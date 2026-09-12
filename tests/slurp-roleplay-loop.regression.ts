@@ -3,10 +3,10 @@ import { readFileSync } from "node:fs";
 import {
   SLURP_DEFAULT_CREATOR_MESSAGING,
   readSlurpCreatorMessaging,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-messaging.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-messaging.js";
 
 const read = (path: string) => readFileSync(path, "utf8");
-const server = "packages/slurp/src/engine/packages/server/src/";
+const server = "packages/slurp2/src/engine/packages/server/src/";
 
 // 6.1 — every payment gets a reaction, and only automatic Creators react.
 const reaction = read(server + "services/slurp/slurp-payment-reaction.ts");
@@ -27,7 +27,7 @@ assert.match(
 );
 assert.match(read(server + "routes/slurp.routes.ts"), /slurpNoodlerGenerationRequestSchema/u);
 assert.match(
-  read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx"),
+  read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx"),
   /format,\n\s*postType,\n\s*\}\);/u,
   "the guided post must send its post type",
 );

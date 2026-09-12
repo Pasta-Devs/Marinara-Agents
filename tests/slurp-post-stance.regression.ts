@@ -6,12 +6,12 @@ import {
   SLURP_CREATOR_STATE_DEFAULT,
   SLURP_MODIFIERS,
   type SlurpCreatorState,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-creator-state.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-creator-state.js";
 import {
   resolveSlurpPostStance,
   slurpPostStanceInstruction,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-post-stance.js";
-import type { SlurpGoalProgress } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-goal.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-post-stance.js";
+import type { SlurpGoalProgress } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-goal.js";
 
 const at = new Date("2026-09-09T12:00:00.000Z");
 const now = at.toISOString();
@@ -94,14 +94,14 @@ assert.match(slurpPostStanceInstruction(loaded) ?? "", /^# How you are today\n/u
 // It never decides how adult a post is: buildNoodlerPostMessages takes that from the editable
 // generation guidance on purpose, and a second opinion here would overrule a player's setting.
 const stance = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-post-stance.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-post-stance.ts",
   "utf8",
 );
 assert.doesNotMatch(stance, /adultLevel|SLURP_ADULT_LEVELS/u);
 
 // The post prompt actually receives it, and the generation path actually builds it.
 const generation = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
   "utf8",
 );
 assert.match(generation, /conditionInstruction\?: string/u);
@@ -111,14 +111,14 @@ assert.match(generation, /input\.conditionInstruction \? \[input\.conditionInstr
 
 // A Creator whose state cannot be read is a Creator having an ordinary day.
 const service = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-post-condition.service.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-post-condition.service.ts",
   "utf8",
 );
 assert.match(service, /catch \{\s*return null;/u);
 
 // --- The world writes back ---------------------------------------------------------------
 // Every modifier the vocabulary defines is worth nothing until something real produces it.
-const storage = readFileSync("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
+const storage = readFileSync("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
 // Money in: felt once it is worth feeling, and never able to fail the payment that caused it.
 assert.match(storage, /amount >= SLURP_PAID_WELL_COINS/u);
 assert.match(storage, /addSlurpModifier\(state, "paid_well"/u);
@@ -137,7 +137,7 @@ assert.match(storage, /addSlurpModifier\(state, "just_posted"/u);
 
 // The audience reacting reaches the Creator instead of stopping at the counters.
 const world = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-world.operation.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.operation.ts",
   "utf8",
 );
 assert.match(world, /addCreatorModifier\(creatorAccountId, "post_landed"/u);

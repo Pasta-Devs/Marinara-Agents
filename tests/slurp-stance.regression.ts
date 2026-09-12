@@ -8,12 +8,12 @@ import {
   resolveSlurpStance,
   SLURP_STRIKE_WINDOW_DAYS,
   type SlurpStanceInput,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-stance.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-stance.js";
 import {
   slurpDayVibe,
   slurpDayVibeDescription,
   slurpDayVibeFacts,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-day-vibe.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-day-vibe.js";
 
 const base: SlurpStanceInput = {
   rapportTier: "regular",
@@ -108,7 +108,7 @@ assert.equal(facts.daysSinceLastPost, 1);
 
 // The debug view runs the real builder. A reconstruction drifts and then reports a prompt the
 // model never received.
-const routes = readFileSync("packages/slurp/src/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");
+const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");
 assert.match(routes, /buildSlurpMessagePrompt\(\{/u);
 assert.match(routes, /if \(!isDebugAgentsEnabled\(\)\) return reply\.code\(404\)/u);
 // The prompt returned is the built one, which `buildSlurpMessagePrompt` has already redacted.
@@ -118,7 +118,7 @@ assert.doesNotMatch(routes, /disclosureMode: "public"|skipProtect|protect: false
 
 // A boundary outranks everything, and it is checked before any generation is paid for.
 const operation = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-message.operation.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message.operation.ts",
   "utf8",
 );
 assert.match(operation, /status: "cooling"/u);

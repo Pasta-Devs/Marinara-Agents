@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {
   readStoredNotes,
   findPromiseNotes,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-thread-notes.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-thread-notes.js";
 const notes = readStoredNotes(
   JSON.stringify([
     { id: "w1", text: "fan likes cats", tier: "working" },

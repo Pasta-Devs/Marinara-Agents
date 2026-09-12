@@ -7,7 +7,7 @@ import { join } from "node:path";
 // the wiring, which is what the defects below actually were.
 
 const root = join(import.meta.dirname, "..");
-const server = "packages/slurp/src/engine/packages/server/src";
+const server = "packages/slurp2/src/engine/packages/server/src";
 const images = readFileSync(join(root, server, "services/slurp/slurp-images.service.ts"), "utf8");
 const routes = readFileSync(join(root, server, "routes/slurp.routes.ts"), "utf8");
 const rewrite = readFileSync(join(root, server, "services/slurp/slurp-image-prompt-rewrite.ts"), "utf8");

@@ -10,7 +10,7 @@ import {
   slurpMembersActiveAt,
   SLURP_POPULATION_NAME_SPACE,
   slurpReactivationStage,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-population.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-population.js";
 
 const at = new Date("2026-09-05T00:00:00.000Z");
 const member = (seed: string) => generateSlurpPopulationMember(seed, at);
@@ -103,7 +103,7 @@ assert.equal(slurpReactivationStage("subscriber", true), "subscriber");
 assert.equal(slurpReactivationStage("invalid", false), "follower");
 
 // ── Wiring ──────────────────────────────────────────────────────────────────
-const root = join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/server/src");
+const root = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 // The six fixed identities with placeholder handles are no longer what fan activity draws from.
@@ -123,8 +123,8 @@ assert.equal(SLURP_FUNNEL_STAGES.indexOf("subscriber") > SLURP_FUNNEL_STAGES.ind
 assert.equal(SLURP_FUNNEL_STAGES.indexOf("follower") > SLURP_FUNNEL_STAGES.indexOf("liker"), true);
 
 const schema = read("db/schema/slurp.ts");
-assert.match(schema, /fileTable\(\s*"slurp_population"/u);
-assert.match(schema, /fileTable\(\s*"slurp_audience_ties"/u);
+assert.match(schema, /fileTable\(\s*"slurp2_population"/u);
+assert.match(schema, /fileTable\(\s*"slurp2_audience_ties"/u);
 // One tie per member per Creator, or the funnel counts the same person twice.
 assert.match(schema, /uniqueBy: \[\{ keys: \["memberId", "creatorAccountId"\] \}\]/u);
 

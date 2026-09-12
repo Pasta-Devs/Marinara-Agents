@@ -285,10 +285,11 @@ for (const localeFile of memoryNagUiLocaleFiles) {
     throw new Error(`Memory Nag ${locale} UI localization direction must be ${expectedDirection}`);
   }
   const keys = Object.keys(catalog).filter((key) => key !== "_meta");
-  if (JSON.stringify(keys) !== JSON.stringify(memoryNagEnglishKeys)) {
-    throw new Error(`Memory Nag ${locale} UI localization keys must match English`);
+  if (keys.some((key) => !memoryNagEnglishKeys.includes(key))) {
+    throw new Error(`Memory Nag ${locale} UI localization contains an unknown English key`);
   }
-  for (const key of memoryNagEnglishKeys) {
+  // UI translations use the same English fallback as package metadata catalogs.
+  for (const key of keys) {
     if (typeof catalog[key] !== "string" || !catalog[key].trim()) {
       throw new Error(`Memory Nag ${locale} UI localization key ${key} is empty`);
     }

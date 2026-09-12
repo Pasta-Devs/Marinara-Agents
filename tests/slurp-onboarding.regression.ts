@@ -4,36 +4,36 @@ import { join } from "node:path";
 
 const root = join(import.meta.dirname, "..");
 const panel = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx"),
+  join(root, "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx"),
   "utf8",
 );
 const home = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx"),
+  join(root, "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx"),
   "utf8",
 );
 const settings = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx"),
+  join(root, "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx"),
   "utf8",
 );
 const storage = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
   "utf8",
 );
-const routes = readFileSync(join(root, "packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts"), "utf8");
+const routes = readFileSync(join(root, "packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts"), "utf8");
 const creatorCard = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpCreatorPostCard.tsx"),
+  join(root, "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpCreatorPostCard.tsx"),
   "utf8",
 );
 const postCard = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpPostCard.tsx"),
+  join(root, "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpPostCard.tsx"),
   "utf8",
 );
 const fanActivity = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-fan-activity.service.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-fan-activity.service.ts"),
   "utf8",
 );
 const responseFormat = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-response-format.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-response-format.ts"),
   "utf8",
 );
 

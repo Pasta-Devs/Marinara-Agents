@@ -7,14 +7,14 @@ import {
   slurpReplyBubbleDelayMs,
   splitSlurpReplyBurst,
   SLURP_DEFAULT_CREATOR_MESSAGING,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-messaging";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-messaging";
 import {
   emptySlurpRapportFacts,
   scoreSlurpRapport,
   slurpRapportTier,
   SLURP_DEFAULT_RAPPORT_WEIGHTS,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-rapport";
-import { slurpCreatorAvailability } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-creator-schedule-context";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-rapport";
+import { slurpCreatorAvailability } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-creator-schedule-context";
 
 // ── Rapport ──────────────────────────────────────────────
 

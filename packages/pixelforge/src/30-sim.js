@@ -47,6 +47,10 @@ PF.Sim = class {
     this._clockAcc = 0;
     this.nearNpc = null;
     this.nearPortal = null;
+    // The lattice edge within reach, or null (see step()) — a FIFTH proximity
+    // read, on the same terms as the four beside it and derived from the zone's
+    // own `gates` list, which only a lattice-participating zone carries.
+    this.nearGate = null;
     // The named feature the player is standing at, or null (see step()). Derived
     // per frame from the zone's own register (20-world makeZone.features), which
     // is itself derived — nothing here is ever saved.
@@ -166,6 +170,37 @@ PF.Sim = class {
     this.dirty = true;
   }
 
+  /** WALK THROUGH A LATTICE EDGE (0.16 §2.3) — materialize what is over there,
+   *  land on its facing doorway, and report what actually happened.
+   *
+   *  MATERIALIZE FIRST, ALWAYS. `ensure` is idempotent and hands a resident zone
+   *  straight back, so the walk home through the settlement's own gate is the
+   *  same call as the first step into country nobody has compiled — and a gate
+   *  into an evicted neighbour cannot be a dead doorway by construction rather
+   *  than by policy.
+   *
+   *  IT COMPUTES ITS OWN TRUTH, which the record loop above does not: that loop
+   *  returns `zoneChanged: true` whether or not its guarded teleport was
+   *  refused, so a record naming a zone this world does not own fires an arrival
+   *  for a zone the player never left. Nothing here can: the answer is whether
+   *  the player is standing in the zone we were asked to move them to.
+   *
+   *  Null means "not a crossing" — a refusal from a builder that threw, a cell
+   *  the lattice does not speak for, or a destination with no doorway facing
+   *  back. The caller falls through and finishes the frame normally, so the tile
+   *  is INERT rather than a hole: the other proximity reads still run, the step
+   *  still returns `zoneChanged: false`, and the player walks away from it. */
+  _crossGate(z, gate) {
+    const id = PF.lattice.gateTargetId(this.world, z, gate);
+    if (!id) return null;
+    const dest = PF.lattice.ensure(this.world, id);
+    if (!dest) return null;
+    const arrival = PF.lattice.arrivalFor(dest, gate.dir);
+    if (!arrival) return null;
+    this.teleport(id, arrival.x, arrival.y);
+    return { zoneChanged: this.zoneId === id };
+  }
+
   step(dt, input) {
     const z = this.zone();
     // A beat is WALK-ONLY and never survives the screen changing hands. Dialogue,
@@ -206,6 +241,32 @@ PF.Sim = class {
           return { zoneChanged: true };
         }
         if (Math.abs(p.x - tx) + Math.abs(p.y - ty) <= 1) this.nearPortal = p;
+      }
+      // THE LATTICE EDGE — AFTER the record loop and never instead of it (0.16
+      // §2.3). Records keep priority, so shipped traversal is untouched: where a
+      // portal and a gate could both answer for one tile the compiler writes no
+      // gate at all, and this loop only ever sees edges nothing else owns.
+      //
+      // A gate is a border tile with a direction, and where it LEADS is
+      // arithmetic on the cell the zone stands in — resolved here, at step time,
+      // off no record whatsoever. That is what makes eviction safe: there is
+      // nothing to dangle when a neighbour goes and nothing to duplicate when it
+      // comes back, and re-entering an evicted cell is this same branch.
+      //
+      // The shape mirrors the record loop above it deliberately, INCLUDING the
+      // adjacency arm's Manhattan reach: the frame the player is standing ON the
+      // gate is the frame they leave, so a label computed only under their feet
+      // would compute and never render. Standing beside it is when the signpost
+      // is worth reading.
+      this.nearGate = null;
+      if (z.gates) {
+        for (const g of z.gates) {
+          if (g.x === tx && g.y === ty) {
+            const crossed = this._crossGate(z, g);
+            if (crossed) return crossed;
+          }
+          if (Math.abs(g.x - tx) + Math.abs(g.y - ty) <= 1) this.nearGate = g;
+        }
       }
       // nearest interactable NPC within reach
       this.nearNpc = null;
@@ -757,7 +818,22 @@ PF.Sim = class {
   /** Compact world header prefixed onto turns so the GM narrates the world we show. */
   header() {
     const z = this.zone();
-    const near = this.nearNpc ? `; near: ${this.nearNpc.name} (${this.nearNpc.role})` : "";
+    // THE RUNG WORD RIDES THE NEAR CLAUSE (0.15, plan §13.4), and only past
+    // stranger — the GM should greet a friend as a friend without burning a
+    // persona injection to learn it, and a stranger costs the header nothing
+    // because the word for "no standing" is no word. Hostility, when something
+    // someday writes it, outranks the rung here as it does on the window title.
+    // Read off the block the sim already carries for the ledger tell; the
+    // header stays free of core lookups, and the words stay the ladder's own
+    // (58-player RUNGS — index 0 blanked because the floor goes unsaid).
+    const rel = this.player?.rel?.[this.world?.startZone];
+    const row =
+      this.nearNpc && rel && typeof rel === "object" && Object.prototype.hasOwnProperty.call(rel, this.nearNpc.name)
+        ? rel[this.nearNpc.name]
+        : null;
+    const rung = row ? PF.clamp(Number(row.d) || 0, 0, 3) : 0;
+    const stand = row && row.h ? "hostile" : rung > 0 ? PF.player.RUNGS[rung] : "";
+    const near = this.nearNpc ? `; near: ${this.nearNpc.name} (${this.nearNpc.role}${stand ? `, ${stand}` : ""})` : "";
     // THREE WORDS IN THE PAREN GROUP, and each earns its permanent per-turn cost.
     // The daypart keeps the GM's light and "who is about" narration consistent
     // with what we render and where NPCs actually are. The weather word is the

@@ -8,24 +8,24 @@ import { readFileSync } from "node:fs";
 // the feature ships a tone the README and onboarding deny. noodle.storage.ts cannot be imported
 // outside an Engine checkout (it resolves ../../db/file-query.js), so this reads the source.
 
-const storage = readFileSync("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
-const home = readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
+const storage = readFileSync("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
+const home = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
 const settings = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx",
+  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx",
   "utf8",
 );
 const readme = readFileSync("packages/slurp/README.md", "utf8");
-const enLocale = readFileSync("packages/slurp/src/engine/packages/client/src/localization/locales/en.json", "utf8");
+const enLocale = readFileSync("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json", "utf8");
 const generation = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
   "utf8",
 );
 const stageDraft = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-stage-profile-draft.service.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-stage-profile-draft.service.ts",
   "utf8",
 );
 const replyGeneration = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-reply-generation.service.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-reply-generation.service.ts",
   "utf8",
 );
 

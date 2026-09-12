@@ -511,12 +511,15 @@ PF.pack = (() => {
    *  hand back a pack whose topic branches vanish on the first fair day. The
    *  guidance asks for a handful; the coverage the window depends on is untagged.
    *
-   *  AND THE REGISTER ASK IS INVERTED (plan §2.7, ruling 4). 0.13 asked for MORE
-   *  FRIEND LINES because that register was where the settlement stopped sounding
-   *  like a signpost. 0.14 serves the stranger register and only that one, so a
-   *  pack written to the old ask spends its best writing on rows nothing reads.
-   *  Friend lines still seal — they are P2's inheritance — they are just not what
-   *  this call asks the model to spend its budget on. */
+   *  AND THE REGISTER ASK IS LEVEL AGAIN (0.15). The ask has swung twice with
+   *  the read side — 0.13 asked friend-heavy for a register nothing served,
+   *  0.14 inverted to stranger-heavy because stranger was all it read — and
+   *  0.15 is where both finally serve: stranger to everyone, friend to anyone
+   *  the ladder has reached friendly with (58-player §13). So the ask leans
+   *  stranger still — most of a town does not know the player, and the stranger
+   *  register is every speaker's floor — but the friend lines are now bought
+   *  for a reader that exists, and the guidance says who reads them instead of
+   *  promising a later release. */
   function guidance(theme) {
     return [
       "You are writing an OFFLINE CONTENT PACK for a settlement that already exists: what its people say,",
@@ -550,8 +553,9 @@ PF.pack = (() => {
       `    w (optional): one of ${WEATHERS_ASKED.join(" | ")} — ONLY for a line that needs that sky;`,
       "      most lines should work any day, so leave it off unless the weather is what the line is about.",
       "    text: ONE spoken line, <=200 characters. No name tags, no quotation marks, no stage directions.",
-      `    Cover the places and hours somebody would actually be there, and write mostly ${REGISTERS[0]} lines:`,
-      `    that is the register this game reads, and every ${REGISTERS[1]} line is written for a later one.`,
+      `    Cover the places and hours somebody would actually be there. Lean ${REGISTERS[0]} — most of the`,
+      `    town does not know the player — but write real ${REGISTERS[1]} lines too: they are served the`,
+      "    moment somebody counts the player a friend, and they are where this place stops sounding like a signpost.",
       "- escalation: ONE line per person, {npc, text}: the thing they say when the player asks properly",
       "    about the unresolved situation above — the door, not what is behind it. Keep it withholding.",
       "- overheard: {at, text} — half of somebody else's conversation, heard in passing. Nobody answers it.",
@@ -1433,13 +1437,25 @@ PF.pack = (() => {
      *       world still stands them up (the fold's `known` set), because a line
      *       naming somebody the world cannot resolve is a line the wrap-up would
      *       read out as fact;
-     *    5. `bump({t:1})` — the giver remembers, on the same settlement-scoped
-     *       key every other bump uses, and SKIPPED SILENTLY on the same miss.
+     *    5. `bump({t:3, s, meaningful})` — the giver remembers, on the same
+     *       settlement-scoped key every other bump uses, and SKIPPED SILENTLY on
+     *       the same miss. THREE, not one (0.15, plan §13): a finished job
+     *       outweighs a greeting on the disposition ladder, which is the reward
+     *       ruling's "money and the giver's rapport" finally paying out as
+     *       MOVEMENT — one hand-in makes a stranger acquainted, and the harness
+     *       pins exactly that. And it is MEANINGFUL, which is the half the weight
+     *       cannot say: doing a job for somebody is what carries a row past
+     *       acquaintance at all, where a hundred greetings never could. The `s`
+     *       line is the giver's own memory of it, in the voice the economy lines
+     *       already use (you = the player).
      *
      *  `say` is the caller's own sentence, and it is a CALLBACK rather than a
      *  string so the guard can decide the shape: it is handed the giver's name or
      *  null and the money already worded by the theme, and hands back the line.
-     *  Returns { money, giver, template } or null when the mutator refused. */
+     *  Returns { money, giver, template, rose } — `rose` is the rung the giver's
+     *  bump EARNED on this call and 0 otherwise, so the caller with a receipt to
+     *  print folds the rise into it rather than saying it in a second toast that
+     *  erases the first (70-hud `_said`) — or null when the mutator refused. */
     settle(core, row, gen, say) {
       const sim = core?.sim;
       const world = sim?.world;
@@ -1452,8 +1468,25 @@ PF.pack = (() => {
       const stands = !!giver && !!folded?.known?.has(giver);
       this.filledToday(core)?.templates.add(template);
       PF.player.log(core, say(stands ? giver : null, PF.economy.money(world, money)), sim.day, gen);
-      if (stands) PF.player.bump(core, world.startZone, giver, { t: 1 }, gen);
-      return { money, giver: stands ? giver : null, template };
+      // WHICH JOB, not merely that one happened. A constant here was a line-cap
+      // flood: `s` lines are capped at 30 across the whole block and evicted
+      // oldest-first (58-player CAPS.relLines), so thirty completions filled
+      // every slot with one sentence and pushed out the berth line and the
+      // purchase line — the two writers that carried anything a player could
+      // tell apart. The board row's own title is the most specific thing this
+      // path knows; the plain sentence stays as the fallback for a row with no
+      // template standing behind it, which is where there is nothing to name.
+      const titled = capText(folded?.byId?.get(template)?.title, CAPS.title);
+      const bumped = stands
+        ? PF.player.bump(
+            core,
+            world.startZone,
+            giver,
+            { t: 3, s: titled ? `Ran ${titled} for me.` : "You ran a job for me.", meaningful: true },
+            gen,
+          )
+        : null;
+      return { money, giver: stands ? giver : null, template, rose: bumped?.rose ?? 0 };
     },
 
     /** Hand one finished job in. Two things happen here that `settle` cannot do
@@ -1482,7 +1515,7 @@ PF.pack = (() => {
         giver ? `Filled ${giver}'s board order — ${paid}.` : `Filled the board order — ${paid}.`,
       );
       if (!done) return fail("refused", { have, n });
-      return { ok: true, reason: null, money: done.money, giver: done.giver, have, n };
+      return { ok: true, reason: null, money: done.money, giver: done.giver, have, n, rose: done.rose ?? 0 };
     },
 
     /** LET ONE JOB GO (plan §2.3). Free, player-initiated, and pressed from the
@@ -1648,10 +1681,12 @@ PF.pack = (() => {
         // and one per errand — so one conversation can now bump the same person
         // up to four times, once per ACCEPTED turn. That is still what the count
         // says it is: `t` counts encounters, four accepted turns are four of
-        // them, and the only reader is P2's disposition ladder, which does not
-        // exist yet. Restated rather than left saying "twice", because a number
-        // in a comment that has stopped being the number is how the next reader
-        // concludes a fifth bump is a bug.
+        // them — and the reader EXISTS now: the disposition ladder promotes on
+        // the crossings (58-player §13), whose lines sit far enough apart that
+        // a four-press conversation cannot vault a rung on its own. Restated
+        // rather than left saying "twice", because a number in a comment that
+        // has stopped being the number is how the next reader concludes a fifth
+        // bump is a bug.
         const done = this.settle(core, row, gen, (giver, paid) =>
           giver && giver !== to ? `Took ${giver}'s word to ${to} — ${paid}.` : `Took word to ${to} — ${paid}.`,
         );
@@ -1665,13 +1700,14 @@ PF.pack = (() => {
     // branches — rumor, work, place, and "Pass the time" — and NONE of them costs
     // a GM call: this is a lookup over an artifact that is already in memory.
     //
-    // THE UNIVERSE IS STRANGER-ONLY (ruling 4). The friend register is written,
-    // sealed and stored, and 0.14 serves none of it: friendship is P2's, and a
-    // stopgap that guessed at it would be a promotion the player never earned.
-    // On the live measured pack that is 7 of 12 lines — the FRIEND half, which
-    // is the unserved one: 5 stranger lines are served and 7 friend lines are
-    // not. That is the honest cost of the ruling and the reason the ladder
-    // below relaxes as hard as it does.
+    // BOTH REGISTERS SERVE, AND THE LADDER DECIDES WHICH LEADS (0.15). Ruling 4
+    // shipped 0.14 stranger-only because a stopgap that GUESSED at friendship
+    // would be a promotion the player never earned — its own words, and its own
+    // sunset clause: the promotion is earned now (58-player §13 — the crossing),
+    // so a speaker the ladder has reached FRIENDLY with serves the friend half
+    // that sat sealed through 0.13 and 0.14, friend-first at every relaxation.
+    // Everyone else still meets exactly 0.14's stranger-only window, byte for
+    // byte, seeded order and all.
     //
     // THE WEATHER TERM: a line with no `w` is served under any sky, and a line
     // tagged `rain` is served under any RAIN — the axis is the five words and an
@@ -1685,14 +1721,20 @@ PF.pack = (() => {
       return zone?.mapKind === "building" ? "dwelling" : "settlement";
     },
 
-    /** Every stranger line this sky can serve, as {line, index} — the index is
-     *  the line's identity for the served set, stable for a session because the
-     *  fold is rebuilt exactly when the world is. */
-    askUniverse(folded, word) {
+    /** Every line this sky can serve TO THIS SPEAKER, as {line, index} — the
+     *  index is the line's identity for the served set, stable for a session
+     *  because the fold is rebuilt exactly when the world is.
+     *
+     *  `befriended` is the 0.15 door: a speaker the ladder has reached FRIENDLY
+     *  with (rung 2 — 58-player §13) serves both registers, everybody else
+     *  serves stranger lines exactly as 0.14 did. The index space is the whole
+     *  pack either way, so a rung earned mid-day changes which lines are
+     *  reachable and not what any already-served index meant. */
+    askUniverse(folded, word, befriended) {
       const out = [];
       const lines = Array.isArray(folded?.pack?.lines) ? folded.pack.lines : [];
       lines.forEach((line, index) => {
-        if (line?.r !== "stranger") return;
+        if (line?.r !== "stranger" && !(befriended && line?.r === "friend")) return;
         if (line.w && line.w !== word) return;
         out.push({ line, index });
       });
@@ -1710,28 +1752,45 @@ PF.pack = (() => {
      *  a button that lied about what it asks. "Pass the time" is the branch that
      *  has somewhere to fall — smalltalk first, then the untagged pool, which is
      *  where most of a hand-written pack lives. */
-    askRungs(branch, at, part) {
+    askRungs(branch, at, part, befriended) {
       const has = (topic) => (row) => row.line.topic === topic;
       const untagged = (row) => row.line.topic === undefined;
       const here = (row) => row.line.at === at;
       const now = (row) => row.line.when === part;
       const rung = (test, pins) => ({ test, pins });
-      if (branch === "smalltalk") {
-        return [
-          rung((r) => here(r) && now(r) && has("smalltalk")(r), "s1|at|part"),
-          rung((r) => here(r) && has("smalltalk")(r), "s2|at"),
-          rung((r) => here(r) && now(r) && untagged(r), "s3|at|part"),
-          rung((r) => here(r) && untagged(r), "s4|at"),
-          rung((r) => has("smalltalk")(r), "s5"),
-          rung(untagged, "s6"),
-        ];
+      const base =
+        branch === "smalltalk"
+          ? [
+              rung((r) => here(r) && now(r) && has("smalltalk")(r), "s1|at|part"),
+              rung((r) => here(r) && has("smalltalk")(r), "s2|at"),
+              rung((r) => here(r) && now(r) && untagged(r), "s3|at|part"),
+              rung((r) => here(r) && untagged(r), "s4|at"),
+              rung((r) => has("smalltalk")(r), "s5"),
+              rung(untagged, "s6"),
+            ]
+          : [
+              rung((r) => here(r) && now(r) && has(branch)(r), "r1|at|part"),
+              rung((r) => here(r) && has(branch)(r), "r2|at"),
+              rung((r) => now(r) && has(branch)(r), "r3|part"),
+              rung(has(branch), "r4"),
+            ];
+      if (!befriended) return base;
+      // THE FRIEND REGISTER LEADS AT EVERY RELAXATION (0.15). Each rung splits
+      // in two — the friend subset first, the stranger subset second — so a
+      // friendly speaker answers in the register the pack wrote for exactly this
+      // moment and falls back to the signpost voice only where the friend pool
+      // at that tier is spent or was never written. Mixing the two in one rung
+      // would have served a 5:7 shuffle in which a friend mostly still talks to
+      // you like a stranger, which is the ratio the register exists to escape.
+      //
+      // The pin suffixes keep the seeded orders apart per register; the `|at`
+      // and `|part` substring reads the signature builder does are unaffected.
+      const split = [];
+      for (const { test, pins } of base) {
+        split.push(rung((r) => r.line.r === "friend" && test(r), `${pins}|rf`));
+        split.push(rung((r) => r.line.r === "stranger" && test(r), `${pins}|rs`));
       }
-      return [
-        rung((r) => here(r) && now(r) && has(branch)(r), "r1|at|part"),
-        rung((r) => here(r) && has(branch)(r), "r2|at"),
-        rung((r) => now(r) && has(branch)(r), "r3|part"),
-        rung(has(branch), "r4"),
-      ];
+      return split;
     },
 
     /** CIRCULAR DAYPART ADJACENCY, measured over the START MINUTES of the four
@@ -1785,7 +1844,11 @@ PF.pack = (() => {
       const folded = PF.save?.packFold?.(core);
       if (!folded) return null;
       const word = sim.weather().word;
-      const universe = this.askUniverse(folded, word);
+      // The rung is the SPEAKER'S — the ladder is per person even though the
+      // lines are per place, so the same bench answers a friend and a stranger
+      // differently in the same hour.
+      const befriended = PF.player.rung(core, sim.world?.startZone, str(npc?.name ?? npc)).d >= 2;
+      const universe = this.askUniverse(folded, word, befriended);
       if (!universe.length) return null;
       const at = this.askAt(sim.zone());
       const part = sim.daypart();
@@ -1797,7 +1860,7 @@ PF.pack = (() => {
         folded._askServed = new Map();
       }
       folded._askServed ??= new Map();
-      const rungs = this.askRungs(branch, at, part);
+      const rungs = this.askRungs(branch, at, part, befriended);
       if (!consume) {
         for (const { test } of rungs) {
           const members = universe.filter(test);

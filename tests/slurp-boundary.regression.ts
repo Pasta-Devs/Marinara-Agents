@@ -13,24 +13,24 @@ function sourceFiles(directory: string): string[] {
 }
 
 const files = [
-  ...sourceFiles("packages/slurp/src/engine/packages/client"),
-  ...sourceFiles("packages/slurp/src/engine/packages/server"),
+  ...sourceFiles("packages/slurp2/src/engine/packages/client"),
+  ...sourceFiles("packages/slurp2/src/engine/packages/server"),
 ];
 
 const slurpRoutes = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts"),
   "utf8",
 );
 const slurpEntry = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/client/src/slurp-package-entry.tsx"),
+  join(root, "packages/slurp2/src/engine/packages/client/src/slurp-package-entry.tsx"),
   "utf8",
 );
 const slurpFanActivity = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-fan-activity.service.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-fan-activity.service.ts"),
   "utf8",
 );
 const slurpServerEntry = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/server-entry.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/server-entry.ts"),
   "utf8",
 );
 assert.match(
@@ -70,15 +70,15 @@ assert.match(
 );
 
 const slurpImages = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-images.service.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-images.service.ts"),
   "utf8",
 );
 const slurpStorage = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
   "utf8",
 );
 const slurpReplyQueue = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/services/storage/slurp-reply-queue.storage.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-reply-queue.storage.ts"),
   "utf8",
 );
 assert.match(slurpReplyQueue, /removeForThread/u, "Slurp delayed replies must have a package-owned cancellation path");
@@ -98,11 +98,11 @@ assert.doesNotMatch(
   "Slurp must not access an Engine-unregistered viewer table",
 );
 const promptSafety = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-prompt-safety.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-prompt-safety.ts",
   "utf8",
 );
 const stageProfileDraft = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-stage-profile-draft.service.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-stage-profile-draft.service.ts"),
   "utf8",
 );
 assert.match(
@@ -152,7 +152,7 @@ assert.doesNotMatch(
   "concealed Slurp profile prompts must withhold the lookupable canon",
 );
 const slurpHomeSource = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
+  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
   "utf8",
 );
 // A character card says nothing about how its Creator treats an audience, so without a nudge every
@@ -170,7 +170,7 @@ assert.match(
 );
 
 const slurpGeneration = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
   "utf8",
 );
 // Bio and stage voice are written once at Creator setup, so on their own they freeze every Creator
@@ -218,7 +218,7 @@ assert.match(
 );
 assert.match(slurpImages, /enableImageInterpretation !== false/u);
 const slurpPublicImages = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-public-images.service.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-public-images.service.ts"),
   "utf8",
 );
 assert.match(

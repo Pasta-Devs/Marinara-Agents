@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import {
   slurpActivityPresetForSettings,
   slurpActivityPresetPatch,
-} from "../packages/slurp/src/engine/packages/client/src/components/slurp/slurp-activity-presets";
+} from "../packages/slurp2/src/engine/packages/client/src/components/slurp/slurp-activity-presets";
 
 assert.equal(slurpActivityPresetForSettings({ autoPostingScheduleEnabled: false, postsPerDay: 7 }), "manual");
 assert.equal(slurpActivityPresetForSettings({ autoPostingScheduleEnabled: true, postsPerDay: 4 }), "lively");
@@ -16,12 +16,12 @@ assert.deepEqual(slurpActivityPresetPatch("veryActive"), {
 
 async function main() {
   const [settings, navigation, store, home, shell, english] = await Promise.all([
-    readFile("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx", "utf8"),
-    readFile("packages/slurp/src/engine/packages/client/src/components/slurp/slurp-navigation.types.ts", "utf8"),
-    readFile("packages/slurp/src/engine/packages/client/src/stores/slurp-package.store.ts", "utf8"),
-    readFile("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8"),
-    readFile("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpShell.tsx", "utf8"),
-    readFile("packages/slurp/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
+    readFile("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx", "utf8"),
+    readFile("packages/slurp2/src/engine/packages/client/src/components/slurp/slurp-navigation.types.ts", "utf8"),
+    readFile("packages/slurp2/src/engine/packages/client/src/stores/slurp-package.store.ts", "utf8"),
+    readFile("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8"),
+    readFile("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpShell.tsx", "utf8"),
+    readFile("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
   ]);
 
   assert.match(navigation, /section\?: SlurpSettingsSection;/u);

@@ -4,6 +4,48 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.2.26",
+          "date": "2026-09-10",
+          "notes": "- Added persistent chat-mode availability selection to Sources for memory imports.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.25",
+          "date": "2026-09-10",
+          "notes": "- Added a confirmed discard action for invalidated drafts, removing old proposals without changing saved memories.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.24",
+          "date": "2026-09-09",
+          "notes": "- Kept drafts with missing source notes visibly blocked without preventing review of other sources.\n- Showed context-loading error details alongside Retry and kept orphaned rejected suggestions accessible.",
+          "highlight": true
+        },
+        {
+          "version": "1.2.23",
+          "date": "2026-09-06",
+          "notes": "- Restored responsive Memory Vault and Sources loading by deferring local-character discovery.\n- Reused one aggregate local-character catalog and kept its loading and retry state visible.",
+          "highlight": true
+        },
+        {
+          "version": "1.2.22",
+          "date": "2026-09-06",
+          "notes": "- Kept user-selected source targets valid while isolating parent chat context transitions.\n- Prevented stale source previews and details from rendering during scope changes.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.21",
+          "date": "2026-09-05",
+          "notes": "- Reduced redundant vault scans across Review Queue, Memory Vault, and Sources loading.\n- Preserved local-character scope targets while reusing the existing note snapshot.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.20",
+          "date": "2026-09-04",
+          "notes": "- Added conversation-family-scoped Roleplay local-character memories and reviewable first-use mutations.\n- Kept Game Mode dynamic NPC metadata out of Long-Term Memory subjects and targets.",
+          "highlight": false
+        },
+        {
           "version": "1.2.19",
           "date": "2026-09-04",
           "notes": "- Bound the Sources destination panel and restored page scrolling when its list is hovered.\n- Restricted Already imported counts and rows to the selected source scope.",
@@ -11,8 +53,30 @@
         }
       ]
     },
+    "memory-nag": {
+      "versions": [
+        {
+          "version": "1.1.1",
+          "date": "2026-09-11",
+          "notes": "Send the saved admin secret on plain-HTTP remote clients too, matching the Engine, so Create Memories no longer fails with an X-Admin-Secret error on LAN and Termux setups.",
+          "highlight": false
+        },
+        {
+          "version": "1.1.0",
+          "date": "2026-09-09",
+          "notes": "Choose all unprocessed messages or a specific message range when creating vault memories, so long chats can skip stale history. Closing the progress or prompt window keeps the underlying chat settings open.",
+          "highlight": false
+        }
+      ]
+    },
     "noodle": {
       "versions": [
+        {
+          "version": "1.2.21",
+          "date": "2026-09-07",
+          "notes": "- Fixed \"Load more\" on the timeline, which failed on every page after the first.\n- Fixed a manually chosen profile avatar being replaced by the character card image.\n- Applying a saved prompt now asks before it discards unsaved prompt changes.\n- Ambient accounts no longer post images.\n- Removed leftover NoodleR wording from the image generation settings.",
+          "highlight": false
+        },
         {
           "version": "1.2.20",
           "date": "2026-09-03",
@@ -36,123 +100,21 @@
     "slurp": {
       "versions": [
         {
-          "version": "1.2.64",
-          "date": "2026-09-10",
-          "notes": "- Fixed duplicate, stale, and out-of-order direct-message replies during retries, resets, and delayed delivery.\n- Added durable follow-up delivery, separate reply obligations, sender snapshots, and older-message loading.",
+          "version": "1.50.0",
+          "date": "2026-09-11",
+          "notes": "- Mark Slurp as the legacy version while it is being reworked.\n- Add a full ZIP backup export containing Slurp data and media for migration.\n- New development is moving to Slurp Remastered. Bug fixes are not planned for this version.",
           "highlight": true
         },
         {
-          "version": "1.2.63",
+          "version": "1.0.31",
           "date": "2026-09-09",
-          "notes": "- Restored active AI updates for the two-list memory system and made each eight-item limit visible.\n- Removed the duplicate read-only memory sections from Conversation Details. Memories now has one editable panel.",
-          "highlight": true
-        },
-        {
-          "version": "1.2.62",
-          "date": "2026-09-09",
-          "notes": "- Simplified the message plus menu into clear photo, generated photo, tip, commission, and locked-content actions.\n- Added commission entry points in the commission panel and from clear commission wording in a message draft.\n- Added viewer-generated photos to direct messages.",
+          "notes": "- Include image generation guidance in the main Slurp post-generation prompt so image interpretation receives the generated image prompt and configured instructions.",
           "highlight": false
         },
         {
-          "version": "1.2.61",
-          "date": "2026-09-09",
-          "notes": "- Inbox is now a catch-up hub: current requests and commissions share one attention tray, recent messages stay visible, and activity is summarized without duplicating direct messages.\n- Repeated activity opens as a notification stack with its people and events intact.\n- Messages now use the full width, with a denser conversation list, match-by-match search, and a compact commission ribbon.\n- Details and prompt diagnostics overlay the chat as a desktop drawer or mobile sheet. Broadcast moved to each Creator's Studio card.\n- Conversation Details has separate Basic and Advanced views. Basic explains rapport, mood, availability, progress and memories in words; Advanced shows the complete simulation and exact values.\n- Progress uses ranked steps, mood uses a centred scale, memories use a readable list, and every state has text or an icon as well as colour.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.60",
-          "date": "2026-09-09",
-          "notes": "- What happens on the platform now reaches the Creator it happens to. Publishing, being paid, reaching a goal and an audience reacting all change how she is, and that then shows in what she posts and how she writes back.\n- Publishing makes a Creator feel exposed for a while, and a locked post more than a public one.\n- Money arriving takes the edge off her day, once it is enough money to notice.\n- Reaching a tip goal is felt, and only when it is actually reached rather than on every coin after it.\n- A post the audience reacts to lands, and a Creator notices. A follow counts for more than a like.\n- None of this can fail the thing that caused it: a payment, a post and a reaction all still go through if the feeling cannot be recorded.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.59",
-          "date": "2026-09-09",
-          "notes": "- What a Creator posts now depends on how she actually is. Until now her mood, her energy, her day and what she published last night reached her direct messages and stopped there, so the feed was written by somebody with no memory of any of it.\n- A Creator low on energy posts something smaller. One with plenty posts something more involved. Neither ever stops her posting.\n- A Creator who recently published something bolder than usual pulls back for a while afterwards.\n- A strong feeling and a quiet day colour how a post is written, never what it announces.\n- An open tip goal now shapes posts: behind, it asks; nearly met, it says how close; met, it says thank you.\n- How adult a post is stays where it was, in the editable generation guidance. Nothing here overrides it.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.58",
-          "date": "2026-09-09",
-          "notes": "- Creators now have short-lived states as well as slow ones: just posted, pleased with how something did, stung by a post going nowhere, tipsy, worn out, rattled, and others. Each one lasts a set time and then stops on its own.\n- Added exposure: how far out on a limb a Creator is in public right now. It rises with what they publish rather than with anything one fan says, and it fades overnight.\n- The conversation overview shows both, so you can see what a Creator is reacting to.\n- Nothing writes these yet beyond the state itself. The next release connects them to what actually happens on the platform.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.57",
-          "date": "2026-09-09",
-          "notes": "- Creator energy is now spent by doing things. Publishing a post, generating a picture and finishing a commission each cost effort, with a commission costing the most.\n- Until now nothing in the game ever spent energy, so a Creator who published all afternoon finished it more rested than she started. Energy already decided how many messages a reply is broken into and whether a picture can be sent, so it was deciding those from a number that never moved.\n- Energy still recovers over time, so ordinary use will not run a Creator down.\n- A post that is already saved is never lost because the effort could not be recorded.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.56",
-          "date": "2026-09-09",
-          "notes": "- Removed two simulation values that nothing in the game ever changed: the Creator's platform strategy and their current need. Both were shown in the conversation overview as though they meant something, and both were fixed forever at their starting value.\n- Removed two more that repeated work already done better elsewhere. Rapport already scores tips, unlocks and commissions from the real ledger, and the conversation mood already tracks how a conversation is going.\n- A strong feeling now ends. Until now the strength of a feeling faded but the feeling itself never did, so one jealous afternoon left a Creator quietly jealous for the rest of the save.\n- A fan asking for free content now costs a little standing instead of a trust score that no longer exists.\n- Existing conversations keep their guardedness through the change.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.55",
-          "date": "2026-09-09",
-          "notes": "- Conversations can now become more explicit over time. Until now a conversation could never pass \"suggestive\", however long it ran or however well it went, because nothing in the game could raise it any further.\n- How adult a conversation is allowed to get is now earned. It rises one step at a time, never skips a step, and needs both lasting comfort and present interest to hold where it is.\n- A creator will not escalate with somebody she does not think well of, is holding a grudge against, or has gone guarded with, whatever else is true of the conversation.\n- Interest fading now lowers the conversation back down, the same way it raised it.\n- Pushing after a refusal caps the conversation whichever order the rest of the message is read in.\n- Welcome adult attention builds comfort a little faster, so the full range is reachable in a real conversation.\n- The confirmation for clearing a conversation is translatable instead of English-only.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.54",
-          "date": "2026-09-09",
-          "notes": "- Settings has a Messaging tab.\n- Creators can be told not to answer while you are away, so replies only happen while you are in the conversation. Commissions and the rest of a reply already sent still arrive.\n- How many messages one reply is broken into is now a setting. One keeps every reply in a single message.\n- The DM policy, request fee and paid message price a Creator starts with are now set once in Settings instead of per Creator.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.53",
-          "date": "2026-09-09",
-          "notes": "- A creator no longer re-answers the same message once a minute. A conversation waits for a reply only while the fan spoke last, so an answered message is answered once.\n- Answering a fan now clears the Creator inbox badge and marks their message read, and a creator taking space from a conversation is no longer polled for a reply.\n- A conversation can be cleared from the overview: every message in it is deleted, along with the mood, notes and state derived from them. Coins, unlocks and commissions are kept.\n- The Advanced switch in the conversation overview now visibly changes the panel: the exact values open at the top and the summary chips show figures instead of bands.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.52",
-          "date": "2026-09-09",
-          "notes": "- The conversation overview now starts with a focused base view and an optional Advanced view for detailed simulation values.\n- Creator availability and activity moved from the chat header into the overview Context section.\n- State refreshes no longer announce every timestamp or move the message viewport, and visible thread polling now runs once per minute.\n- Overview fields now explain arousal, energy, intent, stance, adult interaction, and conversation desire.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.51",
-          "date": "2026-09-09",
-          "notes": "- Creators can now run projects: a titled thread with free-text direction and an optional list of chapters.\n- Automatic posts continue a project on part of the posting rotation, so several projects and ordinary posts interleave in one feed.\n- A project post is never also a Story, and a post you direct yourself ignores the project.\n- The Studio shows each Creator's projects with their chapter and post count, and can pause, resume, finish, or delete one.\n- Deleting a project keeps the posts it produced, and editing a project does not change what published posts were about.\n- A new Projects setting controls how much of a Creator's automatic posting continues a project. Creators with no project are unaffected.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.50",
-          "date": "2026-09-09",
-          "notes": "- The per-post rotation that varies place, moment, framing, company, and format is now called the post variation.\n- Generated posts are unchanged; only the internal names and the prompt input field are renamed.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.49",
-          "date": "2026-09-09",
-          "notes": "- The audience relationship direction is now named the audience arc in the database, the API, and the interface.\n- The notification for a change of direction now uses the `audience_arc` kind.\n- The stored column is renamed, so audience rows written before this release start again at `steady`.\n- The English localization now contains the custom tip labels the message view uses.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.48",
-          "date": "2026-09-09",
-          "notes": "- Mobile message headers now contain long creator names, handles, status text, and controls without widening the viewport.\n- Commission cards now wrap their progress labels and actions within the available mobile width.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.47",
-          "date": "2026-09-09",
-          "notes": "- The conversation overview now has a sticky summary, readable state labels, and independent scrolling.\n- Creator state, conversation state, boundaries, memories, context, and business data now use expandable sections and information boxes.\n- Working memory and long-term memory are shown separately with an explanation of how they differ.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.46",
-          "date": "2026-09-09",
-          "notes": "- Slurp message details now show creator state, arousal, emotion, energy, intent, strategy, needs, and conversation boundaries.\n- The state panel now uses collapsible sections and its own scroll area so the chat remains usable on small screens.\n- State snapshots are returned to both sides of a conversation and refresh with the existing message polling and mutations.",
-          "highlight": false
-        },
-        {
-          "version": "1.2.45",
-          "date": "2026-09-09",
-          "notes": "- Slurp messages, replies, and posts now receive the current character canon.\n- Character identity and relationship facts remain available after old conversation turns leave the context window.\n- Concealed identity modes still hide the linked public identity while preserving behavioral canon.",
+          "version": "1.0.30",
+          "date": "2026-09-08",
+          "notes": "- Preserve the selected image style profile after image prompt interpretation.",
           "highlight": false
         }
       ]

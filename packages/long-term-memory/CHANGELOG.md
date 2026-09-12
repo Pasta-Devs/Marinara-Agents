@@ -1,5 +1,38 @@
 # Long-Term Memory changelog
 
+## 1.2.26 - 2026-09-10
+
+- Added persistent chat-mode availability selection to Sources for memory imports.
+
+## 1.2.25 - 2026-09-10
+
+- Added a confirmed discard action for invalidated drafts, removing old proposals without changing saved memories.
+
+## 1.2.24 - 2026-09-09 [highlight]
+
+- Kept drafts with missing source notes visibly blocked without preventing review of other sources.
+- Showed context-loading error details alongside Retry and kept orphaned rejected suggestions accessible.
+
+## 1.2.23 — 2026-09-06 [highlight]
+
+- Restored responsive Memory Vault and Sources loading by deferring local-character discovery.
+- Reused one aggregate local-character catalog and kept its loading and retry state visible.
+
+## 1.2.22 — 2026-09-06
+
+- Kept user-selected source targets valid while isolating parent chat context transitions.
+- Prevented stale source previews and details from rendering during scope changes.
+
+## 1.2.21 — 2026-09-05
+
+- Reduced redundant vault scans across Review Queue, Memory Vault, and Sources loading.
+- Preserved local-character scope targets while reusing the existing note snapshot.
+
+## 1.2.20 — 2026-09-04
+
+- Added conversation-family-scoped Roleplay local-character memories and reviewable first-use mutations.
+- Kept Game Mode dynamic NPC metadata out of Long-Term Memory subjects and targets.
+
 ## 1.2.19 — 2026-09-04
 
 - Bound the Sources destination panel and restored page scrolling when its list is hovered.

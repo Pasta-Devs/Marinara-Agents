@@ -1,22 +1,22 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const home = readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
-const shell = readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpShell.tsx", "utf8");
-const english = readFileSync("packages/slurp/src/engine/packages/client/src/localization/locales/en.json", "utf8");
-const store = readFileSync("packages/slurp/src/engine/packages/client/src/stores/slurp-package.store.ts", "utf8");
-const hooks = readFileSync("packages/slurp/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");
+const home = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
+const shell = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpShell.tsx", "utf8");
+const english = readFileSync("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json", "utf8");
+const store = readFileSync("packages/slurp2/src/engine/packages/client/src/stores/slurp-package.store.ts", "utf8");
+const hooks = readFileSync("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");
 const messages = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx",
+  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx",
   "utf8",
 );
 const messageStorage = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
   "utf8",
 );
-const routes = readFileSync("packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
+const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
 const messageRoutes = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/routes/slurp-messages.routes.ts",
+  "packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts",
   "utf8",
 );
 

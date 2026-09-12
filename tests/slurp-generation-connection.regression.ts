@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { resolveSlurpTextConnection } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-connection.js";
+import { resolveSlurpTextConnection } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-connection.js";
 
 const root = join(import.meta.dirname, "..");
-const serverRoot = join(root, "packages/slurp/src/engine/packages/server/src");
+const serverRoot = join(root, "packages/slurp2/src/engine/packages/server/src");
 const read = (path: string) => readFileSync(join(serverRoot, path), "utf8");
 
 type Row = { id: string; provider: string; apiKey?: string };

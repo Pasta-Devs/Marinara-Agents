@@ -25,7 +25,7 @@ import {
   slurpCreatorStateCanUseMedia,
   type SlurpCreatorState,
   type SlurpThreadState,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-creator-state.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-creator-state.js";
 
 const now = "2026-09-09T12:00:00.000Z";
 const creator: SlurpCreatorState = { ...SLURP_CREATOR_STATE_DEFAULT, updatedAt: now };
@@ -171,7 +171,7 @@ assert.equal(applySlurpCreatorStateDelta({ ...creator, energy: 2 }, { energy: -8
 // Every path that does work charges for it. Posting is charged at the one storage choke point
 // both the manual and the generated post route through, so neither can skip it.
 const slurpStorage = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
   "utf8",
 );
 assert.match(slurpStorage, /async adjustCreatorState\(/u);
@@ -180,13 +180,13 @@ assert.match(slurpStorage, /adjustCreatorState\(post\.authorAccountId, \{\s*ener
 assert.match(slurpStorage, /const created = await db\.transaction\(/u);
 
 const images = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-images.service.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-images.service.ts",
   "utf8",
 );
 assert.match(images, /adjustCreatorState\(input\.account\.id, \{ energy: -SLURP_ENERGY_COST\.image \}\)/u);
 
 const commissions = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-commission-delivery.service.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-commission-delivery.service.ts",
   "utf8",
 );
 assert.match(commissions, /energy: -SLURP_ENERGY_COST\.commission/u);
@@ -242,14 +242,14 @@ const morning = decaySlurpCreatorState({ ...creator, exposure: 90 }, 8, now);
 assert.ok(morning.exposure < 10);
 
 const messageOperation = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-message.operation.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message.operation.ts",
   "utf8",
 );
 assert.match(messageOperation, /creatorState\.energy >= 35/u);
 assert.match(messageOperation, /slurpCreatorStateCanUseMedia\(creatorState, thread\.threadState\)/u);
 
 const generation = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-message-generation.service.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message-generation.service.ts",
   "utf8",
 );
 assert.match(generation, /creatorState\?: SlurpCreatorState/u);
@@ -258,10 +258,10 @@ assert.match(generation, /A sales intent is not personal intimacy/u);
 assert.match(generation, /stateSignals: generated\.stateSignals/u);
 assert.match(generation, /happeningNow: slurpModifierLines\(input\.creatorState\)/u);
 assert.match(generation, /exposure: slurpIntensityBand\(input\.creatorState\.exposure\)/u);
-const storage = readFileSync("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
+const storage = readFileSync("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
 assert.match(storage, /for \(const accountId of accountIds\)[\s\S]{0,160}?SLURP_CREATOR_STATE_KEY/u);
 
-const routes = readFileSync("packages/slurp/src/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");
+const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");
 assert.match(
   routes,
   /app\.get\("\/messages\/threads\/:threadId\/prompt"[\s\S]{0,700}?ownsCreator\(viewer\.id, thread\.creatorAccountId\)/u,

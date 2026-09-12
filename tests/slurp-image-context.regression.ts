@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { noodleImageContext } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-image-prompt.ts";
+import { noodleImageContext } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-image-prompt.ts";
 
 // A generated image reuses the prompt that produced it, which is free and beats captioning it.
 assert.equal(
@@ -19,13 +19,13 @@ assert.equal(noodleImageContext({}), null);
 
 // Both reaction paths must carry it: this is why replies used to answer "what pic?".
 for (const file of ["slurp-fan-activity.service.ts", "slurp-reply-generation.service.ts"]) {
-  const source = readFileSync(`packages/slurp/src/engine/packages/server/src/services/slurp/${file}`, "utf8");
+  const source = readFileSync(`packages/slurp2/src/engine/packages/server/src/services/slurp/${file}`, "utf8");
   assert.match(source, /noodleImageContext/u, `${file} must give the model the post's image context`);
 }
 
 // A locked post keeps its body out of the prompt but still shows its picture.
 const fan = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-fan-activity.service.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-fan-activity.service.ts",
   "utf8",
 );
 assert.match(fan, /access === "locked"\s*\n?\s*\? \{ id, title, access, \.\.\.\(image && \{ image \}\)/u);

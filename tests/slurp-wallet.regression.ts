@@ -10,9 +10,9 @@ import {
   SLURP_DEFAULT_ECONOMY,
   spend,
   subscriptionPaidThrough,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-wallet.ts";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-wallet.ts";
 const storageSource = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
   "utf8",
 );
 assert.match(
@@ -135,7 +135,7 @@ assert.equal(readSlurpWallet('{"coins":-4}').coins, SLURP_DEFAULT_ECONOMY.starti
 assert.deepEqual(readSlurpWallet('{"subscriptions":{"a":{"price":"free"}}}').subscriptions, {});
 
 // The storage layer must actually gate on the wallet, not just carry it.
-const storage = readFileSync("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
+const storage = readFileSync("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
 assert.match(storage, /spend\(wallet, "unlock", price/u, "unlocking must debit the wallet");
 assert.match(storage, /spend\(previousWallet, "subscribe", price/u, "subscribing must debit the wallet");
 assert.doesNotMatch(storage, /viewerSettingsUpdateQueue/u, "viewer settings must use the shared financial queue");
@@ -210,7 +210,7 @@ assert.match(
 // failing connection is retried once a minute forever.
 {
   const scheduler = readFileSync(
-    "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-message-scheduler.service.ts",
+    "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message-scheduler.service.ts",
     "utf8",
   );
   assert.match(scheduler, /schedule\(slurpPollBackoffMs\(POLL_MS, consecutiveFailures\)\)/u);

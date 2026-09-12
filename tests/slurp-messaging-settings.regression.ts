@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const root = "packages/slurp/src/engine/packages";
+const root = "packages/slurp2/src/engine/packages";
 const settingsStorage = readFileSync(`${root}/server/src/services/storage/slurp.storage.ts`, "utf8");
 const messagesStorage = readFileSync(`${root}/server/src/services/storage/slurp-messages.storage.ts`, "utf8");
 const scheduler = readFileSync(`${root}/server/src/services/slurp/slurp-message-scheduler.service.ts`, "utf8");

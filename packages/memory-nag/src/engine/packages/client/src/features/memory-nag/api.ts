@@ -3,8 +3,14 @@ const CSRF_HEADER = "x-marinara-csrf";
 const CSRF_HEADER_VALUE = "1";
 const ADMIN_SECRET_STORAGE_KEY = "marinara_admin_secret";
 
+/**
+ * Mirrors the Engine's own api-client: the saved admin secret is sent on every request, whatever
+ * the page protocol. Every Memory Nag route sits behind the Engine's privileged gate, so a remote
+ * client on plain HTTP (LAN or Termux reached by IP) would otherwise fail with "Invalid or missing
+ * X-Admin-Secret header" even though the secret is saved.
+ */
 function adminHeaders(): Record<string, string> {
-  if (window.location.protocol !== "https:") return {};
+  if (typeof window === "undefined") return {};
   try {
     const secret = window.localStorage.getItem(ADMIN_SECRET_STORAGE_KEY)?.trim();
     return secret ? { "X-Admin-Secret": secret } : {};

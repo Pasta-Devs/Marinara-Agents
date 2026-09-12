@@ -201,12 +201,21 @@ const slurpOwnedSourcePaths = [
   "packages/server/src/routes/slurp.routes.ts",
   "packages/server/src/services/slurp",
   "packages/server/src/services/storage/slurp.storage.ts",
+];
+// The remaster owns strictly more of the tree than the frozen legacy package does.
+const slurp2OwnedSourcePaths = [
+  ...slurpOwnedSourcePaths,
+  "packages/server/src/routes/slurp-messages.routes.ts",
   "packages/server/src/services/storage/slurp-financial-queue.ts",
   "packages/server/src/services/storage/slurp-host-tables.ts",
+  "packages/server/src/services/storage/slurp-messages.storage.ts",
   "packages/server/src/services/storage/slurp-reply-queue.storage.ts",
 ];
-for (const packageId of ["slurp", "slurp2"]) {
-  for (const relativePath of slurpOwnedSourcePaths) {
+for (const [packageId, ownedSourcePaths] of [
+  ["slurp", slurpOwnedSourcePaths],
+  ["slurp2", slurp2OwnedSourcePaths],
+]) {
+  for (const relativePath of ownedSourcePaths) {
     const packageOwnedPath = join(repoRoot, `packages/${packageId}/src/engine`, relativePath);
     if (!existsSync(packageOwnedPath)) {
       throw new Error(`${packageId} package source is missing: ${relativePath}`);

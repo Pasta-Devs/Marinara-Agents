@@ -3,25 +3,25 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = join(import.meta.dirname, "..");
-const componentsDir = join(root, "packages/slurp/src/engine/packages/client/src/components/slurp");
+const componentsDir = join(root, "packages/slurp2/src/engine/packages/client/src/components/slurp");
 const home = readFileSync(join(componentsDir, "SlurpHome.tsx"), "utf8");
 const settings = readFileSync(join(componentsDir, "SlurpSettings.tsx"), "utf8");
 const shell = readFileSync(join(componentsDir, "SlurpShell.tsx"), "utf8");
 const coin = readFileSync(join(componentsDir, "SlurpCoin.tsx"), "utf8");
 const creatorPostCard = readFileSync(join(componentsDir, "SlurpCreatorPostCard.tsx"), "utf8");
 const sparkle = readFileSync(join(componentsDir, "SlurpSparkleVeil.tsx"), "utf8");
-const hooks = readFileSync(join(root, "packages/slurp/src/engine/packages/client/src/hooks/use-slurp.ts"), "utf8");
+const hooks = readFileSync(join(root, "packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts"), "utf8");
 const mediaHook = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/client/src/hooks/use-slurp-media-src.ts"),
+  join(root, "packages/slurp2/src/engine/packages/client/src/hooks/use-slurp-media-src.ts"),
   "utf8",
 );
 const ageGate = readFileSync(join(componentsDir, "SlurpAgeGate.tsx"), "utf8");
 const artwork = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-artwork.operation.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-artwork.operation.ts"),
   "utf8",
 );
 const images = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-images.service.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-images.service.ts"),
   "utf8",
 );
 

@@ -1,29 +1,29 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createSlurpActivationLifecycle } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-activation-lifecycle.ts";
-import { buildSlurpPostTimingContext } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-post-timing.ts";
-import { runSlurpAutoPostPollOperations } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-autopost-poll.ts";
-import { normalizeSlurpFanActivityRows } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-fan-activity-response.ts";
-import { hasSlurpCreatorPostingIntervalConflict } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-posting-interval.ts";
+import { createSlurpActivationLifecycle } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-activation-lifecycle.ts";
+import { buildSlurpPostTimingContext } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-post-timing.ts";
+import { runSlurpAutoPostPollOperations } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-autopost-poll.ts";
+import { normalizeSlurpFanActivityRows } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-fan-activity-response.ts";
+import { hasSlurpCreatorPostingIntervalConflict } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-posting-interval.ts";
 
-const storage = readFileSync("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
+const storage = readFileSync("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
 const refreshScheduler = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-refresh-scheduler.service.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-refresh-scheduler.service.ts",
   "utf8",
 );
-const hooks = readFileSync("packages/slurp/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");
-const routes = readFileSync("packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
+const hooks = readFileSync("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");
+const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
 const settingsUi = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx",
+  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx",
   "utf8",
 );
-const homeUi = readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
+const homeUi = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
 const onboardingUi = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx",
+  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx",
   "utf8",
 );
 const locale = JSON.parse(
-  readFileSync("packages/slurp/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
+  readFileSync("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
 ) as Record<string, string>;
 
 assert.match(
@@ -87,7 +87,7 @@ assert.equal(hasSlurpCreatorPostingIntervalConflict([candidateAt - postingInterv
 // `postsPerDay` — ran out halfway through the day. A production install showed the result: slot
 // gaps of 30 minutes for a requested 24 a day, and 100 discarded rows against 42 published.
 const reserve = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-reserve.operation.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-reserve.operation.ts",
   "utf8",
 );
 assert.match(

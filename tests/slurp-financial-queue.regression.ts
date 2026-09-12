@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { enqueueSlurpFinancial } from "../packages/slurp/src/engine/packages/server/src/services/storage/slurp-financial-queue.js";
+import { enqueueSlurpFinancial } from "../packages/slurp2/src/engine/packages/server/src/services/storage/slurp-financial-queue.js";
 
 const sharedDb = {} as Parameters<typeof enqueueSlurpFinancial>[0];
 const order: number[] = [];

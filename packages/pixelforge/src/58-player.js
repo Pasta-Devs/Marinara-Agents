@@ -230,8 +230,72 @@ const evictNotices = (rows) => {
   return out;
 };
 
+// ── The disposition ladder's promotion line (P2, plan §13) ────────────────────
+// The ladder has been in the block since 0.11 — d 0..3, stored, capped, merged,
+// evicted — and for four releases nothing in the game ever moved it: every bump
+// wrote `t` and `s`, every resident stayed d 0, and the journal counted a town
+// of permanent strangers. 0.15 is where it moves, and the WHOLE heuristic is
+// this table: a rung is EARNED when the encounter count crosses its line.
+//
+// Encounters are already weighted at the verb sites — an accepted talk turn, a
+// purchase and a night's berth each count one, and a finished job counts three
+// (61-pack settle(); the reward ruling's "money and the giver's rapport" finally
+// cashing out as movement rather than a tally). So the lines below read in
+// those units: acquainted after a few real exchanges, friendly after sustained
+// business or a couple of jobs, close after the kind of history a player builds
+// on purpose. Numbers are alpha tuning, one edit each, and deliberately high
+// enough that one conversation's presses cannot vault a rung (§12.3's four-bump
+// question is absorbed here: four sends in one window is four points, short of
+// friendly from any distance).
+//
+// PROMOTION IS A CROSSING, NOT A CEILING. bump() promotes only when the count
+// moves from below a line to at-or-past it, and never demotes — so a `d` set
+// PRECISELY (the S1 arm, or a test) stays where it was put unless a NEW line is
+// crossed. A max() over the table would have quietly re-promoted anybody a
+// future demotion verb tried to lower, and fighting the GM is the one thing the
+// heuristic must never do. Hostility is not on this ladder at all: `h` is a
+// flag beside it, written by nothing package-side yet, and waits for S1.
+const PROMOTION = [3, 10, 25]; // t at which d 1, 2, 3 are earned
+
+// ── THE VERB CLASSES (0.15, the maintainer's ruling) ──────────────────────────
+// Saying good morning and asking after the rumors should not, over enough
+// mornings, make you somebody's best friend. Small interactions raise standing
+// only to a point; doing jobs, running quests, being business partners are what
+// carry it past acquaintance. So every bump has a CLASS, carried by the call and
+// stored nowhere:
+//
+//   CASUAL (the default, and the talk press — plus any ask-menu read that ever
+//   grows one) builds `t` forever and can never leave a row above ACQUAINTED.
+//   Past that ceiling its encounters accumulate and nothing else happens.
+//
+//   MEANINGFUL (`patch.meaningful`) is the job settle and the two commerce sites
+//   — a berth let and a rod sold, which is what "business partner" means in a
+//   package with two shops. It may cross any line, one rung per press.
+//
+// THE PADDING CONSEQUENCE, stated rather than discovered: casual encounters DO
+// count toward the higher thresholds, so a hundred greetings leave a row that
+// one job lifts straight to friendly. What small talk cannot be is the press
+// that CROSSES — and the crossing press still buys one rung and no more.
+//
+// The class is a field of the PATCH, read here and never written to a row: the
+// wire is 0.11's, to the byte, and `meaningful` never reaches it.
+const CASUAL_CEILING = 1; // the highest rung small talk alone can leave a row on
+
+/** The rung the encounter count has EARNED, 0..3. */
+function rungOf(t) {
+  let rung = 0;
+  for (let step = 0; step < PROMOTION.length; step++) if (t >= PROMOTION[step]) rung = step + 1;
+  return rung;
+}
+
 PF.player = {
   CAPS,
+  // The ladder's words, one authority for every surface that says them — the
+  // window title, the promotion toast, the turn header and the journal all read
+  // from here, because two spellings of "acquainted" is a bug report waiting.
+  // Theme-BLIND on purpose (plan §2.8): a stranger is a stranger in any world.
+  RUNGS: ["stranger", "acquainted", "friendly", "close friend"],
+  PROMOTION,
   QUALITY,
   TOOL_TYPES,
   MIGRATIONS: PLAYER_MIGRATIONS,
@@ -1269,10 +1333,26 @@ PF.player = {
   },
 
   /** Move a relationship. `patch` is { d, t, h, s }: d is the 0-3 ladder, t
-   *  counts encounters, h flags hostility, s is the last line worth remembering.
+   *  counts encounters (weighted at the verb sites — a finished job is three),
+   *  h flags hostility, s is the last line worth remembering.
    *  Two caps bite here and they bite DIFFERENTLY (plan §4): the row cap evicts
    *  whole STRANGER rows, and the line cap evicts the oldest LINE and leaves the
-   *  row standing. */
+   *  row standing.
+   *
+   *  THE LADDER MOVES HERE AND NOWHERE ELSE (0.15, plan §13). When the patch
+   *  carries no explicit `d`, an encounter that crosses a PROMOTION line lifts
+   *  the rung — a crossing, never a max(), so a precisely-set d is not fought
+   *  (the header note above bump's table says why). An explicit `d` stays the
+   *  SETTER it has always been: that arm is S1's, and the harness pins it.
+   *
+   *  `patch.meaningful` is the VERB CLASS, not a stored field: without it the
+   *  bump is small talk and can never leave the row above acquainted; with it
+   *  the press may cross any line. Either way a single call moves the row AT
+   *  MOST ONE RUNG. The header note above CASUAL_CEILING has the ruling.
+   *
+   *  Returns `{ row, rose }` — `rose` is the new rung when THIS call earned one
+   *  and 0 otherwise, so a caller with a toast to show knows without diffing.
+   *  Refusal is still `null`, exactly as documented at the cap. */
   bump(core, zoneId, name, patch, gen) {
     const p = this._live(core, gen);
     if (!p) return null;
@@ -1293,6 +1373,8 @@ PF.player = {
       row = { d: 0, t: 0 };
       rows[who] = row;
     }
+    let rose = 0;
+    const tBefore = posInt(row.t, 0);
     if (patch && typeof patch === "object") {
       if (patch.d !== undefined) row.d = PF.clamp(posInt(patch.d, 0), 0, 3);
       row.t = posInt(row.t, 0) + Math.max(0, posInt(patch.t, patch.t === undefined ? 1 : 0));
@@ -1318,8 +1400,50 @@ PF.player = {
     } else {
       row.t = posInt(row.t, 0) + 1;
     }
+    // The crossing. Gated on the ABSENCE of an explicit d — a patch that set the
+    // ladder said exactly where it wanted the row, and the heuristic yields.
+    //
+    // TWO RULES, and between them they are the ruling in the header note above:
+    //   1. THE CEILING is the verb class's. Casual tops out at acquainted; only
+    //      a meaningful press reaches the rungs above it.
+    //   2. ONE RUNG PER PRESS, whatever the count has earned. Without it
+    //      `row.d = earned` was a max() in disguise — a row a demotion put on
+    //      the floor at `t` 9 was handed TWO rungs by one good morning, because
+    //      the count was still high and there was still a line under it to cross.
+    //
+    // The crossing is measured on the TRUE count, not on the capped landing: a
+    // casual hello that carries `t` over the friendly line HAS crossed a line,
+    // and lands on the casual ceiling. Casual promotion still requires one,
+    // which is what keeps the heuristic from re-fighting a precise demotion on
+    // every subsequent hello. A meaningful press does not require one, because
+    // a padded row is already past every line it could cross — and freezing the
+    // player out of the ladder for having been friendly is not the ruling.
+    if (!(patch && typeof patch === "object" && patch.d !== undefined)) {
+      const meaningful = !!(patch && typeof patch === "object" && patch.meaningful);
+      const count = rungOf(posInt(row.t, 0));
+      const held = posInt(row.d, 0);
+      const earned = Math.min(count, meaningful ? PROMOTION.length : CASUAL_CEILING);
+      if ((meaningful || count > rungOf(tBefore)) && earned > held) {
+        row.d = Math.min(earned, held + 1);
+        rose = row.d;
+      }
+    }
     this._touch(core);
-    return row;
+    return { row, rose };
+  },
+
+  /** Where the player stands with one person: `{ d, h }`, zeros for a stranger
+   *  and for anybody the block has never met — the ladder read the window, the
+   *  header and the pack all share (0.15, plan §13). Read-only and cheap on
+   *  purpose: it is called from a per-turn composer and from a window that
+   *  rebuilds on every press, so it allocates one small literal and touches
+   *  nothing. */
+  rung(core, zoneId, name) {
+    const p = this.get(core);
+    const rows = p ? this._ownRead(p.rel, str(zoneId)) : undefined;
+    const row = rows && typeof rows === "object" ? this._ownRead(rows, str(name)) : undefined;
+    if (!row || typeof row !== "object") return { d: 0, h: false };
+    return { d: PF.clamp(posInt(row.d, 0), 0, 3), h: !!row.h };
   },
 
   _relRowCount(p) {

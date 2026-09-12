@@ -3,6 +3,11 @@
 // chips, touch D-pad, Talk / Travel / Keyboard controls, toasts. The root is
 // pointer-events:none; each control opts back in — clicks in empty space fall
 // through to the narration below (host contract).
+
+/** "No chat visit has been spent on the retry popup yet." A sentinel rather than
+ *  `null` because `null` is a chat id this HUD can actually hold. */
+const NO_RETRY_VISIT = Symbol("pixelforge:no-retry-visit");
+
 PF.Hud = class {
   constructor(rootEl, core) {
     this.core = core;
@@ -89,6 +94,12 @@ PF.Hud = class {
     this.captionEl.setAttribute("aria-atomic", "true");
     this.captionEl.setAttribute("aria-hidden", "true");
     this.locChip = PF.el("span", { style: S.chip, text: "…" });
+    // THE SIGNPOST AT THE EDGE (0.16 §2.3). A gate is crossed by walking into
+    // it, so there is no button to press and nothing to dim — what the player
+    // needs is which way it goes and what is over there. A chip beside the one
+    // that already says where you are, hidden until they are standing at an
+    // edge, and proximity-driven per frame like the offers in the action column.
+    this.gateChip = PF.el("span", { style: `${S.chip}display:none;`, text: "" });
     this.clockChip = PF.el("span", { style: S.chip, text: "" });
     // The purse (S3). Hidden until there is something in it: a legacy world with
     // no economy in it should not carry a permanent "0 coins" telling the player
@@ -101,10 +112,28 @@ PF.Hud = class {
     // `!inWorld` hiding is a toggle these two have to own (see update()).
     this.journalChip = this._chip("📖", "open the journal", () => this.toggleJournal());
     this.sheetChip = this._chip("👤", "open the character sheet", () => this.toggleSheet());
+    // THE RETRY SURFACE'S STANDING WAY BACK IN (0.16 §2.10c). The popup opens
+    // itself once a visit and is dismissible from then on; this chip is what
+    // keeps the offer reachable without nagging, and its words come off the same
+    // registry region the rows do. It derives STRICTLY from live rows, so a
+    // world that healed stops saying "part stand-in" on its own.
+    //
+    // A GLYPH, LIKE THE TWO OPENERS ABOVE IT, and that is `_chip`'s contract
+    // rather than a preference: the topbar is one flex row of chips centred over
+    // the play field, and its fullest state — a bound location name, a signpost,
+    // the clock, a purse with a carry count, and all three buttons — is what the
+    // width was struck against. A twenty-character sentence wearing button
+    // chrome is another whole chip's worth of row, and it pushed that state past
+    // the width on a phone. The SENTENCE is not lost: it is the accessible name,
+    // which is where the two beside it keep the words their glyphs do not say,
+    // and `RETRY_COPY.chip` stays the registry's one home for it.
+    this.retryChip = this._chip("🚧", `${PF.save.RETRY_COPY.chip} — what didn't finish being written`, () =>
+      this.toggleRetry(),
+    );
     this.topbar = PF.el(
       "div",
       { style: "position:absolute;top:10px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:2;" },
-      [this.locChip, this.clockChip, this.purseChip, this.journalChip, this.sheetChip],
+      [this.locChip, this.gateChip, this.clockChip, this.purseChip, this.retryChip, this.journalChip, this.sheetChip],
     );
 
     this.talkBtn = this._btn("Talk (E)", () => core.interact(), S.railBtn);
@@ -290,7 +319,14 @@ PF.Hud = class {
     this.gateBody = PF.el("div", {
       style: "font:12px/1.65 inherit;opacity:0.85;max-width:34ch;margin-bottom:12px;",
     });
-    this.gateRetry = this._btn("Try again", () => PF.save.retryGeneration(this.core));
+    this.gateRetry = this._btn("Try again", () => void PF.save.retryGeneration(this.core));
+    // THE SECOND EXIT (0.16 §2.10d), and it only ever appears when there is
+    // somewhere to go: a playable, non-interim world standing behind the gate.
+    // On a boot-armed pack gate it records the deferral and lets play begin
+    // packless; on a post-start one it simply takes the freeze off the world the
+    // player was already living in.
+    this.gateKeep = this._btn("Keep playing without it", () => void PF.save.keepPlaying(this.core));
+    this.gateKeep.style.display = "none";
     this.gateEl = PF.el(
       "div",
       {
@@ -299,7 +335,7 @@ PF.Hud = class {
           "text-align:center;padding:24px;box-sizing:border-box;gap:0;pointer-events:auto;z-index:4;" +
           "background:rgba(12,14,12,0.9);color:#f3efe2;",
       },
-      [this.gateTitle, this.gateBody, this.gateRetry],
+      [this.gateTitle, this.gateBody, this.gateRetry, this.gateKeep],
     );
     this.gateEl.setAttribute("role", "status");
     this.gateEl.setAttribute("aria-live", "polite");
@@ -356,12 +392,37 @@ PF.Hud = class {
       ]),
       PF.el("div", { style: "flex:1 1 auto;display:flex;gap:14px;overflow:hidden;" }, [this.sheetArt, this.sheetStats]),
     ]);
+    // ── THE GENERATION RETRY POPUP (0.16 §2.10c, ruling 4) ──────────────────
+    // On the two panels' exact shape, and for the exact same reason: the one
+    // window pattern in this package that composes safely with the host. Not an
+    // `aria-modal` dialog (that would make `_hostOwnsKeyboard` true and kill the
+    // keys that close it), a member of `closePanels()`'s mutual-exclusion set —
+    // which is what gets it Escape for free, with zero 90-element edits — and
+    // z-3, under the gate, because a regeneration IN FLIGHT re-arms that gate and
+    // the gate is then the surface.
+    //
+    // IT DOES NOT STOP THE CLOCK. The journal and the sheet do not either;
+    // `sim.talkAnchorId` means "a conversation is open" and is not ours to
+    // borrow. What freezes time is the gate a regeneration arms, at the tick
+    // level, which is exactly right for a world that may be replaced.
+    this.retryBody = PF.el("div", {
+      style: "flex:1 1 auto;overflow:auto;display:flex;flex-direction:column;gap:12px;",
+    });
+    this.retryEl = PF.el("div", { style: panelStyle, "aria-label": "what didn't finish being written" }, [
+      PF.el("div", { style: panelHead }, [
+        PF.el("div", { style: panelTitle, text: PF.save.RETRY_COPY.title }),
+        this._btn("✕ Close", () => this.closeRetry()),
+      ]),
+      this.retryBody,
+    ]);
+
     // Both boot DOWN, as a property rather than inside the style string: the
     // toggles and update() write this same property, and a boot state expressed
     // only in `cssText` is one nothing can read back (the berth button's own
     // discipline).
     this.journalEl.style.display = "none";
     this.sheetEl.style.display = "none";
+    this.retryEl.style.display = "none";
 
     // ── THE TALK WINDOW (plan §2.5) ─────────────────────────────────────────
     // The release's flagship surface, and the one panel here that is deliberately
@@ -449,6 +510,7 @@ PF.Hud = class {
         this.talkEl,
         this.journalEl,
         this.sheetEl,
+        this.retryEl,
         this.gateEl,
       ],
     );
@@ -462,6 +524,34 @@ PF.Hud = class {
     this._journalMemo = null;
     this._sheet = false;
     this._sheetKey = null;
+    // ── THE RETRY POPUP'S OWN STATE (0.16 §2.10c) ───────────────────────────
+    // CHAT IDENTITY LIVES HERE, which is the half that keeps "zero 90-element
+    // edits" true rather than lucky: `70-hud` reads no chat id today and
+    // `_switchChat` never rebuilds the HUD — it calls `refreshChips` and nothing
+    // else — so the latch, the once-a-visit memo and any half-made confirm are
+    // keyed by the chat they belong to and self-reset inside `update()`'s
+    // per-frame reconcile when it changes. Chat A's popup can never mount over
+    // chat B.
+    this._retry = false;
+    this._retryChat = null;
+    // NO VISIT HAS BEEN SPENT YET, said with a value no chat id can equal. Both
+    // memos used to start `null`, and `null` is also what `_retryChat` reads
+    // when there is no chat — so on the very first frame of a chat-less core the
+    // two agreed and the popup could never auto-open. A sentinel means "unspent"
+    // and nothing else.
+    this._retryVisit = NO_RETRY_VISIT;
+    this._retryKey = null;
+    this._retryRows = [];
+    // A half-made press: {stage, action, free}. Dropped on every close, on the
+    // chat change, and once it is spent — a confirmation half-made an hour ago
+    // is not permission for the press that reopens the panel (the journal's own
+    // discipline).
+    this._retryConfirm = null;
+    // Session-only sentences a press LEFT BEHIND, by stage: the free rebuild's
+    // "nothing has changed yet", and the second-failure line. Honestly
+    // re-derived as first-time after a reload, because a durable attempt log is
+    // refused for the same reason a durable failure log is.
+    this._retryNotes = {};
     // ── THE TABS THEMSELVES (0.13 §2.4) ──────────────────────────────────────
     // A LIST of {label, render, memoSync}, and it is a list rather than two
     // branches because the third occupant is already committed (P8's extended
@@ -786,11 +876,19 @@ PF.Hud = class {
     // — so a key built off the memo alone would leave "Skip story & talk?" drawn
     // on a control whose question no longer exists.
     const confirm = this.core.talkConfirmArmed?.() === true ? (this.core._talkConfirm?.controlId ?? "") : "";
+    // THE STANDING, because the title draws it (`_talkRender` below) and a key
+    // that did not carry it was pinned by whatever the row said when the window
+    // opened. Nothing in the game could move a row with the window already open
+    // — the talk press's own bump lands on an accepted turn, which is a frame
+    // later — so this was inert until the GM got a standing verb (0.16), and it
+    // is the half that makes the change visible without closing the window.
+    const stand = PF.player.rung(this.core, sim.world?.startZone, anchor.name);
     return [
       anchor.id,
       sim.day,
       sim.daypart(),
       sim.weather().word,
+      `${stand.d}${stand.h ? "!" : ""}`,
       errands,
       PF.pack.askBurned(this.core, anchor) ? "burnt" : "",
       this._talkDoorNote() ?? "",
@@ -811,7 +909,15 @@ PF.Hud = class {
     const key = this._talkKeyOf(anchor);
     if (key === this._talkRowKey) return;
     this._talkRowKey = key;
-    this.talkWho.textContent = anchor.role ? `${anchor.name} — ${anchor.role}` : anchor.name;
+    // THE STANDING RIDES THE TITLE (0.15, plan §13.4) — one word, and only when
+    // it says something: a stranger's window reads exactly as 0.14's did, and
+    // "stranger" written out would be the ladder announcing its own floor.
+    // Hostile outranks the rung, here as everywhere: whatever you built before,
+    // THIS is the standing that decides the room.
+    const stand = PF.player.rung(this.core, this.core.sim?.world?.startZone, anchor.name);
+    const standWord = stand.h ? "hostile" : stand.d > 0 ? PF.player.RUNGS[stand.d] : "";
+    const who = anchor.role ? `${anchor.name} — ${anchor.role}` : anchor.name;
+    this.talkWho.textContent = standWord ? `${who} · ${standWord}` : who;
     const core = this.core;
     const note = this._talkDoorNote();
     const armed = core._talkConfirm?.controlId ?? null;
@@ -909,6 +1015,17 @@ PF.Hud = class {
     const text = String(this.talkInput.value ?? "").trim();
     if (!text) return;
     this.core.talkSay(text);
+  }
+
+  /** ONE SENTENCE PER EVENT (0.15). `toast` below is ONE node and ONE timer per
+   *  surface, which makes two toasts in a tick exactly one toast: the second
+   *  overwrites the first and the player never sees it. That is not a queue
+   *  waiting to be built — it is a rule about the copy. Everything a single
+   *  press has to say is composed HERE and said once, parts joined by a middot,
+   *  so a rung earned at a hand-in rides the money receipt instead of erasing
+   *  it. Empty parts drop out, so the ordinary receipt is unchanged. */
+  _said(...parts) {
+    return parts.filter(Boolean).join(" · ");
   }
 
   /** `kind` picks the SURFACE, not the styling: "location" goes to the top strip
@@ -1269,7 +1386,14 @@ PF.Hud = class {
     // The purse moved, so the chips have.
     this.refreshChips();
     const paid = PF.economy.money(this.core.sim.world, result.money);
-    this.toast(result.giver ? `Handed in to ${result.giver} — ${paid}` : `Handed in — ${paid}`);
+    // The receipt already names the giver, so the rise rides it as a CLAUSE —
+    // one sentence, and the money survives the rung (see `_said`).
+    this.toast(
+      this._said(
+        result.giver ? `Handed in to ${result.giver} — ${paid}` : `Handed in — ${paid}`,
+        result.giver && result.rose ? this.roseClause(result.rose) : "",
+      ),
+    );
     const view = PF.pack.boardOffers(this.core);
     if (view.available) this._renderBoard(view);
   }
@@ -1334,15 +1458,81 @@ PF.Hud = class {
    *  for the same walk are both filled by taking it, and each is its own sentence.
    *  An empty list says nothing and touches nothing, which is the ordinary case
    *  for every arrival and every greeting in the game. */
-  questFilled(done) {
-    if (!Array.isArray(done) || !done.length) return;
+  questFilled(done, rise) {
+    const rows = Array.isArray(done) ? done : [];
+    if (!rows.length && !rise?.rung) return;
     const world = this.core.sim?.world;
-    for (const row of done) {
+    // ONE SENTENCE FOR THE WHOLE PRESS. Two errands filled by one walk used to
+    // toast twice and show once; a rise beside a receipt did the same to the
+    // money. Everything the press has to say is composed and said together.
+    const parts = rows.map((row) => {
       const paid = PF.economy.money(world, row.money);
-      this.toast(row.giver ? `Done for ${row.giver} — ${paid}` : `Job done — ${paid}`);
-    }
+      // The rise rides the settle's own return, so it is said exactly when the
+      // rung was earned and never re-fires on a reload — there is nothing stored
+      // to re-announce (plan §13.4). The CLAUSE form, because this half of the
+      // sentence has already named the person.
+      return this._said(
+        row.giver ? `Done for ${row.giver} — ${paid}` : `Job done — ${paid}`,
+        row.giver && row.rose ? this.roseClause(row.rose) : "",
+      );
+    });
+    // The TURN'S OWN rise — the greeting that crossed a line on the way to the
+    // handover — joins the same sentence NAMED, because the person who warmed
+    // to you need not be the person the errand was for.
+    if (rise?.rung) parts.push(this.roseLine(rise.name, rise.rung));
+    this.toast(this._said(...parts));
     // The purse moved, so the chips have.
     this.refreshChips();
+  }
+
+  /** The promotion, said once, in plain words. 0.12's precedent: a level change
+   *  is toasted the moment it happens and then lives on the sheet — a rung
+   *  change is the same kind of moment, and the Standing panel is its sheet. */
+  roseLine(name, rung) {
+    if (rung >= 3) return `${name} counts you a close friend now.`;
+    if (rung >= 2) return `${name} counts you a friend now.`;
+    return `${name} knows you now.`;
+  }
+
+  /** The same rise as a CLAUSE, for a receipt that has already said who it was
+   *  about ("Handed in to Alder — 6 coins · they know you now."). Two spellings
+   *  of one moment is the bug roseLine's own header warns about, so this is the
+   *  same authority and the same ladder words — only the subject moves to a
+   *  pronoun, so the sentence does not say the name twice. */
+  roseClause(rung) {
+    if (rung >= 3) return "they count you a close friend now.";
+    if (rung >= 2) return "they count you a friend now.";
+    return "they know you now.";
+  }
+
+  /** The GM's own standing verb, announced (0.16, Capability API 1.16). Shaped
+   *  like `questFilled` above and for the same reason: the copy for an event
+   *  lives with the other copy, and the caller hands over FACTS rather than a
+   *  finished sentence.
+   *
+   *  The three rungs above the floor DELEGATE to `roseLine` — two spellings of
+   *  one moment is exactly the bug that header warns about — and the two words it
+   *  has no case for are the two only the GM can reach: hostility, which no press
+   *  in the game writes, and a return to the floor, which no rise can be.
+   *
+   *  `remembered` is the line the row now carries and ONLY WHEN THIS EVENT SET
+   *  IT; empty drops out of `_said`, so the ordinary case is one sentence.
+   *
+   *  NO `refreshChips()`, unlike `questFilled` — deliberately. Nothing on the
+   *  chip row shows standing, and the three surfaces that do read the row live:
+   *  the turn header composes fresh (30-sim), the Standing sheet's value key
+   *  projects the rungs and the hostile count (`_sheetValueKey`), and the talk
+   *  window's key carries the standing beside it (`_talkKeyOf`). */
+  standingSet(name, stance, remembered) {
+    if (!name) return;
+    const rung = PF.player.RUNGS.indexOf(stance);
+    const said =
+      stance === "hostile"
+        ? `${name} has turned against you.`
+        : rung > 0
+          ? this.roseLine(name, rung)
+          : `${name} is a stranger to you again.`;
+    this.toast(this._said(said, remembered));
   }
 
   /** Take the rod the button is offering. The offer is re-read inside buyRod, so
@@ -1353,10 +1543,15 @@ PF.Hud = class {
     const result = PF.economy.buyRod(this.core);
     if (result.ok) {
       const named = PF.economy.describe(world, { t: "rod", k: result.tier });
+      // The rod's receipt names the rod, not the keeper — so the rise rides it
+      // named, exactly as the berth's does.
       this.toast(
-        result.bait
-          ? `A ${named} is yours, line and tackle included — ${PF.economy.money(world, result.price)}.`
-          : `A ${named} is yours — ${PF.economy.money(world, result.price)}.`,
+        this._said(
+          result.bait
+            ? `A ${named} is yours, line and tackle included — ${PF.economy.money(world, result.price)}.`
+            : `A ${named} is yours — ${PF.economy.money(world, result.price)}.`,
+          result.rose ? this.roseLine(result.keeper, result.rose) : "",
+        ),
       );
       this.refreshChips();
       return;
@@ -1396,7 +1591,14 @@ PF.Hud = class {
     const world = this.core.sim?.world;
     const result = PF.economy.rentBerth(this.core);
     if (result.ok) {
-      this.toast(`A berth is yours — ${PF.economy.money(world, result.price)} the night.`);
+      // The berth's receipt never names the keeper, so a rise it carries is said
+      // in the NAMED form and composed into the same sentence (see `_said`).
+      this.toast(
+        this._said(
+          `A berth is yours — ${PF.economy.money(world, result.price)} the night.`,
+          result.rose ? this.roseLine(result.keeper, result.rose) : "",
+        ),
+      );
       this.refreshChips();
       return;
     }
@@ -1445,12 +1647,265 @@ PF.Hud = class {
     // a FROZEN CLOCK with an invisible window underneath, whose first Escape
     // closes a surface they cannot see.
     const open =
-      this._journal || this._sheet || this.boardMenu.style.display === "flex" || this.core.talkOpen?.() === true;
+      this._journal ||
+      this._sheet ||
+      this._retry ||
+      this.boardMenu.style.display === "flex" ||
+      this.core.talkOpen?.() === true;
     this.core.closeTalk?.();
     this.closeJournal();
     this.closeSheet();
+    // THE RETRY POPUP IS ONE OF THEM, and this is the whole of its Escape story
+    // (0.16 §2.10c). It is also where "dismissal is not acceptance" is enforced:
+    // `closePanels` is a blunt close-everything with no "why" channel, so a
+    // player who opened the journal has spent no choice — the close writes no
+    // marker, the once-a-visit memo stops the re-pop, and the chip stays the way
+    // back in. Only a row's own button records anything.
+    this.closeRetry();
     this.closeBoard();
     return open;
+  }
+
+  /** The popup, on `toggleJournal`'s exact shape: one surface at a time, and the
+   *  talk window counts as one of them because it is the member that also stops
+   *  the clock. */
+  toggleRetry() {
+    if (!this._panelsAllowed()) return;
+    if (this._retry) {
+      this.closeRetry();
+      return;
+    }
+    this.closeSheet();
+    this.closeJournal();
+    this.closeBoard();
+    this.core.closeTalk?.();
+    this._retry = true;
+    this._retryChat = this.core.chatId ?? null;
+    this._retryConfirm = null;
+    this._retryKey = null; // opening always paints
+    this._syncRetry();
+    this.retryEl.style.display = "flex";
+  }
+
+  closeRetry() {
+    this._retry = false;
+    this._retryConfirm = null;
+    this.retryEl.style.display = "none";
+  }
+
+  /** Recompute the rows only when something they are derived FROM has moved.
+   *  The key is deliberately all cheap reads — the derivation itself hashes a
+   *  sealed brief, which is not a per-frame cost. */
+  _retryMemoKey() {
+    const core = this.core;
+    const meta = core.host && typeof core.host.chatMeta === "object" ? core.host.chatMeta : null;
+    const gate = PF.save.gateHolds(core)
+      ? `${PF.save.gate.state}|${PF.save.gate.stage}|${PF.save.gate.postStart === true}`
+      : "";
+    return [
+      core.chatId ?? "",
+      gate,
+      core.sim?.world ?? null,
+      meta?.pixelforgeBrief ?? null,
+      meta?.pixelforgePack ?? null,
+      PF.save.fallbackAccepted(meta, core.chatId, "brief"),
+      PF.save.fallbackAccepted(meta, core.chatId, "pack"),
+      this._retryConfirm,
+      this._retryNotes,
+      this._retryNoteRev ?? 0,
+    ];
+  }
+
+  /** Ask the registry what is standing, and repaint if it moved. Returns the
+   *  live rows, which is what the chip reads too. */
+  _syncRetry() {
+    const key = this._retryMemoKey();
+    const held = this._retryKey;
+    const moved = !held || held.length !== key.length || key.some((value, at) => value !== held[at]);
+    if (moved) {
+      this._retryKey = key;
+      this._retryRows = PF.save.retryRows(this.core);
+      if (this._retry) this._renderRetry();
+    }
+    return this._retryRows;
+  }
+
+  /** The panel's body: one block per row, or the confirmation that stands in
+   *  front of a world-replacing press. */
+  _renderRetry() {
+    const C = PF.save.RETRY_COPY;
+    const body = this.retryBody;
+    const confirm = this._retryConfirm;
+    if (confirm) {
+      // THE TWO-STEP CONFIRM, and FREE IS NOT CONSEQUENCE-FREE: the severance is
+      // identical for all three shapes, so the cost line and the words on the
+      // button are the only halves that differ.
+      const words = confirm.free
+        ? { title: C.confirmFreeTitle, cost: C.costFree, go: C.confirmFreeGo }
+        : confirm.cascade
+          ? { title: C.confirmCascadeTitle, cost: C.costCascade, go: C.confirmCascadeGo }
+          : { title: C.confirmTitle, cost: C.costPaid, go: C.confirmGo };
+      body.replaceChildren(
+        PF.el("div", { style: "font:700 12px/1.6 inherit;", text: words.title }),
+        PF.el("div", { style: "opacity:0.9;", text: words.cost }),
+        PF.el("div", { style: "opacity:0.9;", text: C.keepsAndLoses }),
+        PF.el("div", { style: "display:flex;gap:6px;flex-wrap:wrap;" }, [
+          this._btn(words.go, () => this._retryGo(confirm)),
+          this._btn(C.confirmBack, () => {
+            this._retryConfirm = null;
+            this._retryKey = null;
+            this._syncRetry();
+          }),
+        ]),
+      );
+      return;
+    }
+    const held = PF.save.gateHolds(this.core);
+    const blocks = [];
+    for (const row of this._retryRows) {
+      const controls = [];
+      for (const action of row.actions) {
+        const button = this._btn(action.label, () => this._retryPress(row, action));
+        // Nothing is pressable while a call is in flight behind the gate.
+        if (held) button.disabled = true;
+        controls.push(button);
+      }
+      const parts = [
+        PF.el("div", { style: "font:700 12px/1.6 inherit;", text: row.label }),
+        PF.el("div", { style: "opacity:0.9;", text: row.body }),
+      ];
+      const note = this._retryNotes[row.stage];
+      if (note) parts.push(PF.el("div", { style: "opacity:0.75;", text: note }));
+      // A BUTTON'S OWN SUB-LINE IS ASKED, NOT READ: the free rebuild's sentence
+      // is true in the state the row is usually in and false in the two where
+      // the compile already answers. The registry owns both halves and the
+      // choice between them — this is one repaint, not a per-frame cost, and
+      // the memo above is what keeps it that way. Nor can the answer go stale on
+      // the panel, and the enumeration is exact: the probe reads the standing
+      // world, the sealed setting, the gate, and — behind `_regenSeed` and
+      // `_configTheme` — the wizard's seed and theme. The first three are in
+      // that key. The other two are written at setup and nothing moves them
+      // once a game has started, and the seed the probe actually uses is the
+      // standing world's, which is in the key.
+      for (const action of row.actions) {
+        const line = PF.save.actionNote(this.core, action);
+        if (line) parts.push(PF.el("div", { style: "opacity:0.75;", text: line }));
+      }
+      parts.push(PF.el("div", { style: "display:flex;gap:6px;flex-wrap:wrap;" }, controls));
+      blocks.push(PF.el("div", { style: "display:flex;flex-direction:column;gap:6px;" }, parts));
+    }
+    blocks.push(PF.el("div", { style: "opacity:0.75;", text: C.footer }));
+    body.replaceChildren(...blocks);
+  }
+
+  /** A row button. Everything that replaces the world asks first; everything
+   *  else — a pack call, a deferral — is its own press and no more.
+   *
+   *  AND "EVERYTHING" IS ASKED OF THE STATE, NEVER OF THE BUTTON'S NAME. The
+   *  pack row's one priced button is a single call on the ordinary press — its
+   *  own words are "what its people used to say belonged to the old one" — and
+   *  the cascade's world swap on the other, so a branch that listed mode names
+   *  here was a rule that had quietly stopped being true: it sent a press that
+   *  severs friendships, quests, home and purchases straight through with no
+   *  confirmation at all. `retryReplacesWorld` is the same question the install
+   *  fork asks, and it is the only thing this branch may believe. */
+  _retryPress(row, action) {
+    const C = PF.save.RETRY_COPY;
+    // WHAT A PRESS COSTS AND WHAT IT REPLACES ARE TWO QUESTIONS, and only the
+    // first of them is the mode's to answer. The free rebuild costs milliseconds
+    // rather than calls, and it says so before it asks anything: the rebuild is
+    // deterministic at the same seed, so when it cannot answer yet the honest
+    // thing is to change the copy rather than walk the player through a
+    // confirmation for a no-op.
+    const free = action.mode === "rebuild";
+    if (free && !PF.save.canRebuild(this.core)) {
+      this._retryNotes[row.stage] = C.rebuildUnchanged;
+      this._retryNoteRev = (this._retryNoteRev ?? 0) + 1;
+      this._syncRetry();
+      return;
+    }
+    // THE SECOND QUESTION IS THE REGISTRY'S, FOR EVERY BUTTON WITHOUT EXCEPTION.
+    // The free press installs the same world with the same permanent severance
+    // the paid one does — it just does it for nothing — so a branch that asked
+    // first and reached this line only for the priced modes was the same rule
+    // that had quietly stopped being true one button along: the flag that says
+    // which presses replace the world had a reader the free press never got to.
+    if (PF.save.retryReplacesWorld(this.core, row.stage, action.mode)) {
+      // Which of the three shapes the confirmation wears comes off the registry
+      // as well: the cascade's press spends a call on what its people say and
+      // lands the player in a setting that is already written and stored, so it
+      // may not wear the sentence that prices writing one — and the free press
+      // may not wear either, because it makes no call at all.
+      //
+      // AND THE SECOND TERM IS THE STATE, for the same reason the docstring above
+      // gives: the mode's NAME cannot answer this either. `rewrite` is the pack
+      // row's cascade mode AND its ordinary priced button, and what makes a press
+      // on it the cascade is the setting sitting ahead of the world on screen —
+      // `worldBehindBrief`, the same question `retryReplacesWorld` asked one line
+      // up and the install fork asks at the end. Inert while the pack row's modes
+      // carry no `installs` flag, since only the cascade arm can have got a press
+      // this far; a row that grows one would otherwise get the cascade's copy —
+      // "the new world is settled, this brings you to it" — over a world nothing
+      // has written yet.
+      const cascade = PF.save.stage(row.stage)?.cascade?.mode === action.mode && PF.save.worldBehindBrief(this.core);
+      this._retryConfirm = { stage: row.stage, action, free, cascade };
+      this._retryKey = null;
+      this._syncRetry();
+      return;
+    }
+    void this._retryGo({ stage: row.stage, action, free });
+  }
+
+  async _retryGo(confirm) {
+    this._retryConfirm = null;
+    const stage = confirm.stage;
+    // A REFUSAL IS NOT A FAILURE, and which one this is is asked BEFORE the
+    // dispatch because that is the moment the question is about: the pre-arm
+    // flush is the window where a press is already out and the panel is still
+    // live to take another — no gate is armed yet, so the held-disable does not
+    // apply — and `regenerateStage` turns the second one away having spent
+    // nothing and failed nothing. Read after the await, the answer would be
+    // about the first press's record rather than about this press's refusal.
+    // (Both readings answer the same in the window a press can actually land
+    // in: the refusal returns two microtasks before an after-read could run.
+    // This ordering is the one that cannot start disagreeing, not a fault being
+    // held off by an inch.)
+    const busy = PF.save.retryInFlight(this.core);
+    // …AND THE PRESS BELONGS TO THE CHAT THAT MADE IT. That same flush is the
+    // OTHER window the panel is live in: switch chat inside it and
+    // `regenerateStage` returns false having dispatched nothing, while the
+    // per-frame reconcile has already emptied this map for the chat that just
+    // arrived. Written anyway, a sentence about a press nobody there made lands
+    // on their screen — which is the reconcile's own contract, defeated by a
+    // write that lands after it.
+    const pressedIn = this.core.chatId ?? null;
+    const ok = await PF.save.retryAction(this.core, stage, confirm.action);
+    if (confirm.action.mode && (this.core.chatId ?? null) === pressedIn) {
+      // THE SENTENCE UNDER THE ROW IS ABOUT THE PRESS THAT WAS JUST MADE, which
+      // is why a press that DID what it said clears it rather than leaving the
+      // last one standing: "nothing has changed yet" over a row whose setting
+      // has since been rewritten is the same false-in-this-state copy the
+      // sub-line above was fixed for.
+      //
+      // EVERY SENTENCE IT CAN WRITE IS ABOUT A PRESS THAT SPENT NOTHING
+      // (`retryAction` answers true the moment a call goes out), and the two
+      // that exist are the two refusals that leave NO SCREEN behind them: an
+      // attempt already running, and a free rebuild this build still cannot
+      // answer. A refusal that does raise the failure screen — the pack retry
+      // whose choice-clearing write did not go through — has already said what
+      // happened, there and in its own words, so the panel adds nothing over
+      // the top of it.
+      this._retryNotes[stage] = ok
+        ? null
+        : busy
+          ? PF.save.RETRY_COPY.pressInFlight
+          : confirm.action.mode === "rebuild"
+            ? PF.save.RETRY_COPY.rebuildUnchanged
+            : null;
+      this._retryNoteRev = (this._retryNoteRev ?? 0) + 1;
+    }
+    this._retryKey = null;
+    this.update();
   }
 
   toggleJournal() {
@@ -2136,6 +2591,23 @@ PF.Hud = class {
   }
 
   refreshChips() {
+    // THE SIGNPOST'S MEMO IS DROPPED HERE — the one HUD door every world-
+    // replacing path already knocks on. The package builds exactly one Hud
+    // (`90-element` `attachMain`) and nothing that replaces the world rebuilds
+    // it: `_switchChat` (90-element), `_installSealedWorld` and `_rebuild`
+    // (60-save) all swap the sim underneath and all three call this. Its key is
+    // a zone id and a bearing, NEITHER OF WHICH IS WORLD-UNIQUE — every compiled
+    // world's settlement is `z1`, every cell id is `w_<cx>_<cy>` — so one key
+    // names one edge in every world at once, and without this line a chat switch
+    // between two saves both parked at a north edge leaves the country of the
+    // chat they left on the sign. That is the renderer's own rule for its own
+    // zone-id-keyed cache, one field along (`40-render` `clearZones`). Above the
+    // sim test on purpose: dropping a memo needs no sim.
+    // The cost is one label derivation on an event that was already writing DOM.
+    // The busiest caller is the clock chip below, which at
+    // `CLOCK_SECONDS_PER_GAME_MINUTE` is one derivation per 300 frames of
+    // standing still rather than 300.
+    this._signpost = null;
     const sim = this.core.sim;
     if (!sim) return;
     // The spatial name is the ENGINE's committed party location, which only
@@ -2201,41 +2673,66 @@ PF.Hud = class {
     // same reason `gateWhy` is: a stage that changed without the state changing
     // would leave the wrong sentence up.
     const gateStage = gate ? (PF.save.gate.stage ?? "brief") : null;
+    // WHETHER THIS GATE IS A POST-START ONE (0.16 §2.10d). In the memo key for
+    // exactly the reason `gateWhy` and `gateStage` are: it decides both the note
+    // under the reason and whether the second exit is on screen, and a flag that
+    // changed without the state changing would leave the wrong screen up.
+    const gatePost = gate ? PF.save.gate.postStart === true : false;
+    // WHETHER THE SETTING SEALED ON THIS CHAT IS AHEAD OF THE WORLD BEHIND THE
+    // SCREEN, in the memo key for the same reason the stage is: ruling 8's
+    // cascade seals a new brief mid-attempt, and from that moment the shipped
+    // post-start sentence ("the world you are standing in is untouched whatever
+    // happens here") is false. It is asked of the STATE and not of `gate.mode`,
+    // which the first press rewrites to a mode the row does offer — a note keyed
+    // on the mode reverted to that sentence on the second failure of the same
+    // attempt, over a chat whose brief was already replaced.
+    const gateCascade = gate ? PF.save.worldBehindBrief(this.core) : false;
+    // …and whether there is anywhere to go if the player declines. A brief-stage
+    // BOOT gate never offers it: the world under that one is the placeholder,
+    // which is the one thing nobody may be left standing in. A pack-stage gate
+    // does — the world is written, and only the work posted in it is missing —
+    // and so does any post-start gate, which is holding a world the player has
+    // already been living in.
+    const gateKeep = gate === "failed" && (gateStage === "pack" || (gatePost && !!sim.world && !sim.world.interim));
+    // WHICH WORLD THE SCREEN IS WRITING (0.16.1) — the name the player typed in
+    // the wizard, or "" for a chat created before there was anywhere to store one.
+    // In the memo key for the same reason every field above it is, and for one
+    // more that is particular to it: this method is the HUD of whichever chat is
+    // mounted, and the name is the one gate input that differs between two chats
+    // holding gates in the same state. Without it the second chat's screen would
+    // keep the first chat's world's name.
+    const gateName = gate ? PF.save.gateWorldName(this.core) : "";
     if (
       mode !== this._mode ||
       spatialAvail !== this._spatialAvail ||
       gate !== this._gate ||
       gateWhy !== this._gateWhy ||
-      gateStage !== this._gateStage
+      gateStage !== this._gateStage ||
+      gatePost !== this._gatePost ||
+      gateCascade !== this._gateCascade ||
+      gateKeep !== this._gateKeep ||
+      gateName !== this._gateName
     ) {
       this._mode = mode;
       this._spatialAvail = spatialAvail;
       this._gate = gate;
       this._gateWhy = gateWhy;
       this._gateStage = gateStage;
+      this._gatePost = gatePost;
+      this._gateCascade = gateCascade;
+      this._gateKeep = gateKeep;
+      this._gateName = gateName;
       const inWorld = mode === "walk" && !gate;
       this.gateEl.style.display = gate ? "flex" : "none";
       this.gateRetry.style.display = gate === "failed" ? "" : "none";
-      this.gateTitle.textContent =
-        gate === "failed"
-          ? gateStage === "pack"
-            ? // NOT "the work for this world didn't finish being written": the pack
-              // stage is stamped on both sides of the pack's own seal, so on the
-              // arm where the work IS written and the install threw, that title
-              // named the wrong thing as missing. What is true on every arm is
-              // that the world did not finish coming up, which is also the thing
-              // the player is looking at a spinner instead of.
-              "This world didn't finish opening."
-            : "The world didn't finish being written."
-          : gateStage === "pack"
-            ? "Writing what your world has to say…"
-            : "Writing your world…";
-      this.gateBody.textContent =
-        gate === "failed"
-          ? `${PF.save.gateReason(gateWhy, gateStage)} ${PF.save.gateStageNote(gateStage)}`
-          : gateStage === "pack"
-            ? "The settlement is written. One more call is filling in what its people say and the work they have to offer."
-            : "One generation call is shaping the settlement, its people and the places in it. This can take a minute.";
+      this.gateKeep.style.display = gateKeep ? "" : "none";
+      // THE SCREEN'S WORDS ARE THE REGISTRY'S NOW (0.16 §2.10a). They used to be
+      // four hardcoded brief-vs-pack ternaries here — the one place in this
+      // package a string cannot be pinned without a DOM — so a third stage meant
+      // editing branches rather than adding a row, and the strings the player
+      // reads were the part nothing watched.
+      this.gateTitle.textContent = PF.save.gateTitle(gateStage, gate, gateName);
+      this.gateBody.textContent = PF.save.gateBody(gateStage, gate, gateWhy, gatePost, gateCascade, gateName);
       this.topbar.style.display = gate ? "none" : "";
       // Replay: the host owns the whole screen. Combat: keep a minimal HUD —
       // the mode is inferred from the narrative gameActiveState, which can flip
@@ -2257,12 +2754,22 @@ PF.Hud = class {
         this._sleep = null;
         this.boardBtn.style.display = "none";
         this._board = null;
+        // The signpost is proximity-driven too, and it is a TOPBAR chip — which
+        // the gate hides for free but dialogue mode does not. Leaving walk mode
+        // takes it down here and the walk block decides when it comes back.
+        // Its memo is `_signpost` and NOT `_gate`: the field above belongs to the
+        // loading gate's own reconcile, and a second owner writing an edge key
+        // into it would defeat both memos every frame.
+        this.gateChip.style.display = "none";
+        this._signpost = null;
       }
       // THE PANEL OPENERS, on the berth button's cadence and for a reason of
       // their own: the gate hides the whole topbar, but the topbar STAYS UP in
       // dialogue mode, so `!inWorld` hiding is a toggle these two have to own.
       this.journalChip.style.display = inWorld ? "" : "none";
       this.sheetChip.style.display = inWorld ? "" : "none";
+      // The retry chip has a second gate of its own — whether there is anything
+      // to say — so its visibility is settled below, off the live rows.
       // …AND THE PANELS THEMSELVES. The sheet CLOSES (plan §2.8): `e`, a cutscene
       // beat, and the props-driven replay/combat modes can all fire under an open
       // one, and a sheet that merely hid would resurface drawn against whoever
@@ -2297,6 +2804,56 @@ PF.Hud = class {
       // exactly "this dialogue came out of a conversation".
       if (mode === "dialogue" && !gate && sim.talkAnchorId == null)
         this.toast("Type in the message box below — Resume to keep walking");
+    }
+    // ── THE RETRY POPUP'S PER-FRAME RECONCILE (0.16 §2.10c) ──────────────────
+    // ABOVE the gate return, deliberately: this is the block that HIDES the
+    // panel under a gate, and one written below the return could never fire on
+    // the condition it was sited for (the talk window's own argument at the top
+    // of this method).
+    //
+    // CHAT IDENTITY FIRST. `_switchChat` never rebuilds the HUD, so this is the
+    // only place that can notice the chat moved — and everything the popup holds
+    // belongs to the chat that raised it.
+    if ((this.core.chatId ?? null) !== this._retryChat) {
+      this._retryChat = this.core.chatId ?? null;
+      this._retry = false;
+      this._retryConfirm = null;
+      this._retryNotes = {};
+      this._retryVisit = NO_RETRY_VISIT;
+      this._retryKey = null;
+      this.retryEl.style.display = "none";
+    }
+    const retryRows = this._syncRetry();
+    const retryAllowed = mode === "walk" && !gate;
+    // THE CHIP'S RULE IS THE REGISTRY'S, asked with the rows the memo already
+    // holds so the derivation is not paid twice a frame. Re-deriving the
+    // visibility here was a second copy of a rule that has one home.
+    this.retryChip.style.display = retryAllowed && PF.save.chipTextFor(retryRows) ? "" : "none";
+    if (!retryAllowed) {
+      this.retryEl.style.display = "none";
+    } else if (
+      !this._retry &&
+      this._retryVisit !== this._retryChat &&
+      // …AND NEVER OVER SOMETHING THE PLAYER IS ALREADY READING. `toggleRetry`
+      // is a member of the mutual-exclusion set, so an auto-open over an open
+      // journal would CLOSE it — a surface vanishing under somebody mid-read,
+      // for a popup they did not ask for at that moment. It waits instead; the
+      // visit memo is only spent when the panel actually mounts.
+      !this._journal &&
+      !this._sheet &&
+      this.boardMenu.style.display !== "flex" &&
+      this.core.talkOpen?.() !== true &&
+      retryRows.some((row) => !row.accepted)
+    ) {
+      // ONCE PER CHAT VISIT, and only for a stage nobody has already said
+      // "later" to. Everything after that is the chip: nothing nags, nothing
+      // blocks the game, and a close spends no choice.
+      this._retryVisit = this._retryChat;
+      this.toggleRetry();
+    } else if (this._retry && !retryRows.length) {
+      this.closeRetry();
+    } else {
+      this.retryEl.style.display = this._retry ? "flex" : "none";
     }
     // Nothing below the gate means anything: there is no beat to caption, nobody
     // to be standing next to, and the clock is not running.
@@ -2418,6 +2975,27 @@ PF.Hud = class {
         // does: a board's offers are the offers of a board you are standing at.
         if (board) this.boardBtn.textContent = `📋 ${board.name}`;
         else this.closeBoard();
+      }
+      // THE SIGNPOST, on the board's cadence and memoised the same way — but the
+      // KEY is the edge rather than the words, because the words cost two hashes
+      // and a name-book read and there is no reason to pay them sixty times a
+      // second for a player standing still at a gate. Which edge they are at is
+      // the only thing that can change what the sign says.
+      // The memo has a name of its own for a reason: `_gate` is the loading
+      // gate's, written and read by the mode reconcile at the top of this method,
+      // and sharing it would have left both fields holding the other machine's
+      // answer on every frame either one ran.
+      // The key names the edge and NOT the world it is an edge of, which is only
+      // safe because the memo is dropped whenever the world underneath can have
+      // changed — `refreshChips`, whose comment carries that argument, and the
+      // `!inWorld` teardown above.
+      const gateNear = sim.nearGate;
+      const signpostKey = gateNear ? `${sim.zoneId}|${gateNear.dir}` : "";
+      if (signpostKey !== this._signpost) {
+        this._signpost = signpostKey;
+        const label = gateNear ? PF.lattice.gateLabel(sim.world, sim.zone(), gateNear) : "";
+        this.gateChip.style.display = label ? "" : "none";
+        if (label) this.gateChip.textContent = label;
       }
       const clock = sim.clockLabel();
       if (clock !== this._clock) {

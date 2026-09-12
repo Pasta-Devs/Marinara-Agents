@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runWithSafeCleanup } from "./regression-helpers.ts";
+import { runRegressionToCompletion, runWithSafeCleanup } from "./regression-helpers.ts";
 
 const conversationChat = {
   id: "chat-conversation",
@@ -192,6 +192,7 @@ async function main() {
         ["chat-conversation:day:27.07.2026", "chat-conversation:week:27.07.2026", "chat-conversation:day:02.08.2026"],
         "day and week DD.MM.YYYY keys must share one chronological order",
       );
+      assert.ok(candidates.samples.length > 0);
       assert.ok(candidates.samples.every((candidate) => candidate.importMode === "conversation"));
       const limitedCandidates = await previewPackageInterop(
         { ...request, limit: 2 },
@@ -247,11 +248,43 @@ async function main() {
         new AbortController().signal,
       );
       assert.equal(importedCharacter.imported[0]?.note.modes[0], "roleplay");
+      const unrelatedScope = {
+        chatId: "chat-unrelated",
+        chatIds: ["chat-unrelated"],
+        characterIds: ["character-unrelated"],
+      };
       const characterPreview = await previewPackageInterop(
         { source: "characters", limit: 100 },
         join(dataDir, "long-term-memory"),
       );
       assert.equal(characterPreview.samples[0]?.importMode, "roleplay");
+      const scopedCharacterPreview = await previewPackageInterop(
+        { source: "characters", sourceScope: unrelatedScope, limit: 100 },
+        join(dataDir, "long-term-memory"),
+      );
+      assert.deepEqual(
+        scopedCharacterPreview.samples.map((sample) => sample.sourceId),
+        ["character-import"],
+      );
+      const scopedCharacterDetails = await sourcePackageDetails(
+        { source: "characters", sourceIds: ["character-import"], sourceScope: unrelatedScope },
+        join(dataDir, "long-term-memory"),
+      );
+      assert.deepEqual(scopedCharacterDetails.missingSourceIds, []);
+      const scopedCharacterImport = await importPackageInterop(
+        {
+          source: "characters",
+          sourceIds: ["character-import"],
+          sourceScope: unrelatedScope,
+          destinationScope: { characterIds: ["character-import"] },
+          extract: false,
+          limit: 100,
+        },
+        join(dataDir, "long-term-memory"),
+        new AbortController().signal,
+      );
+      assert.deepEqual(scopedCharacterImport.missingSourceIds, []);
+      assert.equal(scopedCharacterImport.imported.length, 1);
       const explicitCharacter = await importPackageInterop(
         {
           source: "characters",
@@ -270,6 +303,34 @@ async function main() {
         { query: "Imported", limit: 100 },
         join(dataDir, "long-term-memory"),
       );
+      const scopedLorebookPreview = await previewPackageLorebooks(
+        { sourceScope: unrelatedScope, limit: 100 },
+        join(dataDir, "long-term-memory"),
+      );
+      assert.equal(
+        scopedLorebookPreview.books.some((book) => book.id === "lorebook-import"),
+        true,
+      );
+      const scopedLorebookSourceId = scopedLorebookPreview.books[0]?.entries[0]?.candidates[0]?.sourceId;
+      assert.ok(scopedLorebookSourceId, "scoped lorebook preview must expose an importable candidate");
+      const scopedLorebookDetails = await sourcePackageDetails(
+        { source: "lorebooks", sourceIds: [scopedLorebookSourceId], sourceScope: unrelatedScope },
+        join(dataDir, "long-term-memory"),
+      );
+      assert.deepEqual(scopedLorebookDetails.missingSourceIds, []);
+      const scopedLorebookImport = await importPackageInterop(
+        {
+          source: "lorebooks",
+          sourceIds: [scopedLorebookSourceId],
+          sourceScope: unrelatedScope,
+          extract: false,
+          limit: 100,
+        },
+        join(dataDir, "long-term-memory"),
+        new AbortController().signal,
+      );
+      assert.deepEqual(scopedLorebookImport.missingSourceIds, []);
+      assert.equal(scopedLorebookImport.imported.length, 1);
       const limitedLorebookPreview = await previewPackageLorebooks(
         { query: "Imported", limit: 1 },
         join(dataDir, "long-term-memory"),
@@ -330,6 +391,49 @@ async function main() {
       assert.equal(explicitLorebook.imported[0]?.note.modes[0], "game");
       assert.equal(explicitLorebook.imported[0]?.extractionStatus, "succeeded");
 
+      const multiModeLorebook = await importPackageInterop(
+        {
+          source: "lorebooks",
+          sourceIds: [lorebookSourceId],
+          modes: ["conversation"],
+          extract: true,
+          limit: 100,
+        },
+        join(dataDir, "long-term-memory"),
+        new AbortController().signal,
+      );
+      assert.deepEqual(multiModeLorebook.imported[0]?.note.modes, ["conversation"]);
+      assert.equal(multiModeLorebook.imported[0]?.extractionStatus, "succeeded");
+      assert.equal(multiModeLorebook.imported[0]?.note.extractionFingerprint?.extractionMode, "roleplay");
+
+      const refreshedLorebook = await importPackageInterop(
+        {
+          source: "lorebooks",
+          sourceIds: [lorebookSourceId],
+          extract: false,
+          limit: 100,
+        },
+        join(dataDir, "long-term-memory"),
+        new AbortController().signal,
+      );
+      assert.deepEqual(refreshedLorebook.imported[0]?.note.modes, ["conversation"]);
+
+      const { getLtmGlobalSettings, updateLtmGlobalSettings } =
+        await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/settings.ts");
+      const initialSettings = await getLtmGlobalSettings(join(dataDir, "long-term-memory"));
+      assert.equal(initialSettings.sourcesAvailabilityModes, undefined);
+      const updatedSettings = await updateLtmGlobalSettings(
+        { sourcesAvailabilityModes: ["conversation", "roleplay"] },
+        join(dataDir, "long-term-memory"),
+      );
+      assert.deepEqual(updatedSettings.sourcesAvailabilityModes, ["conversation", "roleplay"]);
+      const updatedAgain = await updateLtmGlobalSettings(
+        { longTermMemoryBudgetTokens: 2048 },
+        join(dataDir, "long-term-memory"),
+      );
+      assert.deepEqual(updatedAgain.sourcesAvailabilityModes, ["conversation", "roleplay"]);
+      assert.equal(updatedAgain.longTermMemoryBudgetTokens, 2048);
+
       for (const [chat, expectedMode] of [
         [roleplayChat, "roleplay"],
         [gameChat, "game"],
@@ -351,6 +455,7 @@ async function main() {
           join(dataDir, "long-term-memory"),
           new AbortController().signal,
         );
+        assert.ok(nativeImport.imported.length > 0);
         assert.ok(nativeImport.imported.every((item) => item.note.modes[0] === expectedMode));
       }
 
@@ -378,6 +483,7 @@ async function main() {
         new AbortController().signal,
       );
       assert.equal(imported.counts.sourceNotesWritten, 3);
+      assert.ok(imported.imported.length > 0);
       assert.ok(imported.imported.every((item) => item.created));
       const storage = new LongTermMemoryStorage(join(dataDir, "long-term-memory"));
       const notes = await storage.listNotes({ type: "source" });
@@ -395,6 +501,21 @@ async function main() {
       assert.equal(importedAgain.counts.sourceNotesWritten, 3);
       assert.ok(importedAgain.imported.every((item) => !item.created));
       assert.equal((await storage.listNotes({ type: "source" })).length, 7);
+
+      const multiModeChatImport = await importPackageInterop(
+        {
+          source: "chats",
+          chatId: conversationChat.id,
+          sourceIds: ["chat-conversation:day:27.07.2026"],
+          modes: ["conversation", "roleplay"],
+          extract: true,
+          limit: 100,
+        },
+        join(dataDir, "long-term-memory"),
+        new AbortController().signal,
+      );
+      assert.deepEqual(multiModeChatImport.imported[0]?.note.modes, ["conversation", "roleplay"]);
+      assert.equal(multiModeChatImport.imported[0]?.note.extractionFingerprint?.extractionMode, "conversation");
     },
     [() => releaseRuntime?.(), () => rm(dataDir, { recursive: true, force: true })],
   );
@@ -403,7 +524,7 @@ async function main() {
   );
 }
 
-void main().catch((error) => {
+void runRegressionToCompletion("long-term-memory-conversation-summary-import", main).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

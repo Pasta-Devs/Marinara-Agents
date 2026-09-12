@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const read = (path: string) => readFileSync(path, "utf8");
-const base = "packages/slurp/src/engine/packages/server/src/services/slurp/";
+const base = "packages/slurp2/src/engine/packages/server/src/services/slurp/";
 
 // 3.1 — the first post a new Creator makes is public, so the feed is not empty behind a paywall.
 assert.match(read(base + "slurp-first-post-queue.service.ts"), /access: "public",/u);
@@ -13,7 +13,7 @@ assert.match(
   /result\.status === "disabled"[\s\S]{0,400}?status: "skipped"/u,
 );
 assert.match(
-  read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx"),
+  read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx"),
   /useNoodlerEligibleAccounts\("", "all", open\)/u,
   "onboarding must offer personas as well as characters",
 );

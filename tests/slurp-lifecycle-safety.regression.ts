@@ -4,28 +4,28 @@ import { join } from "node:path";
 
 const root = join(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
-const routes = read("packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts");
-const publicSupport = read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-public-support.ts");
+const routes = read("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
+const publicSupport = read("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-public-support.ts");
 const replyOperation = read(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-creator-reply.operation.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-creator-reply.operation.ts",
 );
 const imageConnections = read(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-image-connections.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-image-connections.ts",
 );
-const home = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
-const storage = read("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts");
-const settings = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx");
-const profileSurface = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpProfileSurface.tsx");
-const englishLocale = read("packages/slurp/src/engine/packages/client/src/localization/locales/en.json");
-const creatorPostCard = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpCreatorPostCard.tsx");
+const home = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
+const storage = read("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
+const settings = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx");
+const profileSurface = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpProfileSurface.tsx");
+const englishLocale = read("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json");
+const creatorPostCard = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpCreatorPostCard.tsx");
 const creatorProfileCard = read(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpCreatorProfileCard.tsx",
+  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpCreatorProfileCard.tsx",
 );
-const mediaHook = read("packages/slurp/src/engine/packages/client/src/hooks/use-slurp-media-src.ts");
-const slurpMedia = read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-media.ts");
-const artwork = read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-artwork.operation.ts");
-const shell = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpShell.tsx");
-const serverEntry = read("packages/slurp/src/engine/packages/server/src/services/slurp/server-entry.ts");
+const mediaHook = read("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp-media-src.ts");
+const slurpMedia = read("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-media.ts");
+const artwork = read("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-artwork.operation.ts");
+const shell = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpShell.tsx");
+const serverEntry = read("packages/slurp2/src/engine/packages/server/src/services/slurp/server-entry.ts");
 assert.match(
   settings,
   /const section = navigation\.section \?\? "overview";[\s\S]*?useSlurpAdState\(section/u,
@@ -47,7 +47,7 @@ assert.doesNotMatch(multipartReader, /return reply\./u, "the multipart helper mu
 // The live Slurp equivalent is the image gate in the generation service: a run with no usable
 // image prompt must not reach the provider.
 assert.match(
-  read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts"),
+  read("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts"),
   /const draftImagePrompt = imagesEnabled/u,
   "image generation must stay gated on the run actually producing a prompt",
 );
@@ -180,7 +180,7 @@ assert.match(home, /isSlurpStory\(post\)[\s\S]*?momentCutoff/u, "Home must show 
 assert.match(home, /id: "stories"[\s\S]*?ui\.slurp\.stories\.archive/u, "Creator Rooms must retain a Story archive");
 assert.match(home, /activeTab === "stories"[\s\S]*?return story/u, "the Story archive must not apply the Home cutoff");
 assert.match(
-  read("packages/slurp/src/engine/packages/client/src/hooks/use-slurp.ts"),
+  read("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts"),
   /export function useNoodlerPosts[\s\S]*?do \{[\s\S]*?cursor = page\.nextCursor;[\s\S]*?\} while \(cursor\)/u,
   "Creator Room archives must follow every post cursor",
 );
@@ -487,7 +487,7 @@ assert.match(home, /useNearViewportSlurpMediaSrc\(post\.imageUrl, \{ width: 480 
 assert.match(home, /animate-pulse bg-\[var\(--muted\)\] motion-reduce:animate-none/u);
 assert.match(creatorPostCard, /postImageLoading[\s\S]*?aspect-\[4\/3\][\s\S]*?animate-pulse/u);
 assert.match(
-  read("packages/slurp/src/engine/packages/client/src/components/slurp/PostImageCropEditor.tsx"),
+  read("packages/slurp2/src/engine/packages/client/src/components/slurp/PostImageCropEditor.tsx"),
   /scale-110 object-cover opacity-25 blur-2xl/u,
   "Slurp post media must use a subdued image-derived stage background",
 );

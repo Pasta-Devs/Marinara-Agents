@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { Module } from "node:module";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
-import { runWithSafeCleanup } from "./regression-helpers.ts";
+import { runRegressionToCompletion, runWithSafeCleanup } from "./regression-helpers.ts";
 
 async function main() {
   const repoRoot = resolve(dirname(process.argv[1] ?? process.cwd()), "..");
@@ -272,108 +272,100 @@ async function main() {
       );
       storage = services.get("long-term-memory:storage").storage;
       runtime = services.get("long-term-memory:runtime");
-      assert.deepEqual(
-        resolveLongTermMemoryRecallSettings({
-          chatMode: "conversation",
-          chatMetadata: {},
-          globalSettings: {
-            ...DEFAULT_LTM_GLOBAL_SETTINGS,
-            longTermMemoryRecallStyle: "balanced",
-          },
-        }).weights,
-        LTM_RECALL_STYLE_WEIGHTS.balanced,
-      );
-      assert.deepEqual(
-        resolveLongTermMemoryRecallSettings({
-          chatMode: "conversation",
-          chatMetadata: {},
-          globalSettings: {
-            ...DEFAULT_LTM_GLOBAL_SETTINGS,
-            longTermMemoryRecallStyle: "exact",
-          },
-        }).weights,
-        LTM_RECALL_STYLE_WEIGHTS.exact,
-      );
-      assert.deepEqual(
-        resolveLongTermMemoryRecallSettings({
-          chatMode: "conversation",
-          chatMetadata: {},
-          globalSettings: {
-            ...DEFAULT_LTM_GLOBAL_SETTINGS,
-            longTermMemoryRecallStyle: "broad",
-          },
-        }).weights,
-        LTM_RECALL_STYLE_WEIGHTS.broad,
-      );
-      assert.deepEqual(
-        resolveLongTermMemoryRecallSettings({
-          chatMode: "conversation",
-          chatMetadata: {},
-          globalSettings: {
-            ...DEFAULT_LTM_GLOBAL_SETTINGS,
-            longTermMemoryRecallStyle: "story",
-          },
-        }).weights,
-        LTM_RECALL_STYLE_WEIGHTS.story,
-      );
-      assert.deepEqual(
-        resolveLongTermMemoryRecallSettings({
-          chatMode: "conversation",
-          chatMetadata: {},
-          globalSettings: {
-            ...DEFAULT_LTM_GLOBAL_SETTINGS,
-            longTermMemoryRecallStyle: "custom",
-            longTermMemorySemanticWeight: 0.91,
-            longTermMemoryLexicalWeight: 0.23,
-            longTermMemoryGraphWeight: 0.44,
-            longTermMemoryKeywordWeight: 0.67,
-          },
-        }).weights,
+      for (const testCase of [
         {
-          semanticWeight: 0.91,
-          lexicalWeight: 0.23,
-          graphWeight: 0.44,
-          keywordWeight: 0.67,
+          input: {
+            chatMode: "conversation" as const,
+            chatMetadata: {},
+            globalSettings: { ...DEFAULT_LTM_GLOBAL_SETTINGS, longTermMemoryRecallStyle: "balanced" as const },
+          },
+          expected: LTM_RECALL_STYLE_WEIGHTS.balanced,
         },
-      );
-      assert.deepEqual(
-        resolveLongTermMemoryRecallSettings({
-          chatMode: "conversation",
-          chatMetadata: { longTermMemoryRecallStyle: "exact" },
-          globalSettings: {
-            ...DEFAULT_LTM_GLOBAL_SETTINGS,
-            longTermMemoryRecallStyle: "custom",
-            longTermMemorySemanticWeight: 0.91,
-            longTermMemoryLexicalWeight: 0.23,
-            longTermMemoryGraphWeight: 0.44,
-            longTermMemoryKeywordWeight: 0.67,
-          },
-        }).weights,
-        LTM_RECALL_STYLE_WEIGHTS.exact,
-      );
-      assert.deepEqual(
-        resolveLongTermMemoryRecallSettings({
-          chatMode: "conversation",
-          chatMetadata: {
-            longTermMemoryRecallStyle: "custom",
-            longTermMemorySemanticWeight: 0.8,
-          },
-          globalSettings: {
-            ...DEFAULT_LTM_GLOBAL_SETTINGS,
-            longTermMemoryRecallStyle: "custom",
-            longTermMemorySemanticWeight: 0.91,
-            longTermMemoryLexicalWeight: 0.23,
-            longTermMemoryGraphWeight: 0.44,
-            longTermMemoryKeywordWeight: 0.67,
-          },
-        }).weights,
         {
-          semanticWeight: 0.8,
-          lexicalWeight: 0.23,
-          graphWeight: 0.44,
-          keywordWeight: 0.67,
+          input: {
+            chatMode: "conversation" as const,
+            chatMetadata: {},
+            globalSettings: { ...DEFAULT_LTM_GLOBAL_SETTINGS, longTermMemoryRecallStyle: "exact" as const },
+          },
+          expected: LTM_RECALL_STYLE_WEIGHTS.exact,
         },
-      );
+        {
+          input: {
+            chatMode: "conversation" as const,
+            chatMetadata: {},
+            globalSettings: { ...DEFAULT_LTM_GLOBAL_SETTINGS, longTermMemoryRecallStyle: "broad" as const },
+          },
+          expected: LTM_RECALL_STYLE_WEIGHTS.broad,
+        },
+        {
+          input: {
+            chatMode: "conversation" as const,
+            chatMetadata: {},
+            globalSettings: { ...DEFAULT_LTM_GLOBAL_SETTINGS, longTermMemoryRecallStyle: "story" as const },
+          },
+          expected: LTM_RECALL_STYLE_WEIGHTS.story,
+        },
+        {
+          input: {
+            chatMode: "conversation" as const,
+            chatMetadata: {},
+            globalSettings: {
+              ...DEFAULT_LTM_GLOBAL_SETTINGS,
+              longTermMemoryRecallStyle: "custom" as const,
+              longTermMemorySemanticWeight: 0.91,
+              longTermMemoryLexicalWeight: 0.23,
+              longTermMemoryGraphWeight: 0.44,
+              longTermMemoryKeywordWeight: 0.67,
+            },
+          },
+          expected: {
+            semanticWeight: 0.91,
+            lexicalWeight: 0.23,
+            graphWeight: 0.44,
+            keywordWeight: 0.67,
+          },
+        },
+        {
+          input: {
+            chatMode: "conversation" as const,
+            chatMetadata: { longTermMemoryRecallStyle: "exact" as const },
+            globalSettings: {
+              ...DEFAULT_LTM_GLOBAL_SETTINGS,
+              longTermMemoryRecallStyle: "custom" as const,
+              longTermMemorySemanticWeight: 0.91,
+              longTermMemoryLexicalWeight: 0.23,
+              longTermMemoryGraphWeight: 0.44,
+              longTermMemoryKeywordWeight: 0.67,
+            },
+          },
+          expected: LTM_RECALL_STYLE_WEIGHTS.exact,
+        },
+        {
+          input: {
+            chatMode: "conversation" as const,
+            chatMetadata: {
+              longTermMemoryRecallStyle: "custom" as const,
+              longTermMemorySemanticWeight: 0.8,
+            },
+            globalSettings: {
+              ...DEFAULT_LTM_GLOBAL_SETTINGS,
+              longTermMemoryRecallStyle: "custom" as const,
+              longTermMemorySemanticWeight: 0.91,
+              longTermMemoryLexicalWeight: 0.23,
+              longTermMemoryGraphWeight: 0.44,
+              longTermMemoryKeywordWeight: 0.67,
+            },
+          },
+          expected: {
+            semanticWeight: 0.8,
+            lexicalWeight: 0.23,
+            graphWeight: 0.44,
+            keywordWeight: 0.67,
+          },
+        },
+      ]) {
+        assert.deepEqual(resolveLongTermMemoryRecallSettings(testCase.input).weights, testCase.expected);
+      }
 
       const serialized = serializeLongTermMemoryPrompt(
         [
@@ -552,31 +544,32 @@ async function main() {
           return texts.map((text) => [Number(text.match(/^chunk-(\d+)/)?.[1] ?? -1)]);
         },
       };
-      const countBatchedVectors = await embedLongTermMemoryTexts(
-        Array.from({ length: 129 }, (_, index) => `chunk-${index}`),
-        { embeddingAdapter: embeddingBatchAdapter },
-      );
-      assert.equal(countBatchedVectors?.length, 129);
-      assert.deepEqual(
-        countBatchedVectors?.map((vector) => vector[0]),
-        Array.from({ length: 129 }, (_, index) => index),
-        "embedding batches must preserve vector order",
-      );
-      assert.ok(embeddingBatchCalls.every((texts) => texts.length <= 128));
-      assert.equal(embeddingBatchCalls.length, 2);
-      embeddingBatchCalls.length = 0;
-      const characterBatchedVectors = await embedLongTermMemoryTexts(
-        Array.from({ length: 9 }, (_, index) => `chunk-${index}-${"x".repeat(23_990)}`),
-        { embeddingAdapter: embeddingBatchAdapter },
-      );
-      assert.equal(characterBatchedVectors?.length, 9);
-      assert.deepEqual(
-        characterBatchedVectors?.map((vector) => vector[0]),
-        Array.from({ length: 9 }, (_, index) => index),
-        "character-limited embedding batches must preserve vector order",
-      );
-      assert.ok(embeddingBatchCalls.every((texts) => texts.reduce((total, text) => total + text.length, 0) <= 200_000));
-      assert.equal(embeddingBatchCalls.length, 2);
+      for (const scenario of [
+        {
+          texts: Array.from({ length: 129 }, (_, index) => `chunk-${index}`),
+          expectedLength: 129,
+          batchCheck: (calls: string[][]) => calls.every((texts) => texts.length <= 128),
+          orderMessage: "embedding batches must preserve vector order",
+        },
+        {
+          texts: Array.from({ length: 9 }, (_, index) => `chunk-${index}-${"x".repeat(23_990)}`),
+          expectedLength: 9,
+          batchCheck: (calls: string[][]) =>
+            calls.every((texts) => texts.reduce((total, text) => total + text.length, 0) <= 200_000),
+          orderMessage: "character-limited embedding batches must preserve vector order",
+        },
+      ]) {
+        embeddingBatchCalls.length = 0;
+        const vectors = await embedLongTermMemoryTexts(scenario.texts, { embeddingAdapter: embeddingBatchAdapter });
+        assert.equal(vectors?.length, scenario.expectedLength);
+        assert.deepEqual(
+          vectors?.map((vector) => vector[0]),
+          Array.from({ length: scenario.expectedLength }, (_, index) => index),
+          scenario.orderMessage,
+        );
+        assert.equal(embeddingBatchCalls.length, 2);
+        assert.ok(scenario.batchCheck(embeddingBatchCalls));
+      }
       await rebuildLongTermMemoryIndexes({ root: storage.root });
       const semantic = await retrieveLongTermMemory({
         root: storage.root,
@@ -999,77 +992,55 @@ async function main() {
         }),
       );
       await rebuildLongTermMemoryIndexes({ root: storage.root });
-      const newCharacterRecall = await runtime.recall({
-        chatId: "chat-new",
-        chatMode: "roleplay",
-        characterIds: ["character-a"],
-        messages: [{ role: "user", content: scopedRecallText }],
-        debugMode: false,
-      });
-      assert.match(newCharacterRecall?.text ?? "", /belongs to character A/);
-      assert.match(newCharacterRecall?.text ?? "", /every character A chat/);
-      assert.doesNotMatch(newCharacterRecall?.text ?? "", /belongs to persona A|belongs to group A/);
-      assert.doesNotMatch(newCharacterRecall?.text ?? "", /old-chat-only|belongs to character B/);
-      assert.doesNotMatch(
-        (
-          await runtime.recall({
-            chatId: "chat-other-character",
-            chatMode: "roleplay",
-            characterIds: ["character-b"],
-            messages: [{ role: "user", content: scopedRecallText }],
-            debugMode: false,
-          })
-        )?.text ?? "",
-        /belongs to character A/,
-      );
-      const personaCharacterRecall =
-        (
-          await runtime.recall({
-            chatId: "chat-persona-a",
-            chatMode: "roleplay",
-            characterIds: [],
-            messages: [{ role: "user", content: scopedRecallText }],
-            debugMode: false,
-          })
-        )?.text ?? "";
-      assert.match(personaCharacterRecall, /belongs to persona A/);
-      assert.match(personaCharacterRecall, /every persona A chat/);
-      assert.doesNotMatch(
-        (
-          await runtime.recall({
-            chatId: "chat-other-persona",
-            chatMode: "roleplay",
-            characterIds: [],
-            messages: [{ role: "user", content: scopedRecallText }],
-            debugMode: false,
-          })
-        )?.text ?? "",
-        /every persona A chat/,
-      );
-      assert.match(
-        (
-          await runtime.recall({
-            chatId: "chat-a",
-            chatMode: "roleplay",
-            characterIds: [],
-            messages: [{ role: "user", content: scopedRecallText }],
-            debugMode: false,
-          })
-        )?.text ?? "",
-        /belongs to group A/,
-      );
-      assert.doesNotMatch(
-        (
-          await runtime.recall({
-            chatId: "chat-other-group",
-            chatMode: "roleplay",
-            characterIds: [],
-            messages: [{ role: "user", content: scopedRecallText }],
-            debugMode: false,
-          })
-        )?.text ?? "",
-        /belongs to group A/,
-      );
+      for (const testCase of [
+        {
+          chatId: "chat-new",
+          characterIds: ["character-a"],
+          matches: [/belongs to character A/, /every character A chat/],
+          doesNotMatch: [/belongs to persona A|belongs to group A/, /old-chat-only|belongs to character B/],
+        },
+        {
+          chatId: "chat-other-character",
+          characterIds: ["character-b"],
+          matches: [],
+          doesNotMatch: [/belongs to character A/],
+        },
+        {
+          chatId: "chat-persona-a",
+          characterIds: [],
+          matches: [/belongs to persona A/, /every persona A chat/],
+          doesNotMatch: [],
+        },
+        {
+          chatId: "chat-other-persona",
+          characterIds: [],
+          matches: [],
+          doesNotMatch: [/every persona A chat/],
+        },
+        {
+          chatId: "chat-a",
+          characterIds: [],
+          matches: [/belongs to group A/],
+          doesNotMatch: [],
+        },
+        {
+          chatId: "chat-other-group",
+          characterIds: [],
+          matches: [],
+          doesNotMatch: [/belongs to group A/],
+        },
+      ]) {
+        const recallResult = await runtime.recall({
+          chatId: testCase.chatId,
+          chatMode: "roleplay",
+          characterIds: testCase.characterIds,
+          messages: [{ role: "user", content: scopedRecallText }],
+          debugMode: false,
+        });
+        const text = recallResult?.text ?? "";
+        for (const pattern of testCase.matches) assert.match(text, pattern);
+        for (const pattern of testCase.doesNotMatch) assert.doesNotMatch(text, pattern);
+      }
       const legacyReadable = await runtime.recall(input);
       assert.match(legacyReadable.text, /beneath the observatory/);
       const first = await runtime.recall(input);
@@ -1285,7 +1256,7 @@ async function main() {
   );
 }
 
-void main().catch((error) => {
+void runRegressionToCompletion("long-term-memory-runtime", main).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

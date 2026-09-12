@@ -22,22 +22,22 @@ assert.match(schema, /Teaser posts require a locked follow-up/u);
 assert.match(schema, /Only teaser posts can link a locked follow-up/u);
 
 const generation = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
   "utf8",
 );
 const operations = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-post.operation.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-post.operation.ts",
   "utf8",
 );
 const reserve = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-reserve.operation.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-reserve.operation.ts",
   "utf8",
 );
 const responseFormat = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-response-format.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-response-format.ts",
   "utf8",
 );
-const composer = readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
+const composer = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
 
 assert.match(generation, /NOODLER_FORMAT_PROMPTS\[format\]/u);
 // Every generated NoodleR post carries a title, whatever the format.
@@ -51,10 +51,10 @@ assert.match(generation, /Hard limit 300 characters/u);
 // The caps moved to a leaf module so the storage layer can hold an edit to the post's own format
 // without importing the generation service (which imports storage back).
 const contentFormat = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-content-format.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-content-format.ts",
   "utf8",
 );
-const storage = readFileSync("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
+const storage = readFileSync("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
 assert.match(contentFormat, /caption: 300,/u);
 assert.match(storage, /slice\(0, noodlerContentLimitFor\(nextMetadata\)\)/u, "edits honour the post's own cap");
 assert.doesNotMatch(storage, /trim\(\)\.slice\(0, 4000\)/u, "no flat 4000-character truncation");

@@ -31,6 +31,7 @@ type GlobalForm = {
   longTermMemoryIncludeResolved: boolean;
   longTermMemoryRecallPreamble: string;
   longTermMemoryDebug: boolean;
+  sourcesAvailabilityModes?: ("conversation" | "roleplay" | "game")[];
 };
 type ExtractionForm = Required<LtmExtractionSettingsPatch> & {
   systemPrompt?: string;
@@ -129,6 +130,7 @@ function settingsForm(settings: LtmGlobalSettings): GlobalForm {
     longTermMemoryIncludeResolved: settings.longTermMemoryIncludeResolved ?? false,
     longTermMemoryRecallPreamble: settings.longTermMemoryRecallPreamble ?? "",
     longTermMemoryDebug: settings.longTermMemoryDebug ?? false,
+    ...(settings.sourcesAvailabilityModes ? { sourcesAvailabilityModes: settings.sourcesAvailabilityModes } : {}),
   };
 }
 
@@ -396,6 +398,7 @@ export default function MemorySettings({
         queryKeys.status,
         queryKeys.notes,
         queryKeys.activity,
+        queryKeys.localCharactersRoot,
         ...(props.chatId ? [queryKeys.lastInjection(props.chatId)] : []),
       ]);
     } catch (error) {
@@ -564,6 +567,7 @@ export default function MemorySettings({
         queryKeys.pendingDrafts,
         queryKeys.rejectedSuggestions,
         queryKeys.activity,
+        queryKeys.localCharactersRoot,
         ...(props.chatId ? [queryKeys.lastInjection(props.chatId)] : []),
       ]);
     } catch (error) {

@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runRegressionToCompletion } from "./regression-helpers.ts";
 
 async function main() {
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
@@ -83,47 +84,46 @@ async function main() {
     },
   };
   try {
-    response = { content: "  ", finishReason: "stop" };
-    await assert.rejects(
-      () => runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() }),
-      (error: any) => error.code === "ltm_model_output_empty",
-    );
-    assert.equal(calls.length, 1, "empty output must not trigger a repair call");
-
-    calls.length = 0;
-    response = { content: "{}", finishReason: "stop" };
-    await assert.rejects(
-      () => runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() }),
-      (error: any) => error.code === "ltm_model_output_unusable",
-    );
-    assert.equal(calls.length, 1, "unusable output must not trigger a repair call");
-
-    calls.length = 0;
-    response = { content: "{malformed", finishReason: "stop" };
-    await assert.rejects(
-      () => runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() }),
-      (error: any) => error.code === "ltm_model_output_unusable",
-    );
-    assert.equal(calls.length, 1, "malformed output must not trigger a repair call");
-
-    calls.length = 0;
-    response = {
-      content: JSON.stringify({ units: Array.from({ length: 1_000 }, () => validUnit) }),
-      finishReason: "stop",
-    };
-    await assert.rejects(
-      () => runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() }),
-      (error: any) => error.code === "ltm_model_output_unusable" && /maximum is/u.test(error.message),
-    );
-    assert.equal(calls.length, 1, "oversized output must not trigger a repair call");
-
-    calls.length = 0;
-    response = { content: '{"summary":"unfinished', finishReason: "length" };
-    await assert.rejects(
-      () => runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() }),
-      (error: any) => error.code === "ltm_model_output_truncated",
-    );
-    assert.equal(calls.length, 1, "truncated output must not trigger a repair call");
+    for (const testCase of [
+      {
+        response: { content: "  ", finishReason: "stop" },
+        expectedCode: "ltm_model_output_empty",
+        message: "empty output must not trigger a repair call",
+      },
+      {
+        response: { content: "{}", finishReason: "stop" },
+        expectedCode: "ltm_model_output_unusable",
+        message: "unusable output must not trigger a repair call",
+      },
+      {
+        response: { content: "{malformed", finishReason: "stop" },
+        expectedCode: "ltm_model_output_unusable",
+        message: "malformed output must not trigger a repair call",
+      },
+      {
+        response: {
+          content: JSON.stringify({ units: Array.from({ length: 1_000 }, () => validUnit) }),
+          finishReason: "stop",
+        },
+        expectedCode: "ltm_model_output_unusable",
+        matchMessage: /maximum is/u,
+        message: "oversized output must not trigger a repair call",
+      },
+      {
+        response: { content: '{"summary":"unfinished', finishReason: "length" },
+        expectedCode: "ltm_model_output_truncated",
+        message: "truncated output must not trigger a repair call",
+      },
+    ]) {
+      calls.length = 0;
+      response = testCase.response;
+      await assert.rejects(
+        () => runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() }),
+        (error: any) =>
+          error.code === testCase.expectedCode && (!testCase.matchMessage || testCase.matchMessage.test(error.message)),
+      );
+      assert.equal(calls.length, 1, testCase.message);
+    }
 
     calls.length = 0;
     response = {
@@ -165,7 +165,7 @@ async function main() {
   );
 }
 
-void main().catch((error) => {
+void runRegressionToCompletion("long-term-memory-extraction-reliability", main).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

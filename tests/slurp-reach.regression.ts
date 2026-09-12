@@ -8,7 +8,7 @@ import {
   slurpPostLikeCount,
   slurpPostReplyCount,
   slurpPostUnlockCount,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-reach.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-reach.js";
 
 const born = "2026-01-01T00:00:00.000Z";
 const day = (n: number) => new Date(Date.parse(born) + n * 86_400_000);
@@ -119,7 +119,7 @@ for (const postId of ["post-c", "post-d", "post-e", "post-f"]) {
 // generated audience pays through the funnel, because an audience member is not a viewer and holds
 // no wallet. Neither half is reach.
 const routes = readFileSync(
-  join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts"),
+  join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts"),
   "utf8",
 );
 assert.match(
@@ -135,7 +135,7 @@ assert.doesNotMatch(
   "no reach call may hardcode an empty audience now that the funnel exists",
 );
 const wallet = readFileSync(
-  join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-wallet.ts"),
+  join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-wallet.ts"),
   "utf8",
 );
 assert.doesNotMatch(wallet, /slurp-reach|slurpCreatorReach|slurpPost/u, "the wallet must never read synthetic reach");

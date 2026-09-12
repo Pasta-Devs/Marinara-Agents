@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { resolveSlurpCreatorScheduleStatus } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-creator-schedule-context.js";
+import { resolveSlurpCreatorScheduleStatus } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-creator-schedule-context.js";
 
 async function main() {
   // A Tuesday, so "this week" starts on the Monday before it.
@@ -106,7 +106,7 @@ async function main() {
 void main();
 
 // ── Wiring ──────────────────────────────────────────────────────────────────
-const root = join(import.meta.dirname, "..", "packages/slurp/src/engine/packages");
+const root = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 assert.match(read("server/src/services/storage/slurp.storage.ts"), /scheduleStatus: publicAccount/u);

@@ -1,0 +1,4113 @@
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import { createServer } from "node:http";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { compileEngineVisualStyles } from "./engine-visual-styles.ts";
+import { runRegressionToCompletion, runWithSafeCleanup } from "./regression-helpers.ts";
+
+const repoRoot = resolve(dirname(process.argv[1] ?? process.cwd()), "..");
+const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || join(repoRoot, "../Marinara-Engine"));
+const catalogUrl = "https://1.1.1.1/catalog/catalog.json";
+const packageManifest = JSON.parse(readFileSync(join(repoRoot, "packages/long-term-memory/manifest.json"), "utf8")) as {
+  version: string;
+};
+const artifactPath = join(repoRoot, `artifacts/long-term-memory-${packageManifest.version}.zip`);
+const artifactUrl = `https://1.1.1.1/artifacts/long-term-memory-${packageManifest.version}.zip`;
+const artifactBytes = readFileSync(artifactPath);
+const visualOutputDir = process.env.MARINARA_VISUAL_OUTPUT_DIR ? resolve(process.env.MARINARA_VISUAL_OUTPUT_DIR) : null;
+function unzip(args: string[], purpose: string) {
+  try {
+    return execFileSync("unzip", args, { encoding: "utf8" });
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT")
+      throw new Error(`Cannot ${purpose}: unzip executable was not found; install unzip and retry.`);
+    throw new Error(`Could not ${purpose}: ${error instanceof Error ? error.message : String(error)}`, {
+      cause: error,
+    });
+  }
+}
+const artifactManifest = JSON.parse(
+  unzip(["-p", artifactPath, "manifest.json"], `read ${artifactPath}/manifest.json`),
+) as Record<string, unknown>;
+const artifactClient = unzip(["-p", artifactPath, "client.js"], `read ${artifactPath}/client.js`);
+const originalFetch = globalThis.fetch;
+const catalogOnline = true;
+
+process.env.AUTO_CREATE_DEFAULT_CONNECTION = "false";
+process.env.LOG_DISABLE_REQUEST_LOGGING = "true";
+process.env.LOG_LEVEL = "silent";
+process.env.MARINARA_AGENT_CATALOG_URL = catalogUrl;
+process.env.MARINARA_LITE = "true";
+process.env.NODE_ENV = "test";
+
+function sha256(value: Buffer) {
+  return createHash("sha256").update(value).digest("hex");
+}
+function catalog() {
+  return {
+    schemaVersion: 1,
+    generatedAt: "2026-07-18T00:00:00.000Z",
+    packages: [
+      {
+        manifest: artifactManifest,
+        category: "misc",
+        artifact: {
+          url: artifactUrl,
+          sha256: sha256(artifactBytes),
+          bytes: artifactBytes.byteLength,
+        },
+      },
+    ],
+  };
+}
+async function main() {
+  if (visualOutputDir) mkdirSync(visualOutputDir, { recursive: true });
+  const engineStyles = await compileEngineVisualStyles(
+    engineRoot,
+    join(repoRoot, "packages/long-term-memory/src/engine/packages/client/src/**/*.{ts,tsx}"),
+  );
+  const { labelKeys, localizedLabel } = await import(
+    pathToFileURL(
+      join(
+        repoRoot,
+        "packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/display-labels.ts",
+      ),
+    ).href
+  );
+  const testLocalize = (key: string) => `translated:${key}`;
+  assert.equal(
+    localizedLabel("critical", testLocalize, labelKeys.importance),
+    "translated:ui.longTermMemory.memoryvault.critical",
+  );
+  assert.equal(
+    localizedLabel("roleplay", testLocalize, labelKeys.mode),
+    "translated:ui.longTermMemory.sourcesworkspace.roleplay",
+  );
+  assert.equal(localizedLabel("future_value", testLocalize, labelKeys.mode), "Future value");
+  const dataDir = mkdtempSync(join(tmpdir(), "marinara-ltm-lifecycle-"));
+  process.env.DATA_DIR = dataDir;
+  process.env.MARINARA_ENV_FILE = join(dataDir, ".env");
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    if (!catalogOnline) throw new Error("LTM lifecycle fixture is offline");
+    if (url === catalogUrl)
+      return new Response(JSON.stringify(catalog()), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    if (url === artifactUrl) return new Response(artifactBytes, { status: 200 });
+    throw new Error(`Unexpected lifecycle URL: ${url}`);
+  }) as typeof fetch;
+  let browser: { close: () => Promise<void> } | null = null;
+  let browserServer: ReturnType<typeof createServer> | null = null;
+  let releaseReextraction: (() => void) | null = null;
+  const reextractionRequests: Array<{ path: string; body: Record<string, unknown> }> = [];
+  let markReextractionStarted: () => void = () => undefined;
+  const reextractionStarted = new Promise<void>((resolve) => {
+    markReextractionStarted = resolve;
+  });
+  await runWithSafeCleanup(
+    "LTM lifecycle",
+    async () => {
+      assert.equal(artifactManifest.id, "long-term-memory");
+      assert.equal(artifactManifest.version, packageManifest.version);
+      assert.match(
+        String(artifactManifest.description),
+        /Chat Settings → Agents → Long-Term Memory/u,
+        "Long-Term Memory guidance must name its dedicated activation path",
+      );
+      assert.doesNotMatch(
+        String(artifactManifest.description),
+        /Misc Agents for Conversation/u,
+        "Long-Term Memory guidance must not send Conversation users to Misc Agents",
+      );
+      assert.doesNotMatch(
+        artifactClient,
+        /crypto\.randomUUID/u,
+        "The mobile client must not require secure-context-only crypto.randomUUID",
+      );
+      assert.doesNotMatch(
+        artifactClient,
+        /1\. Import source -> 2\. Review proposals -> 3\. Accept saved memories -> 4\. Activate recall in chat/u,
+        "Workflow guidance must remain contextual rather than repeated on each destination",
+      );
+      assert.doesNotMatch(
+        artifactClient,
+        /gentlest on-ramp/u,
+        "The removed Character recommendation must not return to the wizard",
+      );
+      for (const copy of [
+        "Review what extraction found.",
+        "Keeps the character card as a source note",
+        "For chat-summary imports, first pick",
+        "Keeps selected lorebook entries as source notes",
+      ])
+        assert.ok(!artifactClient.includes(copy), `Generated client retains removed guidance: ${copy}`);
+      assert.match(
+        artifactClient,
+        /extract:[^,}]+!=="refresh"/u,
+        "Normal imports must continue extracting source notes",
+      );
+      assert.match(
+        artifactClient,
+        /Default agent connection/u,
+        "The null extraction connection option must identify the default agent connection",
+      );
+      const { chromium, devices } = await import(
+        pathToFileURL(join(engineRoot, "node_modules/@playwright/test/index.mjs")).href
+      );
+      const rejectedSuggestionId = "2a1b5c7d-9e0f-4a1b-8c2d-3e4f5a6b7c8d";
+      const otherRejectedSuggestionId = "3b2c6d8e-0f1a-4b2c-9d3e-4f5a6b7c8d9e";
+      const thirdRejectedSuggestionId = "4c3d7e9f-1a2b-4c3d-8e4f-5a6b7c8d9e0f";
+      let savedNote: Record<string, unknown> | null = null;
+      const noteTimestamp = "2026-07-30T00:00:00.000Z";
+      let legacyGlobalNote = {
+        id: "world_legacy_global",
+        title: "Legacy global memory",
+        type: "world",
+        status: "active",
+        modes: ["roleplay"],
+        scope: {},
+        tags: [],
+        keywords: [],
+        links: [],
+        sections: {
+          facts: {
+            text: "Legacy global memory text.",
+            importance: "major",
+            updatedAt: noteTimestamp,
+          },
+        },
+        createdAt: noteTimestamp,
+        updatedAt: noteTimestamp,
+        version: 1,
+      };
+      const scopedDesktopNote = {
+        ...legacyGlobalNote,
+        id: "world_scoped_desktop",
+        title: "Scoped desktop memory",
+        scope: { chatId: "desktop-chat", chatIds: ["desktop-chat"] },
+        sections: {
+          facts: {
+            text: "Scoped desktop memory text.",
+            importance: "major",
+            updatedAt: noteTimestamp,
+          },
+        },
+      };
+      const availabilityPatches: Array<Record<string, unknown>> = [];
+      const batchNotesCalls: Array<Record<string, unknown>> = [];
+      const batchNotesFailure = false;
+      let batchNotesPartial = false;
+      let deletedSuggestionId: string | null = null;
+      const clearedRejectedSourceIds = new Set<string>();
+      let clearRejectedSuggestionsFailure = false;
+      const scopeTargetQueries: string[] = [];
+      const noteQueries: string[] = [];
+      const sourcePreviewRequests: Record<string, unknown>[] = [];
+      const lorebookPreviewRequests: Record<string, unknown>[] = [];
+      const reviewContextQueries: string[] = [];
+      const reviewQueries: string[] = [];
+      const rejectedSuggestionQueries: string[] = [];
+      const reviewActionCalls: Array<{
+        action: "accept" | "skip";
+        draftId: string;
+        mutationIds: string[];
+      }> = [];
+      const reviewEditedMutationIds: string[][] = [];
+      const deletedDraftIds: string[] = [];
+      let failDraftDeletion = false;
+      const reviewDraftIds = {
+        first: "10000000-0000-4000-8000-000000000011",
+        second: "10000000-0000-4000-8000-000000000012",
+        recovery: "10000000-0000-4000-8000-000000000013",
+        merge: "10000000-0000-4000-8000-000000000014",
+        single: "10000000-0000-4000-8000-000000000015",
+        blank: "10000000-0000-4000-8000-000000000016",
+      };
+      const reviewMutationIds = {
+        first: "10000000-0000-4000-8000-000000000021",
+        second: "10000000-0000-4000-8000-000000000022",
+        partial: "10000000-0000-4000-8000-000000000023",
+        merge: "10000000-0000-4000-8000-000000000024",
+      };
+      const makeReviewDraft = (
+        draftId: string,
+        mutationId?: string,
+        title = "Review fixture memory",
+        mutation?: Record<string, unknown> | Record<string, unknown>[],
+      ) => ({
+        id: draftId,
+        status: "pending",
+        applyState: "not_started",
+        indexRebuildStatus: "not_requested",
+        createdAt: "2026-07-30T00:00:00.000Z",
+        updatedAt: "2026-07-30T00:00:00.000Z",
+        reviewRequired: true,
+        source: { sourceNoteId: "source_mobile_review", chatId: "chat-a" },
+        scope: {},
+        modes: ["roleplay"],
+        summary: `${title} summary`,
+        mutations: mutationId
+          ? Array.isArray(mutation)
+            ? mutation
+            : [
+                mutation ?? {
+                  id: mutationId,
+                  kind: "create_note",
+                  claimKind: "static",
+                  risk: "low",
+                  confidence: 0.9,
+                  summary: title,
+                  evidence: ["source_note:source_mobile_review"],
+                  note: {
+                    id: `world_${mutationId.slice(-3)}`,
+                    title,
+                    type: "world",
+                    status: "active",
+                    modes: ["roleplay"],
+                    scope: {},
+                    tags: [],
+                    keywords: [],
+                    links: [],
+                    sections: {
+                      facts: {
+                        text: `${title} content.`,
+                        importance: "major",
+                        updatedAt: "2026-07-30T00:00:00.000Z",
+                      },
+                    },
+                  },
+                },
+              ]
+          : [],
+      });
+      const makeExistingReviewMutation = () => ({
+        id: reviewMutationIds.second,
+        kind: "update_section",
+        claimKind: "change",
+        risk: "low",
+        confidence: 0.9,
+        summary: "Update the existing mobile world memory",
+        evidence: ["source_note:source_mobile_review"],
+        noteId: "world_second_mobile",
+        sectionKey: "facts",
+        section: {
+          text: "Updated second mobile review memory text.",
+          importance: "major",
+          updatedAt: "2026-07-30T00:00:00.000Z",
+        },
+      });
+      const makePartialReviewMutation = () => ({
+        id: reviewMutationIds.partial,
+        kind: "create_note",
+        claimKind: "static",
+        risk: "low",
+        confidence: 0.9,
+        summary: "Pending partial review memory",
+        evidence: ["source_note:source_mobile_review"],
+        note: {
+          id: "world_partial_mobile",
+          title: "Pending partial review memory",
+          type: "world",
+          status: "active",
+          modes: ["roleplay"],
+          scope: {},
+          tags: [],
+          keywords: [],
+          links: [],
+          sections: {
+            facts: {
+              text: "Pending partial review memory content.",
+              importance: "major",
+              updatedAt: "2026-07-30T00:00:00.000Z",
+            },
+          },
+        },
+      });
+      const makeMergeCreateMutation = () => {
+        const mutation = makePartialReviewMutation();
+        return {
+          ...mutation,
+          id: reviewMutationIds.merge,
+          summary: "Merge proposed mobile memory",
+          note: {
+            ...mutation.note,
+            id: "world_merge_proposal_mobile",
+            title: "Merge proposed mobile memory",
+          },
+        };
+      };
+      const singleDraftTitle = `Single-source-mobile-memory-${"x".repeat(300)}`;
+      let reviewSources: any[] = [
+        {
+          sourceNoteId: "source_mobile_recovery",
+          modes: ["roleplay"],
+          drafts: [
+            {
+              draft: {
+                ...makeReviewDraft(reviewDraftIds.recovery, undefined, "Mobile recovery draft"),
+                source: {
+                  sourceNoteId: "source_mobile_recovery",
+                  chatId: "chat-a",
+                },
+              },
+              freshness: "hashless",
+              blockReasons: [
+                {
+                  code: "no_mutations",
+                  message: "No mutation survived extraction.",
+                },
+              ],
+              diagnostics: [],
+              candidateRejections: [],
+              deduplications: [],
+            },
+          ],
+          targets: [],
+        },
+        {
+          sourceNoteId: "source_mobile_single",
+          modes: ["roleplay"],
+          drafts: [
+            {
+              draft: {
+                ...makeReviewDraft(reviewDraftIds.single, undefined, singleDraftTitle),
+                summary: singleDraftTitle,
+                source: {
+                  sourceNoteId: "source_mobile_single",
+                  chatId: "chat-a",
+                },
+              },
+              freshness: "fresh",
+              blockReasons: [],
+              diagnostics: [],
+              candidateRejections: [],
+              deduplications: [],
+            },
+          ],
+          targets: [],
+        },
+        {
+          sourceNoteId: "source_mobile_blank",
+          modes: ["roleplay"],
+          drafts: [
+            {
+              draft: {
+                ...makeReviewDraft(reviewDraftIds.blank),
+                summary: " \t",
+                source: {
+                  sourceNoteId: "source_mobile_blank",
+                  chatId: "chat-a",
+                },
+              },
+              freshness: "fresh",
+              blockReasons: [],
+              diagnostics: [],
+              candidateRejections: [],
+              deduplications: [],
+            },
+          ],
+          targets: [],
+        },
+        {
+          sourceNoteId: "source_mobile_review",
+          modes: ["roleplay"],
+          drafts: [
+            {
+              draft: makeReviewDraft(reviewDraftIds.first, reviewMutationIds.first, "First mobile review memory"),
+              freshness: "fresh",
+              blockReasons: [],
+              diagnostics: [],
+              candidateRejections: [],
+              deduplications: [],
+            },
+            {
+              draft: makeReviewDraft(reviewDraftIds.second, reviewMutationIds.second, "Second mobile review memory", [
+                makeExistingReviewMutation(),
+                makePartialReviewMutation(),
+              ]),
+              freshness: "fresh",
+              blockReasons: [],
+              diagnostics: [],
+              candidateRejections: [],
+              deduplications: [],
+            },
+            {
+              draft: makeReviewDraft(
+                reviewDraftIds.merge,
+                reviewMutationIds.merge,
+                "Merge proposed mobile memory",
+                makeMergeCreateMutation(),
+              ),
+              freshness: "fresh",
+              blockReasons: [],
+              diagnostics: [],
+              candidateRejections: [],
+              deduplications: [],
+            },
+          ],
+          targets: [
+            {
+              noteId: "world_new_mobile",
+              title: "Existing mobile world",
+              noteType: "world",
+              rows: [
+                {
+                  draftId: reviewDraftIds.first,
+                  mutation: {
+                    id: reviewMutationIds.first,
+                    kind: "create_note",
+                    claimKind: "static",
+                    risk: "low",
+                    confidence: 0.9,
+                    summary: "First mobile review memory",
+                    evidence: ["source_note:source_mobile_review"],
+                    note: {
+                      id: "world_new_mobile",
+                      title: "First mobile review memory",
+                      type: "world",
+                      status: "active",
+                      modes: ["roleplay"],
+                      scope: {},
+                      tags: [],
+                      keywords: [],
+                      links: [],
+                      sections: {
+                        facts: {
+                          text: "First mobile review memory content.",
+                          importance: "major",
+                          updatedAt: "2026-07-30T00:00:00.000Z",
+                        },
+                      },
+                    },
+                  },
+                  disposition: "new",
+                  diagnostics: [],
+                  changes: [],
+                },
+              ],
+            },
+            {
+              noteId: "world_second_mobile",
+              title: "Second mobile review memory",
+              noteType: "world",
+              rows: [
+                {
+                  draftId: reviewDraftIds.second,
+                  mutation: makeExistingReviewMutation(),
+                  disposition: "merge",
+                  diagnostics: [],
+                  changes: [],
+                },
+              ],
+            },
+            {
+              noteId: "world_partial_mobile",
+              title: "Pending partial review memory",
+              noteType: "world",
+              rows: [
+                {
+                  draftId: reviewDraftIds.second,
+                  mutation: makePartialReviewMutation(),
+                  disposition: "new",
+                  diagnostics: [],
+                  changes: [],
+                },
+              ],
+            },
+            {
+              noteId: "world_merge_target_mobile",
+              title: "Existing merge target",
+              noteType: "world",
+              rows: [
+                {
+                  draftId: reviewDraftIds.merge,
+                  mutation: makeMergeCreateMutation(),
+                  disposition: "merge",
+                  diagnostics: [],
+                  changes: [],
+                },
+              ],
+            },
+          ],
+        },
+      ];
+      let healthState: "healthy" | "degraded" = "healthy";
+      let noteTotal = 5;
+      let pendingDraftCount = 2;
+      let failSecondReviewAccept = false;
+      let failReviewContext = false;
+      let missingSourceReview = false;
+      const omitReviewContextId: string | null = null;
+      let reviewPreflightBlocked = false;
+      let confirmReviewDiscard = false;
+      let lastReviewDiscardMessage = "";
+      let reviewQueueEmpty = false;
+      let reviewFingerprintRevision = 0;
+      let lastInjectionRequests = 0;
+      browserServer = createServer(async (request, response) => {
+        const url = new URL(request.url ?? "/", "http://127.0.0.1");
+        const send = (status: number, body: unknown, contentType = "application/json") => {
+          const payload = typeof body === "string" ? body : JSON.stringify(body);
+          response.writeHead(status, { "content-type": contentType });
+          response.end(payload);
+        };
+        if (url.pathname === "/")
+          return send(
+            200,
+            `<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/globals.css"><script type="module" src="/client.js"></script>`,
+            "text/html",
+          );
+        if (url.pathname === "/globals.css") return send(200, engineStyles, "text/css");
+        if (url.pathname === "/client.js") return send(200, artifactClient, "application/javascript");
+        if (request.method === "GET" && url.pathname === "/api/connections") return send(200, []);
+        if (!url.pathname.startsWith("/api/long-term-memory/")) return send(404, {});
+        if (request.method === "GET" && url.pathname.endsWith("/status"))
+          return send(200, {
+            initialized: true,
+            directory: "long-term-memory",
+            notes: {
+              total: noteTotal,
+              sourceNotes: 1,
+              savedMemories: Math.max(0, noteTotal - 1),
+              pendingDrafts: pendingDraftCount,
+              byType: {},
+              byStatus: {},
+            },
+            events: { logAvailable: false, bytes: null },
+            indexes: {
+              health: healthState,
+              dirty: false,
+              rebuildState: "idle",
+              errors: [],
+              warnings: [],
+              generatedAt: null,
+              sourceHash: null,
+              noteCount: 0,
+              chunkCount: 12,
+              chunkFormatVersion: 1,
+              embeddingsAvailable: false,
+              embeddedChunkCount: 0,
+            },
+          });
+        if (request.method === "GET" && url.pathname.endsWith("/settings")) return send(200, {});
+        if (request.method === "POST" && url.pathname.endsWith("/notes/batch")) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as {
+            noteIds: string[];
+            status?: string;
+            archive?: string;
+            addScope?: Record<string, unknown>;
+          };
+          batchNotesCalls.push(body);
+          if (batchNotesFailure) {
+            return send(500, { error: "batch notes failed" });
+          }
+          if (batchNotesPartial) {
+            if (body.status === "resolved") {
+              return send(200, {
+                status: "partial",
+                requestedNoteIds: body.noteIds,
+                updatedNoteIds: [],
+                affectedNoteIds: [],
+                skippedNoteIds: [],
+                failedNoteIds: body.noteIds,
+              });
+            }
+            return send(200, {
+              status: "complete",
+              requestedNoteIds: body.noteIds,
+              updatedNoteIds: body.noteIds,
+              affectedNoteIds: body.noteIds,
+              skippedNoteIds: [],
+              failedNoteIds: [],
+            });
+          }
+          return send(200, {
+            status: "complete",
+            requestedNoteIds: body.noteIds,
+            updatedNoteIds: body.noteIds,
+            affectedNoteIds: body.noteIds,
+            skippedNoteIds: [],
+            failedNoteIds: [],
+          });
+        }
+        if (request.method === "GET" && url.pathname.endsWith("/extraction-settings")) return send(200, {});
+        if (request.method === "GET" && url.pathname.endsWith("/integrity"))
+          return send(200, { health: "healthy", ok: true, noteCount: 3, issues: [] });
+        if (request.method === "GET" && url.pathname.endsWith("/drafts/pending-count"))
+          return send(200, { count: pendingDraftCount });
+        if (request.method === "GET" && url.pathname.endsWith("/last-injection/chat-artifact")) {
+          lastInjectionRequests += 1;
+          return lastInjectionRequests === 1
+            ? send(200, {
+                memoryCount: 1,
+                tokenCount: 42,
+                memories: [
+                  {
+                    noteId: "retained-memory",
+                    title: "Retained memory",
+                    tokenCount: 42,
+                  },
+                ],
+              })
+            : send(503, { error: "latest recall failed" });
+        }
+        if (request.method === "GET" && url.pathname.endsWith("/drafts/review")) {
+          reviewQueries.push(url.search);
+          if (url.searchParams.has("chatId"))
+            return send(200, {
+              generatedAt: "2026-07-30T00:00:00.000Z",
+              sources: [],
+              counts: {
+                sources: 0,
+                drafts: 0,
+                mutations: 0,
+                blockedDrafts: 0,
+                candidateRejections: 0,
+                deduplications: 0,
+              },
+            });
+          return send(200, {
+            generatedAt: "2026-07-30T00:00:00.000Z",
+            sources: reviewQueueEmpty
+              ? []
+              : reviewSources.map((source) => ({
+                  ...source,
+                  drafts: source.drafts.map((item: any) => ({
+                    ...item,
+                    draft: {
+                      ...item.draft,
+                      updatedAt: reviewFingerprintRevision ? "2026-07-30T00:00:01.000Z" : item.draft.updatedAt,
+                    },
+                  })),
+                })),
+            counts: {
+              sources: reviewQueueEmpty ? 0 : reviewSources.length,
+              drafts: reviewQueueEmpty ? 0 : reviewSources.reduce((count, source) => count + source.drafts.length, 0),
+              mutations: reviewQueueEmpty
+                ? 0
+                : reviewSources.reduce(
+                    (count, source) =>
+                      count +
+                      source.drafts.reduce(
+                        (draftCount: number, item: any) => draftCount + item.draft.mutations.length,
+                        0,
+                      ),
+                    0,
+                  ),
+              blockedDrafts: reviewQueueEmpty
+                ? 0
+                : reviewSources.reduce(
+                    (count, source) => count + source.drafts.filter((item: any) => item.blockReasons.length).length,
+                    0,
+                  ),
+              candidateRejections: 0,
+              deduplications: 0,
+            },
+          });
+        }
+        if (request.method === "GET" && url.pathname.endsWith("/scope-targets")) {
+          scopeTargetQueries.push(url.search);
+          return send(200, {
+            currentScope: { chatId: "desktop-chat", chatIds: ["desktop-chat"] },
+            chats: [
+              {
+                id: "desktop-chat",
+                label: "Desktop chat",
+                mode: "conversation",
+                groupId: null,
+                personaId: "persona-a",
+                characterIds: ["character-a"],
+              },
+              {
+                id: "memory-chat",
+                label: "Memory chat",
+                mode: "roleplay",
+                groupId: "conversation-a",
+                personaId: "persona-a",
+                characterIds: ["character-a"],
+              },
+              {
+                id: "memory-conversation-branch",
+                label: "Memory conversation branch",
+                mode: "conversation",
+                groupId: "conversation-a",
+                personaId: "persona-a",
+                characterIds: ["character-a"],
+              },
+              ...Array.from({ length: 100 }, (_, index) => ({
+                id: `bulk-chat-${index}`,
+                label: `Bulk chat ${index}`,
+                mode: "conversation",
+                groupId: null,
+                personaId: null,
+                characterIds: [],
+              })),
+            ],
+            groups: [
+              {
+                id: "conversation-a",
+                label: "Conversation A",
+                chatIds: ["memory-chat", "memory-conversation-branch"],
+              },
+              {
+                id: "valid-group",
+                label: "Valid group",
+                chatIds: Array.from({ length: 100 }, (_, index) => `valid-group-chat-${index}`),
+              },
+              {
+                id: "overflow-group",
+                label: "Overflow group",
+                chatIds: Array.from({ length: 101 }, (_, index) => `overflow-group-chat-${index}`),
+              },
+            ],
+            characters: [{ id: "character-a", label: "Character A" }],
+            personas: [
+              { id: "persona-a", label: "Persona A", comment: "Space explorer" },
+              { id: "persona-b", label: "Persona A", comment: "Private detective" },
+            ],
+          });
+        }
+        if (request.method === "GET" && url.pathname.endsWith("/notes")) {
+          noteQueries.push(url.search);
+          const notes = [
+            {
+              id: "source_mobile_review",
+              title: "Mobile review source",
+              type: "source",
+              status: "active",
+              modes: ["roleplay"],
+              scope: {},
+              tags: [],
+              keywords: [],
+              links: [],
+              sections: {
+                source: {
+                  text: "Mobile review source text.",
+                  updatedAt: "2026-07-30T00:00:00.000Z",
+                },
+              },
+              createdAt: "2026-07-30T00:00:00.000Z",
+              updatedAt: "2026-07-30T00:00:00.000Z",
+              version: 1,
+            },
+            {
+              id: "world_second_mobile",
+              title: "Second mobile review memory",
+              type: "world",
+              status: "active",
+              modes: ["roleplay"],
+              scope: {},
+              tags: [],
+              keywords: [],
+              links: [],
+              sections: {
+                facts: {
+                  text: "Second mobile review memory text.",
+                  importance: "major",
+                  updatedAt: "2026-07-30T00:00:00.000Z",
+                },
+              },
+              createdAt: "2026-07-30T00:00:00.000Z",
+              updatedAt: "2026-07-30T00:00:00.000Z",
+              version: 1,
+            },
+            {
+              id: "world_merge_target_mobile",
+              title: "Existing merge target",
+              type: "world",
+              status: "active",
+              modes: ["roleplay"],
+              scope: {},
+              tags: [],
+              keywords: [],
+              links: [],
+              sections: {
+                facts: {
+                  text: "Existing merge target text.",
+                  importance: "major",
+                  updatedAt: "2026-07-30T00:00:00.000Z",
+                },
+              },
+              createdAt: "2026-07-30T00:00:00.000Z",
+              updatedAt: "2026-07-30T00:00:00.000Z",
+              version: 1,
+            },
+            {
+              id: "world_outside_current_chat",
+              title: "Memory outside current chat",
+              type: "world",
+              status: "active",
+              modes: ["roleplay"],
+              scope: { chatId: "memory-chat", chatIds: ["memory-chat"] },
+              tags: [],
+              keywords: [],
+              links: [],
+              sections: {
+                facts: {
+                  text: "This memory belongs to another chat.",
+                  importance: "major",
+                  updatedAt: "2026-07-30T00:00:00.000Z",
+                },
+              },
+              createdAt: "2026-07-30T00:00:00.000Z",
+              updatedAt: "2026-07-30T00:00:00.000Z",
+              version: 1,
+            },
+            {
+              id: "source_mobile_recovery",
+              title: "Mobile recovery source",
+              type: "source",
+              status: "active",
+              modes: ["roleplay"],
+              scope: {},
+              tags: [],
+              keywords: [],
+              links: [],
+              sections: { source: { text: "Mobile recovery source text.", updatedAt: noteTimestamp } },
+              createdAt: noteTimestamp,
+              updatedAt: noteTimestamp,
+              version: 1,
+            },
+            {
+              id: "source_mobile_single",
+              title: "Single-draft mobile source",
+              type: "source",
+              status: "active",
+              modes: ["roleplay"],
+              scope: {},
+              tags: [],
+              keywords: [],
+              links: [],
+              sections: { source: { text: "Single-draft mobile source text.", updatedAt: noteTimestamp } },
+              createdAt: noteTimestamp,
+              updatedAt: noteTimestamp,
+              version: 1,
+            },
+            {
+              id: "source_mobile_blank",
+              title: "Blank-summary mobile source",
+              type: "source",
+              status: "active",
+              modes: ["roleplay"],
+              scope: {},
+              tags: [],
+              keywords: [],
+              links: [],
+              sections: { source: { text: "Blank-summary mobile source text.", updatedAt: noteTimestamp } },
+              createdAt: noteTimestamp,
+              updatedAt: noteTimestamp,
+              version: 1,
+            },
+            {
+              id: "world_mobile_recovery",
+              title: "Mobile recovery memory",
+              type: "world",
+              status: "resolved",
+              modes: ["roleplay"],
+              scope: {},
+              tags: [],
+              keywords: [],
+              links: [],
+              sections: { facts: { text: "Mobile recovery memory text.", updatedAt: noteTimestamp } },
+              createdAt: noteTimestamp,
+              updatedAt: noteTimestamp,
+              version: 1,
+            },
+            legacyGlobalNote,
+            scopedDesktopNote,
+          ];
+          if (url.searchParams.has("ids")) {
+            reviewContextQueries.push(url.search);
+            if (failReviewContext) return send(503, { error: "review context temporarily unavailable" });
+            const requestedIds = new Set(url.searchParams.get("ids")?.split(",") ?? []);
+            return send(
+              200,
+              notes.filter((note) => requestedIds.has(note.id) && note.id !== omitReviewContextId),
+            );
+          }
+          return send(
+            200,
+            url.searchParams.get("scopeCharacterIds") === "character-a"
+              ? notes.filter((note) => note.id === "world_second_mobile")
+              : url.searchParams.get("scopeChatIds") === "desktop-chat"
+                ? notes.filter((note) => note.id !== "world_outside_current_chat")
+                : notes,
+          );
+        }
+        if (request.method === "GET" && url.pathname.endsWith("/notes/world_second_mobile"))
+          return send(200, {
+            id: "world_second_mobile",
+            title: "Second mobile review memory",
+            type: "world",
+            status: "active",
+            modes: ["roleplay"],
+            scope: {},
+            tags: [],
+            keywords: [],
+            links: [],
+            sections: {
+              facts: {
+                text: "Second mobile review memory text.",
+                importance: "major",
+                updatedAt: "2026-07-30T00:00:00.000Z",
+              },
+            },
+            createdAt: "2026-07-30T00:00:00.000Z",
+            updatedAt: "2026-07-30T00:00:00.000Z",
+            version: 1,
+          });
+        if (request.method === "GET" && url.pathname.endsWith("/notes/world_merge_target_mobile"))
+          return send(200, {
+            id: "world_merge_target_mobile",
+            title: "Existing merge target",
+            type: "world",
+            status: "active",
+            modes: ["roleplay"],
+            scope: {},
+            tags: [],
+            keywords: [],
+            links: [],
+            sections: {
+              facts: {
+                text: "Existing merge target text.",
+                importance: "major",
+                updatedAt: "2026-07-30T00:00:00.000Z",
+              },
+            },
+            createdAt: "2026-07-30T00:00:00.000Z",
+            updatedAt: "2026-07-30T00:00:00.000Z",
+            version: 1,
+          });
+        if (request.method === "GET" && url.pathname.endsWith(`/notes/${legacyGlobalNote.id}`))
+          return send(200, legacyGlobalNote);
+        if (request.method === "GET" && url.pathname.endsWith(`/notes/${scopedDesktopNote.id}`))
+          return send(200, scopedDesktopNote);
+        if (request.method === "PATCH" && url.pathname.endsWith(`/notes/${legacyGlobalNote.id}`)) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          const patch = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+          availabilityPatches.push(patch);
+          legacyGlobalNote = {
+            ...legacyGlobalNote,
+            ...patch,
+            updatedAt: noteTimestamp,
+            version: legacyGlobalNote.version + 1,
+          };
+          return send(200, { note: legacyGlobalNote });
+        }
+        if (request.method === "POST" && url.pathname.endsWith("/import/preview"))
+          return send(200, {
+            source: "chats",
+            scanned: 2,
+            draftable: 1,
+            importedCount: 1,
+            samples: [
+              {
+                sourceId: "chat-a:summary-desktop-reextract",
+                title: "Desktop re-extract source",
+                importMode: "conversation",
+                mutationCount: 0,
+                summary: "An imported source held open for re-extraction.",
+                snippet: "The re-extract action should show progress.",
+                status: "imported",
+                freshness: "current",
+                existingNoteId: "source_desktop_reextract",
+                existingNoteTitle: "Desktop re-extract source",
+              },
+              {
+                sourceId: "character-outside-current-chat",
+                title: "Character outside current chat",
+                importMode: "roleplay",
+                mutationCount: 1,
+                summary: "A character source from another chat.",
+                snippet: "This character remains available outside the active chat.",
+                status: "pending",
+                freshness: "new",
+              },
+            ],
+            totals: { matches: 2, ready: 1, imported: 1 },
+            truncated: false,
+          });
+        if (request.method === "POST" && url.pathname.endsWith("/import/lorebooks/preview")) {
+          const books = [
+            {
+              id: "lorebook_mobile_fixture",
+              name: "Mobile Field Guide",
+              description: "A populated lorebook used to verify responsive source browsing.",
+              category: "Reference",
+              tags: ["mobile", "test"],
+              scope: {},
+              counts: { entries: 1, candidates: 1, pending: 1, imported: 0 },
+              totals: { entries: 1, candidates: 1, pending: 1, imported: 0 },
+              entries: [
+                {
+                  id: "entry_mobile_harbor",
+                  name: "Harbor Signals",
+                  candidateCount: 1,
+                  candidates: [
+                    {
+                      sourceId: "lorebook_mobile_fixture:entry_mobile_harbor:0",
+                      title: "Mobile Field Guide: Harbor Signals",
+                      importMode: "roleplay",
+                      mutationCount: 1,
+                      summary: "Harbor signal colors and their meanings.",
+                      snippet: "A blue lantern marks the safe channel after dusk.",
+                      status: "pending",
+                      freshness: "new",
+                    },
+                  ],
+                },
+              ],
+            },
+            {
+              id: "lorebook_outside_current_chat",
+              name: "Lorebook outside current chat",
+              description: "A lorebook source from another chat.",
+              category: "Reference",
+              tags: ["scope", "test"],
+              scope: {},
+              counts: { entries: 1, candidates: 1, pending: 1, imported: 0 },
+              totals: { entries: 1, candidates: 1, pending: 1, imported: 0 },
+              entries: [
+                {
+                  id: "entry_outside_current_chat",
+                  name: "Outside Chat Entry",
+                  candidateCount: 1,
+                  candidates: [
+                    {
+                      sourceId: "lorebook_outside_current_chat:entry_outside_current_chat:0",
+                      title: "Lorebook outside current chat: Outside Chat Entry",
+                      importMode: "roleplay",
+                      mutationCount: 1,
+                      summary: "A lorebook entry from another chat.",
+                      snippet: "This entry remains available outside the active chat.",
+                      status: "pending",
+                      freshness: "new",
+                    },
+                  ],
+                },
+              ],
+            },
+          ];
+          return send(200, {
+            counts: {
+              books: books.length,
+              entries: books.reduce((count, book) => count + book.counts.entries, 0),
+              candidates: books.reduce((count, book) => count + book.counts.candidates, 0),
+              pending: books.reduce((count, book) => count + book.counts.pending, 0),
+              imported: books.reduce((count, book) => count + book.counts.imported, 0),
+            },
+            books,
+            totals: {
+              books: books.length,
+              entries: books.reduce((count, book) => count + book.counts.entries, 0),
+              candidates: books.reduce((count, book) => count + book.counts.candidates, 0),
+              pending: books.reduce((count, book) => count + book.counts.pending, 0),
+              imported: books.reduce((count, book) => count + book.counts.imported, 0),
+            },
+            truncated: false,
+          });
+        }
+        if (request.method === "GET" && url.pathname.endsWith("/rejected-suggestions")) {
+          rejectedSuggestionQueries.push(url.search);
+          if (url.searchParams.has("chatId")) return send(200, { suggestions: [], total: 0 });
+          const suggestions = reviewQueueEmpty
+            ? []
+            : [
+                {
+                  id: rejectedSuggestionId,
+                  fingerprint: "a".repeat(64),
+                  source: { sourceNoteId: "source_mobile_recovery" },
+                  scope: {},
+                  modes: ["roleplay"],
+                  candidate: {
+                    index: 0,
+                    reason: "invalid_format",
+                    validatorCode: "invalid_evidence_unit_format",
+                    message: "A recoverable mobile memory.",
+                    snippet: "A recoverable mobile memory.",
+                    issues: ["units.0.text: Required"],
+                    recovery: {
+                      noteType: "world",
+                      noteId: "world_mobile_recovery",
+                      sectionKey: "facts",
+                    },
+                  },
+                  createdAt: "2026-07-30T00:00:00.000Z",
+                  lastSeenAt: "2026-07-30T00:00:00.000Z",
+                },
+                {
+                  id: otherRejectedSuggestionId,
+                  fingerprint: "b".repeat(64),
+                  source: { sourceNoteId: "source_mobile_single" },
+                  scope: {},
+                  modes: ["roleplay"],
+                  candidate: {
+                    index: 1,
+                    reason: "unsupported_bucket",
+                    validatorCode: "event_shaped_character_fact",
+                    message: "Character facts cannot capture ordinary scene actions.",
+                    snippet: "Rowan entered the observatory.",
+                  },
+                  createdAt: "2026-07-30T00:00:00.000Z",
+                  lastSeenAt: "2026-07-30T00:00:00.000Z",
+                },
+                {
+                  id: thirdRejectedSuggestionId,
+                  fingerprint: "c".repeat(64),
+                  source: { sourceNoteId: missingSourceReview ? "source_orphaned_suggestion" : "source_mobile_blank" },
+                  scope: {},
+                  modes: ["roleplay"],
+                  candidate: {
+                    index: 2,
+                    reason: "missing_source_evidence",
+                    validatorCode: "missing_evidence",
+                    message: "Evidence unit must reference the source note evidence.",
+                    snippet: "A blank-source suggestion.",
+                  },
+                  createdAt: "2026-07-30T00:00:00.000Z",
+                  lastSeenAt: "2026-07-30T00:00:00.000Z",
+                },
+              ].filter(
+                (suggestion) =>
+                  !clearedRejectedSourceIds.has(suggestion.source.sourceNoteId) &&
+                  suggestion.id !== deletedSuggestionId,
+              );
+          return send(200, { suggestions, total: suggestions.length });
+        }
+        if (request.method === "POST" && url.pathname.endsWith("/notes")) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          savedNote = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+          return send(201, {
+            note: {
+              ...savedNote,
+              createdAt: "2026-07-30T00:00:00.000Z",
+              updatedAt: "2026-07-30T00:00:00.000Z",
+              version: 1,
+            },
+          });
+        }
+        if (request.method === "POST" && url.pathname.endsWith("/import/source-notes")) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+            source: string;
+            sourceIds: string[];
+          };
+          return send(200, {
+            operationId: "00000000-0000-4000-8000-000000000001",
+            batchStatus: "failed",
+            source: body.source,
+            imported: [],
+            writeFailures: [],
+            missingSourceIds: body.sourceIds,
+            counts: {
+              requested: body.sourceIds.length,
+              sourceNotesWritten: 0,
+              succeeded: 0,
+              failed: 0,
+              cancelled: 0,
+              missing: body.sourceIds.length,
+              sourceWriteFailed: 0,
+            },
+          });
+        }
+        if (request.method === "POST" && url.pathname.endsWith("/notes/source_desktop_reextract/extract")) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          reextractionRequests.push({
+            path: url.pathname,
+            body: JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as Record<string, unknown>,
+          });
+          if (reextractionRequests.length === 1)
+            return await new Promise<void>((resolve) => {
+              releaseReextraction = () => {
+                releaseReextraction = null;
+                send(500, { error: "Re-extraction fixture failed once" });
+                resolve();
+              };
+              markReextractionStarted();
+            });
+          return send(200, {
+            operationId: "00000000-0000-4000-8000-000000000002",
+            draft: null,
+            diagnostics: [],
+            outcome: {
+              state: "no_suggestions_created",
+              totalCandidates: 0,
+              keptUnits: 0,
+              droppedUnits: 0,
+              droppedCandidates: [],
+            },
+            accounting: {
+              providerCandidates: 0,
+              normalizedAdditions: 0,
+              parserRejections: 0,
+              validationRejections: 0,
+              deduplications: 0,
+              keptUnits: 0,
+            },
+            response: { summary: "No durable suggestions found.", mutations: [] },
+            appliedMutationIds: [],
+            skippedMutationIds: [],
+          });
+        }
+        if (request.method === "POST" && url.pathname.endsWith("/preflight")) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+            mutationIds?: string[];
+          };
+          const mutationIds = body.mutationIds ?? [];
+          const targetByMutationId: Record<string, string> = {
+            [reviewMutationIds.first]: "world_new_mobile",
+            [reviewMutationIds.second]: "world_second_mobile",
+            [reviewMutationIds.partial]: "world_partial_mobile",
+          };
+          const blockedMutationIds = reviewPreflightBlocked ? [reviewMutationIds.second] : [];
+          const conflictMutationIds = reviewPreflightBlocked ? [reviewMutationIds.partial] : [];
+          return send(200, {
+            draftId: decodeURIComponent(url.pathname.split("/").at(-2)!),
+            selectedMutationIds: mutationIds,
+            readyMutationIds: mutationIds.filter((id) => !blockedMutationIds.includes(id)),
+            blockedMutationIds,
+            autoIncludedMutationIds: [],
+            rows: mutationIds.map((mutationId) => ({
+              mutationId,
+              targetId: targetByMutationId[mutationId] ?? `world_${mutationId.slice(-3)}`,
+              disposition: "new",
+              status: blockedMutationIds.includes(mutationId) ? "blocked" : "ready",
+              autoIncluded: false,
+              blockers: blockedMutationIds.includes(mutationId)
+                ? [{ code: "fixture_blocked", message: "Fixture preflight blocked this mutation." }]
+                : [],
+              conflicts: conflictMutationIds.includes(mutationId)
+                ? [
+                    {
+                      field: "facts",
+                      existing: "Existing fixture value",
+                      proposed: "Proposed fixture value",
+                      resolution: "pending",
+                      policy: "manual review",
+                    },
+                  ]
+                : [],
+            })),
+          });
+        }
+        if (request.method === "POST" && (url.pathname.endsWith("/accept") || url.pathname.endsWith("/skip"))) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+            mutationIds?: string[];
+            editedMutations?: Array<{ id: string }>;
+          };
+          const action = url.pathname.endsWith("/accept") ? "accept" : "skip";
+          const draftId = decodeURIComponent(url.pathname.split("/").at(-2)!);
+          const mutationIds = body.mutationIds ?? [];
+          reviewEditedMutationIds.push((body.editedMutations ?? []).map((mutation) => mutation.id));
+          reviewActionCalls.push({ action, draftId, mutationIds });
+          if (
+            action === "accept" &&
+            draftId === reviewDraftIds.second &&
+            mutationIds.includes(reviewMutationIds.second)
+          ) {
+            if (failSecondReviewAccept) return send(503, { error: "temporary review failure" });
+            reviewSources = reviewSources.map((source) => ({
+              ...source,
+              drafts: source.drafts.map((item: any) =>
+                item.draft.id === draftId
+                  ? {
+                      ...item,
+                      draft: {
+                        ...item.draft,
+                        updatedAt: "2026-07-30T00:00:01.000Z",
+                        appliedMutationIds: [reviewMutationIds.second],
+                        mutations: item.draft.mutations.filter(
+                          (mutation: any) => mutation.id === reviewMutationIds.partial,
+                        ),
+                      },
+                    }
+                  : item,
+              ),
+              targets: source.targets.map((target: any) => ({
+                ...target,
+                rows: target.rows.filter(
+                  (row: any) => row.draftId !== draftId || row.mutation.id === reviewMutationIds.partial,
+                ),
+              })),
+            }));
+          } else if (
+            action === "accept" &&
+            draftId === reviewDraftIds.second &&
+            mutationIds.includes(reviewMutationIds.partial)
+          ) {
+            reviewSources = reviewSources
+              .map((source) => ({
+                ...source,
+                drafts: source.drafts.map((item: any) =>
+                  item.draft.id === draftId
+                    ? {
+                        ...item,
+                        draft: {
+                          ...item.draft,
+                          mutations: item.draft.mutations.filter(
+                            (mutation: any) => mutation.id !== reviewMutationIds.partial,
+                          ),
+                        },
+                      }
+                    : item,
+                ),
+                targets: source.targets.map((target: any) => ({
+                  ...target,
+                  rows: target.rows.filter(
+                    (row: any) => row.draftId !== draftId || row.mutation.id !== reviewMutationIds.partial,
+                  ),
+                })),
+              }))
+              .filter((source) => source.drafts.some((item: any) => item.draft.mutations.length > 0));
+          } else if (action === "skip" && draftId === reviewDraftIds.merge) {
+            reviewSources = reviewSources
+              .map((source) => ({
+                ...source,
+                drafts: source.drafts
+                  .filter((item: any) => item.draft.id !== draftId)
+                  .map((item: any) =>
+                    item.draft.id === reviewDraftIds.second
+                      ? {
+                          ...item,
+                          draft: {
+                            ...item.draft,
+                            mutations: item.draft.mutations.filter(
+                              (mutation: any) => mutation.id !== reviewMutationIds.partial,
+                            ),
+                          },
+                        }
+                      : item,
+                  ),
+                targets: source.targets.map((target: any) => ({
+                  ...target,
+                  rows: target.rows.filter(
+                    (row: any) =>
+                      row.draftId !== reviewDraftIds.second || row.mutation.id !== reviewMutationIds.partial,
+                  ),
+                })),
+              }))
+              .filter((source) => source.drafts.some((item: any) => item.draft.mutations.length > 0));
+          } else {
+            reviewSources = reviewSources
+              .map((source) => ({
+                ...source,
+                drafts: source.drafts.filter((item: any) => item.draft.id !== draftId),
+              }))
+              .filter((source) => source.drafts.length > 0);
+          }
+          return action === "accept"
+            ? send(200, {
+                appliedMutationIds: mutationIds,
+                skippedMutationIds: [],
+                autoIncludedMutationIds: [],
+                indexRebuild: { status: "not_requested" },
+              })
+            : send(200, {
+                mutationIds:
+                  draftId === reviewDraftIds.merge
+                    ? [...new Set([...mutationIds, reviewMutationIds.partial])]
+                    : mutationIds,
+              });
+        }
+        if (request.method === "DELETE" && url.pathname.startsWith("/api/long-term-memory/drafts/")) {
+          if (failDraftDeletion) return send(503, { error: "Draft deletion fixture failed" });
+          const draftId = decodeURIComponent(url.pathname.split("/").at(-1)!);
+          deletedDraftIds.push(draftId);
+          reviewSources = reviewSources
+            .map((source) => ({
+              ...source,
+              drafts: source.drafts.filter((item: any) => item.draft.id !== draftId),
+              targets: source.targets.map((target: any) => ({
+                ...target,
+                rows: target.rows.filter((row: any) => row.draftId !== draftId),
+              })),
+            }))
+            .filter((source) => source.drafts.length > 0);
+          return send(200, { deleted: true, id: draftId });
+        }
+        if (request.method === "DELETE" && url.pathname.includes("/rejected-suggestions/")) {
+          deletedSuggestionId = decodeURIComponent(url.pathname.split("/").at(-1)!);
+          return send(200, { deleted: true, id: deletedSuggestionId });
+        }
+        if (request.method === "DELETE" && url.pathname.endsWith("/rejected-suggestions")) {
+          const sourceNoteId = url.searchParams.get("sourceNoteId");
+          if (clearRejectedSuggestionsFailure) return send(500, { error: "Clear rejected suggestions fixture failed" });
+          clearedRejectedSourceIds.add(sourceNoteId ?? "");
+          return send(200, { deletedCount: 1, sourceNoteId });
+        }
+        return send(404, {});
+      });
+      await new Promise<void>((resolveListen) => browserServer!.listen(0, "127.0.0.1", resolveListen));
+      const address = browserServer.address();
+      assert.ok(address && typeof address !== "string");
+      browser = await chromium.launch({ args: ["--disable-gpu"] });
+      const browserContext = await browser.newContext({ hasTouch: true });
+      const page = await browserContext.newPage();
+      page.on("request", (request) => {
+        if (request.method() !== "POST") return;
+        const body = request.postDataJSON() as Record<string, unknown>;
+        if (request.url().endsWith("/api/long-term-memory/import/preview")) sourcePreviewRequests.push(body);
+        if (request.url().endsWith("/api/long-term-memory/import/lorebooks/preview"))
+          lorebookPreviewRequests.push(body);
+      });
+      const desktopActivationChanges: boolean[] = [];
+      const chatSummarySettingsOpens: number[] = [];
+      const promptPresetEditorOpens: number[] = [];
+      await page.exposeFunction("onDesktopActivationChange", (enabled: boolean) => {
+        desktopActivationChanges.push(enabled);
+      });
+      await page.exposeFunction("onOpenChatSummarySettings", () => {
+        chatSummarySettingsOpens.push(Date.now());
+      });
+      await page.exposeFunction("onOpenActivePromptPresetEditor", () => {
+        promptPresetEditorOpens.push(Date.now());
+      });
+      await page.exposeFunction("declineDestinationChange", () => false);
+      await page.exposeFunction("confirmReviewDiscard", (options: { message?: string }) => {
+        lastReviewDiscardMessage = options.message ?? "";
+        return confirmReviewDiscard;
+      });
+      await page.addInitScript(() => {
+        Object.defineProperty(Crypto.prototype, "randomUUID", {
+          configurable: true,
+          value: undefined,
+        });
+      });
+      await page.goto(`http://127.0.0.1:${address.port}/`);
+      await page.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+      await page.evaluate((version) => {
+        const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: unknown;
+        };
+        element.setAttribute("view", "detail");
+        element.capabilityProps = {
+          agent: { name: "Long-Term Memory" },
+          chatId: "desktop-chat",
+          chatName: "desktop chat",
+          chatMode: "conversation",
+          enabledForChat: true,
+          onEnabledForChatChange: (
+            window as Window & {
+              onDesktopActivationChange: () => void;
+            }
+          ).onDesktopActivationChange,
+          package: { version },
+        };
+        document.body.append(element);
+      }, packageManifest.version);
+      await page.locator('[data-ltm-surface="detail"]').waitFor();
+      await page.locator("[data-ltm-browser-controls]").waitFor();
+      const memoryScope = page.locator("[data-ltm-memory-scope]");
+      await memoryScope.locator(":scope > summary").waitFor();
+      assert.equal(
+        (await memoryScope.locator(":scope > summary").textContent())?.trim(),
+        "Currently viewing memories in:desktop chat",
+      );
+      assert.equal(await page.getByText("Memory outside current chat").count(), 0);
+      await memoryScope.locator(":scope > summary").click();
+      assert.equal(
+        await memoryScope.locator('[data-ltm-vault-scope-target="chat:desktop-chat"][aria-checked="true"]').count(),
+        1,
+        "The contextual Current row is checked by selected ID",
+      );
+      assert.equal(
+        await memoryScope.locator('[data-ltm-vault-scope-target="all"][aria-checked="false"]').count(),
+        1,
+        "The all option is present in the shared scope list",
+      );
+      const scopeControlStyle = await page.locator("[data-ltm-vault-scope-control]").evaluate((element) => {
+        const browserControls = document.querySelector<HTMLElement>("[data-ltm-browser-controls]")!;
+        const control = element.getBoundingClientRect();
+        const bounds = browserControls.getBoundingClientRect();
+        return {
+          width: control.width,
+          maxWidth: bounds.width,
+          right: control.right,
+          maxRight: bounds.right,
+        };
+      });
+      assert.ok(scopeControlStyle.width <= scopeControlStyle.maxWidth + 1, JSON.stringify(scopeControlStyle));
+      assert.ok(scopeControlStyle.right <= scopeControlStyle.maxRight + 1, JSON.stringify(scopeControlStyle));
+      const scopePickerLayout = await page.locator("[data-ltm-vault-scope-control]").evaluate((control) => {
+        const tablist = control.querySelector<HTMLElement>("[data-ltm-vault-scope-tablist]")!;
+        const tab = control.querySelector<HTMLElement>('[data-ltm-vault-scope-tab="all"]')!;
+        const search = control.querySelector<HTMLElement>("[data-ltm-vault-scope-search]")!.getBoundingClientRect();
+        const list = control.querySelector<HTMLElement>("[data-ltm-vault-scope-list]")!.getBoundingClientRect();
+        const rail = tablist.getBoundingClientRect();
+        const shape = document.createElement("span");
+        control.append(shape);
+        shape.className = "rounded-md";
+        const controlRadius = getComputedStyle(shape).borderRadius;
+        shape.className = "rounded-lg";
+        const railRadius = getComputedStyle(shape).borderRadius;
+        shape.remove();
+        return {
+          width: tablist.getBoundingClientRect().width,
+          columns: getComputedStyle(tablist).gridTemplateColumns.split(" ").length,
+          tabBorderRadius: getComputedStyle(tab).borderRadius,
+          selectedPillCount: control.querySelectorAll("[data-ltm-vault-selected-scope]").length,
+          railRadius: getComputedStyle(tablist).borderRadius,
+          expectedControlRadius: controlRadius,
+          expectedRailRadius: railRadius,
+          leftEdges: [rail.left, search.left, list.left],
+          rightEdges: [rail.right, search.right, list.right],
+          inOrder: search.bottom <= rail.top && rail.bottom <= list.top,
+        };
+      });
+      assert.equal(scopePickerLayout.columns, 5, JSON.stringify(scopePickerLayout));
+      assert.equal(
+        scopePickerLayout.tabBorderRadius,
+        scopePickerLayout.expectedControlRadius,
+        JSON.stringify(scopePickerLayout),
+      );
+      assert.equal(
+        scopePickerLayout.railRadius,
+        scopePickerLayout.expectedRailRadius,
+        JSON.stringify(scopePickerLayout),
+      );
+      assert.ok(scopePickerLayout.inOrder, JSON.stringify(scopePickerLayout));
+      for (const edges of [scopePickerLayout.leftEdges, scopePickerLayout.rightEdges])
+        assert.ok(Math.max(...edges) - Math.min(...edges) <= 1, JSON.stringify(scopePickerLayout));
+      assert.equal(scopePickerLayout.selectedPillCount, 0, JSON.stringify(scopePickerLayout));
+      const branchTab = memoryScope.locator('[data-ltm-vault-scope-tab="branch"]');
+      for (const active of [false, true]) {
+        if (active) await branchTab.click();
+        await page.mouse.move(0, 0);
+        const colours = await branchTab.evaluate((tab, active) => {
+          const probe = document.createElement("span");
+          probe.style.background = active
+            ? "var(--marinara-editor-control-bg-hover)"
+            : "var(--marinara-editor-control-bg)";
+          probe.style.color = active ? "var(--marinara-editor-text)" : "var(--marinara-editor-muted)";
+          tab.append(probe);
+          const actual = getComputedStyle(tab);
+          const expected = getComputedStyle(probe);
+          const result = {
+            background: actual.backgroundColor,
+            expectedBackground: expected.backgroundColor,
+            text: actual.color,
+            expectedText: expected.color,
+          };
+          probe.remove();
+          return result;
+        }, active);
+        assert.equal(colours.background, colours.expectedBackground, JSON.stringify({ active, ...colours }));
+        assert.equal(colours.text, colours.expectedText, JSON.stringify({ active, ...colours }));
+      }
+      assert.equal(await memoryScope.locator('[data-ltm-vault-scope-tab="chat"]').count(), 1);
+      for (const kind of ["character", "chat", "branch", "persona"]) {
+        await memoryScope.locator(`[data-ltm-vault-scope-tab="${kind}"]`).click();
+        for (const query of ["", "does-not-match"]) {
+          await memoryScope.locator("[data-ltm-vault-scope-search]").fill(query);
+          const rows = memoryScope.locator('[data-ltm-vault-scope-list] [role="checkbox"]');
+          assert.equal(await rows.nth(0).getAttribute("data-ltm-vault-scope-pinned"), "all");
+          assert.equal(await rows.nth(1).getAttribute("data-ltm-vault-scope-pinned"), "current");
+          assert.equal(await rows.nth(1).isDisabled(), kind === "branch");
+          if (query) assert.equal(await rows.count(), 2);
+        }
+        await memoryScope.locator("[data-ltm-vault-scope-search]").fill("");
+        if (kind === "persona") {
+          await memoryScope.locator('[data-ltm-vault-scope-current="persona"]').click();
+          await memoryScope.locator('[data-ltm-vault-scope-current="persona"][aria-checked="true"]').waitFor();
+          assert.ok(noteQueries.some((query) => query.includes("scopePersonaId=persona-a")));
+        }
+        await memoryScope.locator('[data-ltm-vault-scope-pinned="all"]').click();
+        await memoryScope.locator('[data-ltm-vault-scope-pinned="all"][aria-checked="true"]').waitFor();
+      }
+      await memoryScope.locator('[data-ltm-vault-scope-tab="chat"]').click();
+      assert.equal(await memoryScope.locator('[data-ltm-vault-scope-target="group:conversation-a"]').count(), 1);
+      await memoryScope.locator("[data-ltm-vault-scope-search]").fill("does-not-match");
+      assert.equal(await memoryScope.locator('[data-ltm-vault-scope-target="group:conversation-a"]').count(), 0);
+      await memoryScope.locator("[data-ltm-vault-scope-search]").fill("");
+      await memoryScope.locator('[data-ltm-vault-scope-target="group:conversation-a"]').click();
+      await memoryScope.locator('[data-ltm-vault-scope-target="group:conversation-a"][aria-checked="true"]').waitFor();
+      assert.equal(
+        await memoryScope.locator('[data-ltm-vault-scope-target="group:conversation-a"][aria-checked="true"]').count(),
+        1,
+      );
+      await memoryScope.locator('[data-ltm-vault-scope-tab="branch"]').click();
+      assert.ok(await memoryScope.locator('[data-ltm-vault-scope-current="branch"]').isDisabled());
+      await memoryScope.locator('[data-ltm-vault-scope-tab="chat"]').click();
+      assert.equal(
+        await memoryScope.locator('[data-ltm-vault-scope-current="chat"]').getAttribute("data-ltm-vault-scope-target"),
+        "chat:desktop-chat",
+      );
+      await memoryScope.locator('[data-ltm-vault-scope-tab="character"]').click();
+      assert.equal(await memoryScope.locator('[data-ltm-vault-scope-target="character:character-a"]').count(), 1);
+      await memoryScope.locator('[data-ltm-vault-scope-target="character:character-a"]').focus();
+      await memoryScope.locator('[data-ltm-vault-scope-target="character:character-a"]').press("Enter");
+      assert.equal(
+        await memoryScope.locator('[data-ltm-vault-scope-target="character:character-a"][aria-checked="true"]').count(),
+        1,
+      );
+      await memoryScope.locator(":scope > summary").click();
+      const memoryGroupSummary = page.locator('[data-ltm-memory-group="world"] > summary');
+      await page.evaluate(() => {
+        document.body.tabIndex = -1;
+        document.body.focus();
+      });
+      for (let index = 0; index < 200; index += 1) {
+        if (await memoryGroupSummary.evaluate((summary) => summary.matches(":focus"))) break;
+        await page.keyboard.press("Tab");
+      }
+      const memoryGroupFocus = await memoryGroupSummary.evaluate((summary) => ({
+        outlineStyle: getComputedStyle(summary).outlineStyle,
+        outlineWidth: getComputedStyle(summary).outlineWidth,
+        height: summary.getBoundingClientRect().height,
+      }));
+      assert.notEqual(memoryGroupFocus.outlineStyle, "none");
+      assert.ok(memoryGroupFocus.height >= 44, JSON.stringify(memoryGroupFocus));
+      await page.evaluate(() => document.body.removeAttribute("tabindex"));
+      await memoryScope.locator(":scope > summary").click();
+      await memoryScope.locator('[data-ltm-vault-scope-tab="all"]').click();
+      await memoryScope.locator('[data-ltm-vault-scope-target="all"]').click();
+      await page.locator('[data-ltm-memory-group="world"] > summary').click();
+      await page.getByText("Memory outside current chat").waitFor();
+      assert.ok(noteQueries.some((query) => !query.includes("scopeChatIds")));
+      const setupGuide = page.getByRole("button", { name: "Show setup guide" });
+      await setupGuide.click();
+      const onboardingTitle = page.locator("#ltm-onboarding-title");
+      assert.equal(await page.locator('[data-ltm-surface="onboarding"]').getByText("Step 1 of 7 · Save").count(), 1);
+      assert.equal(await onboardingTitle.innerText(), "Overview");
+      assert.equal(await page.locator("#ltm-onboarding-description dt").count(), 3);
+      const guideWidth = await page
+        .locator("#ltm-onboarding-description")
+        .evaluate((description) => description.getBoundingClientRect().width);
+      await page.getByRole("button", { name: "Next: How recall works" }).click();
+      assert.equal(await onboardingTitle.innerText(), "How Recall Works");
+      const onboardingNext = page.getByRole("button", {
+        name: "Next: Enabling it for the Current Chat",
+      });
+      await onboardingNext.click();
+      assert.match(
+        await page.locator('[data-ltm-surface="onboarding"]').innerText(),
+        /In Conversation mode, the Engine places recalled memories automatically/u,
+      );
+      assert.doesNotMatch(await page.locator('[data-ltm-surface="onboarding"]').innerText(), /Agent Sections/u);
+      assert.equal(
+        await page.locator('[data-ltm-surface="onboarding"]').getByText("Step 3 of 7 · Activate").count(),
+        1,
+      );
+      await page.getByRole("button", { name: "Back", exact: true }).click();
+      assert.equal(await onboardingTitle.innerText(), "How Recall Works");
+      await page.getByRole("button", { name: "Next: Enabling it for the Current Chat" }).click();
+      await page.getByRole("button", { name: "Next: Choose a source" }).click();
+      assert.equal(await onboardingTitle.innerText(), "Choose What to Remember");
+      assert.equal(await page.locator("#ltm-onboarding-description ul li").count(), 3);
+      assert.deepEqual(await page.locator("#ltm-onboarding-description ul li strong").allInnerTexts(), [
+        "Chat Summary",
+        "Lorebook",
+        "Character",
+      ]);
+      assert.deepEqual(await page.locator("[data-ltm-source-choice] > button").allInnerTexts(), [
+        "Chat Summary",
+        "Lorebook",
+        "Character",
+      ]);
+      assert.deepEqual(await page.locator("[data-ltm-onboarding-actions] > button").allInnerTexts(), [
+        "Back",
+        "Next: Reviewing and saving memories",
+        "Open chat sources",
+      ]);
+      assert.ok(
+        Math.abs(
+          guideWidth -
+            (await page
+              .locator("#ltm-onboarding-description")
+              .evaluate((description) => description.getBoundingClientRect().width)),
+        ) < 0.01,
+      );
+      assert.equal(await page.getByRole("button", { name: "Open chat sources" }).count(), 1);
+      await page.getByRole("button", { name: "Next: Reviewing and saving memories" }).click();
+      assert.equal(await onboardingTitle.innerText(), "Review Before Saving");
+      assert.equal(await page.locator("#ltm-onboarding-description ul li").count(), 3);
+      await page.getByRole("button", { name: "Next: Check it works" }).click();
+      assert.equal(await onboardingTitle.innerText(), "Check What the Chat Used");
+      assert.match(
+        await page.locator('[data-ltm-surface="onboarding"]').innerText(),
+        /send a message related to a saved fact[\s\S]*zero results/iu,
+      );
+      assert.equal(await page.locator('[data-ltm-surface="onboarding"]').getByText("Step 6 of 7 · Check").count(), 1);
+      assert.equal(await page.locator("#ltm-onboarding-description ol li").count(), 2);
+      assert.equal(
+        await page.locator("#ltm-onboarding-description ol li").nth(1).innerText(),
+        "When you get a response, peek the prompt and make sure the memories are reaching your chat context.",
+      );
+      await page.getByRole("button", { name: "Next: Under the Hood" }).click();
+      assert.equal(await onboardingTitle.innerText(), "Under the Hood");
+      assert.equal(await page.locator("#ltm-onboarding-description details").count(), 2);
+      assert.deepEqual(await page.locator("#ltm-onboarding-description details summary").allInnerTexts(), [
+        "Writing to memory (Extraction)",
+        "Reading from memory (Recall)",
+      ]);
+      assert.equal(await page.getByRole("button", { name: "Close" }).count(), 1);
+      await page.getByRole("button", { name: "Go to saved memories" }).first().click();
+      await page.locator('[data-ltm-destination-content][aria-label="Memory Vault"]').waitFor();
+      await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
+      await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
+      await page.locator('[data-ltm-surface="vault"]').waitFor();
+      const memorySearch = page.getByLabel("Search memories");
+      await memorySearch.fill("Legacy global memory");
+      await page
+        .locator('[data-ltm-note-type="world"]')
+        .filter({ hasText: /^Legacy global memory/u })
+        .locator("button")
+        .first()
+        .click();
+      await page.getByRole("button", { name: "Choose where used" }).click();
+      await page.locator("[data-ltm-availability-workbench]").waitFor();
+      const availability = page.locator("[data-ltm-availability-workbench]");
+      await availability.getByRole("checkbox", { name: "Conversation" }).check();
+      await availability.getByRole("button", { name: "Save availability" }).click();
+      await page.waitForFunction(() => document.querySelector("[data-ltm-availability-workbench]") === null);
+      assert.deepEqual(availabilityPatches.at(-1), {
+        scope: {},
+        modes: ["roleplay", "conversation"],
+      });
+      assert.deepEqual(legacyGlobalNote.scope, {});
+      assert.deepEqual(legacyGlobalNote.modes, ["roleplay", "conversation"]);
+      await memorySearch.fill("Scoped desktop memory");
+      const scopedCard = page.locator('[data-ltm-note-type="world"]').filter({ hasText: /^Scoped desktop memory/u });
+      await scopedCard.waitFor();
+      await scopedCard.locator("button").first().click();
+      await page.getByRole("button", { name: "Edit availability" }).waitFor();
+      await page.getByRole("button", { name: "Edit availability" }).click();
+      await page.locator("[data-ltm-availability-workbench]").waitFor();
+      const scopedAvailability = page.locator("[data-ltm-availability-workbench]");
+      await scopedAvailability.locator("[data-ltm-availability-pills] button").first().click();
+      await scopedAvailability.locator('[role="alert"]').waitFor();
+      assert.equal(await page.locator('[data-ltm-availability-workbench] [role="alert"]').count(), 1);
+      assert.equal(availabilityPatches.length, 1);
+      await page.getByRole("button", { name: "Cancel" }).click();
+      await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
+      const recoverySource = page.locator('[data-ltm-review-source-select="source_mobile_recovery"]');
+      if ((await recoverySource.getAttribute("aria-expanded")) !== "true") await recoverySource.click();
+      const recoveryDraft = page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.recovery}"]`);
+      await recoveryDraft.waitFor();
+      assert.match(await recoveryDraft.innerText(), /Mobile recovery draft summary/u);
+      assert.doesNotMatch(await recoveryDraft.innerText(), /Draft 1/u);
+      const singleSource = page.locator('[data-ltm-review-source-select="source_mobile_single"]');
+      await singleSource.click();
+      const singleDraft = page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.single}"]`);
+      await singleDraft.waitFor();
+      assert.match(await singleDraft.innerText(), /Single-source-mobile-memory-/u);
+      assert.doesNotMatch(await singleDraft.innerText(), /Draft 1/u);
+      await singleDraft.click();
+      await page.setViewportSize({ width: 390, height: 844 });
+      assert.equal(await page.locator("[data-ltm-review-draft-title]").innerText(), singleDraftTitle);
+      assert.equal(
+        await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+        true,
+      );
+      await page.setViewportSize({ width: 1280, height: 900 });
+      const blankSource = page.locator('[data-ltm-review-source-select="source_mobile_blank"]');
+      await blankSource.click();
+      const blankDraft = page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.blank}"]`);
+      await blankDraft.waitFor();
+      assert.equal(await blankDraft.innerText(), "No draft summary.\n0\nFresh");
+      await blankDraft.click();
+      assert.equal(await page.locator("[data-ltm-review-draft-title]").innerText(), "No draft summary.");
+      const reviewSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
+      await reviewSource.click();
+      const reviewDraftRows = page.locator(
+        `#ltm-review-source-panel-source_mobile_review [data-ltm-review-draft-select]`,
+      );
+      await reviewDraftRows.first().waitFor();
+      assert.equal(await reviewDraftRows.count(), 3);
+      const reviewDraftRowText = await reviewDraftRows.allInnerTexts();
+      for (const title of [
+        "First mobile review memory",
+        "Second mobile review memory summary",
+        "Merge proposed mobile memory",
+      ])
+        assert.equal(reviewDraftRowText.filter((text) => text.includes(title)).length, 1);
+      assert.ok(reviewDraftRowText.every((text) => !/Draft 1/u.test(text)));
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-review-mutation-toggle]`)
+        .click();
+      await page.evaluate(() => {
+        const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: Record<string, unknown>;
+        };
+        element.capabilityProps = {
+          ...element.capabilityProps,
+          confirmAction: (
+            window as Window & {
+              declineDestinationChange: () => boolean;
+            }
+          ).declineDestinationChange,
+        };
+        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+        localStorage.removeItem("marinara-long-term-memory-onboarding-v1");
+      });
+      await page.evaluate(() => {
+        let writes = 0;
+        const originalSetItem = localStorage.setItem.bind(localStorage);
+        localStorage.setItem = function (key, value) {
+          if (key.startsWith("marinara_ltm_review_state:")) writes += 1;
+          return originalSetItem(key, value);
+        };
+        const counter = {
+          get value() {
+            return writes;
+          },
+        };
+        Object.defineProperty(window, "reviewStateWriteCount", {
+          configurable: true,
+          get: Object.getOwnPropertyDescriptor(counter, "value")?.get,
+        });
+      });
+      const dirtyEditor = page.locator("[data-ltm-review-mutation] textarea").first();
+      await dirtyEditor.fill("Dirty memory draft");
+      await dirtyEditor.fill("Dirty memory latest");
+      await dirtyEditor.fill("Dirty memory");
+      await page.waitForTimeout(350);
+      assert.equal(await page.evaluate(() => (window as any).reviewStateWriteCount), 1);
+      await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+      await page.locator('[data-ltm-review-source-select="source_mobile_recovery"]').click();
+      await page.locator('[data-ltm-review-source-select="source_mobile_review"]').click();
+      await page.locator("[data-ltm-review-mutation-toggle]").click();
+      assert.equal(await page.locator("[data-ltm-review-mutation] textarea").first().inputValue(), "Dirty memory");
+      assert.deepEqual(
+        await page.evaluate(() => Object.keys(localStorage).filter((key) => key.includes("review_state"))),
+        ["marinara_ltm_review_state:desktop-chat"],
+      );
+      await setupGuide.click();
+      await page.getByRole("button", { name: "Next: How recall works" }).click();
+      await page.getByRole("button", { name: "Next: Enabling it for the Current Chat" }).click();
+      await page.getByRole("button", { name: "Next: Choose a source" }).click();
+      await page.getByRole("button", { name: "Next: Reviewing and saving memories" }).click();
+      await page.getByRole("button", { name: "Open Review Queue" }).click();
+      assert.equal(await onboardingTitle.innerText(), "Review Before Saving");
+      assert.equal(await page.locator('[data-ltm-surface="review-queue"]').count(), 1);
+      assert.equal(
+        await page.evaluate(() => localStorage.getItem("marinara-long-term-memory-onboarding-v1")),
+        "step:4",
+      );
+      await page.getByRole("button", { name: "Close", exact: true }).click();
+      pendingDraftCount = 0;
+      reviewFingerprintRevision = 0;
+      await page.reload();
+      await page.evaluate((version) => {
+        const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: unknown;
+        };
+        element.setAttribute("view", "detail");
+        element.capabilityProps = {
+          agent: { name: "Long-Term Memory" },
+          chatId: "desktop-chat",
+          chatName: "desktop chat",
+          chatMode: "conversation",
+          enabledForChat: true,
+          confirmAction: (
+            window as Window & {
+              declineDestinationChange: () => boolean;
+            }
+          ).declineDestinationChange,
+          package: { version },
+        };
+        document.body.append(element);
+        localStorage.removeItem("marinara-long-term-memory-onboarding-v1");
+      }, packageManifest.version);
+      await page.locator('[data-ltm-surface="detail"]').waitFor();
+      const scopeTargetQueryCount = scopeTargetQueries.length;
+      await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
+      await page.locator('[data-ltm-review-source-select="source_mobile_review"]').click();
+      await page.locator("[data-ltm-review-mutation-toggle]").click();
+      assert.equal(await page.locator("[data-ltm-review-mutation] textarea").first().inputValue(), "Dirty memory");
+      reviewFingerprintRevision = 1;
+      await page.reload();
+      await page.evaluate((version) => {
+        const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: unknown;
+        };
+        element.setAttribute("view", "detail");
+        element.capabilityProps = {
+          agent: { name: "Long-Term Memory" },
+          chatId: "desktop-chat",
+          chatName: "desktop chat",
+          chatMode: "conversation",
+          enabledForChat: true,
+          package: { version },
+        };
+        document.body.append(element);
+      }, packageManifest.version);
+      await page.locator('[data-ltm-surface="detail"]').waitFor();
+      await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
+      await page.locator("[data-ltm-review-state-warning]").waitFor();
+      reviewFingerprintRevision = 0;
+      await setupGuide.click();
+      await page.getByRole("button", { name: "Next: How recall works" }).click();
+      await page.getByRole("button", { name: "Next: Enabling it for the Current Chat" }).click();
+      await page.getByRole("button", { name: "Next: Choose a source" }).click();
+      await page.getByRole("button", { name: "Next: Reviewing and saving memories" }).click();
+      await page.getByRole("button", { name: "Choose a Source" }).click();
+      assert.equal(await onboardingTitle.innerText(), "Review Before Saving");
+      assert.equal(await page.locator('[data-ltm-surface="review-queue"]').count(), 1);
+      assert.equal(
+        await page.evaluate(() => localStorage.getItem("marinara-long-term-memory-onboarding-v1")),
+        "step:4",
+      );
+      await page.getByRole("button", { name: "Close", exact: true }).click();
+      pendingDraftCount = 2;
+      await page.reload();
+      await page.evaluate((version) => {
+        const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: unknown;
+        };
+        element.setAttribute("view", "detail");
+        element.capabilityProps = {
+          agent: { name: "Long-Term Memory" },
+          chatId: "desktop-chat",
+          chatName: "desktop chat",
+          chatMode: "conversation",
+          enabledForChat: true,
+          onEnabledForChatChange: (
+            window as Window & {
+              onDesktopActivationChange: (enabled: boolean) => void;
+            }
+          ).onDesktopActivationChange,
+          package: { version },
+        };
+        document.body.append(element);
+      }, packageManifest.version);
+      await page.locator('[data-ltm-surface="detail"]').waitFor();
+      await setupGuide.click();
+      await page.getByRole("button", { name: "Next: How recall works" }).click();
+      await page.getByRole("button", { name: "Next: Enabling it for the Current Chat" }).click();
+      await page.getByRole("button", { name: "Next: Choose a source" }).click();
+      await page.getByRole("button", { name: "Character" }).click();
+      await page.getByRole("button", { name: "Import a character" }).click();
+      await page.locator('[data-ltm-source-tab="characters"][aria-selected="true"]').waitFor();
+      assert.equal(await page.locator('[data-ltm-surface="onboarding"]').count(), 1);
+      await page.getByRole("button", { name: "Close", exact: true }).click();
+      await setupGuide.click();
+      await page.getByRole("button", { name: "Next: How recall works" }).click();
+      await page.getByRole("button", { name: "Next: Enabling it for the Current Chat" }).click();
+      await page.getByRole("button", { name: "Next: Choose a source" }).click();
+      await page.getByRole("button", { name: "Chat Summary" }).click();
+      const chatSummaryGuide = page.locator('[data-ltm-surface="onboarding"]');
+      assert.match(
+        await chatSummaryGuide.innerText(),
+        /Chat Summary section.*default prompt.*Long-Term Memory Agent/isu,
+      );
+      assert.equal(await page.getByRole("button", { name: "Open chat sources" }).count(), 1);
+      assert.equal(
+        await page.getByRole("button", { name: "Open Chat Summary settings" }).count(),
+        0,
+        "Chat Summary handoff must remain hidden without a compatible Roleplay host callback",
+      );
+      await page.getByRole("button", { name: "Open chat sources" }).click();
+      await page.locator('[data-ltm-source-tab="chats"][aria-selected="true"]').waitFor();
+      assert.equal(
+        await page.locator('[data-ltm-surface="onboarding"]').count(),
+        1,
+        "Source handoff must keep the onboarding wizard open",
+      );
+      await page.getByRole("button", { name: "Close", exact: true }).click();
+      await page.evaluate(() => {
+        const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: Record<string, unknown>;
+        };
+        element.capabilityProps = {
+          ...element.capabilityProps,
+          chatMode: "roleplay",
+          enabledForChat: false,
+        };
+        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+      });
+      await setupGuide.click();
+      await page.getByRole("button", { name: "Next: How recall works" }).click();
+      await page.getByRole("button", { name: "Next: Enabling it for the Current Chat" }).click();
+      assert.match(
+        await page.locator('[data-ltm-surface="onboarding"]').innerText(),
+        /Open Prompt Preset Editor.*Open Sections.*Add an Agent Section for Long-Term Memory/isu,
+      );
+      assert.equal(
+        await page.getByRole("button", { name: "Open Prompt Preset Sections" }).count(),
+        0,
+        "Prompt preset handoff must remain hidden without a host callback",
+      );
+      await page.getByRole("button", { name: "Turn on for this chat" }).click();
+      assert.deepEqual(desktopActivationChanges, [true]);
+      await page.evaluate(() => {
+        const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: Record<string, unknown>;
+        };
+        element.capabilityProps = {
+          ...element.capabilityProps,
+          enabledForChat: true,
+          onOpenChatSummarySettings: (
+            window as Window & {
+              onOpenChatSummarySettings: () => void;
+            }
+          ).onOpenChatSummarySettings,
+          onOpenActivePromptPresetEditor: (
+            window as Window & {
+              onOpenActivePromptPresetEditor: () => void;
+            }
+          ).onOpenActivePromptPresetEditor,
+        };
+        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+        localStorage.removeItem("marinara-long-term-memory-onboarding-v1");
+      });
+      await setupGuide.click();
+      await page.getByRole("button", { name: "Next: How recall works" }).click();
+      await page.getByRole("button", { name: "Next: Enabling it for the Current Chat" }).click();
+      await page.getByRole("button", { name: "Open Prompt Preset Sections" }).click();
+      assert.deepEqual(promptPresetEditorOpens.length, 1);
+      assert.equal(await page.locator('[data-ltm-surface="onboarding"]').count(), 0);
+      assert.equal(
+        await page.evaluate(() => localStorage.getItem("marinara-long-term-memory-onboarding-v1")),
+        "step:2",
+      );
+      await page.evaluate(() => localStorage.removeItem("marinara-long-term-memory-onboarding-v1"));
+      await setupGuide.click();
+      await page.getByRole("button", { name: "Next: How recall works" }).click();
+      await page.getByRole("button", { name: "Next: Enabling it for the Current Chat" }).click();
+      await page.getByRole("button", { name: "Next: Choose a source" }).click();
+      await page.getByRole("button", { name: "Chat Summary", exact: true }).click();
+      await page.getByRole("button", { name: "Open Chat Summary settings" }).click();
+      assert.deepEqual(chatSummarySettingsOpens.length, 1);
+      assert.equal(await page.locator('[data-ltm-surface="onboarding"]').count(), 0);
+      assert.equal(
+        await page.evaluate(() => localStorage.getItem("marinara-long-term-memory-onboarding-v1")),
+        "step:3",
+      );
+      await page.locator('[data-ltm-source-tab="lorebooks"]').click();
+      await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
+      await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
+      await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="sources"]').click();
+      await page.locator('[data-ltm-source-tab="lorebooks"][aria-selected="true"]').waitFor();
+      await page.locator('[data-ltm-source-tab="chats"]').click();
+      assert.equal(
+        scopeTargetQueries.slice(scopeTargetQueryCount).includes("?includeAllChats=true&chatId=desktop-chat"),
+        true,
+      );
+      await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
+      const desktopActivation = page.locator('[data-ltm-control="activation"]');
+      await desktopActivation.waitFor();
+      const desktopActivationBox = await desktopActivation.boundingBox();
+      const desktopAddBox = await page.locator('[aria-label="Add memories"]').boundingBox();
+      assert.ok(desktopActivationBox);
+      assert.ok(desktopAddBox);
+      assert.equal(
+        Math.abs(
+          desktopActivationBox.y + desktopActivationBox.height / 2 - (desktopAddBox.y + desktopAddBox.height / 2),
+        ) <= 2,
+        true,
+      );
+      await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="settings"]').click();
+      await page.locator("#settings-tab-extraction").click();
+      const desktopExtractionLayout = await page
+        .locator("#settings-panel-extraction > [data-ltm-extraction-grid]")
+        .evaluate((grid) => {
+          const fields = [...grid.children].slice(0, 2) as HTMLElement[];
+          const labels = fields.map((field) => field.firstElementChild as HTMLElement);
+          const selects = fields.map((field) => field.querySelector("select")!);
+          const info = fields[1].querySelector("[data-ltm-info] svg")!;
+          return {
+            columns: getComputedStyle(grid).gridTemplateColumns.split(/\s+/u).length,
+            labelTops: labels.map((label) => label.getBoundingClientRect().top),
+            labelHeights: labels.map((label) => label.getBoundingClientRect().height),
+            selectTops: selects.map((select) => select.getBoundingClientRect().top),
+            selectHeights: selects.map((select) => select.getBoundingClientRect().height),
+            infoSize: info.getBoundingClientRect().width,
+          };
+        });
+      assert.equal(desktopExtractionLayout.columns, 2);
+      assert.deepEqual(desktopExtractionLayout.labelHeights, [44, 44]);
+      assert.equal(Math.abs(desktopExtractionLayout.labelTops[0]! - desktopExtractionLayout.labelTops[1]!) <= 1, true);
+      assert.equal(
+        Math.abs(desktopExtractionLayout.selectTops[0]! - desktopExtractionLayout.selectTops[1]!) <= 1,
+        true,
+      );
+      assert.deepEqual(desktopExtractionLayout.selectHeights, [44, 44]);
+      assert.equal(desktopExtractionLayout.infoSize, 14);
+      await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
+      await page.evaluate((version) => {
+        const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: unknown;
+        };
+        element.setAttribute("view", "settings");
+        element.capabilityProps = {
+          chatId: "chat-artifact",
+          package: { version },
+        };
+        document.body.append(element);
+      }, packageManifest.version);
+      const chatSettings = page.locator('[data-ltm-surface="chat-settings"]').last();
+      await chatSettings.waitFor();
+      assert.equal(await chatSettings.getAttribute("data-ltm-density"), "compact");
+      const selectBox = await chatSettings.locator('select[data-ltm-control="select"]').boundingBox();
+      assert.ok(selectBox);
+      assert.ok(selectBox.height <= 38, `Expected compact select height <= 38px, got ${selectBox.height}`);
+      const lastInjection = chatSettings.locator("[data-ltm-last-injection]");
+      await lastInjection.getByText(/1 saved memory included in the latest model context/u).waitFor();
+      await lastInjection.click();
+      await lastInjection.getByText("Retained memory").waitFor();
+      await lastInjection.locator("summary").getByText("42 tokens").waitFor();
+      await page.evaluate(async () => {
+        const element = document.querySelectorAll("marinara-capability-long-term-memory").item(1)!;
+        element.remove();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        document.body.append(element);
+      });
+      await lastInjection.click();
+      await lastInjection.locator('[data-ltm-status="danger"]').waitFor();
+      await lastInjection.getByRole("button", { name: /retry/i }).click();
+      await lastInjection.locator('[data-ltm-status="danger"]').waitFor();
+      assert.equal(lastInjectionRequests, 3);
+      assert.equal(await lastInjection.getByText("Retained memory").count(), 0);
+      assert.equal(await lastInjection.getByText("42 tokens").count(), 0);
+      await page.waitForFunction(() => document.body.textContent?.includes("Second mobile review memory"));
+      assert.equal(noteQueries.at(-1), "?scopeChatIds=desktop-chat&includeGlobal=false&limit=500&offset=0");
+      assert.equal(await page.locator('[data-ltm-surface="overview"]').count(), 0);
+      assert.equal(await page.locator('[data-ltm-surface="vault-health-pill"]').count(), 0);
+      const desktopNavigationLayout = await page
+        .locator('[data-ltm-control="navigation"]')
+        .first()
+        .evaluate((element) => {
+          const navigation = element.closest("nav")!;
+          const style = getComputedStyle(navigation);
+          return {
+            display: style.display,
+            flexDirection: style.flexDirection,
+            overflowX: style.overflowX,
+            width: navigation.getBoundingClientRect().width,
+            height: navigation.getBoundingClientRect().height,
+          };
+        });
+      assert.notEqual(desktopNavigationLayout.display, "none");
+      assert.notEqual(desktopNavigationLayout.flexDirection, "column");
+      assert.equal(desktopNavigationLayout.overflowX, "auto");
+      assert.ok(desktopNavigationLayout.width > 0);
+      assert.ok(desktopNavigationLayout.height > 0);
+      const desktopWorkspace = await page.locator("[data-ltm-workspace]").evaluate((element) => ({
+        columns: getComputedStyle(element).gridTemplateColumns.split(/\s+/u).length,
+        visiblePanes: [...element.querySelectorAll<HTMLElement>("[data-ltm-workspace-pane]")]
+          .filter((pane) => getComputedStyle(pane).display !== "none")
+          .map((pane) => pane.dataset.ltmWorkspacePane),
+      }));
+      assert.equal(desktopWorkspace.columns, 2);
+      assert.deepEqual(desktopWorkspace.visiblePanes, ["navigator", "workbench"]);
+      await page.waitForFunction(() => document.querySelectorAll("[data-ltm-workspace-pane-tab]").length === 0);
+      assert.equal(await page.locator('[data-ltm-surface="vault-health-warning"]').count(), 0);
+      assert.deepEqual(
+        await page
+          .locator('[data-ltm-control="navigation"]')
+          .evaluateAll((elements) => [
+            ...new Set(elements.map((element) => element.getAttribute("data-ltm-destination"))),
+          ]),
+        ["vault", "review", "sources", "settings"],
+      );
+      await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
+      await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
+      assert.ok(reviewQueries.length > 0);
+      assert.ok(reviewQueries.every((query) => query === "?includeInvalidated=true"));
+      assert.ok(rejectedSuggestionQueries.length > 0);
+      assert.ok(rejectedSuggestionQueries.every((query) => query === ""));
+      assert.ok(reviewContextQueries.length > 0);
+      assert.ok(reviewContextQueries.every((query) => query.startsWith("?ids=")));
+      assert.ok(reviewContextQueries.some((query) => query.includes("world_merge_target_mobile")));
+      assert.equal(
+        reviewContextQueries.some((query) => query.includes("includeGlobal")),
+        false,
+      );
+      assert.equal(
+        reviewContextQueries.some((query) => query.includes("limit=500")),
+        false,
+      );
+      await page.setViewportSize({ width: 390, height: 844 });
+      healthState = "degraded";
+      await page.reload();
+      await page.evaluate((version) => {
+        const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: unknown;
+        };
+        element.setAttribute("view", "detail");
+        element.capabilityProps = {
+          agent: { name: "Long-Term Memory" },
+          package: { version },
+        };
+        document.body.append(element);
+      }, packageManifest.version);
+      await page.locator('[data-ltm-surface="detail"]').waitFor();
+      const restoredGuide = page.locator('[data-ltm-surface="onboarding"]');
+      await restoredGuide.waitFor();
+      assert.equal(await restoredGuide.getByText("Step 4 of 7 · Import").count(), 1);
+      await restoredGuide.getByRole("button", { name: "Close" }).click();
+      await restoredGuide.waitFor({ state: "detached" });
+      assert.equal(
+        await page
+          .locator('[data-ltm-control="navigation"]')
+          .last()
+          .evaluate((element) => getComputedStyle(element.closest("nav")!).display !== "none"),
+        true,
+      );
+      assert.equal(
+        await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+        true,
+      );
+      assert.deepEqual(
+        await page.locator('[data-ltm-navigation="mobile"] [data-ltm-badge]').evaluateAll((badges) =>
+          badges
+            .map((badge) => {
+              const badgeRect = badge.getBoundingClientRect();
+              const buttonRect = badge.closest("button")!.getBoundingClientRect();
+              return {
+                destination: badge.closest<HTMLButtonElement>("button")?.dataset.ltmDestination,
+                top: badgeRect.top < buttonRect.top + buttonRect.height / 2,
+                left: badgeRect.left < buttonRect.left + buttonRect.width / 2,
+              };
+            })
+            .sort((left, right) => left.destination!.localeCompare(right.destination!)),
+        ),
+        [
+          { destination: "review", top: true, left: true },
+          { destination: "vault", top: true, left: true },
+        ],
+      );
+      assert.equal(await page.locator('[data-ltm-workspace-pane-tab="workbench"]').count(), 0);
+      assert.deepEqual(
+        await page.locator("[data-ltm-workspace]").evaluate((workspace) => ({
+          visiblePanes: [...workspace.querySelectorAll<HTMLElement>("[data-ltm-workspace-pane]")]
+            .filter((pane) => getComputedStyle(pane).display !== "none")
+            .map((pane) => pane.dataset.ltmWorkspacePane),
+          scrollTop: document.scrollingElement?.scrollTop ?? 0,
+        })),
+        { visiblePanes: ["navigator"], scrollTop: 0 },
+      );
+      const navigatorPane = page.locator('[data-ltm-workspace-pane="navigator"]');
+      const navigatorBox = await navigatorPane.boundingBox();
+      assert.ok(navigatorBox);
+      await page.locator('[data-ltm-surface="vault-health-warning"]').waitFor();
+      assert.equal(await page.locator('[data-ltm-surface="vault-health-warning"] [data-ltm-info]').count(), 1);
+      await page.locator('[data-ltm-surface="vault-health-warning"] [data-ltm-info]').click();
+      const healthInfoPanel = page.locator("[data-ltm-info-panel]").last();
+      await healthInfoPanel.waitFor();
+      assert.match(await healthInfoPanel.innerText(), /12 indexed chunks/u);
+      assert.match(await healthInfoPanel.innerText(), /Check Settings > Maintenance > Reindex recall data\./u);
+
+      const showWorkspacePane = async (pane: "navigator" | "workbench" | "inspector") => {
+        const target = page.locator(`[data-ltm-workspace-pane="${pane}"]`);
+        if (!(await target.isVisible())) {
+          // ResizeObserver renders the mobile tabs asynchronously after a viewport change.
+          const tab = page.locator(`[data-ltm-workspace-pane-tab="${pane}"]`);
+          await tab.waitFor({ state: "visible" });
+          await tab.click();
+        }
+        await target.waitFor({ state: "visible" });
+      };
+      const missingSources = ["source_deleted", "source_vanished"];
+      for (const [index, sourceNoteId] of missingSources.entries()) {
+        const draft = makeReviewDraft(
+          `10000000-0000-4000-8000-00000000003${index}`,
+          `10000000-0000-4000-8000-00000000004${index}`,
+          "Missing-source memory",
+        );
+        draft.source.sourceNoteId = sourceNoteId;
+        const mutation = draft.mutations[0] as any;
+        reviewSources.push({
+          sourceNoteId,
+          modes: ["roleplay"],
+          drafts: [
+            {
+              draft,
+              // Also cover a source disappearing after the server's freshness check.
+              freshness: index === 0 ? "missing" : "fresh",
+              blockReasons:
+                index === 0 ? [{ code: "source_missing", message: "The source note no longer exists." }] : [],
+              diagnostics: [],
+              candidateRejections: [],
+              deduplications: [],
+            },
+          ],
+          targets: [
+            {
+              noteId: mutation.note.id,
+              title: mutation.note.title,
+              noteType: "world",
+              rows: [{ draftId: draft.id, mutation, disposition: "new", diagnostics: [], changes: [] }],
+            },
+          ],
+        });
+      }
+      missingSourceReview = true;
+      failReviewContext = true;
+      await page.locator('[data-ltm-navigation="mobile"] [data-ltm-destination="review"]').click();
+      const reviewContextError = page
+        .locator('[data-ltm-status="danger"]')
+        .filter({ hasText: "Memory context could not load." });
+      await reviewContextError.waitFor();
+      assert.match(await reviewContextError.innerText(), /review context temporarily unavailable/u);
+      assert.equal(await page.locator("[data-ltm-workspace]").isVisible(), false);
+      assert.equal(await page.locator('[data-ltm-review-action="apply"]').count(), 0);
+      const reviewUtilitySizes = await page
+        .locator('[data-ltm-status="danger"] button, [data-ltm-review-rejected-count]')
+        .evaluateAll((elements) =>
+          elements
+            .map((element) => element.getBoundingClientRect().toJSON())
+            .filter((rect) => rect.width > 0 && rect.height > 0),
+        );
+      assert.ok(
+        reviewUtilitySizes.length >= 1 && reviewUtilitySizes.every((rect) => rect.width >= 44 && rect.height >= 44),
+        JSON.stringify(reviewUtilitySizes),
+      );
+      failReviewContext = false;
+      // The review-context failure is transient: a single Retry re-fetches the notes context and, once the
+      // request settles, restores the workspace. (world_second_mobile is an optional context note fetched
+      // with allowMissing=true, so it must not be omitted here or the later review content assertions fail.)
+      await reviewContextError.getByRole("button", { name: "Retry" }).click();
+      await page.locator('[data-ltm-review-source-select="source_deleted"]').waitFor();
+      assert.equal(await reviewContextError.isVisible(), false);
+      for (const sourceNoteId of [...missingSources, "source_orphaned_suggestion"]) {
+        await showWorkspacePane("navigator");
+        const source = page.locator(`[data-ltm-review-source-select="${sourceNoteId}"]`);
+        assert.match(await source.innerText(), /Missing source/u);
+        await source.click();
+        await showWorkspacePane("workbench");
+        const warning = page.locator("[data-ltm-review-source-missing]");
+        await warning.waitFor();
+        assert.match(await warning.innerText(), /cannot be accepted/u);
+        assert.equal(await page.getByRole("button", { name: "Open source", exact: true }).count(), 0);
+        if (missingSources.includes(sourceNoteId)) {
+          assert.equal(await page.locator("[data-ltm-review-mutation]").count(), 1);
+          assert.equal(await page.locator("[data-ltm-review-action]").isDisabled(), true);
+          await page.locator("[data-ltm-review-mutation]").getByRole("checkbox").check();
+          assert.equal(await page.locator("[data-ltm-review-batch-actions] button").first().isDisabled(), true);
+          await page.locator("[data-ltm-review-mutation]").getByRole("checkbox").uncheck();
+        } else {
+          await page.locator("[data-ltm-rejected-suggestions] > summary").click();
+          assert.equal(await page.locator("[data-ltm-clear-rejected-suggestions]").isEnabled(), true);
+        }
+      }
+      if (visualOutputDir) {
+        await showWorkspacePane("navigator");
+        await page.locator('[data-ltm-review-source-select="source_deleted"]').click();
+        await showWorkspacePane("workbench");
+        await page.screenshot({
+          path: join(visualOutputDir, "long-term-memory-missing-source-mobile.png"),
+          fullPage: true,
+        });
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await page.screenshot({
+          path: join(visualOutputDir, "long-term-memory-missing-source-desktop.png"),
+          fullPage: true,
+        });
+        await page.setViewportSize({ width: 390, height: 844 });
+      }
+      await showWorkspacePane("navigator");
+      await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
+      const restoredContextSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
+      if ((await restoredContextSource.getAttribute("aria-expanded")) === "false") {
+        await restoredContextSource.click();
+      }
+      await showWorkspacePane("navigator");
+      await page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.first}"]`).click();
+      await showWorkspacePane("workbench");
+      const restoredAccept = page.locator(
+        `[data-ltm-review-mutation="${reviewMutationIds.first}"] [aria-label^="Review change "]`,
+      );
+      assert.equal(await restoredAccept.isDisabled(), false);
+      await restoredAccept.click();
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-review-action="apply"]`)
+        .waitFor();
+      assert.equal(
+        await page
+          .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [aria-label^="Apply change "]`)
+          .count(),
+        1,
+      );
+      const firstMutation = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"]`);
+      assert.equal(await firstMutation.locator("[data-ltm-review-summary]").count(), 1);
+      assert.equal(await firstMutation.locator("[data-ltm-review-evidence-summary]").count(), 1);
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-review-action="apply"]`)
+        .click();
+      await page.waitForFunction(
+        (mutationId) => !document.querySelector(`[data-ltm-review-mutation="${mutationId}"]`),
+        reviewMutationIds.first,
+      );
+      reviewSources = reviewSources.filter((source) => !missingSources.includes(source.sourceNoteId));
+      missingSourceReview = false;
+      const mergeSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
+      if ((await mergeSource.getAttribute("aria-expanded")) === "false") {
+        await mergeSource.click();
+      }
+      await showWorkspacePane("navigator");
+      await page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.merge}"]`).click();
+      await showWorkspacePane("workbench");
+      const mergeMutation = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.merge}"]`);
+      await mergeMutation.locator("[data-ltm-review-mutation-toggle]").click();
+      await mergeMutation.getByRole("button", { name: "Open memory" }).click();
+      await page.locator('[data-ltm-surface="vault"]').waitFor();
+      await page.locator("[data-ltm-note-editor]").waitFor();
+      assert.equal(await page.locator("[data-ltm-note-editor] input").first().inputValue(), "Existing merge target");
+      await page.locator('[data-ltm-control="navigation"][data-ltm-destination="review"]').last().click();
+      await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
+      await showWorkspacePane("navigator");
+      const restoredReviewSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
+      if ((await restoredReviewSource.getAttribute("aria-expanded")) === "false") {
+        await restoredReviewSource.click();
+      }
+      await showWorkspacePane("navigator");
+      await page.locator('[data-ltm-review-draft-select="10000000-0000-4000-8000-000000000012"]').click();
+      await showWorkspacePane("workbench");
+      await page.locator("[data-ltm-review-draft-title]").waitFor();
+      assert.equal(
+        await page.locator("[data-ltm-review-draft-title]").innerText(),
+        "Second mobile review memory summary",
+      );
+      assert.equal(
+        await page
+          .locator('[data-ltm-workspace-pane="workbench"]')
+          .getByText("Source note: Mobile review source", { exact: true })
+          .count(),
+        1,
+      );
+      const reviewText = await page.locator('[data-ltm-workspace-pane="workbench"]').innerText();
+      assert.match(reviewText, /Second mobile review memory/u);
+      assert.match(reviewText, /Second mobile review memory text\./u);
+      assert.match(reviewText, /World/u);
+      assert.match(reviewText, /Update section/u);
+      assert.match(reviewText, /Major/u);
+      assert.equal(await page.locator("[data-ltm-review-operation]").count(), 1);
+      if (visualOutputDir)
+        await page.screenshot({ path: join(visualOutputDir, "long-term-memory-review-mobile.png"), fullPage: true });
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-review-mutation-toggle]`)
+        .click();
+      await page.getByRole("button", { name: "Open memory" }).click();
+      await page.locator('[data-ltm-surface="vault"]').waitFor();
+      await page.locator("[data-ltm-note-editor]").waitFor();
+      assert.equal(
+        await page.locator("[data-ltm-note-editor] input").first().inputValue(),
+        "Second mobile review memory",
+      );
+      await page.locator('[data-ltm-control="navigation"][data-ltm-destination="review"]').last().click();
+      await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
+      await page.locator('[data-ltm-review-source-select="source_mobile_review"]').click();
+      await showWorkspacePane("navigator");
+      await page.locator('[data-ltm-review-draft-select="10000000-0000-4000-8000-000000000012"]').click();
+      await showWorkspacePane("workbench");
+      await page.setViewportSize({ width: 1280, height: 900 });
+      const acceptButtonSize = await page
+        .locator("[data-ltm-review-mutation] [data-ltm-review-action]")
+        .first()
+        .evaluate((button) => {
+          const rect = button.getBoundingClientRect();
+          const icon = button.querySelector("svg")!;
+          return {
+            width: rect.width,
+            height: rect.height,
+            iconWidth: icon.getAttribute("width"),
+            iconHeight: icon.getAttribute("height"),
+          };
+        });
+      assert.ok(acceptButtonSize.width >= 44);
+      assert.ok(acceptButtonSize.height >= 44);
+      assert.equal(acceptButtonSize.iconWidth, "1rem");
+      assert.equal(acceptButtonSize.iconHeight, "1rem");
+      if (visualOutputDir)
+        await page.screenshot({ path: join(visualOutputDir, "long-term-memory-review-desktop.png"), fullPage: true });
+      await page.setViewportSize({ width: 390, height: 844 });
+      const reviewTextAfterViewportChanges = await page.locator('[data-ltm-workspace-pane="workbench"]').innerText();
+      assert.doesNotMatch(
+        reviewTextAfterViewportChanges,
+        /timeline_event|world_022|10000000-0000-4000-8000-000000000022/u,
+      );
+      assert.equal(
+        await page
+          .locator("[data-ltm-review-target]")
+          .first()
+          .evaluate((target) => Boolean(target.closest("[data-ltm-review-draft]"))),
+        true,
+      );
+      assert.equal(
+        await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+        true,
+      );
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-control="review-select"]`)
+        .check();
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-review-mutation-toggle]`)
+        .click();
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] textarea`)
+        .fill("Edited pending partial memory");
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-control="review-select"]`)
+        .check();
+      reviewPreflightBlocked = true;
+      failSecondReviewAccept = false;
+      await page.getByRole("button", { name: "Accept eligible (2)" }).click();
+      await page.locator("[data-ltm-review-preflight]").first().waitFor();
+      assert.equal(await page.locator('[data-ltm-review-preflight][role="alert"]').count(), 1);
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-review-mutation-toggle]`)
+        .click();
+      assert.equal(await page.locator("[data-ltm-review-conflicts]").count(), 1);
+      assert.equal(
+        await page
+          .locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-review-action="blocked"]`)
+          .isDisabled(),
+        true,
+      );
+      assert.equal(await page.getByRole("button", { name: /^Apply preflighted \(1\)/ }).count(), 1);
+      assert.deepEqual(reviewActionCalls, [
+        {
+          action: "accept",
+          draftId: reviewDraftIds.first,
+          mutationIds: [reviewMutationIds.first],
+        },
+      ]);
+      reviewPreflightBlocked = false;
+      await page.getByRole("button", { name: "Clear" }).click();
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-control="review-select"]`)
+        .check();
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-control="review-select"]`)
+        .check();
+      failSecondReviewAccept = true;
+      await page.getByRole("button", { name: "Accept eligible (2)" }).click();
+      await page.getByRole("button", { name: /^Apply preflighted \(2\)/ }).click();
+      await page.getByRole("button", { name: "Retry failed review actions" }).waitFor();
+      failSecondReviewAccept = false;
+      await page.getByRole("button", { name: "Retry failed review actions" }).click();
+      await page.getByText("Retry preflight complete. Review the results before applying again.").waitFor();
+      const editedPartial = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"]`);
+      assert.match(await editedPartial.locator("[data-ltm-review-summary]").innerText(), /Edited proposal/u);
+      await page.getByRole("button", { name: /^Apply preflighted \(/ }).click();
+      await page.waitForFunction(
+        (mutationId) => !document.querySelector(`[data-ltm-review-mutation="${mutationId}"]`),
+        reviewMutationIds.second,
+      );
+      assert.deepEqual(reviewEditedMutationIds.at(-1), [reviewMutationIds.partial]);
+      assert.deepEqual(reviewActionCalls, [
+        {
+          action: "accept",
+          draftId: reviewDraftIds.first,
+          mutationIds: [reviewMutationIds.first],
+        },
+        {
+          action: "accept",
+          draftId: reviewDraftIds.second,
+          mutationIds: [reviewMutationIds.second, reviewMutationIds.partial],
+        },
+        {
+          action: "accept",
+          draftId: reviewDraftIds.second,
+          mutationIds: [reviewMutationIds.second, reviewMutationIds.partial],
+        },
+      ]);
+
+      await showWorkspacePane("navigator");
+      const discardSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
+      if ((await discardSource.getAttribute("aria-expanded")) === "false") await discardSource.click();
+      await page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.merge}"]`).click();
+      await showWorkspacePane("workbench");
+      const mergeDiscardMutation = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.merge}"]`);
+      const skipCallCountBeforeDecline = reviewActionCalls.length;
+      confirmReviewDiscard = false;
+      await page.evaluate(() => {
+        const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: Record<string, unknown>;
+        };
+        element.capabilityProps = {
+          ...element.capabilityProps,
+          confirmAction: (
+            window as Window & {
+              confirmReviewDiscard: (options: { message?: string }) => boolean;
+            }
+          ).confirmReviewDiscard,
+        };
+        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+      });
+      await mergeDiscardMutation.getByRole("button", { name: /^Discard proposal /u }).click();
+      assert.equal(reviewActionCalls.length, skipCallCountBeforeDecline);
+      assert.match(lastReviewDiscardMessage, /Dependent proposals may also be discarded\./u);
+      confirmReviewDiscard = true;
+      await page.evaluate(() => {
+        const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: Record<string, unknown>;
+        };
+        element.capabilityProps = {
+          ...element.capabilityProps,
+          confirmAction: (
+            window as Window & {
+              confirmReviewDiscard: (options: { message?: string }) => boolean;
+            }
+          ).confirmReviewDiscard,
+        };
+        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+      });
+      await Promise.all([
+        page.waitForResponse(
+          (response) =>
+            response.request().method() === "POST" && response.url().endsWith(`/drafts/${reviewDraftIds.merge}/skip`),
+        ),
+        mergeDiscardMutation.getByRole("button", { name: /^Discard proposal /u }).click(),
+      ]);
+      assert.equal(reviewActionCalls.at(-1)?.action, "skip");
+
+      const sourcesBeforeDismissal = reviewSources;
+      const invalidatedDraftId = "10000000-0000-4000-8000-000000000071";
+      const emptyReportId = "10000000-0000-4000-8000-000000000072";
+      const invalidatedDraft = {
+        ...makeReviewDraft(invalidatedDraftId, reviewMutationIds.first, "Old invalidated draft", [
+          makeExistingReviewMutation(),
+          makePartialReviewMutation(),
+          makeMergeCreateMutation(),
+        ]),
+        status: "invalidated",
+        source: { sourceNoteId: "source_mobile_single", chatId: "chat-a" },
+      };
+      reviewSources = [
+        {
+          sourceNoteId: "source_mobile_single",
+          modes: ["roleplay"],
+          targets: [],
+          drafts: [
+            {
+              draft: invalidatedDraft,
+              freshness: "invalidated",
+              blockReasons: [{ code: "draft_invalidated", message: "A targeted memory detail was deleted." }],
+              diagnostics: [],
+              candidateRejections: [],
+              deduplications: [],
+            },
+            {
+              draft: { ...makeReviewDraft(emptyReportId), source: invalidatedDraft.source },
+              freshness: "fresh",
+              blockReasons: [],
+              diagnostics: [],
+              candidateRejections: [],
+              deduplications: [],
+            },
+          ],
+        },
+      ];
+      await page.reload();
+      await page.evaluate((version) => {
+        const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: unknown;
+        };
+        element.setAttribute("view", "detail");
+        element.capabilityProps = {
+          agent: { name: "Long-Term Memory" },
+          package: { version },
+          confirmAction: (window as Window & { confirmReviewDiscard: unknown }).confirmReviewDiscard,
+        };
+        document.body.append(element);
+      }, packageManifest.version);
+      await page.locator('[data-ltm-navigation="mobile"] [data-ltm-destination="review"]').click();
+      await showWorkspacePane("navigator");
+      const invalidatedSource = page.locator('[data-ltm-review-source-select="source_mobile_single"]');
+      if ((await invalidatedSource.getAttribute("aria-expanded")) === "false") await invalidatedSource.click();
+      await page.locator(`[data-ltm-review-draft-select="${invalidatedDraftId}"]`).click();
+      await showWorkspacePane("workbench");
+      const invalidatedRows = page.locator("[data-ltm-review-mutation]");
+      assert.equal(await invalidatedRows.count(), 3);
+      for (const checkbox of await invalidatedRows.locator('[data-ltm-control="review-select"]').all()) {
+        await checkbox.check();
+      }
+      assert.equal(await page.getByRole("button", { name: "Accept eligible (0)" }).isDisabled(), true);
+      for (const action of await invalidatedRows.locator("[data-ltm-review-action]").all()) {
+        assert.equal(await action.isDisabled(), true);
+      }
+      const discardDraft = page.getByRole("button", { name: "Discard invalidated draft", exact: true });
+      assert.equal(
+        await discardDraft.count(),
+        1,
+        "non-empty invalidated drafts must have a whole-draft discard action",
+      );
+      confirmReviewDiscard = false;
+      await discardDraft.click();
+      await page.waitForFunction(() =>
+        [...document.querySelectorAll("button")].some(
+          (button) => button.textContent?.trim() === "Discard invalidated draft" && !button.disabled,
+        ),
+      );
+      assert.deepEqual(deletedDraftIds, []);
+      assert.match(lastReviewDiscardMessage, /Saved memories will not be changed/u);
+      assert.equal(await invalidatedRows.count(), 3, "cancel must preserve every proposal");
+      confirmReviewDiscard = true;
+      failDraftDeletion = true;
+      await discardDraft.click();
+      await page.getByText(/Draft deletion fixture failed/u).waitFor();
+      assert.deepEqual(deletedDraftIds, []);
+      assert.equal(await invalidatedRows.count(), 3, "failed deletion must leave a retryable draft");
+      failDraftDeletion = false;
+      if (visualOutputDir) {
+        await page.screenshot({
+          path: join(visualOutputDir, "long-term-memory-invalidated-mobile.png"),
+          fullPage: true,
+        });
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await page.screenshot({
+          path: join(visualOutputDir, "long-term-memory-invalidated-desktop.png"),
+          fullPage: true,
+        });
+        await page.setViewportSize({ width: 390, height: 844 });
+      }
+      await discardDraft.focus();
+      await page.keyboard.press("Enter");
+      await page.locator(`[data-ltm-review-draft="${invalidatedDraftId}"]`).waitFor({ state: "detached" });
+      assert.deepEqual(deletedDraftIds, [invalidatedDraftId]);
+      const emptyReport = page.getByRole("button", { name: "Dismiss report", exact: true });
+      await emptyReport.click();
+      await page.locator(`[data-ltm-review-draft="${emptyReportId}"]`).waitFor({ state: "detached" });
+      assert.deepEqual(deletedDraftIds, [invalidatedDraftId, emptyReportId]);
+      reviewSources = sourcesBeforeDismissal;
+
+      reviewQueueEmpty = true;
+      await page.reload();
+      await page.evaluate((version) => {
+        const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: unknown;
+        };
+        element.setAttribute("view", "detail");
+        element.capabilityProps = { agent: { name: "Long-Term Memory" }, package: { version } };
+        document.body.append(element);
+      }, packageManifest.version);
+      await page.locator('[data-ltm-surface="detail"]').waitFor();
+      await page.locator('[data-ltm-navigation="mobile"] [data-ltm-destination="review"]').click();
+      await page
+        .getByText("No proposed memories need review yet. Import a source, then choose Extract to review.")
+        .waitFor();
+      assert.equal(await page.locator("[data-ltm-workspace]").isVisible(), false);
+      reviewQueueEmpty = false;
+
+      healthState = "healthy";
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page.reload();
+      await page.evaluate((version) => {
+        const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: unknown;
+        };
+        element.setAttribute("view", "detail");
+        element.capabilityProps = {
+          agent: { name: "Long-Term Memory" },
+          package: { version },
+        };
+        document.body.append(element);
+      }, packageManifest.version);
+      await page.locator('[data-ltm-surface="detail"]').waitFor();
+      assert.equal(await page.locator('[data-ltm-surface="vault-health-pill"]').count(), 0);
+      assert.equal(await page.locator('[data-ltm-surface="vault-health-warning"]').count(), 0);
+      await page.locator('[data-ltm-control="navigation"][data-ltm-destination="review"]').first().click();
+      await page.locator("[data-ltm-rejected-suggestions]").waitFor();
+      assert.equal(
+        await page
+          .locator("[data-ltm-rejected-suggestions]")
+          .evaluate((element) => (element as HTMLDetailsElement).open),
+        false,
+      );
+      assert.ok(
+        await page
+          .locator("[data-ltm-rejected-suggestions]")
+          .evaluate(
+            (element) =>
+              element.compareDocumentPosition(document.querySelector('[data-ltm-control="review-select"]')!) &
+              Node.DOCUMENT_POSITION_FOLLOWING,
+          ),
+      );
+      await page.locator("[data-ltm-rejected-suggestions] > summary").click();
+      const recoveryReviewText = await page.locator('[data-ltm-workspace-pane="workbench"]').innerText();
+      assert.match(recoveryReviewText, /Mobile recovery source/u);
+      assert.match(recoveryReviewText, /Mobile recovery memory/u);
+      assert.match(recoveryReviewText, /A recoverable mobile memory\./u);
+      assert.match(recoveryReviewText, /Show 1 format details/u);
+      await page.getByText("Show 1 format details", { exact: true }).click();
+      assert.match(
+        await page.locator('[data-ltm-workspace-pane="workbench"]').innerText(),
+        /units\.0\.text: Required/u,
+      );
+      await page.getByRole("button", { name: /^Recover suggestion:/u }).click();
+      await page.locator("[data-ltm-note-editor]").waitFor();
+      await page.locator("[data-ltm-details-toggle]").click();
+      await page.locator("[data-ltm-linked-memories] > summary").click();
+      assert.equal(
+        await page.locator("[data-ltm-linked-memories]").evaluate((section) => (section as HTMLDetailsElement).open),
+        true,
+      );
+      await page.waitForFunction(() => document.querySelectorAll("[data-ltm-workspace-pane-tab]").length === 0);
+      assert.equal(await page.locator("[data-ltm-workspace-pane-tab]").count(), 0);
+      assert.equal(await page.locator('[data-ltm-workspace-pane][role="tabpanel"]').count(), 0);
+      const wideVaultLayout = await page.locator("[data-ltm-workspace]").evaluate((element) => ({
+        columns: getComputedStyle(element).gridTemplateColumns.split(/\s+/u).length,
+        editorVisible:
+          getComputedStyle(element.querySelector<HTMLElement>('[data-ltm-workspace-pane="workbench"]')!).display !==
+          "none",
+        inspectorVisible:
+          getComputedStyle(element.querySelector<HTMLElement>('[data-ltm-workspace-pane="inspector"]')!).display !==
+          "none",
+      }));
+      assert.deepEqual(wideVaultLayout, {
+        columns: 3,
+        editorVisible: true,
+        inspectorVisible: true,
+      });
+      await page.setViewportSize({ width: 900, height: 844 });
+      await page.waitForFunction(() => document.querySelectorAll("[data-ltm-workspace-pane-tab]").length === 2);
+      assert.deepEqual(
+        await page.locator("[data-ltm-workspace-pane-tab]").evaluateAll((tabs) =>
+          tabs.map((tab) => ({
+            pane: tab.getAttribute("data-ltm-workspace-pane-tab"),
+            controls: tab.getAttribute("aria-controls"),
+          })),
+        ),
+        [
+          {
+            pane: "workbench",
+            controls: await page.locator('[data-ltm-workspace-pane="workbench"]').getAttribute("id"),
+          },
+          {
+            pane: "inspector",
+            controls: await page.locator('[data-ltm-workspace-pane="inspector"]').getAttribute("id"),
+          },
+        ],
+      );
+      const workbenchTab = page.locator('[data-ltm-workspace-pane-tab="workbench"]');
+      await workbenchTab.focus();
+      await workbenchTab.press("End");
+      await page.waitForFunction(() => {
+        const tab = document.querySelector('[data-ltm-workspace-pane-tab="inspector"]');
+        return document.activeElement === tab && tab?.getAttribute("aria-selected") === "true";
+      });
+      await page.locator("[data-ltm-note-inspector]").waitFor({ state: "visible" });
+      await page.locator('[data-ltm-workspace-pane-tab="inspector"]').press("Home");
+      await page.waitForFunction(
+        () => document.activeElement?.getAttribute("data-ltm-workspace-pane-tab") === "workbench",
+      );
+      await page.locator("[data-ltm-details-toggle]").click();
+      await page.waitForFunction(() => {
+        const tab = document.querySelector('[data-ltm-workspace-pane-tab="workbench"]');
+        return (
+          (document.activeElement === tab && tab?.getAttribute("aria-selected") === "true") ||
+          document.activeElement?.getAttribute("data-ltm-workspace-pane") === "workbench"
+        );
+      });
+      await page.locator("[data-ltm-details-toggle]").click();
+      await page.waitForFunction(() => {
+        const tab = document.querySelector('[data-ltm-workspace-pane-tab="inspector"]');
+        return document.activeElement === tab && tab?.getAttribute("aria-selected") === "true";
+      });
+      await page.evaluate(() => {
+        document.documentElement.style.fontSize = "20px";
+      });
+      await page.setViewportSize({ width: 900, height: 844 });
+      await page.waitForFunction(() => document.querySelectorAll("[data-ltm-workspace-pane-tab]").length === 3);
+      assert.deepEqual(
+        await page
+          .locator("[data-ltm-workspace-pane-tab]")
+          .evaluateAll((tabs) => tabs.map((tab) => tab.getAttribute("data-ltm-workspace-pane-tab"))),
+        ["navigator", "workbench", "inspector"],
+      );
+      await page.evaluate(() => {
+        document.documentElement.style.fontSize = "";
+      });
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page.locator("[data-ltm-details-toggle]").click();
+      assert.equal(await page.locator("[data-ltm-details-toggle]").getAttribute("aria-pressed"), "false");
+      assert.equal(await page.locator('[data-ltm-workspace-pane="inspector"]').count(), 0);
+      await page.getByRole("button", { name: "Choose where used" }).click();
+      await page.locator("[data-ltm-availability-picker] > summary").click();
+      const availabilityTabs = page.locator("[data-ltm-availability-tabs]");
+      await availabilityTabs.waitFor();
+      assert.deepEqual(
+        await availabilityTabs.locator('[role="tab"]').evaluateAll((tabs) =>
+          tabs.map((tab) => ({
+            kind: tab.getAttribute("data-ltm-availability-tab"),
+            selected: tab.getAttribute("aria-selected"),
+            tabIndex: tab.getAttribute("tabindex"),
+            count: tab.querySelector("[data-ltm-availability-count]")?.textContent,
+          })),
+        ),
+        [
+          { kind: "character", selected: "true", tabIndex: "0", count: "0" },
+          { kind: "persona", selected: "false", tabIndex: "-1", count: "0" },
+          { kind: "chat", selected: "false", tabIndex: "-1", count: "1" },
+          { kind: "branch", selected: "false", tabIndex: "-1", count: "1" },
+        ],
+      );
+      assert.equal(
+        await availabilityTabs.locator('[data-ltm-availability-tab="persona"] span').first().innerText(),
+        "Persona",
+      );
+      assert.equal(
+        await availabilityTabs.locator('[data-ltm-availability-tab="chat"] span').first().innerText(),
+        "Chat",
+      );
+      const desktopRailLayout = await availabilityTabs.evaluate((rail) => {
+        const tablist = rail.querySelector<HTMLElement>('[role="tablist"]')!;
+        const tabs = [...rail.querySelectorAll<HTMLElement>('[role="tab"]')];
+        const rects = tabs.map((tab) => tab.getBoundingClientRect());
+        const panel = rail.querySelector<HTMLElement>('[role="tabpanel"]')!;
+        const panelRect = panel.getBoundingClientRect();
+        const tablistRect = tablist.getBoundingClientRect();
+        const template = getComputedStyle(tablist).gridTemplateColumns;
+        return {
+          columns: template.startsWith("repeat(4,") ? 4 : template.split(/\s+/u).length,
+          sameRow: rects.every((rect) => Math.abs(rect.top - rects[0]!.top) <= 1),
+          equalWidths: rects.every((rect) => Math.abs(rect.width - rects[0]!.width) <= 1),
+          panelBelowTabs: panelRect.top >= tablistRect.bottom,
+          panelWidth: panelRect.width,
+          tablistWidth: tablistRect.width,
+        };
+      });
+      assert.deepEqual(
+        {
+          columns: desktopRailLayout.columns,
+          sameRow: desktopRailLayout.sameRow,
+          equalWidths: desktopRailLayout.equalWidths,
+          panelBelowTabs: desktopRailLayout.panelBelowTabs,
+        },
+        {
+          columns: 4,
+          sameRow: true,
+          equalWidths: true,
+          panelBelowTabs: true,
+        },
+      );
+      assert.ok(Math.abs(desktopRailLayout.panelWidth - desktopRailLayout.tablistWidth) <= 0.5);
+      await availabilityTabs.locator('[data-ltm-availability-tab="chat"]').click();
+      assert.equal(
+        await availabilityTabs.locator('[data-ltm-availability-target="chat:all"]').getAttribute("aria-pressed"),
+        "true",
+      );
+      await availabilityTabs.locator('[data-ltm-availability-tab="branch"]').click();
+      assert.equal(
+        await availabilityTabs.locator('[data-ltm-availability-target="branch:all"]').getAttribute("aria-pressed"),
+        "true",
+      );
+      await availabilityTabs.locator('[data-ltm-availability-tab="character"]').click();
+      const characterTab = availabilityTabs.locator('[data-ltm-availability-tab="character"]');
+      const personaTab = availabilityTabs.locator('[data-ltm-availability-tab="persona"]');
+      await characterTab.press("ArrowRight");
+      assert.equal(await personaTab.getAttribute("aria-selected"), "true");
+      assert.equal(
+        await availabilityTabs.locator('[role="tabpanel"]').getAttribute("aria-labelledby"),
+        await personaTab.getAttribute("id"),
+      );
+      await personaTab.press("Home");
+      assert.equal(await characterTab.getAttribute("aria-selected"), "true");
+      await characterTab.press("End");
+      assert.equal(
+        await availabilityTabs.locator('[data-ltm-availability-tab="branch"]').getAttribute("aria-selected"),
+        "true",
+      );
+      await characterTab.click();
+      await availabilityTabs.locator('[data-ltm-availability-search="character"]').fill("Character");
+      await availabilityTabs.locator('[data-ltm-availability-target="character:character-a"]').click();
+      assert.equal(
+        await availabilityTabs
+          .locator('[data-ltm-availability-target="character:character-a"]')
+          .getAttribute("aria-pressed"),
+        "true",
+      );
+      await personaTab.click();
+      assert.equal(await characterTab.getAttribute("aria-selected"), "false");
+      assert.equal(await personaTab.getAttribute("aria-selected"), "true");
+      await characterTab.click();
+      assert.equal(
+        await availabilityTabs.locator('[data-ltm-availability-search="character"]').inputValue(),
+        "Character",
+      );
+      await page.setViewportSize({ width: 320, height: 720 });
+      const mobileRailLayout = await availabilityTabs.evaluate((rail) => {
+        const tablist = rail.querySelector<HTMLElement>('[role="tablist"]')!;
+        const panel = rail.querySelector<HTMLElement>('[role="tabpanel"]')!;
+        const tablistRect = tablist.getBoundingClientRect();
+        const panelRect = panel.getBoundingClientRect();
+        return {
+          columns: getComputedStyle(tablist).gridTemplateColumns.split(/\s+/u).length,
+          panelBelowTabs: panelRect.top >= tablistRect.bottom,
+          pageFits: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+        };
+      });
+      assert.deepEqual(mobileRailLayout, {
+        columns: 1,
+        panelBelowTabs: true,
+        pageFits: true,
+      });
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await personaTab.click();
+      await page.locator('[data-ltm-availability-target="persona:persona-a"]').click();
+      await page.locator('[data-ltm-availability-tab="chat"]').click();
+      await page.locator('[data-ltm-availability-target="chat:conversation-a"]').click();
+      await page.locator('[data-ltm-availability-tab="branch"]').click();
+      await page.locator('[data-ltm-availability-target="branch:memory-chat"]').click();
+      assert.equal(await page.getByText("Groups", { exact: true }).count(), 0);
+      await page.getByRole("button", { name: "Save availability" }).click();
+      await page.locator("[data-ltm-select-mode]").click();
+      const selectableWorldNotes = page.locator('[data-ltm-note-type="world"] input[type="checkbox"]');
+      assert.ok((await selectableWorldNotes.count()) >= 2);
+      const worldGroup = page.locator('[data-ltm-memory-group="world"]');
+      if (!(await worldGroup.evaluate((group) => (group as HTMLDetailsElement).open))) {
+        await worldGroup.locator(":scope > summary").click();
+      }
+      await selectableWorldNotes.nth(0).check();
+      await selectableWorldNotes.nth(1).check();
+      await page.locator("[data-ltm-bulk-availability]").click();
+      const bulkAvailability = page.locator("[data-ltm-bulk-availability-workbench]");
+      await bulkAvailability.waitFor();
+      const bulkRail = bulkAvailability.locator("[data-ltm-availability-tabs]");
+      await bulkRail.waitFor();
+      assert.deepEqual(
+        await bulkRail.evaluate((rail) => ({
+          railRadius: getComputedStyle(rail).borderRadius,
+          tabRadius: getComputedStyle(rail.querySelector<HTMLElement>('[role="tab"]')!).borderRadius,
+          pageFits: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+        })),
+        { railRadius: "0px", tabRadius: "0px", pageFits: true },
+      );
+      await bulkRail.locator('[data-ltm-availability-tab="character"]').click();
+      await bulkRail.locator('[data-ltm-availability-target="character:character-a"]').click();
+      assert.equal(
+        await bulkRail.locator('[data-ltm-availability-target="character:character-a"]').getAttribute("aria-pressed"),
+        "true",
+      );
+      await bulkRail.locator('[data-ltm-availability-tab="chat"]').click();
+      assert.equal(
+        await bulkRail.locator('[data-ltm-availability-target="chat:all"]').getAttribute("aria-pressed"),
+        "true",
+      );
+      await bulkRail.locator('[data-ltm-availability-tab="branch"]').click();
+      assert.equal(
+        await bulkRail.locator('[data-ltm-availability-target="branch:all"]').getAttribute("aria-pressed"),
+        "true",
+      );
+      await bulkRail.locator('[data-ltm-availability-tab="persona"]').click();
+      await bulkRail.locator('[data-ltm-availability-target="persona:persona-a"]').click();
+      assert.equal(
+        await bulkRail.locator('[data-ltm-availability-target="persona:persona-a"]').getAttribute("aria-pressed"),
+        "true",
+      );
+      const bulkAvailabilityResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" && response.url().includes("/api/long-term-memory/notes/batch"),
+      );
+      const bulkAvailabilityRequest = page.waitForRequest(
+        (request) => request.method() === "POST" && request.url().includes("/api/long-term-memory/notes/batch"),
+      );
+      await bulkAvailability.getByRole("button", { name: "Apply" }).click();
+      const bulkAvailabilityPayload = (await bulkAvailabilityRequest).postDataJSON();
+      assert.deepEqual(bulkAvailabilityPayload.addScope, {
+        characterIds: ["character-a"],
+        personaIds: ["persona-a"],
+      });
+      assert.equal((await bulkAvailabilityResponse).status(), 200);
+      await page.locator("[data-ltm-note-editor]").waitFor();
+      const cleanupRequest = page.waitForRequest(
+        (request) =>
+          request.method() === "DELETE" && request.url().includes(`/rejected-suggestions/${rejectedSuggestionId}`),
+      );
+      await page.getByRole("button", { name: "Save", exact: true }).click();
+      await cleanupRequest;
+      await page.locator('[data-ltm-status="success"]').waitFor();
+      assert.equal(await page.locator('[role="alert"]').count(), 0);
+      assert.equal(deletedSuggestionId, rejectedSuggestionId);
+      assert.equal(savedNote?.type, "world");
+
+      // Prove Archive Undo: mixed prior statuses, complete undo, and rollback on partial failure.
+      const archiveBatch = page.locator("[data-ltm-bulk-actions]");
+      const activeWorldCard = page
+        .locator('[data-ltm-note-type="world"]')
+        .filter({ hasText: "Second mobile review memory" });
+      const resolvedWorldCard = page
+        .locator('[data-ltm-note-type="world"]')
+        .filter({ hasText: "Mobile recovery memory" });
+      await activeWorldCard.locator('input[type="checkbox"]').check();
+      await resolvedWorldCard.locator('input[type="checkbox"]').check();
+      await archiveBatch.getByRole("button", { name: "Archive" }).click();
+      await page
+        .locator("[data-ltm-vault-feedback]")
+        .getByText(/2 memories archived/u)
+        .waitFor();
+      const undoButton = page.locator("[data-ltm-vault-feedback]").getByRole("button", { name: "Undo" });
+      assert.equal(await undoButton.count(), 1);
+
+      // 1. Partial failure restores successful restores back to archived and surfaces error.
+      batchNotesPartial = true;
+      await undoButton.click();
+      await page.locator('[data-ltm-vault-feedback] [role="alert"]').waitFor();
+      assert.match(
+        await page.locator('[data-ltm-vault-feedback] [role="alert"]').innerText(),
+        /Could not undo the archive/u,
+      );
+      // The rollback call re-archives only the successfully restored active note, leaving the failed resolved note untouched
+      const rollbackCall = batchNotesCalls.at(-1);
+      assert.equal(rollbackCall?.status, "archived");
+      assert.deepEqual(
+        rollbackCall?.noteIds,
+        ["world_second_mobile"],
+        "Rollback must re-archive only the successfully restored active note",
+      );
+      batchNotesPartial = false;
+
+      // 2. Complete restore sends restore batches grouped by prior status.
+      // Re-archive the two notes cleanly
+      await activeWorldCard.locator('input[type="checkbox"]').check();
+      await resolvedWorldCard.locator('input[type="checkbox"]').check();
+      await archiveBatch.getByRole("button", { name: "Archive" }).click();
+      await page
+        .locator("[data-ltm-vault-feedback]")
+        .getByText(/2 memories archived/u)
+        .waitFor();
+      const freshUndoButton = page.locator("[data-ltm-vault-feedback]").getByRole("button", { name: "Undo" });
+      await freshUndoButton.click();
+      await page
+        .locator("[data-ltm-vault-feedback]")
+        .getByText(/2 memories restored/u)
+        .waitFor();
+      assert.equal(await page.locator("[data-ltm-vault-feedback]").getByRole("button", { name: "Undo" }).count(), 0);
+      const restoreCalls = batchNotesCalls.slice(-2);
+      const activeRestoreCall = restoreCalls.find((call) => call.status === "active");
+      const resolvedRestoreCall = restoreCalls.find((call) => call.status === "resolved");
+      assert.ok(activeRestoreCall, "Archive undo must include a restore batch for active notes");
+      assert.ok(resolvedRestoreCall, "Archive undo must include a restore batch for resolved notes");
+      assert.deepEqual(
+        activeRestoreCall.noteIds,
+        ["world_second_mobile"],
+        "Active restore batch must target the active note",
+      );
+      assert.deepEqual(
+        resolvedRestoreCall.noteIds,
+        ["world_mobile_recovery"],
+        "Resolved restore batch must target the resolved note",
+      );
+
+      await page.locator('[data-ltm-control="navigation"][data-ltm-destination="review"]').first().click();
+      const clearSource = page.locator('[data-ltm-review-source-select="source_mobile_single"]');
+      await clearSource.click();
+      await page.locator("[data-ltm-rejected-suggestions] > summary").click();
+      const clearSourceSuggestions = page.locator(
+        '[data-ltm-rejected-source="source_mobile_single"] [data-ltm-rejected-suggestion]',
+      );
+      await clearSourceSuggestions.waitFor();
+      const clearRejectedButton = page.locator("[data-ltm-clear-rejected-suggestions]");
+      confirmReviewDiscard = false;
+      await page.evaluate(() => {
+        const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: Record<string, unknown>;
+        };
+        element.capabilityProps = {
+          ...element.capabilityProps,
+          confirmAction: (
+            window as Window & {
+              confirmReviewDiscard: (options: { message?: string }) => boolean;
+            }
+          ).confirmReviewDiscard,
+        };
+        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+      });
+      await clearRejectedButton.click();
+      assert.equal(await clearSourceSuggestions.count(), 1);
+      assert.match(lastReviewDiscardMessage, /Clear 1 rejected suggestions from Single-draft mobile source/u);
+      confirmReviewDiscard = true;
+      await page.evaluate(() => {
+        const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: Record<string, unknown>;
+        };
+        element.capabilityProps = {
+          ...element.capabilityProps,
+          confirmAction: (
+            window as Window & {
+              confirmReviewDiscard: (options: { message?: string }) => boolean;
+            }
+          ).confirmReviewDiscard,
+        };
+        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+      });
+      clearRejectedSuggestionsFailure = true;
+      await clearRejectedButton.click();
+      await page
+        .locator('[data-ltm-status="danger"]')
+        .filter({ hasText: "Clear rejected suggestions fixture failed" })
+        .waitFor();
+      assert.equal(await clearSourceSuggestions.count(), 1);
+      clearRejectedSuggestionsFailure = false;
+      await clearRejectedButton.click();
+      await clearSourceSuggestions.waitFor({ state: "detached" });
+      await page.getByText("Removed 1 rejected suggestion from Single-draft mobile source.", { exact: true }).waitFor();
+      await page.locator('[data-ltm-review-source-select="source_mobile_blank"]').click();
+      await page.locator("[data-ltm-rejected-suggestions] > summary").click();
+      assert.equal(
+        await page.locator('[data-ltm-rejected-source="source_mobile_blank"] [data-ltm-rejected-suggestion]').count(),
+        1,
+      );
+      await page.evaluate(() => {
+        const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: Record<string, unknown>;
+        };
+        element.capabilityProps = { ...element.capabilityProps, confirmAction: undefined };
+        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+      });
+      const expectedInitialChatSourceScope = {
+        chatId: "desktop-chat",
+        chatIds: ["desktop-chat"],
+      };
+      await page.locator('[data-ltm-control="navigation"][data-ltm-destination="sources"]').first().click();
+      await page.locator('[data-ltm-source-tab="chats"]').click();
+      await page.locator('[data-ltm-source-preview-status="success"]').waitFor();
+      const sourceScopePicker = page.locator('[data-ltm-scope-picker="source"]');
+      const sourceScopeTrigger = sourceScopePicker.getByRole("combobox");
+      assert.match((await sourceScopeTrigger.innerText()).trim(), /All/u);
+      await sourceScopeTrigger.click();
+      assert.equal(await sourceScopePicker.locator('[role="listbox"] input').count(), 0);
+      assert.deepEqual(
+        await sourceScopePicker
+          .locator('[role="option"]')
+          .evaluateAll((options) =>
+            options.slice(0, 2).map((option) => option.textContent?.replace(/\s+/gu, " ").trim()),
+          ),
+        ["Current", "All"],
+      );
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="chat:desktop-chat"]').count(), 1);
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="all"]').count(), 1);
+      await sourceScopePicker.locator("[data-ltm-scope-picker-popup] input").fill("does-not-match");
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="chat:desktop-chat"]').count(), 1);
+      assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="all"]').count(), 1);
+      await sourceScopePicker.locator("[data-ltm-scope-picker-popup] input").fill("");
+      assert.equal(
+        await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="chat:memory-chat"]').count(),
+        0,
+      );
+      assert.equal(
+        await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="branch:memory-chat"]').count(),
+        0,
+      );
+      assert.equal(
+        await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="group:conversation-a"]').count(),
+        1,
+      );
+      assert.notEqual(
+        await sourceScopePicker
+          .locator("[data-ltm-scope-picker-popup]")
+          .evaluate((listbox) => getComputedStyle(listbox).backgroundColor),
+        "rgba(0, 0, 0, 0)",
+      );
+      const scopedChatPreviewRequestPromise = page.waitForRequest((request) => {
+        if (request.method() !== "POST" || !request.url().includes("/api/long-term-memory/import/preview"))
+          return false;
+        const body = request.postDataJSON() as { source?: string; sourceScope?: unknown };
+        return (
+          body.source === "chats" && JSON.stringify(body.sourceScope) === JSON.stringify(expectedInitialChatSourceScope)
+        );
+      });
+      await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="chat:desktop-chat"]').click();
+      const scopedChatPreviewRequest = (await scopedChatPreviewRequestPromise).postDataJSON() as {
+        sourceScope?: unknown;
+      };
+      assert.deepEqual(scopedChatPreviewRequest.sourceScope, expectedInitialChatSourceScope);
+      await page.locator('[data-ltm-source-preview-status="success"]').waitFor();
+      // Unified destination panel replaces the split combobox + "Add more locations".
+      const destinationPanel = page.locator("#ltm-destination-scope-control");
+      await destinationPanel.waitFor();
+      assert.equal(await page.locator('[data-ltm-scope-picker="destination"]').count(), 0);
+      assert.equal(await page.locator("[data-ltm-add-destination]").count(), 0);
+      assert.equal(await destinationPanel.getByText("Make memories available in", { exact: true }).count(), 1);
+      for (const kind of ["all", "chat", "branch", "character", "persona"]) {
+        assert.equal(await destinationPanel.locator(`[data-ltm-availability-tab="${kind}"]`).count(), 1);
+      }
+      // No active chat in this source workflow, so no destination is pre-selected and import is blocked.
+      assert.equal(await destinationPanel.locator('button[aria-label^="Remove "]').count(), 0);
+      assert.equal(
+        await destinationPanel.getByText("Choose a destination before importing scoped memories.").count(),
+        1,
+      );
+
+      // All tab shows concrete targets grouped by category.
+      await destinationPanel.locator('[data-ltm-availability-tab="all"]').click();
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="chat:desktop-chat"]').count(), 1);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="persona:persona-a"]').count(), 1);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="branch:conversation-a"]').count(), 1);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="character:character-a"]').count(), 1);
+
+      // Each category view shows only its own kind.
+      await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="chat:desktop-chat"]').count(), 1);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="persona:persona-a"]').count(), 0);
+      await destinationPanel.locator('[data-ltm-availability-tab="branch"]').click();
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="branch:conversation-a"]').count(), 1);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="branch:valid-group"]').count(), 1);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="branch:overflow-group"]').count(), 0);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="chat:desktop-chat"]').count(), 0);
+      await destinationPanel.locator('[data-ltm-availability-tab="character"]').click();
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="character:character-a"]').count(), 1);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="branch:conversation-a"]').count(), 0);
+
+      // Personas are visible and searchable within their category.
+      await destinationPanel.locator('[data-ltm-availability-tab="persona"]').click();
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="persona:persona-a"]').count(), 1);
+      const personaSearch = destinationPanel.locator('[data-ltm-availability-search="persona"]');
+      await personaSearch.fill("Private detective");
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="persona:persona-a"]').count(), 0);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-target="persona:persona-b"]').count(), 1);
+      await personaSearch.fill("");
+
+      // Category action rows (Current / All chats / All branches / All characters) are present.
+      await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
+      // A non-matching query keeps the pinned category action available.
+      await destinationPanel.locator('[data-ltm-availability-search="chat"]').fill("zzz-no-match");
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-action="chat:all"]').count(), 1);
+      await destinationPanel.locator('[data-ltm-availability-search="chat"]').fill("");
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-action="chat:current"]').count(), 1);
+      await destinationPanel.locator('[data-ltm-availability-action="chat:all"]').click();
+      assert.equal(
+        await destinationPanel.locator('[data-ltm-availability-target="chat:bulk-chat-99"] input').isChecked(),
+        true,
+      );
+      assert.equal(
+        await destinationPanel.locator('[data-ltm-availability-target="chat:desktop-chat"] input').isChecked(),
+        false,
+      );
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-action="chat:all"]').count(), 1);
+      for (let index = 0; index < 100; index += 1) {
+        const bulkChat = destinationPanel.locator(`[data-ltm-availability-target="chat:bulk-chat-${index}"] input`);
+        await bulkChat.evaluate((element) => (element as HTMLInputElement).click());
+      }
+      await destinationPanel.locator('[data-ltm-availability-tab="branch"]').click();
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-action="branch:current"]').count(), 0);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-action="branch:all"]').count(), 1);
+      await destinationPanel.locator('[data-ltm-availability-tab="character"]').click();
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-action="character:current"]').count(), 1);
+      assert.equal(await destinationPanel.locator('[data-ltm-availability-action="character:all"]').count(), 1);
+
+      // Home/End and Left/Right move focus across the category tabs.
+      await destinationPanel.locator('[data-ltm-availability-tab="branch"]').focus();
+      await destinationPanel.locator('[data-ltm-availability-tab="branch"]').press("Home");
+      await page.waitForFunction(() => document.activeElement?.getAttribute("data-ltm-availability-tab") === "all");
+      await destinationPanel.locator('[data-ltm-availability-tab="branch"]').press("End");
+      await page.waitForFunction(() => document.activeElement?.getAttribute("data-ltm-availability-tab") === "persona");
+      assert.equal(
+        await destinationPanel.locator('[data-ltm-availability-tab="persona"]').getAttribute("aria-selected"),
+        "true",
+      );
+      await destinationPanel.locator('[data-ltm-availability-tab="persona"]').press("ArrowLeft");
+      await page.waitForFunction(
+        () => document.activeElement?.getAttribute("data-ltm-availability-tab") === "character",
+      );
+      assert.equal(
+        await destinationPanel.locator('[data-ltm-availability-tab="character"]').getAttribute("aria-selected"),
+        "true",
+      );
+
+      // Build a two-category selection: the current chat via the Current action, then a persona.
+      await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
+      await destinationPanel.locator('[data-ltm-availability-action="chat:current"]').click();
+      assert.equal(
+        await destinationPanel.locator('[data-ltm-availability-action="chat:current"]').getAttribute("aria-pressed"),
+        "true",
+      );
+      assert.equal(await destinationPanel.locator('button[aria-label^="Remove Current"]').count(), 1);
+      await destinationPanel.locator('[data-ltm-availability-tab="persona"]').click();
+      await destinationPanel.locator('[data-ltm-availability-target="persona:persona-a"] input').check();
+      assert.equal(
+        await destinationPanel.locator('[data-ltm-availability-target="persona:persona-a"] input').isChecked(),
+        true,
+      );
+      assert.equal(
+        await destinationPanel.locator('button[aria-label^="Remove Persona A (current and future chats)"]').count(),
+        1,
+      );
+
+      // Capacity: the per-kind 100-ID limit blocks the 100th additional chat.
+      await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
+      for (let index = 0; index < 99; index += 1) {
+        const bulkChat = destinationPanel.locator(`[data-ltm-availability-target="chat:bulk-chat-${index}"] input`);
+        await bulkChat.evaluate((element) => (element as HTMLInputElement).click());
+      }
+      const blockedBulkChat = destinationPanel.locator('[data-ltm-availability-target="chat:bulk-chat-99"] input');
+      assert.equal(await blockedBulkChat.isDisabled(), true);
+      assert.equal(await destinationPanel.getByText(/Some locations cannot be added/u).count(), 1);
+      // Reset the chat selection back to the current chat only.
+      for (let index = 0; index < 99; index += 1) {
+        const bulkChat = destinationPanel.locator(`[data-ltm-availability-target="chat:bulk-chat-${index}"] input`);
+        await bulkChat.evaluate((element) => (element as HTMLInputElement).click());
+      }
+
+      // The unified list is the bounded scroll container.
+      const destinationList = destinationPanel.locator("#ltm-bulk-destination-list");
+      const destinationListHeightAllowance = 400;
+      const listMetrics = await destinationList.evaluate((element) => ({
+        scrollHeight: element.scrollHeight,
+        clientHeight: element.clientHeight,
+        overflowY: getComputedStyle(element).overflowY,
+        docHeightBefore: document.documentElement.scrollHeight,
+      }));
+      assert.ok(listMetrics.scrollHeight > listMetrics.clientHeight);
+      assert.match(listMetrics.overflowY, /auto|scroll/u);
+      await destinationList.evaluate((element) => {
+        element.scrollTop = 0;
+      });
+      await destinationList.hover();
+      await page.mouse.wheel(0, 600);
+      await page.waitForFunction(
+        () =>
+          (document.querySelector("#ltm-bulk-destination-list") as HTMLElement | null)?.scrollTop &&
+          (document.querySelector("#ltm-bulk-destination-list") as HTMLElement | null)!.scrollTop > 0,
+      );
+      const docHeightAfter = await destinationList.evaluate(() => document.documentElement.scrollHeight);
+      assert.ok(docHeightAfter < listMetrics.docHeightBefore + destinationListHeightAllowance);
+
+      // Mobile: the same list stays touch/wheel-scrollable inside the inspector pane.
+      await page.setViewportSize({ width: 390, height: 844 });
+      await showWorkspacePane("inspector");
+      const mobileDestinationList = page.locator("#ltm-bulk-destination-list");
+      await mobileDestinationList.scrollIntoViewIfNeeded();
+      const mobileListScrollable = await mobileDestinationList.evaluate((element) => ({
+        scrollHeight: element.scrollHeight,
+        clientHeight: element.clientHeight,
+        overflowY: getComputedStyle(element).overflowY,
+        pageLocked: document.documentElement.scrollHeight > 2000,
+      }));
+      assert.ok(mobileListScrollable.scrollHeight > mobileListScrollable.clientHeight);
+      assert.match(mobileListScrollable.overflowY, /auto|scroll/u);
+      assert.equal(mobileListScrollable.pageLocked, false);
+      await mobileDestinationList.evaluate((element) => {
+        element.scrollTop = 0;
+      });
+      await mobileDestinationList.hover();
+      await page.mouse.wheel(0, 600);
+      await page.waitForFunction(
+        () =>
+          (document.querySelector("#ltm-bulk-destination-list") as HTMLElement | null)?.scrollTop &&
+          (document.querySelector("#ltm-bulk-destination-list") as HTMLElement | null)!.scrollTop > 0,
+      );
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page
+        .locator('[data-ltm-source-preview="chats"]')
+        .getByRole("button", { name: "Select", exact: true })
+        .click();
+      await page.locator('[data-ltm-source-status-filter="ready"]').click();
+      await page.locator('[data-ltm-source-select="character-outside-current-chat"]').check();
+      const mergedDestinationRequestPromise = page.waitForRequest(
+        (request) => request.method() === "POST" && request.url().includes("/api/long-term-memory/import/source-notes"),
+      );
+      await page.locator('[data-ltm-source-action="import-selected"]').click();
+      const mergedDestinationRequest = (await mergedDestinationRequestPromise).postDataJSON() as {
+        destinationScope?: unknown;
+      };
+      assert.deepEqual(mergedDestinationRequest.destinationScope, {
+        chatId: "desktop-chat",
+        chatIds: ["desktop-chat"],
+        personaId: "persona-a",
+        personaIds: ["persona-a"],
+      });
+      await page.locator("[data-ltm-import-scope-result]").waitFor();
+      await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
+      await destinationPanel.locator('button[aria-label^="Remove Current"]').click();
+      await destinationPanel.locator('[data-ltm-availability-tab="branch"]').click();
+      await destinationPanel.locator('[data-ltm-availability-target="branch:valid-group"] input').check();
+      assert.equal(
+        await destinationPanel.locator('[data-ltm-availability-target="branch:valid-group"] input').isChecked(),
+        true,
+      );
+      await page.locator('[data-ltm-source-select="character-outside-current-chat"]').check();
+      const validGroupRequestPromise = page.waitForRequest(
+        (request) => request.method() === "POST" && request.url().includes("/api/long-term-memory/import/source-notes"),
+      );
+      await page.locator('[data-ltm-source-action="import-selected"]').click();
+      const validGroupRequest = (await validGroupRequestPromise).postDataJSON() as {
+        destinationScope?: unknown;
+      };
+      assert.deepEqual(validGroupRequest.destinationScope, {
+        chatId: "valid-group-chat-0",
+        chatIds: Array.from({ length: 100 }, (_, index) => `valid-group-chat-${index}`),
+        groupId: "valid-group",
+        groupIds: ["valid-group"],
+        personaId: "persona-a",
+        personaIds: ["persona-a"],
+      });
+      await page.locator("[data-ltm-import-scope-result]").waitFor();
+      await page.locator('[data-ltm-source-tab="characters"]').click();
+      await page.locator('[data-ltm-source-preview="characters"]').waitFor();
+      await page.locator('[data-ltm-source-preview-status="success"]').waitFor();
+      const allStatusFilter = page.locator('[data-ltm-source-status-filter="all"]');
+      await allStatusFilter.click();
+      await page.locator('[data-ltm-source-status-filter="all"][aria-selected="true"]').waitFor();
+      await allStatusFilter.focus();
+      await allStatusFilter.press("ArrowRight");
+      await page.locator('[data-ltm-source-status-filter="ready"][aria-selected="true"]').waitFor();
+      await page.waitForFunction(
+        () => document.activeElement?.getAttribute("data-ltm-source-status-filter") === "ready",
+      );
+      assert.equal(await page.locator('[data-ltm-source-status-filter="ready"]').getAttribute("aria-selected"), "true");
+      assert.equal(
+        await page.evaluate(() => document.activeElement?.getAttribute("data-ltm-source-status-filter")),
+        "ready",
+      );
+      await page.locator('[data-ltm-source-row-status][data-ltm-source-id="character-outside-current-chat"]').waitFor();
+      const characterPreviewRequest = sourcePreviewRequests.filter((request) => request.source === "characters").at(-1);
+      assert.ok(characterPreviewRequest);
+      assert.equal(Object.hasOwn(characterPreviewRequest, "sourceScope"), false);
+      assert.doesNotMatch(
+        await page.locator('[data-ltm-surface="sources"]').innerText(),
+        /character card|Summary Prompt|lorebook entries as source notes/iu,
+      );
+      await page.locator('[data-ltm-source-tab="chats"]').click();
+      const sourceDetailsRequestPromise = page.waitForRequest(
+        (request) =>
+          request.method() === "POST" && request.url().includes("/api/long-term-memory/import/source-details"),
+      );
+      await page.locator('[data-ltm-source-status-filter="imported"]').click();
+      assert.match(await page.locator('[data-ltm-source-status-filter="imported"]').innerText(), /\([1-9]\d*\)/u);
+      const desktopReextractRow = page.locator('[data-ltm-source-id="chat-a:summary-desktop-reextract"]');
+      await desktopReextractRow.click();
+      const sourceDetailsRequest = (await sourceDetailsRequestPromise).postDataJSON() as Record<string, unknown>;
+      assert.equal(Object.hasOwn(sourceDetailsRequest, "chatId"), false);
+      await page.locator("[data-ltm-source-management] > summary").click();
+      await page.locator('[data-ltm-source-management-action="copy"]').click();
+      const sourceOperationWorkbench = page.locator("[data-ltm-source-operation-workbench]");
+      await sourceOperationWorkbench.waitFor();
+      assert.equal(
+        await sourceOperationWorkbench.evaluate((element) => Boolean(element.closest("[data-ltm-source-workbench]"))),
+        true,
+      );
+      await page.locator('[data-ltm-source-tab="characters"]').click();
+      await page.locator('[data-ltm-source-preview="characters"]').waitFor();
+      await page.locator('[data-ltm-source-tab="chats"]').click();
+      await desktopReextractRow.click();
+      const desktopReextract = page.locator('[data-ltm-source-inspector-action="re-extract"]');
+      await desktopReextract.click();
+      await page.waitForFunction(
+        () =>
+          document.querySelector('[data-ltm-surface="sources"]')?.getAttribute("data-ltm-extraction-status") ===
+          "pending",
+      );
+      assert.equal(await desktopReextract.isDisabled(), true);
+      await page.locator("[data-ltm-source-task-progress]").waitFor();
+      const desktopSourcesNavigation = page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="sources"]');
+      assert.match(await desktopSourcesNavigation.innerText(), /Re-extracting 1/u);
+      await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]').click();
+      await reextractionStarted;
+      releaseReextraction?.();
+      await page.waitForFunction(() =>
+        document
+          .querySelector('[data-ltm-navigation="desktop"] [data-ltm-destination="sources"]')
+          ?.textContent?.includes("1 source failed"),
+      );
+      assert.match(await desktopSourcesNavigation.innerText(), /1 source failed/u);
+      await desktopSourcesNavigation.click();
+      await page.locator('[data-ltm-surface="sources"]').waitFor();
+      await page.locator("[data-ltm-source-mode]").first().selectOption("game");
+      const retryReextract = page.locator('[data-ltm-source-action="retry-re-extract"]');
+      await retryReextract.waitFor();
+      await retryReextract.click();
+      await page.locator("[data-ltm-reextract-result]").waitFor();
+      assert.match(await desktopSourcesNavigation.innerText(), /Completed 1/u);
+      assert.deepEqual(reextractionRequests, [
+        { path: "/api/long-term-memory/notes/source_desktop_reextract/extract", body: {} },
+        { path: "/api/long-term-memory/notes/source_desktop_reextract/extract", body: {} },
+      ]);
+      await page.locator('[data-ltm-source-tab="lorebooks"]').click();
+      await page.locator('[data-ltm-source-preview="lorebooks"]').waitFor();
+      await page.locator('[data-ltm-lorebook-id="lorebook_outside_current_chat"]').waitFor();
+      const lorebookPreviewRequest = lorebookPreviewRequests.at(-1);
+      assert.ok(lorebookPreviewRequest);
+      assert.equal(Object.hasOwn(lorebookPreviewRequest, "sourceScope"), false);
+      const sourcesWorkspace = page.locator('[data-ltm-surface="sources"] [data-ltm-workspace]');
+      await sourcesWorkspace.waitFor();
+      assert.equal(
+        await sourcesWorkspace.evaluate(
+          (element) => getComputedStyle(element).gridTemplateColumns.split(/\s+/u).length,
+        ),
+        3,
+      );
+      await destinationPanel.locator('[data-ltm-availability-tab="branch"]').click();
+      await destinationPanel.locator('[data-ltm-availability-target="branch:conversation-a"] input').check();
+      await page.locator('[data-ltm-lorebook-id="lorebook_mobile_fixture"]').click();
+      assert.equal(await page.locator('[data-ltm-lorebook-workbench="lorebook_mobile_fixture"]').isVisible(), true);
+      await page.locator('[data-ltm-lorebook-entry="entry_mobile_harbor"]').waitFor();
+      assert.match(
+        await page.locator('[data-ltm-lorebook-entry="entry_mobile_harbor"]').innerText(),
+        /blue lantern marks the safe channel/u,
+      );
+      await page.locator("[data-ltm-lorebook-browser]").getByRole("button", { name: "Select", exact: true }).click();
+      await page.locator('[data-ltm-lorebook-entry-select="entry_mobile_harbor"]').check();
+      await page.locator('[data-ltm-lorebook-id="lorebook_outside_current_chat"]').click();
+      await page.locator('[data-ltm-lorebook-entry-select="entry_outside_current_chat"]').check();
+      const selectionDialog = new Promise<void>((resolveDialog) => {
+        page.once("dialog", async (dialog) => {
+          assert.match(dialog.message(), /2/u);
+          await dialog.dismiss();
+          resolveDialog();
+        });
+      });
+      await page.locator('[data-ltm-source-tab="chats"]').click();
+      await selectionDialog;
+      assert.equal(await page.locator('[data-ltm-source-tab="lorebooks"]').getAttribute("aria-selected"), "true");
+      const persistedImportRequest = page.waitForRequest(
+        (request) => request.method() === "POST" && request.url().includes("/api/long-term-memory/import/source-notes"),
+      );
+      await page.locator('[data-ltm-lorebook-action="import-selected"]').click();
+      await persistedImportRequest;
+      const liveImportResult = page.locator("[data-ltm-source-import-result]");
+      await liveImportResult.waitFor();
+      assert.equal(
+        await liveImportResult.evaluate((element) => Boolean(element.closest("[data-ltm-lorebook-workbench]"))),
+        true,
+      );
+
+      await page.reload();
+      await page.evaluate((version) => {
+        const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: unknown;
+        };
+        element.setAttribute("view", "detail");
+        element.capabilityProps = { agent: { name: "Long-Term Memory" }, package: { version } };
+        document.body.append(element);
+      }, packageManifest.version);
+      await page.locator('[data-ltm-surface="detail"]').waitFor();
+      await page.locator('[data-ltm-control="navigation"][data-ltm-destination="sources"]').first().click();
+      await page.locator("[data-ltm-latest-source-task]").click();
+      const restoredSourceResult = page.locator('[data-ltm-safe-source-task-result="completed"]');
+      await restoredSourceResult.waitFor();
+      assert.match(
+        await restoredSourceResult.innerText(),
+        /lorebook_outside_current_chat:entry_outside_current_chat:0/u,
+      );
+      assert.equal(
+        await restoredSourceResult.evaluate((element) => Boolean(element.closest("[data-ltm-lorebook-workbench]"))),
+        true,
+      );
+      await restoredSourceResult.getByRole("button", { name: "Back to preview" }).click();
+      assert.equal(await restoredSourceResult.count(), 0);
+
+      const mobileContext = await browser.newContext({
+        ...devices["Pixel 7"],
+        viewport: { width: 390, height: 844 },
+      });
+      const mobilePage = await mobileContext.newPage();
+      const activationChanges: boolean[] = [];
+      await mobilePage.exposeFunction("onMobileActivationChange", (enabled: boolean) => {
+        activationChanges.push(enabled);
+      });
+      await mobilePage.exposeFunction("onMobileManagePackage", () => {});
+      await mobilePage.goto(`http://127.0.0.1:${address.port}/`);
+      await mobilePage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+      await mobilePage.evaluate((version) => {
+        const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: unknown;
+        };
+        element.setAttribute("view", "detail");
+        element.capabilityProps = {
+          agent: { name: "Long-Term Memory" },
+          chatId: "chat-mobile",
+          chatName: "kirei",
+          enabledForChat: true,
+          onEnabledForChatChange: (
+            window as Window & {
+              onMobileActivationChange: (value: boolean) => void;
+            }
+          ).onMobileActivationChange,
+          onManagePackage: (
+            window as Window & {
+              onMobileManagePackage: () => void;
+            }
+          ).onMobileManagePackage,
+          package: { version },
+        };
+        document.body.append(element);
+      }, packageManifest.version);
+      await mobilePage.locator('[data-ltm-surface="detail"]').waitFor();
+      const activation = mobilePage.locator('[data-ltm-control="activation"]');
+      assert.equal(await activation.count(), 1);
+      assert.equal(await activation.isVisible(), true);
+      assert.equal(await activation.getAttribute("aria-checked"), "true");
+      const activationTrack = activation.locator("[data-ltm-activation-track]");
+      const activationGeometry = await activation.evaluate((element) => {
+        const button = element.getBoundingClientRect();
+        const track = element.querySelector("[data-ltm-activation-track]")!.getBoundingClientRect();
+        const knob = element.querySelector("[data-ltm-activation-knob]")!.getBoundingClientRect();
+        const style = getComputedStyle(element.querySelector("[data-ltm-activation-track]")!);
+        return {
+          button: { width: button.width, height: button.height },
+          track: {
+            x: track.left - button.left,
+            y: track.top - button.top,
+            width: track.width,
+            height: track.height,
+          },
+          knob: {
+            x: knob.left - track.left,
+            y: knob.top - track.top,
+            width: knob.width,
+            height: knob.height,
+          },
+          backgroundColor: style.backgroundColor,
+          borderWidth: style.borderWidth,
+        };
+      });
+      assert.equal(activationGeometry.button.height, 44);
+      assert.equal(activationGeometry.button.width > 48, true);
+      assert.equal(activationGeometry.track.width, 44);
+      assert.equal(activationGeometry.track.height, 24);
+      assert.equal(activationGeometry.knob.width, 20);
+      assert.equal(activationGeometry.knob.height, 20);
+      assert.ok(activationGeometry.knob.x + activationGeometry.knob.width / 2 > activationGeometry.track.width / 2);
+      assert.ok(activationGeometry.knob.x + activationGeometry.knob.width <= activationGeometry.track.width);
+      assert.notEqual(activationGeometry.backgroundColor, "rgba(0, 0, 0, 0)");
+      assert.equal(activationGeometry.borderWidth, "1px");
+      const activationTrackStyle = await activationTrack.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        return {
+          width: rect.width,
+          height: rect.height,
+          backgroundColor: style.backgroundColor,
+        };
+      });
+      assert.deepEqual(
+        { width: activationTrackStyle.width, height: activationTrackStyle.height },
+        { width: 44, height: 24 },
+      );
+      assert.equal(activationTrackStyle.backgroundColor, activationGeometry.backgroundColor);
+      const activationMetrics = await activation.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        const center = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        return {
+          box: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+          display: style.display,
+          visibility: style.visibility,
+          opacity: style.opacity,
+          nearbyText: element.parentElement?.innerText ?? "",
+          withinViewport: rect.left >= 0 && rect.top >= 0 && rect.right <= innerWidth && rect.bottom <= innerHeight,
+          centerCovered: center === element || element.contains(center),
+        };
+      });
+      console.log(`LTM mobile activation baseline: ${JSON.stringify(activationMetrics)}`);
+      assert.ok(activationMetrics.box.width > 0 && activationMetrics.box.height > 0);
+      assert.ok(activationMetrics.box.width >= 40 && activationMetrics.box.height >= 36);
+      assert.equal(activationMetrics.withinViewport, true);
+      assert.equal(activationMetrics.centerCovered, true);
+      assert.ok(
+        (await mobilePage.locator(".mari-editor-header").evaluate((header) => {
+          const [main, actions] = [...header.children].map((child) => child.getBoundingClientRect());
+          return Math.abs(main.top + main.height / 2 - (actions.top + actions.height / 2));
+        })) <= 1,
+      );
+      const addMemoriesBox = await mobilePage.locator('[aria-label="Add memories"]').boundingBox();
+      assert.ok(addMemoriesBox);
+      assert.equal(
+        Math.abs((await activationTrack.boundingBox())!.y + 12 - (addMemoriesBox.y + addMemoriesBox.height / 2)) <= 1,
+        true,
+      );
+      assert.equal(await activation.getAttribute("title"), "Active in kirei");
+      assert.equal((await activation.innerText()).trim(), "Active");
+      assert.equal(
+        await mobilePage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+        true,
+      );
+      await activation.click();
+      assert.deepEqual(activationChanges, [false]);
+      await mobilePage.evaluate(() => {
+        const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: Record<string, unknown>;
+        };
+        element.capabilityProps = {
+          ...element.capabilityProps,
+          enabledForChat: false,
+        };
+        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+      });
+      await mobilePage.waitForFunction(
+        () => document.querySelector('[data-ltm-control="activation"]')?.getAttribute("aria-checked") === "false",
+      );
+      assert.equal(await activation.getAttribute("aria-checked"), "false");
+      assert.equal(await activation.getAttribute("title"), "Inactive in kirei");
+      assert.equal((await activation.innerText()).trim(), "Inactive");
+      const inactiveTrack = await activationTrack.evaluate((element) => {
+        const style = getComputedStyle(element);
+        const track = element.getBoundingClientRect();
+        const knob = element.firstElementChild!.getBoundingClientRect();
+        return {
+          backgroundColor: style.backgroundColor,
+          borderWidth: style.borderWidth,
+          knobRight: knob.right - track.left,
+          width: track.width,
+        };
+      });
+      assert.notEqual(inactiveTrack.backgroundColor, "rgba(0, 0, 0, 0)");
+      assert.equal(inactiveTrack.borderWidth, "1px");
+      assert.ok(inactiveTrack.knobRight <= inactiveTrack.width);
+      const longChatName = "A".repeat(200);
+      await mobilePage.evaluate((chatName) => {
+        const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: Record<string, unknown>;
+        };
+        element.capabilityProps = { ...element.capabilityProps, chatName };
+        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+      }, longChatName);
+      await mobilePage.waitForFunction(
+        (chatName) =>
+          document.querySelector('[data-ltm-control="activation"]')?.getAttribute("aria-label") ===
+          `Inactive in ${chatName}`,
+        longChatName,
+      );
+      const longNameBox = await activation.boundingBox();
+      assert.ok(longNameBox);
+      assert.ok(longNameBox.width >= 40 && longNameBox.height >= 36);
+      assert.equal(longNameBox.x + longNameBox.width <= 390, true);
+      assert.equal(
+        await mobilePage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+        true,
+      );
+      await mobilePage.evaluate(() => {
+        const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: Record<string, unknown>;
+        };
+        element.capabilityProps = {
+          ...element.capabilityProps,
+          chatId: null,
+          chatName: null,
+        };
+        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+      });
+      await mobilePage.waitForFunction(
+        () =>
+          document.querySelector('[data-ltm-control="activation"]')?.getAttribute("aria-label") ===
+          "Inactive in this chat",
+      );
+      assert.equal(await activation.count(), 1);
+      assert.equal(await activation.getAttribute("aria-checked"), "false");
+      const mobileNavigation = mobilePage.locator('[data-ltm-navigation="mobile"]');
+      const mobileNavigationItems = mobileNavigation.locator('[data-ltm-control="navigation"]');
+      assert.equal(await mobileNavigationItems.count(), 4);
+      for (const destination of ["vault", "review", "sources", "settings"])
+        assert.equal(await mobileNavigation.locator(`[data-ltm-destination="${destination}"]`).count(), 1);
+      const mobileNavigationLayout = await mobileNavigation.evaluate((navigation) => {
+        const rect = navigation.getBoundingClientRect();
+        const items = [...navigation.querySelectorAll<HTMLElement>('[data-ltm-control="navigation"]')];
+        return {
+          visible: getComputedStyle(navigation).display !== "none",
+          columns: getComputedStyle(navigation).gridTemplateColumns.split(/\s+/u).length,
+          hasSize: rect.width > 0 && rect.height > 0,
+          fits: navigation.scrollWidth <= navigation.clientWidth + 1,
+          touchTargets: items.every((item) => item.getBoundingClientRect().height >= 44),
+          oneRow: new Set(items.map((item) => Math.round(item.getBoundingClientRect().y))).size === 1,
+        };
+      });
+      assert.equal(mobileNavigationLayout.visible, true);
+      assert.equal(mobileNavigationLayout.columns, 4);
+      assert.equal(mobileNavigationLayout.hasSize, true);
+      assert.equal(mobileNavigationLayout.fits, true);
+      assert.equal(mobileNavigationLayout.touchTargets, true);
+      assert.equal(mobileNavigationLayout.oneRow, true);
+      await mobilePage.getByRole("button", { name: "Show setup guide" }).click();
+      const onboardingFooter = mobilePage.locator("[data-ltm-onboarding-footer]");
+      const footerCloseBox = await onboardingFooter.getByRole("button", { name: "Close" }).boundingBox();
+      const footerNoteBox = await onboardingFooter.locator(":scope > p").boundingBox();
+      assert.ok(footerCloseBox);
+      assert.ok(footerNoteBox);
+      assert.ok(footerNoteBox.x >= footerCloseBox.x + footerCloseBox.width);
+      assert.ok(
+        await mobilePage
+          .locator('[data-ltm-surface="onboarding"] [data-ltm-control="button"]')
+          .evaluateAll((buttons) => buttons.every((button) => button.getBoundingClientRect().height >= 44)),
+      );
+      assert.deepEqual(
+        await mobilePage.locator("[data-ltm-onboarding-actions]").evaluate((actions) => {
+          const buttons = [...actions.querySelectorAll(":scope > button")];
+          return buttons.map((button) => {
+            const actionRect = actions.getBoundingClientRect();
+            const buttonRect = button.getBoundingClientRect();
+            return {
+              left: Math.round(buttonRect.left - actionRect.left),
+              right: Math.round(actionRect.right - buttonRect.right),
+            };
+          });
+        }),
+        [{ left: 0, right: 0 }],
+      );
+      await mobilePage.getByRole("button", { name: "Next: How recall works" }).click();
+      await mobilePage.getByRole("button", { name: "Next: Enabling it for the Current Chat" }).click();
+      await mobilePage.getByRole("button", { name: "Continue without a chat" }).click();
+      const mobileSourceButtons = mobilePage.locator("[data-ltm-source-choice] > button");
+      assert.deepEqual(await mobileSourceButtons.allInnerTexts(), ["Chat Summary", "Lorebook", "Character"]);
+      const sourceButtonPositions = async () =>
+        mobileSourceButtons.evaluateAll((buttons) =>
+          buttons.map((button) => {
+            const rect = button.getBoundingClientRect();
+            return { left: rect.left, width: rect.width };
+          }),
+        );
+      const initialSourceButtonPositions = await sourceButtonPositions();
+      await mobilePage.getByRole("button", { name: "Lorebook" }).click();
+      assert.deepEqual(await sourceButtonPositions(), initialSourceButtonPositions);
+      await mobilePage.getByRole("button", { name: "Close" }).click();
+      await mobilePage.locator('[data-ltm-surface="onboarding"]').waitFor({ state: "detached" });
+      await mobileNavigation.locator('[data-ltm-destination="sources"]').click();
+      await mobilePage.locator('[data-ltm-surface="sources"]').waitFor();
+      await mobilePage.locator('[data-ltm-source-tab="lorebooks"]').evaluate((tab) => (tab as HTMLElement).click());
+      await mobilePage.locator('[data-ltm-lorebook-id="lorebook_mobile_fixture"]').click();
+      const mobileSourcesWorkspace = mobilePage.locator('[data-ltm-surface="sources"] [data-ltm-workspace]');
+      assert.deepEqual(
+        await mobileSourcesWorkspace.evaluate((workspace) => ({
+          innerWidth,
+          mobileMedia: matchMedia("(max-width: 767px)").matches,
+          visiblePanes: [...workspace.querySelectorAll<HTMLElement>("[data-ltm-workspace-pane]")]
+            .filter((pane) => getComputedStyle(pane).display !== "none")
+            .map((pane) => pane.dataset.ltmWorkspacePane),
+        })),
+        {
+          innerWidth: 390,
+          mobileMedia: true,
+          visiblePanes: ["workbench"],
+        },
+      );
+      await mobilePage.locator('[data-ltm-lorebook-entry="entry_mobile_harbor"]').waitFor();
+      assert.equal(
+        await mobilePage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+        true,
+      );
+      await mobileNavigation.locator('[data-ltm-destination="settings"]').click();
+      await mobilePage.locator("#settings-tab-extraction").click();
+      const mobileExtractionLayout = await mobilePage
+        .locator("#settings-panel-extraction > [data-ltm-extraction-grid]")
+        .evaluate((grid) => {
+          const fields = [...grid.children].slice(0, 2) as HTMLElement[];
+          const labels = fields.map((field) => field.firstElementChild as HTMLElement);
+          const selects = fields.map((field) => field.querySelector("select")!);
+          return {
+            columns: getComputedStyle(grid).gridTemplateColumns.split(/\s+/u).length,
+            labelHeights: labels.map((label) => label.getBoundingClientRect().height),
+            selectWidths: selects.map((select) => select.getBoundingClientRect().width),
+            fieldWidths: fields.map((field) => field.getBoundingClientRect().width),
+          };
+        });
+      assert.equal(mobileExtractionLayout.columns, 1);
+      assert.deepEqual(mobileExtractionLayout.labelHeights, [44, 44]);
+      assert.deepEqual(mobileExtractionLayout.selectWidths, mobileExtractionLayout.fieldWidths);
+      await mobilePage.setViewportSize({ width: 320, height: 720 });
+      assert.ok(
+        await mobilePage.locator(".mari-editor-header").evaluate((header) => {
+          const [main, actions] = [...header.children].map((child) => child.getBoundingClientRect());
+          return (
+            Math.abs(main.top + main.height / 2 - (actions.top + actions.height / 2)) <= 1 &&
+            header.scrollWidth <= header.clientWidth
+          );
+        }),
+      );
+      await mobilePage.getByRole("button", { name: "Show setup guide" }).click();
+      await mobilePage.evaluate(() => {
+        document.documentElement.style.fontSize = "20px";
+      });
+      assert.deepEqual(
+        await mobilePage.locator('[data-ltm-surface="onboarding"]').evaluate((onboarding) => {
+          const title = onboarding.querySelector<HTMLElement>("#ltm-onboarding-title")!;
+          const description = onboarding.querySelector<HTMLElement>("#ltm-onboarding-description")!;
+          return {
+            titleFits: title.scrollWidth <= title.clientWidth,
+            descriptionFits: description.scrollWidth <= description.clientWidth,
+            pageFits:
+              onboarding.scrollWidth <= onboarding.clientWidth &&
+              document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+          };
+        }),
+        { titleFits: true, descriptionFits: true, pageFits: true },
+      );
+      assert.equal(
+        await mobilePage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+        true,
+      );
+      await mobilePage.evaluate(() => {
+        document.documentElement.style.fontSize = "";
+      });
+      await mobilePage.getByRole("button", { name: "Close" }).click();
+      noteTotal = 0;
+      const firstRunContext = await browser.newContext({
+        viewport: { width: 390, height: 844 },
+      });
+      const firstRunPage = await firstRunContext.newPage();
+      await firstRunPage.goto(`http://127.0.0.1:${address.port}/`);
+      await firstRunPage.evaluate(() => customElements.whenDefined("marinara-capability-long-term-memory"));
+      await firstRunPage.evaluate((version) => {
+        const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: unknown;
+        };
+        element.setAttribute("view", "detail");
+        element.capabilityProps = {
+          agent: { name: "Long-Term Memory" },
+          package: { version },
+        };
+        document.body.append(element);
+      }, packageManifest.version);
+      const firstRunGuide = firstRunPage.locator('[data-ltm-surface="onboarding"]');
+      await firstRunGuide.waitFor();
+      await firstRunGuide.getByRole("button", { name: "Next: How recall works" }).click();
+      await firstRunGuide.getByRole("button", { name: "Next: Enabling it for the Current Chat" }).click();
+      assert.match(await firstRunGuide.innerText(), /Continue without a chat/u);
+      await firstRunGuide.getByRole("button", { name: "Continue without a chat" }).click();
+      await firstRunGuide.getByRole("button", { name: "Next: Reviewing and saving memories" }).click();
+      await firstRunGuide.getByRole("button", { name: "Next: Check it works" }).click();
+      assert.equal(await firstRunGuide.getByRole("button", { name: "Choose a Source" }).count(), 1);
+      await firstRunGuide.getByRole("button", { name: "Choose a Source" }).click();
+      await firstRunPage.locator('[data-ltm-source-tab="characters"][aria-selected="true"]').waitFor();
+      assert.equal(await firstRunPage.locator('[data-ltm-surface="onboarding"]').count(), 1);
+      await firstRunPage.reload();
+      await firstRunPage.evaluate((version) => {
+        const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: unknown;
+        };
+        element.setAttribute("view", "detail");
+        element.capabilityProps = {
+          agent: { name: "Long-Term Memory" },
+          package: { version },
+        };
+        document.body.append(element);
+      }, packageManifest.version);
+      await firstRunPage.locator('[data-ltm-surface="detail"]').waitFor();
+      assert.equal(await firstRunPage.locator('[data-ltm-surface="onboarding"]').count(), 1);
+      await firstRunPage.getByRole("button", { name: "Show setup guide" }).click();
+      await firstRunPage.locator('[data-ltm-surface="onboarding"]').waitFor();
+      await firstRunContext.close();
+      noteTotal = 3;
+      await mobileContext.close();
+    },
+    [
+      () => releaseReextraction?.(),
+      () => browser?.close(),
+      () =>
+        new Promise<void>((resolveClose, reject) => {
+          if (!browserServer) return resolveClose();
+          browserServer.close((error) => (error ? reject(error) : resolveClose()));
+        }),
+      () => {
+        globalThis.fetch = originalFetch;
+      },
+      () => rmSync(dataDir, { recursive: true, force: true }),
+    ],
+  );
+  console.log(
+    "Long-Term Memory browser lifecycle: onboarding, review, availability, re-extraction, mobile, and loading ok",
+  );
+}
+export const completion = runRegressionToCompletion("long-term-memory-browser", main);
+void completion.catch((error) => {
+  process.stderr.write(`${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`);
+  process.exitCode = 1;
+});

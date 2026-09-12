@@ -9,6 +9,7 @@ export type LtmSourceTaskContract = {
   sourceScope?: LtmScope;
   destinationScope?: LtmScope;
   mode?: "conversation" | "roleplay" | "game";
+  modes?: ("conversation" | "roleplay" | "game")[];
   chatId?: string;
   sourceTargetLabel?: string;
   destinationTargetLabel?: string;

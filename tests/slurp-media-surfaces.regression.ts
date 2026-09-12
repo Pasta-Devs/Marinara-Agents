@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const postCard = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpCreatorPostCard.tsx",
+  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpCreatorPostCard.tsx",
   "utf8",
 );
-const home = readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
+const home = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
 
 // Deliberately not pinned to a pixel radius. This class changed three times in two commits and
 // each change cost a false failure; the server already blurs the locked bytes, so what matters

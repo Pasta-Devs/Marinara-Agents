@@ -8,7 +8,7 @@ import {
   slurpNextAudienceArc,
   SLURP_AUDIENCE_ARCS,
   SLURP_AUDIENCE_ARC_DAYS,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-audience-arc.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-audience-arc.js";
 
 const base = {
   stage: "follower" as const,
@@ -100,7 +100,7 @@ for (const arc of SLURP_AUDIENCE_ARCS) {
 }
 
 // ── Wiring ──────────────────────────────────────────────────────────────────
-const root = join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/server/src");
+const root = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 // The arc is derived from state alone: a trajectory the player cannot account for is worse than

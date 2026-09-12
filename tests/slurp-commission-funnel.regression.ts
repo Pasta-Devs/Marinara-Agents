@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { slurpCommissionDeliveryDelayMs } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-messaging.js";
+import { slurpCommissionDeliveryDelayMs } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-messaging.js";
 
-const schema = readFileSync("packages/slurp/src/engine/packages/server/src/db/schema/slurp.ts", "utf8");
+const schema = readFileSync("packages/slurp2/src/engine/packages/server/src/db/schema/slurp.ts", "utf8");
 
 const storage = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
   "utf8",
 );
 const maintainedStorage = readFileSync(
@@ -14,10 +14,10 @@ const maintainedStorage = readFileSync(
   "utf8",
 );
 const world = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-world.operation.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.operation.ts",
   "utf8",
 );
-const routes = readFileSync("packages/slurp/src/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");
+const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");
 
 assert.match(storage, /async listAudienceBriefCommissions\(\)/u);
 assert.match(storage, /population\.get\(viewerAccountId\)/u);
@@ -97,7 +97,7 @@ assert.match(storage, /const automated = new Map<string, boolean>\(\)/u);
 // An automatic delivery is no longer one hardcoded English line, and it gets rewritten in the
 // Creator's voice on the next read. Both trigger paths share one function so they cannot drift.
 const delivery = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-commission-delivery.service.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-commission-delivery.service.ts",
   "utf8",
 );
 assert.match(delivery, /slurpCommissionDeliveryNote\(commission\.id\)/u);
@@ -127,7 +127,7 @@ assert.doesNotMatch(storage, /mapCommission = \(row[\s\S]{0,600}?mediaPath:/u);
 // The scheduler runs the clock down without the model, so a dead text connection cannot strand a
 // finished commission the fan already paid for.
 const scheduler = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-message-scheduler.service.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message-scheduler.service.ts",
   "utf8",
 );
 assert.match(scheduler, /deliverDueSlurpCommissions\(app\.db\)/u);

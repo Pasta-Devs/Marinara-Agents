@@ -2,20 +2,20 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const storage = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
   "utf8",
 );
 const sourceStorage = readFileSync(
   "sources/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
   "utf8",
 );
-const route = readFileSync("packages/slurp/src/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");
+const route = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");
 const sourceRoute = readFileSync("sources/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");
-const profileRoute = readFileSync("packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
-const client = readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx", "utf8");
-const slurpClientHook = readFileSync("packages/slurp/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");
-const slurp = readFileSync("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
-const packageSchema = readFileSync("packages/slurp/src/engine/packages/server/src/db/schema/slurp.ts", "utf8");
+const profileRoute = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
+const client = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx", "utf8");
+const slurpClientHook = readFileSync("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");
+const slurp = readFileSync("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
+const packageSchema = readFileSync("packages/slurp2/src/engine/packages/server/src/db/schema/slurp.ts", "utf8");
 const sourceSchema = readFileSync("sources/engine/packages/server/src/db/schema/slurp.ts", "utf8");
 assert.equal(
   sourceSchema.match(/export const slurpEvents = fileTable\([\s\S]*?\n\}\);/u)?.[0],
@@ -35,7 +35,7 @@ assert.match(
 );
 assert.match(
   storage,
-  /isFileUniqueConstraintError\(error, "slurp_payment_compensations", \["id"\]\)/u,
+  /isFileUniqueConstraintError\(error, "slurp2_payment_compensations", \["id"\]\)/u,
   "concurrent compensation claims must reuse the durable row",
 );
 assert.match(storage, /refundCoins\([^,]+, [^,]+, [^,]+, `\$\{compensationId\}:refund`\)/u);
@@ -355,7 +355,7 @@ assert.match(
   "profile tip hook must accept an idempotency request ID",
 );
 assert.match(
-  readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8"),
+  readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8"),
   /tipCreator\.mutate\(\{[\s\S]*?requestId:[\s\S]*?crypto\.randomUUID\(\)/u,
   "profile tip actions must provide a client idempotency request ID",
 );

@@ -4,11 +4,11 @@ import {
   exportGarnishAds,
   importGarnishAds,
   garnishExportSchema,
-} from "../packages/slurp/src/engine/packages/server/src/services/garnish-ads/garnish-ads.export";
-import { qualityScores } from "../packages/slurp/src/engine/packages/server/src/services/garnish-ads/garnish-ads.rating";
-import { garnishRatingAllowed } from "../packages/slurp/src/engine/packages/server/src/services/garnish-ads/garnish-ads.types";
-import type { GarnishAd } from "../packages/slurp/src/engine/packages/server/src/services/garnish-ads/garnish-ads.types";
-import type { GarnishAdEvent } from "../packages/slurp/src/engine/packages/server/src/services/garnish-ads/garnish-ads.storage";
+} from "../packages/slurp2/src/engine/packages/server/src/services/garnish-ads/garnish-ads.export";
+import { qualityScores } from "../packages/slurp2/src/engine/packages/server/src/services/garnish-ads/garnish-ads.rating";
+import { garnishRatingAllowed } from "../packages/slurp2/src/engine/packages/server/src/services/garnish-ads/garnish-ads.types";
+import type { GarnishAd } from "../packages/slurp2/src/engine/packages/server/src/services/garnish-ads/garnish-ads.types";
+import type { GarnishAdEvent } from "../packages/slurp2/src/engine/packages/server/src/services/garnish-ads/garnish-ads.storage";
 
 const ad = (id: string, over: Partial<GarnishAd> = {}): GarnishAd => ({
   id,

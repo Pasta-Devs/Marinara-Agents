@@ -52,6 +52,7 @@ import {
   ltmSourceDetailsRequestSchema,
   ltmSourceDetailsResponseSchema,
   ltmSubjectsSchema,
+  ltmRejectedSuggestionsClearResponseSchema,
   ltmRejectedSuggestionsResponseSchema,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { clearLtmDebugLog, exportLtmDebugLog, readLtmDebugLog } from "./debug-log.js";
@@ -105,7 +106,11 @@ import {
   replaceLongTermMemoryData,
   resetLongTermMemorySettings,
 } from "./backup-restore.js";
-import { deleteRejectedSuggestion, listRejectedSuggestions } from "./rejected-suggestions.js";
+import {
+  deleteRejectedSuggestion,
+  deleteRejectedSuggestionsForSource,
+  listRejectedSuggestions,
+} from "./rejected-suggestions.js";
 
 const NOTE_BODY_LIMIT_BYTES = 512 * 1024;
 const DRAFT_BODY_LIMIT_BYTES = 512 * 1024;
@@ -370,6 +375,7 @@ const rejectedSuggestionsQuery = z
     chatId: z.string().min(1).max(120).optional(),
   })
   .strict();
+const rejectedSuggestionsDeleteQuery = z.object({ sourceNoteId: ltmNoteIdSchema }).strict();
 const acceptDraftBody = z
   .object({
     mutationIds: z.array(z.string().uuid()).min(1).optional(),
@@ -764,6 +770,7 @@ export function createLongTermMemoryRoutes(runtime: {
             .sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id)),
         ),
         characters: namedCharacters,
+        localCharacters: [],
         personas: numberDuplicateLabels(
           [...(includeAllChats ? personas : personas.filter((persona) => personaIds.has(persona.id)))]
             .filter((persona) => persona.id !== PROFESSOR_MARI_CHARACTER_ID)
@@ -778,6 +785,41 @@ export function createLongTermMemoryRoutes(runtime: {
             .sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id)),
         ),
       };
+    });
+    app.get<{ Querystring: unknown }>("/local-characters", async (request) => {
+      const { chatId, includeAllChats } = scopeTargetsQuery.parse(request.query);
+      const [notes, chats] = await Promise.all([storage.listNotes(), getPackagePersistence().listChats()]);
+      const eligibleChats = chats.filter(
+        (chat) => !normalizeLtmChatCharacterIds(chat.characterIds).includes(PROFESSOR_MARI_CHARACTER_ID),
+      );
+      const currentChat = chatId ? eligibleChats.find((chat) => chat.id === chatId) : undefined;
+      const catalogChats =
+        chatId === undefined && includeAllChats
+          ? eligibleChats.filter((chat) => chat.mode === "roleplay")
+          : currentChat?.mode === "roleplay"
+            ? includeAllChats
+              ? eligibleChats.filter((chat) => chat.mode === "roleplay")
+              : [currentChat]
+            : [];
+      if (!catalogChats.length) return [];
+      const catalogScope = {
+        chatIds: catalogChats.map((chat) => chat.id),
+        groupIds: [...new Set(catalogChats.flatMap((chat) => (chat.groupId ? [chat.groupId] : [])))],
+        characterIds: [...new Set(catalogChats.flatMap((chat) => normalizeLtmChatCharacterIds(chat.characterIds)))],
+        personaIds: [...new Set(catalogChats.flatMap((chat) => (chat.personaId ? [chat.personaId] : [])))],
+      };
+      const catalog = await loadTrustedLtmSubjectCatalog(catalogScope, root, notes);
+      return numberDuplicateLabels(
+        catalog.entries
+          .filter((entry) => entry.subject.ref?.kind === "local_character" && entry.familyId)
+          .map((entry) => ({
+            id: entry.subject.ref!.id,
+            label: entry.name,
+            comment: `Roleplay family ${entry.familyId}`,
+            familyId: entry.familyId!,
+          }))
+          .sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id)),
+      );
     });
     app.get<{ Params: { id: string } }>("/notes/:id/derived", async (request, reply) => {
       const sourceNoteId = ltmNoteIdSchema.parse(request.params.id);
@@ -872,7 +914,13 @@ export function createLongTermMemoryRoutes(runtime: {
               sourceNote,
               languageModel,
               scope: sourceNote.destinationScope ?? (chat ? resolveChatLtmWriteScope(chat) : sourceNote.scope),
-              modes: chat ? [ltmModeForChatMode(chat.mode)] : body.mode ? [body.mode] : undefined,
+              modes: sourceNote.modes?.length
+                ? sourceNote.modes
+                : chat
+                  ? [ltmModeForChatMode(chat.mode)]
+                  : body.mode
+                    ? [body.mode]
+                    : undefined,
               mode: body.mode,
               instruction: body.instruction,
               operationId,
@@ -994,11 +1042,16 @@ export function createLongTermMemoryRoutes(runtime: {
     app.post<{ Body: unknown }>("/notes/batch", { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES }, async (request, reply) => {
       const parsed = ltmBulkNoteRequestSchema.safeParse(request.body ?? {});
       if (!parsed.success) return reply.status(400).send({ error: parsed.error.message });
-      const result = ltmBulkNoteResultSchema.parse(await storage.bulkMutateNotes(parsed.data));
-      return {
-        ...result,
-        rebuild: result.affectedNoteIds.length ? await rebuildAfterMutation() : null,
-      };
+      try {
+        const result = ltmBulkNoteResultSchema.parse(await storage.bulkMutateNotes(parsed.data));
+        return {
+          ...result,
+          rebuild: result.affectedNoteIds.length ? await rebuildAfterMutation() : null,
+        };
+      } catch (error) {
+        const result = routeError(error, "Could not update notes.");
+        return reply.status(result.statusCode).send(result.body);
+      }
     });
     app.post<{ Body: unknown }>("/notes", { bodyLimit: NOTE_BODY_LIMIT_BYTES }, async (request, reply) => {
       const parsed = createNoteBody.safeParse(request.body);
@@ -1010,9 +1063,8 @@ export function createLongTermMemoryRoutes(runtime: {
         const rebuild = await rebuildAfterMutation(true);
         return reply.status(201).send({ note, rebuild });
       } catch (error) {
-        if (error instanceof LtmServiceError)
-          return reply.status(error.statusCode).send({ error: error.message, code: error.code });
-        throw error;
+        const result = routeError(error, "Could not create note.");
+        return reply.status(result.statusCode).send(result.body);
       }
     });
     app.patch<{ Params: { id: string }; Body: unknown }>(
@@ -1277,6 +1329,12 @@ export function createLongTermMemoryRoutes(runtime: {
       const query = rejectedSuggestionsQuery.parse(request.query);
       const suggestions = await listRejectedSuggestions(query, root);
       return ltmRejectedSuggestionsResponseSchema.parse({ suggestions, total: suggestions.length });
+    });
+    app.delete<{ Querystring: unknown }>("/rejected-suggestions", async (request) => {
+      const query = rejectedSuggestionsDeleteQuery.parse(request.query);
+      return ltmRejectedSuggestionsClearResponseSchema.parse(
+        await deleteRejectedSuggestionsForSource(query.sourceNoteId, root),
+      );
     });
     app.delete<{ Params: { id: string } }>("/rejected-suggestions/:id", async (request, reply) => {
       const parsed = z.string().uuid().safeParse(request.params.id);

@@ -3,8 +3,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = join(import.meta.dirname, "..");
-const server = join(root, "packages/slurp/src/engine/packages/server/src");
-const client = join(root, "packages/slurp/src/engine/packages/client/src");
+const server = join(root, "packages/slurp2/src/engine/packages/server/src");
+const client = join(root, "packages/slurp2/src/engine/packages/client/src");
 const read = (path: string) => readFileSync(path, "utf8");
 
 // ── Money ────────────────────────────────────────────────
@@ -170,7 +170,7 @@ assert.match(
   /metadata: \{ \.\.\.baseInput\.metadata, \.\.\.\(storyVariation \? \{ noodlerPostType: "story" \} : \{\}\) \},/u,
   "the prepareOnly return must carry the story flag",
 );
-const storage = read("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts");
+const storage = read("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 assert.match(
   storage,
   /if \(!hasMedia\) delete preparedMetadata\.noodlerPostType;/u,
@@ -384,7 +384,7 @@ assert.match(messagesView2, /generateImage,/u);
 const slurpRoutesSource = read(join(server, "routes/slurp.routes.ts"));
 assert.match(
   slurpRoutesSource,
-  /isFileUniqueConstraintError\(error, "slurp_interactions", \[[\s\S]*?"postId"[\s\S]*?"actorAccountId"[\s\S]*?"type"[\s\S]*?"parentInteractionId"[\s\S]*?\]\)/u,
+  /isFileUniqueConstraintError\(error, "slurp2_interactions", \[[\s\S]*?"postId"[\s\S]*?"actorAccountId"[\s\S]*?"type"[\s\S]*?"parentInteractionId"[\s\S]*?\]\)/u,
   "concurrent Story views must use the file-store uniqueness error",
 );
 assert.match(
@@ -425,7 +425,7 @@ assert.match(messagesView2, /if \(!ownsCreator\) setTyping\(true\)/u);
 assert.match(messagesView2, /holdTyping\(result\.reply \? \(result\.typingMs \?\? 0\) : 0, result\.reply\?\.id\)/u);
 assert.match(messagesView2, /pending && !messages\.some\(\(message\) => message\.id === pending\.id\)/u);
 
-const slurpHooks = readFileSync("packages/slurp/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");
+const slurpHooks = readFileSync("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");
 // A chat opened from a profile polls like one opened from the inbox, or the queued off-hours
 // reply never arrives on that screen.
 assert.match(

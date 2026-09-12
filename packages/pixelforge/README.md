@@ -6,7 +6,7 @@ package-owned Canvas2D engine. NPC dialogue flows into the normal GM turn loop, 
 (hierarchical spatial context) is read and written as you move, and combat hands off to the
 engine's own vanilla combat — the package never replaces it.
 
-Requires **Marinara Engine 2.4.3+** (capability API 1.10 for `contributions.assets`). It is
+Requires **Marinara Engine 2.4.5+** (capability API 1.10 and full selected-lore world generation). It is
 client-only: no server entrypoint, no restart after install. The package agent definition is a
 runtime-inert stub that satisfies the catalog loader; all behavior lives in `client.js`.
 
@@ -22,12 +22,53 @@ resumes where you left off.
 Since 0.4.0 the wizard's preferences drive what the world *is*, under one rule: **the LLM decides
 what exists, the algorithm decides where every tile goes.** After launch the surface makes one
 host-run structured generation call (`POST /api/game/:chatId/experience-generation`, Engine
-2.4.3-staging+) with themed guidance and a strict schema; the model returns a compact **World
-Brief** — settlement, cast with household structure, places, features — and a deterministic
-compiler builds the tile world from it (30 villagers in 6 households → ~6 houses, never 30). The
-brief is validated, repaired, and floored (`src/18-brief.js`, spec in `docs/brief-schema.md`),
+2.4.5-staging+) with bounded guidance and a strict schema; the model returns a compact **World
+Brief** — the visual kit, the settlement, a cast with household structure, places, features — and a
+deterministic compiler builds the tile world from it (30 villagers in 6 households → ~6 houses,
+never 30). The brief is validated, repaired, and floored (`src/18-brief.js`, spec in `docs/brief-schema.md`),
 then sealed into chat metadata; the compiled zones carry the prose the GM sees, metered so it
 never taxes more than one turn.
+
+**Since 0.16.2 the setup form asks nothing it does not need, and answers nothing on your behalf.**
+The **Setting** box starts empty behind a question — *what the place is made of, what the weather
+does, who lives there* — and what you write there is the authority. **There is no theme dropdown any
+more:** the model picks the visual kit from your own words, as a field of the same generation call
+that was already being paid for, and when a text fits neither kit it takes the one it fights less. A
+chat that declines generation still gets a kit, derived from the same words by a deterministic word
+count rather than by a model, so declining no longer means a cozy village whatever you wrote. The
+**Game name** is a placeholder too. Leave both boxes empty and the game composes *"A cozy pixel
+village called Hearthvale."* — an empty Setting has no words to ask for anything else. Leave only
+the name empty and your text still picks the kit, whose own default name (*Meridian Base*, for the
+colony) fills the loading screen, the generation call and the world itself; a name you do type
+reaches all three. Type your own Setting and it is used exactly as written, to the first **8,000
+characters** — what lies past that stays out of the world call, a bound the launch keeps so an
+oversized nested config cannot fail the launch itself.
+
+**Three things the form stopped emitting**, all of them answers it was giving on your behalf: the
+**party list** (Game Mode's own setup owns that question — for this release a Pixelforge game starts
+with an empty party, and moving the picker to its real owner remains planned), the preset **genre and story
+goals**, and the **map-guidance line**, which is deleted outright rather than rewritten: the GM is
+never to be instructed to keep the player bound to a location, and the world need not be compact or
+walkable.
+
+**And it gained a lorebook entry picker** (0.16.2). Your enabled books are listed; expand one and
+tick the entries the world-writing call should read, or take a whole book at once with *Select all*.
+Selection is **per entry, never per book**. Since 0.16.3, the picker shows the selected count and an
+approximate token total, and accepts entries beyond ordinary lorebook budgets and count limits.
+Engine checks the complete, expanded prompt against the model's context before generation. If it
+does not fit, the retry screen recommends fewer entries or a connection with a larger context;
+the world stays unsealed. The picks ride the call itself rather than your Setting text, so the two
+never compete for the same field. The server half lives in Engine 2.4.5: on an Engine that predates it the
+picks are ignored, the world is written from your setting alone, and the package says so in the
+console rather than sealing a claim it cannot support. One interaction worth knowing while the party
+is empty: an entry filtered to *include specific characters* matches nobody and is skipped.
+
+**Pixelforge chats carry no engine HUD widgets** (roadmap S7). Game Mode's setup normally has the
+model design gauges and counters for the chat's genre, keeps feeding them to the GM, and asks you to
+approve them in a "Review Starting Widgets" step on the way in. This surface has never drawn them —
+the day, the purse and the sky are the package's own header — so since 0.16.1 the wizard declines
+them outright: no widgets are generated, the review step does not appear, and the GM is not told to
+maintain a second purse beside the one the game actually keeps.
 
 **Since 0.11.0 generation is a LOADING GATE, not a background upgrade** (maintainer ruling, S5
 §Q3b). Through 0.10 the chat booted a themed default world instantly and rebuilt in place when the
@@ -204,6 +245,92 @@ everywhere: fences, wells and tree trunks no longer bring their own patch of gra
 they stand on whatever ground is actually under them — which is what lets snow lie around them
 properly.
 
+## The country past the edge (0.16.0)
+
+**Walking out of town used to end at a wall.** A world was a handful of small grids joined by
+portals, and the wilderness was exactly two of them with a solid ring of trees at the far side.
+Now the settlement stands at the middle of a **lattice with no edge**: every direction has country
+in it, and every patch of that country already *exists* — its ground, its name, whatever it
+carries — whether or not anyone has ever walked there. Reaching one builds it; it is not decided
+at that moment, it is only drawn. Which is why **a place you walk back into is the place you
+left**, tile for tile, however long you were away and whichever way you came at it.
+
+**Six kinds of country, and the world's own climate picks the mix.** Woods, heath, scree, fen, far
+fields and old fallen walls — a wet world gets more standing water, an arid one more bare rock, a
+polar one hardly any woodland; the land the settlement stands in is felt strongest in the ring you
+can see from town and lets go the further out you get. **The colony reads as itself**: the same
+country in a sci-fi world is mast fields and antenna farms, sintered pans, talus slopes, catchment
+basins and collapsed outstations, and the names say so rather than pretending the picture is the
+same one.
+
+**Roughly one patch in seven has something in it** — a leaning stone, a watchpoint, still water, a
+fallen steading — and those are the ones with a line of prose and a place in your journal. Ordinary
+country gets a name and a notice and nothing else, which is deliberate: your discoveries are a
+list of eighty, and a walk that filed every field would push the ruin you found on day three off
+the end of it.
+
+**The edges are signposts, not doors.** Stand beside the tile where the country carries on and the
+topbar tells you the bearing and the name of what is over there — "North — The Tangled Thicket" —
+so finding your way home from four patches out is something you can read rather than something you
+have to have counted. Walk into it and you are there; there is no button and no travel menu.
+
+**Walking is free, and that is a deliberate change.** Crossing between patches writes nothing to
+the save — the position rides the same thirty-second autosave the game already ran — so a long
+walk is not a hundred and fifty writes. Everything else keeps the write it had: leaving town,
+arriving in it, a discovery, a job, a conversation. The cost, stated plainly: a browser killed
+mid-walk can lose up to thirty seconds of position, which out here is a patch or two of backtrack
+through country that comes back identical.
+
+**The wilderness does not remember you.** Nothing you do out there is stored — there is nothing to
+fell, gather or leave behind yet, and a patch you walk out of is dropped and rebuilt from scratch
+when you return. That is a real limitation and it is on the roadmap as one; it is what keeps a
+walk of any length costing the same as a walk of one step.
+
+## Every town is its own town (0.16.0)
+
+**"Always the same main village map" was true of generated worlds too, and this is the release
+that ends it.** The crossroad was the middle of the map, the square was the same eight-by-eight
+around it, and every band of buildings sat centred in its own span — so at a given size the fifth
+house landed on the same tile in every world that ever compiled. Four things move now, all of them
+rolled from the world's own seed: **where the crossroad falls**, **what shape the square is** (a
+square, or a market street running one way or the other), **how each row of buildings slides along
+its street**, and **what the surrounding country does to the ground** — a rocky surround strews a
+stone verge along the roads, a settlement on water thickens the grass in a band inside the ring.
+
+**What could not change is what a town is made of, and it does not.** The number of building plots
+is what the whole population hangs off — the households, the people minted into them, every
+building's identity — so the layout search only ever offers plans that seat exactly what the old
+centred one did. A save reloading into a re-laid town keeps every person, every friendship, every
+job and every home it had. The streets move; nobody moves house.
+
+## When part of a world didn't finish (0.16.0)
+
+**If generation half-worked, you used to have two options: play a stand-in world forever, or throw
+the chat away.** Now a window tells you which part didn't finish and offers to do that part again —
+keeping everything that *did* work, which is the point: your setting, your people, your jobs and
+whatever you have already played.
+
+- **The world couldn't be built from your setting.** Try building it again for free — same setting,
+  same seed, so it works once an update has fixed the builder and honestly says so until then — or
+  write the world again from your setting, which costs a generation call.
+- **What your world's people say and do never landed.** Try that call again, or keep playing
+  without it.
+- **You rewrote your world and its people belong to the old one.** Write it for this world.
+
+**Anything that replaces the world asks first, free presses included**, and the confirmation says
+exactly what comes with you and what stays behind: money, items, skills and the clock come across;
+friendships, quests, discoveries, your home and anything bought on the old map do not. **Nothing
+nags.** The window opens once when you enter a chat that has something to say, never over a panel
+you already have open, and after that it is a chip in the topbar that goes away by itself when the
+world is whole. "Keep playing" is always an answer, and taking it is remembered.
+
+**What you will see if your world is older.** Worlds made before 0.16 get the wilderness and the
+new street layout on their next load — their people, jobs, friendships and homes are untouched, and
+the two wilds a brief named are still exactly where they were. The one place that gets none of it
+is the **fallback map** a failed generation leaves you on: it has no wilderness, no edges to walk
+through and no lattice at all, deliberately. Nobody should be living there, and the window above is
+the way out.
+
 ## Art
 
 Two tiers, resolved at runtime with graceful degradation:
@@ -226,7 +353,7 @@ Two tiers, resolved at runtime with graceful degradation:
 packages/pixelforge/
 ├── src/                  # plain-JS modules, concatenated in filename order into client.js
 ├── docs/brief-schema.md  # the World Brief schema v1 spec (sealed; amendments inline)
-├── docs/player-state.md  # the player block + the verbs: wire contract, stamps, quarantine, ladder, gate, fishing, the wrap-up, the quest layer and its content pack, the sky and calendar, the dialogue window
+├── docs/player-state.md  # the player block + the verbs: wire contract, stamps, quarantine, ladder, gate, fishing, the wrap-up, the quest layer and its content pack, the sky and calendar, the dialogue window, the standing ladder, the wilderness lattice, the generation retry surface
 ├── test-brief.mjs        # standalone validator/compiler/spatial regression harness
 ├── build/
 │   ├── build-art.mjs     # deterministic Tier-1 art generator (writes build/assets/, untracked)

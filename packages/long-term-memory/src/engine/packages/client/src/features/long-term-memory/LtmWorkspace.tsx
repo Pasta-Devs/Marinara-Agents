@@ -125,6 +125,7 @@ export function LtmWorkspace({
           min-width: 2.75rem;
         }
         [data-ltm-workspace] [data-ltm-workspace-switcher] {
+          display: flex;
           background: var(--marinara-editor-control-bg);
         }
         [data-ltm-workspace] [data-ltm-workspace-pane-tab][data-active="true"] {
@@ -197,7 +198,7 @@ export function LtmWorkspace({
         {availablePanes.length ? (
           <div
             data-ltm-workspace-switcher
-            className="mari-editor-tab-rail flex gap-1 rounded-lg border p-1"
+            className="ltm-workspace-switcher flex gap-1 rounded-lg border p-1"
             role="tablist"
             aria-label={switcherLabel}
           >

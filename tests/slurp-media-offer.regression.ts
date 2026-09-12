@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { resolveSlurpMediaOffer } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-media-offer.js";
-import { resolveSlurpStance } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-stance.js";
+import { resolveSlurpMediaOffer } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-media-offer.js";
+import { resolveSlurpStance } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-stance.js";
 
 assert.deepEqual(
   resolveSlurpMediaOffer({ intent: "friendly", rapportTier: "regular", subscribed: false, configuredPrice: 20 }),

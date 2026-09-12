@@ -1,17 +1,17 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { slurpCreatorStatus } from "../packages/slurp/src/engine/packages/client/src/components/slurp/slurp-creator-status.js";
+import { slurpCreatorStatus } from "../packages/slurp2/src/engine/packages/client/src/components/slurp/slurp-creator-status.js";
 
 const read = (path: string) => readFileSync(path, "utf8");
 const messagesStorage = read(
-  "packages/slurp/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
 );
-const replyMethods = read("packages/slurp/src/engine/packages/server/src/services/storage/slurp-reply-methods.ts");
-const messagesRoutes = read("packages/slurp/src/engine/packages/server/src/routes/slurp-messages.routes.ts");
-const profileUi = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpProfileSurface.tsx");
-const homeUi = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
-const locale = JSON.parse(read("packages/slurp/src/engine/packages/client/src/localization/locales/en.json")) as Record<
+const replyMethods = read("packages/slurp2/src/engine/packages/server/src/services/storage/slurp-reply-methods.ts");
+const messagesRoutes = read("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts");
+const profileUi = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpProfileSurface.tsx");
+const homeUi = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
+const locale = JSON.parse(read("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json")) as Record<
   string,
   string
 >;

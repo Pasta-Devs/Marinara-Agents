@@ -181,21 +181,105 @@ PF.brief = (() => {
     return [];
   }
 
+  /** THE ART MODULE'S ID LIST, READ THROUGH ONE DOOR (0.16.2). Four call sites
+   *  in this module now ask 10-art what kits exist, and three of them run BEFORE
+   *  the network request inside generate()'s try — whose catch reports
+   *  `onFailure("network")`. A partial `PF.art` (a `themeIds` that throws) would
+   *  therefore burn a paid call and blame the network for a type error, from
+   *  three new places at once, so the read is done here and the throw stops
+   *  here. The SHAPE check stays at the four sites, spelled out each time
+   *  (`Array.isArray(list) && list.length`), because "there is an authority" is
+   *  the thing each of them branches on and it should be readable where it is
+   *  branched on. `foldStored`'s own read is deliberately NOT routed through
+   *  this: its pass-through is pre-existing shipped behaviour and this cycle
+   *  changes nothing about it. */
+  function artThemeIds() {
+    try {
+      return PF.art?.themeIds?.();
+    } catch {
+      return undefined;
+    }
+  }
+
   // ── validate(): the repair passes; runs ONCE, seals the brief ───────────────
-  function validate(raw, { theme: rawTheme, seed }) {
+  function validate(raw, { theme: rawTheme, seed }, opts) {
     const repairs = [];
-    // Theme whitelist: lexicon lookups use bracket access, so a hostile theme
-    // string (a prototype key) must never reach them. The wizard's theme is
-    // still authoritative — an unknown one just resolves to the default.
-    const theme = Object.prototype.hasOwnProperty.call(DEFAULT_BRIEFS, rawTheme) ? rawTheme : "cozy-village";
     const src = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
     if (src !== raw) repairs.push("transport: non-object root replaced");
+
+    // ── THE THEME LADDER (0.16.2) ─────────────────────────────────────────────
+    // The wizard's theme dropdown is gone, so the kit is no longer an answer this
+    // module is handed and copies down: it is RESOLVED here, at the top, because
+    // GATHERING_NOUNS, STOCK_CAST and WILDS_NAMES are all keyed by it further down
+    // and the repair passes must not mint a colony's names out of a village's book.
+    //
+    //   rung 1  the MODEL's own `artTheme`, from the call that was already being
+    //           paid for — the ruling's "freestyle input, not a selector", read by
+    //           the one reader that has the player's whole setting text in front of
+    //           it. Offered ONLY when the caller says the raw object came from a
+    //           model: `validate(raw, ctx, { fromModel: true })`, which generate()
+    //           passes and nothing else does. Without that gate a STORED brief's
+    //           own `artTheme` key — chat metadata, so restorable, importable and
+    //           hand-editable — would outrank its own seal on the #566 revalidate
+    //           path, and this door and `foldStored` would answer differently for
+    //           the same bytes.
+    //   rung 2  the CALLER's theme. Three callers that are not the model:
+    //           defaults(), the #566 revalidate path, and the wizard's own derived
+    //           answer travelling through `experienceConfig.theme` → 60-save's
+    //           `configTheme` → generate()'s `theme` argument. It is not a legacy
+    //           hint; it is the only door the player's typed words walk through
+    //           when no model answers.
+    //   rung 3  the literal "cozy-village", reached only by a chat that has no
+    //           stored config theme at all (created before the experience config
+    //           existed, or rewritten wholesale by /game/create's reuse arm) —
+    //           which is what those chats already get from 60-save's own `??`.
+    //
+    // WITH AUTHORITY every rung FOLDS against 10-art's list, so the prototype-key
+    // hazard the deleted `hasOwnProperty` whitelist existed to stop is closed by
+    // construction rather than by a test. WITH NO ART MODULE there is no
+    // list to fold against, and the two populations that were being conflated part:
+    // a FUTURE theme this build has art for but no lexicon entry passes through
+    // whole (foldStored's own policy, and the future-theme divergence class the
+    // roadmap tracks), while a string that resolves against Object.prototype does
+    // NOT — measured, `constructor` throws out of the STOCK_CAST top-up because the
+    // `|| TABLE["cozy-village"]` tail does not fire for an INHERITED value, and
+    // through the exported defaults() door it gets sealed into `brief.theme` and
+    // travels on to setTheme, world.build and the pack's catch tables.
+    const fromModel = opts?.fromModel === true;
+    // Array.isArray AND length, never truthiness: `[]` is truthy and so is a
+    // non-array, and both of those are precisely the states this guard exists to
+    // prevent — an empty enum taught to the model, an unsatisfiable `required`,
+    // and a `list.find` that throws.
+    const themeIdList = artThemeIds();
+    const haveThemeIds = Array.isArray(themeIdList) && themeIdList.length > 0;
+    const theme = haveThemeIds
+      ? foldEnum(fromModel ? src.artTheme : undefined, themeIdList, foldEnum(rawTheme, themeIdList, "cozy-village"))
+      : typeof rawTheme === "string" && rawTheme && !(rawTheme in Object.prototype)
+        ? rawTheme
+        : "cozy-village";
+    // THE GO/NO-GO SIGNAL FOR THE AUTHORIZED FALLBACK PRE-GENERATION, and the only
+    // reason that decision is answerable at all: `foldEnum` is silent by
+    // construction — only `foldAt` records, and `foldAt` lives in foldStored — so
+    // without this line a model answering `artTheme: "steampunk"` on every call
+    // would be indistinguishable from one answering correctly. Written when rung 1
+    // was OFFERED, the model wrote a non-empty string, and the fold did not return
+    // it: a correct answer and an absent one both stay silent.
+    if (fromModel && typeof src.artTheme === "string" && src.artTheme && src.artTheme !== theme)
+      repairs.push(`artTheme: model answered ${JSON.stringify(src.artTheme)}, folded to ${theme}`);
 
     // Pass 2 — scalars.
     const scale = foldScale(src.scale, repairs);
     const brief = {
       briefVersion: VERSION,
-      theme, // ALWAYS the wizard's theme; the model's echo is discarded unconditionally.
+      // THE RESOLVED KIT, and the inversion is the release: this field used to be
+      // ALWAYS the wizard's theme with the model's echo discarded unconditionally.
+      // The model's answer is the FIRST vote now, and it is safe to trust because
+      // it is folded against 10-art's own list before it is read — a string that is
+      // not a shipped id cannot survive the fold, so no lexicon is ever handed one.
+      // Rung 2 is still here and still load-bearing: defaults(), the #566
+      // revalidate path and the wizard's derived answer are all callers that are
+      // not a model, and for them the caller's theme IS the answer.
+      theme,
       scale,
       surround: foldEnum(src.surround, SURROUNDS, pick(seed, "surround", SURROUNDS)),
       prosperity: foldEnum(src.prosperity, PROSPERITY, "modest"),
@@ -643,7 +727,36 @@ PF.brief = (() => {
     // it survived the transport check, and every field then floored to nothing.
     // The theme came back cozy-village and the brief came back EMPTY, which is
     // the fallback on this line reading as if it had fired when it had not.
-    return validate(PF.own(DEFAULT_BRIEFS, theme) || DEFAULT_BRIEFS["cozy-village"], { theme, seed });
+    //
+    // AND THE WORD IS FOLDED ONCE, BEFORE EITHER READ (0.16.2). This is the one
+    // door that returns a {theme, name} PAIR, so it is the only door where a LABEL
+    // can disagree with a BODY: the ladder inside validate() folds, this line
+    // looked the worked example up with the UNFOLDED word, and `defaults("Sci-Fi-
+    // Colony", 7)` came back labelled `sci-fi-colony` carrying Hearthvale and the
+    // cozy example. One fold at the top, spent on both reads, and the module has
+    // ONE answer to "what is this theme string" instead of two.
+    //
+    // It folds on BOTH arms, and with no art module it folds against the table it
+    // is about to look the body up in rather than passing through or collapsing to
+    // cozy-village. Both alternatives were measured: pass-through makes every
+    // no-authority row a label disagreeing with its body (`swamp-fen`/Hearthvale),
+    // and folding everything to cozy-village makes a SHIPPED id lose its own worked
+    // example (`defaults("sci-fi-colony")` → cozy-village/Hearthvale). Folding
+    // against `Object.keys(DEFAULT_BRIEFS)` gives neither: measured over the sweep,
+    // the two arms agree with each other on every input, so the no-authority arm
+    // stops being a separate policy at all. `Object.keys` is own-enumerable only,
+    // so a prototype key is not in the list and falls to the fallback.
+    //
+    // The property this pins is "an id that has its own worked example always gets
+    // that example" — NOT "label and body always agree", which the
+    // `|| DEFAULT_BRIEFS["cozy-village"]` tail makes impossible to state and which
+    // the future-theme case requires to stay impossible. validate()'s rung 2 keeps
+    // its pass-through untouched: it returns no worked example, so it has nothing
+    // to disagree with.
+    const d9list = artThemeIds();
+    const labels = Array.isArray(d9list) && d9list.length > 0 ? d9list : Object.keys(DEFAULT_BRIEFS);
+    const folded = foldEnum(theme, labels, "cozy-village");
+    return validate(PF.own(DEFAULT_BRIEFS, folded) || DEFAULT_BRIEFS["cozy-village"], { theme: folded, seed });
   }
 
   /** Truncation salvage (§4.1/§5): strip fences, take the outermost balanced
@@ -717,6 +830,56 @@ PF.brief = (() => {
   const capPreferences = (text) =>
     typeof text === "string" && text.length > 7_800 ? `${text.slice(0, 7_800)}…` : text;
 
+  /** WHAT THE CALL DID WITH THE PLAYER'S LORE PICKS, WRITTEN DOWN.
+   *
+   *  The route answers with `lorebook: {includedEntries, skippedEntries}` WHENEVER
+   *  a selection was sent — the key is present even when the answer is zero, which
+   *  is what makes `includedEntries: 0` a REPORTED all-refused rather than a guess:
+   *  a disabled book, a character or trigger filter, or an id that no longer
+   *  exists. Saying nothing there leaves the player with a world that quietly did
+   *  not know about Viridian City and no way to find out why, which is the worst
+   *  shape a bug report can take. So that arm keeps the honest message and keeps
+   *  writing the note.
+   *
+   *  AN ABSENT KEY IS THE OTHER THING ENTIRELY, AND IT IS NOT A REFUSAL. This
+   *  package ships against Engines older than the route half: an Engine that
+   *  predates it takes the request field as an unknown key, writes the world
+   *  WITHOUT the lore, and answers with no `lorebook` block because it has none to
+   *  give. That reading used to be "every id refused" — a `console.warn` AND a
+   *  permanent `_repairs` line on the seal, on every lore-using launch, for a
+   *  version skew that is nobody's bug. It is a soft `console.warn` now and
+   *  NOTHING IS STORED: the seal outlives the mismatch, so a line saying the call
+   *  refused the picks would still be sitting in a checkpoint long after the
+   *  Engine that could not report them was updated.
+   *
+   *  The stored notes ride `_repairs`, this module's existing channel for a
+   *  transport fact worth keeping beside the brief it belongs to (the truncation
+   *  salvage note is the precedent), so what IS written is readable later rather
+   *  than living in one console line the player never sees. */
+  function noteLore(sealed, count, lorebook) {
+    const plural = count === 1 ? "entry" : "entries";
+    if (!lorebook || typeof lorebook !== "object") {
+      console.warn(
+        `[pixelforge] this Engine answered the world call with no lorebook report, so the ${count} picked ${plural} probably did not reach it — the picker needs an Engine that carries the lorebook response block`,
+      );
+      return;
+    }
+    // The counts are the ENGINE'S OWN diagnostics, read rather than re-derived:
+    // `skippedEntries` is what its budget actually set aside, so a second count
+    // invented here could only disagree with it.
+    const included = typeof lorebook.includedEntries === "number" ? lorebook.includedEntries : 0;
+    const skipped = Array.isArray(lorebook.skippedEntries) ? lorebook.skippedEntries.length : 0;
+    if (included >= count && !skipped) return;
+    const budget = skipped ? `, ${skipped} set aside for budget` : "";
+    if (!included) {
+      console.warn(`[pixelforge] the world call refused all ${count} picked lorebook ${plural}`);
+      sealed._repairs.push(`lorebook: all ${count} picked ${plural} were refused; none reached the model${budget}`);
+      return;
+    }
+    console.warn(`[pixelforge] ${included} of ${count} picked lorebook ${plural} reached the world call`);
+    sealed._repairs.push(`lorebook: ${included} of ${count} picked ${plural} reached the model${budget}`);
+  }
+
   /** The one #5135 generation call with the §5 failure ladder (amended):
    *  bounded wait; one wait-out on the server's documented-transient 409
    *  chat_busy; one plain re-roll on truncation (the route's maxTokens is
@@ -744,16 +907,43 @@ PF.brief = (() => {
    *
    *  `onFailure(kind)` reports WHY, once, so the retry screen can say something
    *  truer than "something went wrong" — a deterministic refusal and a busy engine
-   *  want different sentences from the player. Kinds: "unavailable" (404/409/429/
+   *  want different sentences from the player. Kinds: "context_limit" (selected prompt too large), "unavailable" (404/409/429/
    *  5xx), "refused" (400/422 with nothing salvageable), "network", "timeout". */
   async function generate(
     chatId,
-    { theme, seed, preferences, onProgress, onFailure, budgetMs = 90_000, busyWaitMs = Math.min(15_000, budgetMs / 6) },
+    {
+      theme,
+      seed,
+      preferences,
+      lorebookEntryIds,
+      onProgress,
+      onFailure,
+      budgetMs = 90_000,
+      busyWaitMs = Math.min(15_000, budgetMs / 6),
+    },
   ) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), budgetMs);
+    // THE PLAYER'S TICKED LORE ENTRIES (0.16.2, R-D6), AND THE KEY IS ABSENT WHEN
+    // THEY TICKED NONE. The route's field is `.optional()`, so an omitted key and
+    // an empty array mean the same thing to it — but they do not mean the same
+    // thing HERE: a chat whose player never opened the picker must send the exact
+    // body this package sent before the picker existed, guidance included. The
+    // filter is not decoration either; the ids come back out of a config blob the
+    // host rewrites wholesale on its reuse-an-existing-chat arm.
+    const loreIds = Array.isArray(lorebookEntryIds)
+      ? lorebookEntryIds.filter((id) => typeof id === "string" && id)
+      : [];
     try {
-      const base = { instructions: guidance(theme), userContent: capPreferences(preferences), schema: schema() };
+      // `theme` no longer reaches the instructions — the model is ASKED for the kit
+      // rather than told it. It keeps travelling to validate() below as rung 2,
+      // which is the only door the wizard's derived answer has.
+      const base = {
+        instructions: guidance({ lore: loreIds.length > 0 }),
+        userContent: capPreferences(preferences),
+        schema: schema(),
+        ...(loreIds.length ? { lorebookEntryIds: loreIds } : {}),
+      };
       let response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
       if (response.status === 409) {
         // chat_busy ships Retry-After: 15 — wait it out once inside the budget
@@ -761,6 +951,10 @@ PF.brief = (() => {
         await new Promise((resolve) => setTimeout(resolve, busyWaitMs));
         if (!controller.signal.aborted)
           response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
+      }
+      if (response.status === 422 && response.body?.code === "context_limit") {
+        onFailure?.("context_limit");
+        return null;
       }
       const rawOf = (r) =>
         r.status === 422 && r.body?.truncated && typeof r.body.raw === "string" ? r.body.raw : null;
@@ -777,13 +971,29 @@ PF.brief = (() => {
         response.body.data &&
         typeof response.body.data === "object"
       ) {
-        return validate(response.body.data, { theme, seed });
+        // `fromModel` IS THE WHOLE GATE ON RUNG 1, and this is the only function
+        // that may set it: what arrives here really is a model's answer. The #566
+        // revalidate path re-reads STORED bytes — restorable from a checkpoint,
+        // importable, hand-editable — and passes nothing, so a stored `artTheme`
+        // key can never outrank its own seal.
+        const sealed = validate(response.body.data, { theme, seed }, { fromModel: true });
+        if (loreIds.length) noteLore(sealed, loreIds.length, response.body.lorebook);
+        return sealed;
       }
       if (bestRaw) {
         const salvaged = salvageText(bestRaw);
         if (salvaged) {
-          const sealed = validate(salvaged, { theme, seed });
+          const sealed = validate(salvaged, { theme, seed }, { fromModel: true });
           sealed._repairs.push("transport: salvaged from a truncated response");
+          // NOT `noteLore` — the 422 body carries no `lorebook` key whatever the
+          // call did with the picks, and on THIS path an absent key does not even
+          // separate an Engine that predates the response block from one that
+          // simply got cut off before writing it. What IS true is that the reply
+          // was cut off before it said, and that is what gets written.
+          if (loreIds.length)
+            sealed._repairs.push(
+              `lorebook: ${loreIds.length} picked ${loreIds.length === 1 ? "entry" : "entries"} were sent; the cut-off reply did not say what became of them`,
+            );
           return sealed;
         }
       }
@@ -820,20 +1030,93 @@ PF.brief = (() => {
   }
 
   // ── guidance(): the exact text that ships in the one call ───────────────────
-  function guidance(theme) {
+  // IT TAKES NO THEME ANY MORE (0.16.2). It used to open by DECLARING one —
+  // `The visual theme is "${theme}" and it is AUTHORITATIVE: dress the player's
+  // setting text to fit it.` — which was the dropdown's answer stated at the model
+  // as a fact about a world the model had not read yet. The dropdown is gone and
+  // the question is inverted: the model is ASKED which kit the player's own words
+  // belong in, as a field of the brief, and the answer comes back through the same
+  // call. So there is no theme to state and no parameter to take.
+  //
+  // …EXCEPT ONE, AND IT IS A FACT ABOUT THE CALL RATHER THAN ABOUT THE WORLD
+  // (0.16.2, R-D6). When the player ticked lorebook entries, the server resolves
+  // them and appends them to this very system message, so the closing clause that
+  // tells the model to use them is TRUE. When they ticked none, nothing is
+  // appended, and the same clause would be pointing the model at lore it will
+  // never receive — a hallucination prompt rather than a harmless no-op. So the
+  // clause is conditional on the selection being non-empty, which also keeps the
+  // promise this release makes to every chat that does not use the picker: the
+  // body of the call is byte-for-byte what it was before the picker existed.
+  //
+  // An OPTIONS OBJECT rather than a boolean, deliberately: this function took a
+  // theme string for six releases and a stale `guidance(theme)` call passing one
+  // would read as `true` under a bare boolean and turn the clause on for a call
+  // carrying no lore at all. A missing property on a string is `undefined`, which
+  // is the reading that fails safe.
+  function guidance(opts) {
+    const lore = !!(opts && opts.lore);
+    // No art module, no kit list, no field: the schema omits the `artTheme`
+    // property on the same condition, and asking for a field the schema does not
+    // declare is asking for an answer with nowhere to put it.
+    const themeIdList = artThemeIds();
+    const haveThemeIds = Array.isArray(themeIdList) && themeIdList.length > 0;
     return [
       "You are generating a WORLD BRIEF for a walkable pixel-art RPG. You decide WHAT exists;",
       "a deterministic generator decides where every tile goes. Reply with ONLY a JSON object.",
       "",
-      `The visual theme is "${theme}" and it is AUTHORITATIVE: dress the player's setting text to fit it.`,
-      "",
       "Fields (all limits are hard):",
+      // THE KIT DISCRIMINATORS ARE READ OFF THE PAINTER OVERRIDE TABLE (10-art),
+      // not written from association. Every cozy word below is a thing the colony
+      // palette REPLACES, named in the override's own comment: `wall` (timber
+      // framing → a panel with a seam and rivets), `window` (→ porthole), `door`
+      // (a knob → a pressure door with a light strip), `roof` (→ solar panels),
+      // `crop` (a tilled row → a hydroponics tray), `well` (→ an atmosphere
+      // recycler), `fence` (→ a guard rail), `board` (a plank notice board → a JOB
+      // TERMINAL), `trunk` (→ a comms mast). Words the two kits SHARE are named as
+      // shared instead of offered as evidence, which is the part a model cannot
+      // infer from the ids — `sci-fi-colony` has a full climate, a crop palette, a
+      // coolant pool and a shared `landmark-stone`, so weather, crops, water,
+      // trees and stones decide nothing. And `hearth` is deliberately absent: it is
+      // a BASE painter both kits draw (the glow uses `windowGlow`, which the colony
+      // palette turns from firelight to cold blue), so it would steer a colony to
+      // the village on a tile the colony paints itself.
+      //
+      // WHICH IS WHY THE WIZARD'S RESOLVER KEEPS IT, and that is not a copy that
+      // fell behind. This list states what a kit CONTAINS, to a model that has not
+      // seen the art; `KIT_WORDS` in 80-setup reads what a PLAYER MEANT, off
+      // ordinary English connotation. A hearth is genuinely in both kits, and a
+      // player who types "hearth" is genuinely describing a village. Both
+      // statements are true at once, so the word belongs in exactly one of these
+      // two lists and is absent from exactly one — deleting it from the other to
+      // make them match would be making the resolver wrong to make a pair tidy.
+      ...(haveThemeIds
+        ? [
+            `- artTheme: one of ${themeIdList.join(" | ")} — which visual kit the setting belongs in. Choose`,
+            "  from the player's own words; do not ask, and do not blend.",
+            "  cozy-village is built by hand: timber framing, a wooden fence, a village",
+            "  well, a tilled crop row, a plank notice board.",
+            "  sci-fi-colony is built by machine: hull walls with rivets, a porthole, a",
+            "  pressure door, solar roofing, a hydroponics tray, an atmosphere recycler,",
+            "  a job terminal, a comms mast.",
+            "  Weather, crops, water, trees and stones are in both kits: they decide",
+            "  nothing. When the text fits neither, choose the one it fights less.",
+          ]
+        : []),
       `- scale: one of ${Object.keys(SCALES).join(" | ")} — the settlement's size class. Never a number.`,
       `- surround: one of ${SURROUNDS.join(" | ")}.`,
       `- prosperity: one of ${PROSPERITY.join(" | ")}.`,
       `- latitude (optional): one of ${PF.weather.LATITUDES.join(" | ")} — set it only when the setting's identity demands it; omit to let the world roll its own.`,
       `- precipitation (optional): one of ${PF.weather.PRECIPS.join(" | ")} — set it only when the setting's identity demands it; omit to let the world roll its own.`,
-      "- name: the settlement's name, <=24 characters.",
+      // THE NAME IS THE PLAYER'S WHEN THE PLAYER GAVE ONE (0.16.1). The wizard's
+      // first field is the world's name and the payload now leads with it, so the
+      // one thing this call must not do is invent a second name for a place that
+      // already has one. The 24-char cap is the schema's and outranks the ask,
+      // which is why the instruction says shorten rather than "use it exactly" —
+      // a rule the model cannot obey is a rule it is free to ignore entirely.
+      // `DEFAULT_NAMES` is untouched and stays what it was: the seeded fallback a
+      // NAMELESS response lands on, which is the degraded path and not this one.
+      "- name: the settlement's name, <=24 characters. When the preferences give a world name that IS the",
+      "  settlement's name — keep it, and shorten it only if it does not fit. Choose one only when none was given.",
       "- flavor: ONE sentence of arrival atmosphere, <=140 characters.",
       "- situation: ONE sentence, <=240 characters — the unresolved thing happening right now.",
       "  Name a cause and a person, not a mood.",
@@ -861,11 +1144,36 @@ PF.brief = (() => {
       "  texture for the map description — it never creates buildings.",
       "",
       "Only the cast, features, and places you name will exist. Keep names in the player's language.",
+      // THE LORE CLAUSE, AND IT SHIPS ONLY WHEN LORE DOES. The entries the player
+      // ticked are appended to this message by the server, below everything above,
+      // which is why "follows below" is a statement of fact and not a figure of
+      // speech. What it asks for is the maintainer's own worked example: a brief
+      // written for a world whose history already names places should take its
+      // names and its details from that history rather than inventing a second
+      // set beside it.
+      ...(lore
+        ? [
+            "",
+            "LOREBOOK ENTRIES the player picked follow below. They are this world's existing history:",
+            "take the settlement's name and its details from them where they fit, contradict none of it,",
+            "and invent nothing it does not contain.",
+          ]
+        : []),
     ].join("\n");
   }
 
   function schema() {
     const text = (maxLength) => ({ type: "string", maxLength });
+    // THE KIT IS A FIELD OF THE BRIEF NOW (0.16.2), and it is ABSENT rather than
+    // EMPTY when there is no art module to name the ids: an `enum: []` teaches the
+    // model a choice with no options and pairs it with a `required` entry nothing
+    // can satisfy, which is the exact shape this guard is here to prevent. Same
+    // idiom as the ladder's and defaults()' — `Array.isArray` AND length, because
+    // `[]` and a non-array are both truthy. It is transport-only: the sealed brief
+    // keeps its own `theme` field and gains nothing, so `artTheme` never appears in
+    // stored bytes this build writes.
+    const themeIdList = artThemeIds();
+    const haveThemeIds = Array.isArray(themeIdList) && themeIdList.length > 0;
     const featureItem = {
       type: "object",
       properties: { tag: { type: "string", enum: FEATURE_TAGS }, name: text(24) },
@@ -874,6 +1182,7 @@ PF.brief = (() => {
     return {
       type: "object",
       properties: {
+        ...(haveThemeIds ? { artTheme: { type: "string", enum: themeIdList } } : {}),
         scale: { type: "string", enum: Object.keys(SCALES) },
         surround: { type: "string", enum: SURROUNDS },
         prosperity: { type: "string", enum: PROSPERITY },
@@ -919,7 +1228,10 @@ PF.brief = (() => {
         },
         backgroundPopulation: { type: "integer", minimum: 0, maximum: 500 },
       },
-      required: ["scale", "name", "cast"],
+      // On the SAME condition as the property: a `required` naming a property that
+      // is not declared is a schema the route may well reject, and there is nothing
+      // to require when there is no list.
+      required: ["scale", "name", "cast", ...(haveThemeIds ? ["artTheme"] : [])],
     };
   }
 

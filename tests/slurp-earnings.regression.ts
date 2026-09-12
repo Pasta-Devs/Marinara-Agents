@@ -11,7 +11,7 @@ import {
   reverse,
   slurpEarningsKey,
   slurpCreatorRevenueShare,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-earnings.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-earnings.js";
 
 const at = new Date("2026-09-05T12:00:00.000Z");
 
@@ -148,12 +148,12 @@ assert.equal(readSlurpEarnings('{"coins":100,"lifetime":5}').lifetime, 100);
 // This is the whole point. Income used to land in the operating persona's spending wallet, which
 // made scarcity impossible once an audience existed. A character-backed Creator has no operating
 // persona at all, so the account id is the only correct key.
-assert.equal(slurpEarningsKey("creator-1"), "slurp.creator.creator-1.earnings");
+assert.equal(slurpEarningsKey("creator-1"), "slurp2.creator.creator-1.earnings");
 assert.equal(slurpCreatorRevenueShare(99, 37), 36, "reversals must use the configured floored Creator share");
 assert.equal(slurpCreatorRevenueShare(99, 0), 0);
 
 const storage = readFileSync(
-  join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
+  join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
   "utf8",
 );
 assert.match(storage, /creditEarningsNow\(creator\.id, reason, share/u);
@@ -167,7 +167,7 @@ assert.doesNotMatch(
 // Without a payout, earnings are a scoreboard attached to nothing and being a successful Creator
 // does not change your life as a fan.
 const slurpStorage = readFileSync(
-  join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
+  join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
   "utf8",
 );
 assert.match(slurpStorage, /async payOutEarnings\(/u);
@@ -227,7 +227,7 @@ assert.match(
 assert.match(slurpStorage, /writeEarnings\(creatorAccountId, current\)/u);
 
 const payoutRoutes = readFileSync(
-  join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts"),
+  join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts"),
   "utf8",
 );
 assert.match(payoutRoutes, /app\.post\("\/noodler\/accounts\/:id\/payout"/u);

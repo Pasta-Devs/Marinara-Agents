@@ -127,10 +127,10 @@ export function humanizeLabel(value: string) {
 }
 
 export function scopeTargetLabel(
-  kind: "chat" | "character" | "group" | "persona",
+  kind: "chat" | "character" | "group" | "persona" | "local_character",
   id: string,
   targets: ReadonlyArray<{ id: string; label: string }>,
-  fallbackLabels: Partial<Record<"chat" | "character" | "group" | "persona", string>> = {},
+  fallbackLabels: Partial<Record<"chat" | "character" | "group" | "persona" | "local_character", string>> = {},
 ) {
   const target = targets.find((item) => item.id === id || item.id === `${kind}:${id}`);
   if (target?.label && target.label !== id) return target.label;

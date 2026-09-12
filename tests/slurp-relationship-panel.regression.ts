@@ -2,15 +2,15 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const routes = readFileSync("packages/slurp/src/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");
+const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");
 const storage = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
   "utf8",
 );
-const view = readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx", "utf8");
-const hook = readFileSync("packages/slurp/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");
+const view = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx", "utf8");
+const hook = readFileSync("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");
 const locales = JSON.parse(
-  readFileSync("packages/slurp/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
+  readFileSync("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
 ) as Record<string, string>;
 
 // Every thread response funnels through one place, and that place defaults to the fan.

@@ -1186,6 +1186,14 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   };
 
   const applyPromptPreset = async (preset: NoodlePromptPreset) => {
+    if (noodlePromptDirty) {
+      const confirmed = await showConfirmDialog({
+        title: localizeUi("ui.noodle.noodlehome.promptPresetApplyTitle"),
+        message: localizeUi("ui.noodle.noodlehome.promptPresetApplyMessage", { name: preset.name }),
+        confirmLabel: localizeUi("ui.noodle.noodlehome.promptPresetApplyConfirm"),
+      });
+      if (!confirmed) return;
+    }
     try {
       await saveNoodlePrompt.mutateAsync({
         key: NOODLE_TIMELINE_BASE_PROMPT_KEY,

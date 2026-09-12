@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const home = readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
-const routes = readFileSync("packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
+const home = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
+const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
 
 assert.match(home, /onAddStory=\{openStoryComposer\}/u);
 assert.match(home, /updateNoodlerPostDraft\(mainAuthorProfile\.id, \{ postType: "story", poll: null, title: "" \}\)/u);
@@ -28,7 +28,7 @@ assert.doesNotMatch(home, /bg-\[linear-gradient\(145deg,var\(--noodle-accent\),v
 
 for (const locale of ["de", "en", "ko", "pl"]) {
   const messages = JSON.parse(
-    readFileSync(`packages/slurp/src/engine/packages/client/src/localization/locales/${locale}.json`, "utf8"),
+    readFileSync(`packages/slurp2/src/engine/packages/client/src/localization/locales/${locale}.json`, "utf8"),
   ) as Record<string, unknown>;
   assert.equal(typeof messages["ui.slurp.moments.add"], "string", `${locale} must label the Add Story action`);
 }

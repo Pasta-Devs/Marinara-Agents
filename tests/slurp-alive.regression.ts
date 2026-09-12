@@ -12,18 +12,18 @@ import {
   slurpCommissionChancePerDay,
   slurpMessageChancePerDay,
   slurpQuestionChancePerDay,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-world.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.js";
 import {
   scoreSlurpRapport,
   emptySlurpRapportFacts,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-rapport.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-rapport.js";
 import {
   slurpCreatorReplyChance,
   slurpCreatorOpenerKind,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-world.js";
-import { slurpAudienceReaction } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-world-copy.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.js";
+import { slurpAudienceReaction } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world-copy.js";
 
-const root = join(import.meta.dirname, "..", "packages/slurp/src/engine/packages");
+const root = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 const messagesRoutes = read("server/src/routes/slurp-messages.routes.ts");
 

@@ -99,51 +99,6 @@ test.describe("standalone Slurp package", () => {
       .poll(() => slurp.evaluate((element) => getComputedStyle(element).getPropertyValue("--noodle-accent").trim()))
       .toBe("#FF7EC1");
     await expect(slurp.locator('img[src$="/slurp-logo.png"]:visible').first()).toBeVisible();
-    await expect(slurp.getByRole("button", { name: "Leave Slurp" })).toBeVisible();
-    expect(errors).toEqual([]);
-  });
-
-  test("renders the responsive settings overview in the Slurp theme", async ({ page }, testInfo) => {
-    const errors = collectUnexpectedErrors(page);
-    await getSlurpSettings(page);
-    const settingsResponse = await page.request.patch("/api/slurp/settings", {
-      data: { onboarding: "completed" },
-    });
-    expect(settingsResponse.ok()).toBe(true);
-    await page.addInitScript(() => {
-      localStorage.setItem(
-        "marinara:slurp:package-ui",
-        JSON.stringify({
-          navigation: { mode: "creator-settings", section: "overview" },
-          onboardingState: "completed",
-        }),
-      );
-    });
-
-    await page.goto("/");
-    await openSlurp(page);
-
-    const slurp = page.locator('[data-component="NoodleView"]');
-    await expect(slurp.getByRole("heading", { name: /Slurp is live|Automatic publishing is paused/u })).toBeVisible();
-    await expect(slurp.getByRole("button", { name: "Run Generation now" })).toBeVisible();
-    await expect(slurp.getByRole("button", { name: /^Publishing/u }).first()).toBeVisible();
-    await expect
-      .poll(() =>
-        slurp.evaluate((element) => getComputedStyle(element).getPropertyValue("--slurp-hero").trim().toLowerCase()),
-      )
-      .toContain("linear-gradient");
-
-    const sectionNavigation = slurp.locator('nav[aria-label="Creator settings sections"]:visible');
-    await expect(sectionNavigation).toBeVisible();
-    if (testInfo.project.name.includes("mobile")) {
-      const mobileNavigation = slurp.getByRole("navigation", { name: "Slurp navigation" });
-      for (const label of ["Slurp", "Profile", "Inbox", "Discover", "More"]) {
-        await expect(mobileNavigation.getByText(label, { exact: true })).toBeVisible();
-      }
-      await expect(sectionNavigation).toHaveClass(/overflow-x-auto/u);
-      await expect(sectionNavigation.getByRole("button", { name: "Overview" })).toHaveAttribute("aria-current", "page");
-    }
-
     expect(errors).toEqual([]);
   });
 

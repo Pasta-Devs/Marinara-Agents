@@ -9,8 +9,8 @@ import {
   slurpMoodTone,
   SLURP_MOOD_MAX,
   SLURP_MOOD_MIN,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-mood.js";
-import { readSlurpDmReply } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-dm-response.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-mood.js";
+import { readSlurpDmReply } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-dm-response.js";
 
 const apply = (mood: number, shift: Parameters<typeof applySlurpMood>[0]["shift"], rapportScore = 0) =>
   applySlurpMood({ mood, shift, rapportScore, minutesSinceUpdate: 0 });
@@ -69,7 +69,7 @@ assert.throws(() => readSlurpDmReply({ moodShift: "up" }), /no usable content/u)
 // The contract is defined locally. `@marinara-engine/shared` owns the comment-reply schema and is
 // not in this repo, so the direct-message fields cannot be added there.
 const generation = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-message-generation.service.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message-generation.service.ts",
   "utf8",
 );
 assert.doesNotMatch(generation, /noodleGeneratedNoodlerReplySchema/u);
@@ -81,14 +81,14 @@ assert.match(generation, /remember: generated\.remember[\s\S]{0,200}?protectNote
 assert.match(generation, /knownAboutFan: \{[\s\S]{0,240}?working: known\.working/u);
 
 const storage = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
   "utf8",
 );
 assert.match(storage, /applySlurpThreadNotes\(thread\.notes, input\.remember\)/u);
 
 // The reply is what the fan asked for. Recording the simulation around it must never lose it.
 const operation = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-message.operation.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message.operation.ts",
   "utf8",
 );
 assert.match(operation, /recordReplyOutcome\(thread\.id[\s\S]{0,160}?\.catch\(/u);

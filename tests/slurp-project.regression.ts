@@ -13,7 +13,7 @@ import {
   slurpProjectChapter,
   slurpProjectInstruction,
   slurpProjectsKey,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-project.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-project.js";
 
 const at = new Date("2026-09-09T10:00:00.000Z");
 
@@ -90,10 +90,10 @@ assert.equal(
 assert.equal(readSlurpProject({ id: "p", title: "x".repeat(400) })?.title.length, SLURP_PROJECT_TITLE_MAX_LENGTH);
 
 // ── The key follows the goal and earnings shape ─────────────────────────────
-assert.equal(slurpProjectsKey("creator-a"), "slurp.creator.creator-a.projects");
+assert.equal(slurpProjectsKey("creator-a"), "slurp2.creator.creator-a.projects");
 
 // ── Posts carry the project they were published into ────────────────────────
-const root = join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/server/src");
+const root = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 const schema = read("db/schema/slurp.ts");
@@ -185,7 +185,7 @@ assert.match(routes, /Only the Creator's owner can delete a project\./u);
 assert.match(routes, /if \(!\(await noodle\.getProject\(creator\.id, projectId\)\)\) \{\s+return reply\.code\(404\)/u);
 
 // ── Studio panel ────────────────────────────────────────────────────────────
-const clientRoot = join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/client/src");
+const clientRoot = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/client/src");
 const readClient = (path: string) => readFileSync(join(clientRoot, path), "utf8");
 const panel = readClient("components/slurp/SlurpProjectsPanel.tsx");
 // Read down and edit the dull ones. A review queue would be unusable at thirty Creators.

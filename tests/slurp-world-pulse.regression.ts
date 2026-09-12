@@ -7,7 +7,7 @@ import {
   slurpPulseBudget,
   SLURP_PULSE_MAX_PER_TICK,
   SLURP_PULSE_POST_MAX_AGE_HOURS,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-world-pulse.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world-pulse.js";
 
 const targets = [
   { creatorAccountId: "c1", postId: "fresh", ageHours: 0.5, creatorReach: 3_000 },
@@ -97,7 +97,7 @@ const world = readFileSync(
   join(
     import.meta.dirname,
     "..",
-    "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-world.operation.ts",
+    "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.operation.ts",
   ),
   "utf8",
 );
@@ -142,7 +142,7 @@ assert.ok(
 // new ratio rather than the old one. Likes are still what most people leave.
 assert.ok((pulseKinds.get("like") ?? 0) > (pulseKinds.get("comment") ?? 0) * 3, "likes must dominate comments");
 const storage = readFileSync(
-  join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
+  join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
   "utf8",
 );
 assert.match(

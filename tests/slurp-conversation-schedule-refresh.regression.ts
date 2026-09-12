@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const root = "packages/slurp/src/engine/packages";
+const root = "packages/slurp2/src/engine/packages";
 async function main() {
   const [settings, hooks, routes, generator] = await Promise.all([
     readFile(`${root}/client/src/components/slurp/SlurpSettings.tsx`, "utf8"),

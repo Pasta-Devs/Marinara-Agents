@@ -2,20 +2,20 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const messages = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx",
+  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx",
   "utf8",
 );
-const hooks = readFileSync("packages/slurp/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");
-const routes = readFileSync("packages/slurp/src/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");
+const hooks = readFileSync("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");
+const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");
 const operation = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-message.operation.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message.operation.ts",
   "utf8",
 );
 const response = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-dm-response.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-dm-response.ts",
   "utf8",
 );
-const media = readFileSync("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-media.ts", "utf8");
+const media = readFileSync("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-media.ts", "utf8");
 
 assert.match(response, /sharePost: z\.number\(\)\.int\(\)\.min\(0\)\.max\(4\)/u);
 assert.match(operation, /kind: "post_preview"/u);

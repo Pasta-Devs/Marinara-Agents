@@ -11,9 +11,9 @@
  */
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
-import { garnishTagsFromPersona } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-garnish-context";
+import { garnishTagsFromPersona } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-garnish-context";
 
-const DIR = "packages/slurp/src/engine/packages/server/src/services/garnish-ads";
+const DIR = "packages/slurp2/src/engine/packages/server/src/services/garnish-ads";
 const FORBIDDEN = /\b(slurp|noodler|noodle|persona)\b/iu;
 
 /** Drop comments and string literals so only real code is checked. */
@@ -47,7 +47,7 @@ async function main() {
 
   // The seam is allowed to know both worlds, and must keep doing so.
   const seam = await readFile(
-    "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-garnish-context.ts",
+    "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-garnish-context.ts",
     "utf8",
   );
   assert.match(seam, /garnish-ads\/garnish-ads\.types\.js/u);

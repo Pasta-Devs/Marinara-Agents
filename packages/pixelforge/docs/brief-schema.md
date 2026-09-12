@@ -23,9 +23,26 @@ through the derivations below.
                             // not exist. 0.10 changed `backgroundPopulation`'s meaning and did
                             // NOT bump: the number moves once, when the queued v2 bundle lands
                             // (ROADMAP open question 3), not once per change.
-  theme: "cozy-village",    // echo only — ALWAYS overwritten with the wizard's theme, valid or
-                            // not, so the stored brief is self-contained and the model can never
-                            // pick a skin that fights the wizard.
+  theme: "cozy-village",    // The RESOLVED KIT, and 0.16.2 inverted what fills it. It used to be an
+                            // ECHO — always overwritten with the wizard's theme, valid or not,
+                            // because a dropdown had already answered. The dropdown is gone, so
+                            // `validate()` RESOLVES the kit down a three-rung ladder (§10): the
+                            // model's own `artTheme` first, the caller's theme second, the literal
+                            // "cozy-village" third. Every rung is FOLDED against 10-art's shipped
+                            // id list, so a string that is not a kit this build ships can never
+                            // reach a lexicon — which is what the deleted `hasOwnProperty`
+                            // whitelist used to do, now closed by construction rather than by a
+                            // test. The stored brief is still self-contained: whatever the ladder
+                            // returns is what compiles, forever after.
+  //  artTheme              — TRANSPORT ONLY, and never sealed. It is a property of the REQUEST
+  //                          schema and of the model's reply, read once by `validate()` and
+  //                          dropped; the sealed brief carries `theme` and gains no field. So
+  //                          `artTheme` appears in no stored bytes this build writes, and a
+  //                          stored copy of it — chat metadata is restorable, importable and
+  //                          hand-editable — can never outrank the seal it sits beside, because
+  //                          rung 1 is offered only when the caller declares the object came from
+  //                          a model (`validate(raw, ctx, { fromModel: true })`, which the one
+  //                          generation call passes and nothing else does).
   scale: "village",         // ENUM outpost|hamlet|village|town|city — the ONLY size input.
                             //   outpost 28x20 / 4-building budget   hamlet 48x28 / 8
                             //   village 60x40 / 16                  town 76x52 / 34
@@ -71,6 +88,14 @@ through the derivations below.
                             // Full specification in docs/player-state.md §7.9.
 
   name: "Mossbrook",        // TEXT ≤24 graphemes → settlement name, World Maps root.
+                            // Since 0.16.1 the payload LEADS with the world name the player typed
+                            // in the wizard (resolved: the field trimmed, or the theme's default
+                            // name if emptied; the reader collapses whitespace and clips at 60
+                            // graphemes — player-state §9.2) and the guidance says to keep it,
+                            // shortening only if it does not fit — the 24-cap outranks the ask,
+                            // so the instruction says shorten rather than "use it exactly". The
+                            // DEFAULT_NAMES seeded fallback is untouched: it answers a NAMELESS
+                            // response, which is the degraded path and not this one.
   flavor: "…",              // TEXT ≤140, one sentence. Arrival atmosphere. Injected ONCE at setup.
   situation: "…",           // TEXT ≤240, one sentence. "The unresolved thing happening right now —
                             // name a cause and a person, not a mood." The GM's standing hook.
@@ -337,6 +362,14 @@ _Amended again in 0.11 (maintainer ruling #7, plan §Q3b): it no longer runs beh
 throwaway world the player is already walking in. A generate-configured chat whose brief is not
 sealed holds at a **loading gate** — the sim does not step, no mutator resolves, no save is
 written — because a world that is going to be discarded must never be one anybody invested in._
+_Amended in 0.16.1: what the wizard stamps is no longer only the `generate` answer. The Setting box
+ships EMPTY with the theme's prose as its placeholder — it shipped as a pre-filled VALUE, so leaving
+it alone was an active instruction to build the shipped village, and the `userContent` below carried
+that paragraph to a model that then obediently minted its cast — and an untouched box composes one
+line from the theme and the typed name instead ("A cozy pixel village called Pallet Town."). The
+payload gains a `World name:` line ABOVE the setting, read from `experienceConfig.worldName`
+(player-state §9.2), so the model is asked to dress the player's name rather than invent a second
+one; it is omitted entirely for a chat created before 0.16.1, where there is no stored name to keep._
 Package-side call budget: 90 s abort; `userContent` clamps to 7,800 chars (the route 400s
 past 8,000 — a hard contract). On a 409 `chat_busy` (server-documented transient, Retry-After 15)
 → wait it out **once** inside the budget. On the route's `truncated: true` 422 → **one** plain
@@ -402,7 +435,8 @@ before this the wilds pond a brief asked for simply never existed.
 ## 7. Injection discipline (metering the prose)
 
 Written here because it is what keeps the brief from taxing every turn forever: `name` + free-text
-`role` ride the per-turn header **always**; `situation` injects **once, on the first outbound
+`role` ride the per-turn header **always** (from 0.15, a standing word — `acquainted`/`friendly`/
+`close friend`/`hostile` — joins them for anyone past stranger, and a stranger costs no word at all); `situation` injects **once, on the first outbound
 turn**; a zone's `flavor` injects **once on first entry**; an NPC's `persona` injects **once per
 NPC** (first interaction). The one-shot flags **persist in saves** and burn only when the host
 _accepts_ the turn (a refused send never loses the prose), so a reload never re-taxes the
@@ -451,6 +485,26 @@ Not yet exported: the root's population phrase (still §9 territory) and per-fea
 features have no zones of their own, and decorating the root would edit a location the user may
 have authored (the route deliberately cannot).
 
+**The wilderness lattice is a THIRD class of compiled zone and it exports NOTHING (0.16).** The
+paragraph above says "every other compiled zone registers as a child of that bound location", and
+since 0.16 that sentence needs its exception stated rather than inferred: a **compiler-minted
+wilderness cell** — a zone the lattice materialises on arrival, `w_<cx>_<cy>`, `mapKind: "wild"` —
+stamps `mapExport = false` (`21-lattice.js` `compileChunk`, off `LATTICE_TUNE.CHUNK_MAP_EXPORT`) and
+is skipped exactly as a room inside a building is. The brief's own `wilds` places are untouched and
+still export as `kind: "place"`; what is excluded is only the country the brief never named.
+
+**Why, and it is the same no-delete argument one rung harder.** The lattice has no edge: a player
+who walks for twenty minutes materialises tens of cells, so an exported cell is a permanent row per
+patch of wilderness they ever crossed, on a map route that cannot delete. Worse, cells are
+**evicted** — the residency policy drops the zone object once nine newer ones stand
+(`21-lattice.js` `residency`/`evict`) — and the export planner dereferences `world.zones[zoneId]`
+across its awaits with a staleness check that never asks whether the zone survived, so an
+exported-then-evicted cell is a crash rather than a stale row. `CHUNK_MAP_EXPORT` is therefore the
+one entry in the lattice's tunables block that is **not** a playtest knob, and it says so at the
+constant; the harness pins the literal AND drives the shipped `maybeSync` over two rings of walked
+country, asserting zero cell ids in the posted rows and in `world.bindings`, with the brief's own
+zones present as the witness that the export actually ran.
+
 **0.12's feature register is deliberately NOT exported here, and that is a decision rather than an
 oversight.** The register (§9) now holds a rect per feature, which is the first per-feature
 geometry the package has ever had, so extending this export is the obvious next thought. It is
@@ -497,9 +551,94 @@ load, with no regeneration and no schema change.
 
 Still waiting for a consumer: the root's population phrase (§8).
 
-## 10. Guidance note on theme mismatch
+## 10. The kit is an OUTPUT — `artTheme`, the ladder, and the two conditional clauses
 
-The shipped guidance states verbatim: _the theme is authoritative; dress the player's setting text
-to fit it._ A player typing "cyberpunk megacity" under `cozy-village` gets a cozy village wearing
-cyberpunk names — coherent tiles, themed prose — never a schema error. (A wizard-side nudge when
-the free text is far from the chosen theme is a 0.4.x follow-up.)
+**This section said the opposite until 0.16.2, and the inversion is the release.** The old text was
+accurate to its own build: _the theme is authoritative; dress the player's setting text to fit it_ —
+a sentence stated AT the model, as a fact about a world the model had not read yet, because a
+dropdown had already answered. A player typing "cyberpunk megacity" under `cozy-village` got a cozy
+village wearing cyberpunk names. The dropdown is deleted, so the question is inverted and so is the
+guidance: **the player's own setting text is authoritative, and the kit is chosen to fit IT.**
+
+### `artTheme` — a field of the reply, not a parameter of the call
+
+The kit is now a **structured output**. `schema()` declares `artTheme: { type: "string", enum:
+<10-art's shipped ids> }` and names it in `required`, and `guidance()` asks for it in the same
+breath as `scale` and `surround` — so the answer arrives inside the one generation call that was
+already being paid for. There is no second call, no separate pre-generation, and no parameter: the
+guidance takes **no theme argument at all** any more.
+
+Both the property and its `required` entry are declared on **one condition** — that `PF.art.themeIds()`
+answers with a non-empty array (`Array.isArray(list) && list.length`, never truthiness, because `[]`
+and a non-array are both truthy). With no art module there is no list, so the property is **absent**
+rather than empty: an `enum: []` would teach the model a choice with no options and pair it with a
+`required` nothing can satisfy.
+
+**What the guidance says about the two kits is read off the painter override table** (`10-art.js`),
+not written from association, and that discipline is the section's own hard-won rule. Each override
+comment names the cozy thing and the colony's replacement in one sentence — timber framing → a
+riveted panel, a window → a porthole, a knobbed door → a pressure door, a roof → solar panels, a
+tilled row → a hydroponics tray, a well → an atmosphere recycler, a fence → a guard rail, a plank
+notice board → a job terminal, a trunk → a comms mast. **Words the kits SHARE are named as shared**,
+because that is the part a model cannot infer from the ids: `sci-fi-colony` has a full climate, a
+crop palette, a coolant pool and the same `landmark-stone`, so weather, crops, water, trees and
+stones decide nothing. `hearth` is deliberately absent — both kits draw it — even though the
+wizard's own word list keeps it, and the two lists are right to differ: this one states what a kit
+CONTAINS, the wizard's reads what a PLAYER MEANT off ordinary English.
+
+### The ladder — what a missing answer walks down
+
+`validate()` resolves the kit at the top, before any repair pass runs, because `GATHERING_NOUNS`,
+`STOCK_CAST` and `WILDS_NAMES` are all keyed by it further down and a colony's names must never be
+minted out of a village's book.
+
+| rung | source | who reaches it |
+| --- | --- | --- |
+| **1** | the **model's** `artTheme`, from the reply | only when the caller declares the object came from a model — `validate(raw, ctx, { fromModel: true })`, passed by `generate()` and by nothing else. Without that gate a STORED `artTheme` key would outrank its own seal on the revalidate path, and the two doors into this module would answer differently for the same bytes |
+| **2** | the **caller's** theme | `defaults()`, the revalidate path, and the wizard's own derived answer travelling `experienceConfig.theme` → `60-save`'s `configTheme` → `generate()`'s `theme` argument. Not a legacy hint: it is the only door the player's typed words walk through when no model answers |
+| **3** | the literal `"cozy-village"` | a chat with no stored config theme at all — created before the experience config existed, or rewritten wholesale by `/game/create`'s reuse arm — which is what those chats already get from `60-save`'s own `??` |
+
+**Every rung folds against `PF.art.themeIds()`**, so a near-miss spelling lands on the id it meant
+and a string that is not a shipped kit — a prototype key included — cannot survive to reach a
+lexicon. With no art module there is no list to fold against and the two populations part: a FUTURE
+theme this build has art for but no lexicon entry passes through whole, while a string resolving
+against `Object.prototype` does not.
+
+**`defaults()` folds ONCE at the top, before either read**, because it is the only door returning a
+`{theme, name}` pair and therefore the only door where a label can disagree with a body. With no art
+module it folds against `Object.keys(DEFAULT_BRIEFS)` — own-enumerable only, so a prototype key is
+not in the list. The property this pins is *an id with its own worked example always gets that
+example*, which is narrower than "label and body always agree" and deliberately so: the
+`|| DEFAULT_BRIEFS["cozy-village"]` tail makes the wider claim impossible to state, and the
+future-theme case needs it to stay impossible.
+
+**A model answer that does not survive the fold is RECORDED** — `artTheme: model answered "x",
+folded to y` on `_repairs` — written only when rung 1 was offered, the model wrote a non-empty
+string, and the fold did not return it. A correct answer and an absent one both stay silent, so the
+line is the go/no-go signal for whether a separate pre-generation is ever needed. `foldEnum` is
+silent by construction; without this one line a model answering `steampunk` on every call would be
+indistinguishable from one answering correctly.
+
+### Mismatch, and the one thing the guidance is still allowed to state
+
+A text that fits neither kit is not an error and never was. What changed is which way the dressing
+runs: the guidance's own closing rule is **"when the text fits neither, choose the one it fights
+less"**, so a cyberpunk megacity now lands in the colony rather than being dressed onto a village.
+There is no wizard-side mismatch nudge and there will not be one — the 0.4.x follow-up that idea was
+filed as is retired along with the wizard side of the question it was about.
+
+### The lore clause is conditional, and that is a fact about the CALL
+
+When the player has ticked lorebook entries, the server resolves them and appends them to this very
+system message, below everything else — so the closing clause telling the model to take the
+settlement's name and its details from them, contradict none of it and invent nothing it does not
+contain is a statement of fact. When they ticked none, nothing is appended, and the same clause
+would be pointing the model at lore it will never receive: a hallucination prompt rather than a
+harmless no-op. So the clause ships **only when the selection is non-empty**, which also keeps the
+release's other promise — for a chat that never opens the picker, the body of the call is
+byte-for-byte what it was before the picker existed, guidance included.
+
+`guidance()` takes an **options object** rather than a boolean for exactly one reason: it took a
+theme string for six releases, and a stale `guidance(theme)` would read as `true` under a bare
+boolean and turn the clause on for a call carrying no lore at all. A missing property is
+`undefined`, which is the reading that fails safe.

@@ -12,12 +12,12 @@ import {
   SLURP_WORLD_MAX_CATCHUP_DAYS,
   SLURP_WORLD_MAX_OPEN_REQUESTS,
   type SlurpWorldCreator,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-world.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.js";
 import {
   slurpAudienceOpener,
   slurpAudienceQuestion,
   slurpCommissionBrief,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-world-copy.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world-copy.js";
 
 const day = (n: number) => new Date(Date.parse("2026-09-01T00:00:00.000Z") + n * 86_400_000);
 const creator = (over: Partial<SlurpWorldCreator> = {}): SlurpWorldCreator => ({
@@ -135,7 +135,7 @@ assert.equal(slurpAudienceOpener("seed"), slurpAudienceOpener("seed"));
 assert.ok(new Set(Array.from({ length: 60 }, (_, index) => slurpAudienceOpener(`o${index}`))).size > 4);
 
 // ── Wiring ──────────────────────────────────────────────────────────────────
-const root = join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/server/src");
+const root = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 const operation = read("services/slurp/slurp-world.operation.ts");

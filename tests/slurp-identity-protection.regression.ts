@@ -8,7 +8,7 @@ import {
   protectedIdentityValues,
   stageProfileContainsPublicIdentity,
   stageProfileContainsSourceDetails,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-identity-protection";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-identity-protection";
 
 // The disclosure privacy core had no behavioural coverage: the existing disclosure test only
 // grepped source text, which passes forever regardless of what the code does. These assertions
@@ -130,7 +130,7 @@ assert.equal(
 
 const root = join(import.meta.dirname, "..");
 const draft = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-stage-profile-draft.service.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-stage-profile-draft.service.ts"),
   "utf8",
 );
 const briefRule = /ignoring short connecting words/gu;

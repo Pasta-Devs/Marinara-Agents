@@ -131,7 +131,7 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
   },
   slurp2: {
     modes: ["conversation", "roleplay", "game"],
-    activation: "Install it, restart Marinara Engine when prompted, then open Home → Slurp 2.",
+    activation: "Install it, restart Marinara Engine when prompted, then open Home → Slurp Remastered.",
   },
   "gacha-forge": {
     modes: ["conversation", "roleplay", "game"],

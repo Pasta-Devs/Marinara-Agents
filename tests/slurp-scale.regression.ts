@@ -9,10 +9,10 @@ import {
   slurpWorldActivityMultiplier,
   SLURP_DEFAULT_PLATFORM_SCALE,
   SLURP_DEFAULT_WORLD_ACTIVITY,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-scale.js";
-import { slurpCreatorReach } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-reach.js";
-import { planSlurpWorldTick } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-world.js";
-import { planSlurpWorldPulse } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-world-pulse.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-scale.js";
+import { slurpCreatorReach } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-reach.js";
+import { planSlurpWorldTick } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.js";
+import { planSlurpWorldPulse } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world-pulse.js";
 
 // ── Off is a real off switch ────────────────────────────────────────────────
 // Somebody who wants to write undisturbed should get exactly that, not a quieter version of being
@@ -94,7 +94,7 @@ for (const bad of [undefined, null, "nonsense", 7]) {
 }
 
 // ── Wiring ──────────────────────────────────────────────────────────────────
-const root = join(import.meta.dirname, "..", "packages/slurp/src/engine/packages");
+const root = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 const storage = read("server/src/services/storage/slurp.storage.ts");

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { runRegressionToCompletion } from "./regression-helpers.ts";
 
 const session = new Map<string, string>();
 Object.defineProperty(globalThis, "window", {
@@ -18,6 +19,7 @@ const contract = {
   sourceScope: { chatId: "chat-a", chatIds: ["chat-a"] },
   destinationScope: { chatId: "chat-a", chatIds: ["chat-a"] },
   mode: "roleplay" as const,
+  modes: ["conversation", "roleplay"] as ("conversation" | "roleplay" | "game")[],
 };
 
 async function main() {
@@ -132,7 +134,7 @@ async function main() {
   );
 }
 
-void main().catch((error) => {
+void runRegressionToCompletion("long-term-memory-source-task", main).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

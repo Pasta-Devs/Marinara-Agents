@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { runWithSafeCleanup } from "./regression-helpers.ts";
+import { runRegressionToCompletion, runWithSafeCleanup } from "./regression-helpers.ts";
 
 async function main() {
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
@@ -102,9 +102,12 @@ async function main() {
     resetLongTermMemorySettings,
     parseLongTermMemoryBackup,
   } = await import(`${source}/backup-restore.ts`);
-  const { addRejectedSuggestions, deleteRejectedSuggestion, listRejectedSuggestions } = await import(
-    `${source}/rejected-suggestions.ts`
-  );
+  const {
+    addRejectedSuggestions,
+    deleteRejectedSuggestion,
+    deleteRejectedSuggestionsForSource,
+    listRejectedSuggestions,
+  } = await import(`${source}/rejected-suggestions.ts`);
 
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-storage-"));
   const logger = { debug() {}, info() {}, warn() {}, error() {} };
@@ -363,6 +366,61 @@ async function main() {
       await addRejectedSuggestions(rejectionDraft, root);
       await addRejectedSuggestions(rejectionDraft, root);
       assert.equal((await listRejectedSuggestions({ chatId: "chat-a" }, root)).length, 2);
+      const legacyFingerprintRejection = await addRejectedSuggestions(
+        {
+          ...rejectionDraft,
+          extractionOutcome: {
+            ...rejectionDraft.extractionOutcome,
+            droppedCandidates: [
+              {
+                index: 0,
+                reason: "invalid_format",
+                message: "Rejected candidate.",
+                snippet: "candidate",
+                validatorCode: "invalid_evidence_unit_format",
+              },
+            ],
+          },
+        } as any,
+        root,
+      );
+      assert.equal(legacyFingerprintRejection[0]?.id, firstRejections[0]?.id);
+      assert.equal(legacyFingerprintRejection[0]?.candidate.validatorCode, "invalid_evidence_unit_format");
+      const exportedWithValidatorCode = await exportLongTermMemoryData(root);
+      assert.equal(
+        exportedWithValidatorCode.rejectedSuggestions.find((suggestion) => suggestion.id === firstRejections[0]?.id)
+          ?.candidate.validatorCode,
+        "invalid_evidence_unit_format",
+      );
+      const validatorBackupRoot = join(dataDir, "validator-code-backup");
+      await replaceLongTermMemoryData(exportedWithValidatorCode, validatorBackupRoot);
+      assert.equal(
+        (await exportLongTermMemoryData(validatorBackupRoot)).rejectedSuggestions.find(
+          (suggestion) => suggestion.id === firstRejections[0]?.id,
+        )?.candidate.validatorCode,
+        "invalid_evidence_unit_format",
+      );
+      assert.deepEqual(await deleteRejectedSuggestionsForSource("source_second_import", root), {
+        deletedCount: 1,
+        sourceNoteId: "source_second_import",
+      });
+      assert.deepEqual(await deleteRejectedSuggestionsForSource("source_second_import", root), {
+        deletedCount: 0,
+        sourceNoteId: "source_second_import",
+      });
+      assert.equal((await listRejectedSuggestions({ chatId: "chat-a" }, root)).length, 1);
+      const rejectedPath = ltmRejectedSuggestionsPath(root);
+      const rejectedDirectory = dirname(rejectedPath);
+      await chmod(rejectedDirectory, 0o500);
+      try {
+        await assert.rejects(
+          () => deleteRejectedSuggestionsForSource("source_valid_import", root),
+          /EACCES|permission|read-only/i,
+        );
+      } finally {
+        await chmod(rejectedDirectory, 0o700);
+      }
+      assert.equal((await listRejectedSuggestions({ chatId: "chat-a" }, root)).length, 1);
       const rejectionId = firstRejections[0]!.id;
       assert.deepEqual(await deleteRejectedSuggestion(rejectionId, root), { deleted: true, id: rejectionId });
       assert.deepEqual(await deleteRejectedSuggestion(rejectionId, root), { deleted: false, id: rejectionId });
@@ -515,18 +573,17 @@ async function main() {
         }),
         /same scope/u,
       );
-      await assert.rejects(
-        storage.createNote({ ...noteInput, id: "world_empty_storage", sections: {} }),
-        (error: any) => error.code === "ltm_empty_sections",
-      );
-      await assert.rejects(
-        storage.projectNote("world_empty_project", "world", () => ({
-          ...noteInput,
-          id: "world_empty_project",
-          sections: {},
-        })),
-        (error: any) => error.code === "ltm_empty_sections",
-      );
+      for (const createEmpty of [
+        () => storage.createNote({ ...noteInput, id: "world_empty_storage", sections: {} }),
+        () =>
+          storage.projectNote("world_empty_project", "world", () => ({
+            ...noteInput,
+            id: "world_empty_project",
+            sections: {},
+          })),
+      ]) {
+        await assert.rejects(createEmpty, (error: any) => error.code === "ltm_empty_sections");
+      }
       assert.equal(await storage.getNote("world_empty_project"), null);
       const keywordIntent = await storage.createNote({
         ...noteInput,
@@ -824,11 +881,22 @@ async function main() {
       assert.equal(rewrittenDraft?.source.sourceNoteId, canonicalSourceId);
       assert.equal(rewrittenDraft?.source.extractionFingerprint?.sourceHash, rewrittenDraft?.source.sourceHash);
       assert.equal((rewrittenDraft?.mutations[0] as any).note.links[0].target, canonicalSourceId);
-      const review = await projectLongTermMemoryDraftReview({
-        root,
-        sourceNoteId: canonicalSourceId,
-      });
-      assert.equal(review.counts.drafts, 1);
+      const originalGetNotesByIds = LongTermMemoryStorage.prototype.getNotesByIds;
+      const reviewLookupIds: string[][] = [];
+      LongTermMemoryStorage.prototype.getNotesByIds = async function (ids) {
+        reviewLookupIds.push([...ids]);
+        return originalGetNotesByIds.call(this, ids);
+      };
+      try {
+        const review = await projectLongTermMemoryDraftReview({
+          root,
+          sourceNoteId: canonicalSourceId,
+        });
+        assert.equal(review.counts.drafts, 1);
+      } finally {
+        LongTermMemoryStorage.prototype.getNotesByIds = originalGetNotesByIds;
+      }
+      assert.deepEqual(reviewLookupIds, [[canonicalSourceId, "timeline_legacy_evidence", "world_legacy_target"]]);
       const rewrittenEventMutation = rewrittenDraft?.mutations.find((mutation) => mutation.id === eventMutationId);
       assert.equal(rewrittenEventMutation?.kind, "create_note");
       assert.equal(rewrittenEventMutation?.claimKind, "change");
@@ -2033,14 +2101,12 @@ async function main() {
         "invalidated proposals must remain visible with their explicit blocking reason",
       );
       assert.equal(invalidatedReview.counts.mutations, 0, "invalidated drafts must not contribute pending mutations");
-      await assert.rejects(
-        storage.updateNote(deletionTarget.id, { removedSectionKeys: ["history"] }),
-        (error: any) => error.code === "ltm_last_section",
-      );
-      await assert.rejects(
-        storage.updateNote(deletionTarget.id, { sections: {} }),
-        (error: any) => error.code === "ltm_empty_sections",
-      );
+      for (const [patch, expectedCode] of [
+        [{ removedSectionKeys: ["history"] }, "ltm_last_section"],
+        [{ sections: {} }, "ltm_empty_sections"],
+      ] as const) {
+        await assert.rejects(storage.updateNote(deletionTarget.id, patch), (error: any) => error.code === expectedCode);
+      }
       assert.deepEqual(Object.keys((await storage.getNote(deletionTarget.id))!.sections), ["history"]);
 
       const permanentlyDeletedTarget = await storage.createNote({
@@ -2128,7 +2194,7 @@ async function main() {
   );
 }
 
-void main().catch((error) => {
+void runRegressionToCompletion("long-term-memory-storage", main).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

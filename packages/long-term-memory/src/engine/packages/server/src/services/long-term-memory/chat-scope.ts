@@ -1,4 +1,5 @@
-import type { LtmMode, LtmScope } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import { createHash } from "node:crypto";
+import type { LtmMode, LtmScope, LtmSubject } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
   ltmModeForChatMode as sharedLtmModeForChatMode,
   withMergedLtmScopeLinks,
@@ -42,6 +43,79 @@ export function resolveChatLtmScope(chat: {
   ) satisfies LtmScope;
 }
 
-export function resolveChatLtmWriteScope(chat: { id: string }) {
-  return { chatId: chat.id, chatIds: [chat.id] } satisfies LtmScope;
+export function resolveChatLtmWriteScope(chat: { id: string; groupId?: string | null }) {
+  return {
+    chatId: chat.id,
+    chatIds: [chat.id],
+    ...(chat.groupId ? { groupId: chat.groupId, groupIds: [chat.groupId] } : {}),
+  } satisfies LtmScope;
+}
+
+export function ltmScopeFamilyId(scope: Pick<LtmScope, "chatId" | "chatIds" | "groupId" | "groupIds">) {
+  const groupIds = getScopeIds(scope.groupId, scope.groupIds);
+  if (groupIds.length === 1) return `group_${normalizeLocalIdentityComponent(groupIds[0]!, 48)}`;
+  if (groupIds.length > 1) return null;
+  const chatIds = getScopeIds(scope.chatId, scope.chatIds);
+  return chatIds.length === 1 ? `chat_${normalizeLocalIdentityComponent(chatIds[0]!, 48)}` : null;
+}
+
+export function localCharacterSubjectForName(scope: LtmScope, name: string): LtmSubject | null {
+  const familyId = ltmScopeFamilyId(scope);
+  const nameSlug = normalizeLocalIdentityComponent(name, 48);
+  if (!familyId || !nameSlug) return null;
+  const id = `${familyId}:${nameSlug}`;
+  return {
+    key: `local_character:${id}`,
+    ref: { kind: "local_character", id },
+  };
+}
+
+export function localCharacterFamilyFromKey(key: string) {
+  if (!key.startsWith("local_character:")) return null;
+  const id = key.slice("local_character:".length);
+  const separator = id.indexOf(":");
+  return separator > 0 ? id.slice(0, separator) : null;
+}
+
+export function localCharacterSubjectFromKey(subject: Pick<LtmSubject, "key" | "ref">) {
+  if (subject.ref?.kind === "local_character") return subject;
+  if (!subject.key.startsWith("local_character:")) return null;
+  const id = subject.key.slice("local_character:".length);
+  return id.includes(":") ? { ...subject, ref: { kind: "local_character" as const, id } } : null;
+}
+
+export function isLocalCharacterSubject(subject: Pick<LtmSubject, "key" | "ref">) {
+  return subject.ref?.kind === "local_character" || subject.key.startsWith("local_character:");
+}
+
+export function localCharacterScopeError(subjects: readonly LtmSubject[] | undefined, scope: LtmScope | undefined) {
+  const localSubjects = (subjects ?? []).filter(isLocalCharacterSubject);
+  if (!localSubjects.length) return null;
+  const familyId = scope && ltmScopeFamilyId(scope);
+  if (!familyId) return "Local character subjects require a single chat or group family.";
+  for (const subject of localSubjects) {
+    if (
+      subject.ref?.kind !== "local_character" ||
+      subject.key !== `local_character:${subject.ref.id}` ||
+      localCharacterFamilyFromKey(subject.key) !== familyId
+    )
+      return "Local character subjects must belong to the note's single chat or group family.";
+  }
+  return null;
+}
+
+function getScopeIds(primary: string | null | undefined, values: string[] | undefined) {
+  return uniqueStrings([primary, ...(values ?? [])]);
+}
+
+function normalizeLocalIdentityComponent(value: string, maxLength: number) {
+  const raw = value.trim().toLowerCase();
+  const normalized = raw
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .replace(/_+$/g, "");
+  if (normalized && normalized.length <= maxLength && normalized === raw) return normalized;
+  const digest = createHash("sha256").update(raw).digest("hex").slice(0, 12);
+  const suffix = `_${digest}`;
+  return `${(normalized || "x").slice(0, Math.max(1, maxLength - suffix.length))}${suffix}`;
 }

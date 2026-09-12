@@ -7,7 +7,7 @@ import {
   slurpAudienceToneInstruction,
   SLURP_AUDIENCE_TONES,
   SLURP_DEFAULT_AUDIENCE_TONE,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-tone.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-tone.js";
 
 // ── Tone is not spice ───────────────────────────────────────────────────────
 // `generationGuidance` and its three presets govern how explicit a Creator's own posts are. None of
@@ -36,7 +36,7 @@ assert.equal(readSlurpAudienceTone(null), "mixed");
 assert.equal(readSlurpAudienceTone("unfiltered"), "unfiltered");
 
 // ── Wiring ──────────────────────────────────────────────────────────────────
-const root = join(import.meta.dirname, "..", "packages/slurp/src/engine/packages");
+const root = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 // It has to reach the prompt the audience actually speaks through.

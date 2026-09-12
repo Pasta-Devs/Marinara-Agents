@@ -7,7 +7,7 @@ import {
   slurpEventWeight,
   SLURP_EVENT_NOTABLE,
   type SlurpEventLike,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-event-weight.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-event-weight.js";
 
 // ── Money outranks attention ────────────────────────────────────────────────
 // A like is the cheapest thing a person can do; a commission is somebody asking you to make
@@ -104,7 +104,7 @@ assert.deepEqual(groupSlurpEvents([oneRoutineEvent]), [{ type: "single", event: 
 assert.ok(SLURP_EVENT_NOTABLE > 0);
 
 // ── Wiring ──────────────────────────────────────────────────────────────────
-const root = join(import.meta.dirname, "..", "packages/slurp/src/engine/packages");
+const root = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 const storage = read("server/src/services/storage/slurp.storage.ts");

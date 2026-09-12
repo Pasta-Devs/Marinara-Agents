@@ -5,15 +5,15 @@ import {
   slurpPulseBudget,
   SLURP_PULSE_MAX_PER_TICK,
   type SlurpPulseTarget,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-world-pulse.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world-pulse.js";
 import {
   slurpAudienceReaction,
   SLURP_SHIPPED_REACTIONS,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-world-copy.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world-copy.js";
 import {
   mergeSlurpReactionBank,
   SLURP_REACTION_BANK_TARGET,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-reaction-bank.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-reaction-bank.js";
 
 /** A creator with one fresh post, at the reach a brand new profile is born with. */
 const NEW_CREATOR_REACH = 240;

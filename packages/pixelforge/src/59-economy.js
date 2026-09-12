@@ -724,23 +724,37 @@ PF.economy = {
    *    5. `log()` — the day-ledger line P5 will summarise;
    *    6. `bump()` — the keeper remembers. SETTLEMENT-scoped (plan §2: rel keys
    *       are per settlement, not per room), so renting twice does not create two
-   *       people with one name.
-   *  Returns { ok, reason, price, zoneId }. */
+   *       people with one name. MEANINGFUL (0.15's ruling): taking a room off
+   *       somebody is business between you, and business is what moves the ladder
+   *       past acquaintance, where small talk never does.
+   *  Returns { ok, reason, price, zoneId, keeper, rose } — `rose` is the rung the
+   *  night EARNED (0 when it crossed nothing) and `keeper` is who it was taken
+   *  from, both on every return: the receipt this feeds names neither by itself,
+   *  and a caller that had to diff the block to find a rise would say it in a
+   *  second toast, which is a toast that eats the first (70-hud `_said`). */
   rentBerth(core, gen) {
     const offer = this.berthOffer(core);
-    if (!offer.available) return { ok: false, reason: offer.reason, price: offer.price, zoneId: offer.zoneId };
+    const keeper = offer.keeper?.name ?? null;
+    if (!offer.available)
+      return { ok: false, reason: offer.reason, price: offer.price, zoneId: offer.zoneId, keeper, rose: 0 };
     const sim = core.sim;
     const world = sim.world;
     const paid = PF.player.award(core, { money: -offer.price }, gen);
     // The fence, the gate, or a chat switch under us: award() is the first verb
     // that could refuse, and nothing after it has run.
-    if (!paid) return { ok: false, reason: "refused", price: offer.price, zoneId: offer.zoneId };
+    if (!paid) return { ok: false, reason: "refused", price: offer.price, zoneId: offer.zoneId, keeper, rose: 0 };
     PF.player.setHome(core, offer.zoneId, gen);
     PF.player.grant(core, { t: "lodging-key", k: "" }, 1, gen);
     const place = world.zones[offer.zoneId]?.name ?? "the inn";
     PF.player.log(core, `Took a berth at ${place} for ${this.money(world, offer.price)}.`, sim.day, gen);
-    PF.player.bump(core, world.startZone, offer.keeper.name, { t: 1, s: `Let you a berth at ${place}.` }, gen);
-    return { ok: true, reason: null, price: offer.price, zoneId: offer.zoneId };
+    const bumped = PF.player.bump(
+      core,
+      world.startZone,
+      offer.keeper.name,
+      { t: 1, s: `Let you a berth at ${place}.`, meaningful: true },
+      gen,
+    );
+    return { ok: true, reason: null, price: offer.price, zoneId: offer.zoneId, keeper, rose: bumped?.rose ?? 0 };
   },
 
   // ── Sleep (what the berth is FOR) ──────────────────────────────────────────
@@ -916,7 +930,9 @@ PF.economy = {
    *       merges with what the player then fishes up;
    *    4. auto-equip, scoped to tools;
    *    5. `log()` — the day-ledger line the wrap-up will tell;
-   *    6. `bump()` — the keeper remembers, settlement-scoped like every other.
+   *    6. `bump()` — the keeper remembers, settlement-scoped like every
+   *       other, and MEANINGFUL for the berth's reason: buying from somebody is
+   *       business, and business is what carries a row past acquaintance.
    *  Nothing is written to `bought`: that map is world-bound shop DEPLETION and
    *  0.12 ships no shop stock, exactly as rentBerth writes none.
    *
@@ -925,18 +941,23 @@ PF.economy = {
    *  the first settlement's offer costs nothing: the ladder is a stateless
    *  derived read, so any keeper anywhere sells the same next rung later.
    *
-   *  Returns { ok, reason, price, tier, bait }. */
+   *  Returns { ok, reason, price, tier, bait, keeper, rose } — the berth's shape
+   *  again, and for the berth's reason: the sale can be the encounter that
+   *  crosses a line, and the receipt does not name the keeper on its own. */
   buyRod(core, gen) {
     const offer = this.rodOffer(core);
     // ONE SHAPE ON EVERY RETURN, `bait` included: this branch and the refusal
     // after award() below are the same verb refusing the same purchase, and a
     // caller asking what came with the rod should not get `undefined` from one
     // of them and `null` from the other.
-    if (!offer.available) return { ok: false, reason: offer.reason, price: offer.price, tier: offer.tier, bait: null };
+    const keeper = offer.keeper?.name ?? null;
+    if (!offer.available)
+      return { ok: false, reason: offer.reason, price: offer.price, tier: offer.tier, bait: null, keeper, rose: 0 };
     const sim = core.sim;
     const world = sim.world;
     const paid = PF.player.award(core, { money: -offer.price }, gen);
-    if (!paid) return { ok: false, reason: "refused", price: offer.price, tier: offer.tier, bait: null };
+    if (!paid)
+      return { ok: false, reason: "refused", price: offer.price, tier: offer.tier, bait: null, keeper, rose: 0 };
     PF.player.grant(core, { t: "rod", k: offer.tier }, 1, gen);
     let bait = null;
     if (offer.tier === ROD_TIERS[0]) {
@@ -951,8 +972,14 @@ PF.economy = {
       sim.day,
       gen,
     );
-    PF.player.bump(core, world.startZone, offer.keeper.name, { t: 1, s: `Sold you a ${named}.` }, gen);
-    return { ok: true, reason: null, price: offer.price, tier: offer.tier, bait };
+    const bumped = PF.player.bump(
+      core,
+      world.startZone,
+      offer.keeper.name,
+      { t: 1, s: `Sold you a ${named}.`, meaningful: true },
+      gen,
+    );
+    return { ok: true, reason: null, price: offer.price, tier: offer.tier, bait, keeper, rose: bumped?.rose ?? 0 };
   },
 
   // ── Fishing (plan §2.1) ────────────────────────────────────────────────────

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const root = join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/server/src");
+const root = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 const service = read("services/slurp/slurp-pending-text.service.ts");
@@ -62,6 +62,6 @@ assert.match(messageStorage, /latest\?\.id === id/u, "only the newest message ow
 assert.match(messageStorage, /Text only; nothing else moves\./u);
 
 const schema = read("db/schema/slurp.ts");
-assert.match(schema, /fileTable\("slurp_pending_text"/u);
+assert.match(schema, /fileTable\("slurp2_pending_text"/u);
 
 console.log("slurp pending text regression passed");

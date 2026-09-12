@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = join(import.meta.dirname, "..");
-const read = (path: string) => readFileSync(join(root, "packages/slurp/src/engine/packages", path), "utf8");
+const read = (path: string) => readFileSync(join(root, "packages/slurp2/src/engine/packages", path), "utf8");
 
 const messages = read("client/src/components/slurp/SlurpMessages.tsx");
 const settings = read("client/src/components/slurp/SlurpSettings.tsx");

@@ -79,8 +79,17 @@ export const memoryNagRoutes: FastifyPluginAsync = async (app) => {
     }));
   });
 
-  app.post<{ Params: { chatId: string } }>("/scan/:chatId", roleplayOnly, async (request) => {
-    return scanMemoryNagBatch(requiredId(request.params.chatId, "Chat ID"));
+  app.get<{ Params: { chatId: string } }>("/scan/:chatId", roleplayOnly, async (request) => {
+    const messages = await getMemoryNagRuntime().persistence.listMessages(requiredId(request.params.chatId, "Chat ID"));
+    return {
+      messageIds: messages
+        .filter((message) => message.role === "user" || message.role === "assistant")
+        .map((message) => message.id),
+    };
+  });
+
+  app.post<{ Params: { chatId: string }; Body: unknown }>("/scan/:chatId", roleplayOnly, async (request) => {
+    return scanMemoryNagBatch(requiredId(request.params.chatId, "Chat ID"), request.body);
   });
 
   app.post<{ Params: { chatId: string }; Body: { text?: unknown; characterIds?: unknown } }>(

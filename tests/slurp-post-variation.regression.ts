@@ -11,7 +11,7 @@ import {
   SLURP_POST_FORMATS,
   SLURP_PROJECT_RATE,
   SLURP_STORY_RATE,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-post-variation.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-post-variation.js";
 
 // ── Consecutive posts must differ ───────────────────────────────────────────
 // This is the whole point. A random draw can repeat; rotation cannot, and repetition of situation
@@ -62,7 +62,7 @@ assert.match(instruction, /Keep the person exactly as the character card describ
 assert.match(instruction, /directions to vary along, not a scene to copy/u);
 
 // ── Wiring ──────────────────────────────────────────────────────────────────
-const root = join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/server/src");
+const root = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 const generation = read("services/slurp/slurp-generation.service.ts");

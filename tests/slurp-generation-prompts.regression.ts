@@ -4,14 +4,14 @@ import { join } from "node:path";
 import {
   modelAnswerForCorrection,
   requireModelAnswer,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-model-answer";
-import { noodlerCharacterCanonText } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-prompt-safety";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-model-answer";
+import { noodlerCharacterCanonText } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-prompt-safety";
 
 const root = join(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
-const generation = read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts");
-const reply = read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-reply-generation.service.ts");
-const prompt = read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-prompt.ts");
+const generation = read("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts");
+const reply = read("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-reply-generation.service.ts");
+const prompt = read("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-prompt.ts");
 const imageInstructions = "TEST_IMAGE_GUIDANCE_123";
 
 const scheduleText = "Current Conversation Schedule for Ari: Tuesday: busy at work and slow to reply";
@@ -55,7 +55,7 @@ assert.equal(
 // bypassed protect(), which meant a Hinted or Secret creator could be handed the source's name in
 // the same prompt that forbids writing it.
 const messages = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-message-generation.service.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message-generation.service.ts"),
   "utf8",
 );
 for (const [name, source] of [
@@ -71,7 +71,7 @@ for (const [name, source] of [
 }
 // Closed at the source too: the schedule string itself no longer carries the source display name.
 const scheduleBuilder = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-creator-schedule-context.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-creator-schedule-context.ts"),
   "utf8",
 );
 assert.doesNotMatch(scheduleBuilder, /Schedule for \$\{source\.displayName\}/u);
@@ -122,7 +122,7 @@ assert.equal(modelAnswerForCorrection('{"displayName":"Ari"}'), '{"displayName":
 assert.match(reply, /describeSlurpPostCondition\(input\.db, input\.creator\.id\)/u);
 assert.match(reply, /creatorCondition: protect\(input\.creatorCondition\)/u);
 assert.match(
-  readFileSync(join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-post-stance.ts"), "utf8"),
+  readFileSync(join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-post-stance.ts"), "utf8"),
   /activeSlurpModifiers\(state, input\.at \?\? new Date\(\)\)[\s\S]{0,200}?SLURP_MODIFIERS\[modifier\.kind\]\.line/u,
   "the post stance must carry the active Creator modifier lines",
 );

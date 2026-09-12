@@ -4,18 +4,18 @@
 // the fan spoke again.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { readSlurpDmReply } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-dm-response.js";
+import { readSlurpDmReply } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-dm-response.js";
 
 const storage = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
   "utf8",
 );
 const scheduler = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-message-scheduler.service.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message-scheduler.service.ts",
   "utf8",
 );
 const replyMethods = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/storage/slurp-reply-methods.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-reply-methods.ts",
   "utf8",
 );
 

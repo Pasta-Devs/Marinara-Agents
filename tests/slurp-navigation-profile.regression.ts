@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const read = (name: string) =>
-  readFileSync(`packages/slurp/src/engine/packages/client/src/components/slurp/${name}.tsx`, "utf8");
+  readFileSync(`packages/slurp2/src/engine/packages/client/src/components/slurp/${name}.tsx`, "utf8");
 
 const shell = read("SlurpShell");
 const card = read("SlurpCreatorProfileCard");

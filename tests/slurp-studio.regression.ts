@@ -5,12 +5,12 @@ import { join } from "node:path";
 import {
   slurpFollowerMilestone,
   slurpMilestonesCrossed,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-milestones.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-milestones.js";
 import {
   openSlurpGoal,
   readSlurpGoal,
   slurpGoalProgress,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-goal.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-goal.js";
 
 // ── Milestones ──────────────────────────────────────────────────────────────
 // Before the first target there is nothing reached yet, but there is still something to aim at.
@@ -92,7 +92,7 @@ assert.equal(
 );
 
 // ── Wiring ──────────────────────────────────────────────────────────────────
-const root = join(import.meta.dirname, "..", "packages/slurp/src/engine/packages");
+const root = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 const routes = read("server/src/routes/slurp.routes.ts");

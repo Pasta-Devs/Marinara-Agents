@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { slurpMessagePreview } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-messaging.js";
+import { slurpMessagePreview } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-messaging.js";
 
 const root = join(import.meta.dirname, "..");
-const src = join(root, "packages/slurp/src/engine/packages/server/src");
+const src = join(root, "packages/slurp2/src/engine/packages/server/src");
 
 // The inbox row is shown before anyone pays, so it must never quote the locked message.
 const secret = "The whole point of the paid message, in the first sentence.";

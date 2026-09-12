@@ -5,13 +5,13 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const view = readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx", "utf8");
+const view = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx", "utf8");
 const operation = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-message.operation.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message.operation.ts",
   "utf8",
 );
 const locales = JSON.parse(
-  readFileSync("packages/slurp/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
+  readFileSync("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
 ) as Record<string, string>;
 
 // A queued reply means she noticed and did not answer. That is a beat, not a bug, and it needs a

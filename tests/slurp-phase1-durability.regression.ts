@@ -72,7 +72,7 @@ async function main() {
     await cp(join(engineRoot, "packages/server/package.json"), join(overlayRoot, "packages/server/package.json"));
     await cp(join(engineRoot, "packages/server/src"), join(overlayRoot, "packages/server/src"), { recursive: true });
     await cp(
-      join(repoRoot, "packages/slurp/src/engine/packages/server/src"),
+      join(repoRoot, "packages/slurp2/src/engine/packages/server/src"),
       join(overlayRoot, "packages/server/src"),
       { recursive: true, force: true },
     );
@@ -116,7 +116,7 @@ async function main() {
       ]);
     assert.match(
       await readFile(
-        join(repoRoot, "packages/slurp/src/engine/packages/server/src/services/slurp/server-entry.ts"),
+        join(repoRoot, "packages/slurp2/src/engine/packages/server/src/services/slurp/server-entry.ts"),
         "utf8",
       ),
       /startSlurpPaymentRecoveryScheduler\(app, addTeardown\)/u,

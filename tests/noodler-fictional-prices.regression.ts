@@ -5,7 +5,7 @@ import {
   NOODLER_UNLOCK_COST,
   noodlerUnlockPriceFromMetadata,
   noodlerUnlockPriceMetadata,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-prices";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-prices";
 
 // Prices became real in the coin economy, but only when the player turns it on. Until 1.0.12 the
 // old wallet gated access unconditionally, so an imported, restored, or hand-edited wallet could
@@ -35,7 +35,7 @@ for (const junk of [
   assert.equal(noodlerUnlockPriceFromMetadata(junk), NOODLER_UNLOCK_COST);
 }
 
-const storage = readFileSync("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
+const storage = readFileSync("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
 const fanInteraction = storage.slice(
   storage.indexOf("async createNoodlerFanInteraction("),
   storage.indexOf("async deleteNoodlerInteraction("),
@@ -64,7 +64,7 @@ const subscribe = storage.slice(storage.indexOf("async subscribe("), storage.ind
 assert.ok(subscribe.length > 0);
 assert.match(subscribe, /followingAccountIds\.includes\(creatorAccountId\)/u);
 
-const routes = readFileSync("packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
+const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
 // A locked post withholds its metadata, so the price has to travel as its own field.
 assert.match(routes, /metadata: locked \? null : post\.metadata,/u);
 assert.match(routes, /unlockPrice: locked \? noodlerUnlockPriceFromMetadata\(post\.metadata\) : null,/u);
@@ -76,11 +76,11 @@ const unlockRoute = routes.slice(routes.indexOf('"/noodler/posts/:id/unlock"'));
 assert.match(unlockRoute.slice(0, 2000), /reply\.code\(402\)\.send\(\{ error: "Not enough coins"/u);
 
 const card = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpCreatorPostCard.tsx",
+  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpCreatorPostCard.tsx",
   "utf8",
 );
 const enLocale = JSON.parse(
-  readFileSync("packages/slurp/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
+  readFileSync("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
 ) as Record<string, string>;
 
 // Both actions show a price, and the hint says plainly what it does and does not cost.

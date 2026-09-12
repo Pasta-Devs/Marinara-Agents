@@ -88,6 +88,7 @@ const ltmGlobalSettingsShape = z
     longTermMemoryIncludeResolved: z.boolean().optional(),
     longTermMemoryRecallPreamble: z.string().max(500).optional(),
     longTermMemoryDebug: z.boolean().optional(),
+    sourcesAvailabilityModes: z.array(ltmModeSchema).min(1).max(3).optional(),
   })
   .strict();
 
@@ -131,6 +132,7 @@ export const ltmResolvedGlobalSettingsSchema = z
     longTermMemoryIncludeResolved: z.boolean(),
     longTermMemoryRecallPreamble: z.string().max(500),
     longTermMemoryDebug: z.boolean(),
+    sourcesAvailabilityModes: z.array(ltmModeSchema).min(1).max(3).optional(),
   })
   .strict();
 
@@ -454,7 +456,7 @@ export const ltmNoteIdSchema = ltmIdentifierSchema;
 
 export const ltmSubjectReferenceSchema = z
   .object({
-    kind: z.enum(["character", "persona"]),
+    kind: z.enum(["character", "persona", "local_character"]),
     id: z.string().trim().min(1).max(120),
   })
   .strict();
@@ -481,6 +483,12 @@ export const ltmSubjectsSchema = z
   .refine((subjects) => subjects.every((subject, index) => index === 0 || subjects[index - 1]!.key < subject.key), {
     message: "Subjects must be sorted by stable key.",
   });
+
+function hasLocalCharacterSubject(subjects: readonly z.infer<typeof ltmSubjectSchema>[] | undefined) {
+  return subjects?.some(
+    (subject) => subject.ref?.kind === "local_character" || subject.key.startsWith("local_character:"),
+  );
+}
 
 export const ltmSourceProvenanceSchema = z
   .object({
@@ -904,6 +912,13 @@ export const ltmNoteSchema = z
   })
   .strict()
   .superRefine((note, ctx) => {
+    if (hasLocalCharacterSubject(note.subjects) && note.modes.some((mode) => mode !== "roleplay")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["modes"],
+        message: "Local character subjects are available only in Roleplay mode.",
+      });
+    }
     const allowedPrefixes = allowedStoredNoteIdPrefixes(note.type);
     if (!allowedPrefixes.some((prefix) => note.id === prefix || note.id.startsWith(prefix))) {
       ctx.addIssue({
@@ -1952,6 +1967,13 @@ export const ltmDraftNoteInputSchema = z
   })
   .strip()
   .superRefine((note, ctx) => {
+    if (hasLocalCharacterSubject(note.subjects) && note.modes.some((mode) => mode !== "roleplay")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["modes"],
+        message: "Local character subjects are available only in Roleplay mode.",
+      });
+    }
     const allowedPrefixes = LTM_NOTE_ID_PREFIXES_BY_TYPE[note.type];
     if (!allowedPrefixes.some((prefix) => note.id === prefix || note.id.startsWith(prefix))) {
       ctx.addIssue({
@@ -2071,6 +2093,7 @@ export const ltmExtractionDroppedCandidateSchema = z
   .object({
     index: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
     reason: ltmExtractionDropReasonSchema,
+    validatorCode: z.string().trim().min(1).max(120).optional(),
     message: z.string().min(1).max(240),
     snippet: z.string().min(1).max(280).optional(),
     issues: z.array(z.string().trim().min(1).max(240)).max(8).optional(),
@@ -2321,6 +2344,13 @@ export const ltmRejectedSuggestionsResponseSchema = z
   .object({
     suggestions: z.array(ltmRejectedSuggestionSchema).max(10_000),
     total: z.number().int().min(0).max(10_000),
+  })
+  .strict();
+
+export const ltmRejectedSuggestionsClearResponseSchema = z
+  .object({
+    deletedCount: z.number().int().min(0).max(10_000),
+    sourceNoteId: ltmNoteIdSchema,
   })
   .strict();
 
@@ -2626,6 +2656,7 @@ export const ltmImportSourceNotesRequestSchema = z
     extract: z.boolean().default(true),
     importConcurrency: z.number().int().min(1).max(10).optional(),
     mode: ltmModeSchema.optional(),
+    modes: z.array(ltmModeSchema).min(1).max(3).optional(),
   })
   .strict();
 
@@ -2934,6 +2965,7 @@ export type LtmDraftPreflightBlocker = z.infer<typeof ltmDraftPreflightBlockerSc
 export type LtmDraftPreflightRow = z.infer<typeof ltmDraftPreflightRowSchema>;
 export type LtmDraftPreflightResponse = z.infer<typeof ltmDraftPreflightResponseSchema>;
 export type LtmRejectedSuggestionsResponse = z.infer<typeof ltmRejectedSuggestionsResponseSchema>;
+export type LtmRejectedSuggestionsClearResponse = z.infer<typeof ltmRejectedSuggestionsClearResponseSchema>;
 export type LtmExtractSourceNoteRequest = z.infer<typeof ltmExtractSourceNoteRequestSchema>;
 export type LtmExtractSourceNoteResponse = z.infer<typeof ltmExtractSourceNoteResponseSchema>;
 export type LtmInteropSource = z.infer<typeof ltmInteropSourceSchema>;

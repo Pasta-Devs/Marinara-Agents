@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = join(import.meta.dirname, "..");
-const src = join(root, "packages/slurp/src/engine/packages/server/src");
+const src = join(root, "packages/slurp2/src/engine/packages/server/src");
 
 // Every table this package added after the host image was cut lives only in the bundle. The file
 // store rejects such a table with "Unsupported table" unless the package registers it, which is

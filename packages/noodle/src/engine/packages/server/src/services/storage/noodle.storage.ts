@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, inArray, isNull, lt } from "../../db/file-query.js";
+import { and, desc, eq, gt, inArray, isNull, lt, or } from "../../db/file-query.js";
 import type { DB } from "../../db/connection.js";
 import { isFileUniqueConstraintError } from "../../db/file-schema.js";
 import {
