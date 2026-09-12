@@ -73,6 +73,9 @@ if (process.env.MARINARA_ENGINE_SOURCE_ROOT && sourceRoot !== engineRoot && sour
   ].join(process.platform === "win32" ? ";" : ":");
 }
 const packageSharedEntry = join(repoRoot, "sources/package-shared.ts");
+const sharedBundleEntry = process.env.MARINARA_ENGINE_SHARED_ROOT
+  ? join(resolve(process.env.MARINARA_ENGINE_SHARED_ROOT), "packages/shared/dist/index.js")
+  : packageSharedEntry;
 const MIN_ENGINE_VERSION = "2.3.0";
 const MAX_ENGINE_EXCLUSIVE = "4.0.0";
 const hierarchicalMapsOwnedSourcePaths = [
@@ -143,6 +146,7 @@ const noodleOwnedSourcePaths = [
   "packages/server/src/services/storage/noodle.storage.ts",
 ];
 const slurpSourceRoot = join(packagesDir, "slurp/src/engine");
+const slurp2SourceRoot = join(packagesDir, "slurp2/src/engine");
 const slurpOwnedSourcePaths = [
   "packages/client/src/components/slurp",
   "packages/client/src/hooks/use-slurp.ts",
@@ -153,6 +157,25 @@ const slurpOwnedSourcePaths = [
   "packages/server/src/routes/slurp.routes.ts",
   "packages/server/src/services/slurp",
   "packages/server/src/services/storage/slurp.storage.ts",
+];
+// The remaster owns strictly more of the tree than the frozen legacy package does.
+const slurp2OwnedSourcePaths = [
+  ...slurpOwnedSourcePaths,
+  "packages/client/src/hooks/use-slurp-media-src.ts",
+  "packages/client/src/lib/api-client.ts",
+  "packages/server/src/routes/slurp-messages.routes.ts",
+  "packages/server/src/services/storage/slurp-financial-queue.ts",
+  "packages/server/src/services/storage/slurp-host-tables.ts",
+  "packages/server/src/services/storage/slurp-messages.helpers.ts",
+  "packages/server/src/services/storage/slurp-messages.storage.ts",
+  "packages/server/src/services/storage/slurp-messages.types.ts",
+  "packages/server/src/services/storage/slurp-reply-queue.storage.ts",
+  "packages/server/src/services/storage/slurp-reply-methods.ts",
+  // Without these three the builder captures the remaster's own files into sources/engine as
+  // generic Engine material, which puts slurp2_* table names into Noodle's build input.
+  "packages/server/src/services/storage/slurp-events.storage.ts",
+  "packages/server/src/services/storage/slurp-population.storage.ts",
+  "packages/server/src/services/storage/slurp-refresh-run-retention.ts",
 ];
 // Release builds must bundle the current source; runtime reuse is for explicit non-release verification builds.
 const releaseBuild = process.env.MARINARA_RELEASE_BUILD !== "0";
@@ -165,7 +188,7 @@ const rebuiltFeatureClients = new Set(
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
 async function prepareFeatureBuildRoot(feature) {
-  if (feature.id === "noodle" || feature.id === "slurp") {
+  if (feature.id === "noodle" || feature.id === "slurp" || feature.id === "slurp2") {
     if (!existsSync(feature.packageSourceRoot)) {
       throw new Error(`Missing package-owned ${feature.name} source`);
     }
@@ -329,28 +352,28 @@ const features = [
       de: {
         name: "Slurp Legacy",
         description:
-          "Legacy-Version von Slurp. Dieses Paket wird überarbeitet und ist pausiert. Die neue Entwicklung erfolgt in Slurp Remastered. Fehlerbehebungen sind für diese Version nicht geplant.",
+          "Legacy-Version von Slurp. Dieses Paket wird \u00fcberarbeitet und ist pausiert. Die neue Entwicklung erfolgt in Slurp Remastered. Fehlerbehebungen sind f\u00fcr diese Version nicht geplant.",
         homeBrowserTab: {
           label: "Slurp",
-          ariaLabel: "Slurp öffnen",
+          ariaLabel: "Slurp \u00f6ffnen",
         },
       },
       ko: {
         name: "Slurp Legacy",
         description:
-          "Slurp 레거시 버전입니다. 이 패키지는 재작업 중이며 보류 상태입니다. 새로운 개발은 Slurp Remastered에서 진행됩니다. 이 버전의 버그 수정은 계획되어 있지 않습니다.",
+          "Slurp \ub808\uac70\uc2dc \ubc84\uc804\uc785\ub2c8\ub2e4. \uc774 \ud328\ud0a4\uc9c0\ub294 \uc7ac\uc791\uc5c5 \uc911\uc774\uba70 \ubcf4\ub958 \uc0c1\ud0dc\uc785\ub2c8\ub2e4. \uc0c8\ub85c\uc6b4 \uac1c\ubc1c\uc740 Slurp Remastered\uc5d0\uc11c \uc9c4\ud589\ub429\ub2c8\ub2e4. \uc774 \ubc84\uc804\uc758 \ubc84\uadf8 \uc218\uc815\uc740 \uacc4\ud68d\ub418\uc5b4 \uc788\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4.",
         homeBrowserTab: {
           label: "Slurp",
-          ariaLabel: "Slurp 열기",
+          ariaLabel: "Slurp \uc5f4\uae30",
         },
       },
       pl: {
         name: "Slurp Legacy",
         description:
-          "Starsza wersja Slurp. Ten pakiet jest przebudowywany i wstrzymany. Nowy rozwój odbywa się w Slurp Remastered. Poprawki błędów dla tej wersji nie są planowane.",
+          "Starsza wersja Slurp. Ten pakiet jest przebudowywany i wstrzymany. Nowy rozw\u00f3j odbywa si\u0119 w Slurp Remastered. Poprawki b\u0142\u0119d\u00f3w dla tej wersji nie s\u0105 planowane.",
         homeBrowserTab: {
           label: "Slurp",
-          ariaLabel: "Otwórz Slurp",
+          ariaLabel: "Otw\u00f3rz Slurp",
         },
       },
     },
@@ -371,6 +394,66 @@ const features = [
         label: "Slurp",
         ariaLabel: "Open Slurp",
         iconPaths: ["slurp-logo.png"],
+      },
+    },
+  },
+  {
+    id: "slurp2",
+    version: "0.0.1",
+    minEngineVersion: "2.4.5",
+    maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
+    name: "Slurp Remastered",
+    description:
+      "The Slurp remaster. It installs beside Slurp Legacy and keeps its own separate data: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity.",
+    localizations: {
+      de: {
+        name: "Slurp Remastered",
+        description:
+          "Die Neufassung von Slurp. Sie wird neben Slurp Legacy installiert und behaelt eigene, getrennte Daten: Erstelle ein lokales Creator-Profil aus einem Engine-Charakter oder einer Engine-Persona, veroeffentliche oeffentliche oder gesperrte Beitraege und simuliere Abonnements und Publikumsaktivitaet.",
+        homeBrowserTab: {
+          label: "Slurp.",
+          ariaLabel: "Slurp. oeffnen",
+        },
+      },
+      ko: {
+        name: "Slurp Remastered",
+        description:
+          "Slurp\uc758 \ub9ac\uba54\uc774\uc2a4\ud130\uc785\ub2c8\ub2e4. Slurp Legacy\uc640 \ud568\uaed8 \uc124\uce58\ub418\uba70 \ub370\uc774\ud130\ub97c \ub530\ub85c \ubcf4\uad00\ud569\ub2c8\ub2e4. Engine \uce90\ub9ad\ud130\ub098 Engine \ud398\ub974\uc18c\ub098\ub85c \ub85c\uceec \ud06c\ub9ac\uc5d0\uc774\ud130 \ud504\ub85c\ud544\uc744 \ub9cc\ub4e4\uace0, \uacf5\uac1c \ub610\ub294 \uc7a0\uae34 \uac8c\uc2dc\ubb3c\uc744 \uac8c\uc2dc\ud558\uba70, \uad6c\ub3c5 \ubc0f \uccad\uc911 \ud65c\ub3d9\uc744 \uc2dc\ubbac\ub808\uc774\uc158\ud569\ub2c8\ub2e4.",
+        homeBrowserTab: {
+          label: "Slurp.",
+          ariaLabel: "Slurp. \uc5f4\uae30",
+        },
+      },
+      pl: {
+        name: "Slurp Remastered",
+        description:
+          "Odnowiona wersja Slurp. Instaluje sie obok Slurp Legacy i przechowuje wlasne, oddzielne dane: utworz lokalny profil tworcy z postaci silnika lub persony silnika, publikuj publiczne lub zablokowane posty i symuluj subskrypcje oraz aktywnosc publicznosci.",
+        homeBrowserTab: {
+          label: "Slurp.",
+          ariaLabel: "Otworz Slurp.",
+        },
+      },
+    },
+    category: "misc",
+    kind: ["agent"],
+    modes: ["conversation", "roleplay", "game"],
+    permissions: ["chat-read", "network", "routes", "storage", "ui"],
+    serverImport: "packages/server/src/services/slurp/server-entry.ts",
+    serverEntry: true,
+    clientImport: "packages/client/src/slurp-package-entry.tsx",
+    packageSourceRoot: slurp2SourceRoot,
+    ownedSourcePaths: slurp2OwnedSourcePaths,
+    libraryHidden: true,
+    // `slurpcoin.svg` is deliberately not shipped: the Engine keeps SVG out of its servable
+    // package-asset content types, so the route 404s it whatever the manifest declares. The coin
+    // is inlined as a data URI in SlurpCoin.tsx instead, from the same file kept as source.
+    assetPaths: ["slurp2-logo.png", "slurp2agent.png"],
+    contributions: {
+      slots: ["home-browser-tab"],
+      homeBrowserTab: {
+        label: "Slurp.",
+        ariaLabel: "Open Slurp.",
+        iconPaths: ["slurp2-logo.png"],
       },
     },
   },
@@ -690,8 +773,15 @@ export async function selfCheck() {
         "--external:sharp",
         "--external:pino",
         "--external:pino-pretty",
-        ...(feature.id === "long-term-memory" ? ["--external:zod"] : []),
-        `--alias:@marinara-engine/shared=${packageSharedEntry}`,
+        // Bundling undici gives the package a second copy whose dispatcher shape does not match
+        // the Engine's. Handing one to the other's fetch fails with "invalid onRequestStart
+        // method", which broke every outbound request the package made. The runtime provisions
+        // undici alongside the snapshot, so resolving to the Engine's copy is the fix.
+        "--external:undici",
+        ...(feature.id === "long-term-memory" || feature.id === "slurp" || feature.id === "slurp2"
+          ? ["--external:zod"]
+          : []),
+        `--alias:@marinara-engine/shared=${sharedBundleEntry}`,
         `--metafile=${metafile}`,
         `--outfile=${output}`,
       ],
@@ -706,7 +796,7 @@ export async function selfCheck() {
     }
     if (feature.ownedSourcePaths?.length) {
       await capturePackageSources(metafile, prepared.buildRoot, feature.ownedSourcePaths);
-      if (feature.id === "slurp") {
+      if (feature.id === "slurp" || feature.id === "slurp2") {
         await removeOwnedSourceSnapshots(["packages/client/src/localization/locales"]);
       }
     } else {
@@ -784,7 +874,7 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
         "--define:import.meta.env.DEV=false",
         "--define:import.meta.env.PROD=true",
         '--define:import.meta.env.MODE="production"',
-        `--alias:@marinara-engine/shared=${packageSharedEntry}`,
+        `--alias:@marinara-engine/shared=${sharedBundleEntry}`,
         `--metafile=${metafile}`,
         `--outfile=${output}`,
       ],
@@ -1529,7 +1619,7 @@ function Root({ element }) {
 class Element extends HTMLElement { connectedCallback() { if (!this.__root) this.__root = createRoot(this); this.__root.render(<QueryClientProvider client={client}><Root element={this} /></QueryClientProvider>); } disconnectedCallback() { queueMicrotask(() => { if (!this.isConnected && this.__root) { this.__root.unmount(); this.__root = null; } }); } }
 if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.stringify(tag)}, Element);`;
     } else if (feature.clientImport) {
-      if (feature.id === "noodle" || feature.id === "slurp") {
+      if (feature.id === "noodle" || feature.id === "slurp" || feature.id === "slurp2") {
         const setterName = feature.id === "noodle" ? "setNoodlePackageStyles" : "setSlurpPackageStyles";
         source = `import { ${setterName} } from ${JSON.stringify(resolve(prepared.buildRoot, feature.clientImport))};`;
         const styles = await buildPackageStyles(prepared.buildRoot, temporary, feature.id);
@@ -1553,7 +1643,7 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
         "--define:import.meta.env.DEV=false",
         "--define:import.meta.env.PROD=true",
         '--define:import.meta.env.MODE="production"',
-        `--alias:@marinara-engine/shared=${packageSharedEntry}`,
+        `--alias:@marinara-engine/shared=${sharedBundleEntry}`,
         `--metafile=${metafile}`,
         `--outfile=${output}`,
       ],
@@ -1788,8 +1878,8 @@ for (const feature of selectedFeatures) {
           ? "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md"
           : feature.id === "noodle"
             ? "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
-            : feature.id === "slurp"
-              ? "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp/README.md"
+            : feature.id === "slurp" || feature.id === "slurp2"
+              ? `https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/${feature.id}/README.md`
               : `https://github.com/Pasta-Devs/Marinara-Agents#${feature.id}`,
     });
   } finally {

@@ -202,10 +202,34 @@ const slurpOwnedSourcePaths = [
   "packages/server/src/services/slurp",
   "packages/server/src/services/storage/slurp.storage.ts",
 ];
-for (const relativePath of slurpOwnedSourcePaths) {
-  const packageOwnedPath = join(repoRoot, "packages/slurp/src/engine", relativePath);
-  if (!existsSync(packageOwnedPath)) {
-    throw new Error(`Slurp package source is missing: ${relativePath}`);
+// The remaster owns strictly more of the tree than the frozen legacy package does.
+const slurp2OwnedSourcePaths = [
+  ...slurpOwnedSourcePaths,
+  "packages/server/src/routes/slurp-messages.routes.ts",
+  "packages/server/src/services/storage/slurp-financial-queue.ts",
+  "packages/server/src/services/storage/slurp-host-tables.ts",
+  "packages/server/src/services/storage/slurp-messages.storage.ts",
+  "packages/server/src/services/storage/slurp-reply-queue.storage.ts",
+];
+for (const [packageId, ownedSourcePaths] of [
+  ["slurp", slurpOwnedSourcePaths],
+  ["slurp2", slurp2OwnedSourcePaths],
+]) {
+  for (const relativePath of ownedSourcePaths) {
+    const packageOwnedPath = join(repoRoot, `packages/${packageId}/src/engine`, relativePath);
+    if (!existsSync(packageOwnedPath)) {
+      throw new Error(`${packageId} package source is missing: ${relativePath}`);
+    }
+  }
+}
+
+// Hierarchical Maps and Long-Term Memory have always asserted this; Slurp never did, which is how
+// ten stale copies of package-owned files survived in sources/engine long after the split. A
+// captured copy is worse than dead weight now: the remaster's slurp2_* table names would become
+// build input for Noodle, and tests that read the snapshot would check the wrong tree.
+for (const relativePath of ["packages/server/src/db/schema/slurp.ts", ...slurp2OwnedSourcePaths]) {
+  if (existsSync(join(repoRoot, "sources/engine", relativePath))) {
+    throw new Error(`Slurp source must not be captured as generic Engine material: ${relativePath}`);
   }
 }
 
@@ -469,7 +493,7 @@ for (const entry of catalog.packages) {
       }
     }
   }
-  if (manifest.id === "slurp") {
+  if (manifest.id === "slurp" || manifest.id === "slurp2") {
     const expectedLocales = ["de", "ko", "pl"];
     const actualLocales = Object.keys(manifest.localizations ?? {}).sort();
     if (JSON.stringify(actualLocales) !== JSON.stringify(expectedLocales)) {
@@ -844,8 +868,8 @@ if (JSON.stringify(guidanceIds) !== JSON.stringify([...ids].sort())) {
 // Staging-only packages live in the preview overlay and are counted separately.
 const agentOnly = publishedCatalog.packages.filter((entry) => !entry.manifest.entrypoints.server).length;
 const features = publishedCatalog.packages.length - agentOnly;
-if (publishedCatalog.packages.length !== 36 || agentOnly !== 24 || features !== 12) {
-  throw new Error(`Expected 24 agents and 12 features, found ${agentOnly} and ${features}`);
+if (publishedCatalog.packages.length !== 37 || agentOnly !== 24 || features !== 13) {
+  throw new Error(`Expected 24 agents and 13 features, found ${agentOnly} and ${features}`);
 }
 console.log(`Catalog valid: ${publishedCatalog.packages.length} packages (${agentOnly} agents, ${features} features).`);
 if (uncataloguedIntegrity.checked.length > 0) {

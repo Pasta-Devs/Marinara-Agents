@@ -3,17 +3,20 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = join(import.meta.dirname, "..");
-const routes = readFileSync(join(root, "packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts"), "utf8");
+const routes = readFileSync(
+  join(root, "packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts"),
+  "utf8",
+);
 const storage = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
   "utf8",
 );
 const replyOperation = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-creator-reply.operation.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-creator-reply.operation.ts"),
   "utf8",
 );
 const home = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx"),
+  join(root, "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx"),
   "utf8",
 );
 
@@ -45,7 +48,13 @@ assert.match(storage, /viewerActorAccountId: string/u);
 assert.match(replyOperation, /viewerPersonaId: string;[\s\S]*?viewerActorAccountId: string/u);
 assert.match(home, /const viewerActorAccount =[\s\S]*?id: myCreatorProfile\.id/u);
 assert.match(home, /personaAccount: viewerActorAccount/u);
-assert.match(home, /<ViewerHub[\s\S]*?personaAccount=\{shellPersonaAccount\}/u);
+// The shell's persona switcher must show the raw persona account, while post cards act as the
+// persona's Creator profile. The shell prop moved into shellProps, so match it where it lives now.
+assert.match(
+  home,
+  /const shellProps = \{[\s\S]*?personaAccount: shellPersonaAccount/u,
+  "The shell must identify the viewer by their persona account, not their Creator actor",
+);
 assert.match(
   storage,
   /normalizeLegacyNoodlerToggleInteraction[\s\S]*?actorAccountId: input\.actorAccountId/u,

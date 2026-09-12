@@ -1,29 +1,32 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createSlurpActivationLifecycle } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-activation-lifecycle.ts";
-import { buildSlurpPostTimingContext } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-post-timing.ts";
-import { runSlurpAutoPostPollOperations } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-autopost-poll.ts";
-import { normalizeSlurpFanActivityRows } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-fan-activity-response.ts";
-import { hasSlurpCreatorPostingIntervalConflict } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-posting-interval.ts";
+import { createSlurpActivationLifecycle } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-activation-lifecycle.ts";
+import { buildSlurpPostTimingContext } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-post-timing.ts";
+import { runSlurpAutoPostPollOperations } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-autopost-poll.ts";
+import { normalizeSlurpFanActivityRows } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-fan-activity-response.ts";
+import { hasSlurpCreatorPostingIntervalConflict } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-posting-interval.ts";
 
-const storage = readFileSync("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
+const storage = readFileSync(
+  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
+  "utf8",
+);
 const refreshScheduler = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-refresh-scheduler.service.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-refresh-scheduler.service.ts",
   "utf8",
 );
-const hooks = readFileSync("packages/slurp/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");
-const routes = readFileSync("packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
+const hooks = readFileSync("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");
+const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
 const settingsUi = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx",
+  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx",
   "utf8",
 );
-const homeUi = readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
+const homeUi = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
 const onboardingUi = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx",
+  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx",
   "utf8",
 );
 const locale = JSON.parse(
-  readFileSync("packages/slurp/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
+  readFileSync("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
 ) as Record<string, string>;
 
 assert.match(
@@ -53,11 +56,19 @@ const viewerHook = hooks.slice(
 assert.match(viewerHook, /refetchInterval: enabled && personaId \? 30_000 : false/u);
 assert.match(hooks, /invalidateQueries\(\{ queryKey: noodleKeys\.viewer\(personaId\) \}\)/u);
 assert.match(storage, /autoPostGenerationMode: z\.enum\(\["pre_generate", "on_demand"\]\)/u);
-assert.match(storage, /autoPostGenerationMode: "pre_generate"/u);
+assert.match(
+  storage,
+  /autoPostGenerationMode: "on_demand"/u,
+  "new Slurp installs must generate automatic posts on demand",
+);
 assert.match(storage, /state: "scheduled"/u);
-assert.match(storage, /ELAPSED_PREPARED_SLOT_MS = 60 \* 60 \* 1000/u);
 assert.match(storage, /ROLLING_DAY_MS = 24 \* 60 \* 60 \* 1000/u);
-assert.match(storage, /Date\.parse\(item\.publishAt\) < at\.getTime\(\) - ELAPSED_PREPARED_SLOT_MS/u);
+// The grace on a late slot is one posting interval, asserted in full further down. It was a fixed
+// hour, which is why this used to pin a constant here.
+assert.match(
+  storage,
+  /Date\.parse\(item\.publishAt\) < at\.getTime\(\) - elapsedPreparedSlotMs\(settings\.postsPerDay\)/u,
+);
 assert.match(storage, /slurpCreatorPostingIntervalMs\(settings\.postsPerDay\)/u);
 assert.match(storage, /hasSlurpCreatorPostingIntervalConflict\(activityTimes, publishMs, settings\.postsPerDay\)/u);
 assert.match(
@@ -69,6 +80,102 @@ const candidateAt = Date.parse("2026-08-27T12:00:00.000Z");
 assert.equal(hasSlurpCreatorPostingIntervalConflict([candidateAt - postingInterval], candidateAt, 8), false);
 assert.equal(hasSlurpCreatorPostingIntervalConflict([candidateAt + postingInterval * 2], candidateAt, 8), false);
 assert.equal(hasSlurpCreatorPostingIntervalConflict([candidateAt - postingInterval + 1], candidateAt, 8), true);
+
+// ── postsPerDay means posts per day ─────────────────────────────────────────
+// The reserve's coverage test and the per-creator spacing rule must use the SAME interval. They
+// did not: coverage used half an interval, so a candidate half an interval after an existing slot
+// read as uncovered, and with a spare Creator to hand the per-creator rule let it through. The
+// reserve laid down twice the requested slots, `reconcileNoodlerPreparedPosts` capped future slots
+// back to `postsPerDay` and discarded the rest, and the rolling daily attempt budget — also
+// `postsPerDay` — ran out halfway through the day. A production install showed the result: slot
+// gaps of 30 minutes for a requested 24 a day, and 100 discarded rows against 42 published.
+const reserve = readFileSync(
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-reserve.operation.ts",
+  "utf8",
+);
+assert.match(
+  reserve,
+  /Math\.abs\(Date\.parse\(existing\) - Date\.parse\(candidate\)\) < DAY_MS \/ settings\.postsPerDay,/u,
+  "reserve slot coverage must span a whole posting interval, not half of one",
+);
+assert.doesNotMatch(
+  reserve,
+  /DAY_MS \/ settings\.postsPerDay \/ 2/u,
+  "the half-interval coverage test is what doubled the daily post count",
+);
+
+// Drive the actual selection rules over a simulated day. Three or more Creators is the case that
+// broke: with only one or two, the per-creator rule masked the disagreement.
+const DAY_MS_TEST = 24 * 60 * 60 * 1000;
+function slotsPlacedInADay(postsPerDay: number, creators: number): number {
+  const interval = DAY_MS_TEST / postsPerDay;
+  const ids = Array.from({ length: creators }, (_, index) => `c${index + 1}`);
+  const placed: Array<{ at: number; creator: string }> = [];
+  for (let poll = 0; poll < 24 * 60; poll += 1) {
+    const now = poll * 60_000;
+    const live = placed.filter((slot) => slot.at > now - interval);
+    const candidate = Array.from({ length: postsPerDay }, (_, i) => now + interval * (i + 1)).find(
+      (time) => !live.some((slot) => Math.abs(slot.at - time) < interval),
+    );
+    if (candidate === undefined) continue;
+    const eligible = ids.filter(
+      (id) =>
+        !hasSlurpCreatorPostingIntervalConflict(
+          live.filter((slot) => slot.creator === id).map((slot) => slot.at),
+          candidate,
+          postsPerDay,
+        ),
+    );
+    if (eligible.length === 0) continue;
+    placed.push({ at: candidate, creator: eligible[0]! });
+  }
+  // Slots laid down for the first full day after the run started.
+  return placed.filter((slot) => slot.at <= DAY_MS_TEST).length;
+}
+for (const postsPerDay of [4, 8, 24]) {
+  for (const creators of [1, 3, 6, 12]) {
+    const placed = slotsPlacedInADay(postsPerDay, creators);
+    assert.ok(
+      placed <= postsPerDay,
+      `postsPerDay=${postsPerDay} with ${creators} creators placed ${placed} slots in a day`,
+    );
+  }
+}
+
+// The shipped presets document themselves as a ceiling ("at most four posts a day"), and the
+// settings ceiling has to be able to express the rate the doubling used to produce by accident.
+assert.match(storage, /postsPerDay: z\.number\(\)\.int\(\)\.min\(1\)\.max\(96\),/u);
+
+// ── The grace on a late slot tracks the pace ────────────────────────────────
+// Both windows were a hardcoded hour that never learned about `postsPerDay`. At 24 posts a day the
+// grace equalled the spacing, so a slot had one interval to survive any hiccup; at 4 posts a day a
+// slot missed by 61 minutes was destroyed with its replacement still five hours out. Bunching is
+// guarded separately, by refusing to publish within one interval of the creator's last post.
+assert.doesNotMatch(
+  storage,
+  /ELAPSED_PREPARED_SLOT_MS/u,
+  "the fixed one-hour grace must not come back; it belongs to the posting interval",
+);
+assert.match(
+  storage,
+  /const elapsedPreparedSlotMs = \(postsPerDay: number\) => slurpCreatorPostingIntervalMs\(postsPerDay\);/u,
+);
+assert.match(storage, /elapsedPreparedSlotMs\(settings\.postsPerDay\)/u);
+assert.doesNotMatch(reserve, /DAY_MS \/ 24/u, "the reserve's working-set window was the same fixed hour");
+assert.match(reserve, /Date\.parse\(item\.publishAt\) > at\.getTime\(\) - DAY_MS \/ settings\.postsPerDay,/u);
+// The anti-bunching guard is what actually stops a late post landing on top of the next one, so it
+// has to stay for the widened grace to be safe.
+assert.match(
+  storage,
+  /latestCreatorPost\.createdAt\) \+ slurpCreatorPostingIntervalMs\(settings\.postsPerDay\) > at\.getTime\(\)/u,
+);
+// A slot is publishable right up to its interval and retired past it, at every pace.
+for (const postsPerDay of [4, 24, 96]) {
+  const interval = 86_400_000 / postsPerDay;
+  assert.equal(hasSlurpCreatorPostingIntervalConflict([0], interval - 1, postsPerDay), true);
+  assert.equal(hasSlurpCreatorPostingIntervalConflict([0], interval, postsPerDay), false);
+}
+assert.match(settingsUi, /value=\{settings\.postsPerDay\}\s*\n\s*min=\{1\}\s*\n\s*max=\{96\}/u);
 assert.match(routes, /app\.patch\("\/noodler\/auto-post\/schedule\/:slotId"/u);
 assert.match(storage, /item\.id !== current\.id && \(item\.state === "scheduled" \|\| item\.state === "prepared"\)/u);
 assert.match(storage, /hasSlurpCreatorPostingIntervalConflict\(activityTimes, publishMs, settings\.postsPerDay\)/u);

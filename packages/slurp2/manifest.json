@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "id": "slurp2",
+  "name": "Slurp Remastered",
+  "version": "0.0.1",
+  "description": "The Slurp remaster. It installs beside Slurp Legacy and keeps its own separate data: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp Remastered.",
+  "localizations": {
+    "de": {
+      "name": "Slurp Remastered",
+      "description": "Die Neufassung von Slurp. Sie wird neben Slurp Legacy installiert und behaelt eigene, getrennte Daten: Erstelle ein lokales Creator-Profil aus einem Engine-Charakter oder einer Engine-Persona, veroeffentliche oeffentliche oder gesperrte Beitraege und simuliere Abonnements und Publikumsaktivitaet.",
+      "homeBrowserTab": {
+        "label": "Slurp.",
+        "ariaLabel": "Slurp. oeffnen"
+      }
+    },
+    "ko": {
+      "name": "Slurp Remastered",
+      "description": "Slurp의 리메이스터입니다. Slurp Legacy와 함께 설치되며 데이터를 따로 보관합니다. Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다.",
+      "homeBrowserTab": {
+        "label": "Slurp.",
+        "ariaLabel": "Slurp. 열기"
+      }
+    },
+    "pl": {
+      "name": "Slurp Remastered",
+      "description": "Odnowiona wersja Slurp. Instaluje sie obok Slurp Legacy i przechowuje wlasne, oddzielne dane: utworz lokalny profil tworcy z postaci silnika lub persony silnika, publikuj publiczne lub zablokowane posty i symuluj subskrypcje oraz aktywnosc publicznosci.",
+      "homeBrowserTab": {
+        "label": "Slurp.",
+        "ariaLabel": "Otworz Slurp."
+      }
+    }
+  },
+  "engine": {
+    "min": "2.4.5",
+    "maxExclusive": "4.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "server": "server.mjs",
+    "client": "client.js"
+  },
+  "contributions": {
+    "slots": [
+      "home-browser-tab"
+    ],
+    "homeBrowserTab": {
+      "label": "Slurp.",
+      "ariaLabel": "Open Slurp.",
+      "iconPaths": [
+        "slurp2-logo.png"
+      ]
+    }
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "8f6dffb7ebb68257303c3906fd283d4fad8d558c79a272c83eadda0d8328cca3",
+      "bytes": 685
+    },
+    {
+      "path": "server.mjs",
+      "sha256": "23365443c0c34968946d868d0f4370a2980a9af031c356c995bc01e43a274ed9",
+      "bytes": 2049944
+    },
+    {
+      "path": "client.js",
+      "sha256": "9cbd51030c8540f424c86d0127942a9de430107c869f5e88c93a9712e573aee6",
+      "bytes": 3003918
+    },
+    {
+      "path": "slurp2-logo.png",
+      "sha256": "722def3c01846167c9979b0408f380f923c520e7515aed1584de0d879131a75b",
+      "bytes": 31677
+    },
+    {
+      "path": "slurp2agent.png",
+      "sha256": "47805313b5ec8dbc608fec82c4d51f1f82020afe4f286a04919b59cc8ef06f37",
+      "bytes": 120424
+    }
+  ],
+  "permissions": [
+    "chat-read",
+    "network",
+    "routes",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": true
+}

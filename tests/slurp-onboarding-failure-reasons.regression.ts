@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { requireModelAnswer } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-model-answer";
+import { requireModelAnswer } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-model-answer";
 
 const root = join(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
-const slurpServices = "packages/slurp/src/engine/packages/server/src/services/slurp/";
+const slurpServices = "packages/slurp2/src/engine/packages/server/src/services/slurp/";
 const draft = read(`${slurpServices}slurp-stage-profile-draft.service.ts`);
 const parsers = Object.fromEntries(
   [
@@ -16,11 +16,17 @@ const parsers = Object.fromEntries(
     "slurp-ambient-profile-generation.service.ts",
     "slurp-invited-post-draft.service.ts",
     "slurp-public-profiles.service.ts",
+    "slurp-garnish-generation.service.ts",
+    "slurp-message-generation.service.ts",
+    "slurp-pending-text.service.ts",
+    "slurp-reaction-bank.operation.ts",
   ].map((file) => [file, read(`${slurpServices}${file}`)] as const),
 );
-const routes = read("packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts");
-const panel = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx");
-const en = JSON.parse(read("packages/slurp/src/engine/packages/client/src/localization/locales/en.json")) as Record<
+const routes = read("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
+const queue = read("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-first-post-queue.service.ts");
+const schema = read("packages/slurp2/src/engine/packages/server/src/db/schema/slurp.ts");
+const panel = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx");
+const en = JSON.parse(read("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json")) as Record<
   string,
   string
 >;
@@ -115,6 +121,11 @@ assert.match(
   "Nothing created must not report the wizard as complete",
 );
 assert.match(panel, /\(creationFailed \|\| completion === "creationFailed"\)/u, "A setup failure must offer a retry");
+assert.match(routes, /first-posts\/enqueue/u, "Onboarding must enqueue first-post work");
+assert.match(routes, /first-posts\/status/u, "Onboarding must expose first-post status polling");
+assert.match(queue, /const MAX_ATTEMPTS = 3/u, "First-post jobs must have bounded retries");
+assert.match(queue, /status: retry \? "queued" : "failed"/u, "Temporary first-post failures must return to the queue");
+assert.match(schema, /slurp2_first_post_jobs/u, "First-post jobs must survive the request that created them");
 for (const key of [
   "ui.noodle.noodlerwizard.completion.creationFailed.title",
   "ui.noodle.noodlerwizard.completion.creationFailed.detail",

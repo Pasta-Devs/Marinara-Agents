@@ -1,0 +1,44 @@
+import type { GarnishAd } from "./garnish-ads.types.js";
+
+/** Shipped base pool. Each host falls back to this when nothing else exists. */
+export const GARNISH_BASE_ADS: readonly GarnishAd[] = [
+  {
+    id: "nightjar-midnight-blend",
+    platform: "slurp",
+    kind: "inline",
+    contentRating: "tame",
+    origin: "builtin",
+    brand: "Nightjar Coffee",
+    product: "Midnight Blend",
+    copy: "A bitter little ritual for people who refuse to sleep on schedule.",
+    categories: ["coffee", "late-night", "work"],
+    contextTags: ["night", "rain", "working"],
+    actionLabel: "View blend",
+  },
+  {
+    id: "moonmilk-afterglow",
+    platform: "slurp",
+    kind: "inline",
+    contentRating: "tame",
+    origin: "builtin",
+    brand: "Moonmilk Beauty",
+    product: "Afterglow Night Set",
+    copy: "Soft floral light for routines that happen long after midnight.",
+    categories: ["beauty", "luxury", "night"],
+    contextTags: ["night", "home", "date"],
+    actionLabel: "View set",
+  },
+  {
+    id: "black-halo-private-rooms",
+    platform: "slurp",
+    kind: "inline",
+    contentRating: "tame",
+    origin: "builtin",
+    brand: "Black Halo Rooms",
+    product: "After-hours private rooms",
+    copy: "The city is loud. Your reservation does not have to be.",
+    categories: ["nightlife", "private", "luxury"],
+    contextTags: ["night", "club", "city"],
+    actionLabel: "See rooms",
+  },
+];
