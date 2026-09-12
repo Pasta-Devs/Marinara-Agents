@@ -1,0 +1,226 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import {
+  applyStipend,
+  credit,
+  earn,
+  emptySlurpWallet,
+  readSlurpWallet,
+  renewSubscriptions,
+  SLURP_DEFAULT_ECONOMY,
+  spend,
+  subscriptionPaidThrough,
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-wallet.ts";
+const storageSource = readFileSync(
+  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
+  "utf8",
+);
+assert.match(
+  storageSource,
+  /slurpSettingsSchema = z\.object\(\{[\s\S]*?walletDayStartHour: z\.number\(\)\.int\(\)\.min\(0\)\.max\(23\)/u,
+  "the wallet day-start default must have a schema entry before settings normalization indexes it",
+);
+
+const day1 = new Date("2026-01-01T10:00:00.000Z");
+const day2 = new Date("2026-01-02T10:00:00.000Z");
+
+// A reused profile-tip key is idempotent only for the same payment parameters.
+const operationId = "profile-tip:wallet-regression";
+const binding = { viewerAccountId: "viewer-a", creatorAccountId: "creator-a" };
+const charged = spend(emptySlurpWallet(), "tip", 10, day1, "creator", operationId, binding);
+assert.ok(charged);
+assert.equal(spend(charged, "tip", 10, day1, "creator", operationId, binding), charged);
+assert.equal(spend(charged, "tip", 11, day1, "creator", operationId, binding), null);
+assert.equal(
+  spend(charged, "tip", 10, day1, "creator", operationId, { ...binding, viewerAccountId: "viewer-b" }),
+  null,
+);
+assert.equal(spend(charged, "unlock", 10, day1, "creator", operationId, binding), null);
+assert.equal(
+  spend(charged, "tip", 10, day1, "creator", operationId, { ...binding, creatorAccountId: "creator-b" }),
+  null,
+);
+
+// A wallet with less than the floor is topped up to it, and never past it.
+const poor = { ...emptySlurpWallet(), coins: 5 };
+const stipended = applyStipend(poor, day1);
+assert.equal(stipended.coins, SLURP_DEFAULT_ECONOMY.stipendFloor);
+assert.equal(stipended.ledger[0]?.kind, "stipend");
+
+// The stipend pays once per day, and pays nothing to a wallet already above the floor.
+assert.equal(applyStipend(stipended, day1).coins, SLURP_DEFAULT_ECONOMY.stipendFloor);
+const rich = applyStipend({ ...emptySlurpWallet(), coins: 5_000 }, day1);
+assert.equal(rich.coins, 5_000, "the stipend tops up to the floor, it never adds to a full wallet");
+assert.equal(rich.ledger.length, 0, "a stipend that paid nothing writes no ledger line");
+
+// Earning is capped per day, and the cap resets when the day rolls over.
+let earner = { ...emptySlurpWallet(), coins: 0, stipendOn: "2026-01-01" };
+for (let index = 0; index < 100; index += 1) earner = earn(earner, "ad", day1);
+assert.equal(earner.coins, SLURP_DEFAULT_ECONOMY.adDailyCap, "ad earning stops at the daily cap");
+assert.equal(earn(earner, "engagement", day1).coins, SLURP_DEFAULT_ECONOMY.adDailyCap + 1, "caps are per kind");
+assert.equal(earn(earner, "ad", day2).coins, SLURP_DEFAULT_ECONOMY.adDailyCap + SLURP_DEFAULT_ECONOMY.adReward);
+
+// Spending refuses rather than going negative. This is the whole point of a real balance.
+const spender = { ...emptySlurpWallet(), coins: 10 };
+assert.equal(spend(spender, "unlock", 20, day1), null, "an unspendable balance returns null");
+assert.equal(spend(spender, "unlock", 10, day1)?.coins, 0, "spending the exact balance is allowed");
+assert.equal(spend(spender, "unlock", 3, day1)?.ledger[0]?.amount, -3, "spends are recorded as negative");
+
+// A due subscription renews and charges; an unaffordable one lapses and is dropped.
+const subscribed = {
+  ...emptySlurpWallet(),
+  coins: 20,
+  subscriptions: {
+    affordable: { paidThroughAt: "2025-12-01T00:00:00.000Z", price: 12 },
+    unaffordable: { paidThroughAt: "2025-12-01T00:00:00.000Z", price: 500 },
+  },
+};
+const renewal = renewSubscriptions(subscribed, day1);
+assert.deepEqual(
+  renewal.renewed.map((entry) => entry.creatorAccountId),
+  ["affordable"],
+);
+assert.deepEqual(renewal.lapsed, ["unaffordable"]);
+assert.equal(renewal.wallet.coins, 8);
+assert.equal(renewal.wallet.subscriptions.unaffordable, undefined, "a lapsed subscription is dropped");
+assert.equal(renewal.wallet.subscriptions.affordable?.paidThroughAt, subscriptionPaidThrough(day1));
+
+// A subscription still inside its paid period is not charged again.
+assert.equal(renewSubscriptions(renewal.wallet, day1).wallet, renewal.wallet);
+
+// One period is a week.
+assert.equal(Date.parse(subscriptionPaidThrough(day1)) - day1.getTime(), 7 * 86_400_000);
+
+// Credits ignore nonsense amounts rather than corrupting the balance.
+assert.equal(credit(spender, "topUp", 0, day1), spender);
+assert.equal(credit(spender, "topUp", -5, day1), spender);
+assert.equal(credit(spender, "topUp", 1.5, day1), spender);
+
+// A durable refund ID credits once, while ordinary credits without an ID remain additive.
+const refundedOnce = credit(spender, "income", 7, day1, "refund", "refund:request-1");
+const refundedTwice = credit(refundedOnce, "income", 7, day1, "refund", "refund:request-1");
+assert.equal(refundedTwice, refundedOnce);
+assert.equal(refundedTwice.coins, spender.coins + 7);
+assert.equal(refundedTwice.ledger.filter((entry) => entry.id === "refund:request-1").length, 1);
+const unkeyedCreditOnce = credit(spender, "income", 7, day1, "refund");
+const unkeyedCreditTwice = credit(unkeyedCreditOnce, "income", 7, day1, "refund");
+assert.equal(unkeyedCreditTwice.coins, spender.coins + 14);
+assert.equal(unkeyedCreditTwice.ledger.length, unkeyedCreditOnce.ledger.length + 1);
+
+// Durable receipts outlive the 60-line display feed. Old payment IDs must not become payable or
+// refundable again merely because newer activity pushed their visible ledger lines out.
+let oldSpend = spend({ ...emptySlurpWallet(), coins: 1_000 }, "tip", 10, day1, "creator", "old-spend", binding)!;
+for (let index = 0; index < 65; index += 1)
+  oldSpend = credit(oldSpend, "topUp", 1, day1, undefined, `new-credit:${index}`);
+assert.equal(
+  oldSpend.ledger.some((entry) => entry.id === "old-spend"),
+  false,
+);
+assert.equal(spend(oldSpend, "tip", 10, day1, "creator", "old-spend", binding), oldSpend);
+assert.equal(spend(oldSpend, "tip", 11, day1, "creator", "old-spend", binding), null);
+
+let oldRefund = credit(spender, "income", 7, day1, "refund", "old-refund");
+for (let index = 0; index < 65; index += 1)
+  oldRefund = credit(oldRefund, "topUp", 1, day1, undefined, `later-credit:${index}`);
+assert.equal(
+  oldRefund.ledger.some((entry) => entry.id === "old-refund"),
+  false,
+);
+assert.equal(credit(oldRefund, "income", 7, day1, "refund", "old-refund"), oldRefund);
+assert.ok(readSlurpWallet(JSON.stringify(oldRefund)).receipts["old-refund"]);
+
+// Corrupt or hand-edited stored state falls back instead of throwing.
+assert.equal(readSlurpWallet("not json").coins, SLURP_DEFAULT_ECONOMY.startingCoins);
+assert.equal(readSlurpWallet('{"coins":-4}').coins, SLURP_DEFAULT_ECONOMY.startingCoins);
+assert.deepEqual(readSlurpWallet('{"subscriptions":{"a":{"price":"free"}}}').subscriptions, {});
+
+// The storage layer must actually gate on the wallet, not just carry it.
+const storage = readFileSync(
+  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
+  "utf8",
+);
+assert.match(storage, /spend\(wallet, "unlock", price/u, "unlocking must debit the wallet");
+assert.match(storage, /spend\(previousWallet, "subscribe", price/u, "subscribing must debit the wallet");
+assert.doesNotMatch(storage, /viewerSettingsUpdateQueue/u, "viewer settings must use the shared financial queue");
+assert.match(
+  storage,
+  /existingPaymentIsValid[\s\S]*?if \(existing\[0\] && existingPaymentIsValid\)/u,
+  "an existing subscription row must be checked against its wallet payment",
+);
+assert.match(
+  storage,
+  /if \(!charged\) \{\s*await this\.unsubscribe\(viewerAccountId, creatorAccountId, true\)/u,
+  "an unaffordable inconsistent subscription must lapse without waiting on the queue again",
+);
+assert.match(storage, /creditCreatorIncome/u, "a paid creator's owner must be credited");
+assert.match(storage, /const restoreWallet = async/u, "financial rollback must restore the wallet representations");
+assert.match(
+  storage,
+  /wallet: \{ coins: walletAfterCharge\.coins \}[\s\S]*?followingAccountIds/u,
+  "the final subscription settings write preserves charged wallet coins",
+);
+assert.match(
+  storage,
+  /await settingsStore\.set\(walletKey, JSON\.stringify\(wallet\)\);[\s\S]*?await settingsStore\.set\(viewerSettingsKey/u,
+  "wallet writes must update the canonical key and mirrored settings key",
+);
+assert.match(storage, /await writeWallet\(viewerAccountId, \{ \.\.\.wallet, subscriptions \}\)/u);
+// Coins are on out of the box as of 1.1.3: the balance is a gameplay element, not an opt-in.
+// An install that already stored `false` keeps it, because `normalizeSlurpSettings` only falls
+// back to the default for a key it has no stored value for.
+assert.match(storage, /walletEnabled: true/u, "the economy is on by default");
+assert.match(
+  storage,
+  /const renewal = renewSubscriptions\(stored, at\)/u,
+  "wallet reads must still renew subscriptions",
+);
+assert.match(
+  storage,
+  /async claimWalletRefill\(viewerAccountId: string\)/u,
+  "daily refill must remain an explicit action",
+);
+
+// Every other wallet field falls back on bad input; the ledger used to be cast straight from
+// JSON, so a hand-edited or imported blob put entries the wallet page reads unconditionally
+// (kind, amount, at) in front of the UI. Bad lines are dropped, good ones survive.
+{
+  const ledger = JSON.stringify({
+    coins: 10,
+    ledger: [
+      { kind: "tip", amount: -5, at: "2026-01-02T03:04:05.000Z", note: "@someone" },
+      { kind: "not-a-kind", amount: -5, at: "2026-01-02T03:04:05.000Z" },
+      { kind: "tip", amount: "five", at: "2026-01-02T03:04:05.000Z" },
+      { kind: "tip", amount: -5, at: "whenever" },
+      { kind: "tip", amount: -5 },
+      null,
+      "nope",
+      { kind: "stipend", amount: 60, at: "2026-01-02T03:04:05.000Z", note: 7 },
+    ],
+  });
+  const wallet = readSlurpWallet(ledger);
+  assert.deepEqual(
+    wallet.ledger.map((entry) => entry.kind),
+    ["tip", "stipend"],
+    "only renderable ledger lines survive a corrupt blob",
+  );
+  assert.equal(wallet.ledger[0]?.note, "@someone");
+  assert.equal(wallet.ledger[1]?.note, undefined, "a non-string note is dropped rather than passed through");
+  assert.equal(wallet.coins, 10, "a bad ledger must not cost the balance");
+  assert.deepEqual(readSlurpWallet('{"ledger":"nope"}').ledger, []);
+}
+
+// The direct-message scheduler must back off like the auto-post and audience schedulers, or a
+// failing connection is retried once a minute forever.
+{
+  const scheduler = readFileSync(
+    "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message-scheduler.service.ts",
+    "utf8",
+  );
+  assert.match(scheduler, /schedule\(slurpPollBackoffMs\(POLL_MS, consecutiveFailures\)\)/u);
+  assert.match(scheduler, /consecutiveFailures = 0;/u);
+  // `replyToSlurpMessage` reports a failure instead of rejecting, so the poll has to inspect the
+  // outcome. Without this the two assertions above passed while the backoff was dead code.
+  assert.match(scheduler, /if \(outcome\.status === "failed"\) failed = true;/u);
+}
+
+console.log("slurp-wallet regression passed");

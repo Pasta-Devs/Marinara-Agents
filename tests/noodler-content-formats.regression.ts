@@ -22,22 +22,22 @@ assert.match(schema, /Teaser posts require a locked follow-up/u);
 assert.match(schema, /Only teaser posts can link a locked follow-up/u);
 
 const generation = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
   "utf8",
 );
 const operations = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-post.operation.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-post.operation.ts",
   "utf8",
 );
 const reserve = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-reserve.operation.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-reserve.operation.ts",
   "utf8",
 );
 const responseFormat = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-response-format.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-response-format.ts",
   "utf8",
 );
-const composer = readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
+const composer = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
 
 assert.match(generation, /NOODLER_FORMAT_PROMPTS\[format\]/u);
 // Every generated NoodleR post carries a title, whatever the format.
@@ -48,16 +48,38 @@ assert.match(generation, /imagePrompt is required/u);
 assert.match(responseFormat, /minLength: 1, maxLength: NOODLER_TITLE_HARD_MAX_LENGTH/u);
 assert.match(responseFormat, /Math\.min\(contentMaxLength, NOODLE_POST_HARD_MAX_LENGTH\)/u);
 assert.match(generation, /Hard limit 300 characters/u);
-assert.match(generation, /caption: 300,/u);
+// The caps moved to a leaf module so the storage layer can hold an edit to the post's own format
+// without importing the generation service (which imports storage back).
+const contentFormat = readFileSync(
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-content-format.ts",
+  "utf8",
+);
+const storage = readFileSync(
+  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
+  "utf8",
+);
+assert.match(contentFormat, /caption: 300,/u);
+assert.match(storage, /slice\(0, noodlerContentLimitFor\(nextMetadata\)\)/u, "edits honour the post's own cap");
+assert.doesNotMatch(storage, /trim\(\)\.slice\(0, 4000\)/u, "no flat 4000-character truncation");
 assert.match(generation, /NOODLER_FORMAT_MAX_LENGTH\[format\]/u);
 assert.match(generation, /noodlerContentFormat: input\.request\.format \?\? "caption"/u);
-assert.match(generation, /noodlerLockedFollowUpPostId/u);
 assert.match(operations, /format: "caption",\s+access: "locked"/u);
-assert.match(reserve, /format: "caption",\s+access: "locked"/u);
+// The reserve path deliberately passes no format: pinning `caption` there defeated the variation
+// rotation, so an automatic post was always a caption.
+assert.match(reserve, /access: "locked"/u);
+assert.doesNotMatch(reserve, /format: "caption"/u, "automatic posts must not pin a format");
 // The manual composer no longer makes the human pick a format or create locked
-// follow-ups; it just derives the tag from title/length. Teaser/follow-up is not
-// a user-facing NoodleR feature.
+// follow-ups; it just derives the tag from title/length. `teaser` and locked follow-ups are gone
+// entirely: the format told the model to leave a hook to a linked locked post that no route or UI
+// could ever create, so every teaser promised content that did not exist.
 assert.match(composer, /const derivedFormat = \(\): NoodlerContentFormat =>/u);
 assert.doesNotMatch(composer, /teaser|followUp|lockedFollowUp/u);
+for (const [label, source] of [
+  ["generation service", generation],
+  ["post operation", operations],
+] as const) {
+  assert.doesNotMatch(source, /lockedFollowUp/u, `${label} must not retain locked follow-up code`);
+}
+assert.doesNotMatch(generation, /"teaser"/u, "the teaser format is removed from the enum");
 
 console.log("NoodleR content format regressions passed.");

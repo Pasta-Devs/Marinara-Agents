@@ -1,0 +1,565 @@
+// ──────────────────────────────────────────────
+// Schema: Slurp creator social media
+// ──────────────────────────────────────────────
+import { fileTable, text } from "../file-schema.js";
+
+export const noodleAccounts = fileTable(
+  "slurp2_accounts",
+  {
+    id: text("id").primaryKey(),
+    kind: text("kind").notNull(),
+    entityId: text("entity_id").notNull(),
+    handle: text("handle").notNull(),
+    displayName: text("display_name").notNull(),
+    bio: text("bio").notNull().default(""),
+    avatarUrl: text("avatar_url"),
+    invited: text("invited").notNull().default("false"),
+    settings: text("settings").notNull().default("{}"),
+    platform: text("platform").notNull().default("slurp"),
+    sourceKind: text("source_kind"),
+    sourceEntityId: text("source_entity_id"),
+    slurpSourceAccountId: text("slurp_source_account_id"),
+    // Rollback-only mirrors of platform/slurpSourceAccountId. Nothing reads these; they exist so a
+    // build from before the rename can still tell a NoodleR profile from a Noodle account. Without
+    // them an older build falls back to the column default and puts NoodleR content on the public
+    // timeline. Safe to drop once no supported version reads `visibility`.
+    visibility: text("visibility").notNull().default("public"),
+    publicAccountId: text("slurp_public_account_id"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  {
+    uniqueBy: [
+      {
+        keys: ["sourceKind", "sourceEntityId"],
+        when: (row) => row.platform === "slurp" && row.sourceKind != null && row.sourceEntityId != null,
+      },
+      { keys: ["handle"], when: (row) => row.platform === "slurp" },
+    ],
+  },
+);
+
+export const noodlePosts = fileTable("slurp2_posts", {
+  id: text("id").primaryKey(),
+  authorAccountId: text("author_account_id").notNull(),
+  title: text("title"),
+  content: text("content").notNull().default(""),
+  imageUrl: text("image_url"),
+  imagePrompt: text("image_prompt"),
+  imageClaimToken: text("image_claim_token"),
+  imageClaimLeaseUntil: text("image_claim_lease_until"),
+  parentPostId: text("parent_post_id"),
+  quotePostId: text("quote_post_id"),
+  source: text("source").notNull().default("manual"),
+  /** The project this post was published into, when one claimed it. See `slurp-project.ts`. */
+  projectId: text("project_id"),
+  /** The chapter the project was on when this post was written. Kept so editing the project cannot rewrite published history. */
+  projectChapter: text("project_chapter"),
+  access: text("access").notNull().default("public"),
+  metadata: text("metadata").notNull().default("{}"),
+  authorSnapshot: text("author_snapshot").notNull().default("{}"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const noodleAccountSubscriptions = fileTable(
+  "slurp2_account_subscriptions",
+  {
+    id: text("id").primaryKey(),
+    viewerAccountId: text("viewer_account_id").notNull(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["viewerAccountId", "creatorAccountId"] }] },
+);
+
+export const noodlePostUnlocks = fileTable(
+  "slurp2_post_unlocks",
+  {
+    id: text("id").primaryKey(),
+    viewerAccountId: text("viewer_account_id").notNull(),
+    postId: text("post_id").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["viewerAccountId", "postId"] }] },
+);
+
+export const noodleInteractions = fileTable(
+  "slurp2_interactions",
+  {
+    id: text("id").primaryKey(),
+    postId: text("post_id").notNull(),
+    parentInteractionId: text("parent_interaction_id"),
+    actorAccountId: text("actor_account_id").notNull(),
+    type: text("type").notNull(),
+    content: text("content"),
+    imageUrl: text("image_url"),
+    actorSnapshot: text("actor_snapshot").notNull().default("{}"),
+    createdAt: text("created_at").notNull(),
+  },
+  {
+    uniqueBy: [
+      {
+        keys: ["postId", "actorAccountId", "type", "parentInteractionId"],
+        when: (row) => row.type === "like" || row.type === "repost" || row.type === "vote" || row.type === "story_view",
+      },
+    ],
+  },
+);
+
+export const noodlerCreatorReplyClaims = fileTable(
+  "slurp2_creator_reply_claims",
+  {
+    id: text("id").primaryKey(),
+    postId: text("post_id").notNull(),
+    parentInteractionId: text("parent_interaction_id").notNull(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    replyInteractionId: text("reply_interaction_id"),
+    claimedAt: text("claimed_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["parentInteractionId", "creatorAccountId"] }] },
+);
+
+export const noodlerPreparedPosts = fileTable(
+  "slurp2_prepared_posts",
+  {
+    id: text("id").primaryKey(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    generatedAt: text("generated_at").notNull(),
+    publishAt: text("publish_at").notNull(),
+    payload: text("payload").notNull(),
+    policyFingerprint: text("policy_fingerprint").notNull(),
+    state: text("state").notNull().default("prepared"),
+    publishedPostId: text("published_post_id"),
+    imageState: text("image_state").notNull().default("none"),
+    imageClaimToken: text("image_claim_token"),
+    imageClaimLeaseUntil: text("image_claim_lease_until"),
+    updatedAt: text("updated_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["publishedPostId"], when: (row) => row.publishedPostId != null }] },
+);
+
+export const noodlerAutomaticAttempts = fileTable("slurp2_automatic_attempts", {
+  id: text("id").primaryKey(),
+  kind: text("kind").notNull(),
+  claimedAt: text("claimed_at").notNull(),
+  outcome: text("outcome").notNull().default("claimed"),
+});
+
+export const noodlerReserveState = fileTable("slurp2_reserve_state", {
+  id: text("id").primaryKey(),
+  lastObservedBudgetTime: text("last_observed_budget_time").notNull(),
+  preparationNotBefore: text("preparation_not_before").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const noodlerFanActivityState = fileTable("slurp2_fan_activity_state", {
+  id: text("id").primaryKey(),
+  plan: text("plan").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const noodleActivityDigests = fileTable("slurp2_activity_digests", {
+  id: text("id").primaryKey(),
+  accountIds: text("account_ids").notNull().default("[]"),
+  content: text("content").notNull().default(""),
+  sourceRunId: text("source_run_id"),
+  sourcePostId: text("source_post_id"),
+  sourceInteractionId: text("source_interaction_id"),
+  createdAt: text("created_at").notNull(),
+});
+
+export const noodleRefreshRuns = fileTable("slurp2_refresh_runs", {
+  id: text("id").primaryKey(),
+  status: text("status").notNull(),
+  activeAccountIds: text("active_account_ids").notNull().default("[]"),
+  prompt: text("prompt").notNull().default(""),
+  result: text("result"),
+  error: text("error"),
+  attempts: text("attempts").notNull().default("[]"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const noodlerFirstPostJobs = fileTable(
+  "slurp2_first_post_jobs",
+  {
+    id: text("id").primaryKey(),
+    executionId: text("execution_id").notNull(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    status: text("status").notNull().default("queued"),
+    attempts: text("attempts").notNull().default("0"),
+    nextAttemptAt: text("next_attempt_at").notNull(),
+    postId: text("post_id"),
+    error: text("error"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["executionId", "creatorAccountId"] }] },
+);
+
+// ──────────────────────────────────────────────
+// Direct messages
+// ──────────────────────────────────────────────
+
+/**
+ * One thread per viewer/creator pair.
+ *
+ * `state` is the gate: a viewer who does not clear the creator's DM policy lands in `request`
+ * and stays there until the creator accepts. Only `active` threads generate replies, so the
+ * gate is one column rather than a rule spread across every read path.
+ */
+export const slurpThreads = fileTable(
+  "slurp2_threads",
+  {
+    id: text("id").primaryKey(),
+    viewerAccountId: text("viewer_account_id").notNull(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    state: text("state").notNull().default("active"),
+    openedBy: text("opened_by").notNull().default("viewer"),
+    /** Coins paid to jump a `paid-request` gate, refunded in fiction when the creator accepts. */
+    requestFeePaid: text("request_fee_paid").notNull().default("0"),
+    lastMessageAt: text("last_message_at").notNull(),
+    lastMessagePreview: text("last_message_preview").notNull().default(""),
+    viewerUnread: text("viewer_unread").notNull().default("0"),
+    creatorUnread: text("creator_unread").notNull().default("0"),
+    /** Reply work is separate from whether the Creator has opened the thread. */
+    needsReply: text("needs_reply").notNull().default("false"),
+    /** Invalidates model work that started before a reset or terminal close. */
+    generationEpoch: text("generation_epoch").notNull().default("0"),
+    replyNotBeforeAt: text("reply_not_before_at"),
+    /** Cached rapport, recomputed on every send. Kept here so the inbox sorts without a scan. */
+    rapport: text("rapport").notNull().default("{}"),
+    /**
+     * How this conversation is going, from -100 to 100. See `slurp-mood.ts`.
+     *
+     * Rapport measures months and money and cannot move inside one chat, so nothing could express
+     * "she is annoyed with you right now". This is the fast layer that can.
+     */
+    mood: text("mood").notNull().default("0"),
+    moodUpdatedAt: text("mood_updated_at"),
+    /** While set, the creator has stepped away from this conversation and is not replying. */
+    coolUntil: text("cool_until"),
+    /**
+     * While set, Creator stays online for this conversation due to hot momentum.
+     *
+     * Active conversations extend availability: a Creator in the flow sticks around
+     * even if their schedule says they should be offline. Cleared when conversation
+     * goes cold or fan doesn't reply within inactivity threshold.
+     */
+    extendedOnlineUntil: text("extended_online_until"),
+    /**
+     * Scheduled follow-up messages from Creator (array).
+     *
+     * Allows multiple pending follow-ups for promises, task updates, recurring check-ins, etc.
+     * Each entry: { id, scheduledAt, type, reason, context, relatedNoteId?, sequenceNumber?, totalInSequence? }
+     *
+     * Types:
+     * - reminder: One-time reminder
+     * - promise_delivery: Fulfilling a promise (tip rewards, exclusive content)
+     * - task_update: Progress updates on commissions/tasks
+     * - check_in: Proactive check-in after conversation
+     * - recurring: Repeating updates (daily check-ins, workout logs, etc.)
+     */
+    scheduledFollowUps: text("scheduled_follow_ups").notNull().default("[]"),
+    /**
+     * When the pair last emptied this conversation.
+     *
+     * Commissions outlive a clear because coins moved, but they must not keep hanging in a chat
+     * the player just emptied. The timestamp is what lets the thread hide what predates it while
+     * the ledger keeps every row.
+     */
+    clearedAt: text("cleared_at"),
+    /** Per-fan Creator state, separate from global mood and lifetime rapport. */
+    threadState: text("thread_state").notNull().default("{}"),
+    /** Cool-off periods this thread has had. Two inside the strike window closes it for good. */
+    strikes: text("strikes").notNull().default("0"),
+    lastStrikeAt: text("last_strike_at"),
+    /** Working and long-term facts the creator has learned about this fan. See `slurp-thread-notes.ts`. */
+    notes: text("notes").notNull().default("[]"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["viewerAccountId", "creatorAccountId"] }] },
+);
+
+/** One durable Creator follow-up job. The thread JSON field remains a legacy import source only. */
+export const slurpFollowUps = fileTable(
+  "slurp2_follow_ups",
+  {
+    id: text("id").primaryKey(),
+    threadId: text("thread_id").notNull(),
+    viewerAccountId: text("viewer_account_id").notNull(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    scheduledAt: text("scheduled_at").notNull(),
+    type: text("type").notNull(),
+    reason: text("reason").notNull(),
+    context: text("context").notNull().default(""),
+    relatedNoteId: text("related_note_id"),
+    sequenceNumber: text("sequence_number"),
+    totalInSequence: text("total_in_sequence"),
+    recurringPattern: text("recurring_pattern"),
+    status: text("status").notNull().default("pending"),
+    claimedAt: text("claimed_at"),
+    sentAt: text("sent_at"),
+    cancelledAt: text("cancelled_at"),
+    failedAt: text("failed_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["id"] }] },
+);
+
+/**
+ * One message. The image columns are copied from `slurp2_posts` verbatim so a DM attachment
+ * moves through the same claim-token and lease machinery the post pipeline already runs.
+ *
+ * A thread has exactly one viewer, so `unlockedAt` on the row replaces a join table: a mass
+ * message fans out into one row per subscriber thread and every read path stays identical.
+ */
+export const slurpMessages = fileTable("slurp2_messages", {
+  id: text("id").primaryKey(),
+  threadId: text("thread_id").notNull(),
+  senderAccountId: text("sender_account_id").notNull(),
+  /** "viewer" or "creator". Stored rather than derived so a deleted account still renders. */
+  role: text("role").notNull(),
+  kind: text("kind").notNull().default("text"),
+  content: text("content").notNull().default(""),
+  imageUrl: text("image_url"),
+  imagePrompt: text("image_prompt"),
+  imageClaimToken: text("image_claim_token"),
+  imageClaimLeaseUntil: text("image_claim_lease_until"),
+  /** Coins: the unlock price of a locked message, or the amount of a tip. */
+  price: text("price").notNull().default("0"),
+  unlockedAt: text("unlocked_at"),
+  readAt: text("read_at"),
+  metadata: text("metadata").notNull().default("{}"),
+  senderSnapshot: text("sender_snapshot").notNull().default("{}"),
+  createdAt: text("created_at").notNull(),
+});
+
+/**
+ * Reply claims, mirroring `slurp2_creator_reply_claims`. A thread may have at most one reply in
+ * flight, so the claim keys on the thread: a scheduler pass and a live send cannot double-reply.
+ */
+export const slurpMessageClaims = fileTable(
+  "slurp2_message_claims",
+  {
+    id: text("id").primaryKey(),
+    threadId: text("thread_id").notNull(),
+    triggerMessageId: text("trigger_message_id").notNull(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    replyMessageId: text("reply_message_id"),
+    generationEpoch: text("generation_epoch").notNull().default("0"),
+    claimedAt: text("claimed_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["threadId"] }] },
+);
+
+/** Later bubbles from one generated reply. The row is the durable timer. */
+export const slurpReplyBubbles = fileTable(
+  "slurp2_reply_bubbles",
+  {
+    id: text("id").primaryKey(),
+    batchId: text("batch_id").notNull(),
+    sequence: text("sequence").notNull(),
+    threadId: text("thread_id").notNull(),
+    senderAccountId: text("sender_account_id").notNull(),
+    messageId: text("message_id").notNull(),
+    content: text("content").notNull(),
+    deliverAt: text("deliver_at").notNull(),
+    generationEpoch: text("generation_epoch").notNull().default("0"),
+    createdAt: text("created_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["batchId", "sequence"] }, { keys: ["messageId"] }] },
+);
+
+export const slurpCommissions = fileTable("slurp2_commissions", {
+  id: text("id").primaryKey(),
+  threadId: text("thread_id").notNull(),
+  viewerAccountId: text("viewer_account_id").notNull(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  state: text("state").notNull().default("brief"),
+  brief: text("brief").notNull(),
+  price: text("price").notNull().default("0"),
+  deliveryMessageId: text("delivery_message_id"),
+  /**
+   * When an automatic delivery is due.
+   *
+   * A character Creator used to be paid and deliver in the same request, so the one thing a
+   * commission is — somebody making you a thing, and the wait for it — never happened. Null on a
+   * commission a person delivers by hand, which is what keeps the scheduler off those.
+   */
+  deliverAt: text("deliver_at"),
+  /**
+   * The finished picture, drawn and kept at accept time, waiting for that delivery.
+   *
+   * Held on the row rather than in memory: the wait outlives a restart, and the fan has paid.
+   */
+  mediaPath: text("media_path"),
+  cancellationId: text("cancellation_id"),
+  /** Stable claim key for a delivery attempt. It survives a message-write or state-update failure. */
+  deliveryId: text("delivery_id"),
+  /** Unique worker that currently owns the delivery lease. */
+  deliveryClaimToken: text("delivery_claim_token"),
+  /** Lease start time. A stopped worker's claim may be recovered after five minutes. */
+  deliveryClaimedAt: text("delivery_claimed_at"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const slurpPaymentCompensations = fileTable(
+  "slurp2_payment_compensations",
+  {
+    id: text("id").primaryKey(),
+    viewerAccountId: text("viewer_account_id").notNull(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    amount: text("amount").notNull(),
+    creditedAmount: text("credited_amount"),
+    note: text("note").notNull().default(""),
+    creditOperationId: text("credit_operation_id"),
+    status: text("status").notNull().default("pending"),
+    claimToken: text("claim_token"),
+    refundedAt: text("refunded_at"),
+    reversedAt: text("reversed_at"),
+    /** Tip notification and audience progress committed after the paid result became durable. */
+    effectsAppliedAt: text("effects_applied_at"),
+    failedAt: text("failed_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["id"] }] },
+);
+
+/**
+ * One thing that happened, addressed to one persona.
+ *
+ * Slurp had no notification surface at all — only an unseen-post count and DM unread counts.
+ * Nothing reported a subscriber, a tip, an unlock, a milestone, or a loss, so the world could be
+ * made as alive as you like and the player would see none of it.
+ *
+ * `recipientPersonaId` is always a persona. Creator-side events reach the persona that operates
+ * the Creator; a character-backed Creator has no operator and so produces none. Fan-side events
+ * reach the persona directly.
+ *
+ * `weight` carries the significance score. The readable-handful rule means a feed is curated, not
+ * a firehose, and sorting by weight is what lets small events group and trivial ones stay hidden.
+ */
+export const slurpEvents = fileTable("slurp2_events", {
+  id: text("id").primaryKey(),
+  recipientPersonaId: text("recipient_persona_id").notNull(),
+  kind: text("kind").notNull(),
+  /** The Creator the event is about, when there is one. */
+  creatorAccountId: text("creator_account_id"),
+  /** The post, thread, or commission the event points at, so a notification can navigate. */
+  subjectId: text("subject_id"),
+  /** Who acted, for display. Stored rather than joined so a departed fan still renders. */
+  actorLabel: text("actor_label"),
+  /** Stable payment operation that produced this event, when the action must be idempotent. */
+  operationId: text("operation_id"),
+  /** Coins, follower counts, or a milestone target, depending on kind. */
+  amount: text("amount").notNull().default("0"),
+  weight: text("weight").notNull().default("0"),
+  createdAt: text("created_at").notNull(),
+  seenAt: text("seen_at"),
+});
+
+/**
+ * One member of the audience.
+ *
+ * Rows are written only once a member acts somewhere the player can see, so a Creator's follower
+ * count may read 12,483 while a few hundred rows exist. Everything about a member derives from
+ * `seed`, so the row is a record that they were used, not the source of who they are.
+ *
+ * Nobody here has a profile, a post grid, or an avatar. That is what makes an audience affordable.
+ */
+export const slurpPopulation = fileTable(
+  "slurp2_population",
+  {
+    id: text("id").primaryKey(),
+    seed: text("seed").notNull(),
+    handle: text("handle").notNull(),
+    displayName: text("display_name").notNull(),
+    archetype: text("archetype").notNull(),
+    traits: text("traits").notNull().default("[]"),
+    spendTier: text("spend_tier").notNull().default("none"),
+    activeHour: text("active_hour").notNull().default("12"),
+    joinedAt: text("joined_at").notNull(),
+    /** Last time this member did anything. Drives churn: the long-silent drift out. */
+    lastActiveAt: text("last_active_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["handle"] }] },
+);
+
+/**
+ * What one member is to one Creator.
+ *
+ * The funnel lives here. A follower count is the number of rows in follower state, not an invented
+ * number, and decay is people moving back down rather than a curve applied to a total.
+ */
+export const slurpAudienceTies = fileTable(
+  "slurp2_audience_ties",
+  {
+    id: text("id").primaryKey(),
+    memberId: text("member_id").notNull(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    /** stranger | viewer | liker | follower | subscriber | regular | whale | lapsed */
+    stage: text("stage").notNull().default("stranger"),
+    /** Coins this member has paid this Creator, ever. The sum of every split below, plus subscriptions. */
+    spent: text("spent").notNull().default("0"),
+    /**
+     * The spend split, because rapport weighs a tip and an unlock differently.
+     *
+     * Kept here rather than derived from the wallet ledger: that ledger is capped at 60 entries
+     * across every creator, so a whale's history silently aged out of their own rapport score.
+     */
+    tipped: text("tipped").notNull().default("0"),
+    unlocked: text("unlocked").notNull().default("0"),
+    /**
+     * Where this relationship is heading, as opposed to where it stands.
+     *
+     * steady | rising | cooling | burnout | returning. The stage says somebody is a subscriber; the
+     * The audience arc says whether they are on their way in or on their way out, which is the part worth
+     * telling the player about.
+     */
+    audienceArc: text("audience_arc").notNull().default("steady"),
+    audienceArcSince: text("audience_arc_since"),
+    /**
+     * When this member's subscription to this Creator is paid up to.
+     *
+     * Null for anybody who has never subscribed, and for a tie written before audience
+     * subscriptions existed. An audience member holds no wallet — they are not a viewer — so this
+     * column is the whole of their billing state: past it, the tick either renews them or lets
+     * them lapse.
+     */
+    paidThroughAt: text("paid_through_at"),
+    interactions: text("interactions").notNull().default("0"),
+    firstSeenAt: text("first_seen_at").notNull(),
+    lastSeenAt: text("last_seen_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["memberId", "creatorAccountId"] }] },
+);
+
+/**
+ * Text the world wrote from a template and would rather have written properly.
+ *
+ * Unattended work never calls the model, so a commission brief or a question opened by a
+ * background tick comes from the combinatorial bank — vague on purpose, because a template that
+ * fakes specificity about a post it never read is worse than one that does not try.
+ *
+ * That vagueness is a cost of the rule, not a feature. A row here says "this was a placeholder";
+ * when the player is next present, the model rewrites it against the thing it is actually about.
+ */
+export const slurpPendingText = fileTable("slurp2_pending_text", {
+  id: text("id").primaryKey(),
+  /** commission | question | opener */
+  kind: text("kind").notNull(),
+  /** The commission, interaction, or message row whose text is a placeholder. */
+  subjectId: text("subject_id").notNull(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  /** The post a question is about. Null for the other kinds. */
+  postId: text("post_id"),
+  actorLabel: text("actor_label"),
+  createdAt: text("created_at").notNull(),
+});

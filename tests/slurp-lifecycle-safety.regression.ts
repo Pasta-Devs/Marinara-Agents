@@ -4,23 +4,34 @@ import { join } from "node:path";
 
 const root = join(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
-const routes = read("packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts");
-const publicSupport = read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-public-support.ts");
+const routes = read("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
+const publicSupport = read("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-public-support.ts");
 const replyOperation = read(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-creator-reply.operation.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-creator-reply.operation.ts",
 );
 const imageConnections = read(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-image-connections.ts",
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-image-connections.ts",
 );
-const home = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
-const storage = read("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts");
-const settings = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx");
-const profileSurface = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpProfileSurface.tsx");
-const artwork = read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-artwork.operation.ts");
-const shell = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpShell.tsx");
-const serverEntry = read("packages/slurp/src/engine/packages/server/src/services/slurp/server-entry.ts");
-const publicGeneration = read(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-public-generation.service.ts",
+const home = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
+const storage = read("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
+const settings = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx");
+const profileSurface = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpProfileSurface.tsx");
+const englishLocale = read("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json");
+const creatorPostCard = read(
+  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpCreatorPostCard.tsx",
+);
+const creatorProfileCard = read(
+  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpCreatorProfileCard.tsx",
+);
+const mediaHook = read("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp-media-src.ts");
+const slurpMedia = read("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-media.ts");
+const artwork = read("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-artwork.operation.ts");
+const shell = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpShell.tsx");
+const serverEntry = read("packages/slurp2/src/engine/packages/server/src/services/slurp/server-entry.ts");
+assert.match(
+  settings,
+  /const section = navigation\.section \?\? "overview";[\s\S]*?useSlurpAdState\(section/u,
+  "settings must define its section before dependent hooks run",
 );
 
 const multipartReader = routes.slice(
@@ -34,10 +45,13 @@ assert.match(
 assert.match(multipartReader, /return await part\.toBuffer\(\);/u);
 assert.match(multipartReader, /const buffer = write\.value;[\s\S]*?isAllowedImageBuffer\(buffer, extension\)/u);
 assert.doesNotMatch(multipartReader, /return reply\./u, "the multipart helper must not return before validating media");
+// This guarded slurp-public-generation.service.ts, which had no importers and has been deleted.
+// The live Slurp equivalent is the image gate in the generation service: a run with no usable
+// image prompt must not reach the provider.
 assert.match(
-  publicGeneration,
-  /settings: generatedMediaSettings\(settings, parsedGenerated\.rejected\.length\)/u,
-  "partially rejected timeline output must not reach image generation",
+  read("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts"),
+  /const draftImagePrompt = imagesEnabled/u,
+  "image generation must stay gated on the run actually producing a prompt",
 );
 
 const updateRoute = routes.slice(
@@ -63,8 +77,8 @@ assert.doesNotMatch(
 );
 assert.match(
   replyOperation,
-  /settings\.generationConnectionId[\s\S]*?getWithKey\(settings\.generationConnectionId\)[\s\S]*?getDefaultForAgents/u,
-  "Creator replies must use the Slurp connection with Engine default fallback",
+  /resolveSlurpTextConnection\(createConnectionsStorage\(db\), settings\.generationConnectionId\)/u,
+  "Creator replies must use the Slurp connection with the shared fallback ladder",
 );
 assert.match(imageConnections, /LEGACY_KEY = "noodle\.noodler-image-connections"/u);
 assert.match(imageConnections, /storage\.get\(KEY\)[\s\S]*?storage\.get\(LEGACY_KEY\)/u);
@@ -72,15 +86,174 @@ assert.doesNotMatch(home, /canQuieten|makeQuieter|quieterPending/u);
 assert.match(home, /const viewingOwnCreator = profile\.sourceAccountId === viewerAccount\?\.entityId/u);
 assert.match(home, /const managedCreator = true/u);
 assert.match(home, /const personaBackedCreator = viewerAccounts\.some/u);
+assert.match(home, /avatarUrl: persona\.avatarPath/u, "persona switcher accounts must retain persona avatars");
+assert.match(
+  home,
+  /connectionCountsQuery\.data\?\.\[profile\.sourceAccountId\]/u,
+  "persona counts must use source account ids",
+);
+assert.match(home, /useNoodlerViewerWallets\(\)/u, "Slurp must load wallets for every persona");
+assert.match(home, /personaWallets: viewerWalletsQuery\.data/u, "persona wallets must reach the switcher");
+assert.doesNotMatch(
+  home,
+  /aria-label=\{localizeUi\("ui\.slurp\.wallet\.balance", \{ amount: activeWalletCoins \}\)\}/u,
+  "ViewerHub must use its wallet prop",
+);
+assert.match(shell, /<SlurpCoinAmount amount=/u, "balances must use the shared coin component");
 assert.match(home, /const accessViewerAccounts = viewerAccounts\.filter/u);
 assert.match(home, /!personaBackedCreator && \([\s\S]*?setAutomationOpen\(true\)/u);
 assert.match(storage, /withoutNoodlerSelfHiddenAccountId\([\s\S]*?row\.sourceEntityId \?\? row\.entityId/u);
 assert.match(shell, /CSS\.supports\?\.\("-webkit-touch-callout", "none"\)/u);
 assert.match(shell, /style=\{\{ paddingBottom: `max\(1rem, \$\{BOTTOM_SAFE_INSET\}\)` \}\}/u);
-assert.match(shell, /pb-\[calc\(56px\+var\(--slurp-bottom-safe-inset\)\)\]/u);
+assert.match(shell, /pb-\[calc\(64px\+var\(--slurp-bottom-safe-inset\)\)\]/u);
 assert.match(shell, /style=\{\{ paddingBottom: BOTTOM_SAFE_INSET \}\}/u);
-assert.match(home, /<SlurpMobileHeader[\s\S]*?triggerRef=\{mobileDrawerTriggerRef\}/u);
+assert.doesNotMatch(home, /SlurpMobileHeader/u, "Slurp must not render a duplicate mobile top header");
+assert.match(
+  shell,
+  /data-component="NoodleView\.MobileBottomNav"[\s\S]*?onClick=\{onMobileHomeTap\}[\s\S]*?onClick=\{onOpenProfile\}[\s\S]*?onClick=\{onOpenSearch\}[\s\S]*?data-component="NoodleView\.MobileAccountSwitcher"/u,
+  "the mobile persona switcher must be the trailing navigation item",
+);
+assert.match(
+  shell,
+  /<PersonaList[\s\S]*?accounts=\{visiblePersonaAccounts\.filter\(/u,
+  "persona switching must keep readable named rows",
+);
+assert.doesNotMatch(
+  shell,
+  /function PersonaFacePile/u,
+  "persona switching must not collapse accounts into avatar-only controls",
+);
 assert.match(home, /ref=\{setStickyHeader\}[\s\S]*?HIDE_ON_SCROLL_CLASS/u);
+assert.match(shell, /--slurp-canvas/u, "Slurp must own a theme-safe canvas token");
+assert.match(
+  home,
+  /data-component="SlurpHome\.HeaderBar"[\s\S]*?<NoodleLogo/u,
+  "the Home masthead must centre the Slurp logo",
+);
+assert.match(
+  home,
+  /data-component="SlurpHome\.HeaderBar"[\s\S]*?ui\.slurp\.wallet\.balance/u,
+  "the Home masthead must carry the wallet balance",
+);
+assert.match(home, /slurp-rail-discover-heading/u, "the desktop discovery rail must name the creators it contains");
+assert.match(home, /ui\.slurp\.discover\.topCreators/u, "Discover must show a top Creator leaderboard in its rail");
+assert.match(
+  home,
+  /useState<"likes" \| "subscribers">\("likes"\)/u,
+  "Discover ranking must expose the two requested modes",
+);
+assert.match(
+  home,
+  /aria-pressed=\{discoverRank === value\}/u,
+  "Discover ranking toggle must expose its selected state",
+);
+assert.match(
+  home,
+  /connectionCountsQuery\.data\?\.\[creator\.profile\.id\]\?\.fans/u,
+  "Subscriber ranking must use real Creator fan counts",
+);
+assert.match(
+  home,
+  /ownsSelectedProfile \? \(/u,
+  "Owned profiles must receive Creator tools instead of related creators",
+);
+assert.match(home, /ui\.slurp\.profile\.similarCreators/u, "Other profiles may show related creators in the rail");
+assert.doesNotMatch(
+  home,
+  /navigation\.view === "wallet"[\s\S]{0,180}<NoodleShell[^>]*rightRail=/u,
+  "Wallet must not duplicate itself in a right rail",
+);
+assert.doesNotMatch(
+  home,
+  /navigation\.mode === "creator-settings"[\s\S]{0,700}rightRail=/u,
+  "Settings must not add a duplicate summary rail",
+);
+assert.match(
+  home,
+  /inboxThreadContext \? \([\s\S]*?slurp-conversation-rail-heading/u,
+  "Inbox rail must appear only for an open conversation",
+);
+assert.doesNotMatch(home, /ui\.slurp\.home\.tonight/u, "the rail must not carry a heading with no content under it");
+assert.match(home, /SLURP_MOMENT_WINDOW_MS = 72 \* 60 \* 60 \* 1000/u);
+assert.match(home, /data-component="SlurpHome\.Moments"/u, "Home must expose the real 24-hour Moments shelf");
+assert.match(home, /ui\.slurp\.moments\.empty/u, "Home must keep Stories discoverable when the shelf is empty");
+assert.doesNotMatch(home, /\{moments\.length > 0 && \(/u, "the Stories shelf must not disappear when it is empty");
+assert.match(home, /isSlurpStory\(post\)[\s\S]*?momentCutoff/u, "Home must show only fresh Story posts in its shelf");
+assert.match(home, /id: "stories"[\s\S]*?ui\.slurp\.stories\.archive/u, "Creator Rooms must retain a Story archive");
+assert.match(home, /activeTab === "stories"[\s\S]*?return story/u, "the Story archive must not apply the Home cutoff");
+assert.match(
+  read("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts"),
+  /export function useNoodlerPosts[\s\S]*?do \{[\s\S]*?cursor = page\.nextCursor;[\s\S]*?\} while \(cursor\)/u,
+  "Creator Room archives must follow every post cursor",
+);
+assert.match(home, /function SlurpMomentViewer/u);
+assert.match(
+  home,
+  /useSlurpMediaSrc\(moment\.post\.imageUrl, \{ width: 1600 \}\)/u,
+  "Moments must use full-size authenticated Slurp media",
+);
+assert.match(
+  home,
+  /moment\.post\.locked[\s\S]*?onUnlock\(moment\.post\.id\)[\s\S]*?onToggleSubscription/u,
+  "locked Moments must retain both supported access paths",
+);
+assert.match(home, /mobileFullscreen/u, "Moments must fill the mobile viewport");
+assert.match(home, /event\.key === "ArrowLeft"[\s\S]*?event\.key === "ArrowRight"/u);
+assert.match(home, /ui\.slurp\.home\.latestDrops/u, "Home must separate lobby content from the post stream");
+const viewerHub = home.slice(home.indexOf("function ViewerHub"), home.indexOf("function SlurpDiscoverCreatorCard"));
+assert.doesNotMatch(viewerHub, /<NoodlerPostComposer/u, "the viewer-first Home lobby must not contain publishing");
+assert.match(
+  home,
+  /data-slurp-creator-tools[\s\S]*?<NoodlerPostComposer/u,
+  "managed Creator Rooms must retain publishing",
+);
+assert.match(
+  home,
+  /data-slurp-creator-tools[\s\S]*?aria-expanded=\{creatorToolsOpen\}[\s\S]*?hidden=\{!creatorToolsOpen\}[\s\S]*?setAccessSettingsOpen\(true\)[\s\S]*?setAutomationOpen\(true\)[\s\S]*?<NoodlerPostComposer/u,
+  "Collapsed Profile controls must be one bar: actions and composer both live behind the toggle",
+);
+assert.match(englishLocale, /"ui\.slurp\.profile\.creatorTools": "Profile controls"/u);
+assert.match(
+  home,
+  /data-slurp-creator-tools[\s\S]*?onClick=\{onEdit\}[\s\S]*?ui\.noodle\.stageprofileview\.editProfile[\s\S]*?aria-label=\{localizeUi\("ui\.slurp\.profile\.creatorTools"\)\}[\s\S]*?<ChevronDown/u,
+  "Edit Profile must sit immediately before the trailing Profile controls chevron",
+);
+assert.match(home, /group\/edit flex min-h-11[\s\S]*?<span className="rounded-lg[\s\S]*?py-1\.5/u);
+assert.doesNotMatch(
+  home.slice(home.indexOf("data-slurp-creator-tools"), home.indexOf('id="slurp-creator-tools-panel"')),
+  /border-s/u,
+  "the compact Profile controls rail must not be split by segment dividers",
+);
+// Edit Profile belongs to the same profile rail, not inside the expandable operational panel.
+assert.doesNotMatch(
+  home.slice(home.indexOf('id="slurp-creator-tools-panel"'), home.indexOf("<NoodlerPostComposer")),
+  /onClick=\{onEdit\}/u,
+  "Profile controls must not duplicate the rail's Edit Profile action",
+);
+assert.match(home, /ui\.slurp\.discover\.title/u);
+assert.match(home, /sm:grid-cols-2/u, "Discover must present creators as adaptive cards");
+assert.match(
+  creatorProfileCard,
+  /export function SlurpCreatorProfileCard[\s\S]*?useNearViewportSlurpMediaSrc\(creator\.profile\.bannerUrl/u,
+);
+assert.match(home, /tabs=\{\[\{ id: "emoji"/u, "the main composer must expose only its functional emoji media tab");
+assert.doesNotMatch(home, /tabs=\{\[[^\]]*id: "gif"/u, "the main composer must not expose its no-op GIF action");
+assert.match(home, /motion-reduce:transition-none/u);
+assert.match(creatorPostCard, /data-slurp-post-kind=\{postKind\}/u);
+const lockedCard = creatorPostCard.slice(
+  creatorPostCard.indexOf("export function LockedSlurpPostCard"),
+  creatorPostCard.indexOf("function noodlerUnlockPriceOf"),
+);
+assert.match(lockedCard, /data-slurp-locked-preview/u);
+// See slurp-media-surfaces: assert the treatment, not the exact Tailwind value.
+assert.match(lockedCard, /saturate-\[[\d.]+\]/u);
+assert.doesNotMatch(
+  lockedCard,
+  /(?:^|\s)blur-sm/u,
+  "server-blurred locked previews must not be blurred again in the client",
+);
+assert.match(creatorPostCard, /surface === "profile"[\s\S]*?rounded-xl border/u);
+assert.match(creatorPostCard, /motion-reduce:active:scale-100/u);
 assert.match(home, /function DisclosureBadge[\s\S]*?HelpTooltip/u);
 assert.match(home, /confirmProviderDisclosure/u);
 assert.doesNotMatch(home, /findLastIndex/u, "Slurp hub must support the Engine ES2020 target");
@@ -95,17 +268,57 @@ assert.match(
   /cleanupRetiredViewer[\s\S]*?noodleAccountSubscriptions[\s\S]*?noodlePostUnlocks[\s\S]*?slurpViewerSettingsKey/u,
 );
 assert.match(settings, /ui\.slurp\.settings\.creators\.sourceChanged/u);
+assert.match(
+  settings,
+  /md:grid-cols-\[12rem_minmax\(0,1fr\)\][\s\S]*?lg:grid-cols-\[13rem_minmax\(0,1fr\)\]/u,
+  "settings must keep a responsive desktop section rail",
+);
+assert.match(
+  settings,
+  /snap-x[\s\S]*?settingsSections\.map/u,
+  "narrow settings must expose a horizontally scrollable section navigation",
+);
+assert.match(settings, /aria-live="polite"/u, "settings saves must announce their state");
+assert.match(settings, /selectedCreatorId/u, "creator settings must keep an explicit master-detail selection");
+assert.match(settings, /data-slurp-settings-layout/u, "settings must expose its responsive layout boundary");
+assert.match(
+  shell,
+  /slurpActive\s*\?\s*"max-w-\[1680px\][\s\S]*?:\s*"max-w-\[1360px\]"/u,
+  "every Slurp view must share one wide desktop frame",
+);
+assert.match(
+  shell,
+  /export type NoodleShellContextualRail = "populated" \| "blank" \| "spanning"/u,
+  "Slurp views must declare how they use the contextual rail",
+);
+assert.match(
+  shell,
+  /aria-hidden="true"[\s\S]*?data-slurp-contextual-rail="blank"/u,
+  "The shell must keep a non-interactive blank-rail mode for callers that need stable alignment",
+);
+assert.match(
+  home,
+  /navigation\.view === "hub" \|\| navigation\.view === "search"\)[\s\S]*?\? \("populated" as const\)[\s\S]*?: \("spanning" as const\)/u,
+  "Only Home and Discover reserve the contextual rail by default",
+);
+assert.doesNotMatch(settings, /max-w-\[1096px\]/u, "settings must fill the shared Slurp desktop frame");
+assert.match(settings, /data-slurp-setting-toggle/u);
+assert.match(settings, /role="switch"/u, "polished settings toggles must retain native checkbox semantics");
+assert.match(settings, /snap-x grid-flow-col/u, "creator settings must stay browsable before master-detail fits");
+assert.match(settings, /xl:sticky xl:top-4/u, "the wide-screen Creator list must remain visible beside its detail");
+assert.match(settings, /ui\.slurp\.settings\.creators\.personaAutomationDetail/u);
+assert.match(settings, /ui\.slurp\.settings\.creators\.moreActions/u);
+// slurp2 runs no legacy migration: a legacy Slurp can be installed beside it, and reading or
+// rewriting its rows is exactly what the split exists to prevent. Listing stage profiles must
+// still be a pure read.
 const profileList = storage.slice(
   storage.indexOf("async listNoodlerStageProfiles"),
-  storage.indexOf("async migrateLegacyNoodlerSourceSnapshots"),
+  storage.indexOf("async createNoodlerAccount"),
 );
-assert.ok(profileList.length > 0, "listNoodlerStageProfiles must precede migrateLegacyNoodlerSourceSnapshots");
+assert.ok(profileList.length > 0, "listNoodlerStageProfiles must stay present");
 assert.doesNotMatch(profileList, /updateNoodlerSourceSnapshot|patchAccountSettings/u);
-assert.match(storage, /async migrateLegacyNoodlerSourceSnapshots/u);
-assert.match(storage, /minimizeNoodlerSourceSnapshot\(baseline, disclosureMode\)/u);
-assert.match(storage, /NOODLER_SOURCE_SNAPSHOT_MIGRATION_KEY/u);
-assert.match(storage, /settingsStore\.set\(NOODLER_SOURCE_SNAPSHOT_MIGRATION_KEY, "1"\)/u);
-assert.match(serverEntry, /await createSlurpStorage\(app\.db\)\.migrateLegacyNoodlerSourceSnapshots\(\)/u);
+assert.doesNotMatch(storage, /migrateLegacy/u, "slurp2 storage must not carry a legacy migration");
+assert.doesNotMatch(serverEntry, /migrateLegacy/u, "slurp2 activation must not run a legacy migration");
 const dismissRoute = routes.slice(
   routes.indexOf('app.post("/noodler/accounts/:id/source/dismiss"'),
   routes.indexOf('app.post("/noodler/accounts/:id/source/adopt-identity"'),
@@ -115,8 +328,20 @@ assert.match(dismissRoute, /listNoodlerStageProfiles/u);
 assert.match(settings, /sourceStatus\.\$\{creator\.sourceStatus\.state\}/u);
 assert.match(settings, /ui\.slurp\.settings\.creators\.acceptChanges/u);
 assert.match(settings, /onRedraftCreator/u);
-assert.match(settings, /import \{ Avatar, getNoodleAccentStyle, NOODLE_PINK \} from "\.\/SlurpShell"/u);
+assert.match(
+  settings,
+  /import \{[\s\S]*?Avatar,[\s\S]*?getNoodleAccentStyle,[\s\S]*?NOODLE_PINK,?[\s\S]*?\} from "\.\/SlurpShell"/u,
+  "Settings must take its shell primitives from the shell",
+);
 assert.match(routes, /app\.post\("\/noodler\/accounts\/:id\/banner"/u);
+assert.match(routes, /postType: slurpPostTypeSchema\.default\("post"\)/u);
+assert.match(routes, /decoded\.data\.postType === "story" && !decoded\.media/u, "Story creation must require media");
+assert.match(
+  routes,
+  /story: post\.metadata\.noodlerPostType === "story"/u,
+  "locked projections must expose a safe Story flag",
+);
+assert.match(home, /postType === "story" \? "ui\.slurp\.stories\.captionPlaceholder"/u);
 assert.match(routes, /app\.post\("\/noodler\/accounts\/:id\/artwork\/generate"/u);
 assert.match(home, /useUploadNoodlerBanner/u);
 assert.match(home, /useGenerateNoodlerArtwork/u);
@@ -124,9 +349,110 @@ assert.match(profileSurface, /<Upload size=\{13\}/u);
 assert.match(profileSurface, /<Upload size=\{12\}/u);
 assert.match(profileSurface, /ui\.slurp\.artwork\.generateBanner/u);
 assert.match(profileSurface, /ui\.slurp\.artwork\.generateAvatar/u);
-assert.match(profileSurface, /group-hover:opacity-100/u);
+assert.match(profileSurface, /end-\[4\.25rem\] top-3 flex h-11 w-11/u);
+assert.doesNotMatch(
+  profileSurface,
+  /sm:opacity-0 group-hover:opacity-100/u,
+  "profile artwork controls must stay visible on touch and keyboard surfaces",
+);
+assert.match(home, /ui\.slurp\.profile\.follow[\s\S]*?ui\.slurp\.profile\.subscribe/u);
+assert.match(home, /management: true/u, "subscriber data must be marked as creator management");
+assert.match(home, /ui\.slurp\.profile\.creatorToolsDetail/u);
+assert.match(
+  profileSurface,
+  /h-64[\s\S]*?@min-\[760px\]:h-\[24rem\]/u,
+  "Creator Rooms must scale the banner from mobile to desktop",
+);
+assert.match(
+  profileSurface,
+  /@min-\[1040px\]:h-\[28rem\]/u,
+  "wide Creator Rooms must retain the cinematic banner scale",
+);
+assert.match(
+  profileSurface,
+  /-mt-8 @min-\[680px\]:-mt-10 @min-\[1040px\]:-mt-11/u,
+  "Creator avatars must keep roughly 30% of their changing size inside the banner",
+);
+assert.match(
+  profileSurface,
+  /var\(--slurp-canvas\)_2rem[\s\S]*?@min-\[680px\]:bg-\[linear-gradient\(to_bottom[\s\S]*?var\(--slurp-canvas\)_2\.5rem[\s\S]*?@min-\[1040px\]:bg-\[linear-gradient\(to_bottom[\s\S]*?var\(--slurp-canvas\)_2\.75rem/u,
+  "the fade must become solid at the banner edge for every responsive overlap",
+);
+assert.match(
+  profileSurface,
+  /linear-gradient\(to_top,rgba\(8,4,10,0\.88\)_0%,rgba\(8,4,10,0\.58\)_24%,transparent_60%\)/u,
+);
+assert.match(
+  profileSurface,
+  /@min-\[680px\]:items-start/u,
+  "wide Creator identity rows must not lower the avatar with end alignment",
+);
+assert.doesNotMatch(profileSurface, /@min-\[680px\]:items-end/u);
+assert.doesNotMatch(
+  profileSurface,
+  /hasBanner \? \(spotlight \? "relative z-10 -mt-/u,
+  "the avatar wrapper must not apply a second breakpoint-dependent overlap",
+);
+assert.match(
+  profileSurface,
+  /grid-cols-4[\s\S]*?\[&>:first-child\]:col-span-1[\s\S]*?\[&>:nth-child\(2\)\]:col-span-3/u,
+  "narrow Creator actions must reserve room for the primary subscription action",
+);
+assert.doesNotMatch(
+  profileSurface,
+  /@min-\[860px\]:grid-cols-\[minmax\(0,1fr\)_auto\]/u,
+  "profile actions must not move beside the identity content on wide screens",
+);
+assert.match(profileSurface, /hasProfileActions && <div className="mt-1 min-w-0">\{profileActions\}<\/div>/u);
+assert.match(profileSurface, /className="@container/u, "Creator Rooms must respond to their actual canvas width");
+assert.match(
+  shell,
+  /size === "xl"[\s\S]*?h-24 w-24[\s\S]*?@min-\[1040px\]:h-36/u,
+  "Creator avatars must scale from a compact mobile portrait to the wide-desktop hero",
+);
+assert.match(
+  profileSurface,
+  /min-w-\[6\.25rem\][\s\S]*?snap-start[\s\S]*?@min-\[620px\]:flex-1/u,
+  "profile tabs must scroll without crushing labels on narrow canvases and distribute on desktop",
+);
+assert.doesNotMatch(
+  profileSurface,
+  /max-w-\[calc\(100%-13rem\)\]/u,
+  "Creator Room copy must not reserve a fixed action width",
+);
+assert.match(profileSurface, /data-slurp-creator-hero/u, "Creator Rooms must expose their unified identity hero");
+assert.match(profileSurface, /spotlight/u, "Slurp Creator Rooms must support the media-led spotlight treatment");
+assert.match(profileSurface, /linear-gradient\(to_top/u, "Creator banners must fade into the profile canvas");
+assert.match(profileSurface, /--slurp-violet/u, "Creator Rooms must inherit Slurp's atmospheric gradient palette");
+assert.match(profileSurface, /after:scale-x-100/u, "Creator profile tabs must use the flat accent-underline treatment");
+assert.doesNotMatch(
+  profileSurface,
+  /spotlight\s*\?\s*"rounded-\[1\.5rem\]/u,
+  "the spotlight identity must blend into the banner instead of becoming another rounded card",
+);
+assert.match(
+  profileSurface,
+  /\(preTabsContent \|\| editor\) && \(/u,
+  "Profile controls and Edit Profile must share the same rail before public profile content",
+);
+assert.match(profileSurface, /flex min-h-11 items-start[\s\S]*?\{preTabsContent\}[\s\S]*?\{editor &&/u);
+assert.match(profileSurface, /rounded-e-2xl border-s[\s\S]*?ui\.noodle\.stageprofileview\.editProfile/u);
+assert.match(profileSurface, /editor && \(!editorActionInPreTabs \|\| editor\.isEditing\)/u);
+assert.match(home, /data-slurp-home-masthead/u, "Home must expose one unified lobby masthead");
+assert.doesNotMatch(
+  home,
+  /data-slurp-home-masthead[\s\S]*?personaAccount\.displayName/u,
+  "the Home masthead must not repeat the active persona",
+);
+assert.match(shell, /slurpActive && <span className="text-lg font-black">\{SLURP_NAME\}<\/span>/u);
+assert.match(shell, /ui\.slurp\.navigation\.hub/u, "Slurp desktop navigation must name the home destination Hub");
+assert.doesNotMatch(
+  home,
+  /data-slurp-home-masthead[\s\S]*?ui\.slurp\.navigation\.home/u,
+  "The desktop masthead must not repeat the Slurp name",
+);
 assert.match(profileSurface, /<Avatar account=\{account\} size="xl"/u);
-assert.match(home, /function SourceAccountAvatar[\s\S]*?useSlurpMediaSrc\(account\.avatarUrl\)/u);
+assert.match(home, /function SourceAccountAvatar[\s\S]*?useSlurpMediaSrc\(account\.avatarUrl, \{ width: 96 \}\)/u);
 assert.match(home, /function SourceAccountAvatar[\s\S]*?<img src=\{source\}/u);
 assert.match(
   home,
@@ -139,7 +465,10 @@ assert.doesNotMatch(
   "source-account rows must authenticate managed avatar URLs before rendering them",
 );
 assert.match(artwork, /one continuous ultra-wide background scene only/u);
-assert.match(artwork, /Do not include a profile picture, avatar, headshot/u);
+assert.match(artwork, /Do not include a profile picture, avatar, avatar bubble, headshot/u);
+// The page paints its own avatar over the banner, so a banner carrying one shows two.
+assert.match(artwork, /no avatar bubble, no badge, medallion, sticker, or framed headshot/u);
+assert.match(artwork, /negativePromptAdditions: artworkNegativePrompt\(/u);
 assert.match(artwork, /width: kind === "banner" \? 1536 : 1024/u);
 assert.match(artwork, /height: kind === "banner" \? 512 : 1024/u);
 assert.match(settings, /ui\.slurp\.settings\.refresh\.title/u);
@@ -149,6 +478,31 @@ assert.match(
   settings,
   /refreshCreators\.mutate\(\s*\{ accountIds: \[\.\.\.refreshAccountIds\], access: refreshAccess \}/u,
 );
+assert.match(mediaHook, /const mediaCache = new Map<string, CachedMedia>/u, "managed media requests must be shared");
+assert.match(mediaHook, /cache: "force-cache"/u, "managed media must use the HTTP cache");
+assert.match(
+  mediaHook,
+  /new IntersectionObserver[\s\S]*?rootMargin/u,
+  "off-screen media fetches must wait for proximity",
+);
+assert.match(home, /useNearViewportSlurpMediaSrc\(post\.imageUrl, \{ width: 480 \}\)/u);
+assert.match(home, /animate-pulse bg-\[var\(--muted\)\] motion-reduce:animate-none/u);
+assert.match(creatorPostCard, /postImageLoading[\s\S]*?aspect-\[4\/3\][\s\S]*?animate-pulse/u);
+assert.match(
+  read("packages/slurp2/src/engine/packages/client/src/components/slurp/PostImageCropEditor.tsx"),
+  /scale-110 object-cover opacity-25 blur-2xl/u,
+  "Slurp post media must use a subdued image-derived stage background",
+);
+// The locked branch no longer renders its own crop-less frame: the server ships pre-blurred bytes
+// for locked media, so one frame honouring the real crop covers both states.
+assert.match(
+  creatorPostCard,
+  /<PostImageFrame[\s\S]*?crop=\{imageCrop\}/u,
+  "Slurp feed images must use the shared media stage",
+);
+assert.match(slurpMedia, /NOODLER_MEDIA_WIDTHS = \[96, 320, 480, 640, 960, 1280, 1600\]/u);
+assert.match(slurpMedia, /\.resize\(\{ width, withoutEnlargement: true \}\)[\s\S]*?\.webp/u);
+assert.match(slurpMedia, /entry\.startsWith\(`\$\{fileName\}\.w`\)/u, "media deletion must remove every derivative");
 assert.doesNotMatch(home, /refreshAllNow/u, "bulk refresh belongs in Creator settings");
 assert.match(
   shell,

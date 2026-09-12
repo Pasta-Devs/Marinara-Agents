@@ -4,10 +4,7 @@ import { join } from "node:path";
 import { compileImagePrompt } from "../sources/engine/packages/shared/dist/utils/image-prompt-compiler.js";
 import { normalizeImageGenerationProfile } from "../sources/engine/packages/shared/dist/constants/image-generation-defaults.js";
 import { normalizeImageStyleProfileSettings } from "../sources/engine/packages/shared/dist/constants/image-style-profiles.js";
-import {
-  prepareNoodleImageProviderPrompt,
-  selectNoodleImageProviderPrompt,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-image-prompt";
+import { selectNoodleImageProviderPrompt } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-image-prompt";
 
 const root = join(import.meta.dirname, "..");
 const rawPrompt = "A person reading beside a window.";
@@ -23,16 +20,16 @@ const emptyPromptPreset = normalizeImageGenerationProfile(
   { styleProfileId: "anime", automatic1111: { promptPrefix: "", negativePromptPrefix: "" } },
   "automatic1111",
 ).profile;
-const rewrittenProviderPrompt = prepareNoodleImageProviderPrompt({
-  rewrittenPrompt: "A person reading beside a window.",
+// The remaster compiles the rewrite at the call site instead of behind a prepare helper, so the
+// style profile is applied to the interpretation model's output before the provider sees it.
+const rewrittenProviderPrompt = selectNoodleImageProviderPrompt({
+  rewrittenPrompt: compileImagePrompt({
+    kind: "illustration",
+    prompt: "A person reading beside a window.",
+    styleProfiles: animeStyles,
+    imageDefaults: emptyPromptPreset,
+  }).prompt,
   rawPrompt: "A person reading beside a window.",
-  compilePrompt: (prompt) =>
-    compileImagePrompt({
-      kind: "illustration",
-      prompt,
-      styleProfiles: animeStyles,
-      imageDefaults: emptyPromptPreset,
-    }).prompt,
 });
 assert.match(rewrittenProviderPrompt, /anime style/u);
 assert.match(rewrittenProviderPrompt, /visual novel CG/u);
@@ -152,11 +149,11 @@ for (const unavailablePrompt of [null, undefined, ""]) {
 }
 
 const images = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-images.service.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-images.service.ts"),
   "utf8",
 );
 const publicImages = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-public-images.service.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-public-images.service.ts"),
   "utf8",
 );
 for (const source of [images, publicImages]) {
@@ -166,11 +163,32 @@ for (const source of [images, publicImages]) {
     /privateContext: \[characterPersonality\],\s*guidanceContext: \[configuredImageInstructions, connectionImageInstructions\],/u,
     "art style and image preferences must reach the provider; personality is checked at any length",
   );
-  assert.match(source, /prepareNoodleImageProviderPrompt/u);
+  assert.match(source, /selectNoodleImageProviderPrompt/u);
   // Both fallback paths — interpretation disabled, and a rejected rewrite — must still carry style.
-  assert.match(source, /compiledDraft/u);
+  assert.match(source, /compiledDraft|compiledPrompt/u);
   // A reviewed prompt is recompiled so the style profile survives the review path.
   assert.match(source, /compiledOverride/u);
+  // The success path must be compiled too. The style profile is an Engine setting, and the
+  // interpretation model is a text transformation that drops style tags and wording. Sending its
+  // output straight to the provider made a selected style apply only when the rewrite was skipped,
+  // failed, or was rejected — the style looked intermittent rather than broken.
+  assert.match(
+    source,
+    /const compiledRewrittenPrompt = rewrittenPrompt\s*\?\s*compileImagePrompt\(\{/u,
+    "a successful rewrite must be recompiled before it reaches the provider",
+  );
+  assert.match(
+    source,
+    /rewrittenPrompt: compiledRewrittenPrompt\?\.prompt \|\| rewrittenPrompt/u,
+    "the provider must receive the recompiled rewrite, not the raw model output",
+  );
+  // The recompile must use the same style inputs as the first compile, or it silently applies the
+  // global default instead of the connection's selected profile.
+  assert.match(
+    source,
+    /prompt: rewrittenPrompt,\s*styleProfiles: imageSettings\.styleProfiles,\s*imageDefaults,/u,
+    "the recompile must use the connection's own style profile and image defaults",
+  );
 }
 
 console.log("Slurp image instruction regressions passed");

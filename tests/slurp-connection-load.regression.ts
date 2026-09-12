@@ -5,7 +5,7 @@ import { join } from "node:path";
 import {
   slurpPollBackoffMs,
   SLURP_POLL_BACKOFF_MAX_MS,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-poll-backoff.js";
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-poll-backoff.js";
 
 // A healthy poll keeps its normal cadence; a connection that keeps failing is retried
 // exponentially slower instead of once a minute forever, and never slower than the cap.
@@ -17,16 +17,31 @@ assert.equal(slurpPollBackoffMs(60_000, 50), SLURP_POLL_BACKOFF_MAX_MS);
 
 const root = join(import.meta.dirname, "..");
 const read = (path: string) =>
-  readFileSync(join(root, "packages/slurp/src/engine/packages/server/src/services/slurp", path), "utf8");
+  readFileSync(join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp", path), "utf8");
 
 const storage = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
   "utf8",
 );
 const autoPost = read("slurp-autopost-scheduler.service.ts");
 assert.match(autoPost, /slurpPollBackoffMs\(POLL_MS, consecutiveFailures\)/);
 assert.match(autoPost, /consecutiveFailures = failed \? consecutiveFailures \+ 1 : 0;/);
-assert.match(autoPost, /failed = artwork === "unavailable";/);
+// Cosmetic image work has its own brake and must never touch the publishing poll's clock. It used
+// to set `failed`, so a single creator whose picture could not be drawn — most often because no
+// image connection is configured at all — walked the reserve poll out to thirty minutes and held
+// it there, and due posts stopped going out for a reason that had nothing to do with posting.
+assert.doesNotMatch(
+  autoPost,
+  /failed = artwork === "unavailable"|failed = failed \|\| redrawn === "failed"/u,
+  "artwork and image retries must not feed the publishing poll's backoff",
+);
+assert.match(autoPost, /imageWorkFailures = imageWorkFailed \? imageWorkFailures \+ 1 : 0;/u);
+assert.match(
+  autoPost,
+  /imageWorkNotBefore = imageWorkFailed \? Date\.now\(\) \+ slurpPollBackoffMs\(POLL_MS, imageWorkFailures\) : 0;/u,
+  "a failing image backend must still be backed off, just on its own clock",
+);
+assert.match(autoPost, /if \(Date\.now\(\) >= imageWorkNotBefore\) \{/u);
 
 const fanActivity = read("slurp-fan-activity-scheduler.service.ts");
 assert.match(fanActivity, /schedule\(slurpPollBackoffMs\(POLL_MS, consecutiveFailures\)\)/);
@@ -79,7 +94,10 @@ console.log("slurp image retry regression passed");
 // package bundles with esbuild, which does not typecheck) but drops it, so the generation ran
 // unadmitted and never booked its daily attempt — the reserve poll then regenerated a post on
 // every pass. Admission must wrap the composed provider instead.
-for (const file of ["slurp-generation.service.ts", "slurp-public-generation.service.ts"]) {
+// slurp-public-generation.service.ts was deleted: it had no importers, so its copy of this rule
+// would have passed forever no matter what the running code did. The invariant itself still
+// matters, so it stays pointed at the live generation path.
+for (const file of ["slurp-generation.service.ts"]) {
   const source = read(file);
   const fallbackCall = source.slice(
     source.indexOf("withConnectionFallbackProvider({"),
@@ -89,12 +107,18 @@ for (const file of ["slurp-generation.service.ts", "slurp-public-generation.serv
   assert.match(source, /withConnectionAdmissionProvider\(\s*fallbackProvider,/, `${file} does not admit its provider`);
 }
 
-// The text-only retry and the correction pass are steps inside an already-admitted refresh.
-const publicGeneration = read("slurp-public-generation.service.ts");
-assert.match(
-  publicGeneration,
-  /stepProvider = withConnectionAdmissionProvider\(fallbackProvider, input\.connection\.id, \{ kind: "none" \}\)/,
+// The correction pass is a step inside an already-admitted run, so it must not book a second
+// attempt. This used to be asserted only against the dead public-generation file.
+const admittedGeneration = read("slurp-generation.service.ts");
+assert.equal(
+  admittedGeneration.split("provider.chatComplete").length - 1,
+  2,
+  "the first call and the correction turn share one admission",
 );
-assert.equal(publicGeneration.split("stepProvider.chatComplete").length - 1, 2);
+assert.doesNotMatch(
+  admittedGeneration.slice(admittedGeneration.indexOf("const correctionMessages")),
+  /withConnectionAdmissionProvider\(/,
+  "the correction turn must not request its own admission",
+);
 
 console.log("slurp connection admission regression passed");
