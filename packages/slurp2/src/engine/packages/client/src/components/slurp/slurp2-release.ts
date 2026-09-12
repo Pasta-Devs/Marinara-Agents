@@ -16,7 +16,7 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
     version: "0.0.4",
     date: "2026-09-12",
     notes: [
-      "Fixed Refresh Conversation Schedule failing with \"chatComplete is not a function\". It now creates the schedule.",
+      'Fixed Refresh Conversation Schedule failing with "chatComplete is not a function". It now creates the schedule.',
       "Fixed the Conversation Schedule refresh dialog and the settings loading screen showing raw text keys instead of words.",
       "Fixed the header logo not loading. The logo is now built into Slurp and no longer depends on the package asset address.",
       "Added Reply timing settings under Messaging: the longest wait, the wait when the return time is unknown, check-in waits for close and regular fans, and away times for Creators without a schedule.",
