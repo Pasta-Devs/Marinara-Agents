@@ -1,4 +1,15 @@
-import { CalendarClock, FileText, Loader2, Pencil, RefreshCw, RotateCcw, Save, Trash2, UsersRound } from "lucide-react";
+import {
+  CalendarClock,
+  Download,
+  FileText,
+  Loader2,
+  Pencil,
+  RefreshCw,
+  RotateCcw,
+  Save,
+  Trash2,
+  UsersRound,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -7,6 +18,9 @@ import {
   useDeleteNoodlerStageProfile,
   useDeleteAllSlurpData,
   useDeleteUnusedSlurpData,
+  getSlurpBackupJob,
+  startSlurpBackup,
+  downloadSlurpBackup,
   useAdoptNoodlerSourceIdentity,
   useDismissNoodlerSourceChanges,
   useNoodlerAccounts,
@@ -174,6 +188,26 @@ export function SlurpSettings({
   const deleteCreator = useDeleteNoodlerStageProfile();
   const deleteAllData = useDeleteAllSlurpData();
   const deleteUnusedData = useDeleteUnusedSlurpData();
+  const [backupJob, setBackupJob] = useState<Awaited<ReturnType<typeof getSlurpBackupJob>> | null>(null);
+  const [backupPending, setBackupPending] = useState(false);
+  useEffect(() => {
+    if (!backupJob || backupJob.state === "completed" || backupJob.state === "consumed" || backupJob.state === "error")
+      return;
+    const timer = window.setInterval(() => {
+      void getSlurpBackupJob(backupJob.id)
+        .then(setBackupJob)
+        .catch((error) =>
+          setBackupJob({
+            ...backupJob,
+            state: "error",
+            stage: "error",
+            detail: errorMessage(error),
+            error: errorMessage(error),
+          }),
+        );
+    }, 750);
+    return () => window.clearInterval(timer);
+  }, [backupJob]);
   const adoptSourceIdentity = useAdoptNoodlerSourceIdentity();
   const dismissSourceChanges = useDismissNoodlerSourceChanges();
   const connectionsQuery = useSlurpConnections(section === "general" || section === "images" || section === "creators");
@@ -728,6 +762,53 @@ export function SlurpSettings({
                 title={t("ui.slurp.settings.advanced.title")}
                 detail={t("ui.slurp.settings.advanced.detail")}
               />
+              <div className="rounded-md border border-[var(--border)] p-4">
+                <h2 className="text-sm font-semibold">{t("ui.slurp.settings.advanced.backupTitle")}</h2>
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
+                  {t("ui.slurp.settings.advanced.backupDetail")}
+                </p>
+                <button
+                  type="button"
+                  disabled={backupPending}
+                  onClick={() => {
+                    setBackupPending(true);
+                    void startSlurpBackup()
+                      .then(async (job) => {
+                        setBackupJob(job);
+                        let current = job;
+                        while (current.state !== "completed" && current.state !== "error") {
+                          await new Promise((resolve) => window.setTimeout(resolve, 750));
+                          current = await getSlurpBackupJob(job.id);
+                          setBackupJob(current);
+                        }
+                        if (current.state === "error") throw new Error(current.error ?? current.detail);
+                        await downloadSlurpBackup(job.id);
+                        toast.success(t("ui.slurp.settings.advanced.backupSuccess"));
+                      })
+                      .catch((error) => toast.error(errorMessage(error)))
+                      .finally(() => setBackupPending(false));
+                  }}
+                  className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+                >
+                  {backupPending ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                  {t("ui.slurp.settings.advanced.backupButton")}
+                </button>
+                {backupJob && (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="mt-3 rounded-md bg-[var(--accent)] px-3 py-2 text-xs leading-5 text-[var(--muted-foreground)]"
+                  >
+                    <p className="font-semibold">{backupJob.stage}</p>
+                    <p>{backupJob.detail}</p>
+                    <p className="mt-1">
+                      {backupJob.creators} creators · {backupJob.posts} posts · {backupJob.interactions} interactions ·{" "}
+                      {backupJob.mediaCompleted}/{backupJob.mediaFiles} media files · {backupJob.mediaBytes} bytes
+                    </p>
+                    {backupJob.error && <p className="mt-1 text-red-300">{backupJob.error}</p>}
+                  </div>
+                )}
+              </div>
               <div className="rounded-md border border-[var(--border)] p-4">
                 <h2 className="text-sm font-semibold">{t("ui.slurp.settings.advanced.setupAgain")}</h2>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">

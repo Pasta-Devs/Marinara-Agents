@@ -935,12 +935,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
 
   const enterFromGate = async () => {
     setGateOpen(false);
-    setOnboardingState("completed");
-    try {
-      await updateSlurpSettings.mutateAsync({ onboarding: "completed" });
-    } catch (error) {
-      toast.error(errorMessage(error, localizeUi("ui.slurp.onboarding.saveError")));
-    }
+    setOnboardingState("entered");
     onNavigate({ mode: "creator", view: "hub" });
   };
 

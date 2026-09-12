@@ -319,35 +319,35 @@ const features = [
   },
   {
     id: "slurp",
-    version: "1.0.31",
+    version: "1.50.0",
     minEngineVersion: "2.4.3",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
-    name: "Slurp",
+    name: "Slurp Legacy",
     description:
-      "The standalone successor to NoodleR: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity.",
+      "Legacy Slurp version. This package is being reworked and is on hold. New development is happening in Slurp Remastered. Bug fixes are not planned for this version.",
     localizations: {
       de: {
-        name: "Slurp",
+        name: "Slurp Legacy",
         description:
-          "Erstelle ein lokales Creator-Profil aus einem Engine-Charakter oder einer Engine-Persona, veröffentliche öffentliche oder gesperrte Beiträge und simuliere Abonnements und Publikumsaktivität. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Slurp.",
+          "Legacy-Version von Slurp. Dieses Paket wird überarbeitet und ist pausiert. Die neue Entwicklung erfolgt in Slurp Remastered. Fehlerbehebungen sind für diese Version nicht geplant.",
         homeBrowserTab: {
           label: "Slurp",
           ariaLabel: "Slurp öffnen",
         },
       },
       ko: {
-        name: "Slurp",
+        name: "Slurp Legacy",
         description:
-          "Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 Slurp 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Slurp를 여세요.",
+          "Slurp 레거시 버전입니다. 이 패키지는 재작업 중이며 보류 상태입니다. 새로운 개발은 Slurp Remastered에서 진행됩니다. 이 버전의 버그 수정은 계획되어 있지 않습니다.",
         homeBrowserTab: {
           label: "Slurp",
           ariaLabel: "Slurp 열기",
         },
       },
       pl: {
-        name: "Slurp",
+        name: "Slurp Legacy",
         description:
-          "Utwórz lokalne profile twórców z postaci silnika lub person silnika, publikuj publiczne lub zablokowane posty Slurp i symuluj subskrypcje oraz aktywność publiczności. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Slurp na stronie głównej.",
+          "Starsza wersja Slurp. Ten pakiet jest przebudowywany i wstrzymany. Nowy rozwój odbywa się w Slurp Remastered. Poprawki błędów dla tej wersji nie są planowane.",
         homeBrowserTab: {
           label: "Slurp",
           ariaLabel: "Otwórz Slurp",
@@ -364,7 +364,7 @@ const features = [
     packageSourceRoot: slurpSourceRoot,
     ownedSourcePaths: slurpOwnedSourcePaths,
     libraryHidden: true,
-    assetPaths: ["slurp-logo.png", "slurpagent.png"],
+    assetPaths: ["slurp-logo.png", "slurplegacy.png"],
     contributions: {
       slots: ["home-browser-tab"],
       homeBrowserTab: {
@@ -401,7 +401,7 @@ const features = [
   },
   {
     id: "memory-nag",
-    version: "1.1.0",
+    version: "1.1.1",
     minEngineVersion: "2.4.4",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Memory Nag",
@@ -1777,7 +1777,7 @@ for (const feature of selectedFeatures) {
     catalog.packages.push({
       manifest,
       category: feature.category ?? "misc",
-      iconUrl: catalogArtworkUrl(feature.id),
+      iconUrl: feature.id === "slurp" ? catalogArtworkUrl("slurp") : catalogArtworkUrl(feature.id),
       artifact: {
         url: `https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/${basename(artifactPath)}`,
         sha256: sha256(artifact),
