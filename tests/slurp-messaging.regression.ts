@@ -160,6 +160,17 @@ const offlineStranger = slurpReplyPacing({
 assert.equal(offlineStranger.mode, "queued", "An offline creator must queue a stranger");
 assert.ok(offlineStranger.notBeforeMs > 0);
 
+const offlineHot = slurpReplyPacing({
+  online: false,
+  rapport: whale,
+  subscribed: true,
+  messageLength: 20,
+  minutesUntilOnline: 120,
+  momentum: "hot",
+});
+assert.notEqual(offlineHot.mode, "instant", "Hot momentum must not erase an offline schedule");
+assert.ok(offlineHot.notBeforeMs > 0, "An offline creator must retain a wait even in a hot conversation");
+
 const offlineWhale = slurpReplyPacing({
   online: false,
   rapport: whale,

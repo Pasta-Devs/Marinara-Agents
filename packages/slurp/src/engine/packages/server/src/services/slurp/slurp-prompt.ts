@@ -19,10 +19,8 @@ export const NOODLE_PAST_MEMORY_MAX_ITEMS = 5;
 export const NOODLE_PAST_MEMORY_INCLUSION_CHANCE = 0.85;
 export const NOODLE_ADULT_PLATFORM_POLICY =
   "Noodle only accepts confirmed adult accounts and personas. Every participant on Noodle is 18+; minors are not allowed on the platform. NSFW content is allowed, anything goes, and adult in-character drama, flirtation, gossip, and explicit references may appear when they fit the accounts involved.";
-export const SLURP_PLATFORM_CONTEXT =
-  "Slurp is an adult creator platform. Creators publish public or locked posts, interact with followers and subscribers, receive coin tips, sell access, answer DMs, and accept commissions. These are normal in-world social and economic actions. Coins are Slurp's currency and cost money.";
 export const NOODLE_PERSONA_AUTHORSHIP_INSTRUCTION =
-  "- The user persona is controlled exclusively by the user. Never generate posts, replies, likes, poll votes, or follows as a persona. Personas may only be mentioned or targeted by other accounts.";
+  "- The user persona is controlled exclusively by the user. Never generate posts, replies, likes, reposts, poll votes, or follows as a persona. Personas may only be mentioned or targeted by other accounts.";
 export const NOODLE_PERSONA_IDENTITY_INSTRUCTION =
   "- Every persona account is a separate user identity. Preserve the accountKey on historical posts and replies: changing the currently selected persona never changes, merges, or reattributes activity created by another persona.";
 export const NOODLE_UNIQUE_CONTENT_INSTRUCTION =
@@ -36,10 +34,10 @@ export const NOODLE_HISTORY_MOOD_INSTRUCTION =
 export const NOODLE_TIMELINE_BASE_DEFAULT_PROMPT = [
   "You write a fake social media timeline for Marinara Engine's in-app parody site called Noodle.",
   NOODLE_ADULT_PLATFORM_POLICY,
-  "- Structured actions are limited to posts, polls, follows, likes, replies, and poll votes.",
+  "- Structured actions are limited to posts, polls, follows, likes, reposts, replies, and poll votes.",
   "- Generated interactions may target existing posts included in this prompt or posts you create in this response.",
   "- To respond directly to an existing comment, create a reply interaction for its post and set parentInteractionId to that comment's exact replyId.",
-  "- Do not make an account interact with the same existing post again when it has already liked, voted, or replied there, unless that account was tagged or is answering a direct response to its own comment. Never make an account reply to its own comment.",
+  "- Do not make an account interact with the same existing post again when it has already liked, reposted, voted, or replied there, unless that account was tagged or is answering a direct response to its own comment. Never make an account reply to its own comment.",
   "- Avoid repeating an account's recent post topic or phrasing. Continue an existing thread only when new activity gives the account a reason to return.",
   NOODLE_UNIQUE_CONTENT_INSTRUCTION,
   NOODLE_SOCIAL_LENGTH_INSTRUCTION,
@@ -81,7 +79,7 @@ export const NOODLE_TONE_INSTRUCTIONS = [
 export const NOODLE_CONGRUENCY_INSTRUCTION =
   "- Multiple active accounts may know each other from shared chats, prior Noodle posts, or each other's lore below. When it fits, have accounts react to, quote, subtweet, or argue with each other's posts in this same batch (via @handle mentions and targetTempId), not just post in isolation.";
 export const NOODLE_RANDOM_USER_TREATMENT_INSTRUCTION =
-  "- Random user accounts are not characters. Treat them as ordinary fictional Noodle profiles that may follow, like, reply, gossip, or casually join public drama.";
+  "- Random user accounts are not characters. Treat them as ordinary fictional Noodle profiles that may follow, like, reply, repost, gossip, or casually join public drama.";
 /**
  * Default text for the editable "Noodle Timeline Voice & Tone" prompt override
  * (registry/noodle.ts: NOODLE_TIMELINE_VOICE). Deliberately limited to tone and creative-freedom
@@ -106,9 +104,9 @@ export function noodleTimelineVoiceDefaultText(enhanced: boolean, allowRandomUse
 }
 /** Legacy recalled-memory instruction, used when `enableEnhancedTimelineWriting` is off. */
 export const NOODLE_LEGACY_RECALLED_MEMORY_INSTRUCTION =
-  "- These posts are more than 48 hours old and are optional long-term memories. Active accounts may naturally remember, revisit, like, reply to, or build on them, but do not force a reference.";
+  "- These posts are more than 48 hours old and are optional long-term memories. Active accounts may naturally remember, revisit, like, repost, reply to, or build on them, but do not force a reference.";
 export const NOODLE_RECALLED_MEMORY_INSTRUCTION =
-  "- These posts are more than 48 hours old and are past context an account might plausibly remember, especially posts or threads involving currently active accounts. When a recalled post naturally continues a relevant thread, character relationship, or grievance, feel free to revisit, reply to, or build on it — but do not force a reference to every recalled post, and skip ones that don't fit the moment.";
+  "- These posts are more than 48 hours old and are past context an account might plausibly remember, especially posts or threads involving currently active accounts. When a recalled post naturally continues a relevant thread, character relationship, or grievance, feel free to revisit, reply to, repost, or build on it — but do not force a reference to every recalled post, and skip ones that don't fit the moment.";
 
 type NoodleTimelineFeatureSettings = Pick<
   SlurpSettings,

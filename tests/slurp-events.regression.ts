@@ -118,7 +118,12 @@ for (const call of ["subscribe", "unlock", "renew"]) {
   assert.match(storage, new RegExp(`notifyCreatorIncome\\([^)]*"${call}"`, "u"), `${call} must notify`);
 }
 assert.match(storage, /recordCreatorEvent\(creatorAccountId, "lapsed"/u, "a lapse must be reported");
-assert.match(storage, /recordCreatorEvent\(creator\.id, "tip"/u, "a tip must be reported");
+// A tip is reported from the durable tip-effects step, so a refunded tip never leaves an event.
+assert.match(
+  read("server/src/services/storage/slurp-messages.storage.ts"),
+  /kind: "tip",[\s\S]{0,200}?operationId: `\$\{paymentId\}:event`/u,
+  "a tip must be reported",
+);
 
 const messages = read("server/src/services/storage/slurp-messages.storage.ts");
 assert.match(messages, /recordCreatorEvent\(creatorAccountId, "commission_requested"/u);

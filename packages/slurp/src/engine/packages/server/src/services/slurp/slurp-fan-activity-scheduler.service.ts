@@ -46,10 +46,5 @@ export function startNoodlerFanActivityScheduler(
   };
   registerStop?.(stop);
   schedule(INITIAL_DELAY_MS);
-  app.addHook("onClose", async () => {
-    stopped = true;
-    if (timer) clearTimeout(timer);
-    await active?.catch(() => {});
-  });
   return { stop };
 }

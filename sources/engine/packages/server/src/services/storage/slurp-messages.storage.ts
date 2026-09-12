@@ -6,12 +6,14 @@
 // lines. It composes that storage for accounts, subscriptions, and the wallet instead of
 // reimplementing them, so a DM tip and a profile tip move coins through exactly one code path.
 import { tolerateMissingTables } from "./slurp-host-tables.js";
-import { and, asc, desc, eq, gt } from "../../db/file-query.js";
+import { and, asc, desc, eq, gt, isNull, or } from "../../db/file-query.js";
 import { newId } from "../../utils/id-generator.js";
 import type { DB } from "../../db/connection.js";
+import { logger } from "../../lib/logger.js";
 import { isFileUniqueConstraintError } from "../../db/file-schema.js";
 import {
   slurpCommissions,
+  slurpPaymentCompensations,
   slurpMessageClaims,
   slurpMessages,
   slurpReplyBubbles,
@@ -31,6 +33,7 @@ import {
 } from "../slurp/slurp-creator-state.js";
 import { activeSlurpStrikes } from "../slurp/slurp-stance.js";
 import { createAppSettingsStorage } from "./app-settings.storage.js";
+import { createSlurpEventsStorage } from "./slurp-events.storage.js";
 import { createSlurpStorage } from "./slurp.storage.js";
 import { createSlurpPopulationStorage } from "./slurp-population.storage.js";
 import {
@@ -70,12 +73,482 @@ export { SLURP_LONGTERM_NOTE_LIMIT, SLURP_WORKING_NOTE_LIMIT } from "../slurp/sl
 
 const messageUnlocks = new Map<string, Promise<SlurpMessage | null>>();
 const directMessageTips = new Map<string, Promise<SlurpSendResult>>();
-const commissionAccepts = new Map<string, Promise<SlurpCommission | null>>();
-const commissionSettlements = new Map<string, Promise<SlurpCommission | null>>();
-const commissionDeliveries = new Map<string, Promise<SlurpCommission | null>>();
+const commissionOperations = new Map<string, Promise<SlurpCommission | null>>();
+const paymentIntentClaims = new Map<string, Promise<SlurpPaymentIntentClaim>>();
+const slurpDatabases = new WeakMap<object, DB>();
+
+type SlurpPaymentIntentClaim = "claimed" | "charged" | "settled" | "unpayable";
+type SlurpPayment = {
+  viewerAccountId: string;
+  creatorAccountId: string;
+  price: number;
+  note: string;
+  creditOperationId: string;
+};
+
+class SlurpCompensationError extends Error {
+  constructor(
+    readonly originalFailure: unknown,
+    readonly compensationFailures: Array<{ operation: string; error: unknown }>,
+    readonly payment: {
+      viewerAccountId: string;
+      creatorAccountId: string;
+      price: number;
+      note: string;
+      creditOperationId: string;
+    },
+  ) {
+    super(`Payment compensation failed for ${payment.note}`, { cause: originalFailure });
+    this.name = "SlurpCompensationError";
+  }
+}
+
+async function compensateSlurpPayment(
+  slurp: ReturnType<typeof createSlurpStorage>,
+  payment: {
+    viewerAccountId: string;
+    creatorAccountId: string;
+    price: number;
+    note: string;
+    creditOperationId: string;
+  },
+  originalFailure: unknown,
+  compensationId: string,
+): Promise<void> {
+  const db = slurpDatabases.get(slurp);
+  if (!db) throw new Error("Slurp compensation database is unavailable");
+  const failures: Array<{ operation: string; error: unknown }> = [];
+  const existing = (await db.select().from(slurpPaymentCompensations).where(eq(slurpPaymentCompensations.id, compensationId)))[0];
+  if (!existing) {
+    const timestamp = now();
+    try {
+      await db.insert(slurpPaymentCompensations).values({
+        id: compensationId,
+        viewerAccountId: payment.viewerAccountId,
+        creatorAccountId: payment.creatorAccountId,
+        amount: String(payment.price),
+        creditedAmount: null,
+        note: payment.note,
+        creditOperationId: payment.creditOperationId,
+       status: "charged",
+        refundedAt: null,
+        reversedAt: null,
+        effectsAppliedAt: null,
+        failedAt: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
+    } catch (error) {
+      if (!isFileUniqueConstraintError(error, "slurp_payment_compensations", ["id"])) throw error;
+    }
+  }
+  try {
+    let current = (await db.select().from(slurpPaymentCompensations).where(eq(slurpPaymentCompensations.id, compensationId)))[0];
+    if (!current) throw new Error("Payment compensation row was not persisted");
+    if (!current.refundedAt) {
+      await slurp.refundCoins(payment.viewerAccountId, payment.price, payment.note, `${compensationId}:refund`);
+      await db.update(slurpPaymentCompensations).set({ refundedAt: now(), status: "partial", updatedAt: now() }).where(eq(slurpPaymentCompensations.id, compensationId));
+    }
+    current = (await db.select().from(slurpPaymentCompensations).where(eq(slurpPaymentCompensations.id, compensationId)))[0];
+    let reversal: number;
+    if (current.creditedAmount == null) {
+      const related = await db
+        .select()
+        .from(slurpPaymentCompensations)
+        .where(eq(slurpPaymentCompensations.creditOperationId, payment.creditOperationId));
+      const recordedAmount = related.find((row) => row.creditedAmount != null)?.creditedAmount;
+      const creditedAmount =
+        recordedAmount == null
+          ? await slurp.getCreatorIncomeOperationAmount(payment.creatorAccountId, payment.creditOperationId)
+          : Number(recordedAmount);
+      if (creditedAmount === null) throw new Error("Matching creator income credit amount was not found");
+      if (!Number.isInteger(creditedAmount) || creditedAmount < 0)
+        throw new Error("Stored creator income credit amount is invalid");
+      reversal = creditedAmount;
+      await db
+        .update(slurpPaymentCompensations)
+        .set({ creditedAmount: String(creditedAmount), updatedAt: now() })
+        .where(eq(slurpPaymentCompensations.id, compensationId));
+    } else {
+      reversal = Number(current.creditedAmount);
+      if (!Number.isInteger(reversal) || reversal < 0)
+        throw new Error("Stored creator income credit amount is invalid");
+    }
+    if (reversal > 0 && !current?.reversedAt) {
+      const reversed = await slurp.reverseCreatorIncome(payment.creatorAccountId, reversal, payment.note, `${compensationId}:reverse`);
+      if (!reversed) throw new Error("Creator income reversal did not occur");
+      await db.update(slurpPaymentCompensations).set({ reversedAt: now(), status: "completed", updatedAt: now() }).where(eq(slurpPaymentCompensations.id, compensationId));
+    } else if (reversal === 0) {
+      await db.update(slurpPaymentCompensations).set({ status: "completed", updatedAt: now() }).where(eq(slurpPaymentCompensations.id, compensationId));
+    }
+  } catch (error) {
+    failures.push({ operation: "compensation setup", error });
+  }
+  if (failures.length > 0) {
+    try {
+      await db.update(slurpPaymentCompensations).set({ status: "failed", failedAt: now(), updatedAt: now() }).where(eq(slurpPaymentCompensations.id, compensationId));
+    } catch (error) {
+      failures.push({ operation: "compensation state update", error });
+    }
+    const compensationError = new SlurpCompensationError(originalFailure, failures, payment);
+    logger.error(
+      { err: compensationError, payment, compensationFailures: failures },
+      "[slurp] Payment compensation failed; retry state is preserved",
+    );
+    throw compensationError;
+  }
+}
+
+async function persistSlurpPaymentCreditedAmount(
+  slurp: ReturnType<typeof createSlurpStorage>,
+  compensationId: string,
+  creatorAccountId: string,
+  creditOperationId: string,
+): Promise<void> {
+  const db = slurpDatabases.get(slurp);
+  if (!db) throw new Error("Slurp compensation database is unavailable");
+  const creditedAmount = (await slurp.getCreatorIncomeOperationAmount(creatorAccountId, creditOperationId)) ?? 0;
+  await db
+    .update(slurpPaymentCompensations)
+    .set({ creditedAmount: String(creditedAmount), updatedAt: now() })
+    .where(eq(slurpPaymentCompensations.id, compensationId));
+}
+
+export async function compensateSlurpPaymentForDatabase(
+  db: DB,
+  payment: SlurpPayment,
+  originalFailure: unknown,
+  compensationId: string,
+): Promise<void> {
+  const slurp = createSlurpStorage(db);
+  slurpDatabases.set(slurp, db);
+  await compensateSlurpPayment(slurp, payment, originalFailure, compensationId);
+}
+
+export async function claimSlurpPaymentIntentForDatabase(
+  db: DB,
+  payment: SlurpPayment,
+  paymentId: string,
+): Promise<SlurpPaymentIntentClaim> {
+  const slurp = createSlurpStorage(db);
+  slurpDatabases.set(slurp, db);
+  return createSlurpPaymentIntent(slurp, payment, paymentId);
+}
+
+export async function resetSlurpPaymentIntentForDatabase(db: DB, paymentId: string): Promise<void> {
+  const slurp = createSlurpStorage(db);
+  slurpDatabases.set(slurp, db);
+  await resetSlurpPaymentIntentAfterInsufficientFunds(slurp, paymentId);
+}
+
+export async function settleSlurpPaymentIntentForDatabase(
+  db: DB,
+  paymentId: string,
+  creatorAccountId: string,
+  creditOperationId: string,
+): Promise<void> {
+  const slurp = createSlurpStorage(db);
+  slurpDatabases.set(slurp, db);
+  await persistSlurpPaymentCreditedAmount(slurp, paymentId, creatorAccountId, creditOperationId);
+  await completeSlurpPaymentIntent(slurp, paymentId);
+}
+
+async function createSlurpPaymentIntent(
+  slurp: ReturnType<typeof createSlurpStorage>,
+  payment: {
+    viewerAccountId: string;
+    creatorAccountId: string;
+    price: number;
+    note: string;
+    creditOperationId: string;
+  },
+  compensationId: string,
+): Promise<SlurpPaymentIntentClaim> {
+  const previous = paymentIntentClaims.get(compensationId) ?? Promise.resolve("unpayable" as const);
+  const current = previous.catch(() => "unpayable" as const).then(() => createSlurpPaymentIntentUnlocked(slurp, payment, compensationId));
+  paymentIntentClaims.set(compensationId, current);
+  void current.then(
+    () => {
+      if (paymentIntentClaims.get(compensationId) === current) paymentIntentClaims.delete(compensationId);
+    },
+    () => {
+      if (paymentIntentClaims.get(compensationId) === current) paymentIntentClaims.delete(compensationId);
+    },
+  );
+  return current;
+}
+
+async function createSlurpPaymentIntentUnlocked(
+  slurp: ReturnType<typeof createSlurpStorage>,
+  payment: {
+    viewerAccountId: string;
+    creatorAccountId: string;
+    price: number;
+    note: string;
+    creditOperationId: string;
+  },
+  compensationId: string,
+): Promise<SlurpPaymentIntentClaim> {
+  const db = slurpDatabases.get(slurp);
+  if (!db) throw new Error("Slurp compensation database is unavailable");
+  const timestamp = now();
+  try {
+    await db.insert(slurpPaymentCompensations).values({
+      id: compensationId,
+      viewerAccountId: payment.viewerAccountId,
+      creatorAccountId: payment.creatorAccountId,
+      amount: String(payment.price),
+      creditedAmount: null,
+      note: payment.note,
+      creditOperationId: payment.creditOperationId,
+       status: "created",
+      refundedAt: null,
+      reversedAt: null,
+      effectsAppliedAt: null,
+      failedAt: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+  } catch (error) {
+    if (!isFileUniqueConstraintError(error, "slurp_payment_compensations", ["id"])) throw error;
+  }
+  const existing = (await db.select().from(slurpPaymentCompensations).where(eq(slurpPaymentCompensations.id, compensationId)))[0];
+  if (!existing) throw new Error("Slurp payment intent was not persisted");
+  if (
+    String(existing.viewerAccountId) !== payment.viewerAccountId ||
+    String(existing.creatorAccountId) !== payment.creatorAccountId ||
+    int(existing.amount) !== payment.price ||
+    String(existing.note ?? "") !== payment.note ||
+    String(existing.creditOperationId ?? "") !== payment.creditOperationId
+  )
+    return "unpayable";
+  if (existing.status === "charged") return "charged";
+  if (existing.status === "settled") return "settled";
+  let status = existing.status;
+  if (existing.status === "declined") {
+    await db
+      .update(slurpPaymentCompensations)
+      .set({ status: "created", claimToken: null, updatedAt: now() })
+      .where(and(eq(slurpPaymentCompensations.id, compensationId), eq(slurpPaymentCompensations.status, "declined")));
+    status = "created";
+  }
+  if (status !== "created") return "unpayable";
+  const claimToken = newId();
+  await db
+    .update(slurpPaymentCompensations)
+    .set({ status: "charging", claimToken, updatedAt: now() })
+    .where(and(eq(slurpPaymentCompensations.id, compensationId), eq(slurpPaymentCompensations.status, "created")));
+  const claimed = (
+    await db
+      .select()
+      .from(slurpPaymentCompensations)
+      .where(and(eq(slurpPaymentCompensations.id, compensationId), eq(slurpPaymentCompensations.claimToken, claimToken)))
+  )[0];
+  return claimed?.status === "charging" ? "claimed" : "unpayable";
+}
+
+async function completeSlurpPaymentIntent(
+  slurp: ReturnType<typeof createSlurpStorage>,
+  compensationId: string,
+): Promise<void> {
+  const db = slurpDatabases.get(slurp);
+  if (!db) throw new Error("Slurp compensation database is unavailable");
+  await db
+    .update(slurpPaymentCompensations)
+    .set({ status: "settled", updatedAt: now() })
+    .where(eq(slurpPaymentCompensations.id, compensationId));
+}
+
+async function applySlurpTipEffects(
+  slurp: ReturnType<typeof createSlurpStorage>,
+  paymentId: string,
+): Promise<void> {
+  const db = slurpDatabases.get(slurp);
+  if (!db) throw new Error("Slurp compensation database is unavailable");
+  const payment = (await db.select().from(slurpPaymentCompensations).where(eq(slurpPaymentCompensations.id, paymentId)))[0];
+  if (!payment || payment.effectsAppliedAt || payment.status !== "settled") return;
+  const note = String(payment.note ?? "");
+  if (note !== "profile tip" && note !== "direct-message tip") return;
+  const creator = await slurp.getNoodlerAccountById(String(payment.creatorAccountId));
+  if (!creator) throw new Error("Tip Creator was not found while applying durable effects");
+  await db.transaction(async (tx) => {
+    const current = (await tx.select().from(slurpPaymentCompensations).where(eq(slurpPaymentCompensations.id, paymentId)))[0];
+    if (!current || current.effectsAppliedAt || current.status !== "settled") return;
+    const amount = int(current.amount as string);
+    if (creator.sourceKind === "persona" && creator.sourceEntityId) {
+      await createSlurpEventsStorage(tx).recordAndPrune({
+        recipientPersonaId: creator.sourceEntityId,
+        kind: "tip",
+        creatorAccountId: creator.id,
+        actorLabel: String(current.viewerAccountId),
+        operationId: `${paymentId}:event`,
+        amount,
+      });
+    }
+    await createSlurpPopulationStorage(tx).advanceTie(String(current.viewerAccountId), creator.id, {
+      stage: "regular",
+      spent: amount,
+      tipped: amount,
+    });
+    await tx.update(slurpPaymentCompensations).set({ effectsAppliedAt: now(), updatedAt: now() }).where(and(eq(slurpPaymentCompensations.id, paymentId), isNull(slurpPaymentCompensations.effectsAppliedAt)));
+  });
+}
+
+async function applyPaymentTieOnce(
+  slurp: ReturnType<typeof createSlurpStorage>,
+  paymentId: string,
+  viewerAccountId: string,
+  creatorAccountId: string,
+  spent: number,
+): Promise<void> {
+  const db = slurpDatabases.get(slurp);
+  if (!db) throw new Error("Slurp compensation database is unavailable");
+  await db.transaction(async (tx) => {
+    const current = (
+      await tx.select().from(slurpPaymentCompensations).where(eq(slurpPaymentCompensations.id, paymentId))
+    )[0];
+    if (!current || current.effectsAppliedAt) return;
+    await createSlurpPopulationStorage(tx).advanceTie(viewerAccountId, creatorAccountId, {
+      stage: "regular",
+      spent,
+    });
+    await tx
+      .update(slurpPaymentCompensations)
+      .set({ effectsAppliedAt: now(), updatedAt: now() })
+      .where(and(eq(slurpPaymentCompensations.id, paymentId), isNull(slurpPaymentCompensations.effectsAppliedAt)));
+  });
+}
+
+export async function applySlurpTipEffectsForDatabase
+(db: DB, paymentId: string): Promise<void> {
+  const slurp = createSlurpStorage(db);
+  slurpDatabases.set(slurp, db);
+  await applySlurpTipEffects(slurp, paymentId);
+}
+
+async function hasCompletedSlurpPaymentOperation(
+  db: DB,
+  slurp: ReturnType<typeof createSlurpStorage>,
+  row: typeof slurpPaymentCompensations.$inferSelect,
+): Promise<boolean> {
+  const paymentId = String(row.id);
+  const note = String(row.note ?? "");
+  if (note === "message request" && paymentId === `message-request:${row.viewerAccountId}:${row.creatorAccountId}`) {
+    return (
+      await db
+        .select()
+        .from(slurpThreads)
+        .where(
+          and(
+            eq(slurpThreads.viewerAccountId, String(row.viewerAccountId)),
+            eq(slurpThreads.creatorAccountId, String(row.creatorAccountId)),
+          ),
+        )
+    ).length > 0;
+  }
+  if (note === "PPV unlock" && paymentId.startsWith("ppv:")) {
+    const message = (await db.select().from(slurpMessages).where(eq(slurpMessages.id, paymentId.slice(4))))[0];
+    return Boolean(message?.unlockedAt);
+  }
+  if (note === "commission" && paymentId.startsWith("commission:") && paymentId.endsWith(":accept")) {
+    const commissionId = paymentId.slice("commission:".length, -":accept".length);
+    const commission = (await db.select().from(slurpCommissions).where(eq(slurpCommissions.id, commissionId)))[0];
+    if (commission?.state === "accepted" || commission?.state === "delivered") return true;
+    return (
+      (commission?.state === "cancellation_pending" || commission?.state === "declined") &&
+      commission.cancellationId === `commission:${commissionId}:settlement`
+    );
+  }
+  if (note === "profile tip" && paymentId.startsWith("profile-tip:")) {
+    if (row.creditedAmount != null) return true;
+    if (!row.creditOperationId) return false;
+    return (await slurp.getCreatorIncomeOperationAmount(String(row.creatorAccountId), row.creditOperationId)) !== null;
+  }
+  if (note === "direct-message tip" && paymentId.startsWith("dm:") && paymentId.endsWith(":credit")) {
+    const messageId = `${paymentId.slice(0, -":credit".length)}:tip`;
+    return Boolean((await db.select().from(slurpMessages).where(eq(slurpMessages.id, messageId)))[0]);
+  }
+  return false;
+}
+
+async function markSlurpPaymentIntentCharged(
+  slurp: ReturnType<typeof createSlurpStorage>,
+  compensationId: string,
+): Promise<void> {
+  const db = slurpDatabases.get(slurp);
+  if (!db) throw new Error("Slurp compensation database is unavailable");
+  await db
+    .update(slurpPaymentCompensations)
+    .set({ status: "charged", updatedAt: now() })
+    .where(eq(slurpPaymentCompensations.id, compensationId));
+}
+
+async function resetSlurpPaymentIntentAfterInsufficientFunds(
+  slurp: ReturnType<typeof createSlurpStorage>,
+  compensationId: string,
+): Promise<void> {
+  const db = slurpDatabases.get(slurp);
+  if (!db) throw new Error("Slurp compensation database is unavailable");
+  await db
+    .update(slurpPaymentCompensations)
+    .set({ status: "created", claimToken: null, updatedAt: now() })
+    .where(and(eq(slurpPaymentCompensations.id, compensationId), eq(slurpPaymentCompensations.status, "charging")));
+}
+
+async function recoverChargingSlurpPayment(
+  slurp: ReturnType<typeof createSlurpStorage>,
+  row: typeof slurpPaymentCompensations.$inferSelect,
+): Promise<void> {
+  const db = slurpDatabases.get(slurp);
+  if (!db) throw new Error("Slurp compensation database is unavailable");
+  const stale = Date.parse(String(row.updatedAt)) <= Date.now() - 5 * 60 * 1000;
+  if (!stale) return;
+  // The payment intent ID is also the spend operation ID in both payment paths. Querying that
+  // stable ledger key proves a debit without calling spendCoins again after a restart.
+  const spendOperationId = String(row.id);
+  const provenCharged = await slurp.hasWalletSpendOperation(String(row.viewerAccountId), spendOperationId);
+  if (!provenCharged) {
+    // A missing ledger row cannot prove a debit, so make the intent retryable without refunding.
+    await db
+      .update(slurpPaymentCompensations)
+      .set({ status: "created", claimToken: null, updatedAt: now() })
+      .where(
+        and(
+          eq(slurpPaymentCompensations.id, row.id),
+          eq(slurpPaymentCompensations.status, "charging"),
+          eq(slurpPaymentCompensations.claimToken, row.claimToken),
+        ),
+      );
+    logger.warn("[slurp] Stale charging payment has no debit proof; reset for retry: %s", row.id);
+    return;
+  }
+  await db
+    .update(slurpPaymentCompensations)
+    .set({ status: "charged", updatedAt: now() })
+    .where(and(eq(slurpPaymentCompensations.id, row.id), eq(slurpPaymentCompensations.status, "charging")));
+}
+
+function queueCommissionOperation(
+  id: string,
+  operation: () => Promise<SlurpCommission | null>,
+): Promise<SlurpCommission | null> {
+  const previous = commissionOperations.get(id) ?? Promise.resolve(null);
+  const current = previous.catch(() => null).then(operation);
+  commissionOperations.set(id, current);
+  void current.then(
+    () => {
+      if (commissionOperations.get(id) === current) commissionOperations.delete(id);
+    },
+    () => {
+      if (commissionOperations.get(id) === current) commissionOperations.delete(id);
+    },
+  );
+  return current;
+}
 
 export function createSlurpMessagesStorage(db: DB) {
   const slurp = createSlurpStorage(db);
+  slurpDatabases.set(slurp, db);
   const settingsStore = createAppSettingsStorage(db);
 
   const readMessagingBlob = async (): Promise<Record<string, unknown>> =>
@@ -123,6 +596,96 @@ export function createSlurpMessagesStorage(db: DB) {
     async getThreadById(threadId: string): Promise<SlurpThread | null> {
       const rows = await db.select().from(slurpThreads).where(eq(slurpThreads.id, threadId));
       return rows[0] ? mapThread(rows[0]) : null;
+    },
+
+    /** Retry payment compensation rows that survived a process restart. */
+    async recoverPendingPayments(): Promise<void> {
+      const rows = await db
+        .select()
+        .from(slurpPaymentCompensations)
+         .where(
+           or(
+            eq(slurpPaymentCompensations.status, "charging"),
+            eq(slurpPaymentCompensations.status, "charged"),
+            eq(slurpPaymentCompensations.status, "failed"),
+            eq(slurpPaymentCompensations.status, "settled"),
+          ),
+        );
+      for (let row of rows) {
+        if (row.status === "settled") {
+          await applySlurpTipEffects(slurp, String(row.id)).catch((error) =>
+            logger.warn(error, "[slurp] Durable tip-effect recovery failed for %s", row.id),
+          );
+          continue;
+        }
+        if (row.status === "charging") {
+          await recoverChargingSlurpPayment(slurp, row).catch((error) =>
+            logger.warn(error, "[slurp] Charging payment recovery failed for %s", row.id),
+          );
+          const recovered = (
+            await db.select().from(slurpPaymentCompensations).where(eq(slurpPaymentCompensations.id, row.id))
+          )[0];
+          if (!recovered || recovered.status !== "charged") continue;
+          row = recovered;
+        }
+        if (row.status === "charged" && (await hasCompletedSlurpPaymentOperation(db, slurp, row))) {
+          await completeSlurpPaymentIntent(slurp, String(row.id));
+          await applySlurpTipEffects(slurp, String(row.id));
+          continue;
+        }
+        if (!row.creditOperationId) {
+          logger.warn("[slurp] Skipping payment recovery without a credit operation ID for %s", row.id);
+          continue;
+        }
+        await compensateSlurpPayment(
+          slurp,
+          {
+            viewerAccountId: String(row.viewerAccountId),
+            creatorAccountId: String(row.creatorAccountId),
+            price: int(row.amount as string),
+            note: String(row.note ?? "payment compensation"),
+            creditOperationId: String(row.creditOperationId),
+          },
+          new Error("Retrying durable payment compensation"),
+          String(row.id),
+        ).catch((error) => logger.warn(error, "[slurp] Durable payment recovery failed for %s", row.id));
+      }
+      const cancellations = await db
+        .select()
+        .from(slurpCommissions)
+        .where(eq(slurpCommissions.state, "cancellation_pending"));
+      for (const row of cancellations) {
+        const commission = mapCommission(row);
+        if (!commission.cancellationId) continue;
+        try {
+          await compensateSlurpPayment(
+            slurp,
+            {
+              viewerAccountId: commission.viewerAccountId,
+              creatorAccountId: commission.creatorAccountId,
+              price: commission.price,
+              note: "cancelled commission",
+              creditOperationId: `commission:${commission.id}:accept:credit`,
+            },
+            new Error("Retrying pending commission cancellation"),
+            commission.cancellationId,
+         );
+        await storage.appendMessage(commission.threadId, {
+          id: `commission:${commission.id}:cancellation-message`,
+          senderAccountId: commission.viewerAccountId,
+          role: "viewer",
+          kind: "system",
+          content: "The fan cancelled this commission. The payment was refunded.",
+          metadata: { commissionId: commission.id },
+        });
+        await db
+          .update(slurpCommissions)
+          .set({ state: "declined", updatedAt: now() })
+            .where(eq(slurpCommissions.id, commission.id));
+        } catch (error) {
+          logger.warn(error, "[slurp] Durable cancellation recovery failed for %s", commission.id);
+        }
+      }
     },
 
     async getThread(viewerAccountId: string, creatorAccountId: string): Promise<SlurpThread | null> {
@@ -320,12 +883,54 @@ export function createSlurpMessagesStorage(db: DB) {
 
       const settings = await slurp.getSettings();
       let feePaid = 0;
+      let chargedByThisCall = false;
+      const messageRequestId = `message-request:${viewerAccountId}:${creatorAccountId}`;
+      const messageRequestCreditId = `${messageRequestId}:credit`;
       if (settings.walletEnabled && admission.fee > 0) {
-        const charged = await slurp.spendCoins(viewerAccountId, "messageRequest", admission.fee, creator.handle);
-        if (!charged) return { status: "insufficient_funds", required: admission.fee };
-        await slurp.creditCreatorIncome(creatorAccountId, admission.fee, "messageRequest");
-        await slurp.notifyCreatorIncome(creatorAccountId, "messageRequest", admission.fee, viewerAccountId);
-        feePaid = admission.fee;
+        const paymentIntent = await createSlurpPaymentIntent(
+          slurp,
+          {
+            viewerAccountId,
+            creatorAccountId,
+            price: admission.fee,
+            note: "message request",
+            creditOperationId: messageRequestCreditId,
+          },
+          messageRequestId,
+        );
+         if (paymentIntent === "unpayable") return { status: "insufficient_funds", required: admission.fee };
+          const charged = paymentIntent === "charged" || paymentIntent === "settled" ? true : await slurp.spendCoins(viewerAccountId, "messageRequest", admission.fee, creator.handle, messageRequestId);
+         if (!charged) {
+           await resetSlurpPaymentIntentAfterInsufficientFunds(slurp, messageRequestId);
+           return { status: "insufficient_funds", required: admission.fee };
+          }
+          feePaid = admission.fee;
+          chargedByThisCall = paymentIntent === "claimed";
+          await markSlurpPaymentIntentCharged(slurp, messageRequestId);
+         try {
+           await slurp.creditCreatorIncome(creatorAccountId, feePaid, "messageRequest", messageRequestCreditId);
+          await persistSlurpPaymentCreditedAmount(
+            slurp,
+            messageRequestId,
+            creatorAccountId,
+            messageRequestCreditId,
+          );
+          await slurp.notifyCreatorIncome(creatorAccountId, "messageRequest", feePaid, viewerAccountId);
+        } catch (error) {
+          await compensateSlurpPayment(
+            slurp,
+            {
+              viewerAccountId,
+              creatorAccountId,
+              price: feePaid,
+              note: "failed message request",
+              creditOperationId: messageRequestCreditId,
+            },
+            error,
+            messageRequestId,
+          );
+          throw error;
+        }
       }
 
       const timestamp = now();
@@ -349,15 +954,48 @@ export function createSlurpMessagesStorage(db: DB) {
       try {
         await db.insert(slurpThreads).values(row);
       } catch (error) {
-        if (!isFileUniqueConstraintError(error, "slurp_threads", ["viewerAccountId", "creatorAccountId"])) throw error;
+        if (!isFileUniqueConstraintError(error, "slurp_threads", ["viewerAccountId", "creatorAccountId"])) {
+          if (feePaid > 0) {
+            await compensateSlurpPayment(
+              slurp,
+              {
+                viewerAccountId,
+                creatorAccountId,
+                price: feePaid,
+                note: "failed message request",
+                creditOperationId: messageRequestCreditId,
+              },
+              error,
+              `message-request:${viewerAccountId}:${creatorAccountId}`,
+            );
+          }
+          throw error;
+        }
         const raced = await storage.getThread(viewerAccountId, creatorAccountId);
-        if (feePaid > 0) {
-          await slurp.refundCoins(viewerAccountId, feePaid, "duplicate message request");
-          await slurp.reverseCreatorIncome(creatorAccountId, feePaid, "duplicate message request");
+        const paymentIntent = feePaid > 0
+          ? (await db.select().from(slurpPaymentCompensations).where(eq(slurpPaymentCompensations.id, messageRequestId)))[0]
+          : undefined;
+        if (raced && (paymentIntent?.status === "charged" || paymentIntent?.status === "settled")) {
+          return { status: "ok", thread: raced };
+        }
+        if (feePaid > 0 && chargedByThisCall && !raced) {
+          await compensateSlurpPayment(
+            slurp,
+            {
+              viewerAccountId,
+              creatorAccountId,
+              price: feePaid,
+              note: "duplicate message request",
+              creditOperationId: messageRequestCreditId,
+            },
+            error,
+            messageRequestId,
+          );
         }
         return raced ? { status: "ok", thread: raced } : { status: "not_found" };
       }
       const thread = await storage.getThread(viewerAccountId, creatorAccountId);
+      if (feePaid > 0) await completeSlurpPaymentIntent(slurp, messageRequestId);
       return thread ? { status: "ok", thread } : { status: "not_found" };
     },
 
@@ -578,10 +1216,23 @@ export function createSlurpMessagesStorage(db: DB) {
       const price = int(row.price as string);
       const settings = await slurp.getSettings();
       if (settings.walletEnabled) {
-        const charged = await slurp.spendCoins(viewerAccountId, "ppv", price, thread.creatorAccountId);
-        if (!charged) return null;
-        try {
-          await slurp.creditCreatorIncome(thread.creatorAccountId, price, "ppv");
+        const paymentId = `ppv:${messageId}`;
+        const creditOperationId = `message:${messageId}:ppv`;
+        const paymentIntent = await createSlurpPaymentIntent(
+          slurp,
+          { viewerAccountId, creatorAccountId: thread.creatorAccountId, price, note: "PPV unlock", creditOperationId },
+          paymentId,
+        );
+         if (paymentIntent === "unpayable") return null;
+         const charged = paymentIntent === "charged" || paymentIntent === "settled" ? true : await slurp.spendCoins(viewerAccountId, "ppv", price, thread.creatorAccountId, paymentId);
+         if (!charged) {
+           await resetSlurpPaymentIntentAfterInsufficientFunds(slurp, paymentId);
+           return null;
+         }
+         await markSlurpPaymentIntentCharged(slurp, paymentId);
+         try {
+           await slurp.creditCreatorIncome(thread.creatorAccountId, price, "ppv", creditOperationId);
+          await persistSlurpPaymentCreditedAmount(slurp, paymentId, thread.creatorAccountId, creditOperationId);
           await slurp.notifyCreatorIncome(thread.creatorAccountId, "ppv", price, viewerAccountId, messageId);
           // Paying to see something is the strongest signal in a thread, and it reached the funnel
           // nowhere: only profile unlocks did, so the same coins counted or not by where they were spent.
@@ -594,8 +1245,18 @@ export function createSlurpMessagesStorage(db: DB) {
           await db.update(slurpMessages).set({ unlockedAt }).where(eq(slurpMessages.id, messageId));
           return mapMessage({ ...row, unlockedAt });
         } catch (error) {
-          await slurp.refundCoins(viewerAccountId, price, "failed PPV unlock");
-          await slurp.reverseCreatorIncome(thread.creatorAccountId, price, "failed PPV unlock");
+          await compensateSlurpPayment(
+            slurp,
+            {
+              viewerAccountId,
+              creatorAccountId: thread.creatorAccountId,
+              price,
+              note: "failed PPV unlock",
+              creditOperationId,
+            },
+            error,
+            paymentId,
+          );
           throw error;
         }
       }
@@ -608,6 +1269,7 @@ export function createSlurpMessagesStorage(db: DB) {
       creatorAccountId: string,
       viewerAccountId: string,
       input: {
+        id?: string;
         content: string;
         kind?: SlurpMessageKind;
         price?: number;
@@ -627,6 +1289,7 @@ export function createSlurpMessagesStorage(db: DB) {
       const opened = await storage.openThread(viewerAccountId, creatorAccountId, "creator");
       if (opened.status !== "ok") return null;
       return storage.appendMessage(opened.thread.id, {
+        id: input.id,
         senderAccountId: creatorAccountId,
         role: "creator",
         content: input.content,
@@ -814,14 +1477,7 @@ export function createSlurpMessagesStorage(db: DB) {
      * makes the funnel's paying stages reachable by anyone other than the player.
      */
     async settleAudienceCommission(id: string, decision: "accept" | "decline"): Promise<SlurpCommission | null> {
-      const previous = commissionSettlements.get(id) ?? Promise.resolve(null);
-      const current = previous.catch(() => null).then(() => storage.settleAudienceCommissionUnlocked(id, decision));
-      commissionSettlements.set(id, current);
-      try {
-        return await current;
-      } finally {
-        if (commissionSettlements.get(id) === current) commissionSettlements.delete(id);
-      }
+      return queueCommissionOperation(id, () => storage.settleAudienceCommissionUnlocked(id, decision));
     },
 
     async settleAudienceCommissionUnlocked(
@@ -838,7 +1494,12 @@ export function createSlurpMessagesStorage(db: DB) {
           .where(eq(slurpCommissions.id, id));
         return storage.getCommission(id);
       }
-      await slurp.creditCreatorIncome(commission.creatorAccountId, commission.price, "commission");
+      await slurp.creditCreatorIncome(
+        commission.creatorAccountId,
+        commission.price,
+        "commission",
+        `commission:${id}:audience`,
+      );
       await slurp.notifyCreatorIncome(
         commission.creatorAccountId,
         "commission",
@@ -862,6 +1523,10 @@ export function createSlurpMessagesStorage(db: DB) {
     },
 
     async quoteCommission(id: string, price: number): Promise<SlurpCommission | null> {
+      return queueCommissionOperation(id, () => storage.quoteCommissionUnlocked(id, price));
+    },
+
+    async quoteCommissionUnlocked(id: string, price: number): Promise<SlurpCommission | null> {
       // Re-quoting an accepted or delivered commission used to reset it to `quoted`, which made it
       // payable a second time.
       const existing = await storage.getCommission(id);
@@ -889,36 +1554,56 @@ export function createSlurpMessagesStorage(db: DB) {
       // Serialized like `unlockMessage`: the check-then-spend span is the invariant, and the
       // financial queue only serializes each individual wallet write. Two concurrent accepts both
       // read `quoted` and both paid.
-      const previous = commissionAccepts.get(id) ?? Promise.resolve(null);
-      const current = previous.catch(() => null).then(() => storage.acceptCommissionUnlocked(id));
-      commissionAccepts.set(id, current);
-      try {
-        return await current;
-      } finally {
-        if (commissionAccepts.get(id) === current) commissionAccepts.delete(id);
-      }
+      return queueCommissionOperation(id, () => storage.acceptCommissionUnlocked(id));
     },
 
     async acceptCommissionUnlocked(id: string): Promise<SlurpCommission | null> {
       const commission = await storage.getCommission(id);
       if (!commission || commission.state !== "quoted") return commission;
       const settings = await slurp.getSettings();
-      if (
-        settings.walletEnabled &&
-        !(await slurp.spendCoins(
-          commission.viewerAccountId,
-          "commission",
-          commission.price,
-          commission.creatorAccountId,
-        ))
-      )
-        return null;
+      const paymentId = `commission:${id}:accept`;
+      if (settings.walletEnabled) {
+        const paymentIntent = await createSlurpPaymentIntent(
+          slurp,
+          {
+            viewerAccountId: commission.viewerAccountId,
+            creatorAccountId: commission.creatorAccountId,
+            price: commission.price,
+            note: "commission",
+            creditOperationId: `${paymentId}:credit`,
+          },
+          paymentId,
+        );
+        if (paymentIntent === "unpayable") return null;
+        const charged =
+          paymentIntent === "charged" || paymentIntent === "settled"
+            ? true
+            : await slurp.spendCoins(
+                commission.viewerAccountId,
+                "commission",
+                commission.price,
+                commission.creatorAccountId,
+                paymentId,
+              );
+        if (!charged) {
+          await resetSlurpPaymentIntentAfterInsufficientFunds(slurp, paymentId);
+          return null;
+        }
+        await markSlurpPaymentIntentCharged(slurp, paymentId);
+      }
       try {
-        await slurp.creditCreatorIncome(commission.creatorAccountId, commission.price, "commission");
-        await slurp.advanceAudienceTie(commission.viewerAccountId, commission.creatorAccountId, {
-          stage: "regular",
-          spent: commission.price,
-        });
+        await slurp.creditCreatorIncome(
+          commission.creatorAccountId,
+          commission.price,
+          "commission",
+          `commission:${id}:accept:credit`,
+        );
+        await persistSlurpPaymentCreditedAmount(
+          slurp,
+          paymentId,
+          commission.creatorAccountId,
+          `commission:${id}:accept:credit`,
+        );
         await slurp.notifyCreatorIncome(
           commission.creatorAccountId,
           "commission",
@@ -930,15 +1615,34 @@ export function createSlurpMessagesStorage(db: DB) {
           .update(slurpCommissions)
           .set({ state: "accepted", updatedAt: now() })
           .where(eq(slurpCommissions.id, id));
+        // Relationship progress runs once, after acceptance is durable, so a crashed or compensated
+        // accept can never leave paid progress behind or count it twice on retry.
+        await applyPaymentTieOnce(
+          slurp,
+          paymentId,
+          commission.viewerAccountId,
+          commission.creatorAccountId,
+          commission.price,
+        );
       } catch (error) {
         // Same compensation as `unlockMessageUnlocked`: a failure after the debit used to strand the
         // coins while leaving the commission payable again.
         if (settings.walletEnabled) {
-          await slurp.refundCoins(commission.viewerAccountId, commission.price, "failed commission accept");
-          await slurp.reverseCreatorIncome(commission.creatorAccountId, commission.price, "failed commission accept");
+          await db
+            .update(slurpCommissions)
+            .set({ state: "cancellation_pending", cancellationId: `commission:${id}:accept`, updatedAt: now() })
+            .where(eq(slurpCommissions.id, id));
+          await compensateSlurpPayment(slurp, {
+             viewerAccountId: commission.viewerAccountId,
+             creatorAccountId: commission.creatorAccountId,
+             price: commission.price,
+             note: "failed commission accept",
+             creditOperationId: `commission:${id}:accept:credit`,
+           }, error, `commission:${id}:accept`);
         }
         throw error;
       }
+      if (settings.walletEnabled) await completeSlurpPaymentIntent(slurp, paymentId);
       return storage.getCommission(id);
     },
 
@@ -985,28 +1689,66 @@ export function createSlurpMessagesStorage(db: DB) {
     },
 
     async declineCommission(id: string, by: "creator" | "viewer"): Promise<SlurpCommission | null> {
-      const previous = commissionAccepts.get(id) ?? Promise.resolve(null);
-      const current = previous.catch(() => null).then(() => storage.declineCommissionUnlocked(id, by));
-      commissionAccepts.set(id, current);
-      try {
-        return await current;
-      } finally {
-        if (commissionAccepts.get(id) === current) commissionAccepts.delete(id);
-      }
+      return queueCommissionOperation(id, () => storage.declineCommissionUnlocked(id, by));
     },
 
     async declineCommissionUnlocked(id: string, by: "creator" | "viewer"): Promise<SlurpCommission | null> {
       const commission = await storage.getCommission(id);
-      if (!commission || (commission.state !== "brief" && commission.state !== "quoted")) return commission;
-      await db.update(slurpCommissions).set({ state: "declined", updatedAt: now() }).where(eq(slurpCommissions.id, id));
-      await storage.appendMessage(commission.threadId, {
-        senderAccountId: by === "creator" ? commission.creatorAccountId : commission.viewerAccountId,
-        role: by === "creator" ? "creator" : "viewer",
-        kind: "system",
-        content:
-          by === "creator" ? "The Creator declined this commission." : "The fan withdrew this commission request.",
-        metadata: { commissionId: id },
-      });
+      if (!commission) return commission;
+      const acceptedUndelivered =
+        (commission.state === "accepted" || commission.state === "cancellation_pending") &&
+        by === "viewer" &&
+        (!commission.deliverAt || commission.deliverAt <= new Date().toISOString());
+      if (commission.state === "accepted" && by === "viewer" && !acceptedUndelivered) return commission;
+      if (!acceptedUndelivered && commission.state !== "brief" && commission.state !== "quoted") return commission;
+      if (acceptedUndelivered) {
+        const cancellationId = `commission:${id}:settlement`;
+        const claimed = await db.transaction(async (tx) => {
+          const current = (await tx.select().from(slurpCommissions).where(eq(slurpCommissions.id, id)))[0];
+          if (
+            !current ||
+            (current.state !== "accepted" && current.state !== "cancellation_pending") ||
+            (current.state === "cancellation_pending" && current.cancellationId !== cancellationId) ||
+            current.deliveryId ||
+            (current.deliverAt && String(current.deliverAt) > new Date().toISOString())
+          )
+            return false;
+          await tx.update(slurpCommissions).set({ state: "cancellation_pending", cancellationId, deliverAt: null, updatedAt: now() }).where(eq(slurpCommissions.id, id));
+          return true;
+        });
+        if (!claimed) {
+          const pending = await storage.getCommission(id);
+          if (pending?.state !== "cancellation_pending" || pending.cancellationId !== cancellationId) return pending;
+        }
+        await completeSlurpPaymentIntent(slurp, `commission:${id}:accept`);
+        await compensateSlurpPayment(slurp, {
+          viewerAccountId: commission.viewerAccountId,
+          creatorAccountId: commission.creatorAccountId,
+          price: commission.price,
+          note: "cancelled commission",
+          creditOperationId: `commission:${id}:accept:credit`,
+        }, new Error("Commission cancellation requires payment compensation"), cancellationId);
+        await storage.appendMessage(commission.threadId, {
+          id: `commission:${id}:cancellation-message`,
+          senderAccountId: commission.viewerAccountId,
+          role: "viewer",
+          kind: "system",
+          content: "The fan cancelled this commission. The payment was refunded.",
+          metadata: { commissionId: id },
+        });
+        await db.update(slurpCommissions).set({ state: "declined", updatedAt: now() }).where(eq(slurpCommissions.id, id));
+      } else {
+        await db.update(slurpCommissions).set({ state: "declined", updatedAt: now() }).where(eq(slurpCommissions.id, id));
+      }
+      if (!acceptedUndelivered)
+        await storage.appendMessage(commission.threadId, {
+          senderAccountId: by === "creator" ? commission.creatorAccountId : commission.viewerAccountId,
+          role: by === "creator" ? "creator" : "viewer",
+          kind: "system",
+          content:
+            by === "creator" ? "The Creator declined this commission." : "The fan withdrew this commission request.",
+          metadata: { commissionId: id },
+        });
       return storage.getCommission(id);
     },
 
@@ -1056,14 +1798,7 @@ export function createSlurpMessagesStorage(db: DB) {
       content: string,
       imageUrl: string | null = null,
     ): Promise<SlurpCommission | null> {
-      const previous = commissionDeliveries.get(id) ?? Promise.resolve(null);
-      const current = previous.catch(() => null).then(() => storage.deliverCommissionUnlocked(id, content, imageUrl));
-      commissionDeliveries.set(id, current);
-      try {
-        return await current;
-      } finally {
-        if (commissionDeliveries.get(id) === current) commissionDeliveries.delete(id);
-      }
+      return queueCommissionOperation(id, () => storage.deliverCommissionUnlocked(id, content, imageUrl));
     },
 
     async deliverCommissionUnlocked(
@@ -1073,16 +1808,81 @@ export function createSlurpMessagesStorage(db: DB) {
     ): Promise<SlurpCommission | null> {
       const commission = await storage.getCommission(id);
       if (!commission || commission.state !== "accepted") return commission;
-      const message = await storage.sendCreatorMessage(commission.creatorAccountId, commission.viewerAccountId, {
-        content,
-        kind: "commission_delivery",
-        imageUrl,
+      const deliveryId = `commission:${id}:delivery`;
+      const persistedBeforeClaim = await storage.getMessageById(deliveryId);
+      if (persistedBeforeClaim) {
+        await completeSlurpPaymentIntent(slurp, `commission:${id}:accept`);
+        await db
+          .update(slurpCommissions)
+          .set({ state: "delivered", deliveryMessageId: deliveryId, deliverAt: null, updatedAt: now() })
+          .where(eq(slurpCommissions.id, id));
+        return storage.getCommission(id);
+      }
+      const deliveryClaimToken = newId();
+      const claimed = await db.transaction(async (tx) => {
+        const current = (await tx.select().from(slurpCommissions).where(eq(slurpCommissions.id, id)))[0];
+        if (!current || current.state !== "accepted") return false;
+        const claimedAt = Date.parse(String(current.deliveryClaimedAt ?? ""));
+        if (current.deliveryId && Number.isFinite(claimedAt) && claimedAt > Date.now() - 5 * 60 * 1000) return false;
+        const previousClaim = current.deliveryClaimToken
+          ? eq(slurpCommissions.deliveryClaimToken, String(current.deliveryClaimToken))
+          : isNull(slurpCommissions.deliveryClaimToken);
+        await tx
+          .update(slurpCommissions)
+          .set({ deliveryId, deliveryClaimToken, deliveryClaimedAt: now(), updatedAt: now() })
+          .where(and(eq(slurpCommissions.id, id), eq(slurpCommissions.state, "accepted"), previousClaim));
+        const owned = (await tx.select().from(slurpCommissions).where(eq(slurpCommissions.id, id)))[0];
+        return owned?.deliveryClaimToken === deliveryClaimToken;
       });
+      if (!claimed) {
+        const existing = await storage.getMessageById(deliveryId);
+        if (existing) {
+          await completeSlurpPaymentIntent(slurp, `commission:${id}:accept`);
+          await db.update(slurpCommissions).set({ state: "delivered", deliveryMessageId: deliveryId, deliverAt: null, updatedAt: now() }).where(eq(slurpCommissions.id, id));
+          return storage.getCommission(id);
+        }
+        return storage.getCommission(id);
+      }
+      await completeSlurpPaymentIntent(slurp, `commission:${id}:accept`);
+      let message: SlurpMessage | null;
+      try {
+        message = await storage.sendCreatorMessage(commission.creatorAccountId, commission.viewerAccountId, {
+          id: deliveryId,
+          content,
+          kind: "commission_delivery",
+          imageUrl,
+        });
+      } catch (error) {
+        const persisted = await storage.getMessageById(deliveryId);
+        if (!persisted) throw error;
+        await completeSlurpPaymentIntent(slurp, `commission:${id}:accept`);
+        await db
+          .update(slurpCommissions)
+          .set({ state: "delivered", deliveryMessageId: deliveryId, deliverAt: null, updatedAt: now() })
+          .where(eq(slurpCommissions.id, id));
+        return storage.getCommission(id);
+      }
       if (!message) {
         const settings = await slurp.getSettings();
         if (settings.walletEnabled) {
-          await slurp.refundCoins(commission.viewerAccountId, commission.price, "failed commission delivery");
-          await slurp.reverseCreatorIncome(commission.creatorAccountId, commission.price, "failed commission delivery");
+          const compensationId = `commission:${id}:settlement`;
+          await db
+            .update(slurpCommissions)
+            .set({ state: "cancellation_pending", cancellationId: compensationId, deliverAt: null, updatedAt: now() })
+            .where(eq(slurpCommissions.id, id));
+          await completeSlurpPaymentIntent(slurp, `commission:${id}:accept`);
+          await compensateSlurpPayment(
+            slurp,
+            {
+              viewerAccountId: commission.viewerAccountId,
+              creatorAccountId: commission.creatorAccountId,
+              price: commission.price,
+            note: "failed commission delivery",
+            creditOperationId: `commission:${id}:accept:credit`,
+            },
+            new Error("Commission delivery failed"),
+            compensationId,
+          );
         }
         // Close it in the same breath as the refund. Leaving it `accepted` left a scheduled
         // delivery due in the past, which the scheduler would retry — and refund — on every poll.
@@ -1180,42 +1980,109 @@ export function createSlurpMessagesStorage(db: DB) {
     ): Promise<SlurpSendResult> {
       const opened = await storage.openThread(viewerAccountId, creatorAccountId, "viewer");
       if (opened.status !== "ok") return opened;
+      const settings = await slurp.getSettings();
+      const tipId = requestId ?? newId();
+      const tipOperationId = `dm:${tipId}:credit`;
       if (requestId) {
         const existing = (await storage.listMessages(opened.thread.id)).find(
           (message) => message.kind === "tip" && message.metadata.requestId === requestId,
         );
-        if (existing) return { status: "sent", thread: opened.thread, message: existing };
-      }
-      const settings = await slurp.getSettings();
-      if (settings.walletEnabled) {
-        const charged = await slurp.tipCreator(viewerAccountId, creatorAccountId, amount);
-        if (!charged) return { status: "insufficient_funds", required: amount };
+        if (existing) {
+          if (settings.walletEnabled) {
+            await completeSlurpPaymentIntent(slurp, tipOperationId);
+            await applySlurpTipEffects(slurp, tipOperationId).catch((error) =>
+              console.error("[slurp] tip effects failed", error),
+            );
+          }
+          return { status: "sent", thread: opened.thread, message: existing };
+        }
       }
       let message: SlurpMessage | null;
+      let charged = false;
+      if (settings.walletEnabled) {
+        const paymentIntent = await createSlurpPaymentIntent(
+          slurp,
+          {
+            viewerAccountId,
+            creatorAccountId,
+            price: amount,
+            note: "direct-message tip",
+            creditOperationId: tipOperationId,
+          },
+          tipOperationId,
+        );
+        if (paymentIntent === "settled") {
+          const existing = await storage.getMessageById(`dm:${tipId}:tip`);
+          if (existing) {
+            await applySlurpTipEffects(slurp, tipOperationId).catch((error) =>
+              console.error("[slurp] tip effects failed", error),
+            );
+            return { status: "sent", thread: opened.thread, message: existing };
+          }
+        }
+        if (paymentIntent !== "claimed") return { status: "not_found" };
+      }
       try {
+        if (settings.walletEnabled) {
+          const wallet = await slurp.tipCreator(viewerAccountId, creatorAccountId, amount, tipOperationId);
+          if (!wallet) {
+            await resetSlurpPaymentIntentAfterInsufficientFunds(slurp, tipOperationId);
+            return { status: "insufficient_funds", required: amount };
+          }
+          await markSlurpPaymentIntentCharged(slurp, tipOperationId);
+          await persistSlurpPaymentCreditedAmount(slurp, tipOperationId, creatorAccountId, tipOperationId);
+          charged = true;
+        }
         message = await storage.appendMessage(opened.thread.id, {
-          id: requestId ? `dm:${requestId}:tip` : undefined,
+          id: `dm:${tipId}:tip`,
           senderAccountId: viewerAccountId,
           role: "viewer",
           kind: "tip",
           content: note,
           price: amount,
-          metadata: requestId ? { requestId } : undefined,
+          metadata: { ...(requestId ? { requestId } : {}), tipId },
         });
       } catch (error) {
-        if (settings.walletEnabled) {
-          await slurp.refundCoins(viewerAccountId, amount, "failed direct-message tip");
-          await slurp.reverseCreatorIncome(creatorAccountId, amount, "failed direct-message tip");
+        if (settings.walletEnabled && (charged || (await slurp.hasWalletSpendOperation(viewerAccountId, tipOperationId)))) {
+          await compensateSlurpPayment(
+            slurp,
+            {
+              viewerAccountId,
+              creatorAccountId,
+              price: amount,
+              note: "failed direct-message tip",
+              creditOperationId: tipOperationId,
+            },
+            error,
+            tipOperationId,
+          );
+        } else if (settings.walletEnabled) {
+          await resetSlurpPaymentIntentAfterInsufficientFunds(slurp, tipOperationId);
         }
         throw error;
       }
       if (!message) {
         if (settings.walletEnabled) {
-          await slurp.refundCoins(viewerAccountId, amount, "failed direct-message tip");
-          await slurp.reverseCreatorIncome(creatorAccountId, amount, "failed direct-message tip");
+          await compensateSlurpPayment(
+            slurp,
+            {
+              viewerAccountId,
+              creatorAccountId,
+              price: amount,
+              note: "failed direct-message tip",
+              creditOperationId: tipOperationId,
+            },
+            new Error("Direct-message tip message was not persisted"),
+            tipOperationId,
+          );
         }
         return { status: "not_found" };
       }
+      if (settings.walletEnabled) await completeSlurpPaymentIntent(slurp, tipOperationId);
+      if (settings.walletEnabled)
+        await applySlurpTipEffects(slurp, tipOperationId).catch((error) =>
+              console.error("[slurp] tip effects failed", error),
+            );
       const thread = await storage.getThreadById(opened.thread.id);
       return { status: "sent", thread: thread ?? opened.thread, message };
     },

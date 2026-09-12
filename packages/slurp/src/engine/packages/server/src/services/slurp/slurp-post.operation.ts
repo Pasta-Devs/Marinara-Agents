@@ -12,7 +12,6 @@ import type { DB } from "../../db/connection.js";
 import { logger } from "../../lib/logger.js";
 import { newId } from "../../utils/id-generator.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
-import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
 import { noodlerUnlockPriceMetadata } from "./slurp-prices.js";
 import { generateNoodlerPost } from "./slurp-generation.service.js";
@@ -112,10 +111,11 @@ export async function generateAndApplyNoodlerPost(
       return { status: "noodler_account_not_found" } as const;
     }
     const settings = await noodle.getSettings();
-    const connection = await resolveSlurpTextConnection(
-      createConnectionsStorage(db),
-      request.connectionId ?? settings.generationConnectionId,
-    );
+    const connections = createConnectionsStorage(db);
+    const connectionId = request.connectionId ?? settings.generationConnectionId;
+    const connection = connectionId
+      ? await connections.getWithKey(connectionId)
+      : await connections.getDefaultForAgents();
     if (!connection) return { status: "connection_not_found" } as const;
     const generated = await generateNoodlerPost(db, {
       account,
@@ -226,39 +226,66 @@ export async function createNoodlerPost(
   db: DB,
   input: NoodlerPostCreateInput & {
     format?: NoodlerContentFormat;
-    postType?: "post" | "story";
-    linkedPostId?: string | null;
+    lockedFollowUpPostId?: string;
+    lockedFollowUp?: { title: string; content: string };
   },
   media?: NoodlerPostMediaUpload,
 ): Promise<CreateNoodlerPostResult> {
   const noodle = createSlurpStorage(db);
   const locked = await tryNoodlerAccountOperation(input.targetAccountId, async () => {
     const postId = media ? newId() : undefined;
-    // Settings → Wallet → "Unlock a post" is the default price a locked post is stamped with.
-    // Calling the helper with no argument stamped the shipped 1 instead, so the setting did
-    // nothing and every locked post cost one coin whatever the player configured.
-    const unlockPrice = (await noodle.getSettings()).walletUnlockCost;
+    let lockedFollowUpPostId = input.lockedFollowUpPostId;
+    const pendingLockedFollowUp = input.lockedFollowUp;
+    if (lockedFollowUpPostId) {
+      const followUp = await noodle.getNoodlerPostById(lockedFollowUpPostId);
+      if (!followUp || followUp.authorAccountId !== input.targetAccountId || followUp.access !== "locked") {
+        return { status: "noodler_account_not_found" } as const;
+      }
+    } else if (pendingLockedFollowUp) lockedFollowUpPostId = newId();
     const persist = (persistedMedia?: { imageUrl: string; noodlerMediaPath: string }) => {
       const create = async () => {
-        return noodle.createNoodlerPost({
-          id: postId,
-          authorAccountId: input.targetAccountId,
-          title: input.title,
-          content: input.content,
-          source: "manual",
-          access: input.access,
-          imageUrl: persistedMedia?.imageUrl ?? null,
-          metadata: {
-            noodlerContentFormat: input.format ?? "caption",
-            noodlerPostType: input.postType ?? "post",
-            ...(input.postType === "story" && input.linkedPostId ? { noodlerLinkedPostId: input.linkedPostId } : {}),
-            // Stored at creation so an unlock price stays put across refreshes and edits.
-            ...(input.access === "locked" ? noodlerUnlockPriceMetadata(unlockPrice) : {}),
-            ...(input.poll ? { poll: createNoodlePoll(input.poll) } : {}),
-            ...(input.imageCrop ? { imageCrop: input.imageCrop } : {}),
-            ...(persistedMedia ? { noodlerMediaPath: persistedMedia.noodlerMediaPath } : {}),
-          },
-        });
+        let createdFollowUp = false;
+        try {
+          if (pendingLockedFollowUp && lockedFollowUpPostId) {
+            const followUp = await noodle.createNoodlerPost({
+              id: lockedFollowUpPostId,
+              authorAccountId: input.targetAccountId,
+              title: pendingLockedFollowUp.title,
+              content: pendingLockedFollowUp.content,
+              source: "manual",
+              access: "locked",
+              metadata: {
+                noodlerContentFormat: "long_form",
+                ...noodlerUnlockPriceMetadata(),
+              },
+            });
+            if (!followUp) return null;
+            createdFollowUp = true;
+          }
+          const post = await noodle.createNoodlerPost({
+            id: postId,
+            authorAccountId: input.targetAccountId,
+            title: input.title,
+            content: input.content,
+            source: "manual",
+            access: input.access,
+            imageUrl: persistedMedia?.imageUrl ?? null,
+            metadata: {
+              noodlerContentFormat: input.format ?? "caption",
+              // Stored at creation so an unlock price stays put across refreshes and edits.
+              ...(input.access === "locked" ? noodlerUnlockPriceMetadata() : {}),
+              ...(lockedFollowUpPostId ? { noodlerLockedFollowUpPostId: lockedFollowUpPostId } : {}),
+              ...(input.poll ? { poll: createNoodlePoll(input.poll) } : {}),
+              ...(input.imageCrop ? { imageCrop: input.imageCrop } : {}),
+              ...(persistedMedia ? { noodlerMediaPath: persistedMedia.noodlerMediaPath } : {}),
+            },
+          });
+          if (!post && createdFollowUp && lockedFollowUpPostId) await noodle.deleteNoodlerPost(lockedFollowUpPostId);
+          return post;
+        } catch (error) {
+          if (createdFollowUp && lockedFollowUpPostId) await noodle.deleteNoodlerPost(lockedFollowUpPostId);
+          throw error;
+        }
       };
       return create();
     };

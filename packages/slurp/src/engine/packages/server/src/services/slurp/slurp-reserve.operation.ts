@@ -1,6 +1,5 @@
 import type { DB } from "../../db/connection.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
-import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { resolveNoodlerImageConnectionId } from "./slurp-image-connections.js";
 import { createSlurpStorage, noodlerReservePolicyFingerprint } from "../storage/slurp.storage.js";
 import { hasSlurpCreatorPostingIntervalConflict } from "./slurp-posting-interval.js";
@@ -44,14 +43,10 @@ export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Pr
     noodle.listAutoPostEnabledAccounts(),
   ]);
   if (accounts.length === 0) return "ineligible";
-  // A slot leaves the working set once it is a whole interval overdue, which is also when
-  // `reconcileNoodlerPreparedPosts` retires it. This was a hardcoded hour that happened to agree
-  // with that constant and with nothing else: at 4 posts a day a slot stopped being fillable an
-  // hour after its time while its replacement was still five hours away.
   const active = items.filter(
     (item) =>
       (item.state === "scheduled" || item.state === "prepared") &&
-      Date.parse(item.publishAt) > at.getTime() - DAY_MS / settings.postsPerDay,
+      Date.parse(item.publishAt) > at.getTime() - DAY_MS / 24,
   );
   const existingSlot = active
     .filter((item) => item.state === "scheduled")
@@ -63,19 +58,11 @@ export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Pr
 
   if (!existingSlot) {
     const covered = active.map((item) => item.publishAt);
-    // A candidate is covered when an existing slot is within a whole interval of it, matching the
-    // per-creator spacing rule below. This used to be half an interval, and the two disagreeing is
-    // why `postsPerDay` did not mean posts per day: a candidate half an interval after an existing
-    // slot read as uncovered, and with a spare Creator to hand the per-creator rule let it through,
-    // so the reserve laid down twice the requested number of slots. `reconcileNoodlerPreparedPosts`
-    // then capped future slots back to `postsPerDay` and discarded the surplus, which is why a
-    // production install had a hundred discarded rows against forty-two published, some of them
-    // destroyed four minutes after they were created.
     publishAt =
       plannedPublicationTimes(at, settings.postsPerDay).find(
         (candidate) =>
           !covered.some(
-            (existing) => Math.abs(Date.parse(existing) - Date.parse(candidate)) < DAY_MS / settings.postsPerDay,
+            (existing) => Math.abs(Date.parse(existing) - Date.parse(candidate)) < DAY_MS / settings.postsPerDay / 2,
           ),
       ) ?? null;
     if (!publishAt) return "covered";
@@ -129,7 +116,10 @@ export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Pr
   const selectedPublishAt = publishAt;
 
   const locked = await tryNoodlerAccountOperation(selectedAccount.id, async () => {
-    const connection = await resolveSlurpTextConnection(createConnectionsStorage(db), settings.generationConnectionId);
+    const connections = createConnectionsStorage(db);
+    const connection = settings.generationConnectionId
+      ? await connections.getWithKey(settings.generationConnectionId)
+      : await connections.getDefaultForAgents();
     if (!connection) return "ineligible" as const;
     try {
       let payload = await generateNoodlerPost(db, {
@@ -147,12 +137,9 @@ export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Pr
         request: {
           mode: "noodler",
           targetAccountId: selectedAccount.id,
-          // No format and no guide. Both used to be pinned here, and between them they defeated
-          // every variety mechanism on the one path that generates most posts: the format was
-          // always `caption`, and the constant guide read as player direction, which makes the
-          // generator stand its rotating variation down. The guide also said nothing the system prompt
-          // does not already say.
+          format: "caption",
           access: "locked",
+          noodlerPostGuide: "Write a standalone scheduled Slurp post.",
         },
         publicationTime: new Date(selectedPublishAt),
         generatedAt: at,

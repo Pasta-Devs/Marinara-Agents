@@ -25,7 +25,7 @@ import { createPromptOverridesStorage } from "../storage/prompt-overrides.storag
 import { loadPrompt, NOODLE_IMAGE_POST } from "../prompt-overrides/index.js";
 import { generateNoodleImageWithRetry } from "./slurp-image-retry.js";
 import { rewriteNoodleImagePrompt } from "./slurp-image-prompt-rewrite.js";
-import { selectNoodleImageProviderPrompt } from "./slurp-image-prompt.js";
+import { prepareNoodleImageProviderPrompt } from "./slurp-image-prompt.js";
 import { resolveNoodlerImageConnectionId } from "./slurp-image-connections.js";
 import type { ConnectionAdmissionMode } from "../generation/connection-admission.js";
 import {
@@ -258,23 +258,16 @@ export async function generateNoodlePostImage(input: {
           styleGuidance,
         })
       : null;
-  // The style profile is an Engine setting, not something the interpretation model owns. The
-  // rewrite is a text transformation, and it freely drops the style's positive tags and wording,
-  // so the rewritten text is compiled again before it reaches the provider. Without this the style
-  // applied only when the rewrite was skipped, failed, or was rejected — which is exactly why the
-  // setting looked intermittent rather than broken. The compiler dedupes against the prompt it is
-  // given, so a rewrite that kept its style is not styled twice.
-  const compiledRewrittenPrompt = rewrittenPrompt
-    ? compileImagePrompt({
+  const finalPrompt = prepareNoodleImageProviderPrompt({
+    rewrittenPrompt,
+    rawPrompt: rawProviderPrompt,
+    compilePrompt: (prompt) =>
+      compileImagePrompt({
         kind: "illustration",
-        prompt: rewrittenPrompt,
+        prompt,
         styleProfiles: imageSettings.styleProfiles,
         imageDefaults,
-      })
-    : null;
-  const finalPrompt = selectNoodleImageProviderPrompt({
-    rewrittenPrompt: compiledRewrittenPrompt?.prompt || rewrittenPrompt,
-    rawPrompt: rawProviderPrompt,
+      }).prompt,
     // Art style and the character's image habits are meant to reach the provider, so a rewrite
     // that applies them is doing its job. Personality never belongs in a visual prompt at any
     // length; the instruction fields are guidance and only leak as a copied block.

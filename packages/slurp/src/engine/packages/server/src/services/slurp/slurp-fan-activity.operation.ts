@@ -25,17 +25,8 @@ import {
   resolveNoodlerFanConnection,
 } from "./slurp-fan-activity.service.js";
 import { tryNoodleOperation } from "./slurp-operation-lock.js";
-import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
-import { NOODLER_FAN_IDENTITY_PREFIX, populationNoodlerFanIdentityProvider } from "./slurp-fan-identity-provider.js";
-import { newId } from "../../utils/id-generator.js";
 
 const FAN_PLAN_ROW_PREFIX = "fan-day:";
-
-/** People who have acted before and may act again, so a Creator gets recognisable regulars. */
-const FAN_RUN_RETURNING = 10;
-
-/** New faces per run. Small, but enough that the cast is never the same list twice in a row. */
-const FAN_RUN_NEWCOMERS = 2;
 const FAN_PLAN_RETENTION_DAYS = 7;
 const FAN_ACTIVITY_RECOVERY_MAX_AGE_MS = 15 * 60 * 1000;
 
@@ -166,27 +157,10 @@ async function applyAcceptedActivities(
       actorId: activity.actorId,
       actorSnapshot: activity.snapshot as NoodleAuthorSnapshot,
       runId: run.id,
-      type: activity.type as "like" | "reply",
+      type: activity.type as "like" | "reply" | "repost",
       content: activity.content,
-      parentInteractionId: activity.parentInteractionId ?? null,
     });
-    if (result?.created) {
-      created += 1;
-      // Fan activity is the highest-volume thing the audience does, and it fed nothing into the
-      // Fan likes and replies are the only audience interactions in Slurp.
-      const population = createSlurpPopulationStorage(db);
-      // Same guard as `advanceAudienceTie`: a recovered plan written before the population existed
-      // still carries `noodler-fan:` archetype ids, and a tie for one is an unresolvable follower.
-      if (!activity.actorId.startsWith(NOODLER_FAN_IDENTITY_PREFIX)) {
-        await population
-          .advanceTie(activity.actorId, activity.creatorId, {
-            stage: "liker",
-            interactions: 1,
-          })
-          .catch(() => undefined);
-        await population.touch(activity.actorId).catch(() => undefined);
-      }
-    }
+    if (result?.created) created += 1;
     current = markNoodleFanActivityApplied(current, run.id, activity.id);
   }
   current = finishNoodleFanActivityRun(current, run.id, "completed", finishedAt);
@@ -243,55 +217,10 @@ export async function runNoodlerFanActivity(input: {
       }
       await writePlan(input.db, plan);
 
-      // Draw the cast for this run: mostly people who have acted before, so regulars recur and
-      // can be recognised, plus a couple of new faces so the roster churns instead of freezing
-      // into the same names forever. Churn is the cure for repetition — a fixed cast of thirty is
-      // the old six-account problem with thirty faces.
-      const population = createSlurpPopulationStorage(input.db);
-      const returning = await population.listAll(40);
-      const seeds = [
-        ...returning.slice(0, FAN_RUN_RETURNING).map((member) => member.id.replace(/^slurp-fan:/u, "")),
-        ...Array.from({ length: FAN_RUN_NEWCOMERS }, () => newId()),
-      ];
-      const cast = await Promise.all(seeds.map((seed) => population.ensure(seed, at)));
-      // Mark the drawn cast as recently active. `listAll` orders by that column, so without this
-      // it kept ordering by creation time: the same earliest members were redrawn forever and
-      // anybody who actually showed up sank out of the pool. Regulars could never recur.
-      await Promise.all(cast.map((member) => population.touch(member.id).catch(() => undefined)));
-
-      // The cast carries its relationship to each Creator. Resolved for every creator in the run,
-      // not just the first: a run covers up to twelve, and reusing one creator's ties for all of
-      // them told the model a false history rather than no history.
-      const tiesByCreator = new Map(
-        await Promise.all(
-          run.creatorIds.map(
-            async (creatorId) =>
-              [
-                creatorId,
-                new Map(
-                  (await population.listTiesForCreator(creatorId)).map((tie) => [
-                    tie.memberId,
-                    {
-                      stage: tie.stage,
-                      spent: tie.spent,
-                      knownForDays: Math.max(
-                        0,
-                        Math.round((at.getTime() - Date.parse(tie.firstSeenAt)) / 86_400_000) || 0,
-                      ),
-                      audienceArc: tie.audienceArc,
-                    },
-                  ]),
-                ),
-              ] as const,
-          ),
-        ),
-      );
-
       const creators = await prepareNoodlerFanCreatorCandidates({
         db: input.db,
         settings,
         creatorIds: run.creatorIds,
-        identityProvider: populationNoodlerFanIdentityProvider(cast, tiesByCreator),
       });
       if (creators.length === 0) {
         plan = finishNoodleFanActivityRun(plan, run.id, "skipped", at);

@@ -10,6 +10,7 @@ import {
   slurpPayoutAllowance,
   reverse,
   slurpEarningsKey,
+  slurpCreatorRevenueShare,
 } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-earnings.js";
 
 const at = new Date("2026-09-05T12:00:00.000Z");
@@ -20,6 +21,37 @@ assert.equal(earned.coins, 62);
 assert.equal(earned.lifetime, 62);
 assert.equal(earned.ledger[0]?.kind, "tip");
 assert.equal(earned.ledger[1]?.note, "@fan");
+
+const creditedOnce = earn(emptySlurpEarnings(), "subscribe", 12, at, "@fan", "subscription-1");
+const creditedTwice = earn(creditedOnce, "subscribe", 12, at, "@fan", "subscription-1");
+assert.equal(creditedTwice.coins, 12);
+assert.equal(creditedTwice.lifetime, 12);
+assert.equal(creditedTwice.ledger.length, 1);
+
+// Durable receipts outlive the 60-line display feed, so old credits and reversals remain
+// idempotent and keep their exact historical amount after unrelated activity.
+let durableCredit = earn(emptySlurpEarnings(), "tip", 37, at, "old", "old-credit");
+for (let index = 0; index < 65; index += 1)
+  durableCredit = earn(durableCredit, "tip", 1, at, undefined, `later-credit:${index}`);
+assert.equal(
+  durableCredit.ledger.some((entry) => entry.id === "old-credit"),
+  false,
+);
+assert.equal(earn(durableCredit, "tip", 37, at, "old", "old-credit"), durableCredit);
+assert.deepEqual(durableCredit.receipts["old-credit"], { kind: "tip", amount: 37 });
+
+let durableReversal = reverse(durableCredit, 10, at, "old", "old-reversal");
+for (let index = 0; index < 65; index += 1)
+  durableReversal = earn(durableReversal, "tip", 1, at, undefined, `post-reversal:${index}`);
+assert.equal(
+  durableReversal.ledger.some((entry) => entry.id === "old-reversal"),
+  false,
+);
+assert.equal(reverse(durableReversal, 10, at, "old", "old-reversal"), durableReversal);
+assert.deepEqual(readSlurpEarnings(JSON.stringify(durableReversal)).receipts["old-reversal"], {
+  kind: "reversal",
+  amount: -10,
+});
 
 // Nothing is credited for a bad amount.
 assert.equal(earn(earned, "tip", 0, at), earned);
@@ -117,6 +149,8 @@ assert.equal(readSlurpEarnings('{"coins":100,"lifetime":5}').lifetime, 100);
 // made scarcity impossible once an audience existed. A character-backed Creator has no operating
 // persona at all, so the account id is the only correct key.
 assert.equal(slurpEarningsKey("creator-1"), "slurp.creator.creator-1.earnings");
+assert.equal(slurpCreatorRevenueShare(99, 37), 36, "reversals must use the configured floored Creator share");
+assert.equal(slurpCreatorRevenueShare(99, 0), 0);
 
 const storage = readFileSync(
   join(import.meta.dirname, "..", "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
@@ -156,7 +190,7 @@ assert.match(
 );
 assert.match(
   slurpStorage,
-  /await writeWallet\(viewerAccountId, renewal\.wallet\);[\s\S]*?await creditEarningsNow\([\s\S]*?restoreWallet\(viewerAccountId, previousWalletValue, previousViewerSettingsValue\)/u,
+  /await writeWallet\(viewerAccountId, walletAfterRenewal\);[\s\S]*?await creditEarningsNow\([\s\S]*?restoreWallet\(viewerAccountId, previousWalletValue, previousViewerSettingsValue\)/u,
   "renewal persists the wallet before crediting earnings and restores it on failure",
 );
 assert.match(

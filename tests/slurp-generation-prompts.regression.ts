@@ -117,4 +117,14 @@ for (const answer of ["", "   ", "[]", "```json\n[]\n```"]) {
 assert.throws(() => requireModelAnswer("", "a creator profile"), /empty response/u);
 assert.equal(modelAnswerForCorrection('{"displayName":"Ari"}'), '{"displayName":"Ari"}');
 
+// Phase 4 — the same Creator on every surface: the comment reply carries the Creator state block,
+// and the post stance carries the modifier lines.
+assert.match(reply, /describeSlurpPostCondition\(input\.db, input\.creator\.id\)/u);
+assert.match(reply, /creatorCondition: protect\(input\.creatorCondition\)/u);
+assert.match(
+  readFileSync(join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-post-stance.ts"), "utf8"),
+  /activeSlurpModifiers\(state, input\.at \?\? new Date\(\)\)[\s\S]{0,200}?SLURP_MODIFIERS\[modifier\.kind\]\.line/u,
+  "the post stance must carry the active Creator modifier lines",
+);
+
 console.log("Slurp generation prompt regressions passed");

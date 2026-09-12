@@ -266,6 +266,83 @@ export const slurpCommissions = fileTable("slurp_commissions", {
   brief: text("brief").notNull(),
   price: text("price").notNull().default("0"),
   deliveryMessageId: text("delivery_message_id"),
+  /**
+   * When an automatic delivery is due.
+   *
+   * A character Creator used to be paid and deliver in the same request, so the one thing a
+   * commission is — somebody making you a thing, and the wait for it — never happened. Null on a
+   * commission a person delivers by hand, which is what keeps the scheduler off those.
+   */
+  deliverAt: text("deliver_at"),
+  /**
+   * The finished picture, drawn and kept at accept time, waiting for that delivery.
+   *
+   * Held on the row rather than in memory: the wait outlives a restart, and the fan has paid.
+   */
+  mediaPath: text("media_path"),
+  cancellationId: text("cancellation_id"),
+  /** Stable claim key for a delivery attempt. It survives a message-write or state-update failure. */
+  deliveryId: text("delivery_id"),
+  /** Unique worker that currently owns the delivery lease. */
+  deliveryClaimToken: text("delivery_claim_token"),
+  /** Lease start time. A stopped worker's claim may be recovered after five minutes. */
+  deliveryClaimedAt: text("delivery_claimed_at"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
+});
+
+export const slurpPaymentCompensations = fileTable(
+  "slurp_payment_compensations",
+  {
+    id: text("id").primaryKey(),
+    viewerAccountId: text("viewer_account_id").notNull(),
+    creatorAccountId: text("creator_account_id").notNull(),
+    amount: text("amount").notNull(),
+    creditedAmount: text("credited_amount"),
+    note: text("note").notNull().default(""),
+    creditOperationId: text("credit_operation_id"),
+    status: text("status").notNull().default("pending"),
+    claimToken: text("claim_token"),
+    refundedAt: text("refunded_at"),
+    reversedAt: text("reversed_at"),
+    /** Tip notification and audience progress committed after the paid result became durable. */
+    effectsAppliedAt: text("effects_applied_at"),
+    failedAt: text("failed_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  { uniqueBy: [{ keys: ["id"] }] },
+);
+
+/**
+ * One thing that happened, addressed to one persona.
+ *
+ * Slurp had no notification surface at all — only an unseen-post count and DM unread counts.
+ * Nothing reported a subscriber, a tip, an unlock, a milestone, or a loss, so the world could be
+ * made as alive as you like and the player would see none of it.
+ *
+ * `recipientPersonaId` is always a persona. Creator-side events reach the persona that operates
+ * the Creator; a character-backed Creator has no operator and so produces none. Fan-side events
+ * reach the persona directly.
+ *
+ * `weight` carries the significance score. The readable-handful rule means a feed is curated, not
+ * a firehose, and sorting by weight is what lets small events group and trivial ones stay hidden.
+ */
+export const slurpEvents = fileTable("slurp_events", {
+  id: text("id").primaryKey(),
+  recipientPersonaId: text("recipient_persona_id").notNull(),
+  kind: text("kind").notNull(),
+  /** The Creator the event is about, when there is one. */
+  creatorAccountId: text("creator_account_id"),
+  /** The post, thread, or commission the event points at, so a notification can navigate. */
+  subjectId: text("subject_id"),
+  /** Who acted, for display. Stored rather than joined so a departed fan still renders. */
+  actorLabel: text("actor_label"),
+  /** Stable payment operation that produced this event, when the action must be idempotent. */
+  operationId: text("operation_id"),
+  /** Coins, follower counts, or a milestone target, depending on kind. */
+  amount: text("amount").notNull().default("0"),
+  weight: text("weight").notNull().default("0"),
+  createdAt: text("created_at").notNull(),
+  seenAt: text("seen_at"),
 });

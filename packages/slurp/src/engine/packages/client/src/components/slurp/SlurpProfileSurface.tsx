@@ -1,26 +1,20 @@
-import { Heart, MapPin, Sparkles, Upload, Users } from "lucide-react";
+import { MapPin, Sparkles, Upload } from "lucide-react";
 import type { ChangeEvent, CSSProperties, ReactNode, RefObject } from "react";
 import { cn } from "../../lib/utils";
 import { Avatar } from "./SlurpShell";
-import { SlurpEmptyArtwork } from "./SlurpEmptyArtwork";
 import { useTranslation as useUiTranslation } from "react-i18next";
 
 type SlurpProfileTab = "posts" | "likes" | "media";
 
-/**
- * Editing happens in place: a field keeps the exact typography it had a moment ago and only gains
- * an editable surface. Editing used to swap the whole identity block for a stacked form with tiny
- * labels, so you lost your bearings the instant you clicked Edit and could not tell what the
- * result would look like.
- */
-const inPlaceFieldClass =
-  "w-full min-w-0 rounded-lg border border-dashed border-[var(--noodle-accent)]/45 bg-[var(--noodle-accent)]/[0.06] px-2 py-1 outline-none transition-colors focus:border-solid focus:border-[var(--noodle-accent)] focus:bg-[var(--noodle-accent)]/10";
+const fieldClass =
+  "mari-chrome-field h-9 w-full min-w-0 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-accent)]";
+const labelClass =
+  "text-[0.68rem] font-semibold uppercase tracking-normal text-[var(--marinara-chat-chrome-panel-muted)]";
 
 interface SlurpProfileSurfaceProps<TTab extends string = SlurpProfileTab> {
   mobileHeader: ReactNode;
   account: Parameters<typeof Avatar>[0]["account"];
   displayHandle: string;
-  identityEyebrow?: ReactNode;
   handleMeta?: ReactNode;
   banner?: {
     url: string | null;
@@ -41,7 +35,6 @@ interface SlurpProfileSurfaceProps<TTab extends string = SlurpProfileTab> {
   editor?: {
     isEditing: boolean;
     onStartEditing: () => void;
-    onCancel: () => void;
     onSave: () => void;
     canSave: boolean;
     isSaving: boolean;
@@ -53,7 +46,6 @@ interface SlurpProfileSurfaceProps<TTab extends string = SlurpProfileTab> {
     onBioChange: (value: string) => void;
     location: string;
     onLocationChange: (value: string) => void;
-    privateFields?: ReactNode;
   };
   followAction?: { followed: boolean; pending: boolean; onToggle: () => void };
   leadingActions?: ReactNode;
@@ -68,27 +60,20 @@ interface SlurpProfileSurfaceProps<TTab extends string = SlurpProfileTab> {
     onOpenFollowing: () => void;
     onOpenFollowers: () => void;
   };
-  tabs?: Array<{ id: TTab; label: ReactNode; ariaLabel?: string; management?: boolean }>;
+  tabs?: Array<{ id: TTab; label: ReactNode; ariaLabel?: string }>;
   activeTab: TTab;
   onTabChange: (tab: TTab) => void;
   preTabsContent?: ReactNode;
-  editorActionInPreTabs?: boolean;
   postList: ReactNode;
   postPanelId?: string;
   accent?: string;
   featuredContent?: ReactNode;
-  spotlight?: boolean;
-  status?: "online" | "away" | "offline";
-  stats?: { followers: number; subscribers: number; likes: number };
-  bioQuote?: ReactNode;
-  bioCollapsible?: boolean;
 }
 
 export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
   mobileHeader,
   account,
   displayHandle,
-  identityEyebrow,
   handleMeta,
   banner,
   avatarUpload,
@@ -105,16 +90,10 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
   activeTab,
   onTabChange,
   preTabsContent,
-  editorActionInPreTabs = false,
   postList,
   postPanelId = "slurp-profile-panel",
   accent,
   featuredContent,
-  spotlight = false,
-  status = "away",
-  stats,
-  bioQuote,
-  bioCollapsible = true,
 }: SlurpProfileSurfaceProps<TTab>) {
   const { t: localizeUi } = useUiTranslation();
   const hasBanner = Boolean(banner) || decorativeBanner;
@@ -124,7 +103,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
       { id: "posts", label: localizeUi("ui.noodle.profile.tabs.posts") },
       { id: "likes", label: localizeUi("ui.noodle.profile.tabs.likes") },
       { id: "media", label: localizeUi("ui.noodle.profile.tabs.media") },
-    ] as Array<{ id: TTab; label: ReactNode; ariaLabel?: string; management?: boolean }>);
+    ] as Array<{ id: TTab; label: ReactNode; ariaLabel?: string }>);
   const focusTabAt = (index: number) => {
     const next = resolvedTabs[(index + resolvedTabs.length) % resolvedTabs.length];
     if (!next) return;
@@ -133,45 +112,14 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
       document.getElementById(`${postPanelId}-tab-${String(next.id)}`)?.focus();
     });
   };
-  const hasProfileActions = Boolean(leadingActions || followAction || secondaryActions);
-  const profileActions = (
-    <div className="grid min-h-11 w-full min-w-0 grid-cols-4 gap-2 [&>*]:min-w-0 [&>:first-child]:col-span-1 [&>:nth-child(2)]:col-span-3 [&>:nth-child(n+3)]:col-span-2 [&>:nth-child(n+3)>button]:w-full [&>button:only-child]:col-span-4 @min-[560px]:flex @min-[560px]:w-auto @min-[560px]:flex-wrap @min-[560px]:justify-start @min-[560px]:[&>button:only-child]:col-span-1 @min-[860px]:justify-end">
-      {!editor?.isEditing && leadingActions}
-      {followAction ? (
-        <button
-          type="button"
-          onClick={followAction.onToggle}
-          disabled={followAction.pending}
-          className={cn(
-            "min-h-11 rounded-xl px-5 text-xs font-bold transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50",
-            followAction.followed
-              ? "border border-[var(--noodle-divider)] text-[var(--foreground)]"
-              : "bg-[var(--foreground)] text-[var(--background)]",
-          )}
-        >
-          {followAction.followed
-            ? localizeUi("ui.noodle.connections.tabs.following")
-            : localizeUi("ui.noodle.noodlehome.follow")}
-        </button>
-      ) : null}
-      {secondaryActions}
-    </div>
-  );
   return (
     <div
-      className="@container relative min-h-full overflow-x-hidden bg-[var(--slurp-canvas,var(--background))] pb-6 [background-image:radial-gradient(ellipse_42rem_30rem_at_10%_0%,color-mix(in_srgb,var(--noodle-accent)_18%,transparent),transparent_70%),radial-gradient(ellipse_38rem_32rem_at_94%_16%,color-mix(in_srgb,var(--slurp-violet)_14%,transparent),transparent_74%)]"
+      className="relative border-b border-[var(--noodle-divider)]"
       style={accent ? ({ "--noodle-accent": accent } as CSSProperties) : undefined}
     >
       {mobileHeader}
       {banner && (
-        <div
-          className={cn(
-            "group relative isolate overflow-hidden bg-[var(--slurp-canvas,var(--background))]",
-            spotlight
-              ? "shadow-[0_34px_84px_-60px_var(--noodle-accent)] ring-1 ring-inset ring-white/[0.06]"
-              : "shadow-[var(--slurp-shadow-modal)]",
-          )}
-        >
+        <div className="group relative">
           <button
             type="button"
             onClick={() => {
@@ -179,40 +127,26 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
             }}
             disabled={!banner.canEdit || banner.uploadTarget === "banner"}
             className={cn(
-              "relative block h-64 w-full overflow-hidden bg-[var(--noodle-accent)]/15 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default @min-[540px]:h-80 @min-[760px]:h-[24rem] @min-[1040px]:h-[28rem]",
+              "relative block h-48 w-full overflow-hidden bg-[var(--noodle-accent)]/15 text-left disabled:cursor-default sm:h-56",
               banner.uploadTarget === "banner" && "cursor-wait opacity-80",
             )}
             title={banner.canEdit ? localizeUi("ui.noodle.noodleprofilesurface.uploadBanner") : undefined}
-            aria-label={banner.canEdit ? localizeUi("ui.noodle.noodleprofilesurface.uploadBanner") : undefined}
           >
             {banner.url ? (
               <img src={banner.url} alt="" className="h-full w-full object-cover" />
             ) : (
-              <div className="relative h-full overflow-hidden bg-[var(--noodle-accent)]/10">
-                <SlurpEmptyArtwork className="absolute inset-0 opacity-90" />
+              <div className="flex h-full items-center justify-center bg-[var(--noodle-accent)]/10">
+                <span className="text-3xl font-black tracking-[0.12em] text-[var(--noodle-accent)]/70">SLURP</span>
               </div>
             )}
-            <span
-              className={cn(
-                "pointer-events-none absolute inset-0",
-                spotlight
-                  ? "bg-[radial-gradient(ellipse_at_82%_18%,color-mix(in_srgb,var(--slurp-coral)_18%,transparent),transparent_48%),linear-gradient(to_top,rgba(8,4,10,0.88)_0%,rgba(8,4,10,0.58)_24%,transparent_60%),linear-gradient(to_right,rgba(8,4,10,0.62),transparent_64%)]"
-                  : "bg-[linear-gradient(to_top,var(--slurp-canvas,var(--background))_0%,color-mix(in_srgb,var(--slurp-canvas,var(--background))_70%,transparent)_34%,transparent_72%),linear-gradient(to_right,rgba(8,4,10,0.28),transparent_55%)]",
-              )}
-              aria-hidden="true"
-            />
-            <span
-              className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/45 to-transparent"
-              aria-hidden="true"
-            />
             {banner.uploadTarget === "banner" && (
-              <span className="absolute end-2 top-2 rounded-full bg-[var(--marinara-chat-chrome-panel-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--noodle-accent)] shadow-lg ring-1 ring-[var(--marinara-chat-chrome-panel-border)]">
+              <span className="absolute bottom-3 right-3 rounded-full bg-[var(--marinara-chat-chrome-panel-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--noodle-accent)] shadow-lg ring-1 ring-[var(--marinara-chat-chrome-panel-border)]">
                 {localizeUi("ui.noodle.noodleprofilesurface.uploading")}
               </span>
             )}
             {banner.canEdit && banner.uploadTarget !== "banner" && (
               <span
-                className="absolute end-3 top-3 flex h-11 w-11 items-center justify-center rounded-xl bg-black/60 text-white shadow-[var(--slurp-shadow-raised)] ring-1 ring-white/15 backdrop-blur-md"
+                className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                 aria-hidden="true"
               >
                 <Upload size={13} className="!text-white" />
@@ -223,7 +157,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
             <button
               type="button"
               onClick={banner.onGenerate}
-              className="absolute end-[4.25rem] top-3 flex h-11 w-11 items-center justify-center rounded-xl bg-black/60 text-white shadow-[var(--slurp-shadow-raised)] ring-1 ring-white/15 backdrop-blur-md transition-[background-color,transform] hover:bg-black/80 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white motion-reduce:transition-none motion-reduce:active:scale-100"
+              className="absolute bottom-2 right-11 flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white opacity-100 shadow-md transition-opacity hover:bg-black/80 sm:opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
               title={localizeUi("ui.slurp.artwork.generateBanner")}
               aria-label={localizeUi("ui.slurp.artwork.generateBanner")}
             >
@@ -243,27 +177,8 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
       )}
       {!banner && decorativeBanner && <div className="h-40 w-full bg-[var(--noodle-accent)]/10" aria-hidden="true" />}
 
-      <div
-        className={cn(
-          "relative px-4 pb-6 @min-[680px]:px-6 @min-[680px]:pb-7 @min-[1040px]:px-8",
-          spotlight
-            ? "bg-[linear-gradient(to_bottom,transparent_0%,rgba(8,4,10,0.58)_1rem,var(--slurp-canvas)_2rem)] @min-[680px]:grid @min-[680px]:grid-cols-[auto_minmax(0,1fr)] @min-[680px]:items-start @min-[680px]:gap-x-6 @min-[680px]:bg-[linear-gradient(to_bottom,transparent_0%,rgba(8,4,10,0.58)_1.5rem,var(--slurp-canvas)_2.5rem)] @min-[1040px]:gap-x-8 @min-[1040px]:bg-[linear-gradient(to_bottom,transparent_0%,rgba(8,4,10,0.58)_1.75rem,var(--slurp-canvas)_2.75rem)]"
-            : "rounded-xl bg-[color-mix(in_srgb,var(--slurp-surface-raised,var(--background))_96%,transparent)] shadow-[var(--slurp-shadow-modal)] ring-1 ring-inset ring-[var(--noodle-divider)] backdrop-blur-md",
-          // Keep roughly 30% of each responsive avatar inside the banner. The identity shares
-          // this overlap so its first line rises into the smooth bottom fade without drifting.
-          hasBanner ? "-mt-8 @min-[680px]:-mt-10 @min-[1040px]:-mt-11" : "mt-5",
-        )}
-        data-slurp-creator-hero
-      >
-        <div
-          className={cn(
-            "relative flex items-end",
-            spotlight ? "w-auto" : "w-full",
-            // The hero itself establishes the banner overlap. Do not add another margin here:
-            // doing so changes the grid row's height and lets the avatar drop at a breakpoint.
-            hasBanner ? "relative z-10 pt-0" : "pt-5",
-          )}
-        >
+      <div className={decorativeBanner ? "px-4 pb-4 sm:px-6" : "px-4 pb-5"}>
+        <div className={cn("flex flex-col items-center gap-1", hasBanner ? "-mt-14" : "pt-6")}>
           {avatarUpload ? (
             <div className="group relative">
               <button
@@ -273,11 +188,10 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
                 }}
                 disabled={!avatarUpload.canEdit || avatarUpload.uploadTarget === "avatar"}
                 className={cn(
-                  "relative rounded-full bg-[var(--background)] p-1 text-left shadow-[var(--slurp-shadow-floating)] ring-1 ring-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--slurp-surface-raised,var(--background))] disabled:cursor-default",
+                  "relative rounded-full bg-[var(--background)] p-1 text-left disabled:cursor-default",
                   avatarUpload.uploadTarget === "avatar" && "cursor-wait opacity-80",
                 )}
                 title={avatarUpload.canEdit ? localizeUi("editor.avatar.upload") : undefined}
-                aria-label={avatarUpload.canEdit ? localizeUi("editor.avatar.upload") : undefined}
               >
                 <Avatar account={account} size="xl" />
                 {avatarUpload.uploadTarget === "avatar" && (
@@ -287,7 +201,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
                 )}
                 {avatarUpload.canEdit && avatarUpload.uploadTarget !== "avatar" && (
                   <span
-                    className="absolute bottom-0 end-0 flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white shadow-md ring-1 ring-white/15 backdrop-blur-md"
+                    className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                     aria-hidden="true"
                   >
                     <Upload size={12} className="!text-white" />
@@ -298,7 +212,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
                 <button
                   type="button"
                   onClick={avatarUpload.onGenerate}
-                  className="absolute bottom-0 start-0 flex h-11 w-11 items-center justify-center rounded-xl bg-black/70 text-white shadow-md ring-1 ring-white/15 backdrop-blur-md transition-[background-color,transform] hover:bg-black/90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white motion-reduce:transition-none motion-reduce:active:scale-100"
+                  className="absolute bottom-1 right-8 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white opacity-100 shadow-md transition-opacity hover:bg-black/85 sm:opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                   title={localizeUi("ui.slurp.artwork.generateAvatar")}
                   aria-label={localizeUi("ui.slurp.artwork.generateAvatar")}
                 >
@@ -313,14 +227,6 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
           ) : (
             <Avatar account={account} size="xl" />
           )}
-          <span
-            className={cn(
-              "absolute bottom-0 end-0 rounded-full border-2 border-[var(--background)] px-2 py-0.5 text-[0.6rem] font-bold leading-4 text-white",
-              status === "online" ? "bg-emerald-500" : status === "away" ? "bg-amber-500" : "bg-zinc-500",
-            )}
-          >
-            {localizeUi(`ui.slurp.profile.status.${status}`, { defaultValue: status })}
-          </span>
           {avatarUpload && (
             <input
               ref={avatarUpload.fileRef}
@@ -330,131 +236,103 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
               onChange={avatarUpload.onFileChange}
             />
           )}
+          <div className="order-3 flex min-h-9 flex-wrap items-center justify-center gap-2">
+            {leadingActions}
+            {editor ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (editor.isEditing) editor.onSave();
+                  else editor.onStartEditing();
+                }}
+                disabled={editor.isEditing ? !editor.canSave || editor.isSaving : false}
+                className="h-9 rounded-full bg-[var(--noodle-accent)] px-5 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {editor.isEditing
+                  ? editor.isSaving
+                    ? localizeUi("ui.noodle.noodlehome.saving")
+                    : localizeUi("ui.noodle.noodlehome.save")
+                  : localizeUi("ui.noodle.stageprofileview.editProfile")}
+              </button>
+            ) : followAction ? (
+              <button
+                type="button"
+                onClick={followAction.onToggle}
+                disabled={followAction.pending}
+                className={cn(
+                  "h-9 rounded-full px-5 text-xs font-bold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50",
+                  followAction.followed
+                    ? "border border-[var(--noodle-divider)] text-[var(--foreground)]"
+                    : "bg-[var(--foreground)] text-[var(--background)]",
+                )}
+              >
+                {followAction.followed
+                  ? localizeUi("ui.noodle.connections.tabs.following")
+                  : localizeUi("ui.noodle.noodlehome.follow")}
+              </button>
+            ) : null}
+            {secondaryActions}
+          </div>
         </div>
 
-        <div className="mt-4 grid w-full min-w-0 items-start gap-4 text-left @min-[680px]:mt-0">
-          <div className="flex min-w-0 flex-col items-start">
-            {identityEyebrow && (
-              <div className="mb-1.5 text-[0.68rem] font-bold uppercase tracking-[0.14em] text-[var(--noodle-accent)]">
-                {identityEyebrow}
-              </div>
-            )}
-            {editor?.isEditing ? (
-              <input
-                value={editor.name}
-                onChange={(event) => editor.onNameChange(event.target.value)}
-                aria-label={localizeUi("ui.noodle.noodleprofilesurface.displayName")}
-                className={cn(
-                  inPlaceFieldClass,
-                  "text-2xl font-black leading-[1.08] tracking-[-0.025em] @min-[680px]:text-3xl @min-[1040px]:text-4xl",
-                )}
-              />
-            ) : (
-              <h1 className="max-w-full text-2xl font-black leading-[1.08] tracking-[-0.025em] text-balance @min-[680px]:text-3xl @min-[1040px]:text-4xl">
-                {account.displayName}
-              </h1>
-            )}
-            <div className="mt-1 flex max-w-full flex-wrap items-center gap-2 text-sm text-[var(--muted-foreground)]">
-              {editor?.isEditing ? (
-                <span className="flex min-w-0 flex-1 items-center gap-1 font-medium !text-[var(--noodle-accent-foreground)]">
-                  @
-                  <input
-                    value={editor.handle}
-                    onChange={(event) => editor.onHandleChange(event.target.value)}
-                    aria-label={localizeUi("ui.noodle.noodleprofilesurface.name")}
-                    placeholder={localizeUi("ui.noodle.noodleprofilesurface.mari")}
-                    className={cn(inPlaceFieldClass, "text-sm font-medium")}
-                  />
-                </span>
-              ) : (
-                <>
-                  <span
-                    data-noodle-profile-handle
-                    className="min-w-0 break-all font-medium !text-[var(--noodle-accent-foreground)]"
-                  >
-                    @{displayHandle || localizeUi("ui.slurp.profile.fallbackHandle")}
-                  </span>
-                  {handleMeta}
-                </>
-              )}
+        {editor?.isEditing ? (
+          <div className="order-1 mt-1 w-full space-y-3 text-left">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="block space-y-1.5">
+                <span className={labelClass}>{localizeUi("ui.noodle.noodleprofilesurface.displayName")}</span>
+                <input
+                  value={editor.name}
+                  onChange={(event) => editor.onNameChange(event.target.value)}
+                  className={fieldClass}
+                />
+              </label>
+              <label className="block space-y-1.5">
+                <span className={labelClass}>{localizeUi("ui.noodle.noodleprofilesurface.name")}</span>
+                <input
+                  value={editor.handle}
+                  onChange={(event) => editor.onHandleChange(event.target.value)}
+                  className={fieldClass}
+                  placeholder={localizeUi("ui.noodle.noodleprofilesurface.mari")}
+                />
+              </label>
             </div>
-            {stats && (
-              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-[var(--muted-foreground)]">
-                <span className="inline-flex items-center gap-1.5">
-                  <Users size={14} aria-hidden="true" />
-                  <strong className="text-[var(--foreground)]">{stats.followers}</strong>{" "}
-                  {localizeUi("ui.slurp.profile.followers", { defaultValue: "Followers" })}
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <Users size={14} aria-hidden="true" />
-                  <strong className="text-[var(--foreground)]">{stats.subscribers}</strong>{" "}
-                  {localizeUi("ui.slurp.profile.subscribers", { defaultValue: "Subscribers" })}
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <Heart size={14} aria-hidden="true" />
-                  <strong className="text-[var(--foreground)]">{stats.likes}</strong>{" "}
-                  {localizeUi("ui.slurp.profile.likes", { defaultValue: "Likes" })}
-                </span>
-              </div>
-            )}
-            {editor?.isEditing ? (
+            <label className="block space-y-1.5">
+              <span className={labelClass}>{localizeUi("ui.noodle.noodleprofilesurface.bio")}</span>
               <textarea
                 value={editor.bio}
                 onChange={(event) => editor.onBioChange(event.target.value)}
-                aria-label={localizeUi("ui.noodle.noodleprofilesurface.bio")}
-                className={cn(inPlaceFieldClass, "mt-2 h-24 resize-none text-sm leading-relaxed")}
+                className={cn(fieldClass, "h-24 resize-none py-2")}
               />
-            ) : (
-              <div className="mt-3 max-w-[65ch] text-sm leading-relaxed text-[var(--muted-foreground)] text-pretty">
-                <span className="mb-1 block text-[0.62rem] font-bold uppercase tracking-[0.16em] text-[var(--noodle-accent)]">
-                  {localizeUi("ui.slurp.profile.bioLabel", { defaultValue: "Bio" })}
-                </span>
-                {bioQuote && (
-                  <span className="mb-1 block border-s-2 border-[var(--noodle-accent)]/50 ps-3 italic">{bioQuote}</span>
-                )}
-                {bioContent && bioCollapsible && (
-                  <details className="group/bio">
-                    <summary className="list-none cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]">
-                      <div className="line-clamp-4">{bioContent}</div>
-                      <span className="mt-1 block text-xs font-bold text-[var(--noodle-accent)] group-open/bio:hidden">
-                        {localizeUi("ui.slurp.profile.expandBio", { defaultValue: "Show more" })}
-                      </span>
-                    </summary>
-                    <div className="mt-1">{bioContent}</div>
-                    <span className="mt-1 block text-xs font-bold text-[var(--noodle-accent)]">
-                      {localizeUi("ui.slurp.profile.collapseBio", { defaultValue: "Show less" })}
-                    </span>
-                  </details>
-                )}
-                {bioContent && !bioCollapsible && <div>{bioContent}</div>}
-              </div>
-            )}
-            {!editor?.isEditing && contentActions}
-            {editor?.isEditing ? (
-              <span className="mt-2 flex w-full items-center gap-1.5 text-sm text-[var(--muted-foreground)]">
-                <MapPin size={15} className="shrink-0 text-[var(--noodle-accent)]" />
-                <input
-                  value={editor.location}
-                  onChange={(event) => editor.onLocationChange(event.target.value)}
-                  aria-label={localizeUi("ui.noodle.noodleprofilesurface.location")}
-                  placeholder={localizeUi("ui.noodle.noodleprofilesurface.somewhereCozy")}
-                  className={cn(inPlaceFieldClass, "text-sm")}
-                />
+            </label>
+            <label className="block space-y-1.5">
+              <span className={labelClass}>{localizeUi("ui.noodle.noodleprofilesurface.location")}</span>
+              <input
+                value={editor.location}
+                onChange={(event) => editor.onLocationChange(event.target.value)}
+                className={fieldClass}
+                placeholder={localizeUi("ui.noodle.noodleprofilesurface.somewhereCozy")}
+              />
+            </label>
+          </div>
+        ) : (
+          <div className="order-2 flex w-full flex-col items-center text-center">
+            <h1 className="text-2xl font-bold leading-tight sm:text-3xl">{account.displayName}</h1>
+            <div className="mt-1 flex flex-wrap items-center justify-center gap-2 text-sm text-[var(--muted-foreground)]">
+              <span data-noodle-profile-handle className="font-medium !text-[var(--noodle-accent-foreground)]">
+                @{displayHandle || "noodle"}
               </span>
-            ) : (
-              location && (
-                <p className="mt-2 flex items-center gap-1.5 text-sm text-[var(--muted-foreground)]">
-                  <MapPin size={15} className="text-[var(--noodle-accent)]" />
-                  {location}
-                </p>
-              )
+              {handleMeta}
+            </div>
+            <div className="max-w-xl text-sm leading-relaxed text-[var(--muted-foreground)]">{bioContent}</div>
+            {contentActions}
+            {location && (
+              <p className="mt-2 flex items-center gap-1.5 text-sm text-[var(--muted-foreground)]">
+                <MapPin size={15} className="text-[var(--noodle-accent)]" />
+                {location}
+              </p>
             )}
-            {/* Settings with no on-profile equivalent, so they can only follow the live fields. */}
-            {editor?.isEditing && editor.privateFields && (
-              <div className="mt-4 w-full space-y-3">{editor.privateFields}</div>
-            )}
-            {!editor?.isEditing && connections && (
-              <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 border-t border-[var(--noodle-divider)] pt-3 text-sm text-[var(--muted-foreground)]">
+            {connections && (
+              <div className="mt-3 flex flex-wrap justify-center gap-x-6 gap-y-1 border-t border-[var(--noodle-divider)] pt-3 text-sm text-[var(--muted-foreground)]">
                 <button
                   type="button"
                   onClick={connections.onOpenFollowing}
@@ -474,59 +352,13 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
               </div>
             )}
           </div>
-          {hasProfileActions && <div className="mt-1 min-w-0">{profileActions}</div>}
-        </div>
-      </div>
-      {(preTabsContent || editor) && (
-        <div
-          className={cn(
-            "mx-3 overflow-hidden @min-[680px]:mx-5 @min-[1040px]:mx-8",
-            spotlight
-              ? "mt-2 rounded-2xl bg-[color-mix(in_srgb,var(--slurp-surface)_82%,transparent)] shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-white/[0.07] backdrop-blur-xl"
-              : "mt-4 rounded-xl shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--noodle-divider)]",
-          )}
-        >
-          <div className="flex min-h-11 items-start">
-            <div className="min-w-0 flex-1">{preTabsContent}</div>
-            {editor && (!editorActionInPreTabs || editor.isEditing) && (
-              <div className="flex h-11 shrink-0 items-stretch">
-                {editor.isEditing && (
-                  <button
-                    type="button"
-                    onClick={editor.onCancel}
-                    className="min-h-11 border-s border-white/[0.07] px-3 text-xs font-bold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
-                  >
-                    {localizeUi("ui.slurp.creatorForm.cancel")}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => (editor.isEditing ? editor.onSave() : editor.onStartEditing())}
-                  disabled={editor.isEditing ? !editor.canSave || editor.isSaving : false}
-                  className="min-h-11 rounded-e-2xl border-s border-black/10 bg-[var(--noodle-accent)] px-4 text-xs font-black text-zinc-950 transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
-                >
-                  {editor.isEditing
-                    ? editor.isSaving
-                      ? localizeUi("ui.noodle.noodlehome.saving")
-                      : localizeUi("ui.noodle.noodlehome.save")
-                    : localizeUi("ui.noodle.stageprofileview.editProfile")}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-      <div
-        className={cn(
-          "overflow-hidden @min-[680px]:mx-5 @min-[1040px]:mx-8",
-          spotlight
-            ? "mt-4 bg-transparent"
-            : "mt-4 shadow-[var(--slurp-shadow-floating)] sm:rounded-xl sm:ring-1 sm:ring-inset sm:ring-[var(--noodle-divider)]",
         )}
-      >
+      </div>
+      <div className="border-t border-[var(--noodle-divider)]">
+        {preTabsContent}
         {featuredContent}
         <div
-          className="flex snap-x overflow-x-auto border-b border-white/[0.07] bg-[color-mix(in_srgb,var(--slurp-canvas)_92%,transparent)] pe-8 [scrollbar-width:none] backdrop-blur-xl [&::-webkit-scrollbar]:hidden @min-[620px]:pe-0"
+          className="flex border-b border-[var(--noodle-divider)]"
           role="tablist"
           aria-label={localizeUi("ui.noodle.noodleprofilesurface.profileSections")}
         >
@@ -551,12 +383,14 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
               aria-label={tab.ariaLabel}
               aria-selected={activeTab === tab.id}
               className={cn(
-                "relative flex min-h-12 min-w-[6.25rem] flex-none snap-start items-center justify-center px-3 text-sm font-semibold text-[var(--muted-foreground)] transition-[background-color,color,transform] after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:origin-center after:scale-x-0 after:rounded-full after:bg-[var(--noodle-accent)] after:transition-transform hover:bg-[var(--accent)]/20 hover:text-[var(--foreground)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:after:transition-none motion-reduce:active:scale-100 @min-[620px]:min-w-0 @min-[620px]:flex-1",
-                tab.management && "ms-1 min-w-[8.5rem] border-s border-white/[0.07] @min-[620px]:min-w-0",
-                activeTab === tab.id && "text-[var(--foreground)] after:scale-x-100",
+                "relative flex h-12 min-w-0 flex-1 items-center justify-center px-2 text-sm font-semibold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]",
+                activeTab === tab.id && "text-[var(--foreground)]",
               )}
             >
               <span className="truncate">{tab.label}</span>
+              {activeTab === tab.id && (
+                <span className="absolute bottom-0 left-1/2 h-1 w-12 -translate-x-1/2 rounded-full bg-[var(--noodle-accent)]" />
+              )}
             </button>
           ))}
         </div>

@@ -1,8 +1,8 @@
 import type { NoodleAuthorSnapshot } from "@marinara-engine/shared";
 
 export const NOODLE_FAN_ACTIVITY_DAY_PLAN_VERSION = 1 as const;
-export const NOODLE_FAN_ACTIVITY_RUNS_PER_DAY = 8 as const;
-export const NOODLE_FAN_ACTIVITY_MAX_RUNS_PER_DAY = 96 as const;
+export const NOODLE_FAN_ACTIVITY_RUNS_PER_DAY = 4 as const;
+export const NOODLE_FAN_ACTIVITY_MAX_RUNS_PER_DAY = 24 as const;
 export const NOODLE_FAN_ACTIVITY_MAX_MANUAL_RUNS = 24 as const;
 export const NOODLE_FAN_ACTIVITY_MAX_CREATORS_PER_RUN = 12 as const;
 export const NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR = 4 as const;
@@ -16,8 +16,6 @@ export interface NoodleFanAcceptedActivity {
   type: string;
   targetPostId: string;
   content: string | null;
-  /** The comment this one answers. Null when it answers the post itself. */
-  parentInteractionId: string | null;
   actorId: string;
   snapshot: NoodleAuthorSnapshot;
   applied: boolean;
@@ -47,8 +45,6 @@ export interface NoodleFanActivityToStore {
   type: string;
   targetPostId: string;
   content?: string | null;
-  /** The comment this one answers, when it answers one rather than the post. */
-  parentInteractionId?: string | null;
   actorId: string;
   snapshot: NoodleAuthorSnapshot;
 }
@@ -100,13 +96,10 @@ function validActivity(value: unknown): value is NoodleFanAcceptedActivity {
   return (
     typeof row.id === "string" &&
     typeof row.creatorId === "string" &&
-    (row.type === "like" || row.type === "reply") &&
+    (row.type === "like" || row.type === "reply" || row.type === "repost") &&
     typeof row.targetPostId === "string" &&
     typeof row.actorId === "string" &&
     (row.content === null || typeof row.content === "string") &&
-    (row.parentInteractionId === null ||
-      row.parentInteractionId === undefined ||
-      typeof row.parentInteractionId === "string") &&
     typeof row.applied === "boolean" &&
     validAuthorSnapshot(row.snapshot)
   );
@@ -302,7 +295,6 @@ export function storeNoodleFanAcceptedActivities(
               targetPostId: activity.targetPostId,
               actorId: activity.actorId,
               content: activity.content ?? null,
-              parentInteractionId: activity.parentInteractionId ?? null,
               snapshot: activity.snapshot,
               applied: false,
             })),

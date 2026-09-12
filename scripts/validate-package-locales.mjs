@@ -227,7 +227,7 @@ if (missingNoodleKeys.length > 0) {
 
 // Slurp ships its own copy of the Noodle UI catalog. Without this the Slurp client could
 // reference a key that only exists in the Noodle package and render the raw key id instead.
-const slurpClientRoot = join(repoRoot, "packages/slurp/src/engine/packages/client/src");
+const slurpClientRoot = join(repoRoot, "packages/slurp2/src/engine/packages/client/src");
 const slurpEnglish = JSON.parse(await readFile(join(slurpClientRoot, "localization/locales/en.json"), "utf8"));
 assertRecord(slurpEnglish, "Slurp en UI localization");
 const referencedSlurpKeys = new Set();

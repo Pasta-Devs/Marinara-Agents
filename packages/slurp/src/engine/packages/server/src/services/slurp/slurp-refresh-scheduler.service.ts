@@ -2,8 +2,6 @@ import type { FastifyInstance, InjectOptions } from "fastify";
 import { logger } from "../../lib/logger.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
 import { AUTOMATIC_GENERATION_HEADER } from "../generation/connection-admission.js";
-import { createGarnishAds } from "../garnish-ads/garnish-ads.service.js";
-import { syncGarnishAdsWithLorebook } from "./slurp-garnish-sync.service.js";
 import {
   dueNoodleRefreshTimes,
   markNoodleRefreshAttempt,
@@ -24,6 +22,19 @@ const NOODLE_SCHEDULER_RATE_LIMIT_RETRY_MS = 5 * 60_000;
 const NOODLE_SCHEDULER_FAILURE_BASE_RETRY_MS = 5 * 60_000;
 const NOODLE_SCHEDULER_FAILURE_MAX_RETRY_MS = 60 * 60_000;
 const NOODLE_SCHEDULER_CONFIGURATION_STATUS_CODES = new Set([400, 401, 403, 404, 405, 410, 422]);
+let refreshPauseDepth = 0;
+let activeRefreshPoll: Promise<void> | null = null;
+
+export async function pauseNoodleRefreshScheduler(): Promise<() => void> {
+  refreshPauseDepth += 1;
+  await activeRefreshPoll?.catch(() => {});
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    refreshPauseDepth -= 1;
+  };
+}
 
 function responseError(payload: string): string {
   try {
@@ -77,7 +88,9 @@ export function startNoodleRefreshScheduler(
       () => {
         active = poll().finally(() => {
           active = null;
+          activeRefreshPoll = null;
         });
+        activeRefreshPoll = active;
       },
       Math.max(1_000, delayMs),
     );
@@ -112,18 +125,15 @@ export function startNoodleRefreshScheduler(
 
   const poll = async () => {
     if (stopped || polling) return;
+    if (refreshPauseDepth > 0) {
+      scheduleNext(NOODLE_SCHEDULER_BUSY_RETRY_MS);
+      return;
+    }
     polling = true;
     let nextDelay = NOODLE_SCHEDULER_MAX_POLL_MS;
     try {
       const now = new Date();
       const settings = await noodle.getSettings();
-      // A lorebook-backed ad pool follows its book. This is a no-op unless the book's content
-      // fingerprint actually changed, so a steady setting costs one cheap read per poll.
-      if (settings.inlineAdsLorebookId) {
-        await syncGarnishAdsWithLorebook(app.db, createGarnishAds(app.db).pool).catch((error) =>
-          logger.warn(error, "[noodle-scheduler] Lorebook ad sync failed"),
-        );
-      }
       let schedule = await noodle.ensureRefreshSchedule(now, settings);
       const retryAt = schedule.nextAttemptAt ? Date.parse(schedule.nextAttemptAt) : Number.NaN;
       if (Number.isFinite(retryAt) && retryAt > now.getTime()) {
@@ -193,13 +203,6 @@ export function startNoodleRefreshScheduler(
   };
   registerStop?.(stop);
   scheduleNext(NOODLE_SCHEDULER_INITIAL_DELAY_MS);
-  app.addHook("onClose", async () => {
-    stopped = true;
-    if (timer) clearTimeout(timer);
-    timer = null;
-    await active?.catch(() => {});
-  });
-
   logger.info("[noodle-scheduler] Automatic timeline refresh scheduler started");
   return { stop };
 }

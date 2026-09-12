@@ -2,10 +2,11 @@
 // Storage: Noodle Fake Social Media
 // ──────────────────────────────────────────────
 import { existsSync } from "node:fs";
-import { and, desc, eq, gt, inArray, isNotNull, isNull, like, lt, ne, or } from "../../db/file-query.js";
+import { and, desc, eq, gt, inArray, isNotNull, isNull, like, lt, or } from "../../db/file-query.js";
 import {
   createNoodlePoll,
   DEFAULT_NOODLER_CREATOR_REPLIES_PER_24_HOURS,
+  DEFAULT_NOODLE_WALLET_COINS,
   noodleAccountProfileSettingsSchema,
   noodleAccountPrivacySettingsSchema,
   noodleAccountSocialSettingsSchema,
@@ -55,68 +56,6 @@ export {
   noodlerUnlockPriceFromMetadata,
   noodlerUnlockPriceMetadata,
 } from "../slurp/slurp-prices.js";
-// Re-exported above for consumers; imported here because a re-export creates no local binding.
-import { noodlerUnlockPriceFromMetadata } from "../slurp/slurp-prices.js";
-import {
-  applyStipend,
-  credit,
-  earn,
-  readSlurpWallet,
-  renewSubscriptions,
-  slurpWalletKey,
-  SLURP_DEFAULT_ECONOMY,
-  spend,
-  subscriptionPaidThrough,
-  type SlurpEconomy,
-  type SlurpWallet,
-  type SlurpWalletSpendKind,
-} from "../slurp/slurp-wallet.js";
-import { openSlurpGoal, readSlurpGoal, slurpGoalKey, slurpGoalProgress, type SlurpGoal } from "../slurp/slurp-goal.js";
-import {
-  activeSlurpProjects,
-  makeSlurpProject,
-  readSlurpProjects,
-  SLURP_PROJECT_CHAPTER_MAX_LENGTH,
-  SLURP_PROJECT_DIRECTION_MAX_LENGTH,
-  SLURP_PROJECT_MAX_ACTIVE,
-  SLURP_PROJECT_MAX_CHAPTERS,
-  SLURP_PROJECT_TITLE_MAX_LENGTH,
-  slurpProjectAdvance,
-  slurpProjectsKey,
-  SLURP_PROJECT_STATUSES,
-  type SlurpProject,
-  type SlurpProjectStatus,
-} from "../slurp/slurp-project.js";
-import { SLURP_AUDIENCE_TONES, SLURP_DEFAULT_AUDIENCE_TONE } from "../slurp/slurp-tone.js";
-import {
-  SLURP_DEFAULT_PLATFORM_SCALE,
-  SLURP_DEFAULT_WORLD_ACTIVITY,
-  SLURP_PLATFORM_SCALE,
-  SLURP_WORLD_ACTIVITY,
-} from "../slurp/slurp-scale.js";
-import { resolveSlurpCreatorScheduleStatus } from "../slurp/slurp-creator-schedule-context.js";
-import {
-  SLURP_DEFAULT_PROJECT_RATE,
-  SLURP_DEFAULT_STORY_RATE,
-  SLURP_PROJECT_RATE,
-  SLURP_STORY_RATE,
-} from "../slurp/slurp-post-variation.js";
-import { createSlurpEventsStorage } from "./slurp-events.storage.js";
-import { createSlurpPopulationStorage } from "./slurp-population.storage.js";
-import type { SlurpFunnelStage } from "../slurp/slurp-population.js";
-import type { SlurpEventKind } from "../slurp/slurp-event-weight.js";
-import {
-  // `earn` is also the viewer-wallet credit above. Importing both under one name meant the last
-  // import won at runtime, so every ad and engagement reward called the creator-earnings `earn`
-  // with wallet arguments and silently paid nothing.
-  earn as earnCreatorIncome,
-  payout as payoutEarnings,
-  readSlurpEarnings,
-  reverse as reverseEarnings,
-  slurpEarningsKey,
-  type SlurpEarnings,
-  type SlurpEarningsEntryKind,
-} from "../slurp/slurp-earnings.js";
 import { logger } from "../../lib/logger.js";
 import {
   NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR,
@@ -147,23 +86,7 @@ import {
   noodlerPreparedPosts,
   noodlerReserveState,
   noodlerFanActivityState,
-  slurpPopulation,
-  slurpAudienceTies,
-  slurpEvents,
-  slurpPendingText,
-  noodlerFirstPostJobs,
-  slurpMessageClaims,
-  slurpMessages,
-  slurpReplyBubbles,
-  slurpThreads,
-  slurpCommissions,
 } from "../../db/schema/slurp.js";
-import {
-  SLURP_CREATOR_MESSAGING_KEY,
-  SLURP_DEFAULT_CREATOR_MESSAGING,
-  SLURP_DM_POLICIES,
-} from "../slurp/slurp-messaging.js";
-import { noodlerContentLimitFor } from "../slurp/slurp-content-format.js";
 import { readNoodlerAccountMediaPath, readNoodlerAvatarMediaPath } from "../slurp/slurp-avatar.js";
 import { newId, now } from "../../utils/id-generator.js";
 import {
@@ -182,21 +105,7 @@ import {
 } from "../slurp/slurp-refresh-schedule.js";
 import { pruneNoodleRefreshRuns } from "./slurp-refresh-run-retention.js";
 import { noodlerPostImageRetryAttempts, NOODLER_POST_IMAGE_RETRY_LIMIT } from "../slurp/slurp-image-retry.js";
-import { enqueueSlurpFinancial } from "./slurp-financial-queue.js";
-import {
-  addSlurpModifier,
-  applySlurpCreatorStateDelta,
-  creatorStateDeltaForSignal,
-  decaySlurpCreatorState,
-  readSlurpCreatorState,
-  SLURP_ENERGY_COST,
-  SLURP_EXPOSURE_PER_POST,
-  SLURP_PAID_WELL_COINS,
-  type SlurpCreatorState,
-  type SlurpCreatorStateSignal,
-  type SlurpModifierKind,
-  type SlurpStateDelta,
-} from "../slurp/slurp-creator-state.js";
+import { getNoodlerImageConnections } from "../slurp/slurp-image-connections.js";
 
 /** Newest candidates the image-retry poll inspects per pass. */
 const IMAGE_RETRY_SCAN_LIMIT = 200;
@@ -209,7 +118,6 @@ import {
 } from "../slurp/slurp-post-page.js";
 
 const SLURP_SETTINGS_KEY = "slurp.settings";
-const SLURP_CREATOR_STATE_KEY = "slurp.creator.state";
 const NOODLE_REFRESH_SCHEDULE_KEY = "slurp.refresh-schedule";
 const NOODLER_SOURCE_SNAPSHOT_MIGRATION_KEY = "slurp.migration.noodler-source-snapshots-v1";
 const slurpViewerSettingsKey = (personaId: string) => `slurp.viewer.${personaId}.settings`;
@@ -217,20 +125,11 @@ const NOODLER_RESERVE_STATE_ID = "noodler-reserve";
 let slurpSettingsUpdateQueue: Promise<unknown> = Promise.resolve();
 const ROLLING_DAY_MS = 24 * 60 * 60 * 1000;
 /**
- * How long a slot stays publishable after its time.
- *
- * The reserve poll runs every minute, so a slot past this means the server was down or paused.
- * Publishing it now would backdate it, and a long outage would release the whole missed run at
- * once, so an elapsed slot is retired instead.
- *
- * One posting interval, not the fixed hour this used to be. The hour was written when the pace was
- * a few posts a day and it never learned about the setting: at 24 posts a day the grace equalled
- * the spacing, so a slot had a single interval to survive any hiccup, while at 4 posts a day a
- * slot missed by 61 minutes was destroyed even though the next one was five hours out. Bunching is
- * not what this guards — `publishDueNoodlerPreparedPosts` separately refuses to publish within one
- * interval of the creator's last post — so the grace can track the pace it belongs to.
+ * The reserve poll runs every minute, so a slot this far past its publish time means the server
+ * was down or paused. Publishing it now would backdate it, and a long outage would release the
+ * whole missed run at once, so an elapsed slot is retired instead.
  */
-const elapsedPreparedSlotMs = (postsPerDay: number) => slurpCreatorPostingIntervalMs(postsPerDay);
+const ELAPSED_PREPARED_SLOT_MS = 60 * 60 * 1000;
 /** How long published/discarded prepared rows are kept for crash recovery before pruning. */
 const TERMINAL_PREPARED_POST_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -260,43 +159,10 @@ const noodlerFanArchetypeWeightsSchema = z
  * must not become an implicit dependency of Creator scheduling or generation.
  */
 export const slurpSettingsSchema = z.object({
-  inlineAdsEnabled: z.boolean(),
-  inlineAdsFrequency: z.enum(["light", "standard", "frequent"]),
-  inlineAdsSteering: z.enum(["balanced", "personalized", "random"]),
-  inlineAdsPreferredTags: z.array(z.string().trim().min(1).max(32)).max(8),
-  inlineAdsContentCeiling: z.enum(["tame", "suggestive", "explicit"]),
-  inlineAdsTone: z.enum(["corporate", "scammy", "local", "luxury", "unhinged"]),
-  inlineAdsEra: z.enum(["present", "nineties", "cyberpunk", "retrofuture"]),
-  inlineAdsWorldContext: z.string().trim().max(1200),
-  inlineAdsImagesEnabled: z.boolean(),
-  /** Lorebook whose entries feed the ad generator as world context. */
-  inlineAdsLorebookId: z.string().trim().min(1).nullable(),
-  /** Fingerprint of the synced lorebook, so a changed book can resync itself. */
-  inlineAdsLorebookRevision: z.string().trim().max(64).nullable(),
   imageWidth: z.number().int().min(64).max(4096),
   imageHeight: z.number().int().min(64).max(4096),
-  /** Share of a Creator's automatic posts published as Stories. */
-  storyRate: z.enum(SLURP_STORY_RATE),
-  /** Share of a Creator's automatic posts that continue a project rather than standing alone. */
-  projectRate: z.enum(SLURP_PROJECT_RATE),
-  /** Stories are shown in their own tall frame, so they carry their own size. */
-  storyImageWidth: z.number().int().min(64).max(4096),
-  storyImageHeight: z.number().int().min(64).max(4096),
   refreshesPerDay: z.number().int().min(0).max(24),
   generationGuidance: z.string().max(20_000),
-  audienceTone: z.enum(SLURP_AUDIENCE_TONES),
-  /**
-   * Extra bodies for the free audience comment bank, merged with the shipped ones.
-   *
-   * The free tier writes the highest-volume text on the platform and must never call the model to
-   * do it, so it draws from a fixed bank. A fixed bank of any size eventually repeats, and the
-   * body is the part a reader notices. Storing the bank here makes it two things at once: a list
-   * the player can edit or clear in Settings, and somewhere a rare, cheap generation can leave new
-   * lines behind. One call buys hundreds of comments.
-   */
-  audienceReactionBank: z.array(z.string().min(1).max(120)).max(400),
-  worldActivity: z.enum(SLURP_WORLD_ACTIVITY),
-  platformScale: z.enum(SLURP_PLATFORM_SCALE),
   generationConnectionId: z.string().nullable(),
   imageGenerationConnectionId: z.string().nullable(),
   imageGenerationPrompt: z.string(),
@@ -325,51 +191,18 @@ export const slurpSettingsSchema = z.object({
   maxImagesPerRefresh: z.number().int().min(0).max(24),
   maxGeneratedPostsPerRefresh: z.number().int().min(0).max(24),
   maxLikesPerRefresh: z.number().int().min(0).max(24),
+  maxRepostsPerRefresh: z.number().int().min(0).max(24),
   maxRepliesPerRefresh: z.number().int().min(0).max(24),
   allowGalleryImageAttachments: z.boolean(),
-  /**
-   * Posts a day across the whole Creator cast, and now actually that number: the reserve used to
-   * lay down twice as many slots as this asked for. The ceiling is well above the old 24 so a
-   * player who liked the accidental rate can ask for it outright.
-   */
-  postsPerDay: z.number().int().min(1).max(96),
+  postsPerDay: z.number().int().min(1).max(24),
   autoPostingScheduleEnabled: z.boolean(),
   autoPostGenerationMode: z.enum(["pre_generate", "on_demand"]),
   fanActivityEnabled: z.boolean(),
-  fanActivityRunsPerDay: z.number().int().min(1).max(96),
+  fanActivityRunsPerDay: z.number().int().min(1).max(24),
   fanLikesPerRefresh: z.number().int().min(0).max(24),
   fanRepliesPerRefresh: z.number().int().min(0).max(12),
+  fanRepostsPerRefresh: z.number().int().min(0).max(12),
   fanArchetypeWeights: noodlerFanArchetypeWeightsSchema,
-  /**
-   * Wallet economy. Off by default: an existing install keeps the presentation-only prices it
-   * has always had, and nothing starts refusing an unlock because a stored balance ran dry.
-   */
-  walletEnabled: z.boolean(),
-  walletUnlockCost: z.number().int().min(0).max(9999),
-  walletSubscriptionCost: z.number().int().min(0).max(9999),
-  /** Daily stipend tops the balance up to this floor. Zero disables the stipend. */
-  walletStipendFloor: z.number().int().min(0).max(99_999),
-  walletDayStartHour: z.number().int().min(0).max(23),
-  walletAdReward: z.number().int().min(0).max(999),
-  walletAdDailyCap: z.number().int().min(0).max(9999),
-  walletEngagementReward: z.number().int().min(0).max(999),
-  walletEngagementDailyCap: z.number().int().min(0).max(9999),
-  /** Share of a fan's payment that reaches the viewer's own creator, as a percentage. */
-  walletCreatorRevenueSharePercent: z.number().int().min(0).max(100),
-  /**
-   * Creators answer a message you left unanswered while you were away.
-   *
-   * On by default, because a chat nobody ever answers is not a chat. Off leaves the whole
-   * background reply loop asleep: a creator then answers only while you are in the conversation.
-   * Commissions and the later bubbles of a reply already sent still arrive — those are owed.
-   */
-  messagesAwayRepliesEnabled: z.boolean(),
-  /** Messages one reply is broken into. One keeps a reply in a single bubble. */
-  messagesReplyBubbleLimit: z.number().int().min(1).max(4),
-  /** Where a creator nobody has configured by hand starts. */
-  messagesDefaultDmPolicy: z.enum(SLURP_DM_POLICIES as unknown as [string, ...string[]]),
-  messagesDefaultRequestFee: z.number().int().min(0).max(9999),
-  messagesDefaultPpvPrice: z.number().int().min(0).max(9999),
   nightQuiet: z.boolean(),
   onboarding: z.enum(["not_started", "in_progress", "completed"]),
 });
@@ -408,7 +241,6 @@ function noodlerPostPageCondition(options: NoodlerPostPageOptions, includeCursor
   const readable = noodlerReadablePostCondition(options);
   return and(
     inArray(noodlePosts.authorAccountId, options.accountIds),
-    ne(noodlePosts.access, "draft"),
     options.mediaOnly
       ? and(isNotNull(noodlePosts.imageUrl), or(readable, like(noodlePosts.imageUrl, `${NOODLER_MEDIA_URL_PREFIX}%`)))
       : undefined,
@@ -427,9 +259,6 @@ export type NoodlerPreparedPostPayload = {
   content: string;
   access: NoodlePostAccess;
   imagePrompt: string | null;
-  /** The project chosen when the post was prepared, carried through to publication. */
-  projectId?: string | null;
-  projectChapter?: string | null;
   metadata: Record<string, unknown>;
 };
 
@@ -552,12 +381,6 @@ type InsertInteractionCommand = {
   imageUrl?: string | null;
   parentInteractionId: string | null;
 };
-type NoodlerWorldInteractionInput = {
-  creatorAccountId: string;
-  actorId: string;
-  type: "like" | "reply" | "repost";
-  content: string | null;
-};
 type NoodlerPostPersistenceInput = {
   /** Optional caller-supplied id so a serving URL can be derived before the row is inserted. */
   id?: string;
@@ -569,9 +392,6 @@ type NoodlerPostPersistenceInput = {
   metadata?: Record<string, unknown>;
   imageUrl?: string | null;
   imagePrompt?: string | null;
-  /** The project this post was published into, and the chapter it was on. See `slurp-project.ts`. */
-  projectId?: string | null;
-  projectChapter?: string | null;
 };
 
 export type NoodlerCreatorReplyClaimResult =
@@ -600,13 +420,15 @@ function parseRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
+let viewerSettingsUpdateQueue: Promise<unknown> = Promise.resolve();
+
 function emptyNoodleAccountSettings(): NoodleAccountSettings {
   return {
     profile: {},
     social: {},
     scheduler: { autoPosting: defaultAutoPostingSettings() },
     privacy: { access: { hiddenFromAccountIds: [] } },
-    wallet: { coins: SLURP_DEFAULT_ECONOMY.startingCoins },
+    wallet: { coins: DEFAULT_NOODLE_WALLET_COINS },
   };
 }
 
@@ -724,7 +546,7 @@ export function normalizeNoodleAccountSettings(value: unknown): NoodleAccountSet
     social,
     scheduler: normalizeScheduler(raw.scheduler),
     privacy,
-    wallet: { coins: normalizePersistedInteger(rawWallet.coins) ?? SLURP_DEFAULT_ECONOMY.startingCoins },
+    wallet: { coins: normalizePersistedInteger(rawWallet.coins) ?? DEFAULT_NOODLE_WALLET_COINS },
   };
 }
 
@@ -844,83 +666,25 @@ function isToggleInteractionType(type: NoodleInteractionType) {
 // Keep this value aligned with the Slurp settings surface.
 export const LEGACY_NOODLER_DEFAULT_GENERATION_GUIDANCE =
   "All NoodleR creators and viewers are adults (18+). This is an adult creator page: flirty, suggestive, teasing, and sensual posts are common, and explicit posts appear regularly when they suit the creator — but they are not required and need not be the majority. Tease the locked posts and answer flirty comments in kind. Keep each creator's personality intact: a shy creator flirts shyly, a blunt one bluntly, a funny one filthily. Ordinary posts — updates, humor, behind the scenes, project news — matter just as much and keep both the page and the character human. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood.";
-export const LEGACY_SLURP_DEFAULT_GENERATION_GUIDANCE =
+export const NOODLER_DEFAULT_GENERATION_GUIDANCE =
   "All Slurp creators and viewers are adults (18+). This is an adult creator page: flirty, suggestive, teasing, and sensual posts are common, and explicit posts appear regularly when they suit the creator — but they are not required and need not be the majority. Tease the locked posts and answer flirty comments in kind. Keep each creator's personality intact: a shy creator flirts shyly, a blunt one bluntly, a funny one filthily. Ordinary posts — updates, humor, behind the scenes, project news — matter just as much and keep both the page and the character human. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood.";
-/**
- * Three shipped spice levels for the generation guidance. The middle level is the default; the
- * settings surface writes one of these verbatim into `generationGuidance`, and any edit to the
- * text is preserved as the user's own.
- */
-export const SLURP_GUIDANCE_PRESETS = {
-  mild: "All Slurp creators and viewers are adults (18+). This is an adult creator page, but a restrained one: posts are flirty, teasing, and suggestive rather than graphic. Innuendo, charm, and anticipation do the work, and locked posts are teased instead of described. Do not write explicit sexual detail. Keep each creator's personality intact: a shy creator flirts shyly, a blunt one flirts bluntly. Ordinary posts about their day, work, and mood stay just as important as the flirty ones.",
-  steamy:
-    "All Slurp creators and viewers are adults (18+). This is an adult creator page. Posts are normally sexually suggestive to outright NSFW. Creators will use Slurp to often excite their readers with their posts. The level of NSFW of a post is dependent on the creator's personality, a shy, innocent person will be suggestive, but still overall tame. On the other end of the spectrum, an outgoing personality who has no problems with sex, will often post very explicit material. When a post is explicit or shows nudity, always use thorough, graphic, horny descriptions. Name the body in dirty everyday words, not clinical ones: tits, nipples, ass, pussy, clit, cock, balls, cum, wet, dripping, hard, leaking. Describe how it looks, feels, and moves. Keep each creator's personality intact.",
-  explicit:
-    "All Slurp creators and viewers are adults (18+). This is an explicit adult creator page. Sexual content is the norm here rather than the exception, and creators describe it directly and in detail when it suits them. Tease the locked posts hard and answer flirty comments in kind. Always use thorough, graphic, horny descriptions for nudity and sex. Name the body in dirty everyday words, not clinical ones: tits, nipples, ass, pussy, clit, cock, balls, cum, wet, dripping, hard, leaking. Describe how it looks, feels, and moves. Keep each creator's personality intact: a shy creator is explicit shyly, a blunt one is explicit bluntly. Ordinary posts about their day, work, and mood still appear and keep the feed believable.",
-} as const;
-
-export type SlurpGuidanceLevel = keyof typeof SLURP_GUIDANCE_PRESETS;
-
-export const NOODLER_DEFAULT_GENERATION_GUIDANCE: string = SLURP_GUIDANCE_PRESETS.steamy;
-
-/** The middle level shipped with a typo before the levels existed; migrate it forward. */
-export const LEGACY_TYPO_SLURP_DEFAULT_GENERATION_GUIDANCE =
-  "All Slurp creators and viewers are adults (18+). This is an adult creator page. Posts are normallly sexually suggestive to outright NSFW. Creators will use Slurp to often excite its readers with their posts. The level of NSFW of a post is dependent on the creator's personality, a shy, innocent person will be suggestive, but still overall tame. On the other end of the spectrum, an outgoing personality who has no problems with sex, will often post very explicit material.";
-export const LEGACY_STEAMY_SLURP_DEFAULT_GENERATION_GUIDANCE =
-  "All Slurp creators and viewers are adults (18+). This is an adult creator page. Posts are normally sexually suggestive to outright NSFW. Creators will use Slurp to often excite their readers with their posts. The level of NSFW of a post is dependent on the creator's personality, a shy, innocent person will be suggestive, but still overall tame. On the other end of the spectrum, an outgoing personality who has no problems with sex, will often post very explicit material.";
-export const LEGACY_EXPLICIT_SLURP_DEFAULT_GENERATION_GUIDANCE =
-  "All Slurp creators and viewers are adults (18+). This is an explicit adult creator page. Sexual content is the norm here rather than the exception, and creators describe it directly and in detail when it suits them. Tease the locked posts hard and answer flirty comments in kind. Keep each creator's personality intact: a shy creator is explicit shyly, a blunt one is explicit bluntly. Ordinary posts about their day, work, and mood still appear and keep the feed believable.";
-export const LEGACY_NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT =
-  "Create a polished social-media image for an adult Creator post. Match the creator's identity, personality, body, clothing, and established visual details. Follow the post's mood and subject. Describe the pose, expression, setting, lighting, camera angle, composition, and visible details clearly. Flirty, suggestive, sensual, or explicit imagery is allowed when it fits the post and creator, but do not force sexual content into ordinary updates. Keep the image coherent, intentional, and suitable for a public or locked Creator feed.";
 export const NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT =
-  "Create a polished social-media image for an adult Creator post. Match the creator's identity, personality, body, clothing, and established visual details. Follow the post's mood and subject. Describe the pose, expression, setting, lighting, camera angle, composition, and visible details clearly. Flirty, suggestive, sensual, or explicit imagery is allowed when it fits the post and creator, but do not force sexual content into ordinary updates. When the image shows nudity or sex, always use thorough, graphic descriptions. Name the body in dirty everyday words, not clinical ones: tits, nipples, ass, pussy, clit, cock, balls, cum, wet, dripping, hard, leaking. Describe how it looks, how it sits, how it catches the light. Keep the image coherent, intentional, and suitable for a public or locked Creator feed.";
-export const LEGACY_NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION =
-  "Edit this image prompt into a provider-ready image prompt. Preserve the original subject, action, setting, composition, and visual style. Preserve any explicit style in the original prompt, character context, image instructions, or style guidance. Do not add realistic, photorealistic, photographic, camera, lens, or natural-lighting language unless the supplied context clearly requests that style. Do not convert an anime, cartoon, game, manga, comic, illustration, painterly, fantasy, or stylized character into a realistic image. When no style is specified, keep the prompt style-neutral. Do not invent an art style. Treat image instructions as guidance, not text to copy into the result. Return only the provider-ready image prompt.";
+  "Create a polished social-media image for an adult Creator post. Match the creator's identity, personality, body, clothing, and established visual details. Follow the post's mood and subject. Describe the pose, expression, setting, lighting, camera angle, composition, and visible details clearly. Flirty, suggestive, sensual, or explicit imagery is allowed when it fits the post and creator, but do not force sexual content into ordinary updates. Keep the image coherent, intentional, and suitable for a public or locked Creator feed.";
 export const NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION =
-  "Edit this image prompt into a provider-ready image prompt. Preserve the original subject, action, setting, composition, and visual style. Preserve any explicit style in the original prompt, character context, image instructions, or style guidance. Do not add realistic, photorealistic, photographic, camera, lens, or natural-lighting language unless the supplied context clearly requests that style. Do not convert an anime, cartoon, game, manga, comic, illustration, painterly, fantasy, or stylized character into a realistic image. When no style is specified, keep the prompt style-neutral. Do not invent an art style. When the prompt shows nudity or sex, keep thorough, graphic body language and dirty everyday words such as tits, nipples, ass, pussy, clit, cock, balls, cum, wet, dripping, hard, leaking. Do not replace them with clinical or euphemistic wording. Treat image instructions as guidance, not text to copy into the result. Return only the provider-ready image prompt.";
+  "Edit this image prompt into a provider-ready image prompt. Preserve the original subject, action, setting, composition, and visual style. Preserve any explicit style in the original prompt, character context, image instructions, or style guidance. Do not add realistic, photorealistic, photographic, camera, lens, or natural-lighting language unless the supplied context clearly requests that style. Do not convert an anime, cartoon, game, manga, comic, illustration, painterly, fantasy, or stylized character into a realistic image. When no style is specified, keep the prompt style-neutral. Do not invent an art style. Treat image instructions as guidance, not text to copy into the result. Return only the provider-ready image prompt.";
 
 /**
- * The LEGACY_* guidance constants above are every previously shipped default. An install that
- * never edited the guidance stored one of them verbatim, so it is migrated to the current default
- * instead of being kept as if the user had chosen it. Comparison is exact: an edited string
- * differs by at least one character and is preserved as the user's own.
+ * Every previously shipped default, newest first. An install that never edited the guidance
+ * stored one of these strings verbatim, so it is migrated to the current default instead of
+ * being kept as if the user had chosen it. Comparison is exact: an edited string differs by at
+ * least one character and is preserved as the user's own.
  */
 
 export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
-  inlineAdsEnabled: true,
-  inlineAdsFrequency: "standard",
-  inlineAdsSteering: "personalized",
-  inlineAdsPreferredTags: [],
-  inlineAdsContentCeiling: "explicit",
-  inlineAdsTone: "corporate",
-  inlineAdsEra: "present",
-  inlineAdsWorldContext: "",
-  inlineAdsImagesEnabled: false,
-  walletEnabled: true,
-  walletUnlockCost: SLURP_DEFAULT_ECONOMY.unlockCost,
-  walletSubscriptionCost: SLURP_DEFAULT_ECONOMY.subscriptionCost,
-  walletStipendFloor: SLURP_DEFAULT_ECONOMY.stipendFloor,
-  walletDayStartHour: SLURP_DEFAULT_ECONOMY.dayStartHour,
-  walletAdReward: SLURP_DEFAULT_ECONOMY.adReward,
-  walletAdDailyCap: SLURP_DEFAULT_ECONOMY.adDailyCap,
-  walletEngagementReward: SLURP_DEFAULT_ECONOMY.engagementReward,
-  walletEngagementDailyCap: SLURP_DEFAULT_ECONOMY.engagementDailyCap,
-  walletCreatorRevenueSharePercent: SLURP_DEFAULT_ECONOMY.creatorRevenueSharePercent,
-  inlineAdsLorebookId: null,
-  inlineAdsLorebookRevision: null,
   imageWidth: 1024,
   imageHeight: 1536,
-  storyRate: SLURP_DEFAULT_STORY_RATE,
-  projectRate: SLURP_DEFAULT_PROJECT_RATE,
-  // 4:5. The composer crops an uploaded Story to whatever ratio is configured here, so the two
-  // halves of the feature stay one shape.
-  storyImageWidth: 1024,
-  storyImageHeight: 1280,
   refreshesPerDay: 0,
   generationGuidance: NOODLER_DEFAULT_GENERATION_GUIDANCE,
-  audienceTone: SLURP_DEFAULT_AUDIENCE_TONE,
-  worldActivity: SLURP_DEFAULT_WORLD_ACTIVITY,
-  platformScale: SLURP_DEFAULT_PLATFORM_SCALE,
   generationConnectionId: null,
   imageGenerationConnectionId: null,
   imageGenerationPrompt: NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT,
@@ -945,31 +709,17 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   maxImagesPerRefresh: 0,
   maxGeneratedPostsPerRefresh: 4,
   maxLikesPerRefresh: 4,
+  maxRepostsPerRefresh: 2,
   maxRepliesPerRefresh: 4,
   allowGalleryImageAttachments: false,
   postsPerDay: 4,
   autoPostingScheduleEnabled: false,
-  autoPostGenerationMode: "on_demand",
-  // On by default, and at a volume that reads as a comment section rather than a rumour of one.
-  // At the old defaults this was off, and switching it on bought one reply per run across up to
-  // twelve Creators: roughly one comment per Creator every three days.
-  //
-  // This does not breach the readable-handful rule. That rule caps *notable* events, and a comment
-  // weighs 25 against a notable threshold of 40 (`slurp-event-weight.ts`), so comments group into
-  // a single line instead of filling the notification list.
-  fanActivityEnabled: true,
-  fanActivityRunsPerDay: 8,
-  // Likes belong to the pulse, which produces them free and continuously; spending a generated
-  // batch slot on "who tapped like" buys nothing an RNG cannot. A couple are kept so somebody who
-  // just wrote a comment can also be seen liking the post.
+  autoPostGenerationMode: "pre_generate",
+  fanActivityEnabled: false,
+  fanActivityRunsPerDay: 4,
   fanLikesPerRefresh: 2,
-  // A run is one batched model call however many rows it returns, so replies per run are close to
-  // free. Six across up to twelve Creators is about 24 readable comments a day, which sits at
-  // roughly the same like-to-comment ratio the displayed counts in `slurp-reach.ts` already claim.
-  fanRepliesPerRefresh: 6,
-  // Ships empty: the shipped bodies carry a new install on their own, and a bank the player never
-  // asked for should not arrive pre-filled with lines they did not choose.
-  audienceReactionBank: [],
+  fanRepliesPerRefresh: 1,
+  fanRepostsPerRefresh: 1,
   fanArchetypeWeights: {
     ordinary: 1,
     eccentric: 1,
@@ -978,26 +728,9 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
     organicDiscovery: 1,
     freeResource: 1,
   },
-  messagesAwayRepliesEnabled: true,
-  messagesReplyBubbleLimit: 3,
-  messagesDefaultDmPolicy: SLURP_DEFAULT_CREATOR_MESSAGING.dmPolicy,
-  messagesDefaultRequestFee: SLURP_DEFAULT_CREATOR_MESSAGING.requestFee,
-  messagesDefaultPpvPrice: SLURP_DEFAULT_CREATOR_MESSAGING.ppvPrice,
   nightQuiet: false,
   onboarding: "not_started",
 };
-
-/**
- * A persona's own Slurp identity, provisioned so its likes and replies have an author.
- *
- * It is not a Creator: it has no stage profile, no disclosure mode, and nobody authored it. Listing
- * it as one put every persona that ever tapped a heart into the Creator profiles list as "Setup
- * Needed", and into every other viewer's Discover as a browsable Creator. A Creator stage profile
- * is always written with `invited: false`; only these actor accounts are an invited persona.
- */
-export function isSlurpViewerActorAccount(account: Pick<SlurpAccount, "invited" | "kind">): boolean {
-  return account.invited === true && account.kind === "persona";
-}
 
 export function normalizeSlurpSettings(raw: unknown): SlurpSettings {
   const rawRecord = parseRecord(raw);
@@ -1005,24 +738,15 @@ export function normalizeSlurpSettings(raw: unknown): SlurpSettings {
     Object.entries(DEFAULT_SLURP_SETTINGS).map(([key, value]) => [key, rawRecord[key] ?? value]),
   ) as Record<keyof SlurpSettings, unknown>;
   candidate.generationGuidance =
-    rawRecord.generationGuidance === LEGACY_NOODLER_DEFAULT_GENERATION_GUIDANCE ||
-    rawRecord.generationGuidance === LEGACY_TYPO_SLURP_DEFAULT_GENERATION_GUIDANCE ||
-    rawRecord.generationGuidance === LEGACY_SLURP_DEFAULT_GENERATION_GUIDANCE ||
-    rawRecord.generationGuidance === LEGACY_STEAMY_SLURP_DEFAULT_GENERATION_GUIDANCE
+    rawRecord.generationGuidance === LEGACY_NOODLER_DEFAULT_GENERATION_GUIDANCE
       ? NOODLER_DEFAULT_GENERATION_GUIDANCE
-      : rawRecord.generationGuidance === LEGACY_EXPLICIT_SLURP_DEFAULT_GENERATION_GUIDANCE
-        ? SLURP_GUIDANCE_PRESETS.explicit
-        : (rawRecord.generationGuidance ?? NOODLER_DEFAULT_GENERATION_GUIDANCE);
+      : (rawRecord.generationGuidance ?? NOODLER_DEFAULT_GENERATION_GUIDANCE);
   candidate.imageGenerationPrompt =
-    rawRecord.imageGenerationPrompt === undefined ||
-    rawRecord.imageGenerationPrompt === "" ||
-    rawRecord.imageGenerationPrompt === LEGACY_NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT
+    rawRecord.imageGenerationPrompt === undefined || rawRecord.imageGenerationPrompt === ""
       ? NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT
       : rawRecord.imageGenerationPrompt;
   candidate.imagePromptInterpretation =
-    rawRecord.imagePromptInterpretation === undefined ||
-    rawRecord.imagePromptInterpretation === "" ||
-    rawRecord.imagePromptInterpretation === LEGACY_NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION
+    rawRecord.imagePromptInterpretation === undefined || rawRecord.imagePromptInterpretation === ""
       ? NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION
       : rawRecord.imagePromptInterpretation;
   candidate.nightQuiet = rawRecord.nightQuiet ?? DEFAULT_SLURP_SETTINGS.nightQuiet;
@@ -1282,163 +1006,6 @@ export function createSlurpStorage(db: DB) {
   const settingsStore = createAppSettingsStorage(db);
   const characters = createCharactersStorage(db);
   let publicHandleReconciliation: Promise<void> | null = null;
-
-  /**
-   * Per-creator subscription prices, as one `creatorAccountId -> coins` blob. A creator that sets
-   * no price of its own is billed at the Slurp-wide default, so this map stays small and no
-   * backfill is ever needed.
-   */
-  const CREATOR_PRICES_KEY = "slurp.creator-prices";
-
-  const readCreatorPrices = async (): Promise<Record<string, number>> => {
-    try {
-      const parsed = JSON.parse((await settingsStore.get(CREATOR_PRICES_KEY)) ?? "{}");
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-      return Object.fromEntries(
-        Object.entries(parsed as Record<string, unknown>).filter(
-          (entry): entry is [string, number] =>
-            typeof entry[1] === "number" && Number.isInteger(entry[1]) && entry[1] >= 0,
-        ),
-      );
-    } catch {
-      return {};
-    }
-  };
-
-  /** The economy the current Slurp settings describe, for the pure rules in `slurp-wallet.ts`. */
-  const economyFrom = (settings: SlurpSettings): SlurpEconomy => ({
-    ...SLURP_DEFAULT_ECONOMY,
-    unlockCost: settings.walletUnlockCost,
-    subscriptionCost: settings.walletSubscriptionCost,
-    stipendFloor: settings.walletStipendFloor,
-    dayStartHour: settings.walletDayStartHour,
-    adReward: settings.walletAdReward,
-    adDailyCap: settings.walletAdDailyCap,
-    engagementReward: settings.walletEngagementReward,
-    engagementDailyCap: settings.walletEngagementDailyCap,
-    creatorRevenueSharePercent: settings.walletCreatorRevenueSharePercent,
-  });
-
-  const compensate = async (
-    originalError: unknown,
-    operations: Array<() => Promise<void>>,
-    label: string,
-  ): Promise<void> => {
-    for (const operation of operations) {
-      try {
-        await operation();
-      } catch (error) {
-        logger.error(error, "[slurp] %s compensation failed; preserving original failure", label);
-      }
-    }
-    logger.error(originalError, "[slurp] %s failed", label);
-  };
-
-  /**
-   * Write the wallet, mirroring the balance onto `NoodleAccountSettings.wallet.coins` so the
-   * balance the sidebar and header already read stays the authoritative number.
-   */
-  const writeWallet = async (viewerAccountId: string, wallet: SlurpWallet) => {
-    const walletKey = slurpWalletKey(viewerAccountId);
-    const viewerSettingsKey = slurpViewerSettingsKey(viewerAccountId);
-    const previousWallet = await settingsStore.get(walletKey);
-    const previousViewerSettings = await settingsStore.get(viewerSettingsKey);
-    try {
-      await settingsStore.set(walletKey, JSON.stringify(wallet));
-      const stored = normalizeNoodleAccountSettings(previousViewerSettings);
-      await settingsStore.set(viewerSettingsKey, JSON.stringify({ ...stored, wallet: { coins: wallet.coins } }));
-    } catch (error) {
-      await compensate(
-        error,
-        [
-          () => restoreSetting(walletKey, previousWallet),
-          () => restoreSetting(viewerSettingsKey, previousViewerSettings),
-        ],
-        "wallet write",
-      );
-      throw error;
-    }
-    return wallet;
-  };
-
-  const restoreSetting = async (key: string, value: string | null): Promise<void> => {
-    if (value === null) await settingsStore.remove(key);
-    else await settingsStore.set(key, value);
-  };
-  const restoreWallet = async (
-    viewerAccountId: string,
-    walletValue: string | null,
-    viewerSettingsValue: string | null,
-  ): Promise<void> => {
-    const failures: unknown[] = [];
-    for (const restore of [
-      () => restoreSetting(slurpWalletKey(viewerAccountId), walletValue),
-      () => restoreSetting(slurpViewerSettingsKey(viewerAccountId), viewerSettingsValue),
-    ]) {
-      try {
-        await restore();
-      } catch (error) {
-        failures.push(error);
-      }
-    }
-    if (failures[0]) throw failures[0];
-  };
-
-  /** Earnings live under their own key, so a write never races the persona wallet's two-key write. */
-  const enqueueFinancial = <T>(operation: () => Promise<T>): Promise<T> => {
-    return enqueueSlurpFinancial(db, operation);
-  };
-  const writeEarnings = async (creatorAccountId: string, earnings: SlurpEarnings) => {
-    await settingsStore.set(slurpEarningsKey(creatorAccountId), JSON.stringify(earnings));
-    return earnings;
-  };
-  /**
-   * Move one Creator's state from inside the storage module.
-   *
-   * The public methods below go through `getCreatorState`, which also decays and writes back. The
-   * internal callers here run inside financial and post paths where that extra write is noise, so
-   * they read, mutate and store in one step. `readSlurpCreatorState` already drops expired
-   * modifiers on the way through, so neither path can accumulate stale ones.
-   */
-  const mutateCreatorStateNow = async (
-    creatorAccountId: string,
-    mutate: (state: SlurpCreatorState) => SlurpCreatorState,
-  ): Promise<void> => {
-    const key = `${SLURP_CREATOR_STATE_KEY}.${creatorAccountId}`;
-    const state = readSlurpCreatorState(await settingsStore.get(key), new Date().toISOString());
-    await settingsStore.set(key, JSON.stringify(mutate(state)));
-  };
-
-  const creditEarningsNow = async (
-    creatorAccountId: string,
-    kind: Exclude<SlurpEarningsEntryKind, "payout" | "reversal">,
-    amount: number,
-    note?: string,
-  ) => {
-    const current = readSlurpEarnings(await settingsStore.get(slurpEarningsKey(creatorAccountId)));
-    const next = earnCreatorIncome(current, kind, amount, new Date(), note);
-    if (next === current) return;
-    await writeEarnings(creatorAccountId, next);
-    // Money landing is the loudest thing the world does to a Creator, and until now it changed
-    // her ledger and nothing else. Never allowed to fail the payment that caused it.
-    try {
-      if (amount >= SLURP_PAID_WELL_COINS) {
-        await mutateCreatorStateNow(creatorAccountId, (state) => addSlurpModifier(state, "paid_well", note ?? kind));
-      }
-      const goal = readSlurpGoal(await settingsStore.get(slurpGoalKey(creatorAccountId)));
-      // Only the crossing counts. Comparing the two ledgers is what keeps a met goal from
-      // re-firing on every coin that arrives after it.
-      if (goal && !slurpGoalProgress(goal, current.lifetime).met && slurpGoalProgress(goal, next.lifetime).met) {
-        await mutateCreatorStateNow(creatorAccountId, (state) => addSlurpModifier(state, "goal_hit", goal.label));
-      }
-    } catch (error) {
-      logger.warn(error, "[slurp] Could not record how earnings felt for %s", creatorAccountId);
-    }
-  };
-  const getWalletNow = async (viewerAccountId: string): Promise<SlurpWallet> => {
-    const settings = normalizeSlurpSettings(await settingsStore.get(SLURP_SETTINGS_KEY));
-    return readSlurpWallet(await settingsStore.get(slurpWalletKey(viewerAccountId)), economyFrom(settings));
-  };
 
   const pruneFinishedRefreshRuns = async () => {
     await db.transaction(async (tx) => {
@@ -1865,21 +1432,6 @@ export function createSlurpStorage(db: DB) {
       return mapViewer(personaId, raw ? normalizeNoodleAccountSettings(raw) : emptyNoodleAccountSettings(), persona);
     },
 
-    async listViewerWallets(personaIds: string[]): Promise<Record<string, { coins: number }>> {
-      const wallets = await Promise.all(
-        [...new Set(personaIds)].map(async (personaId) => {
-          const viewer = await this.getViewer(personaId);
-          // `settings.wallet.coins` is the Engine's own field, which defaults to 999_999 and is
-          // only mirrored once Slurp first writes a wallet. Reading it showed a brand-new persona
-          // as having 999,999 coins in the switcher while the Wallet page showed the real balance.
-          return viewer ? ([personaId, { coins: (await getWalletNow(personaId)).coins }] as const) : null;
-        }),
-      );
-      return Object.fromEntries(
-        wallets.filter((wallet): wallet is readonly [string, { coins: number }] => wallet !== null),
-      );
-    },
-
     async cleanupRetiredViewer(personaId: string): Promise<void> {
       const authored = await db
         .select()
@@ -1887,17 +1439,8 @@ export function createSlurpStorage(db: DB) {
         .where(eq(noodleInteractions.actorAccountId, personaId));
       for (const interaction of authored) await this.deleteInteractionById(interaction.id);
       await db.transaction(async (tx) => {
-        const threads = await tx.select().from(slurpThreads).where(eq(slurpThreads.viewerAccountId, personaId));
-        for (const thread of threads) {
-          await tx.delete(slurpMessageClaims).where(eq(slurpMessageClaims.threadId, thread.id));
-          await tx.delete(slurpMessages).where(eq(slurpMessages.threadId, thread.id));
-          await tx.delete(slurpReplyBubbles).where(eq(slurpReplyBubbles.threadId, thread.id));
-          await tx.delete(slurpThreads).where(eq(slurpThreads.id, thread.id));
-        }
         await tx.delete(noodleAccountSubscriptions).where(eq(noodleAccountSubscriptions.viewerAccountId, personaId));
         await tx.delete(noodlePostUnlocks).where(eq(noodlePostUnlocks.viewerAccountId, personaId));
-        await tx.delete(slurpCommissions).where(eq(slurpCommissions.viewerAccountId, personaId));
-        await tx.delete(slurpEvents).where(eq(slurpEvents.recipientPersonaId, personaId));
         await createAppSettingsStorage(tx).remove(slurpViewerSettingsKey(personaId));
         await tx._fileStore.flush();
       });
@@ -1908,66 +1451,106 @@ export function createSlurpStorage(db: DB) {
       return normalizeSlurpSettings(raw);
     },
 
-    async getCreatorState(creatorAccountId: string): Promise<SlurpCreatorState> {
-      const raw = await settingsStore.get(`${SLURP_CREATOR_STATE_KEY}.${creatorAccountId}`);
-      const fallback = new Date().toISOString();
-      const state = readSlurpCreatorState(raw, fallback);
-      const parsedUpdatedAt = Date.parse(state.updatedAt);
-      const elapsedHours = Number.isFinite(parsedUpdatedAt)
-        ? Math.max(0, (Date.now() - parsedUpdatedAt) / 3_600_000)
-        : 0;
-      if (elapsedHours <= 0) return state;
-      const recovered = decaySlurpCreatorState(state, elapsedHours, fallback);
-      await settingsStore.set(`${SLURP_CREATOR_STATE_KEY}.${creatorAccountId}`, JSON.stringify(recovered));
-      return recovered;
-    },
-
-    /**
-     * Move one Creator's shared state by a bounded delta.
-     *
-     * Separate from `recordCreatorStateSignals` because these callers are not reporting what a
-     * fan did: they are the cost of work the Creator actually performed, and the world owns them.
-     */
-    async adjustCreatorState(creatorAccountId: string, changes: SlurpStateDelta): Promise<SlurpCreatorState> {
-      const current = await this.getCreatorState(creatorAccountId);
-      const next = applySlurpCreatorStateDelta(current, changes, new Date().toISOString());
-      await settingsStore.set(`${SLURP_CREATOR_STATE_KEY}.${creatorAccountId}`, JSON.stringify(next));
-      return next;
-    },
-
-    /**
-     * Record that something happened to this Creator that will be true for a while.
-     *
-     * The one-off numeric change rides along inside `addSlurpModifier`, so callers never have to
-     * know which dials a feeling moves — they say what happened and the table decides.
-     */
-    async addCreatorModifier(
-      creatorAccountId: string,
-      kind: SlurpModifierKind,
-      source: string,
-    ): Promise<SlurpCreatorState> {
-      const current = await this.getCreatorState(creatorAccountId);
-      const next = addSlurpModifier(current, kind, source);
-      await settingsStore.set(`${SLURP_CREATOR_STATE_KEY}.${creatorAccountId}`, JSON.stringify(next));
-      return next;
-    },
-
-    async recordCreatorStateSignals(
-      creatorAccountId: string,
-      signals: SlurpCreatorStateSignal[],
-    ): Promise<SlurpCreatorState> {
-      const current = await this.getCreatorState(creatorAccountId);
-      const next = signals.reduce(
-        (state, signal) =>
-          applySlurpCreatorStateDelta(state, creatorStateDeltaForSignal(signal), new Date().toISOString()),
-        current,
-      );
-      await settingsStore.set(`${SLURP_CREATOR_STATE_KEY}.${creatorAccountId}`, JSON.stringify(next));
-      return next;
-    },
-
     async getSlurpSettings() {
       return this.getSettings();
+    },
+
+    async exportSlurpBackup() {
+      const accounts = await db.select().from(noodleAccounts).where(eq(noodleAccounts.platform, "slurp"));
+      const accountIds = accounts.map((account) => account.id);
+      const personas = await characters.listPersonas();
+      const personaIds = personas.map((persona) => persona.id);
+      const posts = accountIds.length
+        ? await db.select().from(noodlePosts).where(inArray(noodlePosts.authorAccountId, accountIds))
+        : [];
+      const postIds = posts.map((post) => post.id);
+      const [
+        subscriptions,
+        unlocks,
+        interactions,
+        replyClaims,
+        preparedPosts,
+        attempts,
+        reserveState,
+        fanState,
+        digests,
+        refreshRuns,
+      ] = await Promise.all([
+        accountIds.length
+          ? db
+              .select()
+              .from(noodleAccountSubscriptions)
+              .where(
+                or(
+                  inArray(noodleAccountSubscriptions.viewerAccountId, accountIds),
+                  inArray(noodleAccountSubscriptions.creatorAccountId, accountIds),
+                  inArray(noodleAccountSubscriptions.viewerAccountId, personaIds),
+                ),
+              )
+          : [],
+        postIds.length
+          ? db
+              .select()
+              .from(noodlePostUnlocks)
+              .where(
+                and(
+                  inArray(noodlePostUnlocks.postId, postIds),
+                  or(
+                    inArray(noodlePostUnlocks.viewerAccountId, accountIds),
+                    inArray(noodlePostUnlocks.viewerAccountId, personaIds),
+                  ),
+                ),
+              )
+          : [],
+        accountIds.length || personaIds.length
+          ? db
+              .select()
+              .from(noodleInteractions)
+              .where(
+                or(
+                  ...(postIds.length ? [inArray(noodleInteractions.postId, postIds)] : []),
+                  ...(accountIds.length || personaIds.length
+                    ? [inArray(noodleInteractions.actorAccountId, [...accountIds, ...personaIds])]
+                    : []),
+                ),
+              )
+          : [],
+        postIds.length
+          ? db.select().from(noodlerCreatorReplyClaims).where(inArray(noodlerCreatorReplyClaims.postId, postIds))
+          : [],
+        db.select().from(noodlerPreparedPosts),
+        db.select().from(noodlerAutomaticAttempts),
+        db.select().from(noodlerReserveState),
+        db.select().from(noodlerFanActivityState),
+        db.select().from(noodleActivityDigests),
+        db.select().from(noodleRefreshRuns),
+      ]);
+      const viewerSettings: Record<string, string> = {};
+      for (const persona of personas) {
+        const raw = await settingsStore.get(slurpViewerSettingsKey(persona.id));
+        if (raw !== null) viewerSettings[persona.id] = raw;
+      }
+      return {
+        settings: await settingsStore.get(SLURP_SETTINGS_KEY),
+        imageConnections: await getNoodlerImageConnections(db),
+        refreshSchedule: await settingsStore.get(NOODLE_REFRESH_SCHEDULE_KEY),
+        sourceSnapshotMigration: await settingsStore.get(NOODLER_SOURCE_SNAPSHOT_MIGRATION_KEY),
+        viewerSettings,
+        tables: {
+          accounts,
+          posts,
+          subscriptions,
+          unlocks,
+          interactions,
+          replyClaims,
+          preparedPosts,
+          attempts,
+          reserveState,
+          fanState,
+          digests,
+          refreshRuns,
+        },
+      };
     },
 
     async updateSlurpSettings(input: SlurpSettingsUpdateInput) {
@@ -1991,20 +1574,6 @@ export function createSlurpStorage(db: DB) {
           noodlerReserveState,
           noodlerPreparedPosts,
           noodlerCreatorReplyClaims,
-          // Direct messages are Slurp data too. Left out, "delete all Slurp data" would keep
-          // every thread and leave the next install reading someone else's conversations.
-          slurpMessageClaims,
-          slurpMessages,
-          slurpReplyBubbles,
-          slurpCommissions,
-          slurpThreads,
-          // Everything below had no deletion path at all, not even in this full reset. A fresh
-          // install inherited the previous one's audience, world events, and queued work.
-          noodlerFirstPostJobs,
-          slurpEvents,
-          slurpAudienceTies,
-          slurpPopulation,
-          slurpPendingText,
         ]) {
           await tx.delete(table);
         }
@@ -2026,15 +1595,10 @@ export function createSlurpStorage(db: DB) {
           await tx.delete(noodleAccounts).where(inArray(noodleAccounts.id, accountIds));
         }
         const settings = createAppSettingsStorage(tx);
-        for (const accountId of accountIds) {
-          await settings.remove(`${SLURP_CREATOR_STATE_KEY}.${accountId}`);
-          await settings.remove(slurpProjectsKey(accountId));
-        }
         for (const personaId of personaIds) await settings.remove(slurpViewerSettingsKey(personaId));
         await settings.remove(SLURP_SETTINGS_KEY);
         await settings.remove(NOODLE_REFRESH_SCHEDULE_KEY);
         await settings.remove(NOODLER_SOURCE_SNAPSHOT_MIGRATION_KEY);
-        await settings.remove(SLURP_CREATOR_MESSAGING_KEY);
         await tx._fileStore.flush();
       });
       return { deletedCreators: accounts.length, deletedPosts: posts.length };
@@ -2245,13 +1809,6 @@ export function createSlurpStorage(db: DB) {
             ),
           );
         await tx.delete(noodlerPreparedPosts).where(eq(noodlerPreparedPosts.creatorAccountId, existing.id));
-        // Same Creator-keyed rows deleteNoodlerAccount cascades. Both entry points must agree, or
-        // which one the caller happened to use decides what survives.
-        await tx.delete(slurpCommissions).where(eq(slurpCommissions.creatorAccountId, existing.id));
-        await tx.delete(slurpAudienceTies).where(eq(slurpAudienceTies.creatorAccountId, existing.id));
-        await tx.delete(slurpPendingText).where(eq(slurpPendingText.creatorAccountId, existing.id));
-        await tx.delete(slurpEvents).where(eq(slurpEvents.creatorAccountId, existing.id));
-        await tx.delete(noodlerFirstPostJobs).where(eq(noodlerFirstPostJobs.creatorAccountId, existing.id));
         await tx.delete(noodlePosts).where(inArray(noodlePosts.id, postIds));
         await tx.delete(noodleAccounts).where(eq(noodleAccounts.id, existing.id));
         await tx._fileStore.flush();
@@ -2326,7 +1883,7 @@ export function createSlurpStorage(db: DB) {
       personaId: string,
       input: NoodleAccountSettingsPatchInput,
     ): Promise<NoodleAccount | null> {
-      return enqueueFinancial(async () => {
+      const run = viewerSettingsUpdateQueue.then(async () => {
         if (input.subtree !== "social") return null;
         const viewer = await this.getViewer(personaId);
         if (!viewer) return null;
@@ -2339,6 +1896,8 @@ export function createSlurpStorage(db: DB) {
         await settingsStore.set(slurpViewerSettingsKey(personaId), JSON.stringify({ ...viewer.settings, social }));
         return this.getViewer(personaId);
       });
+      viewerSettingsUpdateQueue = run.catch(() => undefined);
+      return run;
     },
 
     async updateViewerFollow(
@@ -2347,7 +1906,7 @@ export function createSlurpStorage(db: DB) {
       followed: boolean,
       followedAt = now(),
     ): Promise<{ account: NoodleAccount; changed: boolean } | null> {
-      return enqueueFinancial(async () => {
+      const run = viewerSettingsUpdateQueue.then(async () => {
         const viewer = await this.getViewer(personaId);
         if (!viewer) return null;
         const followingAccountIds = viewer.settings.social.followingAccountIds ?? [];
@@ -2370,6 +1929,8 @@ export function createSlurpStorage(db: DB) {
         await settingsStore.set(slurpViewerSettingsKey(personaId), JSON.stringify(next));
         return { account: (await this.getViewer(personaId))!, changed: true };
       });
+      viewerSettingsUpdateQueue = run.catch(() => undefined);
+      return run;
     },
 
     async deleteNoodlerAccount(id: string): Promise<NoodleAccount | null> {
@@ -2417,19 +1978,6 @@ export function createSlurpStorage(db: DB) {
             ),
           );
         await tx.delete(noodlerPreparedPosts).where(eq(noodlerPreparedPosts.creatorAccountId, id));
-        // Threads on either side of the deleted account, and their messages. Left behind, the
-        // inbox would keep listing a creator that no longer exists.
-        const threadRows = await tx
-          .select()
-          .from(slurpThreads)
-          .where(or(eq(slurpThreads.viewerAccountId, id), eq(slurpThreads.creatorAccountId, id)));
-        const threadIds = threadRows.map((row) => row.id);
-        if (threadIds.length > 0) {
-          await tx.delete(slurpMessages).where(inArray(slurpMessages.threadId, threadIds));
-          await tx.delete(slurpReplyBubbles).where(inArray(slurpReplyBubbles.threadId, threadIds));
-          await tx.delete(slurpMessageClaims).where(inArray(slurpMessageClaims.threadId, threadIds));
-          await tx.delete(slurpThreads).where(inArray(slurpThreads.id, threadIds));
-        }
         await tx
           .delete(noodleInteractions)
           .where(
@@ -2440,13 +1988,6 @@ export function createSlurpStorage(db: DB) {
                 : eq(noodleInteractions.postId, "__none__"),
             ),
           );
-        // Rows keyed to this Creator that nothing else cleans up. Left behind, a deleted Creator
-        // kept an audience, a commission history, and queued work that could still fire.
-        await tx.delete(slurpCommissions).where(eq(slurpCommissions.creatorAccountId, id));
-        await tx.delete(slurpAudienceTies).where(eq(slurpAudienceTies.creatorAccountId, id));
-        await tx.delete(slurpPendingText).where(eq(slurpPendingText.creatorAccountId, id));
-        await tx.delete(slurpEvents).where(eq(slurpEvents.creatorAccountId, id));
-        await tx.delete(noodlerFirstPostJobs).where(eq(noodlerFirstPostJobs.creatorAccountId, id));
         await tx.delete(noodleAccounts).where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.platform, "slurp")));
         await tx._fileStore.flush();
       });
@@ -2454,7 +1995,7 @@ export function createSlurpStorage(db: DB) {
     },
 
     async listNoodlerStageProfiles(): Promise<NoodlerManagedStageProfile[]> {
-      const accounts = (await this.listNoodlerAccounts()).filter((account) => !isSlurpViewerActorAccount(account));
+      const accounts = await this.listNoodlerAccounts();
       return Promise.all(
         accounts.map(async (account) => {
           const disclosureMode = account.settings.privacy.identityDisclosure ?? null;
@@ -2467,7 +2008,6 @@ export function createSlurpStorage(db: DB) {
             handle: account.handle,
             displayName: account.displayName,
             bio: account.bio,
-            location: account.settings.profile.location ?? "",
             avatarUrl: account.avatarUrl,
             avatarCrop: account.avatarCrop,
             bannerUrl: account.settings.profile.bannerUrl ?? null,
@@ -2479,15 +2019,6 @@ export function createSlurpStorage(db: DB) {
                 ? (account.settings.scheduler.autoPosting ?? defaultAutoPostingSettings())
                 : { ...(account.settings.scheduler.autoPosting ?? defaultAutoPostingSettings()), enabled: false },
             fanActivity: account.settings.scheduler.fanActivity ?? null,
-            // Reported so a stale schedule is visible. Engine schedules expire weekly, and until
-            // now one that lapsed simply stopped applying with no signal anywhere.
-            scheduleStatus: publicAccount
-              ? await resolveSlurpCreatorScheduleStatus(characters, {
-                  kind: publicAccount.kind,
-                  entityId: publicAccount.entityId,
-                  displayName: publicAccount.displayName,
-                })
-              : { state: "not-applicable" as const },
             sourceStatus: !currentSource
               ? { state: "missing" as const }
               : compareMinimizedNoodlerSourceSnapshot(
@@ -2589,7 +2120,6 @@ export function createSlurpStorage(db: DB) {
       id: string,
       stageProfile: NoodleStageProfileInput,
       sourceSnapshot?: NoodlerSourceSnapshot,
-      location?: string,
     ): Promise<NoodleAccount | null> {
       return db.transaction(async (tx) => {
         const rows = await tx
@@ -2620,7 +2150,6 @@ export function createSlurpStorage(db: DB) {
               ...settings,
               profile: {
                 ...profile,
-                ...(location !== undefined && { location: location.trim().slice(0, 120) }),
                 ...(sourceSnapshot && { noodlerSourceSnapshot: sourceSnapshot }),
               },
               privacy: {
@@ -2689,13 +2218,6 @@ export function createSlurpStorage(db: DB) {
         const row = (await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id)))[0];
         if (!row || row.platform !== "slurp") return null;
         const settings = normalizeNoodleAccountSettings(row.settings);
-        // The snapshot is re-minimised and handed back on every stage-profile save, almost always
-        // byte-identical to the stored one. Writing it anyway churned the row and moved updatedAt,
-        // which made a save with no source change look like a source change to everything reading
-        // that timestamp.
-        if (JSON.stringify(settings.profile.noodlerSourceSnapshot ?? null) === JSON.stringify(sourceSnapshot)) {
-          return mapAccount(row);
-        }
         await tx
           .update(noodleAccounts)
           .set({
@@ -3381,10 +2903,7 @@ export function createSlurpStorage(db: DB) {
           const current = (await tx.select().from(noodlerPreparedPosts).where(eq(noodlerPreparedPosts.id, item.id)))[0];
           if (!current || current.state !== "prepared" || Date.parse(current.publishAt) > at.getTime()) return false;
           const existingPost = publishedPreparedIds.get(current.id);
-          if (
-            !existingPost &&
-            Date.parse(current.publishAt) < at.getTime() - elapsedPreparedSlotMs(settings.postsPerDay)
-          ) {
+          if (!existingPost && Date.parse(current.publishAt) < at.getTime() - ELAPSED_PREPARED_SLOT_MS) {
             await tx
               .update(noodlerPreparedPosts)
               .set({ state: "discarded", updatedAt: at.toISOString() })
@@ -3458,25 +2977,19 @@ export function createSlurpStorage(db: DB) {
           }
           const postId = newId();
           const imageState = current.imageState === "attached" ? "attached" : "closed";
-          const preparedMetadata = parseRecord(payload.metadata);
-          const hasMedia = typeof preparedMetadata.noodlerMediaPath === "string";
-          // A Story is a picture with a line under it. The prepared payload carries the story
-          // intent, but a run whose image never attached publishes as an ordinary post.
-          if (!hasMedia) delete preparedMetadata.noodlerPostType;
           await tx.insert(noodlePosts).values({
             id: postId,
             authorAccountId: account.id,
             title: typeof payload.title === "string" ? payload.title : null,
             content: payload.content,
-            imageUrl: hasMedia ? noodlerPostMediaUrl(postId) : null,
+            imageUrl:
+              typeof parseRecord(payload.metadata).noodlerMediaPath === "string" ? noodlerPostMediaUrl(postId) : null,
             imagePrompt: typeof payload.imagePrompt === "string" ? payload.imagePrompt : null,
             parentPostId: null,
             quotePostId: null,
             source: "generated",
-            projectId: typeof payload.projectId === "string" ? payload.projectId : null,
-            projectChapter: typeof payload.projectChapter === "string" ? payload.projectChapter : null,
             access: payload.access === "public" ? "public" : "locked",
-            metadata: JSON.stringify({ ...preparedMetadata, noodlerPreparedPostId: current.id }),
+            metadata: JSON.stringify({ ...parseRecord(payload.metadata), noodlerPreparedPostId: current.id }),
             authorSnapshot: JSON.stringify(snapshotForAccount(account)),
             // A late publish is stamped with the moment it actually happened. Using publishAt
             // would file the post behind whatever the feed received during the delay.
@@ -3496,13 +3009,7 @@ export function createSlurpStorage(db: DB) {
             .where(eq(noodlerPreparedPosts.id, current.id));
           return true;
         });
-        if (!didPublish) continue;
-        published += 1;
-        // Outside the transaction on purpose. Advancing is bookkeeping, not part of publishing:
-        // a project that failed to advance must not roll back a post the audience can already see.
-        if (typeof item.payload.projectId === "string" && item.payload.projectId) {
-          await this.advanceProject(item.creatorAccountId, item.payload.projectId);
-        }
+        if (didPublish) published += 1;
       }
       for (const path of discardedMediaPaths) unlinkNoodlerMedia(path);
       return published;
@@ -3584,7 +3091,7 @@ export function createSlurpStorage(db: DB) {
             // every status read and publish pass fail until someone edited storage by hand.
             Number.isNaN(Date.parse(item.publishAt)) ||
             Number.isNaN(Date.parse(item.generatedAt)) ||
-            Date.parse(item.publishAt) < at.getTime() - elapsedPreparedSlotMs(settings.postsPerDay) ||
+            Date.parse(item.publishAt) < at.getTime() - ELAPSED_PREPARED_SLOT_MS ||
             !account ||
             !source ||
             missingSourceAccountIds.has(item.creatorAccountId) ||
@@ -3858,7 +3365,6 @@ export function createSlurpStorage(db: DB) {
         .where(inArray(noodlePosts.authorAccountId, accountIds))
         .orderBy(desc(noodlePosts.createdAt));
       for (const row of rows) {
-        if (row.access === "draft") continue;
         const post = mapManagedPost(row);
         const existing = result.get(post.authorAccountId);
         if (existing) {
@@ -3950,7 +3456,7 @@ export function createSlurpStorage(db: DB) {
           updatedAt: noodlePosts.updatedAt,
         })
         .from(noodlePosts)
-        .where(and(inArray(noodlePosts.authorAccountId, visibleAccountIds), ne(noodlePosts.access, "draft")));
+        .where(inArray(noodlePosts.authorAccountId, visibleAccountIds));
       const latestPost = [...posts].sort(compareNoodlerPostSortKeysDescending)[0];
       const latestUpdate = [...posts].sort((left, right) =>
         compareNoodlerPostSortKeysDescending(
@@ -3987,18 +3493,6 @@ export function createSlurpStorage(db: DB) {
         latestInteraction: latestInteraction ? `${latestInteraction.createdAt}:${latestInteraction.id}` : null,
         interactionPostId: latestInteraction?.postId ?? null,
       };
-    },
-
-    /**
-     * How many posts this Creator has made, ever.
-     *
-     * Used as the rotation index for the post variation, so consecutive posts land on different angles.
-     * Counting rather than sampling matters: a random draw can repeat, and repetition is the whole
-     * failure being fixed.
-     */
-    async countNoodlerPostsByAccount(accountId: string): Promise<number> {
-      const rows = await db.select().from(noodlePosts).where(eq(noodlePosts.authorAccountId, accountId));
-      return rows.length;
     },
 
     countNoodlerPostsByAccountsSince(accountIds: string[], since: string): number {
@@ -4045,15 +3539,13 @@ export function createSlurpStorage(db: DB) {
         parentPostId: null,
         quotePostId: null,
         source: input.source ?? "manual",
-        projectId: input.projectId ?? null,
-        projectChapter: input.projectChapter ?? null,
         access: input.access ?? "public",
         metadata: JSON.stringify(input.metadata ?? {}),
         authorSnapshot: JSON.stringify(snapshotForAccount(accounts[index]!)),
         createdAt: timestamp,
         updatedAt: timestamp,
       }));
-      const created = await db.transaction(async (tx) => {
+      return db.transaction(async (tx) => {
         for (const row of rows) await tx.insert(noodlePosts).values(row);
         const stored = await tx
           .select()
@@ -4068,24 +3560,6 @@ export function createSlurpStorage(db: DB) {
         const managed = rows.map((row) => byId.get(row.id));
         return managed.every((post) => post) ? (managed as NoodlerManagedPost[]) : null;
       });
-      // Outside the transaction and never able to fail it: a post that is already stored must not
-      // be reported as an error because a settings write for a mood number did not land.
-      if (created) {
-        for (const post of created) {
-          try {
-            await this.adjustCreatorState(post.authorAccountId, {
-              energy: -SLURP_ENERGY_COST.post,
-              exposure: post.access === "locked" ? SLURP_EXPOSURE_PER_POST.locked : SLURP_EXPOSURE_PER_POST.public,
-            });
-            await mutateCreatorStateNow(post.authorAccountId, (state) =>
-              addSlurpModifier(state, "just_posted", post.id),
-            );
-          } catch (error) {
-            logger.warn(error, "[slurp] Could not record the cost of a post for %s", post.authorAccountId);
-          }
-        }
-      }
-      return created;
     },
 
     async createPost(
@@ -4235,12 +3709,6 @@ export function createSlurpStorage(db: DB) {
         // finalized (success or failed) row never keeps contradictory pending lifecycle state.
         const mergedMetadata = { ...parseRecord(row.metadata), ...input.metadata };
         delete mergedMetadata.imagePendingReview;
-        if (input.imageUrl) {
-          delete mergedMetadata.imageGenerationFailed;
-          delete mergedMetadata.imageGenerationError;
-          delete mergedMetadata.imageRetryPrompt;
-          delete mergedMetadata.imageRetryNegativePrompt;
-        }
         await tx
           .update(noodlePosts)
           .set({
@@ -4272,9 +3740,7 @@ export function createSlurpStorage(db: DB) {
         await tx
           .update(noodlePosts)
           .set({
-            ...(input.content !== undefined && {
-              content: input.content.trim().slice(0, noodlerContentLimitFor(nextMetadata)),
-            }),
+            ...(input.content !== undefined && { content: input.content.trim().slice(0, 4000) }),
             ...(input.imageUrl !== undefined && { imageUrl: input.imageUrl }),
             ...(input.imagePrompt !== undefined && { imagePrompt: input.imagePrompt }),
             ...((input.imageUrl !== undefined || input.imagePrompt !== undefined) && {
@@ -4359,9 +3825,7 @@ export function createSlurpStorage(db: DB) {
           .update(noodlePosts)
           .set({
             ...(input.title !== undefined && { title: input.title }),
-            ...(input.content !== undefined && {
-              content: input.content.trim().slice(0, noodlerContentLimitFor(nextMetadata)),
-            }),
+            ...(input.content !== undefined && { content: input.content.trim().slice(0, 4000) }),
             ...(imageChanged && {
               imageUrl: media?.imageUrl ?? null,
               imagePrompt: null,
@@ -4621,16 +4085,6 @@ export function createSlurpStorage(db: DB) {
     // Callers pass post IDs already resolved from NoodleR-account queries
     // (listNoodlerPostsByAccounts), so this trusts them and issues a single bulk
     // read instead of re-validating each ID with getNoodlerPostById (2N reads).
-    async getNoodlerInteractionById(id: string): Promise<NoodleInteraction | null> {
-      const rows = await db.select().from(noodleInteractions).where(eq(noodleInteractions.id, id));
-      return rows[0] ? mapInteraction(rows[0]) : null;
-    },
-
-    /** Replace a placeholder comment with the model's rewrite. Text only. */
-    async rewriteNoodlerInteractionContent(id: string, content: string): Promise<void> {
-      await db.update(noodleInteractions).set({ content }).where(eq(noodleInteractions.id, id));
-    },
-
     async listNoodlerInteractions(noodlerPostIds: string[] = []): Promise<NoodleInteraction[]> {
       if (noodlerPostIds.length === 0) return [];
       const rows = await db
@@ -4798,124 +4252,6 @@ export function createSlurpStorage(db: DB) {
           post,
           parent: mapInteraction(parentRow),
           viewer: viewerActor,
-        };
-      });
-    },
-
-    /**
-     * Claim a creator reply to a comment from the generated audience.
-     *
-     * Deliberately *not* a relaxation of `claimNoodlerCreatorReply`. That function's access checks
-     * — hidden-creator, subscription, unlock — exist because the player is asking for a reply to
-     * their own comment, and without them the endpoint would hand back text about a locked post
-     * they never paid for. Loosening it to let a synthetic fan through would weaken a gate that
-     * protects a real person, to serve a caller that is not one.
-     *
-     * So this is a second, narrower door. The commenter must be a generated population member on
-     * the creator's own post, and there is no viewer to protect content from. It shares the parts
-     * that actually matter — the one-reply-per-comment dedupe and the 24-hour spend ceiling — so
-     * audience replies and player replies draw on the same budget and cannot double-answer.
-     */
-    async claimNoodlerAudienceReply(
-      creatorAccountId: string,
-      parentInteractionId: string,
-      at = now(),
-      ceiling = DEFAULT_NOODLER_CREATOR_REPLIES_PER_24_HOURS,
-    ): Promise<
-      | {
-          status: "claimed";
-          claimId: string;
-          creator: NoodleAccount;
-          post: NoodlerManagedPost;
-          parent: NoodleInteraction;
-          commenter: { id: string; handle: string; displayName: string };
-        }
-      | { status: "ineligible" }
-      | { status: "duplicate" }
-      | { status: "exhausted" }
-    > {
-      return db.transaction(async (tx) => {
-        const parentRow = (
-          await tx.select().from(noodleInteractions).where(eq(noodleInteractions.id, parentInteractionId))
-        )[0];
-        if (!parentRow || parentRow.type !== "reply" || !parentRow.content?.trim()) return { status: "ineligible" };
-        if (parentRow.actorAccountId === creatorAccountId) return { status: "ineligible" };
-        // Only somebody the world invented. A real persona's comment belongs to the player-facing
-        // path, with its access checks intact.
-        const commenterRow = (
-          await tx.select().from(slurpPopulation).where(eq(slurpPopulation.id, parentRow.actorAccountId))
-        )[0];
-        if (!commenterRow) return { status: "ineligible" };
-        const creatorRow = (
-          await tx
-            .select()
-            .from(noodleAccounts)
-            .where(and(eq(noodleAccounts.id, creatorAccountId), eq(noodleAccounts.platform, "slurp")))
-        )[0];
-        if (!creatorRow) return { status: "ineligible" };
-        const postRow = (
-          await tx
-            .select()
-            .from(noodlePosts)
-            .where(and(eq(noodlePosts.id, String(parentRow.postId)), eq(noodlePosts.authorAccountId, creatorAccountId)))
-        )[0];
-        if (!postRow) return { status: "ineligible" };
-
-        const cutoff = new Date(Date.parse(at) - ROLLING_DAY_MS).toISOString();
-        const existing = (
-          await tx
-            .select()
-            .from(noodlerCreatorReplyClaims)
-            .where(
-              and(
-                eq(noodlerCreatorReplyClaims.parentInteractionId, parentInteractionId),
-                eq(noodlerCreatorReplyClaims.creatorAccountId, creatorAccountId),
-              ),
-            )
-        )[0];
-        if (existing) return { status: "duplicate" };
-        // The free tier may already have answered this comment from the bank. One reply per
-        // comment, whichever tier wrote it.
-        const strandedReply = (
-          await tx
-            .select()
-            .from(noodleInteractions)
-            .where(
-              and(
-                eq(noodleInteractions.parentInteractionId, parentInteractionId),
-                eq(noodleInteractions.actorAccountId, creatorAccountId),
-                eq(noodleInteractions.type, "reply"),
-              ),
-            )
-        )[0];
-        if (strandedReply) return { status: "duplicate" };
-
-        const recentClaims = await tx
-          .select()
-          .from(noodlerCreatorReplyClaims)
-          .where(gt(noodlerCreatorReplyClaims.claimedAt, cutoff));
-        if (recentClaims.length >= ceiling) return { status: "exhausted" };
-
-        const claimId = newId();
-        await tx.insert(noodlerCreatorReplyClaims).values({
-          id: claimId,
-          postId: String(postRow.id),
-          parentInteractionId,
-          creatorAccountId,
-          replyInteractionId: null,
-          claimedAt: at,
-        });
-        return {
-          status: "claimed",
-          claimId,
-          creator: mapAccount(creatorRow),
-          post: mapManagedPost(postRow),
-          parent: mapInteraction(parentRow),
-          commenter: {
-            id: String(commenterRow.id),
-            handle: String(commenterRow.handle),
-            displayName: String(commenterRow.displayName),
-          },
         };
       });
     },
@@ -5121,26 +4457,6 @@ export function createSlurpStorage(db: DB) {
             parentInteractionId,
             actor,
           });
-          // Liking a post that is already liked used to reach the insert and fail the unique
-          // constraint. The file store asserts uniqueness when the transaction settles rather than
-          // at the insert call, so the catch below never saw it and a repeated tap returned a 500.
-          // A toggle is idempotent by definition: hand back the row that already exists.
-          const already = (
-            await tx
-              .select()
-              .from(noodleInteractions)
-              .where(
-                and(
-                  eq(noodleInteractions.postId, postId),
-                  eq(noodleInteractions.actorAccountId, actor.id),
-                  eq(noodleInteractions.type, input.type),
-                  parentInteractionId
-                    ? eq(noodleInteractions.parentInteractionId, parentInteractionId)
-                    : isNull(noodleInteractions.parentInteractionId),
-                ),
-              )
-          )[0];
-          if (already) return mapInteraction(already);
         }
         if (parentInteractionId) {
           const parent = (
@@ -5204,8 +4520,6 @@ export function createSlurpStorage(db: DB) {
         runId: string;
         type: "like" | "reply" | "repost";
         content: string | null;
-        /** The comment being answered. Null, or an unusable id, means answering the post. */
-        parentInteractionId?: string | null;
       },
     ): Promise<{ interaction: NoodleInteraction; created: boolean } | null> {
       return db.transaction(async (tx) => {
@@ -5227,34 +4541,6 @@ export function createSlurpStorage(db: DB) {
         const creator = mapAccount(creatorRows[0]);
         const override = creator.settings.scheduler.fanActivity;
         if (!settings.fanActivityEnabled || override?.enabled === false) return null;
-        const actorAccountRow = (
-          await tx
-            .select()
-            .from(noodleAccounts)
-            .where(and(eq(noodleAccounts.id, input.actorId), eq(noodleAccounts.platform, "slurp")))
-        )[0];
-        const actorPopulationRow = (
-          await tx.select().from(slurpPopulation).where(eq(slurpPopulation.id, input.actorId))
-        )[0];
-        const canonicalSnapshot = actorAccountRow
-          ? snapshotForAccount(mapAccount(actorAccountRow))
-          : actorPopulationRow
-            ? {
-                id: actorPopulationRow.id,
-                kind: "random_user" as const,
-                entityId: actorPopulationRow.id,
-                handle: actorPopulationRow.handle,
-                displayName: actorPopulationRow.displayName,
-                avatarUrl: null,
-                avatarCrop: null,
-              }
-            : null;
-        if (
-          !canonicalSnapshot ||
-          canonicalSnapshot.kind !== "random_user" ||
-          JSON.stringify(canonicalSnapshot) !== JSON.stringify(input.actorSnapshot)
-        )
-          return null;
 
         const stateRows = await tx.select().from(noodlerFanActivityState);
         const plan = stateRows
@@ -5315,121 +4601,6 @@ export function createSlurpStorage(db: DB) {
           createdAt: now(),
         });
         const rows = await tx.select().from(noodleInteractions).where(eq(noodleInteractions.id, input.id));
-        return rows[0] ? { interaction: mapInteraction(rows[0]), created: true } : null;
-      });
-    },
-
-    async createNoodlerWorldInteraction(
-      postId: string,
-      input: NoodlerWorldInteractionInput,
-    ): Promise<{ interaction: NoodleInteraction; created: boolean } | null> {
-      return db.transaction(async (tx) => {
-        const postRow = (await tx.select().from(noodlePosts).where(eq(noodlePosts.id, postId)))[0];
-        if (
-          !postRow ||
-          (postRow.access !== "public" && postRow.access !== "locked") ||
-          postRow.authorAccountId !== input.creatorAccountId
-        )
-          return null;
-        const creatorRow = (
-          await tx
-            .select()
-            .from(noodleAccounts)
-            .where(and(eq(noodleAccounts.id, input.creatorAccountId), eq(noodleAccounts.platform, "slurp")))
-        )[0];
-        if (!creatorRow) return null;
-
-        const actorAccountRow = (
-          await tx
-            .select()
-            .from(noodleAccounts)
-            .where(and(eq(noodleAccounts.id, input.actorId), eq(noodleAccounts.platform, "slurp")))
-        )[0];
-        const actorPopulationRow = (
-          await tx.select().from(slurpPopulation).where(eq(slurpPopulation.id, input.actorId))
-        )[0];
-        const actor = actorAccountRow ? mapAccount(actorAccountRow) : null;
-        const actorSnapshot = actor
-          ? snapshotForAccount(actor)
-          : actorPopulationRow
-            ? {
-                id: actorPopulationRow.id,
-                kind: "random_user" as const,
-                entityId: actorPopulationRow.id,
-                handle: actorPopulationRow.handle,
-                displayName: actorPopulationRow.displayName,
-                avatarUrl: null,
-                avatarCrop: null,
-              }
-            : null;
-        if (!actorSnapshot || (actor && actor.kind !== "random_user")) return null;
-        const content = input.type === "reply" ? input.content?.trim() || null : null;
-        if (input.type === "reply" && !content) return null;
-        // A parent must be a real comment on this post, and nobody answers themselves. Only a
-        // reply may have one: a like on a comment is not a thing this schema models.
-        let parentInteractionId: string | null = null;
-        if (input.type === "reply" && input.parentInteractionId) {
-          const parentRow = (
-            await tx.select().from(noodleInteractions).where(eq(noodleInteractions.id, input.parentInteractionId))
-          )[0];
-          const parent = parentRow ? mapInteraction(parentRow) : null;
-          if (parent && parent.postId === postId && parent.type === "reply" && parent.actorAccountId !== input.actorId)
-            parentInteractionId = parent.id;
-        }
-        const matchesParent = parentInteractionId
-          ? eq(noodleInteractions.parentInteractionId, parentInteractionId)
-          : isNull(noodleInteractions.parentInteractionId);
-        const existing = await tx
-          .select()
-          .from(noodleInteractions)
-          .where(
-            and(
-              eq(noodleInteractions.postId, postId),
-              eq(noodleInteractions.actorAccountId, input.actorId),
-              eq(noodleInteractions.type, input.type),
-              matchesParent,
-            ),
-          );
-        if (existing[0]) return { interaction: mapInteraction(existing[0]), created: false };
-        const id = newId();
-        try {
-          await tx.insert(noodleInteractions).values({
-            id,
-            postId,
-            parentInteractionId,
-            actorAccountId: input.actorId,
-            type: input.type,
-            content,
-            imageUrl: null,
-            actorSnapshot: JSON.stringify(actorSnapshot),
-            createdAt: now(),
-          });
-        } catch (error) {
-          if (
-            !isFileUniqueConstraintError(error, "slurp_interactions", [
-              "postId",
-              "actorAccountId",
-              "type",
-              "parentInteractionId",
-            ])
-          )
-            throw error;
-          const duplicate = (
-            await tx
-              .select()
-              .from(noodleInteractions)
-              .where(
-                and(
-                  eq(noodleInteractions.postId, postId),
-                  eq(noodleInteractions.actorAccountId, input.actorId),
-                  eq(noodleInteractions.type, input.type),
-                  matchesParent,
-                ),
-              )
-          )[0];
-          return duplicate ? { interaction: mapInteraction(duplicate), created: false } : null;
-        }
-        const rows = await tx.select().from(noodleInteractions).where(eq(noodleInteractions.id, id));
         return rows[0] ? { interaction: mapInteraction(rows[0]), created: true } : null;
       });
     },
@@ -5714,242 +4885,114 @@ export function createSlurpStorage(db: DB) {
       return finished;
     },
 
-    /**
-     * Subscribe a viewer to a creator for one paid period.
-     *
-     * Returns `null` when the viewer cannot afford the creator's price, alongside the existing
-     * "no" for a hidden or self-owned creator. Re-subscribing to a creator that is already paid
-     * up charges nothing, so the route stays idempotent.
-     */
     async subscribe(viewerAccountId: string, creatorAccountId: string): Promise<NoodleAccountSubscription | null> {
       if (viewerAccountId === creatorAccountId) return null;
-      const settings = await this.getSettings();
-      return enqueueFinancial(async () => {
+      const run = viewerSettingsUpdateQueue.then(async () => {
         const viewer = await this.getViewer(viewerAccountId);
         if (!viewer) return null;
-        const creatorRows = await db
-          .select()
-          .from(noodleAccounts)
-          .where(and(eq(noodleAccounts.id, creatorAccountId), eq(noodleAccounts.platform, "slurp")));
-        const creator = creatorRows[0] ? mapAccount(creatorRows[0]) : null;
-        if (
-          !creator ||
-          (creator.sourceKind === "persona" && creator.sourceEntityId === viewerAccountId) ||
-          isNoodlerHiddenFromViewer(creator, viewerAccountId)
-        )
-          return null;
-        const existing = await db
-          .select()
-          .from(noodleAccountSubscriptions)
-          .where(
-            and(
-              eq(noodleAccountSubscriptions.viewerAccountId, viewerAccountId),
-              eq(noodleAccountSubscriptions.creatorAccountId, creatorAccountId),
-            ),
-          );
-        const price = settings.walletEnabled ? await this.getCreatorSubscriptionPrice(creatorAccountId) : 0;
-        // `now()` returns an ISO string. Every use below wants a Date — `at.getTime()`, `spend`,
-        // and `subscriptionPaidThrough` — so the string made the first subscribe for a viewer fail
-        // with "toISOString is not a function" and return a 500.
-        const at = new Date();
-        const existingWallet = settings.walletEnabled ? await getWalletNow(viewerAccountId) : null;
-        const existingPayment = existingWallet?.subscriptions[creatorAccountId];
-        const existingPaymentIsValid =
-          !settings.walletEnabled ||
-          (existingPayment !== undefined &&
-            Number.isFinite(Date.parse(existingPayment.paidThroughAt)) &&
-            Date.parse(existingPayment.paidThroughAt) > at.getTime());
-        if (existing[0] && existingPaymentIsValid) {
-          const followingAccountIds = viewer.settings.social.followingAccountIds ?? [];
-          if (!followingAccountIds.includes(creatorAccountId)) {
-            const followingAccountTimestamps = { ...viewer.settings.social.followingAccountTimestamps };
-            followingAccountTimestamps[creatorAccountId] ??= existing[0].createdAt;
-            const currentSettings = normalizeNoodleAccountSettings(
-              await settingsStore.get(slurpViewerSettingsKey(viewerAccountId)),
-            );
-            await createAppSettingsStorage(db).set(
-              slurpViewerSettingsKey(viewerAccountId),
-              JSON.stringify({
-                ...currentSettings,
-                wallet: existingWallet ? { coins: existingWallet.coins } : currentSettings.wallet,
-                social: {
-                  ...currentSettings.social,
-                  followingAccountIds: [...followingAccountIds, creatorAccountId],
-                  followingAccountTimestamps,
-                },
-              }),
-            );
-          }
-          await this.advanceAudienceTie(viewerAccountId, creatorAccountId, {
-            stage: "subscriber",
-            hasSubscription: true,
-          });
-          return mapSubscription(existing[0]);
-        }
-
-        if (existing[0] && settings.walletEnabled && existingWallet) {
-          const charged = spend(existingWallet, "subscribe", price, at, creatorAccountId);
-          if (!charged) {
-            await this.unsubscribe(viewerAccountId, creatorAccountId, true);
+        return db.transaction(async (tx) => {
+          const creatorRows = await tx
+            .select()
+            .from(noodleAccounts)
+            .where(and(eq(noodleAccounts.id, creatorAccountId), eq(noodleAccounts.platform, "slurp")));
+          const creator = creatorRows[0] ? mapAccount(creatorRows[0]) : null;
+          if (
+            !creator ||
+            (creator.sourceKind === "persona" && creator.sourceEntityId === viewerAccountId) ||
+            isNoodlerHiddenFromViewer(creator, viewerAccountId)
+          )
             return null;
+          const existing = await tx
+            .select()
+            .from(noodleAccountSubscriptions)
+            .where(
+              and(
+                eq(noodleAccountSubscriptions.viewerAccountId, viewerAccountId),
+                eq(noodleAccountSubscriptions.creatorAccountId, creatorAccountId),
+              ),
+            );
+          if (existing[0]) {
+            const followingAccountIds = viewer.settings.social.followingAccountIds ?? [];
+            const followingAccountTimestamps = { ...viewer.settings.social.followingAccountTimestamps };
+            if (!followingAccountIds.includes(creatorAccountId)) {
+              followingAccountTimestamps[creatorAccountId] ??= existing[0].createdAt;
+              await createAppSettingsStorage(tx).set(
+                slurpViewerSettingsKey(viewerAccountId),
+                JSON.stringify({
+                  ...viewer.settings,
+                  social: {
+                    ...viewer.settings.social,
+                    followingAccountIds: [...followingAccountIds, creatorAccountId],
+                    followingAccountTimestamps,
+                  },
+                }),
+              );
+            }
+            return mapSubscription(existing[0]);
           }
-          const walletAfterCharge = {
-            ...charged,
-            subscriptions: {
-              ...charged.subscriptions,
-              [creatorAccountId]: { paidThroughAt: subscriptionPaidThrough(at, economyFrom(settings)), price },
+          const timestamp = now();
+          const followingAccountIds = viewer.settings.social.followingAccountIds ?? [];
+          const followingAccountTimestamps = { ...viewer.settings.social.followingAccountTimestamps };
+          followingAccountTimestamps[creatorAccountId] ??= timestamp;
+          const nextViewerSettings: NoodleAccountSettings = {
+            ...viewer.settings,
+            social: {
+              ...viewer.settings.social,
+              followingAccountIds: followingAccountIds.includes(creatorAccountId)
+                ? followingAccountIds
+                : [...followingAccountIds, creatorAccountId],
+              followingAccountTimestamps,
             },
           };
-          const previousWalletValue = await settingsStore.get(slurpWalletKey(viewerAccountId));
-          const previousViewerSettingsValue = await settingsStore.get(slurpViewerSettingsKey(viewerAccountId));
-          const earningsKey = slurpEarningsKey(creatorAccountId);
-          const previousEarnings = await settingsStore.get(earningsKey);
+          // A duplicate row means the subscription already existed, so this path stays idempotent.
           try {
-            await writeWallet(viewerAccountId, walletAfterCharge);
-            const followingAccountIds = viewer.settings.social.followingAccountIds ?? [];
-            const followingAccountTimestamps = { ...viewer.settings.social.followingAccountTimestamps };
-            followingAccountTimestamps[creatorAccountId] ??= existing[0].createdAt;
-            await createAppSettingsStorage(db).set(
-              slurpViewerSettingsKey(viewerAccountId),
-              JSON.stringify({
-                ...viewer.settings,
-                wallet: { coins: walletAfterCharge.coins },
-                social: {
-                  ...viewer.settings.social,
-                  followingAccountIds: followingAccountIds.includes(creatorAccountId)
-                    ? followingAccountIds
-                    : [...followingAccountIds, creatorAccountId],
-                  followingAccountTimestamps,
-                },
-              }),
-            );
-            await creditEarningsNow(
-              creatorAccountId,
-              "subscribe",
-              Math.floor((price * settings.walletCreatorRevenueSharePercent) / 100),
-              `subscribe: ${creatorAccountId}`,
-            );
-            await this.notifyCreatorIncome(creatorAccountId, "subscribe", price, viewerAccountId);
-            await this.advanceAudienceTie(viewerAccountId, creatorAccountId, {
-              stage: "subscriber",
-              spent: price,
-              hasSubscription: true,
-            });
-          } catch (error) {
-            await compensate(
-              error,
-              [
-                () => restoreWallet(viewerAccountId, previousWalletValue, previousViewerSettingsValue),
-                () => restoreSetting(earningsKey, previousEarnings),
-              ],
-              "subscription renewal",
-            );
-            throw error;
-          }
-          return mapSubscription(existing[0]);
-        }
-
-        const previousWallet = existingWallet ?? (await getWalletNow(viewerAccountId));
-        const charged = settings.walletEnabled
-          ? spend(previousWallet, "subscribe", price, at, creatorAccountId)
-          : previousWallet;
-        if (!charged) return null;
-        const walletAfterCharge = settings.walletEnabled
-          ? {
-              ...charged,
-              subscriptions: {
-                ...charged.subscriptions,
-                [creatorAccountId]: { paidThroughAt: subscriptionPaidThrough(at, economyFrom(settings)), price },
-              },
-            }
-          : charged;
-        const subscriptionId = newId();
-        const earningsKey = slurpEarningsKey(creatorAccountId);
-        const previousEarnings = await settingsStore.get(earningsKey);
-        try {
-          if (settings.walletEnabled) await writeWallet(viewerAccountId, walletAfterCharge);
-          const subscription = await db.transaction(async (tx) => {
-            const timestamp = now();
-            const followingAccountIds = viewer.settings.social.followingAccountIds ?? [];
-            const followingAccountTimestamps = { ...viewer.settings.social.followingAccountTimestamps };
-            followingAccountTimestamps[creatorAccountId] ??= timestamp;
-            const nextViewerSettings: NoodleAccountSettings = {
-              ...viewer.settings,
-              ...(settings.walletEnabled ? { wallet: { coins: walletAfterCharge.coins } } : {}),
-              social: {
-                ...viewer.settings.social,
-                followingAccountIds: followingAccountIds.includes(creatorAccountId)
-                  ? followingAccountIds
-                  : [...followingAccountIds, creatorAccountId],
-                followingAccountTimestamps,
-              },
-            };
             await tx.insert(noodleAccountSubscriptions).values({
-              id: subscriptionId,
+              id: newId(),
               viewerAccountId,
               creatorAccountId,
               createdAt: timestamp,
             });
-            await createAppSettingsStorage(tx).set(
-              slurpViewerSettingsKey(viewerAccountId),
-              JSON.stringify(nextViewerSettings),
-            );
-            return { id: subscriptionId, viewerAccountId, creatorAccountId, createdAt: timestamp };
-          });
-          if (settings.walletEnabled) {
-            await creditEarningsNow(
-              creatorAccountId,
-              "subscribe",
-              Math.floor((price * settings.walletCreatorRevenueSharePercent) / 100),
-              `subscribe: ${creatorAccountId}`,
-            );
-            await this.notifyCreatorIncome(creatorAccountId, "subscribe", price, viewerAccountId);
-            await this.advanceAudienceTie(viewerAccountId, creatorAccountId, {
-              stage: "subscriber",
-              spent: price,
-              hasSubscription: true,
-            });
-          }
-          if (!settings.walletEnabled) {
-            await this.advanceAudienceTie(viewerAccountId, creatorAccountId, {
-              stage: "subscriber",
-              hasSubscription: true,
-            });
-          }
-          return subscription;
-        } catch (error) {
-          await compensate(
-            error,
-            [
-              () => (settings.walletEnabled ? writeWallet(viewerAccountId, previousWallet) : Promise.resolve()),
-              () => restoreSetting(earningsKey, previousEarnings),
-              () => db.delete(noodleAccountSubscriptions).where(eq(noodleAccountSubscriptions.id, subscriptionId)),
-              () =>
-                createAppSettingsStorage(db).set(
-                  slurpViewerSettingsKey(viewerAccountId),
-                  JSON.stringify(viewer.settings),
+          } catch (error) {
+            if (
+              !isFileUniqueConstraintError(error, "slurp_account_subscriptions", [
+                "viewerAccountId",
+                "creatorAccountId",
+              ])
+            ) {
+              throw error;
+            }
+            const duplicate = await tx
+              .select()
+              .from(noodleAccountSubscriptions)
+              .where(
+                and(
+                  eq(noodleAccountSubscriptions.viewerAccountId, viewerAccountId),
+                  eq(noodleAccountSubscriptions.creatorAccountId, creatorAccountId),
                 ),
-            ],
-            "subscription",
+              );
+            return duplicate[0] ? mapSubscription(duplicate[0]) : null;
+          }
+          await createAppSettingsStorage(tx).set(
+            slurpViewerSettingsKey(viewerAccountId),
+            JSON.stringify(nextViewerSettings),
           );
-          throw error;
-        }
+          const rows = await tx
+            .select()
+            .from(noodleAccountSubscriptions)
+            .where(
+              and(
+                eq(noodleAccountSubscriptions.viewerAccountId, viewerAccountId),
+                eq(noodleAccountSubscriptions.creatorAccountId, creatorAccountId),
+              ),
+            );
+          return rows[0] ? mapSubscription(rows[0]) : null;
+        });
       });
+      viewerSettingsUpdateQueue = run.catch(() => undefined);
+      return run;
     },
 
-    async unsubscribe(viewerAccountId: string, creatorAccountId: string, internal = false): Promise<void> {
-      if (!internal) {
-        await enqueueFinancial(() => this.unsubscribe(viewerAccountId, creatorAccountId, true));
-        return;
-      }
-      // The paid period is dropped with the subscription: cancelling is a cancellation, not a
-      // pause, so re-subscribing later pays again rather than resuming a period already bought.
-      const wallet = readSlurpWallet(await settingsStore.get(slurpWalletKey(viewerAccountId)));
-      if (wallet.subscriptions[creatorAccountId]) {
-        const subscriptions = { ...wallet.subscriptions };
-        delete subscriptions[creatorAccountId];
-        await writeWallet(viewerAccountId, { ...wallet, subscriptions });
-      }
+    async unsubscribe(viewerAccountId: string, creatorAccountId: string): Promise<void> {
       await db
         .delete(noodleAccountSubscriptions)
         .where(
@@ -5958,11 +5001,6 @@ export function createSlurpStorage(db: DB) {
             eq(noodleAccountSubscriptions.creatorAccountId, creatorAccountId),
           ),
         );
-      // Losing a subscriber is news. A world that only reports good outcomes has no stakes.
-      await this.recordCreatorEvent(creatorAccountId, "lapsed", { actorLabel: viewerAccountId });
-      await createSlurpPopulationStorage(db)
-        .lapseTie(viewerAccountId, creatorAccountId)
-        .catch(() => undefined);
     },
 
     async listSubscriptionsForViewer(viewerAccountId: string): Promise<NoodleAccountSubscription[]> {
@@ -6017,633 +5055,51 @@ export function createSlurpStorage(db: DB) {
       };
     },
 
-    /**
-     * Unlock a locked post for a viewer.
-     *
-     * Returns `null` when the viewer cannot afford it, which is the same "no" the caller already
-     * handles for a missing or hidden post. The price comes from the post, so an edited price
-     * survives a refresh.
-     *
-     */
     async unlockPost(viewerAccountId: string, postId: string): Promise<NoodlePostUnlock | null> {
-      return enqueueFinancial(async () => {
-        const viewer = await this.getViewer(viewerAccountId);
-        if (!viewer) return null;
-        const settings = await this.getSettings();
-        let price = 0;
-        if (settings.walletEnabled) {
-          const target = (await db.select().from(noodlePosts).where(eq(noodlePosts.id, postId)))[0];
-          if (!target) return null;
-          price = noodlerUnlockPriceFromMetadata(mapPost(target).metadata);
+      const viewer = await this.getViewer(viewerAccountId);
+      if (!viewer) return null;
+      return db.transaction(async (tx) => {
+        const postRows = await tx.select().from(noodlePosts).where(eq(noodlePosts.id, postId));
+        const postRow = postRows[0];
+        if (!postRow || mapPost(postRow).access !== "locked") {
+          return null;
         }
-        let created = false;
-        const unlock = await db.transaction(async (tx) => {
-          const postRows = await tx.select().from(noodlePosts).where(eq(noodlePosts.id, postId));
-          const postRow = postRows[0];
-          if (!postRow || mapPost(postRow).access !== "locked") {
-            return null;
-          }
-          const authorRows = await tx
-            .select()
-            .from(noodleAccounts)
-            .where(and(eq(noodleAccounts.id, postRow.authorAccountId), eq(noodleAccounts.platform, "slurp")));
-          const author = authorRows[0] ? mapAccount(authorRows[0]) : null;
-          if (
-            !author ||
-            (author.sourceKind === "persona" && author.sourceEntityId === viewerAccountId) ||
-            isNoodlerHiddenFromViewer(author, viewerAccountId)
-          ) {
-            return null;
-          }
-          const existing = await tx
-            .select()
-            .from(noodlePostUnlocks)
-            .where(and(eq(noodlePostUnlocks.viewerAccountId, viewerAccountId), eq(noodlePostUnlocks.postId, postId)));
-          if (existing[0]) return mapPostUnlock(existing[0]);
-          const timestamp = now();
-          // An already-unlocked post stays idempotent.
-          try {
-            await tx.insert(noodlePostUnlocks).values({ id: newId(), viewerAccountId, postId, createdAt: timestamp });
-            created = true;
-          } catch (error) {
-            if (!isFileUniqueConstraintError(error, "slurp_post_unlocks", ["viewerAccountId", "postId"])) throw error;
-            const duplicate = await tx
-              .select()
-              .from(noodlePostUnlocks)
-              .where(and(eq(noodlePostUnlocks.viewerAccountId, viewerAccountId), eq(noodlePostUnlocks.postId, postId)));
-            return duplicate[0] ? mapPostUnlock(duplicate[0]) : null;
-          }
-          const rows = await tx
+        const authorRows = await tx
+          .select()
+          .from(noodleAccounts)
+          .where(and(eq(noodleAccounts.id, postRow.authorAccountId), eq(noodleAccounts.platform, "slurp")));
+        const author = authorRows[0] ? mapAccount(authorRows[0]) : null;
+        if (
+          !author ||
+          (author.sourceKind === "persona" && author.sourceEntityId === viewerAccountId) ||
+          isNoodlerHiddenFromViewer(author, viewerAccountId)
+        ) {
+          return null;
+        }
+        const existing = await tx
+          .select()
+          .from(noodlePostUnlocks)
+          .where(and(eq(noodlePostUnlocks.viewerAccountId, viewerAccountId), eq(noodlePostUnlocks.postId, postId)));
+        if (existing[0]) return mapPostUnlock(existing[0]);
+        const timestamp = now();
+        // An already-unlocked post stays idempotent.
+        try {
+          await tx.insert(noodlePostUnlocks).values({ id: newId(), viewerAccountId, postId, createdAt: timestamp });
+        } catch (error) {
+          if (!isFileUniqueConstraintError(error, "slurp_post_unlocks", ["viewerAccountId", "postId"])) throw error;
+          const duplicate = await tx
             .select()
             .from(noodlePostUnlocks)
             .where(and(eq(noodlePostUnlocks.viewerAccountId, viewerAccountId), eq(noodlePostUnlocks.postId, postId)));
-          return rows[0] ? mapPostUnlock(rows[0]) : null;
-        });
-        if (unlock && created && settings.walletEnabled) {
-          const walletKey = slurpWalletKey(viewerAccountId);
-          const viewerSettingsKey = slurpViewerSettingsKey(viewerAccountId);
-          const previousWalletValue = await settingsStore.get(walletKey);
-          const previousViewerSettingsValue = await settingsStore.get(viewerSettingsKey);
-          const wallet = readSlurpWallet(previousWalletValue);
-          let earningsKey: string | null = null;
-          let earningsValue: string | null = null;
-          let paymentCompleted = false;
-          try {
-            const charged = spend(wallet, "unlock", price, new Date(), postId);
-            if (!charged) return null;
-            const post = (await db.select().from(noodlePosts).where(eq(noodlePosts.id, postId)))[0];
-            if (post) {
-              earningsKey = slurpEarningsKey(post.authorAccountId);
-              earningsValue = await settingsStore.get(earningsKey);
-            }
-            await writeWallet(viewerAccountId, charged);
-            if (post) {
-              const share = Math.floor((price * settings.walletCreatorRevenueSharePercent) / 100);
-              if (share > 0) {
-                await creditEarningsNow(post.authorAccountId, "unlock", share, `unlock: ${post.authorAccountId}`);
-              }
-              await this.notifyCreatorIncome(post.authorAccountId, "unlock", price, viewerAccountId, post.id);
-              await this.advanceAudienceTie(viewerAccountId, post.authorAccountId, {
-                stage: "liker",
-                spent: price,
-                unlocked: price,
-              });
-            }
-            paymentCompleted = true;
-          } catch (error) {
-            await compensate(
-              error,
-              [
-                () => restoreWallet(viewerAccountId, previousWalletValue, previousViewerSettingsValue),
-                ...(earningsKey ? [() => restoreSetting(earningsKey, earningsValue)] : []),
-              ],
-              "unlock",
-            );
-            throw error;
-          } finally {
-            if (!paymentCompleted) {
-              // Never leave a newly-created row that a retry could mistake for a paid unlock.
-              try {
-                await db.delete(noodlePostUnlocks).where(eq(noodlePostUnlocks.id, unlock.id));
-              } catch (error) {
-                logger.error(error, "[slurp] unlock cleanup failed for %s", unlock.id);
-              }
-            }
-          }
+          return duplicate[0] ? mapPostUnlock(duplicate[0]) : null;
         }
-        return unlock;
+        // Unlocking no longer touches viewer settings at all: there is nothing to debit.
+        const rows = await tx
+          .select()
+          .from(noodlePostUnlocks)
+          .where(and(eq(noodlePostUnlocks.viewerAccountId, viewerAccountId), eq(noodlePostUnlocks.postId, postId)));
+        return rows[0] ? mapPostUnlock(rows[0]) : null;
       });
-    },
-
-    /**
-     * The viewer's wallet, with any due subscription renewals charged. The daily refill stays an
-     * explicit action, so opening Wallet never claims it before the player can see it.
-     *
-     * A creator the viewer could not pay for is unsubscribed here, which is the whole consequence
-     * of running out of coins.
-     */
-    /**
-     * A generated audience member is not a player, so they never receive a daily stipend.
-     *
-     * They still hold a balance — they need one to pay a request fee — but only a real persona can
-     * claim the daily refill route.
-     */
-    isSyntheticWalletHolder(accountId: string): boolean {
-      return accountId.startsWith("slurp-fan:");
-    },
-
-    async getWallet(viewerAccountId: string): Promise<SlurpWallet> {
-      return enqueueFinancial(async () => {
-        const settings = await this.getSettings();
-        const stored = await getWalletNow(viewerAccountId);
-        if (!settings.walletEnabled || this.isSyntheticWalletHolder(viewerAccountId)) return stored;
-        const previousWalletValue = await settingsStore.get(slurpWalletKey(viewerAccountId));
-        const previousViewerSettingsValue = await settingsStore.get(slurpViewerSettingsKey(viewerAccountId));
-        const at = new Date();
-        const renewal = renewSubscriptions(stored, at);
-        if (renewal.wallet === stored) return stored;
-        const previousEarnings = new Map<string, string | null>();
-        try {
-          // Persist the charge before crediting income. A failed income write can then restore this
-          // exact wallet and retry the renewal without charging or crediting it twice.
-          await writeWallet(viewerAccountId, renewal.wallet);
-          for (const renewed of renewal.renewed) {
-            const creator = await this.getNoodlerAccountById(renewed.creatorAccountId);
-            if (creator && settings.walletCreatorRevenueSharePercent > 0) {
-              previousEarnings.set(creator.id, await settingsStore.get(slurpEarningsKey(creator.id)));
-              await creditEarningsNow(
-                creator.id,
-                "renew",
-                Math.floor((renewed.price * settings.walletCreatorRevenueSharePercent) / 100),
-                `renew: ${creator.handle}`,
-              );
-            }
-            await this.notifyCreatorIncome(renewed.creatorAccountId, "renew", renewed.price, viewerAccountId);
-          }
-        } catch (error) {
-          await compensate(
-            error,
-            [
-              ...[...previousEarnings].map(
-                ([creatorId, earningsValue]) =>
-                  () =>
-                    restoreSetting(slurpEarningsKey(creatorId), earningsValue),
-              ),
-              () => restoreWallet(viewerAccountId, previousWalletValue, previousViewerSettingsValue),
-            ],
-            "subscription renewal",
-          );
-          throw error;
-        }
-        try {
-          for (const creatorAccountId of renewal.lapsed)
-            await this.unsubscribe(viewerAccountId, creatorAccountId, true);
-        } catch (error) {
-          await compensate(
-            error,
-            [
-              ...[...previousEarnings].map(
-                ([creatorId, earningsValue]) =>
-                  () =>
-                    restoreSetting(slurpEarningsKey(creatorId), earningsValue),
-              ),
-              () => restoreWallet(viewerAccountId, previousWalletValue, previousViewerSettingsValue),
-            ],
-            "lapsed subscription cleanup",
-          );
-          throw error;
-        }
-        return renewal.wallet;
-      });
-    },
-
-    /** Subscription price for one creator: its own price when it has set one, else the default. */
-    async getCreatorSubscriptionPrice(creatorAccountId: string): Promise<number> {
-      const [prices, settings] = await Promise.all([readCreatorPrices(), this.getSettings()]);
-      return prices[creatorAccountId] ?? settings.walletSubscriptionCost;
-    },
-
-    /** Set a creator's own weekly price, or clear it back to the Slurp-wide default with `null`. */
-    async setCreatorSubscriptionPrice(creatorAccountId: string, price: number | null): Promise<void> {
-      const prices = await readCreatorPrices();
-      if (price === null) delete prices[creatorAccountId];
-      else if (Number.isInteger(price) && price >= 0) prices[creatorAccountId] = price;
-      else return;
-      await settingsStore.set(CREATOR_PRICES_KEY, JSON.stringify(prices));
-    },
-
-    /** Credit capped earnings for acting on an ad or for the viewer's own engagement. */
-    async earnCoins(viewerAccountId: string, kind: "ad" | "engagement", note?: string): Promise<SlurpWallet> {
-      const settings = await this.getSettings();
-      return enqueueFinancial(async () => {
-        const wallet = await getWalletNow(viewerAccountId);
-        if (!settings.walletEnabled) return wallet;
-        const next = earn(wallet, kind, new Date(), note, economyFrom(settings));
-        return next === wallet ? wallet : writeWallet(viewerAccountId, next);
-      });
-    },
-
-    /** Claim the configured daily refill. The refill raises a low balance to its floor. */
-    async claimWalletRefill(viewerAccountId: string): Promise<SlurpWallet> {
-      const settings = await this.getSettings();
-      return enqueueFinancial(async () => {
-        const wallet = await getWalletNow(viewerAccountId);
-        if (!settings.walletEnabled) return wallet;
-        const next = applyStipend(wallet, new Date(), economyFrom(settings));
-        return next === wallet ? wallet : writeWallet(viewerAccountId, next);
-      });
-    },
-
-    async setWalletCoinsForDevelopment(viewerAccountId: string, coins: number): Promise<SlurpWallet> {
-      if (!Number.isInteger(coins) || coins < 0) throw new Error("Wallet coins must be a non-negative integer.");
-      const settings = await this.getSettings();
-      return enqueueFinancial(async () => {
-        const wallet = await getWalletNow(viewerAccountId);
-        if (!settings.walletEnabled) return wallet;
-        return writeWallet(viewerAccountId, { ...wallet, coins });
-      });
-    },
-
-    /** Move a tip immediately from one persona wallet to one creator wallet. */
-    async tipCreator(viewerAccountId: string, creatorAccountId: string, amount: number): Promise<SlurpWallet | null> {
-      if (viewerAccountId === creatorAccountId || !Number.isInteger(amount) || amount <= 0) return null;
-      const settings = await this.getSettings();
-      if (!settings.walletEnabled) return null;
-      const run = enqueueFinancial(async () => {
-        const creator = await this.getNoodlerAccountById(creatorAccountId);
-        if (!creator || (creator.sourceKind === "persona" && creator.sourceEntityId === viewerAccountId)) return null;
-        const sender = await getWalletNow(viewerAccountId);
-        const charged = spend(sender, "tip", amount, new Date(), creator.handle);
-        if (!charged) return null;
-        try {
-          await writeWallet(viewerAccountId, charged);
-          await creditEarningsNow(creator.id, "tip", amount, `tip: ${creator.handle}`);
-          await this.recordCreatorEvent(creator.id, "tip", { amount, actorLabel: viewerAccountId });
-          await this.advanceAudienceTie(viewerAccountId, creator.id, {
-            stage: "regular",
-            spent: amount,
-            tipped: amount,
-          });
-          return charged;
-        } catch (error) {
-          // Restore the sender if the recipient write fails. The shared queue prevents concurrent
-          // tips from reading and overwriting the same balance during this two-key operation.
-          await writeWallet(viewerAccountId, sender);
-          throw error;
-        }
-      });
-      return run;
-    },
-
-    /**
-     * Debit a viewer for anything that is not a tip or a subscription, returning `null` when the
-     * funds are not there. The direct-message paths route every charge through here so a locked
-     * message, a request fee, and a commission all land in the one ledger the wallet page reads.
-     */
-    async spendCoins(
-      viewerAccountId: string,
-      kind: SlurpWalletSpendKind,
-      amount: number,
-      note?: string,
-    ): Promise<SlurpWallet | null> {
-      const settings = await this.getSettings();
-      if (!settings.walletEnabled || amount <= 0) return this.getWallet(viewerAccountId);
-      const run = enqueueFinancial(async () => {
-        const wallet = await getWalletNow(viewerAccountId);
-        const charged = spend(wallet, kind, amount, new Date(), note);
-        return charged ? writeWallet(viewerAccountId, charged) : null;
-      });
-      return run;
-    },
-
-    async refundCoins(viewerAccountId: string, amount: number, note: string): Promise<SlurpWallet> {
-      const run = enqueueFinancial(async () => {
-        const wallet = await getWalletNow(viewerAccountId);
-        return writeWallet(viewerAccountId, credit(wallet, "income", amount, new Date(), `refund: ${note}`));
-      });
-      return run;
-    },
-
-    async reverseCreatorIncome(creatorAccountId: string, amount: number, note: string): Promise<void> {
-      const creator = await this.getNoodlerAccountById(creatorAccountId);
-      if (!creator) return;
-      const run = enqueueFinancial(async () => {
-        const current = await this.getEarnings(creator.id);
-        const next = reverseEarnings(current, amount, new Date(), `reversal: ${note}`);
-        if (next !== current) await writeEarnings(creator.id, next);
-      });
-      await run;
-    },
-
-    /**
-     * Pay a creator's owner when a fan pays that creator. Only a creator backed by one of this
-     * install's personas pays that persona wallet. Other creators keep their own wallet.
-     */
-    async creditCreatorIncome(
-      creatorAccountId: string,
-      price: number,
-      reason: "unlock" | "subscribe" | "renew" | "messageRequest" | "ppv" | "commission",
-    ) {
-      const settings = await this.getSettings();
-      if (!settings.walletEnabled || settings.walletCreatorRevenueSharePercent <= 0) return;
-      const creator = await this.getNoodlerAccountById(creatorAccountId);
-      if (!creator) return;
-      const share = Math.floor((price * settings.walletCreatorRevenueSharePercent) / 100);
-      if (share <= 0) return;
-      // Earnings belong to the Creator, not to the persona operating it. Paying into the
-      // operator's spending wallet made income and spending money the same balance, so a real
-      // audience would have ended every purchasing decision in the game. See slurp-earnings.ts.
-      await enqueueFinancial(() => creditEarningsNow(creator.id, reason, share, `${reason}: ${creator.handle}`));
-    },
-
-    /**
-     * Notify the operator that money arrived.
-     *
-     * Separate from `creditCreatorIncome` on purpose: that one returns early when the wallet is
-     * off or the revenue share is zero, and a Creator with the economy disabled should still be
-     * told that somebody subscribed.
-     */
-    async notifyCreatorIncome(
-      creatorAccountId: string,
-      reason: "unlock" | "subscribe" | "renew" | "messageRequest" | "ppv" | "commission",
-      amount: number,
-      actorLabel?: string | null,
-      subjectId?: string | null,
-    ): Promise<void> {
-      const kind: SlurpEventKind =
-        reason === "subscribe" || reason === "renew"
-          ? "subscribed"
-          : reason === "ppv"
-            ? "ppv_unlock"
-            : reason === "commission"
-              ? "commission_accepted"
-              : "unlock";
-      await this.recordCreatorEvent(creatorAccountId, kind, { amount, actorLabel, subjectId });
-    },
-
-    /**
-     * Move somebody along a Creator's funnel.
-     *
-     * The funnel is what a follower count will eventually be counted from, so it has to record
-     * real actions and not only the world tick's. Wrapped like `recordCreatorEvent`: a funnel
-     * write must never roll back the payment that caused it.
-     */
-    async advanceAudienceTie(
-      memberId: string,
-      creatorAccountId: string,
-      input: {
-        stage?: SlurpFunnelStage;
-        spent?: number;
-        tipped?: number;
-        unlocked?: number;
-        interactions?: number;
-        hasSubscription?: boolean;
-      },
-    ): Promise<void> {
-      // A legacy `noodler-fan:` id names an archetype slot, not a person, and persisted day plans
-      // written before the population existed still carry them. A tie for one is a follower who
-      // can never be resolved or shown, inflating reach with somebody who does not exist.
-      if (memberId.startsWith(NOODLER_FAN_IDENTITY_PREFIX)) return;
-      try {
-        await createSlurpPopulationStorage(db).advanceTie(memberId, creatorAccountId, input);
-      } catch (error) {
-        logger.warn(error, "[slurp-population] Could not advance the tie for %s", memberId);
-      }
-    },
-
-    /**
-     * Record one notification against whoever operates this Creator.
-     *
-     * A character-backed Creator has no operator, so it silently records nothing — that is the
-     * correct answer, not a failure. Never lets a notification failure break the action that
-     * caused it: a subscription that succeeded must not be rolled back because a feed row could
-     * not be written.
-     */
-    async recordCreatorEvent(
-      creatorAccountId: string,
-      kind: SlurpEventKind,
-      detail: { subjectId?: string | null; actorLabel?: string | null; amount?: number } = {},
-    ): Promise<void> {
-      try {
-        const creator = await this.getNoodlerAccountById(creatorAccountId);
-        if (!creator || creator.sourceKind !== "persona" || !creator.sourceEntityId) return;
-        await createSlurpEventsStorage(db).recordAndPrune({
-          recipientPersonaId: creator.sourceEntityId,
-          kind,
-          creatorAccountId,
-          ...detail,
-        });
-      } catch (error) {
-        logger.warn(error, "[slurp-events] Could not record a %s event for %s", kind, creatorAccountId);
-      }
-    },
-
-    /**
-     * Move earnings into the operating persona's spending money.
-     *
-     * This is what closes the circuit: a Creator who does well funds your habit as a fan. Only a
-     * persona-backed Creator can pay out, because a character-backed one has nobody to pay.
-     *
-     * The two writes are ordered earnings-first: if the wallet write fails the coins are put back,
-     * and a crash between them costs the player money they can see rather than minting money they
-     * cannot account for.
-     */
-    async payOutEarnings(
-      creatorAccountId: string,
-      amount: number,
-    ): Promise<{ status: "paid"; earnings: SlurpEarnings; wallet: SlurpWallet } | { status: "refused" }> {
-      const creator = await this.getNoodlerAccountById(creatorAccountId);
-      if (!creator || creator.sourceKind !== "persona" || !creator.sourceEntityId) return { status: "refused" };
-      const recipientId = creator.sourceEntityId;
-      const run = enqueueFinancial(async () => {
-        const current = await this.getEarnings(creatorAccountId);
-        const next = payoutEarnings(current, amount, new Date());
-        if (!next) return { status: "refused" as const };
-        const previousWalletValue = await settingsStore.get(slurpWalletKey(recipientId));
-        const previousViewerSettingsValue = await settingsStore.get(slurpViewerSettingsKey(recipientId));
-        await writeEarnings(creatorAccountId, next);
-        try {
-          const wallet = await getWalletNow(recipientId);
-          const credited = await writeWallet(
-            recipientId,
-            credit(wallet, "topUp", amount, new Date(), `payout: ${creator.handle}`),
-          );
-          return { status: "paid" as const, earnings: next, wallet: credited };
-        } catch (error) {
-          await compensate(
-            error,
-            [
-              () => restoreWallet(recipientId, previousWalletValue, previousViewerSettingsValue),
-              () => writeEarnings(creatorAccountId, current),
-            ],
-            "payout",
-          );
-          throw error;
-        }
-      });
-      return run;
-    },
-
-    async getGoal(creatorAccountId: string): Promise<SlurpGoal | null> {
-      return readSlurpGoal(await settingsStore.get(slurpGoalKey(creatorAccountId)));
-    },
-
-    /** Open or replace a Creator's tip goal. Passing a null label clears it. */
-    async setGoal(creatorAccountId: string, label: string | null, target: number): Promise<SlurpGoal | null> {
-      if (label === null) {
-        await settingsStore.remove(slurpGoalKey(creatorAccountId));
-        return null;
-      }
-      const earnings = await this.getEarnings(creatorAccountId);
-      const goal = openSlurpGoal(label, target, earnings.lifetime, new Date());
-      if (!goal) return null;
-      await settingsStore.set(slurpGoalKey(creatorAccountId), JSON.stringify(goal));
-      return goal;
-    },
-
-    /** Every project this Creator has, newest first. Paused and complete ones are included. */
-    async listProjects(creatorAccountId: string): Promise<SlurpProject[]> {
-      return readSlurpProjects(await settingsStore.get(slurpProjectsKey(creatorAccountId)));
-    },
-
-    /** The projects that may claim a post right now. */
-    async listActiveProjects(creatorAccountId: string): Promise<SlurpProject[]> {
-      return activeSlurpProjects(await this.listProjects(creatorAccountId));
-    },
-
-    async getProject(creatorAccountId: string, projectId: string): Promise<SlurpProject | null> {
-      return (await this.listProjects(creatorAccountId)).find((project) => project.id === projectId) ?? null;
-    },
-
-    /**
-     * Open a project.
-     *
-     * Refuses past `SLURP_PROJECT_MAX_ACTIVE` rather than opening a fourth that would publish too
-     * rarely to follow. Returns null on an unusable title, which is the one field it cannot invent.
-     */
-    async createProject(
-      creatorAccountId: string,
-      input: { title: string; direction?: string; chapters?: string[] },
-    ): Promise<SlurpProject | null> {
-      const projects = await this.listProjects(creatorAccountId);
-      if (activeSlurpProjects(projects).length >= SLURP_PROJECT_MAX_ACTIVE) return null;
-      const project = makeSlurpProject(newId(), input, new Date());
-      if (!project) return null;
-      await settingsStore.set(slurpProjectsKey(creatorAccountId), JSON.stringify([project, ...projects]));
-      return project;
-    },
-
-    /**
-     * Edit a project.
-     *
-     * Only the fields the player owns. `posts` is not one of them: it counts what was published and
-     * a hand-set value would make the Studio disagree with the feed.
-     */
-    async updateProject(
-      creatorAccountId: string,
-      projectId: string,
-      patch: { title?: string; direction?: string; chapters?: string[]; chapter?: number; status?: SlurpProjectStatus },
-    ): Promise<SlurpProject | null> {
-      const projects = await this.listProjects(creatorAccountId);
-      const index = projects.findIndex((project) => project.id === projectId);
-      if (index < 0) return null;
-      const current = projects[index]!;
-      // Resuming a project that would make a fourth active one is refused for the same reason
-      // opening one is: the rotation would starve all of them.
-      if (
-        patch.status === "active" &&
-        current.status !== "active" &&
-        activeSlurpProjects(projects).length >= SLURP_PROJECT_MAX_ACTIVE
-      )
-        return null;
-      const chapters = patch.chapters
-        ? patch.chapters
-            .map((chapter) => chapter.trim().slice(0, SLURP_PROJECT_CHAPTER_MAX_LENGTH))
-            .filter(Boolean)
-            .slice(0, SLURP_PROJECT_MAX_CHAPTERS)
-        : current.chapters;
-      const title =
-        patch.title === undefined ? current.title : patch.title.trim().slice(0, SLURP_PROJECT_TITLE_MAX_LENGTH);
-      if (!title) return null;
-      const chapter = patch.chapter === undefined ? current.chapter : Math.floor(patch.chapter);
-      const next: SlurpProject = {
-        ...current,
-        title,
-        direction:
-          patch.direction === undefined
-            ? current.direction
-            : patch.direction.trim().slice(0, SLURP_PROJECT_DIRECTION_MAX_LENGTH),
-        chapters,
-        // Clamped here as well as on read, so a shortened chapter list cannot leave the pointer
-        // past the end and strand the project one post short of finishing.
-        chapter: Math.min(Math.max(0, chapter), Math.max(0, chapters.length - 1)),
-        status: SLURP_PROJECT_STATUSES.includes(patch.status as SlurpProjectStatus)
-          ? (patch.status as SlurpProjectStatus)
-          : current.status,
-        updatedAt: now(),
-      };
-      projects[index] = next;
-      await settingsStore.set(slurpProjectsKey(creatorAccountId), JSON.stringify(projects));
-      return next;
-    },
-
-    /**
-     * Forget a project.
-     *
-     * Posts published into it keep their `projectId`. Deleting the thread must not delete the feed,
-     * and a post that has already been read cannot be un-published by tidying the Studio.
-     */
-    async deleteProject(creatorAccountId: string, projectId: string): Promise<boolean> {
-      const projects = await this.listProjects(creatorAccountId);
-      const remaining = projects.filter((project) => project.id !== projectId);
-      if (remaining.length === projects.length) return false;
-      await settingsStore.set(slurpProjectsKey(creatorAccountId), JSON.stringify(remaining));
-      return true;
-    },
-
-    /**
-     * Record that a post published into a project.
-     *
-     * Called after publication, never at generation: advancing on a draft would skip a chapter
-     * every time a generation failed.
-     */
-    async advanceProject(creatorAccountId: string, projectId: string): Promise<SlurpProject | null> {
-      const projects = await this.listProjects(creatorAccountId);
-      const index = projects.findIndex((project) => project.id === projectId);
-      if (index < 0) return null;
-      const next = slurpProjectAdvance(projects[index]!, new Date());
-      projects[index] = next;
-      await settingsStore.set(slurpProjectsKey(creatorAccountId), JSON.stringify(projects));
-      return next;
-    },
-
-    /** One project's own posts, newest first, for the Studio and for generation continuity. */
-    async listPostsByProject(projectId: string, limit = 8): Promise<NoodlerManagedPost[]> {
-      const rows = await db
-        .select()
-        .from(noodlePosts)
-        .where(eq(noodlePosts.projectId, projectId))
-        .orderBy(desc(noodlePosts.createdAt))
-        .limit(Math.max(1, Math.min(50, Math.floor(limit))));
-      return rows.map(mapManagedPost);
-    },
-
-    async getEarnings(creatorAccountId: string): Promise<SlurpEarnings> {
-      return readSlurpEarnings(await settingsStore.get(slurpEarningsKey(creatorAccountId)));
-    },
-
-    async creditEarnings(
-      creatorAccountId: string,
-      kind: Exclude<SlurpEarningsEntryKind, "payout" | "reversal">,
-      amount: number,
-      note?: string,
-    ): Promise<void> {
-      const run = enqueueFinancial(async () => {
-        const current = await this.getEarnings(creatorAccountId);
-        const next = earnCreatorIncome(current, kind, amount, new Date(), note);
-        if (next !== current) await writeEarnings(creatorAccountId, next);
-      });
-      await run;
     },
 
     async listPostUnlocksForViewer(viewerAccountId: string): Promise<NoodlePostUnlock[]> {

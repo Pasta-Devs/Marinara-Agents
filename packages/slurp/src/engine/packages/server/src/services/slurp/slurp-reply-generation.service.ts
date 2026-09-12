@@ -1,5 +1,6 @@
 import {
   NOODLER_REPLY_CONTENT_MAX_LENGTH,
+  noodleGeneratedNoodlerReplySchema,
   type APIProvider,
   type NoodleAccount,
   type NoodleIdentityDisclosure,
@@ -12,7 +13,6 @@ import { logDebugOverride } from "../../lib/logger.js";
 import { resolveBaseUrl } from "../generation/connection-base-url.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
 import { resolveStoredChatOptions } from "../generation/generation-parameters.js";
-import { noodleImageContext } from "./slurp-image-prompt.js";
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { parseGameJsonish } from "../game/jsonish.js";
 import { requireModelAnswer } from "./slurp-model-answer.js";
@@ -21,10 +21,6 @@ import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
-import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
-import { slurpAudienceArcDescription } from "./slurp-audience-arc.js";
-import { readSlurpDmReply } from "./slurp-dm-response.js";
-import type { SlurpMoodShift } from "./slurp-mood.js";
 import {
   NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
   noodlerIdentityInstruction,
@@ -37,63 +33,29 @@ import { noodleResponseFormat } from "./slurp-response-format.js";
 import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js";
 import { createChatsStorage } from "../storage/chats.storage.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
-import { SLURP_PLATFORM_CONTEXT } from "./slurp-prompt.js";
-import { resolveNoodlerCharacterCanon } from "./slurp-source-resolve.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
-/**
- * Whoever wrote the comment.
- *
- * Narrowed from `NoodleAccount` to the three fields the prompt actually reads, so a generated
- * population member can be the commenter without a fake account row being minted to satisfy a
- * type. Real accounts satisfy this structurally, so every existing caller is unaffected.
- */
-export type NoodlerReplyCommenter = { id: string; displayName: string; handle: string };
-
 export function buildNoodlerCreatorReplyMessages(input: {
   creator: NoodleAccount;
-  viewer: NoodlerReplyCommenter;
+  viewer: NoodleAccount;
   post: NoodlerManagedPost;
   parent: NoodleInteraction;
   disclosureMode: NoodleIdentityDisclosure;
   publicIdentity: PublicIdentity | null;
   generationGuidance: string;
   scheduleContext?: string;
-  /**
-   * What this viewer is to this Creator.
-   *
-   * A creator used to answer a whale who had spent four hundred coins exactly as they answered a
-   * stranger, because the reply prompt carried a display name and a handle and nothing else. The
-   * direct-message path has had rapport since it shipped; the comment path never did — so being a
-   * particular fan changed nothing about how you were treated in the one place most people are
-   * actually seen.
-   */
-  relationship?: string;
-  characterCanon?: string;
 }): ChatMessage[] {
   const protect = (value: string | null | undefined) =>
     protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
   const system = [
     "You write exactly one direct reply from one Slurp creator to one real viewer comment on the creator's post.",
-    SLURP_PLATFORM_CONTEXT,
     "Write only as the supplied creator's stage persona. Address the viewer's comment naturally and do not write for the viewer.",
     NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
     input.generationGuidance.trim(),
     noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
-    input.characterCanon
-      ? "Character canon is permanent identity and relationship context. Stay consistent with it unless the conversation explicitly establishes a change."
-      : "",
     "Keep the reply direct and brief: one or two short sentences, normally under 240 characters.",
-    "Let the relationship set the warmth. A stranger gets a friendly but ordinary reply; somebody who has been here a long time or paid for a lot gets recognition, familiarity, and a callback to what they have given you.",
-    'Return exactly one JSON object with four fields: "content", "moodShift", "remember" and "stateSignals".',
-    '"content" is your reply, and the only field the viewer ever sees.',
-    // The same field the direct-message path reads, so being rude in public counts exactly as
-    // much as being rude in private. A creator who forgave in the comments what she would not
-    // forgive in a DM would not read as one person.
-    '"moodShift" is how this comment changed your feeling about this person: "up" if you enjoyed it, "same" for anything ordinary, "down" if they were rude, pushy, or tiring, "sharp_down" only for something you would genuinely take offence at. Most comments are "same".',
-    '"remember" must be an empty array here.',
-    '"stateSignals" must be an empty array here.',
+    'Return exactly one JSON object with one string field named "content".',
     "Return JSON only. No prose outside the JSON object.",
   ]
     .filter(Boolean)
@@ -108,21 +70,13 @@ export function buildNoodlerCreatorReplyMessages(input: {
     post: {
       title: protect(input.post.title),
       content: protect(input.post.content),
-      // The picture the creator is replying about. Without it every reply talks past the image.
-      ...(noodleImageContext(input.post) && { image: noodleImageContext(input.post) }),
     },
     viewer: {
       displayName: protect(input.viewer.displayName),
       handle: protect(input.viewer.handle),
-      relationship: input.relationship ?? "no history with this creator yet",
     },
     viewerComment: protect(input.parent.content) || (input.parent.imageUrl ? "[image reply]" : ""),
-    // Redacted like every neighbouring field. A Conversation Schedule activity is user-written and
-    // can name the source, so it must not be the one value that bypasses protect(). Matches the
-    // same fix in buildNoodlerPostMessages.
-    scheduleContext:
-      protect(input.scheduleContext) || "No active Conversation Schedule is available for this Creator today.",
-    ...(input.characterCanon ? { characterCanon: protect(input.characterCanon) } : {}),
+    scheduleContext: input.scheduleContext ?? "No active Conversation Schedule is available for this Creator today.",
   };
   return [
     { role: "system", content: system },
@@ -136,12 +90,12 @@ export function buildNoodlerCreatorReplyMessages(input: {
 export async function generateNoodlerCreatorReply(input: {
   db: DB;
   creator: NoodleAccount;
-  viewer: NoodlerReplyCommenter;
+  viewer: NoodleAccount;
   post: NoodlerManagedPost;
   parent: NoodleInteraction;
   connection: GenerationConnection;
   debugMode?: boolean;
-}): Promise<{ content: string; moodShift: SlurpMoodShift }> {
+}): Promise<string> {
   const connections = createConnectionsStorage(input.db);
   const fallbackConnection = await connections.getFallbackForMain();
   const provider = withConnectionFallbackProvider({
@@ -165,21 +119,15 @@ export async function generateNoodlerCreatorReply(input: {
   const publicIdentity = await resolveNoodlerPublicIdentity(input.db, input.creator);
   const settings = await createSlurpStorage(input.db).getSettings();
   const source = await createSlurpStorage(input.db).resolveAccountSource(input.creator);
-  const characterCanon = await resolveNoodlerCharacterCanon(input.db, source, disclosureMode);
   const scheduleContext = source
     ? await resolveSlurpCreatorScheduleContext(createCharactersStorage(input.db), source, undefined, new Date())
     : undefined;
-  // Who this commenter is to this Creator. Read from the funnel and from whether they subscribe,
-  // both of which were already recorded and never reached this prompt.
-  const relationship = await describeCommenterRelationship(input.db, input.creator.id, input.viewer.id);
   const messages = buildNoodlerCreatorReplyMessages({
     ...input,
     disclosureMode,
     publicIdentity,
     generationGuidance: settings.generationGuidance,
     scheduleContext,
-    characterCanon,
-    relationship,
   });
   const debugMode = input.debugMode === true || isDebugAgentsEnabled();
   const options = {
@@ -196,7 +144,7 @@ export async function generateNoodlerCreatorReply(input: {
     }),
     stream: false,
     debugMode,
-    responseFormat: noodleResponseFormat(input.connection.model, "noodler_dm"),
+    responseFormat: noodleResponseFormat(input.connection.model, "noodler_reply"),
   } as const;
   logDebugOverride(
     debugMode,
@@ -211,7 +159,9 @@ export async function generateNoodlerCreatorReply(input: {
     content.length,
   );
   const parsed = parseGameJsonish(requireModelAnswer(content, "a creator reply"));
-  const generated = readSlurpDmReply(Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed);
+  const generated = noodleGeneratedNoodlerReplySchema.parse(
+    Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed,
+  );
   const protectedContent = protectBoundedNoodlerGeneratedText(
     generated.content,
     disclosureMode,
@@ -219,40 +169,5 @@ export async function generateNoodlerCreatorReply(input: {
     NOODLER_REPLY_CONTENT_MAX_LENGTH,
   );
   if (!protectedContent) throw new Error("Slurp creator reply generation returned no usable content.");
-  return { content: protectedContent, moodShift: generated.moodShift };
-}
-
-/**
- * One line describing what a commenter is to a Creator.
- *
- * Deliberately short. A reply is one or two sentences, and a paragraph of history would dominate
- * the comment it is answering.
- */
-async function describeCommenterRelationship(db: DB, creatorAccountId: string, viewerId: string): Promise<string> {
-  const parts: string[] = [];
-  try {
-    const subscribed = (await createSlurpStorage(db).listSubscriptionsForViewer(viewerId)).some(
-      (entry) => entry.creatorAccountId === creatorAccountId,
-    );
-    if (subscribed) parts.push("subscribes to you");
-    const tie = (await createSlurpPopulationStorage(db).listTiesForCreator(creatorAccountId)).find(
-      (entry) => entry.memberId === viewerId,
-    );
-    if (tie) {
-      if (tie.stage !== "stranger" && tie.stage !== "lapsed") parts.push(tie.stage);
-      if (tie.stage === "lapsed") parts.push("drifted away for a while and is back");
-      // Where they are heading, not just where they stand. A regular on the way out does not get
-      // the same reply as one on the way in, and that difference is the whole point of an arc.
-      const arc = slurpAudienceArcDescription(tie.audienceArc);
-      if (arc) parts.push(arc);
-      if (tie.spent > 0) parts.push(`has spent ${tie.spent} coins on you`);
-      const days = Math.round((Date.now() - Date.parse(tie.firstSeenAt)) / 86_400_000);
-      if (Number.isFinite(days) && days >= 14)
-        parts.push(`around for ${days >= 90 ? `${Math.round(days / 30)} months` : `${Math.round(days / 7)} weeks`}`);
-    }
-  } catch {
-    // A missing relationship is not a reason to refuse a reply.
-    return "no history with this creator yet";
-  }
-  return parts.length > 0 ? parts.join(", ") : "no history with this creator yet";
+  return protectedContent;
 }

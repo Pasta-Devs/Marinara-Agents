@@ -24,6 +24,23 @@ assert.match(
 const day1 = new Date("2026-01-01T10:00:00.000Z");
 const day2 = new Date("2026-01-02T10:00:00.000Z");
 
+// A reused profile-tip key is idempotent only for the same payment parameters.
+const operationId = "profile-tip:wallet-regression";
+const binding = { viewerAccountId: "viewer-a", creatorAccountId: "creator-a" };
+const charged = spend(emptySlurpWallet(), "tip", 10, day1, "creator", operationId, binding);
+assert.ok(charged);
+assert.equal(spend(charged, "tip", 10, day1, "creator", operationId, binding), charged);
+assert.equal(spend(charged, "tip", 11, day1, "creator", operationId, binding), null);
+assert.equal(
+  spend(charged, "tip", 10, day1, "creator", operationId, { ...binding, viewerAccountId: "viewer-b" }),
+  null,
+);
+assert.equal(spend(charged, "unlock", 10, day1, "creator", operationId, binding), null);
+assert.equal(
+  spend(charged, "tip", 10, day1, "creator", operationId, { ...binding, creatorAccountId: "creator-b" }),
+  null,
+);
+
 // A wallet with less than the floor is topped up to it, and never past it.
 const poor = { ...emptySlurpWallet(), coins: 5 };
 const stipended = applyStipend(poor, day1);
@@ -78,6 +95,39 @@ assert.equal(Date.parse(subscriptionPaidThrough(day1)) - day1.getTime(), 7 * 86_
 assert.equal(credit(spender, "topUp", 0, day1), spender);
 assert.equal(credit(spender, "topUp", -5, day1), spender);
 assert.equal(credit(spender, "topUp", 1.5, day1), spender);
+
+// A durable refund ID credits once, while ordinary credits without an ID remain additive.
+const refundedOnce = credit(spender, "income", 7, day1, "refund", "refund:request-1");
+const refundedTwice = credit(refundedOnce, "income", 7, day1, "refund", "refund:request-1");
+assert.equal(refundedTwice, refundedOnce);
+assert.equal(refundedTwice.coins, spender.coins + 7);
+assert.equal(refundedTwice.ledger.filter((entry) => entry.id === "refund:request-1").length, 1);
+const unkeyedCreditOnce = credit(spender, "income", 7, day1, "refund");
+const unkeyedCreditTwice = credit(unkeyedCreditOnce, "income", 7, day1, "refund");
+assert.equal(unkeyedCreditTwice.coins, spender.coins + 14);
+assert.equal(unkeyedCreditTwice.ledger.length, unkeyedCreditOnce.ledger.length + 1);
+
+// Durable receipts outlive the 60-line display feed. Old payment IDs must not become payable or
+// refundable again merely because newer activity pushed their visible ledger lines out.
+let oldSpend = spend({ ...emptySlurpWallet(), coins: 1_000 }, "tip", 10, day1, "creator", "old-spend", binding)!;
+for (let index = 0; index < 65; index += 1)
+  oldSpend = credit(oldSpend, "topUp", 1, day1, undefined, `new-credit:${index}`);
+assert.equal(
+  oldSpend.ledger.some((entry) => entry.id === "old-spend"),
+  false,
+);
+assert.equal(spend(oldSpend, "tip", 10, day1, "creator", "old-spend", binding), oldSpend);
+assert.equal(spend(oldSpend, "tip", 11, day1, "creator", "old-spend", binding), null);
+
+let oldRefund = credit(spender, "income", 7, day1, "refund", "old-refund");
+for (let index = 0; index < 65; index += 1)
+  oldRefund = credit(oldRefund, "topUp", 1, day1, undefined, `later-credit:${index}`);
+assert.equal(
+  oldRefund.ledger.some((entry) => entry.id === "old-refund"),
+  false,
+);
+assert.equal(credit(oldRefund, "income", 7, day1, "refund", "old-refund"), oldRefund);
+assert.ok(readSlurpWallet(JSON.stringify(oldRefund)).receipts["old-refund"]);
 
 // Corrupt or hand-edited stored state falls back instead of throwing.
 assert.equal(readSlurpWallet("not json").coins, SLURP_DEFAULT_ECONOMY.startingCoins);

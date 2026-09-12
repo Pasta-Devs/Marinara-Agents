@@ -174,10 +174,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   showGenerationFallbackHeader(res);
 
   if (!res.ok) {
-    // A non-object error body (a bare `null` from a proxy, or an array) used to make `body.error`
-    // throw a TypeError that replaced the real status.
-    const parsed = await res.json().catch(() => null);
-    const body = isRecord(parsed) ? parsed : { error: res.statusText };
+    const body = await res.json().catch(() => ({ error: res.statusText }));
     throw new ApiError(res.status, getApiErrorMessage(body.error, res.statusText), body);
   }
 
@@ -187,7 +184,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   const headers = new Headers(init?.headers);
   for (const [name, value] of Object.entries(getAdminSecretHeader())) {
     headers.set(name, value);
@@ -205,7 +202,7 @@ async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   return fetch(`${BASE}${path}`, {
     ...init,
     headers,
-    cache: init?.cache ?? "no-store",
+    cache: "no-store",
   });
 }
 

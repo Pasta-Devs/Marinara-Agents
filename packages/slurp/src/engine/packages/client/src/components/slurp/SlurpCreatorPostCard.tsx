@@ -1,6 +1,6 @@
 // ──────────────────────────────────────────────
-// Slurp post card — the membership-style, media-forward variant of the post card
-// used by the Slurp creator feed. Shares all leaf helpers, the ctx contract,
+// NoodleR post card — the Patreon-style, media-forward variant of the post card
+// used only in the NoodleR viewer hub. Shares all leaf helpers, the ctx contract,
 // and the reply/edit/poll machinery's building blocks with NoodlePostCard; only the
 // layout (two-line header, filled access pill, full-width body, image-on-top) differs.
 // The public Noodle feed keeps the original NoodlePostCard.
@@ -14,12 +14,10 @@ import {
   MessageCircle,
   MoreHorizontal,
   Pencil,
-  RefreshCw,
-  Share2,
+  Repeat2,
   Smile,
   Trash2,
   Lock,
-  Loader2,
   X,
 } from "lucide-react";
 import { Fragment, useMemo, useRef, useState } from "react";
@@ -34,11 +32,10 @@ import {
   type NoodlerStageProfile,
 } from "@marinara-engine/shared";
 import { cn } from "../../lib/utils";
-import { api } from "../../lib/api-client";
-import { toast } from "sonner";
 import { ConversationMediaPickerPanel } from "../chat/ConversationMediaPickerPanel";
 import type { ChatImage } from "../../hooks/use-gallery";
-import { useNearViewportSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
+import { useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
+import { useConfirmNoodlerImagePrompts } from "../../hooks/use-slurp";
 import { Modal } from "../ui/Modal";
 import { Avatar, ProfileInitial } from "./SlurpShell";
 import { formatTime } from "./SlurpDateTime";
@@ -52,6 +49,7 @@ import {
   noodleIconButtonClass,
   NOODLE_MEDIA_PICKER_TABS,
   NOODLE_TEXT_MEDIA_PICKER_TABS,
+  NoodleAnchoredPopover,
   NoodleMentionSuggestions,
   NoodlePollCard,
   NoodleTextContent,
@@ -62,14 +60,8 @@ import {
   type NoodlePostCardCtx,
   type NoodlePostCardModel,
 } from "./SlurpPostCard";
-import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
-import { SlurpLikedBy } from "./SlurpFanCard";
 import { NoodlePollComposer } from "./SlurpPollComposer";
 import { PostImageFrame } from "./PostImageCropEditor";
-import { SlurpCelebrationRing, SlurpSparkleVeil } from "./SlurpSparkleVeil";
-import { SlurpCoin, SlurpCoinBurst } from "./SlurpCoin";
-
-const SLURP_FEED_MEDIA_RATIO_CLASS = "aspect-[4/3] sm:aspect-[16/10]";
 
 export function LockedSlurpPostCard({
   post,
@@ -81,23 +73,19 @@ export function LockedSlurpPostCard({
   onUnlock,
   onToggleSubscription,
   onManage,
-  onGenerateImage,
-  imageGenerationPending = false,
   onOpenProfile,
   demo,
 }: {
   post: Pick<NoodlerPostView, "id" | "access" | "createdAt" | "title" | "imageUrl"> &
-    Partial<Pick<NoodlerPostView, "likeCount" | "replyCount" | "hasImage" | "imagePrompt">>; // controller-locked managed posts carry no counts
+    Partial<Pick<NoodlerPostView, "likeCount" | "replyCount" | "hasImage">>; // controller-locked managed posts carry no counts
   profile: NoodlerStageProfile;
   controllerOnly?: boolean;
   subscribed: boolean;
   unlockPending: boolean;
   subscriptionPending: boolean;
-  onUnlock: (postId: string) => void | Promise<void>;
-  onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void | Promise<void>;
+  onUnlock: (postId: string) => void;
+  onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
   onManage?: () => void;
-  onGenerateImage?: () => void;
-  imageGenerationPending?: boolean;
   onOpenProfile?: (accountId: string) => void;
   /** Onboarding only: unlocking reveals this text locally instead of calling the server. */
   /** `unlockedImageUrl` lets the demo pay off with a different image than the locked teaser. */
@@ -111,8 +99,6 @@ export function LockedSlurpPostCard({
 }) {
   const { t: localizeUi, i18n } = useUiTranslation();
   const [unlockSheetOpen, setUnlockSheetOpen] = useState(false);
-  const [transaction, setTransaction] = useState<"subscribe" | "unlock" | null>(null);
-  const [postMenuOpen, setPostMenuOpen] = useState(false);
   const [demoUnlocked, setDemoUnlocked] = useState(false);
   const likeCount = post.likeCount ?? 0;
   const replyCount = post.replyCount ?? 0;
@@ -120,46 +106,22 @@ export function LockedSlurpPostCard({
   const revealed = Boolean(demo && demoUnlocked);
   // A locked post's URL resolves to a server-blurred teaser, not the original bytes. Where no
   // teaser can be built the server sends nothing and only the frame renders.
-  const requestedMediaUrl = (revealed && demo?.unlockedImageUrl) || post.imageUrl || null;
-  const { src: mediaSrc, observe: observeMedia } = useNearViewportSlurpMediaSrc(requestedMediaUrl, { width: 960 });
+  const mediaSrc = useSlurpMediaSrc((revealed && demo?.unlockedImageUrl) || post.imageUrl || null);
   // No teaser could be built (the route 404s), so drop the broken <img> and keep the frame.
   const [failedMediaSrc, setFailedMediaSrc] = useState<string | null>(null);
   const shownMediaSrc = mediaSrc && mediaSrc !== failedMediaSrc ? mediaSrc : null;
-  const runTransaction = async (kind: "subscribe" | "unlock") => {
-    if (transaction) return;
-    setTransaction(kind);
-    try {
-      if (demo) {
-        await new Promise((resolve) => window.setTimeout(resolve, 420));
-        setDemoUnlocked(true);
-        demo.onReveal?.();
-        setUnlockSheetOpen(false);
-        setTransaction(null);
-        return;
-      }
-      if (kind === "unlock") await onUnlock(post.id);
-      else await onToggleSubscription(profile.id, subscribed);
-    } catch {
-      // The parent owns the error message. Keep the sheet open so the viewer can try again.
-      setTransaction(null);
-    }
-  };
   return (
     <article
       data-noodle-post-id={post.id}
-      className="group/locked relative overflow-hidden rounded-xl bg-[linear-gradient(145deg,var(--slurp-surface-raised),var(--slurp-surface))] px-4 py-5 shadow-[0_1px_0_color-mix(in_srgb,var(--noodle-accent)_32%,transparent),0_22px_48px_-34px_rgba(0,0,0,0.95)] ring-1 ring-inset ring-[var(--noodle-accent)]/25"
+      className="border-b border-[var(--noodle-divider)] px-4 py-5 transition-colors hover:bg-[var(--accent)]/25"
     >
-      <div
-        className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-[var(--noodle-accent)]/70 to-transparent"
-        aria-hidden="true"
-      />
       {/* Author row */}
       <div className="flex gap-3">
         <button
           type="button"
           onClick={openProfile}
           disabled={!openProfile}
-          className="h-fit rounded-full text-left transition-opacity enabled:hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default"
+          className="h-fit rounded-full text-left transition-opacity enabled:hover:opacity-80 disabled:cursor-default"
           title={
             openProfile
               ? localizeUi("ui.noodle.noodlehome.viewValue1", {
@@ -168,10 +130,7 @@ export function LockedSlurpPostCard({
               : undefined
           }
         >
-          <span className="relative">
-            <ProfileInitial profile={profile} />
-            <SlurpCelebrationRing active={transaction !== null} />
-          </span>
+          <ProfileInitial profile={profile} />
         </button>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -179,13 +138,13 @@ export function LockedSlurpPostCard({
               type="button"
               onClick={openProfile}
               disabled={!openProfile}
-              className="rounded-lg font-semibold transition-colors enabled:hover:text-[var(--noodle-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default"
+              className="font-semibold transition-colors enabled:hover:text-[var(--noodle-accent)] disabled:cursor-default"
             >
               {profile.displayName}
             </button>
             <span
               title={localizeUi("ui.noodle.postaccess.locked.hint")}
-              className="inline-flex items-center gap-1 rounded-lg bg-[var(--noodle-accent)]/12 px-2 py-1 text-[0.68rem] font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/20"
+              className="inline-flex items-center gap-1 rounded-md bg-[var(--noodle-accent)]/12 px-2 py-1 text-[0.68rem] font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/20"
             >
               <Lock size={11} />
               {revealed && demo ? demo.unlockedLabel : localizeUi("ui.noodle.postaccess.locked")}
@@ -195,63 +154,20 @@ export function LockedSlurpPostCard({
             @{profile.handle} · {formatTime(post.createdAt, i18n.language)}
           </p>
         </div>
-        <div className="relative shrink-0">
-          <button
-            type="button"
-            onClick={() => setPostMenuOpen((open) => !open)}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
-            title={localizeUi("ui.noodle.noodlepostcard.postActions")}
-            aria-label={localizeUi("ui.noodle.noodlepostcard.postActions")}
-            aria-expanded={postMenuOpen}
-          >
-            <MoreHorizontal size={18} />
-          </button>
-          {postMenuOpen && (
-            <div className="absolute end-0 top-[calc(100%+0.25rem)] z-30 min-w-40 overflow-hidden rounded-lg border border-[var(--noodle-divider)] bg-[var(--background)] py-1 text-xs shadow-2xl shadow-black/30">
-              {onManage && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPostMenuOpen(false);
-                    onManage();
-                  }}
-                  className="flex min-h-10 w-full items-center gap-2 px-3 text-start hover:bg-[var(--accent)]"
-                >
-                  <Pencil size={14} />
-                  {localizeUi("ui.noodle.lockednoodlerpostcard.managePost")}
-                </button>
-              )}
-              <button
-                type="button"
-                disabled
-                className="flex min-h-10 w-full items-center gap-2 px-3 text-start text-[var(--muted-foreground)] opacity-60"
-                title={localizeUi("ui.slurp.post.unlockToShare", { defaultValue: "Unlock this post to share it." })}
-              >
-                <Share2 size={14} />
-                {localizeUi("ui.slurp.post.share", { defaultValue: "Share as image" })}
-              </button>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Full-width body */}
       <div>
         {/* Media frame with Locked badge — only when the post has an image */}
-        {(mediaSrc || post.hasImage || (onGenerateImage && post.imagePrompt)) && (
+        {(mediaSrc || post.hasImage) && (
           <div
-            ref={observeMedia}
-            data-slurp-locked-preview
             className={cn(
-              "relative -mx-4 mt-4 w-[calc(100%+2rem)] overflow-hidden bg-[var(--muted)] ring-1 ring-inset ring-white/10 sm:mx-0 sm:w-full sm:rounded-xl",
-              SLURP_FEED_MEDIA_RATIO_CLASS,
+              "relative mt-3 aspect-[4/3] w-full overflow-hidden rounded-lg bg-[var(--muted)] ring-1 ring-inset ring-white/10",
             )}
           >
             {shownMediaSrc ? (
               <img
                 src={shownMediaSrc}
-                loading="lazy"
-                decoding="async"
                 onError={() => setFailedMediaSrc(shownMediaSrc)}
                 alt={
                   revealed
@@ -261,76 +177,28 @@ export function LockedSlurpPostCard({
                     : localizeUi("ui.noodle.lockednoodlerpostcard.lockedImageFrom", { name: profile.displayName })
                 }
                 className={cn(
-                  "h-full w-full object-cover",
-                  // Locked images are reduced and lightly blurred on the server. Keep the client
-                  // treatment limited to a small color adjustment so the silhouette stays clear.
-                  revealed ? "scale-100" : "saturate-[0.88]",
+                  "h-full w-full object-cover transition-[filter,transform] duration-500 motion-reduce:transition-none",
+                  // Locked images arrive already blurred (the demo teaser ships that way, real
+                  // ones are blurred server-side), so this is presentation on top, not the
+                  // protection — a heavier blur would only turn them to mush.
+                  revealed ? "scale-100 blur-0" : "scale-110 blur-sm",
                 )}
-              />
-            ) : requestedMediaUrl ? (
-              <div
-                className="absolute inset-0 animate-pulse bg-[var(--muted)] motion-reduce:animate-none"
-                aria-hidden="true"
               />
             ) : (
-              <div className="flex h-full flex-col items-center justify-center gap-3 bg-[radial-gradient(circle_at_50%_35%,var(--noodle-accent)_0%,transparent_65%)] px-6 text-center">
-                <span className="rounded-full bg-black/25 p-3 text-[var(--noodle-accent)] ring-1 ring-white/10">
-                  <ImageIcon size={22} aria-hidden="true" />
-                </span>
-                <span className="text-xs font-semibold text-[var(--muted-foreground)]">
-                  {localizeUi("ui.slurp.locked.previewUnavailable")}
-                </span>
-                {onGenerateImage && (
-                  <button
-                    type="button"
-                    onClick={onGenerateImage}
-                    disabled={imageGenerationPending}
-                    className="pointer-events-auto absolute bottom-3 right-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/65 text-white shadow-lg ring-1 ring-white/20 transition-[opacity,transform] hover:bg-black/80 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-60 motion-reduce:transition-none motion-reduce:active:scale-100"
-                    title={localizeUi("ui.slurp.image.generate")}
-                    aria-label={localizeUi("ui.slurp.image.generate")}
-                    aria-busy={imageGenerationPending}
-                  >
-                    <RefreshCw
-                      size={17}
-                      className={imageGenerationPending ? "animate-spin motion-reduce:animate-none" : ""}
-                    />
-                  </button>
-                )}
-              </div>
-            )}
-            {!revealed && (
-              <div
-                className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,rgba(8,4,10,0.9)_0%,rgba(8,4,10,0.52)_38%,rgba(8,4,10,0.16)_76%)]"
-                aria-hidden="true"
-              />
-            )}
-            {!revealed && shownMediaSrc && <SlurpSparkleVeil className={transaction ? "opacity-100" : ""} />}
-            {/* The lock is a state cue; the accessible image text already describes the preview. */}
-            {!revealed && (
-              <span className="pointer-events-none absolute inset-x-0 top-[36%] flex justify-center" aria-hidden="true">
-                <span className="flex h-16 w-16 items-center justify-center rounded-3xl bg-[#24131f] text-[var(--noodle-accent)] shadow-[0_12px_28px_-14px_rgba(0,0,0,0.95),inset_0_0_0_1px_rgba(255,111,174,0.18)]">
-                  <Lock size={27} strokeWidth={2.4} />
-                </span>
+              <span className="sr-only">
+                {localizeUi("ui.noodle.lockednoodlerpostcard.lockedImageFrom", {
+                  name: profile.displayName,
+                })}
               </span>
             )}
-            {!revealed && !controllerOnly && (
-              <div className="absolute inset-x-4 top-[calc(36%+4.75rem)] flex flex-col items-center gap-2">
-                <button
-                  type="button"
-                  disabled={unlockPending || subscriptionPending}
-                  onClick={() => setUnlockSheetOpen(true)}
-                  className="pointer-events-auto inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-[var(--noodle-accent)] px-7 text-sm font-black text-zinc-950 shadow-[0_14px_34px_-16px_var(--noodle-accent)] transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-black motion-reduce:transition-none motion-reduce:active:scale-100 disabled:opacity-50 [&_svg]:!text-zinc-950"
-                >
-                  <Eye size={16} strokeWidth={2.4} aria-hidden="true" />
-                  {localizeUi("ui.noodle.lockednoodlerpostcard.unlock")}
-                  <NoodlerFictionalPrice amount={noodlerUnlockPriceOf(post)} />
-                </button>
-                <span className="text-[0.68rem] font-semibold text-white/72 drop-shadow-sm">
-                  {localizeUi("ui.slurp.locked.includedForSubscribers", {
-                    defaultValue: "Included for subscribers",
-                  })}
+            {!revealed && <div className="absolute inset-0 bg-black/35" aria-hidden="true" />}
+            {/* Icon only: the header badge already says "Locked", and the alt text carries it for AT. */}
+            {!revealed && (
+              <span className="absolute inset-0 flex items-center justify-center" aria-hidden="true">
+                <span className="rounded-full bg-black/70 p-2.5 text-white ring-1 ring-white/15">
+                  <Lock size={16} />
                 </span>
-              </div>
+              </span>
             )}
           </div>
         )}
@@ -342,14 +210,15 @@ export function LockedSlurpPostCard({
           return title && <h3 className="mt-3 text-lg font-bold leading-snug">{title}</h3>;
         })()}
 
-        {/* Body: a short teaser until unlocked; the private copy is never reconstructed client-side. */}
+        {/* Body: unreadable teaser until unlocked */}
         {revealed && demo ? (
           <p className="mt-3 whitespace-pre-line text-sm leading-6">{demo.body}</p>
         ) : (
           !controllerOnly && (
-            <p className="mt-3 text-sm text-[var(--muted-foreground)]">
-              {localizeUi("ui.slurp.locked.teaser", { defaultValue: "A little something from tonight…" })}
-            </p>
+            <div className="mt-3 space-y-2 select-none" aria-hidden="true">
+              <div className="h-2.5 w-full rounded-sm bg-[var(--muted-foreground)]/20" />
+              <div className="h-2.5 w-3/4 rounded-sm bg-[var(--muted-foreground)]/15" />
+            </div>
           )
         )}
 
@@ -358,10 +227,21 @@ export function LockedSlurpPostCard({
           <p className="mt-3 text-xs text-[var(--muted-foreground)]">
             {localizeUi("ui.noodle.lockednoodlerpostcard.openTheControllerToolsToManageThisPost")}
           </p>
-        ) : null}
+        ) : (
+          !revealed && (
+            <button
+              type="button"
+              disabled={unlockPending || subscriptionPending}
+              onClick={() => setUnlockSheetOpen(true)}
+              className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md bg-[#ff7ec1] px-4 text-xs font-bold text-[#17121b] transition-[opacity,scale] hover:bg-[#ff9dce] active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:!text-[#17121b]"
+            >
+              <Eye size={14} /> {localizeUi("ui.noodle.lockednoodlerpostcard.unlock")}
+            </button>
+          )
+        )}
 
         {/* Footer */}
-        <div className="mt-5 flex items-center gap-4 border-t border-[var(--noodle-divider)] pt-4 text-sm tabular-nums text-[var(--muted-foreground)]">
+        <div className="mt-4 flex items-center gap-4 text-sm tabular-nums text-[var(--muted-foreground)]">
           {/* The icons are decorative, so the counts carry their own labels for screen readers. */}
           <span className="flex items-center gap-1.5">
             <Heart size={18} aria-hidden="true" /> {likeCount}
@@ -371,139 +251,88 @@ export function LockedSlurpPostCard({
             <MessageCircle size={18} aria-hidden="true" /> {replyCount}
             <span className="sr-only">{localizeUi("ui.noodle.noodlehome.replies")}</span>
           </span>
+          <div className="ml-auto flex items-center gap-3">
+            {onManage && (
+              <button
+                type="button"
+                onClick={onManage}
+                className="flex items-center gap-1.5 hover:text-[var(--foreground)]"
+              >
+                <Pencil size={18} /> {localizeUi("ui.noodle.lockednoodlerpostcard.managePost")}
+              </button>
+            )}
+          </div>
         </div>
       </div>
       <Modal
         open={unlockSheetOpen}
-        onClose={() => !transaction && setUnlockSheetOpen(false)}
+        onClose={() => setUnlockSheetOpen(false)}
         title={localizeUi("ui.noodle.unlocksheet.title")}
-        width="max-w-xl"
-        closeDisabled={transaction !== null}
+        width="max-w-sm"
         panelStyle={{
-          "--background": "var(--slurp-surface)",
-          "--foreground": "var(--slurp-text)",
-          "--muted-foreground": "var(--slurp-muted)",
-          "--border": "color-mix(in srgb, var(--noodle-accent) 28%, transparent)",
-          "--accent": "color-mix(in srgb, var(--noodle-accent) 14%, transparent)",
+          "--background": "#17121b",
+          "--foreground": "#fff7fc",
+          "--muted-foreground": "#d8c9d4",
+          "--border": "rgba(255, 126, 193, 0.28)",
+          "--accent": "rgba(255, 126, 193, 0.14)",
         }}
       >
-        <div data-component="SlurpHome.UnlockSheet" className="relative isolate overflow-hidden px-1 pb-1">
-          {transaction && <SlurpSparkleVeil className="z-20 opacity-80" />}
-          <div className="mb-4 grid gap-3 rounded-2xl bg-[linear-gradient(115deg,color-mix(in_srgb,var(--noodle-accent)_10%,var(--slurp-surface-raised)),color-mix(in_srgb,var(--slurp-violet)_8%,var(--slurp-surface)))] p-3 ring-1 ring-inset ring-white/[0.07] sm:grid-cols-[minmax(0,1fr)_9rem]">
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="relative">
-                <ProfileInitial profile={profile} />
-                <SlurpCelebrationRing active={transaction !== null} />
+        <div data-component="SlurpHome.UnlockSheet" className="divide-y divide-[var(--noodle-divider)]">
+          <button
+            type="button"
+            data-noodler-unlock-action="post"
+            disabled={unlockPending}
+            onClick={() => {
+              setUnlockSheetOpen(false);
+              if (demo) {
+                setDemoUnlocked(true);
+                demo.onReveal?.();
+              } else onUnlock(post.id);
+            }}
+            className="flex min-h-16 w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-[#3a2335] disabled:opacity-50"
+          >
+            <Eye size={20} className="shrink-0 text-[var(--noodle-accent)]" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-bold">{localizeUi("ui.noodle.unlocksheet.unlockThisPost")}</span>
+              <span className="block text-xs text-[var(--muted-foreground)]">
+                {localizeUi("ui.noodle.unlocksheet.unlockThisPostDetail")}
               </span>
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-black">{profile.displayName}</span>
-                <span className="block truncate text-xs text-[var(--muted-foreground)]">@{profile.handle}</span>
-                <span className="mt-1 block text-xs leading-5 text-[var(--muted-foreground)]">
-                  {localizeUi("ui.slurp.unlocksheet.fromCreator", {
-                    defaultValue: "See the full post from {{name}}.",
-                    name: profile.displayName,
-                  })}
-                </span>
+            </span>
+            <NoodlerFictionalPrice amount={noodlerUnlockPriceOf(post)} />
+          </button>
+          <button
+            type="button"
+            data-noodler-unlock-action="subscribe"
+            disabled={subscriptionPending}
+            onClick={() => {
+              setUnlockSheetOpen(false);
+              if (demo) {
+                setDemoUnlocked(true);
+                demo.onReveal?.();
+              } else onToggleSubscription(profile.id, subscribed);
+            }}
+            className="flex min-h-16 w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-[#3a2335] disabled:opacity-50"
+          >
+            <Bell size={20} className="shrink-0 text-[var(--noodle-accent)]" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-bold">{localizeUi("ui.noodle.unlocksheet.subscribe")}</span>
+              <span className="block text-xs text-[var(--muted-foreground)]">
+                {localizeUi("ui.noodle.unlocksheet.subscribeDetail")}
               </span>
-            </div>
-            {shownMediaSrc && (
-              <span className="relative hidden aspect-[16/10] overflow-hidden rounded-xl outline outline-1 -outline-offset-1 outline-white/10 sm:block">
-                <img
-                  src={shownMediaSrc}
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
-                  className="h-full w-full object-cover saturate-[0.82]"
-                />
-                <span className="absolute inset-0 bg-black/35" />
-                <span className="absolute inset-0 flex items-center justify-center text-white">
-                  <Lock size={19} strokeWidth={2.25} aria-hidden="true" />
-                </span>
-              </span>
-            )}
-          </div>
-          <div className="grid gap-3">
-            <button
-              type="button"
-              data-noodler-unlock-action="post"
-              disabled={unlockPending || transaction !== null}
-              onClick={() => void runTransaction("unlock")}
-              className="relative flex min-h-[4.75rem] w-full items-center gap-3 overflow-visible rounded-2xl bg-[var(--slurp-surface-raised)] px-4 py-3 text-left shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-white/[0.07] transition-[background-color,transform,box-shadow] hover:bg-[color-mix(in_srgb,var(--noodle-accent)_7%,var(--slurp-surface-raised))] hover:shadow-[var(--slurp-shadow-floating)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
-            >
-              <SlurpCoinBurst active={transaction === "unlock"} />
-              {transaction === "unlock" ? (
-                <Loader2
-                  size={20}
-                  className="shrink-0 animate-spin text-[var(--noodle-accent)] motion-reduce:animate-none"
-                />
-              ) : (
-                <Eye size={20} className="shrink-0 text-[var(--noodle-accent)]" />
-              )}
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-black">
-                  {localizeUi("ui.slurp.unlocksheet.unlockOnce", { defaultValue: "Unlock once" })}
-                </span>
-                <span className="block text-xs text-[var(--muted-foreground)]">
-                  {noodlerUnlockCountOf(post) === 1
-                    ? localizeUi("ui.slurp.unlocksheet.unlockedByOne", { defaultValue: "Unlocked by 1 fan" })
-                    : noodlerUnlockCountOf(post) > 1
-                      ? localizeUi("ui.slurp.unlocksheet.unlockedBy", {
-                          defaultValue: "Unlocked by {{count}} fans",
-                          count: noodlerUnlockCountOf(post),
-                        })
-                      : localizeUi("ui.noodle.unlocksheet.unlockThisPostDetail")}
-                </span>
-              </span>
-              <NoodlerFictionalPrice amount={noodlerUnlockPriceOf(post)} />
-            </button>
-            <button
-              type="button"
-              data-noodler-unlock-action="subscribe"
-              disabled={subscriptionPending || transaction !== null}
-              onClick={() => void runTransaction("subscribe")}
-              className="relative flex min-h-[5.25rem] w-full items-center gap-3 overflow-visible rounded-2xl bg-[linear-gradient(115deg,color-mix(in_srgb,var(--slurp-coral)_22%,var(--slurp-surface-raised)),color-mix(in_srgb,var(--slurp-violet)_20%,var(--slurp-surface-raised)))] px-4 py-3 text-left shadow-[0_18px_42px_-30px_var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/55 transition-[filter,transform,box-shadow] hover:brightness-110 hover:shadow-[0_22px_48px_-28px_var(--noodle-accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
-            >
-              <SlurpCoinBurst active={transaction === "subscribe"} />
-              {transaction === "subscribe" ? (
-                <Loader2
-                  size={20}
-                  className="shrink-0 animate-spin text-[var(--noodle-accent)] motion-reduce:animate-none"
-                />
-              ) : (
-                <Bell size={20} className="shrink-0 text-[var(--noodle-accent)]" />
-              )}
-              <span className="min-w-0 flex-1">
-                <span className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-black">{localizeUi("ui.noodle.unlocksheet.subscribe")}</span>
-                  <span className="rounded-full bg-black/20 px-2 py-0.5 text-[0.62rem] font-black uppercase tracking-[0.08em] text-amber-200 ring-1 ring-inset ring-amber-200/40">
-                    {localizeUi("ui.slurp.unlocksheet.bestValue", { defaultValue: "Best value" })}
-                  </span>
-                </span>
-                <span className="block text-xs text-[var(--muted-foreground)]">
-                  {localizeUi("ui.slurp.unlocksheet.subscribeCreatorDetail", {
-                    defaultValue: "Unlock every post from {{name}} and follow them.",
-                    name: profile.displayName,
-                  })}
-                </span>
-              </span>
-              <NoodlerFictionalPrice
-                amount={noodlerSubscriptionPriceOf(profile)}
-                suffix={localizeUi("ui.slurp.unlocksheet.perWeek", { defaultValue: "/ week" })}
-              />
-            </button>
-          </div>
-          <p className="mt-4 text-center text-[0.68rem] text-[var(--muted-foreground)]">
-            {localizeUi("ui.slurp.unlocksheet.reassurance", {
-              defaultValue: "Fictional SlurpCoins · Cancel anytime",
-            })}
-          </p>
+            </span>
+            <NoodlerFictionalPrice amount={noodlerSubscriptionPriceOf(profile)} />
+          </button>
         </div>
       </Modal>
     </article>
   );
 }
 
-/** Fictional SlurpCoin prices only; the tooltip makes clear that no real money is involved. */
+/**
+ * Fictional prices, presentation only. Nothing is debited, no balance is shown, and access is
+ * never gated on funds — so the label carries its own hint saying exactly that, rather than
+ * letting a currency symbol imply an economy that does not exist.
+ */
 const NOODLER_DEFAULT_UNLOCK_PRICE = 1;
 const NOODLER_DEFAULT_SUBSCRIPTION_PRICE = 5;
 
@@ -513,27 +342,19 @@ function noodlerUnlockPriceOf(post: unknown): number {
   return typeof price === "number" && price >= 0 ? price : NOODLER_DEFAULT_UNLOCK_PRICE;
 }
 
-/** Social proof on the paywall. Absent or zero on a post nobody has paid for yet. */
-function noodlerUnlockCountOf(post: unknown): number {
-  const count = (post as { unlockCount?: unknown } | null)?.unlockCount;
-  return typeof count === "number" && count > 0 ? count : 0;
-}
-
 function noodlerSubscriptionPriceOf(profile: unknown): number {
   const price = (profile as { subscriptionPrice?: unknown } | null)?.subscriptionPrice;
   return typeof price === "number" && price >= 0 ? price : NOODLER_DEFAULT_SUBSCRIPTION_PRICE;
 }
 
-function NoodlerFictionalPrice({ amount, suffix }: { amount: number; suffix?: string }) {
+function NoodlerFictionalPrice({ amount }: { amount: number }) {
   const { t: localizeUi } = useUiTranslation();
   return (
     <span
       title={localizeUi("ui.noodle.unlocksheet.priceHint")}
-      className="inline-flex shrink-0 cursor-help items-center gap-1.5 rounded-full bg-[#24131f] px-2.5 py-1 text-sm font-black text-amber-200 shadow-[0_2px_10px_rgba(0,0,0,0.28)] ring-1 ring-inset ring-amber-200/35"
+      className="shrink-0 cursor-help rounded-full border border-dashed border-[var(--noodle-divider)] px-2 py-0.5 text-xs font-bold text-[var(--muted-foreground)]"
     >
-      <span>{localizeUi("ui.noodle.unlocksheet.price", { amount })}</span>
-      <SlurpCoin size={15} />
-      {suffix && <span className="text-[0.65rem] font-bold text-[var(--muted-foreground)]">{suffix}</span>}
+      {localizeUi("ui.noodle.unlocksheet.price", { amount })}
     </span>
   );
 }
@@ -550,6 +371,8 @@ export function SlurpCreatorPostCard({
   const { t: localizeUi, i18n } = useUiTranslation();
   const {
     personaAccount,
+    postMenuId,
+    setPostMenuId,
     editingPostId,
     editingPostContent,
     setEditingPostContent,
@@ -589,6 +412,7 @@ export function SlurpCreatorPostCard({
   const accountByHandle = ctx.accountByHandle ?? new Map<string, NoodleAccount>();
   const authorAccount = accountById.get(post.authorAccountId) ?? null;
   const author = authorAccount ?? post.authorSnapshot;
+
   // Card-owned defaults for absent capability groups. Hosts pass only the capabilities they
   // support (NoodleR omits media/replyManagement/mentions/poll/profile); the card fills the
   // rest with no-ops and empty state, and gates the corresponding UI on group presence — so
@@ -644,14 +468,9 @@ export function SlurpCreatorPostCard({
   const isEditingPost = Boolean(ctx.postManagement) && editingPostId === post.id;
   const imageCrop = readNoodlePostImageCrop(post.metadata);
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
-  const {
-    src: postImageSrc,
-    observe: observePostImage,
-    loading: postImageLoading,
-  } = useNearViewportSlurpMediaSrc(post.imageUrl, { width: 960 });
+  const retryImage = useConfirmNoodlerImagePrompts();
+  const postImageSrc = useSlurpMediaSrc(post.imageUrl);
   const displayedImageUrl = postImageSrc && postImageSrc !== failedImageUrl ? postImageSrc : null;
-  const imageGenerationPending = ctx.generatingPostImageId === post.id;
-  const postMenuOpen = ctx.postMenuId === post.id;
   // Distinct from displayedImageUrl: while postImageSrc is still resolving (the authenticated
   // fetch hasn't returned yet) there is no evidence the image is broken, so editing must not
   // drop it. Only a confirmed <img> render failure (postImageSrc resolved and then errored,
@@ -661,7 +480,6 @@ export function SlurpCreatorPostCard({
   const postInteractions = post.interactions;
   const rootPostInteractions = postInteractions.filter((interaction) => !interaction.parentInteractionId);
   const poll = readNoodlePollFromMetadata(post.metadata);
-  const postKind = post.imageUrl ? "media" : poll ? "poll" : "text";
   const pollVotes = poll
     ? rootPostInteractions.filter(
         (interaction) =>
@@ -674,6 +492,11 @@ export function SlurpCreatorPostCard({
   const likedByPersona = personaAccount
     ? rootPostInteractions.some(
         (interaction) => interaction.type === "like" && interaction.actorAccountId === personaAccount.id,
+      )
+    : false;
+  const repostedByPersona = personaAccount
+    ? rootPostInteractions.some(
+        (interaction) => interaction.type === "repost" && interaction.actorAccountId === personaAccount.id,
       )
     : false;
   const { replies, replyById, orderedReplies, replyLikesByParentId } = useMemo(() => {
@@ -717,6 +540,7 @@ export function SlurpCreatorPostCard({
     ? (accountById.get(replyTarget.actorAccountId) ?? replyTarget.actorSnapshot)
     : author;
   const postLikePending = reactionPendingFor(post.id, "like");
+  const postRepostPending = reactionPendingFor(post.id, "repost");
   const postReplyPending = createInteractionPendingFor(post.id, "reply", replyParentInteractionId);
   const pollVotePending = createInteractionPendingFor(post.id, "vote");
   const editingExistingPoll = Boolean(poll && pollEditing);
@@ -924,16 +748,12 @@ export function SlurpCreatorPostCard({
     <article
       key={post.id}
       data-noodle-post-id={post.id}
-      data-slurp-post-kind={postKind}
       tabIndex={-1}
-      className={cn(
+      className={
         surface === "profile"
-          ? "border-b border-[var(--noodle-divider)] px-4 py-5 transition-colors last:border-b-0 hover:bg-[var(--accent)]/20"
-          : "rounded-xl bg-[var(--slurp-surface)] px-4 py-5 shadow-[0_1px_0_var(--noodle-divider),0_20px_42px_-36px_rgba(0,0,0,0.95)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,box-shadow] hover:bg-[var(--slurp-surface-raised)] hover:shadow-[0_1px_0_color-mix(in_srgb,var(--noodle-accent)_30%,transparent),0_24px_46px_-32px_rgba(0,0,0,0.95)] motion-reduce:transition-none",
-        surface !== "profile" &&
-          postKind === "poll" &&
-          "bg-[linear-gradient(145deg,var(--slurp-surface),color-mix(in_srgb,var(--noodle-accent)_5%,var(--slurp-surface)))]",
-      )}
+          ? "border-b border-[var(--noodle-divider)] px-4 py-3 transition-colors hover:bg-[var(--accent)]/25"
+          : "border-b border-[var(--noodle-divider)] px-4 py-5 transition-colors hover:bg-[var(--accent)]/25"
+      }
     >
       <div className="flex gap-3">
         {author ? (
@@ -962,194 +782,125 @@ export function SlurpCreatorPostCard({
                 type="button"
                 onClick={openPostAuthor}
                 disabled={!canOpenAuthorProfile}
-                className="rounded-lg font-semibold transition-colors enabled:hover:text-[var(--noodle-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-default"
+                className="font-semibold transition-colors enabled:hover:text-[var(--noodle-accent)] disabled:cursor-default"
               >
-                {author?.displayName ?? localizeUi("ui.slurp.profile.fallbackUser")}
+                {author?.displayName ?? localizeUi("ui.noodle.noodlepostcard.noodleUser")}
               </button>
               {/* Locked cards reach this component only after access is granted; pre-unlock teasers use LockedSlurpPostCard. */}
               <span
                 title={localizeUi(
                   post.access === "locked" ? "ui.noodle.postaccess.unlocked.hint" : "ui.noodle.postaccess.public.hint",
                 )}
-                className={cn(
-                  "rounded-lg px-2 py-1 text-[0.68rem] font-bold ring-1 ring-inset",
-                  post.access === "locked"
-                    ? "bg-[var(--noodle-accent)]/15 text-[var(--noodle-accent)] ring-[var(--noodle-accent)]/25"
-                    : "bg-[var(--accent)] text-[var(--muted-foreground)] ring-[var(--noodle-divider)]",
-                )}
+                className="rounded-full bg-[var(--noodle-accent)]/15 px-2 py-0.5 text-[0.68rem] font-bold text-[var(--noodle-accent)]"
               >
                 {localizeUi(post.access === "locked" ? "ui.noodle.postaccess.unlocked" : "ui.noodle.postaccess.public")}
               </span>
             </div>
             <p className="text-xs font-medium !text-[var(--noodle-accent-foreground)]">
-              @{author?.handle ?? localizeUi("ui.slurp.profile.fallbackHandle")} ·{" "}
+              @{author?.handle ?? localizeUi("ui.noodle.noodleshell.noodleHandle")} ·{" "}
               {formatTime(post.createdAt, i18n.language)}
             </p>
           </div>
-          <div className="relative shrink-0">
-            <button
-              type="button"
-              onClick={() => ctx.setPostMenuId((current) => (current === post.id ? null : post.id))}
-              className="flex h-9 w-9 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
-              title={localizeUi("ui.noodle.noodlepostcard.postActions")}
-              aria-label={localizeUi("ui.noodle.noodlepostcard.postActions")}
-              aria-expanded={postMenuOpen}
-            >
-              <MoreHorizontal size={18} />
-            </button>
-            {postMenuOpen && (
-              <div className="absolute end-0 top-[calc(100%+0.25rem)] z-30 min-w-40 overflow-hidden rounded-lg border border-[var(--noodle-divider)] bg-[var(--background)] py-1 text-xs shadow-2xl shadow-black/30">
-                {ctx.postManagement && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        ctx.setPostMenuId(null);
-                        startEditingPost(editablePost);
-                      }}
-                      className="flex min-h-10 w-full items-center gap-2 px-3 text-start transition-colors hover:bg-[var(--accent)]"
-                    >
-                      <Pencil size={14} />
-                      {localizeUi("ui.noodle.noodlepostcard.edit")}
-                    </button>
-                    {ctx.generatePostImage && (post.imagePrompt || post.imageUrl) && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          ctx.setPostMenuId(null);
-                          ctx.generatePostImage?.(post);
-                        }}
-                        disabled={imageGenerationPending}
-                        className="flex min-h-10 w-full items-center gap-2 px-3 text-start transition-colors hover:bg-[var(--accent)] disabled:opacity-50"
-                      >
-                        <RefreshCw
-                          size={14}
-                          className={imageGenerationPending ? "animate-spin motion-reduce:animate-none" : ""}
-                        />
-                        {localizeUi("ui.slurp.image.generate")}
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        ctx.setPostMenuId(null);
-                        deleteNoodlePost(post);
-                      }}
-                      className="flex min-h-10 w-full items-center gap-2 px-3 text-start text-[var(--slurp-danger)] transition-colors hover:bg-[var(--slurp-danger)]/10 [&_svg]:!text-[var(--slurp-danger)]"
-                    >
-                      <Trash2 size={14} />
-                      {localizeUi("lorebook.editor.batch.delete")}
-                    </button>
-                  </>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    ctx.setPostMenuId(null);
-                    const persona = ctx.personaAccount?.entityId;
-                    void api
-                      .download(
-                        `/slurp/noodler/posts/${encodeURIComponent(post.id)}/share-card${persona ? `?personaId=${encodeURIComponent(persona)}` : ""}`,
-                        `slurp-${post.id}.png`,
-                      )
-                      .catch((error: unknown) =>
-                        toast.error(
-                          error instanceof Error
-                            ? error.message
-                            : localizeUi("ui.slurp.post.shareFailed", {
-                                defaultValue: "Could not build the share image.",
-                              }),
-                        ),
-                      );
-                  }}
-                  className="flex min-h-10 w-full items-center gap-2 px-3 text-start transition-colors hover:bg-[var(--accent)]"
+          {ctx.postManagement && (
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setPostMenuId((current) => (current === post.id ? null : post.id))}
+                className="flex h-11 w-11 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+                title={localizeUi("ui.noodle.noodlepostcard.postActions")}
+                aria-label={localizeUi("ui.noodle.noodlepostcard.postActions")}
+                aria-haspopup="menu"
+                aria-expanded={postMenuId === post.id}
+              >
+                <MoreHorizontal size={18} />
+              </button>
+              {postMenuId === post.id && (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-[calc(100%+0.25rem)] z-30 min-w-32 overflow-hidden rounded-lg border border-[var(--noodle-divider)] bg-[var(--background)] py-1 text-xs shadow-2xl shadow-black/30"
                 >
-                  <Share2 size={14} />
-                  {localizeUi("ui.slurp.post.share", { defaultValue: "Share as image" })}
-                </button>
-              </div>
-            )}
-          </div>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => startEditingPost(editablePost)}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]/70"
+                  >
+                    <Pencil size={14} className="text-[var(--noodle-accent)]" />
+                    {localizeUi("ui.noodle.noodlepostcard.edit")}
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => deleteNoodlePost(post)}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]/70"
+                  >
+                    <Trash2 size={14} className="text-[var(--noodle-accent)]" />
+                    {localizeUi("lorebook.editor.batch.delete")}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
       <div>
         {/* The image editor renders its own preview while editing, so hide the read-only one. */}
-        {isEditingPost && imageEditing ? null : displayedImageUrl || postImageLoading ? (
+        {isEditingPost && imageEditing ? null : displayedImageUrl ? (
           <button
-            ref={observePostImage}
             type="button"
-            onClick={() => {
-              if (!displayedImageUrl) return;
-              if (ctx.openPost) ctx.openPost(post.id);
-              else setImageLightbox(createNoodleLightboxImage(post.id, displayedImageUrl, post.imagePrompt ?? ""));
-            }}
-            disabled={!displayedImageUrl}
-            className={cn(
-              "mt-4 flex max-h-[32rem] justify-center overflow-hidden bg-black/20 text-left ring-1 ring-inset ring-white/10 ring-offset-[var(--background)] transition-[opacity,transform] hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2 motion-reduce:transition-none",
-              surface === "profile"
-                ? "w-full rounded-xl"
-                : "-mx-4 w-[calc(100%+2rem)] rounded-none sm:mx-0 sm:w-full sm:rounded-xl",
-            )}
+            onClick={() =>
+              setImageLightbox(createNoodleLightboxImage(post.id, displayedImageUrl, post.imagePrompt ?? ""))
+            }
+            className="mt-3 block w-full overflow-hidden rounded-lg text-left ring-1 ring-inset ring-white/10 ring-offset-[var(--background)] transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2"
             title={localizeUi("ui.noodle.noodlepostcard.openImage")}
             aria-label={localizeUi("ui.noodle.noodlepostcard.openPostImage")}
           >
-            {!displayedImageUrl ? (
-              <span
-                className="block aspect-[4/3] w-full animate-pulse bg-[var(--muted)] motion-reduce:animate-none sm:aspect-[16/10]"
-                aria-hidden="true"
-              />
-            ) : imageCrop ? (
+            {imageCrop ? (
               <PostImageFrame
                 src={displayedImageUrl}
                 onError={() => setFailedImageUrl(displayedImageUrl)}
                 crop={imageCrop}
                 alt={localizeUi("ui.noodle.post.imageBy", {
-                  name: author?.displayName ?? localizeUi("ui.slurp.profile.fallbackUser"),
+                  name: author?.displayName ?? localizeUi("ui.noodle.profile.fallbackUser"),
                 })}
               />
             ) : (
-              <div
+              <img
+                src={displayedImageUrl}
+                onError={() => setFailedImageUrl(displayedImageUrl)}
+                alt={localizeUi("ui.noodle.post.imageBy", {
+                  name: author?.displayName ?? localizeUi("ui.noodle.profile.fallbackUser"),
+                })}
                 className={cn(
-                  "relative w-full overflow-hidden rounded-xl bg-[var(--slurp-media-stage,#17131a)]",
-                  SLURP_FEED_MEDIA_RATIO_CLASS,
+                  "max-h-[26rem] w-full bg-black/10",
+                  ctx.imageFit === "cover" ? "object-cover" : "object-contain",
                 )}
-              >
-                <img
-                  src={displayedImageUrl}
-                  onError={() => setFailedImageUrl(displayedImageUrl)}
-                  alt={localizeUi("ui.noodle.post.imageBy", {
-                    name: author?.displayName ?? localizeUi("ui.slurp.profile.fallbackUser"),
-                  })}
-                  loading="lazy"
-                  decoding="async"
-                  className="h-full w-full object-cover"
-                />
-              </div>
+              />
             )}
           </button>
         ) : post.imagePrompt ? (
-          <div className="relative mt-3 rounded-xl border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/10 p-3 pr-14 text-xs leading-5">
+          <div className="mt-3 rounded-xl border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/10 p-3 text-xs leading-5">
             <span className="mb-1 flex items-center gap-1.5 font-semibold text-[var(--noodle-accent)]">
-              <ImageIcon size={13} aria-hidden="true" />
+              <ImageIcon size={13} />
               {localizeUi("ui.noodle.noodlepostcard.imagePrompt")}
             </span>
             {post.imagePrompt}
-            {ctx.postManagement && ctx.generatePostImage && (
-              <button
-                type="button"
-                onClick={() => ctx.generatePostImage?.(post)}
-                disabled={imageGenerationPending}
-                className="absolute right-2 top-2 flex h-10 w-10 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/15 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
-                title={localizeUi("ui.slurp.image.generate")}
-                aria-label={localizeUi("ui.slurp.image.generate")}
-                aria-busy={imageGenerationPending}
-              >
-                <RefreshCw
-                  size={17}
-                  className={imageGenerationPending ? "animate-spin motion-reduce:animate-none" : ""}
-                />
-              </button>
-            )}
+            {/* The post kept its prompt when the picture failed, so it can be drawn again on
+                demand instead of waiting for the automatic retry. */}
+            <button
+              type="button"
+              disabled={retryImage.isPending}
+              onClick={() =>
+                retryImage.mutate({
+                  targetAccountId: post.authorAccountId,
+                  prompts: [{ id: post.id, prompt: post.imagePrompt ?? "" }],
+                })
+              }
+              className="mt-2 flex items-center gap-1.5 rounded-lg border border-[var(--noodle-accent)]/40 px-2 py-1 font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/15 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70"
+            >
+              <ImageIcon size={13} />
+              {localizeUi("ui.noodle.noodlepostcard.generateImage")}
+            </button>
           </div>
         ) : null}
         {isEditingPost ? (
@@ -1227,10 +978,10 @@ export function SlurpCreatorPostCard({
             onOpenProfile={openProfile}
           />
         )}
-        <div className="mt-5 flex items-center gap-2 border-t border-[var(--noodle-divider)] pt-3 tabular-nums">
+        <div className="mt-4 flex max-w-md items-center justify-between gap-1 tabular-nums">
           <button
             type="button"
-            className={cn(noodleIconButtonClass, "rounded-lg", likedByPersona && "bg-[var(--noodle-accent)]/10")}
+            className={cn(noodleIconButtonClass, "rounded-full", likedByPersona && "bg-[var(--noodle-accent)]/10")}
             disabled={!personaAccount || postLikePending}
             onClick={() => reactToPost(post, "like", likedByPersona)}
             title={
@@ -1255,7 +1006,23 @@ export function SlurpCreatorPostCard({
           </button>
           <button
             type="button"
-            className={cn(noodleIconButtonClass, "rounded-lg hover:text-[var(--noodle-accent)]")}
+            className={cn(noodleIconButtonClass, "rounded-full", repostedByPersona && "bg-[var(--noodle-accent)]/10")}
+            disabled={!personaAccount || postRepostPending}
+            onClick={() => reactToPost(post, "repost", repostedByPersona)}
+            title={
+              repostedByPersona
+                ? localizeUi("ui.noodle.noodlepostcard.undoRepost")
+                : localizeUi("ui.noodle.noodlepostcard.repost")
+            }
+            aria-busy={postRepostPending}
+            data-noodle-reaction="repost"
+          >
+            <Repeat2 size={24} strokeWidth={1.55} className="-my-1" />
+            {countInteractions(rootPostInteractions, "repost")}
+          </button>
+          <button
+            type="button"
+            className={cn(noodleIconButtonClass, "rounded-full hover:text-[var(--noodle-accent)]")}
             disabled={!personaAccount}
             onClick={() => openReplyComposer(post.id)}
             title={localizeUi("ui.noodle.noodlepostcard.reply")}
@@ -1264,12 +1031,6 @@ export function SlurpCreatorPostCard({
             {replies.length}
           </button>
         </div>
-
-        <SlurpLikedBy
-          likes={rootPostInteractions.filter((interaction) => interaction.type === "like")}
-          total={countInteractions(rootPostInteractions, "like")}
-          creatorAccountId={post.authorAccountId}
-        />
 
         {replyPostId === post.id && !replyParentInteractionId && renderReplyComposer(false)}
 
@@ -1322,7 +1083,7 @@ export function SlurpCreatorPostCard({
                       <Avatar
                         account={
                           actor ?? {
-                            displayName: localizeUi("ui.slurp.profile.fallbackUser"),
+                            displayName: localizeUi("ui.noodle.noodlepostcard.noodleUser"),
                             avatarUrl: null,
                           }
                         }
@@ -1340,7 +1101,7 @@ export function SlurpCreatorPostCard({
                           disabled={!actorAccount}
                           className="max-w-full truncate font-semibold !text-[var(--foreground)] transition-colors enabled:hover:!text-[var(--noodle-accent)] disabled:cursor-default"
                         >
-                          {actor?.displayName ?? localizeUi("ui.slurp.profile.fallbackUser")}
+                          {actor?.displayName ?? localizeUi("ui.noodle.noodlepostcard.noodleUser")}
                         </button>
                         <span className="truncate !text-[var(--noodle-accent-foreground)]">
                           @{actor?.handle ?? "noodle"}
@@ -1356,7 +1117,7 @@ export function SlurpCreatorPostCard({
                             <button
                               type="button"
                               onClick={() => openProfile(parentActorAccount)}
-                              className="font-medium text-[var(--noodle-accent)] hover:underline focus-visible:rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70"
+                              className="font-medium text-[var(--noodle-accent)] hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70"
                               aria-label={localizeUi("ui.noodle.profile.viewHandleProfile", {
                                 handle: parentActorAccount.handle,
                               })}
@@ -1419,7 +1180,7 @@ export function SlurpCreatorPostCard({
                           <img
                             src={reply.imageUrl}
                             alt={localizeUi("ui.noodle.noodlepostcard.commentImageAlt", {
-                              name: actor?.displayName ?? localizeUi("ui.slurp.profile.fallbackUser"),
+                              name: actor?.displayName ?? localizeUi("ui.noodle.noodlepostcard.noodleUser"),
                             })}
                             className="max-h-72 w-full object-cover"
                           />

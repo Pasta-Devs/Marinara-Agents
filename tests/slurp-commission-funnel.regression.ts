@@ -9,6 +9,10 @@ const storage = readFileSync(
   "packages/slurp/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
   "utf8",
 );
+const maintainedStorage = readFileSync(
+  "sources/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
+  "utf8",
+);
 const world = readFileSync(
   "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-world.operation.ts",
   "utf8",
@@ -31,6 +35,51 @@ assert.match(routes, /generateSlurpCommissionImage\(app\.db/u);
 assert.match(routes, /messages\.deliverCommission\(/u);
 assert.match(routes, /commissionAcceptRequests\.has\(commission\.id\)/u);
 assert.match(routes, /commissionDeliveryRequests\.has\(commissionId\)/u);
+
+// A fresh delivery lease belongs to the other worker. A stale lease can be conditionally reclaimed,
+// while a persisted stable message completes without another send.
+for (const copy of [storage, maintainedStorage]) {
+  const deliverySection = copy.match(/const deliveryId = `commission:\$\{id\}:delivery`[\s\S]*?let message/u)?.[0];
+  const claimRecovery = deliverySection?.match(/if \(!claimed\) \{[\s\S]*?(?=\n\s*let message)/u)?.[0];
+  assert.ok(deliverySection, "commission delivery claim must exist");
+  assert.ok(claimRecovery, "delivery claim recovery branch must exist");
+  assert.match(deliverySection, /const persistedBeforeClaim = await storage\.getMessageById\(deliveryId\)/u);
+  assert.match(deliverySection, /const deliveryClaimToken = newId\(\)/u);
+  assert.match(
+    deliverySection,
+    /deliveryClaimedAt[\s\S]*?Date\.now\(\) - 5 \* 60 \* 1000[\s\S]*?return false/u,
+    "a foreign delivery lease must remain exclusive for five minutes",
+  );
+  assert.match(
+    deliverySection,
+    /previousClaim[\s\S]*?deliveryClaimToken, deliveryClaimedAt: now\(\)[\s\S]*?previousClaim[\s\S]*?owned\?\.deliveryClaimToken === deliveryClaimToken/u,
+    "a stale delivery lease must be reclaimed conditionally by one owner",
+  );
+  assert.match(claimRecovery, /return storage\.getCommission\(id\);/u);
+  assert.match(claimRecovery, /return storage\.getCommission\(id\);[\s\S]*\n\s*\}/u);
+  const deliveryStart = copy.indexOf("const deliveryId =");
+  assert.ok(
+    copy.indexOf("sendCreatorMessage(", deliveryStart) > deliveryStart + claimRecovery.length,
+    "send must follow the claim guard",
+  );
+}
+
+// Commission acceptance uses one durable payment intent and the same key for the wallet debit.
+assert.match(
+  storage,
+  /async acceptCommissionUnlocked\(id: string\)[\s\S]{0,900}?const paymentId = `commission:\$\{id\}:accept`[\s\S]{0,1500}?spendCoins\([\s\S]{0,260}?paymentId/u,
+  "commission acceptance must use the stable payment intent ID for spendCoins",
+);
+assert.doesNotMatch(
+  storage,
+  /async acceptCommissionUnlocked\(id: string\)[\s\S]{0,1200}?spendCoins\([\s\S]{0,220}?commission\.creatorAccountId,\s*\n\s*\)\)/u,
+  "commission acceptance must not use an unkeyed spend",
+);
+assert.match(
+  storage,
+  /async acceptCommissionUnlocked\(id: string\)[\s\S]{0,2400}?\.set\(\{ state: "accepted", updatedAt: now\(\) \}\)[\s\S]{0,600}?\}\s*catch \(error\)[\s\S]{0,900}?\}\s*if \(settings\.walletEnabled\) await completeSlurpPaymentIntent\(/u,
+  "payment completion must run after the compensation catch",
+);
 
 console.log("slurp commission funnel regression: ok");
 

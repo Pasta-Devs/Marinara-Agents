@@ -19,15 +19,6 @@ export function normalizeSlurpFanActivityRows(
           (typeof targetPostId === "string" ? creatorAccountIdByPostId.get(targetPostId) : undefined),
         targetPostId,
         content: row.content ?? null,
-        // Kept as a plain field rather than added to the shared generated-activity schema, which
-        // this package cannot change. `parseGeneratedFanActivityResponse` reads it back off the
-        // normalised row after the schema has stripped it.
-        parentInteractionId:
-          typeof row.parentInteractionId === "string"
-            ? row.parentInteractionId
-            : typeof row.replyToInteractionId === "string"
-              ? row.replyToInteractionId
-              : null,
       },
     ];
   });

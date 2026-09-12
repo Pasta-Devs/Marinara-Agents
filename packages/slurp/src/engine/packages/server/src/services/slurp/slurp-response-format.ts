@@ -52,7 +52,7 @@ const timelineSchema = {
           targetTempId: nullableString,
           targetPostId: nullableString,
           parentInteractionId: nullableString,
-          type: { type: "string", enum: ["like", "reply", "vote"] },
+          type: { type: "string", enum: ["like", "repost", "reply", "vote"] },
           content: { type: ["string", "null"], maxLength: NOODLE_REPLY_HARD_MAX_LENGTH },
           pollOptionIndex: nullableInteger,
         },
@@ -148,70 +148,13 @@ const noodlerReplySchema = {
   additionalProperties: false,
 } as const;
 
-/**
- * A direct-message reply.
- *
- * Separate from `noodlerReplySchema` because a DM carries two things a comment reply does not: how
- * the creator now feels about the conversation, and anything about this fan worth keeping. Both
- * ride the reply that already runs, so neither costs an extra call.
- *
- * `strict` requires every property to be listed in `required`, so the model always answers all
- * three fields. The parser still treats the two new ones as optional, because a connection that
- * does not support json_schema returns whatever it likes.
- */
-const noodlerDmSchema = {
-  type: "object",
-  properties: {
-    content: { type: "string", maxLength: NOODLE_REPLY_HARD_MAX_LENGTH },
-    moodShift: { type: "string", enum: ["up", "same", "down", "sharp_down"] },
-    remember: {
-      type: "array",
-      maxItems: 2,
-      items: {
-        type: "object",
-        properties: {
-          op: { type: "string", enum: ["add", "replace", "forget", "keep"] },
-          id: { type: ["string", "null"] },
-          text: { type: ["string", "null"], maxLength: 160 },
-        },
-        required: ["op", "id", "text"],
-        additionalProperties: false,
-      },
-    },
-    stateSignals: {
-      type: "array",
-      maxItems: 3,
-      items: {
-        type: "string",
-        enum: [
-          "fan_shared_personal_fact",
-          "fan_remembered_creator_detail",
-          "fan_gave_respectful_compliment",
-          "fan_gave_welcome_adult_attention",
-          "fan_ignored_creator_question",
-          "fan_pushed_after_refusal",
-          "fan_requested_free_content",
-          "fan_paid_for_content",
-          "fan_completed_commission",
-          "fan_returned_after_silence",
-          "fan_mentioned_another_creator",
-          "fan_apologized",
-          "fan_broke_a_promise",
-        ],
-      },
-    },
-  },
-  required: ["content", "moodShift", "remember", "stateSignals"],
-  additionalProperties: false,
-} as const;
-
 const noodlerFanActivitySchema = {
   type: "object",
   properties: {
     actorHandle: { type: "string" },
     creatorAccountId: { type: "string" },
     targetPostId: { type: "string" },
-    type: { type: "string", enum: ["like", "reply"] },
+    type: { type: "string", enum: ["like", "reply", "repost"] },
     content: nullableString,
   },
   required: ["actorHandle", "creatorAccountId", "targetPostId", "type", "content"],
@@ -220,14 +163,7 @@ const noodlerFanActivitySchema = {
 
 export function noodleResponseFormat(
   model: string,
-  kind:
-    | "timeline"
-    | "profiles"
-    | "noodler_post"
-    | "noodler_profile"
-    | "noodler_reply"
-    | "noodler_dm"
-    | "noodler_fan_activity",
+  kind: "timeline" | "profiles" | "noodler_post" | "noodler_profile" | "noodler_reply" | "noodler_fan_activity",
   options: { allowImagePrompt?: boolean; contentMaxLength?: number } = {},
 ): { type: string; [key: string]: unknown } {
   if (!isOpenAIGpt56Model(model)) return { type: "json_object" };
@@ -240,24 +176,22 @@ export function noodleResponseFormat(
           ? noodlerProfileSchema
           : kind === "noodler_reply"
             ? noodlerReplySchema
-            : kind === "noodler_dm"
-              ? noodlerDmSchema
-              : kind === "noodler_fan_activity"
-                ? {
-                    type: "object",
-                    properties: {
-                      activities: {
-                        type: "array",
-                        items: noodlerFanActivitySchema,
-                      },
+            : kind === "noodler_fan_activity"
+              ? {
+                  type: "object",
+                  properties: {
+                    activities: {
+                      type: "array",
+                      items: noodlerFanActivitySchema,
                     },
-                    required: ["activities"],
-                    additionalProperties: false,
-                  }
-                : noodlerPostSchema(
-                    options.allowImagePrompt === true,
-                    options.contentMaxLength ?? NOODLE_POST_HARD_MAX_LENGTH,
-                  );
+                  },
+                  required: ["activities"],
+                  additionalProperties: false,
+                }
+              : noodlerPostSchema(
+                  options.allowImagePrompt === true,
+                  options.contentMaxLength ?? NOODLE_POST_HARD_MAX_LENGTH,
+                );
   return {
     type: "json_schema",
     name:
@@ -269,11 +203,9 @@ export function noodleResponseFormat(
             ? "noodler_profile"
             : kind === "noodler_reply"
               ? "noodler_reply"
-              : kind === "noodler_dm"
-                ? "noodler_dm"
-                : kind === "noodler_fan_activity"
-                  ? "noodler_fan_activity"
-                  : "noodler_post",
+              : kind === "noodler_fan_activity"
+                ? "noodler_fan_activity"
+                : "noodler_post",
     schema,
     strict: true,
   };

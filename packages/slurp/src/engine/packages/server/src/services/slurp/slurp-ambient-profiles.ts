@@ -48,11 +48,6 @@ export async function ensureAmbientNoodleAccounts(
   noodle: ReturnType<typeof createSlurpStorage>,
   invited: boolean,
 ): Promise<NoodleAccount[]> {
-  if (!invited) {
-    const staleAmbient = (await noodle.listAccounts()).filter(isAmbientNoodleAccount);
-    for (const account of staleAmbient) await noodle.deleteAccountByEntity("random_user", account.entityId);
-    return [];
-  }
   let resolveTurn!: () => void;
   const previousTurn = ambientSeedQueue;
   ambientSeedQueue = new Promise<void>((resolve) => {

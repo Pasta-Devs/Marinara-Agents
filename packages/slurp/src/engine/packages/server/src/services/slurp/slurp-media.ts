@@ -1,13 +1,12 @@
-import { existsSync, readFileSync, readdirSync, renameSync, rmSync, unlinkSync, writeFileSync } from "fs";
-import { basename, dirname, join } from "path";
+import { existsSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync } from "fs";
+import { readdir } from "fs/promises";
+import { dirname, join } from "path";
 import type { NoodlerManagedPost } from "@marinara-engine/shared";
 import { logger } from "../../lib/logger.js";
 import { DATA_DIR } from "../../utils/data-dir.js";
-import { assertInsideDir, isAllowedImageBuffer } from "../../utils/security.js";
+import { assertInsideDir } from "../../utils/security.js";
 import { getSharp } from "../../utils/sharp.js";
 import { stageImageToDisk } from "../image/image-generation.js";
-
-export { isAllowedImageBuffer } from "../../utils/security.js";
 
 // NoodleR-owned media lives under the gallery data dir but in a namespace whose
 // path contains a slash, so the public gallery serve routes (which reject slashes in the
@@ -28,18 +27,6 @@ export function noodlerPostMediaUrl(postId: string): string {
 }
 
 export const NOODLER_MEDIA_URL_PREFIX = "/api/slurp/noodler/posts/";
-
-/** Access-checked serving URL for a generated direct-message image. */
-export function slurpMessageMediaUrl(messageId: string): string {
-  return `/api/slurp/messages/${encodeURIComponent(messageId)}/media`;
-}
-
-export type SlurpMessageMediaUpload = { buffer: Buffer; extension: string };
-
-/** Stage a validated fan upload. The caller promotes it only after the message row exists. */
-export function stageSlurpMessageMedia(upload: SlurpMessageMediaUpload) {
-  return stageImageToDisk(`${NOODLER_MEDIA_PREFIX}messages`, upload.buffer.toString("base64"), upload.extension);
-}
 
 /**
  * Bind a stored NoodleR media URL to the persona it is being served to. The media route
@@ -91,36 +78,8 @@ export async function persistNoodlerPostWithUploadedMedia<T>(
 // original bytes and blurring in CSS discloses the image to anyone who opens devtools.
 // Downscaling to a handful of pixels before blurring makes the original unrecoverable
 // rather than merely hidden.
-const TEASER_WIDTH = 64;
-const TEASER_SUFFIX = ".teaser-v4.jpg";
-export const NOODLER_MEDIA_WIDTHS = [96, 320, 480, 640, 960, 1280, 1600] as const;
-
-export async function resolveNoodlerMediaVariant(absolutePath: string, width: number | undefined): Promise<string> {
-  if (!width || !NOODLER_MEDIA_WIDTHS.includes(width as (typeof NOODLER_MEDIA_WIDTHS)[number])) return absolutePath;
-  const variantPath = `${absolutePath}.w${width}.webp`;
-  if (existsSync(variantPath)) return variantPath;
-  const sharp = await getSharp();
-  if (!sharp) return absolutePath;
-  const stagingPath = `${variantPath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
-  try {
-    await sharp(absolutePath)
-      .rotate()
-      .resize({ width, withoutEnlargement: true })
-      .webp({ quality: width <= 320 ? 78 : 84 })
-      .toFile(stagingPath);
-    try {
-      renameSync(stagingPath, variantPath);
-    } catch (error) {
-      if (!existsSync(variantPath)) throw error;
-    }
-    return variantPath;
-  } catch (error) {
-    logger.warn(error, "[slurp] Failed to build %spx media variant for %s", width, absolutePath);
-    return absolutePath;
-  } finally {
-    if (existsSync(stagingPath)) unlinkSync(stagingPath);
-  }
-}
+const TEASER_WIDTH = 24;
+const TEASER_SUFFIX = ".teaser.jpg";
 
 /**
  * Blurred, unrecoverable teaser bytes for a locked post's media, cached next to the
@@ -135,7 +94,7 @@ export async function readNoodlerLockedTeaser(absolutePath: string): Promise<Buf
   try {
     const teaser: Buffer = await sharp(absolutePath)
       .resize({ width: TEASER_WIDTH, withoutEnlargement: true })
-      .blur(1.6)
+      .blur(2)
       .jpeg({ quality: 60 })
       .toBuffer();
     const stagingPath = `${teaserPath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
@@ -186,10 +145,6 @@ export function unlinkNoodlerMedia(relativePath: string | null): void {
     if (existsSync(absolute)) unlinkSync(absolute);
     // The cached teaser is a derivative of the same bytes and must not outlive them.
     if (existsSync(`${absolute}${TEASER_SUFFIX}`)) unlinkSync(`${absolute}${TEASER_SUFFIX}`);
-    const fileName = basename(absolute);
-    for (const entry of readdirSync(dirname(absolute))) {
-      if (entry.startsWith(`${fileName}.w`) && entry.endsWith(".webp")) unlinkSync(join(dirname(absolute), entry));
-    }
   } catch (error) {
     logger.warn(error, "[noodler] Failed to remove NoodleR media file %s", relativePath);
   }
@@ -216,4 +171,21 @@ export function removeAllNoodlerMedia(): void {
   } catch (error) {
     logger.warn(error, "[noodler] Failed to remove all Slurp media");
   }
+}
+
+export async function listNoodlerMediaFiles(): Promise<Array<{ relativePath: string; absolutePath: string }>> {
+  const marker = resolveNoodlerMediaAbsolutePath(`${NOODLER_MEDIA_PREFIX}__slurp_backup_root__`);
+  const root = marker ? dirname(marker) : null;
+  if (!root || !existsSync(root)) return [];
+  const files: Array<{ relativePath: string; absolutePath: string }> = [];
+  const visit = async (directory: string, relativeDirectory: string): Promise<void> => {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const absolutePath = join(directory, entry.name);
+      const relativePath = `${relativeDirectory}/${entry.name}`;
+      if (entry.isDirectory()) await visit(absolutePath, relativePath);
+      else if (entry.isFile() && !entry.name.endsWith(TEASER_SUFFIX)) files.push({ relativePath, absolutePath });
+    }
+  };
+  await visit(root, "media");
+  return files;
 }

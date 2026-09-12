@@ -1,9 +1,5 @@
 import { create } from "zustand";
-import {
-  SLURP_SETTINGS_SECTIONS,
-  type SlurpNavigationState,
-  type SlurpSettingsSection,
-} from "../components/slurp/slurp-navigation.types";
+import type { SlurpNavigationState } from "../components/slurp/slurp-navigation.types";
 
 const PACKAGE_STATE_KEY = "marinara:slurp:package-ui";
 
@@ -36,7 +32,8 @@ function isSlurpNavigation(value: unknown): value is SlurpNavigationState {
   if (value.mode === "creator-settings") {
     return (
       (value.tab === undefined || value.tab === "creator") &&
-      (value.section === undefined || SLURP_SETTINGS_SECTIONS.includes(value.section as SlurpSettingsSection)) &&
+      (value.section === undefined ||
+        ["general", "creators", "images", "audience", "advanced"].includes(value.section as string)) &&
       (value.returnTo === undefined || isSlurpNavigation(value.returnTo))
     );
   }
@@ -46,12 +43,6 @@ function isSlurpNavigation(value: unknown): value is SlurpNavigationState {
       return value.onboarding === undefined || typeof value.onboarding === "boolean";
     case "search":
       return true;
-    // Messages and Wallet fell through to `false`, so a reload always dropped you back on the
-    // hub from either one. `creatorAccountId` reopens the chat you were reading.
-    case "wallet":
-      return true;
-    case "messages":
-      return value.creatorAccountId === undefined || typeof value.creatorAccountId === "string";
     case "profile":
       return (
         (value.accountId === null || typeof value.accountId === "string") &&
@@ -86,9 +77,7 @@ function readRecord(key: string): Record<string, unknown> | null {
 function validatedPersistedState(state: Record<string, unknown>): PersistedSlurpState {
   const validated: PersistedSlurpState = {};
   if (state.navigation && typeof state.navigation === "object" && !Array.isArray(state.navigation)) {
-    if (state.navigation.mode === "creator" && state.navigation.view === "notifications") {
-      validated.navigation = { mode: "creator", view: "notifications" };
-    } else if (isSlurpNavigation(state.navigation)) validated.navigation = state.navigation;
+    if (isSlurpNavigation(state.navigation)) validated.navigation = state.navigation;
   }
   if (typeof state.viewerPersonaId === "string" || state.viewerPersonaId === null) {
     validated.viewerPersonaId = state.viewerPersonaId;

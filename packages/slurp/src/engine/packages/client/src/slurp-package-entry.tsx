@@ -73,18 +73,10 @@ function SlurpPackageRoot({ element }: { element: CapabilityElement }) {
   const [revision, redraw] = useState(0);
   const navigation = useSlurpUIStore((state) => state.navigation);
   const setNavigation = useSlurpUIStore((state) => state.setNavigation);
-  const close = element.capabilityProps?.onClose;
-  const onLeave = typeof close === "function" ? () => close() : undefined;
 
   useEffect(() => {
-    // The host re-dispatches this event whenever capabilityProps change, so the store has to be
-    // reconfigured as well. Redrawing alone left debugMode and reviewImagePromptsBeforeSend stuck
-    // on their mount-time values until the tab was remounted.
-    const update = () => {
-      configureSlurpPackageState(element.capabilityProps ?? {});
-      redraw((value) => value + 1);
-    };
     configureSlurpPackageState(element.capabilityProps ?? {});
+    const update = () => redraw((value) => value + 1);
     element.addEventListener("marinara-capability-props", update);
     return () => element.removeEventListener("marinara-capability-props", update);
   }, [element]);
@@ -100,7 +92,7 @@ function SlurpPackageRoot({ element }: { element: CapabilityElement }) {
       <QueryClientProvider client={client}>
         <ModalPortalContext.Provider value={element.__portal ?? element}>
           <div className="h-full min-h-0 overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
-            <SlurpHome navigation={navigation} onNavigate={setNavigation} onLeave={onLeave} />
+            <SlurpHome navigation={navigation} onNavigate={setNavigation} />
             <AppDialogRenderer />
           </div>
         </ModalPortalContext.Provider>

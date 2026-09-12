@@ -13,14 +13,10 @@ import { resolveStoredChatOptions } from "../generation/generation-parameters.js
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { parseGameJsonish } from "../game/jsonish.js";
 import { requireModelAnswer } from "./slurp-model-answer.js";
-import { noodleImageContext } from "./slurp-image-prompt.js";
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
-import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { createSlurpStorage, type SlurpSettings } from "../storage/slurp.storage.js";
-import { slurpAudienceToneInstruction } from "./slurp-tone.js";
-import { slurpAudienceArcDescription, type SlurpAudienceArc } from "./slurp-audience-arc.js";
 import {
   NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR,
   NOODLE_FAN_ACTIVITY_MAX_CREATORS_PER_RUN,
@@ -37,9 +33,6 @@ import { normalizeSlurpFanActivityRows } from "./slurp-fan-activity-response.js"
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
 export const MAX_FAN_POSTS_PER_CREATOR = 4;
-
-/** Comments shown per post. Enough to answer somebody, short enough not to bury the post. */
-const MAX_POST_COMMENTS_IN_PROMPT = 6;
 
 export interface ResolvedNoodlerFanActivityPolicy {
   enabled: boolean;
@@ -66,17 +59,7 @@ export interface NoodlerFanCreatorCandidate {
     creatorAccountId: string;
     title: string | null;
     content: string;
-    /** What the attached image shows, so a reply can react to the picture instead of ignoring it. */
-    image?: string | null;
     access: "public" | "locked";
-    /**
-     * Comments already under this post.
-     *
-     * The model used to write every comment blind to the ones beside it, which is most of why a
-     * comment section read as a stack of parallel monologues: six people answering the post and
-     * nobody answering each other, often all saying the same thing.
-     */
-    comments?: { id: string; from: string; text: string }[];
   }>;
   identities: NoodlerFanIdentity[];
 }
@@ -88,10 +71,10 @@ function weightedIdentitySequence(identities: NoodlerFanIdentity[], weights: Noo
 }
 
 export function selectNoodlerFanActivities(input: {
-  activities: (NoodleGeneratedFanRefresh["activities"][number] & { parentInteractionId?: string | null })[];
+  activities: NoodleGeneratedFanRefresh["activities"];
   creators: readonly NoodlerFanCreatorCandidate[];
   existingInteractions: readonly Pick<NoodleInteraction, "postId" | "actorAccountId" | "type" | "content">[];
-  quotas: { like: number; reply: number };
+  quotas: { like: number; reply: number; repost: number };
 }): NoodleFanActivityToStore[] {
   const creatorById = new Map(input.creators.map((candidate) => [candidate.creator.id, candidate]));
   const postOwnerById = new Map(
@@ -112,7 +95,6 @@ export function selectNoodlerFanActivities(input: {
   const creatorSlotSeen = new Set<string>();
   const selected: NoodleFanActivityToStore[] = [];
   for (const activity of input.activities) {
-    if (activity.type !== "like" && activity.type !== "reply") continue;
     if (quotas[activity.type] <= 0) continue;
     const creator = creatorById.get(activity.creatorAccountId);
     if (!creator || postOwnerById.get(activity.targetPostId) !== creator.creator.id) continue;
@@ -121,13 +103,6 @@ export function selectNoodlerFanActivities(input: {
     if (!identity || !creator.identities.some((candidate) => candidate.id === identity.id)) continue;
     const content = activity.type === "reply" ? activity.content?.trim() || null : null;
     if (activity.type === "reply" && !content) continue;
-    // A parent must be a real comment on the same post, and a fan may not answer themselves.
-    const parentComment =
-      activity.type === "reply" && activity.parentInteractionId
-        ? creator.posts
-            .find((post) => post.id === activity.targetPostId)
-            ?.comments?.find((comment) => comment.id === activity.parentInteractionId)
-        : undefined;
     const key = `${activity.targetPostId}:${identity.id}:${activity.type}`;
     if (seen.has(key)) continue;
     const creatorSlotKey = `${creator.creator.id}:${identity.id}:${activity.type}`;
@@ -142,61 +117,24 @@ export function selectNoodlerFanActivities(input: {
       type: activity.type,
       targetPostId: activity.targetPostId,
       content,
-      parentInteractionId: parentComment?.id ?? null,
       snapshot: identity.snapshot,
     });
   }
   return selected;
 }
 
-/**
- * One line describing what this person is to this Creator.
- *
- * Kept to a sentence. The prompt already carries the posts, the creator card, and every other
- * actor; a paragraph per fan would crowd out the thing they are reacting to.
- */
-function describeFanRelationship(persona: {
-  spendTier: string;
-  stage?: string;
-  spent?: number;
-  knownForDays?: number;
-  audienceArc?: string;
-}): string {
-  const parts: string[] = [];
-  if (persona.stage && persona.stage !== "stranger") parts.push(persona.stage);
-  const arc = persona.audienceArc ? slurpAudienceArcDescription(persona.audienceArc as SlurpAudienceArc) : null;
-  if (arc) parts.push(arc);
-  if (persona.knownForDays !== undefined) {
-    parts.push(
-      persona.knownForDays < 14
-        ? "new here"
-        : persona.knownForDays < 90
-          ? `around for ${Math.round(persona.knownForDays / 7)} weeks`
-          : `around for ${Math.round(persona.knownForDays / 30)} months`,
-    );
-  }
-  if (persona.spent) parts.push(`has spent ${persona.spent} coins here`);
-  else if (persona.spendTier === "none") parts.push("has never paid for anything");
-  return parts.length > 0 ? parts.join(", ") : "no history with this creator yet";
-}
-
 function buildFanActivityMessages(input: {
   creators: NoodlerFanCreatorCandidate[];
-  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone">;
+  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "fanRepostsPerRefresh">;
 }): ChatMessage[] {
   const system = [
     "Propose quiet synthetic audience activity for the supplied Slurp posts.",
-    "A post's image field describes its attached picture. Treat it as something the actor can see, and never ask to be shown an image that is already described.",
     "Posts marked locked are paid posts. Only subscribers see them, so react to the title and the fact it is paid; never invent or state its hidden contents.",
     "Use only supplied creator IDs, actor handles, and post IDs. Never invent identifiers.",
-    "Likes have null content. Replies are one short sentence, normally under 180 characters, natural, relevant, and not repetitive.",
-    "Each post lists the comments already under it. Never repeat a point somebody has already made.",
-    'To answer one of those comments instead of the post, set "parentInteractionId" to that comment\'s id. Leave it out to comment on the post itself. Some replies should answer other people; a comment section where nobody talks to anybody is a list, not a conversation.',
+    "Likes and reposts have null content. Replies are one short sentence, normally under 180 characters, natural, relevant, and not repetitive.",
     "Return JSON only with an activities array.",
     "Each actor handle has a weight; prefer higher-weight actors more often, proportionally.",
-    slurpAudienceToneInstruction(input.settings.audienceTone),
-    "Actors carry traits and a relationship to the creator. Write each reply as that specific person: a long-standing paying regular does not sound like somebody who arrived yesterday, and somebody whose trait is 'emoji only' does not write a paragraph.",
-    `At most ${input.settings.fanLikesPerRefresh} likes and ${input.settings.fanRepliesPerRefresh} replies total.`,
+    `At most ${input.settings.fanLikesPerRefresh} likes, ${input.settings.fanRepliesPerRefresh} replies, and ${input.settings.fanRepostsPerRefresh} reposts total.`,
     `At most ${NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR} activities for any creator.`,
   ].join("\n");
   const creators = input.creators.map((candidate) => ({
@@ -206,26 +144,12 @@ function buildFanActivityMessages(input: {
       handle: candidate.creator.handle,
       bio: candidate.creator.bio,
     },
-    // Each actor arrives as a person, not a name. A comment from "a regular who has spent 240
-    // coins here over four months and only shows up at night" is a different comment from one by
-    // an anonymous handle, and all of this was already stored and thrown away.
     actorHandles: weightedIdentitySequence(candidate.identities, candidate.policy.archetypeWeights).map(
-      ({ identity, weight }) => ({
-        handle: identity.snapshot.handle,
-        weight,
-        ...(identity.persona
-          ? {
-              traits: identity.persona.traits,
-              relationship: describeFanRelationship(identity.persona),
-            }
-          : {}),
-      }),
+      ({ identity, weight }) => ({ handle: identity.snapshot.handle, weight }),
     ),
-    // Locked bodies stay out, but the image line stays in: a teaser's picture is public.
-    posts: candidate.posts.map(({ id, title, content, image, access, comments }) =>
-      access === "locked"
-        ? { id, title, access, ...(image && { image }), ...(comments?.length ? { comments } : {}) }
-        : { id, title, content, access, ...(image && { image }), ...(comments?.length ? { comments } : {}) },
+    // Locked bodies stay out of the prompt: a fan reply must not restate paid content.
+    posts: candidate.posts.map(({ id, title, content, access }) =>
+      access === "locked" ? { id, title, access } : { id, title, content, access },
     ),
   }));
   return [
@@ -236,7 +160,7 @@ function buildFanActivityMessages(input: {
 
 async function generateFanActivity(input: {
   connection: GenerationConnection;
-  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh">;
+  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "fanRepostsPerRefresh">;
   creators: NoodlerFanCreatorCandidate[];
   debugMode: boolean;
 }): Promise<NoodleGeneratedFanRefresh> {
@@ -302,16 +226,7 @@ export function parseGeneratedFanActivityResponse(
   const normalized = normalizeSlurpFanActivityRows(value, creatorAccountIdByPostId);
   const accepted = normalized.rows.flatMap((row) => {
     const parsed = noodleGeneratedFanActivitySchema.safeParse(row);
-    // The shared schema strips fields it does not know, and this package cannot change it, so the
-    // parent is read back off the normalised row rather than through the parse result.
-    return parsed.success
-      ? [
-          {
-            ...parsed.data,
-            parentInteractionId: typeof row.parentInteractionId === "string" ? row.parentInteractionId : null,
-          },
-        ]
-      : [];
+    return parsed.success ? [parsed.data] : [];
   });
   return {
     value: { activities: accepted },
@@ -336,21 +251,6 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
     MAX_FAN_POSTS_PER_CREATOR,
   );
   const provider = input.identityProvider ?? syntheticNoodlerFanIdentityProvider;
-  const allPostIds = creators.flatMap((creator) => (postsByCreator.get(creator.id) ?? []).map((post) => post.id));
-  const commentsByPost = new Map<string, { id: string; from: string; text: string }[]>();
-  for (const interaction of allPostIds.length > 0 ? await noodle.listNoodlerInteractions(allPostIds) : []) {
-    if (interaction.type !== "reply" || !interaction.content?.trim()) continue;
-    const list = commentsByPost.get(interaction.postId) ?? [];
-    // Newest few only. The whole thread would crowd out the post it is under.
-    if (list.length < MAX_POST_COMMENTS_IN_PROMPT) {
-      list.push({
-        id: interaction.id,
-        from: interaction.actorSnapshot?.handle ?? interaction.actorAccountId,
-        text: interaction.content.slice(0, 200),
-      });
-    }
-    commentsByPost.set(interaction.postId, list);
-  }
   return creators.flatMap((creator) => {
     const policy = resolveNoodlerFanActivityPolicy(input.settings, creator);
     if (!policy.enabled) return [];
@@ -359,24 +259,25 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
       creatorAccountId: creator.id,
       title: post.title,
       content: post.content,
-      image: noodleImageContext(post),
       access: post.access,
-      comments: commentsByPost.get(post.id) ?? [],
     }));
-    const identities = provider.resolve(policy.archetypeWeights, creator.id);
+    const identities = provider.resolve(policy.archetypeWeights);
     return posts.length > 0 && identities.length > 0 ? [{ creator, policy, posts, identities }] : [];
   });
 }
 
 export async function generateNoodlerFanActivityBatch(input: {
   db: DB;
-  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone">;
+  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "fanRepostsPerRefresh">;
   connection: GenerationConnection;
   creators: NoodlerFanCreatorCandidate[];
   debugMode?: boolean;
 }): Promise<NoodleFanActivityToStore[]> {
   if (input.creators.length === 0) return [];
-  if (input.settings.fanLikesPerRefresh + input.settings.fanRepliesPerRefresh === 0) {
+  if (
+    input.settings.fanLikesPerRefresh + input.settings.fanRepliesPerRefresh + input.settings.fanRepostsPerRefresh ===
+    0
+  ) {
     return [];
   }
   const generated = await generateFanActivity({ ...input, debugMode: input.debugMode === true });
@@ -389,10 +290,14 @@ export async function generateNoodlerFanActivityBatch(input: {
     quotas: {
       like: input.settings.fanLikesPerRefresh,
       reply: input.settings.fanRepliesPerRefresh,
+      repost: input.settings.fanRepostsPerRefresh,
     },
   });
 }
 
 export async function resolveNoodlerFanConnection(db: DB, settings: Pick<SlurpSettings, "generationConnectionId">) {
-  return resolveSlurpTextConnection(createConnectionsStorage(db), settings.generationConnectionId);
+  const connections = createConnectionsStorage(db);
+  return settings.generationConnectionId
+    ? connections.getWithKey(settings.generationConnectionId)
+    : connections.getDefaultForAgents();
 }

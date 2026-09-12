@@ -41,6 +41,23 @@ export function selectNoodleImageProviderPrompt(input: {
   return hasInternalMarker || copiesPrivateContext || copiesGuidance ? input.rawPrompt : rewrittenPrompt;
 }
 
+/** Recompile an accepted rewrite before it crosses the image-provider boundary. */
+export function prepareNoodleImageProviderPrompt(input: {
+  rewrittenPrompt: string | null | undefined;
+  rawPrompt: string;
+  compilePrompt: (prompt: string) => string;
+  privateContext?: ReadonlyArray<string | null | undefined>;
+  guidanceContext?: ReadonlyArray<string | null | undefined>;
+}): string {
+  const rewrittenPrompt = input.rewrittenPrompt?.trim();
+  return selectNoodleImageProviderPrompt({
+    rewrittenPrompt: rewrittenPrompt ? input.compilePrompt(rewrittenPrompt) : rewrittenPrompt,
+    rawPrompt: input.rawPrompt,
+    privateContext: input.privateContext,
+    guidanceContext: input.guidanceContext,
+  });
+}
+
 /**
  * Recover the visual idea when a weaker timeline model wraps imagePrompt in
  * JSON or repeats Marinara's legacy prompt-assembly labels inside the field.
@@ -76,20 +93,4 @@ export function normalizeNoodleImagePrompt(value: string | null | undefined): st
   }
 
   return candidate;
-}
-
-/**
- * A short description of a post's attached image, for prompts that generate reactions to it.
- *
- * A generated image already carries the prompt that produced it, which describes the picture
- * better than a caption model would and costs nothing to reuse. An uploaded image has no prompt,
- * so it is announced as present but undescribed — a reader who knows an image exists writes
- * "cute pic" rather than "what pic?", which was the whole failure.
- *
- * Returns `null` when the post has no image, so callers can spread it away.
- */
-export function noodleImageContext(post: { imageUrl?: string | null; imagePrompt?: string | null }): string | null {
-  if (!post.imageUrl) return null;
-  const prompt = post.imagePrompt?.trim();
-  return prompt ? `The post has an attached image showing: ${prompt}` : "The post has an attached image.";
 }

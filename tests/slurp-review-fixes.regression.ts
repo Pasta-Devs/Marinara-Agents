@@ -21,17 +21,42 @@ assert.match(
 
 // Check-then-spend has to be one span. `enqueueFinancial` serializes each wallet write, not the
 // decision that precedes it, so two concurrent accepts both read `quoted` and both paid.
-assert.match(messagesStorage, /const commissionAccepts = new Map</u);
+assert.match(messagesStorage, /const commissionOperations = new Map</u);
 assert.match(
   messagesStorage,
-  /async acceptCommission\(id: string\)[\s\S]{0,600}?commissionAccepts\.set\(id, current\)/u,
-  "commission accepts must be serialized per commission",
+  /async acceptCommission\(id: string\)[\s\S]{0,300}?queueCommissionOperation\(id/u,
+  "commission operations must be serialized per commission",
 );
 // A failure after the debit must give the coins back, like the PPV path does.
+const acceptStart = messagesStorage.indexOf("async acceptCommissionUnlocked(id: string)");
+const acceptEnd = messagesStorage.indexOf("\n    async ", acceptStart + 1);
+const acceptCommissionUnlocked = messagesStorage.slice(acceptStart, acceptEnd === -1 ? undefined : acceptEnd);
+assert.ok(acceptCommissionUnlocked, "acceptCommissionUnlocked must exist");
+assert.match(
+  acceptCommissionUnlocked,
+  /await compensateSlurpPayment\(/u,
+  "a failed commission accept must be compensated",
+);
 assert.match(
   messagesStorage,
-  /async acceptCommissionUnlocked[\s\S]{0,1400}?refundCoins\([\s\S]{0,200}?reverseCreatorIncome\(/u,
-  "a failed commission accept must be compensated",
+  /if \(!current\.refundedAt\)[\s\S]{0,500}?refundCoins\([\s\S]{0,500}?current = \([\s\S]{0,2000}?if \(reversal > 0 && !current\?\.reversedAt\)[\s\S]{0,300}?reverseCreatorIncome/u,
+  "compensation must persist the refund before it attempts creator-income reversal",
+);
+// Compensation reverses the amount that was actually credited, never a share recomputed from the
+// current setting, which can have changed since the payment.
+assert.match(messagesStorage, /reversal = Number\(current\.creditedAmount\)/u);
+assert.doesNotMatch(messagesStorage, /slurpCreatorRevenueShare\(payment\.price/u);
+assert.match(messagesStorage, /db\.transaction\(async \(tx\) => \{[\s\S]{0,500}?current\.state !== "accepted"/u);
+assert.match(messagesStorage, /const paymentId = `commission:\$\{id\}:accept`/u);
+assert.match(
+  messagesStorage,
+  /paymentId[\s\S]{0,900}?spendCoins\([\s\S]{0,260}?paymentId/u,
+  "commission acceptance must pass its stable payment ID to spendCoins",
+);
+assert.doesNotMatch(
+  messagesStorage,
+  /acceptCommissionUnlocked[\s\S]{0,1200}?spendCoins\([\s\S]{0,220}?commission\.creatorAccountId,\s*\n\s*\)\)/u,
+  "commission acceptance must not directly call unkeyed spendCoins",
 );
 // Re-quoting an accepted commission used to reset it to `quoted` and make it payable again.
 assert.match(
@@ -125,7 +150,10 @@ assert.match(
 
 const generation = read(join(server, "services/slurp/slurp-generation.service.ts"));
 // Automatic posting only ever produced feed posts, so the Story shelf could only be filled by hand.
-assert.match(generation, /const storyVariation = variation\?\.story === true && imagesEnabled;/u);
+assert.match(
+  generation,
+  /const storyVariation = \(variation\?\.story === true \|\| input\.request\.postType === "story"\) && imagesEnabled;/u,
+);
 // A Story is a picture with a line under it, so only the path that commits an image may mark one.
 assert.match(
   generation,
@@ -308,10 +336,10 @@ assert.doesNotMatch(read(join(server, "services/garnish-ads/garnish-ads.base.ts"
 // `declined` and its four localized labels shipped, but no route or button could reach it, so an
 // unwanted brief sat in the thread forever.
 assert.match(messagesStorage, /async declineCommission\(id: string, by: "creator" \| "viewer"\)/u);
-// Only an unpaid commission: after accept the coins have moved and it would need a refund path.
+// Briefs and quotes can end directly. Accepted commissions use the compensation path.
 assert.match(
   messagesStorage,
-  /async declineCommission[\s\S]{0,400}?commission\.state !== "brief" && commission\.state !== "quoted"/u,
+  /async declineCommissionUnlocked[\s\S]{0,700}?commission\.state === "accepted"[\s\S]{0,500}?by === "viewer"/u,
 );
 assert.match(messageRoutes, /commissions\/:commissionId\/decline/u);
 assert.match(messageRoutes, /if \(!isCreator && !isViewer\) return reply\.code\(403\)/u);
@@ -394,10 +422,7 @@ console.log("slurp review fixes regression passed");
 // indicator have to appear at send time. Without this the chat sat empty for the whole wait.
 assert.match(messagesView2, /setPending\(\{ content, id: null \}\)/u);
 assert.match(messagesView2, /if \(!ownsCreator\) setTyping\(true\)/u);
-assert.match(
-  messagesView2,
-  /holdTyping\(result\.reply \? \(result\.typingMs \?\? 0\) : 0, startedAt, result\.reply\?\.id\)/u,
-);
+assert.match(messagesView2, /holdTyping\(result\.reply \? \(result\.typingMs \?\? 0\) : 0, result\.reply\?\.id\)/u);
 assert.match(messagesView2, /pending && !messages\.some\(\(message\) => message\.id === pending\.id\)/u);
 
 const slurpHooks = readFileSync("packages/slurp/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");

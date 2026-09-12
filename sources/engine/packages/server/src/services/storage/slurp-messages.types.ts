@@ -56,11 +56,16 @@ export type SlurpCommission = {
   threadId: string;
   viewerAccountId: string;
   creatorAccountId: string;
-  state: "brief" | "quoted" | "accepted" | "declined" | "delivered";
+  state: "brief" | "quoted" | "accepted" | "cancellation_pending" | "declined" | "delivered";
   brief: string;
   price: number;
   deliveryMessageId: string | null;
   deliverAt: string | null;
+  mediaPath: string | null;
+  cancellationId: string | null;
+  deliveryId: string | null;
+  deliveryClaimToken: string | null;
+  deliveryClaimedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };

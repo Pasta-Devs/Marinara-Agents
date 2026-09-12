@@ -28,7 +28,7 @@ const IGNORED_NAMES = new Set(["setImmediate", "clearImmediate", "NodeJS"]);
 const CODES = /error (TS2304|TS2552): Cannot find name '([^']+)'/;
 
 const packages = process.argv.slice(2);
-if (packages.length === 0) packages.push("slurp");
+if (packages.length === 0) packages.push("slurp2");
 
 let failed = false;
 for (const id of packages) {

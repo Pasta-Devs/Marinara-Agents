@@ -92,6 +92,7 @@ const tipSchema = z.object({
   creatorAccountId: z.string().trim().min(1),
   amount: z.number().int().min(1).max(9999),
   note: z.string().trim().max(280).default(""),
+  requestId: z.string().trim().min(8).max(100).optional(),
 });
 
 /**
@@ -350,6 +351,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
               : "none",
         creatorState: await slurp.getCreatorState(thread.creatorAccountId),
         threadState: thread.threadState,
+        scheduledFollowUps: thread.scheduledFollowUps,
       },
     };
   });
@@ -531,11 +533,15 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await requireViewer(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const creator = await slurp.getNoodlerAccountById(parsed.data.creatorAccountId);
+    if (creator?.sourceKind === "persona" && creator.sourceEntityId === viewer.id)
+      return reply.code(400).send({ error: "You cannot tip yourself." });
     const sent = await messages.tipInThread(
       viewer.id,
       parsed.data.creatorAccountId,
       parsed.data.amount,
       parsed.data.note,
+      parsed.data.requestId,
     );
     if (sent.status === "not_found") return reply.code(404).send({ error: "Creator not found" });
     if (sent.status === "closed") return reply.code(403).send({ error: "This Creator is not accepting messages." });
@@ -781,7 +787,14 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     const isCreator = await ownsCreator(parsed.data.personaId, commission.creatorAccountId);
     const isViewer = commission.viewerAccountId === parsed.data.personaId;
     if (!isCreator && !isViewer) return reply.code(403).send({ error: "Commission not found" });
-    if (commission.state !== "brief" && commission.state !== "quoted") {
+    const canCancel =
+      commission.state === "brief" ||
+      commission.state === "quoted" ||
+      (commission.state === "cancellation_pending" && isViewer) ||
+      (commission.state === "accepted" &&
+        isViewer &&
+        (!commission.deliverAt || commission.deliverAt <= new Date().toISOString()));
+    if (!canCancel) {
       return reply.code(409).send({ error: "This commission can no longer be called off." });
     }
     return { commission: await messages.declineCommission(commission.id, isCreator ? "creator" : "viewer") };
@@ -1212,7 +1225,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       return reply.code(403).send({ error: "Only the Creator's owner can cancel follow-ups." });
     }
 
-    await messages.removeScheduledFollowUp(parsed.data.threadId, parsed.data.followUpId);
+    await messages.cancelScheduledFollowUp(parsed.data.threadId, parsed.data.followUpId);
     return { success: true };
   });
 

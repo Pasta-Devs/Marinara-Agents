@@ -128,6 +128,11 @@ export const mapCommission = (row: Record<string, unknown>): SlurpCommission => 
   price: int(row.price as string),
   deliveryMessageId: (row.deliveryMessageId as string | null) ?? null,
   deliverAt: (row.deliverAt as string | null) ?? null,
+  mediaPath: (row.mediaPath as string | null) ?? null,
+  cancellationId: (row.cancellationId as string | null) ?? null,
+  deliveryId: (row.deliveryId as string | null) ?? null,
+  deliveryClaimToken: (row.deliveryClaimToken as string | null) ?? null,
+  deliveryClaimedAt: (row.deliveryClaimedAt as string | null) ?? null,
   createdAt: String(row.createdAt),
   updatedAt: String(row.updatedAt),
 });

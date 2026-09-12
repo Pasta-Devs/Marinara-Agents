@@ -17,7 +17,17 @@ const locales = JSON.parse(
 // A queued reply means she noticed and did not answer. That is a beat, not a bug, and it needs a
 // timestamp to be one.
 assert.match(operation, /markRead\(thread\.id, "creator"\)/u);
-assert.match(operation, /pacing\.mode === "queued" && input\.force !== true/u);
+assert.match(operation, /pacing\.mode === "queued" \|\| pacing\.mode === "delayed"/u);
+assert.match(
+  operation,
+  /Momentum can extend the stored conversation window, but it must not override a schedule/u,
+  "hot momentum must not make an offline creator answer immediately",
+);
+assert.match(
+  operation,
+  /momentum === "hot" && availability\.online/u,
+  "only an online Creator can extend the conversation window",
+);
 
 // Every outcome the operation can report has copy, so none of them renders as silence.
 for (const status of ["queued", "cooling", "busy", "ineligible", "connection_not_found", "failed"]) {

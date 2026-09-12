@@ -145,7 +145,7 @@ const noodleOwnedSourcePaths = [
   "packages/server/src/services/storage/noodle-refresh-run-retention.ts",
   "packages/server/src/services/storage/noodle.storage.ts",
 ];
-const slurpSourceRoot = join(packagesDir, "slurp/src/engine");
+const slurpSourceRoot = join(packagesDir, "slurp2/src/engine");
 const slurpOwnedSourcePaths = [
   "packages/client/src/components/slurp",
   "packages/client/src/hooks/use-slurp-media-src.ts",
@@ -178,7 +178,7 @@ const rebuiltFeatureClients = new Set(
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
 async function prepareFeatureBuildRoot(feature) {
-  if (feature.id === "noodle" || feature.id === "slurp") {
+  if (feature.id === "noodle" || feature.id === "slurp2") {
     if (!existsSync(feature.packageSourceRoot)) {
       throw new Error(`Missing package-owned ${feature.name} source`);
     }
@@ -331,39 +331,39 @@ const features = [
     },
   },
   {
-    id: "slurp",
-    version: "1.2.64",
-    minEngineVersion: "2.4.3",
+    id: "slurp2",
+    version: "0.0.1",
+    minEngineVersion: "2.4.5",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
-    name: "Slurp",
+    name: "Slurp 2",
     description:
-      "The standalone successor to NoodleR: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity.",
+      "The Slurp remaster, installable beside the original Slurp with its own separate data: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity.",
     localizations: {
       de: {
-        name: "Slurp",
+        name: "Slurp 2",
         description:
-          "Erstelle ein lokales Creator-Profil aus einem Engine-Charakter oder einer Engine-Persona, veröffentliche öffentliche oder gesperrte Beiträge und simuliere Abonnements und Publikumsaktivität. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Slurp.",
+          "Erstelle ein lokales Creator-Profil aus einem Engine-Charakter oder einer Engine-Persona, veröffentliche öffentliche oder gesperrte Beiträge und simuliere Abonnements und Publikumsaktivität. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Slurp 2.",
         homeBrowserTab: {
-          label: "Slurp",
-          ariaLabel: "Slurp öffnen",
+          label: "Slurp 2",
+          ariaLabel: "Slurp 2 öffnen",
         },
       },
       ko: {
-        name: "Slurp",
+        name: "Slurp 2",
         description:
-          "Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 Slurp 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Slurp를 여세요.",
+          "Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 Slurp 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Slurp 2를 여세요.",
         homeBrowserTab: {
-          label: "Slurp",
-          ariaLabel: "Slurp 열기",
+          label: "Slurp 2",
+          ariaLabel: "Slurp 2 열기",
         },
       },
       pl: {
-        name: "Slurp",
+        name: "Slurp 2",
         description:
-          "Utwórz lokalne profile twórców z postaci silnika lub person silnika, publikuj publiczne lub zablokowane posty Slurp i symuluj subskrypcje oraz aktywność publiczności. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Slurp na stronie głównej.",
+          "Utwórz lokalne profile twórców z postaci silnika lub person silnika, publikuj publiczne lub zablokowane posty Slurp i symuluj subskrypcje oraz aktywność publiczności. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Slurp 2 na stronie głównej.",
         homeBrowserTab: {
-          label: "Slurp",
-          ariaLabel: "Otwórz Slurp",
+          label: "Slurp 2",
+          ariaLabel: "Otwórz Slurp 2",
         },
       },
     },
@@ -380,13 +380,13 @@ const features = [
     // `slurpcoin.svg` is deliberately not shipped: the Engine keeps SVG out of its servable
     // package-asset content types, so the route 404s it whatever the manifest declares. The coin
     // is inlined as a data URI in SlurpCoin.tsx instead, from the same file kept as source.
-    assetPaths: ["slurp-logo.png", "slurpagent.png"],
+    assetPaths: ["slurp2-logo.png", "slurp2agent.png"],
     contributions: {
       slots: ["home-browser-tab"],
       homeBrowserTab: {
-        label: "Slurp",
-        ariaLabel: "Open Slurp",
-        iconPaths: ["slurp-logo.png"],
+        label: "Slurp 2",
+        ariaLabel: "Open Slurp 2",
+        iconPaths: ["slurp2-logo.png"],
       },
     },
   },
@@ -711,7 +711,7 @@ export async function selfCheck() {
         // method", which broke every outbound request the package made. The runtime provisions
         // undici alongside the snapshot, so resolving to the Engine's copy is the fix.
         "--external:undici",
-        ...(feature.id === "long-term-memory" || feature.id === "slurp" ? ["--external:zod"] : []),
+        ...(feature.id === "long-term-memory" || feature.id === "slurp2" ? ["--external:zod"] : []),
         `--alias:@marinara-engine/shared=${sharedBundleEntry}`,
         `--metafile=${metafile}`,
         `--outfile=${output}`,
@@ -727,7 +727,7 @@ export async function selfCheck() {
     }
     if (feature.ownedSourcePaths?.length) {
       await capturePackageSources(metafile, prepared.buildRoot, feature.ownedSourcePaths);
-      if (feature.id === "slurp") {
+      if (feature.id === "slurp2") {
         await removeOwnedSourceSnapshots(["packages/client/src/localization/locales"]);
       }
     } else {
@@ -1550,7 +1550,7 @@ function Root({ element }) {
 class Element extends HTMLElement { connectedCallback() { if (!this.__root) this.__root = createRoot(this); this.__root.render(<QueryClientProvider client={client}><Root element={this} /></QueryClientProvider>); } disconnectedCallback() { queueMicrotask(() => { if (!this.isConnected && this.__root) { this.__root.unmount(); this.__root = null; } }); } }
 if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.stringify(tag)}, Element);`;
     } else if (feature.clientImport) {
-      if (feature.id === "noodle" || feature.id === "slurp") {
+      if (feature.id === "noodle" || feature.id === "slurp2") {
         const setterName = feature.id === "noodle" ? "setNoodlePackageStyles" : "setSlurpPackageStyles";
         source = `import { ${setterName} } from ${JSON.stringify(resolve(prepared.buildRoot, feature.clientImport))};`;
         const styles = await buildPackageStyles(prepared.buildRoot, temporary, feature.id);
@@ -1809,8 +1809,8 @@ for (const feature of selectedFeatures) {
           ? "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md"
           : feature.id === "noodle"
             ? "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
-            : feature.id === "slurp"
-              ? "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp/README.md"
+            : feature.id === "slurp2"
+              ? "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp2/README.md"
               : `https://github.com/Pasta-Devs/Marinara-Agents#${feature.id}`,
     });
   } finally {

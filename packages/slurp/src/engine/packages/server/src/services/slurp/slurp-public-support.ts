@@ -46,12 +46,7 @@ export function parseStringArray(value: unknown): string[] {
   }
 }
 
-export {
-  characterContextFromRow,
-  escapePromptAttribute,
-  escapePromptText,
-  noodlerCharacterCanonText,
-} from "./slurp-prompt-safety.js";
+export { characterContextFromRow, escapePromptAttribute, escapePromptText } from "./slurp-prompt-safety.js";
 
 export function galleryImageUrl(filePath: string, fallbackChatId: string) {
   const filename = basename(filePath.replace(/\\/g, "/"));
@@ -233,6 +228,7 @@ export async function resolvePersonaAccount(
 
 export function interactionDigestVerb(type: NoodleInteractionType) {
   if (type === "reply") return "replied on";
+  if (type === "repost") return "reposted";
   if (type === "vote") return "voted in";
   return "liked";
 }

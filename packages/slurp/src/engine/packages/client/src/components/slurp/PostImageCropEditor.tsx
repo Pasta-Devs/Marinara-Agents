@@ -48,20 +48,12 @@ export function PostImageCropEditor({
   source,
   crop: initialCrop = null,
   disabled = false,
-  lockedRatio,
   onCancel,
   onApply,
 }: {
   source: File | string;
   crop?: NoodlePostImageCrop | null;
   disabled?: boolean;
-  /**
-   * Pin the crop to one ratio and hide the picker. A Story is drawn and shown in one shape, so
-   * letting it be cropped square or landscape only produces a Story that does not fit its frame.
-   * Given as width / height so it can follow the configured Story size rather than being stuck to
-   * one of the four named aspects.
-   */
-  lockedRatio?: number;
   onCancel: () => void;
   onApply: (crop: NoodlePostImageCrop) => Promise<void>;
 }) {
@@ -109,14 +101,14 @@ export function PostImageCropEditor({
       return;
     }
     const initialAspect = closestAspect(sourceSize, initialCrop);
-    const base = resolveCrop(sourceSize, initialAspect, 1, { x: 0.5, y: 0.5 }, lockedRatio);
+    const base = resolveCrop(sourceSize, initialAspect, 1, { x: 0.5, y: 0.5 });
     setAspect(initialAspect);
     setZoom(clamp(Math.min(base.width / initialCrop.width, base.height / initialCrop.height), 1, 3));
     setCenter({
       x: initialCrop.x + initialCrop.width / 2,
       y: initialCrop.y + initialCrop.height / 2,
     });
-  }, [initialCrop, lockedRatio, sourceSize]);
+  }, [initialCrop, sourceSize]);
 
   useEffect(() => {
     const image = imageRef.current;
@@ -131,7 +123,7 @@ export function PostImageCropEditor({
     return () => observer.disconnect();
   }, [sourceSize]);
 
-  const crop = sourceSize ? resolveCrop(sourceSize, aspect, zoom, center, lockedRatio) : null;
+  const crop = sourceSize ? resolveCrop(sourceSize, aspect, zoom, center) : null;
   const busy = disabled || applying;
 
   const reset = () => {
@@ -213,7 +205,7 @@ export function PostImageCropEditor({
       </div>
 
       <div className="overflow-hidden rounded-lg bg-black/55 p-2">
-        <div className="relative mx-auto w-fit max-w-full overflow-hidden rounded-lg">
+        <div className="relative mx-auto w-fit max-w-full overflow-hidden rounded-md">
           <img
             ref={imageRef}
             alt={localizeUi("ui.noodle.postimagecropeditor.cropPreview")}
@@ -281,7 +273,7 @@ export function PostImageCropEditor({
       </div>
 
       <div className="space-y-2">
-        <div className={cn("flex flex-wrap gap-1 rounded-lg bg-[var(--background)] p-1", lockedRatio && "hidden")}>
+        <div className="flex flex-wrap gap-1 rounded-lg bg-[var(--background)] p-1">
           {ASPECT_OPTIONS.map((option) => (
             <button
               key={option.value}
@@ -293,7 +285,7 @@ export function PostImageCropEditor({
                 setCenter({ x: 0.5, y: 0.5 });
               }}
               className={cn(
-                "min-h-9 flex-1 rounded-lg px-2 text-xs font-bold transition-colors disabled:opacity-50",
+                "min-h-9 flex-1 rounded-md px-2 text-xs font-bold transition-colors disabled:opacity-50",
                 aspect === option.value
                   ? "bg-[var(--noodle-accent)] text-zinc-950"
                   : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
@@ -361,38 +353,16 @@ export function PostImageFrame({
   maxHeight?: number;
   onError?: () => void;
 }) {
-  const [naturalRatio, setNaturalRatio] = useState<number | null>(null);
   const validCrop = crop && isValidCrop(crop) ? crop : null;
   if (!validCrop) {
-    // Uncropped posts arrive in whatever shape the image model produced, and the Engine's
-    // defaults are portrait. A fixed 4:3 stage shrinks those to a stamp between two blurred
-    // margins, so the frame takes the picture's own shape, clamped so nothing runs off the
-    // screen: no taller than 4:5, no wider than 16:9, and a portrait gets more height to use.
-    const framed = naturalRatio ? Math.min(16 / 9, Math.max(0.8, naturalRatio)) : 4 / 3;
     return (
-      <div
-        className="relative flex w-full items-center justify-center overflow-hidden rounded-xl bg-[var(--slurp-media-stage,#17131a)]"
-        style={{ aspectRatio: framed, maxHeight: framed < 1 ? maxHeight * 1.45 : maxHeight }}
-      >
-        <ImageWithSource
-          source={src}
-          alt=""
-          aria-hidden="true"
-          className="absolute inset-0 h-full w-full scale-110 object-cover opacity-25 blur-2xl"
-        />
+      <div className="flex justify-center overflow-hidden rounded-xl bg-black/30" style={{ maxHeight }}>
         <ImageWithSource
           source={src}
           alt={alt}
           onError={onError}
-          onLoad={(event) => {
-            const image = event.currentTarget;
-            if (image.naturalWidth && image.naturalHeight) {
-              setNaturalRatio(image.naturalWidth / image.naturalHeight);
-            }
-          }}
-          loading="lazy"
-          decoding="async"
-          className="relative z-10 h-full w-full object-contain"
+          className="max-w-full object-contain"
+          style={{ maxHeight }}
         />
       </div>
     );
@@ -406,24 +376,10 @@ export function PostImageFrame({
   };
   return (
     <div
-      className="relative mx-auto w-full overflow-hidden rounded-xl bg-[var(--slurp-media-stage,#17131a)]"
+      className="relative mx-auto w-full overflow-hidden rounded-xl bg-black/30"
       style={{ aspectRatio, maxWidth: maxHeight * aspectRatio }}
     >
-      <ImageWithSource
-        source={src}
-        alt=""
-        aria-hidden="true"
-        className="absolute inset-0 h-full w-full scale-110 object-cover opacity-25 blur-2xl"
-      />
-      <ImageWithSource
-        source={src}
-        alt={alt}
-        onError={onError}
-        loading="lazy"
-        decoding="async"
-        className="absolute z-10 max-w-none"
-        style={imageStyle}
-      />
+      <ImageWithSource source={src} alt={alt} onError={onError} className="absolute max-w-none" style={imageStyle} />
     </div>
   );
 }
@@ -464,21 +420,10 @@ function resolveCrop(
   aspect: CropAspect,
   zoom: number,
   center: { x: number; y: number },
-  lockedRatio?: number,
 ): NormalizedCrop {
   const sourceRatio = size.width / size.height;
-  // A locked ratio overrides the named aspects entirely: the picker is hidden in that mode, so
-  // there is nothing for the four presets to mean.
   const targetRatio =
-    lockedRatio && Number.isFinite(lockedRatio) && lockedRatio > 0
-      ? lockedRatio
-      : aspect === "square"
-        ? 1
-        : aspect === "portrait"
-          ? 4 / 5
-          : aspect === "landscape"
-            ? 16 / 9
-            : sourceRatio;
+    aspect === "square" ? 1 : aspect === "portrait" ? 4 / 5 : aspect === "landscape" ? 16 / 9 : sourceRatio;
   const baseWidth = sourceRatio > targetRatio ? targetRatio / sourceRatio : 1;
   const baseHeight = sourceRatio > targetRatio ? 1 : sourceRatio / targetRatio;
   const width = baseWidth / zoom;

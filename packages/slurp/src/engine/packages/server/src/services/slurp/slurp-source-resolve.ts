@@ -1,43 +1,12 @@
 // Split from noodle-noodler-source.ts so the identity-minimization helpers stay a
 // pure module that regressions can import without an Engine database.
-import type { NoodleAccount, NoodleIdentityDisclosure, NoodlerSourceSnapshot } from "@marinara-engine/shared";
+import type { NoodleAccount, NoodlerSourceSnapshot } from "@marinara-engine/shared";
 import type { DB } from "../../db/connection.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
 import { parseRecord } from "./slurp-public-support.js";
-import { noodlerCharacterCanonText } from "./slurp-prompt-safety.js";
 
 function text(value: unknown): string {
   return typeof value === "string" ? value : "";
-}
-
-export async function resolveNoodlerCharacterCanon(
-  db: DB,
-  publicAccount: Pick<NoodleAccount, "kind" | "entityId"> | null,
-  disclosureMode: NoodleIdentityDisclosure,
-): Promise<string> {
-  if (!publicAccount) return "";
-  const characters = createCharactersStorage(db);
-  if (publicAccount.kind === "character") {
-    const source = await characters.getById(publicAccount.entityId);
-    return source ? noodlerCharacterCanonText(source.data, disclosureMode === "open") : "";
-  }
-  if (publicAccount.kind === "persona") {
-    const source = await characters.getPersona(publicAccount.entityId);
-    return source
-      ? noodlerCharacterCanonText(
-          {
-            name: source.name,
-            description: source.description,
-            personality: source.personality,
-            scenario: source.scenario,
-            appearance: source.appearance,
-            backstory: source.backstory,
-          },
-          disclosureMode === "open",
-        )
-      : "";
-  }
-  return "";
 }
 
 export async function resolveNoodlerSourceSnapshot(
