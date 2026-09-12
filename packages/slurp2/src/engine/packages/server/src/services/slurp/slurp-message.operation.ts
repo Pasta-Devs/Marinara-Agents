@@ -77,9 +77,15 @@ export async function replyToSlurpMessage(
   }
 
   const source = await slurp.resolveAccountSource(creator);
-  // TODO: Query lastActiveAt from population storage for better availability inference
+  const latestPost = await slurp.getNoodlerLatestPublishedPost(creator.id);
   const scheduled = source
-    ? await resolveSlurpCreatorAvailability(createCharactersStorage(db), source, undefined, new Date(), undefined)
+    ? await resolveSlurpCreatorAvailability(
+        createCharactersStorage(db),
+        source,
+        undefined,
+        new Date(),
+        latestPost?.createdAt ?? null,
+      )
     : { online: true, activity: null, minutesUntilOnline: 0 };
   // An open conversation window keeps the Creator online; momentum alone never wakes her.
   const availability =

@@ -3952,6 +3952,22 @@ export function createSlurpStorage(db: DB) {
       return rows.map(mapManagedPost);
     },
 
+    /**
+     * The newest post the audience can actually see, which is what "is this Creator active right
+     * now" means. Drafts are excluded in the query, not by the caller: filtering a `limit 1` result
+     * afterwards returns nothing when the newest post happens to be a draft, which reads as a
+     * Creator who has never posted.
+     */
+    async getNoodlerLatestPublishedPost(accountId: string): Promise<NoodlerManagedPost | null> {
+      const rows = await db
+        .select()
+        .from(noodlePosts)
+        .where(and(eq(noodlePosts.authorAccountId, accountId), ne(noodlePosts.access, "draft")))
+        .orderBy(desc(noodlePosts.createdAt))
+        .limit(1);
+      return rows[0] ? mapManagedPost(rows[0]) : null;
+    },
+
     async listNoodlerPostsByAccounts(accountIds: string[], limit = 8): Promise<Map<string, NoodlerManagedPost[]>> {
       const boundedLimit = Math.max(1, Math.min(50, Math.floor(limit)));
       const result = new Map<string, NoodlerManagedPost[]>();

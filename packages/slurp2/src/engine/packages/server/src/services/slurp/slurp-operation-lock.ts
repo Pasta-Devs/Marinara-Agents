@@ -4,9 +4,9 @@ import {
   isSlurpBackupActive as readSlurpBackupActive,
   setSlurpBackupActive,
 } from "./slurp-backup-state.js";
+import { claimSlurpDataDeletion, isSlurpDataDeletionActive } from "./slurp-data-deletion-state.js";
 
 const activeNoodleOperations = new Set<string>();
-let slurpDataDeletionActive = false;
 
 function claimNoodleOperation(key: string): (() => void) | null {
   if (activeNoodleOperations.has(key)) return null;
@@ -28,11 +28,11 @@ function claimNoodleOperation(key: string): (() => void) | null {
  */
 export function claimSlurpBackup(): (() => void) | null {
   if (
-    slurpDataDeletionActive ||
+    isSlurpDataDeletionActive() ||
     readSlurpBackupActive() ||
     hasActiveNoodlerAccountOperations() ||
     hasActiveSlurpMutations() ||
-    activeNoodleOperations.has("noodler-fan-activity")
+    activeNoodleOperations.size > 0
   )
     return null;
   const releaseWrite = claimNoodleOperation("slurp-write");
@@ -52,7 +52,7 @@ export async function tryNoodleOperation<T>(
   key: string,
   operation: () => Promise<T>,
 ): Promise<{ acquired: true; value: T } | { acquired: false }> {
-  if (readSlurpBackupActive()) return { acquired: false };
+  if (readSlurpBackupActive() || isSlurpDataDeletionActive()) return { acquired: false };
   const release = claimNoodleOperation(key);
   if (!release) return { acquired: false };
   try {
@@ -63,18 +63,19 @@ export async function tryNoodleOperation<T>(
 }
 
 export async function trySlurpWrite<T>(operation: () => Promise<T>) {
-  if (slurpDataDeletionActive || readSlurpBackupActive()) return { acquired: false as const };
+  if (isSlurpDataDeletionActive() || readSlurpBackupActive()) return { acquired: false as const };
   return tryNoodleOperation("slurp-write", operation);
 }
 
 export async function trySlurpDataDeletion<T>(operation: () => Promise<T>) {
-  if (slurpDataDeletionActive || readSlurpBackupActive() || activeNoodleOperations.has("slurp-write"))
+  if (readSlurpBackupActive() || hasActiveNoodlerAccountOperations() || activeNoodleOperations.size > 0)
     return { acquired: false as const };
-  slurpDataDeletionActive = true;
+  const release = claimSlurpDataDeletion();
+  if (!release) return { acquired: false as const };
   try {
     return { acquired: true as const, value: await operation() };
   } finally {
-    slurpDataDeletionActive = false;
+    release();
   }
 }
 

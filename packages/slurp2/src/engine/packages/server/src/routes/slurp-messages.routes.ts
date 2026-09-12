@@ -181,7 +181,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
         (latest, message) => (!latest || message.createdAt > latest ? message.createdAt : latest),
         null,
       );
-    const latestPost = (await slurp.listNoodlerPostsByAccount(creator.id, 1))[0] ?? null;
+    const latestPost = await slurp.getNoodlerLatestPublishedPost(creator.id);
     const source = await slurp.resolveAccountSource(creator);
     let availability = source
       ? await resolveSlurpCreatorAvailability(

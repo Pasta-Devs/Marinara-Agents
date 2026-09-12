@@ -274,12 +274,22 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
   const settings = await slurp.getSettings();
   const source = await slurp.resolveAccountSource(input.creator);
   const characters = createCharactersStorage(input.db);
-  const [scheduleContext, availability] = await Promise.all([
+  const [scheduleContext, recentPostRows] = await Promise.all([
     source ? resolveSlurpCreatorScheduleContext(characters, source, undefined, new Date()) : Promise.resolve(undefined),
-    source
-      ? resolveSlurpCreatorAvailability(characters, source, undefined, new Date(), undefined)
-      : Promise.resolve({ online: true, activity: null, minutesUntilOnline: 0 }),
+    slurp
+      .listNoodlerPostsByAccounts([input.creator.id], RECENT_POSTS)
+      .then((byAccount) => byAccount.get(input.creator.id) ?? [])
+      .catch(() => []),
   ]);
+  const availability = source
+    ? await resolveSlurpCreatorAvailability(
+        characters,
+        source,
+        undefined,
+        new Date(),
+        recentPostRows[0]?.createdAt ?? null,
+      )
+    : { online: true, activity: null, minutesUntilOnline: 0 };
   const characterCanon = await resolveNoodlerCharacterCanon(input.db, source, disclosureMode);
   // The fan's direction, and what the creator has posted lately. Both were already stored and
   // neither reached the one prompt where a fan is most likely to mention them.
@@ -287,21 +297,16 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
     .listTiesForCreator(input.creator.id)
     .then((ties) => ties.find((entry) => entry.memberId === input.viewer.id))
     .catch(() => undefined);
-  const recentPosts = await slurp
-    .listNoodlerPostsByAccounts([input.creator.id], RECENT_POSTS)
-    .then((byAccount) =>
-      (byAccount.get(input.creator.id) ?? [])
-        .filter((post) => post.access !== "draft")
-        .slice(0, RECENT_POSTS)
-        .map((post) => ({
-          id: post.id,
-          title: post.title,
-          content: post.content,
-          access: post.access,
-          imageUrl: post.imageUrl,
-        })),
-    )
-    .catch(() => []);
+  const recentPosts = recentPostRows
+    .filter((post) => post.access !== "draft")
+    .slice(0, RECENT_POSTS)
+    .map((post) => ({
+      id: post.id,
+      title: post.title,
+      content: post.content,
+      access: post.access,
+      imageUrl: post.imageUrl,
+    }));
   const stance = resolveSlurpStance({
     rapportTier: input.rapport.tier,
     rapportScore: input.rapport.score,
