@@ -50,6 +50,7 @@ export function SlurpSplash({ open, onDismiss }: { open: boolean; onDismiss: () 
   useEffect(() => {
     if (!open) return;
     const frame = window.requestAnimationFrame(() => {
+      topRef.current?.focus({ preventScroll: true });
       scrollToTop();
       window.requestAnimationFrame(scrollToTop);
     });
@@ -79,9 +80,9 @@ export function SlurpSplash({ open, onDismiss }: { open: boolean; onDismiss: () 
       title={`Slurp ${SLURP2_VERSION}`}
       width="max-w-2xl"
       contentRef={contentRef}
-      initialFocusRef={topRef}
-      // This is a required acknowledgement screen. A close button would let users bypass the warning.
-      hideCloseButton
+      // This is a required acknowledgement screen. Hide the disabled close control instead of
+      // passing a prop the shared Modal does not support.
+      panelClassName="[&>div:first-child>button]:hidden"
       closeDisabled
     >
       <div data-component="SlurpSplash" className="flex flex-col gap-6">

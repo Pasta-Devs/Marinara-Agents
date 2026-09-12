@@ -4870,7 +4870,11 @@ function ViewerHub({
     // Slot n sits after every nth post and takes the nth ad. Subtracting one here left the first
     // slot permanently empty and dropped one ad out of the rotation.
     if (index % inlineAdEvery !== inlineAdEvery - 1) return null;
-    return inlineAdsQuery.data?.items[Math.floor(index / inlineAdEvery)] ?? null;
+    const items = inlineAdsQuery.data?.items ?? [];
+    // The server hands back a small batch per fetch, not one ad per slot, so a long scroll
+    // must cycle through it rather than index off the end into slots that stay empty forever.
+    if (items.length === 0) return null;
+    return items[Math.floor(index / inlineAdEvery) % items.length];
   };
   const profileKey = (scope?.creators ?? []).map((creator) => creator.profile.id).join("\u0000");
   useEffect(() => {
@@ -4880,7 +4884,7 @@ function ViewerHub({
   // while discovery search has replaced it. Declared above the early returns so hook order
   // stays stable across the empty and error states below.
   // A search-filtered list is not the feed either, so it does not count as having seen it.
-  const feedIsOnScreen = tab === "all" && Boolean(scope) && !isLoading && !isError && !discoveryOpen && !search.trim();
+  const feedIsOnScreen = Boolean(scope) && !isLoading && !isError && !discoveryOpen && !search.trim();
   useEffect(() => {
     if (feedIsOnScreen) onFeedShown();
   }, [feedIsOnScreen, onFeedShown]);

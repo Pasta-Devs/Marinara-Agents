@@ -45,6 +45,7 @@ import { SLURP_POST_LANDED_REACTIONS } from "./slurp-creator-state.js";
 import { planSlurpWorldPulse, type SlurpPulseAction } from "./slurp-world-pulse.js";
 
 const TICK_KEY = "slurp2.world.tick";
+const MAINTENANCE_KEY = "slurp2.world.maintenance";
 
 /** The local day, so a per-pair roll is made once a day rather than on every page load. */
 function localDayKey(at: Date): string {
@@ -106,6 +107,16 @@ async function writeLastTick(db: DB, at: Date): Promise<void> {
   await createAppSettingsStorage(db).set(TICK_KEY, at.toISOString());
 }
 
+async function readMaintenanceMark(db: DB): Promise<Date | null> {
+  const raw = await createAppSettingsStorage(db).get(MAINTENANCE_KEY);
+  const parsed = raw ? Date.parse(raw) : Number.NaN;
+  return Number.isFinite(parsed) ? new Date(parsed) : null;
+}
+
+async function writeMaintenanceMark(db: DB, at: Date): Promise<void> {
+  await createAppSettingsStorage(db).set(MAINTENANCE_KEY, at.toISOString());
+}
+
 async function readPulseMark(db: DB): Promise<Date | null> {
   const raw = await createAppSettingsStorage(db).get(PULSE_KEY);
   const parsed = raw ? Date.parse(raw) : Number.NaN;
@@ -135,6 +146,9 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       return { status: "idle" as const, actions: 0 };
     }
     const accounts = await noodle.listNoodlerAccounts();
+    const automaticCreators = accounts.filter(
+      (account) => !(account.kind === "persona" && account.sourceKind === "persona"),
+    );
     const allAccounts = await noodle.listAccounts();
 
     // The generated population, plus the ambient roster when it is switched on.
@@ -180,8 +194,10 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     // Skipped on short hops. The catch-up runs on every notifications read, and this is a full scan
     // of every tie of every Creator; nobody's 45-day silence changes between two page loads.
     const staleBefore = new Date(until.getTime() - CHURN_SILENT_DAYS * 86_400_000).toISOString();
-    const elapsedDays = (until.getTime() - since.getTime()) / 86_400_000;
-    for (const account of elapsedDays >= CHURN_MIN_ELAPSED_DAYS ? accounts : []) {
+    const maintenanceMark = await readMaintenanceMark(db);
+    const maintenanceSince = maintenanceMark ?? since;
+    const maintenanceDue = (until.getTime() - maintenanceSince.getTime()) / 86_400_000 >= CHURN_MIN_ELAPSED_DAYS;
+    for (const account of maintenanceDue ? accounts : []) {
       for (const tie of await population.listTiesForCreator(account.id)) {
         if (tie.stage === "lapsed" || tie.stage === "stranger" || tie.stage === "subscriber") continue;
         if (tie.lastSeenAt >= staleBefore) continue;
@@ -192,7 +208,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     // Arcs. Where each relationship is heading, as opposed to where it stands. Runs on the same
     // cadence as churn because it reads the same silence, and because recomputing a three-week
     // trajectory on every page load would be a full scan for nothing.
-    for (const account of elapsedDays >= CHURN_MIN_ELAPSED_DAYS ? accounts : []) {
+    for (const account of maintenanceDue ? accounts : []) {
       for (const tie of await population.listTiesForCreator(account.id)) {
         if (tie.stage === "stranger") continue;
         const next = slurpNextAudienceArc({
@@ -228,7 +244,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     // credited to the Creator and that is the whole transaction, exactly as an audience commission
     // already settles. Only a first subscribe and a lapse are notified — a renewal every week from
     // every subscriber is the flood the readable-handful rule exists to prevent.
-    for (const account of elapsedDays >= CHURN_MIN_ELAPSED_DAYS ? accounts : []) {
+    for (const account of maintenanceDue ? accounts : []) {
       const price = await noodle.getCreatorSubscriptionPrice(account.id).catch(() => 0);
       for (const tie of await population.listTiesForCreator(account.id)) {
         const member = await population.get(tie.memberId).catch(() => null);
@@ -260,6 +276,9 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
         }
       }
     }
+    // Also written when the mark is missing: without that, the fallback resolves to the previous
+    // tick on every run, so a box that ticks more often than the interval never arms the clock.
+    if (maintenanceDue || !maintenanceMark) await writeMaintenanceMark(db, until);
 
     // Automated Creators review briefs on the world tick. Do not quote during request creation: the
     // fan must see a real review step and the Creator must have time to decline or revise the quote.
@@ -383,7 +402,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     // cannot. Nobody is at zero: a stranger's first comment sometimes getting a reply is the thing
     // that makes them comment again.
     let replied = 0;
-    for (const account of accounts) {
+    for (const account of automaticCreators) {
       if (replied >= SLURP_MAX_CREATOR_REPLIES_PER_TICK) break;
       const recent = (postsByAccount.get(account.id) ?? []).filter((post) => post.access !== "draft").slice(0, 4);
       if (recent.length === 0) continue;
@@ -427,8 +446,10 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     // the fan answers, the reply runs through the full direct-message path with rapport, arc, and
     // the creator's recent posts. A cheap invitation to a real conversation.
     let opened = 0;
-    for (const account of accounts) {
+    for (const account of automaticCreators) {
       if (opened >= SLURP_MAX_CREATOR_OPENERS_PER_TICK) break;
+      const messaging = await messages.getCreatorMessaging(account.id);
+      if (!messaging.proactiveMessages) continue;
       for (const tie of await population.listTiesForCreator(account.id)) {
         if (opened >= SLURP_MAX_CREATOR_OPENERS_PER_TICK) break;
         const daysSinceSeen = (until.getTime() - Date.parse(tie.lastSeenAt)) / 86_400_000;

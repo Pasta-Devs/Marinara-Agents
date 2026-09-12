@@ -2141,10 +2141,14 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
-    await ads.record(parsed.data.personaId, (req.params as { id: string }).id, "action");
+    const adId = (req.params as { id: string }).id;
+    if (!(await ads.canAct(parsed.data.personaId, SLURP_GARNISH_PLATFORM, adId))) {
+      return reply.code(404).send({ error: "Slurp ad not found" });
+    }
+    await ads.record(parsed.data.personaId, adId, "action");
     // Acting on an ad pays, capped per day. The wallet applies the cap, so a capped-out day
     // quietly pays nothing rather than failing the click.
-    const wallet = await noodle.earnCoins(parsed.data.personaId, "ad", (req.params as { id: string }).id);
+    const wallet = await noodle.earnCoins(parsed.data.personaId, "ad", adId);
     return { ok: true, coins: wallet.coins };
   });
 

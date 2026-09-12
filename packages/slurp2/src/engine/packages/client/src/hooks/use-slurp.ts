@@ -191,6 +191,24 @@ export function useGenerateSlurpAds() {
   });
 }
 
+export type SlurpAdInput = {
+  brand: string;
+  product: string;
+  copy: string;
+  contentRating: SlurpContentRating;
+};
+
+export function useCreateSlurpAd() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SlurpAdInput) => api.post<SlurpPromotion>(`/slurp2/noodler/ads/pool`, input),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: noodleKeys.adPool() });
+      void qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() });
+    },
+  });
+}
+
 export function useDeleteSlurpAd() {
   const qc = useQueryClient();
   return useMutation({

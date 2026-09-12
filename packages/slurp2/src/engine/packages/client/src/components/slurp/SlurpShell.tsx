@@ -73,8 +73,8 @@ export const SLURP_TOGGLE_ACTIVE_CLASS =
 
 export const NOODLER_MARK = "R";
 export const NOODLER_ADD_MARK = "+R";
-export const NOODLE_LOGO_SRC = "/api/capability-packages/slurp/assets/slurp-logo.png";
-const NOODLER_LOGO_SRC = "/api/capability-packages/slurp/assets/slurp-logo.png";
+export const NOODLE_LOGO_SRC = "/api/capability-packages/slurp2/assets/slurp2-logo.png";
+const NOODLER_LOGO_SRC = "/api/capability-packages/slurp2/assets/slurp2-logo.png";
 const SLURP_NAME = "Slurp";
 export const NOODLE_PERSONA_SWITCHER_PAGE_SIZE = 5;
 
