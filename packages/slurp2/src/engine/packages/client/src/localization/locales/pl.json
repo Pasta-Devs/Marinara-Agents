@@ -190,5 +190,15 @@
   "ui.slurp.messages.tipSent": "Napiwek wysłany",
   "ui.slurp.messages.typing": "{{name}} pisze…",
   "ui.slurp.messages.unreadCount": "Nieprzeczytane: {{count}}",
-  "ui.slurp.profile.message": "Wiadomość"
+  "ui.slurp.profile.message": "Wiadomość",
+  "ui.slurp.settings.advanced.backupTitle": "Kopia zapasowa i przywracanie",
+  "ui.slurp.settings.advanced.backupDetail": "Zapisz wszystkich twórców Slurp, posty, interakcje, subskrypcje, wiadomości, ustawienia i pliki multimedialne w jednym archiwum na swoim komputerze. Postacie silnika, persony i dane Noodle nie są zawarte.",
+  "ui.slurp.settings.advanced.backupButton": "Pobierz kopię zapasową",
+  "ui.slurp.settings.advanced.backupSuccess": "Kopia zapasowa Slurp została pobrana.",
+  "ui.slurp.settings.advanced.restoreButton": "Przywróć z kopii zapasowej",
+  "ui.slurp.settings.advanced.restoreDetail": "Przywracanie zastępuje wszystkie bieżące dane Slurp zawartością archiwum. Kopia zapasowa ze Slurp Legacy również działa i w ten sposób przenosisz swoje dane do tego pakietu.",
+  "ui.slurp.settings.advanced.restoreConfirm": "To zastąpi wszystkie bieżące dane Slurp kopią zapasową. Nie można tego cofnąć. Kontynuować?",
+  "ui.slurp.settings.advanced.restoreSuccess": "Przywracanie zakończone. {{creators}} twórców i {{posts}} postów.",
+  "ui.slurp.settings.advanced.restoreSkipped_one": "Pominięto {{count}} wpis archiwum.",
+  "ui.slurp.settings.advanced.restoreSkipped_other": "Pominięto {{count}} wpisów archiwum."
 }

@@ -122,6 +122,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.0.2",
+          "date": "2026-09-12",
+          "notes": "- Added a backup export: save every Creator, post, message, setting, and media file to one archive.\n- Added a restore. A Slurp Legacy backup can be restored here, which is how you move your data across.",
+          "highlight": true
+        },
+        {
           "version": "0.0.1",
           "date": "2026-09-12",
           "notes": "- First release of the Slurp remaster as its own package. It installs beside Slurp Legacy and keeps its own separate data.\n- Added direct messages, scheduled follow-ups, commissions, an audience funnel, and creator earnings kept apart from spending money.",

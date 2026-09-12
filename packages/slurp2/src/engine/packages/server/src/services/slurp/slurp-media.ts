@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, renameSync, rmSync, unlinkSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, unlinkSync, writeFileSync } from "fs";
 import { basename, dirname, join } from "path";
 import type { NoodlerManagedPost } from "@marinara-engine/shared";
 import { logger } from "../../lib/logger.js";
@@ -215,5 +215,49 @@ export function removeAllNoodlerMedia(): void {
     rmSync(dir, { recursive: true, force: true });
   } catch (error) {
     logger.warn(error, "[noodler] Failed to remove all Slurp media");
+  }
+}
+
+/** Every owned media file, as archive-relative paths, for a backup export. */
+export async function listNoodlerMediaFiles(): Promise<Array<{ relativePath: string; absolutePath: string }>> {
+  const marker = resolveNoodlerMediaAbsolutePath(`${NOODLER_MEDIA_PREFIX}__slurp_backup_root__`);
+  const root = marker ? dirname(marker) : null;
+  if (!root || !existsSync(root)) return [];
+  const files: Array<{ relativePath: string; absolutePath: string }> = [];
+  const visit = (directory: string, relativeDirectory: string): void => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const absolutePath = join(directory, entry.name);
+      const relativePath = `${relativeDirectory}/${entry.name}`;
+      // Teasers and width variants are derived from the original bytes, so the archive carries
+      // only the originals and the derivatives are regenerated on demand after a restore.
+      if (entry.isDirectory()) visit(absolutePath, relativePath);
+      else if (entry.isFile() && !entry.name.endsWith(TEASER_SUFFIX) && !/\.w\d+\.webp$/u.test(entry.name)) {
+        files.push({ relativePath, absolutePath });
+      }
+    }
+  };
+  visit(root, "media");
+  return files;
+}
+
+/**
+ * Write one media file back from a backup archive.
+ *
+ * The archive stores media under `media/<accountId>/<file>`, which maps to the owned namespace
+ * `<NOODLER_MEDIA_PREFIX><accountId>/<file>`. Anything that escapes that namespace, or that is not
+ * an image, is refused: a backup archive is untrusted input even when this package wrote it.
+ */
+export function restoreNoodlerMediaFile(archivePath: string, data: Buffer): boolean {
+  if (!archivePath.startsWith("media/")) return false;
+  const absolute = resolveNoodlerMediaAbsolutePath(`${NOODLER_MEDIA_PREFIX}${archivePath.slice("media/".length)}`);
+  if (!absolute) return false;
+  if (!isAllowedImageBuffer(data)) return false;
+  try {
+    mkdirSync(dirname(absolute), { recursive: true });
+    writeFileSync(absolute, data);
+    return true;
+  } catch (error) {
+    logger.warn(error, "[slurp2] Failed to restore media file %s", archivePath);
+    return false;
   }
 }

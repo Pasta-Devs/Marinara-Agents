@@ -1,8 +1,11 @@
 // ──────────────────────────────────────────────
 // Routes: Noodle Fake Social Media
 // ──────────────────────────────────────────────
-import { existsSync, readFileSync } from "fs";
-import { basename, dirname } from "path";
+import { createReadStream, createWriteStream, existsSync, readFileSync } from "fs";
+import { readFile, readdir, stat, unlink } from "node:fs/promises";
+import { finished } from "node:stream/promises";
+import { randomUUID } from "node:crypto";
+import { basename, dirname, join } from "path";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { extname } from "node:path";
 import { z } from "zod";
@@ -90,7 +93,16 @@ import {
 import { tryNoodlerAccountOperation } from "../services/slurp/slurp-account-operation-lock.js";
 import { createSlurpFirstPostQueue } from "../services/slurp/slurp-first-post-queue.service.js";
 import { trySlurpDataDeletion, trySlurpWrite } from "../services/slurp/slurp-operation-lock.js";
-import { removeAllNoodlerMedia } from "../services/slurp/slurp-media.js";
+import {
+  listNoodlerMediaFiles,
+  removeAllNoodlerMedia,
+  restoreNoodlerMediaFile,
+} from "../services/slurp/slurp-media.js";
+import { DATA_DIR } from "../utils/data-dir.js";
+import { claimSlurpBackup } from "../services/slurp/slurp-operation-lock.js";
+import { pauseNoodleAutoPost } from "../services/slurp/slurp-autopost-scheduler.service.js";
+import { pauseNoodleRefreshScheduler } from "../services/slurp/slurp-refresh-scheduler.service.js";
+import { jsonEntry, readStoredZip, writeStoredZip, type StoredZipEntry } from "../services/slurp/slurp-backup.js";
 import { clearNoodlerImageConnections } from "../services/slurp/slurp-image-connections.js";
 import { generateAndApplyNoodlerCreatorReply } from "../services/slurp/slurp-creator-reply.operation.js";
 import { getNoodlerFanActivityStatus, runNoodlerFanActivity } from "../services/slurp/slurp-fan-activity.operation.js";
@@ -506,6 +518,297 @@ export async function slurpRoutes(app: FastifyInstance) {
     const body = slurpSettingsSchema.partial().safeParse(req.body ?? {});
     if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
     return noodle.updateSlurpSettings(body.data);
+  });
+
+  // ── Backup: export and restore ────────────────────────────────────────────
+  //
+  // Both directions run as jobs rather than one long request: a real install carries thousands of
+  // rows and every generated image, which takes far longer than a browser will wait. The client
+  // starts a job, polls it, then downloads or reads the result.
+  //
+  // The archive format is shared with legacy Slurp on purpose. Its data files are named for
+  // logical entities ("accounts", "posts"), not for physical tables, so a legacy export restores
+  // into this package even though every table was renamed from slurp_* to slurp2_*.
+
+  type BackupJob = {
+    id: string;
+    kind: "export" | "restore";
+    state: string;
+    stage: string;
+    detail: string;
+    creators: number;
+    posts: number;
+    interactions: number;
+    mediaFiles: number;
+    mediaCompleted: number;
+    mediaBytes: number;
+    archiveBytes: number;
+    skipped: string[];
+    error: string | null;
+    filePath: string | null;
+    terminalAt: number | null;
+  };
+
+  const backupJobs = new Map<string, BackupJob>();
+  const BACKUP_RETENTION_MS = 24 * 60 * 60 * 1000;
+  const BACKUP_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+  const BACKUP_FILE_PREFIX = "slurp2-backup-";
+
+  async function sweepBackupArchives() {
+    const liveFilePaths = new Set<string>();
+    const now = Date.now();
+    for (const [id, job] of backupJobs) {
+      if (job.filePath) liveFilePaths.add(job.filePath);
+      if (job.terminalAt === null || now - job.terminalAt < BACKUP_RETENTION_MS) continue;
+      if (job.filePath) await unlink(job.filePath).catch(() => {});
+      backupJobs.delete(id);
+    }
+    for (const name of await readdir(DATA_DIR)) {
+      if (!name.startsWith(BACKUP_FILE_PREFIX) || !name.endsWith(".zip")) continue;
+      const stalePath = join(DATA_DIR, name);
+      if (liveFilePaths.has(stalePath)) continue;
+      await unlink(stalePath).catch(() => {});
+    }
+  }
+
+  // Sweep orphaned archives once at startup and again each hour. The timer is unref'd so a
+  // deactivated package never keeps the host process alive, and sweeps are idempotent.
+  void sweepBackupArchives();
+  const backupSweepTimer = setInterval(() => void sweepBackupArchives(), BACKUP_SWEEP_INTERVAL_MS);
+  backupSweepTimer.unref();
+
+  const newBackupJob = (kind: "export" | "restore", detail: string): BackupJob => ({
+    id: randomUUID(),
+    kind,
+    state: "queued",
+    stage: "queued",
+    detail,
+    creators: 0,
+    posts: 0,
+    interactions: 0,
+    mediaFiles: 0,
+    mediaCompleted: 0,
+    mediaBytes: 0,
+    archiveBytes: 0,
+    skipped: [],
+    error: null,
+    filePath: null,
+    terminalAt: null,
+  });
+
+  const failJob = (job: BackupJob, error: unknown) => {
+    job.state = "error";
+    job.stage = "error";
+    job.error = error instanceof Error ? error.message : String(error);
+    job.detail = job.error;
+    job.terminalAt = Date.now();
+  };
+
+  /** Run a job body while the data is held still, releasing every lock in reverse order. */
+  const runExclusive = async (job: BackupJob, body: () => Promise<void>) => {
+    const release = claimSlurpBackup();
+    if (!release) {
+      failJob(job, "Slurp data is busy. Try again shortly.");
+      return;
+    }
+    const releaseScheduler = await pauseNoodleAutoPost();
+    const releaseRefreshScheduler = await pauseNoodleRefreshScheduler();
+    try {
+      await body();
+    } catch (error) {
+      failJob(job, error);
+    } finally {
+      releaseRefreshScheduler();
+      releaseScheduler();
+      release();
+    }
+  };
+
+  const createBackupJob = async () => {
+    const job = newBackupJob("export", "Waiting for the backup worker.");
+    backupJobs.set(job.id, job);
+    void runExclusive(job, async () => {
+      job.state = "preparing";
+      job.stage = "reading-data";
+      job.detail = "Reading Slurp database records.";
+      const backup = await noodle.exportSlurpBackup();
+      job.creators = backup.tables.accounts.length;
+      job.posts = backup.tables.posts.length;
+      job.interactions = backup.tables.interactions.length;
+      const mediaFiles = await listNoodlerMediaFiles();
+      job.mediaFiles = mediaFiles.length;
+      job.stage = "writing-archive";
+      job.state = "writing";
+      job.detail = `Writing archive. ${mediaFiles.length} media file${mediaFiles.length === 1 ? "" : "s"} found.`;
+      const entries: StoredZipEntry[] = [
+        {
+          name: "manifest.json",
+          read: async () =>
+            jsonEntry("manifest.json", {
+              format: "marinara-slurp-backup",
+              formatVersion: 1,
+              sourcePackage: "slurp2",
+              exportedAt: new Date().toISOString(),
+              dataFiles: Object.keys(backup.tables),
+              mediaIncluded: true,
+            }).data,
+        },
+        {
+          name: "data/app-settings.json",
+          read: async () => jsonEntry("app-settings.json", backup.settings).data,
+        },
+        ...Object.entries(backup.tables).map(([name, rows]) => ({
+          name: `data/${name}.json`,
+          read: async () => jsonEntry(`${name}.json`, rows).data,
+        })),
+        ...mediaFiles.map((media) => ({ name: media.relativePath, read: () => readFile(media.absolutePath) })),
+      ];
+      const filePath = join(DATA_DIR, `${BACKUP_FILE_PREFIX}${job.id}.zip`);
+      const output = createWriteStream(filePath);
+      const outputFinished = finished(output);
+      await Promise.all([
+        writeStoredZip(output, entries, ({ index, total, name, bytes }) => {
+          job.mediaCompleted = Math.max(0, index - (entries.length - mediaFiles.length));
+          if (name.startsWith("media/")) job.mediaBytes += bytes;
+          job.detail = `Writing ${index} of ${total} archive entries. Last: ${name}.`;
+        }),
+        outputFinished,
+      ]);
+      job.filePath = filePath;
+      job.archiveBytes = (await stat(filePath)).size;
+      job.stage = "completed";
+      job.state = "completed";
+      job.terminalAt = Date.now();
+      job.detail = `Backup ready. ${job.archiveBytes} bytes written.`;
+    }).catch((error) => failJob(job, error));
+    return job;
+  };
+
+  const createRestoreJob = (archive: Buffer) => {
+    const job = newBackupJob("restore", "Waiting for the restore worker.");
+    backupJobs.set(job.id, job);
+    void runExclusive(job, async () => {
+      job.state = "preparing";
+      job.stage = "reading-archive";
+      job.detail = "Reading the backup archive.";
+      const entries = readStoredZip(archive);
+      const byName = new Map(entries.map((entry) => [entry.name, entry.data]));
+
+      const manifestRaw = byName.get("manifest.json");
+      if (!manifestRaw) throw new Error("This archive has no manifest.json and is not a Slurp backup.");
+      const manifest = JSON.parse(manifestRaw.toString("utf8")) as {
+        format?: string;
+        formatVersion?: number;
+        sourcePackage?: string;
+      };
+      if (manifest.format !== "marinara-slurp-backup") throw new Error("This file is not a Slurp backup.");
+      if (manifest.formatVersion !== 1) {
+        throw new Error(`This backup uses format version ${manifest.formatVersion}, which this build cannot read.`);
+      }
+      // A legacy Slurp export is the migration path onto this package, so both are accepted.
+      if (manifest.sourcePackage !== "slurp" && manifest.sourcePackage !== "slurp2") {
+        throw new Error(`This backup came from ${manifest.sourcePackage ?? "an unknown package"}.`);
+      }
+
+      const readJson = (name: string): unknown => {
+        const raw = byName.get(name);
+        if (!raw) return null;
+        try {
+          return JSON.parse(raw.toString("utf8"));
+        } catch {
+          throw new Error(`Archive entry ${name} is not valid JSON.`);
+        }
+      };
+
+      const tables: Record<string, unknown[]> = {};
+      for (const name of byName.keys()) {
+        if (!name.startsWith("data/") || !name.endsWith(".json")) continue;
+        const logicalName = name.slice("data/".length, -".json".length);
+        if (logicalName === "app-settings") continue;
+        const rows = readJson(name);
+        if (Array.isArray(rows)) tables[logicalName] = rows;
+      }
+
+      // slurp2 exports carry the whole `slurp2.` namespace in one file. A legacy export instead
+      // wrote separate settings files under legacy key names, which belong to the legacy package
+      // and are deliberately not adopted: the remaster's settings shape has moved on, and a fresh
+      // default is safer than a half-understood import.
+      const settingsBlob = readJson("data/app-settings.json");
+      const settings =
+        settingsBlob && typeof settingsBlob === "object" && !Array.isArray(settingsBlob)
+          ? (settingsBlob as Record<string, string>)
+          : {};
+
+      job.creators = tables.accounts?.length ?? 0;
+      job.posts = tables.posts?.length ?? 0;
+      job.interactions = tables.interactions?.length ?? 0;
+      job.stage = "writing-data";
+      job.state = "writing";
+      job.detail = `Restoring ${job.creators} creator${job.creators === 1 ? "" : "s"} and ${job.posts} post${job.posts === 1 ? "" : "s"}.`;
+      const result = await noodle.importSlurpBackup({ settings, tables });
+      job.skipped = result.skipped;
+
+      job.stage = "writing-media";
+      job.detail = "Restoring media files.";
+      const mediaEntries = [...byName.entries()].filter(([name]) => name.startsWith("media/"));
+      job.mediaFiles = mediaEntries.length;
+      // Media is replaced wholesale alongside the rows it belongs to, so a restore cannot leave
+      // images from the previous data set attached to posts that no longer exist.
+      removeAllNoodlerMedia();
+      for (const [name, data] of mediaEntries) {
+        if (restoreNoodlerMediaFile(name, data)) {
+          job.mediaCompleted += 1;
+          job.mediaBytes += data.length;
+        } else {
+          job.skipped.push(name);
+        }
+      }
+
+      job.stage = "completed";
+      job.state = "completed";
+      job.terminalAt = Date.now();
+      job.detail = `Restore complete. ${job.creators} creators, ${job.posts} posts, ${job.mediaCompleted} media files.`;
+    }).catch((error) => failJob(job, error));
+    return job;
+  };
+
+  app.post("/backup/jobs", async (_req, reply) => reply.code(202).send(await createBackupJob()));
+  app.get("/backup/jobs/:id", async (req, reply) => {
+    const job = backupJobs.get((req.params as { id: string }).id);
+    if (!job) return reply.code(404).send({ error: "Backup job not found." });
+    const { filePath: _filePath, terminalAt: _terminalAt, ...publicJob } = job;
+    return publicJob;
+  });
+  app.get("/backup/jobs/:id/download", async (req, reply) => {
+    const job = backupJobs.get((req.params as { id: string }).id);
+    if (!job) return reply.code(404).send({ error: "Backup job not found." });
+    if (job.state !== "completed" || !job.filePath) return reply.code(409).send({ error: job.detail });
+    const stream = createReadStream(job.filePath);
+    // The archive is a one-shot download: it is removed as soon as it has been handed over, so a
+    // full copy of every creator and image does not sit in the data directory indefinitely.
+    stream.once("close", () => {
+      void unlink(job.filePath!).catch(() => {});
+      job.filePath = null;
+    });
+    return reply
+      .header("content-type", "application/zip")
+      .header("content-disposition", `attachment; filename="slurp2-backup.zip"`)
+      .send(stream);
+  });
+
+  // Fastify refuses a body whose content type it has no parser for, and an upload of every
+  // creator plus every generated image is far past the host's default body limit.
+  const MAX_RESTORE_BYTES = 2 * 1024 * 1024 * 1024;
+  app.addContentTypeParser("application/zip", { parseAs: "buffer", bodyLimit: MAX_RESTORE_BYTES }, (_req, body, done) =>
+    done(null, body),
+  );
+
+  app.post("/restore/jobs", { bodyLimit: MAX_RESTORE_BYTES }, async (req, reply) => {
+    const body = req.body;
+    if (!Buffer.isBuffer(body) || body.length === 0) {
+      return reply.code(400).send({ error: "Upload a Slurp backup archive." });
+    }
+    return reply.code(202).send(createRestoreJob(body));
   });
 
   /**

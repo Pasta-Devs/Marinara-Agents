@@ -6,6 +6,11 @@ export type NoodlerAccountOperationResult<T> = { acquired: true; value: T } | { 
  * Serializes identity-sensitive work for one NoodleR account in this server process.
  * It intentionally does not coordinate multiple Marinara processes.
  */
+/** True while any account operation is in flight. A backup must not run across one. */
+export function hasActiveNoodlerAccountOperations(): boolean {
+  return activeAccountOperations.size > 0;
+}
+
 export async function tryNoodlerAccountOperation<T>(
   accountId: string,
   operation: () => Promise<T>,

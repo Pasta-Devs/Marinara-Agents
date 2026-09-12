@@ -1049,7 +1049,7 @@ export function SlurpCreatorPostCard({
                     const persona = ctx.personaAccount?.entityId;
                     void api
                       .download(
-                        `/slurp/noodler/posts/${encodeURIComponent(post.id)}/share-card${persona ? `?personaId=${encodeURIComponent(persona)}` : ""}`,
+                        `/slurp2/noodler/posts/${encodeURIComponent(post.id)}/share-card${persona ? `?personaId=${encodeURIComponent(persona)}` : ""}`,
                         `slurp-${post.id}.png`,
                       )
                       .catch((error: unknown) =>

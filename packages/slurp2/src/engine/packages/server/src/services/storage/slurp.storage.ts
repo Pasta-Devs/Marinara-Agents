@@ -159,7 +159,10 @@ import {
   slurpReplyBubbles,
   slurpThreads,
   slurpCommissions,
+  slurpFollowUps,
+  slurpPaymentCompensations,
 } from "../../db/schema/slurp.js";
+import { appSettings } from "../../db/schema/app-settings.js";
 import {
   SLURP_CREATOR_MESSAGING_KEY,
   SLURP_DEFAULT_CREATOR_MESSAGING,
@@ -168,10 +171,7 @@ import {
 import { noodlerContentLimitFor } from "../slurp/slurp-content-format.js";
 import { readNoodlerAccountMediaPath, readNoodlerAvatarMediaPath } from "../slurp/slurp-avatar.js";
 import { newId, now } from "../../utils/id-generator.js";
-import {
-  compareMinimizedNoodlerSourceSnapshot,
-  minimizeNoodlerSourceSnapshot,
-} from "../slurp/slurp-source.js";
+import { compareMinimizedNoodlerSourceSnapshot, minimizeNoodlerSourceSnapshot } from "../slurp/slurp-source.js";
 import { resolveNoodlerSourceSnapshot } from "../slurp/slurp-source-resolve.js";
 import { createAppSettingsStorage } from "./app-settings.storage.js";
 import {
@@ -213,6 +213,47 @@ const SLURP_SETTINGS_KEY = "slurp2.settings";
 const SLURP_CREATOR_STATE_KEY = "slurp2.creator.state";
 const NOODLE_REFRESH_SCHEDULE_KEY = "slurp2.refresh-schedule";
 const slurpViewerSettingsKey = (personaId: string) => `slurp2.viewer.${personaId}.settings`;
+/**
+ * Every table a Slurp backup carries, keyed by the archive's logical name rather than the physical
+ * `slurp2_*` table name. The archive is deliberately named this way so a backup survives a table
+ * rename — which is exactly what happened when the remaster moved off the `slurp_*` names.
+ *
+ * Order is parents first. Restore clears in reverse and writes forward, so a cascade never removes
+ * a row the same restore just wrote.
+ */
+const SLURP_BACKUP_TABLES = {
+  accounts: noodleAccounts,
+  posts: noodlePosts,
+  subscriptions: noodleAccountSubscriptions,
+  unlocks: noodlePostUnlocks,
+  interactions: noodleInteractions,
+  replyClaims: noodlerCreatorReplyClaims,
+  preparedPosts: noodlerPreparedPosts,
+  attempts: noodlerAutomaticAttempts,
+  reserveState: noodlerReserveState,
+  fanState: noodlerFanActivityState,
+  digests: noodleActivityDigests,
+  refreshRuns: noodleRefreshRuns,
+  firstPostJobs: noodlerFirstPostJobs,
+  population: slurpPopulation,
+  audienceTies: slurpAudienceTies,
+  events: slurpEvents,
+  threads: slurpThreads,
+  messages: slurpMessages,
+  messageClaims: slurpMessageClaims,
+  replyBubbles: slurpReplyBubbles,
+  followUps: slurpFollowUps,
+  commissions: slurpCommissions,
+  paymentCompensations: slurpPaymentCompensations,
+  pendingText: slurpPendingText,
+} as const;
+
+type SlurpBackupTableName = keyof typeof SLURP_BACKUP_TABLES;
+const SLURP_BACKUP_TABLE_ORDER = Object.keys(SLURP_BACKUP_TABLES) as SlurpBackupTableName[];
+
+/** Every owned setting key starts here. The export takes the whole namespace by prefix. */
+const SLURP_SETTINGS_NAMESPACE = "slurp2.";
+
 const NOODLER_RESERVE_STATE_ID = "noodler-reserve";
 let slurpSettingsUpdateQueue: Promise<unknown> = Promise.resolve();
 const ROLLING_DAY_MS = 24 * 60 * 60 * 1000;
@@ -1541,7 +1582,10 @@ export function createSlurpStorage(db: DB) {
       });
     } catch (error) {
       const toggleKeys = ["postId", "actorAccountId", "type", "parentInteractionId"];
-      if (isToggleInteractionType(input.type) && isFileUniqueConstraintError(error, "slurp2_interactions", toggleKeys)) {
+      if (
+        isToggleInteractionType(input.type) &&
+        isFileUniqueConstraintError(error, "slurp2_interactions", toggleKeys)
+      ) {
         const existing = await readExistingToggleInteraction();
         if (existing) return existing;
       }
@@ -1969,6 +2013,91 @@ export function createSlurpStorage(db: DB) {
 
     async getSlurpSettings() {
       return this.getSettings();
+    },
+
+    /**
+     * Dump every table and setting this package owns.
+     *
+     * Unlike legacy Slurp, which had to filter its rows by creator and persona because it shared
+     * tables with the public Noodle timeline, every `slurp2_*` table belongs to this package
+     * alone. So the export is a wholesale dump: simpler, and it cannot silently drop the ambient
+     * audience rows that a filtered export missed.
+     *
+     * Settings are collected by prefix rather than from a hand-written key list, so a new
+     * `slurp2.*` key is included the day it is added instead of the day someone remembers it.
+     * `garnish.ads.*` is deliberately excluded: the ad pool is shared with legacy Slurp by design.
+     */
+    async exportSlurpBackup() {
+      const tables: Record<string, unknown[]> = {};
+      for (const [name, table] of Object.entries(SLURP_BACKUP_TABLES)) {
+        tables[name] = await db.select().from(table);
+      }
+      const settingRows = await db
+        .select()
+        .from(appSettings)
+        .where(like(appSettings.key, `${SLURP_SETTINGS_NAMESPACE}%`));
+      const settings: Record<string, string> = {};
+      for (const row of settingRows) settings[String(row.key)] = String(row.value ?? "");
+      return { settings, tables };
+    },
+
+    /**
+     * Replace this package's data with the contents of a backup export.
+     *
+     * Restore is destructive and total: partial merges would collide on primary keys and leave
+     * half-linked rows, so every owned table is cleared first and the whole write runs in one
+     * transaction. Legacy Slurp's own data is never touched — a legacy install beside this one
+     * keeps working, which is the entire point of the split.
+     *
+     * Unknown table names and unknown columns are skipped rather than rejected, so a backup taken
+     * by a newer or older build still restores what both sides understand.
+     */
+    async importSlurpBackup(backup: {
+      settings?: Record<string, string>;
+      tables?: Record<string, unknown[]>;
+    }): Promise<{ tables: Record<string, number>; settings: number; skipped: string[] }> {
+      const skipped: string[] = [];
+      const written: Record<string, number> = {};
+      const incoming = backup.tables ?? {};
+      for (const name of Object.keys(incoming)) {
+        if (!(name in SLURP_BACKUP_TABLES)) skipped.push(name);
+      }
+      await db.transaction(async (tx) => {
+        // Clear children before parents so a cascade cannot delete a row this restore just wrote.
+        for (const name of [...SLURP_BACKUP_TABLE_ORDER].reverse()) {
+          await tx.delete(SLURP_BACKUP_TABLES[name]);
+        }
+        for (const name of SLURP_BACKUP_TABLE_ORDER) {
+          const rows = incoming[name];
+          if (!Array.isArray(rows) || rows.length === 0) continue;
+          const table = SLURP_BACKUP_TABLES[name];
+          const columns = new Set(Object.keys(table));
+          const values = rows
+            .filter((row): row is Record<string, unknown> => !!row && typeof row === "object")
+            .map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => columns.has(key))));
+          for (const value of values) await tx.insert(table).values(value);
+          written[name] = values.length;
+        }
+        const settingsTx = createAppSettingsStorage(tx);
+        const stale = await tx
+          .select()
+          .from(appSettings)
+          .where(like(appSettings.key, `${SLURP_SETTINGS_NAMESPACE}%`));
+        for (const row of stale) await settingsTx.remove(String(row.key));
+        for (const [key, value] of Object.entries(backup.settings ?? {})) {
+          // A backup must never reach outside this package's own settings namespace.
+          if (!key.startsWith(SLURP_SETTINGS_NAMESPACE)) {
+            skipped.push(key);
+            continue;
+          }
+          await settingsTx.set(key, value);
+        }
+        await tx._fileStore.flush();
+      });
+      const settingsCount = Object.keys(backup.settings ?? {}).filter((key) =>
+        key.startsWith(SLURP_SETTINGS_NAMESPACE),
+      ).length;
+      return { tables: written, settings: settingsCount, skipped };
     },
 
     async updateSlurpSettings(input: SlurpSettingsUpdateInput) {

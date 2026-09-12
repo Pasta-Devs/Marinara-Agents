@@ -2350,5 +2350,15 @@
   "ui.slurp.messages.scheduledFollowUps": "Scheduled follow-ups",
   "ui.slurp.messages.scheduledFollowUpsHint": "The Creator will send these later.",
   "ui.slurp.messages.sendPhoto": "Send a photo",
-  "ui.slurp.messages.sendPhotoDetail": "Send a photo to this Creator."
+  "ui.slurp.messages.sendPhotoDetail": "Send a photo to this Creator.",
+  "ui.slurp.settings.advanced.backupTitle": "Backup and restore",
+  "ui.slurp.settings.advanced.backupDetail": "Save every Slurp Creator, post, interaction, subscription, message, setting, and media file to one archive on your computer. Engine characters, personas, and Noodle data are not included.",
+  "ui.slurp.settings.advanced.backupButton": "Download a backup",
+  "ui.slurp.settings.advanced.backupSuccess": "Your Slurp backup was downloaded.",
+  "ui.slurp.settings.advanced.restoreButton": "Restore from a backup",
+  "ui.slurp.settings.advanced.restoreDetail": "A restore replaces all current Slurp data with the archive. A backup from Slurp Legacy also works, which is how you move your data to this package.",
+  "ui.slurp.settings.advanced.restoreConfirm": "This replaces all current Slurp data with the backup. This cannot be undone. Continue?",
+  "ui.slurp.settings.advanced.restoreSuccess": "Restore complete. {{creators}} creators and {{posts}} posts.",
+  "ui.slurp.settings.advanced.restoreSkipped_one": "{{count}} archive entry was skipped.",
+  "ui.slurp.settings.advanced.restoreSkipped_other": "{{count}} archive entries were skipped."
 }

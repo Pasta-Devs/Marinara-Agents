@@ -19,13 +19,30 @@ let pauseDepth = 0;
 let activePoll: Promise<void> = Promise.resolve();
 
 export async function withNoodleAutoPostPaused<T>(run: () => Promise<T>): Promise<T> {
-  pauseDepth += 1;
+  const release = await pauseNoodleAutoPost();
   try {
-    await activePoll.catch(() => {});
     return await run();
   } finally {
-    pauseDepth -= 1;
+    release();
   }
+}
+
+/**
+ * Hold the auto-post scheduler still and wait for any poll already running to finish.
+ *
+ * A backup or restore spans many seconds, which is far longer than a scoped
+ * `withNoodleAutoPostPaused` block wants to be, so the pause is handed out as a release function
+ * the job releases in its own `finally`.
+ */
+export async function pauseNoodleAutoPost(): Promise<() => void> {
+  pauseDepth += 1;
+  await activePoll.catch(() => {});
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    pauseDepth -= 1;
+  };
 }
 
 /** True when nothing can be prepared or published, so the poll only has existing rows to tidy. */

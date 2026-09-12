@@ -190,5 +190,15 @@
   "ui.slurp.messages.tipSent": "Trinkgeld gesendet",
   "ui.slurp.messages.typing": "{{name}} schreibt…",
   "ui.slurp.messages.unreadCount": "{{count}} ungelesen",
-  "ui.slurp.profile.message": "Nachricht"
+  "ui.slurp.profile.message": "Nachricht",
+  "ui.slurp.settings.advanced.backupTitle": "Sicherung und Wiederherstellung",
+  "ui.slurp.settings.advanced.backupDetail": "Speichere alle Slurp-Creator, Beiträge, Interaktionen, Abonnements, Nachrichten, Einstellungen und Mediendateien in einem Archiv auf deinem Computer. Engine-Charaktere, Personas und Noodle-Daten sind nicht enthalten.",
+  "ui.slurp.settings.advanced.backupButton": "Sicherung herunterladen",
+  "ui.slurp.settings.advanced.backupSuccess": "Deine Slurp-Sicherung wurde heruntergeladen.",
+  "ui.slurp.settings.advanced.restoreButton": "Aus Sicherung wiederherstellen",
+  "ui.slurp.settings.advanced.restoreDetail": "Eine Wiederherstellung ersetzt alle aktuellen Slurp-Daten durch das Archiv. Eine Sicherung aus Slurp Legacy funktioniert ebenfalls. So überträgst du deine Daten in dieses Paket.",
+  "ui.slurp.settings.advanced.restoreConfirm": "Dies ersetzt alle aktuellen Slurp-Daten durch die Sicherung. Das kann nicht rückgängig gemacht werden. Fortfahren?",
+  "ui.slurp.settings.advanced.restoreSuccess": "Wiederherstellung abgeschlossen. {{creators}} Creator und {{posts}} Beiträge.",
+  "ui.slurp.settings.advanced.restoreSkipped_one": "{{count}} Archiveintrag wurde übersprungen.",
+  "ui.slurp.settings.advanced.restoreSkipped_other": "{{count}} Archiveinträge wurden übersprungen."
 }

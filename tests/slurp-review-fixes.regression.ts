@@ -134,7 +134,7 @@ const messagesView = read(join(client, "components/slurp/SlurpMessages.tsx"));
 assert.match(messagesView, /\{unlock\.isError && \(/u);
 
 const settings = read(join(client, "components/slurp/SlurpSettings.tsx"));
-assert.match(settings, /\.download\("\/slurp\/noodler\/ads\/export"[\s\S]{0,120}?\.catch\(/u);
+assert.match(settings, /\.download\("\/slurp2\/noodler\/ads\/export"[\s\S]{0,120}?\.catch\(/u);
 
 const shell = read(join(client, "components/slurp/SlurpShell.tsx"));
 // The active persona was signalled by background colour alone.

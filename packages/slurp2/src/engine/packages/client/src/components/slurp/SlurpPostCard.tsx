@@ -1834,7 +1834,7 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
                       const persona = ctx.personaAccount?.entityId;
                       void api
                         .download(
-                          `/slurp/noodler/posts/${encodeURIComponent(post.id)}/share-card${
+                          `/slurp2/noodler/posts/${encodeURIComponent(post.id)}/share-card${
                             persona ? `?personaId=${encodeURIComponent(persona)}` : ""
                           }`,
                           `slurp-${post.id}.png`,

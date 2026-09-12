@@ -5,6 +5,7 @@ import {
   CalendarClock,
   CheckCircle2,
   ChevronRight,
+  Download,
   FileText,
   Image,
   Loader2,
@@ -16,6 +17,7 @@ import {
   Save,
   Sparkles,
   Trash2,
+  Upload,
   UsersRound,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -35,6 +37,11 @@ import {
   type SlurpCreatorMessaging,
   useDeleteAllSlurpData,
   useDeleteUnusedSlurpData,
+  getSlurpBackupJob,
+  startSlurpBackup,
+  startSlurpRestore,
+  downloadSlurpBackup,
+  type SlurpBackupJob,
   useAdoptNoodlerSourceIdentity,
   useDismissNoodlerSourceChanges,
   useNoodlerAccounts,
@@ -353,6 +360,23 @@ export function SlurpSettings({
   const setCreatorPrice = useSetSlurpCreatorPrice();
   const deleteAllData = useDeleteAllSlurpData();
   const deleteUnusedData = useDeleteUnusedSlurpData();
+  const [backupJob, setBackupJob] = useState<SlurpBackupJob | null>(null);
+  const [backupPending, setBackupPending] = useState(false);
+  const [restorePending, setRestorePending] = useState(false);
+  const restoreInputRef = useRef<HTMLInputElement | null>(null);
+
+  /** Poll a job to a terminal state, surfacing each step so a long run does not look stuck. */
+  const followBackupJob = async (job: SlurpBackupJob) => {
+    let current = job;
+    setBackupJob(current);
+    while (current.state !== "completed" && current.state !== "error") {
+      await new Promise((resolve) => window.setTimeout(resolve, 750));
+      current = await getSlurpBackupJob(job.id);
+      setBackupJob(current);
+    }
+    if (current.state === "error") throw new Error(current.error ?? current.detail);
+    return current;
+  };
   const adoptSourceIdentity = useAdoptNoodlerSourceIdentity();
   const dismissSourceChanges = useDismissNoodlerSourceChanges();
   const connectionsQuery = useSlurpConnections(
@@ -1817,7 +1841,7 @@ export function SlurpSettings({
                         type="button"
                         onClick={() =>
                           void api
-                            .download("/slurp/noodler/ads/export", "slurp-ads.json")
+                            .download("/slurp2/noodler/ads/export", "slurp-ads.json")
                             .catch((error: unknown) => toast.error(errorMessage(error)))
                         }
                         className="min-h-9 rounded-lg border border-[var(--slurp-outline)] px-3 text-xs font-bold hover:bg-[var(--accent)]"
@@ -2019,6 +2043,91 @@ export function SlurpSettings({
                     title={t("ui.slurp.settings.advanced.title")}
                     detail={t("ui.slurp.settings.advanced.detail")}
                   />
+                  <div className="rounded-lg border border-[var(--border)] p-4">
+                    <h2 className="text-sm font-semibold">{t("ui.slurp.settings.advanced.backupTitle")}</h2>
+                    <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
+                      {t("ui.slurp.settings.advanced.backupDetail")}
+                    </p>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={backupPending || restorePending}
+                        onClick={() => {
+                          setBackupPending(true);
+                          void startSlurpBackup()
+                            .then(async (job) => {
+                              await followBackupJob(job);
+                              await downloadSlurpBackup(job.id);
+                              toast.success(t("ui.slurp.settings.advanced.backupSuccess"));
+                            })
+                            .catch((error) => toast.error(errorMessage(error)))
+                            .finally(() => setBackupPending(false));
+                        }}
+                        className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+                      >
+                        {backupPending ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                        {t("ui.slurp.settings.advanced.backupButton")}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={backupPending || restorePending}
+                        onClick={() => restoreInputRef.current?.click()}
+                        className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+                      >
+                        {restorePending ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                        {t("ui.slurp.settings.advanced.restoreButton")}
+                      </button>
+                    </div>
+                    <p className="mt-2 max-w-2xl text-xs leading-5 text-[var(--muted-foreground)]">
+                      {t("ui.slurp.settings.advanced.restoreDetail")}
+                    </p>
+                    <input
+                      ref={restoreInputRef}
+                      type="file"
+                      accept=".zip,application/zip"
+                      className="hidden"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        event.target.value = "";
+                        if (!file) return;
+                        if (!window.confirm(t("ui.slurp.settings.advanced.restoreConfirm"))) return;
+                        setRestorePending(true);
+                        void startSlurpRestore(file)
+                          .then(async (job) => {
+                            const done = await followBackupJob(job);
+                            toast.success(
+                              t("ui.slurp.settings.advanced.restoreSuccess", {
+                                creators: done.creators,
+                                posts: done.posts,
+                              }),
+                            );
+                          })
+                          .catch((error) => toast.error(errorMessage(error)))
+                          .finally(() => setRestorePending(false));
+                      }}
+                    />
+                    {backupJob && (
+                      <div
+                        role="status"
+                        aria-live="polite"
+                        className="mt-3 rounded-md bg-[var(--accent)] px-3 py-2 text-xs leading-5 text-[var(--muted-foreground)]"
+                      >
+                        <p className="font-semibold">{backupJob.stage}</p>
+                        <p>{backupJob.detail}</p>
+                        <p className="mt-1">
+                          {backupJob.creators} creators · {backupJob.posts} posts · {backupJob.interactions}{" "}
+                          interactions · {backupJob.mediaCompleted}/{backupJob.mediaFiles} media files ·{" "}
+                          {backupJob.mediaBytes} bytes
+                        </p>
+                        {backupJob.skipped.length > 0 && (
+                          <p className="mt-1">
+                            {t("ui.slurp.settings.advanced.restoreSkipped", { count: backupJob.skipped.length })}
+                          </p>
+                        )}
+                        {backupJob.error && <p className="mt-1 text-red-300">{backupJob.error}</p>}
+                      </div>
+                    )}
+                  </div>
                   <div className="rounded-lg border border-[var(--border)] p-4">
                     <h2 className="text-sm font-semibold">{t("ui.slurp.settings.advanced.setupAgain")}</h2>
                     <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
