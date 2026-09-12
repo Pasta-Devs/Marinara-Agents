@@ -122,7 +122,10 @@ assert.equal(modelAnswerForCorrection('{"displayName":"Ari"}'), '{"displayName":
 assert.match(reply, /describeSlurpPostCondition\(input\.db, input\.creator\.id\)/u);
 assert.match(reply, /creatorCondition: protect\(input\.creatorCondition\)/u);
 assert.match(
-  readFileSync(join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-post-stance.ts"), "utf8"),
+  readFileSync(
+    join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-post-stance.ts"),
+    "utf8",
+  ),
   /activeSlurpModifiers\(state, input\.at \?\? new Date\(\)\)[\s\S]{0,200}?SLURP_MODIFIERS\[modifier\.kind\]\.line/u,
   "the post stance must carry the active Creator modifier lines",
 );

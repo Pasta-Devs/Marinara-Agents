@@ -17,7 +17,9 @@ const storage = read("packages/slurp2/src/engine/packages/server/src/services/st
 const settings = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx");
 const profileSurface = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpProfileSurface.tsx");
 const englishLocale = read("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json");
-const creatorPostCard = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpCreatorPostCard.tsx");
+const creatorPostCard = read(
+  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpCreatorPostCard.tsx",
+);
 const creatorProfileCard = read(
   "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpCreatorProfileCard.tsx",
 );

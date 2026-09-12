@@ -54,7 +54,10 @@ const contentFormat = readFileSync(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-content-format.ts",
   "utf8",
 );
-const storage = readFileSync("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
+const storage = readFileSync(
+  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
+  "utf8",
+);
 assert.match(contentFormat, /caption: 300,/u);
 assert.match(storage, /slice\(0, noodlerContentLimitFor\(nextMetadata\)\)/u, "edits honour the post's own cap");
 assert.doesNotMatch(storage, /trim\(\)\.slice\(0, 4000\)/u, "no flat 4000-character truncation");

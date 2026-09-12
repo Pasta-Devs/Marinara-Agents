@@ -258,7 +258,10 @@ assert.match(generation, /A sales intent is not personal intimacy/u);
 assert.match(generation, /stateSignals: generated\.stateSignals/u);
 assert.match(generation, /happeningNow: slurpModifierLines\(input\.creatorState\)/u);
 assert.match(generation, /exposure: slurpIntensityBand\(input\.creatorState\.exposure\)/u);
-const storage = readFileSync("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
+const storage = readFileSync(
+  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
+  "utf8",
+);
 assert.match(storage, /for \(const accountId of accountIds\)[\s\S]{0,160}?SLURP_CREATOR_STATE_KEY/u);
 
 const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");

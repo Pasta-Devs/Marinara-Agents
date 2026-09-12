@@ -4,9 +4,7 @@ import { join } from "node:path";
 import { compileImagePrompt } from "../sources/engine/packages/shared/dist/utils/image-prompt-compiler.js";
 import { normalizeImageGenerationProfile } from "../sources/engine/packages/shared/dist/constants/image-generation-defaults.js";
 import { normalizeImageStyleProfileSettings } from "../sources/engine/packages/shared/dist/constants/image-style-profiles.js";
-import {
-  selectNoodleImageProviderPrompt,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-image-prompt";
+import { selectNoodleImageProviderPrompt } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-image-prompt";
 
 const root = join(import.meta.dirname, "..");
 const rawPrompt = "A person reading beside a window.";

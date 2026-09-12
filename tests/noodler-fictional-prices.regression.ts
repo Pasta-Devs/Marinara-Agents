@@ -35,7 +35,10 @@ for (const junk of [
   assert.equal(noodlerUnlockPriceFromMetadata(junk), NOODLER_UNLOCK_COST);
 }
 
-const storage = readFileSync("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
+const storage = readFileSync(
+  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
+  "utf8",
+);
 const fanInteraction = storage.slice(
   storage.indexOf("async createNoodlerFanInteraction("),
   storage.indexOf("async deleteNoodlerInteraction("),

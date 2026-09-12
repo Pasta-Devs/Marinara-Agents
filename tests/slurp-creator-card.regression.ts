@@ -6,7 +6,10 @@ const cardSource = readFileSync(
   "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpCreatorProfileCard.tsx",
   "utf8",
 );
-const homeSource = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
+const homeSource = readFileSync(
+  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
+  "utf8",
+);
 
 test("creator discovery cards expose one dedicated View profile action", () => {
   assert.match(cardSource, /ui\.slurp\.settings\.creators\.viewProfile/);

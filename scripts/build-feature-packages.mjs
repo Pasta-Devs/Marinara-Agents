@@ -778,7 +778,9 @@ export async function selfCheck() {
         // method", which broke every outbound request the package made. The runtime provisions
         // undici alongside the snapshot, so resolving to the Engine's copy is the fix.
         "--external:undici",
-        ...(feature.id === "long-term-memory" || feature.id === "slurp" || feature.id === "slurp2" ? ["--external:zod"] : []),
+        ...(feature.id === "long-term-memory" || feature.id === "slurp" || feature.id === "slurp2"
+          ? ["--external:zod"]
+          : []),
         `--alias:@marinara-engine/shared=${sharedBundleEntry}`,
         `--metafile=${metafile}`,
         `--outfile=${output}`,

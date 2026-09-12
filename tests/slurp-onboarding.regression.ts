@@ -19,7 +19,10 @@ const storage = readFileSync(
   join(root, "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
   "utf8",
 );
-const routes = readFileSync(join(root, "packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts"), "utf8");
+const routes = readFileSync(
+  join(root, "packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts"),
+  "utf8",
+);
 const creatorCard = readFileSync(
   join(root, "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpCreatorPostCard.tsx"),
   "utf8",

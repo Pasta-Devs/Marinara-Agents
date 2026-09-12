@@ -8,7 +8,10 @@ import { readFileSync } from "node:fs";
 // the feature ships a tone the README and onboarding deny. noodle.storage.ts cannot be imported
 // outside an Engine checkout (it resolves ../../db/file-query.js), so this reads the source.
 
-const storage = readFileSync("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
+const storage = readFileSync(
+  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
+  "utf8",
+);
 const home = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
 const settings = readFileSync(
   "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx",

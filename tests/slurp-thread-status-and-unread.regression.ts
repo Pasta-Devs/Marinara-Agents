@@ -11,10 +11,9 @@ const replyMethods = read("packages/slurp2/src/engine/packages/server/src/servic
 const messagesRoutes = read("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts");
 const profileUi = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpProfileSurface.tsx");
 const homeUi = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
-const locale = JSON.parse(read("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json")) as Record<
-  string,
-  string
->;
+const locale = JSON.parse(
+  read("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json"),
+) as Record<string, string>;
 
 // ── A creator reply clears the creator's own unread count ───────────────────
 // Nothing else clears it server-side: `markRead` is only reached from routes the player's own UI

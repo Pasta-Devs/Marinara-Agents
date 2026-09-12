@@ -55,7 +55,10 @@ assert.doesNotMatch(
 assert.match(routes, /await ads\.markRecent\(/u, "serving ads must mark them recent or rotation never happens");
 assert.match(routes, /"impression"\)/u, "serving ads must record impressions or quality has no denominator");
 
-const storage = readFileSync("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
+const storage = readFileSync(
+  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
+  "utf8",
+);
 for (const key of ["inlineAdsTone", "inlineAdsEra", "inlineAdsWorldContext", "inlineAdsContentCeiling"]) {
   assert.ok(storage.includes(key), `settings must expose ${key}`);
 }

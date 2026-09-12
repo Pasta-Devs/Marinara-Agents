@@ -107,7 +107,10 @@ assert.ok(world.includes("setTiePaidThrough("), "billing state must be recorded 
 
 // Counts. Both halves are exact rows and neither is reach: the personas on this install pay
 // through subscription rows, and the audience pays through the funnel because it holds no wallet.
-const routes = readFileSync(join(root, "packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts"), "utf8");
+const routes = readFileSync(
+  join(root, "packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts"),
+  "utf8",
+);
 assert.ok(routes.includes("countSubscribersForCreators"), "subscriber counts must include the audience");
 assert.ok(
   routes.includes('app.get("/noodler/accounts/:id/followers"'),
