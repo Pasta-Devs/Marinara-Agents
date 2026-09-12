@@ -1,5 +1,10 @@
 # Slurp Remastered release notes
 
+## 0.0.3 — 2026-09-12 [highlight]
+
+- Fixed Create post and Add story doing nothing on a Creator profile with a tip goal set. The goal used to hide the post composer.
+- Slurp Remastered now shows its color artwork in the Agents browser. The gray artwork is for Slurp Legacy only.
+
 ## 0.0.2 — 2026-09-12 [highlight]
 
 - Added a way to write your own ad in Settings. Give it a brand, a product, ad copy, and a rating, and it joins the pool.

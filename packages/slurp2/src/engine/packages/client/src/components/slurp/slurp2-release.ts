@@ -2,7 +2,7 @@
 // client has no route that serves CHANGELOG.md. So the notes are mirrored here, and
 // `tests/slurp2-release-notes.regression.ts` fails the build if this file drifts from
 // `packages/slurp2/CHANGELOG.md` or from the version in `manifest.json`.
-export const SLURP2_VERSION = "0.0.2";
+export const SLURP2_VERSION = "0.0.3";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -12,6 +12,14 @@ export interface Slurp2ReleaseEntry {
 
 /** Newest first, same order as CHANGELOG.md. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.0.3",
+    date: "2026-09-12",
+    notes: [
+      "Fixed Create post and Add story doing nothing on a Creator profile with a tip goal set. The goal used to hide the post composer.",
+      "Slurp Remastered now shows its color artwork in the Agents browser. The gray artwork is for Slurp Legacy only.",
+    ],
+  },
   {
     version: "0.0.2",
     date: "2026-09-12",
