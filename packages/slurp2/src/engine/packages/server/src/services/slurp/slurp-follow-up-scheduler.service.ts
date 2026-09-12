@@ -94,6 +94,7 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
                   undefined,
                   new Date(),
                   latestPost?.createdAt ?? null,
+                  settings,
                 )
               : { online: true, activity: null, minutesUntilOnline: 0 };
             const quiet = settings.nightQuiet && isNoodlerNightQuietTime(new Date());

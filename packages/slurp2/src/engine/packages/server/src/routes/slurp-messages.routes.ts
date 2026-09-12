@@ -190,6 +190,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
           undefined,
           new Date(),
           latestPost?.createdAt ?? null,
+          await slurp.getSettings(),
         )
       : { online: true, activity: null, minutesUntilOnline: 0 };
 
