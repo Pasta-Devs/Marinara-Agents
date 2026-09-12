@@ -516,6 +516,54 @@ async function main() {
       );
       assert.deepEqual(multiModeChatImport.imported[0]?.note.modes, ["conversation", "roleplay"]);
       assert.equal(multiModeChatImport.imported[0]?.note.extractionFingerprint?.extractionMode, "conversation");
+
+      // Renamed branch display name and candidate title regression proof
+      const renamedBranchChat = {
+        ...roleplayChat,
+        id: "chat-renamed-branch",
+        name: "Initial Chat Name",
+        groupId: "group-renamed",
+        metadata: {
+          branchName: "Final Branch",
+          summaryEntries: [{ id: "renamed-summary", content: "Renamed branch summary content.", range: "1-10" }],
+        },
+      };
+      chats.push(renamedBranchChat);
+      const renamedPreview = await previewPackageInterop(
+        {
+          source: "chats",
+          sourceScope: { chatId: "chat-renamed-branch", chatIds: ["chat-renamed-branch"] },
+        },
+        join(dataDir, "long-term-memory"),
+      );
+      const renamedSample = renamedPreview.samples.find(
+        (sample) => sample.sourceId === "chat-renamed-branch:renamed-summary",
+      );
+      assert.ok(renamedSample, "renamed branch sample should be found in preview");
+      assert.ok(
+        renamedSample.title.startsWith("Final Branch,"),
+        `candidate title should use branch display name 'Final Branch', got: ${renamedSample.title}`,
+      );
+
+      const renamedImport = await importPackageInterop(
+        {
+          source: "chats",
+          chatId: "chat-renamed-branch",
+          sourceIds: ["chat-renamed-branch:renamed-summary"],
+          sourceScope: { chatId: "chat-renamed-branch", chatIds: ["chat-renamed-branch"] },
+          destinationScope: { chatId: "chat-renamed-branch", chatIds: ["chat-renamed-branch"] },
+          extract: false,
+          limit: 10,
+        },
+        join(dataDir, "long-term-memory"),
+        new AbortController().signal,
+      );
+      const importedRenamedNote = renamedImport.imported[0]?.note;
+      assert.ok(
+        importedRenamedNote?.sections?.source?.evidence?.includes("chat_name:Final Branch"),
+        `imported source evidence should include chat_name:Final Branch, got: ${JSON.stringify(importedRenamedNote?.sections?.source?.evidence)}`,
+      );
+      chats.pop();
     },
     [() => releaseRuntime?.(), () => rm(dataDir, { recursive: true, force: true })],
   );

@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.2.27 - 2026-09-12
+
+- Displayed and searched renamed chat branches consistently in Sources and imported summary evidence.
+
 ## 1.2.26 - 2026-09-10
 
 - Added persistent chat-mode availability selection to Sources for memory imports.
