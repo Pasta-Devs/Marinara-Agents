@@ -222,7 +222,6 @@ function ScopeTargetPicker({
     ...targets.character,
     ...targets.persona,
   ].filter((target, index, items) => items.findIndex((item) => item.id === target.id) === index);
-  const selected = flatTargets.find((target) => target.id === selectedId);
   const activeTargets =
     activeKind === "all"
       ? flatTargets.filter((target) => target.id !== "all")
@@ -237,10 +236,15 @@ function ScopeTargetPicker({
   const filtered = activeTargets.filter((target) => target.label.toLocaleLowerCase().includes(needle));
   const pickerId = useId();
   const currentTarget =
-    activeKind === "all" ? undefined : flatTargets.find((target) => target.id === currentIds[activeKind]);
-  const filteredCurrentTarget =
-    currentTarget && currentTarget.label.toLocaleLowerCase().includes(needle) ? currentTarget : undefined;
+    activeKind === "all" ? undefined : activeTargets.find((target) => target.id === currentIds[activeKind]);
   const displayedTargets = filtered.filter((target) => target.id !== currentTarget?.id);
+  const options = [
+    { key: "all", target: targets.all, label: localizeUi("ui.longTermMemory.sourcesworkspace.all") },
+    ...(activeKind === "all"
+      ? []
+      : [{ key: "current", target: currentTarget, label: localizeUi("ui.longTermMemory.memoryvault.current") }]),
+    ...displayedTargets.map((target) => ({ key: target.id, target, label: target.label })),
+  ];
   return (
     <div
       id="ltm-vault-scope-control"
@@ -250,7 +254,6 @@ function ScopeTargetPicker({
     >
       <div className="flex min-w-0 items-center gap-2 text-xs font-semibold">
         <span className="min-w-0 truncate">{localizeUi("ui.longTermMemory.memoryvault.chooseScope")}</span>
-        {selected ? <span className="min-w-0 truncate text-[var(--muted-foreground)]">{selected.label}</span> : null}
       </div>
       <label className="relative block min-w-0">
         <Search
@@ -271,17 +274,14 @@ function ScopeTargetPicker({
         role="tablist"
         aria-label={localizeUi("ui.longTermMemory.memoryvault.chooseScope")}
         data-ltm-vault-scope-tablist
-        className="mari-editor-tab-rail grid min-w-0"
+        className="mari-editor-tab-rail grid w-full min-w-0 gap-1 rounded-lg border p-1"
       >
         <style>{`
           [data-ltm-vault-scope-tablist] {
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 1px;
-            background: var(--marinara-editor-divider);
           }
-          [data-ltm-vault-scope-tab] {
-            border: 0;
-            border-radius: 0;
+          [data-ltm-vault-scope-tab]:not([data-active="true"]):not(:hover) {
+            background: var(--marinara-editor-control-bg);
           }
           @container (min-width: 16rem) {
             [data-ltm-vault-scope-tablist] {
@@ -305,7 +305,7 @@ function ScopeTargetPicker({
             aria-selected={activeKind === kind}
             data-ltm-vault-scope-tab={kind}
             data-active={activeKind === kind}
-            className="mari-editor-tab min-h-11 min-w-0 px-2 text-xs font-semibold"
+            className="mari-editor-tab min-h-11 min-w-0 rounded-md px-1 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--marinara-editor-focus-ring)]"
             onClick={() => setActiveKind(kind)}
             onKeyDown={(event) => {
               if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
@@ -332,44 +332,35 @@ function ScopeTargetPicker({
         aria-labelledby={`${pickerId}-${activeKind}`}
         className="min-w-0 max-h-52 overflow-y-auto overscroll-contain divide-y divide-[var(--border)] border-y border-[var(--border)]"
       >
-        {filteredCurrentTarget ? (
-          <button
-            type="button"
-            data-ltm-vault-scope-current={activeKind}
-            data-ltm-vault-scope-target={currentTarget.id}
-            role="checkbox"
-            aria-checked={selectedId === currentTarget.id}
-            className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-left text-xs"
-            onClick={() => onSelect(currentTarget)}
-          >
-            <span>{localizeUi("ui.longTermMemory.memoryvault.current")}</span>
-            <span className="min-w-0 truncate">{currentTarget.label}</span>
-          </button>
-        ) : null}
-        {(activeKind === "all"
-          ? [{ id: "all", label: localizeUi("ui.longTermMemory.memoryvault.allMemories") }, ...displayedTargets]
-          : displayedTargets
-        ).map((option) => {
-          const optionTarget = option.id === "all" ? targets.all : option;
-          if (!optionTarget) return null;
+        {options.map(({ key, target: optionTarget, label }) => {
+          const selected = optionTarget?.id === selectedId;
           return (
             <button
-              key={option.id}
+              key={key}
               type="button"
-              data-ltm-vault-scope-target={option.id}
+              data-ltm-vault-scope-target={optionTarget?.id}
+              data-ltm-vault-scope-current={key === "current" ? activeKind : undefined}
+              data-ltm-vault-scope-pinned={key === "all" || key === "current" ? key : undefined}
+              disabled={!optionTarget}
+              title={optionTarget?.label}
               role="checkbox"
-              aria-checked={selectedId === option.id}
-              data-selected={selectedId === option.id ? "true" : "false"}
+              aria-checked={selected}
+              data-selected={selected ? "true" : "false"}
               className="mari-editor-action flex min-h-11 w-full min-w-0 items-center gap-3 rounded-none border-x-0 border-t-0 px-3 py-2 text-left text-sm last:border-b-0 data-[selected=true]:bg-[var(--primary)]/10"
-              onClick={() => onSelect(optionTarget)}
+              onClick={() => optionTarget && onSelect(optionTarget)}
             >
               <Check
                 aria-hidden="true"
                 size="0.875rem"
-                className={selectedId === option.id ? "shrink-0 text-[var(--primary)]" : "shrink-0 opacity-0"}
+                className={selected ? "shrink-0 text-[var(--marinara-editor-accent)]" : "shrink-0 opacity-0"}
               />
               <span className="min-w-0 flex-1 truncate">
-                {option.id === "all" ? localizeUi("ui.longTermMemory.memoryvault.allMemories") : option.label}
+                {label}
+                {key === "current" && optionTarget ? (
+                  <span className="block truncate text-xs text-[var(--marinara-editor-muted)]">
+                    {optionTarget.label}
+                  </span>
+                ) : null}
               </span>
             </button>
           );
@@ -1599,6 +1590,7 @@ export default function MemoryVault({
     })),
   ].filter((candidate, index, items) => items.findIndex((item) => item.id === candidate.id) === index);
   const scopeIndexes = useMemo(() => buildScopeIndexes(scopeTargets.data?.chats ?? []), [scopeTargets.data?.chats]);
+  const currentChat = props.chatId ? scopeIndexes.chatsById.get(props.chatId) : undefined;
   const selectedChat =
     target?.id.startsWith("chat:") && target.scope?.chatIds?.length === 1
       ? scopeIndexes.chatsById.get(target.scope.chatIds[0])
@@ -1629,16 +1621,15 @@ export default function MemoryVault({
   const characterScopeTargets = (scopeTargets.data?.characters ?? []).map((character) =>
     targets.find((candidate) => candidate.id === `character:${character.id}`)!,
   );
-  const currentCharacterTarget: Target | null =
-    props.chatId && selectedChat?.characterIds.length
-      ? {
-          id: `character:${selectedChat.characterIds[0]}`,
-          label:
-            characterScopeTargets.find((candidate) => candidate.id === `character:${selectedChat.characterIds[0]}`)
-              ?.label ?? localizeUi("ui.longTermMemory.memoryvault.current"),
-          scope: { characterIds: [selectedChat.characterIds[0]] },
-        }
-      : null;
+  const currentCharacterTarget: Target | null = currentChat?.characterIds.length
+    ? {
+        id: `character:${currentChat.characterIds[0]}`,
+        label:
+          characterScopeTargets.find((candidate) => candidate.id === `character:${currentChat.characterIds[0]}`)
+            ?.label ?? localizeUi("ui.longTermMemory.memoryvault.current"),
+        scope: { characterIds: [currentChat.characterIds[0]] },
+      }
+    : null;
   const pickerCharacterScopeTargets = [
     ...(currentCharacterTarget ? [currentCharacterTarget] : []),
     ...characterScopeTargets,
@@ -1662,14 +1653,14 @@ export default function MemoryVault({
             },
     };
   });
-  const currentConversationScopeTarget: Target | null = props.chatId
+  const currentConversationScopeTarget: Target | null = currentChat
     ? {
-        id: `chat:${props.chatId}`,
+        id: `chat:${currentChat.id}`,
         label:
-          conversationScopeTargets.find((candidate) => candidate.id === `chat:${props.chatId}`)?.label ??
+          conversationScopeTargets.find((candidate) => candidate.id === `chat:${currentChat.id}`)?.label ??
           props.chatName ??
           localizeUi("ui.longTermMemory.memoryvault.currentChat"),
-        scope: scopeTargets.data?.currentScope ?? { chatId: props.chatId, chatIds: [props.chatId] },
+        scope: scopeTargets.data?.currentScope ?? { chatId: currentChat.id, chatIds: [currentChat.id] },
       }
     : null;
   const pickerConversationScopeTargets = [
@@ -1686,17 +1677,16 @@ export default function MemoryVault({
       ...(selectedCharacterId ? { characterIds: [selectedCharacterId] } : {}),
     },
   }));
-  const currentBranchTarget: Target | null =
-    props.chatId && selectedChat?.groupId
-      ? {
-          id: `chat:${props.chatId}`,
-          label:
-            branchScopeTargets.find((candidate) => candidate.id === `chat:${props.chatId}`)?.label ??
-            props.chatName ??
-            localizeUi("ui.longTermMemory.memoryvault.currentChat"),
-          scope: scopeTargets.data?.currentScope ?? { chatId: props.chatId, chatIds: [props.chatId] },
-        }
-      : null;
+  const currentBranchTarget: Target | null = currentChat?.groupId
+    ? {
+        id: `chat:${currentChat.id}`,
+        label:
+          branchScopeTargets.find((candidate) => candidate.id === `chat:${currentChat.id}`)?.label ??
+          props.chatName ??
+          localizeUi("ui.longTermMemory.memoryvault.currentChat"),
+        scope: scopeTargets.data?.currentScope ?? { chatId: currentChat.id, chatIds: [currentChat.id] },
+      }
+    : null;
   const pickerBranchScopeTargets = [
     ...(currentBranchTarget ? [currentBranchTarget] : []),
     ...branchScopeTargets,
@@ -2858,6 +2848,7 @@ export default function MemoryVault({
                         chat: currentConversationScopeTarget?.id,
                         branch: currentBranchTarget?.id,
                         character: currentCharacterTarget?.id,
+                        persona: currentChat?.personaId ? `persona:${currentChat.personaId}` : undefined,
                       }}
                       localizeUi={localizeUi}
                       onSelect={(candidate) => void selectTarget(candidate)}
