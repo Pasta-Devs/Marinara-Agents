@@ -720,7 +720,7 @@ async function main() {
             chats: [
               {
                 id: "desktop-chat",
-                label: "Desktop chat",
+                label: "Current Final Branch",
                 mode: "conversation",
                 groupId: null,
                 personaId: "persona-a",
@@ -728,7 +728,7 @@ async function main() {
               },
               {
                 id: "memory-chat",
-                label: "Memory chat",
+                label: "Member Final Branch",
                 mode: "roleplay",
                 groupId: "conversation-a",
                 personaId: "persona-a",
@@ -3277,18 +3277,31 @@ async function main() {
       await sourceScopeTrigger.click();
       assert.equal(await sourceScopePicker.locator('[role="listbox"] input').count(), 0);
       assert.deepEqual(
-        await sourceScopePicker
-          .locator('[role="option"]')
-          .evaluateAll((options) =>
-            options.slice(0, 2).map((option) => option.textContent?.replace(/\s+/gu, " ").trim()),
-          ),
-        ["Current", "All"],
+        await sourceScopePicker.locator('[role="option"]').evaluateAll((options) =>
+          options.slice(0, 2).map((option) => {
+            const text = option.querySelector("span.min-w-0");
+            return {
+              label: text?.children[0]?.textContent?.trim(),
+              comment: text?.children[1]?.textContent?.trim(),
+            };
+          }),
+        ),
+        [
+          { label: "Current", comment: "Current Final Branch" },
+          { label: "All", comment: undefined },
+        ],
       );
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="chat:desktop-chat"]').count(), 1);
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="all"]').count(), 1);
       await sourceScopePicker.locator("[data-ltm-scope-picker-popup] input").fill("does-not-match");
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="chat:desktop-chat"]').count(), 1);
       assert.equal(await sourceScopePicker.locator('[data-ltm-scope-option="all"]').count(), 1);
+      await sourceScopePicker.locator("[data-ltm-scope-picker-popup] input").fill("Member Final Branch");
+      assert.equal(
+        await sourceScopePicker.locator('[data-ltm-scope-option="group:conversation-a"]').count(),
+        1,
+        "branch family is searchable by a member branch display name",
+      );
       await sourceScopePicker.locator("[data-ltm-scope-picker-popup] input").fill("");
       assert.equal(
         await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="chat:memory-chat"]').count(),
@@ -3349,6 +3362,13 @@ async function main() {
       await destinationPanel.locator('[data-ltm-availability-tab="chat"]').click();
       assert.equal(await destinationPanel.locator('[data-ltm-availability-target="chat:desktop-chat"]').count(), 1);
       assert.equal(await destinationPanel.locator('[data-ltm-availability-target="persona:persona-a"]').count(), 0);
+      await destinationPanel.locator('[data-ltm-availability-search="chat"]').fill("Current Final Branch");
+      assert.equal(
+        await destinationPanel.locator('[data-ltm-availability-target="chat:desktop-chat"]').count(),
+        1,
+        "current target is searchable by its display name through the destination filter",
+      );
+      await destinationPanel.locator('[data-ltm-availability-search="chat"]').fill("");
       await destinationPanel.locator('[data-ltm-availability-tab="branch"]').click();
       assert.equal(await destinationPanel.locator('[data-ltm-availability-target="branch:conversation-a"]').count(), 1);
       assert.equal(await destinationPanel.locator('[data-ltm-availability-target="branch:valid-group"]').count(), 1);

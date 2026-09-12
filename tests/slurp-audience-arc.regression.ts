@@ -124,8 +124,13 @@ assert.match(
 const world = read("services/slurp/slurp-world.operation.ts");
 assert.match(world, /slurpNextAudienceArc\(/u);
 // Arcs read the same silence churn does, and recomputing a three-week trajectory on every page
-// load would be a full scan for nothing.
-assert.match(world, /elapsedDays >= CHURN_MIN_ELAPSED_DAYS \? accounts : \[\]/u);
+// load would be a full scan for nothing. The gate is its own persisted mark rather than the world
+// tick: the tick advances on every notifications read, which starved maintenance entirely.
+assert.match(world, /maintenanceDue \? accounts : \[\]/u);
+assert.match(world, /maintenanceDue =[^;]*CHURN_MIN_ELAPSED_DAYS/u);
+// Without this the mark is never written on a box that ticks faster than the interval, the
+// fallback resolves to the previous tick forever, and the clock never arms.
+assert.match(world, /if \(maintenanceDue \|\| !maintenanceMark\) await writeMaintenanceMark\(/u);
 assert.match(world, /isNotableAudienceArcChange\(tie\.audienceArc, next\)/u);
 assert.match(read("services/slurp/slurp-population.ts"), /slurpReactivationStage/u);
 

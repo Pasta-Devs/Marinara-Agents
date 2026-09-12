@@ -191,6 +191,24 @@ export function useGenerateSlurpAds() {
   });
 }
 
+export type SlurpAdInput = {
+  brand: string;
+  product: string;
+  copy: string;
+  contentRating: SlurpContentRating;
+};
+
+export function useCreateSlurpAd() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SlurpAdInput) => api.post<SlurpPromotion>(`/slurp2/noodler/ads/pool`, input),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: noodleKeys.adPool() });
+      void qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() });
+    },
+  });
+}
+
 export function useDeleteSlurpAd() {
   const qc = useQueryClient();
   return useMutation({
@@ -336,6 +354,18 @@ export type SlurpSettings = {
   messagesDefaultDmPolicy: "open" | "subscribers" | "paid" | "closed";
   messagesDefaultRequestFee: number;
   messagesDefaultPpvPrice: number;
+  /** Reply timing, in minutes. */
+  messagesUnscheduledAlwaysReachable: boolean;
+  messagesHighRapportDelayMinMinutes: number;
+  messagesHighRapportDelayMaxMinutes: number;
+  messagesMediumRapportDelayMinMinutes: number;
+  messagesMediumRapportDelayMaxMinutes: number;
+  messagesUnknownReturnDelayMinutes: number;
+  messagesMaxReplyDelayMinutes: number;
+  messagesRecentPostAwayMinMinutes: number;
+  messagesRecentPostAwayMaxMinutes: number;
+  messagesStalePostAwayMinMinutes: number;
+  messagesStalePostAwayMaxMinutes: number;
   nightQuiet: boolean;
   onboarding: "not_started" | "in_progress" | "completed";
 };

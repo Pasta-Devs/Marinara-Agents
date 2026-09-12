@@ -46,6 +46,9 @@ export function garnishContextForViewer(input: {
   contextTags: string[];
   preferredTags: string[];
   steering: GarnishAdContext["steering"];
+  // Required, not optional: the caller was already passing a ceiling that this seam quietly
+  // dropped, which left the gate open. A required field makes that mistake a type error.
+  contentCeiling: NonNullable<GarnishAdContext["contentCeiling"]>;
 }): GarnishAdContext {
   return {
     subjectTags: input.persona ? garnishTagsFromPersona(input.persona) : [],
@@ -54,5 +57,6 @@ export function garnishContextForViewer(input: {
     contextTags: input.contextTags,
     preferredTags: input.preferredTags,
     steering: input.steering,
+    contentCeiling: input.contentCeiling,
   };
 }

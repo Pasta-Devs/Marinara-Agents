@@ -1,3 +1,6 @@
+import { isSlurpBackupActive } from "./slurp-backup-state.js";
+import { isSlurpDataDeletionActive } from "./slurp-data-deletion-state.js";
+
 const activeAccountOperations = new Set<string>();
 
 export type NoodlerAccountOperationResult<T> = { acquired: true; value: T } | { acquired: false };
@@ -15,7 +18,9 @@ export async function tryNoodlerAccountOperation<T>(
   accountId: string,
   operation: () => Promise<T>,
 ): Promise<NoodlerAccountOperationResult<T>> {
-  if (activeAccountOperations.has(accountId)) return { acquired: false };
+  if (isSlurpBackupActive() || isSlurpDataDeletionActive() || activeAccountOperations.has(accountId)) {
+    return { acquired: false };
+  }
   activeAccountOperations.add(accountId);
   try {
     return { acquired: true, value: await operation() };

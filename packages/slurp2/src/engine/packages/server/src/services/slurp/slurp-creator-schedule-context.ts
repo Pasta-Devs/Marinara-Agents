@@ -1,3 +1,5 @@
+import { SLURP_DEFAULT_REPLY_DELAYS, slurpDelayInRange, type SlurpReplyDelays } from "./slurp-messaging.js";
+
 type CreatorSource = { kind: string; entityId: string; displayName: string };
 
 type WeekSchedule = {
@@ -181,7 +183,10 @@ function inferAvailabilityFromActivity(
   creatorId: string,
   lastPostedAt: string | null,
   now: Date = new Date(),
+  delays: SlurpReplyDelays = SLURP_DEFAULT_REPLY_DELAYS,
 ): SlurpCreatorAvailability {
+  if (delays.messagesUnscheduledAlwaysReachable) return { online: true, activity: null, minutesUntilOnline: 0 };
+
   if (!lastPostedAt) {
     // Never posted = offline indefinitely
     return { online: false, activity: null, minutesUntilOnline: null };
@@ -198,16 +203,20 @@ function inferAvailabilityFromActivity(
   // Come back online in 30-90 minutes (deterministic randomness)
   if (ageMinutes <= 120) {
     const seed = simpleHash(creatorId + now.toDateString());
-    const variance = (seed % 60) / 100; // 0.0 to 0.6
-    const minutesUntilOnline = Math.round(30 + variance * 60); // 30-90 minutes
+    const variance = (seed % 60) / 59; // 0.0 to 1.0
+    const minutesUntilOnline = Math.round(
+      slurpDelayInRange(delays.messagesRecentPostAwayMinMinutes, delays.messagesRecentPostAwayMaxMinutes, variance),
+    );
     return { online: false, activity: null, minutesUntilOnline };
   }
 
   // Posted 2-12 hours ago = offline, back in a few hours
   if (ageMinutes <= 720) {
     const seed = simpleHash(creatorId + now.toDateString() + "midday");
-    const variance = (seed % 120) / 100; // 0.0 to 1.2
-    const minutesUntilOnline = Math.round(120 + variance * 120); // 120-240 minutes
+    const variance = (seed % 120) / 119; // 0.0 to 1.0
+    const minutesUntilOnline = Math.round(
+      slurpDelayInRange(delays.messagesStalePostAwayMinMinutes, delays.messagesStalePostAwayMaxMinutes, variance),
+    );
     return { online: false, activity: null, minutesUntilOnline };
   }
 
@@ -332,6 +341,7 @@ export async function resolveSlurpCreatorAvailability(
   timeZone?: string,
   now: Date = new Date(),
   lastPostedAt?: string | null,
+  delays?: SlurpReplyDelays,
 ): Promise<SlurpCreatorAvailability> {
   // Persona-backed Creators: try to get schedule from character
   if (source.kind === "character") {
@@ -349,5 +359,5 @@ export async function resolveSlurpCreatorAvailability(
   }
 
   // No schedule available: infer from posting activity
-  return inferAvailabilityFromActivity(source.entityId, lastPostedAt ?? null, now);
+  return inferAvailabilityFromActivity(source.entityId, lastPostedAt ?? null, now, delays);
 }

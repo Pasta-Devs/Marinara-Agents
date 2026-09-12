@@ -79,6 +79,7 @@ import {
   normalizeLtmChatCharacterIds,
   resolveChatLtmScope,
   resolveChatLtmWriteScope,
+  getLtmChatDisplayName,
 } from "./chat-scope.js";
 import { isLtmSourceNote } from "./source-extraction.js";
 import { processLongTermMemorySource } from "./source-processing.js";
@@ -726,7 +727,7 @@ export function createLongTermMemoryRoutes(runtime: {
           .filter((chat): chat is NonNullable<typeof chat> => Boolean(chat))
           .map((chat) => ({
             id: chat.id,
-            label: chat.name?.trim() || "Untitled chat",
+            label: getLtmChatDisplayName(chat) || "Untitled chat",
             mode: ltmModeForChatMode(chat.mode),
             groupId: chat.groupId,
             personaId: chat.personaId,

@@ -71,7 +71,10 @@ export function createGarnishAds(db: DB) {
       const hiddenBrands = new Set(state.hiddenBrands.map((brand) => brand.toLowerCase()));
       const recent = new Set(state.recentAdIds);
       const quality = qualityScores(events);
-      const ceiling = context.contentCeiling ?? "explicit";
+      // A host that states no ceiling has not said what it is allowed to show, so it gets the
+      // safest tier rather than everything. Defaulting the other way turned one dropped field
+      // into an open gate instead of a visible breakage.
+      const ceiling = context.contentCeiling ?? "tame";
 
       return ads
         .filter(
@@ -110,6 +113,11 @@ export function createGarnishAds(db: DB) {
 
     async record(subjectId: string, adId: string, type: GarnishAdEvent["type"]) {
       await pool.recordEvent({ adId, subjectId, type, at: new Date().toISOString() });
+    },
+
+    async canAct(subjectId: string, platform: GarnishPlatform, adId: string): Promise<boolean> {
+      const [state, active] = await Promise.all([load(subjectId), pool.listActive(platform)]);
+      return state.recentAdIds.includes(adId) && active.some((ad) => ad.id === adId && ad.kind === "inline");
     },
 
     async reset(subjectId: string) {

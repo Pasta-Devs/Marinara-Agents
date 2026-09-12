@@ -1,4 +1,8 @@
-import type { BaseLLMProvider } from "../llm/base-provider.js";
+import { resolveBaseUrl } from "../generation/connection-base-url.js";
+import { createLLMProvider } from "../llm/provider-registry.js";
+import type { createConnectionsStorage } from "../storage/connections.storage.js";
+
+type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
 type ScheduleBlock = { time: string; activity: string; status: "online" | "idle" | "dnd" | "offline" };
 type GeneratedSchedule = {
@@ -44,10 +48,21 @@ function parseResponse(content: string): GeneratedSchedule {
 }
 
 export async function generateSlurpConversationSchedule(
-  provider: BaseLLMProvider,
-  model: string,
+  connection: GenerationConnection,
   character: { name: string; description: string; personality: string },
 ): Promise<GeneratedSchedule> {
+  // The route hands over the stored connection row; it is not a provider until built here.
+  const provider = createLLMProvider(
+    connection.provider,
+    resolveBaseUrl(connection),
+    connection.apiKey,
+    connection.maxContext,
+    connection.openrouterProvider,
+    connection.maxTokensOverride,
+    connection.claudeFastMode === "true",
+    connection.treatAsLocalEndpoint === "true",
+    connection.defaultParameters,
+  );
   const result = await provider.chatComplete(
     [
       {
@@ -66,7 +81,7 @@ export async function generateSlurpConversationSchedule(
       },
       { role: "user", content: "Generate the current week's schedule." },
     ],
-    { model, temperature: 0.8, maxTokens: Math.min(provider.maxTokensOverrideValue ?? 8192, 8192) },
+    { model: connection.model, temperature: 0.8, maxTokens: Math.min(provider.maxTokensOverrideValue ?? 8192, 8192) },
   );
   return parseResponse(result.content ?? "");
 }

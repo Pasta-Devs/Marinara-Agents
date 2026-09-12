@@ -8,6 +8,35 @@ import {
   type ScopeTargetChat,
   type ScopeTargetGroup,
 } from "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/scope-targets.js";
+import { getLtmChatDisplayName } from "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/chat-scope.js";
+
+// Verify getLtmChatDisplayName helper handles metadata.branchName, stringified metadata, and empty/fallback values
+assert.equal(
+  getLtmChatDisplayName({ name: "Base Chat", metadata: { branchName: "Final Branch" } }),
+  "Final Branch",
+  "uses branchName from object metadata when present",
+);
+assert.equal(
+  getLtmChatDisplayName({ name: "Base Chat", metadata: JSON.stringify({ branchName: "Parsed Branch" }) }),
+  "Parsed Branch",
+  "parses stringified metadata to extract branchName",
+);
+assert.equal(
+  getLtmChatDisplayName({ name: "Base Chat", metadata: { branchName: "   " } }),
+  "Base Chat",
+  "falls back to chat.name when branchName is whitespace",
+);
+assert.equal(
+  getLtmChatDisplayName({ name: "Base Chat", metadata: {} }),
+  "Base Chat",
+  "falls back to chat.name when branchName is missing",
+);
+assert.equal(
+  getLtmChatDisplayName({ name: "", metadata: {} }),
+  "",
+  "returns empty string when both branchName and chat.name are empty",
+);
+assert.equal(getLtmChatDisplayName(null), "", "handles null chat safely");
 
 const chats: ScopeTargetChat[] = [
   {

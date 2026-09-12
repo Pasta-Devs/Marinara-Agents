@@ -77,9 +77,17 @@ export async function replyToSlurpMessage(
   }
 
   const source = await slurp.resolveAccountSource(creator);
-  // TODO: Query lastActiveAt from population storage for better availability inference
+  const latestPost = await slurp.getNoodlerLatestPublishedPost(creator.id);
+  const replyDelays = await slurp.getSettings();
   const scheduled = source
-    ? await resolveSlurpCreatorAvailability(createCharactersStorage(db), source, undefined, new Date(), undefined)
+    ? await resolveSlurpCreatorAvailability(
+        createCharactersStorage(db),
+        source,
+        undefined,
+        new Date(),
+        latestPost?.createdAt ?? null,
+        replyDelays,
+      )
     : { online: true, activity: null, minutesUntilOnline: 0 };
   // An open conversation window keeps the Creator online; momentum alone never wakes her.
   const availability =
@@ -141,6 +149,7 @@ export async function replyToSlurpMessage(
     momentum: momentumAnalysis.momentum,
     // replyLength will be filled in after generation
     talkativeness: talkativenessProfile.talkativeness,
+    delays: replyDelays,
   });
   const completedReplyId = await messagesStore.getCompletedReply(thread.id, input.triggerMessageId);
   if (completedReplyId) {
@@ -451,6 +460,7 @@ export async function replyToSlurpMessage(
         momentum: momentumAnalysis.momentum,
         replyLength: actualReplyLength,
         talkativeness: talkativenessProfile.talkativeness,
+        delays: replyDelays,
       });
       return { status: "replied", message: locked.value.message, pacing: recalculatedPacing };
     }

@@ -36,7 +36,10 @@ const generatedAdSchema = z.object({
   categories: z.array(z.string().trim().min(1).max(32)).max(6).default([]),
   contextTags: z.array(z.string().trim().min(1).max(32)).max(6).default([]),
   actionLabel: z.string().trim().min(1).max(40).optional(),
-  contentRating: z.enum(["tame", "suggestive", "explicit"]).default("tame"),
+  // Models occasionally invent their own label (e.g. "general") instead of the three asked
+  // for. Falling back to the strictest rating keeps one hallucinated word from failing the
+  // whole batch — the gate below still filters it against the requested ceiling.
+  contentRating: z.enum(["tame", "suggestive", "explicit"]).catch("tame"),
 });
 
 const TONE_DIRECTION: Record<GarnishTone, string> = {

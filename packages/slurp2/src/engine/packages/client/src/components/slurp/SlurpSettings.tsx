@@ -12,6 +12,7 @@ import {
   Megaphone,
   Pencil,
   Play,
+  Plus,
   RefreshCw,
   RotateCcw,
   Save,
@@ -52,6 +53,7 @@ import {
   useRefreshTargetedNoodlerCreatorsNow,
   useResetSlurpAds,
   useSlurpAdPool,
+  useCreateSlurpAd,
   useDeleteSlurpAd,
   useGenerateSlurpAdImage,
   useSlurpAdLorebooks,
@@ -68,6 +70,7 @@ import {
   useUpdateSlurpImageConnections,
   useUpdateSlurpSettings,
   type SlurpSettings,
+  type SlurpContentRating,
   type SlurpReserveStatus,
   type SlurpScheduleSlot,
 } from "../../hooks/use-slurp";
@@ -303,6 +306,14 @@ export function SlurpSettings({
   const adPool = useSlurpAdPool();
   const generateAds = useGenerateSlurpAds();
   const importAds = useImportSlurpAds();
+  const createAd = useCreateSlurpAd();
+  const [customAdOpen, setCustomAdOpen] = useState(false);
+  const [customAd, setCustomAd] = useState<{
+    brand: string;
+    product: string;
+    copy: string;
+    contentRating: SlurpContentRating;
+  }>({ brand: "", product: "", copy: "", contentRating: "tame" });
   const adsImportRef = useRef<HTMLInputElement>(null);
   const adState = useSlurpAdState(section === "ads" ? viewerPersonaId : null);
   const unhideBrand = useUnhideSlurpAdBrand();
@@ -487,7 +498,7 @@ export function SlurpSettings({
     return (
       <main className="flex h-full items-center justify-center gap-2 p-6 text-sm text-[var(--muted-foreground)]">
         <Loader2 size={18} className="animate-spin" />
-        {t("capabilities.actions.loading")}
+        {t("ui.slurp.studio.loading")}
       </main>
     );
 
@@ -1104,6 +1115,129 @@ export function SlurpSettings({
                       />
                     </Field>
                   </SettingsGroup>
+                  <SettingsGroup title={t("ui.slurp.settings.messaging.delaysTitle")}>
+                    <p className="text-xs leading-5 text-[var(--muted-foreground)]">
+                      {t("ui.slurp.settings.messaging.delaysDetail")}
+                    </p>
+                    <Toggle
+                      label={t("ui.slurp.settings.messaging.unscheduledAlwaysReachable")}
+                      detail={t("ui.slurp.settings.messaging.unscheduledAlwaysReachableDetail")}
+                      value={settings.messagesUnscheduledAlwaysReachable}
+                      onChange={(value) => update("messagesUnscheduledAlwaysReachable", value)}
+                    />
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field
+                        label={t("ui.slurp.settings.messaging.unknownReturnDelay")}
+                        detail={t("ui.slurp.settings.messaging.unknownReturnDelayDetail")}
+                      >
+                        <NumberSetting
+                          value={settings.messagesUnknownReturnDelayMinutes}
+                          min={0}
+                          max={1440}
+                          onSave={(value) => update("messagesUnknownReturnDelayMinutes", value)}
+                        />
+                      </Field>
+                      <Field
+                        label={t("ui.slurp.settings.messaging.maxReplyDelay")}
+                        detail={t("ui.slurp.settings.messaging.maxReplyDelayDetail")}
+                      >
+                        <NumberSetting
+                          value={settings.messagesMaxReplyDelayMinutes}
+                          min={0}
+                          max={1440}
+                          onSave={(value) => update("messagesMaxReplyDelayMinutes", value)}
+                        />
+                      </Field>
+                      <Field
+                        label={t("ui.slurp.settings.messaging.highRapportDelayMin")}
+                        detail={t("ui.slurp.settings.messaging.highRapportDelayMinDetail")}
+                      >
+                        <NumberSetting
+                          value={settings.messagesHighRapportDelayMinMinutes}
+                          min={0}
+                          max={1440}
+                          onSave={(value) => update("messagesHighRapportDelayMinMinutes", value)}
+                        />
+                      </Field>
+                      <Field
+                        label={t("ui.slurp.settings.messaging.highRapportDelayMax")}
+                        detail={t("ui.slurp.settings.messaging.highRapportDelayMaxDetail")}
+                      >
+                        <NumberSetting
+                          value={settings.messagesHighRapportDelayMaxMinutes}
+                          min={0}
+                          max={1440}
+                          onSave={(value) => update("messagesHighRapportDelayMaxMinutes", value)}
+                        />
+                      </Field>
+                      <Field
+                        label={t("ui.slurp.settings.messaging.mediumRapportDelayMin")}
+                        detail={t("ui.slurp.settings.messaging.mediumRapportDelayMinDetail")}
+                      >
+                        <NumberSetting
+                          value={settings.messagesMediumRapportDelayMinMinutes}
+                          min={0}
+                          max={1440}
+                          onSave={(value) => update("messagesMediumRapportDelayMinMinutes", value)}
+                        />
+                      </Field>
+                      <Field
+                        label={t("ui.slurp.settings.messaging.mediumRapportDelayMax")}
+                        detail={t("ui.slurp.settings.messaging.mediumRapportDelayMaxDetail")}
+                      >
+                        <NumberSetting
+                          value={settings.messagesMediumRapportDelayMaxMinutes}
+                          min={0}
+                          max={1440}
+                          onSave={(value) => update("messagesMediumRapportDelayMaxMinutes", value)}
+                        />
+                      </Field>
+                      <Field
+                        label={t("ui.slurp.settings.messaging.recentPostAwayMin")}
+                        detail={t("ui.slurp.settings.messaging.recentPostAwayMinDetail")}
+                      >
+                        <NumberSetting
+                          value={settings.messagesRecentPostAwayMinMinutes}
+                          min={0}
+                          max={1440}
+                          onSave={(value) => update("messagesRecentPostAwayMinMinutes", value)}
+                        />
+                      </Field>
+                      <Field
+                        label={t("ui.slurp.settings.messaging.recentPostAwayMax")}
+                        detail={t("ui.slurp.settings.messaging.recentPostAwayMaxDetail")}
+                      >
+                        <NumberSetting
+                          value={settings.messagesRecentPostAwayMaxMinutes}
+                          min={0}
+                          max={1440}
+                          onSave={(value) => update("messagesRecentPostAwayMaxMinutes", value)}
+                        />
+                      </Field>
+                      <Field
+                        label={t("ui.slurp.settings.messaging.stalePostAwayMin")}
+                        detail={t("ui.slurp.settings.messaging.stalePostAwayMinDetail")}
+                      >
+                        <NumberSetting
+                          value={settings.messagesStalePostAwayMinMinutes}
+                          min={0}
+                          max={1440}
+                          onSave={(value) => update("messagesStalePostAwayMinMinutes", value)}
+                        />
+                      </Field>
+                      <Field
+                        label={t("ui.slurp.settings.messaging.stalePostAwayMax")}
+                        detail={t("ui.slurp.settings.messaging.stalePostAwayMaxDetail")}
+                      >
+                        <NumberSetting
+                          value={settings.messagesStalePostAwayMaxMinutes}
+                          min={0}
+                          max={1440}
+                          onSave={(value) => update("messagesStalePostAwayMaxMinutes", value)}
+                        />
+                      </Field>
+                    </div>
+                  </SettingsGroup>
                   <SettingsGroup title={t("ui.slurp.settings.messaging.defaultsTitle")}>
                     <p className="text-xs leading-5 text-[var(--muted-foreground)]">
                       {t("ui.slurp.settings.messaging.defaultsDetail")}
@@ -1385,7 +1519,7 @@ export function SlurpSettings({
                                         title: t("ui.slurp.settings.creators.refreshConversationSchedule"),
                                         message: t("ui.slurp.settings.creators.refreshConversationScheduleConfirm"),
                                         confirmLabel: t("ui.slurp.settings.creators.refreshConversationSchedule"),
-                                        cancelLabel: t("capabilities.actions.cancel"),
+                                        cancelLabel: t("ui.slurp.actions.cancel"),
                                       }).then((confirmed) => {
                                         if (!confirmed) return;
                                         refreshConversationSchedule.mutate(selectedCreator.id, {
@@ -1856,6 +1990,15 @@ export function SlurpSettings({
                       >
                         {importAds.isPending ? t("ui.slurp.settings.ads.importing") : t("ui.slurp.settings.ads.import")}
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setCustomAdOpen((open) => !open)}
+                        aria-expanded={customAdOpen}
+                        className="flex min-h-9 items-center gap-1 rounded-lg border border-[var(--slurp-outline)] px-3 text-xs font-bold hover:bg-[var(--accent)]"
+                      >
+                        <Plus size={13} aria-hidden="true" />
+                        {t("ui.slurp.settings.ads.createOwn")}
+                      </button>
                       <input
                         ref={adsImportRef}
                         type="file"
@@ -1875,6 +2018,79 @@ export function SlurpSettings({
                         }}
                       />
                     </div>
+                    {customAdOpen && (
+                      <form
+                        className="mt-3 space-y-2 rounded-lg border border-[var(--slurp-outline)] p-3"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          createAd.mutate(customAd, {
+                            onSuccess: () => {
+                              toast.success(t("ui.slurp.settings.ads.created", { brand: customAd.brand }));
+                              setCustomAd({ brand: "", product: "", copy: "", contentRating: "tame" });
+                              setCustomAdOpen(false);
+                            },
+                            onError: (error) => toast.error(errorMessage(error)),
+                          });
+                        }}
+                      >
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <input
+                            required
+                            maxLength={80}
+                            value={customAd.brand}
+                            onChange={(event) => setCustomAd((prev) => ({ ...prev, brand: event.target.value }))}
+                            placeholder={t("ui.slurp.settings.ads.createBrandPlaceholder")}
+                            aria-label={t("ui.slurp.settings.ads.createBrandPlaceholder")}
+                            className="min-h-9 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+                          />
+                          <input
+                            required
+                            maxLength={120}
+                            value={customAd.product}
+                            onChange={(event) => setCustomAd((prev) => ({ ...prev, product: event.target.value }))}
+                            placeholder={t("ui.slurp.settings.ads.createProductPlaceholder")}
+                            aria-label={t("ui.slurp.settings.ads.createProductPlaceholder")}
+                            className="min-h-9 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+                          />
+                        </div>
+                        <textarea
+                          required
+                          maxLength={600}
+                          rows={2}
+                          value={customAd.copy}
+                          onChange={(event) => setCustomAd((prev) => ({ ...prev, copy: event.target.value }))}
+                          placeholder={t("ui.slurp.settings.ads.createCopyPlaceholder")}
+                          aria-label={t("ui.slurp.settings.ads.createCopyPlaceholder")}
+                          className="w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+                        />
+                        <div className="flex flex-wrap items-center gap-2">
+                          <select
+                            value={customAd.contentRating}
+                            onChange={(event) =>
+                              setCustomAd((prev) => ({
+                                ...prev,
+                                contentRating: event.target.value as SlurpContentRating,
+                              }))
+                            }
+                            aria-label={t("ui.slurp.settings.ads.ceiling")}
+                            className="min-h-9 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+                          >
+                            <option value="tame">{t("ui.slurp.settings.ads.ceilingTame")}</option>
+                            <option value="suggestive">{t("ui.slurp.settings.ads.ceilingSuggestive")}</option>
+                            <option value="explicit">{t("ui.slurp.settings.ads.ceilingExplicit")}</option>
+                          </select>
+                          <button
+                            type="submit"
+                            disabled={createAd.isPending}
+                            className="min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 hover:opacity-90 disabled:opacity-50"
+                          >
+                            {createAd.isPending
+                              ? t("ui.slurp.settings.ads.creating")
+                              : t("ui.slurp.settings.ads.createSubmit")}
+                          </button>
+                        </div>
+                      </form>
+                    )}
                     {/* The pool used to be a bare count, so a bad generated ad could only be
                         removed by resetting everything. */}
                     <ul className="mt-4 space-y-2">

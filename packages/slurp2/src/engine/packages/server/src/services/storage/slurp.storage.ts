@@ -279,6 +279,7 @@ import {
   hasSlurpCreatorPostingIntervalConflict,
   slurpCreatorPostingIntervalMs,
 } from "../slurp/slurp-posting-interval.js";
+import { SLURP_DEFAULT_REPLY_DELAYS } from "../slurp/slurp-messaging.js";
 
 export type NoodlerPostPageCursor = NoodlerPostSortKey;
 
@@ -411,6 +412,18 @@ export const slurpSettingsSchema = z.object({
   messagesDefaultDmPolicy: z.enum(SLURP_DM_POLICIES as unknown as [string, ...string[]]),
   messagesDefaultRequestFee: z.number().int().min(0).max(9999),
   messagesDefaultPpvPrice: z.number().int().min(0).max(9999),
+  /** Reply timing, in minutes. See `SlurpReplyDelays` in slurp-messaging.ts. */
+  messagesUnscheduledAlwaysReachable: z.boolean(),
+  messagesHighRapportDelayMinMinutes: z.number().int().min(0).max(1440),
+  messagesHighRapportDelayMaxMinutes: z.number().int().min(0).max(1440),
+  messagesMediumRapportDelayMinMinutes: z.number().int().min(0).max(1440),
+  messagesMediumRapportDelayMaxMinutes: z.number().int().min(0).max(1440),
+  messagesUnknownReturnDelayMinutes: z.number().int().min(0).max(1440),
+  messagesMaxReplyDelayMinutes: z.number().int().min(0).max(1440),
+  messagesRecentPostAwayMinMinutes: z.number().int().min(0).max(1440),
+  messagesRecentPostAwayMaxMinutes: z.number().int().min(0).max(1440),
+  messagesStalePostAwayMinMinutes: z.number().int().min(0).max(1440),
+  messagesStalePostAwayMaxMinutes: z.number().int().min(0).max(1440),
   nightQuiet: z.boolean(),
   onboarding: z.enum(["not_started", "in_progress", "completed"]),
 });
@@ -1024,6 +1037,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   messagesDefaultDmPolicy: SLURP_DEFAULT_CREATOR_MESSAGING.dmPolicy,
   messagesDefaultRequestFee: SLURP_DEFAULT_CREATOR_MESSAGING.requestFee,
   messagesDefaultPpvPrice: SLURP_DEFAULT_CREATOR_MESSAGING.ppvPrice,
+  ...SLURP_DEFAULT_REPLY_DELAYS,
   nightQuiet: false,
   onboarding: "not_started",
 };
@@ -3950,6 +3964,22 @@ export function createSlurpStorage(db: DB) {
         .where(eq(noodlePosts.authorAccountId, accountId))
         .orderBy(desc(noodlePosts.createdAt));
       return rows.map(mapManagedPost);
+    },
+
+    /**
+     * The newest post the audience can actually see, which is what "is this Creator active right
+     * now" means. Drafts are excluded in the query, not by the caller: filtering a `limit 1` result
+     * afterwards returns nothing when the newest post happens to be a draft, which reads as a
+     * Creator who has never posted.
+     */
+    async getNoodlerLatestPublishedPost(accountId: string): Promise<NoodlerManagedPost | null> {
+      const rows = await db
+        .select()
+        .from(noodlePosts)
+        .where(and(eq(noodlePosts.authorAccountId, accountId), ne(noodlePosts.access, "draft")))
+        .orderBy(desc(noodlePosts.createdAt))
+        .limit(1);
+      return rows[0] ? mapManagedPost(rows[0]) : null;
     },
 
     async listNoodlerPostsByAccounts(accountIds: string[], limit = 8): Promise<Map<string, NoodlerManagedPost[]>> {

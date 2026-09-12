@@ -1612,6 +1612,7 @@ export default function SourcesWorkspace({
     const chatTarget = (chat: ScopeTargetChat, current = false): ScopeTarget => ({
       id: `chat:${chat.id}`,
       label: current ? localizeUi("ui.longTermMemory.sourcesworkspace.current") : chat.label,
+      comment: current ? chat.label : undefined,
       kind: "chat",
       sourceScope: current
         ? (scopeTargets.data?.currentScope ?? { chatId: chat.id, chatIds: [chat.id] })
@@ -1619,7 +1620,7 @@ export default function SourcesWorkspace({
       destinationScope: current
         ? (scopeTargets.data?.currentScope ?? { chatId: chat.id, chatIds: [chat.id] })
         : { chatId: chat.id, chatIds: [chat.id] },
-      searchText: [chat.mode, chat.groupId, chat.personaId, ...chat.characterIds].filter(Boolean).join(" "),
+      searchText: [chat.label, chat.mode, chat.groupId, chat.personaId, ...chat.characterIds].filter(Boolean).join(" "),
       ...(current ? { pinned: "current" as const } : {}),
     });
     return [
@@ -1649,14 +1650,17 @@ export default function SourcesWorkspace({
       ...(scopeTargets.data?.chats ?? [])
         .filter((chat) => chat.id !== currentChatId && !chat.groupId)
         .map((chat) => chatTarget(chat)),
-      ...(scopeTargets.data?.groups ?? []).map((group) => ({
-        id: `group:${group.id}`,
-        label: `${localizeUi("ui.longTermMemory.sourcesworkspace.allBranches")}: ${group.label}`,
-        kind: "branch" as const,
-        sourceScope: { groupId: group.id, groupIds: [group.id], chatIds: group.chatIds },
-        destinationScope: { groupId: group.id, groupIds: [group.id], chatIds: group.chatIds },
-        searchText: group.chatIds.join(" "),
-      })),
+      ...(scopeTargets.data?.groups ?? []).map((group) => {
+        const memberDisplayNames = group.chatIds.map((id) => scopeIndexes.chatsById.get(id)?.label).filter(Boolean);
+        return {
+          id: `group:${group.id}`,
+          label: `${localizeUi("ui.longTermMemory.sourcesworkspace.allBranches")}: ${group.label}`,
+          kind: "branch" as const,
+          sourceScope: { groupId: group.id, groupIds: [group.id], chatIds: group.chatIds },
+          destinationScope: { groupId: group.id, groupIds: [group.id], chatIds: group.chatIds },
+          searchText: [group.label, ...memberDisplayNames, ...group.chatIds].join(" "),
+        };
+      }),
       ...(scopeTargets.data?.characters ?? []).map((character) => ({
         id: `character:${character.id}`,
         label: character.label,
