@@ -1521,129 +1521,142 @@ async function main() {
       );
       assert.equal(await page.getByText("Memory outside current chat").count(), 0);
       await memoryScope.locator(":scope > summary").click();
-      const scopeControlStyle = await memoryScope.locator(":scope > summary").evaluate((element) => {
-        const chevron = element.querySelector<SVGElement>("[data-ltm-memory-scope-chevron]");
-        const label = element.querySelector<HTMLElement>("span");
-        const style = getComputedStyle(element);
+      assert.equal(
+        await memoryScope.locator('[data-ltm-vault-scope-target="chat:desktop-chat"][aria-checked="true"]').count(),
+        1,
+        "The contextual Current row is checked by selected ID",
+      );
+      assert.equal(
+        await memoryScope.locator('[data-ltm-vault-scope-target="all"][aria-checked="false"]').count(),
+        1,
+        "The all option is present in the shared scope list",
+      );
+      const scopeControlStyle = await page.locator("[data-ltm-vault-scope-control]").evaluate((element) => {
+        const browserControls = document.querySelector<HTMLElement>("[data-ltm-browser-controls]")!;
+        const control = element.getBoundingClientRect();
+        const bounds = browserControls.getBoundingClientRect();
         return {
-          display: style.display,
-          fontFamily: style.fontFamily,
-          chevronAfterLabel: Boolean(
-            chevron && label && chevron.getBoundingClientRect().left >= label.getBoundingClientRect().right,
-          ),
+          width: control.width,
+          maxWidth: bounds.width,
+          right: control.right,
+          maxRight: bounds.right,
         };
       });
-      assert.equal(scopeControlStyle.display, "flex");
-      assert.ok(scopeControlStyle.fontFamily.length > 0);
-      assert.equal(scopeControlStyle.chevronAfterLabel, true);
+      assert.ok(scopeControlStyle.width <= scopeControlStyle.maxWidth + 1, JSON.stringify(scopeControlStyle));
+      assert.ok(scopeControlStyle.right <= scopeControlStyle.maxRight + 1, JSON.stringify(scopeControlStyle));
+      const scopePickerLayout = await page.locator("[data-ltm-vault-scope-control]").evaluate((control) => {
+        const tablist = control.querySelector<HTMLElement>("[data-ltm-vault-scope-tablist]")!;
+        const tab = control.querySelector<HTMLElement>('[data-ltm-vault-scope-tab="all"]')!;
+        const search = control.querySelector<HTMLElement>("[data-ltm-vault-scope-search]")!.getBoundingClientRect();
+        const list = control.querySelector<HTMLElement>("[data-ltm-vault-scope-list]")!.getBoundingClientRect();
+        const rail = tablist.getBoundingClientRect();
+        const shape = document.createElement("span");
+        control.append(shape);
+        shape.className = "rounded-md";
+        const controlRadius = getComputedStyle(shape).borderRadius;
+        shape.className = "rounded-lg";
+        const railRadius = getComputedStyle(shape).borderRadius;
+        shape.remove();
+        return {
+          width: tablist.getBoundingClientRect().width,
+          columns: getComputedStyle(tablist).gridTemplateColumns.split(" ").length,
+          tabBorderRadius: getComputedStyle(tab).borderRadius,
+          selectedPillCount: control.querySelectorAll("[data-ltm-vault-selected-scope]").length,
+          railRadius: getComputedStyle(tablist).borderRadius,
+          expectedControlRadius: controlRadius,
+          expectedRailRadius: railRadius,
+          leftEdges: [rail.left, search.left, list.left],
+          rightEdges: [rail.right, search.right, list.right],
+          inOrder: search.bottom <= rail.top && rail.bottom <= list.top,
+        };
+      });
+      assert.equal(scopePickerLayout.columns, 5, JSON.stringify(scopePickerLayout));
       assert.equal(
-        await memoryScope.locator('[data-ltm-memory-scope-target="character:character-a"]').textContent(),
-        "Current",
+        scopePickerLayout.tabBorderRadius,
+        scopePickerLayout.expectedControlRadius,
+        JSON.stringify(scopePickerLayout),
       );
       assert.equal(
-        (await memoryScope.locator('[data-ltm-memory-scope-picker="chat"]').locator(":scope > summary").textContent())
-          ?.replace(/\s+/gu, "")
-          .trim(),
-        "ChatDesktopchat",
+        scopePickerLayout.railRadius,
+        scopePickerLayout.expectedRailRadius,
+        JSON.stringify(scopePickerLayout),
       );
-      assert.equal(
-        await memoryScope
-          .locator('[data-ltm-memory-scope-picker="branch"]')
-          .locator('[data-ltm-memory-scope-target="branch:all"]')
-          .count(),
-        1,
-      );
-      const memoryChatPicker = memoryScope.locator('[data-ltm-memory-scope-picker="chat"]');
-      await memoryChatPicker.locator(":scope > summary").click();
-      assert.deepEqual(
-        await memoryChatPicker
-          .locator("[data-ltm-memory-scope-target]")
-          .evaluateAll((targets) => targets.slice(0, 2).map((target) => target.textContent?.trim())),
-        ["Current", "All"],
-      );
-      await memoryChatPicker.locator("input").fill("does-not-match");
-      assert.equal(await memoryChatPicker.locator('[data-ltm-memory-scope-target="chat:desktop-chat"]').count(), 1);
-      assert.equal(await memoryChatPicker.locator('[data-ltm-memory-scope-target="chat:all"]').count(), 1);
-      await memoryChatPicker.locator("input").fill("");
-      await memoryChatPicker.locator(":scope > summary").click();
-      const memoryCharacterPicker = memoryScope.locator('[data-ltm-memory-scope-picker="character"]');
-      await memoryCharacterPicker.locator(":scope > summary").click();
-      assert.deepEqual(
-        await memoryCharacterPicker
-          .locator("[data-ltm-memory-scope-target]")
-          .evaluateAll((targets) => targets.slice(0, 2).map((target) => target.textContent?.trim())),
-        ["Current", "All"],
-      );
-      await memoryCharacterPicker.locator("input").fill("does-not-match");
-      assert.equal(
-        await memoryCharacterPicker.locator('[data-ltm-memory-scope-target="character:character-a"]').count(),
-        1,
-      );
-      assert.equal(await memoryCharacterPicker.locator('[data-ltm-memory-scope-target="character:all"]').count(), 1);
-      await memoryCharacterPicker.locator("input").fill("");
-      await memoryCharacterPicker.locator(":scope > summary").click();
-      await memoryChatPicker.locator(":scope > summary").click();
-      assert.equal(await memoryChatPicker.locator('[data-ltm-memory-scope-target="group:conversation-a"]').count(), 1);
-      await memoryChatPicker.locator('[data-ltm-memory-scope-target="group:conversation-a"]').click();
-      const memoryBranchPicker = memoryScope.locator('[data-ltm-memory-scope-picker="branch"]');
-      assert.equal(
-        await memoryBranchPicker.locator('[data-ltm-memory-scope-target="chat:memory-conversation-branch"]').count(),
-        1,
-      );
-      assert.equal(await memoryBranchPicker.locator('[data-ltm-memory-scope-target="chat:memory-chat"]').count(), 0);
-      const roleplayMode = memoryScope.getByRole("checkbox", { name: "Roleplay" });
-      await roleplayMode.check();
-      assert.equal(await memoryBranchPicker.locator('[data-ltm-memory-scope-target="chat:memory-chat"]').count(), 1);
-      await roleplayMode.uncheck();
-      await memoryChatPicker.locator(":scope > summary").click();
-      await memoryChatPicker.locator('[data-ltm-memory-scope-target="chat:desktop-chat"]').click();
-      await memoryScope.locator('[data-ltm-memory-scope-picker="character"] > summary').click();
-      assert.equal(
-        await memoryScope
-          .locator('[data-ltm-memory-scope-picker="character"]')
-          .evaluate((picker) => (picker as HTMLDetailsElement).open),
-        true,
-      );
-      const characterPickerStyle = await memoryScope
-        .locator('[data-ltm-memory-scope-picker="character"]')
-        .evaluate((picker) => {
-          const summary = picker.querySelector<HTMLElement>("summary")!;
-          const chevron = summary.querySelector<SVGElement>("[data-ltm-memory-scope-chevron]")!;
-          const target = picker.querySelector<HTMLElement>('[data-ltm-memory-scope-target="character:character-a"]')!;
-          const targetStyle = getComputedStyle(target);
-          return {
-            chevronTransform: getComputedStyle(chevron).transform,
-            targetBackground: targetStyle.backgroundColor,
-            targetFontWeight: Number.parseInt(targetStyle.fontWeight, 10),
+      assert.ok(scopePickerLayout.inOrder, JSON.stringify(scopePickerLayout));
+      for (const edges of [scopePickerLayout.leftEdges, scopePickerLayout.rightEdges])
+        assert.ok(Math.max(...edges) - Math.min(...edges) <= 1, JSON.stringify(scopePickerLayout));
+      assert.equal(scopePickerLayout.selectedPillCount, 0, JSON.stringify(scopePickerLayout));
+      const branchTab = memoryScope.locator('[data-ltm-vault-scope-tab="branch"]');
+      for (const active of [false, true]) {
+        if (active) await branchTab.click();
+        await page.mouse.move(0, 0);
+        const colours = await branchTab.evaluate((tab, active) => {
+          const probe = document.createElement("span");
+          probe.style.background = active
+            ? "var(--marinara-editor-control-bg-hover)"
+            : "var(--marinara-editor-control-bg)";
+          probe.style.color = active ? "var(--marinara-editor-text)" : "var(--marinara-editor-muted)";
+          tab.append(probe);
+          const actual = getComputedStyle(tab);
+          const expected = getComputedStyle(probe);
+          const result = {
+            background: actual.backgroundColor,
+            expectedBackground: expected.backgroundColor,
+            text: actual.color,
+            expectedText: expected.color,
           };
-        });
-      assert.notEqual(characterPickerStyle.chevronTransform, "none");
-      assert.notEqual(characterPickerStyle.targetBackground, "rgba(0, 0, 0, 0)");
-      assert.ok(characterPickerStyle.targetFontWeight >= 600);
-      await page.locator('[data-ltm-memory-scope-target="character:character-a"]').focus();
-      await page.locator('[data-ltm-memory-scope-target="character:character-a"]').press("Enter");
-      await page.waitForFunction(
-        () => document.activeElement === document.querySelector('[data-ltm-memory-scope-picker="character"] > summary'),
-      );
-      assert.equal(
-        await memoryScope
-          .locator('[data-ltm-memory-scope-picker="character"]')
-          .evaluate((picker) => (picker as HTMLDetailsElement).open),
-        false,
-      );
-      for (const kind of ["chat", "branch", "status", "sort"]) {
-        const picker = page.locator(`[data-ltm-memory-scope-picker="${kind}"]`);
-        const summary = picker.locator(":scope > summary");
-        await summary.focus();
-        await summary.press("Enter");
-        await picker.locator('[data-ltm-memory-scope-target$=":all"]').focus();
-        await picker.locator('[data-ltm-memory-scope-target$=":all"]').press("Enter");
-        await page.waitForFunction(
-          (selector) => document.activeElement === document.querySelector(selector),
-          `[data-ltm-memory-scope-picker="${kind}"] > summary`,
-          { timeout: 5000 },
-        );
+          probe.remove();
+          return result;
+        }, active);
+        assert.equal(colours.background, colours.expectedBackground, JSON.stringify({ active, ...colours }));
+        assert.equal(colours.text, colours.expectedText, JSON.stringify({ active, ...colours }));
       }
+      assert.equal(await memoryScope.locator('[data-ltm-vault-scope-tab="chat"]').count(), 1);
+      for (const kind of ["character", "chat", "branch", "persona"]) {
+        await memoryScope.locator(`[data-ltm-vault-scope-tab="${kind}"]`).click();
+        for (const query of ["", "does-not-match"]) {
+          await memoryScope.locator("[data-ltm-vault-scope-search]").fill(query);
+          const rows = memoryScope.locator('[data-ltm-vault-scope-list] [role="checkbox"]');
+          assert.equal(await rows.nth(0).getAttribute("data-ltm-vault-scope-pinned"), "all");
+          assert.equal(await rows.nth(1).getAttribute("data-ltm-vault-scope-pinned"), "current");
+          assert.equal(await rows.nth(1).isDisabled(), kind === "branch");
+          if (query) assert.equal(await rows.count(), 2);
+        }
+        await memoryScope.locator("[data-ltm-vault-scope-search]").fill("");
+        if (kind === "persona") {
+          await memoryScope.locator('[data-ltm-vault-scope-current="persona"]').click();
+          await memoryScope.locator('[data-ltm-vault-scope-current="persona"][aria-checked="true"]').waitFor();
+          assert.ok(noteQueries.some((query) => query.includes("scopePersonaId=persona-a")));
+        }
+        await memoryScope.locator('[data-ltm-vault-scope-pinned="all"]').click();
+        await memoryScope.locator('[data-ltm-vault-scope-pinned="all"][aria-checked="true"]').waitFor();
+      }
+      await memoryScope.locator('[data-ltm-vault-scope-tab="chat"]').click();
+      assert.equal(await memoryScope.locator('[data-ltm-vault-scope-target="group:conversation-a"]').count(), 1);
+      await memoryScope.locator("[data-ltm-vault-scope-search]").fill("does-not-match");
+      assert.equal(await memoryScope.locator('[data-ltm-vault-scope-target="group:conversation-a"]').count(), 0);
+      await memoryScope.locator("[data-ltm-vault-scope-search]").fill("");
+      await memoryScope.locator('[data-ltm-vault-scope-target="group:conversation-a"]').click();
+      await memoryScope.locator('[data-ltm-vault-scope-target="group:conversation-a"][aria-checked="true"]').waitFor();
+      assert.equal(
+        await memoryScope.locator('[data-ltm-vault-scope-target="group:conversation-a"][aria-checked="true"]').count(),
+        1,
+      );
+      await memoryScope.locator('[data-ltm-vault-scope-tab="branch"]').click();
+      assert.ok(await memoryScope.locator('[data-ltm-vault-scope-current="branch"]').isDisabled());
+      await memoryScope.locator('[data-ltm-vault-scope-tab="chat"]').click();
+      assert.equal(
+        await memoryScope.locator('[data-ltm-vault-scope-current="chat"]').getAttribute("data-ltm-vault-scope-target"),
+        "chat:desktop-chat",
+      );
+      await memoryScope.locator('[data-ltm-vault-scope-tab="character"]').click();
+      assert.equal(await memoryScope.locator('[data-ltm-vault-scope-target="character:character-a"]').count(), 1);
+      await memoryScope.locator('[data-ltm-vault-scope-target="character:character-a"]').focus();
+      await memoryScope.locator('[data-ltm-vault-scope-target="character:character-a"]').press("Enter");
+      assert.equal(
+        await memoryScope.locator('[data-ltm-vault-scope-target="character:character-a"][aria-checked="true"]').count(),
+        1,
+      );
+      await memoryScope.locator(":scope > summary").click();
       const memoryGroupSummary = page.locator('[data-ltm-memory-group="world"] > summary');
       await page.evaluate(() => {
         document.body.tabIndex = -1;
@@ -1661,8 +1674,9 @@ async function main() {
       assert.notEqual(memoryGroupFocus.outlineStyle, "none");
       assert.ok(memoryGroupFocus.height >= 44, JSON.stringify(memoryGroupFocus));
       await page.evaluate(() => document.body.removeAttribute("tabindex"));
-      await memoryScope.locator('[data-ltm-memory-scope-picker="character"] > summary').click();
-      await page.locator('[data-ltm-memory-scope-target="character:all"]').click();
+      await memoryScope.locator(":scope > summary").click();
+      await memoryScope.locator('[data-ltm-vault-scope-tab="all"]').click();
+      await memoryScope.locator('[data-ltm-vault-scope-target="all"]').click();
       await page.locator('[data-ltm-memory-group="world"] > summary').click();
       await page.getByText("Memory outside current chat").waitFor();
       assert.ok(noteQueries.some((query) => !query.includes("scopeChatIds")));
