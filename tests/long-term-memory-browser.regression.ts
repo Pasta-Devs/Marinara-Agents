@@ -1544,6 +1544,19 @@ async function main() {
       });
       assert.ok(scopeControlStyle.width <= scopeControlStyle.maxWidth + 1, JSON.stringify(scopeControlStyle));
       assert.ok(scopeControlStyle.right <= scopeControlStyle.maxRight + 1, JSON.stringify(scopeControlStyle));
+      const scopePickerLayout = await page.locator("[data-ltm-vault-scope-control]").evaluate((control) => {
+        const tablist = control.querySelector<HTMLElement>("[data-ltm-vault-scope-tablist]")!;
+        const tab = control.querySelector<HTMLElement>('[data-ltm-vault-scope-tab="all"]')!;
+        return {
+          width: tablist.getBoundingClientRect().width,
+          columns: getComputedStyle(tablist).gridTemplateColumns.split(" ").length,
+          tabBorderRadius: getComputedStyle(tab).borderRadius,
+          selectedPillCount: control.querySelectorAll("[data-ltm-vault-selected-scope]").length,
+        };
+      });
+      assert.equal(scopePickerLayout.columns, 5, JSON.stringify(scopePickerLayout));
+      assert.equal(scopePickerLayout.tabBorderRadius, "0px", JSON.stringify(scopePickerLayout));
+      assert.equal(scopePickerLayout.selectedPillCount, 0, JSON.stringify(scopePickerLayout));
       assert.equal(await memoryScope.locator('[data-ltm-vault-scope-tab="chat"]').count(), 1);
       await memoryScope.locator('[data-ltm-vault-scope-tab="chat"]').click();
       assert.equal(await memoryScope.locator('[data-ltm-vault-scope-target="group:conversation-a"]').count(), 1);

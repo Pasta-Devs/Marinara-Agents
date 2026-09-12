@@ -245,29 +245,13 @@ function ScopeTargetPicker({
     <div
       id="ltm-vault-scope-control"
       data-ltm-vault-scope-control
-      className="mari-editor-panel min-w-0 max-w-full space-y-3 p-3"
+      className="min-w-0 max-w-full space-y-3 p-3"
+      style={{ containerType: "inline-size" }}
     >
       <div className="flex min-w-0 items-center gap-2 text-xs font-semibold">
         <span className="min-w-0 truncate">{localizeUi("ui.longTermMemory.memoryvault.chooseScope")}</span>
         {selected ? <span className="min-w-0 truncate text-[var(--muted-foreground)]">{selected.label}</span> : null}
       </div>
-      {selected && selected.id !== "all" ? (
-        <div className="flex min-w-0 flex-wrap gap-1.5" data-ltm-vault-selected-scope>
-          <span className="inline-flex min-w-0 max-w-full items-center rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 py-1 text-xs">
-            <span className="min-w-0 truncate">{selected.label}</span>
-            <button
-              type="button"
-              className="grid h-11 w-11 shrink-0 place-items-center"
-              aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.removeLocationValue1", {
-                value1: selected.label,
-              })}
-              onClick={() => onSelect(targets.all)}
-            >
-              <X aria-hidden="true" size="0.75rem" />
-            </button>
-          </span>
-        </div>
-      ) : null}
       <label className="relative block min-w-0">
         <Search
           aria-hidden="true"
@@ -286,8 +270,30 @@ function ScopeTargetPicker({
       <div
         role="tablist"
         aria-label={localizeUi("ui.longTermMemory.memoryvault.chooseScope")}
-        className="grid min-w-0 grid-cols-2 gap-1"
+        data-ltm-vault-scope-tablist
+        className="mari-editor-tab-rail grid min-w-0"
       >
+        <style>{`
+          [data-ltm-vault-scope-tablist] {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 1px;
+            background: var(--marinara-editor-divider);
+          }
+          [data-ltm-vault-scope-tab] {
+            border: 0;
+            border-radius: 0;
+          }
+          @container (min-width: 16rem) {
+            [data-ltm-vault-scope-tablist] {
+              grid-template-columns: repeat(5, minmax(0, 1fr));
+            }
+          }
+          @container (max-width: 15rem) {
+            [data-ltm-vault-scope-tablist] {
+              grid-template-columns: minmax(0, 1fr);
+            }
+          }
+        `}</style>
         {categories.map(([kind, label], index) => (
           <button
             key={kind}
@@ -299,7 +305,7 @@ function ScopeTargetPicker({
             aria-selected={activeKind === kind}
             data-ltm-vault-scope-tab={kind}
             data-active={activeKind === kind}
-            className="mari-editor-tab min-h-11 min-w-0 rounded-md border px-2 text-xs font-semibold"
+            className="mari-editor-tab min-h-11 min-w-0 px-2 text-xs font-semibold"
             onClick={() => setActiveKind(kind)}
             onKeyDown={(event) => {
               if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
@@ -324,7 +330,7 @@ function ScopeTargetPicker({
         id={`${pickerId}-panel`}
         role="tabpanel"
         aria-labelledby={`${pickerId}-${activeKind}`}
-        className="min-w-0 max-h-52 overflow-y-auto overscroll-contain rounded-md border border-[var(--border)]"
+        className="min-w-0 max-h-52 overflow-y-auto overscroll-contain divide-y divide-[var(--border)] border-y border-[var(--border)]"
       >
         {filteredCurrentTarget ? (
           <button
@@ -2817,10 +2823,7 @@ export default function MemoryVault({
                     {visible.length} {localizeUi("ui.longTermMemory.memoryvault.shown")}
                   </span>
                 </div>
-                <details
-                  data-ltm-memory-scope
-                  className="mari-editor-panel mari-editor-panel--soft group col-span-2 min-w-0 max-w-full rounded-md"
-                >
+                <details data-ltm-memory-scope className="group col-span-2 min-w-0 max-w-full">
                   <summary className="mari-editor-action flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left text-[var(--marinara-editor-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)] [&::-webkit-details-marker]:hidden">
                     <span className="min-w-0 flex-1">
                       <span className="block text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">
