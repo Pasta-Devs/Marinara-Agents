@@ -35,6 +35,7 @@ import { useDialogFocusScope } from "../../hooks/use-dialog-focus-scope";
 import { useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { SlurpCoinAmount } from "./SlurpCoin";
+import { SLURP_LOGO_SRC } from "./slurp-logo";
 
 export const NOODLE_BLUE = "#7EA7FF";
 export const NOODLE_PINK = "#FF7EC1";
@@ -73,8 +74,8 @@ export const SLURP_TOGGLE_ACTIVE_CLASS =
 
 export const NOODLER_MARK = "R";
 export const NOODLER_ADD_MARK = "+R";
-export const NOODLE_LOGO_SRC = "/api/capability-packages/slurp2/assets/slurp2-logo.png";
-const NOODLER_LOGO_SRC = "/api/capability-packages/slurp2/assets/slurp2-logo.png";
+export const NOODLE_LOGO_SRC = SLURP_LOGO_SRC;
+const NOODLER_LOGO_SRC = SLURP_LOGO_SRC;
 const SLURP_NAME = "Slurp";
 export const NOODLE_PERSONA_SWITCHER_PAGE_SIZE = 5;
 

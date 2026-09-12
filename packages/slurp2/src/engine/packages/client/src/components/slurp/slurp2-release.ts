@@ -2,7 +2,7 @@
 // client has no route that serves CHANGELOG.md. So the notes are mirrored here, and
 // `tests/slurp2-release-notes.regression.ts` fails the build if this file drifts from
 // `packages/slurp2/CHANGELOG.md` or from the version in `manifest.json`.
-export const SLURP2_VERSION = "0.0.3";
+export const SLURP2_VERSION = "0.0.4";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -12,6 +12,18 @@ export interface Slurp2ReleaseEntry {
 
 /** Newest first, same order as CHANGELOG.md. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.0.4",
+    date: "2026-09-12",
+    notes: [
+      "Fixed Refresh Conversation Schedule failing with \"chatComplete is not a function\". It now creates the schedule.",
+      "Fixed the Conversation Schedule refresh dialog and the settings loading screen showing raw text keys instead of words.",
+      "Fixed the header logo not loading. The logo is now built into Slurp and no longer depends on the package asset address.",
+      "Added Reply timing settings under Messaging: the longest wait, the wait when the return time is unknown, check-in waits for close and regular fans, and away times for Creators without a schedule.",
+      "Added Always reachable without a schedule. With it on, a Creator with no Conversation Schedule counts as online.",
+      "Corrected the Creator settings text that said a Creator without a Conversation Schedule is always reachable. Slurp guesses from their last post unless the new setting is on.",
+    ],
+  },
   {
     version: "0.0.3",
     date: "2026-09-12",

@@ -7,6 +7,7 @@ import {
   slurpReplyBubbleDelayMs,
   splitSlurpReplyBurst,
   SLURP_DEFAULT_CREATOR_MESSAGING,
+  SLURP_DEFAULT_REPLY_DELAYS,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-messaging";
 import {
   emptySlurpRapportFacts,
@@ -14,7 +15,10 @@ import {
   slurpRapportTier,
   SLURP_DEFAULT_RAPPORT_WEIGHTS,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-rapport";
-import { slurpCreatorAvailability } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-creator-schedule-context";
+import {
+  resolveSlurpCreatorAvailability,
+  slurpCreatorAvailability,
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-creator-schedule-context";
 
 // ── Rapport ──────────────────────────────────────────────
 
@@ -237,4 +241,75 @@ assert.equal(slurpMessagePreview("tip", "", 25), "Tipped 25 coins");
 assert.equal(slurpMessagePreview("ppv", "  something   new ", 8), "Sent locked content");
 assert.equal(slurpMessagePreview("text", "hi ".repeat(80), 0).length <= 80, true, "Previews must stay on one row");
 
-console.info("Slurp messaging regression passed.");
+// ── Player-set reply timing ──────────────────────────────
+
+const noWait = slurpReplyPacing({
+  online: false,
+  rapport: stranger,
+  subscribed: false,
+  messageLength: 20,
+  minutesUntilOnline: 600,
+  delays: { ...SLURP_DEFAULT_REPLY_DELAYS, messagesMaxReplyDelayMinutes: 0 },
+});
+assert.equal(noWait.mode, "instant", "A zero longest wait must answer an offline creator's message right away");
+assert.equal(noWait.notBeforeMs, 0);
+
+const capped = slurpReplyPacing({
+  online: false,
+  rapport: stranger,
+  subscribed: false,
+  messageLength: 20,
+  minutesUntilOnline: null,
+  delays: { ...SLURP_DEFAULT_REPLY_DELAYS, messagesUnknownReturnDelayMinutes: 600, messagesMaxReplyDelayMinutes: 45 },
+});
+assert.ok(capped.notBeforeMs <= 45 * 60_000, "The longest wait setting must cap a queued reply");
+
+const slowWhale = slurpReplyPacing({
+  online: false,
+  rapport: whale,
+  subscribed: true,
+  messageLength: 200,
+  minutesUntilOnline: 120,
+  delays: {
+    ...SLURP_DEFAULT_REPLY_DELAYS,
+    messagesHighRapportDelayMinMinutes: 50,
+    messagesHighRapportDelayMaxMinutes: 50,
+  },
+});
+assert.equal(slowWhale.mode, "delayed");
+assert.ok(slowWhale.notBeforeMs >= 25 * 60_000, "The close-fan wait setting must set the check-in delay");
+
+async function checkUnscheduledAvailability() {
+  const unscheduled = { kind: "character", entityId: "no-schedule", displayName: "Ari" };
+  const noCharacter = { getById: async () => null };
+  const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60_000).toISOString();
+  const guessed = await resolveSlurpCreatorAvailability(noCharacter, unscheduled, undefined, new Date(), threeHoursAgo);
+  assert.equal(guessed.online, false, "Without a schedule the default still guesses from the last post");
+  const reachable = await resolveSlurpCreatorAvailability(
+    noCharacter,
+    unscheduled,
+    undefined,
+    new Date(),
+    threeHoursAgo,
+    {
+      ...SLURP_DEFAULT_REPLY_DELAYS,
+      messagesUnscheduledAlwaysReachable: true,
+    },
+  );
+  assert.equal(reachable.online, true, "Always reachable must make an unscheduled creator online");
+  const shortAway = await resolveSlurpCreatorAvailability(
+    noCharacter,
+    unscheduled,
+    undefined,
+    new Date(),
+    threeHoursAgo,
+    {
+      ...SLURP_DEFAULT_REPLY_DELAYS,
+      messagesStalePostAwayMinMinutes: 5,
+      messagesStalePostAwayMaxMinutes: 5,
+    },
+  );
+  assert.equal(shortAway.minutesUntilOnline, 5, "The away-time settings must set the guessed return time");
+}
+
+void checkUnscheduledAvailability().then(() => console.info("Slurp messaging regression passed."));

@@ -354,6 +354,18 @@ export type SlurpSettings = {
   messagesDefaultDmPolicy: "open" | "subscribers" | "paid" | "closed";
   messagesDefaultRequestFee: number;
   messagesDefaultPpvPrice: number;
+  /** Reply timing, in minutes. */
+  messagesUnscheduledAlwaysReachable: boolean;
+  messagesHighRapportDelayMinMinutes: number;
+  messagesHighRapportDelayMaxMinutes: number;
+  messagesMediumRapportDelayMinMinutes: number;
+  messagesMediumRapportDelayMaxMinutes: number;
+  messagesUnknownReturnDelayMinutes: number;
+  messagesMaxReplyDelayMinutes: number;
+  messagesRecentPostAwayMinMinutes: number;
+  messagesRecentPostAwayMaxMinutes: number;
+  messagesStalePostAwayMinMinutes: number;
+  messagesStalePostAwayMaxMinutes: number;
   nightQuiet: boolean;
   onboarding: "not_started" | "in_progress" | "completed";
 };

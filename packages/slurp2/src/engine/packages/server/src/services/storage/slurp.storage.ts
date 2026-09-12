@@ -279,6 +279,7 @@ import {
   hasSlurpCreatorPostingIntervalConflict,
   slurpCreatorPostingIntervalMs,
 } from "../slurp/slurp-posting-interval.js";
+import { SLURP_DEFAULT_REPLY_DELAYS } from "../slurp/slurp-messaging.js";
 
 export type NoodlerPostPageCursor = NoodlerPostSortKey;
 
@@ -411,6 +412,18 @@ export const slurpSettingsSchema = z.object({
   messagesDefaultDmPolicy: z.enum(SLURP_DM_POLICIES as unknown as [string, ...string[]]),
   messagesDefaultRequestFee: z.number().int().min(0).max(9999),
   messagesDefaultPpvPrice: z.number().int().min(0).max(9999),
+  /** Reply timing, in minutes. See `SlurpReplyDelays` in slurp-messaging.ts. */
+  messagesUnscheduledAlwaysReachable: z.boolean(),
+  messagesHighRapportDelayMinMinutes: z.number().int().min(0).max(1440),
+  messagesHighRapportDelayMaxMinutes: z.number().int().min(0).max(1440),
+  messagesMediumRapportDelayMinMinutes: z.number().int().min(0).max(1440),
+  messagesMediumRapportDelayMaxMinutes: z.number().int().min(0).max(1440),
+  messagesUnknownReturnDelayMinutes: z.number().int().min(0).max(1440),
+  messagesMaxReplyDelayMinutes: z.number().int().min(0).max(1440),
+  messagesRecentPostAwayMinMinutes: z.number().int().min(0).max(1440),
+  messagesRecentPostAwayMaxMinutes: z.number().int().min(0).max(1440),
+  messagesStalePostAwayMinMinutes: z.number().int().min(0).max(1440),
+  messagesStalePostAwayMaxMinutes: z.number().int().min(0).max(1440),
   nightQuiet: z.boolean(),
   onboarding: z.enum(["not_started", "in_progress", "completed"]),
 });
@@ -1024,6 +1037,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   messagesDefaultDmPolicy: SLURP_DEFAULT_CREATOR_MESSAGING.dmPolicy,
   messagesDefaultRequestFee: SLURP_DEFAULT_CREATOR_MESSAGING.requestFee,
   messagesDefaultPpvPrice: SLURP_DEFAULT_CREATOR_MESSAGING.ppvPrice,
+  ...SLURP_DEFAULT_REPLY_DELAYS,
   nightQuiet: false,
   onboarding: "not_started",
 };

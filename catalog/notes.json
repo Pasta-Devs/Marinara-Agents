@@ -128,6 +128,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.0.4",
+          "date": "2026-09-12",
+          "notes": "- Fixed Refresh Conversation Schedule failing with \"chatComplete is not a function\". It now creates the schedule.\n- Fixed the Conversation Schedule refresh dialog and the settings loading screen showing raw text keys instead of words.\n- Fixed the header logo not loading. The logo is now built into Slurp and no longer depends on the package asset address.\n- Added Reply timing settings under Messaging: the longest wait, the wait when the return time is unknown, check-in waits for close and regular fans, and away times for Creators without a schedule.\n- Added Always reachable without a schedule. With it on, a Creator with no Conversation Schedule counts as online.\n- Corrected the Creator settings text that said a Creator without a Conversation Schedule is always reachable. Slurp guesses from their last post unless the new setting is on.",
+          "highlight": true
+        },
+        {
           "version": "0.0.3",
           "date": "2026-09-12",
           "notes": "- Fixed Create post and Add story doing nothing on a Creator profile with a tip goal set. The goal used to hide the post composer.\n- Slurp Remastered now shows its color artwork in the Agents browser. The gray artwork is for Slurp Legacy only.",

@@ -131,6 +131,48 @@ export type SlurpReplyPacing = {
 
 const MINUTE = 60_000;
 
+/**
+ * Player-set reply timing, in minutes. Mirrors the `messages*` Slurp settings of the same names,
+ * so a caller can hand over the settings object itself.
+ */
+export type SlurpReplyDelays = {
+  /** A Creator with no Conversation Schedule answers as if online instead of guessing from posts. */
+  messagesUnscheduledAlwaysReachable: boolean;
+  messagesHighRapportDelayMinMinutes: number;
+  messagesHighRapportDelayMaxMinutes: number;
+  messagesMediumRapportDelayMinMinutes: number;
+  messagesMediumRapportDelayMaxMinutes: number;
+  /** Wait when an offline Creator has no known return time. */
+  messagesUnknownReturnDelayMinutes: number;
+  /** Ceiling on any reply wait. Zero answers right away. */
+  messagesMaxReplyDelayMinutes: number;
+  /** No schedule, posted within two hours: back in this range. */
+  messagesRecentPostAwayMinMinutes: number;
+  messagesRecentPostAwayMaxMinutes: number;
+  /** No schedule, posted two to twelve hours ago: back in this range. */
+  messagesStalePostAwayMinMinutes: number;
+  messagesStalePostAwayMaxMinutes: number;
+};
+
+export const SLURP_DEFAULT_REPLY_DELAYS: SlurpReplyDelays = {
+  messagesUnscheduledAlwaysReachable: false,
+  messagesHighRapportDelayMinMinutes: 10,
+  messagesHighRapportDelayMaxMinutes: 20,
+  messagesMediumRapportDelayMinMinutes: 30,
+  messagesMediumRapportDelayMaxMinutes: 60,
+  messagesUnknownReturnDelayMinutes: 120,
+  messagesMaxReplyDelayMinutes: 180,
+  messagesRecentPostAwayMinMinutes: 30,
+  messagesRecentPostAwayMaxMinutes: 90,
+  messagesStalePostAwayMinMinutes: 120,
+  messagesStalePostAwayMaxMinutes: 240,
+};
+
+/** A point inside a player-set range. A range entered backwards still reads as a range. */
+export function slurpDelayInRange(min: number, max: number, variance: number): number {
+  return Math.min(min, max) + variance * Math.abs(max - min);
+}
+
 export function slurpReplyPacing(input: {
   online: boolean;
   rapport: SlurpRapport;
@@ -153,7 +195,11 @@ export function slurpReplyPacing(input: {
   replyLength?: number;
   /** Talkativeness 0-100 from generated schedule. */
   talkativeness?: number;
+  /** Player-set timing. Defaults keep the shipped pacing. */
+  delays?: SlurpReplyDelays;
 }): SlurpReplyPacing {
+  const delays = input.delays ?? SLURP_DEFAULT_REPLY_DELAYS;
+  const maxDelayMs = delays.messagesMaxReplyDelayMinutes * MINUTE;
   const mood = Math.max(-100, Math.min(100, input.mood ?? 0));
   const momentum = input.momentum ?? "cold";
   const replyLength = input.replyLength ?? 100;
@@ -212,12 +258,34 @@ export function slurpReplyPacing(input: {
 
   // OFFLINE PATH: Creator is not actively available
 
+  // A zero ceiling means the player wants no wait at all, so the reply is not queued behind one.
+  if (maxDelayMs <= 0) {
+    const typingMs = calculateTypingDelay(replyLength, momentum, mood, talkativeness, "normal");
+    return {
+      mode: "instant",
+      typingMs,
+      notBeforeMs: 0,
+      debug: { reach, moodDrag, momentumBoost: momentum, decision: "offline, no reply delay allowed" },
+    };
+  }
+
   // High reach (subscriber + good rapport) gets check-in reply
   if (reach >= 0.6) {
     // They'll check messages and reply within 10-20 minutes
     // Deterministic based on rapport score for consistency
     const variance = (input.rapport.score % 10) / 10; // 0.0 to 1.0
-    const checkInDelay = Math.round((10 + variance * 10) * MINUTE * moodDrag);
+    const checkInDelay = Math.min(
+      maxDelayMs,
+      Math.round(
+        slurpDelayInRange(
+          delays.messagesHighRapportDelayMinMinutes,
+          delays.messagesHighRapportDelayMaxMinutes,
+          variance,
+        ) *
+          MINUTE *
+          moodDrag,
+      ),
+    );
     const typingMs = calculateTypingDelay(replyLength, momentum, mood, talkativeness, "fast");
     return {
       mode: "delayed",
@@ -230,7 +298,18 @@ export function slurpReplyPacing(input: {
   // Medium reach gets delayed check-in reply (30-60 min)
   if (reach >= 0.4) {
     const variance = (input.rapport.score % 10) / 10; // 0.0 to 1.0
-    const checkInDelay = Math.round((30 + variance * 30) * MINUTE * moodDrag);
+    const checkInDelay = Math.min(
+      maxDelayMs,
+      Math.round(
+        slurpDelayInRange(
+          delays.messagesMediumRapportDelayMinMinutes,
+          delays.messagesMediumRapportDelayMaxMinutes,
+          variance,
+        ) *
+          MINUTE *
+          moodDrag,
+      ),
+    );
     const typingMs = calculateTypingDelay(replyLength, momentum, mood, talkativeness, "normal");
     return {
       mode: "delayed",
@@ -241,13 +320,15 @@ export function slurpReplyPacing(input: {
   }
 
   // Low reach waits for schedule
-  const scheduled = input.minutesUntilOnline === null ? 120 : Math.max(15, input.minutesUntilOnline);
+  const scheduled =
+    input.minutesUntilOnline === null
+      ? delays.messagesUnknownReturnDelayMinutes
+      : Math.max(15, input.minutesUntilOnline);
   // Reach still shortens wait a bit (max 50% reduction)
   const reduction = 1 - reach * 0.5;
   const finalDelay = Math.round(scheduled * MINUTE * reduction * moodDrag);
 
-  // Cap at 3 hours (180 minutes) per user config
-  const cappedDelay = Math.min(finalDelay, 180 * MINUTE);
+  const cappedDelay = Math.min(finalDelay, maxDelayMs);
 
   return {
     mode: "queued",

@@ -288,6 +288,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
         undefined,
         new Date(),
         recentPostRows[0]?.createdAt ?? null,
+        settings,
       )
     : { online: true, activity: null, minutesUntilOnline: 0 };
   const characterCanon = await resolveNoodlerCharacterCanon(input.db, source, disclosureMode);

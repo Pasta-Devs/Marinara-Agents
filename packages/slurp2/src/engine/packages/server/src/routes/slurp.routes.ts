@@ -934,7 +934,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       data.extensions && typeof data.extensions === "object" && !Array.isArray(data.extensions)
         ? (data.extensions as Record<string, unknown>)
         : {};
-    const generated = await generateSlurpConversationSchedule(connection, connection.model, {
+    const generated = await generateSlurpConversationSchedule(connection, {
       name: String(data.name ?? source.displayName),
       description: String(data.description ?? ""),
       personality: String(data.personality ?? ""),
