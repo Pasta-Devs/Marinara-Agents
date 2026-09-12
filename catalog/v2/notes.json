@@ -128,6 +128,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.0.3",
+          "date": "2026-09-12",
+          "notes": "- Fixed Create post and Add story doing nothing on a Creator profile with a tip goal set. The goal used to hide the post composer.\n- Slurp Remastered now shows its color artwork in the Agents browser. The gray artwork is for Slurp Legacy only.",
+          "highlight": true
+        },
+        {
           "version": "0.0.2",
           "date": "2026-09-12",
           "notes": "- Added a way to write your own ad in Settings. Give it a brand, a product, ad copy, and a rating, and it joins the pool.\n- Fixed feed ads stopping after the first server batch, content-rating limits being dropped, and one odd rating rejecting a whole batch.\n- Fixed ad actions paying out for ads that were never served, and restored read tracking on the default Following feed.\n- Fixed audience churn, relationship arcs, and subscription billing being starved by the world tick.\n- Fixed recent Creator activity being ignored when replies and follow-ups decide whether a Creator is online. Drafts no longer count as activity.\n- Stopped backups, restores, and deletion from overlapping world or Creator writes, and persona-operated Creators from speaking on their own.\n- Creators no longer write first when you have turned their proactive messages off.\n- Corrected the logo and the welcome screen's close control and keyboard focus.\n- A restore now says plainly that it overrides your settings.",

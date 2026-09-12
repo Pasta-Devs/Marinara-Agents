@@ -36,6 +36,11 @@ assert.match(shell, /\/api\/capability-packages\/slurp2\/assets\/slurp2-logo\.pn
 assert.match(ads, /async canAct[\s\S]*?state\.recentAdIds\.includes\(adId\)[\s\S]*?active\.some/u);
 assert.match(routes, /if \(!\(await ads\.canAct[\s\S]*?return reply\.code\(404\)[\s\S]*?earnCoins/u);
 assert.match(home, /const feedIsOnScreen = Boolean\(scope\)[\s\S]*?if \(feedIsOnScreen\) onFeedShown\(\)/u);
+// A set tip goal must not take the composer's place: the goal bar and the creator tools share
+// `preTabsContent`, and a ternary between them left Create post and Add story opening nothing.
+assert.doesNotMatch(home, /\) : managedCreator && !editing \? \(/u);
+assert.match(home, /\{goalForViewer && !editing && \(/u);
+assert.match(home, /\{managedCreator && !editing && \(\s*<section data-slurp-creator-tools/u);
 
 assert.doesNotMatch(splash, /initialFocusRef|hideCloseButton/u);
 assert.match(splash, /topRef\.current\?\.focus\(\{ preventScroll: true \}\)/u);

@@ -4309,120 +4309,125 @@ function StageProfileView({
         onTabChange={setActiveTab}
         editorActionInPreTabs
         preTabsContent={
-          goalForViewer && !editing ? (
-            <section className="border-b border-[var(--noodle-divider)] bg-[var(--slurp-surface)] px-4 py-3 sm:px-6">
-              <div className="flex items-baseline justify-between gap-3">
-                <p className="min-w-0 truncate text-xs font-bold">{goalForViewer.label}</p>
-                <p className="shrink-0 text-xs tabular-nums text-[var(--muted-foreground)]">
-                  {goalForViewer.met
-                    ? localizeUi("ui.slurp.profile.goalMet", { defaultValue: "Goal met" })
-                    : localizeUi("ui.slurp.profile.goalProgress", {
-                        defaultValue: "{{raised}} / {{target}}",
-                        raised: goalForViewer.raised.toLocaleString(),
-                        target: goalForViewer.target.toLocaleString(),
-                      })}
-                </p>
-              </div>
-              <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--accent)]">
-                <div
-                  className="h-full rounded-full bg-[var(--noodle-accent)] transition-[width] motion-reduce:transition-none"
-                  style={{ width: `${Math.round(goalForViewer.progress * 100)}%` }}
-                />
-              </div>
-            </section>
-          ) : managedCreator && !editing ? (
-            <section data-slurp-creator-tools className="min-w-0">
-              {/* Collapsed, this is one thin line under the header — the tools are the creator's
-                  own business, not the first thing anyone reads on the profile. */}
-              <div className="flex h-11 items-stretch">
-                <button
-                  type="button"
-                  onClick={() => setCreatorToolsOpen((open) => !open)}
-                  aria-expanded={creatorToolsOpen}
-                  aria-controls="slurp-creator-tools-panel"
-                  title={localizeUi("ui.slurp.profile.creatorToolsDetail")}
-                  className="flex min-w-0 flex-1 items-center gap-2 rounded-s-2xl px-3 text-start text-xs font-semibold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
-                >
-                  <Sparkles size={13} className="shrink-0 text-[var(--muted-foreground)]" aria-hidden="true" />
-                  <span className="min-w-0 flex-1 truncate">{localizeUi("ui.slurp.profile.creatorTools")}</span>
-                  {viewingOwnCreator && (
-                    <span className="hidden shrink-0 text-[0.68rem] font-semibold text-[var(--muted-foreground)] lg:inline">
-                      {localizeUi("ui.noodle.stageprofileview.yourProfile")}
-                    </span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={onEdit}
-                  className="group/edit flex min-h-11 items-center px-2 text-xs font-bold text-[var(--noodle-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
-                >
-                  <span className="rounded-lg bg-[color-mix(in_srgb,var(--noodle-accent)_18%,transparent)] px-2.5 py-1.5 transition-[background-color,transform] group-hover/edit:bg-[color-mix(in_srgb,var(--noodle-accent)_26%,transparent)] group-active/edit:scale-[0.96] motion-reduce:transition-none motion-reduce:group-active/edit:scale-100">
-                    {localizeUi("ui.noodle.stageprofileview.editProfile")}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCreatorToolsOpen((open) => !open)}
-                  aria-expanded={creatorToolsOpen}
-                  aria-controls="slurp-creator-tools-panel"
-                  aria-label={localizeUi("ui.slurp.profile.creatorTools")}
-                  className="flex w-11 shrink-0 items-center justify-center rounded-e-2xl text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
-                >
-                  <ChevronDown
-                    size={16}
-                    strokeWidth={2.5}
-                    className={cn(
-                      "transition-transform motion-reduce:transition-none",
-                      creatorToolsOpen && "rotate-180",
-                    )}
-                    aria-hidden="true"
+          <>
+            {/* Both, never either: a set tip goal used to take this slot and hide the composer,
+              so Create post and Add story opened nothing while still leaving a draft behind. */}
+            {goalForViewer && !editing && (
+              <section className="border-b border-[var(--noodle-divider)] bg-[var(--slurp-surface)] px-4 py-3 sm:px-6">
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="min-w-0 truncate text-xs font-bold">{goalForViewer.label}</p>
+                  <p className="shrink-0 text-xs tabular-nums text-[var(--muted-foreground)]">
+                    {goalForViewer.met
+                      ? localizeUi("ui.slurp.profile.goalMet", { defaultValue: "Goal met" })
+                      : localizeUi("ui.slurp.profile.goalProgress", {
+                          defaultValue: "{{raised}} / {{target}}",
+                          raised: goalForViewer.raised.toLocaleString(),
+                          target: goalForViewer.target.toLocaleString(),
+                        })}
+                  </p>
+                </div>
+                <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--accent)]">
+                  <div
+                    className="h-full rounded-full bg-[var(--noodle-accent)] transition-[width] motion-reduce:transition-none"
+                    style={{ width: `${Math.round(goalForViewer.progress * 100)}%` }}
                   />
-                </button>
-              </div>
-              <div
-                id="slurp-creator-tools-panel"
-                hidden={!creatorToolsOpen}
-                className="mt-1 rounded-xl bg-[var(--background)] shadow-inner ring-1 ring-inset ring-[var(--noodle-divider)]"
-              >
-                {/* Edit lives on the profile header with Follow and Subscribe. It used to be
-                    duplicated here too, which gave the same action two homes and made this panel
-                    look like the place to go. */}
-                <div className="flex flex-wrap gap-2 px-3 py-2 @min-[760px]:px-4">
+                </div>
+              </section>
+            )}
+            {managedCreator && !editing && (
+              <section data-slurp-creator-tools className="min-w-0">
+                {/* Collapsed, this is one thin line under the header — the tools are the creator's
+                  own business, not the first thing anyone reads on the profile. */}
+                <div className="flex h-11 items-stretch">
                   <button
                     type="button"
-                    onClick={() => setAccessSettingsOpen(true)}
-                    className="min-h-11 rounded-lg border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+                    onClick={() => setCreatorToolsOpen((open) => !open)}
+                    aria-expanded={creatorToolsOpen}
+                    aria-controls="slurp-creator-tools-panel"
+                    title={localizeUi("ui.slurp.profile.creatorToolsDetail")}
+                    className="flex min-w-0 flex-1 items-center gap-2 rounded-s-2xl px-3 text-start text-xs font-semibold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
                   >
-                    {localizeUi("ui.noodle.stageprofileview.access")}
+                    <Sparkles size={13} className="shrink-0 text-[var(--muted-foreground)]" aria-hidden="true" />
+                    <span className="min-w-0 flex-1 truncate">{localizeUi("ui.slurp.profile.creatorTools")}</span>
+                    {viewingOwnCreator && (
+                      <span className="hidden shrink-0 text-[0.68rem] font-semibold text-[var(--muted-foreground)] lg:inline">
+                        {localizeUi("ui.noodle.stageprofileview.yourProfile")}
+                      </span>
+                    )}
                   </button>
-                  {!personaBackedCreator && (
+                  <button
+                    type="button"
+                    onClick={onEdit}
+                    className="group/edit flex min-h-11 items-center px-2 text-xs font-bold text-[var(--noodle-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
+                  >
+                    <span className="rounded-lg bg-[color-mix(in_srgb,var(--noodle-accent)_18%,transparent)] px-2.5 py-1.5 transition-[background-color,transform] group-hover/edit:bg-[color-mix(in_srgb,var(--noodle-accent)_26%,transparent)] group-active/edit:scale-[0.96] motion-reduce:transition-none motion-reduce:group-active/edit:scale-100">
+                      {localizeUi("ui.noodle.stageprofileview.editProfile")}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCreatorToolsOpen((open) => !open)}
+                    aria-expanded={creatorToolsOpen}
+                    aria-controls="slurp-creator-tools-panel"
+                    aria-label={localizeUi("ui.slurp.profile.creatorTools")}
+                    className="flex w-11 shrink-0 items-center justify-center rounded-e-2xl text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
+                  >
+                    <ChevronDown
+                      size={16}
+                      strokeWidth={2.5}
+                      className={cn(
+                        "transition-transform motion-reduce:transition-none",
+                        creatorToolsOpen && "rotate-180",
+                      )}
+                      aria-hidden="true"
+                    />
+                  </button>
+                </div>
+                <div
+                  id="slurp-creator-tools-panel"
+                  hidden={!creatorToolsOpen}
+                  className="mt-1 rounded-xl bg-[var(--background)] shadow-inner ring-1 ring-inset ring-[var(--noodle-divider)]"
+                >
+                  {/* Edit lives on the profile header with Follow and Subscribe. It used to be
+                    duplicated here too, which gave the same action two homes and made this panel
+                    look like the place to go. */}
+                  <div className="flex flex-wrap gap-2 px-3 py-2 @min-[760px]:px-4">
                     <button
                       type="button"
-                      onClick={() => setAutomationOpen(true)}
+                      onClick={() => setAccessSettingsOpen(true)}
                       className="min-h-11 rounded-lg border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
                     >
-                      {autoPosting.enabled
-                        ? localizeUi("ui.noodle.stageprofileview.automationOn")
-                        : localizeUi("ui.noodle.stageprofileview.automation")}
+                      {localizeUi("ui.noodle.stageprofileview.access")}
                     </button>
-                  )}
+                    {!personaBackedCreator && (
+                      <button
+                        type="button"
+                        onClick={() => setAutomationOpen(true)}
+                        className="min-h-11 rounded-lg border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+                      >
+                        {autoPosting.enabled
+                          ? localizeUi("ui.noodle.stageprofileview.automationOn")
+                          : localizeUi("ui.noodle.stageprofileview.automation")}
+                      </button>
+                    )}
+                  </div>
+                  <NoodlerPostComposer
+                    key={profile.id}
+                    profile={profile}
+                    availablePosts={posts}
+                    draft={draft}
+                    onDraftChange={onDraftChange}
+                    onClearDraft={onClearDraft}
+                    onDiscardDraft={onDiscardDraft}
+                    onManualPost={onManualPost}
+                    onGuidedPost={onGuidedPost}
+                    manualPending={manualPending}
+                    guidePending={guidePending}
+                  />
                 </div>
-                <NoodlerPostComposer
-                  key={profile.id}
-                  profile={profile}
-                  availablePosts={posts}
-                  draft={draft}
-                  onDraftChange={onDraftChange}
-                  onClearDraft={onClearDraft}
-                  onDiscardDraft={onDiscardDraft}
-                  onManualPost={onManualPost}
-                  onGuidedPost={onGuidedPost}
-                  manualPending={manualPending}
-                  guidePending={guidePending}
-                />
-              </div>
-            </section>
-          ) : null
+              </section>
+            )}
+          </>
         }
         featuredContent={
           featuredPost && !bannerSrc && activeTab === "posts" ? (
