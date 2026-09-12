@@ -260,10 +260,9 @@ export function slurpReplyPacing(input: {
 
   // A zero ceiling means the player wants no wait at all, so the reply is not queued behind one.
   if (maxDelayMs <= 0) {
-    const typingMs = calculateTypingDelay(replyLength, momentum, mood, talkativeness, "normal");
     return {
       mode: "instant",
-      typingMs,
+      typingMs: 0,
       notBeforeMs: 0,
       debug: { reach, moodDrag, momentumBoost: momentum, decision: "offline, no reply delay allowed" },
     };

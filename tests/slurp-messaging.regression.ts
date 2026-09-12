@@ -253,6 +253,7 @@ const noWait = slurpReplyPacing({
 });
 assert.equal(noWait.mode, "instant", "A zero longest wait must answer an offline creator's message right away");
 assert.equal(noWait.notBeforeMs, 0);
+assert.equal(noWait.typingMs, 0, "A zero longest wait must not hold the reply behind a typing delay");
 
 const capped = slurpReplyPacing({
   online: false,
