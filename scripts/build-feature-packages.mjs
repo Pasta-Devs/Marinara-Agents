@@ -399,7 +399,7 @@ const features = [
   },
   {
     id: "slurp2",
-    version: "0.0.2",
+    version: "0.0.1",
     minEngineVersion: "2.4.5",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp Remastered",
@@ -411,8 +411,8 @@ const features = [
         description:
           "Die Neufassung von Slurp. Sie wird neben Slurp Legacy installiert und behaelt eigene, getrennte Daten: Erstelle ein lokales Creator-Profil aus einem Engine-Charakter oder einer Engine-Persona, veroeffentliche oeffentliche oder gesperrte Beitraege und simuliere Abonnements und Publikumsaktivitaet.",
         homeBrowserTab: {
-          label: "Slurp Remastered",
-          ariaLabel: "Slurp Remastered oeffnen",
+          label: "Slurp.",
+          ariaLabel: "Slurp. oeffnen",
         },
       },
       ko: {
@@ -420,8 +420,8 @@ const features = [
         description:
           "Slurp\uc758 \ub9ac\uba54\uc774\uc2a4\ud130\uc785\ub2c8\ub2e4. Slurp Legacy\uc640 \ud568\uaed8 \uc124\uce58\ub418\uba70 \ub370\uc774\ud130\ub97c \ub530\ub85c \ubcf4\uad00\ud569\ub2c8\ub2e4. Engine \uce90\ub9ad\ud130\ub098 Engine \ud398\ub974\uc18c\ub098\ub85c \ub85c\uceec \ud06c\ub9ac\uc5d0\uc774\ud130 \ud504\ub85c\ud544\uc744 \ub9cc\ub4e4\uace0, \uacf5\uac1c \ub610\ub294 \uc7a0\uae34 \uac8c\uc2dc\ubb3c\uc744 \uac8c\uc2dc\ud558\uba70, \uad6c\ub3c5 \ubc0f \uccad\uc911 \ud65c\ub3d9\uc744 \uc2dc\ubbac\ub808\uc774\uc158\ud569\ub2c8\ub2e4.",
         homeBrowserTab: {
-          label: "Slurp Remastered",
-          ariaLabel: "Slurp Remastered \uc5f4\uae30",
+          label: "Slurp.",
+          ariaLabel: "Slurp. \uc5f4\uae30",
         },
       },
       pl: {
@@ -429,8 +429,8 @@ const features = [
         description:
           "Odnowiona wersja Slurp. Instaluje sie obok Slurp Legacy i przechowuje wlasne, oddzielne dane: utworz lokalny profil tworcy z postaci silnika lub persony silnika, publikuj publiczne lub zablokowane posty i symuluj subskrypcje oraz aktywnosc publicznosci.",
         homeBrowserTab: {
-          label: "Slurp Remastered",
-          ariaLabel: "Otworz Slurp Remastered",
+          label: "Slurp.",
+          ariaLabel: "Otworz Slurp.",
         },
       },
     },
@@ -451,8 +451,8 @@ const features = [
     contributions: {
       slots: ["home-browser-tab"],
       homeBrowserTab: {
-        label: "Slurp Remastered",
-        ariaLabel: "Open Slurp Remastered",
+        label: "Slurp.",
+        ariaLabel: "Open Slurp.",
         iconPaths: ["slurp2-logo.png"],
       },
     },

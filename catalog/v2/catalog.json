@@ -1626,31 +1626,31 @@
         "schemaVersion": 1,
         "id": "slurp2",
         "name": "Slurp Remastered",
-        "version": "0.0.2",
+        "version": "0.0.1",
         "description": "The Slurp remaster. It installs beside Slurp Legacy and keeps its own separate data: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp Remastered.",
         "localizations": {
           "de": {
             "name": "Slurp Remastered",
             "description": "Die Neufassung von Slurp. Sie wird neben Slurp Legacy installiert und behaelt eigene, getrennte Daten: Erstelle ein lokales Creator-Profil aus einem Engine-Charakter oder einer Engine-Persona, veroeffentliche oeffentliche oder gesperrte Beitraege und simuliere Abonnements und Publikumsaktivitaet.",
             "homeBrowserTab": {
-              "label": "Slurp Remastered",
-              "ariaLabel": "Slurp Remastered oeffnen"
+              "label": "Slurp.",
+              "ariaLabel": "Slurp. oeffnen"
             }
           },
           "ko": {
             "name": "Slurp Remastered",
             "description": "Slurp의 리메이스터입니다. Slurp Legacy와 함께 설치되며 데이터를 따로 보관합니다. Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다.",
             "homeBrowserTab": {
-              "label": "Slurp Remastered",
-              "ariaLabel": "Slurp Remastered 열기"
+              "label": "Slurp.",
+              "ariaLabel": "Slurp. 열기"
             }
           },
           "pl": {
             "name": "Slurp Remastered",
             "description": "Odnowiona wersja Slurp. Instaluje sie obok Slurp Legacy i przechowuje wlasne, oddzielne dane: utworz lokalny profil tworcy z postaci silnika lub persony silnika, publikuj publiczne lub zablokowane posty i symuluj subskrypcje oraz aktywnosc publicznosci.",
             "homeBrowserTab": {
-              "label": "Slurp Remastered",
-              "ariaLabel": "Otworz Slurp Remastered"
+              "label": "Slurp.",
+              "ariaLabel": "Otworz Slurp."
             }
           }
         },
@@ -1671,8 +1671,8 @@
             "home-browser-tab"
           ],
           "homeBrowserTab": {
-            "label": "Slurp Remastered",
-            "ariaLabel": "Open Slurp Remastered",
+            "label": "Slurp.",
+            "ariaLabel": "Open Slurp.",
             "iconPaths": [
               "slurp2-logo.png"
             ]
@@ -1686,13 +1686,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "4ce47fb48a85324bb0692799c1aab6fa9a7a2a1c8e8425140beac972e36fe5fc",
-            "bytes": 2496346
+            "sha256": "23365443c0c34968946d868d0f4370a2980a9af031c356c995bc01e43a274ed9",
+            "bytes": 2049944
           },
           {
             "path": "client.js",
-            "sha256": "001a5be674ff04571fb3bb0fc388663053e0795648b03980fd97b154ccdba9b7",
-            "bytes": 2973257
+            "sha256": "9cbd51030c8540f424c86d0127942a9de430107c869f5e88c93a9712e573aee6",
+            "bytes": 3003918
           },
           {
             "path": "slurp2-logo.png",
@@ -1717,9 +1717,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp2.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.0.2.zip",
-        "sha256": "4028e34770373e49539b44db4787eaf618bd321c1b6d4fe45325c2d083fffabe",
-        "bytes": 5626235
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.0.1.zip",
+        "sha256": "0f470826d5bc4c7d809ca2fe9b5b39c8d6c30a7a5ac4151ca8fca7b0d3f11bd4",
+        "bytes": 5210414
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp2/README.md"
     },

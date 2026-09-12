@@ -159,6 +159,7 @@ import { ChatImageLightbox } from "../chat/ChatImageLightbox";
 import { useNearViewportSlurpMediaSrc, useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
 import { SlurpOnboardingWizard } from "./SlurpOnboardingPanel";
 import { SlurpAgeGate, SlurpConfetti } from "./SlurpAgeGate";
+import { SlurpSplash, slurp2SplashPending } from "./SlurpSplash";
 import { slurpCreatorStatus } from "./slurp-creator-status";
 import {
   Avatar,
@@ -627,6 +628,9 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   const [feedTab, setFeedTab] = useState<"following" | "all">("following");
   const [onboardingMode, setOnboardingMode] = useState<"first-run" | "add-creators" | null>(null);
   const [gateOpen, setGateOpen] = useState(false);
+  // The splash comes first: it is the alpha warning, and the age gate is no use to someone who has
+  // not been told what they installed yet.
+  const [splashOpen, setSplashOpen] = useState(slurp2SplashPending);
   const [gateCelebrating, setGateCelebrating] = useState(false);
   const gatePresentedRef = useRef(false);
   const onboardingPresentedRef = useRef(false);
@@ -2477,7 +2481,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
         onSkipped={() => setOnboardingState("completed")}
       />
       <Modal
-        open={gateOpen}
+        open={gateOpen && !splashOpen}
         onClose={() => undefined}
         title={localizeUi("ui.noodle.noodlemodetoggle.noodler")}
         width="max-w-md"
@@ -2493,6 +2497,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
           isPending={false}
         />
       </Modal>
+      <SlurpSplash open={splashOpen} onDismiss={() => setSplashOpen(false)} />
       {gateCelebrating && <SlurpConfetti fixed />}
       {reviewModal}
     </NoodleShell>
