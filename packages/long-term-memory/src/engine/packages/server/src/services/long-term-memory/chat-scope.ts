@@ -6,6 +6,27 @@ import {
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
 import { uniqueStrings } from "./ltm-utils.js";
 
+export function parseLtmChatMetadata(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
+  if (typeof value !== "string") return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function getLtmChatDisplayName(chat: { name?: string | null; metadata?: unknown } | null | undefined): string {
+  if (!chat) return "";
+  const metadataRecord = parseLtmChatMetadata(chat.metadata);
+  if (typeof metadataRecord?.branchName === "string") {
+    const branchName = metadataRecord.branchName.trim();
+    if (branchName) return branchName;
+  }
+  return chat.name?.trim() || "";
+}
+
 export function normalizeLtmChatCharacterIds(value: unknown) {
   if (Array.isArray(value)) return uniqueStrings(value.filter((id): id is string => typeof id === "string"));
   if (typeof value !== "string") return [];

@@ -139,6 +139,13 @@ async function main(routeScenario: RouteScenario) {
       },
       {
         ...chats[0],
+        id: "chat-renamed-branch",
+        name: "Initial Chat Name",
+        groupId: "renamed-branch-family",
+        metadata: { branchName: "Final Branch" },
+      },
+      {
+        ...chats[0],
         id: "chat-professor-mari",
         name: "Professor Mari",
         characterIds: ["__professor_mari__"],
@@ -1456,6 +1463,21 @@ async function main(routeScenario: RouteScenario) {
           id: "observatory-branches",
           label: "Observatory",
           chatIds: ["chat-a", "game-a"],
+        },
+      );
+      assert.equal(
+        allScopeTargets
+          .json()
+          .chats.some((chat: any) => chat.id === "chat-renamed-branch" && chat.label === "Final Branch"),
+        true,
+        JSON.stringify(allScopeTargets.json().chats),
+      );
+      assert.deepEqual(
+        allScopeTargets.json().groups.find((group: any) => group.id === "renamed-branch-family"),
+        {
+          id: "renamed-branch-family",
+          label: "Final Branch",
+          chatIds: ["chat-renamed-branch"],
         },
       );
       assert.equal(

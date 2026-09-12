@@ -27,6 +27,8 @@ import {
   normalizeLtmChatCharacterIds,
   resolveChatLtmScope,
   resolveChatLtmWriteScope,
+  getLtmChatDisplayName,
+  parseLtmChatMetadata,
 } from "./chat-scope.js";
 import { DEFAULT_LTM_IMPORTED_SOURCE_MODE } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
 import { nowIso } from "./ltm-utils.js";
@@ -478,8 +480,9 @@ async function candidates(
         if (!request.sourceScope && request.chatId && !broaderScope && chat.id !== request.chatId) continue;
         if (scopeGroupIds.size ? !scopeGroupIds.has(chat.groupId) : scopeIds.size && !scopeIds.has(chat.id)) continue;
       }
-      const metadata = object(chat.metadata),
-        chatMode = ltmModeForChatMode(chat.mode);
+      const metadata = parseLtmChatMetadata(chat.metadata),
+        chatMode = ltmModeForChatMode(chat.mode),
+        chatDisplayName = getLtmChatDisplayName(chat) || "Chat";
       for (const entry of summaries(metadata, chatMode)) {
         const sourceId = `${chat.id}:${entry.id}`,
           provenance = {
@@ -487,7 +490,7 @@ async function candidates(
             sourceId: chat.id,
             entryId: entry.id,
           },
-          title = `${chat.name || "Chat"}, msgs ${entry.range}`,
+          title = `${chatDisplayName}, msgs ${entry.range}`,
           seed = `${chat.id}:${entry.id}`,
           legacy =
             entry.origin === "legacy"
@@ -506,7 +509,7 @@ async function candidates(
           importTags: [],
           evidence: [
             `chat:${chat.id}`,
-            `chat_name:${chat.name || "Chat"}`,
+            `chat_name:${chatDisplayName}`,
             `summary_entry:${entry.id}`,
             `message_range:${entry.range}`,
           ],
