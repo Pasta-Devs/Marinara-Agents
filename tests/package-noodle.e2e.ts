@@ -135,6 +135,81 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.describe("package-owned Noodle interface", () => {
+  test("Delete All Noodle Data can be cancelled before typing DELETE", async ({ page }, testInfo) => {
+    let deletions = 0;
+    page.on("request", (request) => {
+      if (request.method() === "DELETE" && new URL(request.url()).pathname === "/api/noodle/data") deletions += 1;
+    });
+    await page.goto("/");
+    await openNoodle(page);
+    const noodle = page.locator('[data-component="NoodleView"]');
+    await noodle.getByRole("button", { name: "Settings", exact: true }).click();
+    await noodle.getByRole("button", { name: "Advanced", exact: true }).click();
+    await noodle.getByRole("button", { name: "Delete All Noodle Data", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Delete All Noodle Data", exact: true });
+    await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeEnabled();
+    await expect(dialog.getByRole("button", { name: "Delete All Data", exact: true })).toBeDisabled();
+    await page.screenshot({ path: testInfo.outputPath("delete-all-cancel.png") });
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(dialog).not.toBeVisible();
+    await noodle.getByRole("button", { name: "Delete All Noodle Data", exact: true }).click();
+    await dialog.getByRole("textbox", { name: "DELETE", exact: true }).fill("DELETE");
+    await expect(dialog.getByRole("button", { name: "Delete All Data", exact: true })).toBeEnabled();
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(dialog).not.toBeVisible();
+    expect(deletions).toBe(0);
+  });
+
+  test("saved prompt replacement confirms before changing the active custom prompt", async ({ page }, testInfo) => {
+    const promptPath = "/api/prompt-overrides/noodle.timelineBase";
+    const initialDetail = (await (await page.request.get(promptPath)).json()) as {
+      override: { template: string; enabled: boolean } | null;
+    };
+    const initialBootstrap = (await (await page.request.get("/api/noodle")).json()) as {
+      settings: { promptPresets?: unknown[] };
+    };
+    const preset = {
+      name: "Replacement confirmation fixture",
+      key: "noodle.timelineBase",
+      template: "A saved timeline prompt.",
+    };
+    const activePrompt = "My edited active timeline prompt, not saved on the preset shelf.";
+    try {
+      expect((await page.request.put(promptPath, { data: { template: activePrompt, enabled: true } })).ok()).toBe(true);
+      expect((await page.request.put("/api/noodle/settings", { data: { promptPresets: [preset] } })).ok()).toBe(true);
+      await page.goto("/");
+      await openNoodle(page);
+      const noodle = page.locator('[data-component="NoodleView"]');
+      await noodle.getByRole("button", { name: "Settings", exact: true }).click();
+      await noodle.getByRole("button", { name: "Advanced", exact: true }).click();
+      const promptSetting = noodle.locator('[data-component="NoodleView.PromptSetting"]');
+      await expect(promptSetting).toContainText(activePrompt);
+      await promptSetting.getByRole("combobox", { name: "Saved prompts", exact: true }).selectOption(preset.name);
+      const dialog = page.getByRole("dialog", { name: "Replace current prompt?", exact: true });
+      await expect(dialog).toContainText("including any unsaved edits");
+      await page.screenshot({ path: testInfo.outputPath("prompt-replacement-confirmation.png") });
+      await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+      await expect(dialog).not.toBeVisible();
+      await expect(promptSetting).toContainText(activePrompt);
+      expect(
+        ((await (await page.request.get(promptPath)).json()) as { override: { template: string } }).override.template,
+      ).toBe(activePrompt);
+      await promptSetting.getByRole("combobox", { name: "Saved prompts", exact: true }).selectOption(preset.name);
+      await dialog.getByRole("button", { name: "Apply preset", exact: true }).click();
+      await expect(dialog).not.toBeVisible();
+      await expect(promptSetting).toContainText(preset.template);
+      expect(
+        ((await (await page.request.get(promptPath)).json()) as { override: { template: string } }).override.template,
+      ).toBe(preset.template);
+    } finally {
+      if (initialDetail.override) await page.request.put(promptPath, { data: initialDetail.override });
+      else await page.request.delete(promptPath);
+      await page.request.put("/api/noodle/settings", {
+        data: { promptPresets: initialBootstrap.settings.promptPresets ?? [] },
+      });
+    }
+  });
+
   test("Noodle interface icons consistently use Noodle blue", async ({ page }, testInfo) => {
     test.skip(!testInfo.project.name.includes("desktop"), "The full Noodle settings surface is covered on desktop.");
 

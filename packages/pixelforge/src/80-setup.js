@@ -616,6 +616,19 @@ PF.mountSetup = (el, props) => {
     // JSON STRING, which is why the list used to be a column of nanoids). That
     // parse retires WITH its reader rather than being kept warm for a list
     // nothing renders; the Engine's own character picker is where it lives now.
+    let chatMeta = {};
+    const chatId = el._pfProps?.chatId;
+    if (typeof chatId === "string" && chatId) {
+      try {
+        const chat = await PF.api.getJson(`/chats/${encodeURIComponent(chatId)}`);
+        const metadata = typeof chat?.metadata === "string" ? JSON.parse(chat.metadata) : chat?.metadata;
+        if (metadata && typeof metadata === "object" && !Array.isArray(metadata)) chatMeta = metadata;
+      } catch {
+        // Older or unavailable hosts keep the shared-library picker usable.
+      }
+    }
+    const excludedBooks = new Set(Array.isArray(chatMeta.excludedLorebookIds) ? chatMeta.excludedLorebookIds : []);
+    const entryOverrides = chatMeta.entryStateOverrides ?? {};
     try {
       const books = await PF.api.getJson("/lorebooks");
       loreBox.replaceChildren();
@@ -626,7 +639,7 @@ PF.mountSetup = (el, props) => {
         // offering a choice the server has already made. `parseLorebookRow` gives
         // a real boolean here; the string is accepted too, because an unparsed
         // projection is what every other row read in this file has had to survive.
-        if (book.enabled === false || book.enabled === "false") continue;
+        if (book.enabled === false || book.enabled === "false" || excludedBooks.has(book.id)) continue;
         const name = typeof book.name === "string" && book.name ? book.name : book.id;
         const noteEl = PF.el("div", { style: "font:11px/1.5 inherit;opacity:0.75;padding-left:16px;" });
         loreBooks.set(book.id, {
@@ -683,7 +696,13 @@ PF.mountSetup = (el, props) => {
                 // A DISABLED ENTRY IS NOT OFFERED EITHER, for the same reason its
                 // book is not: `parseEntryRow` gives a real boolean, the server
                 // refuses one anyway, and not offering it is the honest half.
-                .filter((row) => row.enabled !== false && row.enabled !== "false")
+                .filter(
+                  (row) =>
+                    row.enabled !== false &&
+                    row.enabled !== "false" &&
+                    entryOverrides[row.id]?.enabled !== false &&
+                    entryOverrides[row.id]?.enabled !== "false",
+                )
                 .sort((a, b) => {
                   const constant = (row) => (row.constant === true || row.constant === "true" ? 0 : 1);
                   if (constant(a) !== constant(b)) return constant(a) - constant(b);

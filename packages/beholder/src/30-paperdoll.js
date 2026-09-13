@@ -1194,7 +1194,7 @@ function renderCharacterDoll(name, state, view, opts = {}) {
     // "missing" tag — the cover IS the visible, tracked state there.
     const coveredLoss = COVERABLE_MISSING_SLOTS.has(slot) && slotState?.wornCount > 0;
     if (slotState?.missing && !coveredLoss) {
-      return `<div class="bh-slot-card bh-slot-missing" data-slot="${slot}" data-slots="${slot}"${styleAttr} title="${escapeHtml(slotLabel)} — missing / lost">
+      return `<div class="bh-slot-card bh-slot-missing" role="button" tabindex="0" data-slot="${slot}" data-slots="${slot}"${styleAttr} title="${escapeHtml(slotLabel)} — missing / lost">
                 <span class="bh-slot-name">${escapeHtml(slotLabel)}</span>
                 <span class="bh-slot-missing-tag">missing</span>
             </div>`;
@@ -1203,13 +1203,13 @@ function renderCharacterDoll(name, state, view, opts = {}) {
     // from empty: empty = unknown, bare = known-uncovered. Renders with a
     // skin-tone left bar instead of the gray "missing" hatch.
     if (slotState?.bare && items.length === 0) {
-      return `<div class="bh-slot-card bh-slot-bare" data-slot="${slot}" data-slots="${slot}"${styleAttr} title="${escapeHtml(slotLabel)} — bare (narration confirmed uncovered)">
+      return `<div class="bh-slot-card bh-slot-bare" role="button" tabindex="0" data-slot="${slot}" data-slots="${slot}"${styleAttr} title="${escapeHtml(slotLabel)} — bare (narration confirmed uncovered)">
                 <span class="bh-slot-name">${escapeHtml(slotLabel)}</span>
                 <span class="bh-slot-bare-tag">bare</span>
             </div>`;
     }
     if (items.length === 0) {
-      return `<div class="bh-slot-card bh-slot-empty" data-slot="${slot}" data-slots="${slot}"${styleAttr}>
+      return `<div class="bh-slot-card bh-slot-empty" role="button" tabindex="0" data-slot="${slot}" data-slots="${slot}"${styleAttr}>
                 <span class="bh-slot-name">${escapeHtml(slotLabel)}</span>
             </div>`;
     }
@@ -1256,7 +1256,7 @@ function renderCharacterDoll(name, state, view, opts = {}) {
       })
       .join("");
     const woundChipsHtml = woundCount ? `<div class="bh-slot-wounds">${woundChips.map(renderChip).join("")}</div>` : "";
-    return `<div class="${cardClasses}" data-slot="${slot}" data-slots="${slot}"${styleAttr}>
+    return `<div class="${cardClasses}" role="button" tabindex="0" data-slot="${slot}" data-slots="${slot}"${styleAttr}>
             <div class="bh-slot-card-head">
                 <span class="bh-slot-name">${escapeHtml(slotLabel)}</span>
             </div>
@@ -1269,7 +1269,7 @@ function renderCharacterDoll(name, state, view, opts = {}) {
    *  pairs stay symmetric in paired layout. */
   const ghostCard = (slot, style) => {
     const styleAttr = style ? ` style="${style}"` : "";
-    return `<div class="bh-slot-card bh-slot-empty bh-slot-ghosted" data-slot="${slot}" data-slots="${slot}"${styleAttr}>
+    return `<div class="bh-slot-card bh-slot-empty bh-slot-ghosted" role="button" tabindex="0" data-slot="${slot}" data-slots="${slot}"${styleAttr}>
             <span class="bh-slot-name">${escapeHtml(labelOf(slot, family))}</span>
         </div>`;
   };

@@ -1184,7 +1184,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   };
 
   const applyPromptPreset = async (preset: NoodlePromptPreset) => {
-    if (noodlePromptDirty) {
+    if (noodlePromptDraft.trim() && noodlePromptDraft !== preset.template) {
       const confirmed = await showConfirmDialog({
         title: localizeUi("ui.noodle.noodlehome.promptPresetApplyTitle"),
         message: localizeUi("ui.noodle.noodlehome.promptPresetApplyMessage", { name: preset.name }),
@@ -5612,10 +5612,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
               <button
                 type="button"
                 onClick={() => setConfirmAction(null)}
-                disabled={
-                  confirmActionPending ||
-                  (confirmAction.kind === "delete-all-data" && deleteAllConfirmation !== "DELETE")
-                }
+                disabled={confirmActionPending}
                 className="h-9 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] px-4 text-xs font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {localizeUi("chat.delete.dialog.cancel")}
@@ -5623,7 +5620,10 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
               <button
                 type="button"
                 onClick={confirmNoodleAction}
-                disabled={confirmActionPending}
+                disabled={
+                  confirmActionPending ||
+                  (confirmAction.kind === "delete-all-data" && deleteAllConfirmation !== "DELETE")
+                }
                 className={cn(
                   "flex h-9 items-center justify-center gap-2 rounded-md px-4 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
                   confirmAction.kind === "delete-post" ||

@@ -1,5 +1,12 @@
 # Noodle release notes
 
+## 1.2.23 — 2026-09-13
+
+- Applying a saved prompt asks before replacing the current prompt, including edits already saved as the active prompt.
+- Cancel works immediately in Delete All Noodle Data; only deletion requires typing DELETE.
+- A running timeline refresh blocks duplicate refresh requests instead of queuing extra generations.
+- GLM 5.3 on NanoGPT and Z.AI keeps its required reasoning enabled when the selected effort is None.
+
 ## 1.2.22 — 2026-09-13
 
 - Maintenance: simplify the inline composer's visibility checks and remove unused code.

@@ -25764,9 +25764,13 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     ],
     "lb-johto": [entry({ id: "e-cinnabar", lorebookId: "lb-johto", name: "Cinnabar Island", content: "C".repeat(900), order: 0 })],
   };
-  const stubLore = (books, entriesByBook) => {
+  const stubLore = (books, entriesByBook, chat = {}) => {
     loadedPF.api.getJson = async (path) => {
       if (path === "/connections") return [{ id: "conn-1", name: "Main", model: "m", isDefault: "true" }];
+      if (path.startsWith("/chats/")) {
+        if (chat instanceof Error) throw chat;
+        return chat;
+      }
       if (path === "/lorebooks") return books;
       const at = /^\/lorebooks\/([^/]+)\/entries$/.exec(path);
       if (at) return entriesByBook[decodeURIComponent(at[1])] ?? [];
@@ -25776,10 +25780,10 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   const settle = async () => {
     for (let i = 0; i < 32; i++) await Promise.resolve();
   };
-  const mountWizard = async () => {
+  const mountWizard = async (chatId) => {
     const el = new FakeNode("div");
     const launches = [];
-    loadedPF.mountSetup(el, { onLaunch: async (config, name) => void launches.push({ config, name }) });
+    loadedPF.mountSetup(el, { chatId, onLaunch: async (config, name) => void launches.push({ config, name }) });
     await settle();
     const at = () => walkNodes(el);
     const form = {
@@ -25826,6 +25830,19 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   };
 
   try {
+    // Chat-local exclusions use the same offered rows for individual and all selection.
+    {
+      stubLore([KANTO, JOHTO], REGION_ENTRIES, { metadata: JSON.stringify({ excludedLorebookIds: ["lb-johto"], entryStateOverrides: { "e-viridian": { enabled: false } } }) });
+      const form = await mountWizard("chat-scoped");
+      assert.equal(form.expanders.length, 1);
+      await fire(form.selectAlls[0], "click");
+      assert.deepEqual(form.ticks.map((node) => node.value), ["e-always", "e-pallet"]);
+      assert.deepEqual((await launch(form)).experienceConfig.loreEntryIds, ["e-always", "e-pallet"]);
+      stubLore([KANTO, JOHTO], REGION_ENTRIES, new Error("Chat unavailable"));
+      const fallback = await mountWizard("chat-unavailable");
+      assert.equal(fallback.expanders.length, 2);
+    }
+
     // ── (1) AN EMPTY SELECTION IS TODAY, BYTE FOR BYTE ────────────────────────
     // The lane that lets the Engine half merge without a regression argument
     // behind it, and the reason the config key is OMITTED rather than emitted
@@ -26084,18 +26101,27 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       const originalPost = loadedPF.api.postExperienceGeneration;
       let calls = 0;
       let failure;
+      let detail;
       loadedPF.api.postExperienceGeneration = async () => {
         calls++;
-        return { status: 422, body: { code: "context_limit", error: "Prompt exceeds model context" } };
+        return { status: 422, body: { code: "context_limit", error: "Prompt exceeds model context", estimatedInputTokens: 1600, inputBudget: 400 } };
       };
       try {
         const result = await brief.generate("chat-context", {
           theme: "cozy-village", seed: 7, preferences: "p", lorebookEntryIds: ["large"],
-          onFailure: (kind) => { failure = kind; },
+          onFailure: (kind, value) => { failure = kind; detail = value; },
         });
         assert.equal(result, null);
         assert.equal(calls, 1);
         assert.equal(failure, "context_limit");
+        assert.deepEqual(detail, { estimatedInputTokens: 1600, inputBudget: 400 });
+        assert.match(loadedPF.save.gateReason(failure, "brief", detail), /1.?600.*400/);
+        assert.doesNotMatch(loadedPF.save.gateReason(failure, "brief", { estimatedInputTokens: NaN }), /NaN|undefined/);
+        loadedPF.api.postExperienceGeneration = async () => ({ status: 413, body: {} });
+        assert.equal(await brief.generate("chat-large", { preferences: "p", onFailure: (kind) => { failure = kind; } }), null);
+        assert.equal(failure, "request_too_large");
+        assert.match(loadedPF.save.gateReason(failure, "brief"), /Untick some entries/);
+        failure = "context_limit";
         assert.match(loadedPF.save.gateReason(failure, "brief"), /fewer lorebook entries/);
         assert.match(loadedPF.save.gateReason(failure, "brief"), /larger context/);
       } finally {

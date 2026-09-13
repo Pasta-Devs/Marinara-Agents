@@ -952,10 +952,6 @@ PF.brief = (() => {
         if (!controller.signal.aborted)
           response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
       }
-      if (response.status === 422 && response.body?.code === "context_limit") {
-        onFailure?.("context_limit");
-        return null;
-      }
       const rawOf = (r) =>
         r.status === 422 && r.body?.truncated && typeof r.body.raw === "string" ? r.body.raw : null;
       let bestRaw = rawOf(response);
@@ -964,6 +960,17 @@ PF.brief = (() => {
         response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
         const retryRaw = rawOf(response);
         if (retryRaw && (!bestRaw || retryRaw.length > bestRaw.length)) bestRaw = retryRaw;
+      }
+      if (response.status === 422 && response.body?.code === "context_limit") {
+        onFailure?.("context_limit", {
+          estimatedInputTokens: response.body.estimatedInputTokens,
+          inputBudget: response.body.inputBudget,
+        });
+        return null;
+      }
+      if (response.status === 413) {
+        onFailure?.("request_too_large");
+        return null;
       }
       if (
         response.status === 200 &&

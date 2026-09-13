@@ -1287,5 +1287,7 @@
   "ui.longTermMemory.memoryvault.keepEditing": "Keep editing",
   "ui.longTermMemory.memoryvault.stay": "Stay",
   "ui.longTermMemory.memoryvault.discardAndContinue": "Discard and continue",
-  "ui.longTermMemory.memoryvault.saveAndContinue": "Save and continue"
+  "ui.longTermMemory.memoryvault.saveAndContinue": "Save and continue",
+  "ui.longTermMemory.sourcesworkspace.loadMoreSources": "Load more sources",
+  "ui.longTermMemory.sourcesworkspace.loadingMoreSources": "Loading more sources…"
 }
