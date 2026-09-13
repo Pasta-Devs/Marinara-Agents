@@ -1343,7 +1343,7 @@ export function SlurpCreatorPostCard({
                           {actor?.displayName ?? localizeUi("ui.slurp.profile.fallbackUser")}
                         </button>
                         <span className="truncate !text-[var(--noodle-accent-foreground)]">
-                          @{actor?.handle ?? "noodle"}
+                          @{actor?.handle ?? "slurp"}
                         </span>
                         <span className="!text-[var(--noodle-accent-foreground)] opacity-75">
                           · {formatTime(reply.createdAt, i18n.language)}

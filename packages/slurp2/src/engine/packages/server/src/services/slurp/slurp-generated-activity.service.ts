@@ -148,7 +148,7 @@ export async function prepareGeneratedNoodleMedia(input: {
         // A busy image connection means this background run should yield and retry, not brand
         // the post with a permanent image failure it never actually suffered.
         if (isConnectionAdmissionFailure(err)) throw err;
-        logger.warn(err, "[noodle] Failed to generate image for %s", account.displayName);
+        logger.warn(err, "[slurp] Failed to generate image for %s", account.displayName);
         prepared.imagePrompt = null;
         prepared.metadata.imageGenerationFailed = true;
         prepared.metadata.imageGenerationError = getErrorMessage(err).slice(0, 500);
@@ -177,7 +177,7 @@ export async function prepareGeneratedNoodleMedia(input: {
           Object.assign(prepared.metadata, attachment.metadata);
         }
       } catch (err) {
-        logger.warn(err, "[noodle] Failed to attach gallery image for %s", account.displayName);
+        logger.warn(err, "[slurp] Failed to attach gallery image for %s", account.displayName);
       }
     }
     posts.set(generatedPost, prepared);
@@ -220,7 +220,7 @@ export async function persistGeneratedNoodleActivity(input: {
     const account = handleToAccount.get(normalizeNoodleHandle(generatedPost.authorHandle));
     if (!account) continue;
     if (!canGenerateNoodleActivityForAccountKind(account.kind)) {
-      logger.warn("[noodle] Ignoring generated post attributed to persona %s", account.entityId);
+      logger.warn("[slurp] Ignoring generated post attributed to persona %s", account.entityId);
       continue;
     }
     const preparedMedia = input.preparedMedia.posts.get(generatedPost);
@@ -243,13 +243,13 @@ export async function persistGeneratedNoodleActivity(input: {
     });
     if (!post) {
       if (preparedMedia.stagedMedia) {
-        throw new Error("Failed to persist a generated Noodle post with staged media.");
+        throw new Error("Failed to persist a generated Slurp post with staged media.");
       }
       continue;
     }
     if (preparedMedia.stagedMedia?.characterGalleryInput) {
       const galleryImage = await input.characterGallery.create(preparedMedia.stagedMedia.characterGalleryInput);
-      if (!galleryImage) throw new Error("Failed to associate a generated Noodle image with the character gallery.");
+      if (!galleryImage) throw new Error("Failed to associate a generated Slurp image with the character gallery.");
       await input.noodle.updatePostMedia(post.id, {
         metadata: { characterGalleryImageId: galleryImage.id },
       });
@@ -260,7 +260,7 @@ export async function persistGeneratedNoodleActivity(input: {
     if (generatedPost.tempId) tempIdToPostId.set(generatedPost.tempId, post.id);
     const digest = await input.noodle.createDigest({
       accountIds: [account.id, ...mentionedAccounts.map((mentionedAccount) => mentionedAccount.id)],
-      content: `${noodleDigestAccountLabel(account)} posted on Noodle: ${post.content}`,
+      content: `${noodleDigestAccountLabel(account)} posted on Slurp: ${post.content}`,
       sourceRunId: input.runId,
       sourcePostId: post.id,
     });
@@ -281,7 +281,7 @@ export async function persistGeneratedNoodleActivity(input: {
     if (!actor) continue;
     if (!canGenerateNoodleActivityForAccountKind(actor.kind)) {
       logger.warn(
-        "[noodle] Ignoring generated %s interaction attributed to persona %s",
+        "[slurp] Ignoring generated %s interaction attributed to persona %s",
         generatedInteraction.type,
         actor.entityId,
       );
@@ -333,7 +333,7 @@ export async function persistGeneratedNoodleActivity(input: {
         accountIds: Array.from(
           new Set([actor.id, targetPost.authorAccountId, parentInteraction?.actorAccountId]),
         ).filter((accountId): accountId is string => Boolean(accountId)),
-        content: `${noodleDigestAccountLabel(actor)} ${interactionDigestVerb(generatedInteraction.type)} a Noodle post: ${interactionSummary}`,
+        content: `${noodleDigestAccountLabel(actor)} ${interactionDigestVerb(generatedInteraction.type)} a Slurp post: ${interactionSummary}`,
         sourceRunId: input.runId,
         sourcePostId: targetPostId,
         sourceInteractionId: interaction.id,
@@ -348,7 +348,7 @@ export async function persistGeneratedNoodleActivity(input: {
     const target = handleToAccount.get(normalizeNoodleHandle(generatedFollow.targetHandle));
     if (!actor || !target || actor.id === target.id) continue;
     if (!canGenerateNoodleActivityForAccountKind(actor.kind)) {
-      logger.warn("[noodle] Ignoring generated follow attributed to persona %s", actor.entityId);
+      logger.warn("[slurp] Ignoring generated follow attributed to persona %s", actor.entityId);
       continue;
     }
     const followKey = `${actor.id}:${target.id}`;
@@ -359,7 +359,7 @@ export async function persistGeneratedNoodleActivity(input: {
     committedCounts.follows += 1;
     await input.noodle.createDigest({
       accountIds: [actor.id, target.id],
-      content: `${noodleDigestAccountLabel(actor)} followed ${noodleDigestAccountLabel(target)} on Noodle.`,
+      content: `${noodleDigestAccountLabel(actor)} followed ${noodleDigestAccountLabel(target)} on Slurp.`,
       sourceRunId: input.runId,
     });
   }
@@ -414,7 +414,7 @@ export async function commitGeneratedNoodleActivity(input: {
           },
         }),
       });
-      if (!completedRun) throw new Error("Noodle refresh run disappeared during activity commit.");
+      if (!completedRun) throw new Error("Slurp refresh run disappeared during activity commit.");
       return persisted;
     });
   } catch (error) {

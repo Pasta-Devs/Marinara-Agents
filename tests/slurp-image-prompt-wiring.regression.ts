@@ -22,13 +22,19 @@ assert.match(
   /const rawRewriteInput = redactIdentity\(reviewedOverride\?\.prompt \|\| compiledDraft\?\.prompt \|\| draftPrompt\);/u,
 );
 
-// The template is the document that carries the appearance notes, so it is what reaches the
-// provider when no rewrite survives. Falling back to the bare draft dropped appearance entirely.
+// When no rewrite survives, the provider gets the rendered template — the only document carrying
+// appearance notes and image habits, without which fallback pictures show the wrong character. The
+// length cap in selectNoodleImageProviderPrompt is what keeps that stack bounded.
 assert.match(
   images,
   /const rawProviderPrompt = redactIdentity\(reviewedOverride\?\.prompt \|\| compiledPrompt\.prompt\);/u,
 );
-assert.match(images, /rawPrompt: rawProviderPrompt,/u);
+assert.match(images, /rawPrompt: rawProviderPrompt,\s*rewriteAttempted,\s*onFallback:/u);
+// Garnish ad images honour the interpretation setting and share the same rewrite and fallback.
+const garnish = readFileSync(join(root, server, "services/slurp/slurp-garnish-image.service.ts"), "utf8");
+assert.match(garnish, /settings\.enableImageInterpretation !== false/u);
+assert.match(garnish, /rewriteNoodleImagePrompt\(/u);
+assert.match(garnish, /selectNoodleImageProviderPrompt\(/u);
 
 // --- a retry is built the same way the first attempt was ----------------------------------------
 // Every retry resends our own stored draft as promptOverride. The old guard read that as a

@@ -167,6 +167,8 @@ export type SlurpCreatorAvailability = {
   activity: string | null;
   /** Minutes until the next schedule block starts. `null` when nothing is left today. */
   minutesUntilOnline: number | null;
+  /** True when there is no active schedule and the status is guessed from recent posts. */
+  estimated?: boolean;
 };
 
 /**
@@ -359,5 +361,5 @@ export async function resolveSlurpCreatorAvailability(
   }
 
   // No schedule available: infer from posting activity
-  return inferAvailabilityFromActivity(source.entityId, lastPostedAt ?? null, now, delays);
+  return { ...inferAvailabilityFromActivity(source.entityId, lastPostedAt ?? null, now, delays), estimated: true };
 }
