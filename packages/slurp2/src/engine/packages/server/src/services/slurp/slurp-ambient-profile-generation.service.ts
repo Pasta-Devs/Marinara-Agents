@@ -145,7 +145,7 @@ export async function rerollAmbientNoodleProfiles(input: {
   ];
   logDebugOverride(
     input.debugMode,
-    "[debug/noodle] Ambient profile reroll prompt:\n%s",
+    "[debug/slurp] Ambient profile reroll prompt:\n%s",
     messages.map((message) => `${message.role.toUpperCase()}:\n${message.content}`).join("\n\n"),
   );
   const result = await provider.chatComplete(messages, {
@@ -171,10 +171,10 @@ export async function rerollAmbientNoodleProfiles(input: {
       parseGameJsonish(requireModelAnswer(result.content ?? "", "Ambient profiles")),
     );
   } catch (error) {
-    logger.warn(error, "[noodle] Ambient profile reroll returned an unusable response");
+    logger.warn(error, "[slurp] Ambient profile reroll returned an unusable response");
   }
   if (parsed.rejected.length > 0) {
-    logger.warn("[noodle] Skipped %d invalid Ambient profile row(s)", parsed.rejected.length);
+    logger.warn("[slurp] Skipped %d invalid Ambient profile row(s)", parsed.rejected.length);
   }
   const generatedByEntityId = new Map(parsed.profiles.map((profile) => [profile.entityId, profile]));
   const allocatedHandles = allocateAmbientProfileHandles(
@@ -209,7 +209,7 @@ export async function rerollAmbientNoodleProfiles(input: {
       accounts.push(updated);
       outcomes.push({ accountId: account.id, status: "updated" });
     } catch (error) {
-      logger.error(error, "[noodle] Could not apply Ambient profile reroll for %s", account.id);
+      logger.error(error, "[slurp] Could not apply Ambient profile reroll for %s", account.id);
       outcomes.push({ accountId: account.id, status: "error" });
     }
   }

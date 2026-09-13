@@ -132,7 +132,7 @@ export async function generateMissingNoodleProfiles(input: {
     {
       role: "system",
       content: [
-        "You set up fake Noodle social media profiles for existing Marinara Engine characters.",
+        "You set up fake Slurp social media profiles for existing Marinara Engine characters.",
         NOODLE_ADULT_PLATFORM_POLICY,
         "Create concise profile metadata only. Do not write posts, replies, likes, or timeline content.",
         "Use each character's personality, setting, and appearance to make the profile feel natural and in character.",
@@ -141,11 +141,11 @@ export async function generateMissingNoodleProfiles(input: {
     },
     {
       role: "user",
-      content: ["# Characters Needing Noodle Profiles", characterBlocks, "", outputFormat].join("\n"),
+      content: ["# Characters Needing Slurp Profiles", characterBlocks, "", outputFormat].join("\n"),
     },
   ];
   const promptForLog = messages.map((m) => `${m.role.toUpperCase()}:\n${m.content}`).join("\n\n");
-  logDebugOverride(input.debugMode, "[debug/noodle] Profile prompt sent to model:\n%s", promptForLog);
+  logDebugOverride(input.debugMode, "[debug/slurp] Profile prompt sent to model:\n%s", promptForLog);
   const maxTokens = clampGenerationMaxOutputTokens({
     provider: input.connection.provider as APIProvider,
     model: input.connection.model,
@@ -170,11 +170,11 @@ export async function generateMissingNoodleProfiles(input: {
       parseGameJsonish(requireModelAnswer(result.content ?? "", "public profiles")),
     );
   } catch (error) {
-    logger.warn(error, "[noodle] Profile generation returned an unusable response; retrying once");
+    logger.warn(error, "[slurp] Profile generation returned an unusable response; retrying once");
     generated = { profiles: [], rejected: [] };
   }
   if (generated.profiles.length === 0 && targets.length > 0) {
-    logger.warn("[noodle] Profile generation returned no usable profiles; retrying once");
+    logger.warn("[slurp] Profile generation returned no usable profiles; retrying once");
     const retry = await input.provider.chatComplete(
       [
         ...messages,
@@ -197,7 +197,7 @@ export async function generateMissingNoodleProfiles(input: {
   }
   if (generated.rejected.length > 0) {
     logger.warn(
-      "[noodle] Skipped %d invalid generated profile row(s); valid profiles will still be applied",
+      "[slurp] Skipped %d invalid generated profile row(s); valid profiles will still be applied",
       generated.rejected.length,
     );
   }

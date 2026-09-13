@@ -5696,7 +5696,7 @@ export function createSlurpStorage(db: DB) {
         (await this.listAccounts({ includeHidden: true })).map((account) => account.id),
       );
       if (!uniqueAccountIds.every((accountId) => slurpSourceAccountIds.has(accountId))) {
-        throw new Error("Public Noodle digests cannot reference NoodleR accounts.");
+        throw new Error("Public Noodle digests cannot reference Slurp accounts.");
       }
       await db.transaction(async (tx) => {
         if (input.sourceInteractionId) {
@@ -5878,7 +5878,7 @@ export function createSlurpStorage(db: DB) {
       try {
         await pruneFinishedRefreshRuns();
       } catch (error) {
-        console.error("Noodle refresh-run retention cleanup failed", error);
+        console.error("Slurp refresh-run retention cleanup failed", error);
       }
       return finished;
     },

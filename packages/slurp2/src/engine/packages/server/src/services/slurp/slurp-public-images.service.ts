@@ -279,7 +279,7 @@ export async function generateNoodlePostImage(input: {
     rawPrompt: rawProviderPrompt,
     rewriteAttempted,
     onFallback: (reason) =>
-      logger.warn("[noodle] Image prompt rewrite unusable (%s); sending the capped draft", reason),
+      logger.warn("[slurp] Image prompt rewrite unusable (%s); sending the capped draft", reason),
     // Art style and the character's image habits are meant to reach the provider, so a rewrite
     // that applies them is doing its job. Personality never belongs in a visual prompt at any
     // length; the instruction fields are guidance and only leak as a copied block.
@@ -343,7 +343,7 @@ export async function generateNoodlePostImage(input: {
     (error, attempt, maxAttempts) => {
       logger.warn(
         error,
-        "[noodle] Image generation attempt %d/%d failed for %s",
+        "[slurp] Image generation attempt %d/%d failed for %s",
         attempt,
         maxAttempts,
         input.account.displayName,
@@ -441,7 +441,7 @@ export function createPublicNoodleImagesService(db: DB) {
             claimOwned = await noodle.renewPostImageClaim(post.id, claimToken, imageClaimLeaseUntil());
           } catch (error) {
             claimOwned = false;
-            logger.warn(error, "[noodle] Failed to renew reviewed image claim for post %s", post.id);
+            logger.warn(error, "[slurp] Failed to renew reviewed image claim for post %s", post.id);
           }
         };
         const renewalTimer = setInterval(() => void renewClaim(), REVIEWED_IMAGE_CLAIM_RENEW_MS);
@@ -463,7 +463,7 @@ export function createPublicNoodleImagesService(db: DB) {
             promptOverride,
           });
         } catch (error) {
-          logger.warn(error, "[noodle] Failed to generate reviewed image for %s", account.displayName);
+          logger.warn(error, "[slurp] Failed to generate reviewed image for %s", account.displayName);
           clearInterval(renewalTimer);
           await renewClaim();
           if (claimOwned) {
@@ -507,7 +507,7 @@ export function createPublicNoodleImagesService(db: DB) {
           try {
             await noodle.releasePostImageClaim(post.id, claimToken);
           } catch (releaseError) {
-            logger.warn(releaseError, "[noodle] Failed to release reviewed image claim for post %s", post.id);
+            logger.warn(releaseError, "[slurp] Failed to release reviewed image claim for post %s", post.id);
           }
           throw error;
         } finally {

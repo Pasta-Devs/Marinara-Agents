@@ -276,7 +276,7 @@ const noodleStageProfileUpdateRequestSchema = noodleStageProfileUpdateSchema.ext
 });
 
 /** The `identity` lock is shared by refresh, reroll, and profile edits, so the 409 stays operation-neutral. */
-const NOODLE_IDENTITY_LOCK_BUSY = "Another Noodle identity operation is already running. Wait for it to finish.";
+const NOODLE_IDENTITY_LOCK_BUSY = "Another Slurp identity operation is already running. Wait for it to finish.";
 const NOODLER_MEDIA_MAX_BYTES = 20 * 1024 * 1024;
 const NOODLER_FEED_PAGE_SIZE = 20;
 const NOODLER_MEDIA_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
@@ -374,7 +374,7 @@ async function readNoodlerMultipart(req: FastifyRequest): Promise<{ payload: unk
         const truncated = (part.file as typeof part.file & { truncated?: boolean }).truncated === true;
         const tooLarge = truncated || (error as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE";
         throw new NoodlerMediaRequestError(
-          tooLarge ? "NoodleR image is too large." : "Failed to read the uploaded image.",
+          tooLarge ? "Slurp image is too large." : "Failed to read the uploaded image.",
           tooLarge ? 413 : 400,
         );
       }
@@ -425,11 +425,11 @@ async function importNoodlerMedia(imageUrl: string): Promise<NoodlerPostMediaUpl
     return { buffer, extension: detected.ext };
   } catch (error) {
     if (error instanceof NoodlerMediaRequestError) throw error;
-    logger.warn(error, "[noodler] Could not import image URL");
+    logger.warn(error, "[slurp] Could not import image URL");
     const tooLarge = error instanceof Error && /exceeded \d+ bytes/iu.test(error.message);
     throw new NoodlerMediaRequestError(
       tooLarge
-        ? "NoodleR image is too large."
+        ? "Slurp image is too large."
         : "Could not download that image URL. Check that it is public and points directly to an image.",
       tooLarge ? 413 : 400,
     );
@@ -472,13 +472,13 @@ async function decodeNoodlerMediaRequest<WithMediaSchema extends z.ZodTypeAny, W
 function sendNoodlerMediaError(reply: FastifyReply, error: unknown) {
   const tooLarge = (error as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE";
   const statusCode = tooLarge ? 413 : error instanceof NoodlerMediaRequestError ? error.statusCode : 500;
-  if (statusCode === 500) logger.error(error, "[noodler] Image request failed");
+  if (statusCode === 500) logger.error(error, "[slurp] Image request failed");
   return reply.code(statusCode).send({
     error:
       statusCode === 500
         ? "Image request failed."
         : tooLarge
-          ? "NoodleR image is too large."
+          ? "Slurp image is too large."
           : (error as Error).message,
   });
 }
@@ -1237,8 +1237,8 @@ export async function slurpRoutes(app: FastifyInstance) {
         }
       });
       if (!locked.acquired)
-        return reply.code(409).send({ error: "Another operation for this NoodleR account is already running." });
-      if (!locked.value) return reply.code(404).send({ error: "NoodleR stage profile not found" });
+        return reply.code(409).send({ error: "Another operation for this Slurp account is already running." });
+      if (!locked.value) return reply.code(404).send({ error: "Slurp stage profile not found" });
       return locked.value;
     } catch (error) {
       return sendNoodlerMediaError(reply, error);
@@ -1258,9 +1258,9 @@ export async function slurpRoutes(app: FastifyInstance) {
       return (await noodle.listNoodlerStageProfiles()).find((profile) => profile.id === id) ?? null;
     });
     if (!locked.acquired)
-      return reply.code(409).send({ error: "Another operation for this NoodleR account is already running." });
+      return reply.code(409).send({ error: "Another operation for this Slurp account is already running." });
     if (locked.value === false) return reply.code(409).send({ error: "The linked source does not have an avatar." });
-    if (!locked.value) return reply.code(404).send({ error: "An Open NoodleR stage profile was not found." });
+    if (!locked.value) return reply.code(404).send({ error: "An Open Slurp stage profile was not found." });
     return locked.value;
   });
 
@@ -1274,8 +1274,8 @@ export async function slurpRoutes(app: FastifyInstance) {
       return (await noodle.listNoodlerStageProfiles()).find((profile) => profile.id === id) ?? null;
     });
     if (!locked.acquired)
-      return reply.code(409).send({ error: "Another operation for this NoodleR account is already running." });
-    if (!locked.value) return reply.code(404).send({ error: "NoodleR stage profile not found" });
+      return reply.code(409).send({ error: "Another operation for this Slurp account is already running." });
+    if (!locked.value) return reply.code(404).send({ error: "Slurp stage profile not found" });
     return locked.value;
   });
 
@@ -1997,7 +1997,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     const parsed = noodlerViewerPersonaSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
-    if (!viewer) return reply.code(404).send({ error: "Noodle persona not found" });
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const accounts = await noodle.listNoodlerAccounts();
     const unseenCreatorAccountIds = noodlerUnseenCreatorAccountIds(accounts, viewer.id);
     const visibleAccounts = accounts.filter(
@@ -2061,7 +2061,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     const parsed = noodlerViewerPersonaSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
-    if (!viewer) return reply.code(404).send({ error: "Noodle persona not found" });
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     return buildViewerShell(await buildViewerContext(viewer));
   });
 
@@ -2069,7 +2069,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     const parsed = noodlerViewerFeedQuerySchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
-    if (!viewer) return reply.code(404).send({ error: "Noodle persona not found" });
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const context = await buildViewerContext(viewer);
     const accounts = context.visibleAccounts.filter(
       (account) => parsed.data.tab === "all" || context.followedIds.has(account.id),
@@ -2481,7 +2481,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     const identity = await resolveViewerIdentity(parsed.data.personaId);
     if (!identity?.actor) return reply.code(404).send({ error: "Slurp viewer profile not found" });
     const gated = await resolveGatedNoodlerPost(parsed.data.personaId, id);
-    if (!gated) return reply.code(404).send({ error: "NoodleR post not found" });
+    if (!gated) return reply.code(404).send({ error: "Slurp post not found" });
     if (parsed.data.type === "vote") {
       const poll = readNoodlePollFromMetadata(gated.post.metadata);
       const optionId = parsed.data.content?.trim() ?? "";
@@ -2496,7 +2496,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       content: parsed.data.content ?? null,
       parentInteractionId: parsed.data.parentInteractionId ?? null,
     });
-    if (!interaction) return reply.code(400).send({ error: "Could not add that NoodleR interaction." });
+    if (!interaction) return reply.code(400).send({ error: "Could not add that Slurp interaction." });
     // Taking part pays, capped per day. A like is one tap, so only the interactions that cost the
     // player something to write are rewarded — otherwise the cap is reached by tapping hearts.
     if (parsed.data.type === "reply" || parsed.data.type === "vote") {
@@ -2605,14 +2605,14 @@ export async function slurpRoutes(app: FastifyInstance) {
       if (result.status === "generated") return reply.code(201).send(result);
       if (result.status === "busy") {
         return reply.code(409).send({
-          error: "Another operation for this NoodleR account is already running.",
+          error: "Another operation for this Slurp account is already running.",
         });
       }
       if (result.status === "connection_required") {
-        return reply.code(400).send({ error: "Select a Noodle generation connection first." });
+        return reply.code(400).send({ error: "Select a Slurp generation connection first." });
       }
       if (result.status === "connection_not_found") {
-        return reply.code(404).send({ error: "Noodle generation connection not found" });
+        return reply.code(404).send({ error: "Slurp generation connection not found" });
       }
       if (result.status === "exhausted") {
         // The ceiling is installation-wide, not per creator: saying otherwise sends the user to
@@ -2623,7 +2623,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       }
       if (result.status === "ineligible") {
         return reply.code(404).send({
-          error: "That NoodleR reply can no longer receive a creator reply.",
+          error: "That Slurp reply can no longer receive a creator reply.",
         });
       }
       // `duplicate` carries the existing interaction and is a success: the reply the caller
@@ -2642,14 +2642,14 @@ export async function slurpRoutes(app: FastifyInstance) {
     const identity = await resolveViewerIdentity(parsed.data.personaId);
     if (!identity?.actor) return reply.code(404).send({ error: "Slurp viewer profile not found" });
     const gated = await resolveGatedNoodlerPost(parsed.data.personaId, id);
-    if (!gated) return reply.code(404).send({ error: "NoodleR post not found" });
+    if (!gated) return reply.code(404).send({ error: "Slurp post not found" });
     const interaction = await noodle.deleteNoodlerInteraction(id, {
       actorAccountId: identity.actor.id,
       viewerPersonaId: identity.personaId,
       type: parsed.data.type,
       parentInteractionId: parsed.data.parentInteractionId ?? null,
     });
-    if (!interaction) return reply.code(404).send({ error: "NoodleR interaction not found" });
+    if (!interaction) return reply.code(404).send({ error: "Slurp interaction not found" });
     return interaction;
   });
 
@@ -2708,7 +2708,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
     const existing = await noodle.getNoodlerPostById(id);
-    if (!existing) return reply.code(404).send({ error: "NoodleR post not found" });
+    if (!existing) return reply.code(404).send({ error: "Slurp post not found" });
     if (existing.authorAccountId !== accountId) return reply.code(403).send({ error: "Forbidden" });
     const nextContent = parsed.data.content === undefined ? existing.content : parsed.data.content;
     const nextPoll =
@@ -2735,10 +2735,10 @@ export async function slurpRoutes(app: FastifyInstance) {
     });
     if (!locked.acquired) {
       return reply.code(409).send({
-        error: "Another operation for this NoodleR account is already running.",
+        error: "Another operation for this Slurp account is already running.",
       });
     }
-    if (!locked.value) return reply.code(404).send({ error: "NoodleR post not found" });
+    if (!locked.value) return reply.code(404).send({ error: "Slurp post not found" });
     if (parsed.data.removeImage) unlinkNoodlerMedia(locked.value.staleMedia);
     return locked.value.updated;
   });
@@ -2775,11 +2775,11 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (result.status === "created") return reply.code(201).send(result.post);
     if (result.status === "busy") {
       return reply.code(409).send({
-        error: "Another operation for this NoodleR account is already running.",
+        error: "Another operation for this Slurp account is already running.",
       });
     }
     if (result.status === "disabled") return reply.code(404).send({ error: "Not Found" });
-    return reply.code(404).send({ error: "NoodleR stage profile not found" });
+    return reply.code(404).send({ error: "Slurp stage profile not found" });
   });
 
   app.post("/noodler/posts/:id/media", async (req, reply) => {
@@ -2803,12 +2803,12 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (result.status === "updated") return result.post;
     if (result.status === "busy") {
       return reply.code(409).send({
-        error: "Another operation for this NoodleR account is already running.",
+        error: "Another operation for this Slurp account is already running.",
       });
     }
     if (result.status === "disabled") return reply.code(404).send({ error: "Not Found" });
     if (result.status === "forbidden") return reply.code(403).send({ error: "Forbidden" });
-    return reply.code(404).send({ error: "NoodleR post not found" });
+    return reply.code(404).send({ error: "Slurp post not found" });
   });
 
   app.post("/noodler/posts/:id/image/generate", async (req, reply) => {
@@ -2821,7 +2821,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       .safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const post = await noodle.getNoodlerPostById(id);
-    if (!post) return reply.code(404).send({ error: "NoodleR post not found" });
+    if (!post) return reply.code(404).send({ error: "Slurp post not found" });
     if (post.authorAccountId !== parsed.data.accountId) return reply.code(403).send({ error: "Forbidden" });
     if (post.imageUrl) return reply.code(409).send({ error: "This post already has an image." });
     if (!post.imagePrompt) return reply.code(400).send({ error: "This post does not have an image prompt." });
@@ -2850,15 +2850,15 @@ export async function slurpRoutes(app: FastifyInstance) {
     }
     const { id } = req.params as { id: string };
     const existing = await noodle.getNoodlerPostById(id);
-    if (!existing) return reply.code(404).send({ error: "NoodleR post not found" });
+    if (!existing) return reply.code(404).send({ error: "Slurp post not found" });
     if (existing.authorAccountId !== accountId) return reply.code(403).send({ error: "Forbidden" });
     const locked = await tryNoodlerAccountOperation(existing.authorAccountId, () => noodle.deleteNoodlerPost(id));
     if (!locked.acquired) {
       return reply.code(409).send({
-        error: "Another operation for this NoodleR account is already running.",
+        error: "Another operation for this Slurp account is already running.",
       });
     }
-    if (!locked.value) return reply.code(404).send({ error: "NoodleR post not found" });
+    if (!locked.value) return reply.code(404).send({ error: "Slurp post not found" });
     unlinkNoodlerMedia(readNoodlerMediaPath(locked.value));
     return locked.value;
   });
@@ -2877,7 +2877,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       creatorBelongsToViewer(creator, viewer) ||
       isNoodlerHiddenFromViewer(creator, viewer.id)
     ) {
-      return reply.code(404).send({ error: "NoodleR stage profile not found" });
+      return reply.code(404).send({ error: "Slurp stage profile not found" });
     }
     const subscription = await noodle.subscribe(viewer.id, creator.id);
     if (!subscription) {
@@ -2896,7 +2896,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     const parsed = noodlerSubscriptionSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
-    if (!viewer) return reply.code(404).send({ error: "Noodle persona not found" });
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const { id } = req.params as { id: string };
     await noodle.unsubscribe(viewer.id, id);
     const freshViewer = await resolveViewerPersona(parsed.data.personaId);
@@ -2908,7 +2908,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     const parsed = noodlerSubscriberPageQuerySchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     if (!(await noodle.getNoodlerAccountById(id))) {
-      return reply.code(404).send({ error: "NoodleR stage profile not found" });
+      return reply.code(404).send({ error: "Slurp stage profile not found" });
     }
     const page = await noodle.listSubscriptionsForCreatorPage(
       id,
@@ -2984,7 +2984,7 @@ export async function slurpRoutes(app: FastifyInstance) {
   app.get("/noodler/accounts/:id/followers", async (req, reply) => {
     const { id } = req.params as { id: string };
     const creator = await noodle.getNoodlerAccountById(id);
-    if (!creator) return reply.code(404).send({ error: "NoodleR stage profile not found" });
+    if (!creator) return reply.code(404).send({ error: "Slurp stage profile not found" });
     const population = createSlurpPopulationStorage(app.db);
     const at = new Date();
     const followerFloor = SLURP_FUNNEL_STAGES.indexOf("follower");
@@ -3075,7 +3075,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       creatorBelongsToViewer(creator, viewer) ||
       isNoodlerHiddenFromViewer(creator, viewer.id)
     ) {
-      return reply.code(404).send({ error: "NoodleR stage profile not found" });
+      return reply.code(404).send({ error: "Slurp stage profile not found" });
     }
     const updated = await noodle.updateViewerFollow(viewer.id, creator.id, body.followed);
     if (!updated) return reply.code(400).send({ error: "Could not update follow state" });
@@ -3110,7 +3110,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       creatorBelongsToViewer(creator, viewer) ||
       isNoodlerHiddenFromViewer(creator, viewer.id)
     ) {
-      return reply.code(404).send({ error: "NoodleR post not found" });
+      return reply.code(404).send({ error: "Slurp post not found" });
     }
     const unlock = await noodle.unlockPost(viewer.id, post.id);
     // An affordable post that still fails is a different problem from an unaffordable one, so
@@ -3175,7 +3175,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       connections,
       parsed.data.connectionId ?? settings.generationConnectionId,
     );
-    if (!connection) return reply.code(404).send({ error: "Noodle generation connection not found" });
+    if (!connection) return reply.code(404).send({ error: "Slurp generation connection not found" });
     try {
       return await generateNoodlerStageProfileDraft(app.db, {
         request: parsed.data,
@@ -3184,7 +3184,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     } catch (error) {
       logger.error(
         error,
-        "[noodler] Stage profile draft generation failed using %s",
+        "[slurp] Stage profile draft generation failed using %s",
         connection.model || connection.provider,
       );
       return reply
@@ -3268,12 +3268,12 @@ export async function slurpRoutes(app: FastifyInstance) {
       );
       if (!created) return reply.code(404).send({ error: "Noodle account not found" });
       const profile = (await noodle.listNoodlerStageProfiles()).find((item) => item.id === created.id);
-      if (!profile) throw new Error("Failed to load the created NoodleR stage profile.");
+      if (!profile) throw new Error("Failed to load the created Slurp stage profile.");
       return reply.code(201).send(profile);
     } catch (error) {
       if (isFileUniqueConstraintError(error, "slurp2_accounts", ["sourceKind", "sourceEntityId"])) {
         return reply.code(409).send({
-          error: "A NoodleR account already exists for this Noodle account.",
+          error: "A Slurp creator already exists for this Noodle account.",
         });
       }
       throw error;
@@ -3325,7 +3325,7 @@ export async function slurpRoutes(app: FastifyInstance) {
             await applyAutoPosting(existing.id);
             created.push(existing.id);
           } catch (error) {
-            logger.error(error, "[noodler] Bulk replay could not apply auto-posting for %s", noodleAccountId);
+            logger.error(error, "[slurp] Bulk replay could not apply auto-posting for %s", noodleAccountId);
             failed.push(noodleAccountId);
             noteReason(noodleAccountId, errorReason(error));
           }
@@ -3403,7 +3403,7 @@ export async function slurpRoutes(app: FastifyInstance) {
             } catch (autoPostingError) {
               logger.error(
                 autoPostingError,
-                "[noodler] Bulk replay could not apply auto-posting for %s",
+                "[slurp] Bulk replay could not apply auto-posting for %s",
                 noodleAccountId,
               );
               failed.push(noodleAccountId);
@@ -3418,7 +3418,7 @@ export async function slurpRoutes(app: FastifyInstance) {
           }
           return;
         }
-        logger.error(error, "[noodler] Bulk stage profile generation failed for %s", noodleAccountId);
+        logger.error(error, "[slurp] Bulk stage profile generation failed for %s", noodleAccountId);
         failed.push(noodleAccountId);
         noteReason(noodleAccountId, errorReason(error));
         return;
@@ -3427,7 +3427,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     settledCreations.forEach((result, index) => {
       if (result.status === "fulfilled") return;
       const noodleAccountId = noodleAccountIds[index]!;
-      logger.error(result.reason, "[noodler] Bulk stage profile setup failed for %s", noodleAccountId);
+      logger.error(result.reason, "[slurp] Bulk stage profile setup failed for %s", noodleAccountId);
       failed.push(noodleAccountId);
       noteReason(noodleAccountId, errorReason(result.reason));
     });
@@ -3537,12 +3537,12 @@ export async function slurpRoutes(app: FastifyInstance) {
       const updated = await noodle.updateNoodlerStageProfile(id, stageProfile, sourceSnapshot ?? undefined, location);
       if (!updated) return { status: "not_found" } as const;
       const profile = (await noodle.listNoodlerStageProfiles()).find((item) => item.id === updated.id);
-      if (!profile) throw new Error("Failed to load the updated NoodleR stage profile.");
+      if (!profile) throw new Error("Failed to load the updated Slurp stage profile.");
       return { status: "updated", profile, discardedPreparedPostCount } as const;
     });
     if (!locked.acquired) {
       return reply.code(409).send({
-        error: "Another operation for this NoodleR account is already running.",
+        error: "Another operation for this Slurp account is already running.",
       });
     }
     if (locked.value.status === "identity_conflict") {
@@ -3558,7 +3558,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       });
     }
     if (locked.value.status === "not_found") {
-      return reply.code(404).send({ error: "NoodleR stage profile not found" });
+      return reply.code(404).send({ error: "Slurp stage profile not found" });
     }
     if (locked.value.status === "source_revision_conflict") {
       return reply.code(409).send({
@@ -3586,7 +3586,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       return true;
     });
     if (!locked.acquired) return reply.code(409).send({ error: "Another Creator operation is already running." });
-    if (!locked.value) return reply.code(404).send({ error: "NoodleR source not found" });
+    if (!locked.value) return reply.code(404).send({ error: "Slurp source not found" });
     return (await noodle.listNoodlerStageProfiles()).find((profile) => profile.id === id);
   });
 
@@ -3602,7 +3602,7 @@ export async function slurpRoutes(app: FastifyInstance) {
         : ("invalid" as const);
     });
     if (!locked.acquired) return reply.code(409).send({ error: "Another Creator operation is already running." });
-    if (locked.value === "missing") return reply.code(404).send({ error: "NoodleR source not found" });
+    if (locked.value === "missing") return reply.code(404).send({ error: "Slurp source not found" });
     if (locked.value === "invalid") {
       return reply.code(400).send({
         error: "Only open Creator profiles can adopt the public identity.",
@@ -3643,11 +3643,11 @@ export async function slurpRoutes(app: FastifyInstance) {
     });
     if (!locked.acquired) {
       return reply.code(409).send({
-        error: "Another operation for this NoodleR account is already running.",
+        error: "Another operation for this Slurp account is already running.",
       });
     }
     const deleted = locked.value;
-    if (!deleted) return reply.code(404).send({ error: "NoodleR stage profile not found" });
+    if (!deleted) return reply.code(404).send({ error: "Slurp stage profile not found" });
     return deleted;
   });
 
@@ -3673,11 +3673,11 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
     if (!(await noodle.getNoodlerAccountById(id))) {
-      return reply.code(404).send({ error: "NoodleR stage profile not found" });
+      return reply.code(404).send({ error: "Slurp stage profile not found" });
     }
     const viewer = parsed.data.personaId ? await resolveViewerPersona(parsed.data.personaId) : null;
     if (parsed.data.personaId && !viewer) {
-      return reply.code(404).send({ error: "Noodle persona not found" });
+      return reply.code(404).send({ error: "Slurp persona not found" });
     }
     const context = viewer ? await buildViewerContext(viewer) : null;
     const creatorVisible = Boolean(context?.accountById.has(id));
@@ -3757,13 +3757,13 @@ export async function slurpRoutes(app: FastifyInstance) {
       });
     }
     if (creatorId && !(await noodle.getNoodlerAccountById(creatorId))) {
-      return reply.code(404).send({ error: "NoodleR stage profile not found" });
+      return reply.code(404).send({ error: "Slurp stage profile not found" });
     }
     for (const candidateConnectionId of [defaultConnectionId, connectionId]) {
       if (candidateConnectionId === undefined || candidateConnectionId === null) continue;
       const connection = await connections.getWithKey(candidateConnectionId);
       if (!connection || connection.provider !== "image_generation") {
-        return reply.code(404).send({ error: "Noodle image connection not found" });
+        return reply.code(404).send({ error: "Slurp image connection not found" });
       }
     }
     return updateNoodlerImageConnections(app.db, (current) => {
@@ -3795,21 +3795,21 @@ export async function slurpRoutes(app: FastifyInstance) {
       if (result.status === "generated") return result.post;
       if (result.status === "busy") {
         return reply.code(409).send({
-          error: "A generation for this NoodleR account is already running.",
+          error: "A generation for this Slurp account is already running.",
         });
       }
       if (result.status === "connection_required") {
-        return reply.code(400).send({ error: "Select a Noodle generation connection first." });
+        return reply.code(400).send({ error: "Select a Slurp generation connection first." });
       }
       if (result.status === "connection_not_found") {
-        return reply.code(404).send({ error: "Noodle generation connection not found" });
+        return reply.code(404).send({ error: "Slurp generation connection not found" });
       }
       if (result.status === "disabled") {
         return reply.code(400).send({ error: "Persona-owned Slurp profiles cannot post automatically" });
       }
-      return reply.code(404).send({ error: "NoodleR account not found." });
+      return reply.code(404).send({ error: "Slurp account not found." });
     } catch (error) {
-      logger.error(error, "[noodler] Manual run-now failed");
+      logger.error(error, "[slurp] Manual run-now failed");
       return reply.code(500).send({ error: "Manual post generation failed." });
     }
   });
@@ -3831,19 +3831,19 @@ export async function slurpRoutes(app: FastifyInstance) {
         debugMode: (req.body as { debugMode?: unknown } | undefined)?.debugMode === true,
       });
       if (result.status === "disabled") return reply.code(404).send({ error: "Not Found" });
-      if (result.status === "busy") return reply.code(409).send({ error: "NoodleR fan activity is already running." });
+      if (result.status === "busy") return reply.code(409).send({ error: "Slurp fan activity is already running." });
       if (result.status === "limit_reached")
         return reply.code(429).send({ error: "Today's audience activity limit has been reached." });
       if (result.status === "connection_required") {
-        return reply.code(400).send({ error: "Select a Noodle generation connection first." });
+        return reply.code(400).send({ error: "Select a Slurp generation connection first." });
       }
       if (result.status === "connection_not_found") {
-        return reply.code(404).send({ error: "Noodle generation connection not found" });
+        return reply.code(404).send({ error: "Slurp generation connection not found" });
       }
       return result;
     } catch (error) {
       if (isConnectionAdmissionFailure(error)) return reply.code(409).send({ error: getErrorMessage(error) });
-      logger.error(error, "[noodler] Fan activity generation failed");
+      logger.error(error, "[slurp] Fan activity generation failed");
       return reply.code(500).send({ error: "Fan activity generation failed." });
     }
   });
@@ -3915,23 +3915,23 @@ export async function slurpRoutes(app: FastifyInstance) {
       }
       if (result.status === "busy") {
         return reply.code(409).send({
-          error: "A generation for this NoodleR account is already running.",
+          error: "A generation for this Slurp account is already running.",
         });
       }
       if (result.status === "connection_required") {
-        return reply.code(400).send({ error: "Select a Noodle generation connection first." });
+        return reply.code(400).send({ error: "Select a Slurp generation connection first." });
       }
       if (result.status === "connection_not_found") {
-        return reply.code(404).send({ error: "Noodle generation connection not found" });
+        return reply.code(404).send({ error: "Slurp generation connection not found" });
       }
       if (result.status === "disabled") {
         return reply.code(400).send({ error: "Persona-owned Slurp profiles cannot post automatically" });
       }
-      return reply.code(404).send({ error: "NoodleR account not found." });
+      return reply.code(404).send({ error: "Slurp account not found." });
     } catch (error) {
       if (isConnectionAdmissionFailure(error)) return reply.code(409).send({ error: getErrorMessage(error) });
-      logger.error(error, "[noodler] NoodleR post generation failed");
-      return reply.code(500).send({ error: "NoodleR post generation failed." });
+      logger.error(error, "[slurp] Slurp post generation failed");
+      return reply.code(500).send({ error: "Slurp post generation failed." });
     }
   });
 

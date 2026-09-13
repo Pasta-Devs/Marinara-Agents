@@ -153,7 +153,7 @@ export async function readNoodlerLockedTeaser(absolutePath: string): Promise<Buf
     }
     return teaser;
   } catch (error) {
-    logger.warn(error, "[noodler] Failed to build locked teaser for %s", absolutePath);
+    logger.warn(error, "[slurp] Failed to build locked teaser for %s", absolutePath);
     return null;
   }
 }
@@ -191,7 +191,7 @@ export function unlinkNoodlerMedia(relativePath: string | null): void {
       if (entry.startsWith(`${fileName}.w`) && entry.endsWith(".webp")) unlinkSync(join(dirname(absolute), entry));
     }
   } catch (error) {
-    logger.warn(error, "[noodler] Failed to remove NoodleR media file %s", relativePath);
+    logger.warn(error, "[slurp] Failed to remove Slurp media file %s", relativePath);
   }
 }
 
@@ -203,7 +203,7 @@ export function removeNoodlerAccountMedia(accountId: string): void {
   try {
     rmSync(dir, { recursive: true, force: true });
   } catch (error) {
-    logger.warn(error, "[noodler] Failed to remove NoodleR media dir for account %s", accountId);
+    logger.warn(error, "[slurp] Failed to remove Slurp media dir for account %s", accountId);
   }
 }
 
@@ -214,7 +214,7 @@ export function removeAllNoodlerMedia(): void {
   try {
     rmSync(dir, { recursive: true, force: true });
   } catch (error) {
-    logger.warn(error, "[noodler] Failed to remove all Slurp media");
+    logger.warn(error, "[slurp] Failed to remove all Slurp media");
   }
 }
 

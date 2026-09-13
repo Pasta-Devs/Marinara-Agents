@@ -46,7 +46,7 @@ function responseError(payload: string): string {
   } catch {
     // Fall through to the raw payload.
   }
-  return payload.trim().slice(0, 500) || "Automatic Noodle refresh failed";
+  return payload.trim().slice(0, 500) || "Automatic Slurp refresh failed";
 }
 
 export function noodleRefreshRetryDelayMs(statusCode: number, failureAttempts: number): number {

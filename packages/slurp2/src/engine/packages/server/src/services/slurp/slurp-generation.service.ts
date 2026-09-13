@@ -477,7 +477,7 @@ export async function generateNoodlerPost(
   const debugMode = input.request.debugMode === true || isDebugAgentsEnabled();
   logDebugOverride(
     debugMode,
-    "[debug/noodler] Prompt prepared with %d messages; private prompt content is redacted.",
+    "[debug/slurp] Prompt prepared with %d messages; private prompt content is redacted.",
     messages.length,
   );
   const completionOptions = {
@@ -504,7 +504,7 @@ export async function generateNoodlerPost(
   let content = response.content ?? "";
   logDebugOverride(
     debugMode,
-    "[debug/noodler] Model response attempt 1 received (%d characters); content is redacted.",
+    "[debug/slurp] Model response attempt 1 received (%d characters); content is redacted.",
     content.length,
   );
   let generated;
@@ -527,14 +527,14 @@ export async function generateNoodlerPost(
     ];
     logDebugOverride(
       debugMode,
-      "[debug/noodler] Correction prompt prepared with %d messages; private prompt content is redacted.",
+      "[debug/slurp] Correction prompt prepared with %d messages; private prompt content is redacted.",
       correctionMessages.length,
     );
     response = await provider.chatComplete(correctionMessages, completionOptions);
     content = response.content ?? "";
     logDebugOverride(
       debugMode,
-      "[debug/noodler] Model response attempt 2 received (%d characters); content is redacted.",
+      "[debug/slurp] Model response attempt 2 received (%d characters); content is redacted.",
       content.length,
     );
     generated = parseNoodlerPost(content);
@@ -694,7 +694,7 @@ export async function generateNoodlerPost(
       });
     } catch (err) {
       if (isConnectionAdmissionFailure(err)) throw err;
-      logger.warn(err, "[noodler] Failed to prepare image prompt review for %s", account.displayName);
+      logger.warn(err, "[slurp] Failed to prepare image prompt review for %s", account.displayName);
       return {
         post: await persist({
           imagePrompt: draftImagePrompt,
@@ -729,7 +729,7 @@ export async function generateNoodlerPost(
     // Same rule as the text leg: a busy connection is a deferral, so let it propagate to the
     // scheduler instead of persisting a post permanently marked as image-failed.
     if (isConnectionAdmissionFailure(err)) throw err;
-    logger.warn(err, "[noodler] Failed to generate image for %s", account.displayName);
+    logger.warn(err, "[slurp] Failed to generate image for %s", account.displayName);
     return {
       post: await persist({
         imagePrompt: draftImagePrompt,

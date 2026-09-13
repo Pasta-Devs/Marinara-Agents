@@ -65,7 +65,7 @@ export async function generateAndApplyNoodlerCreatorReply(
     const interaction = await noodle.finalizeNoodlerCreatorReplyClaim(claim.claimId, content);
     if (!interaction) {
       await releaseClaim(claim.claimId);
-      throw new Error("Failed to persist the generated NoodleR creator reply.");
+      throw new Error("Failed to persist the generated Slurp creator reply.");
     }
     return { status: "generated", interaction } as const;
   });

@@ -312,7 +312,7 @@ export async function generateNoodlerPostImage(input: {
       rawPrompt: rawProviderPrompt,
       rewriteAttempted,
       onFallback: (reason) =>
-        logger.warn("[noodle] Image prompt rewrite unusable (%s); sending the capped draft", reason),
+        logger.warn("[slurp] Image prompt rewrite unusable (%s); sending the capped draft", reason),
       // Art style and the character's image habits are meant to reach the provider, so a rewrite
       // that applies them is doing its job. Personality never belongs in a visual prompt at any
       // length; the instruction fields are guidance and only leak as a copied block.
@@ -359,7 +359,7 @@ export async function generateNoodlerPostImage(input: {
       metadata: {},
       preview: {
         kind: "illustration",
-        title: `${input.account.displayName} NoodleR image`,
+        title: `${input.account.displayName} Slurp image`,
         prompt: finalPrompt,
         negativePrompt: finalNegativePrompt,
         width: previewSize.width,
@@ -391,7 +391,7 @@ export async function generateNoodlerPostImage(input: {
       await input.onProviderAttemptFailure?.(attempt);
       logger.warn(
         error,
-        "[noodler] Image generation attempt %d/%d failed for %s",
+        "[slurp] Image generation attempt %d/%d failed for %s",
         attempt,
         maxAttempts,
         input.account.displayName,
@@ -404,7 +404,7 @@ export async function generateNoodlerPostImage(input: {
   try {
     await createSlurpStorage(input.db).adjustCreatorState(input.account.id, { energy: -SLURP_ENERGY_COST.image });
   } catch (error) {
-    logger.warn(error, "[noodler] Could not charge image energy for %s", input.account.id);
+    logger.warn(error, "[slurp] Could not charge image energy for %s", input.account.id);
   }
   const file = stageImageToDisk(
     `${NOODLER_MEDIA_PREFIX}${input.account.id}`,
@@ -486,7 +486,7 @@ export function createNoodlerNoodleImagesService(db: DB) {
           claimOwned = await noodle.renewPostImageClaim(claimed.id, claimToken, imageClaimLeaseUntil());
         } catch (error) {
           claimOwned = false;
-          logger.warn(error, "[noodler] Failed to renew reviewed image claim for post %s", claimed.id);
+          logger.warn(error, "[slurp] Failed to renew reviewed image claim for post %s", claimed.id);
         }
       };
       const renewalTimer = setInterval(() => void renewClaim(), REVIEWED_IMAGE_CLAIM_RENEW_MS);
@@ -519,7 +519,7 @@ export function createNoodlerNoodleImagesService(db: DB) {
           deferred += 1;
           continue;
         }
-        logger.warn(error, "[noodler] Failed to generate reviewed image for %s", account.displayName);
+        logger.warn(error, "[slurp] Failed to generate reviewed image for %s", account.displayName);
         await renewClaim();
         if (claimOwned) {
           const attempts = noodlerPostImageRetryAttempts(claimed.metadata) + 1;
@@ -583,7 +583,7 @@ export function createNoodlerNoodleImagesService(db: DB) {
         try {
           await noodle.releasePostImageClaim(claimed.id, claimToken);
         } catch (releaseError) {
-          logger.warn(releaseError, "[noodler] Failed to release reviewed image claim for post %s", claimed.id);
+          logger.warn(releaseError, "[slurp] Failed to release reviewed image claim for post %s", claimed.id);
         }
         throw error;
       }

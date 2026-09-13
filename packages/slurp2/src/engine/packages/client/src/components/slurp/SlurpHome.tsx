@@ -1607,7 +1607,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     overlays: postCardController.imageLightbox ? (
       <ChatImageLightbox
         image={postCardController.imageLightbox}
-        alt={postCardController.imageLightbox.prompt || "NoodleR image"}
+        alt={postCardController.imageLightbox.prompt || "Slurp image"}
         pinEnabled={false}
         onClose={() => postCardController.setImageLightbox(null)}
       />
