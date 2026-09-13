@@ -581,6 +581,9 @@ function recoveredNote(
       [sectionKey]: {
         text: handoff.candidate.recoveryCandidate?.text ?? handoff.candidate.snippet ?? handoff.candidate.message,
         updatedAt: now,
+        ...(handoff.candidate.recoveryCandidate?.evidence
+          ? { evidence: handoff.candidate.recoveryCandidate.evidence }
+          : {}),
       },
     },
   };
