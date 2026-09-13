@@ -1,15 +1,22 @@
 // ── Tier-1 asset loader ───────────────────────────────────────────────────────
 // Loads the authored atlas + sprite sheets shipped as package assets
 // (contributions.assets, Capability API 1.10). Every draw resolves
-// Tier1 ?? Tier0, so a missing/failed load (older engine without the assets
-// route, network trouble, corrupted file → 404) leaves the game fully playable
-// on procedural art. Uses the packageId/packageVersion the host injects into
+// Tier1 ?? Tier0, so a missing/failed load leaves the game fully playable on
+// procedural art. An engine that cannot serve assets is not one of those
+// cases: install refuses a package whose engine range or Capability API the
+// host cannot meet, so it never gets far enough to draw. What does fall back
+// is a failed fetch (network trouble, corrupted file → 404), a theme with no
+// baked sheet, a sheet smaller than its own id map, and a host that passes no
+// package id. Uses the packageId/packageVersion the host injects into
 // capabilityProps; ?v= keys the browser cache per version (assets revalidate
 // with ETags — never immutable).
 PF.assets = {
   status: "idle", // idle | loading | ready | failed
-  /** The theme the shipped atlas was authored for: Tier-1 art only serves this
-   *  theme; every other theme renders procedurally until themed atlases ship. */
+  /** The theme the LOADED sheet was authored for: both shipped themes have an
+   *  authored sheet, and load() swaps in whichever one the active theme needs.
+   *  This stays cozy-village before the first load settles, and whenever a
+   *  theme has no baked sheet and the cozy sheet stands in for it, which is
+   *  what keeps that theme procedural. */
   atlasTheme: "cozy-village",
   atlas: null, // {tileSize, columns, tiles: {id: index}}
   sprites: null, // {frameWidth, frameHeight, frames, rows, actors: {name: path}}
@@ -61,8 +68,8 @@ PF.assets = {
    *  only for an id the atlas does NOT list. An id the atlas DOES list, against
    *  a sheet too small to hold it, blits an empty in-bounds slot or a no-op
    *  out-of-bounds rect. That is a see-through world rather than procedural art,
-   *  and it is exactly what a release that appends tile ids ships if the sheet
-   *  goes out un-rebaked.
+   *  which is why the mismatch is worth catching even though the bake makes it
+   *  hard to produce.
    *
    *  `naturalHeight`/`naturalWidth`, not `height`/`width`: `_image()` resolves on
    *  the load event without decode(), and the attribute-shadowed pair is not the
@@ -77,12 +84,15 @@ PF.assets = {
    *  sheet, so the guard asks both.
    *
    *  THE HONEST SCOPE, because the guard is narrower than it looks: it catches a
-   *  sheet too SMALL for its id map, and that it covers this release at all is
-   *  arithmetic luck of the count — 33 ids into 32 slots. Three appended
-   *  painters instead of four would have landed in bounds and slipped straight
-   *  past it. An aligned-but-stale sheet is busted by the `?v=` cache key
-   *  instead, and ids deliberately absent from the atlas keep the per-tile null
-   *  path they already had. */
+   *  sheet too SMALL for its id map, and on the shipped pairing it is dormant,
+   *  40 slots against 33 ids. It has never fired on a committed pairing, and it
+   *  should not: one build run emits every theme sheet and atlas.json from the
+   *  same id list, so the sheet's row count and the map are sized together and
+   *  cannot drift apart. What is left for the guard is a sheet that reaches an
+   *  install some other way, hand-edited, truncated, or half-copied. An
+   *  aligned-but-stale sheet is busted by the `?v=` cache key instead, and ids
+   *  deliberately absent from the atlas keep the per-tile null path they
+   *  already had. */
   _overCapacity(img) {
     const tiles = this.atlas?.tiles;
     const size = this.atlas?.tileSize;
@@ -121,14 +131,17 @@ PF.assets = {
     // distinction every props delivery would re-run a 404-fetch + full zone
     // recomposite storm (review finding).
     if (this.status === "ready" && this._requestedTheme === theme) return;
-    // No packageId (pre-#5092 engine) is the one terminal state; network
-    // failures retry, rate-limited, so a transient outage no longer disables
-    // Tier-1 for the whole session (0.3.0 regression fix).
+    // The FIRST of the loader's two terminal states: no packageId (pre-#5092
+    // engine), which is terminal for the whole session. Network failures are
+    // not terminal, they retry, rate-limited, so a transient outage no longer
+    // disables Tier-1 for the whole session (0.3.0 regression fix).
     if (this._noPackage) return;
     // The SECOND terminal, and it is `_noPackage`-shaped for the same reason:
     // a sheet that cannot hold its own id map is a shipped artifact, identical
     // on every retry. Sending it to "failed" alone would re-fetch the whole
-    // asset set every 30 seconds, forever, on exactly the broken installs.
+    // asset set every 30 seconds, forever, on exactly the broken installs. It
+    // returns before the retry clock is even consulted, and unlike the first it
+    // is terminal only for this theme at this package version.
     if (this._capacityLatch === this._capacityKey(core, theme)) return;
     if (this.status === "failed" && Date.now() - (this._failedAt ?? 0) < 30_000) return;
     if (typeof core.host?.packageId !== "string") {

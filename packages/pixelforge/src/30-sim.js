@@ -430,10 +430,9 @@ PF.Sim = class {
    *  literal, a string hash and an rng construction, so the uncached version is
    *  that work sixty times a second. One comparison serves every consumer.
    *
-   *  The key is the SERIALIZED WHOLE of the override, not its word: a console
-   *  change from `{word:"storm"}` to `{word:"storm", intensity:"heavy"}` is the
-   *  documented verification incantation, and a word-only key would sit on it
-   *  until the day rolled.
+   *  The key is the SERIALIZED WHOLE of the override, not its word: a
+   *  storyteller who says rain and then heavy rain writes the same word with a
+   *  new intensity, and a word-only key would sit on that until the day rolled.
    *
    *  A PERF CACHE, NOT A TRANSITION DETECTOR. There is no `_weather` field
    *  anywhere: the ledger park derives both sides of a crossing itself, which is
@@ -821,8 +820,9 @@ PF.Sim = class {
     // THE RUNG WORD RIDES THE NEAR CLAUSE (0.15, plan §13.4), and only past
     // stranger — the GM should greet a friend as a friend without burning a
     // persona injection to learn it, and a stranger costs the header nothing
-    // because the word for "no standing" is no word. Hostility, when something
-    // someday writes it, outranks the rung here as it does on the window title.
+    // because the word for "no standing" is no word. Hostility outranks the rung
+    // here as it does on the window title, and the storyteller's standing command
+    // (62-gm) is what sets and clears the flag.
     // Read off the block the sim already carries for the ledger tell; the
     // header stays free of core lookups, and the words stay the ladder's own
     // (58-player RUNGS — index 0 blanked because the floor goes unsaid).

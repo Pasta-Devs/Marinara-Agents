@@ -275,8 +275,10 @@ PF.Render = class {
    *
    *  A building's eave is painted two rows ABOVE its footprint, and those rows are
    *  ordinary walkable grass — so the player can stand there, and since the overhead
-   *  layer composites after the actors, the roof simply swallows them. Roughly 62
-   *  tiles per settlement are walkable-but-roofed, and tall buildings make it worse.
+   *  layer composites after the actors, the roof simply swallows them. How many tiles
+   *  end up walkable-but-roofed scales with the settlement's rank: roughly 30 in an
+   *  outpost, around 65 in a hamlet, and 520 to 600 in a city. Tall buildings make it
+   *  worse.
    *
    *  The zone composites are cached and player-independent, so the hole cannot live
    *  in them: it is punched into a view-sized scratch each frame instead. Only while

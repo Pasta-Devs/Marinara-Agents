@@ -1,4 +1,4 @@
-// Pixelforge 0.16.5 — Marinara Engine game-surface Experience (single-file client bundle)
+// Pixelforge 0.16.6 — Marinara Engine game-surface Experience (single-file client bundle)
 // Built from packages/pixelforge/src (20 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -234,7 +234,7 @@ PF.fail = (elOrNull, err) => {
 
 // ===== 10-art.js =====
 // ── Tier-0 procedural art ─────────────────────────────────────────────────────
-// The deterministic bottom rung: a fixed 32-colour ramp and canvas-painted
+// The deterministic bottom rung: a fixed 39-colour ramp and canvas-painted
 // tiles/sprites so the game is playable with zero assets and zero network.
 // Later tiers (authored atlas, AI bake) resolve above this and fall back here.
 //
@@ -296,8 +296,9 @@ PF.art = (() => {
   const T = PF.TILE;
 
   /** One 16×16 tile canvas: Tier-1 (authored atlas) ?? Tier-0 (procedural).
-   *  Tier-1 only serves the theme it was authored for; other themes stay
-   *  procedural until themed atlases ship. */
+   *  Tier-1 serves whichever theme the loaded sheet was authored for, and both
+   *  shipped themes have an authored sheet. A theme with no baked sheet, or one
+   *  whose sheet failed to load, stays procedural. */
   const tileCache = new Map();
   function tile(id) {
     if (activeTheme === PF.assets?.atlasTheme) {
@@ -960,15 +961,22 @@ PF.art = (() => {
 // ── Tier-1 asset loader ───────────────────────────────────────────────────────
 // Loads the authored atlas + sprite sheets shipped as package assets
 // (contributions.assets, Capability API 1.10). Every draw resolves
-// Tier1 ?? Tier0, so a missing/failed load (older engine without the assets
-// route, network trouble, corrupted file → 404) leaves the game fully playable
-// on procedural art. Uses the packageId/packageVersion the host injects into
+// Tier1 ?? Tier0, so a missing/failed load leaves the game fully playable on
+// procedural art. An engine that cannot serve assets is not one of those
+// cases: install refuses a package whose engine range or Capability API the
+// host cannot meet, so it never gets far enough to draw. What does fall back
+// is a failed fetch (network trouble, corrupted file → 404), a theme with no
+// baked sheet, a sheet smaller than its own id map, and a host that passes no
+// package id. Uses the packageId/packageVersion the host injects into
 // capabilityProps; ?v= keys the browser cache per version (assets revalidate
 // with ETags — never immutable).
 PF.assets = {
   status: "idle", // idle | loading | ready | failed
-  /** The theme the shipped atlas was authored for: Tier-1 art only serves this
-   *  theme; every other theme renders procedurally until themed atlases ship. */
+  /** The theme the LOADED sheet was authored for: both shipped themes have an
+   *  authored sheet, and load() swaps in whichever one the active theme needs.
+   *  This stays cozy-village before the first load settles, and whenever a
+   *  theme has no baked sheet and the cozy sheet stands in for it, which is
+   *  what keeps that theme procedural. */
   atlasTheme: "cozy-village",
   atlas: null, // {tileSize, columns, tiles: {id: index}}
   sprites: null, // {frameWidth, frameHeight, frames, rows, actors: {name: path}}
@@ -1020,8 +1028,8 @@ PF.assets = {
    *  only for an id the atlas does NOT list. An id the atlas DOES list, against
    *  a sheet too small to hold it, blits an empty in-bounds slot or a no-op
    *  out-of-bounds rect. That is a see-through world rather than procedural art,
-   *  and it is exactly what a release that appends tile ids ships if the sheet
-   *  goes out un-rebaked.
+   *  which is why the mismatch is worth catching even though the bake makes it
+   *  hard to produce.
    *
    *  `naturalHeight`/`naturalWidth`, not `height`/`width`: `_image()` resolves on
    *  the load event without decode(), and the attribute-shadowed pair is not the
@@ -1036,12 +1044,15 @@ PF.assets = {
    *  sheet, so the guard asks both.
    *
    *  THE HONEST SCOPE, because the guard is narrower than it looks: it catches a
-   *  sheet too SMALL for its id map, and that it covers this release at all is
-   *  arithmetic luck of the count — 33 ids into 32 slots. Three appended
-   *  painters instead of four would have landed in bounds and slipped straight
-   *  past it. An aligned-but-stale sheet is busted by the `?v=` cache key
-   *  instead, and ids deliberately absent from the atlas keep the per-tile null
-   *  path they already had. */
+   *  sheet too SMALL for its id map, and on the shipped pairing it is dormant,
+   *  40 slots against 33 ids. It has never fired on a committed pairing, and it
+   *  should not: one build run emits every theme sheet and atlas.json from the
+   *  same id list, so the sheet's row count and the map are sized together and
+   *  cannot drift apart. What is left for the guard is a sheet that reaches an
+   *  install some other way, hand-edited, truncated, or half-copied. An
+   *  aligned-but-stale sheet is busted by the `?v=` cache key instead, and ids
+   *  deliberately absent from the atlas keep the per-tile null path they
+   *  already had. */
   _overCapacity(img) {
     const tiles = this.atlas?.tiles;
     const size = this.atlas?.tileSize;
@@ -1080,14 +1091,17 @@ PF.assets = {
     // distinction every props delivery would re-run a 404-fetch + full zone
     // recomposite storm (review finding).
     if (this.status === "ready" && this._requestedTheme === theme) return;
-    // No packageId (pre-#5092 engine) is the one terminal state; network
-    // failures retry, rate-limited, so a transient outage no longer disables
-    // Tier-1 for the whole session (0.3.0 regression fix).
+    // The FIRST of the loader's two terminal states: no packageId (pre-#5092
+    // engine), which is terminal for the whole session. Network failures are
+    // not terminal, they retry, rate-limited, so a transient outage no longer
+    // disables Tier-1 for the whole session (0.3.0 regression fix).
     if (this._noPackage) return;
     // The SECOND terminal, and it is `_noPackage`-shaped for the same reason:
     // a sheet that cannot hold its own id map is a shipped artifact, identical
     // on every retry. Sending it to "failed" alone would re-fetch the whole
-    // asset set every 30 seconds, forever, on exactly the broken installs.
+    // asset set every 30 seconds, forever, on exactly the broken installs. It
+    // returns before the retry clock is even consulted, and unlike the first it
+    // is terminal only for this theme at this package version.
     if (this._capacityLatch === this._capacityKey(core, theme)) return;
     if (this.status === "failed" && Date.now() - (this._failedAt ?? 0) < 30_000) return;
     if (typeof core.host?.packageId !== "string") {
@@ -1658,12 +1672,20 @@ PF.weather = (() => {
   }
 
   // ── The GM override slot ───────────────────────────────────────────────────
-  // WRITTEN BY NOTHING IN THIS RELEASE except a console, deliberately: the host
-  // dispatches `onHostEvent` on engine-defined type strings only, so there is no
-  // surface for a real writer to sit on yet (that is the feature request's).
-  // What exists is the READ side, whole and verifiable, and the incantation is
-  // TWO lines — the runtime slot is a sim field, and the town only re-places on
-  // a resolve:
+  // WRITTEN BY THE STORYTELLER, in ordinary play: the package declares a
+  // `weather` state verb in `gm-verbs.json`, and the engine writes that verb's
+  // arguments wholesale into the chat's metadata under `pixelforgeWeather`,
+  // where `foldOverride` below picks them up. The verb takes one of the five
+  // words plus an optional `intensity` of light or heavy, declared for every
+  // word: only rain and snow keep it, because `foldOverride` below drops an
+  // intensity from a word whose `takesIntensity` is false. It takes no day
+  // argument, so a sky set that way holds until it is set again; the `sinceDay`
+  // and `untilDay` fields folded below are the read side's own window, honoured
+  // when a row carries them and absent from anything the verb writes.
+  //
+  // A CONSOLE IS THE DEBUGGING SHORTCUT, not the writer. The incantation is TWO
+  // lines, because the runtime slot is a sim field and the town only re-places
+  // on a resolve:
   //
   //     core.sim.weatherOverride = { word: "storm" };
   //     core.sim.resolveSchedules();
@@ -1704,10 +1726,15 @@ PF.weather = (() => {
   }
 
   /** The comparand the mid-session reconciler memoises: the SERIALIZED WHOLE of a
-   *  folded override, never the word alone. A console change from
-   *  `{word:"storm"}` to `{word:"storm", intensity:"heavy"}` is this release's
-   *  documented verification incantation, and a word-only key would sit on it
-   *  until the day rolled. */
+   *  folded override, never the word alone. A storyteller who says rain and then
+   *  heavy rain writes the same word twice with a new intensity, which is an
+   *  ordinary turn-to-turn move; a word-only key would not move at all, so the
+   *  reconciler would never re-apply and `weather()`'s day-keyed memo would hold
+   *  the old intensity until the day rolled. The intensity has to be one a word
+   *  actually takes: `storm` takes none, so a stored `{word:"storm",
+   *  intensity:"heavy"}` is folded to `{word:"storm"}` before it ever reaches
+   *  this key and the metadata path sees no move. A console write assigns the
+   *  runtime slot unfolded, so on that path the extra field does move the key. */
   function overrideKey(override) {
     if (!override || typeof override !== "object") return "";
     return `${override.word ?? ""}|${override.intensity ?? ""}|${override.sinceDay ?? ""}|${override.untilDay ?? ""}`;
@@ -1971,8 +1998,9 @@ PF.brief = (() => {
   // every 8 rows and every 9 columns, and a map only 30 tall has room for two
   // rows of them however wide it is — so a village used to lay six lots on 1320
   // tiles and read as a hamlet with a lot of grass. Lots per rank now run
-  // 4 / 8 / 16 / 36 / 80, which is the first progression where each rank looks
-  // like a bigger VERSION of the one below rather than the same place zoomed.
+  // 4 / 8 / 20 / 36 / 80 before the `buildings` ceiling below clamps them, which
+  // is the first progression where each rank looks like a bigger VERSION of the
+  // one below rather than the same place zoomed.
   //
   // `buildings` is the ceiling on how many of those lots get laid out, and it is
   // deliberately kept ABOVE what the population arithmetic asks for at each rank
@@ -2140,11 +2168,14 @@ PF.brief = (() => {
   }
 
   /** THE ART MODULE'S ID LIST, READ THROUGH ONE DOOR (0.16.2). Four call sites
-   *  in this module now ask 10-art what kits exist, and three of them run BEFORE
-   *  the network request inside generate()'s try — whose catch reports
-   *  `onFailure("network")`. A partial `PF.art` (a `themeIds` that throws) would
-   *  therefore burn a paid call and blame the network for a type error, from
-   *  three new places at once, so the read is done here and the throw stops
+   *  in this module ask 10-art what kits exist, and three of them sit on the
+   *  generation path: guidance() and schema() run inside generate()'s try BEFORE
+   *  the network request, and validate()'s read runs AFTER the response on the
+   *  same path. (defaults() is the fourth and generation never reaches it.) That
+   *  try's catch reports `onFailure("network")`, so a partial `PF.art` (a
+   *  `themeIds` that throws) would blame the network for a type error from any
+   *  of the three, and from the one after the response it would also burn the
+   *  paid call it had just made. So the read is done here and the throw stops
    *  here. The SHAPE check stays at the four sites, spelled out each time
    *  (`Array.isArray(list) && list.length`), because "there is an authority" is
    *  the thing each of them branches on and it should be readable where it is
@@ -3105,8 +3136,9 @@ PF.brief = (() => {
       `  standing (optional, default resident): one of ${STANDING.join(" | ")}. transient = passing`,
       "  through; fringe = lives apart at the edges (hermit, outcast, refugee); destitute = no home.",
       "  Keep most people resident; a crossroads or waystation may have many transients.",
-      "- backgroundPopulation: total inhabitants including the cast (0-500). This is narrative",
-      "  texture for the map description — it never creates buildings.",
+      "- backgroundPopulation: total inhabitants including the cast (0-500). It informs the flavor and",
+      "  situation you write, and within what a settlement of this size class can hold it also moves how",
+      "  many homes are built, up or down. It never changes the size class; 0 means the usual number of homes.",
       "",
       "Only the cast, features, and places you name will exist. Keep names in the player's language.",
       // THE LORE CLAUSE, AND IT SHIPS ONLY WHEN LORE DOES. The entries the player
@@ -5161,8 +5193,10 @@ PF.world = (() => {
   //
   //   - The GATHERING always. Guest rooms upstairs is the shape an inn has had
   //     for as long as there have been inns, its berth budget is the largest band
-  //     the compiler lays (four to ten), and it is where a travelling group or a
-  //     player party goes.
+  //     the compiler lays (three to twelve, the table plus prosperity: see
+  //     GUEST_BERTHS, where the table stops at eleven so a thriving city lands
+  //     on twelve, the ceiling a thirteenth berth would fall through), and it is
+  //     where a travelling group or a player party goes.
   //   - The SANCTUARY always, but a BELL TOWER rather than a storey.
   //   - A HOUSE only when it is LARGE OR MERGED: four or more sleeping under one
   //     roof, or a block the over-subscription merge put more than one household
@@ -6949,8 +6983,13 @@ PF.world = (() => {
       // the door apron of the building they run for the whole of daylight, with
       // the lit common room and the counter behind them; a sanctuary's keeper did
       // the same on the church step, and the keeper schedule tier holds them
-      // there dawn to dusk. Both default briefs home their host at the root, so
-      // this was every default world.
+      // there dawn to dusk. Both worked-example briefs home their host at the
+      // gathering itself, so neither of them is the case this covers: a host
+      // homed IN the inn takes the named-building branch instead and gets the
+      // room's walkable middle. What reaches this is a brief that homes its host
+      // or its keeper at the settlement root, which is what the validator writes
+      // whenever a cast member arrives without a `home` of their own, and what
+      // the synthesized cast does for every one of its four.
       //
       // The station comes off the ZONE because the furnisher is what knows it.
       // Same handle shape the minted loop builds, so the promotion needs no
@@ -7662,9 +7701,14 @@ PF.world = (() => {
       // WHO LETS THE ROOMS: the cast member the specials pass bound to the
       // gathering's building — the `host` kind, the innkeeper — and only if the
       // brief named nobody, whoever the brief homed there. Deliberately NOT the
-      // `_sched.keeper` tier: that tier is PLACE_BOUND_SPECIALS, which is the
-      // sanctuary alone, so a gathering's owner never carries it and reading it
-      // here would leave every inn in the game with nobody behind the counter.
+      // `_sched.keeper` tier, which answers a different question in both
+      // directions. It is set for the HEAD RESIDENT of any named building (see
+      // headOfBuilding) as well as for the owner of a PLACE_BOUND_SPECIALS one,
+      // so a healer living at her infirmary and an elder at the moot house carry
+      // it too and it never picked the inn out; and it is NOT set for a host the
+      // brief homed at the settlement root instead of at the inn, so reading it
+      // here would leave exactly those inns with nobody behind the counter.
+      // Owning the gathering's facade is the fact this block actually wants.
       const facade = buildings.find((b) => b.boundPlace === gatheringPlace);
       const host = facade?.owner ?? headOfBuilding.get(gatheringZoneId) ?? null;
       // BOTH MARKS OR NEITHER. A brief can name a gathering and home nobody in it
@@ -9210,11 +9254,15 @@ PF.schedule = (() => {
     // the tile every zone guarantees walkable, and was standable in all 480
     // compiled zones tried, but the guarantee should live in the code.
     //
-    // Unreachable in practice, and deliberately not escalated to a null return:
-    // the smallest zone measured holds 119 standable tiles, comfortably more
-    // than any one zone's occupants even now that the mint fills a city (see
-    // npcOccupies in 30-sim.js for the measured population numbers), so this is
-    // a floor under a contract, not a live path.
+    // Unreachable in practice, and deliberately not escalated to a null return.
+    // The comparison has to be made PER ZONE, because the smallest zone and the
+    // most crowded one are never the same place: the smallest measured holds 62
+    // standable tiles (a 14x10 dwelling interior, sheltering a household of
+    // three), while the zones that hold a hundred-odd occupants are the city
+    // exteriors, which are two orders of magnitude bigger (see npcOccupies in
+    // 30-sim.js for the measured population numbers). Across every zone, scale,
+    // theme and daypart measured, the tightest case still left 59 standable
+    // tiles spare, so this is a floor under a contract, not a live path.
     if (standable(zone, zone.spawn.x, zone.spawn.y)) return { x: zone.spawn.x, y: zone.spawn.y };
     for (let y = 0; y < zone.h; y++) {
       for (let x = 0; x < zone.w; x++) if (standable(zone, x, y)) return { x, y };
@@ -9658,10 +9706,9 @@ PF.Sim = class {
    *  literal, a string hash and an rng construction, so the uncached version is
    *  that work sixty times a second. One comparison serves every consumer.
    *
-   *  The key is the SERIALIZED WHOLE of the override, not its word: a console
-   *  change from `{word:"storm"}` to `{word:"storm", intensity:"heavy"}` is the
-   *  documented verification incantation, and a word-only key would sit on it
-   *  until the day rolled.
+   *  The key is the SERIALIZED WHOLE of the override, not its word: a
+   *  storyteller who says rain and then heavy rain writes the same word with a
+   *  new intensity, and a word-only key would sit on that until the day rolled.
    *
    *  A PERF CACHE, NOT A TRANSITION DETECTOR. There is no `_weather` field
    *  anywhere: the ledger park derives both sides of a crossing itself, which is
@@ -10049,8 +10096,9 @@ PF.Sim = class {
     // THE RUNG WORD RIDES THE NEAR CLAUSE (0.15, plan §13.4), and only past
     // stranger — the GM should greet a friend as a friend without burning a
     // persona injection to learn it, and a stranger costs the header nothing
-    // because the word for "no standing" is no word. Hostility, when something
-    // someday writes it, outranks the rung here as it does on the window title.
+    // because the word for "no standing" is no word. Hostility outranks the rung
+    // here as it does on the window title, and the storyteller's standing command
+    // (62-gm) is what sets and clears the flag.
     // Read off the block the sim already carries for the ledger tell; the
     // header stays free of core lookups, and the words stay the ladder's own
     // (58-player RUNGS — index 0 blanked because the floor goes unsaid).
@@ -10493,8 +10541,10 @@ PF.Render = class {
    *
    *  A building's eave is painted two rows ABOVE its footprint, and those rows are
    *  ordinary walkable grass — so the player can stand there, and since the overhead
-   *  layer composites after the actors, the roof simply swallows them. Roughly 62
-   *  tiles per settlement are walkable-but-roofed, and tall buildings make it worse.
+   *  layer composites after the actors, the roof simply swallows them. How many tiles
+   *  end up walkable-but-roofed scales with the settlement's rank: roughly 30 in an
+   *  outpost, around 65 in a hamlet, and 520 to 600 in a city. Tall buildings make it
+   *  worse.
    *
    *  The zone composites are cached and player-independent, so the hole cannot live
    *  in them: it is punched into a view-sized scratch each frame instead. Only while
@@ -10550,10 +10600,19 @@ PF.Render = class {
 //
 // Review-hardened: a generation counter guards cross-chat races (a refresh
 // started for chat A must never write into chat B's world). Transition
-// outcomes arrive two ways: engines with capability API 1.12 address the
-// commit/reject events to this package (onHostEvent — immediate), and on
-// older engines `pending` still self-clears after two refreshes with no
-// movement (the stale-count fallback; events simply never arrive there).
+// outcomes normally arrive as host events: the engine addresses the
+// commit/reject events to this package (onHostEvent, immediate). Every engine
+// the package can install on does that: the addressing shipped in Engine 2.4.3
+// (capability API 1.12, a soft seam delivered whatever the package declares),
+// below the 2.4.5 engine floor the manifest declares. The stale-count fallback,
+// `pending` self-clearing after two per-turn refreshes with no movement, covers
+// what the events still miss: the host can only address an event to this
+// package when it can resolve the chat's Experience package id, which comes
+// back empty when the chat's metadata names no Experience or when the dispatch
+// lands after a chat switch with the chat row gone from both caches, and some
+// rejections never reach the client as a reject event at all (a pre-stream
+// commit that fails without a spatial_* code, or an already-applied conflict
+// whose recovery read fails, both reconcile through a plain refresh instead).
 PF.spatial = {
   data: null, // last SpatialContextResponse (or null: unbound / not fetched)
   available: false,
@@ -10598,7 +10657,7 @@ PF.spatial = {
     // a mutator caller (the visit verb completes at an arrival). Read pre-await,
     // like everything else here, and it is the ONE capture this site adds.
     const saveGen = PF.save._gen ?? 0;
-    // Latest-started wins: 1.12 event refreshes overlap the per-turn ones, and
+    // Latest-started wins: event refreshes overlap the per-turn ones, and
     // a slow pre-commit response landing AFTER a post-commit refresh would
     // otherwise roll the world back to the departed zone (review finding).
     const seq = ++this._seq;
@@ -10640,8 +10699,8 @@ PF.spatial = {
         } else if (countStale && ++this.pending.staleCount >= 2) {
           // Two turns with no movement → the transition was rejected somewhere
           // we can't observe. Let go so drift-following resumes. Event-driven
-          // refreshes pass countStale:false so 1.12 engines don't halve this
-          // fallback budget (review finding).
+          // refreshes pass countStale:false so live event delivery doesn't
+          // halve this fallback budget (review finding).
           this.pending = null;
           core.hud?.toast("Travel didn't happen — the story stayed put.");
         }
@@ -11299,11 +11358,13 @@ const evictNotices = (rows) => {
 //
 // PROMOTION IS A CROSSING, NOT A CEILING. bump() promotes only when the count
 // moves from below a line to at-or-past it, and never demotes — so a `d` set
-// PRECISELY (the S1 arm, or a test) stays where it was put unless a NEW line is
-// crossed. A max() over the table would have quietly re-promoted anybody a
-// future demotion verb tried to lower, and fighting the GM is the one thing the
-// heuristic must never do. Hostility is not on this ladder at all: `h` is a
-// flag beside it, written by nothing package-side yet, and waits for S1.
+// PRECISELY (the standing command's arm) stays where it was put unless a NEW
+// line is crossed. A max() over the table would have quietly
+// re-promoted anybody a future demotion verb tried to lower, and fighting the
+// GM is the one thing the heuristic must never do. Hostility is not on this
+// ladder at all: `h` is a flag beside it, set and cleared by the storyteller's
+// standing command (62-gm, shipped in 0.16.0) rather than by any of bump's
+// heuristic callers.
 const PROMOTION = [3, 10, 25]; // t at which d 1, 2, 3 are earned
 
 // ── THE VERB CLASSES (0.15, the maintainer's ruling) ──────────────────────────
@@ -12392,7 +12453,8 @@ PF.player = {
    *  carries no explicit `d`, an encounter that crosses a PROMOTION line lifts
    *  the rung — a crossing, never a max(), so a precisely-set d is not fought
    *  (the header note above bump's table says why). An explicit `d` stays the
-   *  SETTER it has always been: that arm is S1's, and the harness pins it.
+   *  SETTER it has always been: the storyteller's standing command (62-gm) writes
+   *  through that arm, and the crossing below is gated on its absence.
    *
    *  `patch.meaningful` is the VERB CLASS, not a stored field: without it the
    *  bump is small talk and can never leave the row above acquainted; with it
@@ -13437,9 +13499,11 @@ PF.quarantine = {
 // The player block has held a pouch, a purse and a `home` field since S5 slice 3
 // and nothing has ever put anything in them. This is the layer that does: the
 // item VOCABULARY (what a `{t,k}` row is called and how it reads in this theme),
-// the fixed PRICE list, and the one live transaction 0.11 ships — renting a berth
-// at the settlement's inn, which is simultaneously S3's first money sink and the
-// bed P5's day-ledger boundary will need (plan §2, Decisions #2).
+// the fixed PRICE list, and the transactions the build ships. The FIRST of them
+// is renting a berth at the settlement's inn, which is simultaneously S3's first
+// money sink and the bed P5's day-ledger boundary will need (plan §2, Decisions
+// #2). Buying a rod charges the purse as well, and sleeping and fishing spend
+// the clock against the same content.
 //
 // WHY A BERTH AND NOT A HOUSE. Maintainer ruling #2: there is NO automatic home.
 // A modern setting probably houses its protagonist and a fantasy adventurer
@@ -13449,12 +13513,13 @@ PF.quarantine = {
 // the plan and deliberately not here.
 //
 // Everything below is CONTENT plus the game-facing entry points: the OFFERS
-// (berthOffer, rodOffer) describe and never charge, so the HUD can call them
-// every frame; the VERBS (rentBerth, buyRod, grantStartingPurse) mutate. The
-// rest — _skin, currency, money, describe, price, the catch tables — is the
-// vocabulary those read through. It holds no state of its own: what persists
-// goes through the shipped mutators (award/grant/setHome/log/bump) and lives in
-// the player block, which is what makes it rewind-safe.
+// (berthOffer, sleepOffer, rodOffer, fishOffer) describe and never charge, so
+// the HUD can call them every frame; the VERBS (rentBerth, sleep, buyRod, fish,
+// grantStartingPurse) mutate. The rest — _skin, currency, money, describe,
+// price, the catch tables — is the vocabulary those read through. It holds no
+// state of its own: what persists goes through the shipped mutators
+// (award/grant/setHome/log/bump) and lives in the player block, which is what
+// makes it rewind-safe.
 
 // The catch table's TYPE vocabulary — the fixed shared roles a table entry can
 // be, and the one non-catch yield water gives up. A table row carries a role and
@@ -13761,11 +13826,13 @@ const PRICES = {
 };
 
 // What a new game starts with. It exists because a sink with no source is not a
-// feature: the real income is the quest layer (P4, roadmap 0.13), so without this
-// the one transaction 0.11 ships would be unreachable in a shipped game and only
-// ever exercised by a test that minted its own money. Granted ONCE, on the first
-// sealed world to come up on a block nothing has touched — see grantStartingPurse
-// for why that condition and not a default value.
+// feature: the real income is the quest layer (P4), which the settlement job
+// board now ships, and without this the first transaction would have been
+// unreachable in a shipped game before that landed and only ever exercised by a
+// test that minted its own money. It stays because a new game still opens before
+// any board work is done. Granted ONCE, on the first sealed world to come up on
+// a block nothing has touched — see grantStartingPurse for why that condition
+// and not a default value.
 const STARTING_PURSE = 40;
 
 // "Line and tackle included" — the stack of bait that rides the FIRST rod
@@ -13810,15 +13877,18 @@ const STARTER_BAIT = 8;
 //
 // PRICE INTERPLAY — A NOTE FOR TUNERS, NOT AN INVARIANT (maintainer override,
 // 2026-08-24). Nothing in this build asserts that a starting purse can afford a
-// rod, a berth, or both, and that is deliberate: 0.12 ships no income mechanic,
-// nobody is required to sleep in a rented berth, and income arrives in later
-// releases. The rod-against-berth fork is a PLAYER's choice and the build
+// rod, a berth, or both, and that is deliberate: nobody is required to sleep in
+// a rented berth, and the settlement job board is the income the fork is decided
+// against. The rod-against-berth fork is a PLAYER's choice and the build
 // declines to have an opinion about it. What a tuner should know while moving
 // numbers: STARTING_PURSE 40 against a 12-coin berth and the 6-coin fantasy
 // entry rod leaves room for both several times over, while the 24-credit sci-fi
-// rod turns the same purse into a real decision — and a player who spends the
-// purse down before buying is priced out of fishing until income lands, which is
-// an accepted limitation and not a bug.
+// rod turns the same purse into a real decision. A player who spends the purse
+// down before buying is not stranded: the board's smallest errand pays 6
+// (61-pack TUNING.reward, `visit`), which is exactly the fantasy entry rod, so
+// one walk buys the thing that starts fishing, while the sci-fi rod at 24 is
+// four of them. What still holds is that nothing GUARANTEES the opening purse
+// covers a rod or a berth, which is an accepted looseness and not a bug.
 const TUNING = {
   // THE SUCCESS CURVE, one family for every cast:
   //     p = base(level) * toolMult[toolTier] * modMult[modTier]
@@ -13865,8 +13935,11 @@ const TUNING = {
   // bites implicitly — summoning rain IS summoning the ×2, with no new machinery
   // — so a GM who wants faster bites has one. The direct knob, a
   // `fishBite:<word>:<multiplier>` write over these keys validated against the
-  // closed weather-word enum, is a line in the GM write-back channel's FR: that
-  // channel does not exist yet and this release builds NO read slot for it. The
+  // closed weather-word enum, would be a third verb on the GM write-back
+  // channel. That channel SHIPS: the package declares its verb table in
+  // `gm-verbs.json` and the engine validates every call against it (62-gm), and
+  // two verbs ride it today, `weather` and `standing`. What is missing is a
+  // bite-rate verb on the table, and this file builds NO read slot for one. The
   // row exists to tune the multiplier itself, not to get faster bites at all.
   biteRate: { overcast: 2, rain: 2, snow: 2, storm: 2 },
   // THE REGION'S WATER (ruling B3-2): the bite's base is DERIVED from the axes
@@ -14962,9 +15035,14 @@ PF.economy = {
     // THE 2×2, both halves. A theme with no table for a spot kind is water the
     // player can stand at and the verb cannot answer for; an EMPTY table is the
     // same hole with a shape, and it would divide by a zero weight rather than
-    // refuse. The wilds `water-feature` never places today (slice-1 verify F1)
-    // and its tables are still required — settlements and the legacy world reach
-    // that kind, and the drop is a placement fact, not a vocabulary one.
+    // refuse. Every one of these tables is live content: settlements and the
+    // legacy world hold a `water-feature`, the wilds hold a `water-crossing`,
+    // and a wilds `water-feature` now places when a brief asks for one, because
+    // the bridge ruling gave that tag a second placement pass with the road band
+    // off the busy set, which is what stopped the wilds pool being refused on
+    // every anchor that touched the road (20-world, the wilds feature loop). So
+    // none of these tables is vocabulary kept against a placement that cannot
+    // happen.
     const byTag = CATCH_TABLES[theme];
     if (!byTag) throw new Error(`pixelforge: theme "${theme}" ships no catch tables`);
     for (const tag of SPOT_TAGS) {
@@ -15032,9 +15110,10 @@ PF.economy = {
     // answers null for "not for sale here", and a rod the build means to sell
     // and forgot to price is indistinguishable from one it deliberately does
     // not stock. KEY EXISTENCE ONLY: no assertion couples these numbers to the
-    // purse or to the berth (maintainer override, 2026-08-24 — income arrives
-    // in later releases and berth-sleeping is optional), so what the build
-    // insists on is that a quotable rung is quotable, never that it is cheap.
+    // purse or to the berth (maintainer override, 2026-08-24: berth-sleeping is
+    // optional and nothing couples the opening purse to a price), and since 0.15
+    // the board is what an empty purse earns, so what the build insists on is
+    // that a quotable rung is quotable, never that it is cheap.
     for (const tier of ROD_TIERS) {
       // …and a rung has to be a rung. A tier that is not on the QUALITY ladder
       // resolves to crude at every read, so the ladder would quote a rod nobody
@@ -15799,11 +15878,21 @@ PF.save = {
     return snap;
   },
 
-  /** Where /game/create actually stores the wizard config (review finding):
-   *  the chooser wraps our cfg as setupConfig.experienceConfig = cfg, and the
-   *  server persists the whole setupConfig under meta.gameSetupConfig — so our
-   *  own `experienceConfig.seed` lands two levels deep. Read every plausible
-   *  depth so a future un-nesting doesn't strand old games. */
+  /** Where /game/create actually stores the wizard config: the chooser wraps our
+   *  cfg as setupConfig.experienceConfig = cfg.experienceConfig ?? cfg, and the
+   *  server persists the whole setupConfig under meta.gameSetupConfig. Our own
+   *  `experienceConfig.seed` therefore lands ONE level deep on every chat created
+   *  since the host stopped re-wrapping a config that already carries that key.
+   *
+   *  The deeper read is a LEGACY path, not future-proofing. The host used to wrap
+   *  unconditionally, so a chat created before that change keeps its seed two
+   *  levels down. A saved game survives the shallower read on its save row alone,
+   *  since `simFromSaved` takes `saved.seed` first, but the readers with no
+   *  save-side fallback do not: the generate and pack flags, the world name and
+   *  the picked lore ids live only in this config, and a legacy chat that has not
+   *  saved yet has nowhere else to get its seed. Both depths stay, innermost
+   *  first, so an older game keeps rebuilding from its own number. Every other
+   *  reader below covers both depths for exactly this reason. */
   _configSeed(meta) {
     const setup =
       meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
@@ -17489,7 +17578,7 @@ PF.save = {
     }
   },
 
-  /** The wizard's theme, from the same double-nested config home as the seed. */
+  /** The wizard's theme, from the same config home as the seed, at both depths. */
   _configTheme(meta) {
     const setup =
       meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
@@ -17508,7 +17597,7 @@ PF.save = {
   },
 
   /** THE LOREBOOK ENTRIES THE PLAYER TICKED (0.16.2, R-D6), from the same
-   *  double-nested config home as the seed, the theme and the name.
+   *  config home as the seed, the theme and the name.
    *
    *  ENTRY ids and never book ids: the ruling is that "the player must be able to
    *  select specific lorebook entries rather than the entire lorebook getting
@@ -17541,7 +17630,7 @@ PF.save = {
   },
 
   /** THE NAME THE PLAYER TYPED IN THE WIZARD (0.16.1), from the same
-   *  double-nested config home as the seed and the theme. "Typed" resolves at
+   *  config home as the seed and the theme. "Typed" resolves at
    *  write time: the wizard stores the field's value trimmed, and an emptied
    *  field stores the theme's default name instead — a world needs SOME name,
    *  and an empty string is not one.
@@ -25568,12 +25657,6 @@ PF.setup = {
   kitIds: () => Object.keys(KIT_WORDS),
 };
 
-/** The bound on the one unbounded string the package contributes to the config
- *  the host nests inside itself. The arithmetic that produced this number is at
- *  the emit site, beside `setting`, because that is where the next person adding
- *  a field will be standing. */
-const SETTING_MAX = 8_000;
-
 PF.mountSetup = (el, props) => {
   // The host delivers a FRESH props object on every render, and its onCancel
   // closes over the current `launching` state — capturing the first one would
@@ -25741,11 +25824,19 @@ PF.mountSetup = (el, props) => {
   // never duplicates or overrides what the GM setup collects. That the chooser
   // currently swaps the classic wizard out before its Party step ever runs is
   // the reason this is a COST rather than a tidy-up, and it is stated plainly:
-  // for this one release every Pixelforge game starts with an empty party and
-  // nothing anywhere asks otherwise. It is survivable because the villagers are
-  // NPCs the GM plays and a party is additive rather than load-bearing for a
-  // walkable world; it stops being true the moment the seam lands and the
-  // Engine's own Party step runs again.
+  // every Pixelforge game starts with an empty party and nothing anywhere asks
+  // otherwise. It has been that way since 0.16.2 and no release number is
+  // attached to the fix. It is survivable because the villagers are NPCs the GM
+  // plays and a party is additive rather than load-bearing for a walkable world;
+  // it stops being true when the seam lands and the Engine's own Party step runs
+  // again.
+  //
+  // THE SEAM IS STILL THE PLAN, AND IT IS WIDER THAN THE PARTY. All of setup
+  // except the seed is to be handed over to the Engine's own game mode setup
+  // screen. Anything that was contingent on this package's own setup and is
+  // still necessary, if the Engine's setup does not already handle it, is either
+  // removed or asked for inside that screen, which may also use what the player
+  // filled in elsewhere in it. Until then this form is what ships, in full.
 
   // ── THE PER-ENTRY LOREBOOK PICKER (0.16.2, R-D6) ────────────────────────────
   // "the player must be able to select specific lorebook entries rather than the
@@ -25881,8 +25972,17 @@ PF.mountSetup = (el, props) => {
     //
     // The per-book sort stays and is still worth having, because it IS true: it
     // is the drop rule restricted to one book, and one expanded book is the unit
-    // a player can actually read. Nothing is ever dropped in practice — the four
-    // walls see to that — so this is a fix to the SENTENCE and not to the sort.
+    // a player can actually read. No budget drops one of these entries any more
+    // either, though not for the reason this comment used to give: the picker's
+    // four walls were deleted in 0.16.3, and what keeps the selection whole now is
+    // that it goes over as an exact list the brief route reads with
+    // `forcedEntriesOnly`, which switches the automatic token and count budgets off
+    // outright. What can still refuse a picked entry is the eligibility gates the
+    // Engine keeps either way (a disabled book, a character or trigger filter, a
+    // stale id); an entry refused there shows up only as absence from the reply's
+    // included count, never as a named skip. The only size wall left is the
+    // model's own context window, which the Engine checks the finished prompt
+    // against. So this is a fix to the SENTENCE and not to the sort.
     field("Lorebook entries to read before writing the world (each book in the order the call keeps its own)", loreBox),
     loreBudgetEl,
     errEl,
@@ -26147,22 +26247,22 @@ PF.mountSetup = (el, props) => {
       // genre is in `setting`, which is the player's own words and reaches the
       // GM's per-turn prompt on the very next line of the same block.
       genre: "A tile-based pixel-art RPG.",
-      // ── THE ONE UNBOUNDED STRING THIS PACKAGE CONTRIBUTES ──────────────────
-      // `/game/create`'s chooser nests the package's whole returned config inside
-      // itself (`experienceConfig: cfg`) and the route caps THAT nested copy at
-      // 32,000 characters, while `setting` is declared `z.string().min(1)` with
-      // no maximum at all. Everything else here is a scalar or a short literal —
-      // about 1 KB — so the Setting box is the only field that can push the copy
-      // over and turn a launch into a hard 400 on a field the player never sees.
-      // 8,000 is the bound, and it is derived rather than picked: the brief call
-      // clamps its preferences to 7,800 against the route's own 8,000 cap, so
-      // the world-writing call loses nothing it was ever going to read. 8,000
-      // plus ~1 KB of scalars is ~9 KB against 32,000, with ~23 KB spare. The
-      // cost, stated once rather than twice in opposite directions: Setting text
-      // past 8,000 characters stops reaching the GM's per-turn prompt, at a
-      // length no setup box invites. Anyone adding a field here inherits this
-      // budget — the spare is the room, not the cap.
-      setting: settingOf(preset, settingIn.value, worldName).slice(0, SETTING_MAX),
+      // ── THE PLAYER'S OWN WORDS, WHOLE ──────────────────────────────────────
+      // This used to be clipped to 8,000 characters against a cap that never
+      // applied to it. `setting` is a TOP-LEVEL field of the host's setup schema,
+      // declared `z.string().min(1)` with no maximum at all. The route's length
+      // refine measures `experienceConfig` alone, the small object of the
+      // package's own further down this literal, and it allows 262,144
+      // characters for a seed, a theme, two flags, a world name and at most a
+      // list of lore entry ids. Nothing typed in the Setting box reaches that
+      // object, so no length here can turn a launch into a 400.
+      //
+      // The clip's only surviving effect was to cut the player's own description
+      // short on its way to the GM's per-turn prompt, so it is gone and the whole
+      // box ships. The 7,800 character clamp in the brief call (18-brief.js) is a
+      // DIFFERENT bound and it stays: the experience-generation route caps that
+      // field at 8,000 characters and 400s past it, which is a real wall.
+      setting: settingOf(preset, settingIn.value, worldName),
       tone: toneSel.value,
       difficulty: diffSel.value,
       rating: ratingSel.value,
@@ -26410,9 +26510,10 @@ PF.core = {
     PF.save.ensurePresent(this, meta);
 
     // THE GM'S SKY, RECONCILED. The host hands us the whole metadata blob on
-    // every props delivery, so a future writer patching `pixelforgeWeather`
-    // mid-story is answered here — the town re-places under the new sky the
-    // moment the key lands, without waiting for a boundary.
+    // every props delivery, so the storyteller's `weather` verb patching
+    // `pixelforgeWeather` mid-story is answered here, and the town re-places
+    // under the new sky the moment the key lands, without waiting for a
+    // boundary.
     //
     // COMPARED AGAINST THE APPLIED MEMO, never against `sim.weatherOverride`.
     // The memo tracks METADATA, which a console never touches, so a summoned

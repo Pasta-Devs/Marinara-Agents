@@ -1,5 +1,5 @@
 // ── Tier-0 procedural art ─────────────────────────────────────────────────────
-// The deterministic bottom rung: a fixed 32-colour ramp and canvas-painted
+// The deterministic bottom rung: a fixed 39-colour ramp and canvas-painted
 // tiles/sprites so the game is playable with zero assets and zero network.
 // Later tiers (authored atlas, AI bake) resolve above this and fall back here.
 //
@@ -61,8 +61,9 @@ PF.art = (() => {
   const T = PF.TILE;
 
   /** One 16×16 tile canvas: Tier-1 (authored atlas) ?? Tier-0 (procedural).
-   *  Tier-1 only serves the theme it was authored for; other themes stay
-   *  procedural until themed atlases ship. */
+   *  Tier-1 serves whichever theme the loaded sheet was authored for, and both
+   *  shipped themes have an authored sheet. A theme with no baked sheet, or one
+   *  whose sheet failed to load, stays procedural. */
   const tileCache = new Map();
   function tile(id) {
     if (activeTheme === PF.assets?.atlasTheme) {

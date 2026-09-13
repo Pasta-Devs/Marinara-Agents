@@ -1,5 +1,8 @@
 # The World Brief — schema v1 (sealed spec)
 
+Pixelforge is in early development. Everything in this document, including numbers, mechanisms and
+planned designs, is subject to change.
+
 **Architecture:** the LLM decides _what exists_, the algorithm decides _where every tile goes._
 One structured call at game creation (engine #5135, route
 `POST /api/game/:chatId/experience-generation`) turns the wizard's preferences into a compact
@@ -103,8 +106,14 @@ through the derivations below.
 
   features: [               // 0-4 in the settlement exterior; item shape {tag, name}.
     { tag: "crop-plots", name: "The Long Furrows" },
-  ],                        // tag: OPEN vocabulary resolved via the placer registry (§6);
-                            // an unknown tag drops the WHOLE item (a name can never orphan a tag).
+  ],                        // tag: CLOSED vocabulary (§6). The request schema's enum is the
+                            // full ten-tag `FEATURE_TAGS`, but only the eight SETTLEMENT tags are
+                            // legal here (`water-crossing` and `dense-growth` are wilds-only and
+                            // drop from this list), and the model guidance names those eight.
+                            // `validate()` folds against the enum, then drops anything outside the
+                            // settlement set, and never consults the placer registry, so adding a
+                            // tag is a schema change and a prompt change, not a registry entry.
+                            // An unknown tag drops the WHOLE item (a name can never orphan a tag).
                             // name: TEXT ≤24 graphemes → a World Maps CHILD location.
 
   places: [                 // 0-4 additional zones; ≤2 wilds, ≤1 hall, ≤1 gathering, ≤1 sanctuary.
@@ -206,8 +215,11 @@ every fold is Unicode-aware.
 
 `compile(brief, seed)` is pure. **One entropy source**: every repaired default, top-up, split, and
 dedup suffix derives from `hash(seed, fieldPath)` — never from `hash(name)`, never from a second
-seed. The sealed brief is stored beside the seed in the wizard config; re-rolling the seed rebuilds
-geometry from the same brief; regenerating the brief is an explicit player action, never implicit.
+seed. The seed lives in the wizard config; the sealed brief does not, it is written atomically to
+its own top-level `pixelforgeBrief` chat metadata key (§5), so the two are no longer stored
+together. The nested location is still READ, for chats sealed before the key moved. Re-rolling the
+seed rebuilds geometry from the same brief; regenerating the brief is an explicit player action,
+never implicit.
 
 ## 4. Repair contract (runs ONCE; the repaired brief is sealed)
 
@@ -245,12 +257,13 @@ response is **never stored** (checkpoints capture by value — see #5110).
      them a roof like anyone else. Shared household = shared roof; a
      non-resident never gets a dwelling — it anchors to its standing rest spot (transient → the inn,
      fringe → the wilds/margin, destitute → the public center);
-   - special buildings from a **resident**'s `kind` (never a duplicate hall; extra specials demote
-     to workyard markers); a **place-bound** special is the exception — `elder`→`sanctuary` binds
-     the church the brief NAMED and mints nothing on its own, so an elder in a church-less
-     settlement claims neither a lot nor a dwelling slot (which is also what keeps every brief
-     sealed before 0.8.0 compiling to the same tiles); a non-resident with a special kind builds
-     nothing — except a
+   - special buildings from a **resident**'s `kind` (never a duplicate: the first resident whose
+     `kind` maps to a building takes it, and a second resident of a kind that maps to the same
+     building is skipped and mints nothing); a **place-bound** special is the exception —
+     `elder`→`sanctuary` binds the church the brief NAMED and mints nothing on its own, so an elder
+     in a church-less settlement claims neither a lot nor a dwelling slot (which is also what keeps
+     every brief sealed before 0.8.0 compiling to the same tiles); a non-resident with a special
+     kind builds nothing — except a
      **transient `merchant`**, who sets up a light market stall (3 tables, no walls) when a lot is
      free (else it loiters at a public spot like any transient);
    - **live-work vs duty station.** A workplace is a HOME only when the trade is carried on where
@@ -283,9 +296,16 @@ response is **never stored** (checkpoints capture by value — see #5110).
      **last free lot goes to housing**. A workshop or a named place that would leave a family with
      nowhere to sleep is not built; the house is, and the merge below puts every remaining
      household under it. `dwelling lots = min(lots left, households still owed a roof)`;
-   - **over-subscription MERGES households into multi-family blocks — a named NPC's home is
-     never dropped**; only filler is dropped, then the lowest-priority specials
-     (leader > host > grower > maker > merchant > guard > healer > scholar > folk);
+   - **over-subscription MERGES households into multi-family blocks, and NOBODY is dropped**: the
+     households that outrun the dwelling lots are dealt round-robin across the lots there are, so a
+     settlement at its limit reads as addresses holding more than one household rather than as a
+     bunkhouse beside eleven single houses. There is no drop list and no kind priority order: a
+     special that cannot afford a lot is simply never built (the reservation above), and no cast
+     member loses a roof to make room for one. A second person whose kind runs an already-built
+     special (a second merchant, a second maker) is skipped rather than given a duplicate shop.
+     **Planned:** a settlement that runs out of ground grows instead of tightening, upgraded to a
+     megastructure spanning more than one chunk of map, or to a place that exists across several
+     maps. Nothing of that is built and no release carries it;
    - **interiors**: a dwelling, a shop and a farm each compile a room behind the door the building
      already has, two-way portal on that door, `mapExport = false` (§8). A duty station (post,
      hall) stays a facade — no zone is minted just to put a bed in it. A dwelling's zone id is
@@ -300,9 +320,11 @@ response is **never stored** (checkpoints capture by value — see #5110).
      shelves, and the OWNER's working anchor moved inside (only the owner's: the rest of the
      household are residents there, not staff), because an empty shop reads worse than a
      locked door. The inn's guest berths are sized from `scale` and `prosperity` (GUEST_BERTHS —
-     three to thirteen of them), never from tonight's guest list; whoever arrives past the last berth
-     shares the common room as before. None of this adds a save field: the
-     handles are re-baked on every compile and placement is a pure function of the saved clock;
+     three to twelve of them, and twelve is a deliberate ceiling: a thirteenth berth falls through
+     the guest wing's rooms and compiles a bunkhouse with a bar), never from tonight's guest list;
+     whoever arrives past the last berth shares the common room as before. None of this adds a save
+     field: the handles are re-baked on every compile and placement is a pure function of the saved
+     clock;
    - **height** is a facade, not a footprint: every body row of a building is already solid wall,
      hidden under roof overhead, so a tall building simply leaves its top rows UNROOFED and the
      stonework shows. A `sanctuary` takes two such rows always, plus whatever head-room its lot
@@ -312,7 +334,8 @@ response is **never stored** (checkpoints capture by value — see #5110).
 6. **Quality floors** (valid-but-degenerate briefs — the weak-local-model shape): after repair,
    enforce ≥2 distinct households (split by seed), ≥2 zones (synthesize one wilds), ≥3 distinct
    tints (rotate by seed), and no feature tag on more than TWO kept slots (the surplus re-rolls
-   by seed from the theme's placer list). Every top-up derives from `hash(seed, floorName)`.
+   by seed from the remaining settlement tag vocabulary, the tags no kept slot has claimed yet, with
+   no theme read anywhere on that path). Every top-up derives from `hash(seed, floorName)`.
    **Then §4.3 again, last of all** (see pass 3): the cast floor tops up from a STOCK roster and
    every roster leads with a `host`, so a brief whose cast failed validation outright sealed a
    keeper with nowhere to keep — and the compiler builds the common room from the gathering PLACE,
@@ -388,8 +411,12 @@ world. That decision predates the loading gate, which now holds play precisely s
 invests in a world that is going to be discarded — so sealing a default is no longer "the world
 they were already walking in", it is a permanent decision made on their behalf in the one case they
 cannot undo. The `userContent` clamp above also makes a reachable 400 a contract bug rather than a
-long setting. The ladder reports the failure KIND instead (`unavailable` | `refused` | `network` |
-`timeout`), and the retry screen says which._
+long setting. The ladder reports the failure KIND instead (`context_limit` | `request_too_large` |
+`unavailable` | `refused` | `network` | `timeout`), and the retry screen says which. The two SIZE
+kinds are tested first and each earns its own sentence: a 422 carrying `context_limit` tells the
+player roughly how many input tokens the request needs against what the connection allows, and a 413
+says the picked lorebook entries make the request too large to send. `refused` stays the catch-all
+for every other deterministic answer._
 The sealed result stores **atomically** under the top-level `pixelforgeBrief` metadata key
 (shallow-merge PATCH, 3 retries — never a read-modify-write of the whole setup config), and the
 world rebuilds in place when it lands; the stored key doubles as the one-shot guard, so a chat
@@ -399,10 +426,15 @@ ceiling overruns, and wall-clock (tracked as a 0.4.0 validation TODO).
 
 ## 6. The placer registry (feature vocabulary)
 
-`PLACERS[tag][theme] ?? PLACERS[tag].neutral ?? drop-item`. The vocabulary is OPEN (a new theme or
-tag ships placers with zero schema/prompt change), but **every tag in the shipped guidance must
-have a placer for EVERY shipped theme, enforced by a startup assertion over the registry** — the
-fallback chain is for third-party extension, not for shipping silent per-theme feature loss.
+`PLACERS[tag]`. The registry is a **flat tag→function map**: one placer per tag, no theme dimension
+in it, and no `neutral` key to fall through to. Each placer is composed from SEMANTIC tiles, and the
+art layer (`10-art`) is what makes `crop-plots` paint hydroponics trays in a colony, so the geometry
+needs no per-theme variant. The startup assertion is correspondingly narrow: **every tag in the
+shipped vocabulary must have ONE placer, or the package throws as it loads**, because a vocabulary tag with no
+placer would drop features in silence, which is the failure this spec forbids shipping. The vocabulary
+itself is CLOSED (§1): a new tag is a schema change and a prompt change, not a registry entry.
+
+The two columns below are what the shipped kits PAINT over the same placer, not two placers:
 
 | tag            | cozy-village           | sci-fi-colony            |
 | -------------- | ---------------------- | ------------------------ |
@@ -416,6 +448,11 @@ fallback chain is for third-party extension, not for shipping silent per-theme f
 | dense-growth   | heavy trees            | mast/antenna field       |
 | ruin           | roofless broken walls  | breached hull section    |
 | lookout        | raised stone pad       | observation platform     |
+
+**Planned: theme-aware placers.** Matching a tag to a placer semantically, per setting, so that a
+tag resolves to different GEOMETRY and not only a different skin, is possible and is where this is
+meant to go. It is deferred on art, not on code: this build ships art for two kinds of setting, so a
+second placer per tag would have nothing of its own to paint with. It waits on more themed art.
 
 **Water and roads (0.12).** Exactly one placement relaxed: a **wilds `water-feature`**, which runs
 a second pass of eight anchor attempts with the approach road off the reservation once the strict

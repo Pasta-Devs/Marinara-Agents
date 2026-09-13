@@ -7,10 +7,19 @@
 //
 // Review-hardened: a generation counter guards cross-chat races (a refresh
 // started for chat A must never write into chat B's world). Transition
-// outcomes arrive two ways: engines with capability API 1.12 address the
-// commit/reject events to this package (onHostEvent — immediate), and on
-// older engines `pending` still self-clears after two refreshes with no
-// movement (the stale-count fallback; events simply never arrive there).
+// outcomes normally arrive as host events: the engine addresses the
+// commit/reject events to this package (onHostEvent, immediate). Every engine
+// the package can install on does that: the addressing shipped in Engine 2.4.3
+// (capability API 1.12, a soft seam delivered whatever the package declares),
+// below the 2.4.5 engine floor the manifest declares. The stale-count fallback,
+// `pending` self-clearing after two per-turn refreshes with no movement, covers
+// what the events still miss: the host can only address an event to this
+// package when it can resolve the chat's Experience package id, which comes
+// back empty when the chat's metadata names no Experience or when the dispatch
+// lands after a chat switch with the chat row gone from both caches, and some
+// rejections never reach the client as a reject event at all (a pre-stream
+// commit that fails without a spatial_* code, or an already-applied conflict
+// whose recovery read fails, both reconcile through a plain refresh instead).
 PF.spatial = {
   data: null, // last SpatialContextResponse (or null: unbound / not fetched)
   available: false,
@@ -55,7 +64,7 @@ PF.spatial = {
     // a mutator caller (the visit verb completes at an arrival). Read pre-await,
     // like everything else here, and it is the ONE capture this site adds.
     const saveGen = PF.save._gen ?? 0;
-    // Latest-started wins: 1.12 event refreshes overlap the per-turn ones, and
+    // Latest-started wins: event refreshes overlap the per-turn ones, and
     // a slow pre-commit response landing AFTER a post-commit refresh would
     // otherwise roll the world back to the departed zone (review finding).
     const seq = ++this._seq;
@@ -97,8 +106,8 @@ PF.spatial = {
         } else if (countStale && ++this.pending.staleCount >= 2) {
           // Two turns with no movement → the transition was rejected somewhere
           // we can't observe. Let go so drift-following resumes. Event-driven
-          // refreshes pass countStale:false so 1.12 engines don't halve this
-          // fallback budget (review finding).
+          // refreshes pass countStale:false so live event delivery doesn't
+          // halve this fallback budget (review finding).
           this.pending = null;
           core.hud?.toast("Travel didn't happen — the story stayed put.");
         }

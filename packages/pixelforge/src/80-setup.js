@@ -246,12 +246,6 @@ PF.setup = {
   kitIds: () => Object.keys(KIT_WORDS),
 };
 
-/** The bound on the one unbounded string the package contributes to the config
- *  the host nests inside itself. The arithmetic that produced this number is at
- *  the emit site, beside `setting`, because that is where the next person adding
- *  a field will be standing. */
-const SETTING_MAX = 8_000;
-
 PF.mountSetup = (el, props) => {
   // The host delivers a FRESH props object on every render, and its onCancel
   // closes over the current `launching` state — capturing the first one would
@@ -419,11 +413,19 @@ PF.mountSetup = (el, props) => {
   // never duplicates or overrides what the GM setup collects. That the chooser
   // currently swaps the classic wizard out before its Party step ever runs is
   // the reason this is a COST rather than a tidy-up, and it is stated plainly:
-  // for this one release every Pixelforge game starts with an empty party and
-  // nothing anywhere asks otherwise. It is survivable because the villagers are
-  // NPCs the GM plays and a party is additive rather than load-bearing for a
-  // walkable world; it stops being true the moment the seam lands and the
-  // Engine's own Party step runs again.
+  // every Pixelforge game starts with an empty party and nothing anywhere asks
+  // otherwise. It has been that way since 0.16.2 and no release number is
+  // attached to the fix. It is survivable because the villagers are NPCs the GM
+  // plays and a party is additive rather than load-bearing for a walkable world;
+  // it stops being true when the seam lands and the Engine's own Party step runs
+  // again.
+  //
+  // THE SEAM IS STILL THE PLAN, AND IT IS WIDER THAN THE PARTY. All of setup
+  // except the seed is to be handed over to the Engine's own game mode setup
+  // screen. Anything that was contingent on this package's own setup and is
+  // still necessary, if the Engine's setup does not already handle it, is either
+  // removed or asked for inside that screen, which may also use what the player
+  // filled in elsewhere in it. Until then this form is what ships, in full.
 
   // ── THE PER-ENTRY LOREBOOK PICKER (0.16.2, R-D6) ────────────────────────────
   // "the player must be able to select specific lorebook entries rather than the
@@ -559,8 +561,17 @@ PF.mountSetup = (el, props) => {
     //
     // The per-book sort stays and is still worth having, because it IS true: it
     // is the drop rule restricted to one book, and one expanded book is the unit
-    // a player can actually read. Nothing is ever dropped in practice — the four
-    // walls see to that — so this is a fix to the SENTENCE and not to the sort.
+    // a player can actually read. No budget drops one of these entries any more
+    // either, though not for the reason this comment used to give: the picker's
+    // four walls were deleted in 0.16.3, and what keeps the selection whole now is
+    // that it goes over as an exact list the brief route reads with
+    // `forcedEntriesOnly`, which switches the automatic token and count budgets off
+    // outright. What can still refuse a picked entry is the eligibility gates the
+    // Engine keeps either way (a disabled book, a character or trigger filter, a
+    // stale id); an entry refused there shows up only as absence from the reply's
+    // included count, never as a named skip. The only size wall left is the
+    // model's own context window, which the Engine checks the finished prompt
+    // against. So this is a fix to the SENTENCE and not to the sort.
     field("Lorebook entries to read before writing the world (each book in the order the call keeps its own)", loreBox),
     loreBudgetEl,
     errEl,
@@ -825,22 +836,22 @@ PF.mountSetup = (el, props) => {
       // genre is in `setting`, which is the player's own words and reaches the
       // GM's per-turn prompt on the very next line of the same block.
       genre: "A tile-based pixel-art RPG.",
-      // ── THE ONE UNBOUNDED STRING THIS PACKAGE CONTRIBUTES ──────────────────
-      // `/game/create`'s chooser nests the package's whole returned config inside
-      // itself (`experienceConfig: cfg`) and the route caps THAT nested copy at
-      // 32,000 characters, while `setting` is declared `z.string().min(1)` with
-      // no maximum at all. Everything else here is a scalar or a short literal —
-      // about 1 KB — so the Setting box is the only field that can push the copy
-      // over and turn a launch into a hard 400 on a field the player never sees.
-      // 8,000 is the bound, and it is derived rather than picked: the brief call
-      // clamps its preferences to 7,800 against the route's own 8,000 cap, so
-      // the world-writing call loses nothing it was ever going to read. 8,000
-      // plus ~1 KB of scalars is ~9 KB against 32,000, with ~23 KB spare. The
-      // cost, stated once rather than twice in opposite directions: Setting text
-      // past 8,000 characters stops reaching the GM's per-turn prompt, at a
-      // length no setup box invites. Anyone adding a field here inherits this
-      // budget — the spare is the room, not the cap.
-      setting: settingOf(preset, settingIn.value, worldName).slice(0, SETTING_MAX),
+      // ── THE PLAYER'S OWN WORDS, WHOLE ──────────────────────────────────────
+      // This used to be clipped to 8,000 characters against a cap that never
+      // applied to it. `setting` is a TOP-LEVEL field of the host's setup schema,
+      // declared `z.string().min(1)` with no maximum at all. The route's length
+      // refine measures `experienceConfig` alone, the small object of the
+      // package's own further down this literal, and it allows 262,144
+      // characters for a seed, a theme, two flags, a world name and at most a
+      // list of lore entry ids. Nothing typed in the Setting box reaches that
+      // object, so no length here can turn a launch into a 400.
+      //
+      // The clip's only surviving effect was to cut the player's own description
+      // short on its way to the GM's per-turn prompt, so it is gone and the whole
+      // box ships. The 7,800 character clamp in the brief call (18-brief.js) is a
+      // DIFFERENT bound and it stays: the experience-generation route caps that
+      // field at 8,000 characters and 400s past it, which is a real wall.
+      setting: settingOf(preset, settingIn.value, worldName),
       tone: toneSel.value,
       difficulty: diffSel.value,
       rating: ratingSel.value,

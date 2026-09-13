@@ -441,12 +441,20 @@ PF.weather = (() => {
   }
 
   // ── The GM override slot ───────────────────────────────────────────────────
-  // WRITTEN BY NOTHING IN THIS RELEASE except a console, deliberately: the host
-  // dispatches `onHostEvent` on engine-defined type strings only, so there is no
-  // surface for a real writer to sit on yet (that is the feature request's).
-  // What exists is the READ side, whole and verifiable, and the incantation is
-  // TWO lines — the runtime slot is a sim field, and the town only re-places on
-  // a resolve:
+  // WRITTEN BY THE STORYTELLER, in ordinary play: the package declares a
+  // `weather` state verb in `gm-verbs.json`, and the engine writes that verb's
+  // arguments wholesale into the chat's metadata under `pixelforgeWeather`,
+  // where `foldOverride` below picks them up. The verb takes one of the five
+  // words plus an optional `intensity` of light or heavy, declared for every
+  // word: only rain and snow keep it, because `foldOverride` below drops an
+  // intensity from a word whose `takesIntensity` is false. It takes no day
+  // argument, so a sky set that way holds until it is set again; the `sinceDay`
+  // and `untilDay` fields folded below are the read side's own window, honoured
+  // when a row carries them and absent from anything the verb writes.
+  //
+  // A CONSOLE IS THE DEBUGGING SHORTCUT, not the writer. The incantation is TWO
+  // lines, because the runtime slot is a sim field and the town only re-places
+  // on a resolve:
   //
   //     core.sim.weatherOverride = { word: "storm" };
   //     core.sim.resolveSchedules();
@@ -487,10 +495,15 @@ PF.weather = (() => {
   }
 
   /** The comparand the mid-session reconciler memoises: the SERIALIZED WHOLE of a
-   *  folded override, never the word alone. A console change from
-   *  `{word:"storm"}` to `{word:"storm", intensity:"heavy"}` is this release's
-   *  documented verification incantation, and a word-only key would sit on it
-   *  until the day rolled. */
+   *  folded override, never the word alone. A storyteller who says rain and then
+   *  heavy rain writes the same word twice with a new intensity, which is an
+   *  ordinary turn-to-turn move; a word-only key would not move at all, so the
+   *  reconciler would never re-apply and `weather()`'s day-keyed memo would hold
+   *  the old intensity until the day rolled. The intensity has to be one a word
+   *  actually takes: `storm` takes none, so a stored `{word:"storm",
+   *  intensity:"heavy"}` is folded to `{word:"storm"}` before it ever reaches
+   *  this key and the metadata path sees no move. A console write assigns the
+   *  runtime slot unfolded, so on that path the extra field does move the key. */
   function overrideKey(override) {
     if (!override || typeof override !== "object") return "";
     return `${override.word ?? ""}|${override.intensity ?? ""}|${override.sinceDay ?? ""}|${override.untilDay ?? ""}`;
