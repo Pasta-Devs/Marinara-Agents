@@ -33,6 +33,7 @@ import {
   readNoodlePollFromMetadata,
 } from "@marinara-engine/shared";
 import { isConnectionAdmissionFailure, admissionModeForRequest } from "../services/generation/connection-admission.js";
+import { tryNoodleOperation } from "../services/noodle/noodle-operation-lock.js";
 
 const accountQuery = z.object({ accountId: z.string().trim().min(1) });
 const noodleImagePromptConfirmationSchema = z.object({
@@ -440,47 +441,55 @@ export async function noodleRoutes(app: FastifyInstance) {
   app.post("/refresh", async (request, reply) => {
     const parsed = noodleGenerationRequestSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
-    try {
-      const settings = await noodle.getSettings();
-      const connectionId = parsed.data.connectionId ?? String(settings.generationConnectionId ?? "");
-      if (!connectionId) return reply.code(400).send({ error: "Select a Noodle generation connection first." });
-      const connection = await connections.getWithKey(connectionId);
-      if (!connection) return reply.code(404).send({ error: "Noodle generation connection not found" });
-      const imageCaptioning = await resolveImageCaptioningRuntime({
-        chatMeta: settings.imageCaptioningUseConnectionDefault
-          ? {}
-          : {
-              imageCaptioningEnabled: settings.imageCaptioningEnabled,
-              imageCaptioningConnectionId: settings.imageCaptioningConnectionId,
-            },
-        fallbackConnectionId: connectionId,
-        connections,
-        admissionMode: admissionModeForRequest(request.headers),
-      });
-      const imageConnection = settings.enableImagePrompts
-        ? settings.imageGenerationConnectionId
-          ? await connections.getWithKey(settings.imageGenerationConnectionId)
-          : await connections.getDefaultForImageGeneration()
-        : null;
-      if (settings.enableImagePrompts && !imageConnection) {
-        return reply.code(400).send({ error: "Select a Noodle image generation connection first." });
+    const operation = await tryNoodleOperation("public-refresh", async () => {
+      try {
+        const settings = await noodle.getSettings();
+        const connectionId = parsed.data.connectionId ?? String(settings.generationConnectionId ?? "");
+        if (!connectionId) return reply.code(400).send({ error: "Select a Noodle generation connection first." });
+        const connection = await connections.getWithKey(connectionId);
+        if (!connection) return reply.code(404).send({ error: "Noodle generation connection not found" });
+        const imageCaptioning = await resolveImageCaptioningRuntime({
+          chatMeta: settings.imageCaptioningUseConnectionDefault
+            ? {}
+            : {
+                imageCaptioningEnabled: settings.imageCaptioningEnabled,
+                imageCaptioningConnectionId: settings.imageCaptioningConnectionId,
+              },
+          fallbackConnectionId: connectionId,
+          connections,
+          admissionMode: admissionModeForRequest(request.headers),
+        });
+        const imageConnection = settings.enableImagePrompts
+          ? settings.imageGenerationConnectionId
+            ? await connections.getWithKey(settings.imageGenerationConnectionId)
+            : await connections.getDefaultForImageGeneration()
+          : null;
+        if (settings.enableImagePrompts && !imageConnection) {
+          return reply.code(400).send({ error: "Select a Noodle image generation connection first." });
+        }
+        const generated = await publicGeneration.generate({
+          connection,
+          imageConnection,
+          imageCaptioning,
+          settings,
+          personaId: parsed.data.personaId,
+          timeZone: normalizePromptTimeZone(parsed.data.timeZone),
+          debugMode: parsed.data.debugMode === true,
+          reviewImagePromptsBeforeSend: parsed.data.reviewImagePromptsBeforeSend === true,
+          admissionMode: admissionModeForRequest(request.headers),
+        });
+        if (!generated.ok) return reply.code(400).send({ error: generated.error });
+        return generated.result;
+      } catch (error) {
+        if (isConnectionAdmissionFailure(error)) return reply.code(409).send({ error: getErrorMessage(error) });
+        return reply.code(500).send({ error: getErrorMessage(error) });
       }
-      const generated = await publicGeneration.generate({
-        connection,
-        imageConnection,
-        imageCaptioning,
-        settings,
-        personaId: parsed.data.personaId,
-        timeZone: normalizePromptTimeZone(parsed.data.timeZone),
-        debugMode: parsed.data.debugMode === true,
-        reviewImagePromptsBeforeSend: parsed.data.reviewImagePromptsBeforeSend === true,
-        admissionMode: admissionModeForRequest(request.headers),
-      });
-      if (!generated.ok) return reply.code(400).send({ error: generated.error });
-      return generated.result;
-    } catch (error) {
-      if (isConnectionAdmissionFailure(error)) return reply.code(409).send({ error: getErrorMessage(error) });
-      return reply.code(500).send({ error: getErrorMessage(error) });
+    });
+    if (!operation.acquired) {
+      return reply
+        .code(409)
+        .send({ error: "A Noodle timeline refresh is already running. Please wait for it to finish." });
     }
+    return operation.value;
   });
 }

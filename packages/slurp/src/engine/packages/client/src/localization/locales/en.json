@@ -1500,5 +1500,11 @@
   "ui.noodle.stageprofileform.stance.eager": "Eager to please",
   "ui.noodle.stageprofileform.stance.eagerText": "Openly enthusiastic, and keen to give the audience what they ask for.",
   "ui.noodle.stageprofileform.stance.shy": "Shy",
-  "ui.noodle.stageprofileform.stance.shyText": "Reserved and easily flustered, and opens up slowly."
+  "ui.noodle.stageprofileform.stance.shyText": "Reserved and easily flustered, and opens up slowly.",
+  "ui.slurp.settings.refresh.remaining": "{{count}} remaining",
+  "ui.slurp.settings.images.contextMode": "Image context for reactions",
+  "ui.slurp.settings.images.contextModeDetail": "Fans and creator replies can use stored image prompts or descriptions from the Creator text connection. Auto prefers the stored prompt and uses vision for other images. Vision requires an image-capable model. Locked images stay hidden from public fan reactions.",
+  "ui.slurp.settings.images.contextAuto": "Auto: prompt, then vision",
+  "ui.slurp.settings.images.contextPrompt": "Stored image prompt only",
+  "ui.slurp.settings.images.contextVision": "Vision description"
 }

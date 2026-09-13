@@ -931,42 +931,6 @@ function collectSlotRows(state) {
 }
 
 /**
- * Format a list of slot keys for display. Collapses symmetric pairs:
- *   ['left_leg', 'right_leg'] → 'both legs'
- *   ['chest', 'waist']        → 'chest · waist'
- *   ['left_hand']             → 'L. hand'
- */
-function formatSlotList(slots) {
-  if (slots.length === 2) {
-    const [a, b] = slots;
-    const PAIRS = {
-      "left_hand|right_hand": "both hands",
-      "left_arm|right_arm": "both arms",
-      "left_leg|right_leg": "both legs",
-      "left_foot|right_foot": "both feet",
-      "left_shoulder|right_shoulder": "both shoulders",
-    };
-    const key = [a, b].sort().join("|");
-    if (PAIRS[key]) return PAIRS[key];
-  }
-  return slots.map((s) => SLOT_LABEL[s] || s).join(" · ");
-}
-
-/**
- * Which column (left/right/center) does a merged row belong in?
- * Single-side items go to their side; mixed/center rows go to whichever
- * column is shorter at render time (returned as 'center').
- */
-function rowSide(slots) {
-  const sides = new Set(slots.map((s) => SLOT_SIDE[s] || "center"));
-  if (sides.size === 1) {
-    const only = [...sides][0];
-    if (only === "left" || only === "right") return only;
-  }
-  return "center";
-}
-
-/**
  * Render a single character's paper doll. Returns HTML string.
  *
  * `view` is 'front' (default) or 'back'. In back view the torso reflects the
@@ -1230,7 +1194,7 @@ function renderCharacterDoll(name, state, view, opts = {}) {
     // "missing" tag — the cover IS the visible, tracked state there.
     const coveredLoss = COVERABLE_MISSING_SLOTS.has(slot) && slotState?.wornCount > 0;
     if (slotState?.missing && !coveredLoss) {
-      return `<div class="bh-slot-card bh-slot-missing" data-slot="${slot}" data-slots="${slot}"${styleAttr} title="${escapeHtml(slotLabel)} — missing / lost">
+      return `<div class="bh-slot-card bh-slot-missing" role="button" tabindex="0" data-slot="${slot}" data-slots="${slot}"${styleAttr} title="${escapeHtml(slotLabel)} — missing / lost">
                 <span class="bh-slot-name">${escapeHtml(slotLabel)}</span>
                 <span class="bh-slot-missing-tag">missing</span>
             </div>`;
@@ -1239,13 +1203,13 @@ function renderCharacterDoll(name, state, view, opts = {}) {
     // from empty: empty = unknown, bare = known-uncovered. Renders with a
     // skin-tone left bar instead of the gray "missing" hatch.
     if (slotState?.bare && items.length === 0) {
-      return `<div class="bh-slot-card bh-slot-bare" data-slot="${slot}" data-slots="${slot}"${styleAttr} title="${escapeHtml(slotLabel)} — bare (narration confirmed uncovered)">
+      return `<div class="bh-slot-card bh-slot-bare" role="button" tabindex="0" data-slot="${slot}" data-slots="${slot}"${styleAttr} title="${escapeHtml(slotLabel)} — bare (narration confirmed uncovered)">
                 <span class="bh-slot-name">${escapeHtml(slotLabel)}</span>
                 <span class="bh-slot-bare-tag">bare</span>
             </div>`;
     }
     if (items.length === 0) {
-      return `<div class="bh-slot-card bh-slot-empty" data-slot="${slot}" data-slots="${slot}"${styleAttr}>
+      return `<div class="bh-slot-card bh-slot-empty" role="button" tabindex="0" data-slot="${slot}" data-slots="${slot}"${styleAttr}>
                 <span class="bh-slot-name">${escapeHtml(slotLabel)}</span>
             </div>`;
     }
@@ -1292,7 +1256,7 @@ function renderCharacterDoll(name, state, view, opts = {}) {
       })
       .join("");
     const woundChipsHtml = woundCount ? `<div class="bh-slot-wounds">${woundChips.map(renderChip).join("")}</div>` : "";
-    return `<div class="${cardClasses}" data-slot="${slot}" data-slots="${slot}"${styleAttr}>
+    return `<div class="${cardClasses}" role="button" tabindex="0" data-slot="${slot}" data-slots="${slot}"${styleAttr}>
             <div class="bh-slot-card-head">
                 <span class="bh-slot-name">${escapeHtml(slotLabel)}</span>
             </div>
@@ -1305,7 +1269,7 @@ function renderCharacterDoll(name, state, view, opts = {}) {
    *  pairs stay symmetric in paired layout. */
   const ghostCard = (slot, style) => {
     const styleAttr = style ? ` style="${style}"` : "";
-    return `<div class="bh-slot-card bh-slot-empty bh-slot-ghosted" data-slot="${slot}" data-slots="${slot}"${styleAttr}>
+    return `<div class="bh-slot-card bh-slot-empty bh-slot-ghosted" role="button" tabindex="0" data-slot="${slot}" data-slots="${slot}"${styleAttr}>
             <span class="bh-slot-name">${escapeHtml(labelOf(slot, family))}</span>
         </div>`;
   };

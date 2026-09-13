@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "tic-tac-toe",
   "name": "Tic-Tac-Toe",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Play Tic-Tac-Toe with a Conversation character. Install to use /tictactoe manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
   "engine": {
     "min": "2.3.0",
@@ -45,8 +45,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "317d735b4615d4fa9a90193977cbc4c605ce8736ccb17b955378124d8958f24b",
-      "bytes": 613889
+      "sha256": "96c569b83a6a63b22ad394bd0b28b253a02be29ca987250809b2efc916130ccd",
+      "bytes": 561148
     }
   ],
   "permissions": [

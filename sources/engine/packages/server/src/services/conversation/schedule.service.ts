@@ -4,7 +4,6 @@
 // Generates and manages weekly schedules for characters in Conversation mode.
 // Schedules are stored in chat metadata and drive the status system.
 
-import { createLLMProvider } from "../llm/provider-registry.js";
 import type { BaseLLMProvider } from "../llm/base-provider.js";
 import {
   CONVERSATION_SCHEDULE_DAYS,

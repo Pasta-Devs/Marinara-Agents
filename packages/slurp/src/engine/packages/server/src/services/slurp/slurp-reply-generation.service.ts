@@ -31,8 +31,8 @@ import {
 } from "./slurp-generation.service.js";
 import { noodleResponseFormat } from "./slurp-response-format.js";
 import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js";
-import { createChatsStorage } from "../storage/chats.storage.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
+import { prepareSlurpPostImageContexts } from "./slurp-post-image-context.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -45,6 +45,7 @@ export function buildNoodlerCreatorReplyMessages(input: {
   publicIdentity: PublicIdentity | null;
   generationGuidance: string;
   scheduleContext?: string;
+  imageContext?: string;
 }): ChatMessage[] {
   const protect = (value: string | null | undefined) =>
     protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
@@ -70,6 +71,7 @@ export function buildNoodlerCreatorReplyMessages(input: {
     post: {
       title: protect(input.post.title),
       content: protect(input.post.content),
+      image: protect(input.imageContext) || undefined,
     },
     viewer: {
       displayName: protect(input.viewer.displayName),
@@ -122,12 +124,20 @@ export async function generateNoodlerCreatorReply(input: {
   const scheduleContext = source
     ? await resolveSlurpCreatorScheduleContext(createCharactersStorage(input.db), source, undefined, new Date())
     : undefined;
+  const imageContexts = await prepareSlurpPostImageContexts({
+    posts: [input.post],
+    mode: settings.imageContextMode,
+    captioning: { enabled: true, connectionId: input.connection.id, connection: input.connection, provider },
+    allowLocked: true,
+    debugMode: input.debugMode,
+  });
   const messages = buildNoodlerCreatorReplyMessages({
     ...input,
     disclosureMode,
     publicIdentity,
     generationGuidance: settings.generationGuidance,
     scheduleContext,
+    imageContext: imageContexts.get(input.post.id),
   });
   const debugMode = input.debugMode === true || isDebugAgentsEnabled();
   const options = {

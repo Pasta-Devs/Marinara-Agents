@@ -100,7 +100,6 @@ export function useStartRockPaperScissors(chatId: string) {
 }
 
 export function useRockPaperScissorsThrow(chatId: string) {
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: (vars: { move: RockPaperScissorsMove }) =>
       api.post<OutcomeResponse>(`/turn-games/${chatId}/move`, vars),

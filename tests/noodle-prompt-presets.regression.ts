@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { stripTypeScriptTypes } from "node:module";
+import { runInNewContext } from "node:vm";
 import {
   mergeNoodlePromptPreset,
   parseNoodlePromptPresetImport,
@@ -43,3 +46,52 @@ assert.equal(
 );
 
 console.log("noodle prompt preset regression: ok");
+
+async function verifyApplyConfirmation() {
+  const source = readFileSync(
+    new URL("../packages/noodle/src/engine/packages/client/src/components/noodle/NoodleHome.tsx", import.meta.url),
+    "utf8",
+  );
+  const applySource = source.slice(
+    source.indexOf("const applyPromptPreset ="),
+    source.indexOf("const deletePromptPreset ="),
+  );
+  let confirmed = false;
+  let confirmations = 0;
+  let saves = 0;
+  let draft = "My edited active prompt, not saved as a template.";
+  const context = {
+    noodlePromptDraft: draft,
+    noodlePromptDirty: false,
+    showConfirmDialog: async () => {
+      confirmations++;
+      return confirmed;
+    },
+    localizeUi: (key: string) => key,
+    NOODLE_TIMELINE_BASE_PROMPT_KEY: "noodle.timelineBase",
+    saveNoodlePrompt: {
+      mutateAsync: async () => {
+        saves++;
+      },
+    },
+    setNoodlePromptDraft: (value: string) => {
+      draft = value;
+    },
+    setPromptPresetDialogOpen: () => undefined,
+    toast: { success: () => undefined, error: () => assert.fail("Preset application failed") },
+  };
+  const apply = runInNewContext(stripTypeScriptTypes(`${applySource}\napplyPromptPreset;`), context);
+  await apply(valid);
+  assert.equal(confirmations, 1, "a different saved preset must warn even after the active prompt was saved");
+  assert.equal(saves, 0, "Cancel must not persist the selected preset");
+  assert.equal(draft, context.noodlePromptDraft, "Cancel must preserve the current prompt");
+  confirmed = true;
+  await apply(valid);
+  assert.equal(saves, 1);
+  assert.equal(draft, valid.template);
+  context.noodlePromptDraft = valid.template;
+  await apply(valid);
+  assert.equal(confirmations, 2, "an identical preset does not replace any text");
+}
+
+void verifyApplyConfirmation();

@@ -134,7 +134,7 @@ export function startNoodleRefreshScheduler(
     try {
       const now = new Date();
       const settings = await noodle.getSettings();
-      let schedule = await noodle.ensureRefreshSchedule(now, settings);
+      let schedule = await noodle.ensureRefreshSchedule(now);
       const retryAt = schedule.nextAttemptAt ? Date.parse(schedule.nextAttemptAt) : Number.NaN;
       if (Number.isFinite(retryAt) && retryAt > now.getTime()) {
         nextDelay = nextNoodleSchedulerPollDelayMs(schedule, now);

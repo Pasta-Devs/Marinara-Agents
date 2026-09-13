@@ -45,6 +45,7 @@ import {
   ltmStatusResponseSchema,
   ltmWriteScopeSchema,
   ltmScopeSchema,
+  type LtmScope,
   ltmSectionKeySchema,
   ltmSectionSchema,
   ltmStatusSchema,
@@ -728,6 +729,7 @@ export function createLongTermMemoryRoutes(runtime: {
           .map((chat) => ({
             id: chat.id,
             label: getLtmChatDisplayName(chat) || "Untitled chat",
+            chatName: chat.name?.trim() || "Untitled chat",
             mode: ltmModeForChatMode(chat.mode),
             groupId: chat.groupId,
             personaId: chat.personaId,
@@ -735,6 +737,11 @@ export function createLongTermMemoryRoutes(runtime: {
           }))
           .sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id)),
       );
+      const memoryPresence: LtmScope[] = [];
+      for (const note of notes) {
+        if (note.type === "source") continue;
+        memoryPresence.push(note.scope);
+      }
       const resourceById = new Map(eligibleResources.map((resource) => [resource.id, resource]));
       const visibleCharacterIds = includeAllChats
         ? new Set(eligibleResources.map((resource) => resource.id))
@@ -755,6 +762,7 @@ export function createLongTermMemoryRoutes(runtime: {
       );
       return {
         currentScope: currentChat ? resolveChatLtmScope(currentChat) : null,
+        memoryPresence,
         chats: namedChats,
         groups: numberDuplicateLabels(
           [...groupIds]
@@ -941,10 +949,19 @@ export function createLongTermMemoryRoutes(runtime: {
         }
       },
     );
-    app.post<{ Body: unknown }>("/import/preview", { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES }, async (request) =>
-      ltmInteropPreviewResponseSchema.parse(
-        await previewPackageInterop(ltmInteropPreviewRequestSchema.parse(request.body ?? {}), root),
-      ),
+    app.post<{ Body: unknown }>(
+      "/import/preview",
+      { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES },
+      async (request, reply) => {
+        try {
+          return ltmInteropPreviewResponseSchema.parse(
+            await previewPackageInterop(ltmInteropPreviewRequestSchema.parse(request.body ?? {}), root),
+          );
+        } catch (error) {
+          const result = routeError(error, "Could not load long-term memory source previews.");
+          return reply.status(result.statusCode).send(result.body);
+        }
+      },
     );
     app.post<{ Body: unknown }>(
       "/import/source-details",
@@ -963,10 +980,16 @@ export function createLongTermMemoryRoutes(runtime: {
     app.post<{ Body: unknown }>(
       "/import/lorebooks/preview",
       { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES },
-      async (request) =>
-        ltmLorebookPreviewResponseSchema.parse(
-          await previewPackageLorebooks(ltmLorebookPreviewRequestSchema.parse(request.body ?? {}), root),
-        ),
+      async (request, reply) => {
+        try {
+          return ltmLorebookPreviewResponseSchema.parse(
+            await previewPackageLorebooks(ltmLorebookPreviewRequestSchema.parse(request.body ?? {}), root),
+          );
+        } catch (error) {
+          const result = routeError(error, "Could not load long-term memory lorebook previews.");
+          return reply.status(result.statusCode).send(result.body);
+        }
+      },
     );
     app.post<{ Body: unknown }>(
       "/import/source-notes",

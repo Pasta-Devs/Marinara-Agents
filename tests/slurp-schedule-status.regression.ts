@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { stripTypeScriptTypes } from "node:module";
 import { join } from "node:path";
+import { runInNewContext } from "node:vm";
 
 import { resolveSlurpCreatorScheduleStatus } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-creator-schedule-context.js";
+import {
+  reconcileNoodleRefreshSchedule,
+  type PersistedNoodleRefreshSchedule,
+} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-refresh-schedule.js";
 
 async function main() {
   // A Tuesday, so "this week" starts on the Monday before it.
@@ -101,6 +107,37 @@ async function main() {
     );
     assert.equal(status.state, "missing", `unexpected status for ${JSON.stringify(bad)}`);
   }
+
+  // Execute the actual legacy storage method: its disabled refresh schedule must
+  // not depend on reading unrelated settings or write again when already current.
+  const legacyStorage = readFileSync(
+    new URL("../packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts", import.meta.url),
+    "utf8",
+  );
+  const scheduleMethod = legacyStorage.slice(
+    legacyStorage.indexOf("async ensureRefreshSchedule("),
+    legacyStorage.indexOf("async listAccounts()"),
+  );
+  let stored: PersistedNoodleRefreshSchedule | null = null;
+  let scheduleWrites = 0;
+  const storage = {
+    getSettings: async () => {
+      throw new Error("The disabled legacy refresh schedule does not need settings");
+    },
+    getRefreshSchedule: async () => stored,
+    saveRefreshSchedule: async (value: PersistedNoodleRefreshSchedule) => {
+      stored = value;
+      scheduleWrites += 1;
+    },
+  };
+  const ensureRefreshSchedule = runInNewContext(stripTypeScriptTypes(`({${scheduleMethod}})`), {
+    reconcileNoodleRefreshSchedule,
+  }).ensureRefreshSchedule as (this: typeof storage, at: Date) => Promise<PersistedNoodleRefreshSchedule>;
+  const initialized = await ensureRefreshSchedule.call(storage, now);
+  assert.equal(initialized.refreshesPerDay, 0);
+  assert.deepEqual(initialized.scheduledTimes, []);
+  assert.equal(await ensureRefreshSchedule.call(storage, now), initialized);
+  assert.equal(scheduleWrites, 1);
 }
 
 void main();

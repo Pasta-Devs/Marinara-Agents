@@ -2,7 +2,7 @@
 // client has no route that serves CHANGELOG.md. So the notes are mirrored here, and
 // `tests/slurp2-release-notes.regression.ts` fails the build if this file drifts from
 // `packages/slurp2/CHANGELOG.md` or from the version in `manifest.json`.
-export const SLURP2_VERSION = "0.0.4";
+export const SLURP2_VERSION = "0.0.6";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -12,6 +12,23 @@ export interface Slurp2ReleaseEntry {
 
 /** Newest first, same order as CHANGELOG.md. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.0.6",
+    date: "2026-09-13",
+    notes: [
+      "Added image context options for reactions: stored prompts, vision descriptions, or automatic selection. Public fan reactions keep locked images hidden and respect Creator identity privacy.",
+      "Generation now shows how many Creators remain, including skipped or failed requests.",
+      "Restored visible success and error notifications for Slurp actions.",
+    ],
+  },
+  {
+    version: "0.0.5",
+    date: "2026-09-13",
+    notes: [
+      "Made the welcome screen shorter, put Gunterlie beside the greeting, linked Slurp General, and tucked older release notes behind an expander.",
+      "Corrected older ad ratings, fallback handles, onboarding text, and invalid digest account errors.",
+    ],
+  },
   {
     version: "0.0.4",
     date: "2026-09-12",
@@ -58,3 +75,10 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
     ],
   },
 ];
+
+/** Everything newer than the acknowledged version. Fresh installs and versions that have rolled
+ *  off the retained history receive the full list, with the splash deciding what to expand. */
+export function getSlurp2UnseenReleases(seenVersion: string | null): Slurp2ReleaseEntry[] {
+  const seenIndex = seenVersion === null ? -1 : SLURP2_RELEASES.findIndex((release) => release.version === seenVersion);
+  return seenIndex === -1 ? SLURP2_RELEASES : SLURP2_RELEASES.slice(0, seenIndex);
+}

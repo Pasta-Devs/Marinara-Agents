@@ -215,6 +215,23 @@ async function main() {
   ]);
   assert.equal(sourceHashMismatch.outcome.droppedCandidates[0]?.validatorCode, "source_hash_mismatch");
 
+  const invalidTimelineSection = unit(chat, {
+    bucket: "timeline_event",
+    subjectId: "argument_strained_trust",
+    sectionKey: "facts",
+    text: "Alice and Rowan argued, straining their trust.",
+    links: [{ target: chat.id, relation: "extracted_from" }],
+  });
+  const invalidTimelineResult = compile(chat, [invalidTimelineSection]);
+  const invalidTimelineDrop = invalidTimelineResult.outcome.droppedCandidates[0];
+  assert.equal(invalidTimelineDrop?.validatorCode, "invalid_timeline_section");
+  assert.equal(invalidTimelineDrop?.recoveryCandidate?.text, invalidTimelineSection.text);
+  assert.equal(invalidTimelineDrop?.recoveryCandidate?.sourceHash, invalidTimelineSection.sourceHash);
+  assert.deepEqual(invalidTimelineDrop?.recoveryCandidate?.evidence, invalidTimelineSection.evidence);
+  const repairedTimelineResult = compile(chat, [{ ...invalidTimelineDrop!.recoveryCandidate!, sectionKey: "event" }]);
+  assert.equal(repairedTimelineResult.outcome.droppedCandidates.length, 0);
+  assert.equal(repairedTimelineResult.accounting.keptUnits, 1);
+
   const relationshipWithEvent = compile(chat, [
     unit(chat, {
       bucket: "timeline_event",

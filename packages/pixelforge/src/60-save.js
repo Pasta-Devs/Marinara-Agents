@@ -1473,13 +1473,14 @@ PF.save = {
    *  refused request are the same screen but not the same sentence, and a
    *  deterministic 400 that reads as a mystery is a player pressing a button that
    *  will never work. Absent for the throw path, which has no verdict to report. */
-  _failGate(core, kind, stage) {
+  _failGate(core, kind, stage, detail) {
     if (!this.gateHolds(core)) return;
     this.gate = {
       ...this.gate,
       state: "failed",
       attempts: this.gate.attempts + 1,
       failure: typeof kind === "string" && kind ? kind : null,
+      failureDetail: detail ?? null,
       // WHICH CALL FAILED, carried onto the failure because the two are not the
       // same news. A brief-stage failure means the setting is still open; a
       // pack-stage one means it is spent and kept, and only the work posted in the
@@ -1523,7 +1524,7 @@ PF.save = {
    *  the setting is written and settled, and a screen that says the save failed
    *  beside a screen that says the world is safe is one a player has to guess
    *  at. What did not store at the pack stage is the WORK, not the world. */
-  gateReason(kind, stage) {
+  gateReason(kind, stage, detail) {
     // THE TWO STAGE-FORKED KINDS ARE THE ROW'S NOW (0.16 §2.10a). They used to
     // be ternaries here, which is a shape that costs one edit per kind per new
     // stage; the rest of the switch is genuinely cross-stage and stays shared.
@@ -1547,7 +1548,17 @@ PF.save = {
       // generic below rather than borrowing another stage's sentence.
       case "unavailable":
         return "The engine could not take the request just now — it may be busy with something else.";
+      case "request_too_large":
+        return "The selected lorebook entries make this request too large to send. Untick some entries and try again.";
       case "context_limit":
+        if (
+          Number.isFinite(detail?.estimatedInputTokens) &&
+          detail.estimatedInputTokens >= 0 &&
+          Number.isFinite(detail?.inputBudget) &&
+          detail.inputBudget >= 0
+        ) {
+          return `This request needs about ${Math.ceil(detail.estimatedInputTokens).toLocaleString()} input tokens; the connection allows ${Math.floor(detail.inputBudget).toLocaleString()}. Reduce the request or choose a connection with a larger context.`;
+        }
         return "The selected lore and world request exceed the model’s context limit. Choose fewer lorebook entries or a connection with a larger context.";
       case "network":
         return "The request did not get through.";
@@ -1655,9 +1666,10 @@ PF.save = {
    *  — what did not finish and what it costs to try again — and dropping the
    *  world's name into a sentence about a call that was refused buys nothing the
    *  title above does not already say. */
-  gateBody(stage, state, kind, postStart, cascaded, worldName) {
+  gateBody(stage, state, kind, postStart, cascaded, worldName, detail) {
     const row = this.stage(stage) ?? this.stage("brief");
-    if (state === "failed") return `${this.gateReason(kind, stage)} ${this.gateStageNote(stage, postStart, cascaded)}`;
+    if (state === "failed")
+      return `${this.gateReason(kind, stage, detail)} ${this.gateStageNote(stage, postStart, cascaded)}`;
     const named = typeof worldName === "string" ? worldName.trim() : "";
     return named ? row.screens.generating.bodyNamed(named) : row.screens.generating.body;
   },
@@ -2182,6 +2194,7 @@ PF.save = {
       // READ-SITE 1 — the call-one gate: the intended override.
       if (briefWanted || force === "brief") {
         let failure = null;
+        let failureDetail;
         sealed = await PF.brief.generate(chatId, {
           // RUNG 2, and it is passed for that reason rather than as a legacy hint:
           // `generate()`'s `theme` is exactly what reaches `validate()`'s second
@@ -2198,8 +2211,9 @@ PF.save = {
           // preferences against that field's 8,000-character cap. Empty is the
           // ordinary case and sends no key at all.
           lorebookEntryIds: this._configLoreEntryIds(meta),
-          onFailure: (kind) => {
+          onFailure: (kind, detail) => {
             failure = kind;
+            failureDetail = detail;
           },
         });
         if (!sealed) {
@@ -2210,7 +2224,7 @@ PF.save = {
           // escape on any branch: sealing a default world for a player who wrote
           // three paragraphs of setting is the outcome ruling #7 exists to forbid,
           // and a deterministic failure is the one case they could never undo.
-          if (chatId === core.chatId) this._failGate(core, failure, "brief");
+          if (chatId === core.chatId) this._failGate(core, failure, "brief", failureDetail);
           return;
         }
         // THE SEAL PATCH CARRIES THE MARKER'S COPY (plan §2.2a). One PATCH, two
@@ -2307,20 +2321,22 @@ PF.save = {
       if (wantPack) {
         this._stageGate(core, "pack");
         let failure = null;
+        let failureDetail;
         const pack = await PF.pack.generate(chatId, {
           theme,
           seed,
           brief: sealed,
           preferences,
-          onFailure: (kind) => {
+          onFailure: (kind, detail) => {
             failure = kind;
+            failureDetail = detail;
           },
         });
         if (!pack) {
           // THE WORLD IS ALREADY SAFE HERE, which is the whole difference between
           // this failure and the one above: the brief is sealed and stored, so the
           // retry screen says so and the retry costs one call, not a world.
-          if (chatId === core.chatId) this._failGate(core, failure, "pack");
+          if (chatId === core.chatId) this._failGate(core, failure, "pack", failureDetail);
           return;
         }
         const packStored = await storeWithRetry(

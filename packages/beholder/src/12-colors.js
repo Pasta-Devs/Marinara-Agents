@@ -10,25 +10,6 @@
 // compare-after-normalize semantics. The synonym map must stay in sync with the
 // server-side color normalizer the extractor was trained against.
 
-const COLOR_PALETTE = [
-  "red",
-  "orange",
-  "yellow",
-  "green",
-  "blue",
-  "purple",
-  "pink",
-  "brown",
-  "black",
-  "white",
-  "gray",
-  "beige",
-  "gold",
-  "silver",
-  "navy",
-  "tan",
-];
-
 // Conservative: only true synonyms (same color, different word) + the grey/gray
 // spelling variant. Distinct shades (cream, gunmetal, maroon, teal, …) are absent.
 const COLOR_SYNONYMS = new Map([

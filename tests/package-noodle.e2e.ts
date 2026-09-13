@@ -63,6 +63,21 @@ async function openNoodle(page: Page) {
   await welcomeDialog.getByRole("button", { name: "Start reading" }).click();
 }
 
+async function openNoodleSettings(page: Page) {
+  const noodle = page.locator('[data-component="NoodleView"]');
+  const mobileNav = noodle.locator('[data-component="NoodleView.MobileBottomNav"]');
+  if (await mobileNav.isVisible()) {
+    await mobileNav.getByRole("button", { name: "Open Noodle account menu" }).click();
+    await page
+      .getByRole("dialog", { name: "Noodle account menu" })
+      .getByRole("button", { name: "Settings", exact: true })
+      .click();
+  } else {
+    await noodle.getByRole("button", { name: "Settings", exact: true }).click();
+  }
+  await expect(noodle.getByRole("heading", { name: "Noodle settings" })).toBeVisible();
+}
+
 async function setStoredTheme(page: Page, theme: "dark" | "light") {
   const updatedAt = Date.now() + 1_000;
   const response = await page.request.get("/api/app-settings/ui");
@@ -135,6 +150,145 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.describe("package-owned Noodle interface", () => {
+  test("timeline posts can be edited, cancelled, and saved", async ({ page }, testInfo) => {
+    const errors = collectUnexpectedErrors(page);
+    const bootstrapResponse = await page.request.get("/api/noodle");
+    expect(bootstrapResponse.ok()).toBe(true);
+    const bootstrap = (await bootstrapResponse.json()) as {
+      accounts: Array<{ entityId: string; kind: string; invited: boolean }>;
+    };
+    const author = bootstrap.accounts.find((account) => account.kind === "character" && account.invited);
+    expect(author).toBeDefined();
+    const originalContent = `Post editing regression ${Date.now()}`;
+    const postResponse = await page.request.post("/api/noodle/posts", {
+      data: { authorKind: "character", authorEntityId: author!.entityId, content: originalContent },
+    });
+    expect(postResponse.ok()).toBe(true);
+    const post = (await postResponse.json()) as { id: string };
+    let updates = 0;
+    page.on("request", (request) => {
+      if (request.method() === "PATCH" && new URL(request.url()).pathname === `/api/noodle/posts/${post.id}`)
+        updates += 1;
+    });
+    try {
+      await page.goto("/");
+      await openNoodle(page);
+      const article = page.locator(`[data-noodle-post-id="${post.id}"]`);
+      await expect(article).toContainText(originalContent);
+      await article.getByRole("button", { name: "Post actions", exact: true }).click();
+      await article.getByRole("button", { name: "Edit", exact: true }).click();
+      const editor = article.getByPlaceholder("What's simmering?");
+      await expect(editor).toHaveValue(originalContent);
+      await editor.fill("A cancelled edit must not be saved.");
+      await article.getByRole("button", { name: "Cancel", exact: true }).click();
+      await expect(editor).not.toBeVisible();
+      await expect(article).toContainText(originalContent);
+      expect(updates).toBe(0);
+
+      await article.getByRole("button", { name: "Post actions", exact: true }).click();
+      await article.getByRole("button", { name: "Edit", exact: true }).click();
+      await expect(editor).toHaveValue(originalContent);
+      const editedContent = `${originalContent}, now saved.`;
+      await editor.fill(editedContent);
+      await page.screenshot({ path: testInfo.outputPath("noodle-post-editing.png") });
+      const saveResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === "PATCH" &&
+          new URL(response.url()).pathname === `/api/noodle/posts/${post.id}`,
+      );
+      await article.getByRole("button", { name: "Save", exact: true }).click();
+      expect((await saveResponse).ok()).toBe(true);
+      await expect(editor).not.toBeVisible();
+      await expect(article).toContainText(editedContent);
+      const posts = (await (await page.request.get("/api/noodle/posts")).json()) as Array<{
+        id: string;
+        content: string;
+      }>;
+      expect(posts.find((entry) => entry.id === post.id)?.content).toBe(editedContent);
+      expect(updates).toBe(1);
+      expect(errors).toEqual([]);
+    } finally {
+      await page.request.delete(`/api/noodle/posts/${post.id}`, { timeout: 5_000 }).catch(() => undefined);
+    }
+  });
+
+  test("Delete All Noodle Data can be cancelled before typing DELETE", async ({ page }, testInfo) => {
+    let deletions = 0;
+    page.on("request", (request) => {
+      if (request.method() === "DELETE" && new URL(request.url()).pathname === "/api/noodle/data") deletions += 1;
+    });
+    await page.goto("/");
+    await openNoodle(page);
+    const noodle = page.locator('[data-component="NoodleView"]');
+    await openNoodleSettings(page);
+    await noodle.getByRole("button", { name: "Advanced", exact: true }).click();
+    await noodle.getByRole("button", { name: "Delete All Noodle Data", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Delete All Noodle Data", exact: true });
+    await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeEnabled();
+    await expect(dialog.getByRole("button", { name: "Delete All Data", exact: true })).toBeDisabled();
+    await expect(dialog.locator(".mari-modal-panel")).toHaveCSS("opacity", "1");
+    await page.screenshot({ path: testInfo.outputPath("delete-all-cancel.png") });
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(dialog).not.toBeVisible();
+    await noodle.getByRole("button", { name: "Delete All Noodle Data", exact: true }).click();
+    await dialog.getByRole("textbox", { name: "DELETE", exact: true }).fill("DELETE");
+    await expect(dialog.getByRole("button", { name: "Delete All Data", exact: true })).toBeEnabled();
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(dialog).not.toBeVisible();
+    expect(deletions).toBe(0);
+  });
+
+  test("saved prompt replacement confirms before changing the active custom prompt", async ({ page }, testInfo) => {
+    const promptPath = "/api/prompt-overrides/noodle.timelineBase";
+    const initialDetail = (await (await page.request.get(promptPath)).json()) as {
+      override: { template: string; enabled: boolean } | null;
+    };
+    const initialBootstrap = (await (await page.request.get("/api/noodle")).json()) as {
+      settings: { promptPresets?: unknown[] };
+    };
+    const preset = {
+      name: "Replacement confirmation fixture",
+      key: "noodle.timelineBase",
+      template: "A saved timeline prompt.",
+    };
+    const activePrompt = "My edited active timeline prompt, not saved on the preset shelf.";
+    try {
+      expect((await page.request.put(promptPath, { data: { template: activePrompt, enabled: true } })).ok()).toBe(true);
+      expect((await page.request.put("/api/noodle/settings", { data: { promptPresets: [preset] } })).ok()).toBe(true);
+      await page.goto("/");
+      await openNoodle(page);
+      const noodle = page.locator('[data-component="NoodleView"]');
+      await openNoodleSettings(page);
+      await noodle.getByRole("button", { name: "Advanced", exact: true }).click();
+      const promptSetting = noodle.locator('[data-component="NoodleView.PromptSetting"]');
+      await expect(promptSetting).toContainText(activePrompt);
+      await promptSetting.getByRole("combobox", { name: "Saved prompts", exact: true }).selectOption(preset.name);
+      const dialog = page.getByRole("dialog", { name: "Replace current prompt?", exact: true });
+      await expect(dialog).toContainText("including any unsaved edits");
+      await expect(dialog.locator(".mari-modal-panel")).toHaveCSS("opacity", "1");
+      await page.screenshot({ path: testInfo.outputPath("prompt-replacement-confirmation.png") });
+      await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+      await expect(dialog).not.toBeVisible();
+      await expect(promptSetting).toContainText(activePrompt);
+      expect(
+        ((await (await page.request.get(promptPath)).json()) as { override: { template: string } }).override.template,
+      ).toBe(activePrompt);
+      await promptSetting.getByRole("combobox", { name: "Saved prompts", exact: true }).selectOption(preset.name);
+      await dialog.getByRole("button", { name: "Apply preset", exact: true }).click();
+      await expect(dialog).not.toBeVisible();
+      await expect(promptSetting).toContainText(preset.template);
+      expect(
+        ((await (await page.request.get(promptPath)).json()) as { override: { template: string } }).override.template,
+      ).toBe(preset.template);
+    } finally {
+      if (initialDetail.override) await page.request.put(promptPath, { data: initialDetail.override });
+      else await page.request.delete(promptPath);
+      await page.request.put("/api/noodle/settings", {
+        data: { promptPresets: initialBootstrap.settings.promptPresets ?? [] },
+      });
+    }
+  });
+
   test("Noodle interface icons consistently use Noodle blue", async ({ page }, testInfo) => {
     test.skip(!testInfo.project.name.includes("desktop"), "The full Noodle settings surface is covered on desktop.");
 

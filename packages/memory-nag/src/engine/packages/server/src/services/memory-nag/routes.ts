@@ -3,7 +3,7 @@ import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { normalizeMemoryNagSettings } from "../../../../shared/src/features/agents/memory-nag/schema.js";
 import { loadMemoryNagParticipants } from "./participants.js";
 import { getMemoryNagRuntime } from "./package-runtime.js";
-import { scanMemoryNagBatch } from "./scanner.js";
+import { scanMemoryNagBatch, startMemoryNagRangeScan, endMemoryNagRangeScan } from "./scanner.js";
 import { readMemoryNagVault, updateMemoryNagVault } from "./vault.js";
 
 function requiredId(value: unknown, label: string): string {
@@ -87,6 +87,23 @@ export const memoryNagRoutes: FastifyPluginAsync = async (app) => {
         .map((message) => message.id),
     };
   });
+
+  app.post<{ Params: { chatId: string }; Body: unknown }>("/scan/:chatId/range", roleplayOnly, async (request) => {
+    return startMemoryNagRangeScan(requiredId(request.params.chatId, "Chat ID"), request.body);
+  });
+
+  app.delete<{ Params: { chatId: string; scanId: string } }>(
+    "/scan/:chatId/range/:scanId",
+    roleplayOnly,
+    async (request) => {
+      return {
+        released: endMemoryNagRangeScan(
+          requiredId(request.params.chatId, "Chat ID"),
+          requiredId(request.params.scanId, "Scan ID"),
+        ),
+      };
+    },
+  );
 
   app.post<{ Params: { chatId: string }; Body: unknown }>("/scan/:chatId", roleplayOnly, async (request) => {
     return scanMemoryNagBatch(requiredId(request.params.chatId, "Chat ID"), request.body);

@@ -2,7 +2,6 @@ import type { LtmNote } from "../../../../shared/src/features/agents/long-term-m
 import {
   getLtmActiveKeywords,
   getLtmKeywordIntent,
-  ltmKeywordKey,
 } from "../../../../shared/src/features/agents/long-term-memory/keywords.js";
 
 const TOKEN_PATTERN = /[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*/gu;

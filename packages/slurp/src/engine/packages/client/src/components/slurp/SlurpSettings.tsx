@@ -156,6 +156,7 @@ export function SlurpSettings({
   const [imagePromptInterpretationEditorOpen, setImagePromptInterpretationEditorOpen] = useState(false);
   const [refreshModalOpen, setRefreshModalOpen] = useState(false);
   const [refreshAccountIds, setRefreshAccountIds] = useState<Set<string>>(new Set());
+  const [refreshRemaining, setRefreshRemaining] = useState(0);
   const [refreshAccess, setRefreshAccess] = useState<"public" | "locked">("locked");
   const [scheduleCreatorId, setScheduleCreatorId] = useState<string | null>(null);
   useEffect(() => {
@@ -183,7 +184,7 @@ export function SlurpSettings({
   const updateAuto = useUpdateNoodlerAutoPosting();
   const updateScheduleSlot = useUpdateNoodlerScheduleSlot();
   const refreshFans = useRefreshNoodlerFanActivityNow();
-  const refreshCreators = useRefreshTargetedNoodlerCreatorsNow();
+  const refreshCreators = useRefreshTargetedNoodlerCreatorsNow(setRefreshRemaining);
   const updateImages = useUpdateSlurpImageConnections();
   const deleteCreator = useDeleteNoodlerStageProfile();
   const deleteAllData = useDeleteAllSlurpData();
@@ -445,6 +446,21 @@ export function SlurpSettings({
           {section === "images" && (
             <div className="space-y-6">
               <SectionTitle title={t("ui.slurp.settings.images.title")} detail={t("ui.slurp.settings.images.detail")} />
+              <Field
+                label={t("ui.slurp.settings.images.contextMode")}
+                detail={t("ui.slurp.settings.images.contextModeDetail")}
+              >
+                <select
+                  value={settings.imageContextMode}
+                  disabled={updateSettings.isPending}
+                  onChange={(event) => void update("imageContextMode", event.target.value)}
+                  className="h-10 w-full rounded-md border border-[var(--border)] bg-transparent px-3 text-sm disabled:opacity-50"
+                >
+                  <option value="auto">{t("ui.slurp.settings.images.contextAuto")}</option>
+                  <option value="imagePrompt">{t("ui.slurp.settings.images.contextPrompt")}</option>
+                  <option value="vision">{t("ui.slurp.settings.images.contextVision")}</option>
+                </select>
+              </Field>
               <GuidanceBox
                 title={t("ui.slurp.settings.images.howTitle")}
                 detail={t("ui.slurp.settings.images.howDetail")}
@@ -1027,6 +1043,7 @@ export function SlurpSettings({
                 <button
                   type="button"
                   onClick={() => setRefreshAccountIds(new Set(automationCreators.map((creator) => creator.id)))}
+                  disabled={refreshCreators.isPending}
                   className="text-[var(--noodle-accent)] hover:underline"
                 >
                   {t("ui.slurp.settings.refresh.selectAll")}
@@ -1034,6 +1051,7 @@ export function SlurpSettings({
                 <button
                   type="button"
                   onClick={() => setRefreshAccountIds(new Set())}
+                  disabled={refreshCreators.isPending}
                   className="text-[var(--muted-foreground)] hover:underline"
                 >
                   {t("ui.slurp.settings.refresh.clear")}
@@ -1049,6 +1067,7 @@ export function SlurpSettings({
                   <input
                     type="checkbox"
                     checked={refreshAccountIds.has(creator.id)}
+                    disabled={refreshCreators.isPending}
                     onChange={(event) =>
                       setRefreshAccountIds((current) => {
                         const next = new Set(current);
@@ -1079,6 +1098,7 @@ export function SlurpSettings({
                   key={access}
                   type="button"
                   aria-pressed={refreshAccess === access}
+                  disabled={refreshCreators.isPending}
                   onClick={() => setRefreshAccess(access)}
                   className={`min-h-10 rounded-md text-sm font-semibold capitalize ${refreshAccess === access ? "bg-[var(--noodle-accent)] text-zinc-950" : "text-[var(--muted-foreground)] hover:bg-[var(--accent)]"}`}
                 >
@@ -1122,7 +1142,11 @@ export function SlurpSettings({
               className="inline-flex min-h-10 items-center gap-2 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-50"
             >
               {refreshCreators.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-              {t("ui.slurp.settings.refresh.generate", { count: refreshAccountIds.size || "" })}
+              <span role={refreshCreators.isPending ? "status" : undefined}>
+                {refreshCreators.isPending
+                  ? t("ui.slurp.settings.refresh.remaining", { count: refreshRemaining })
+                  : t("ui.slurp.settings.refresh.generate", { count: refreshAccountIds.size || "" })}
+              </span>
             </button>
           </div>
         </div>

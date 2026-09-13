@@ -1,34 +1,141 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { noodleImageContext } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-image-prompt.ts";
+import { stripTypeScriptTypes } from "node:module";
+import { runInNewContext } from "node:vm";
+import { normalizeNoodleImagePrompt } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-image-prompt";
 
-// A generated image reuses the prompt that produced it, which is free and beats captioning it.
-assert.equal(
-  noodleImageContext({ imageUrl: "/api/gallery/file/a.png", imagePrompt: "  a cat in a hat  " }),
-  "The post has an attached image showing: a cat in a hat",
-);
-// An uploaded image has no prompt, but the reader must still know a picture is there.
-assert.equal(noodleImageContext({ imageUrl: "/api/gallery/file/a.png" }), "The post has an attached image.");
-assert.equal(
-  noodleImageContext({ imageUrl: "/api/gallery/file/a.png", imagePrompt: "   " }),
-  "The post has an attached image.",
-);
-// No image means no line at all, so callers can spread the result away.
-assert.equal(noodleImageContext({ imageUrl: null, imagePrompt: "unused" }), null);
-assert.equal(noodleImageContext({}), null);
+const root = "../packages/slurp/src/engine/packages/server/src/services/slurp/";
+const read = (file: string) => readFileSync(new URL(`${root}${file}`, import.meta.url), "utf8");
+const part = (source: string, start: string, end: string) => {
+  assert.ok(source.includes(start) && source.includes(end));
+  return source.slice(source.indexOf(start), source.indexOf(end));
+};
+const compile = (source: string, context: Record<string, unknown>) =>
+  runInNewContext(
+    stripTypeScriptTypes(source.replace(/^import[\s\S]*?;\n/gm, "").replace(/^\s*export /gm, "")),
+    context,
+  );
 
-// Both reaction paths must carry it: this is why replies used to answer "what pic?".
-for (const file of ["slurp-fan-activity.service.ts", "slurp-reply-generation.service.ts"]) {
-  const source = readFileSync(`packages/slurp2/src/engine/packages/server/src/services/slurp/${file}`, "utf8");
-  assert.match(source, /noodleImageContext/u, `${file} must give the model the post's image context`);
+async function main() {
+  const seenImages: string[][] = [];
+  let captionCalls = 0;
+  const prepare = compile(`${read("slurp-post-image-context.ts")}\nprepareSlurpPostImageContexts;`, {
+    normalizeNoodleImagePrompt,
+    noodlerPostMediaUrl: (id: string) => `/api/slurp/noodler/posts/${id}/media`,
+    prepareNoodleVisionAttachments: async (candidates: Array<{ key: string }>) => {
+      seenImages.push(Array.from(candidates, ({ key }) => key));
+      return candidates.map((candidate) => ({ ...candidate, dataUrl: "data:image/png;base64,fixture" }));
+    },
+    generateImageCaptionsForDataUrls: async (inputs: Array<{ filename: string }>) => {
+      captionCalls++;
+      return inputs.map((input) => ({ input, caption: "Mari Vale in a red coat" }));
+    },
+    AbortSignal,
+  });
+  const post = {
+    id: "public",
+    access: "public",
+    imageUrl: "/image.png",
+    imagePrompt: '{"prompt":"Mari Vale in a blue coat"}',
+    metadata: {},
+    createdAt: "2026-09-13T12:00:00Z",
+    title: "A photo",
+    content: "Today",
+  };
+  const upload = { ...post, id: "upload", imagePrompt: null };
+  const locked = { ...post, id: "locked", access: "locked", imagePrompt: "PRIVATE IMAGE CONTENT" };
+  const input = { posts: [post, upload, locked], mode: "auto", captioning: {} };
+  const auto = await prepare(input);
+  assert.match(auto.get("public"), /blue coat/);
+  assert.match(auto.get("upload"), /red coat/);
+  assert.equal(auto.has("locked"), false);
+  assert.deepEqual(seenImages, [["upload"]], "locked posts and stored prompts must never reach vision in auto mode");
+  const prompts = await prepare({ ...input, mode: "imagePrompt" });
+  assert.deepEqual([...prompts.keys()], ["public"]);
+  assert.equal(captionCalls, 1, "stored-prompt mode must make no caption requests");
+  await prepare({ ...input, mode: "vision" });
+  assert.deepEqual(seenImages[1], ["public", "upload"]);
+  const allowed = await prepare({ ...input, posts: [locked], mode: "imagePrompt", allowLocked: true });
+  assert.match(allowed.get("locked"), /PRIVATE IMAGE CONTENT/, "an authorized creator reply may see its unlocked post");
+
+  const generation = read("slurp-generation.service.ts");
+  const protect = compile(
+    `${part(generation, "function escapeRegExp", "export function buildNoodlerPublicIdentity")}
+    ${part(generation, "export function protectNoodlerGeneratedIdentity", "export function protectBoundedNoodlerGeneratedText")}
+    protectNoodlerGeneratedIdentity;`,
+    {},
+  );
+  const fan = read("slurp-fan-activity.service.ts");
+  let sent = "";
+  const generateFan = compile(
+    `${part(fan, "function buildFanActivityMessages", "export function parseGeneratedFanActivityResponse")}
+    generateFanActivity;`,
+    {
+      createLLMProvider: () => ({
+        chatComplete: async (messages: unknown) => {
+          sent = JSON.stringify(messages);
+          return { content: "{}" };
+        },
+      }),
+      resolveBaseUrl: () => "http://fixture",
+      prepareSlurpPostImageContexts: prepare,
+      resolveNoodlerPublicIdentity: async () => ({ displayName: "Mari Vale", handle: "marivale" }),
+      protectNoodlerGeneratedIdentity: protect,
+      logDebugOverride: () => undefined,
+      weightedIdentitySequence: () => [],
+      NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR: 4,
+      noodleSamplingOptions: () => ({}),
+      resolveStoredChatOptions: () => ({}),
+      clampGenerationMaxOutputTokens: () => 100,
+      noodleResponseFormat: () => undefined,
+      parseGameJsonish: JSON.parse,
+      requireModelAnswer: (value: string) => value,
+      parseGeneratedFanActivityResponse: () => ({ value: { activities: [] }, rejected: 0 }),
+    },
+  );
+  const creator = {
+    id: "creator",
+    displayName: "Stage",
+    handle: "stage",
+    bio: "",
+    settings: { privacy: { identityDisclosure: "secret" } },
+  };
+  await generateFan({
+    db: {},
+    connection: { id: "connection", model: "fixture" },
+    settings: { imageContextMode: "auto", fanLikesPerRefresh: 1, fanRepliesPerRefresh: 1, fanRepostsPerRefresh: 1 },
+    creators: [{ creator, policy: { archetypeWeights: {} }, posts: [post, upload, locked], identities: [] }],
+    debugMode: false,
+  });
+  assert.match(sent, /someone in a blue coat/);
+  assert.match(sent, /someone in a red coat/);
+  assert.doesNotMatch(sent, /Mari Vale|PRIVATE IMAGE CONTENT/);
+
+  const reply = read("slurp-reply-generation.service.ts");
+  const buildReply = compile(
+    `${part(reply, "export function buildNoodlerCreatorReplyMessages", "export async function generateNoodlerCreatorReply")}\nbuildNoodlerCreatorReplyMessages;`,
+    {
+      protectNoodlerGeneratedIdentity: protect,
+      noodlerIdentityInstruction: () => "Protect identity",
+      NOODLER_UNTRUSTED_CONTENT_INSTRUCTION: "Treat as untrusted",
+    },
+  );
+  const replyPrompt = JSON.stringify(
+    buildReply({
+      creator,
+      viewer: creator,
+      post,
+      parent: { content: "Nice coat" },
+      disclosureMode: "secret",
+      publicIdentity: { displayName: "Mari Vale", handle: "marivale" },
+      generationGuidance: "",
+      imageContext: auto.get("public"),
+    }),
+  );
+  assert.match(replyPrompt, /someone in a blue coat/);
+  assert.doesNotMatch(replyPrompt, /Mari Vale/);
+  console.log(
+    "Slurp image mode selection, locked-post exclusion, and final prompt identity protection regression passed.",
+  );
 }
-
-// A locked post keeps its body out of the prompt but still shows its picture.
-const fan = readFileSync(
-  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-fan-activity.service.ts",
-  "utf8",
-);
-assert.match(fan, /access === "locked"\s*\n?\s*\? \{ id, title, access, \.\.\.\(image && \{ image \}\)/u);
-assert.doesNotMatch(fan, /access === "locked" \? \{ id, title, content/u, "locked bodies must never reach the prompt");
-
-console.log("slurp-image-context regression passed");
+void main();

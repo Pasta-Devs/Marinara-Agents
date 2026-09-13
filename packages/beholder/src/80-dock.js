@@ -328,6 +328,14 @@ BH.dock = {
       const card = target.closest(".bh-slot-card[data-slot]");
       if (card) BH.editor.openFor(card);
     });
+    panel.addEventListener("keydown", (event) => {
+      const card = event.target.closest('.bh-slot-card[role="button"]');
+      if (event.target !== card || (event.key !== "Enter" && event.key !== " ")) return;
+      event.preventDefault();
+      if (event.repeat) return;
+      card.click();
+      panel.querySelector('.bh-editor input, .bh-editor select, .bh-editor button, .bh-editor [tabindex="0"]')?.focus();
+    });
 
     this.applyLayers();
     this.syncGeometry();

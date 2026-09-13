@@ -1239,6 +1239,7 @@ function closeSourceEventGraph(units: LtmEvidenceUnit[], sourceNote: LtmNote, ex
         validatorCode: "source_event_graph_open",
         message,
         snippet: safeSnippet(unit.text),
+        recoveryCandidate: unit,
       });
       diagnostics.push({
         severity: "error",

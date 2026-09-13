@@ -701,6 +701,7 @@ function droppedCandidate(
       ? { snippet: safeSnippet(input.snippet ?? input.unit.text)! }
       : {}),
     ...(recovery ? { recovery } : {}),
+    ...(input.unit ? { recoveryCandidate: input.unit } : {}),
   };
 }
 

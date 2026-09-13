@@ -105,7 +105,7 @@ import { DATA_DIR } from "../utils/data-dir.js";
 import { assertInsideDir } from "../utils/security.js";
 import { newId } from "../utils/id-generator.js";
 import { logger, logDebugOverride } from "../lib/logger.js";
-import { llmFetch, type ChatMediaAttachment, type ChatMessage } from "../services/llm/base-provider.js";
+import type { ChatMediaAttachment, ChatMessage } from "../services/llm/base-provider.js";
 
 const SOUNDBOARD_ROOT = join(DATA_DIR, "conversation-call-sounds");
 const ALLOWED_SOUND_EXTS = new Set([".mp3", ".wav", ".ogg", ".webm", ".m4a"]);

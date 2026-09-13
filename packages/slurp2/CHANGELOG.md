@@ -1,5 +1,16 @@
 # Slurp Remastered release notes
 
+## 0.0.6 — 2026-09-13
+
+- Added image context options for reactions: stored prompts, vision descriptions, or automatic selection. Public fan reactions keep locked images hidden and respect Creator identity privacy.
+- Generation now shows how many Creators remain, including skipped or failed requests.
+- Restored visible success and error notifications for Slurp actions.
+
+## 0.0.5 — 2026-09-13
+
+- Made the welcome screen shorter, put Gunterlie beside the greeting, linked Slurp General, and tucked older release notes behind an expander.
+- Corrected older ad ratings, fallback handles, onboarding text, and invalid digest account errors.
+
 ## 0.0.4 — 2026-09-12 [highlight]
 
 - Fixed Refresh Conversation Schedule failing with "chatComplete is not a function". It now creates the schedule.

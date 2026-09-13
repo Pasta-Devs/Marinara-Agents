@@ -97,7 +97,6 @@ import {
 import { resolveNoodlerSourceSnapshot } from "../slurp/slurp-source-resolve.js";
 import { createAppSettingsStorage } from "./app-settings.storage.js";
 import {
-  clearNoodleRefreshFailure,
   noodleRefreshSchedulerStatus,
   parsePersistedNoodleRefreshSchedule,
   reconcileNoodleRefreshSchedule,
@@ -164,6 +163,7 @@ export const slurpSettingsSchema = z.object({
   refreshesPerDay: z.number().int().min(0).max(24),
   generationGuidance: z.string().max(20_000),
   generationConnectionId: z.string().nullable(),
+  imageContextMode: z.enum(["auto", "imagePrompt", "vision"]),
   imageGenerationConnectionId: z.string().nullable(),
   imageGenerationPrompt: z.string(),
   imagePromptInterpretation: z.string().max(20_000),
@@ -686,6 +686,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   refreshesPerDay: 0,
   generationGuidance: NOODLER_DEFAULT_GENERATION_GUIDANCE,
   generationConnectionId: null,
+  imageContextMode: "auto",
   imageGenerationConnectionId: null,
   imageGenerationPrompt: NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT,
   imagePromptInterpretation: NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION,
@@ -1695,11 +1696,7 @@ export function createSlurpStorage(db: DB) {
       await settingsStore.set(NOODLE_REFRESH_SCHEDULE_KEY, JSON.stringify(schedule));
     },
 
-    async ensureRefreshSchedule(
-      at = new Date(),
-      settingsOverride?: SlurpSettings,
-    ): Promise<PersistedNoodleRefreshSchedule> {
-      const settings = settingsOverride ?? (await this.getSettings());
+    async ensureRefreshSchedule(at = new Date()): Promise<PersistedNoodleRefreshSchedule> {
       const current = await this.getRefreshSchedule();
       const reconciled = reconcileNoodleRefreshSchedule(current, 0, at);
       if (!current || JSON.stringify(current) !== JSON.stringify(reconciled)) {

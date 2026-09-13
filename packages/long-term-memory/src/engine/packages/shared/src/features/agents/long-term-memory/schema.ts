@@ -2098,6 +2098,7 @@ export const ltmExtractionDroppedCandidateSchema = z
     snippet: z.string().min(1).max(280).optional(),
     issues: z.array(z.string().trim().min(1).max(240)).max(8).optional(),
     recovery: ltmExtractionRecoveryHintSchema.optional(),
+    recoveryCandidate: ltmEvidenceUnitSchema.optional(),
   })
   .strict();
 
@@ -2402,6 +2403,7 @@ export const ltmInteropPreviewRequestSchema = z
     scope: ltmScopeSchema.optional(),
     mode: ltmModeSchema.optional(),
     query: ltmPreviewQuerySchema,
+    cursor: z.string().min(1).max(2048).optional(),
   })
   .strict();
 
@@ -2454,6 +2456,8 @@ export const ltmInteropPreviewResponseSchema = z
       })
       .strict(),
     truncated: z.boolean(),
+    hasMore: z.boolean().optional(),
+    nextCursor: z.string().max(2048).nullable().optional(),
   })
   .strict()
   .superRefine((response, ctx) => {
@@ -2482,6 +2486,7 @@ export const ltmLorebookPreviewRequestSchema = z
     scope: ltmScopeSchema.optional(),
     mode: ltmModeSchema.optional(),
     query: ltmPreviewQuerySchema,
+    cursor: z.string().min(1).max(2048).optional(),
   })
   .strict();
 
@@ -2569,6 +2574,8 @@ export const ltmLorebookPreviewResponseSchema = z
       books: z.number().int().min(0).max(1_000_000),
     }),
     truncated: z.boolean(),
+    hasMore: z.boolean().optional(),
+    nextCursor: z.string().max(2048).nullable().optional(),
   })
   .strict()
   .superRefine((response, ctx) => {
