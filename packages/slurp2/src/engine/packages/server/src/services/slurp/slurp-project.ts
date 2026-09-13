@@ -1,5 +1,5 @@
 /**
- * A thread a Creator keeps posting about.
+ * A thread a Creator keeps posting about. The player sees these as Arcs.
  *
  * Pure, like `slurp-goal.ts` and `slurp-milestones.ts` beside it.
  *
@@ -11,6 +11,11 @@
  * optionally, an ordered list of chapters to move through. Chapters are plain strings rather than
  * rows because an open-ended project — "she is renovating the flat, no idea how long it takes" —
  * has to cost nothing, and a table would charge for a plan the player never made.
+ *
+ * An arc of a known kind (moving, a new job) starts from a template whose chapters carry day
+ * ranges. A chapter with a range moves on when enough days have passed and a post has shown it, or
+ * when its time runs out; a chapter without one moves on after every post, as projects always did.
+ * Time is what stops a five-chapter move finishing in two days because the Creator posts often.
  *
  * A project never owns the feed. It claims some posts and leaves the rest alone; see
  * `slurp-post-variation.ts` for the rotation that decides which.
@@ -45,6 +50,32 @@ export const SLURP_PROJECT_STATUSES = ["active", "paused", "complete"] as const;
 
 export type SlurpProjectStatus = (typeof SLURP_PROJECT_STATUSES)[number];
 
+export const SLURP_ARC_KINDS = ["custom", "moving", "new_job", "trip", "fitness", "renovation", "breakup"] as const;
+
+export type SlurpArcKind = (typeof SLURP_ARC_KINDS)[number];
+
+/**
+ * How loudly an arc shows in the feed. A focus arc takes twice the project slots of a background
+ * one, and only one arc may be the focus: three equal threads read as no thread at all.
+ */
+export const SLURP_ARC_INTENSITIES = ["background", "focus"] as const;
+
+export type SlurpArcIntensity = (typeof SLURP_ARC_INTENSITIES)[number];
+
+export const SLURP_ARC_PACES = ["slow", "normal", "fast"] as const;
+
+export type SlurpArcPace = (typeof SLURP_ARC_PACES)[number];
+
+export const SLURP_DEFAULT_ARC_PACE: SlurpArcPace = "normal";
+
+const PACE_MULTIPLIER: Record<SlurpArcPace, number> = { slow: 1.5, normal: 1, fast: 0.5 };
+
+/** Days a chapter lasts. `min` gates advancing on a post; `max` advances without one. */
+export type SlurpArcPhaseDays = { min: number; max: number };
+
+/** Longest a single chapter may be set to last. */
+const MAX_PHASE_DAYS = 90;
+
 export type SlurpProject = {
   id: string;
   title: string;
@@ -59,6 +90,82 @@ export type SlurpProject = {
   posts: number;
   startedAt: string;
   updatedAt: string;
+  kind: SlurpArcKind;
+  /** Day range per chapter, by index. A missing or null entry advances after every post. */
+  phaseDays: (SlurpArcPhaseDays | null)[];
+  /** When the current chapter began, for the day ranges. */
+  chapterStartedAt: string;
+  intensity: SlurpArcIntensity;
+};
+
+type Template = { title: string; direction: string; phases: readonly (readonly [string, number, number])[] };
+
+/**
+ * The shipped arc kinds. Chapters are beats, not scenes: "packing" leaves the Creator's own life to
+ * say what packing looks like for them.
+ */
+export const SLURP_ARC_TEMPLATES: Record<Exclude<SlurpArcKind, "custom">, Template> = {
+  moving: {
+    title: "Moving house",
+    direction: "Leaving the old place for a new one, from the decision to finally feeling at home.",
+    phases: [
+      ["deciding to move", 2, 5],
+      ["packing up the old place", 3, 6],
+      ["moving day", 1, 1],
+      ["the new place is still empty", 2, 4],
+      ["settling in", 4, 10],
+    ],
+  },
+  new_job: {
+    title: "A new job",
+    direction: "Starting somewhere new, from the offer to finding their feet.",
+    phases: [
+      ["the offer", 1, 3],
+      ["working out the notice period", 5, 10],
+      ["the first day", 1, 1],
+      ["finding their feet", 5, 12],
+    ],
+  },
+  trip: {
+    title: "A trip away",
+    direction: "Getting away for a while and coming back.",
+    phases: [
+      ["planning the trip", 2, 5],
+      ["packing", 1, 2],
+      ["away", 3, 7],
+      ["back home", 1, 3],
+    ],
+  },
+  fitness: {
+    title: "Getting in shape",
+    direction: "A real attempt at getting fitter, with the boring middle left in.",
+    phases: [
+      ["the decision", 1, 3],
+      ["the first weeks", 7, 14],
+      ["the plateau", 5, 10],
+      ["starting to see it", 7, 14],
+    ],
+  },
+  renovation: {
+    title: "Redoing a room",
+    direction: "Fixing up one room, mess included.",
+    phases: [
+      ["picking a plan", 2, 5],
+      ["tearing it out", 2, 4],
+      ["living in the mess", 5, 10],
+      ["the reveal", 1, 2],
+    ],
+  },
+  breakup: {
+    title: "A breakup",
+    direction: "A relationship ending and life carrying on after it.",
+    phases: [
+      ["it ended", 1, 2],
+      ["the raw part", 4, 8],
+      ["going out again", 5, 10],
+      ["fine, actually", 4, 8],
+    ],
+  },
 };
 
 /** Storage key for one Creator's projects. Mirrors the goal and earnings key shape. */
@@ -75,12 +182,30 @@ const readChapters = (value: unknown): string[] =>
         .slice(0, SLURP_PROJECT_MAX_CHAPTERS)
     : [];
 
+const readDays = (value: unknown): number =>
+  Number.isFinite(Number(value)) ? Math.min(MAX_PHASE_DAYS, Math.max(0, Math.floor(Number(value)))) : 0;
+
+const readPhaseDays = (value: unknown, length: number): (SlurpArcPhaseDays | null)[] =>
+  Array.isArray(value)
+    ? value.slice(0, length).map((entry) => {
+        if (!entry || typeof entry !== "object") return null;
+        const min = readDays((entry as Record<string, unknown>).min);
+        const max = Math.max(min, readDays((entry as Record<string, unknown>).max));
+        return max > 0 ? { min, max } : null;
+      })
+    : [];
+
+const validDate = (value: unknown): value is string => typeof value === "string" && !Number.isNaN(Date.parse(value));
+
 /**
  * Read one stored project, or null when there is not a usable one.
  *
  * Exported so the storage layer and the tests read a project the same way. A project missing its
  * title is dropped rather than repaired: an untitled thread cannot be chosen or cancelled, and a
  * silent placeholder would leave the player unable to get rid of it.
+ *
+ * Projects stored before arcs had kinds read as custom background arcs with no day ranges, which
+ * is exactly how they behaved.
  */
 export function readSlurpProject(value: unknown): SlurpProject | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -99,7 +224,7 @@ export function readSlurpProject(value: unknown): SlurpProject | null {
     ? Math.min(Math.max(0, Math.floor(chapterRaw)), Math.max(0, chapters.length - 1))
     : 0;
   const postsRaw = Number(raw.posts);
-  const startedAt = typeof raw.startedAt === "string" && !Number.isNaN(Date.parse(raw.startedAt)) ? raw.startedAt : "";
+  const startedAt = validDate(raw.startedAt) ? raw.startedAt : "";
   return {
     id,
     title,
@@ -110,6 +235,10 @@ export function readSlurpProject(value: unknown): SlurpProject | null {
     posts: Number.isFinite(postsRaw) ? Math.max(0, Math.floor(postsRaw)) : 0,
     startedAt,
     updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : startedAt,
+    kind: (SLURP_ARC_KINDS as readonly string[]).includes(String(raw.kind)) ? (raw.kind as SlurpArcKind) : "custom",
+    phaseDays: readPhaseDays(raw.phaseDays, chapters.length),
+    chapterStartedAt: validDate(raw.chapterStartedAt) ? raw.chapterStartedAt : startedAt,
+    intensity: raw.intensity === "focus" ? "focus" : "background",
   };
 }
 
@@ -125,29 +254,57 @@ export function readSlurpProjects(raw: string | null): SlurpProject[] {
   }
 }
 
-/** Build a project. Returns null when there is no title, which is the one field it cannot invent. */
+/**
+ * Build a project. Returns null when there is no title, which is the one field it cannot invent.
+ *
+ * A templated kind with no chapters of its own takes the template's chapters, day ranges, and, when
+ * left blank, its title and direction. Chapters the player typed win over the template.
+ */
 export function makeSlurpProject(
   id: string,
-  input: { title: string; direction?: string; chapters?: string[] },
+  input: {
+    title?: string;
+    direction?: string;
+    chapters?: string[];
+    kind?: SlurpArcKind;
+    intensity?: SlurpArcIntensity;
+  },
   at: Date,
 ): SlurpProject | null {
   const timestamp = at.toISOString();
+  const kind = input.kind ?? "custom";
+  const template = kind === "custom" ? null : SLURP_ARC_TEMPLATES[kind];
+  const useTemplate = Boolean(template) && !input.chapters?.length;
   return readSlurpProject({
     id,
-    title: input.title,
-    direction: input.direction ?? "",
-    chapters: input.chapters ?? [],
+    title: input.title?.trim() || template?.title || "",
+    direction: input.direction?.trim() || template?.direction || "",
+    chapters: useTemplate ? template!.phases.map(([label]) => label) : (input.chapters ?? []),
+    phaseDays: useTemplate ? template!.phases.map(([, min, max]) => ({ min, max })) : [],
     chapter: 0,
     status: "active",
     posts: 0,
     startedAt: timestamp,
     updatedAt: timestamp,
+    chapterStartedAt: timestamp,
+    kind,
+    intensity: input.intensity ?? "background",
   });
 }
 
 /** The projects that may claim a post. Paused and complete projects keep everything and claim nothing. */
 export function activeSlurpProjects(projects: readonly SlurpProject[]): SlurpProject[] {
   return projects.filter((project) => project.status === "active");
+}
+
+/** The rotation list: the focus arc appears twice, so it takes twice the slots of a background one. */
+export function slurpArcRotation(projects: readonly SlurpProject[]): SlurpProject[] {
+  return [...projects, ...projects.filter((project) => project.intensity === "focus")];
+}
+
+/** Every project demoted to background, for the moment another one becomes the focus. */
+export function slurpArcsWithoutFocus(projects: readonly SlurpProject[]): SlurpProject[] {
+  return projects.map((project) => (project.intensity === "focus" ? { ...project, intensity: "background" } : project));
 }
 
 /** The chapter a project is on, or null for an open-ended one. */
@@ -184,21 +341,54 @@ export function slurpProjectInstruction(input: {
   ].join("\n");
 }
 
+const daysInChapter = (project: SlurpProject, at: Date) =>
+  (at.getTime() - Date.parse(project.chapterStartedAt || project.startedAt)) / 86_400_000 || 0;
+
+function nextChapter(project: SlurpProject, at: Date): SlurpProject {
+  const updatedAt = at.toISOString();
+  const next = project.chapter + 1;
+  return next >= project.chapters.length
+    ? { ...project, chapter: project.chapters.length - 1, status: "complete", updatedAt }
+    : { ...project, chapter: next, chapterStartedAt: updatedAt, updatedAt };
+}
+
 /**
  * Move a project on by one published post.
  *
  * Called after publication, never at generation: a project that advanced when a post was drafted
  * would skip a chapter every time a generation failed, and the feed would tell a story with holes.
  *
+ * A chapter with a day range stays put until its minimum has passed, so a Creator who posts four
+ * times a day does not pack, move, and settle in before lunch.
+ *
  * An open-ended project never completes on its own. There is no last chapter to pass, and guessing
  * that a thread has ended is the one judgement the player has to make.
  */
-export function slurpProjectAdvance(project: SlurpProject, at: Date): SlurpProject {
-  const posts = project.posts + 1;
-  const updatedAt = at.toISOString();
-  if (project.chapters.length === 0) return { ...project, posts, updatedAt };
-  const next = project.chapter + 1;
-  return next >= project.chapters.length
-    ? { ...project, posts, chapter: project.chapters.length - 1, status: "complete", updatedAt }
-    : { ...project, posts, chapter: next, updatedAt };
+export function slurpProjectAdvance(
+  project: SlurpProject,
+  at: Date,
+  pace: SlurpArcPace = SLURP_DEFAULT_ARC_PACE,
+): SlurpProject {
+  const posted = { ...project, posts: project.posts + 1, updatedAt: at.toISOString() };
+  if (project.chapters.length === 0) return posted;
+  const days = project.phaseDays[project.chapter];
+  if (days && daysInChapter(project, at) < days.min * PACE_MULTIPLIER[pace]) return posted;
+  return nextChapter(posted, at);
+}
+
+/**
+ * Move a project on because its chapter's time ran out, posted or not.
+ *
+ * Without this a move stalls forever on a Creator who stopped posting. Chapters without a day
+ * range never time out: they have no clock to run out.
+ */
+export function slurpProjectTick(
+  project: SlurpProject,
+  at: Date,
+  pace: SlurpArcPace = SLURP_DEFAULT_ARC_PACE,
+): SlurpProject {
+  if (project.status !== "active") return project;
+  const days = project.phaseDays[project.chapter];
+  if (!days || daysInChapter(project, at) < days.max * PACE_MULTIPLIER[pace]) return project;
+  return nextChapter(project, at);
 }

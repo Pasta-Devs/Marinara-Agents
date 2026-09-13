@@ -85,7 +85,14 @@ import {
   SLURP_PROJECT_TITLE_MAX_LENGTH,
   slurpProjectAdvance,
   slurpProjectsKey,
+  slurpProjectTick,
+  slurpArcsWithoutFocus,
+  SLURP_ARC_INTENSITIES,
+  SLURP_ARC_PACES,
+  SLURP_DEFAULT_ARC_PACE,
   SLURP_PROJECT_STATUSES,
+  type SlurpArcIntensity,
+  type SlurpArcKind,
   type SlurpProject,
   type SlurpProjectStatus,
 } from "../slurp/slurp-project.js";
@@ -322,6 +329,8 @@ export const slurpSettingsSchema = z.object({
   storyRate: z.enum(SLURP_STORY_RATE),
   /** Share of a Creator's automatic posts that continue a project rather than standing alone. */
   projectRate: z.enum(SLURP_PROJECT_RATE),
+  /** Multiplies every arc chapter's day range. */
+  arcPace: z.enum(SLURP_ARC_PACES),
   /** Stories are shown in their own tall frame, so they carry their own size. */
   storyImageWidth: z.number().int().min(64).max(4096),
   storyImageHeight: z.number().int().min(64).max(4096),
@@ -970,6 +979,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   imageHeight: 1536,
   storyRate: SLURP_DEFAULT_STORY_RATE,
   projectRate: SLURP_DEFAULT_PROJECT_RATE,
+  arcPace: SLURP_DEFAULT_ARC_PACE,
   // 4:5. The composer crops an uploaded Story to whatever ratio is configured here, so the two
   // halves of the feature stay one shape.
   storyImageWidth: 1024,
@@ -6749,13 +6759,20 @@ export function createSlurpStorage(db: DB) {
      */
     async createProject(
       creatorAccountId: string,
-      input: { title: string; direction?: string; chapters?: string[] },
+      input: {
+        title?: string;
+        direction?: string;
+        chapters?: string[];
+        kind?: SlurpArcKind;
+        intensity?: SlurpArcIntensity;
+      },
     ): Promise<SlurpProject | null> {
       const projects = await this.listProjects(creatorAccountId);
       if (activeSlurpProjects(projects).length >= SLURP_PROJECT_MAX_ACTIVE) return null;
       const project = makeSlurpProject(newId(), input, new Date());
       if (!project) return null;
-      await settingsStore.set(slurpProjectsKey(creatorAccountId), JSON.stringify([project, ...projects]));
+      const rest = project.intensity === "focus" ? slurpArcsWithoutFocus(projects) : projects;
+      await settingsStore.set(slurpProjectsKey(creatorAccountId), JSON.stringify([project, ...rest]));
       return project;
     },
 
@@ -6768,7 +6785,14 @@ export function createSlurpStorage(db: DB) {
     async updateProject(
       creatorAccountId: string,
       projectId: string,
-      patch: { title?: string; direction?: string; chapters?: string[]; chapter?: number; status?: SlurpProjectStatus },
+      patch: {
+        title?: string;
+        direction?: string;
+        chapters?: string[];
+        chapter?: number;
+        status?: SlurpProjectStatus;
+        intensity?: SlurpArcIntensity;
+      },
     ): Promise<SlurpProject | null> {
       const projects = await this.listProjects(creatorAccountId);
       const index = projects.findIndex((project) => project.id === projectId);
@@ -6791,7 +6815,13 @@ export function createSlurpStorage(db: DB) {
       const title =
         patch.title === undefined ? current.title : patch.title.trim().slice(0, SLURP_PROJECT_TITLE_MAX_LENGTH);
       if (!title) return null;
-      const chapter = patch.chapter === undefined ? current.chapter : Math.floor(patch.chapter);
+      // Clamped here as well as on read, so a shortened chapter list cannot leave the pointer
+      // past the end and strand the project one post short of finishing.
+      const chapter = Math.min(
+        Math.max(0, patch.chapter === undefined ? current.chapter : Math.floor(patch.chapter)),
+        Math.max(0, chapters.length - 1),
+      );
+      const updatedAt = now();
       const next: SlurpProject = {
         ...current,
         title,
@@ -6800,16 +6830,22 @@ export function createSlurpStorage(db: DB) {
             ? current.direction
             : patch.direction.trim().slice(0, SLURP_PROJECT_DIRECTION_MAX_LENGTH),
         chapters,
-        // Clamped here as well as on read, so a shortened chapter list cannot leave the pointer
-        // past the end and strand the project one post short of finishing.
-        chapter: Math.min(Math.max(0, chapter), Math.max(0, chapters.length - 1)),
+        chapter,
+        // Day ranges stay with the chapter at the same index; a chapter the player added has none.
+        phaseDays: current.phaseDays.slice(0, chapters.length),
+        // A chapter set by hand starts its clock now, or it would time out on the next tick.
+        chapterStartedAt: chapter === current.chapter ? current.chapterStartedAt : updatedAt,
         status: SLURP_PROJECT_STATUSES.includes(patch.status as SlurpProjectStatus)
           ? (patch.status as SlurpProjectStatus)
           : current.status,
-        updatedAt: now(),
+        intensity: SLURP_ARC_INTENSITIES.includes(patch.intensity as SlurpArcIntensity)
+          ? (patch.intensity as SlurpArcIntensity)
+          : current.intensity,
+        updatedAt,
       };
-      projects[index] = next;
-      await settingsStore.set(slurpProjectsKey(creatorAccountId), JSON.stringify(projects));
+      const saved = next.intensity === "focus" ? slurpArcsWithoutFocus(projects) : projects;
+      saved[index] = next;
+      await settingsStore.set(slurpProjectsKey(creatorAccountId), JSON.stringify(saved));
       return next;
     },
 
@@ -6837,10 +6873,23 @@ export function createSlurpStorage(db: DB) {
       const projects = await this.listProjects(creatorAccountId);
       const index = projects.findIndex((project) => project.id === projectId);
       if (index < 0) return null;
-      const next = slurpProjectAdvance(projects[index]!, new Date());
+      const next = slurpProjectAdvance(projects[index]!, new Date(), (await this.getSettings()).arcPace);
       projects[index] = next;
       await settingsStore.set(slurpProjectsKey(creatorAccountId), JSON.stringify(projects));
       return next;
+    },
+
+    /**
+     * Move on every arc whose chapter has run out of time. Returns the arcs that moved, so the world
+     * tick can tell the player about them. Writes nothing when nothing moved.
+     */
+    async tickProjects(creatorAccountId: string, at = new Date()): Promise<SlurpProject[]> {
+      const projects = await this.listProjects(creatorAccountId);
+      const pace = (await this.getSettings()).arcPace;
+      const ticked = projects.map((project) => slurpProjectTick(project, at, pace));
+      const moved = ticked.filter((project, index) => project !== projects[index]);
+      if (moved.length) await settingsStore.set(slurpProjectsKey(creatorAccountId), JSON.stringify(ticked));
+      return moved;
     },
 
     /** One project's own posts, newest first, for the Studio and for generation continuity. */

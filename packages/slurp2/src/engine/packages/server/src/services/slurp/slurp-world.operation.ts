@@ -205,6 +205,12 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       }
     }
 
+    // Creator arcs. A chapter with a day range moves on once its time runs out, posted or not, so a
+    // move does not stall forever on a Creator who stopped posting.
+    for (const account of maintenanceDue ? accounts : []) {
+      await noodle.tickProjects(account.id, until).catch(() => []);
+    }
+
     // Arcs. Where each relationship is heading, as opposed to where it stands. Runs on the same
     // cadence as churn because it reads the same silence, and because recomputing a three-week
     // trajectory on every page load would be a full scan for nothing.

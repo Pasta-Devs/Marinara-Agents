@@ -41,7 +41,7 @@ import { getErrorMessage } from "./slurp-public-support.js";
 import { noodleResponseFormat } from "./slurp-response-format.js";
 import { buildSlurpPostTimingContext } from "./slurp-post-timing.js";
 import { slurpPostProject, slurpPostVariation, slurpPostVariationInstruction } from "./slurp-post-variation.js";
-import { slurpProjectChapter, slurpProjectInstruction, type SlurpProject } from "./slurp-project.js";
+import { slurpArcRotation, slurpProjectChapter, slurpProjectInstruction, type SlurpProject } from "./slurp-project.js";
 import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js";
 import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
 import { createChatsStorage } from "../storage/chats.storage.js";
@@ -435,7 +435,12 @@ export async function generateNoodlerPost(
   // rotations down for the same reason: their direction is the subject, and a second one fights it.
   const project = directed
     ? null
-    : slurpPostProject(account.id, sequence, await noodle.listActiveProjects(account.id), settings.projectRate);
+    : slurpPostProject(
+        account.id,
+        sequence,
+        slurpArcRotation(await noodle.listActiveProjects(account.id)),
+        settings.projectRate,
+      );
   // The project's own posts, not the page's. The page history is already supplied above and says
   // nothing about where this thread had got to.
   const projectPosts = project ? await noodle.listPostsByProject(project.id, 4) : [];

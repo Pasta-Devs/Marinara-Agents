@@ -7,15 +7,59 @@ import {
   makeSlurpProject,
   readSlurpProject,
   readSlurpProjects,
+  SLURP_ARC_TEMPLATES,
   SLURP_PROJECT_MAX_CHAPTERS,
   SLURP_PROJECT_TITLE_MAX_LENGTH,
+  slurpArcRotation,
+  slurpArcsWithoutFocus,
   slurpProjectAdvance,
   slurpProjectChapter,
   slurpProjectInstruction,
   slurpProjectsKey,
+  slurpProjectTick,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-project.js";
 
 const at = new Date("2026-09-09T10:00:00.000Z");
+const daysLater = (days: number) => new Date(at.getTime() + days * 86_400_000);
+
+// ── Templated arcs are paced in days, not posts ─────────────────────────────
+const move = makeSlurpProject("m1", { kind: "moving" }, at);
+assert.ok(move, "a templated kind brings its own title");
+assert.equal(move.title, SLURP_ARC_TEMPLATES.moving.title);
+assert.equal(move.chapters.length, SLURP_ARC_TEMPLATES.moving.phases.length);
+assert.deepEqual(move.phaseDays[0], { min: 2, max: 5 });
+// Posting four times on day one must not pack, move, and settle in before lunch.
+let moving = move;
+for (let index = 0; index < 4; index += 1) moving = slurpProjectAdvance(moving, at);
+assert.equal(moving.chapter, 0, "the minimum days hold the chapter against frequent posts");
+assert.equal(moving.posts, 4);
+moving = slurpProjectAdvance(moving, daysLater(2));
+assert.equal(moving.chapter, 1, "a post after the minimum moves the arc on");
+assert.equal(moving.chapterStartedAt, daysLater(2).toISOString(), "the next chapter starts its own clock");
+// Pace stretches the minimum: slow is one and a half times as long.
+assert.equal(slurpProjectAdvance(move, daysLater(2), "slow").chapter, 0);
+assert.equal(slurpProjectAdvance(move, daysLater(1), "fast").chapter, 1);
+// The maximum moves the arc on with no post at all, so a quiet Creator does not stall mid-move.
+assert.equal(slurpProjectTick(move, daysLater(4), "normal"), move, "nothing moves before the maximum");
+assert.equal(slurpProjectTick(move, daysLater(5), "normal").chapter, 1);
+assert.equal(slurpProjectTick({ ...move, status: "paused" }, daysLater(50)).chapter, 0, "a paused arc keeps still");
+// Typed chapters win over the template, and carry no day ranges.
+const ownMove = makeSlurpProject("m2", { kind: "moving", title: "Leaving Leeds", chapters: ["a", "b"] }, at);
+assert.equal(ownMove?.title, "Leaving Leeds");
+assert.deepEqual(ownMove?.phaseDays, []);
+assert.equal(makeSlurpProject("m3", { kind: "custom" }, at), null, "a custom arc still needs a title");
+// Chapters without a day range never time out: they have no clock to run out.
+const planless = makeSlurpProject("m4", { title: "t", chapters: ["a", "b"] }, at)!;
+assert.equal(slurpProjectTick(planless, daysLater(365)), planless);
+
+// ── Focus ───────────────────────────────────────────────────────────────────
+const focus = { ...move, id: "f", intensity: "focus" as const };
+assert.deepEqual(
+  slurpArcRotation([move, focus]).map((project) => project.id),
+  ["m1", "f", "f"],
+  "the focus arc takes twice the slots",
+);
+assert.ok(slurpArcsWithoutFocus([move, focus]).every((project) => project.intensity === "background"));
 
 // ── A project needs a title and nothing else ────────────────────────────────
 const open = makeSlurpProject("p1", { title: "Renovating the flat" }, at);
@@ -88,6 +132,26 @@ assert.equal(
   SLURP_PROJECT_MAX_CHAPTERS,
 );
 assert.equal(readSlurpProject({ id: "p", title: "x".repeat(400) })?.title.length, SLURP_PROJECT_TITLE_MAX_LENGTH);
+// A project stored before arcs had kinds reads as a custom background arc that advances per post.
+const legacy = readSlurpProject({ id: "p", title: "t", chapters: ["a", "b"], startedAt: at.toISOString() })!;
+assert.equal(legacy.kind, "custom");
+assert.equal(legacy.intensity, "background");
+assert.deepEqual(legacy.phaseDays, []);
+assert.equal(legacy.chapterStartedAt, at.toISOString());
+assert.equal(slurpProjectAdvance(legacy, at).chapter, 1);
+assert.deepEqual(
+  readSlurpProject({
+    id: "p",
+    title: "t",
+    chapters: ["a"],
+    phaseDays: [
+      { min: 9, max: 2 },
+      { min: 1, max: 1 },
+    ],
+  })?.phaseDays,
+  [{ min: 9, max: 9 }],
+  "day ranges are trimmed to the chapters and max is never below min",
+);
 
 // ── The key follows the goal and earnings shape ─────────────────────────────
 assert.equal(slurpProjectsKey("creator-a"), "slurp2.creator.creator-a.projects");
@@ -141,7 +205,7 @@ assert.match(generation, /const sequence = await noodle\.countNoodlerPostsByAcco
 assert.match(generation, /slurpPostVariation\(account\.id, sequence, settings\.storyRate\)/u);
 assert.match(
   generation,
-  /slurpPostProject\(account\.id, sequence, await noodle\.listActiveProjects\(account\.id\), settings\.projectRate\)/u,
+  /slurpPostProject\(\s*account\.id,\s*sequence,\s*slurpArcRotation\(await noodle\.listActiveProjects\(account\.id\)\),\s*settings\.projectRate,?\s*\)/u,
 );
 // Player direction stands both rotations down: their direction is the subject.
 assert.match(generation, /const directed = Boolean\(input\.request\.noodlerPostGuide\?\.trim\(\)\)/u);

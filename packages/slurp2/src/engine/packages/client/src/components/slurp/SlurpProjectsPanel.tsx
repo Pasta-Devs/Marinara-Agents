@@ -1,12 +1,16 @@
 import { useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import {
+  SLURP_ARC_KINDS,
   useCreateSlurpProject,
   useDeleteSlurpProject,
   useSlurpProjects,
   useUpdateSlurpProject,
+  type SlurpArcKind,
   type SlurpProject,
 } from "../../hooks/use-slurp";
+
+type Draft = { title: string; direction: string; chapters: string; kind: SlurpArcKind };
 
 /**
  * What a Creator is currently posting about, and what comes next.
@@ -22,7 +26,7 @@ export function SlurpProjectsPanel({ personaId, creatorAccountId }: { personaId:
   const update = useUpdateSlurpProject();
   const remove = useDeleteSlurpProject();
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<{ title: string; direction: string; chapters: string } | null>(null);
+  const [draft, setDraft] = useState<Draft | null>(null);
 
   const projects = query.data?.projects ?? [];
   const activeCount = projects.filter((project) => project.status === "active").length;
@@ -38,12 +42,17 @@ export function SlurpProjectsPanel({ personaId, creatorAccountId }: { personaId:
 
   const startEdit = (project: SlurpProject) => {
     setEditingId(project.id);
-    setDraft({ title: project.title, direction: project.direction, chapters: chaptersToText(project.chapters) });
+    setDraft({
+      title: project.title,
+      direction: project.direction,
+      chapters: chaptersToText(project.chapters),
+      kind: project.kind,
+    });
   };
 
   const startNew = () => {
     setEditingId("new");
-    setDraft({ title: "", direction: "", chapters: "" });
+    setDraft({ title: "", direction: "", chapters: "", kind: "custom" });
   };
 
   const cancel = () => {
@@ -52,19 +61,22 @@ export function SlurpProjectsPanel({ personaId, creatorAccountId }: { personaId:
   };
 
   const save = async () => {
-    if (!draft?.title.trim()) return;
+    if (!draft || !canSave(draft)) return;
     const body = {
       title: draft.title.trim(),
       direction: draft.direction.trim(),
       chapters: chaptersFromText(draft.chapters),
     };
-    if (editingId === "new") await create.mutateAsync({ creatorAccountId, personaId, ...body });
+    if (editingId === "new") await create.mutateAsync({ creatorAccountId, personaId, ...body, kind: draft.kind });
     else if (editingId) await update.mutateAsync({ creatorAccountId, personaId, projectId: editingId, ...body });
     cancel();
   };
 
   const setStatus = (project: SlurpProject, status: SlurpProject["status"]) =>
     update.mutate({ creatorAccountId, personaId, projectId: project.id, status });
+
+  const setIntensity = (project: SlurpProject, intensity: SlurpProject["intensity"]) =>
+    update.mutate({ creatorAccountId, personaId, projectId: project.id, intensity });
 
   const busy = create.isPending || update.isPending || remove.isPending;
   const error = create.error ?? update.error ?? remove.error;
@@ -73,7 +85,7 @@ export function SlurpProjectsPanel({ personaId, creatorAccountId }: { personaId:
     <div>
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
-          {localizeUi("ui.slurp.projects.heading", { defaultValue: "Projects" })}
+          {localizeUi("ui.slurp.projects.heading", { defaultValue: "Arcs" })}
         </h3>
         {editingId === null && (
           <button
@@ -82,7 +94,7 @@ export function SlurpProjectsPanel({ personaId, creatorAccountId }: { personaId:
             className="text-[0.7rem] font-semibold underline disabled:opacity-50"
             disabled={busy}
           >
-            {localizeUi("ui.slurp.projects.new", { defaultValue: "New project" })}
+            {localizeUi("ui.slurp.projects.new", { defaultValue: "New arc" })}
           </button>
         )}
       </div>
@@ -94,7 +106,7 @@ export function SlurpProjectsPanel({ personaId, creatorAccountId }: { personaId:
       ) : projects.length === 0 && editingId === null ? (
         <p className="mt-2 text-xs text-[var(--muted-foreground)]">
           {localizeUi("ui.slurp.projects.empty", {
-            defaultValue: "No projects. Posts stand on their own until this Creator has one.",
+            defaultValue: "No arcs. Posts stand on their own until this Creator has one.",
           })}
         </p>
       ) : null}
@@ -112,6 +124,9 @@ export function SlurpProjectsPanel({ personaId, creatorAccountId }: { personaId:
                 <span className="block truncate text-[0.7rem] text-[var(--muted-foreground)]">
                   {[
                     localizeUi(`ui.slurp.projects.status.${project.status}`, { defaultValue: project.status }),
+                    ...(project.intensity === "focus"
+                      ? [localizeUi("ui.slurp.projects.focus", { defaultValue: "Focus" })]
+                      : []),
                     // Progress only means something when there is a plan to measure against.
                     project.chapters.length
                       ? localizeUi("ui.slurp.projects.chapterOf", {
@@ -132,6 +147,18 @@ export function SlurpProjectsPanel({ personaId, creatorAccountId }: { personaId:
                 <button type="button" onClick={() => startEdit(project)} className="underline" disabled={busy}>
                   {localizeUi("ui.slurp.projects.edit", { defaultValue: "Edit" })}
                 </button>
+                {project.status === "active" && (
+                  <button
+                    type="button"
+                    onClick={() => setIntensity(project, project.intensity === "focus" ? "background" : "focus")}
+                    className="underline"
+                    disabled={busy}
+                  >
+                    {project.intensity === "focus"
+                      ? localizeUi("ui.slurp.projects.unfocus", { defaultValue: "Background" })
+                      : localizeUi("ui.slurp.projects.makeFocus", { defaultValue: "Make focus" })}
+                  </button>
+                )}
                 {project.status === "active" ? (
                   <button
                     type="button"
@@ -175,7 +202,7 @@ export function SlurpProjectsPanel({ personaId, creatorAccountId }: { personaId:
         )}
         {editingId === "new" && (
           <li className="py-2">
-            <ProjectEditor draft={draft} setDraft={setDraft} onSave={save} onCancel={cancel} busy={busy} />
+            <ProjectEditor draft={draft} setDraft={setDraft} onSave={save} onCancel={cancel} busy={busy} isNew />
           </li>
         )}
       </ul>
@@ -183,7 +210,7 @@ export function SlurpProjectsPanel({ personaId, creatorAccountId }: { personaId:
       {/* Deleting a project leaves its posts published. Say so, because "delete" usually does not. */}
       {projects.length > 0 && editingId === null && (
         <p className="mt-2 text-[0.65rem] text-[var(--muted-foreground)]">
-          {localizeUi("ui.slurp.projects.deleteNote", { defaultValue: "Deleting a project keeps its posts." })}
+          {localizeUi("ui.slurp.projects.deleteNote", { defaultValue: "Deleting an arc keeps its posts." })}
         </p>
       )}
       {activeCount >= 3 && editingId === null && (
@@ -198,24 +225,53 @@ export function SlurpProjectsPanel({ personaId, creatorAccountId }: { personaId:
   );
 }
 
+/** A templated kind brings its own title, so only a custom arc needs one typed in. */
+const canSave = (draft: Draft) => Boolean(draft.title.trim()) || draft.kind !== "custom";
+
 function ProjectEditor({
   draft,
   setDraft,
   onSave,
   onCancel,
   busy,
+  isNew = false,
 }: {
-  draft: { title: string; direction: string; chapters: string } | null;
-  setDraft: (draft: { title: string; direction: string; chapters: string }) => void;
+  draft: Draft | null;
+  setDraft: (draft: Draft) => void;
   onSave: () => void;
   onCancel: () => void;
   busy: boolean;
+  isNew?: boolean;
 }) {
   const { t: localizeUi } = useUiTranslation();
   if (!draft) return null;
   const field = "w-full rounded border border-[var(--noodle-divider)] bg-transparent px-2 py-1 text-xs";
   return (
     <div className="flex flex-col gap-2">
+      {/* The kind only matters when the arc is made: it picks the template, then the text is the player's. */}
+      {isNew && (
+        <label className="flex flex-col gap-1 text-[0.7rem] font-semibold">
+          {localizeUi("ui.slurp.projects.kind", { defaultValue: "Kind" })}
+          <select
+            value={draft.kind}
+            onChange={(event) => setDraft({ ...draft, kind: event.target.value as SlurpArcKind })}
+            className={field}
+          >
+            {SLURP_ARC_KINDS.map((kind) => (
+              <option key={kind} value={kind}>
+                {localizeUi(`ui.slurp.projects.kinds.${kind}`, { defaultValue: kind })}
+              </option>
+            ))}
+          </select>
+          {draft.kind !== "custom" && (
+            <span className="font-normal text-[var(--muted-foreground)]">
+              {localizeUi("ui.slurp.projects.templateNote", {
+                defaultValue: "Leave the title and chapters empty to use the template.",
+              })}
+            </span>
+          )}
+        </label>
+      )}
       <input
         value={draft.title}
         onChange={(event) => setDraft({ ...draft, title: event.target.value })}
@@ -243,7 +299,7 @@ function ProjectEditor({
         className={field}
       />
       <div className="flex gap-3 text-[0.7rem] font-semibold">
-        <button type="button" onClick={onSave} className="underline" disabled={busy || !draft.title.trim()}>
+        <button type="button" onClick={onSave} className="underline" disabled={busy || !canSave(draft)}>
           {localizeUi("ui.slurp.projects.save", { defaultValue: "Save" })}
         </button>
         <button type="button" onClick={onCancel} className="underline" disabled={busy}>

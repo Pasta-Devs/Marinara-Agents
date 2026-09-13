@@ -318,6 +318,7 @@ export type SlurpSettings = {
   imageHeight: number;
   storyRate: "off" | "rare" | "regular" | "often";
   projectRate: "off" | "rare" | "regular" | "often";
+  arcPace: "slow" | "normal" | "fast";
   storyImageWidth: number;
   storyImageHeight: number;
   refreshesPerDay: number;
@@ -798,7 +799,15 @@ export type SlurpProject = {
   posts: number;
   startedAt: string;
   updatedAt: string;
+  kind: SlurpArcKind;
+  phaseDays: ({ min: number; max: number } | null)[];
+  chapterStartedAt: string;
+  intensity: "background" | "focus";
 };
+
+/** Mirrors `SLURP_ARC_KINDS` on the server. */
+export const SLURP_ARC_KINDS = ["custom", "moving", "new_job", "trip", "fitness", "renovation", "breakup"] as const;
+export type SlurpArcKind = (typeof SLURP_ARC_KINDS)[number];
 
 /**
  * A Creator's projects.
@@ -832,6 +841,7 @@ export function useCreateSlurpProject() {
       title: string;
       direction: string;
       chapters: string[];
+      kind: SlurpArcKind;
     }) =>
       api.post<{ project: SlurpProject }>(
         `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects`,
@@ -857,6 +867,7 @@ export function useUpdateSlurpProject() {
       chapters?: string[];
       chapter?: number;
       status?: SlurpProject["status"];
+      intensity?: SlurpProject["intensity"];
     }) =>
       api.patch<{ project: SlurpProject }>(
         `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects/${encodeURIComponent(projectId)}`,

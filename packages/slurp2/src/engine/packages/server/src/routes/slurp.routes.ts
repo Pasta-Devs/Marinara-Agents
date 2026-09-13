@@ -186,6 +186,8 @@ import {
   SLURP_GOAL_MIN_TARGET,
 } from "../services/slurp/slurp-goal.js";
 import {
+  SLURP_ARC_INTENSITIES,
+  SLURP_ARC_KINDS,
   SLURP_PROJECT_CHAPTER_MAX_LENGTH,
   SLURP_PROJECT_DIRECTION_MAX_LENGTH,
   SLURP_PROJECT_MAX_ACTIVE,
@@ -1625,9 +1627,16 @@ export async function slurpRoutes(app: FastifyInstance) {
     const parsed = z
       .object({
         personaId: z.string().trim().min(1),
-        title: z.string().trim().min(1).max(SLURP_PROJECT_TITLE_MAX_LENGTH),
+        // Optional for a templated kind, which brings its own title.
+        title: z.string().trim().max(SLURP_PROJECT_TITLE_MAX_LENGTH).default(""),
         direction: z.string().trim().max(SLURP_PROJECT_DIRECTION_MAX_LENGTH).default(""),
         chapters: projectChapters.default([]),
+        kind: z.enum(SLURP_ARC_KINDS).default("custom"),
+        intensity: z.enum(SLURP_ARC_INTENSITIES).default("background"),
+      })
+      .refine((body) => body.title.length > 0 || body.kind !== "custom", {
+        message: "A custom arc needs a title.",
+        path: ["title"],
       })
       .safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
@@ -1642,6 +1651,8 @@ export async function slurpRoutes(app: FastifyInstance) {
       title: parsed.data.title,
       direction: parsed.data.direction,
       chapters: parsed.data.chapters,
+      kind: parsed.data.kind,
+      intensity: parsed.data.intensity,
     });
     if (!project) {
       return reply
@@ -1666,6 +1677,7 @@ export async function slurpRoutes(app: FastifyInstance) {
         chapters: projectChapters.optional(),
         chapter: z.number().int().min(0).optional(),
         status: z.enum(SLURP_PROJECT_STATUSES).optional(),
+        intensity: z.enum(SLURP_ARC_INTENSITIES).optional(),
       })
       .safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
@@ -1684,6 +1696,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       chapters: parsed.data.chapters,
       chapter: parsed.data.chapter,
       status: parsed.data.status,
+      intensity: parsed.data.intensity,
     });
     if (!project) {
       return reply

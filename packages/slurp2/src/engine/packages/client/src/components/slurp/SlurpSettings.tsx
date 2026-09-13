@@ -1102,6 +1102,18 @@ export function SlurpSettings({
                       <option value="often">{t("ui.slurp.settings.projectRateOften")}</option>
                     </select>
                   </Field>
+                  <Field label={t("ui.slurp.settings.arcPace")} detail={t("ui.slurp.settings.arcPaceDetail")}>
+                    <select
+                      value={settings.arcPace}
+                      disabled={updateSettings.isPending}
+                      onChange={(event) => void update("arcPace", event.target.value as SlurpSettings["arcPace"])}
+                      className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                    >
+                      <option value="slow">{t("ui.slurp.settings.arcPaceSlow")}</option>
+                      <option value="normal">{t("ui.slurp.settings.arcPaceNormal")}</option>
+                      <option value="fast">{t("ui.slurp.settings.arcPaceFast")}</option>
+                    </select>
+                  </Field>
                 </div>
               )}
 
