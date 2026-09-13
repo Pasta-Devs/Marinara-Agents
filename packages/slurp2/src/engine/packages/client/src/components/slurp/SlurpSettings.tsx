@@ -2208,7 +2208,7 @@ export function SlurpSettings({
                                 </p>
                                 <p className="mt-1 text-[0.65rem] font-bold uppercase tracking-[0.12em] text-[var(--slurp-muted)]">
                                   {t(
-                                    `ui.slurp.settings.ads.ceiling${ad.contentRating === "tame" ? "Tame" : ad.contentRating === "suggestive" ? "Suggestive" : "Explicit"}`,
+                                    `ui.slurp.settings.ads.ceiling${ad.contentRating === "suggestive" ? "Suggestive" : ad.contentRating === "explicit" ? "Explicit" : "Tame"}`,
                                   )}
                                   {ad.retiredAt ? ` · ${t("ui.slurp.settings.ads.retired")}` : ""}
                                 </p>

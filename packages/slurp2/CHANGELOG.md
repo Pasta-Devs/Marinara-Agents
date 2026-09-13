@@ -3,6 +3,7 @@
 ## 0.0.5 — 2026-09-13
 
 - Made the welcome screen shorter, put Gunterlie beside the greeting, linked Slurp General, and tucked older release notes behind an expander.
+- Corrected older ad ratings, fallback handles, onboarding text, and invalid digest account errors.
 
 ## 0.0.4 — 2026-09-12 [highlight]
 

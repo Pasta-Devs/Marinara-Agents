@@ -22,12 +22,21 @@ assert.doesNotMatch(shell, /<AnimatePresence mode="wait"/u, "the view swap must 
 assert.match(shell, /key=\{activeView\}/u, "the view swap still remounts on the active view");
 
 // h-full against an auto-height flex ancestor let the lower half overflow the clip.
-for (const line of settings.split("\n").filter((entry) => entry.includes("<main className="))) {
-  assert.ok(
-    line.includes("min-h-0") && line.includes("flex-1"),
-    `settings <main> must size from the flex chain: ${line.trim()}`,
-  );
+function assertMainSizing(source: string) {
+  const mainTags = [...source.matchAll(/<main\b[^>]*>/gu)];
+  assert.ok(mainTags.length > 0, "settings must contain a <main> pane");
+  for (const [tag] of mainTags) {
+    const classes = /className="([^"]*)"/u.exec(tag)?.[1].split(/\s+/u) ?? [];
+    assert.ok(
+      classes.includes("min-h-0") && classes.includes("flex-1"),
+      `settings <main> must size from the flex chain: ${tag.trim()}`,
+    );
+  }
 }
+assertMainSizing(settings);
+assertMainSizing('<main\n className="min-h-0 flex-1">');
+assert.throws(() => assertMainSizing("<section />"), /must contain a <main>/u);
+assert.throws(() => assertMainSizing('<main\n className="min-h-0">'), /must size from the flex chain/u);
 assert.match(
   settings,
   /min-h-0 flex-1 overflow-y-auto bg-\[var\(--slurp-canvas\)\]/u,

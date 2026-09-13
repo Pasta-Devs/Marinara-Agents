@@ -5705,7 +5705,7 @@ export function createSlurpStorage(db: DB) {
         (await this.listAccounts({ includeHidden: true })).map((account) => account.id),
       );
       if (!uniqueAccountIds.every((accountId) => slurpSourceAccountIds.has(accountId))) {
-        throw new Error("Public Noodle digests cannot reference Slurp accounts.");
+        throw new Error("Slurp digests cannot reference accounts outside Slurp.");
       }
       await db.transaction(async (tx) => {
         if (input.sourceInteractionId) {

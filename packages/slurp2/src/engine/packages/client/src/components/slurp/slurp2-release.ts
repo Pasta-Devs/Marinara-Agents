@@ -17,6 +17,7 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
     date: "2026-09-13",
     notes: [
       "Made the welcome screen shorter, put Gunterlie beside the greeting, linked Slurp General, and tucked older release notes behind an expander.",
+      "Corrected older ad ratings, fallback handles, onboarding text, and invalid digest account errors.",
     ],
   },
   {
