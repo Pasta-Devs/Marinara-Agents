@@ -45,6 +45,7 @@ import {
   ltmStatusResponseSchema,
   ltmWriteScopeSchema,
   ltmScopeSchema,
+  type LtmScope,
   ltmSectionKeySchema,
   ltmSectionSchema,
   ltmStatusSchema,
@@ -728,6 +729,7 @@ export function createLongTermMemoryRoutes(runtime: {
           .map((chat) => ({
             id: chat.id,
             label: getLtmChatDisplayName(chat) || "Untitled chat",
+            chatName: chat.name?.trim() || "Untitled chat",
             mode: ltmModeForChatMode(chat.mode),
             groupId: chat.groupId,
             personaId: chat.personaId,
@@ -735,6 +737,11 @@ export function createLongTermMemoryRoutes(runtime: {
           }))
           .sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id)),
       );
+      const memoryPresence: LtmScope[] = [];
+      for (const note of notes) {
+        if (note.type === "source") continue;
+        memoryPresence.push(note.scope);
+      }
       const resourceById = new Map(eligibleResources.map((resource) => [resource.id, resource]));
       const visibleCharacterIds = includeAllChats
         ? new Set(eligibleResources.map((resource) => resource.id))
@@ -755,6 +762,7 @@ export function createLongTermMemoryRoutes(runtime: {
       );
       return {
         currentScope: currentChat ? resolveChatLtmScope(currentChat) : null,
+        memoryPresence,
         chats: namedChats,
         groups: numberDuplicateLabels(
           [...groupIds]
