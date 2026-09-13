@@ -140,6 +140,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.0.6",
+          "date": "2026-09-13",
+          "notes": "- Fixed persona Creator creation when Slurp already has the persona's viewer identity. The viewer and Creator accounts can now coexist for one persona.\n- Moved message, photo, subscription, and tip pricing from the profile information box to the action that uses each price.",
+          "highlight": true
+        },
+        {
           "version": "0.0.5",
           "date": "2026-09-13",
           "notes": "- Made the welcome screen shorter, put Gunterlie beside the greeting, linked Slurp General, and tucked older release notes behind an expander.\n- Corrected older ad ratings, fallback handles, onboarding text, and invalid digest account errors.",

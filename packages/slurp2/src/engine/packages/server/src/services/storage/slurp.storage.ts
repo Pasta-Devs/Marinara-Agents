@@ -609,6 +609,7 @@ type InsertInteractionCommand = {
   imageUrl?: string | null;
   parentInteractionId: string | null;
 };
+type SlurpAccountRole = "creator" | "viewer";
 type NoodlerWorldInteractionInput = {
   creatorAccountId: string;
   actorId: string;
@@ -2432,7 +2433,11 @@ export function createSlurpStorage(db: DB) {
       return existing;
     },
 
-    async getSlurpAccountForEntity(kind: NoodleAccountKind, entityId: string): Promise<SlurpAccount | null> {
+    async getSlurpAccountForEntity(
+      kind: NoodleAccountKind,
+      entityId: string,
+      role: SlurpAccountRole = "creator",
+    ): Promise<SlurpAccount | null> {
       const rows = await db
         .select()
         .from(noodleAccounts)
@@ -2443,7 +2448,13 @@ export function createSlurpStorage(db: DB) {
             eq(noodleAccounts.platform, "slurp"),
           ),
         );
-      return rows[0] ? mapAccount(rows[0]) : null;
+      return (
+        rows
+          .map(mapAccount)
+          .find((account) =>
+            role === "viewer" ? isSlurpViewerActorAccount(account) : !isSlurpViewerActorAccount(account),
+          ) ?? null
+      );
     },
 
     async getAccountsByEntities(kind: NoodleAccountKind, entityIds: string[]): Promise<SlurpAccount[]> {
@@ -2482,17 +2493,7 @@ export function createSlurpStorage(db: DB) {
       sourceKind: SlurpSourceKind,
       sourceEntityId: string,
     ): Promise<SlurpAccount | null> {
-      const rows = await db
-        .select()
-        .from(noodleAccounts)
-        .where(
-          and(
-            eq(noodleAccounts.platform, "slurp"),
-            eq(noodleAccounts.sourceKind, sourceKind),
-            eq(noodleAccounts.sourceEntityId, sourceEntityId),
-          ),
-        );
-      return rows[0] ? mapAccount(rows[0]) : null;
+      return this.getSlurpAccountForEntity(sourceKind, sourceEntityId, "creator");
     },
 
     async patchViewerSettings(
@@ -2902,7 +2903,11 @@ export function createSlurpStorage(db: DB) {
       syncIdentity?: boolean;
     }): Promise<NoodleAccount> {
       await reconcilePublicHandles();
-      const existing = await this.getSlurpAccountForEntity(input.kind, input.entityId);
+      const existing = await this.getSlurpAccountForEntity(
+        input.kind,
+        input.entityId,
+        input.kind === "persona" && input.invited !== false ? "viewer" : "creator",
+      );
       if (existing) {
         return db.transaction(async (tx) => {
           const rows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, existing.id));

@@ -1338,7 +1338,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     // absent right after account deletion/cleanup — provision it here so interactions never
     // 404 for a still-live persona (review finding).
     const resolvedActor =
-      (await noodle.getSlurpAccountForEntity("persona", personaId)) ??
+      (await noodle.getSlurpAccountForEntity("persona", personaId, "viewer")) ??
       (await resolvePersonaAccount(noodle, characters, personaId));
     const actor = resolvedActor?.kind === "persona" && resolvedActor.entityId === personaId ? resolvedActor : null;
     return { personaId, viewer, actor };
@@ -2929,7 +2929,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       await Promise.all(
         page.items.map(async (subscription): Promise<SlurpSubscriberRow | null> => {
           const account =
-            (await noodle.getSlurpAccountForEntity("persona", subscription.viewerAccountId)) ??
+            (await noodle.getSlurpAccountForEntity("persona", subscription.viewerAccountId, "viewer")) ??
             (await noodle.getViewer(subscription.viewerAccountId));
           // A subscriber with no account row is somebody from the generated audience. Dropping
           // them here is why an audience subscription could never be seen: the row existed and the

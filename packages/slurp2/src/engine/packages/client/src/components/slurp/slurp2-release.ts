@@ -2,7 +2,7 @@
 // client has no route that serves CHANGELOG.md. So the notes are mirrored here, and
 // `tests/slurp2-release-notes.regression.ts` fails the build if this file drifts from
 // `packages/slurp2/CHANGELOG.md` or from the version in `manifest.json`.
-export const SLURP2_VERSION = "0.0.5";
+export const SLURP2_VERSION = "0.0.6";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -12,6 +12,14 @@ export interface Slurp2ReleaseEntry {
 
 /** Newest first, same order as CHANGELOG.md. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.0.6",
+    date: "2026-09-13",
+    notes: [
+      "Fixed persona Creator creation when Slurp already has the persona's viewer identity. The viewer and Creator accounts can now coexist for one persona.",
+      "Moved message, photo, subscription, and tip pricing from the profile information box to the action that uses each price.",
+    ],
+  },
   {
     version: "0.0.5",
     date: "2026-09-13",

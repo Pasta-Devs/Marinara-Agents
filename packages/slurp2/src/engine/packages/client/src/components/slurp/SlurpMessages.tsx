@@ -932,6 +932,17 @@ function SlurpThreadView({
       setToolTab("commission");
       return;
     }
+    if (!force && !ownsCreator && messaging?.dmPolicy === "paid" && !subscribed && messaging.requestFee > 0) {
+      const confirmed = await showConfirmDialog({
+        title: localizeUi("ui.slurp.messages.sendRequestTitle", { defaultValue: "Send message request?" }),
+        message: localizeUi("ui.slurp.messages.sendRequestDetail", {
+          defaultValue: "This costs {{fee}} coins. It opens the conversation but does not guarantee a reply.",
+          fee: messaging.requestFee,
+        }),
+        confirmLabel: localizeUi("ui.slurp.messages.sendRequestConfirm", { defaultValue: "Send request" }),
+      });
+      if (!confirmed) return;
+    }
     // Cancel any active typing animation when fan interrupts
     if (typing) {
       cancelTyping();
@@ -996,6 +1007,17 @@ function SlurpThreadView({
     setError(null);
     setActiveTipAmount(amount);
     try {
+      const confirmed = await showConfirmDialog({
+        title: localizeUi("ui.slurp.messages.sendTipTitle", {
+          defaultValue: "Send {{amount}} coins as a tip?",
+          amount,
+        }),
+        message: localizeUi("ui.slurp.messages.sendTipDetail", {
+          defaultValue: "A tip is a gift. It does not guarantee a reply.",
+        }),
+        confirmLabel: localizeUi("ui.slurp.messages.sendTipConfirm", { defaultValue: "Send tip" }),
+      });
+      if (!confirmed) return;
       const result = await tip.mutateAsync({
         personaId,
         creatorAccountId: targetCreatorAccountId,
@@ -2584,7 +2606,18 @@ function MessageBubble({
           <button
             type="button"
             disabled={!personaId || unlock.isPending}
-            onClick={() => personaId && unlock.mutate({ personaId, messageId: message.id })}
+            onClick={async () => {
+              if (!personaId) return;
+              const confirmed = await showConfirmDialog({
+                title: localizeUi("ui.slurp.messages.unlockTitle", { defaultValue: "Unlock this photo?" }),
+                message: localizeUi("ui.slurp.messages.unlockDetail", {
+                  defaultValue: "This costs {{amount}} coins.",
+                  amount: message.price,
+                }),
+                confirmLabel: localizeUi("ui.slurp.messages.unlockConfirm", { defaultValue: "Unlock photo" }),
+              });
+              if (confirmed) unlock.mutate({ personaId, messageId: message.id });
+            }}
             className="relative inline-flex min-h-11 items-center gap-1.5 overflow-visible rounded-lg px-1 text-left text-[var(--muted-foreground)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-60"
           >
             <SlurpCoinBurst active={unlock.isPending} />

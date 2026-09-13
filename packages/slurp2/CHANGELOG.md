@@ -1,5 +1,10 @@
 # Slurp Remastered release notes
 
+## 0.0.6 — 2026-09-13 [highlight]
+
+- Fixed persona Creator creation when Slurp already has the persona's viewer identity. The viewer and Creator accounts can now coexist for one persona.
+- Moved message, photo, subscription, and tip pricing from the profile information box to the action that uses each price.
+
 ## 0.0.5 — 2026-09-13
 
 - Made the welcome screen shorter, put Gunterlie beside the greeting, linked Slurp General, and tucked older release notes behind an expander.

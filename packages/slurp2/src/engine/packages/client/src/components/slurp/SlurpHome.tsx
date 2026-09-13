@@ -4,7 +4,6 @@ import {
   ArrowRight,
   Bell,
   Bookmark,
-  BookmarkCheck,
   BriefcaseBusiness,
   Check,
   ChevronDown,
@@ -3598,9 +3597,7 @@ function StageProfileView({
   const updateFanActivity = useUpdateNoodlerFanActivity();
   const tipCreator = useTipSlurpCreator();
   const [tipOpen, setTipOpen] = useState(false);
-  // What this Creator charges for, in one place, before the fan pays for anything. The compose
-  // query is the viewer-facing source of these prices, so this needs no new server data.
-  // ponytail: reuses the compose query; give it its own light endpoint if the profile gets heavy.
+  // The compose query is the viewer-facing source for action prices and messaging policy.
   const offerMessaging = useSlurpCompose(profile.id, viewerAccount?.entityId ?? null).data?.messaging ?? null;
   const [customTip, setCustomTip] = useState("");
   const [locationDraft, setLocationDraft] = useState(
@@ -4073,17 +4070,7 @@ function StageProfileView({
         leadingActions={
           !editing && !viewingOwnCreator && viewerCreator ? (
             <>
-              {/* A subscription already implies a follow, so subscribers get a static badge instead of a
-                  toggle they cannot actually turn off. */}
-              {viewerCreator.subscribed ? (
-                <span
-                  aria-label={localizeUi("ui.slurp.profile.subscribed")}
-                  title={localizeUi("ui.slurp.profile.subscribed")}
-                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--noodle-accent)]/50 bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]"
-                >
-                  <BookmarkCheck size={19} />
-                </span>
-              ) : (
+              {!viewerCreator.subscribed && (
                 <button
                   type="button"
                   disabled={followPending}
@@ -4101,7 +4088,7 @@ function StageProfileView({
                       : localizeUi("ui.slurp.profile.follow")
                   }
                 >
-                  {viewerCreator.followed ? <BookmarkCheck size={19} /> : <Bookmark size={19} />}
+                  <Bookmark size={19} />
                 </button>
               )}
               <button
@@ -4150,13 +4137,28 @@ function StageProfileView({
                   </>
                 )}
               </button>
+              {!viewerCreator.subscribed && (
+                <span className="max-w-52 text-[0.68rem] leading-4 text-[var(--muted-foreground)]">
+                  {localizeUi("ui.slurp.profile.subscribeBenefits", {
+                    defaultValue: "Faster replies · Free chat photos · Subscriber-only posts",
+                  })}
+                </span>
+              )}
               <button
                 type="button"
+                disabled={offerMessaging?.dmPolicy === "closed"}
                 onClick={() => onOpenMessages(profile.id)}
                 className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-[var(--noodle-divider)] px-4 text-sm font-bold transition-[background-color,opacity,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100"
               >
                 <MessageCircle size={16} aria-hidden="true" />
-                {localizeUi("ui.slurp.profile.message", { defaultValue: "Message" })}
+                {offerMessaging?.dmPolicy === "paid" && !viewerCreator.subscribed && offerMessaging.requestFee > 0
+                  ? localizeUi("ui.slurp.profile.requestMessage", {
+                      defaultValue: "Request message · {{count}} coins",
+                      count: offerMessaging.requestFee,
+                    })
+                  : offerMessaging?.dmPolicy === "closed"
+                    ? localizeUi("ui.slurp.profile.messagingUnavailable", { defaultValue: "Messaging unavailable" })
+                    : localizeUi("ui.slurp.profile.message", { defaultValue: "Message" })}
               </button>
               <div className="relative">
                 <button
@@ -4239,56 +4241,7 @@ function StageProfileView({
         status={creatorStatus}
         stats={{ followers: followerTotal, subscribers: subscriberTotal, likes: profileLikeTotal }}
         location={profileLocation}
-        bioContent={
-          profileBioBody || offerMessaging ? (
-            <div className="space-y-3">
-              {profileBioBody ? <p className="whitespace-pre-wrap text-sm leading-6">{profileBioBody}</p> : null}
-              {offerMessaging ? (
-                <div className="rounded-lg border border-[var(--noodle-divider)] p-3 text-sm">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                    {localizeUi("ui.slurp.profile.offer.title", { defaultValue: "What you can buy here" })}
-                  </p>
-                  <ul className="mt-2 space-y-1 text-[var(--muted-foreground)]">
-                    <li>
-                      {localizeUi(`ui.slurp.profile.offer.dm.${offerMessaging.dmPolicy}`, {
-                        defaultValue: "Direct messages are open.",
-                      })}
-                    </li>
-                    {offerMessaging.requestFee > 0 ? (
-                      <li>
-                        {localizeUi("ui.slurp.profile.offer.requestFee", {
-                          defaultValue:
-                            "A message request costs {{count}} coins. It opens the thread; it does not buy a reply.",
-                          count: offerMessaging.requestFee,
-                        })}
-                      </li>
-                    ) : null}
-                    {offerMessaging.ppvPrice > 0 ? (
-                      <li>
-                        {localizeUi("ui.slurp.profile.offer.ppv", {
-                          defaultValue: "Locked photos in chat cost {{count}} coins each.",
-                          count: offerMessaging.ppvPrice,
-                        })}
-                      </li>
-                    ) : null}
-                    <li>
-                      {localizeUi("ui.slurp.profile.offer.subscribe", {
-                        defaultValue:
-                          "Subscribing at {{count}} / week gets faster replies, free photos in chat, and subscriber-only posts.",
-                        count: slurpSubscriptionPriceOf(profile),
-                      })}
-                    </li>
-                    <li>
-                      {localizeUi("ui.slurp.profile.offer.tip", {
-                        defaultValue: "A tip buys nothing. It is a gift, and she may or may not answer it.",
-                      })}
-                    </li>
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-          ) : null
-        }
+        bioContent={profileBioBody ? <p className="whitespace-pre-wrap text-sm leading-6">{profileBioBody}</p> : null}
         bioCollapsible={profileBioBody.length > 280 || profileBioBody.split("\n").length > 4}
         contentActions={null}
         tabs={[

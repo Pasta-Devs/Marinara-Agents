@@ -32,9 +32,31 @@ export const noodleAccounts = fileTable(
     uniqueBy: [
       {
         keys: ["sourceKind", "sourceEntityId"],
-        when: (row) => row.platform === "slurp" && row.sourceKind != null && row.sourceEntityId != null,
+        // Persona viewer actors and persona Creators share a source entity, but they are separate
+        // accounts. Keep this rule for Creator rows only; the actor has its own scoped rule below.
+        when: (row) =>
+          row.platform === "slurp" &&
+          row.sourceKind != null &&
+          row.sourceEntityId != null &&
+          !(row.kind === "persona" && row.invited === "true"),
       },
-      { keys: ["handle"], when: (row) => row.platform === "slurp" },
+      {
+        keys: ["sourceKind", "sourceEntityId", "invited"],
+        when: (row) =>
+          row.platform === "slurp" &&
+          row.sourceKind != null &&
+          row.sourceEntityId != null &&
+          row.kind === "persona" &&
+          row.invited === "true",
+      },
+      {
+        keys: ["handle"],
+        when: (row) => row.platform === "slurp" && !(row.kind === "persona" && row.invited === "true"),
+      },
+      {
+        keys: ["handle", "invited"],
+        when: (row) => row.platform === "slurp" && row.kind === "persona" && row.invited === "true",
+      },
     ],
   },
 );
