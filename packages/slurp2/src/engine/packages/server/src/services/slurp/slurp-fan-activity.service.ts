@@ -13,7 +13,8 @@ import { resolveStoredChatOptions } from "../generation/generation-parameters.js
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { parseGameJsonish } from "../game/jsonish.js";
 import { requireModelAnswer } from "./slurp-model-answer.js";
-import { noodleImageContext } from "./slurp-image-prompt.js";
+import { prepareSlurpPostImageContexts, type SlurpImageContextPost } from "./slurp-post-image-context.js";
+import { protectNoodlerGeneratedIdentity, resolveNoodlerPublicIdentity } from "./slurp-generation.service.js";
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
@@ -61,23 +62,23 @@ export function resolveNoodlerFanActivityPolicy(
 export interface NoodlerFanCreatorCandidate {
   creator: NoodleAccount;
   policy: ResolvedNoodlerFanActivityPolicy;
-  posts: Array<{
-    id: string;
-    creatorAccountId: string;
-    title: string | null;
-    content: string;
-    /** What the attached image shows, so a reply can react to the picture instead of ignoring it. */
-    image?: string | null;
-    access: "public" | "locked";
-    /**
-     * Comments already under this post.
-     *
-     * The model used to write every comment blind to the ones beside it, which is most of why a
-     * comment section read as a stack of parallel monologues: six people answering the post and
-     * nobody answering each other, often all saying the same thing.
-     */
-    comments?: { id: string; from: string; text: string }[];
-  }>;
+  posts: Array<
+    SlurpImageContextPost & {
+      id: string;
+      creatorAccountId: string;
+      title: string | null;
+      content: string;
+      access: "public" | "locked";
+      /**
+       * Comments already under this post.
+       *
+       * The model used to write every comment blind to the ones beside it, which is most of why a
+       * comment section read as a stack of parallel monologues: six people answering the post and
+       * nobody answering each other, often all saying the same thing.
+       */
+      comments?: { id: string; from: string; text: string }[];
+    }
+  >;
   identities: NoodlerFanIdentity[];
 }
 
@@ -183,6 +184,7 @@ function describeFanRelationship(persona: {
 function buildFanActivityMessages(input: {
   creators: NoodlerFanCreatorCandidate[];
   settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone">;
+  imageContexts?: ReadonlyMap<string, string>;
 }): ChatMessage[] {
   const system = [
     "Propose quiet synthetic audience activity for the supplied Slurp posts.",
@@ -221,11 +223,18 @@ function buildFanActivityMessages(input: {
           : {}),
       }),
     ),
-    // Locked bodies stay out, but the image line stays in: a teaser's picture is public.
-    posts: candidate.posts.map(({ id, title, content, image, access, comments }) =>
+    // Locked bodies and images stay out of public audience reactions.
+    posts: candidate.posts.map(({ id, title, content, access, comments }) =>
       access === "locked"
-        ? { id, title, access, ...(image && { image }), ...(comments?.length ? { comments } : {}) }
-        : { id, title, content, access, ...(image && { image }), ...(comments?.length ? { comments } : {}) },
+        ? { id, title, access, ...(comments?.length ? { comments } : {}) }
+        : {
+            id,
+            title,
+            content,
+            access,
+            image: input.imageContexts?.get(id),
+            ...(comments?.length ? { comments } : {}),
+          },
     ),
   }));
   return [
@@ -235,8 +244,9 @@ function buildFanActivityMessages(input: {
 }
 
 async function generateFanActivity(input: {
+  db: DB;
   connection: GenerationConnection;
-  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh">;
+  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone" | "imageContextMode">;
   creators: NoodlerFanCreatorCandidate[];
   debugMode: boolean;
 }): Promise<NoodleGeneratedFanRefresh> {
@@ -251,7 +261,30 @@ async function generateFanActivity(input: {
     input.connection.treatAsLocalEndpoint === "true",
     input.connection.defaultParameters,
   );
-  const messages = buildFanActivityMessages(input);
+  const imageContexts = await prepareSlurpPostImageContexts({
+    posts: input.creators.flatMap((candidate) => candidate.posts),
+    mode: input.settings.imageContextMode,
+    captioning: { enabled: true, connectionId: input.connection.id, connection: input.connection, provider },
+    debugMode: input.debugMode,
+  });
+  for (const candidate of input.creators) {
+    if (!candidate.posts.some((post) => imageContexts.has(post.id))) continue;
+    const identity = await resolveNoodlerPublicIdentity(input.db, candidate.creator);
+    for (const post of candidate.posts) {
+      const context = imageContexts.get(post.id);
+      if (context) {
+        imageContexts.set(
+          post.id,
+          protectNoodlerGeneratedIdentity(
+            context,
+            candidate.creator.settings.privacy.identityDisclosure ?? "secret",
+            identity,
+          ) ?? "",
+        );
+      }
+    }
+  }
+  const messages = buildFanActivityMessages({ ...input, imageContexts });
   logDebugOverride(
     input.debugMode,
     "[debug/noodler-fan] Prompt prepared with %d messages; audience content is redacted.",
@@ -360,7 +393,10 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
       creatorAccountId: creator.id,
       title: post.title,
       content: post.content,
-      image: noodleImageContext(post),
+      imageUrl: post.imageUrl,
+      imagePrompt: post.imagePrompt,
+      metadata: post.metadata,
+      createdAt: post.createdAt,
       access: post.access,
       comments: commentsByPost.get(post.id) ?? [],
     }));
@@ -371,7 +407,7 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
 
 export async function generateNoodlerFanActivityBatch(input: {
   db: DB;
-  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone">;
+  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone" | "imageContextMode">;
   connection: GenerationConnection;
   creators: NoodlerFanCreatorCandidate[];
   debugMode?: boolean;
