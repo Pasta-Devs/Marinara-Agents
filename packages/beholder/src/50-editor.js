@@ -85,11 +85,11 @@ BH.editor = {
       this.close();
     };
     this.dismissHandlers = { click: onClick, keydown: onKeydown };
-    // Deferred: the click that opened the editor is still propagating.
+    document.addEventListener("keydown", onKeydown, true);
+    // Only clicks need deferring; keyboard users can dismiss the editor immediately.
     setTimeout(() => {
       if (!editor.isConnected) return;
       document.addEventListener("click", onClick, true);
-      document.addEventListener("keydown", onKeydown, true);
     }, 0);
   },
 

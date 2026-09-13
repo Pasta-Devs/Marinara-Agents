@@ -1687,18 +1687,13 @@ async function main() {
         "Memory Conversation - Member Final Branch",
       );
       await memoryScope.locator("[data-ltm-vault-scope-search]").fill("Memory Conversation");
-      assert.equal(
-        await memoryScope.locator('[data-ltm-vault-scope-presence="no-memories"]').evaluate((element) => element.open),
-        true,
-      );
+      await memoryScope.locator('[data-ltm-vault-scope-presence="no-memories"][open]').waitFor();
       await memoryScope.locator('[data-ltm-vault-scope-presence="no-memories"] > summary').click();
+      await memoryScope.locator('[data-ltm-vault-scope-presence="no-memories"]:not([open])').waitFor();
+      // Check the user's collapsed preference after clearing the search, without
+      // batching an immediate clear/refill back to the same controlled value.
       await memoryScope.locator("[data-ltm-vault-scope-search]").fill("");
-      await memoryScope.locator("[data-ltm-vault-scope-search]").fill("Memory Conversation");
-      assert.equal(
-        await memoryScope.locator('[data-ltm-vault-scope-presence="no-memories"]').evaluate((element) => element.open),
-        false,
-      );
-      await memoryScope.locator("[data-ltm-vault-scope-search]").fill("");
+      await memoryScope.locator('[data-ltm-vault-scope-presence="no-memories"]:not([open])').waitFor();
       assert.ok(await memoryScope.locator('[data-ltm-vault-scope-current="branch"]').isDisabled());
       await memoryScope.locator('[data-ltm-vault-scope-tab="chat"]').click();
       assert.equal(
