@@ -97,7 +97,6 @@ export function useStartChess(chatId: string) {
 }
 
 export function useChessMove(chatId: string) {
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: (vars: { move: ChessMove }) => api.post<OutcomeResponse>(`/turn-games/${chatId}/move`, vars),
     onSuccess: (res) => {

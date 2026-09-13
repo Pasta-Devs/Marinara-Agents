@@ -150,7 +150,6 @@ const noodleStageProfileUpdateRequestSchema = noodleStageProfileUpdateSchema.ext
 });
 
 /** The `identity` lock is shared by refresh, reroll, and profile edits, so the 409 stays operation-neutral. */
-const NOODLE_IDENTITY_LOCK_BUSY = "Another Noodle identity operation is already running. Wait for it to finish.";
 const NOODLER_MEDIA_MAX_BYTES = 20 * 1024 * 1024;
 const NOODLER_FEED_PAGE_SIZE = 20;
 const NOODLER_MEDIA_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);

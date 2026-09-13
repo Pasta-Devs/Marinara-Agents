@@ -217,8 +217,6 @@ function isConnection(value: unknown): value is Partial<APIConnection> {
 
 const fieldClass =
   "mari-chrome-field h-9 w-full min-w-0 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-xs text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-accent)]";
-const textareaClass =
-  "mari-chrome-field min-h-24 w-full min-w-0 resize-y rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] p-3 text-xs leading-relaxed text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-accent)]";
 const labelClass =
   "text-[0.68rem] font-semibold uppercase tracking-normal text-[var(--marinara-chat-chrome-panel-muted)]";
 const NOODLE_INVITE_PAGE_SIZE = 50;
@@ -4894,14 +4892,11 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   {localizeUi("ui.noodle.noodlehome.post")}
                 </button>
               }
-              popovers={
-                !composeOpen &&
-                renderComposerToolPopovers({
-                  imageRef: imageToolRef,
-                  pollRef: pollToolRef,
-                  mediaRef: mediaToolRef,
-                })
-              }
+              popovers={renderComposerToolPopovers({
+                imageRef: imageToolRef,
+                pollRef: pollToolRef,
+                mediaRef: mediaToolRef,
+              })}
             >
               <textarea
                 ref={inlineComposerRef}
@@ -4912,16 +4907,16 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                 disabled={!personaAccount}
                 placeholder={localizeUi("ui.noodle.noodlehome.whatSSimmering")}
                 aria-autocomplete="list"
-                aria-controls={activeMention && !composeOpen ? "noodle-inline-mention-list" : undefined}
-                aria-expanded={Boolean(activeMention && !composeOpen)}
+                aria-controls={activeMention ? "noodle-inline-mention-list" : undefined}
+                aria-expanded={Boolean(activeMention)}
                 aria-activedescendant={
-                  activeMention && !composeOpen && mentionSuggestions.length > 0
+                  activeMention && mentionSuggestions.length > 0
                     ? `noodle-inline-mention-list-option-${Math.min(activeMentionIndex, mentionSuggestions.length - 1)}`
                     : undefined
                 }
                 className="min-h-20 w-full resize-none border-0 bg-transparent py-2 text-[1rem] leading-6 text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] disabled:opacity-60"
               />
-              {!composeOpen && renderComposerMentionSuggestions("noodle-inline-mention-list")}
+              {renderComposerMentionSuggestions("noodle-inline-mention-list")}
               {renderDraftPoll()}
               {renderDraftImage(208)}
             </NoodleComposerShell>

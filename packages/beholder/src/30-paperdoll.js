@@ -931,42 +931,6 @@ function collectSlotRows(state) {
 }
 
 /**
- * Format a list of slot keys for display. Collapses symmetric pairs:
- *   ['left_leg', 'right_leg'] → 'both legs'
- *   ['chest', 'waist']        → 'chest · waist'
- *   ['left_hand']             → 'L. hand'
- */
-function formatSlotList(slots) {
-  if (slots.length === 2) {
-    const [a, b] = slots;
-    const PAIRS = {
-      "left_hand|right_hand": "both hands",
-      "left_arm|right_arm": "both arms",
-      "left_leg|right_leg": "both legs",
-      "left_foot|right_foot": "both feet",
-      "left_shoulder|right_shoulder": "both shoulders",
-    };
-    const key = [a, b].sort().join("|");
-    if (PAIRS[key]) return PAIRS[key];
-  }
-  return slots.map((s) => SLOT_LABEL[s] || s).join(" · ");
-}
-
-/**
- * Which column (left/right/center) does a merged row belong in?
- * Single-side items go to their side; mixed/center rows go to whichever
- * column is shorter at render time (returned as 'center').
- */
-function rowSide(slots) {
-  const sides = new Set(slots.map((s) => SLOT_SIDE[s] || "center"));
-  if (sides.size === 1) {
-    const only = [...sides][0];
-    if (only === "left" || only === "right") return only;
-  }
-  return "center";
-}
-
-/**
  * Render a single character's paper doll. Returns HTML string.
  *
  * `view` is 'front' (default) or 'back'. In back view the torso reflects the

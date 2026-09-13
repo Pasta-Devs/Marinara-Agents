@@ -97,7 +97,6 @@ import {
 import { resolveNoodlerSourceSnapshot } from "../slurp/slurp-source-resolve.js";
 import { createAppSettingsStorage } from "./app-settings.storage.js";
 import {
-  clearNoodleRefreshFailure,
   noodleRefreshSchedulerStatus,
   parsePersistedNoodleRefreshSchedule,
   reconcileNoodleRefreshSchedule,
@@ -1695,11 +1694,7 @@ export function createSlurpStorage(db: DB) {
       await settingsStore.set(NOODLE_REFRESH_SCHEDULE_KEY, JSON.stringify(schedule));
     },
 
-    async ensureRefreshSchedule(
-      at = new Date(),
-      settingsOverride?: SlurpSettings,
-    ): Promise<PersistedNoodleRefreshSchedule> {
-      const settings = settingsOverride ?? (await this.getSettings());
+    async ensureRefreshSchedule(at = new Date()): Promise<PersistedNoodleRefreshSchedule> {
       const current = await this.getRefreshSchedule();
       const reconciled = reconcileNoodleRefreshSchedule(current, 0, at);
       if (!current || JSON.stringify(current) !== JSON.stringify(reconciled)) {

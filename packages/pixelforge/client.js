@@ -1,4 +1,4 @@
-// Pixelforge 0.16.3 — Marinara Engine game-surface Experience (single-file client bundle)
+// Pixelforge 0.16.4 — Marinara Engine game-surface Experience (single-file client bundle)
 // Built from packages/pixelforge/src (20 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -3404,8 +3404,6 @@ PF.brief = (() => {
 // object, overhead), a solidity map, portals, and NPCs. No host GameMap types
 // are used — the world model is wholly package-owned (exploration R09/R10).
 PF.world = (() => {
-  const T = PF.TILE;
-
   /** The spatialLocationId → zoneId table, NULL-PROTOTYPE (#567).
    *
    *  Every key in it belongs to the HOST — a World Maps location id, authored by

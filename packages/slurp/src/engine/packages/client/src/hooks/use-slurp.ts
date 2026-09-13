@@ -47,7 +47,6 @@ import type {
   NoodlerFanActivitySettings,
   NoodlerRemoveInteractionInput,
 } from "@marinara-engine/shared";
-import { mergeNoodlePollVoteInteractions } from "@marinara-engine/shared";
 import type { ImagePromptOverride, ImagePromptReviewItem } from "../components/ui/ImagePromptReviewModal";
 
 export type NoodleRefreshResult = {
@@ -270,12 +269,6 @@ export function useUpdateSlurpImageConnections() {
       api.patch<SlurpImageConnections>("/slurp/noodler/image-connections", patch),
     onSuccess: (value) => qc.setQueryData(noodleKeys.noodlerImageConnections(), value),
   });
-}
-
-function preservePollVotes(current: NoodleBootstrap | undefined, next: NoodleBootstrap): NoodleBootstrap {
-  if (!current) return next;
-  const interactions = mergeNoodlePollVoteInteractions(current.interactions, next.posts, next.interactions);
-  return interactions === next.interactions ? next : { ...next, interactions };
 }
 
 export function useRerollAmbientNoodleProfiles() {

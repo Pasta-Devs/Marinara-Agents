@@ -316,7 +316,6 @@ function runOuterStep(active: Map<number, SimBall>, dt: number, ctx: SimCtx): vo
     if (!ev || ev.t > remaining) {
       advanceAll(active, remaining);
       ctx.simTime += remaining;
-      remaining = 0;
       forceCaptureOutOfBounds(active, ctx);
       break;
     }

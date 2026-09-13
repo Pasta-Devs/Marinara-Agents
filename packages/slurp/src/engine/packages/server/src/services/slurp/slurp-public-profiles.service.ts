@@ -16,12 +16,7 @@ import { noodleAccountsNeedingProfiles } from "./slurp-profile-selection.js";
 import { normalizeNoodleHandle } from "./slurp-handle.js";
 import { NOODLE_ADULT_PLATFORM_POLICY } from "./slurp-prompt.js";
 import { NOODLE_JSON_OUTPUT_HEADING, noodleResponseFormat } from "./slurp-response-format.js";
-import {
-  characterContextFromRow,
-  escapePromptAttribute,
-  generatedProfileSettings,
-  parseRecord,
-} from "./slurp-public-support.js";
+import { characterContextFromRow, escapePromptAttribute, generatedProfileSettings } from "./slurp-public-support.js";
 
 function shuffle<T>(items: T[]): T[] {
   const next = [...items];
