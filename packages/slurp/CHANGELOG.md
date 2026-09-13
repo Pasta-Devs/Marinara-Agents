@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.50.1 — 2026-09-13
+
+- Maintenance: remove unused legacy code and an unnecessary settings read when checking the posting schedule.
+
 ## 1.50.0 — 2026-09-11
 
 - Mark Slurp as the legacy version while it is being reworked.

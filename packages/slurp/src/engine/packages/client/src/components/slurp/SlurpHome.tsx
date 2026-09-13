@@ -121,7 +121,6 @@ import {
   useHideOnScroll,
   NOODLE_PERSONA_SWITCHER_PAGE_SIZE,
   NOODLE_PINK,
-  useNoodleAccent,
 } from "./SlurpShell";
 import { SlurpProfileSurface } from "./SlurpProfileSurface";
 import { SlurpSettings } from "./SlurpSettings";

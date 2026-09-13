@@ -286,7 +286,7 @@ async function removeOwnedSourceSnapshots(excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.2.21",
+    version: "1.2.22",
     minEngineVersion: "2.4.4",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
@@ -342,7 +342,7 @@ const features = [
   },
   {
     id: "slurp",
-    version: "1.50.0",
+    version: "1.50.1",
     minEngineVersion: "2.4.3",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp Legacy",
@@ -556,7 +556,7 @@ const features = [
   {
     id: "conversation-calls",
     name: "Calls",
-    version: "1.0.13",
+    version: "1.0.14",
     minEngineVersion: "2.4.1",
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],
@@ -608,9 +608,10 @@ const features = [
   ].map(([id, name, description, clientName, command, aliases, playerLabel]) => ({
     id,
     name,
-    version: "1.0.4",
+    version: "1.0.5",
     maxEngineExclusive: "4.0.0",
     description,
+    agent: { description: withPackageActivationGuidance(id, description) },
     kind: ["agent", "turn-game"],
     modes: ["conversation"],
     permissions: ["agent-runtime", "chat-read", "chat-write", "storage", "ui"],

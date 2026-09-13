@@ -99,7 +99,6 @@ export function useStartUno(chatId: string) {
 }
 
 export function useUnoMove(chatId: string) {
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: (vars: { move: unknown }) => api.post<OutcomeResponse>(`/turn-games/${chatId}/move`, vars),
     onSuccess: (res) => {

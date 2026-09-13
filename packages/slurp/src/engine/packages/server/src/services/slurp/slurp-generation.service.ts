@@ -43,7 +43,6 @@ import { getErrorMessage } from "./slurp-public-support.js";
 import { noodleResponseFormat } from "./slurp-response-format.js";
 import { buildSlurpPostTimingContext } from "./slurp-post-timing.js";
 import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js";
-import { createChatsStorage } from "../storage/chats.storage.js";
 
 export type GeneratedNoodlerPostResult = {
   post: NoodlerManagedPost;

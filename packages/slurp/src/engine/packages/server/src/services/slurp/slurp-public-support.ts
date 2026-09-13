@@ -6,7 +6,6 @@ import {
   type NoodleInteractionType,
 } from "@marinara-engine/shared";
 import { basename } from "path";
-import { logger } from "../../lib/logger.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
 import {
   createSlurpStorage,
