@@ -57,12 +57,18 @@ export function isAmbientNoodleAccount(account: Pick<NoodleAccount, "kind" | "en
   return account.kind === "random_user" && AMBIENT_NOODLE_ENTITY_ID_SET.has(account.entityId);
 }
 
+/** Ambient roster accounts are hidden, not deleted, while ambient profiles are switched off. */
+export function withoutHiddenAmbientAccounts<T extends Pick<NoodleAccount, "kind" | "entityId">>(
+  accounts: T[],
+  allowRandomUsers: boolean,
+): T[] {
+  return allowRandomUsers ? accounts : accounts.filter((account) => !isAmbientNoodleAccount(account));
+}
+
 type AmbientSeedStorage = Pick<
   ReturnType<typeof createSlurpStorage>,
   | "getSettings"
   | "updateSettings"
-  | "listAccounts"
-  | "deleteAccountByEntity"
   | "getSlurpAccountForEntity"
   | "updateAccount"
   | "upsertAccountFromProfile"
@@ -75,12 +81,11 @@ export async function dismissAmbientNoodleAccount(noodle: AmbientSeedStorage, en
   await noodle.updateSettings({ dismissedAmbientProfileIds: [...settings.dismissedAmbientProfileIds, entityId] });
 }
 
+/**
+ * Create the missing, non-dismissed roster accounts. Switched off, nothing is created or deleted:
+ * existing rows are returned as-is (storage hides them from every listing) so edits survive.
+ */
 export async function ensureAmbientNoodleAccounts(noodle: AmbientSeedStorage, invited: boolean): Promise<NoodleAccount[]> {
-  if (!invited) {
-    const staleAmbient = (await noodle.listAccounts()).filter(isAmbientNoodleAccount);
-    for (const account of staleAmbient) await noodle.deleteAccountByEntity("random_user", account.entityId);
-    return [];
-  }
   let resolveTurn!: () => void;
   const previousTurn = ambientSeedQueue;
   ambientSeedQueue = new Promise<void>((resolve) => {
@@ -93,6 +98,10 @@ export async function ensureAmbientNoodleAccounts(noodle: AmbientSeedStorage, in
     for (const { legacyName, legacyBio, ...profile } of AMBIENT_NOODLE_PROFILES) {
       if (dismissed.has(profile.entityId)) continue;
       const existing = await noodle.getSlurpAccountForEntity("random_user", profile.entityId);
+      if (!invited) {
+        if (existing) accounts.push(existing);
+        continue;
+      }
       // Only untouched legacy copy is renamed; an edited or rerolled account no longer carries the legacy name.
       if (existing && existing.displayName === legacyName && existing.settings.profile.profileManuallyEdited !== true) {
         const rename = {

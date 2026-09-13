@@ -205,7 +205,7 @@ export async function generateMissingNoodleProfiles(input: {
   const allocatedHandles = allocateAmbientProfileHandles(
     targets.map(({ account }) => account),
     profileByEntityId,
-    (await input.noodle.listAccounts()).map((account) => account.handle),
+    (await input.noodle.listAccounts({ includeHidden: true })).map((account) => account.handle),
   );
   for (const target of targets) {
     const profile = profileByEntityId.get(target.account.entityId);

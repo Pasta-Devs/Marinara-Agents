@@ -180,7 +180,7 @@ export async function rerollAmbientNoodleProfiles(input: {
   const allocatedHandles = allocateAmbientProfileHandles(
     input.accounts,
     generatedByEntityId,
-    (await input.noodle.listAccounts()).map((account) => account.handle),
+    (await input.noodle.listAccounts({ includeHidden: true })).map((account) => account.handle),
   );
   const accounts: NoodleAccount[] = [];
   const outcomes: AmbientProfileRerollOutcome[] = [];

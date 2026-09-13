@@ -5,6 +5,7 @@ import {
   AMBIENT_NOODLE_PROFILES,
   dismissAmbientNoodleAccount,
   ensureAmbientNoodleAccounts,
+  withoutHiddenAmbientAccounts,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-ambient-profiles.js";
 
 // In-memory stand-in for the slurp storage methods the seeder uses. Existing rows are never
@@ -123,6 +124,39 @@ async function main() {
     const accounts = await seed(store);
     assert.equal(store.rows.has(third.entityId), false);
     assert.equal(accounts.length, AMBIENT_NOODLE_PROFILES.length - 1);
+  }
+
+  // ── Switching off hides the roster; switching on again keeps edits ──────────
+  {
+    const store = fakeStorage();
+    await seed(store);
+    Object.assign(store.rows.get(first.entityId)!, {
+      displayName: "Kept Edit",
+      bio: "kept",
+      settings: { profile: { profileManuallyEdited: true } },
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const offAccounts = await ensureAmbientNoodleAccounts(store as any, false);
+    assert.equal(store.rows.size, AMBIENT_NOODLE_PROFILES.length);
+    assert.equal(offAccounts.length, AMBIENT_NOODLE_PROFILES.length, "settings panel still lists them");
+    await seed(store);
+    assert.equal(store.rows.size, AMBIENT_NOODLE_PROFILES.length);
+    assert.equal(store.rows.get(first.entityId)!.displayName, "Kept Edit");
+    assert.equal(store.rows.get(first.entityId)!.bio, "kept");
+
+    const creator = { kind: "character" as const, entityId: "char-1" };
+    const fan = { kind: "random_user" as const, entityId: "fan:generated" };
+    const listed = [creator, fan, ...store.rows.values()];
+    assert.deepEqual(withoutHiddenAmbientAccounts(listed, false), [creator, fan]);
+    assert.equal(withoutHiddenAmbientAccounts(listed, true).length, listed.length);
+  }
+
+  // ── Switched off, nothing is seeded ─────────────────────────────────────────
+  {
+    const store = fakeStorage();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    assert.deepEqual(await ensureAmbientNoodleAccounts(store as any, false), []);
+    assert.equal(store.rows.size, 0);
   }
 
   console.log("slurp2 ambient roster regression passed");

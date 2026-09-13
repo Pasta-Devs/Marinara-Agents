@@ -203,6 +203,7 @@ import {
 const IMAGE_RETRY_SCAN_LIMIT = 200;
 import { normalizeNoodlerSeenAt } from "../slurp/slurp-viewer-unseen.js";
 import { createCharactersStorage } from "./characters.storage.js";
+import { withoutHiddenAmbientAccounts } from "../slurp/slurp-ambient-profiles.js";
 import {
   compareNoodlerPostSortKeysDescending,
   isNoodlerPostAfterCursor,
@@ -2297,14 +2298,24 @@ export function createSlurpStorage(db: DB) {
       return reconciled;
     },
 
-    async listAccounts(): Promise<NoodleAccount[]> {
+    /**
+     * Ambient roster accounts are hidden, not deleted, while `allowRandomUsers` is off. Every read
+     * path lists accounts through here, so feeds, search and activity drop them in one place.
+     * `includeHidden` is for integrity guards and handle allocation, which must still see them.
+     */
+    async withoutHiddenAmbientAccounts<T extends NoodleAccount>(accounts: T[], includeHidden = false): Promise<T[]> {
+      if (includeHidden) return accounts;
+      return withoutHiddenAmbientAccounts(accounts, (await this.getSettings()).allowRandomUsers);
+    },
+
+    async listAccounts(options: { includeHidden?: boolean } = {}): Promise<NoodleAccount[]> {
       await reconcilePublicHandles();
       const rows = await db
         .select()
         .from(noodleAccounts)
         .where(eq(noodleAccounts.platform, "slurp"))
         .orderBy(desc(noodleAccounts.updatedAt));
-      return rows.map(mapAccount);
+      return this.withoutHiddenAmbientAccounts(rows.map(mapAccount), options.includeHidden);
     },
 
     async getAccountById(id: string): Promise<NoodleAccount | null> {
@@ -2441,13 +2452,13 @@ export function createSlurpStorage(db: DB) {
       return rows.map(mapAccount);
     },
 
-    async listNoodlerAccounts(): Promise<SlurpAccount[]> {
+    async listNoodlerAccounts(options: { includeHidden?: boolean } = {}): Promise<SlurpAccount[]> {
       const rows = await db
         .select()
         .from(noodleAccounts)
         .where(eq(noodleAccounts.platform, "slurp"))
         .orderBy(desc(noodleAccounts.updatedAt));
-      return rows.map(mapAccount);
+      return this.withoutHiddenAmbientAccounts(rows.map(mapAccount), options.includeHidden);
     },
 
     async getNoodlerAccountById(id: string): Promise<SlurpAccount | null> {
@@ -4441,7 +4452,9 @@ export function createSlurpStorage(db: DB) {
       const existing = await this.getPostById(id);
       if (!existing) return null;
       const interactions = await db.select().from(noodleInteractions).where(eq(noodleInteractions.postId, id));
-      const slurpSourceAccountIds = new Set((await this.listAccounts()).map((account) => account.id));
+      const slurpSourceAccountIds = new Set(
+        (await this.listAccounts({ includeHidden: true })).map((account) => account.id),
+      );
       if (interactions.some((interaction) => !slurpSourceAccountIds.has(interaction.actorAccountId))) return null;
       const interactionIds = interactions.map((interaction) => interaction.id);
       const digests = await db.select().from(noodleActivityDigests);
@@ -4546,7 +4559,7 @@ export function createSlurpStorage(db: DB) {
     },
 
     async resetTimeline(): Promise<void> {
-      const slurpSourceAccountIds = (await this.listAccounts()).map((account) => account.id);
+      const slurpSourceAccountIds = (await this.listAccounts({ includeHidden: true })).map((account) => account.id);
       const publicPosts =
         slurpSourceAccountIds.length > 0
           ? await db.select().from(noodlePosts).where(inArray(noodlePosts.authorAccountId, slurpSourceAccountIds))
@@ -4681,10 +4694,12 @@ export function createSlurpStorage(db: DB) {
       // The guard is "every actor in this subtree is an account this installation owns". A
       // creator reply is authored by a NoodleR stage account, so leaving those out made a
       // comment undeletable as soon as its creator answered it.
-      const slurpSourceAccountIds = new Set((await this.listAccounts()).map((account) => account.id));
+      const slurpSourceAccountIds = new Set(
+        (await this.listAccounts({ includeHidden: true })).map((account) => account.id),
+      );
       const knownAccountIds = new Set([
         ...slurpSourceAccountIds,
-        ...(await this.listNoodlerAccounts()).map((account) => account.id),
+        ...(await this.listNoodlerAccounts({ includeHidden: true })).map((account) => account.id),
       ]);
       if (
         deletedRows.some(
@@ -4782,7 +4797,13 @@ export function createSlurpStorage(db: DB) {
         .from(noodleInteractions)
         .where(inArray(noodleInteractions.postId, noodlerPostIds))
         .orderBy(noodleInteractions.createdAt);
-      return rows.map(mapInteraction);
+      const visibleIds = new Set((await this.listAccounts()).map((account) => account.id));
+      const hiddenIds = new Set(
+        (await this.listAccounts({ includeHidden: true }))
+          .filter((account) => !visibleIds.has(account.id))
+          .map((account) => account.id),
+      );
+      return rows.filter((row) => !hiddenIds.has(row.actorAccountId)).map(mapInteraction);
     },
 
     async claimNoodlerCreatorReply(
@@ -5671,7 +5692,9 @@ export function createSlurpStorage(db: DB) {
     }): Promise<NoodleDigestEntry> {
       const id = newId();
       const uniqueAccountIds = Array.from(new Set(input.accountIds.filter(Boolean)));
-      const slurpSourceAccountIds = new Set((await this.listAccounts()).map((account) => account.id));
+      const slurpSourceAccountIds = new Set(
+        (await this.listAccounts({ includeHidden: true })).map((account) => account.id),
+      );
       if (!uniqueAccountIds.every((accountId) => slurpSourceAccountIds.has(accountId))) {
         throw new Error("Public Noodle digests cannot reference NoodleR accounts.");
       }
@@ -5712,7 +5735,9 @@ export function createSlurpStorage(db: DB) {
       const existingRows = await db.select().from(noodleActivityDigests).where(eq(noodleActivityDigests.id, id));
       const existing = existingRows[0];
       if (!existing) return null;
-      const slurpSourceAccountIds = new Set((await this.listAccounts()).map((account) => account.id));
+      const slurpSourceAccountIds = new Set(
+        (await this.listAccounts({ includeHidden: true })).map((account) => account.id),
+      );
       if (
         !parseStringArray(existing.accountIds).every((accountId) => slurpSourceAccountIds.has(accountId)) ||
         !uniqueAccountIds.every((accountId) => slurpSourceAccountIds.has(accountId))
