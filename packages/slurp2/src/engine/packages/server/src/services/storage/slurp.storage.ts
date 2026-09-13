@@ -87,9 +87,15 @@ import {
   slurpProjectChapter,
   slurpProjectsKey,
   slurpProjectTick,
+  slurpArcAutoKey,
   slurpArcsWithoutFocus,
+  slurpAutoArcKind,
+  SLURP_ARC_AUTO_MODES,
   SLURP_ARC_INTENSITIES,
+  SLURP_ARC_KINDS,
   SLURP_ARC_PACES,
+  SLURP_DEFAULT_ARC_ALLOWED_KINDS,
+  SLURP_DEFAULT_ARC_AUTO_MODE,
   SLURP_DEFAULT_ARC_PACE,
   SLURP_PROJECT_STATUSES,
   type SlurpArcIntensity,
@@ -336,6 +342,10 @@ export const slurpSettingsSchema = z.object({
   arcAffectsMood: z.boolean(),
   /** The Creator's running arc reaches the audience that comments on their posts. */
   arcFanReactions: z.boolean(),
+  /** Whether the world tick starts or suggests arcs for Creators with none running. */
+  arcAutoMode: z.enum(SLURP_ARC_AUTO_MODES),
+  arcCooldownWeeks: z.number().int().min(1).max(8),
+  arcAllowedKinds: z.array(z.enum(SLURP_ARC_KINDS)).max(SLURP_ARC_KINDS.length),
   /** Stories are shown in their own tall frame, so they carry their own size. */
   storyImageWidth: z.number().int().min(64).max(4096),
   storyImageHeight: z.number().int().min(64).max(4096),
@@ -987,6 +997,9 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   arcPace: SLURP_DEFAULT_ARC_PACE,
   arcAffectsMood: true,
   arcFanReactions: true,
+  arcAutoMode: SLURP_DEFAULT_ARC_AUTO_MODE,
+  arcCooldownWeeks: 3,
+  arcAllowedKinds: [...SLURP_DEFAULT_ARC_ALLOWED_KINDS],
   // 4:5. The composer crops an uploaded Story to whatever ratio is configured here, so the two
   // halves of the feature stay one shape.
   storyImageWidth: 1024,
@@ -2202,6 +2215,7 @@ export function createSlurpStorage(db: DB) {
         for (const accountId of accountIds) {
           await settings.remove(`${SLURP_CREATOR_STATE_KEY}.${accountId}`);
           await settings.remove(slurpProjectsKey(accountId));
+          await settings.remove(slurpArcAutoKey(accountId));
         }
         for (const personaId of personaIds) await settings.remove(slurpViewerSettingsKey(personaId));
         await settings.remove(SLURP_SETTINGS_KEY);
@@ -6918,6 +6932,36 @@ export function createSlurpStorage(db: DB) {
         if (project !== projects[index]) await this.recordArcChange(creatorAccountId, projects[index]!, project);
       }
       return moved;
+    },
+
+    /**
+     * Start or suggest an automatic arc for a Creator with none running, when the settings allow it
+     * and the cooldown has passed. The cooldown starts at the suggestion, so dismissing one does not
+     * bring the next one sooner.
+     */
+    async rollAutoArc(creatorAccountId: string, at = new Date()): Promise<SlurpProject | null> {
+      const settings = await this.getSettings();
+      if (settings.arcAutoMode === "off") return null;
+      const projects = await this.listProjects(creatorAccountId);
+      const kind = slurpAutoArcKind({
+        creatorAccountId,
+        at,
+        projects,
+        allowed: settings.arcAllowedKinds,
+        lastAutoAt: await settingsStore.get(slurpArcAutoKey(creatorAccountId)),
+        cooldownWeeks: settings.arcCooldownWeeks,
+      });
+      if (!kind) return null;
+      const made = makeSlurpProject(newId(), { kind }, at);
+      if (!made) return null;
+      const project: SlurpProject = settings.arcAutoMode === "suggest" ? { ...made, status: "suggested" } : made;
+      await settingsStore.set(slurpProjectsKey(creatorAccountId), JSON.stringify([project, ...projects]));
+      await settingsStore.set(slurpArcAutoKey(creatorAccountId), at.toISOString());
+      await this.recordCreatorEvent(creatorAccountId, "arc_started", {
+        actorLabel: project.title,
+        subjectId: project.id,
+      });
+      return project;
     },
 
     /** One project's own posts, newest first, for the Studio and for generation continuity. */

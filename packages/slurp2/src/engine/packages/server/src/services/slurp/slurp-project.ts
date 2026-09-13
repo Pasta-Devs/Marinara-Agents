@@ -46,7 +46,8 @@ export const SLURP_PROJECT_MAX_CHAPTERS = 12;
  */
 export const SLURP_PROJECT_MAX_ACTIVE = 3;
 
-export const SLURP_PROJECT_STATUSES = ["active", "paused", "complete"] as const;
+/** `suggested` is an automatic arc waiting for the player to accept it. It claims no posts. */
+export const SLURP_PROJECT_STATUSES = ["active", "paused", "complete", "suggested"] as const;
 
 export type SlurpProjectStatus = (typeof SLURP_PROJECT_STATUSES)[number];
 
@@ -170,6 +171,65 @@ export const SLURP_ARC_TEMPLATES: Record<Exclude<SlurpArcKind, "custom">, Templa
 
 /** Storage key for one Creator's projects. Mirrors the goal and earnings key shape. */
 export const slurpProjectsKey = (creatorAccountId: string) => `slurp2.creator.${creatorAccountId}.projects`;
+
+export const SLURP_ARC_AUTO_MODES = ["off", "suggest", "auto"] as const;
+
+export type SlurpArcAutoMode = (typeof SLURP_ARC_AUTO_MODES)[number];
+
+/**
+ * Off by default. The whole reason arcs exist is that every Creator used to be moving house without
+ * anybody asking for it; turning life events back on by default would repeat that.
+ */
+export const SLURP_DEFAULT_ARC_AUTO_MODE: SlurpArcAutoMode = "off";
+
+export const SLURP_TEMPLATED_ARC_KINDS = SLURP_ARC_KINDS.filter(
+  (kind): kind is Exclude<SlurpArcKind, "custom"> => kind !== "custom",
+);
+
+/** A breakup is a heavy thing to hand a Creator unasked, so automatic arcs leave it out unless chosen. */
+export const SLURP_DEFAULT_ARC_ALLOWED_KINDS = SLURP_TEMPLATED_ARC_KINDS.filter((kind) => kind !== "breakup");
+
+/** When an automatic arc was last started or suggested for this Creator, for the cooldown. */
+export const slurpArcAutoKey = (creatorAccountId: string) => `slurp2.creator.${creatorAccountId}.arcAutoAt`;
+
+const WEEK_MS = 7 * 86_400_000;
+
+function hash(value: string): number {
+  let out = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    out ^= value.charCodeAt(index);
+    out = Math.imul(out, 0x01000193);
+  }
+  return out >>> 0;
+}
+
+/**
+ * The arc kind to start for a Creator right now, or null.
+ *
+ * Deterministic, like audience arcs: seeded on the Creator and the week, so running the world tick
+ * twice cannot start two arcs, and the same week always gives the same answer. Only one eligible
+ * week in three rolls an arc, so a fresh install does not hand every Creator a life event at once.
+ *
+ * A Creator who already has a running or suggested arc gets nothing: automatic arcs fill silence,
+ * they never stack on a story the player is already telling.
+ */
+export function slurpAutoArcKind(input: {
+  creatorAccountId: string;
+  at: Date;
+  projects: readonly SlurpProject[];
+  allowed: readonly SlurpArcKind[];
+  lastAutoAt: string | null;
+  cooldownWeeks: number;
+}): Exclude<SlurpArcKind, "custom"> | null {
+  if (input.projects.some((project) => project.status === "active" || project.status === "suggested")) return null;
+  const allowed = SLURP_TEMPLATED_ARC_KINDS.filter((kind) => input.allowed.includes(kind));
+  if (allowed.length === 0) return null;
+  const last = input.lastAutoAt ? Date.parse(input.lastAutoAt) : Number.NaN;
+  if (Number.isFinite(last) && input.at.getTime() - last < Math.max(1, input.cooldownWeeks) * WEEK_MS) return null;
+  const roll = hash(`${input.creatorAccountId}:${Math.floor(input.at.getTime() / WEEK_MS)}`);
+  if (roll % 3 !== 0) return null;
+  return allowed[(roll >>> 2) % allowed.length]!;
+}
 
 const clampText = (value: unknown, max: number): string =>
   typeof value === "string" ? value.trim().slice(0, max) : "";

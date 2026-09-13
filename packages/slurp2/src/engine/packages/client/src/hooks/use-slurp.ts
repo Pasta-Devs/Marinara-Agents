@@ -321,6 +321,9 @@ export type SlurpSettings = {
   arcPace: "slow" | "normal" | "fast";
   arcAffectsMood: boolean;
   arcFanReactions: boolean;
+  arcAutoMode: "off" | "suggest" | "auto";
+  arcCooldownWeeks: number;
+  arcAllowedKinds: SlurpArcKind[];
   storyImageWidth: number;
   storyImageHeight: number;
   refreshesPerDay: number;
@@ -708,7 +711,8 @@ export type SlurpEventKind =
   | "audience_arc"
   | "returned"
   | "arc_phase"
-  | "arc_complete";
+  | "arc_complete"
+  | "arc_started";
 
 export type SlurpEventItem = {
   id: string;
@@ -799,7 +803,7 @@ export type SlurpProject = {
   direction: string;
   chapters: string[];
   chapter: number;
-  status: "active" | "paused" | "complete";
+  status: "active" | "paused" | "complete" | "suggested";
   posts: number;
   startedAt: string;
   updatedAt: string;

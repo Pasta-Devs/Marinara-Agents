@@ -1,6 +1,6 @@
 # Slurp Arcs Plan
 
-Status: proposal. Nothing here is built yet.
+Status: built, one commit per phase. See "As built" at the end for where it differs from the plan.
 
 ## Problem
 
@@ -151,3 +151,18 @@ Adds settings: `arcAutoMode`, `arcCooldownWeeks`, `arcAllowedKinds`, `arcPace` (
   trigger enough? Default: removing the trigger; revisit if Phase 0 shows other sources.
 - Rename `project` → `arc` internally? Default: no, UI copy only.
 - Is `breakup` a kind at all, given adult Creator content? Default: shipped but off.
+
+## As built
+
+- Phase 0 was not run. The diagnosis is still unconfirmed on real data.
+- Phase 2: no `arcsEnabled`. `projectRate: "off"` already stops every arc from posting, so a
+  second switch would do nothing new.
+- Phase 3: `chapters` stays the list of chapter labels, and `phaseDays` holds a day range per
+  chapter by index. There is no separate `beat` field; the chapter label is the beat.
+- Phase 4: no per-phase mood modifier. The stance line carries the arc into DMs. Fan reactions
+  come from giving the fan-activity prompt the arc line, not from a separate DM trigger.
+- Phase 5: no per-Creator override of `arcAutoMode`. One eligible week in three rolls an arc,
+  seeded on Creator and week.
+- Settings that shipped: `projectRate`, `arcPace`, `arcAffectsMood`, `arcFanReactions`,
+  `arcAutoMode`, `arcCooldownWeeks`, `arcAllowedKinds`. `arcMaxActive` did not ship; the limit
+  stays at three.

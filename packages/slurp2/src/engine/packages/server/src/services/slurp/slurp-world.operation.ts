@@ -209,6 +209,8 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     // move does not stall forever on a Creator who stopped posting.
     for (const account of maintenanceDue ? accounts : []) {
       await noodle.tickProjects(account.id, until).catch(() => []);
+      // After the tick, so an arc that just finished leaves room for the next one.
+      await noodle.rollAutoArc(account.id, until).catch(() => null);
     }
 
     // Arcs. Where each relationship is heading, as opposed to where it stands. Runs on the same

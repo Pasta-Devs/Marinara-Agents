@@ -75,6 +75,7 @@ import {
   type SlurpContentRating,
   type SlurpReserveStatus,
   type SlurpScheduleSlot,
+  SLURP_ARC_KINDS,
 } from "../../hooks/use-slurp";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { Modal } from "../ui/Modal";
@@ -1126,6 +1127,60 @@ export function SlurpSettings({
                     value={settings.arcFanReactions}
                     onChange={(value) => update("arcFanReactions", value)}
                   />
+                  <Field label={t("ui.slurp.settings.arcAutoMode")} detail={t("ui.slurp.settings.arcAutoModeDetail")}>
+                    <select
+                      value={settings.arcAutoMode}
+                      disabled={updateSettings.isPending}
+                      onChange={(event) =>
+                        void update("arcAutoMode", event.target.value as SlurpSettings["arcAutoMode"])
+                      }
+                      className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                    >
+                      <option value="off">{t("ui.slurp.settings.arcAutoModeOff")}</option>
+                      <option value="suggest">{t("ui.slurp.settings.arcAutoModeSuggest")}</option>
+                      <option value="auto">{t("ui.slurp.settings.arcAutoModeAuto")}</option>
+                    </select>
+                  </Field>
+                  {settings.arcAutoMode !== "off" && (
+                    <>
+                      <Field
+                        label={t("ui.slurp.settings.arcCooldownWeeks")}
+                        detail={t("ui.slurp.settings.arcCooldownWeeksDetail")}
+                      >
+                        <NumberSetting
+                          value={settings.arcCooldownWeeks}
+                          min={1}
+                          max={8}
+                          onSave={(value) => save({ arcCooldownWeeks: value })}
+                        />
+                      </Field>
+                      <Field
+                        label={t("ui.slurp.settings.arcAllowedKinds")}
+                        detail={t("ui.slurp.settings.arcAllowedKindsDetail")}
+                      >
+                        <div className="flex flex-wrap gap-x-4">
+                          {SLURP_ARC_KINDS.filter((kind) => kind !== "custom").map((kind) => (
+                            <label key={kind} className="inline-flex min-h-11 items-center gap-2 text-sm">
+                              <input
+                                type="checkbox"
+                                checked={settings.arcAllowedKinds.includes(kind)}
+                                disabled={updateSettings.isPending}
+                                onChange={(event) =>
+                                  void update(
+                                    "arcAllowedKinds",
+                                    event.target.checked
+                                      ? [...settings.arcAllowedKinds, kind]
+                                      : settings.arcAllowedKinds.filter((entry) => entry !== kind),
+                                  )
+                                }
+                              />
+                              {t(`ui.slurp.projects.kinds.${kind}`)}
+                            </label>
+                          ))}
+                        </div>
+                      </Field>
+                    </>
+                  )}
                 </div>
               )}
 

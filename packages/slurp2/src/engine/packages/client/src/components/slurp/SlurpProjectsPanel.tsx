@@ -144,6 +144,17 @@ export function SlurpProjectsPanel({ personaId, creatorAccountId }: { personaId:
                 </span>
               </span>
               <span className="flex shrink-0 gap-2 text-[0.65rem] font-semibold">
+                {/* A suggestion is the player's call before it is anything else: accept it or let it go. */}
+                {project.status === "suggested" && (
+                  <button
+                    type="button"
+                    onClick={() => setStatus(project, "active")}
+                    className="underline"
+                    disabled={busy}
+                  >
+                    {localizeUi("ui.slurp.projects.accept", { defaultValue: "Accept" })}
+                  </button>
+                )}
                 <button type="button" onClick={() => startEdit(project)} className="underline" disabled={busy}>
                   {localizeUi("ui.slurp.projects.edit", { defaultValue: "Edit" })}
                 </button>
@@ -178,7 +189,7 @@ export function SlurpProjectsPanel({ personaId, creatorAccountId }: { personaId:
                     {localizeUi("ui.slurp.projects.resume", { defaultValue: "Resume" })}
                   </button>
                 ) : null}
-                {project.status !== "complete" && (
+                {(project.status === "active" || project.status === "paused") && (
                   <button
                     type="button"
                     onClick={() => setStatus(project, "complete")}
@@ -194,7 +205,9 @@ export function SlurpProjectsPanel({ personaId, creatorAccountId }: { personaId:
                   className="underline"
                   disabled={busy}
                 >
-                  {localizeUi("ui.slurp.projects.delete", { defaultValue: "Delete" })}
+                  {project.status === "suggested"
+                    ? localizeUi("ui.slurp.projects.dismiss", { defaultValue: "Dismiss" })
+                    : localizeUi("ui.slurp.projects.delete", { defaultValue: "Delete" })}
                 </button>
               </span>
             </li>

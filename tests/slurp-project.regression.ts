@@ -10,9 +10,12 @@ import {
   SLURP_ARC_TEMPLATES,
   SLURP_PROJECT_MAX_CHAPTERS,
   SLURP_PROJECT_TITLE_MAX_LENGTH,
+  SLURP_DEFAULT_ARC_ALLOWED_KINDS,
+  SLURP_DEFAULT_ARC_AUTO_MODE,
   slurpArcLifeLine,
   slurpArcRotation,
   slurpArcsWithoutFocus,
+  slurpAutoArcKind,
   slurpProjectAdvance,
   slurpProjectChapter,
   slurpProjectInstruction,
@@ -61,6 +64,42 @@ assert.deepEqual(
   "the focus arc takes twice the slots",
 );
 assert.ok(slurpArcsWithoutFocus([move, focus]).every((project) => project.intensity === "background"));
+
+// ── Automatic arcs ──────────────────────────────────────────────────────────
+// Off by default: every Creator moving house unasked is the bug arcs were built to fix.
+assert.equal(SLURP_DEFAULT_ARC_AUTO_MODE, "off");
+assert.ok(!SLURP_DEFAULT_ARC_ALLOWED_KINDS.includes("breakup" as never));
+{
+  const auto = (overrides: Partial<Parameters<typeof slurpAutoArcKind>[0]> = {}) =>
+    slurpAutoArcKind({
+      creatorAccountId: "creator-a",
+      at,
+      projects: [],
+      allowed: SLURP_DEFAULT_ARC_ALLOWED_KINDS,
+      lastAutoAt: null,
+      cooldownWeeks: 3,
+      ...overrides,
+    });
+  // Find a Creator whose week rolls an arc, so the other rules can be checked against a real "yes".
+  const lucky = Array.from({ length: 60 }, (_, index) => `creator-${index}`).find(
+    (creatorAccountId) => auto({ creatorAccountId }) !== null,
+  );
+  assert.ok(lucky, "some Creators roll an arc in a given week");
+  const rolled = Array.from({ length: 60 }, (_, index) => auto({ creatorAccountId: `creator-${index}` }));
+  assert.ok(rolled.filter(Boolean).length < 60, "not every Creator gets an arc in the same week");
+  assert.ok(rolled.every((kind) => kind === null || SLURP_DEFAULT_ARC_ALLOWED_KINDS.includes(kind)));
+  assert.equal(
+    auto({ creatorAccountId: lucky }),
+    auto({ creatorAccountId: lucky }),
+    "the same week gives the same answer",
+  );
+  assert.equal(auto({ creatorAccountId: lucky, projects: [move] }), null, "a running arc blocks another");
+  assert.equal(auto({ creatorAccountId: lucky, projects: [{ ...move, status: "suggested" }] }), null);
+  assert.notEqual(auto({ creatorAccountId: lucky, projects: [{ ...move, status: "complete" }] }), null);
+  assert.equal(auto({ creatorAccountId: lucky, allowed: [] }), null, "no allowed kinds, no arc");
+  assert.equal(auto({ creatorAccountId: lucky, allowed: ["custom"] }), null, "custom has no template to start");
+  assert.equal(auto({ creatorAccountId: lucky, lastAutoAt: daysLater(-7).toISOString() }), null, "cooldown holds");
+}
 
 // ── The arc reaches the rest of the Creator's life ──────────────────────────
 assert.equal(slurpArcLifeLine([]), null, "no arc, no life event invented in a DM");

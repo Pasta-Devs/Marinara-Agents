@@ -8094,7 +8094,8 @@ function SlurpNotificationsView({
       return { icon: MessageCircle, tone: "bg-[var(--noodle-accent)]/14 text-[var(--noodle-accent)]" };
     if (kind === "comment" || kind === "returned" || kind === "audience_arc")
       return { icon: Heart, tone: "bg-sky-500/14 text-sky-300" };
-    if (kind === "arc_phase" || kind === "arc_complete") return { icon: Star, tone: "bg-amber-500/14 text-amber-300" };
+    if (kind === "arc_phase" || kind === "arc_complete" || kind === "arc_started")
+      return { icon: Star, tone: "bg-amber-500/14 text-amber-300" };
     if (kind === "tip") return { icon: Coins, tone: "bg-emerald-500/14 text-emerald-300" };
     if (kind === "unlock" || kind === "ppv_unlock") return { icon: Lock, tone: "bg-violet-500/14 text-violet-300" };
     if (kind === "subscribed") return { icon: Crown, tone: "bg-fuchsia-500/14 text-fuchsia-300" };
