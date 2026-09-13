@@ -1650,6 +1650,7 @@ function subjectRejection(unit: LtmEvidenceUnit, match: Exclude<SubjectMatch, { 
       validatorCode: code,
       message,
       snippet: safeSnippet(unit.text),
+      recoveryCandidate: unit,
       recovery: {
         noteType: unit.bucket === "character_fact" ? ("character" as const) : ("relationship" as const),
         noteId,

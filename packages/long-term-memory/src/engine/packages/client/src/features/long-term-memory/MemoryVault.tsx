@@ -579,8 +579,11 @@ function recoveredNote(
     scope: handoff.scope,
     sections: {
       [sectionKey]: {
-        text: handoff.candidate.snippet ?? handoff.candidate.message,
+        text: handoff.candidate.recoveryCandidate?.text ?? handoff.candidate.snippet ?? handoff.candidate.message,
         updatedAt: now,
+        ...(handoff.candidate.recoveryCandidate?.evidence
+          ? { evidence: handoff.candidate.recoveryCandidate.evidence }
+          : {}),
       },
     },
   };

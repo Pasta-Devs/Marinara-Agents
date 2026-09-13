@@ -76,7 +76,9 @@ async function main() {
   const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
   const { LongTermMemoryDraftStore } = await import(`${source}/draft-store.ts`);
   const { applyLongTermMemoryDraft, preflightLongTermMemoryDraft } = await import(`${source}/reconciliation.ts`);
-  const { compileEvidenceUnitExtraction } = await import(`${source}/evidence-unit-extraction.ts`);
+  const { compileEvidenceUnitExtraction, sourceMetadataForEvidenceUnitDraft } = await import(
+    `${source}/evidence-unit-extraction.ts`
+  );
   const { extractionFingerprintForLtmSourceNote, isLtmSourceExtractionFingerprintCurrent, sourceHashForLtmSourceNote } =
     await import(`${source}/source-hash.ts`);
   const { projectLongTermMemoryDraftReview } = await import(`${source}/draft-review.ts`);
@@ -363,8 +365,104 @@ async function main() {
       assert.equal(secondRejections.length, 1);
       assert.equal((await listRejectedSuggestions({ chatId: "chat-a" }, root)).length, 2);
       assert.equal((await exportLongTermMemoryData(root)).rejectedSuggestions.length, 2);
-      await addRejectedSuggestions(rejectionDraft, root);
-      await addRejectedSuggestions(rejectionDraft, root);
+
+      const completeSource = {
+        id: "source_valid_import",
+        title: "Valid imported summary",
+        type: "source",
+        status: "active",
+        modes: ["roleplay"],
+        scope: {},
+        tags: ["imported_chat"],
+        keywords: [],
+        links: [],
+        provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "summary-a" },
+        sections: {
+          source: { text: "Valid summary.", updatedAt: timestamp, evidence: ["chat:chat-a"] },
+        },
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        version: 1,
+      } as any;
+      const completeRecoveryCandidate = {
+        id: randomUUID(),
+        bucket: "timeline_event",
+        subjectId: "argument_strained_trust",
+        sectionKey: "facts",
+        text: "A complete recovered candidate whose original text is longer than the display preview. ".repeat(5),
+        claimKind: "static",
+        importance: "major",
+        keywords: ["recovery", "complete"],
+        evidence: [`source_note:${completeSource.id}`, "summary_entry:summary-a"],
+        confidence: 0.91,
+        salience: 0.84,
+        status: "active",
+        links: [{ target: completeSource.id, relation: "extracted_from" }],
+        sourceHash: sourceHashForLtmSourceNote(completeSource),
+      };
+      const completeRecoverySource = sourceMetadataForEvidenceUnitDraft(completeSource, {
+        scope: completeSource.scope,
+        modes: completeSource.modes,
+        extractionMode: "roleplay",
+      });
+      const completeRecovery = await addRejectedSuggestions(
+        {
+          ...rejectionDraft,
+          source: completeRecoverySource,
+          extractionOutcome: {
+            ...rejectionDraft.extractionOutcome,
+            droppedCandidates: [
+              {
+                index: 0,
+                reason: "invalid_format",
+                message: "Rejected candidate.",
+                snippet: "candidate",
+                recoveryCandidate: completeRecoveryCandidate,
+              },
+            ],
+          },
+        } as any,
+        root,
+      );
+      assert.equal(completeRecovery[0]?.candidate.recoveryCandidate?.text, completeRecoveryCandidate.text);
+      assert.equal(completeRecovery[0]?.candidate.recoveryCandidate?.confidence, 0.91);
+      assert.deepEqual(completeRecovery[0]?.candidate.recoveryCandidate?.evidence, completeRecoveryCandidate.evidence);
+      const completeRecoveryBackup = await exportLongTermMemoryData(root);
+      const completeRecoveryBackupRoot = join(dataDir, "complete-recovery-backup");
+      await replaceLongTermMemoryData(completeRecoveryBackup, completeRecoveryBackupRoot);
+      const restoredCompleteRecovery = (
+        await exportLongTermMemoryData(completeRecoveryBackupRoot)
+      ).rejectedSuggestions.find((suggestion) => suggestion.id === completeRecovery[0]?.id);
+      assert.equal(restoredCompleteRecovery?.candidate.recoveryCandidate?.text, completeRecoveryCandidate.text);
+      assert.equal(
+        restoredCompleteRecovery?.candidate.recoveryCandidate?.text.length,
+        completeRecoveryCandidate.text.length,
+      );
+      assert.equal(restoredCompleteRecovery?.source.sourceHash, completeRecoverySource.sourceHash);
+      assert.deepEqual(
+        restoredCompleteRecovery?.source.extractionFingerprint,
+        completeRecoverySource.extractionFingerprint,
+      );
+      const previewOnlyRepeat = await addRejectedSuggestions(
+        {
+          ...rejectionDraft,
+          source: completeRecoverySource,
+          extractionOutcome: {
+            ...rejectionDraft.extractionOutcome,
+            droppedCandidates: [
+              {
+                index: 0,
+                reason: "invalid_format",
+                message: "Rejected candidate.",
+                snippet: "candidate",
+              },
+            ],
+          },
+        } as any,
+        root,
+      );
+      assert.equal(previewOnlyRepeat[0]?.id, completeRecovery[0]?.id);
+      assert.equal(previewOnlyRepeat[0]?.candidate.recoveryCandidate?.text, completeRecoveryCandidate.text);
       assert.equal((await listRejectedSuggestions({ chatId: "chat-a" }, root)).length, 2);
       const legacyFingerprintRejection = await addRejectedSuggestions(
         {
@@ -386,6 +484,7 @@ async function main() {
       );
       assert.equal(legacyFingerprintRejection[0]?.id, firstRejections[0]?.id);
       assert.equal(legacyFingerprintRejection[0]?.candidate.validatorCode, "invalid_evidence_unit_format");
+      assert.equal(legacyFingerprintRejection[0]?.candidate.recoveryCandidate?.text, completeRecoveryCandidate.text);
       const exportedWithValidatorCode = await exportLongTermMemoryData(root);
       assert.equal(
         exportedWithValidatorCode.rejectedSuggestions.find((suggestion) => suggestion.id === firstRejections[0]?.id)
