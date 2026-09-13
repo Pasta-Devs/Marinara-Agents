@@ -61,6 +61,15 @@ const instruction = slurpPostVariationInstruction(slurpPostVariation("creator-a"
 assert.match(instruction, /Keep the person exactly as the character card describes them/u);
 assert.match(instruction, /directions to vary along, not a scene to copy/u);
 
+// ── No angle plants a life event ────────────────────────────────────────────
+// "A small, ordinary change to their space" came up once in six posts for every Creator, read as
+// moving house, and history continuity kept every Creator moving. Life events belong to arcs.
+for (let step = 0; step < 60; step += 1) {
+  const text = slurpPostVariationInstruction(slurpPostVariation("creator-a", step));
+  assert.doesNotMatch(text, /change to their space|had to travel/u);
+  assert.match(text, /This angle is for this post only/u);
+}
+
 // ── Wiring ──────────────────────────────────────────────────────────────────
 const root = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
