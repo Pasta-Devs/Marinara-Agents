@@ -16,7 +16,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 class NoodlerAttemptUnavailableError extends Error {
   constructor(readonly status: "exhausted" | "holding") {
-    super(`Automatic NoodleR attempt ${status}.`);
+    super(`Automatic Slurp attempt ${status}.`);
   }
 }
 

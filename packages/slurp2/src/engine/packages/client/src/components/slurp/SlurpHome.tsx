@@ -1607,7 +1607,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     overlays: postCardController.imageLightbox ? (
       <ChatImageLightbox
         image={postCardController.imageLightbox}
-        alt={postCardController.imageLightbox.prompt || "NoodleR image"}
+        alt={postCardController.imageLightbox.prompt || "Slurp image"}
         pinEnabled={false}
         onClose={() => postCardController.setImageLightbox(null)}
       />
@@ -4073,25 +4073,37 @@ function StageProfileView({
         leadingActions={
           !editing && !viewingOwnCreator && viewerCreator ? (
             <>
-              <button
-                type="button"
-                disabled={followPending}
-                onClick={() => onToggleFollow(profile.id, viewerCreator.followed)}
-                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--noodle-divider)] text-[var(--noodle-accent)] transition-[background-color,opacity,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50"
-                aria-label={
-                  viewerCreator.followed
-                    ? localizeUi("ui.noodle.connections.tabs.following")
-                    : localizeUi("ui.slurp.profile.follow")
-                }
-                aria-pressed={viewerCreator.followed}
-                title={
-                  viewerCreator.followed
-                    ? localizeUi("ui.noodle.connections.tabs.following")
-                    : localizeUi("ui.slurp.profile.follow")
-                }
-              >
-                {viewerCreator.followed ? <BookmarkCheck size={19} /> : <Bookmark size={19} />}
-              </button>
+              {/* A subscription already implies a follow, so subscribers get a static badge instead of a
+                  toggle they cannot actually turn off. */}
+              {viewerCreator.subscribed ? (
+                <span
+                  aria-label={localizeUi("ui.slurp.profile.subscribed")}
+                  title={localizeUi("ui.slurp.profile.subscribed")}
+                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--noodle-accent)]/50 bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]"
+                >
+                  <BookmarkCheck size={19} />
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  disabled={followPending}
+                  onClick={() => onToggleFollow(profile.id, viewerCreator.followed)}
+                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--noodle-divider)] text-[var(--noodle-accent)] transition-[background-color,opacity,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label={
+                    viewerCreator.followed
+                      ? localizeUi("ui.noodle.connections.tabs.following")
+                      : localizeUi("ui.slurp.profile.follow")
+                  }
+                  aria-pressed={viewerCreator.followed}
+                  title={
+                    viewerCreator.followed
+                      ? localizeUi("ui.noodle.connections.tabs.following")
+                      : localizeUi("ui.slurp.profile.follow")
+                  }
+                >
+                  {viewerCreator.followed ? <BookmarkCheck size={19} /> : <Bookmark size={19} />}
+                </button>
+              )}
               <button
                 type="button"
                 disabled={subscriptionPending}
@@ -4896,7 +4908,6 @@ function ViewerHub({
   const searchTerm = search.trim().toLowerCase();
   const { moments, feed, searchResults, discoveredCreators, suggestedCreators } = useMemo(() => {
     const searchable = (value: unknown) => (typeof value === "string" ? value.toLowerCase() : "");
-    const followedCreatorIds = new Set(scope?.viewer.settings.social.followingAccountIds ?? []);
     const creators = scope?.creators ?? [];
     // Keep a Creator's active Stories together. This makes one shelf tile a sequence rather than
     // making the next tap jump to an unrelated Creator.
@@ -4929,7 +4940,7 @@ function ViewerHub({
     return {
       moments: nextMoments,
       feed: allPosts
-        .filter(({ creator }) => tab === "all" || followedCreatorIds.has(creator.profile.id))
+        .filter(({ creator }) => tab === "all" || creator.followed)
         .filter(matchesSearch)
         .sort(newestFirst),
       searchResults: searchTerm ? allPosts.filter(matchesSearch).sort(newestFirst) : [],

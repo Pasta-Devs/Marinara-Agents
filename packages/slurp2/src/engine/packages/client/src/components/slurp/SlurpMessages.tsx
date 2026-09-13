@@ -1063,10 +1063,20 @@ function SlurpThreadView({
                   {relationship.availability.online
                     ? localizeUi("ui.slurp.messages.availableNow", { defaultValue: "Available now" })
                     : relationship.availability.minutesUntilOnline !== null
-                      ? relationship.availability.minutesUntilOnline < 60
-                        ? `Back in ~${Math.round(relationship.availability.minutesUntilOnline)}min`
-                        : `Back in ~${Math.round(relationship.availability.minutesUntilOnline / 60)}hr`
-                      : localizeUi("ui.slurp.messages.away", { defaultValue: "Away" })}
+                      ? localizeUi(
+                          relationship.availability.estimated
+                            ? "ui.slurp.messages.probablyBackIn"
+                            : "ui.slurp.messages.backIn",
+                          {
+                            value1:
+                              relationship.availability.minutesUntilOnline < 60
+                                ? `${Math.round(relationship.availability.minutesUntilOnline)}min`
+                                : `${Math.round(relationship.availability.minutesUntilOnline / 60)}hr`,
+                          },
+                        )
+                      : relationship.availability.estimated
+                        ? localizeUi("ui.slurp.messages.probablyAway")
+                        : localizeUi("ui.slurp.messages.away", { defaultValue: "Away" })}
                 </span>
               )}
               {/* Rapport decides how fast and how warmly a Creator answers. The player felt it and
@@ -3871,7 +3881,7 @@ function SlurpRelationshipPanel({
                 <Field label="Activity" value={availability.activity ?? "Nothing recorded"} />
                 {availability.minutesUntilOnline !== null && !availability.online && (
                   <Field
-                    label="Back in"
+                    label={availability.estimated ? "Back in (estimated from recent activity)" : "Back in"}
                     value={
                       availability.minutesUntilOnline < 60
                         ? `~${Math.round(availability.minutesUntilOnline)}min`

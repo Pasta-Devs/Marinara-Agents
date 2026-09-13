@@ -105,7 +105,7 @@ export async function rewriteNoodleImagePrompt(input: {
       typeof parsed.prompt === "string" ? parsed.prompt.trim().slice(0, MAX_REWRITTEN_PROMPT_LENGTH) : "";
     return rewritten || null;
   } catch (error) {
-    logger.warn(error, "[noodle] Image prompt instruction rewrite failed; using the original prompt");
+    logger.warn(error, "[slurp] Image prompt instruction rewrite failed; using the original prompt");
     return null;
   }
 }
