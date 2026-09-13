@@ -135,9 +135,10 @@ const noodlerProfileSchema = {
     handle: { type: "string" },
     bio: { type: "string" },
     stagePersonality: { type: "string" },
-    disclosureMode: { type: "string", enum: ["open", "hinted", "secret"] },
+    gender: { anyOf: [{ type: "null" }, { type: "string", enum: ["male", "female", "other"] }] },
+    tags: { type: "array", maxItems: 8, items: { type: "string" } },
   },
-  required: ["displayName", "handle", "bio", "stagePersonality", "disclosureMode"],
+  required: ["displayName", "handle", "bio", "stagePersonality", "gender", "tags"],
   additionalProperties: false,
 } as const;
 

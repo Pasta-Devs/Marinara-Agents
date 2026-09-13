@@ -1,10 +1,22 @@
 # Slurp Remastered release notes
 
+## 0.0.7 — 2026-09-13
+
+- Rebuilt Discover around direct subscription actions, persistent grid and list views, and filters for subscription status, gender, weekly price, and Creator tags.
+- Added Recommended, Newest, Most liked, and Most subscribed sorting with stable results.
+- Added editable Creator gender and tags, including safe custom tags and AI-suggested curated tags during profile creation and redrafting.
+- Added Arcs with automatic suggestions, pacing, focus, allowed kinds, and delivery to posts, messages, fan comments, and notifications.
+- Moved message, photo, subscription, and tip prices from the profile information box to the action that uses each price.
+- Hid the Follow control for subscribed Creators because a subscription already includes following.
+- Made Open the default Creator identity mode and removed the Secret identity tier.
+- Fixed persona Creator creation when Slurp already has the persona's viewer identity.
+
 ## 0.0.6 — 2026-09-13
 
 - Added image context options for reactions: stored prompts, vision descriptions, or automatic selection. Public fan reactions keep locked images hidden and respect Creator identity privacy.
 - Generation now shows how many Creators remain, including skipped or failed requests.
 - Restored visible success and error notifications for Slurp actions.
+- Fixed persona Creator creation when Slurp already has the persona's viewer identity. The viewer and Creator accounts can now coexist for one persona.
 
 ## 0.0.5 — 2026-09-13
 

@@ -32,6 +32,7 @@ import {
   slurpCreatorReaction,
 } from "./slurp-world-copy.js";
 import { enqueueSlurpPendingText } from "./slurp-pending-text.service.js";
+import { generateSlurpArc } from "./slurp-arc-generation.service.js";
 import {
   planSlurpWorldTick,
   slurpCreatorOpenerKind,
@@ -205,6 +206,19 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       }
     }
 
+    // Creator arcs. A chapter with a day range moves on once its time runs out, posted or not, so a
+    // move does not stall forever on a Creator who stopped posting.
+    for (const account of maintenanceDue ? accounts : []) {
+      await noodle.tickProjects(account.id, until).catch(() => []);
+      // After the tick, so an arc that just finished leaves room for the next one.
+      // Generated arcs are the one model call here; a failed call starts nothing this tick.
+      await noodle
+        .rollAutoArc(account.id, until, (id, partnerIds) =>
+          generateSlurpArc(db, id, partnerIds, "", { kind: "background" }),
+        )
+        .catch(() => null);
+    }
+
     // Arcs. Where each relationship is heading, as opposed to where it stands. Runs on the same
     // cadence as churn because it reads the same silence, and because recomputing a three-week
     // trajectory on every page load would be a full scan for nothing.
@@ -310,16 +324,20 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     const creators: SlurpWorldCreator[] = await Promise.all(
       accounts.map(async (account) => ({
         id: account.id,
-        followers: slurpCreatorReach(
-          {
-            accountId: account.id,
-            createdAt: account.createdAt,
-            // Request rates scale with audience, so the tick has to see the same follower count
-            // the player does. Passing zero here made a large Creator as quiet as a new one.
-            realFollowers: tickFunnel.get(account.id) ?? 0,
-            scale,
-          },
-          until,
+        // Arc stat effects on growth scale the reach the pulse hands out follows by, the one place
+        // new followers come from. The follower count shown to the player is left alone.
+        followers: Math.round(
+          slurpCreatorReach(
+            {
+              accountId: account.id,
+              createdAt: account.createdAt,
+              // Request rates scale with audience, so the tick has to see the same follower count
+              // the player does. Passing zero here made a large Creator as quiet as a new one.
+              realFollowers: tickFunnel.get(account.id) ?? 0,
+              scale,
+            },
+            until,
+          ) * (await noodle.arcEffectMultiplier(account.id, "growth")),
         ),
         recentPostIds: (postsByAccount.get(account.id) ?? [])
           .filter((post) => post.createdAt >= cutoff && post.access !== "draft")

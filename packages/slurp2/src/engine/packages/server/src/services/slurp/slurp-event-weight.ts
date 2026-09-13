@@ -30,7 +30,13 @@ export type SlurpEventKind =
   /** Somebody's relationship with a Creator changed direction: rising, or burning out. */
   | "audience_arc"
   /** Somebody who had drifted away came back. */
-  | "returned";
+  | "returned"
+  /** One of the Creator's own arcs moved to its next chapter. */
+  | "arc_phase"
+  /** One of the Creator's own arcs finished. */
+  | "arc_complete"
+  /** An automatic arc was started or suggested for a Creator. */
+  | "arc_started";
 
 /**
  * Base weights. The gaps matter more than the numbers: anything at or above `SLURP_EVENT_NOTABLE`
@@ -51,6 +57,12 @@ const BASE: Record<SlurpEventKind, number> = {
   // back is the better story of the two, so it is weighted above a change of direction.
   returned: 65,
   audience_arc: 48,
+  // A finished arc is a small milestone of the Creator's own. A chapter change is worth a line, not
+  // more: the player can read it on the Creator page whenever they like.
+  arc_complete: 60,
+  // The player did not start this one, so it has to be seen, or a suggestion would wait unnoticed.
+  arc_started: 62,
+  arc_phase: 42,
 };
 
 /**

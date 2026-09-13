@@ -68,25 +68,26 @@ assert.match(
 );
 assert.match(rewrite, /getDefaultForAgents\(\)\) \?\? \(await connections\.getFallbackForAgents\(\)\)/u);
 
-// --- the anonymity guard is Secret-only ----------------------------------------------------------
-assert.match(images, /input\.disclosureMode === "secret"\s*\?\s*"Compose so the face cannot be identified/u);
-// Secret gets no source image references; Open and Hinted still do.
-assert.match(
-  images,
-  /!input\.suppressCharacterContext && input\.disclosureMode !== "secret" && input\.linkedPublicAccount/u,
-);
+// --- no Secret tier: Open and Hinted both get source image references ----------------------------
+assert.doesNotMatch(images, /Compose so the face cannot be identified/u);
+assert.match(images, /!input\.suppressCharacterContext && input\.linkedPublicAccount \? input\.linkedPublicAccount/u);
 // Persona-owned Creators are eligible too. Requiring kind === "character" here meant a persona got
 // appearance text and nothing else in every mode, so Open meant less for a persona than a character.
 assert.doesNotMatch(
   images,
-  /disclosureMode !== "secret" &&\s*input\.linkedPublicAccount\?\.kind === "character"/u,
+  /input\.linkedPublicAccount\?\.kind === "character"\s*\?\s*input\.linkedPublicAccount/u,
   "persona-owned Creators must not be excluded from image context",
 );
 assert.match(images, /personality: sourcePersona\.personality\?\.trim\(\) \?\? "",/u);
 
 // --- the commission path uses the same default as everything else --------------------------------
 const commission = readFileSync(join(root, server, "services/slurp/slurp-commission-image.operation.ts"), "utf8");
-assert.match(commission, /identityDisclosure \?\? "secret"/u);
-assert.doesNotMatch(commission, /identityDisclosure \?\? "hinted"/u, "commissions must not default to a weaker tier");
+// Open is the default everywhere, commissions included.
+assert.match(commission, /identityDisclosure \?\? "open"/u);
+assert.doesNotMatch(
+  commission,
+  /identityDisclosure \?\? "(hinted|secret)"/u,
+  "commissions must use the shared default",
+);
 
 console.log("slurp image prompt wiring regression passed");

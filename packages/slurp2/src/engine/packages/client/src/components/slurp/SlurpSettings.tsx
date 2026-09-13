@@ -5,6 +5,7 @@ import {
   CalendarClock,
   CheckCircle2,
   ChevronRight,
+  CircleHelp,
   Download,
   FileText,
   Image,
@@ -71,6 +72,11 @@ import {
   useRefreshNoodlerConversationSchedule,
   useUpdateSlurpImageConnections,
   useUpdateSlurpSettings,
+  useReplaceSlurpDiscoveryTag,
+  useResetSlurpArcType,
+  useGenerateSlurpArcType,
+  useSlurpDiscoveryTagUsage,
+  type SlurpArcType,
   type SlurpSettings,
   type SlurpContentRating,
   type SlurpReserveStatus,
@@ -304,6 +310,9 @@ export function SlurpSettings({
   const settingsQuery = useSlurpSettings();
   const updateSettings = useUpdateSlurpSettings();
   const section = navigation.section ?? "overview";
+  const tagUsage = useSlurpDiscoveryTagUsage(section === "tags");
+  const replaceTag = useReplaceSlurpDiscoveryTag();
+  const [newTag, setNewTag] = useState({ tag: "", group: "" });
   const resetAds = useResetSlurpAds();
   const adPool = useSlurpAdPool();
   const generateAds = useGenerateSlurpAds();
@@ -797,23 +806,6 @@ export function SlurpSettings({
                       </select>
                     </Field>
                   )}
-                  {settings.autoPostingScheduleEnabled && (
-                    <Field label={t("ui.slurp.settings.projectRate")} detail={t("ui.slurp.settings.projectRateDetail")}>
-                      <select
-                        value={settings.projectRate}
-                        disabled={updateSettings.isPending}
-                        onChange={(event) =>
-                          void update("projectRate", event.target.value as SlurpSettings["projectRate"])
-                        }
-                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                      >
-                        <option value="off">{t("ui.slurp.settings.projectRateOff")}</option>
-                        <option value="rare">{t("ui.slurp.settings.projectRateRare")}</option>
-                        <option value="regular">{t("ui.slurp.settings.projectRateRegular")}</option>
-                        <option value="often">{t("ui.slurp.settings.projectRateOften")}</option>
-                      </select>
-                    </Field>
-                  )}
                   {settings.autoPostingScheduleEnabled ? (
                     <Toggle
                       label={t("ui.slurp.settings.quietHours")}
@@ -1116,6 +1108,288 @@ export function SlurpSettings({
                       />
                     </div>
                   </details>
+                </div>
+              )}
+
+              {section === "tags" && (
+                <div className="space-y-5">
+                  <SectionTitle title={t("ui.slurp.settings.tags.title")} detail={t("ui.slurp.settings.tags.detail")} />
+                  <ul className="divide-y divide-[var(--slurp-outline)] rounded-lg border border-[var(--slurp-outline)]">
+                    {settings.discoveryTags.map((entry) => {
+                      const count = tagUsage.data?.creators[entry.tag.toLocaleLowerCase()] ?? 0;
+                      const arcTypes = tagUsage.data?.arcTypes[entry.tag.toLocaleLowerCase()] ?? 0;
+                      return (
+                        <li key={entry.tag} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
+                          <span className="min-w-0 flex-1 font-semibold">{entry.tag}</span>
+                          <span className="text-xs tabular-nums text-[var(--slurp-muted)]">
+                            {t("ui.slurp.settings.tags.usage", { count })}
+                          </span>
+                          <input
+                            aria-label={t("ui.slurp.settings.tags.group")}
+                            defaultValue={entry.group}
+                            maxLength={40}
+                            disabled={updateSettings.isPending}
+                            onBlur={(event) => {
+                              const group = event.target.value.trim();
+                              if (!group || group === entry.group) return;
+                              void update(
+                                "discoveryTags",
+                                settings.discoveryTags.map((item) =>
+                                  item.tag === entry.tag ? { ...item, group } : item,
+                                ),
+                              );
+                            }}
+                            className="min-h-11 w-32 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base sm:text-sm"
+                          />
+                          <button
+                            type="button"
+                            disabled={replaceTag.isPending}
+                            onClick={() => {
+                              const to = window
+                                .prompt(t("ui.slurp.settings.tags.renamePrompt", { tag: entry.tag }), entry.tag)
+                                ?.trim();
+                              if (to && to !== entry.tag) replaceTag.mutate({ from: entry.tag, to });
+                            }}
+                            className="min-h-11 rounded-lg px-3 text-sm font-semibold hover:bg-[var(--slurp-surface-raised)] disabled:opacity-50"
+                          >
+                            {t("ui.slurp.settings.tags.rename")}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={replaceTag.isPending}
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  t("ui.slurp.settings.tags.deleteConfirm", { tag: entry.tag, count, arcTypes }),
+                                )
+                              )
+                                replaceTag.mutate({ from: entry.tag, to: null });
+                            }}
+                            className="min-h-11 rounded-lg px-3 text-sm font-semibold text-red-600 hover:bg-[var(--slurp-surface-raised)] disabled:opacity-50"
+                          >
+                            {t("ui.slurp.settings.tags.delete")}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <form
+                    className="flex flex-wrap gap-2"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      const tag = newTag.tag.trim();
+                      const group = newTag.group.trim() || "themes";
+                      if (
+                        !tag ||
+                        settings.discoveryTags.some(
+                          (entry) => entry.tag.toLocaleLowerCase() === tag.toLocaleLowerCase(),
+                        )
+                      )
+                        return;
+                      void update("discoveryTags", [...settings.discoveryTags, { tag, group }]);
+                      setNewTag({ tag: "", group: "" });
+                    }}
+                  >
+                    <input
+                      aria-label={t("ui.slurp.settings.tags.newTag")}
+                      placeholder={t("ui.slurp.settings.tags.newTag")}
+                      value={newTag.tag}
+                      maxLength={24}
+                      onChange={(event) => setNewTag({ ...newTag, tag: event.target.value })}
+                      className="min-h-11 min-w-0 flex-1 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base sm:text-sm"
+                    />
+                    <input
+                      aria-label={t("ui.slurp.settings.tags.group")}
+                      placeholder={t("ui.slurp.settings.tags.group")}
+                      value={newTag.group}
+                      maxLength={40}
+                      list="slurp-discovery-tag-groups"
+                      onChange={(event) => setNewTag({ ...newTag, group: event.target.value })}
+                      className="min-h-11 w-32 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base sm:text-sm"
+                    />
+                    <datalist id="slurp-discovery-tag-groups">
+                      {[...new Set(settings.discoveryTags.map((entry) => entry.group))].map((group) => (
+                        <option key={group} value={group} />
+                      ))}
+                    </datalist>
+                    <button
+                      type="submit"
+                      disabled={updateSettings.isPending || !newTag.tag.trim()}
+                      className="min-h-11 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-white disabled:opacity-50"
+                    >
+                      {t("ui.slurp.settings.tags.add")}
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {section === "arcs" && (
+                <div className="space-y-6">
+                  <SectionTitle title={t("ui.slurp.settings.arcs.title")} detail={t("ui.slurp.settings.arcs.detail")} />
+                  <GuidanceBox
+                    title={t("ui.slurp.settings.arcs.guideTitle", { defaultValue: "Set the story rules once" })}
+                    detail={t("ui.slurp.settings.arcs.guideDetail", {
+                      defaultValue:
+                        "These settings apply to every Creator. Use the Creator arc settings to make one profile different.",
+                    })}
+                  />
+                  <SettingsGroup title={t("ui.slurp.settings.arcs.behaviorGroup", { defaultValue: "Story behavior" })}>
+                    <Field label={t("ui.slurp.settings.projectRate")} detail={t("ui.slurp.settings.projectRateDetail")}>
+                      <select
+                        value={settings.projectRate}
+                        disabled={updateSettings.isPending}
+                        onChange={(event) =>
+                          void update("projectRate", event.target.value as SlurpSettings["projectRate"])
+                        }
+                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                      >
+                        <option value="off">{t("ui.slurp.settings.projectRateOff")}</option>
+                        <option value="rare">{t("ui.slurp.settings.projectRateRare")}</option>
+                        <option value="regular">{t("ui.slurp.settings.projectRateRegular")}</option>
+                        <option value="often">{t("ui.slurp.settings.projectRateOften")}</option>
+                      </select>
+                    </Field>
+                    <Field label={t("ui.slurp.settings.arcPace")} detail={t("ui.slurp.settings.arcPaceDetail")}>
+                      <select
+                        value={settings.arcPace}
+                        disabled={updateSettings.isPending}
+                        onChange={(event) => void update("arcPace", event.target.value as SlurpSettings["arcPace"])}
+                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                      >
+                        <option value="slow">{t("ui.slurp.settings.arcPaceSlow")}</option>
+                        <option value="normal">{t("ui.slurp.settings.arcPaceNormal")}</option>
+                        <option value="fast">{t("ui.slurp.settings.arcPaceFast")}</option>
+                      </select>
+                    </Field>
+                    <Field
+                      label={t("ui.slurp.settings.arcPollHours")}
+                      detail={t("ui.slurp.settings.arcPollHoursDetail")}
+                    >
+                      <NumberSetting
+                        value={settings.arcPollHours}
+                        min={1}
+                        max={168}
+                        onSave={(value) => save({ arcPollHours: value })}
+                      />
+                    </Field>
+                    <Field
+                      label={t("ui.slurp.settings.arcStatEffects")}
+                      detail={t("ui.slurp.settings.arcStatEffectsDetail")}
+                    >
+                      <select
+                        value={settings.arcStatEffects}
+                        disabled={updateSettings.isPending}
+                        onChange={(event) =>
+                          void update("arcStatEffects", event.target.value as SlurpSettings["arcStatEffects"])
+                        }
+                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                      >
+                        <option value="off">{t("ui.slurp.settings.arcStatEffectsOff")}</option>
+                        <option value="small">{t("ui.slurp.settings.arcStatEffectsSmall")}</option>
+                        <option value="big">{t("ui.slurp.settings.arcStatEffectsBig")}</option>
+                      </select>
+                    </Field>
+                    <Toggle
+                      label={t("ui.slurp.settings.arcAffectsMood")}
+                      detail={t("ui.slurp.settings.arcAffectsMoodDetail")}
+                      value={settings.arcAffectsMood}
+                      onChange={(value) => update("arcAffectsMood", value)}
+                    />
+                    <Toggle
+                      label={t("ui.slurp.settings.arcDirectorMode")}
+                      detail={t("ui.slurp.settings.arcDirectorModeDetail")}
+                      value={settings.arcDirectorMode}
+                      onChange={(value) => update("arcDirectorMode", value)}
+                    />
+                    <Toggle
+                      label={t("ui.slurp.settings.arcFanReactions")}
+                      detail={t("ui.slurp.settings.arcFanReactionsDetail")}
+                      value={settings.arcFanReactions}
+                      onChange={(value) => update("arcFanReactions", value)}
+                    />
+                    <Toggle
+                      label={t("ui.slurp.settings.arcCrossovers")}
+                      detail={t("ui.slurp.settings.arcCrossoversDetail")}
+                      value={settings.arcCrossovers}
+                      onChange={(value) => update("arcCrossovers", value)}
+                    />
+                  </SettingsGroup>
+                  <SettingsGroup title={t("ui.slurp.settings.arcs.automaticGroup", { defaultValue: "Automatic arcs" })}>
+                    <Field label={t("ui.slurp.settings.arcAutoMode")} detail={t("ui.slurp.settings.arcAutoModeDetail")}>
+                      <select
+                        value={settings.arcAutoMode}
+                        disabled={updateSettings.isPending}
+                        onChange={(event) =>
+                          void update("arcAutoMode", event.target.value as SlurpSettings["arcAutoMode"])
+                        }
+                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                      >
+                        <option value="off">{t("ui.slurp.settings.arcAutoModeOff")}</option>
+                        <option value="suggest">{t("ui.slurp.settings.arcAutoModeSuggest")}</option>
+                        <option value="auto">{t("ui.slurp.settings.arcAutoModeAuto")}</option>
+                      </select>
+                    </Field>
+                    {settings.arcAutoMode !== "off" && (
+                      <>
+                        <Field label={t("ui.slurp.settings.arcSource")} detail={t("ui.slurp.settings.arcSourceDetail")}>
+                          <select
+                            value={settings.arcSource}
+                            disabled={updateSettings.isPending}
+                            onChange={(event) =>
+                              void update("arcSource", event.target.value as SlurpSettings["arcSource"])
+                            }
+                            className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                          >
+                            <option value="library">{t("ui.slurp.projects.config.sourceLibrary")}</option>
+                            <option value="generated">{t("ui.slurp.projects.config.sourceGenerated")}</option>
+                            <option value="mixed">{t("ui.slurp.projects.config.sourceMixed")}</option>
+                          </select>
+                        </Field>
+                        <Field
+                          label={t("ui.slurp.settings.arcCooldownWeeks")}
+                          detail={t("ui.slurp.settings.arcCooldownWeeksDetail")}
+                        >
+                          <NumberSetting
+                            value={settings.arcCooldownWeeks}
+                            min={1}
+                            max={8}
+                            onSave={(value) => save({ arcCooldownWeeks: value })}
+                          />
+                        </Field>
+                        <Field
+                          label={t("ui.slurp.settings.arcMaxConcurrentAuto")}
+                          detail={t("ui.slurp.settings.arcMaxConcurrentAutoDetail")}
+                        >
+                          <NumberSetting
+                            value={settings.arcMaxConcurrentAuto}
+                            min={1}
+                            max={20}
+                            onSave={(value) => save({ arcMaxConcurrentAuto: value })}
+                          />
+                        </Field>
+                      </>
+                    )}
+                  </SettingsGroup>
+                  <div className="space-y-4 border-t border-[var(--slurp-outline)] pt-5">
+                    <div>
+                      <h3 className="text-base font-black">
+                        {t("ui.slurp.settings.arcLibrary", { defaultValue: "Arc library" })}
+                      </h3>
+                      <p className="mt-1 max-w-2xl text-xs leading-5 text-[var(--muted-foreground)]">
+                        {t("ui.slurp.settings.arcLibraryDetail", {
+                          defaultValue: "Reusable story patterns for new arcs. Running arcs keep their current plan.",
+                        })}
+                      </p>
+                    </div>
+                    <ArcLibraryEditor
+                      library={settings.arcLibrary}
+                      tags={settings.discoveryTags.map((entry) => entry.tag)}
+                      busy={updateSettings.isPending}
+                      creatorAccountId={selectedCreatorId}
+                      personaId={viewerPersonaId}
+                      onChange={(arcLibrary) => update("arcLibrary", arcLibrary)}
+                    />
+                  </div>
                 </div>
               )}
 
@@ -3322,6 +3596,737 @@ function ActivityRow({
   );
 }
 
+/**
+ * Settings → Arcs library list. Deleting a built-in only hides it, so Reset can bring it back; a
+ * custom type is removed. Running arcs hold their own copy and never see these edits.
+ */
+/** Mirrors `SLURP_MODIFIER_KINDS` on the server: the moods a chapter may start. */
+const ARC_MOODS = [
+  "just_posted",
+  "post_landed",
+  "post_flopped",
+  "afterglow",
+  "overexposed",
+  "paid_well",
+  "goal_hit",
+  "lapse_sting",
+  "tipsy",
+  "tired",
+  "rattled",
+] as const;
+
+function ArcLibraryEditor({
+  library,
+  tags,
+  busy,
+  creatorAccountId,
+  personaId,
+  onChange,
+}: {
+  library: SlurpArcType[];
+  tags: string[];
+  busy: boolean;
+  creatorAccountId: string | null;
+  personaId: string | null;
+  onChange: (library: SlurpArcType[]) => void;
+}) {
+  const { t } = useTranslation();
+  const reset = useResetSlurpArcType();
+  const generate = useGenerateSlurpArcType();
+  const [draft, setDraft] = useState<SlurpArcType | null>(null);
+  const [brief, setBrief] = useState("");
+  const [selectedChapters, setSelectedChapters] = useState<Set<number>>(new Set());
+  const [reviewingGeneratedDraft, setReviewingGeneratedDraft] = useState(false);
+  const input =
+    "min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base sm:text-sm";
+  const button =
+    "min-h-11 rounded-lg px-3 text-sm font-semibold hover:bg-[var(--slurp-surface-raised)] disabled:opacity-50";
+  const replace = (type: SlurpArcType) =>
+    onChange(
+      library.some((entry) => entry.id === type.id)
+        ? library.map((entry) => (entry.id === type.id ? type : entry))
+        : [...library, type],
+    );
+  const setChapter = (index: number, patch: Partial<SlurpArcType["chapters"][number]>) =>
+    draft &&
+    setDraft({
+      ...draft,
+      chapters: draft.chapters.map((chapter, at) => (at === index ? { ...chapter, ...patch } : chapter)),
+    });
+  const days = (value: string) => Math.min(90, Math.max(0, Math.floor(Number(value)) || 0));
+  const setOption = (
+    index: number,
+    optionIndex: number,
+    patch: Partial<NonNullable<SlurpArcType["chapters"][number]["choice"]>["options"][number]>,
+  ) => {
+    const choice = draft?.chapters[index]?.choice;
+    if (choice)
+      setChapter(index, {
+        choice: {
+          ...choice,
+          options: choice.options.map((option, at) => (at === optionIndex ? { ...option, ...patch } : option)),
+        },
+      });
+  };
+  /** A choice without a question or two named options is dropped on save rather than refused. */
+  const cleanChoice = (choice: NonNullable<SlurpArcType["chapters"][number]["choice"]>) => {
+    const question = choice.question.trim();
+    const options = choice.options
+      .map((option) => ({
+        label: option.label.trim(),
+        chapters: option.chapters
+          .filter((chapter) => chapter.label.trim())
+          .map((chapter) => ({ ...chapter, label: chapter.label.trim() })),
+      }))
+      .filter((option) => option.label);
+    return question && options.length >= 2 ? { question, options } : undefined;
+  };
+
+  const generateDraft = async () => {
+    if (!creatorAccountId || !personaId || !brief.trim()) return;
+    const result = await generate.mutateAsync({ creatorAccountId, personaId, brief: brief.trim() }).catch(() => null);
+    if (!result) return;
+    setDraft(result.type);
+    setSelectedChapters(new Set(result.type.chapters.map((_, index) => index)));
+    setReviewingGeneratedDraft(true);
+    setBrief("");
+  };
+
+  if (draft) {
+    return (
+      <form
+        className="space-y-5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!draft.name.trim()) return;
+          replace({
+            ...draft,
+            name: draft.name.trim(),
+            description: draft.description.trim(),
+            tone: draft.tone.trim(),
+            chapters: (reviewingGeneratedDraft
+              ? draft.chapters.filter((_, index) => selectedChapters.has(index))
+              : draft.chapters
+            )
+              .filter((chapter) => chapter.label.trim())
+              .map((chapter) => {
+                const choice = chapter.choice && cleanChoice(chapter.choice);
+                const effects = Object.fromEntries(
+                  Object.entries(chapter.effects ?? {}).filter(([, pct]) => Number.isInteger(pct) && pct !== 0),
+                );
+                const bio = chapter.profile?.bio?.trim();
+                const location = chapter.profile?.location?.trim();
+                return {
+                  label: chapter.label.trim(),
+                  minDays: chapter.minDays,
+                  maxDays: Math.max(chapter.minDays, chapter.maxDays),
+                  ...(choice ? { choice } : {}),
+                  ...(chapter.mood ? { mood: chapter.mood } : {}),
+                  ...(Object.keys(effects).length ? { effects } : {}),
+                  ...(bio || location
+                    ? { profile: { ...(bio ? { bio } : {}), ...(location ? { location } : {}) } }
+                    : {}),
+                };
+              }),
+          });
+          setDraft(null);
+          setSelectedChapters(new Set());
+          setReviewingGeneratedDraft(false);
+        }}
+      >
+        <GuidanceBox
+          title={t("ui.slurp.settings.arcLibrary.editorTitle", { defaultValue: "Build the arc in layers" })}
+          detail={t("ui.slurp.settings.arcLibrary.editorDetail", {
+            defaultValue:
+              "Start with the story idea. Add chapters only when you want precise pacing, effects, profile changes, or fan choices.",
+          })}
+        />
+        {draft.chapters.length > 0 && (
+          <div className="rounded-xl border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] p-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold">
+                  {t("ui.slurp.settings.arcLibrary.chapterSelection", { defaultValue: "Choose the chapters to keep" })}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
+                  {t("ui.slurp.settings.arcLibrary.chapterSelectionDetail", {
+                    defaultValue: "AI suggestions are editable. Uncheck any chapter you do not want in this arc.",
+                  })}
+                </p>
+              </div>
+              <span className="text-xs tabular-nums text-[var(--muted-foreground)]">
+                {selectedChapters.size}/{draft.chapters.length}
+              </span>
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {draft.chapters.map((chapter, index) => (
+                <label
+                  key={`${chapter.label}-${index}`}
+                  className="flex min-h-11 items-center gap-2 rounded-lg border border-[var(--slurp-outline)] px-3 text-xs font-semibold"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedChapters.has(index)}
+                    onChange={(event) =>
+                      setSelectedChapters((current) => {
+                        const next = new Set(current);
+                        if (event.target.checked) next.add(index);
+                        else next.delete(index);
+                        return next;
+                      })
+                    }
+                  />
+                  <span className="min-w-0 truncate">{chapter.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field
+            label={t("ui.slurp.settings.arcLibrary.name")}
+            detail={t("ui.slurp.settings.arcLibrary.nameDetail", {
+              defaultValue: "A short name shown in the Arc Library.",
+            })}
+          >
+            <input
+              value={draft.name}
+              maxLength={80}
+              onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+              className={input}
+            />
+          </Field>
+          <Field
+            label={t("ui.slurp.settings.arcLibrary.tone")}
+            detail={t("ui.slurp.settings.arcLibrary.toneDetail", {
+              defaultValue: "The feeling the Creator should bring to posts.",
+            })}
+          >
+            <input
+              value={draft.tone}
+              maxLength={80}
+              onChange={(event) => setDraft({ ...draft, tone: event.target.value })}
+              className={input}
+            />
+          </Field>
+        </div>
+        <Field
+          label={t("ui.slurp.settings.arcLibrary.description")}
+          detail={t("ui.slurp.settings.arcLibrary.descriptionDetail", {
+            defaultValue: "Give the model enough direction to make the arc feel specific.",
+          })}
+        >
+          <textarea
+            value={draft.description}
+            maxLength={2000}
+            rows={3}
+            onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+            className={`${input} py-2`}
+          />
+        </Field>
+        <div className="flex items-end justify-between gap-3 border-t border-[var(--slurp-outline)] pt-4">
+          <div>
+            <h3 className="text-sm font-bold">{t("ui.slurp.settings.arcLibrary.chapters")}</h3>
+            <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
+              {t("ui.slurp.settings.arcLibrary.chapterDetail", {
+                defaultValue: "Each chapter can change the pace, mood, stats, profile, and fan choices.",
+              })}
+            </p>
+          </div>
+          <span className="shrink-0 text-xs tabular-nums text-[var(--muted-foreground)]">
+            {draft.chapters.length}/12
+          </span>
+        </div>
+        {draft.chapters.map((chapter, index) => (
+          <fieldset
+            key={index}
+            className="space-y-4 rounded-xl border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] p-4"
+          >
+            <legend className="px-1 text-xs font-bold uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
+              {t("ui.slurp.settings.arcLibrary.chapterNumber", {
+                defaultValue: "Chapter {{number}}",
+                number: index + 1,
+              })}
+            </legend>
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7rem_7rem_auto] sm:items-end">
+              <Field label={t("ui.slurp.settings.arcLibrary.chapterLabel")}>
+                <input
+                  value={chapter.label}
+                  maxLength={200}
+                  onChange={(event) => setChapter(index, { label: event.target.value })}
+                  className={input}
+                />
+              </Field>
+              <Field label={t("ui.slurp.settings.arcLibrary.minDays")}>
+                <input
+                  type="number"
+                  min={0}
+                  max={90}
+                  value={chapter.minDays}
+                  onChange={(event) => setChapter(index, { minDays: days(event.target.value) })}
+                  className={input}
+                />
+              </Field>
+              <Field label={t("ui.slurp.settings.arcLibrary.maxDays")}>
+                <input
+                  type="number"
+                  min={0}
+                  max={90}
+                  value={chapter.maxDays}
+                  onChange={(event) => setChapter(index, { maxDays: days(event.target.value) })}
+                  className={input}
+                />
+              </Field>
+              <button
+                type="button"
+                className={`${button} text-red-600`}
+                onClick={() => {
+                  setDraft({ ...draft, chapters: draft.chapters.filter((_, at) => at !== index) });
+                  setSelectedChapters((current) => {
+                    const next = new Set<number>();
+                    for (const at of current) {
+                      if (at < index) next.add(at);
+                      else if (at > index) next.add(at - 1);
+                    }
+                    return next;
+                  });
+                }}
+              >
+                {t("ui.slurp.settings.arcLibrary.removeChapter")}
+              </button>
+            </div>
+            <details className="group rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-surface-raised,var(--background))]">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-3 text-xs font-bold text-[var(--muted-foreground)] [&::-webkit-details-marker]:hidden">
+                <span>{t("ui.slurp.settings.arcLibrary.advanced", { defaultValue: "Advanced chapter options" })}</span>
+                <ChevronRight size={15} className="transition-transform group-open:rotate-90" aria-hidden="true" />
+              </summary>
+              <div className="space-y-4 border-t border-[var(--slurp-outline)] p-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field
+                    label={t("ui.slurp.settings.arcLibrary.mood")}
+                    detail={t("ui.slurp.settings.arcLibrary.moodDetail", {
+                      defaultValue: "Set the mood when this chapter starts.",
+                    })}
+                  >
+                    <select
+                      value={chapter.mood ?? ""}
+                      onChange={(event) => setChapter(index, { mood: event.target.value || undefined })}
+                      className={input}
+                    >
+                      <option value="">{t("ui.slurp.settings.arcLibrary.noMood")}</option>
+                      {ARC_MOODS.map((mood) => (
+                        <option key={mood} value={mood}>
+                          {mood.replace(/_/g, " ")}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field
+                    label={t("ui.slurp.settings.arcLibrary.effects", { defaultValue: "Audience effects" })}
+                    detail={t("ui.slurp.settings.arcLibrary.effectsDetail", {
+                      defaultValue: "Optional changes to growth, earnings, and loyalty.",
+                    })}
+                  >
+                    <div className="grid grid-cols-3 gap-2">
+                      {(["growth", "earnings", "loyalty"] as const).map((stat) => (
+                        <input
+                          key={stat}
+                          type="number"
+                          aria-label={t(`ui.slurp.settings.arcLibrary.effect.${stat}`)}
+                          min={-50}
+                          max={50}
+                          value={chapter.effects?.[stat] ?? ""}
+                          onChange={(event) =>
+                            setChapter(index, {
+                              effects: {
+                                ...chapter.effects,
+                                [stat]:
+                                  event.target.value === ""
+                                    ? undefined
+                                    : Math.max(-50, Math.min(50, Math.round(Number(event.target.value)) || 0)),
+                              },
+                            })
+                          }
+                          className={input}
+                          placeholder={stat.slice(0, 3).toUpperCase()}
+                        />
+                      ))}
+                    </div>
+                  </Field>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field
+                    label={t("ui.slurp.settings.arcLibrary.profileBio")}
+                    detail={t("ui.slurp.settings.arcLibrary.profileBioDetail", {
+                      defaultValue: "Optional bio change. Slurp asks before applying it.",
+                    })}
+                  >
+                    <input
+                      value={chapter.profile?.bio ?? ""}
+                      maxLength={500}
+                      onChange={(event) =>
+                        setChapter(index, { profile: { ...chapter.profile, bio: event.target.value } })
+                      }
+                      className={input}
+                    />
+                  </Field>
+                  <Field
+                    label={t("ui.slurp.settings.arcLibrary.profileLocation")}
+                    detail={t("ui.slurp.settings.arcLibrary.profileLocationDetail", {
+                      defaultValue: "Optional location change. Slurp asks before applying it.",
+                    })}
+                  >
+                    <input
+                      value={chapter.profile?.location ?? ""}
+                      maxLength={120}
+                      onChange={(event) =>
+                        setChapter(index, { profile: { ...chapter.profile, location: event.target.value } })
+                      }
+                      className={input}
+                    />
+                  </Field>
+                </div>
+                {chapter.choice ? (
+                  <div className="basis-full space-y-2 border-l-2 border-[var(--slurp-outline)] pl-3">
+                    <input
+                      aria-label={t("ui.slurp.settings.arcLibrary.choiceQuestion")}
+                      placeholder={t("ui.slurp.settings.arcLibrary.choiceQuestion")}
+                      value={chapter.choice.question}
+                      maxLength={240}
+                      onChange={(event) =>
+                        setChapter(index, { choice: { ...chapter.choice!, question: event.target.value } })
+                      }
+                      className={input}
+                    />
+                    {chapter.choice.options.map((option, optionIndex) => (
+                      <div key={optionIndex} className="flex flex-wrap items-start gap-2">
+                        <input
+                          aria-label={t("ui.slurp.settings.arcLibrary.choiceOption")}
+                          placeholder={t("ui.slurp.settings.arcLibrary.choiceOption")}
+                          value={option.label}
+                          maxLength={120}
+                          onChange={(event) => setOption(index, optionIndex, { label: event.target.value })}
+                          className={`${input} min-w-0 flex-1`}
+                        />
+                        {/* One branch chapter per line; a line keeps its days while its label is unchanged. */}
+                        <textarea
+                          aria-label={t("ui.slurp.settings.arcLibrary.choiceBranch")}
+                          placeholder={t("ui.slurp.settings.arcLibrary.choiceBranch")}
+                          value={option.chapters.map((entry) => entry.label).join("\n")}
+                          rows={2}
+                          onChange={(event) =>
+                            setOption(index, optionIndex, {
+                              chapters: event.target.value
+                                .split("\n")
+                                .slice(0, 4)
+                                .map((label) => {
+                                  const known = option.chapters.find((entry) => entry.label === label);
+                                  return { label, minDays: known?.minDays ?? 1, maxDays: known?.maxDays ?? 3 };
+                                }),
+                            })
+                          }
+                          className={`${input} min-w-0 flex-1 py-2`}
+                        />
+                        {chapter.choice!.options.length > 2 && (
+                          <button
+                            type="button"
+                            className={button}
+                            onClick={() =>
+                              setChapter(index, {
+                                choice: {
+                                  ...chapter.choice!,
+                                  options: chapter.choice!.options.filter((_, at) => at !== optionIndex),
+                                },
+                              })
+                            }
+                          >
+                            {t("ui.slurp.settings.arcLibrary.removeOption")}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <div className="flex flex-wrap gap-2">
+                      {chapter.choice.options.length < 4 && (
+                        <button
+                          type="button"
+                          className={button}
+                          onClick={() =>
+                            setChapter(index, {
+                              choice: {
+                                ...chapter.choice!,
+                                options: [...chapter.choice!.options, { label: "", chapters: [] }],
+                              },
+                            })
+                          }
+                        >
+                          {t("ui.slurp.settings.arcLibrary.addOption")}
+                        </button>
+                      )}
+                      <button type="button" className={button} onClick={() => setChapter(index, { choice: undefined })}>
+                        {t("ui.slurp.settings.arcLibrary.removeChoice")}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className={button}
+                    onClick={() =>
+                      setChapter(index, {
+                        choice: {
+                          question: "",
+                          options: [
+                            { label: "", chapters: [] },
+                            { label: "", chapters: [] },
+                          ],
+                        },
+                      })
+                    }
+                  >
+                    {t("ui.slurp.settings.arcLibrary.addChoice")}
+                  </button>
+                )}
+              </div>
+            </details>
+          </fieldset>
+        ))}
+        {draft.chapters.length < 12 && (
+          <button
+            type="button"
+            className={button}
+            onClick={() => setDraft({ ...draft, chapters: [...draft.chapters, { label: "", minDays: 1, maxDays: 3 }] })}
+          >
+            {t("ui.slurp.settings.arcLibrary.addChapter")}
+          </button>
+        )}
+        {draft.chapters.length > 0 && (
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={draft.revertProfileAtEnd === true}
+              onChange={(event) => setDraft({ ...draft, revertProfileAtEnd: event.target.checked })}
+            />
+            {t("ui.slurp.settings.arcLibrary.revertProfileAtEnd")}
+          </label>
+        )}
+        {draft.chapters.length === 0 && (
+          <label className="flex items-center gap-2 text-sm">
+            {t("ui.slurp.settings.arcLibrary.durationDays")}
+            <input
+              type="number"
+              min={1}
+              max={365}
+              value={draft.durationDays}
+              onChange={(event) =>
+                setDraft({
+                  ...draft,
+                  durationDays: Math.min(365, Math.max(1, Math.floor(Number(event.target.value)) || 1)),
+                })
+              }
+              className={`${input} w-24`}
+            />
+          </label>
+        )}
+        <p className="text-sm font-semibold">{t("ui.slurp.settings.arcLibrary.tags")}</p>
+        <div className="flex flex-wrap gap-x-4">
+          {[...new Set([...tags, ...draft.tags])].map((tag) => (
+            <label key={tag} className="inline-flex min-h-11 items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={draft.tags.includes(tag)}
+                onChange={(event) =>
+                  setDraft({
+                    ...draft,
+                    tags: event.target.checked ? [...draft.tags, tag] : draft.tags.filter((entry) => entry !== tag),
+                  })
+                }
+              />
+              {tag}
+            </label>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            disabled={busy || !draft.name.trim()}
+            className="min-h-11 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-white disabled:opacity-50"
+          >
+            {t("ui.slurp.settings.arcLibrary.save")}
+          </button>
+          <button type="button" className={button} onClick={() => setDraft(null)}>
+            {t("ui.slurp.settings.arcLibrary.cancel")}
+          </button>
+        </div>
+      </form>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <ul className="space-y-2">
+        {library
+          .filter((type) => !type.hidden || type.builtin)
+          .map((type) => (
+            <li
+              key={type.id}
+              className="rounded-xl border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] p-3 text-sm shadow-sm sm:p-4"
+            >
+              <div className="flex flex-wrap items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`font-bold ${type.hidden ? "text-[var(--slurp-muted)] line-through" : ""}`}>
+                      {type.name}
+                    </span>
+                    {type.builtin && (
+                      <span className="rounded-full bg-[var(--noodle-accent)]/10 px-2 py-0.5 text-[0.65rem] font-bold text-[var(--noodle-accent)]">
+                        {t("ui.slurp.settings.arcLibrary.builtIn", { defaultValue: "Built in" })}
+                      </span>
+                    )}
+                    {type.hidden && (
+                      <span className="rounded-full bg-[var(--muted-foreground)]/10 px-2 py-0.5 text-[0.65rem] font-bold text-[var(--muted-foreground)]">
+                        {t("ui.slurp.settings.arcLibrary.hidden")}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--muted-foreground)]">
+                    {type.description ||
+                      t("ui.slurp.settings.arcLibrary.noDescription", { defaultValue: "No direction added." })}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[0.68rem] text-[var(--muted-foreground)]">
+                    <span>
+                      {t("ui.slurp.settings.arcLibrary.chapterCount", {
+                        defaultValue: "{{count}} chapters",
+                        count: type.chapters.length,
+                      })}
+                    </span>
+                    {type.tone && <span>{type.tone}</span>}
+                    {type.tags.length > 0 && <span>{type.tags.join(", ")}</span>}
+                  </div>
+                </div>
+                {!type.hidden && (
+                  <label className="inline-flex min-h-10 shrink-0 items-center gap-2 text-xs font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={type.enabled}
+                      disabled={busy}
+                      onChange={(event) => replace({ ...type, enabled: event.target.checked })}
+                    />
+                    {t("ui.slurp.settings.arcLibrary.enabled")}
+                  </label>
+                )}
+              </div>
+              {!type.hidden && (
+                <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-[var(--slurp-outline)] pt-3">
+                  <button
+                    type="button"
+                    className={button}
+                    disabled={busy}
+                    onClick={() => {
+                      setReviewingGeneratedDraft(false);
+                      setDraft(structuredClone(type));
+                    }}
+                  >
+                    {t("ui.slurp.settings.arcLibrary.edit")}
+                  </button>
+                  <button
+                    type="button"
+                    className={`${button} text-red-600`}
+                    disabled={busy}
+                    onClick={() => {
+                      if (!window.confirm(t("ui.slurp.settings.arcLibrary.deleteConfirm", { name: type.name }))) return;
+                      onChange(
+                        type.builtin
+                          ? library.map((entry) =>
+                              entry.id === type.id ? { ...entry, enabled: false, hidden: true } : entry,
+                            )
+                          : library.filter((entry) => entry.id !== type.id),
+                      );
+                    }}
+                  >
+                    {t("ui.slurp.settings.arcLibrary.delete")}
+                  </button>
+                </div>
+              )}
+              {type.hidden && type.builtin && (
+                <button
+                  type="button"
+                  className={button}
+                  disabled={busy || reset.isPending}
+                  onClick={() => reset.mutate(type.id)}
+                >
+                  {t("ui.slurp.settings.arcLibrary.reset")}
+                </button>
+              )}
+            </li>
+          ))}
+      </ul>
+      <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+        <label className="block space-y-2 text-sm font-semibold">
+          <span className="flex items-center gap-1.5">
+            {t("ui.slurp.settings.arcLibrary.aiBrief", { defaultValue: "Describe the arc to AI" })}
+            <span
+              title={t("ui.slurp.settings.arcLibrary.aiBriefDetail", {
+                defaultValue: "AI creates an editable arc draft. Nothing is saved until you save it.",
+              })}
+              className="text-[var(--muted-foreground)]"
+            >
+              <CircleHelp size={14} aria-hidden="true" />
+            </span>
+          </span>
+          <textarea
+            value={brief}
+            onChange={(event) => setBrief(event.target.value)}
+            maxLength={2000}
+            rows={2}
+            placeholder={t("ui.slurp.settings.arcLibrary.aiBriefPlaceholder", {
+              defaultValue: "For example: a summer road trip that starts badly and ends with a surprise collaboration.",
+            })}
+            className={`${input} py-2`}
+          />
+        </label>
+        <button
+          type="button"
+          className="min-h-11 self-end rounded-lg border border-[var(--noodle-accent)] px-4 text-sm font-bold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 disabled:opacity-50"
+          disabled={busy || generate.isPending || !brief.trim() || !creatorAccountId || !personaId}
+          onClick={() => void generateDraft()}
+        >
+          {generate.isPending
+            ? t("ui.slurp.settings.arcLibrary.generating", { defaultValue: "Building draft..." })
+            : t("ui.slurp.settings.arcLibrary.buildWithAi", { defaultValue: "Build with AI" })}
+        </button>
+      </div>
+      {generate.error && (
+        <p role="alert" className="text-xs text-[var(--destructive)]">
+          {generate.error.message}
+        </p>
+      )}
+      <button
+        type="button"
+        className={button}
+        disabled={busy}
+        onClick={() => {
+          setReviewingGeneratedDraft(false);
+          setDraft({
+            id: `custom-${Date.now().toString(36)}`,
+            name: "",
+            description: "",
+            chapters: [],
+            tags: [],
+            tone: "",
+            durationDays: 14,
+            enabled: true,
+            builtin: false,
+            hidden: false,
+          });
+        }}
+      >
+        <Plus size={15} aria-hidden="true" />
+        {t("ui.slurp.settings.arcLibrary.add")}
+      </button>
+    </div>
+  );
+}
+
 function SectionTitle({ title, detail }: { title: string; detail: string }) {
   return (
     <div>
@@ -3354,7 +4359,14 @@ function GuidanceBox({ title, detail }: { title: string; detail: string }) {
 function Field({ label, detail, children }: { label: string; detail?: string; children: ReactNode }) {
   return (
     <label className="block space-y-2 text-sm font-semibold">
-      <span className="block">{label}</span>
+      <span className="flex items-center gap-1.5">
+        <span>{label}</span>
+        {detail && (
+          <span title={detail} aria-label={detail} className="inline-flex text-[var(--muted-foreground)]">
+            <CircleHelp size={14} strokeWidth={2} aria-hidden="true" />
+          </span>
+        )}
+      </span>
       {detail && <span className="block text-xs font-normal leading-5 text-[var(--muted-foreground)]">{detail}</span>}
       {children}
     </label>

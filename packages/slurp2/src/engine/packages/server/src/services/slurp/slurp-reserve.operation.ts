@@ -172,7 +172,7 @@ export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Pr
             const image = await generateNoodlerPostImage({
               account: selectedAccount,
               linkedPublicAccount,
-              disclosureMode: selectedAccount.settings.privacy.identityDisclosure ?? "secret",
+              disclosureMode: selectedAccount.settings.privacy.identityDisclosure ?? "open",
               postContent: payload.content,
               draftPrompt: payload.imagePrompt,
               settings,

@@ -59,11 +59,11 @@ export function protectNoodlerGeneratedIdentity(
 }
 
 export function stageProfileContainsPublicIdentity(
-  profile: NoodleStageProfileInput,
+  profile: NoodleStageProfileInput & { tags?: readonly string[] },
   publicIdentity: PublicIdentity,
 ): boolean {
   if (profile.disclosureMode === "open") return false;
-  const values = [profile.displayName, profile.handle, profile.bio, profile.stagePersonality];
+  const values = [profile.displayName, profile.handle, profile.bio, profile.stagePersonality, ...(profile.tags ?? [])];
   const protectedValues = protectedIdentityValues(publicIdentity);
   return values.some((value) => protectedValues.some((identifier) => containsIdentity(value, identifier)));
 }
@@ -83,11 +83,17 @@ export function normalizedDisclosureWords(value: string): string[] {
 }
 
 export function stageProfileContainsSourceDetails(
-  profile: NoodleStageProfileInput,
+  profile: NoodleStageProfileInput & { tags?: readonly string[] },
   source: NoodlerSourceSnapshot,
 ): boolean {
   if (profile.disclosureMode === "open") return false;
-  const profileText = [profile.displayName, profile.handle, profile.bio, profile.stagePersonality].join(" ");
+  const profileText = [
+    profile.displayName,
+    profile.handle,
+    profile.bio,
+    profile.stagePersonality,
+    ...(profile.tags ?? []),
+  ].join(" ");
   const normalizedProfile = ` ${normalizedDisclosureWords(profileText).join(" ")} `;
   // Personality is deliberately part of the seed both concealed modes receive: "body, voice, and
   // everyday texture are inseparable from the person and stay in" (slurp-prompt-safety.ts). Checking

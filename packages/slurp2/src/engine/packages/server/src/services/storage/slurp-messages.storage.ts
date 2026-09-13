@@ -890,7 +890,9 @@ export function createSlurpMessagesStorage(db: DB) {
       const messaging = await storage.getCreatorMessaging(creatorAccountId);
       const facts = await storage.rapportFactsFor(viewerAccountId, creatorAccountId);
       // Apply subscriber boost: subscribers gain rapport 1.5x faster from conversation and effort
-      return scoreSlurpRapport(facts, messaging.rapportWeights, { subscriberBoost: true });
+      // Arc stat effects on fan loyalty scale here, the one place rapport is scored.
+      const gain = await slurp.arcEffectMultiplier(creatorAccountId, "loyalty");
+      return scoreSlurpRapport(facts, messaging.rapportWeights, { subscriberBoost: true, gain });
     },
 
     /**

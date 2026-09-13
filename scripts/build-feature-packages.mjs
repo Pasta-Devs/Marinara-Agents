@@ -163,6 +163,9 @@ const slurp2OwnedSourcePaths = [
   ...slurpOwnedSourcePaths,
   "packages/client/src/hooks/use-slurp-media-src.ts",
   "packages/client/src/lib/api-client.ts",
+  "packages/client/src/lib/slurp-custom-emojis.ts",
+  "packages/client/src/lib/slurp-discovery.ts",
+  "packages/client/src/lib/slurp-refresh-batch.ts",
   "packages/server/src/routes/slurp-messages.routes.ts",
   "packages/server/src/services/storage/slurp-financial-queue.ts",
   "packages/server/src/services/storage/slurp-host-tables.ts",
@@ -399,7 +402,7 @@ const features = [
   },
   {
     id: "slurp2",
-    version: "0.0.6",
+    version: "0.0.7",
     minEngineVersion: "2.4.5",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp Remastered",

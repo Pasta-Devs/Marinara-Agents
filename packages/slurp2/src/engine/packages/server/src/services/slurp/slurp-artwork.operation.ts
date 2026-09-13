@@ -50,7 +50,7 @@ export async function generateNoodlerCreatorArtwork(
     const account = await noodle.getNoodlerAccountById(input.accountId);
     if (!account) return "missing" as const;
     const linkedPublicAccount = await noodle.resolveAccountSource(account);
-    const disclosureMode = account.settings.privacy.identityDisclosure ?? "secret";
+    const disclosureMode = account.settings.privacy.identityDisclosure ?? "open";
     const connections = createConnectionsStorage(db);
     const mappedId = await resolveNoodlerImageConnectionId(db, account.id);
     const imageConnection =
@@ -126,7 +126,7 @@ export async function backfillNextNoodlerCreatorArtwork(db: DB): Promise<Noodler
     const account = await noodle.getNoodlerAccountById(target.id);
     if (!account) return "idle" as const;
     const linkedPublicAccount = await noodle.resolveAccountSource(account);
-    const disclosureMode = account.settings.privacy.identityDisclosure ?? "secret";
+    const disclosureMode = account.settings.privacy.identityDisclosure ?? "open";
 
     // Open creators inherit rather than generate, including ones created before artwork existed.
     if (disclosureMode === "open") {

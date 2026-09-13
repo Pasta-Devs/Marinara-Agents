@@ -3,7 +3,6 @@ import {
   type APIProvider,
   type NoodleIdentityDisclosure,
   type NoodleStageProfileDraftRequest,
-  type NoodleStageProfileInput,
 } from "@marinara-engine/shared";
 import { isDebugAgentsEnabled } from "../../config/runtime-config.js";
 import type { DB } from "../../db/connection.js";
@@ -30,6 +29,11 @@ import { resolveNoodlerSourceSnapshot } from "./slurp-source-resolve.js";
 import { normalizeNoodlerStageProfileDraft } from "./slurp-stage-profile-normalize.js";
 import { noodlerConcealedSourceText, noodlerSourceText } from "./slurp-prompt-safety.js";
 import { createNoodlerSourceRevisionToken } from "./slurp-source-revision.js";
+import {
+  normalizeSlurpDiscoveryTags,
+  slurpGeneratedDiscoveryProfileSchema,
+  type SlurpStageProfileInput,
+} from "./slurp-discovery-profile.js";
 
 /** Used only when a source card carries no usable prose, so the model still gets a starting point. */
 const CONCEALED_SOURCE_FALLBACK_BRIEF = "General temperament and creative interests from the source profile.";
@@ -39,9 +43,7 @@ type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof cre
 function disclosureRules(mode: NoodleIdentityDisclosure, publicIdentity: { displayName: string; handle: string }) {
   if (mode === "open")
     return `This is the same public creator. Use exactly ${publicIdentity.displayName} as displayName and ${publicIdentity.handle} as handle. Write a concise social profile bio that summarizes the linked source. Preserve a direct bio edit from the current draft. Do not invent a stage identity.`;
-  if (mode === "hinted")
-    return "Create the same person behind a different stage name and handle, as an open secret. Preserve species, body, age range, unusual anatomy, scars, missing or unusual features, clothing preferences, voice, interests, and recurring visual traits. Preserve indirect clues that regular followers may recognize. Never use the exact public name or handle, and never copy canonical biography sentences.";
-  return "The same person behind an anonymous alias, taking real care not to be traced. Use a different display name and handle. Keep their body, voice, humour, interests, and everyday life fully intact — this person is specific, not vague. Withhold only the linkable details: the public name and handle, the face and any one-of-a-kind marker such as species traits, unusual anatomy, or a signature scar or outfit, plus named people, employer, city, and any canonical event that could be looked up.";
+  return "Create the same person behind a different stage name and handle, as an open secret. Preserve species, body, age range, unusual anatomy, scars, missing or unusual features, clothing preferences, voice, interests, and recurring visual traits. Preserve indirect clues that regular followers may recognize. Never use the exact public name or handle, and never copy canonical biography sentences.";
 }
 
 export function buildNoodlerStageProfileDraftMessages(input: {
@@ -50,6 +52,8 @@ export function buildNoodlerStageProfileDraftMessages(input: {
   source: {
     data: string | ({ name?: unknown } & Record<string, unknown>);
   } | null;
+  /** The `discoveryTags` setting; the model may only pick from these. */
+  allowedTags: readonly string[];
 }): ChatMessage[] {
   const identity = buildNoodlerPublicIdentity(input.publicAccount, input.source);
   const protectedDraft = input.request.currentDraft
@@ -65,38 +69,27 @@ export function buildNoodlerStageProfileDraftMessages(input: {
   const sourceDetails = input.source
     ? noodlerSourceText(input.source.data)
     : "General temperament and creative interests from the source profile.";
-  const hintedBrief = input.request.disclosureMode === "hinted";
+  // Anything that is not Open is Hinted: Slurp no longer offers a Secret tier.
   const rawSourceContext =
-    input.request.disclosureMode === "secret"
+    input.request.disclosureMode !== "open"
       ? [
-          "# Anonymous alias brief",
-          "This is the same person as the source, running a page they do not want traced back to them. They are not a different person and not a vaguer one.",
-          "Keep them fully themselves: same body, same voice, same humour, same tastes, same everyday life. An anonymous creator is specific and vivid, because their body and personality are the page.",
-          "Withhold only what would link them: the source name and handle, the face and any one-of-a-kind marker, named people, employer, and city, and any canonical event someone could look up.",
-          // Secret is validated against this rule but was never told it, which is why creating a
-          // Secret creator failed more often than the other modes, and opaquely.
-          "Do not reuse four or more of the source's distinctive words in sequence, ignoring short connecting words. Write it all in your own wording.",
+          "# Open-secret inspiration brief",
+          "The stage identity is the same person as the source. Carry over look, vibe, interests, and daily life so a regular follower can recognize them.",
+          // Worded to match the validator, which strips words shorter than four characters before
+          // checking 4-grams. "Four consecutive words" invited a faithful paraphrase that only
+          // swapped the stopwords the validator drops anyway, so the more carefully the model
+          // obeyed, the more likely it tripped and the creation failed.
+          "Never use the source name or handle. Do not reuse four or more of the source's distinctive words in sequence, ignoring short connecting words — change the notable nouns, verbs, and adjectives, not just the words between them. Rewrite everything in the stage voice.",
           noodlerConcealedSourceText(input.source?.data) || CONCEALED_SOURCE_FALLBACK_BRIEF,
         ].join("\n")
-      : hintedBrief
-        ? [
-            "# Open-secret inspiration brief",
-            "The stage identity is the same person as the source. Carry over look, vibe, interests, and daily life so a regular follower can recognize them.",
-            // Worded to match the validator, which strips words shorter than four characters before
-            // checking 4-grams. "Four consecutive words" invited a faithful paraphrase that only
-            // swapped the stopwords the validator drops anyway, so the more carefully the model
-            // obeyed, the more likely it tripped and the creation failed.
-            "Never use the source name or handle. Do not reuse four or more of the source's distinctive words in sequence, ignoring short connecting words — change the notable nouns, verbs, and adjectives, not just the words between them. Rewrite everything in the stage voice.",
-            noodlerConcealedSourceText(input.source?.data) || CONCEALED_SOURCE_FALLBACK_BRIEF,
-          ].join("\n")
-        : [
-            "# Source character or persona",
-            // `Public name:` is dropped: noodlerSourceText already opens with `Name:` from the same
-            // card, so the Open block stated the name twice in consecutive lines.
-            `Public handle: @${input.publicAccount.handle}`,
-            `Public bio: ${input.publicAccount.bio || "No bio provided."}`,
-            sourceDetails,
-          ].join("\n");
+      : [
+          "# Source character or persona",
+          // `Public name:` is dropped: noodlerSourceText already opens with `Name:` from the same
+          // card, so the Open block stated the name twice in consecutive lines.
+          `Public handle: @${input.publicAccount.handle}`,
+          `Public bio: ${input.publicAccount.bio || "No bio provided."}`,
+          sourceDetails,
+        ].join("\n");
   const sourceContext =
     input.request.disclosureMode === "open"
       ? rawSourceContext
@@ -111,7 +104,9 @@ export function buildNoodlerStageProfileDraftMessages(input: {
         "Create one editable Slurp creator profile draft.",
         // disclosureMode is chosen by the caller and stripped by the parser, so asking for it only
         // invites the model to second-guess a decision it does not own.
-        "Return JSON only with displayName, handle, bio, and stagePersonality.",
+        "Return JSON only with displayName, handle, bio, stagePersonality, gender, and tags.",
+        "gender must be male, female, other, or null. Only infer it when the source clearly supports it; otherwise use null.",
+        `tags must contain at most eight relevant values selected only from: ${input.allowedTags.join(", ")}.`,
         // The post prompt states the person-vs-performance contract to the model that *consumes*
         // stagePersonality, but the model that writes it was never told what the field is for. The
         // obvious guess is "restate the personality", which collapses the two layers into one trait
@@ -135,7 +130,10 @@ export function buildNoodlerStageProfileDraftMessages(input: {
   ];
 }
 
-const noodlerStageProfileDraftSchema = noodleStageProfileDraftResponseSchema.omit({ disclosureMode: true }).strip();
+const noodlerStageProfileDraftSchema = noodleStageProfileDraftResponseSchema
+  .omit({ disclosureMode: true })
+  .extend(slurpGeneratedDiscoveryProfileSchema.shape)
+  .strip();
 
 export function parseNoodlerStageProfileDraft(content: string) {
   const normalized = normalizeNoodlerStageProfileDraft(
@@ -151,7 +149,7 @@ export async function generateNoodlerStageProfileDraft(
     connection: GenerationConnection;
   },
 ): Promise<
-  NoodleStageProfileInput & {
+  SlurpStageProfileInput & {
     sourceSnapshot?: Awaited<ReturnType<typeof resolveNoodlerSourceSnapshot>>;
     sourceRevisionToken?: string;
   }
@@ -188,10 +186,12 @@ export async function generateNoodlerStageProfileDraft(
         : null;
   const identity = buildNoodlerPublicIdentity(publicAccount, source);
   const sourceSnapshot = await resolveNoodlerSourceSnapshot(db, publicAccount);
+  const allowedTags = (await noodle.getSettings()).discoveryTags.map((entry) => entry.tag);
   const messages = buildNoodlerStageProfileDraftMessages({
     request: input.request,
     publicAccount,
     source,
+    allowedTags,
   });
   const debugMode = isDebugAgentsEnabled();
   logDebugOverride(
@@ -252,7 +252,7 @@ export async function generateNoodlerStageProfileDraft(
         {
           role: "user",
           content:
-            "That was not a valid stage profile object. Return exactly one JSON object with the keys displayName, handle, bio, and stagePersonality, all strings. No other keys, no prose.",
+            "That was not a valid stage profile object. Return exactly one JSON object with string keys displayName, handle, bio, and stagePersonality; gender as male, female, other, or null; and tags as an array of up to eight allowed tag strings. No other keys, no prose.",
         },
       ],
       completionOptions,
@@ -261,6 +261,7 @@ export async function generateNoodlerStageProfileDraft(
   }
   const draft = {
     ...parsedDraft,
+    tags: normalizeSlurpDiscoveryTags(parsedDraft.tags, allowedTags),
     disclosureMode: input.request.disclosureMode,
   };
   if (input.request.disclosureMode !== "open" && stageProfileContainsPublicIdentity(draft, identity)) {
