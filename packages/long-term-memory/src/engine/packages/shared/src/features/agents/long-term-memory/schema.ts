@@ -2098,6 +2098,7 @@ export const ltmExtractionDroppedCandidateSchema = z
     snippet: z.string().min(1).max(280).optional(),
     issues: z.array(z.string().trim().min(1).max(240)).max(8).optional(),
     recovery: ltmExtractionRecoveryHintSchema.optional(),
+    recoveryCandidate: ltmEvidenceUnitSchema.optional(),
   })
   .strict();
 
