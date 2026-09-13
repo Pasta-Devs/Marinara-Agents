@@ -717,6 +717,7 @@ async function main() {
           scopeTargetQueries.push(url.search);
           return send(200, {
             currentScope: { chatId: "desktop-chat", chatIds: ["desktop-chat"] },
+            memoryPresence: [{ chatId: "memory-chat", chatIds: ["memory-chat"] }],
             chats: [
               {
                 id: "desktop-chat",
@@ -729,6 +730,7 @@ async function main() {
               {
                 id: "memory-chat",
                 label: "Member Final Branch",
+                chatName: "Memory Conversation",
                 mode: "roleplay",
                 groupId: "conversation-a",
                 personaId: "persona-a",
@@ -737,6 +739,7 @@ async function main() {
               {
                 id: "memory-conversation-branch",
                 label: "Memory conversation branch",
+                chatName: "Memory Conversation",
                 mode: "conversation",
                 groupId: "conversation-a",
                 personaId: "persona-a",
@@ -1642,6 +1645,29 @@ async function main() {
         1,
       );
       await memoryScope.locator('[data-ltm-vault-scope-tab="branch"]').click();
+      assert.equal(await memoryScope.locator('[data-ltm-vault-scope-presence="with-memories"]').count(), 1);
+      assert.equal(await memoryScope.locator('[data-ltm-vault-scope-presence="no-memories"]').count(), 1);
+      assert.equal(
+        await memoryScope.locator('[data-ltm-vault-scope-presence="no-memories"]').getAttribute("open"),
+        null,
+      );
+      assert.equal(
+        await memoryScope.locator('[data-ltm-vault-scope-target="chat:memory-chat"]').getAttribute("title"),
+        "Memory Conversation - Member Final Branch",
+      );
+      await memoryScope.locator("[data-ltm-vault-scope-search]").fill("Memory Conversation");
+      assert.equal(
+        await memoryScope.locator('[data-ltm-vault-scope-presence="no-memories"]').evaluate((element) => element.open),
+        true,
+      );
+      await memoryScope.locator('[data-ltm-vault-scope-presence="no-memories"] > summary').click();
+      await memoryScope.locator("[data-ltm-vault-scope-search]").fill("");
+      await memoryScope.locator("[data-ltm-vault-scope-search]").fill("Memory Conversation");
+      assert.equal(
+        await memoryScope.locator('[data-ltm-vault-scope-presence="no-memories"]').evaluate((element) => element.open),
+        false,
+      );
+      await memoryScope.locator("[data-ltm-vault-scope-search]").fill("");
       assert.ok(await memoryScope.locator('[data-ltm-vault-scope-current="branch"]').isDisabled());
       await memoryScope.locator('[data-ltm-vault-scope-tab="chat"]').click();
       assert.equal(

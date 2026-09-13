@@ -467,6 +467,8 @@
   "ui.longTermMemory.memoryvault.noMatchingCharacters": "No matching characters.",
   "ui.longTermMemory.memoryvault.noMatchingChats": "No matching chats.",
   "ui.longTermMemory.memoryvault.noMatchingPersonas": "No matching personas.",
+  "ui.longTermMemory.memoryvault.withMemories": "With memories",
+  "ui.longTermMemory.memoryvault.noMemories": "No memories",
   "ui.longTermMemory.memoryvault.noSavedMemoriesLinkToThisSourceYet": "No saved memories link to this source yet.",
   "ui.longTermMemory.memoryvault.noSavedMemoriesYetImportASourceOrCreate": "No saved memories yet. Import a character, lorebook, or chat summary and accept its proposals, or create a memory manually.",
   "ui.longTermMemory.memoryvault.noScopeTargets": "No matching places.",

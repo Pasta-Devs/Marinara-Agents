@@ -7,6 +7,7 @@ export type ScopeTargetChat = {
   groupId: string | null;
   personaId: string | null;
   characterIds: string[];
+  chatName?: string | null;
 };
 export type ScopeTargetGroup = { id: string; label: string; chatIds: string[] };
 export type ScopeTargetCharacter = {
@@ -32,6 +33,7 @@ export type ScopeTargets = {
   characters: ScopeTargetCharacter[];
   personas: ScopeTargetPersona[];
   localCharacters: ScopeTargetLocalCharacter[];
+  memoryPresence?: LtmScope[] | null;
 };
 export type ScopeIndexes = {
   chatsById: Map<string, ScopeTargetChat>;
