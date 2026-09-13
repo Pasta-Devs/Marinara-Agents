@@ -77,6 +77,8 @@ export type SlurpStanceInput = {
   moodTone: SlurpMoodTone;
   /** From `slurp-audience-arc.ts`, already phrased. Null when the relationship is going nowhere in particular. */
   audienceArc: string | null;
+  /** From `slurpArcLifeLine`, already protected. What is going on in the creator's own life. */
+  creatorArc?: string | null;
   /** From `slurp-day-vibe.ts`, already phrased. Null on an ordinary day. */
   dayVibe: string | null;
   availability: { online: boolean; activity: string | null };
@@ -189,6 +191,15 @@ export function resolveSlurpStance(input: SlurpStanceInput): SlurpStance {
   if (input.audienceArc) {
     instructions.push(`About this person: they are ${input.audienceArc}.`);
     evidence.push({ layer: "audience arc", value: input.audienceArc, effect: "context for the relationship" });
+  }
+
+  // Colour, like the day. The arc the feed is posting about is the same life the DMs come from,
+  // but a creator who brings up the move in every reply is a creator with one topic.
+  if (input.creatorArc) {
+    instructions.push(
+      `What is going on in your own life right now: ${input.creatorArc}. It can come up when it fits; do not make every reply about it.`,
+    );
+    evidence.push({ layer: "creator arc", value: input.creatorArc, effect: "context for the creator's own life" });
   }
 
   // Rule 5. Shape, not warmth.

@@ -84,6 +84,7 @@ import {
   SLURP_PROJECT_MAX_CHAPTERS,
   SLURP_PROJECT_TITLE_MAX_LENGTH,
   slurpProjectAdvance,
+  slurpProjectChapter,
   slurpProjectsKey,
   slurpProjectTick,
   slurpArcsWithoutFocus,
@@ -331,6 +332,10 @@ export const slurpSettingsSchema = z.object({
   projectRate: z.enum(SLURP_PROJECT_RATE),
   /** Multiplies every arc chapter's day range. */
   arcPace: z.enum(SLURP_ARC_PACES),
+  /** The Creator's running arc reaches their direct messages. */
+  arcAffectsMood: z.boolean(),
+  /** The Creator's running arc reaches the audience that comments on their posts. */
+  arcFanReactions: z.boolean(),
   /** Stories are shown in their own tall frame, so they carry their own size. */
   storyImageWidth: z.number().int().min(64).max(4096),
   storyImageHeight: z.number().int().min(64).max(4096),
@@ -980,6 +985,8 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   storyRate: SLURP_DEFAULT_STORY_RATE,
   projectRate: SLURP_DEFAULT_PROJECT_RATE,
   arcPace: SLURP_DEFAULT_ARC_PACE,
+  arcAffectsMood: true,
+  arcFanReactions: true,
   // 4:5. The composer crops an uploaded Story to whatever ratio is configured here, so the two
   // halves of the feature stay one shape.
   storyImageWidth: 1024,
@@ -6873,10 +6880,28 @@ export function createSlurpStorage(db: DB) {
       const projects = await this.listProjects(creatorAccountId);
       const index = projects.findIndex((project) => project.id === projectId);
       if (index < 0) return null;
-      const next = slurpProjectAdvance(projects[index]!, new Date(), (await this.getSettings()).arcPace);
+      const current = projects[index]!;
+      const next = slurpProjectAdvance(current, new Date(), (await this.getSettings()).arcPace);
       projects[index] = next;
       await settingsStore.set(slurpProjectsKey(creatorAccountId), JSON.stringify(projects));
+      await this.recordArcChange(creatorAccountId, current, next);
       return next;
+    },
+
+    /**
+     * Tell the player an arc moved on or finished. An open-ended arc that only counted a post is
+     * not news, so nothing is recorded for it.
+     */
+    async recordArcChange(creatorAccountId: string, before: SlurpProject, after: SlurpProject): Promise<void> {
+      const label = after.chapters.length ? `${after.title} (${slurpProjectChapter(after)})` : after.title;
+      if (after.status === "complete" && before.status !== "complete") {
+        await this.recordCreatorEvent(creatorAccountId, "arc_complete", {
+          actorLabel: after.title,
+          subjectId: after.id,
+        });
+      } else if (after.chapter !== before.chapter) {
+        await this.recordCreatorEvent(creatorAccountId, "arc_phase", { actorLabel: label, subjectId: after.id });
+      }
     },
 
     /**
@@ -6889,6 +6914,9 @@ export function createSlurpStorage(db: DB) {
       const ticked = projects.map((project) => slurpProjectTick(project, at, pace));
       const moved = ticked.filter((project, index) => project !== projects[index]);
       if (moved.length) await settingsStore.set(slurpProjectsKey(creatorAccountId), JSON.stringify(ticked));
+      for (const [index, project] of ticked.entries()) {
+        if (project !== projects[index]) await this.recordArcChange(creatorAccountId, projects[index]!, project);
+      }
       return moved;
     },
 

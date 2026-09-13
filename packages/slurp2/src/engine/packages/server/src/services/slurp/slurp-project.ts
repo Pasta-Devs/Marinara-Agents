@@ -313,6 +313,21 @@ export function slurpProjectChapter(project: SlurpProject): string | null {
 }
 
 /**
+ * One clause for what is going on in the Creator's own life, for prompts outside the feed.
+ *
+ * The focus arc if there is one, else the newest running arc. Null when nothing is running, so a
+ * Creator with no arc has no life event invented for them in a DM either. Raw project text: the
+ * caller protects it, as the post path does.
+ */
+export function slurpArcLifeLine(projects: readonly SlurpProject[]): string | null {
+  const active = activeSlurpProjects(projects);
+  const arc = active.find((project) => project.intensity === "focus") ?? active[0];
+  if (!arc) return null;
+  const chapter = slurpProjectChapter(arc);
+  return chapter ? `${arc.title} (${chapter})` : arc.title;
+}
+
+/**
  * The project as prompt text. One block, so the caller does not assemble it in three places.
  *
  * Takes already-protected strings. Identity protection belongs to the caller that knows the

@@ -1114,6 +1114,18 @@ export function SlurpSettings({
                       <option value="fast">{t("ui.slurp.settings.arcPaceFast")}</option>
                     </select>
                   </Field>
+                  <Toggle
+                    label={t("ui.slurp.settings.arcAffectsMood")}
+                    detail={t("ui.slurp.settings.arcAffectsMoodDetail")}
+                    value={settings.arcAffectsMood}
+                    onChange={(value) => update("arcAffectsMood", value)}
+                  />
+                  <Toggle
+                    label={t("ui.slurp.settings.arcFanReactions")}
+                    detail={t("ui.slurp.settings.arcFanReactionsDetail")}
+                    value={settings.arcFanReactions}
+                    onChange={(value) => update("arcFanReactions", value)}
+                  />
                 </div>
               )}
 

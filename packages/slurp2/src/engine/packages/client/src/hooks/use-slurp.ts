@@ -319,6 +319,8 @@ export type SlurpSettings = {
   storyRate: "off" | "rare" | "regular" | "often";
   projectRate: "off" | "rare" | "regular" | "often";
   arcPace: "slow" | "normal" | "fast";
+  arcAffectsMood: boolean;
+  arcFanReactions: boolean;
   storyImageWidth: number;
   storyImageHeight: number;
   refreshesPerDay: number;
@@ -704,7 +706,9 @@ export type SlurpEventKind =
   | "message"
   | "milestone"
   | "audience_arc"
-  | "returned";
+  | "returned"
+  | "arc_phase"
+  | "arc_complete";
 
 export type SlurpEventItem = {
   id: string;

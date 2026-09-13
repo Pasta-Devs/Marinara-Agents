@@ -10,6 +10,7 @@ import {
   SLURP_ARC_TEMPLATES,
   SLURP_PROJECT_MAX_CHAPTERS,
   SLURP_PROJECT_TITLE_MAX_LENGTH,
+  slurpArcLifeLine,
   slurpArcRotation,
   slurpArcsWithoutFocus,
   slurpProjectAdvance,
@@ -60,6 +61,23 @@ assert.deepEqual(
   "the focus arc takes twice the slots",
 );
 assert.ok(slurpArcsWithoutFocus([move, focus]).every((project) => project.intensity === "background"));
+
+// ── The arc reaches the rest of the Creator's life ──────────────────────────
+assert.equal(slurpArcLifeLine([]), null, "no arc, no life event invented in a DM");
+assert.equal(slurpArcLifeLine([{ ...move, status: "paused" }]), null);
+assert.equal(slurpArcLifeLine([move, { ...focus, title: "Trip" }]), "Trip (deciding to move)", "the focus arc wins");
+assert.equal(slurpArcLifeLine([move]), "Moving house (deciding to move)");
+{
+  const serverRoot = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src/services");
+  const stance = readFileSync(join(serverRoot, "slurp/slurp-stance.ts"), "utf8");
+  assert.match(stance, /do not make every reply about it/u);
+  const dm = readFileSync(join(serverRoot, "slurp/slurp-message-generation.service.ts"), "utf8");
+  // Gated by the setting, and protected: an arc title can name a Secret Creator's real city.
+  assert.match(dm, /settings\.arcAffectsMood\s+\? \(protectNoodlerGeneratedIdentity\(\s+slurpArcLifeLine/u);
+  const store = readFileSync(join(serverRoot, "storage/slurp.storage.ts"), "utf8");
+  assert.match(store, /"arc_complete"/u);
+  assert.match(store, /await this\.recordArcChange\(creatorAccountId, current, next\)/u);
+}
 
 // ── A project needs a title and nothing else ────────────────────────────────
 const open = makeSlurpProject("p1", { title: "Renovating the flat" }, at);
