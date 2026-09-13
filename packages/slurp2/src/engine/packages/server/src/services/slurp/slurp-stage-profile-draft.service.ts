@@ -3,7 +3,6 @@ import {
   type APIProvider,
   type NoodleIdentityDisclosure,
   type NoodleStageProfileDraftRequest,
-  type NoodleStageProfileInput,
 } from "@marinara-engine/shared";
 import { isDebugAgentsEnabled } from "../../config/runtime-config.js";
 import type { DB } from "../../db/connection.js";
@@ -30,6 +29,11 @@ import { resolveNoodlerSourceSnapshot } from "./slurp-source-resolve.js";
 import { normalizeNoodlerStageProfileDraft } from "./slurp-stage-profile-normalize.js";
 import { noodlerConcealedSourceText, noodlerSourceText } from "./slurp-prompt-safety.js";
 import { createNoodlerSourceRevisionToken } from "./slurp-source-revision.js";
+import {
+  slurpGeneratedDiscoveryProfileSchema,
+  type SlurpStageProfileInput,
+  SLURP_DISCOVERY_TAGS,
+} from "./slurp-discovery-profile.js";
 
 /** Used only when a source card carries no usable prose, so the model still gets a starting point. */
 const CONCEALED_SOURCE_FALLBACK_BRIEF = "General temperament and creative interests from the source profile.";
@@ -111,7 +115,9 @@ export function buildNoodlerStageProfileDraftMessages(input: {
         "Create one editable Slurp creator profile draft.",
         // disclosureMode is chosen by the caller and stripped by the parser, so asking for it only
         // invites the model to second-guess a decision it does not own.
-        "Return JSON only with displayName, handle, bio, and stagePersonality.",
+        "Return JSON only with displayName, handle, bio, stagePersonality, gender, and tags.",
+        "gender must be male, female, other, or null. Only infer it when the source clearly supports it; otherwise use null.",
+        `tags must contain at most eight relevant values selected only from: ${SLURP_DISCOVERY_TAGS.join(", ")}.`,
         // The post prompt states the person-vs-performance contract to the model that *consumes*
         // stagePersonality, but the model that writes it was never told what the field is for. The
         // obvious guess is "restate the personality", which collapses the two layers into one trait
@@ -135,7 +141,10 @@ export function buildNoodlerStageProfileDraftMessages(input: {
   ];
 }
 
-const noodlerStageProfileDraftSchema = noodleStageProfileDraftResponseSchema.omit({ disclosureMode: true }).strip();
+const noodlerStageProfileDraftSchema = noodleStageProfileDraftResponseSchema
+  .omit({ disclosureMode: true })
+  .extend(slurpGeneratedDiscoveryProfileSchema.shape)
+  .strip();
 
 export function parseNoodlerStageProfileDraft(content: string) {
   const normalized = normalizeNoodlerStageProfileDraft(
@@ -151,7 +160,7 @@ export async function generateNoodlerStageProfileDraft(
     connection: GenerationConnection;
   },
 ): Promise<
-  NoodleStageProfileInput & {
+  SlurpStageProfileInput & {
     sourceSnapshot?: Awaited<ReturnType<typeof resolveNoodlerSourceSnapshot>>;
     sourceRevisionToken?: string;
   }
@@ -252,7 +261,7 @@ export async function generateNoodlerStageProfileDraft(
         {
           role: "user",
           content:
-            "That was not a valid stage profile object. Return exactly one JSON object with the keys displayName, handle, bio, and stagePersonality, all strings. No other keys, no prose.",
+            "That was not a valid stage profile object. Return exactly one JSON object with string keys displayName, handle, bio, and stagePersonality; gender as male, female, other, or null; and tags as an array of up to eight allowed tag strings. No other keys, no prose.",
         },
       ],
       completionOptions,

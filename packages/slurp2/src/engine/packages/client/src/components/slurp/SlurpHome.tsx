@@ -40,7 +40,16 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 import { toast } from "sonner";
 import {
   NOODLER_POST_CONTENT_MAX_LENGTH,
@@ -54,10 +63,8 @@ import type {
   NoodleInteraction,
   NoodlePostAccess,
   NoodlerPostView,
-  NoodleStageProfileInput,
   NoodlePollInput,
   NoodlePostImageCrop,
-  NoodlerManagedStageProfile,
   NoodlerManagedPost,
   NoodlerStageProfile,
   NoodlerSourceSnapshot,
@@ -129,6 +136,8 @@ import {
   type NoodlerContentFormat,
   type SlurpProfilePost,
   type NoodlerPostDraftImage,
+  type SlurpStageProfileInput,
+  type SlurpManagedStageProfile,
 } from "../../hooks/use-slurp";
 import { useActivePersona, usePersonas } from "../../hooks/use-creator-personas";
 import { useConnections } from "../../hooks/use-connections";
@@ -187,6 +196,15 @@ import type { SlurpNavigationState } from "./slurp-navigation.types";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { SlurpInlineAd } from "./SlurpInlineAd";
 import { SlurpCreatorProfileCard } from "./SlurpCreatorProfileCard";
+import { SlurpDiscoveryProfileEditor } from "./SlurpDiscoveryProfileEditor";
+import { SlurpDiscoverToolbar } from "./SlurpDiscoverToolbar";
+import {
+  filterAndSortSlurpCreators,
+  SLURP_DISCOVERY_TAGS,
+  type SlurpDiscoverLayout,
+  type SlurpDiscoverSort,
+  type SlurpDiscoveryGender,
+} from "../../lib/slurp-discovery";
 import { formatTime } from "./SlurpDateTime";
 
 interface SlurpHomeProps {
@@ -433,12 +451,14 @@ function disclosureOptions(t: ReturnType<typeof useUiTranslation>["t"]): Disclos
   ];
 }
 
-const EMPTY_STAGE_PROFILE: NoodleStageProfileInput = {
+const EMPTY_STAGE_PROFILE: SlurpStageProfileInput = {
   displayName: "",
   handle: "",
   bio: "",
   stagePersonality: "",
   disclosureMode: "hinted",
+  gender: null,
+  tags: [],
 };
 
 const fieldClass =
@@ -692,7 +712,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   const generateProfileDraft = useGenerateNoodlerStageProfileDraft();
   const connectionsQuery = useConnections();
   const connections = (connectionsQuery.data ?? []) as Array<{ id: string; name: string; model?: string }>;
-  const [profileDraft, setProfileDraft] = useState<NoodleStageProfileInput | null>(null);
+  const [profileDraft, setProfileDraft] = useState<SlurpStageProfileInput | null>(null);
   const [profileDraftDirty, setProfileDraftDirty] = useState(false);
   const [imagePromptReview, setImagePromptReview] = useState<{
     accountId: string;
@@ -703,7 +723,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   const [creationDisclosure, setCreationDisclosure] = useState<NoodleIdentityDisclosure>("hinted");
   const [draftGuidance, setDraftGuidance] = useState("");
   const [draftConnectionId, setDraftConnectionId] = useState("");
-  const [previousDraft, setPreviousDraft] = useState<NoodleStageProfileInput | null>(null);
+  const [previousDraft, setPreviousDraft] = useState<SlurpStageProfileInput | null>(null);
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
   const profileReturnToSettingsRef = useRef<SlurpNavigationState | null>(null);
   const [acceptSourceChangesForProfileId, setAcceptSourceChangesForProfileId] = useState<string | null>(null);
@@ -1177,7 +1197,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     }
   };
 
-  const beginEdit = (profile: NoodlerStageProfile) => {
+  const beginEdit = (profile: SlurpManagedStageProfile) => {
     invalidateProfileDraftGeneration();
     setAcceptSourceChangesForProfileId(null);
     setDraftSourceSnapshot(null);
@@ -1197,6 +1217,8 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
       bio: profile.bio,
       stagePersonality: profile.stagePersonality,
       disclosureMode: profile.disclosureMode ?? "hinted",
+      gender: profile.gender,
+      tags: profile.tags,
     });
     setProfileDraftDirty(false);
   };
@@ -1215,7 +1237,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     noodlerAccountId?: string;
     disclosureMode?: NoodleIdentityDisclosure;
     guidance?: string;
-    currentDraft?: NoodleStageProfileInput;
+    currentDraft?: SlurpStageProfileInput;
   }) => {
     const noodlerAccountId = options?.noodlerAccountId ?? editingProfileId;
     if (!draftNoodleAccountId && !noodlerAccountId) {
@@ -1259,7 +1281,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     );
   };
 
-  const redraftFromSource = (profile: NoodlerStageProfile) => {
+  const redraftFromSource = (profile: SlurpManagedStageProfile) => {
     beginEdit(profile);
     void generateDraft({
       noodlerAccountId: profile.id,
@@ -1271,6 +1293,8 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
         bio: profile.bio,
         stagePersonality: profile.stagePersonality,
         disclosureMode: profile.disclosureMode ?? "hinted",
+        gender: profile.gender,
+        tags: profile.tags,
       },
     });
   };
@@ -1282,7 +1306,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
       handle: profileDraft.handle.replace(/^@+/u, ""),
       ...(editingProfileId && location !== undefined ? { location } : {}),
     };
-    const onSuccess = (profile: NoodlerStageProfile & { discardedPreparedPostCount?: number }) => {
+    const onSuccess = (profile: SlurpManagedStageProfile & { discardedPreparedPostCount?: number }) => {
       invalidateProfileDraftGeneration();
       setProfileDraft(null);
       setProfileDraftDirty(false);
@@ -2468,6 +2492,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
         }
         onToggleSubscription={toggleCreatorSubscription}
         togglePending={toggleSubscription.isPending || toggleFollow.isPending}
+        connectionCounts={connectionCountsQuery.data ?? {}}
         inlineAdsEnabled={slurpSettingsQuery.data?.inlineAdsEnabled !== false}
         inlineAdsFrequency={slurpSettingsQuery.data?.inlineAdsFrequency ?? "standard"}
       />
@@ -2559,7 +2584,7 @@ function StageProfileForm({
   onCancel,
   onSave,
 }: {
-  draft: NoodleStageProfileInput;
+  draft: SlurpStageProfileInput;
   source: { displayName: string; handle: string; avatarUrl?: string | null } | null;
   disclosureMode: NoodleIdentityDisclosure;
   onDisclosureChange: (value: NoodleIdentityDisclosure) => void;
@@ -2570,9 +2595,9 @@ function StageProfileForm({
   onConnectionChange: (value: string) => void;
   onGenerate: () => void;
   isGenerating: boolean;
-  previousDraft: NoodleStageProfileInput | null;
+  previousDraft: SlurpStageProfileInput | null;
   onUndoDraft: () => void;
-  onChange: (patch: Partial<NoodleStageProfileInput>) => void;
+  onChange: (patch: Partial<SlurpStageProfileInput>) => void;
   sourceAccountId: string | null;
   accentId: string;
   isEditing: boolean;
@@ -2871,6 +2896,12 @@ function StageProfileForm({
               />
             </label>
           </div>
+          <SlurpDiscoveryProfileEditor
+            gender={draft.gender}
+            tags={draft.tags}
+            disabled={isGenerating || isPending}
+            onChange={onChange}
+          />
           <details className="group overflow-visible rounded-lg border border-[var(--noodle-divider)]">
             <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 py-3 transition-colors hover:bg-[var(--accent)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] [&::-webkit-details-marker]:hidden">
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 text-[var(--noodle-accent)]">
@@ -3546,9 +3577,9 @@ function StageProfileView({
   accessPending,
   onAccessChange,
 }: {
-  profile: NoodlerManagedStageProfile;
-  profileDraft: NoodleStageProfileInput | null;
-  onProfileChange: (patch: Partial<NoodleStageProfileInput>) => void;
+  profile: SlurpManagedStageProfile;
+  profileDraft: SlurpStageProfileInput | null;
+  onProfileChange: (patch: Partial<SlurpStageProfileInput>) => void;
   onCancelEdit: () => void;
   onSaveEdit: (location?: string) => void;
   profileSavePending: boolean;
@@ -3587,7 +3618,7 @@ function StageProfileView({
   /** Opens Messages in this Creator's chat. No thread is created until something is sent. */
   onOpenMessages: (creatorAccountId: string) => void;
   accessPending: boolean;
-  onAccessChange: (access: NoodlerManagedStageProfile["access"]) => void;
+  onAccessChange: (access: SlurpManagedStageProfile["access"]) => void;
 }) {
   const { t: localizeUi, i18n } = useUiTranslation();
   const bannerSrc = useSlurpMediaSrc(profile.bannerUrl, { width: 1280 });
@@ -3604,13 +3635,13 @@ function StageProfileView({
   const offerMessaging = useSlurpCompose(profile.id, viewerAccount?.entityId ?? null).data?.messaging ?? null;
   const [customTip, setCustomTip] = useState("");
   const [locationDraft, setLocationDraft] = useState(
-    () => (profile as NoodlerManagedStageProfile & { location?: string }).location ?? "",
+    () => (profile as SlurpManagedStageProfile & { location?: string }).location ?? "",
   );
   const locationProfileId = useRef(profile.id);
   useEffect(() => {
     if (locationProfileId.current === profile.id) return;
     locationProfileId.current = profile.id;
-    setLocationDraft((profile as NoodlerManagedStageProfile & { location?: string }).location ?? "");
+    setLocationDraft((profile as SlurpManagedStageProfile & { location?: string }).location ?? "");
   }, [profile.id, profile]);
   const uploadProfileAvatar = useUploadNoodlerAvatar();
   const uploadProfileBanner = useUploadNoodlerBanner();
@@ -3644,7 +3675,7 @@ function StageProfileView({
         lastActiveAt: latestActivityAt || null,
         autoPostingEnabled: profile.autoPosting.enabled,
       });
-  const profileLocation = (profile as NoodlerManagedStageProfile & { location?: string }).location ?? "";
+  const profileLocation = (profile as SlurpManagedStageProfile & { location?: string }).location ?? "";
   const profileBioBody = profile.bio.trim();
   const accent = profileAccent(profile.id);
   const personaBackedCreator = viewerAccounts.some((account) => account.id === profile.sourceAccountId);
@@ -3662,6 +3693,8 @@ function StageProfileView({
     bio: profile.bio,
     stagePersonality: profile.stagePersonality,
     disclosureMode: profile.disclosureMode ?? "hinted",
+    gender: profile.gender,
+    tags: profile.tags,
   };
   const viewerPostById = new Map((viewerCreator?.posts ?? []).map((post) => [post.id, post]));
   const projectedPosts = posts.flatMap((entry) => {
@@ -4048,25 +4081,33 @@ function StageProfileView({
           location: locationDraft,
           onLocationChange: setLocationDraft,
           privateFields: (
-            <div className="space-y-3 rounded-xl border border-[var(--noodle-divider)] bg-[var(--accent)]/35 p-4">
-              <div>
-                <p className="text-sm font-bold">{localizeUi("ui.noodle.stageprofileform.stageVoice")}</p>
-                <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
-                  {localizeUi("ui.noodle.stageprofileform.voiceAttitudeBoundariesAndCreatorPersona")}
-                </p>
-                <textarea
-                  value={editDraft.stagePersonality}
-                  maxLength={1000}
-                  onChange={(event) => onProfileChange({ stagePersonality: event.target.value })}
-                  className="mt-2 min-h-24 w-full resize-y rounded-lg border border-[var(--noodle-divider)] bg-[var(--background)] p-3 text-sm outline-none focus:border-[var(--noodle-accent)]"
+            <div className="space-y-3">
+              <SlurpDiscoveryProfileEditor
+                gender={editDraft.gender}
+                tags={editDraft.tags}
+                disabled={profileSavePending}
+                onChange={onProfileChange}
+              />
+              <div className="space-y-3 rounded-xl border border-[var(--noodle-divider)] bg-[var(--accent)]/35 p-4">
+                <div>
+                  <p className="text-sm font-bold">{localizeUi("ui.noodle.stageprofileform.stageVoice")}</p>
+                  <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
+                    {localizeUi("ui.noodle.stageprofileform.voiceAttitudeBoundariesAndCreatorPersona")}
+                  </p>
+                  <textarea
+                    value={editDraft.stagePersonality}
+                    maxLength={1000}
+                    onChange={(event) => onProfileChange({ stagePersonality: event.target.value })}
+                    className="mt-2 min-h-24 w-full resize-y rounded-lg border border-[var(--noodle-divider)] bg-[var(--background)] p-3 text-sm outline-none focus:border-[var(--noodle-accent)]"
+                  />
+                </div>
+                <AudienceStancePresets
+                  disabled={profileSavePending}
+                  onApply={(sentence) =>
+                    onProfileChange({ stagePersonality: appendAudienceStance(editDraft.stagePersonality, sentence) })
+                  }
                 />
               </div>
-              <AudienceStancePresets
-                disabled={profileSavePending}
-                onApply={(sentence) =>
-                  onProfileChange({ stagePersonality: appendAudienceStance(editDraft.stagePersonality, sentence) })
-                }
-              />
             </div>
           ),
         }}
@@ -4821,6 +4862,7 @@ function ViewerHub({
   onOpenAuthorProfile,
   onToggleSubscription,
   togglePending,
+  connectionCounts,
   inlineAdsEnabled,
   inlineAdsFrequency,
   newSinceAt,
@@ -4857,12 +4899,13 @@ function ViewerHub({
   discoveryInputRef: React.RefObject<HTMLInputElement | null>;
   tab: "following" | "all";
   onTabChange: (tab: "following" | "all") => void;
-  authorProfile: NoodlerManagedStageProfile | null;
+  authorProfile: SlurpManagedStageProfile | null;
   onAddStory: () => void;
   /** Open the persona's own Creator profile from the empty feed. */
   onOpenAuthorProfile?: () => void;
   onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
   togglePending: boolean;
+  connectionCounts: Record<string, { fans: number; followers: number }>;
   inlineAdsEnabled: boolean;
   inlineAdsFrequency: "light" | "standard" | "frequent";
 }) {
@@ -4873,8 +4916,21 @@ function ViewerHub({
   const [visibleFeedCount, setVisibleFeedCount] = useState(NOODLER_FEED_WINDOW_SIZE);
   const [activeMomentId, setActiveMomentId] = useState<string | null>(null);
   const [feedLayout, setFeedLayout] = useState<"list" | "wall">("list");
+  const [discoverLayout, setDiscoverLayout] = useState<SlurpDiscoverLayout>(() => {
+    if (typeof window === "undefined") return "grid";
+    return window.localStorage.getItem("slurp2.discover.layout") === "list" ? "list" : "grid";
+  });
+  const [discoverNotSubscribed, setDiscoverNotSubscribed] = useState(false);
+  const [discoverGenders, setDiscoverGenders] = useState<Set<SlurpDiscoveryGender>>(() => new Set());
+  const [discoverTags, setDiscoverTags] = useState<Set<string>>(() => new Set());
+  const [discoverMinimumPrice, setDiscoverMinimumPrice] = useState("");
+  const [discoverMaximumPrice, setDiscoverMaximumPrice] = useState("");
+  const [discoverSort, setDiscoverSort] = useState<SlurpDiscoverSort>("recommended");
   const [openPostId, setOpenPostId] = useState<string | null>(null);
   const [momentCutoff] = useState(() => Date.now() - SLURP_MOMENT_WINDOW_MS);
+  useEffect(() => {
+    window.localStorage.setItem("slurp2.discover.layout", discoverLayout);
+  }, [discoverLayout]);
   const inlineAdsQuery = useSlurpInlineAds(scope?.viewer.entityId ?? null, null, [
     tab === "all" ? "discover" : "following",
     new Date().getHours() >= 18 ? "night" : "day",
@@ -4944,18 +5000,73 @@ function ViewerHub({
         .filter(matchesSearch)
         .sort(newestFirst),
       searchResults: searchTerm ? allPosts.filter(matchesSearch).sort(newestFirst) : [],
-      discoveredCreators: creators.filter(
-        (creator) =>
-          creator.profile.id !== authorProfile?.id &&
-          (!searchTerm ||
-            searchable(creator.profile.handle).includes(searchTerm) ||
-            searchable(creator.profile.displayName).includes(searchTerm)),
-      ),
+      discoveredCreators: creators.filter((creator) => creator.profile.id !== authorProfile?.id),
       suggestedCreators: creators
         .filter((creator) => creator.profile.id !== authorProfile?.id && !creator.followed)
         .slice(0, 3),
     };
   }, [authorProfile?.id, momentCutoff, scope, searchTerm, tab]);
+  const parsePrice = (value: string) => {
+    if (!value.trim()) return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  };
+  const filteredDiscoveredCreators = useMemo(
+    () =>
+      filterAndSortSlurpCreators(
+        discoveredCreators,
+        {
+          search,
+          notSubscribed: discoverNotSubscribed,
+          genders: discoverGenders,
+          tags: discoverTags,
+          minimumPrice: parsePrice(discoverMinimumPrice),
+          maximumPrice: parsePrice(discoverMaximumPrice),
+          sort: discoverSort,
+        },
+        connectionCounts,
+      ),
+    [
+      connectionCounts,
+      discoverGenders,
+      discoverMaximumPrice,
+      discoverMinimumPrice,
+      discoverNotSubscribed,
+      discoverSort,
+      discoverTags,
+      discoveredCreators,
+      search,
+    ],
+  );
+  const discoverFiltersActive = Boolean(
+    searchTerm ||
+    discoverNotSubscribed ||
+    discoverGenders.size ||
+    discoverTags.size ||
+    discoverMinimumPrice ||
+    discoverMaximumPrice,
+  );
+  const customDiscoverTags = useMemo(() => {
+    const curated = new Set<string>(SLURP_DISCOVERY_TAGS);
+    return [...new Set(discoveredCreators.flatMap((creator) => creator.profile.tags ?? []))]
+      .filter((tag) => !curated.has(tag))
+      .sort((left, right) => left.localeCompare(right));
+  }, [discoveredCreators]);
+  const toggleDiscoverSetValue = <T,>(setter: Dispatch<SetStateAction<Set<T>>>, value: T) =>
+    setter((current) => {
+      const next = new Set(current);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
+  const clearDiscoverFilters = () => {
+    onSearchChange("");
+    setDiscoverNotSubscribed(false);
+    setDiscoverGenders(new Set());
+    setDiscoverTags(new Set());
+    setDiscoverMinimumPrice("");
+    setDiscoverMaximumPrice("");
+  };
   // "Create a persona" is a claim about the user's data, so it waits for the personas query to
   // actually succeed instead of speaking for a cold or failed load.
   if (personas.length === 0) {
@@ -5084,6 +5195,27 @@ function ViewerHub({
           </header>
         )}
 
+        <SlurpDiscoverToolbar
+          notSubscribed={discoverNotSubscribed}
+          onNotSubscribedChange={setDiscoverNotSubscribed}
+          genders={discoverGenders}
+          onGenderToggle={(gender) => toggleDiscoverSetValue(setDiscoverGenders, gender)}
+          minimumPrice={discoverMinimumPrice}
+          maximumPrice={discoverMaximumPrice}
+          onMinimumPriceChange={setDiscoverMinimumPrice}
+          onMaximumPriceChange={setDiscoverMaximumPrice}
+          tags={discoverTags}
+          customTags={customDiscoverTags}
+          onTagToggle={(tag) => toggleDiscoverSetValue(setDiscoverTags, tag)}
+          sort={discoverSort}
+          onSortChange={setDiscoverSort}
+          layout={discoverLayout}
+          onLayoutChange={setDiscoverLayout}
+          filteredCount={filteredDiscoveredCreators.length}
+          filtersActive={discoverFiltersActive}
+          onClear={clearDiscoverFilters}
+        />
+
         {searchTerm && (
           <section className="px-3 pb-4 sm:px-4" aria-labelledby="noodler-search-results">
             <div className="border-b border-[var(--noodle-divider)] px-4 py-3">
@@ -5122,20 +5254,37 @@ function ViewerHub({
               {localizeUi("ui.noodle.subscriptionsections.discoverCreators")}
             </h2>
           </div>
-          {discoveredCreators.length > 0 ? (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {discoveredCreators.map((creator) => (
+          {filteredDiscoveredCreators.length > 0 ? (
+            <div className={cn(discoverLayout === "grid" ? "grid gap-3 sm:grid-cols-2" : "space-y-3")}>
+              {filteredDiscoveredCreators.map((creator) => (
                 <SlurpCreatorProfileCard
                   key={creator.profile.id}
                   creator={creator}
                   onOpenProfile={postCardCtx.openAuthorProfile}
+                  layout={discoverLayout}
+                  showDiscoveryActions
+                  subscriptionPending={togglePending}
+                  onToggleSubscription={onToggleSubscription}
                 />
               ))}
             </div>
           ) : (
-            <p className="px-4 py-6 text-sm text-[var(--muted-foreground)]">
-              {localizeUi("ui.noodle.subscriptionsections.noCreatorsAreVisibleToThisPersonaYet")}
-            </p>
+            <div className="px-4 py-8 text-center">
+              <p className="text-sm font-bold">
+                {discoverFiltersActive
+                  ? localizeUi("ui.slurp.discover.noMatches", { defaultValue: "No Creators match these filters" })
+                  : localizeUi("ui.noodle.subscriptionsections.noCreatorsAreVisibleToThisPersonaYet")}
+              </p>
+              {discoverFiltersActive && (
+                <button
+                  type="button"
+                  onClick={clearDiscoverFilters}
+                  className="mt-3 min-h-10 rounded-full px-4 text-sm font-bold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+                >
+                  {localizeUi("ui.slurp.discover.clearFilters", { defaultValue: "Clear filters" })}
+                </button>
+              )}
+            </div>
           )}
         </section>
       </div>
@@ -6448,7 +6597,7 @@ function NoodlerPostComposer({
   manualPending,
   guidePending,
 }: {
-  profile: NoodlerManagedStageProfile;
+  profile: SlurpManagedStageProfile;
   availablePosts: SlurpProfilePost[];
   collapsible?: boolean;
   draft: NoodlerPostDraft;

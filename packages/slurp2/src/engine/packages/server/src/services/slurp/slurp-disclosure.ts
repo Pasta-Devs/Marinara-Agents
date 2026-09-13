@@ -1,4 +1,10 @@
 import type { NoodleIdentityDisclosure, NoodlerManagedStageProfile } from "@marinara-engine/shared";
+import type { SlurpDiscoveryGender } from "./slurp-discovery-profile.js";
+
+type SlurpManagedStageProfile = NoodlerManagedStageProfile & {
+  gender: SlurpDiscoveryGender | null;
+  tags: string[];
+};
 
 const DISCLOSURE_RANK: Record<NoodleIdentityDisclosure, number> = {
   secret: 0,
@@ -16,6 +22,8 @@ const AUDIENCE_FIELDS = [
   "avatarUrl",
   "avatarCrop",
   "bannerUrl",
+  "gender",
+  "tags",
   "disclosureMode",
   "stagePersonality",
   "autoPosting",
@@ -25,7 +33,7 @@ const AUDIENCE_FIELDS = [
 ] as const;
 
 export type NoodlerAudienceProfile = Pick<
-  NoodlerManagedStageProfile,
+  SlurpManagedStageProfile,
   (typeof AUDIENCE_FIELDS)[number] | "slurpSourceAccountId" | "publicIdentity"
 >;
 
@@ -36,11 +44,11 @@ export function isNoodlerDisclosureDowngrade(
   return DISCLOSURE_RANK[next] < DISCLOSURE_RANK[current];
 }
 
-export function projectNoodlerAudienceProfile(profile: NoodlerManagedStageProfile): NoodlerAudienceProfile {
+export function projectNoodlerAudienceProfile(profile: SlurpManagedStageProfile): NoodlerAudienceProfile {
   const open = profile.disclosureMode === "open";
   return {
     ...(Object.fromEntries(AUDIENCE_FIELDS.map((field) => [field, profile[field]])) as Pick<
-      NoodlerManagedStageProfile,
+      SlurpManagedStageProfile,
       (typeof AUDIENCE_FIELDS)[number]
     >),
     slurpSourceAccountId: open ? profile.slurpSourceAccountId : null,

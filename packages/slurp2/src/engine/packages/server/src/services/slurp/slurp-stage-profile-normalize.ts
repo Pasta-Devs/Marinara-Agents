@@ -9,6 +9,7 @@ const DRAFT_FIELD_ALIASES: Record<string, readonly string[]> = {
   handle: ["username", "user_name", "stageHandle", "stage_handle", "screenName"],
   bio: ["biography", "description", "about", "tagline", "summary"],
   stagePersonality: ["stage_personality", "personality", "stageVoice", "stage_voice", "voice", "persona", "tone"],
+  gender: ["gender_identity", "genderIdentity", "sex"],
 };
 
 function unwrapDraftCandidate(value: unknown): unknown {
@@ -56,5 +57,9 @@ export function normalizeNoodlerStageProfileDraft(value: unknown): Record<string
   }
   if (!normalized.bio) normalized.bio = "";
   if (!normalized.stagePersonality) normalized.stagePersonality = "";
+  if (!Array.isArray(normalized.tags)) {
+    const tagsAlias = ["categories", "themes", "interests"].find((key) => Array.isArray(normalized[key]));
+    if (tagsAlias) normalized.tags = normalized[tagsAlias];
+  }
   return normalized;
 }

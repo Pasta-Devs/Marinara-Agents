@@ -72,6 +72,10 @@ assert.ok(
   "Open is allowed to name the source",
 );
 assert.ok(!stageProfileContainsPublicIdentity({ ...leakyProfile, bio: "Quieter than most." }, identity));
+assert.ok(
+  stageProfileContainsPublicIdentity({ ...leakyProfile, bio: "Quieter than most.", tags: ["Mari Vale"] }, identity),
+  "a custom tag naming the source must be rejected",
+);
 
 // --- normalizedDisclosureWords -----------------------------------------------------------------
 
@@ -108,6 +112,13 @@ const copiedProfile = {
   disclosureMode: "hinted" as const,
 };
 assert.ok(stageProfileContainsSourceDetails(copiedProfile, source), "a copied run of content words is rejected");
+assert.ok(
+  stageProfileContainsSourceDetails(
+    { ...copiedProfile, bio: "Reworded.", tags: ["busy coffee shop near river"] },
+    source,
+  ),
+  "custom tags participate in source-detail leak checks",
+);
 
 // Open is never checked against the source.
 assert.ok(!stageProfileContainsSourceDetails({ ...copiedProfile, disclosureMode: "open" }, source));

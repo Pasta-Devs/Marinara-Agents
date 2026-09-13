@@ -4,6 +4,10 @@ import { cn } from "../../lib/utils";
 import { useNearViewportSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
 import { ProfileInitial } from "./SlurpShell";
 import { SlurpEmptyArtwork } from "./SlurpEmptyArtwork";
+import { Check, Loader2 } from "lucide-react";
+import { SlurpCoinAmount } from "./SlurpCoin";
+import type { SlurpDiscoverLayout, SlurpDiscoveryGender } from "../../lib/slurp-discovery";
+import { showConfirmDialog } from "../../lib/app-dialogs";
 
 export type SlurpCreatorProfileCardCreator = {
   profile: {
@@ -14,18 +18,29 @@ export type SlurpCreatorProfileCardCreator = {
     avatarUrl?: string | null;
     avatarCrop?: AvatarCrop | null;
     bannerUrl?: string | null;
+    gender?: SlurpDiscoveryGender | null;
+    tags?: string[];
   };
   followed: boolean;
   subscribed: boolean;
+  subscriptionPrice?: number | null;
 };
 
 export function SlurpCreatorProfileCard({
   creator,
   onOpenProfile,
+  layout = "grid",
+  showDiscoveryActions = false,
+  subscriptionPending = false,
+  onToggleSubscription,
   className,
 }: {
   creator: SlurpCreatorProfileCardCreator;
   onOpenProfile?: (accountId: string) => void;
+  layout?: SlurpDiscoverLayout;
+  showDiscoveryActions?: boolean;
+  subscriptionPending?: boolean;
+  onToggleSubscription?: (accountId: string, subscribed: boolean) => void;
   className?: string;
 }) {
   const { t: localizeUi } = useUiTranslation();
@@ -33,17 +48,42 @@ export function SlurpCreatorProfileCard({
   const { src: bannerSrc, observe: observeBanner } = useNearViewportSlurpMediaSrc(creator.profile.bannerUrl ?? null, {
     width: 640,
   });
+  const tags = creator.profile.tags ?? [];
+  const visibleTagCount = layout === "list" ? 6 : 3;
+  const visibleTags = tags.slice(0, visibleTagCount);
+  const hiddenTagCount = Math.max(0, tags.length - visibleTags.length);
+  const toggleSubscription = async () => {
+    if (!onToggleSubscription) return;
+    if (
+      creator.subscribed &&
+      !(await showConfirmDialog({
+        title: localizeUi("ui.slurp.subscription.cancelTitle", { defaultValue: "Cancel subscription?" }),
+        detail: localizeUi("ui.slurp.subscription.cancelDetail", {
+          defaultValue:
+            "You keep subscriber access until the week you already paid for ends. It will not renew after that.",
+        }),
+        confirmLabel: localizeUi("ui.slurp.subscription.cancelAction", { defaultValue: "Cancel subscription" }),
+        destructive: true,
+      }))
+    )
+      return;
+    onToggleSubscription(creator.profile.id, creator.subscribed);
+  };
 
   return (
     <article
       className={cn(
-        "group @container flex min-w-0 flex-col overflow-hidden rounded-2xl bg-[var(--slurp-surface)] shadow-[0_1px_0_var(--noodle-divider),0_18px_38px_-28px_rgba(0,0,0,0.9)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,box-shadow,transform] hover:-translate-y-0.5 hover:bg-[var(--slurp-surface-raised)] hover:shadow-[0_1px_0_color-mix(in_srgb,var(--noodle-accent)_62%,transparent),0_22px_42px_-26px_rgba(0,0,0,0.92)] motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+        "group @container flex min-w-0 overflow-hidden rounded-2xl bg-[var(--slurp-surface)] shadow-[0_1px_0_var(--noodle-divider),0_18px_38px_-28px_rgba(0,0,0,0.9)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,box-shadow,transform] hover:-translate-y-0.5 hover:bg-[var(--slurp-surface-raised)] hover:shadow-[0_1px_0_color-mix(in_srgb,var(--noodle-accent)_62%,transparent),0_22px_42px_-26px_rgba(0,0,0,0.92)] motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+        layout === "list" ? "flex-col sm:flex-row" : "flex-col",
         className,
       )}
     >
       <div
         ref={observeBanner}
-        className="relative h-28 w-full overflow-hidden bg-[var(--noodle-accent)]/15 @min-[22rem]:h-32"
+        className={cn(
+          "relative h-28 w-full shrink-0 overflow-hidden bg-[var(--noodle-accent)]/15 @min-[22rem]:h-32",
+          layout === "list" && "sm:h-auto sm:w-52 sm:self-stretch",
+        )}
       >
         {bannerSrc ? (
           <img
@@ -61,7 +101,12 @@ export function SlurpCreatorProfileCard({
           aria-hidden="true"
         />
       </div>
-      <div className="relative z-10 -mt-8 flex flex-1 flex-col px-4 pb-3">
+      <div
+        className={cn(
+          "relative z-10 flex flex-1 flex-col px-4 pb-3",
+          layout === "list" ? "-mt-8 sm:mt-0 sm:py-4" : "-mt-8",
+        )}
+      >
         <div className="flex min-w-0 items-end gap-3">
           <span className="shrink-0 rounded-full bg-[var(--slurp-canvas)] p-0.5 shadow-[0_8px_20px_-10px_rgba(0,0,0,0.95)] ring-1 ring-white/10">
             <ProfileInitial profile={creator.profile} />
@@ -76,7 +121,37 @@ export function SlurpCreatorProfileCard({
             {creator.profile.bio}
           </p>
         )}
-        <div className="mt-auto flex min-h-14 items-end justify-end border-t border-[var(--noodle-divider)] pt-3">
+        {(visibleTags.length > 0 || creator.profile.gender) && (
+          <div
+            className="mt-3 flex flex-wrap gap-1.5"
+            aria-label={localizeUi("ui.slurp.discover.creatorTags", { defaultValue: "Creator tags" })}
+          >
+            {creator.profile.gender && (
+              <span className="rounded-full bg-[var(--accent)] px-2.5 py-1 text-[11px] font-bold capitalize text-[var(--muted-foreground)]">
+                {localizeUi(`ui.slurp.discover.gender.${creator.profile.gender}`, {
+                  defaultValue: creator.profile.gender,
+                })}
+              </span>
+            )}
+            {visibleTags.map((tag) => (
+              <span
+                key={tag}
+                className="rounded-full bg-[color-mix(in_srgb,var(--noodle-accent)_12%,var(--accent))] px-2.5 py-1 text-[11px] font-bold text-[var(--noodle-accent-foreground)]"
+              >
+                {localizeUi(`ui.slurp.tags.${tag}`, { defaultValue: tag })}
+              </span>
+            ))}
+            {hiddenTagCount > 0 && (
+              <span className="px-1 py-1 text-[11px] font-bold text-[var(--muted-foreground)]">+{hiddenTagCount}</span>
+            )}
+          </div>
+        )}
+        <div
+          className={cn(
+            "mt-auto flex min-h-14 items-end gap-2 border-t border-[var(--noodle-divider)] pt-3",
+            showDiscoveryActions ? "justify-between" : "justify-end",
+          )}
+        >
           <button
             type="button"
             onClick={openProfile}
@@ -85,6 +160,34 @@ export function SlurpCreatorProfileCard({
           >
             {localizeUi("ui.slurp.settings.creators.viewProfile")}
           </button>
+          {showDiscoveryActions && (
+            <button
+              type="button"
+              onClick={() => void toggleSubscription()}
+              disabled={!onToggleSubscription || subscriptionPending}
+              aria-pressed={creator.subscribed}
+              className={cn(
+                "inline-flex min-h-10 items-center justify-center gap-1.5 rounded-full px-4 text-xs font-black transition-[background-color,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--slurp-surface)] disabled:opacity-60 motion-reduce:transition-none",
+                creator.subscribed
+                  ? "bg-[var(--accent)] text-[var(--foreground)]"
+                  : "bg-[var(--noodle-accent)] text-white shadow-[0_10px_24px_-12px_var(--noodle-accent)]",
+              )}
+            >
+              {subscriptionPending ? (
+                <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+              ) : creator.subscribed ? (
+                <Check size={14} aria-hidden="true" />
+              ) : null}
+              {creator.subscribed ? (
+                localizeUi("ui.slurp.discover.subscribed", { defaultValue: "Subscribed" })
+              ) : (
+                <>
+                  {localizeUi("ui.slurp.discover.subscribe", { defaultValue: "Subscribe" })} ·{" "}
+                  <SlurpCoinAmount amount={`${creator.subscriptionPrice ?? 0}/week`} size={13} />
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
     </article>

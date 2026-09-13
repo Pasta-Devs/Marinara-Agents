@@ -138,8 +138,8 @@ assert.match(row, /edges\.end \? "transparent"/u, "A scrollable end edge must fa
 
 const card = readFileSync(join(componentsDir, "SlurpCreatorProfileCard.tsx"), "utf8");
 
-// One creator card everywhere: the rail, the inline suggestions, and the discover grid.
-assert.doesNotMatch(card, /variant/u, "The creator card must have a single shape");
+// One creator card everywhere; only Discover opts into its horizontal layout and actions.
+assert.match(card, /layout = "grid"/u, "the shared card must preserve the grid default");
 assert.doesNotMatch(home, /variant="compact"/u, "No surface may fall back to the old row-shaped card");
 const suggestions = home.slice(
   home.indexOf("function SlurpInlineSuggestedCreators("),

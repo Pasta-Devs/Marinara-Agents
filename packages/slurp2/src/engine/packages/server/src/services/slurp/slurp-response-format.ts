@@ -1,4 +1,5 @@
 import { isOpenAIGpt56Model } from "@marinara-engine/shared";
+import { SLURP_DISCOVERY_TAGS } from "./slurp-discovery-profile.js";
 
 const NOODLE_POST_HARD_MAX_LENGTH = 4000;
 const NOODLE_REPLY_HARD_MAX_LENGTH = 2000;
@@ -135,9 +136,10 @@ const noodlerProfileSchema = {
     handle: { type: "string" },
     bio: { type: "string" },
     stagePersonality: { type: "string" },
-    disclosureMode: { type: "string", enum: ["open", "hinted", "secret"] },
+    gender: { anyOf: [{ type: "null" }, { type: "string", enum: ["male", "female", "other"] }] },
+    tags: { type: "array", maxItems: 8, items: { type: "string", enum: SLURP_DISCOVERY_TAGS } },
   },
-  required: ["displayName", "handle", "bio", "stagePersonality", "disclosureMode"],
+  required: ["displayName", "handle", "bio", "stagePersonality", "gender", "tags"],
   additionalProperties: false,
 } as const;
 

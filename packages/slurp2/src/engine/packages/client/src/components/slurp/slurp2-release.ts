@@ -2,7 +2,7 @@
 // client has no route that serves CHANGELOG.md. So the notes are mirrored here, and
 // `tests/slurp2-release-notes.regression.ts` fails the build if this file drifts from
 // `packages/slurp2/CHANGELOG.md` or from the version in `manifest.json`.
-export const SLURP2_VERSION = "0.0.6";
+export const SLURP2_VERSION = "0.1.0";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -12,6 +12,15 @@ export interface Slurp2ReleaseEntry {
 
 /** Newest first, same order as CHANGELOG.md. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.1.0",
+    date: "2026-09-13",
+    notes: [
+      "Rebuilt Discover around direct subscription actions, persistent grid and list views, and filters for subscription status, gender, weekly price, and Creator tags.",
+      "Added Recommended, Newest, Most liked, and Most subscribed sorting with stable results.",
+      "Added editable Creator gender and tags, including safe custom tags and AI-suggested curated tags during profile creation and redrafting.",
+    ],
+  },
   {
     version: "0.0.6",
     date: "2026-09-13",

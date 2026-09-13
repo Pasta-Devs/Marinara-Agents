@@ -11,13 +11,16 @@ const homeSource = readFileSync(
   "utf8",
 );
 
-test("creator discovery cards expose one dedicated View profile action", () => {
+test("creator discovery cards expose profile and discovery-only subscription actions", () => {
   assert.match(cardSource, /ui\.slurp\.settings\.creators\.viewProfile/);
-  assert.match(cardSource, /mt-auto flex min-h-14 items-end justify-end border-t/);
-  assert.doesNotMatch(cardSource, /onToggleFollow|onToggleSubscription|showFollow|showSubscription/);
+  assert.match(cardSource, /showDiscoveryActions/);
+  assert.match(cardSource, /onToggleSubscription/);
+  assert.match(cardSource, /subscriptionPrice/);
+  assert.match(cardSource, /Cancel subscription\?/);
+  assert.doesNotMatch(cardSource, /onToggleFollow|showFollow/);
 });
 
 test("every creator discovery surface uses the shared card", () => {
   assert.equal(homeSource.match(/<SlurpCreatorProfileCard/g)?.length, 5);
-  assert.doesNotMatch(homeSource, /<SlurpCreatorProfileCard[\s\S]{0,240}onToggleSubscription/);
+  assert.equal(homeSource.match(/showDiscoveryActions/g)?.length, 1, "only Discover enables subscription actions");
 });

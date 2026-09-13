@@ -16,7 +16,6 @@ import {
   noodlerPostCreateWithMediaSchema,
   noodlerGenerationRequestSchema,
   noodlerPostUpdateSchema,
-  noodlerAccountCreateSchema,
   noodlerCreatorReplyRequestSchema,
   noodlerCreateInteractionSchema,
   noodlerRemoveInteractionSchema,
@@ -29,6 +28,7 @@ import {
   noodleAmbientProfileRerollSchema,
   noodleInteractionUpdateSchema,
   noodleStageProfileUpdateSchema,
+  noodleStageProfileSchema,
   noodleStageProfileDraftRequestSchema,
   readNoodlePollFromMetadata,
   type NoodleAccount,
@@ -125,6 +125,7 @@ import { readGarnishLorebookContext } from "../services/slurp/slurp-garnish-lore
 import { syncGarnishAdsWithLorebook } from "../services/slurp/slurp-garnish-sync.service.js";
 import { createLorebooksStorage } from "../services/storage/lorebooks.storage.js";
 import { generateNoodlerStageProfileDraft } from "../services/slurp/slurp-stage-profile-draft.service.js";
+import { slurpDiscoveryProfileSchema } from "../services/slurp/slurp-discovery-profile.js";
 import {
   getNoodlerImageConnections,
   updateNoodlerImageConnections,
@@ -266,7 +267,11 @@ const slurpBulkNoodlerAccountCreateSchema = noodleBulkNoodlerAccountCreateSchema
   connectionId: z.string().min(1).nullable().optional(),
 });
 
+const slurpStageProfileSchema = noodleStageProfileSchema.extend(slurpDiscoveryProfileSchema.shape);
+const slurpNoodlerAccountCreateSchema = z.object({ stageProfile: slurpStageProfileSchema }).strict();
+
 const noodleStageProfileUpdateRequestSchema = noodleStageProfileUpdateSchema.extend({
+  ...slurpDiscoveryProfileSchema.shape,
   location: z.string().trim().max(120).optional(),
   sourceRevisionToken: z
     .string()
@@ -3235,7 +3240,7 @@ export async function slurpRoutes(app: FastifyInstance) {
   });
 
   app.post("/accounts/:id/noodler", async (req, reply) => {
-    const parsed = noodlerAccountCreateSchema.safeParse(req.body ?? {});
+    const parsed = slurpNoodlerAccountCreateSchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
     const publicAccount = await noodle.resolveSourceByEntityId(id);

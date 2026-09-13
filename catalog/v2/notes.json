@@ -184,6 +184,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.1.0",
+          "date": "2026-09-13",
+          "notes": "- Rebuilt Discover around direct subscription actions, persistent grid and list views, and filters for subscription status, gender, weekly price, and Creator tags.\n- Added Recommended, Newest, Most liked, and Most subscribed sorting with stable results.\n- Added editable Creator gender and tags, including safe custom tags and AI-suggested curated tags during profile creation and redrafting.",
+          "highlight": true
+        },
+        {
           "version": "0.0.6",
           "date": "2026-09-13",
           "notes": "- Added image context options for reactions: stored prompts, vision descriptions, or automatic selection. Public fan reactions keep locked images hidden and respect Creator identity privacy.\n- Generation now shows how many Creators remain, including skipped or failed requests.\n- Restored visible success and error notifications for Slurp actions.",

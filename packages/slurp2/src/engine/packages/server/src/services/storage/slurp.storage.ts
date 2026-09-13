@@ -36,7 +36,6 @@ import {
   type NoodlePostUpdateInput,
   type NoodlePostSource,
   type NoodlerPostUpdateInput,
-  type NoodleStageProfileInput,
   type NoodlerManagedPost,
   type NoodlerManagedStageProfile,
   type NoodlerSourceSnapshot,
@@ -57,6 +56,11 @@ export {
 } from "../slurp/slurp-prices.js";
 // Re-exported above for consumers; imported here because a re-export creates no local binding.
 import { noodlerUnlockPriceFromMetadata } from "../slurp/slurp-prices.js";
+import {
+  slurpDiscoveryFields,
+  type SlurpDiscoveryGender,
+  type SlurpStageProfileInput,
+} from "../slurp/slurp-discovery-profile.js";
 import {
   applyStipend,
   credit,
@@ -437,7 +441,20 @@ export type SlurpSettingsUpdateInput = Partial<SlurpSettings>;
 export type SlurpBootstrap = Omit<NoodleBootstrap, "settings"> & { settings: SlurpSettings };
 
 export type SlurpSourceKind = "character" | "persona";
-export type SlurpAccount = NoodleAccount & {
+type SlurpNoodleAccountSettings = Omit<NoodleAccountSettings, "profile"> & {
+  profile: NoodleAccountSettings["profile"] & {
+    gender: SlurpDiscoveryGender | null;
+    tags: string[];
+  };
+};
+
+export type SlurpManagedStageProfile = NoodlerManagedStageProfile & {
+  gender: SlurpDiscoveryGender | null;
+  tags: string[];
+};
+
+export type SlurpAccount = Omit<NoodleAccount, "settings"> & {
+  settings: SlurpNoodleAccountSettings;
   sourceKind: SlurpSourceKind;
   sourceEntityId: string;
 };
@@ -658,9 +675,9 @@ function parseRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
-function emptyNoodleAccountSettings(): NoodleAccountSettings {
+function emptyNoodleAccountSettings(): SlurpNoodleAccountSettings {
   return {
-    profile: {},
+    profile: { gender: null, tags: [] },
     social: {},
     scheduler: { autoPosting: defaultAutoPostingSettings() },
     privacy: { access: { hiddenFromAccountIds: [] } },
@@ -720,7 +737,7 @@ function validPrivacyField(key: string, value: unknown): NoodleAccountSettings["
   return parsed.success ? parsed.data : empty;
 }
 
-export function normalizeNoodleAccountSettings(value: unknown): NoodleAccountSettings {
+export function normalizeNoodleAccountSettings(value: unknown): SlurpNoodleAccountSettings {
   const raw = parseRecord(value);
   const rawProfile = parseRecord(raw.profile);
   const rawSocial = parseRecord(raw.social);
@@ -742,6 +759,7 @@ export function normalizeNoodleAccountSettings(value: unknown): NoodleAccountSet
   const rawStagePersonality = nestedOrLegacy(rawPrivacy, raw, "stagePersonality");
   const rawAccess = parseRecord(rawPrivacy.access);
   const normalizedAvatarCrop = rawAvatarCrop === null ? null : normalizeAvatarCrop(rawAvatarCrop);
+  const discovery = slurpDiscoveryFields(rawProfile);
   const profile = {
     ...(rawAvatarCrop !== undefined &&
       (rawAvatarCrop === null || normalizedAvatarCrop !== null) && { avatarCrop: normalizedAvatarCrop }),
@@ -754,6 +772,7 @@ export function normalizeNoodleAccountSettings(value: unknown): NoodleAccountSet
     ...(rawNoodlerWizardExecutionId !== undefined &&
       validProfileField("noodlerWizardExecutionId", rawNoodlerWizardExecutionId)),
     ...(rawNoodlerSourceSnapshot !== undefined && validProfileField("noodlerSourceSnapshot", rawNoodlerSourceSnapshot)),
+    ...discovery,
   };
   const followingAccountTimestamps = Object.fromEntries(
     Object.entries(parseRecord(rawFollowingAccountTimestamps)).filter(
@@ -2628,7 +2647,7 @@ export function createSlurpStorage(db: DB) {
       return existing;
     },
 
-    async listNoodlerStageProfiles(): Promise<NoodlerManagedStageProfile[]> {
+    async listNoodlerStageProfiles(): Promise<SlurpManagedStageProfile[]> {
       const accounts = (await this.listNoodlerAccounts()).filter((account) => !isSlurpViewerActorAccount(account));
       return Promise.all(
         accounts.map(async (account) => {
@@ -2646,6 +2665,8 @@ export function createSlurpStorage(db: DB) {
             avatarUrl: account.avatarUrl,
             avatarCrop: account.avatarCrop,
             bannerUrl: account.settings.profile.bannerUrl ?? null,
+            gender: account.settings.profile.gender,
+            tags: account.settings.profile.tags,
             disclosureMode,
             stagePersonality: account.settings.privacy.stagePersonality ?? "",
             access: account.settings.privacy.access,
@@ -2684,7 +2705,7 @@ export function createSlurpStorage(db: DB) {
     async createNoodlerAccount(
       sourceKind: SlurpSourceKind,
       sourceEntityId: string,
-      stageProfile: NoodleStageProfileInput,
+      stageProfile: SlurpStageProfileInput,
       wizardExecutionId?: string,
       sourceSnapshot?: NoodlerSourceSnapshot,
       avatarUrl?: string | null,
@@ -2695,7 +2716,7 @@ export function createSlurpStorage(db: DB) {
       const timestamp = now();
       const id = newId();
       const base = emptyNoodleAccountSettings();
-      const accountSettings: NoodleAccountSettings = {
+      const accountSettings: SlurpNoodleAccountSettings = {
         ...base,
         profile: {
           ...(wizardExecutionId && { noodlerWizardExecutionId: wizardExecutionId }),
@@ -2704,6 +2725,8 @@ export function createSlurpStorage(db: DB) {
           // resolveNoodlerCreatorArtwork); callers already gate the value on that, this is
           // belt-and-suspenders against a future caller passing one for hinted/secret.
           ...(stageProfile.disclosureMode === "open" && bannerUrl ? { bannerUrl } : {}),
+          gender: stageProfile.gender,
+          tags: stageProfile.tags,
         },
         scheduler: { autoPosting: defaultAutoPostingSettings() },
         privacy: {
@@ -2737,7 +2760,7 @@ export function createSlurpStorage(db: DB) {
 
     async updateNoodlerStageProfile(
       id: string,
-      stageProfile: NoodleStageProfileInput,
+      stageProfile: SlurpStageProfileInput,
       sourceSnapshot?: NoodlerSourceSnapshot,
       location?: string,
     ): Promise<NoodleAccount | null> {
@@ -2772,13 +2795,15 @@ export function createSlurpStorage(db: DB) {
                 ...profile,
                 ...(location !== undefined && { location: location.trim().slice(0, 120) }),
                 ...(sourceSnapshot && { noodlerSourceSnapshot: sourceSnapshot }),
+                gender: stageProfile.gender,
+                tags: stageProfile.tags,
               },
               privacy: {
                 ...settings.privacy,
                 identityDisclosure: stageProfile.disclosureMode,
                 stagePersonality: stageProfile.stagePersonality,
               },
-            } satisfies NoodleAccountSettings),
+            } satisfies SlurpNoodleAccountSettings),
             updatedAt: now(),
           })
           .where(eq(noodleAccounts.id, id));

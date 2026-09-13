@@ -1,5 +1,11 @@
 # Slurp Remastered release notes
 
+## 0.1.0 — 2026-09-13
+
+- Rebuilt Discover around direct subscription actions, persistent grid and list views, and filters for subscription status, gender, weekly price, and Creator tags.
+- Added Recommended, Newest, Most liked, and Most subscribed sorting with stable results.
+- Added editable Creator gender and tags, including safe custom tags and AI-suggested curated tags during profile creation and redrafting.
+
 ## 0.0.6 — 2026-09-13
 
 - Added image context options for reactions: stored prompts, vision descriptions, or automatic selection. Public fan reactions keep locked images hidden and respect Creator identity privacy.

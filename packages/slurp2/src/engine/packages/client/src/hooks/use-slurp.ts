@@ -49,6 +49,26 @@ import type {
 import { mergeNoodlePollVoteInteractions } from "@marinara-engine/shared";
 import type { ImagePromptOverride, ImagePromptReviewItem } from "../components/ui/ImagePromptReviewModal";
 
+export type SlurpDiscoveryGender = "male" | "female" | "other";
+export type SlurpStageProfileInput = NoodleStageProfileInput & {
+  gender: SlurpDiscoveryGender | null;
+  tags: string[];
+};
+export type SlurpManagedStageProfile = NoodlerManagedStageProfile & {
+  gender: SlurpDiscoveryGender | null;
+  tags: string[];
+};
+export type SlurpViewerScope = Omit<NoodlerViewerScope, "creators"> & {
+  creators: Array<
+    Omit<NoodlerViewerScope["creators"][number], "profile"> & {
+      profile: NoodlerViewerScope["creators"][number]["profile"] & {
+        gender: SlurpDiscoveryGender | null;
+        tags: string[];
+      };
+    }
+  >;
+};
+
 export type NoodleRefreshResult = {
   bootstrap: NoodleBootstrap;
   imagePromptReviewItems: ImagePromptReviewItem[];
@@ -572,7 +592,7 @@ export function useNoodlerAccounts(enabled = true) {
     // The server sends `scheduleStatus` alongside the shared type, which has no such field — the
     // same arrangement `subscriptionPrice` and the tip goal already use.
     queryFn: () =>
-      api.get<Array<NoodlerManagedStageProfile & { scheduleStatus?: SlurpScheduleStatus }>>("/slurp2/noodler/accounts"),
+      api.get<Array<SlurpManagedStageProfile & { scheduleStatus?: SlurpScheduleStatus }>>("/slurp2/noodler/accounts"),
     enabled,
     staleTime: 10_000,
     // Autonomous reserve work changes operator state without a client mutation.
@@ -1134,9 +1154,9 @@ export function useCreateNoodlerStageProfile() {
       stageProfile,
     }: {
       sourceAccountId: string;
-      stageProfile: NoodleStageProfileInput;
+      stageProfile: SlurpStageProfileInput;
     }) =>
-      api.post<NoodlerStageProfile>(`/slurp2/accounts/${encodeURIComponent(sourceAccountId)}/noodler`, {
+      api.post<SlurpManagedStageProfile>(`/slurp2/accounts/${encodeURIComponent(sourceAccountId)}/noodler`, {
         stageProfile,
       }),
     onSuccess: () =>
@@ -1160,7 +1180,7 @@ export function useBulkCreateNoodlerStageProfiles() {
       },
     ) =>
       api.post<{
-        created: NoodlerManagedStageProfile[];
+        created: SlurpManagedStageProfile[];
         skipped: string[];
         failed?: string[];
         reasons?: { accountId: string; reason: string }[];
@@ -1201,8 +1221,8 @@ export function useUpdateNoodlerStageProfile() {
       sourceSnapshot?: NoodlerSourceSnapshot;
       sourceRevisionToken?: string;
       confirmAvatarReview?: boolean;
-    } & NoodleStageProfileInput) =>
-      api.put<NoodlerStageProfile>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/stage-profile`, {
+    } & SlurpStageProfileInput) =>
+      api.put<SlurpManagedStageProfile>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/stage-profile`, {
         ...input,
         ...(sourceSnapshot ? { sourceSnapshot } : {}),
       }),
@@ -1333,7 +1353,7 @@ export function useGenerateNoodlerStageProfileDraft() {
       const timer = setTimeout(() => controller.abort(), 60_000);
       return api
         .post<
-          NoodleStageProfileInput & {
+          SlurpStageProfileInput & {
             sourceSnapshot?: NoodlerSourceSnapshot;
             sourceRevisionToken?: string;
           }
@@ -1558,7 +1578,7 @@ export function useNoodlerViewer(personaId: string | null, enabled = true) {
     queryKey: noodleKeys.viewer(personaId ?? "none"),
     queryFn: async ({ signal }) => {
       const encodedPersonaId = encodeURIComponent(personaId!);
-      type ViewerPost = NoodlerViewerScope["creators"][number]["posts"][number] & { story?: boolean };
+      type ViewerPost = SlurpViewerScope["creators"][number]["posts"][number] & { story?: boolean };
       type FeedPage = {
         items: Array<{
           creatorAccountId: string;
@@ -1573,7 +1593,7 @@ export function useNoodlerViewer(personaId: string | null, enabled = true) {
         const page: FeedPage = await api.get<{
           items: Array<{
             creatorAccountId: string;
-            post: NoodlerViewerScope["creators"][number]["posts"][number];
+            post: SlurpViewerScope["creators"][number]["posts"][number];
           }>;
           total: number;
           nextCursor: SlurpPageCursor | null;
@@ -1586,10 +1606,10 @@ export function useNoodlerViewer(personaId: string | null, enabled = true) {
       // Read the shell after the feed. A newly-created Creator account and its first post can
       // otherwise be observed from different file-store snapshots when these requests start
       // together, leaving the client with a post whose Creator is absent from the shell.
-      const scope = await api.get<NoodlerViewerScope>(`/slurp2/noodler/viewer?personaId=${encodedPersonaId}`, {
+      const scope = await api.get<SlurpViewerScope>(`/slurp2/noodler/viewer?personaId=${encodedPersonaId}`, {
         signal,
       });
-      const postsByCreator = new Map<string, NoodlerViewerScope["creators"][number]["posts"]>();
+      const postsByCreator = new Map<string, SlurpViewerScope["creators"][number]["posts"]>();
       for (const item of feedItems) {
         const posts = postsByCreator.get(item.creatorAccountId) ?? [];
         posts.push(item.post);
