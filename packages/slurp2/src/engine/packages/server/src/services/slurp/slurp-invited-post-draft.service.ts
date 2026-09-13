@@ -68,7 +68,7 @@ export async function generateInvitedNoodlePostDraft(
     {
       role: "system",
       content: [
-        "Write exactly one public Noodle post as the supplied character.",
+        "Write exactly one public Slurp post as the supplied character.",
         "Keep it like a real social post: usually 40-280 characters. Use longer text only when the direction explicitly asks for long-form writing.",
         NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
         "Return one JSON object with title, content, and imagePrompt set to null.",
@@ -90,7 +90,7 @@ export async function generateInvitedNoodlePostDraft(
   const debugMode = request.debugMode === true;
   logDebugOverride(
     debugMode,
-    "[debug/noodle] Invited post draft prompt prepared with %d messages; private prompt content is redacted.",
+    "[debug/slurp] Invited post draft prompt prepared with %d messages; private prompt content is redacted.",
     messages.length,
   );
   const completionOptions = {
@@ -117,7 +117,7 @@ export async function generateInvitedNoodlePostDraft(
   try {
     generated = parseDraft(raw);
   } catch (error) {
-    logger.warn(error, "[noodle] Correcting invalid invited post draft response");
+    logger.warn(error, "[slurp] Correcting invalid invited post draft response");
     const correctionMessages: ChatMessage[] = [
       ...messages,
       // Some providers reject an empty assistant turn; only echo the prior

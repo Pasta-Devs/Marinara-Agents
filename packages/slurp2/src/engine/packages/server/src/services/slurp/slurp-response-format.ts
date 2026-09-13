@@ -262,18 +262,18 @@ export function noodleResponseFormat(
     type: "json_schema",
     name:
       kind === "timeline"
-        ? "noodle_timeline"
+        ? "slurp_timeline"
         : kind === "profiles"
-          ? "noodle_profiles"
+          ? "slurp_profiles"
           : kind === "noodler_profile"
-            ? "noodler_profile"
+            ? "slurp_profile"
             : kind === "noodler_reply"
-              ? "noodler_reply"
+              ? "slurp_reply"
               : kind === "noodler_dm"
-                ? "noodler_dm"
+                ? "slurp_dm"
                 : kind === "noodler_fan_activity"
-                  ? "noodler_fan_activity"
-                  : "noodler_post",
+                  ? "slurp_fan_activity"
+                  : "slurp_post",
     schema,
     strict: true,
   };

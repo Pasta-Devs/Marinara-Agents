@@ -37,7 +37,7 @@ const PLACES = [
   "out of the house entirely",
   "somewhere they had to travel to get to",
   "in their usual place, but from an angle they have never shown before",
-  "somewhere half-packed, half-finished, or mid-move",
+  "somewhere in the middle of a small, ordinary change to their space",
 ] as const;
 
 /** What they are doing. Deliberately about state rather than subject matter. */

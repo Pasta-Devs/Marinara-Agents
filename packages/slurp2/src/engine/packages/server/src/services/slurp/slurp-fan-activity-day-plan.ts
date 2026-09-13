@@ -272,7 +272,7 @@ export function claimNoodleFanActivityRun(
   const reconciled = reconcileOverdueNoodleFanActivityRuns(plan, at);
   const run = reconciled.runs.find((candidate) => candidate.id === runId);
   if (!run || run.status !== "scheduled" || Date.parse(run.scheduledAt) > at.getTime()) {
-    throw new Error("That Noodle fan activity run is not due or is no longer available.");
+    throw new Error("That Slurp fan activity run is not due or is no longer available.");
   }
   return {
     ...reconciled,
@@ -338,7 +338,7 @@ export function finishNoodleFanActivityRun(
   at: Date,
 ): PersistedNoodleFanActivityDayPlan {
   if (status !== "completed" && status !== "skipped" && status !== "abandoned") {
-    throw new Error("Invalid Noodle fan activity finish status.");
+    throw new Error("Invalid Slurp fan activity finish status.");
   }
   return {
     ...plan,

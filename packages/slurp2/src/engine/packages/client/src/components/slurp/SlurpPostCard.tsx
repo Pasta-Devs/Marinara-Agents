@@ -1785,7 +1785,9 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
               >
                 {author?.displayName ?? localizeUi("ui.slurp.profile.fallbackUser")}
               </button>
-              <span className="text-xs text-[var(--muted-foreground)]">@{author?.handle ?? "noodle"}</span>
+              <span className="text-xs text-[var(--muted-foreground)]">
+                @{author?.handle ?? localizeUi("ui.slurp.profile.fallbackHandle")}
+              </span>
               <span className="text-xs text-[var(--muted-foreground)]">
                 {formatTime(post.createdAt, i18n.language)}
               </span>
@@ -2120,7 +2122,7 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
                             {actor?.displayName ?? localizeUi("ui.slurp.profile.fallbackUser")}
                           </button>
                           <span className="truncate !text-[var(--noodle-accent-foreground)]">
-                            @{actor?.handle ?? "noodle"}
+                            @{actor?.handle ?? localizeUi("ui.slurp.profile.fallbackHandle")}
                           </span>
                           <span className="!text-[var(--noodle-accent-foreground)] opacity-75">
                             · {formatTime(reply.createdAt, i18n.language)}

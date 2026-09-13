@@ -67,7 +67,7 @@ async function invalidateNearFutureReserve(
   try {
     await noodle.discardPreparedPostsAfterManualPost(accountId, postedAt);
   } catch (error) {
-    logger.warn(error, "[noodler] Could not invalidate the reserve after posting for %s", accountId);
+    logger.warn(error, "[slurp] Could not invalidate the reserve after posting for %s", accountId);
   }
 }
 
@@ -172,7 +172,7 @@ export async function refreshAllNoodlerCreatorsNow(db: DB): Promise<NoodlerRefre
 
   const outcomes = settled.map((entry, index): NoodlerRefreshNowOutcome => {
     if (entry.status === "fulfilled") return entry.value;
-    logger.error(entry.reason, "[noodler] Global refresh failed for creator %s", prioritized[index]!.id);
+    logger.error(entry.reason, "[slurp] Global refresh failed for creator %s", prioritized[index]!.id);
     return { accountId: prioritized[index]!.id, status: "error" };
   });
   return { status: "ok", outcomes };
@@ -213,7 +213,7 @@ export async function refreshTargetedNoodlerCreatorsNow(
   const outcomes = settled.map((entry, index): NoodlerRefreshNowOutcome => {
     const accountId = eligibleTargetAccountIds[index]!;
     if (entry.status === "fulfilled") return entry.value;
-    logger.error(entry.reason, "[noodler] Targeted refresh failed for creator %s", accountId);
+    logger.error(entry.reason, "[slurp] Targeted refresh failed for creator %s", accountId);
     return { accountId, status: "error" };
   });
   for (const accountId of targetAccountIds) {
@@ -273,11 +273,7 @@ export async function createNoodlerPost(
     try {
       await noodle.discardPreparedPostsAfterManualPost(input.targetAccountId, post.createdAt);
     } catch (error) {
-      logger.warn(
-        error,
-        "[noodler] Failed to discard prepared posts after a manual post for %s",
-        input.targetAccountId,
-      );
+      logger.warn(error, "[slurp] Failed to discard prepared posts after a manual post for %s", input.targetAccountId);
     }
     return { status: "created", post } as const;
   });

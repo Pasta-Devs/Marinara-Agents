@@ -207,7 +207,7 @@ export async function tryBackfillNextNoodlerCreatorArtwork(db: DB): Promise<Nood
   } catch (error) {
     // A busy connection is not a failure: nothing was sent, so the next poll may simply try again.
     if (isConnectionAdmissionFailure(error)) return "idle";
-    logger.warn(error, "[noodler] Creator artwork backfill failed");
+    logger.warn(error, "[slurp] Creator artwork backfill failed");
     return "unavailable";
   }
 }

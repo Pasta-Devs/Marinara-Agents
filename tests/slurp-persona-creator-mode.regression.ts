@@ -28,4 +28,17 @@ assert.match(
   /creator\.kind === "persona" && creator\.sourceKind === "persona"\) continue;/u,
 );
 
+// Persona Creators still receive audience activity: the fan scheduler and the world pulse must not
+// filter them out, only the paths where the Creator itself writes.
+assert.doesNotMatch(read(base + "slurp-fan-activity.operation.ts"), /sourceKind === "persona"/u);
+assert.match(
+  read(base + "slurp-world.operation.ts"),
+  /targets: creators\.flatMap/u,
+  "pulse targets must come from every creator, not automaticCreators",
+);
+assert.match(
+  read(base + "slurp-world.operation.ts"),
+  /const creators: SlurpWorldCreator\[\] = await Promise\.all\(\s*accounts\.map/u,
+);
+
 console.log("slurp persona creator mode regression: ok");

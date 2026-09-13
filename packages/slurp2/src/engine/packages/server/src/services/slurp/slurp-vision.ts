@@ -126,7 +126,7 @@ export async function prepareNoodleVisionAttachments(
 export function formatNoodleVisionManifest(attachments: NoodleVisionAttachment[]): string {
   if (attachments.length === 0) return "";
   return [
-    "# Attached Noodle Images",
+    "# Attached Slurp Images",
     "The image inputs are attached in the same order as this list. Use each key to associate pixels with the correct post or reply.",
     ...attachments.map((attachment, index) =>
       attachment.interactionId

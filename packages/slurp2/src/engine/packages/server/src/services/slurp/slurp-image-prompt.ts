@@ -12,6 +12,33 @@ function stripCodeFence(value: string): string {
 // callers a labelled block and extend `hasInternalMarker` rather than lowering this.
 const MIN_GUIDANCE_BLOCK_LENGTH = 40;
 
+/**
+ * A fallback prompt is the post's visual idea plus the character's appearance, not a context dump.
+ * The rendered template leads with the draft and appearance and trails with softer guidance, so a
+ * head-first cut keeps the parts that decide what the picture looks like.
+ * ponytail: a flat character ceiling, not a token count. Swap in a tokenizer only if a provider
+ * starts rejecting prompts that fit this.
+ */
+export const MAX_FALLBACK_IMAGE_PROMPT_LENGTH = 1_500;
+
+/** Cut to the ceiling on a sentence, then a word boundary — a mid-word cut reads as a typo. */
+export function capFallbackImagePrompt(value: string): string {
+  if (value.length <= MAX_FALLBACK_IMAGE_PROMPT_LENGTH) return value;
+  const head = value.slice(0, MAX_FALLBACK_IMAGE_PROMPT_LENGTH);
+  const sentenceEnd = Math.max(
+    head.lastIndexOf("."),
+    head.lastIndexOf("!"),
+    head.lastIndexOf("?"),
+    head.lastIndexOf("\n"),
+  );
+  // Only honour a boundary in the last quarter, so a prompt with one early full stop is not
+  // truncated down to that sentence.
+  const floor = Math.floor(MAX_FALLBACK_IMAGE_PROMPT_LENGTH * 0.75);
+  if (sentenceEnd >= floor) return head.slice(0, sentenceEnd + 1).trim();
+  const wordEnd = head.lastIndexOf(" ");
+  return (wordEnd >= floor ? head.slice(0, wordEnd) : head).trim();
+}
+
 /** Select only the visual prompt that can be sent to an image provider. */
 export function selectNoodleImageProviderPrompt(input: {
   rewrittenPrompt: string | null | undefined;
@@ -20,9 +47,21 @@ export function selectNoodleImageProviderPrompt(input: {
   privateContext?: ReadonlyArray<string | null | undefined>;
   /** Authored to steer the image, so only a copied block counts as a leak. */
   guidanceContext?: ReadonlyArray<string | null | undefined>;
+  /** The rewrite was expected to run, so an empty result is a fallback rather than a deliberate skip. */
+  rewriteAttempted?: boolean;
+  /** Called with the reason whenever an attempted or rejected rewrite falls back to the draft. */
+  onFallback?: (reason: string) => void;
 }): string {
+  const fallback = (reason: string) => {
+    input.onFallback?.(reason);
+    return capFallbackImagePrompt(input.rawPrompt);
+  };
   const rewrittenPrompt = input.rewrittenPrompt?.trim();
-  if (!rewrittenPrompt) return input.rawPrompt;
+  if (!rewrittenPrompt) {
+    return input.rewriteAttempted
+      ? fallback("the rewrite did not run or returned nothing (check the agent text connection)")
+      : input.rawPrompt;
+  }
 
   const normalizedPrompt = rewrittenPrompt.toLocaleLowerCase().replace(/\s+/gu, " ");
   const hasInternalMarker =
@@ -38,7 +77,10 @@ export function selectNoodleImageProviderPrompt(input: {
   const copiesPrivateContext = copies(input.privateContext, 2);
   const copiesGuidance = copies(input.guidanceContext, MIN_GUIDANCE_BLOCK_LENGTH);
 
-  return hasInternalMarker || copiesPrivateContext || copiesGuidance ? input.rawPrompt : rewrittenPrompt;
+  if (hasInternalMarker) return fallback("the rewrite contained an internal prompt label");
+  if (copiesPrivateContext) return fallback("the rewrite copied private character context");
+  if (copiesGuidance) return fallback("the rewrite copied an image guidance block");
+  return rewrittenPrompt;
 }
 
 /**

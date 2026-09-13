@@ -140,6 +140,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.0.5",
+          "date": "2026-09-13",
+          "notes": "- Made the welcome screen shorter, put Gunterlie beside the greeting, linked Slurp General, and tucked older release notes behind an expander.\n- Corrected older ad ratings, fallback handles, onboarding text, and invalid digest account errors.",
+          "highlight": false
+        },
+        {
           "version": "0.0.4",
           "date": "2026-09-12",
           "notes": "- Fixed Refresh Conversation Schedule failing with \"chatComplete is not a function\". It now creates the schedule.\n- Fixed the Conversation Schedule refresh dialog and the settings loading screen showing raw text keys instead of words.\n- Fixed the header logo not loading. The logo is now built into Slurp and no longer depends on the package asset address.\n- Added Reply timing settings under Messaging: the longest wait, the wait when the return time is unknown, check-in waits for close and regular fans, and away times for Creators without a schedule.\n- Added Always reachable without a schedule. With it on, a Creator with no Conversation Schedule counts as online.\n- Corrected the Creator settings text that said a Creator without a Conversation Schedule is always reachable. Slurp guesses from their last post unless the new setting is on.",

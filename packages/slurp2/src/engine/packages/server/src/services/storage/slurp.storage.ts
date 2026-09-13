@@ -203,6 +203,7 @@ import {
 const IMAGE_RETRY_SCAN_LIMIT = 200;
 import { normalizeNoodlerSeenAt } from "../slurp/slurp-viewer-unseen.js";
 import { createCharactersStorage } from "./characters.storage.js";
+import { withoutHiddenAmbientAccounts } from "../slurp/slurp-ambient-profiles.js";
 import {
   compareNoodlerPostSortKeysDescending,
   isNoodlerPostAfterCursor,
@@ -348,6 +349,8 @@ export const slurpSettingsSchema = z.object({
   imageGenerationIncludeDescriptions: z.boolean(),
   autoPostingImagesEnabled: z.boolean(),
   allowRandomUsers: z.boolean(),
+  /** Ambient roster entity ids the user deleted; the seeder never recreates these. */
+  dismissedAmbientProfileIds: z.array(z.string()),
   allowProfessorMari: z.boolean(),
   participantSelectionMode: z.enum(["all", "random", "exact"]),
   participantMin: z.number().int().min(1).max(24),
@@ -984,6 +987,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   imageGenerationIncludeDescriptions: false,
   autoPostingImagesEnabled: false,
   allowRandomUsers: false,
+  dismissedAmbientProfileIds: [],
   allowProfessorMari: false,
   participantSelectionMode: "random",
   participantMin: 1,
@@ -2069,8 +2073,13 @@ export function createSlurpStorage(db: DB) {
     async importSlurpBackup(backup: {
       settings?: Record<string, string>;
       tables?: Record<string, unknown[]>;
+      /** Settings are replaced only on explicit opt-in, and only when the archive carries some. */
+      importSettings?: boolean;
     }): Promise<{ tables: Record<string, number>; settings: number; skipped: string[] }> {
       const skipped: string[] = [];
+      const replaceSettings =
+        backup.importSettings === true &&
+        Object.keys(backup.settings ?? {}).some((key) => key.startsWith(SLURP_SETTINGS_NAMESPACE));
       const written: Record<string, number> = {};
       const incoming = backup.tables ?? {};
       for (const name of Object.keys(incoming)) {
@@ -2092,25 +2101,27 @@ export function createSlurpStorage(db: DB) {
           for (const value of values) await tx.insert(table).values(value);
           written[name] = values.length;
         }
-        const settingsTx = createAppSettingsStorage(tx);
-        const stale = await tx
-          .select()
-          .from(appSettings)
-          .where(like(appSettings.key, `${SLURP_SETTINGS_NAMESPACE}%`));
-        for (const row of stale) await settingsTx.remove(String(row.key));
-        for (const [key, value] of Object.entries(backup.settings ?? {})) {
-          // A backup must never reach outside this package's own settings namespace.
-          if (!key.startsWith(SLURP_SETTINGS_NAMESPACE)) {
-            skipped.push(key);
-            continue;
+        if (replaceSettings) {
+          const settingsTx = createAppSettingsStorage(tx);
+          const stale = await tx
+            .select()
+            .from(appSettings)
+            .where(like(appSettings.key, `${SLURP_SETTINGS_NAMESPACE}%`));
+          for (const row of stale) await settingsTx.remove(String(row.key));
+          for (const [key, value] of Object.entries(backup.settings ?? {})) {
+            // A backup must never reach outside this package's own settings namespace.
+            if (!key.startsWith(SLURP_SETTINGS_NAMESPACE)) {
+              skipped.push(key);
+              continue;
+            }
+            await settingsTx.set(key, value);
           }
-          await settingsTx.set(key, value);
         }
         await tx._fileStore.flush();
       });
-      const settingsCount = Object.keys(backup.settings ?? {}).filter((key) =>
-        key.startsWith(SLURP_SETTINGS_NAMESPACE),
-      ).length;
+      const settingsCount = replaceSettings
+        ? Object.keys(backup.settings ?? {}).filter((key) => key.startsWith(SLURP_SETTINGS_NAMESPACE)).length
+        : 0;
       return { tables: written, settings: settingsCount, skipped };
     },
 
@@ -2287,22 +2298,41 @@ export function createSlurpStorage(db: DB) {
       return reconciled;
     },
 
-    async listAccounts(): Promise<NoodleAccount[]> {
+    /**
+     * Ambient roster accounts are hidden, not deleted, while `allowRandomUsers` is off. Every read
+     * path lists accounts through here, so feeds, search and activity drop them in one place.
+     * `includeHidden` is for integrity guards and handle allocation, which must still see them.
+     */
+    async withoutHiddenAmbientAccounts<T extends NoodleAccount>(accounts: T[], includeHidden = false): Promise<T[]> {
+      if (includeHidden) return accounts;
+      return withoutHiddenAmbientAccounts(accounts, (await this.getSettings()).allowRandomUsers);
+    },
+
+    async listAccounts(options: { includeHidden?: boolean } = {}): Promise<NoodleAccount[]> {
       await reconcilePublicHandles();
       const rows = await db
         .select()
         .from(noodleAccounts)
         .where(eq(noodleAccounts.platform, "slurp"))
         .orderBy(desc(noodleAccounts.updatedAt));
-      return rows.map(mapAccount);
+      return this.withoutHiddenAmbientAccounts(rows.map(mapAccount), options.includeHidden);
     },
 
-    async getAccountById(id: string): Promise<NoodleAccount | null> {
+    /** Single-row sibling of `withoutHiddenAmbientAccounts`, so id reads hide what lists hide. */
+    async withoutHiddenAmbientAccount<T extends NoodleAccount>(
+      account: T | null,
+      includeHidden = false,
+    ): Promise<T | null> {
+      if (!account) return null;
+      return (await this.withoutHiddenAmbientAccounts([account], includeHidden))[0] ?? null;
+    },
+
+    async getAccountById(id: string, options: { includeHidden?: boolean } = {}): Promise<NoodleAccount | null> {
       const rows = await db
         .select()
         .from(noodleAccounts)
         .where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.platform, "slurp")));
-      return rows[0] ? mapAccount(rows[0]) : null;
+      return this.withoutHiddenAmbientAccount(rows[0] ? mapAccount(rows[0]) : null, options.includeHidden);
     },
 
     /**
@@ -2431,21 +2461,21 @@ export function createSlurpStorage(db: DB) {
       return rows.map(mapAccount);
     },
 
-    async listNoodlerAccounts(): Promise<SlurpAccount[]> {
+    async listNoodlerAccounts(options: { includeHidden?: boolean } = {}): Promise<SlurpAccount[]> {
       const rows = await db
         .select()
         .from(noodleAccounts)
         .where(eq(noodleAccounts.platform, "slurp"))
         .orderBy(desc(noodleAccounts.updatedAt));
-      return rows.map(mapAccount);
+      return this.withoutHiddenAmbientAccounts(rows.map(mapAccount), options.includeHidden);
     },
 
-    async getNoodlerAccountById(id: string): Promise<SlurpAccount | null> {
+    async getNoodlerAccountById(id: string, options: { includeHidden?: boolean } = {}): Promise<SlurpAccount | null> {
       const rows = await db
         .select()
         .from(noodleAccounts)
         .where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.platform, "slurp")));
-      return rows[0] ? mapAccount(rows[0]) : null;
+      return this.withoutHiddenAmbientAccount(rows[0] ? mapAccount(rows[0]) : null, options.includeHidden);
     },
 
     async getNoodlerAccountForSource(
@@ -2516,7 +2546,7 @@ export function createSlurpStorage(db: DB) {
     },
 
     async deleteNoodlerAccount(id: string): Promise<NoodleAccount | null> {
-      const existing = await this.getNoodlerAccountById(id);
+      const existing = await this.getNoodlerAccountById(id, { includeHidden: true });
       if (!existing) return null;
       const postRows = await db.select().from(noodlePosts).where(eq(noodlePosts.authorAccountId, id));
       const postIds = postRows.map((post) => post.id);
@@ -2934,7 +2964,7 @@ export function createSlurpStorage(db: DB) {
         });
         return accountId;
       });
-      return (await this.getAccountById(id))!;
+      return (await this.getAccountById(id, { includeHidden: true }))!;
     },
 
     async updateAccount(id: string, input: NoodleAccountUpdateInput): Promise<NoodleAccount | null> {
@@ -4431,7 +4461,9 @@ export function createSlurpStorage(db: DB) {
       const existing = await this.getPostById(id);
       if (!existing) return null;
       const interactions = await db.select().from(noodleInteractions).where(eq(noodleInteractions.postId, id));
-      const slurpSourceAccountIds = new Set((await this.listAccounts()).map((account) => account.id));
+      const slurpSourceAccountIds = new Set(
+        (await this.listAccounts({ includeHidden: true })).map((account) => account.id),
+      );
       if (interactions.some((interaction) => !slurpSourceAccountIds.has(interaction.actorAccountId))) return null;
       const interactionIds = interactions.map((interaction) => interaction.id);
       const digests = await db.select().from(noodleActivityDigests);
@@ -4536,7 +4568,7 @@ export function createSlurpStorage(db: DB) {
     },
 
     async resetTimeline(): Promise<void> {
-      const slurpSourceAccountIds = (await this.listAccounts()).map((account) => account.id);
+      const slurpSourceAccountIds = (await this.listAccounts({ includeHidden: true })).map((account) => account.id);
       const publicPosts =
         slurpSourceAccountIds.length > 0
           ? await db.select().from(noodlePosts).where(inArray(noodlePosts.authorAccountId, slurpSourceAccountIds))
@@ -4671,10 +4703,12 @@ export function createSlurpStorage(db: DB) {
       // The guard is "every actor in this subtree is an account this installation owns". A
       // creator reply is authored by a NoodleR stage account, so leaving those out made a
       // comment undeletable as soon as its creator answered it.
-      const slurpSourceAccountIds = new Set((await this.listAccounts()).map((account) => account.id));
+      const slurpSourceAccountIds = new Set(
+        (await this.listAccounts({ includeHidden: true })).map((account) => account.id),
+      );
       const knownAccountIds = new Set([
         ...slurpSourceAccountIds,
-        ...(await this.listNoodlerAccounts()).map((account) => account.id),
+        ...(await this.listNoodlerAccounts({ includeHidden: true })).map((account) => account.id),
       ]);
       if (
         deletedRows.some(
@@ -4772,7 +4806,13 @@ export function createSlurpStorage(db: DB) {
         .from(noodleInteractions)
         .where(inArray(noodleInteractions.postId, noodlerPostIds))
         .orderBy(noodleInteractions.createdAt);
-      return rows.map(mapInteraction);
+      const visibleIds = new Set((await this.listAccounts()).map((account) => account.id));
+      const hiddenIds = new Set(
+        (await this.listAccounts({ includeHidden: true }))
+          .filter((account) => !visibleIds.has(account.id))
+          .map((account) => account.id),
+      );
+      return rows.filter((row) => !hiddenIds.has(row.actorAccountId)).map(mapInteraction);
     },
 
     async claimNoodlerCreatorReply(
@@ -5661,9 +5701,11 @@ export function createSlurpStorage(db: DB) {
     }): Promise<NoodleDigestEntry> {
       const id = newId();
       const uniqueAccountIds = Array.from(new Set(input.accountIds.filter(Boolean)));
-      const slurpSourceAccountIds = new Set((await this.listAccounts()).map((account) => account.id));
+      const slurpSourceAccountIds = new Set(
+        (await this.listAccounts({ includeHidden: true })).map((account) => account.id),
+      );
       if (!uniqueAccountIds.every((accountId) => slurpSourceAccountIds.has(accountId))) {
-        throw new Error("Public Noodle digests cannot reference NoodleR accounts.");
+        throw new Error("Slurp digests cannot reference accounts outside Slurp.");
       }
       await db.transaction(async (tx) => {
         if (input.sourceInteractionId) {
@@ -5702,7 +5744,9 @@ export function createSlurpStorage(db: DB) {
       const existingRows = await db.select().from(noodleActivityDigests).where(eq(noodleActivityDigests.id, id));
       const existing = existingRows[0];
       if (!existing) return null;
-      const slurpSourceAccountIds = new Set((await this.listAccounts()).map((account) => account.id));
+      const slurpSourceAccountIds = new Set(
+        (await this.listAccounts({ includeHidden: true })).map((account) => account.id),
+      );
       if (
         !parseStringArray(existing.accountIds).every((accountId) => slurpSourceAccountIds.has(accountId)) ||
         !uniqueAccountIds.every((accountId) => slurpSourceAccountIds.has(accountId))
@@ -5843,7 +5887,7 @@ export function createSlurpStorage(db: DB) {
       try {
         await pruneFinishedRefreshRuns();
       } catch (error) {
-        console.error("Noodle refresh-run retention cleanup failed", error);
+        console.error("Slurp refresh-run retention cleanup failed", error);
       }
       return finished;
     },

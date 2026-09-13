@@ -196,7 +196,7 @@ export async function generateNoodlerStageProfileDraft(
   const debugMode = isDebugAgentsEnabled();
   logDebugOverride(
     debugMode,
-    "[debug/noodler] Stage profile draft prompt prepared with %d messages; private source content is redacted.",
+    "[debug/slurp] Stage profile draft prompt prepared with %d messages; private source content is redacted.",
     messages.length,
   );
   const connections = createConnectionsStorage(db);

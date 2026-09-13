@@ -31,6 +31,7 @@ import { formatClockTime, formatDateTime } from "./SlurpDateTime";
 import {
   useSlurpAmbientProfiles,
   useRerollAmbientProfiles,
+  useUpdateAmbientProfile,
   useDeleteNoodlerStageProfile,
   useSetSlurpCreatorMessaging,
   useSetSlurpCreatorPrice,
@@ -55,6 +56,7 @@ import {
   useSlurpAdPool,
   useCreateSlurpAd,
   useDeleteSlurpAd,
+  useUpdateSlurpAd,
   useGenerateSlurpAdImage,
   useSlurpAdLorebooks,
   useSyncSlurpAdLorebook,
@@ -318,6 +320,14 @@ export function SlurpSettings({
   const adState = useSlurpAdState(section === "ads" ? viewerPersonaId : null);
   const unhideBrand = useUnhideSlurpAdBrand();
   const deleteAd = useDeleteSlurpAd();
+  const updateAd = useUpdateSlurpAd();
+  const [editingAd, setEditingAd] = useState<{
+    id: string;
+    brand: string;
+    product: string;
+    copy: string;
+    contentRating: SlurpContentRating;
+  } | null>(null);
   const generateAdImage = useGenerateSlurpAdImage();
   const adLorebooks = useSlurpAdLorebooks(section === "ads");
   const syncAdLorebook = useSyncSlurpAdLorebook();
@@ -374,6 +384,7 @@ export function SlurpSettings({
   const [backupJob, setBackupJob] = useState<SlurpBackupJob | null>(null);
   const [backupPending, setBackupPending] = useState(false);
   const [restorePending, setRestorePending] = useState(false);
+  const [restoreImportSettings, setRestoreImportSettings] = useState(false);
   const restoreInputRef = useRef<HTMLInputElement | null>(null);
 
   /** Poll a job to a terminal state, surfacing each step so a long run does not look stuck. */
@@ -482,7 +493,7 @@ export function SlurpSettings({
 
   if (settingsQuery.isError)
     return (
-      <main className="flex h-full flex-col items-center justify-center gap-3 p-6 text-sm text-[var(--muted-foreground)]">
+      <main className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-sm text-[var(--muted-foreground)]">
         <p>{t("ui.slurp.settings.loadError")}</p>
         <button
           type="button"
@@ -496,7 +507,7 @@ export function SlurpSettings({
     );
   if (settingsQuery.isLoading || !settings)
     return (
-      <main className="flex h-full items-center justify-center gap-2 p-6 text-sm text-[var(--muted-foreground)]">
+      <main className="flex min-h-0 flex-1 items-center justify-center gap-2 p-6 text-sm text-[var(--muted-foreground)]">
         <Loader2 size={18} className="animate-spin" />
         {t("ui.slurp.studio.loading")}
       </main>
@@ -504,7 +515,7 @@ export function SlurpSettings({
 
   return (
     <>
-      <main className="h-full overflow-y-auto bg-[var(--slurp-canvas)] pb-[calc(5rem+env(safe-area-inset-bottom))] text-[var(--slurp-text)] sm:pb-8">
+      <main className="min-h-0 flex-1 overflow-y-auto bg-[var(--slurp-canvas)] pb-[calc(5rem+env(safe-area-inset-bottom))] text-[var(--slurp-text)] sm:pb-8">
         <div className="mx-auto flex w-full flex-col gap-4 p-3 sm:p-5 lg:gap-6 lg:p-6" data-slurp-settings-layout>
           <header className="relative isolate flex flex-wrap items-start justify-between gap-3 overflow-hidden rounded-xl bg-[linear-gradient(120deg,color-mix(in_srgb,var(--slurp-surface-raised)_94%,transparent),color-mix(in_srgb,var(--noodle-accent)_17%,var(--slurp-surface-raised))_58%,color-mix(in_srgb,var(--slurp-violet)_13%,var(--slurp-surface-raised)))] p-4 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] sm:gap-4 sm:p-5">
             <div className="min-w-0">
@@ -1522,11 +1533,7 @@ export function SlurpSettings({
                                         cancelLabel: t("ui.slurp.actions.cancel"),
                                       }).then((confirmed) => {
                                         if (!confirmed) return;
-                                        refreshConversationSchedule.mutate(selectedCreator.id, {
-                                          onSuccess: () =>
-                                            toast.success(t("ui.slurp.settings.creators.scheduleRefreshed")),
-                                          onError: (error) => toast.error(errorMessage(error)),
-                                        });
+                                        refreshConversationSchedule.mutate(selectedCreator.id);
                                       });
                                     }}
                                     className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
@@ -2094,72 +2101,203 @@ export function SlurpSettings({
                     {/* The pool used to be a bare count, so a bad generated ad could only be
                         removed by resetting everything. */}
                     <ul className="mt-4 space-y-2">
-                      {(adPool.data?.items ?? []).map((ad) => (
-                        <li
-                          key={ad.id}
-                          className="flex items-start gap-3 rounded-lg bg-[var(--slurp-surface-raised)] p-3 ring-1 ring-inset ring-[var(--slurp-outline)]"
-                        >
-                          {ad.imageUrl ? (
-                            <img
-                              src={ad.imageUrl}
-                              alt=""
-                              loading="lazy"
-                              className="h-14 w-20 shrink-0 rounded-lg object-cover"
-                            />
-                          ) : (
-                            <span
-                              aria-hidden="true"
-                              className="flex h-14 w-20 shrink-0 items-center justify-center rounded-lg bg-[var(--slurp-canvas)] text-[var(--slurp-muted)]"
-                            >
-                              <Image size={16} />
-                            </span>
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-bold">{ad.brand}</p>
-                            <p className="truncate text-xs font-semibold text-[var(--slurp-muted)]">{ad.product}</p>
-                            <p className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--slurp-muted)]">{ad.copy}</p>
-                            <p className="mt-1 text-[0.65rem] font-bold uppercase tracking-[0.12em] text-[var(--slurp-muted)]">
-                              {t(
-                                `ui.slurp.settings.ads.ceiling${ad.contentRating === "tame" ? "Tame" : ad.contentRating === "suggestive" ? "Suggestive" : "Explicit"}`,
+                      {(adPool.data?.items ?? []).map((ad) => {
+                        const builtin = ad.origin === "builtin";
+                        return (
+                          <li
+                            key={ad.id}
+                            className="flex items-start gap-3 rounded-lg bg-[var(--slurp-surface-raised)] p-3 ring-1 ring-inset ring-[var(--slurp-outline)]"
+                          >
+                            {ad.imageUrl ? (
+                              <img
+                                src={ad.imageUrl}
+                                alt=""
+                                loading="lazy"
+                                className="h-14 w-20 shrink-0 rounded-lg object-cover"
+                              />
+                            ) : (
+                              <span
+                                aria-hidden="true"
+                                className="flex h-14 w-20 shrink-0 items-center justify-center rounded-lg bg-[var(--slurp-canvas)] text-[var(--slurp-muted)]"
+                              >
+                                <Image size={16} />
+                              </span>
+                            )}
+                            {editingAd?.id === ad.id ? (
+                              <form
+                                className="min-w-0 flex-1 space-y-2"
+                                onSubmit={(event) => {
+                                  event.preventDefault();
+                                  updateAd.mutate(editingAd, {
+                                    onSuccess: () => {
+                                      toast.success(t("ui.slurp.settings.ads.edited", { brand: editingAd.brand }));
+                                      setEditingAd(null);
+                                    },
+                                    onError: (error) => toast.error(errorMessage(error)),
+                                  });
+                                }}
+                              >
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                  <input
+                                    required
+                                    maxLength={80}
+                                    value={editingAd.brand}
+                                    onChange={(event) => setEditingAd({ ...editingAd, brand: event.target.value })}
+                                    placeholder={t("ui.slurp.settings.ads.createBrandPlaceholder")}
+                                    aria-label={t("ui.slurp.settings.ads.createBrandPlaceholder")}
+                                    className="min-h-9 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+                                  />
+                                  <input
+                                    required
+                                    maxLength={120}
+                                    value={editingAd.product}
+                                    onChange={(event) => setEditingAd({ ...editingAd, product: event.target.value })}
+                                    placeholder={t("ui.slurp.settings.ads.createProductPlaceholder")}
+                                    aria-label={t("ui.slurp.settings.ads.createProductPlaceholder")}
+                                    className="min-h-9 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+                                  />
+                                </div>
+                                <textarea
+                                  required
+                                  maxLength={600}
+                                  rows={2}
+                                  value={editingAd.copy}
+                                  onChange={(event) => setEditingAd({ ...editingAd, copy: event.target.value })}
+                                  placeholder={t("ui.slurp.settings.ads.createCopyPlaceholder")}
+                                  aria-label={t("ui.slurp.settings.ads.createCopyPlaceholder")}
+                                  className="w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+                                />
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <select
+                                    value={editingAd.contentRating}
+                                    onChange={(event) =>
+                                      setEditingAd({
+                                        ...editingAd,
+                                        contentRating: event.target.value as SlurpContentRating,
+                                      })
+                                    }
+                                    aria-label={t("ui.slurp.settings.ads.ceiling")}
+                                    className="min-h-9 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+                                  >
+                                    <option value="tame">{t("ui.slurp.settings.ads.ceilingTame")}</option>
+                                    <option value="suggestive">{t("ui.slurp.settings.ads.ceilingSuggestive")}</option>
+                                    <option value="explicit">{t("ui.slurp.settings.ads.ceilingExplicit")}</option>
+                                  </select>
+                                  <button
+                                    type="submit"
+                                    disabled={updateAd.isPending}
+                                    className="min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 hover:opacity-90 disabled:opacity-50"
+                                  >
+                                    {t("ui.slurp.settings.ads.editSubmit")}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingAd(null)}
+                                    className="min-h-9 rounded-lg px-3 text-xs font-bold text-[var(--slurp-muted)] hover:bg-[var(--accent)]"
+                                  >
+                                    {t("ui.slurp.settings.ads.editCancel")}
+                                  </button>
+                                </div>
+                              </form>
+                            ) : (
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-bold">{ad.brand}</p>
+                                <p className="truncate text-xs font-semibold text-[var(--slurp-muted)]">{ad.product}</p>
+                                <p className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--slurp-muted)]">
+                                  {ad.copy}
+                                </p>
+                                <p className="mt-1 text-[0.65rem] font-bold uppercase tracking-[0.12em] text-[var(--slurp-muted)]">
+                                  {t(
+                                    `ui.slurp.settings.ads.ceiling${ad.contentRating === "suggestive" ? "Suggestive" : ad.contentRating === "explicit" ? "Explicit" : "Tame"}`,
+                                  )}
+                                  {ad.retiredAt ? ` · ${t("ui.slurp.settings.ads.retired")}` : ""}
+                                </p>
+                              </div>
+                            )}
+                            <div className="flex shrink-0 flex-col gap-1">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setEditingAd({
+                                    id: ad.id,
+                                    brand: ad.brand,
+                                    product: ad.product,
+                                    copy: ad.copy,
+                                    contentRating: ad.contentRating ?? "tame",
+                                  })
+                                }
+                                aria-label={t("ui.slurp.settings.ads.editAd", { brand: ad.brand })}
+                                title={t("ui.slurp.settings.ads.editAd", { brand: ad.brand })}
+                                className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--slurp-muted)] hover:bg-[var(--accent)] hover:text-[var(--slurp-text)]"
+                              >
+                                <Pencil size={15} aria-hidden="true" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={generateAdImage.isPending}
+                                onClick={() =>
+                                  generateAdImage.mutate(ad.id, {
+                                    onSuccess: () => toast.success(t("ui.slurp.settings.ads.imageGenerated")),
+                                    onError: (error) => toast.error(errorMessage(error)),
+                                  })
+                                }
+                                aria-label={t("ui.slurp.settings.ads.regenerateImage", { brand: ad.brand })}
+                                title={t("ui.slurp.settings.ads.regenerateImage", { brand: ad.brand })}
+                                className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--slurp-muted)] hover:bg-[var(--accent)] hover:text-[var(--slurp-text)] disabled:opacity-50"
+                              >
+                                <Image size={15} aria-hidden="true" />
+                              </button>
+                              {ad.retiredAt ? (
+                                <button
+                                  type="button"
+                                  disabled={updateAd.isPending}
+                                  onClick={() =>
+                                    updateAd.mutate(
+                                      { id: ad.id, retiredAt: null },
+                                      {
+                                        onSuccess: () =>
+                                          toast.success(t("ui.slurp.settings.ads.restored", { brand: ad.brand })),
+                                        onError: (error) => toast.error(errorMessage(error)),
+                                      },
+                                    )
+                                  }
+                                  aria-label={t("ui.slurp.settings.ads.restoreAd", { brand: ad.brand })}
+                                  title={t("ui.slurp.settings.ads.restoreAd", { brand: ad.brand })}
+                                  className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--slurp-muted)] hover:bg-[var(--accent)] hover:text-[var(--slurp-text)] disabled:opacity-50"
+                                >
+                                  <RotateCcw size={15} aria-hidden="true" />
+                                </button>
+                              ) : null}
+                              {!(builtin && ad.retiredAt) && (
+                                <button
+                                  type="button"
+                                  disabled={deleteAd.isPending}
+                                  onClick={() =>
+                                    deleteAd.mutate(ad.id, {
+                                      onSuccess: () =>
+                                        toast.success(
+                                          t(`ui.slurp.settings.ads.${builtin ? "hiddenBuiltin" : "deleted"}`, {
+                                            brand: ad.brand,
+                                          }),
+                                        ),
+                                      onError: (error) => toast.error(errorMessage(error)),
+                                    })
+                                  }
+                                  aria-label={t(`ui.slurp.settings.ads.${builtin ? "hideAd" : "deleteAd"}`, {
+                                    brand: ad.brand,
+                                  })}
+                                  title={t(`ui.slurp.settings.ads.${builtin ? "hideAd" : "deleteAd"}`, {
+                                    brand: ad.brand,
+                                  })}
+                                  className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--slurp-muted)] hover:bg-[var(--accent)] hover:text-red-300 disabled:opacity-50"
+                                >
+                                  <Trash2 size={15} aria-hidden="true" />
+                                </button>
                               )}
-                              {ad.retiredAt ? ` · ${t("ui.slurp.settings.ads.retired")}` : ""}
-                            </p>
-                          </div>
-                          <div className="flex shrink-0 flex-col gap-1">
-                            <button
-                              type="button"
-                              disabled={generateAdImage.isPending}
-                              onClick={() =>
-                                generateAdImage.mutate(ad.id, {
-                                  onSuccess: () => toast.success(t("ui.slurp.settings.ads.imageGenerated")),
-                                  onError: (error) => toast.error(errorMessage(error)),
-                                })
-                              }
-                              aria-label={t("ui.slurp.settings.ads.regenerateImage", { brand: ad.brand })}
-                              title={t("ui.slurp.settings.ads.regenerateImage", { brand: ad.brand })}
-                              className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--slurp-muted)] hover:bg-[var(--accent)] hover:text-[var(--slurp-text)] disabled:opacity-50"
-                            >
-                              <Image size={15} aria-hidden="true" />
-                            </button>
-                            <button
-                              type="button"
-                              disabled={deleteAd.isPending}
-                              onClick={() =>
-                                deleteAd.mutate(ad.id, {
-                                  onSuccess: () =>
-                                    toast.success(t("ui.slurp.settings.ads.deleted", { brand: ad.brand })),
-                                  onError: (error) => toast.error(errorMessage(error)),
-                                })
-                              }
-                              aria-label={t("ui.slurp.settings.ads.deleteAd", { brand: ad.brand })}
-                              title={t("ui.slurp.settings.ads.deleteAd", { brand: ad.brand })}
-                              className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--slurp-muted)] hover:bg-[var(--accent)] hover:text-red-300 disabled:opacity-50"
-                            >
-                              <Trash2 size={15} aria-hidden="true" />
-                            </button>
-                          </div>
-                        </li>
-                      ))}
+                            </div>
+                          </li>
+                        );
+                      })}
                     </ul>
                     {(adPool.data?.items.length ?? 0) === 0 && (
                       <p className="mt-4 text-xs leading-5 text-[var(--slurp-muted)]">
@@ -2297,6 +2435,23 @@ export function SlurpSettings({
                     <p className="mt-2 max-w-2xl text-xs leading-5 text-[var(--muted-foreground)]">
                       {t("ui.slurp.settings.advanced.restoreDetail")}
                     </p>
+                    <label className="mt-2 flex max-w-2xl items-start gap-2 text-xs leading-5">
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={restoreImportSettings}
+                        disabled={restorePending}
+                        onChange={(event) => setRestoreImportSettings(event.target.checked)}
+                      />
+                      <span>
+                        <span className="font-semibold">{t("ui.slurp.settings.advanced.restoreImportSettings")}</span>
+                        {restoreImportSettings && (
+                          <span className="block text-[var(--muted-foreground)]">
+                            {t("ui.slurp.settings.advanced.restoreImportSettingsWarning")}
+                          </span>
+                        )}
+                      </span>
+                    </label>
                     <input
                       ref={restoreInputRef}
                       type="file"
@@ -2308,7 +2463,7 @@ export function SlurpSettings({
                         if (!file) return;
                         if (!window.confirm(t("ui.slurp.settings.advanced.restoreConfirm"))) return;
                         setRestorePending(true);
-                        void startSlurpRestore(file)
+                        void startSlurpRestore(file, restoreImportSettings)
                           .then(async (job) => {
                             const done = await followBackupJob(job);
                             toast.success(
@@ -3355,8 +3510,11 @@ function AmbientProfilesPanel({
   const { t } = useTranslation();
   const profilesQuery = useSlurpAmbientProfiles();
   const reroll = useRerollAmbientProfiles();
+  const update = useUpdateAmbientProfile();
+  const remove = useDeleteNoodlerStageProfile();
   const profiles = profilesQuery.data?.items ?? [];
   const [selected, setSelected] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ id: string; displayName: string; handle: string; bio: string } | null>(null);
 
   const rerollIds = (accountIds: string[], id: string | null) => {
     if (accountIds.length === 0) return;
@@ -3398,28 +3556,101 @@ function AmbientProfilesPanel({
       />
       {profiles.length > 0 && (
         <ul className="space-y-2">
-          {profiles.map((profile) => (
-            <li
-              key={profile.id}
-              className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] p-3"
-            >
-              <span className="flex min-w-0 flex-col">
-                <span className="truncate text-xs font-semibold">
-                  {profile.displayName} <span className="text-[var(--slurp-muted)]">@{profile.handle}</span>
-                </span>
-                <span className="truncate text-[0.7rem] text-[var(--slurp-muted)]">{profile.bio}</span>
-              </span>
-              <button
-                type="button"
-                disabled={reroll.isPending}
-                onClick={() => rerollIds([profile.id], profile.id)}
-                className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[var(--border)] px-2.5 text-[0.7rem] font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+          {profiles.map((profile) =>
+            editing?.id === profile.id ? (
+              <li key={profile.id} className="space-y-2 rounded-lg border border-[var(--border)] p-3">
+                {(["displayName", "handle", "bio"] as const).map((field) => (
+                  <label key={field} className="block text-[0.7rem] font-semibold">
+                    {t(`ui.slurp.settings.ambient.fields.${field}`)}
+                    <input
+                      value={editing[field]}
+                      onChange={(event) => setEditing({ ...editing, [field]: event.target.value })}
+                      className="mt-1 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+                    />
+                  </label>
+                ))}
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditing(null)}
+                    className="inline-flex min-h-9 items-center rounded-lg border border-[var(--border)] px-2.5 text-[0.7rem] font-semibold hover:bg-[var(--accent)]"
+                  >
+                    {t("ui.slurp.settings.ambient.cancel")}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={update.isPending || !editing.displayName.trim() || !editing.handle.trim()}
+                    onClick={() =>
+                      update.mutate(editing, {
+                        onSuccess: () => setEditing(null),
+                        onError: (error) => toast.error(errorMessage(error)),
+                      })
+                    }
+                    className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[var(--noodle-accent)] px-2.5 text-[0.7rem] font-bold text-zinc-950 disabled:opacity-50"
+                  >
+                    <Save size={12} />
+                    {t("ui.slurp.settings.ambient.save")}
+                  </button>
+                </div>
+              </li>
+            ) : (
+              <li
+                key={profile.id}
+                className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] p-3"
               >
-                <RefreshCw size={12} className={selected === profile.id ? "animate-spin" : ""} />
-                {t("ui.slurp.settings.ambient.reroll")}
-              </button>
-            </li>
-          ))}
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate text-xs font-semibold">
+                    {profile.displayName} <span className="text-[var(--slurp-muted)]">@{profile.handle}</span>
+                  </span>
+                  <span className="truncate text-[0.7rem] text-[var(--slurp-muted)]">{profile.bio}</span>
+                </span>
+                <span className="flex shrink-0 gap-1.5">
+                  <button
+                    type="button"
+                    disabled={reroll.isPending}
+                    onClick={() => rerollIds([profile.id], profile.id)}
+                    className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[var(--border)] px-2.5 text-[0.7rem] font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+                  >
+                    <RefreshCw size={12} className={selected === profile.id ? "animate-spin" : ""} />
+                    {t("ui.slurp.settings.ambient.reroll")}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={t("ui.slurp.settings.ambient.edit")}
+                    title={t("ui.slurp.settings.ambient.edit")}
+                    onClick={() =>
+                      setEditing({
+                        id: profile.id,
+                        displayName: profile.displayName,
+                        handle: profile.handle,
+                        bio: profile.bio,
+                      })
+                    }
+                    className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg border border-[var(--border)] hover:bg-[var(--accent)]"
+                  >
+                    <Pencil size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={t("ui.slurp.settings.ambient.delete")}
+                    title={t("ui.slurp.settings.ambient.delete")}
+                    disabled={remove.isPending}
+                    onClick={() => {
+                      if (!window.confirm(t("ui.slurp.settings.ambient.deleteConfirm", { name: profile.displayName })))
+                        return;
+                      remove.mutate(profile.id, {
+                        onSuccess: () => void profilesQuery.refetch(),
+                        onError: (error) => toast.error(errorMessage(error)),
+                      });
+                    }}
+                    className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg border border-[var(--border)] hover:bg-[var(--accent)] disabled:opacity-50"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </span>
+              </li>
+            ),
+          )}
         </ul>
       )}
     </div>

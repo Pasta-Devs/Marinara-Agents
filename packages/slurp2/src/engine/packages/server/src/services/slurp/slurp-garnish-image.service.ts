@@ -10,9 +10,12 @@ import { logger } from "../../lib/logger.js";
 import { resolveConnectionImageDefaults } from "../image/image-generation-defaults.js";
 import { generateImage, stageImageToDisk } from "../image/image-generation.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
+import { createSlurpStorage } from "../storage/slurp.storage.js";
 import type { GarnishAd } from "../garnish-ads/garnish-ads.types.js";
 import type { GarnishAdsStorage } from "../garnish-ads/garnish-ads.storage.js";
 import { generateNoodleImageWithRetry } from "./slurp-image-retry.js";
+import { rewriteNoodleImagePrompt } from "./slurp-image-prompt-rewrite.js";
+import { selectNoodleImageProviderPrompt } from "./slurp-image-prompt.js";
 import { garnishAdImageUrl, garnishAdMediaNamespace, unlinkGarnishAdImage } from "./slurp-garnish-image.js";
 
 /** Ads read as feed content, so the artwork is product photography rather than a poster. */
@@ -51,6 +54,34 @@ export async function generateGarnishAdImage(
 
   const model = connection.model || "";
   const source = connection.imageGenerationSource || model;
+  // Ads honour the same interpretation setting and rewrite pass as post images.
+  const settings = await createSlurpStorage(db).getSettings();
+  const rawPrompt = adImagePrompt(ad);
+  const imagePromptInstructions = [
+    settings.imageGenerationPrompt.trim(),
+    connection.imagePromptInstructions?.trim() ?? "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const rewriteAttempted = Boolean(imagePromptInstructions) && settings.enableImageInterpretation !== false;
+  const prompt = selectNoodleImageProviderPrompt({
+    rewrittenPrompt: rewriteAttempted
+      ? await rewriteNoodleImagePrompt({
+          db,
+          prompt: rawPrompt,
+          interpretationInstruction: settings.imagePromptInterpretation,
+          instructions: imagePromptInstructions,
+        })
+      : null,
+    rawPrompt,
+    rewriteAttempted,
+    onFallback: (reason) =>
+      logger.warn(
+        "[garnish-ads] Image prompt rewrite unusable for %s (%s); sending the capped draft",
+        ad.brand,
+        reason,
+      ),
+  });
   try {
     const image = await generateNoodleImageWithRetry(
       () =>
@@ -60,7 +91,7 @@ export async function generateGarnishAdImage(
           connection.apiKey || "",
           connection.imageService || source,
           {
-            prompt: adImagePrompt(ad),
+            prompt,
             negativePrompt: AD_IMAGE_NEGATIVE_PROMPT,
             model,
             width: 1024,
