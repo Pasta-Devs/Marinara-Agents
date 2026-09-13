@@ -3684,7 +3684,8 @@ function ArcLibraryEditor({
 
   const generateDraft = async () => {
     if (!creatorAccountId || !personaId || !brief.trim()) return;
-    const result = await generate.mutateAsync({ creatorAccountId, personaId, brief: brief.trim() });
+    const result = await generate.mutateAsync({ creatorAccountId, personaId, brief: brief.trim() }).catch(() => null);
+    if (!result) return;
     setDraft(result.type);
     setSelectedChapters(new Set(result.type.chapters.map((_, index) => index)));
     setReviewingGeneratedDraft(true);
@@ -3879,7 +3880,17 @@ function ArcLibraryEditor({
               <button
                 type="button"
                 className={`${button} text-red-600`}
-                onClick={() => setDraft({ ...draft, chapters: draft.chapters.filter((_, at) => at !== index) })}
+                onClick={() => {
+                  setDraft({ ...draft, chapters: draft.chapters.filter((_, at) => at !== index) });
+                  setSelectedChapters((current) => {
+                    const next = new Set<number>();
+                    for (const at of current) {
+                      if (at < index) next.add(at);
+                      else if (at > index) next.add(at - 1);
+                    }
+                    return next;
+                  });
+                }}
               >
                 {t("ui.slurp.settings.arcLibrary.removeChapter")}
               </button>

@@ -1979,7 +1979,10 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!creator || !creatorBelongsToViewer(creator, viewer)) {
       return reply.code(403).send({ error: "Only the Creator's owner can generate an arc." });
     }
-    const project = await noodle.addGeneratedProject(creator.id, await generateSlurpArc(app.db, creator.id));
+    const project = await noodle.addGeneratedProject(
+      creator.id,
+      await generateSlurpArc(app.db, creator.id, [], "", { kind: "foreground" }),
+    );
     if (!project) return reply.code(502).send({ error: "The model did not return a usable arc. Try again." });
     return { project };
   });
@@ -1996,7 +1999,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!creator || !creatorBelongsToViewer(creator, viewer)) {
       return reply.code(403).send({ error: "Only the Creator's owner can generate an arc type." });
     }
-    const raw = await generateSlurpArc(app.db, creator.id, [], parsed.data.brief);
+    const raw = await generateSlurpArc(app.db, creator.id, [], parsed.data.brief, { kind: "foreground" });
     const draftId = `draft-${Date.now().toString(36)}`;
     const project = raw
       ? slurpGeneratedArcProject(draftId, raw, new Date(), { origin: "manual", status: "suggested" })
@@ -3673,6 +3676,15 @@ export async function slurpRoutes(app: FastifyInstance) {
           },
           connection,
         });
+        const validatedProfile = slurpNoodlerAccountCreateSchema.safeParse({ stageProfile });
+        if (!validatedProfile.success) {
+          skipped.push(noodleAccountId);
+          noteReason(
+            noodleAccountId,
+            "The generated stage profile did not include a valid gender and at least 3 tags.",
+          );
+          return;
+        }
         const sourceSnapshot = await resolveNoodlerSourceSnapshot(app.db, publicAccount);
         // Belt-and-braces: the generator already enforces leak protection, but keep the guard.
         if (
@@ -3695,7 +3707,7 @@ export async function slurpRoutes(app: FastifyInstance) {
         const account = await noodle.createNoodlerAccount(
           publicAccount.kind as "character" | "persona",
           publicAccount.entityId,
-          stageProfile,
+          validatedProfile.data.stageProfile,
           executionId,
           sourceSnapshot ? minimizeNoodlerSourceSnapshot(sourceSnapshot, accountDisclosure) : undefined,
           artwork.avatarUrl,

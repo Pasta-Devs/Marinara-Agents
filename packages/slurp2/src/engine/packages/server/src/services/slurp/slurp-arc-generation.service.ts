@@ -15,6 +15,7 @@ import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
 import { resolveSlurpTextConnection } from "./slurp-connection.js";
+import { withConnectionAdmissionProvider, type ConnectionAdmissionMode } from "../generation/connection-admission.js";
 import { SLURP_MODIFIER_KINDS } from "./slurp-creator-state.js";
 import { modelAnswerForCorrection, requireModelAnswer } from "./slurp-model-answer.js";
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
@@ -90,6 +91,7 @@ export async function generateSlurpArc(
   creatorAccountId: string,
   partnerIds: readonly string[] = [],
   brief = "",
+  admissionMode: ConnectionAdmissionMode = { kind: "foreground" },
 ): Promise<Record<string, unknown> | null> {
   try {
     const slurp = createSlurpStorage(db);
@@ -121,7 +123,7 @@ export async function generateSlurpArc(
       partners,
     });
     const fallbackConnection = await connections.getFallbackForMain();
-    const provider = withConnectionFallbackProvider({
+    const fallbackProvider = withConnectionFallbackProvider({
       primary: createLLMProvider(
         connection.provider,
         resolveBaseUrl(connection),
@@ -138,6 +140,7 @@ export async function generateSlurpArc(
       fallbackBaseUrl: fallbackConnection ? resolveBaseUrl(fallbackConnection) : "",
       category: "main",
     });
+    const provider = withConnectionAdmissionProvider(fallbackProvider, connection.id, admissionMode);
     const options = {
       model: connection.model,
       maxTokens: clampGenerationMaxOutputTokens({

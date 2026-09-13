@@ -14,7 +14,6 @@ import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { parseGameJsonish } from "../game/jsonish.js";
 import { requireModelAnswer } from "./slurp-model-answer.js";
 import { prepareSlurpPostImageContexts, type SlurpImageContextPost } from "./slurp-post-image-context.js";
-import { protectNoodlerGeneratedIdentity, resolveNoodlerPublicIdentity } from "./slurp-generation.service.js";
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
@@ -397,7 +396,8 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
   const arcByCreator = new Map<string, string | null>();
   if (input.settings.arcFanReactions !== false) {
     for (const creator of creators) {
-      const line = slurpArcLifeLine(await noodle.listProjects(creator.id).catch(() => []));
+      const projects = await noodle.listProjects(creator.id).catch(() => []);
+      const line = slurpArcLifeLine(projects.map((project) => ({ ...project, partnerNames: [] })));
       if (!line) continue;
       const publicIdentity = await resolveNoodlerPublicIdentity(input.db, creator).catch(() => null);
       arcByCreator.set(

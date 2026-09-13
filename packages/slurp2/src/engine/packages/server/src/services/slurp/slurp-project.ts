@@ -1033,7 +1033,7 @@ export function readSlurpProject(value: unknown): SlurpProject | null {
 
 function readPendingProfile(value: unknown): SlurpArcPendingProfile | null {
   const pending = value as Record<string, unknown> | null | undefined;
-  const change = readProfileChange(pending);
+  const change = readPreviousProfile(pending) ?? readProfileChange(pending);
   return pending && change && Number.isInteger(pending.chapter) && validDate(pending.proposedAt)
     ? { ...change, chapter: pending.chapter as number, proposedAt: pending.proposedAt, revert: pending.revert === true }
     : null;

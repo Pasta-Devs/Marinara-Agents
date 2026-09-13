@@ -213,7 +213,9 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       // After the tick, so an arc that just finished leaves room for the next one.
       // Generated arcs are the one model call here; a failed call starts nothing this tick.
       await noodle
-        .rollAutoArc(account.id, until, (id, partnerIds) => generateSlurpArc(db, id, partnerIds))
+        .rollAutoArc(account.id, until, (id, partnerIds) =>
+          generateSlurpArc(db, id, partnerIds, "", { kind: "background" }),
+        )
         .catch(() => null);
     }
 

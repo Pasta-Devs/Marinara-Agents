@@ -932,7 +932,8 @@ function SlurpThreadView({
       setToolTab("commission");
       return;
     }
-    if (!force && !ownsCreator && messaging?.dmPolicy === "paid" && !subscribed && messaging.requestFee > 0) {
+    const feeDue = !thread || thread.requestFeePaid <= 0;
+    if (!force && !ownsCreator && feeDue && messaging?.dmPolicy === "paid" && !subscribed && messaging.requestFee > 0) {
       const confirmed = await showConfirmDialog({
         title: localizeUi("ui.slurp.messages.sendRequestTitle", { defaultValue: "Send message request?" }),
         message: localizeUi("ui.slurp.messages.sendRequestDetail", {

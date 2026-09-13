@@ -104,7 +104,11 @@ export function SlurpProjectsPanel({
       title: draft.title.trim(),
       direction: draft.direction.trim(),
       chapters: chaptersFromText(draft.chapters),
-      ...(draft.typeId && draft.durationDays.trim() && days >= 1 ? { durationDays: Math.min(365, days) } : {}),
+      ...(draft.typeId && draft.durationDays.trim() && days >= 1
+        ? { durationDays: Math.min(365, days) }
+        : editingId !== "new" && draft.typeId
+          ? { durationDays: null }
+          : {}),
     };
     if (editingId === "new")
       await create.mutateAsync({
@@ -930,6 +934,7 @@ function ProjectEditor({
               setDraft(
                 type
                   ? {
+                      ...draft,
                       typeId: type.id,
                       title: type.name,
                       direction: type.description,
