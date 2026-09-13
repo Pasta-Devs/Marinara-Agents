@@ -1221,6 +1221,8 @@
   "ui.slurp.comment.deleteTitle": "Delete comment",
   "ui.slurp.comment.editError": "Could not edit the comment.",
   "ui.slurp.composer.guideTooLong": "The combined title and body guide must be {{count}} characters or fewer.",
+  "ui.slurp.crash.body": "Slurp hit an unexpected error and stopped drawing this panel.",
+  "ui.slurp.crash.title": "Something broke in Slurp",
   "ui.slurp.creator.updateError": "Could not update the Creator.",
   "ui.slurp.creatorForm.cancel": "Cancel",
   "ui.slurp.disclosure.hintedDetail": "The Creator is inspired by the linked source, but uses a different public identity.",

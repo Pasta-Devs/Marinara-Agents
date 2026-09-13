@@ -493,7 +493,7 @@ export function SlurpSettings({
 
   if (settingsQuery.isError)
     return (
-      <main className="flex h-full flex-col items-center justify-center gap-3 p-6 text-sm text-[var(--muted-foreground)]">
+      <main className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-sm text-[var(--muted-foreground)]">
         <p>{t("ui.slurp.settings.loadError")}</p>
         <button
           type="button"
@@ -507,7 +507,7 @@ export function SlurpSettings({
     );
   if (settingsQuery.isLoading || !settings)
     return (
-      <main className="flex h-full items-center justify-center gap-2 p-6 text-sm text-[var(--muted-foreground)]">
+      <main className="flex min-h-0 flex-1 items-center justify-center gap-2 p-6 text-sm text-[var(--muted-foreground)]">
         <Loader2 size={18} className="animate-spin" />
         {t("ui.slurp.studio.loading")}
       </main>
@@ -515,7 +515,7 @@ export function SlurpSettings({
 
   return (
     <>
-      <main className="h-full overflow-y-auto bg-[var(--slurp-canvas)] pb-[calc(5rem+env(safe-area-inset-bottom))] text-[var(--slurp-text)] sm:pb-8">
+      <main className="min-h-0 flex-1 overflow-y-auto bg-[var(--slurp-canvas)] pb-[calc(5rem+env(safe-area-inset-bottom))] text-[var(--slurp-text)] sm:pb-8">
         <div className="mx-auto flex w-full flex-col gap-4 p-3 sm:p-5 lg:gap-6 lg:p-6" data-slurp-settings-layout>
           <header className="relative isolate flex flex-wrap items-start justify-between gap-3 overflow-hidden rounded-xl bg-[linear-gradient(120deg,color-mix(in_srgb,var(--slurp-surface-raised)_94%,transparent),color-mix(in_srgb,var(--noodle-accent)_17%,var(--slurp-surface-raised))_58%,color-mix(in_srgb,var(--slurp-violet)_13%,var(--slurp-surface-raised)))] p-4 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] sm:gap-4 sm:p-5">
             <div className="min-w-0">
@@ -3350,7 +3350,7 @@ function Toggle({
   return (
     <label
       data-slurp-setting-toggle
-      className={`group relative flex ${compact ? "min-h-11" : "min-h-16"} cursor-pointer items-center justify-between gap-4 rounded-lg bg-[var(--slurp-surface-raised,var(--background))] px-3 py-2 text-sm shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-transparent transition-[background-color,box-shadow] hover:bg-[var(--accent)]/40 hover:ring-[var(--border)] focus-within:ring-2 focus-within:ring-[var(--noodle-accent)] motion-reduce:transition-none`}
+      className={`group flex ${compact ? "min-h-11" : "min-h-16"} cursor-pointer items-center justify-between gap-4 rounded-lg bg-[var(--slurp-surface-raised,var(--background))] px-3 py-2 text-sm shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-transparent transition-[background-color,box-shadow] hover:bg-[var(--accent)]/40 hover:ring-[var(--border)] focus-within:ring-2 focus-within:ring-[var(--noodle-accent)] motion-reduce:transition-none`}
     >
       <span className="min-w-0">
         <span className="block font-semibold">{label}</span>
@@ -3514,9 +3514,7 @@ function AmbientProfilesPanel({
   const remove = useDeleteNoodlerStageProfile();
   const profiles = profilesQuery.data?.items ?? [];
   const [selected, setSelected] = useState<string | null>(null);
-  const [editing, setEditing] = useState<{ id: string; displayName: string; handle: string; bio: string } | null>(
-    null,
-  );
+  const [editing, setEditing] = useState<{ id: string; displayName: string; handle: string; bio: string } | null>(null);
 
   const rerollIds = (accountIds: string[], id: string | null) => {
     if (accountIds.length === 0) return;

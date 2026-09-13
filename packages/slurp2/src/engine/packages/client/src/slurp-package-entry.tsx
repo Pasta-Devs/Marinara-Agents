@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import i18next from "i18next";
@@ -69,6 +69,43 @@ function requestedLanguage(element: CapabilityElement) {
   return typeof locale === "string" ? locale.split("-")[0] : "en";
 }
 
+/**
+ * Without this, any render throw tears down the whole React root and leaves an empty panel next to
+ * the Engine chrome, with nothing in the bug report to explain it.
+ */
+class SlurpErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("[slurp2] render failed", error, info.componentStack);
+  }
+
+  render() {
+    const { error } = this.state;
+    if (!error) return this.props.children;
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm">
+        <p className="text-base font-semibold">{localization.t("ui.slurp.crash.title")}</p>
+        <p className="text-[var(--muted-foreground)]">{localization.t("ui.slurp.crash.body")}</p>
+        <pre className="max-w-full overflow-auto whitespace-pre-wrap text-xs text-[var(--muted-foreground)]">
+          {error.message}
+        </pre>
+        <button
+          type="button"
+          onClick={() => this.setState({ error: null })}
+          className="inline-flex min-h-10 items-center rounded-lg border border-[var(--noodle-accent)]/40 px-3 font-semibold text-[var(--noodle-accent)]"
+        >
+          {localization.t("capabilities.actions.tryAgain")}
+        </button>
+      </div>
+    );
+  }
+}
+
 function SlurpPackageRoot({ element }: { element: CapabilityElement }) {
   const [revision, redraw] = useState(0);
   const navigation = useSlurpUIStore((state) => state.navigation);
@@ -100,8 +137,10 @@ function SlurpPackageRoot({ element }: { element: CapabilityElement }) {
       <QueryClientProvider client={client}>
         <ModalPortalContext.Provider value={element.__portal ?? element}>
           <div className="h-full min-h-0 overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
-            <SlurpHome navigation={navigation} onNavigate={setNavigation} onLeave={onLeave} />
-            <AppDialogRenderer />
+            <SlurpErrorBoundary>
+              <SlurpHome navigation={navigation} onNavigate={setNavigation} onLeave={onLeave} />
+              <AppDialogRenderer />
+            </SlurpErrorBoundary>
           </div>
         </ModalPortalContext.Provider>
       </QueryClientProvider>
