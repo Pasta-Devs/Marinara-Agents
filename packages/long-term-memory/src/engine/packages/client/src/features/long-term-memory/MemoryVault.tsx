@@ -483,13 +483,15 @@ function ScopeTargetPicker({
         {targetsWithoutMemories.length ? (
           <details
             open={noMemoriesOpen}
-            onToggle={(event) => {
-              if (!wasSearching.current) noMemoriesPreference.current = event.currentTarget.open;
-              setNoMemoriesOpen(event.currentTarget.open);
-            }}
+            onToggle={(event) => setNoMemoriesOpen(event.currentTarget.open)}
             data-ltm-vault-scope-presence="no-memories"
           >
-            <summary className="flex min-h-11 cursor-pointer list-none items-center border-b border-[var(--border)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)] [&::-webkit-details-marker]:hidden">
+            <summary
+              onClick={() => {
+                noMemoriesPreference.current = !noMemoriesOpen;
+              }}
+              className="flex min-h-11 cursor-pointer list-none items-center border-b border-[var(--border)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)] [&::-webkit-details-marker]:hidden"
+            >
               {localizeUi("ui.longTermMemory.memoryvault.noMemories")}
             </summary>
             {targetsWithoutMemories.map(renderRegularTarget)}

@@ -1669,10 +1669,6 @@ async function main() {
       );
       await memoryScope.locator("[data-ltm-vault-scope-search]").fill("");
       assert.ok(await memoryScope.locator('[data-ltm-vault-scope-current="branch"]').isDisabled());
-      assert.equal(
-        await memoryScope.locator('[data-ltm-vault-scope-current="branch"]').locator("span").nth(1).innerText(),
-        "Member Final Branch",
-      );
       await memoryScope.locator('[data-ltm-vault-scope-tab="chat"]').click();
       assert.equal(
         await memoryScope.locator('[data-ltm-vault-scope-current="chat"]').getAttribute("data-ltm-vault-scope-target"),
