@@ -14,6 +14,12 @@
     "conversation-calls": {
       "versions": [
         {
+          "version": "1.0.16",
+          "date": "2026-09-13",
+          "notes": "- SwarmUI video connections now generate character call clips using their saved workflow, resolution, frame rate, and LoRAs. Backup SwarmUI connections keep their own workflow settings.",
+          "highlight": true
+        },
+        {
           "version": "1.0.15",
           "date": "2026-09-13",
           "notes": "- Keep required reasoning enabled for GLM 5.3 on NanoGPT and Z.AI when the selected effort is None.",
