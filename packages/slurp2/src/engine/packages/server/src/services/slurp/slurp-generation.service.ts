@@ -323,7 +323,10 @@ export function buildNoodlerPostMessages(input: {
               : (() => {
                   const choice = input.project.project.choices[input.project.project.chapter];
                   return choice
-                    ? { question: protect(choice.question), options: choice.options.map((option) => protect(option.label)) }
+                    ? {
+                        question: protect(choice.question),
+                        options: choice.options.map((option) => protect(option.label)),
+                      }
                     : null;
                 })(),
             partners: input.project.project.partnerNames ?? [],

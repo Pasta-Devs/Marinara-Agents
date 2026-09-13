@@ -208,6 +208,8 @@ import {
   SLURP_PROJECT_STATUSES,
   SLURP_PROJECT_TITLE_MAX_LENGTH,
   slurpCrossoverForViewer,
+  slurpArcTypeFromProject,
+  slurpGeneratedArcProject,
 } from "../services/slurp/slurp-project.js";
 import { generateSlurpArc } from "../services/slurp/slurp-arc-generation.service.js";
 import { readSlurpStudioSnapshot, writeSlurpStudioSnapshot } from "../services/slurp/slurp-studio-snapshot.js";
@@ -1980,6 +1982,27 @@ export async function slurpRoutes(app: FastifyInstance) {
     const project = await noodle.addGeneratedProject(creator.id, await generateSlurpArc(app.db, creator.id));
     if (!project) return reply.code(502).send({ error: "The model did not return a usable arc. Try again." });
     return { project };
+  });
+
+  /** Generate an unsaved Arc Library draft from a player brief. */
+  app.post("/noodler/accounts/:id/arc-library/generate", async (req, reply) => {
+    const parsed = z
+      .object({ personaId: z.string().trim().min(1), brief: z.string().trim().min(1).max(2_000) })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const creator = await noodle.getNoodlerAccountById((req.params as { id: string }).id);
+    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
+      return reply.code(403).send({ error: "Only the Creator's owner can generate an arc type." });
+    }
+    const raw = await generateSlurpArc(app.db, creator.id, [], parsed.data.brief);
+    const draftId = `draft-${Date.now().toString(36)}`;
+    const project = raw
+      ? slurpGeneratedArcProject(draftId, raw, new Date(), { origin: "manual", status: "suggested" })
+      : null;
+    if (!project) return reply.code(502).send({ error: "The model did not return a usable arc. Try again." });
+    return { type: slurpArcTypeFromProject(project, draftId) };
   });
 
   /** Copy an arc into the arc library as a custom type. */

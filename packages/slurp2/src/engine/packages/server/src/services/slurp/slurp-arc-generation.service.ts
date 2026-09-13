@@ -23,6 +23,7 @@ export function buildSlurpArcGenerationMessages(input: {
   stagePersonality: string;
   gender: string | null;
   tags: readonly string[];
+  brief?: string;
   recentPosts: readonly string[];
   libraryNames: readonly string[];
   pastArcTitles: readonly string[];
@@ -48,6 +49,7 @@ export function buildSlurpArcGenerationMessages(input: {
         input.stagePersonality || "Not set.",
         `Gender: ${input.gender ?? "not set"}`,
         `Tags: ${input.tags.join(", ") || "none"}`,
+        ...(input.brief?.trim() ? ["", "# Player brief", input.brief.trim().slice(0, 2_000)] : []),
         "",
         "# Recent posts",
         ...(input.recentPosts.length ? input.recentPosts.map((post) => `- ${post}`) : ["None yet."]),
@@ -87,6 +89,7 @@ export async function generateSlurpArc(
   db: DB,
   creatorAccountId: string,
   partnerIds: readonly string[] = [],
+  brief = "",
 ): Promise<Record<string, unknown> | null> {
   try {
     const slurp = createSlurpStorage(db);
@@ -111,6 +114,7 @@ export async function generateSlurpArc(
       stagePersonality: creator.settings.privacy.stagePersonality ?? "",
       gender: creator.settings.profile.gender,
       tags: creator.settings.profile.tags,
+      brief,
       recentPosts: posts.map((post) => `${post.title ? `${post.title} — ` : ""}${post.content}`.slice(0, 200)),
       libraryNames: settings.arcLibrary.filter((type) => !type.hidden).map((type) => type.name),
       pastArcTitles: (await slurp.listProjects(creator.id)).map((project) => project.title),

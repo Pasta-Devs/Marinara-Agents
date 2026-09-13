@@ -212,7 +212,9 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       await noodle.tickProjects(account.id, until).catch(() => []);
       // After the tick, so an arc that just finished leaves room for the next one.
       // Generated arcs are the one model call here; a failed call starts nothing this tick.
-      await noodle.rollAutoArc(account.id, until, (id, partnerIds) => generateSlurpArc(db, id, partnerIds)).catch(() => null);
+      await noodle
+        .rollAutoArc(account.id, until, (id, partnerIds) => generateSlurpArc(db, id, partnerIds))
+        .catch(() => null);
     }
 
     // Arcs. Where each relationship is heading, as opposed to where it stands. Runs on the same

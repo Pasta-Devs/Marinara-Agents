@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   makeSlurpProject,
@@ -12,6 +13,25 @@ import {
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-project.js";
 
 const at = new Date("2026-09-09T10:00:00.000Z");
+
+const generationSource = readFileSync(
+  new URL(
+    "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-arc-generation.service.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
+assert.match(generationSource, /input\.brief\.trim\(\)\.slice\(0, 2_000\)/u, "the AI builder sends the player's brief");
+const routesSource = readFileSync(
+  new URL("../packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", import.meta.url),
+  "utf8",
+);
+assert.match(routesSource, /arc-library\/generate/u, "the AI builder has a dedicated draft route");
+assert.match(
+  routesSource,
+  /slurpArcTypeFromProject\(project, draftId\)/u,
+  "the draft route returns a library type without storing a project",
+);
 
 // arcSource: global default reaches the resolved config, a Creator override wins.
 const global = { arcAutoMode: "auto", arcCooldownWeeks: 1, arcPace: "normal", arcSource: "mixed" } as const;

@@ -1120,6 +1120,25 @@ export function useGenerateSlurpProject() {
   });
 }
 
+/** Generate an unsaved Arc Library draft from a player brief. */
+export function useGenerateSlurpArcType() {
+  return useMutation({
+    mutationFn: ({
+      creatorAccountId,
+      personaId,
+      brief,
+    }: {
+      creatorAccountId: string;
+      personaId: string;
+      brief: string;
+    }) =>
+      api.post<{ type: SlurpArcType }>(
+        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/arc-library/generate`,
+        { personaId, brief },
+      ),
+  });
+}
+
 /** Copy an arc into the arc library as a custom type. */
 export function useSaveSlurpProjectToLibrary() {
   const qc = useQueryClient();
