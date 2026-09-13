@@ -1,61 +1,126 @@
 # Quartermaster
 
-A per-chat RPG character sheet and inventory manager for Roleplay mode: equip slots around your
-persona's portrait, item locations (bag / stored / equipped), and saved outfits, in a
-draggable/resizable floating dock plus a native Tracker Panel view.
+A per-chat RPG character sheet and inventory manager with equip slots around your character's
+portrait, a full inventory with item locations, saved outfits, and AI-generated images — in a
+draggable floating dock, plus a native Tracker Panel view.
 
-**Requires Marinara Engine 2.4.4+.** Roleplay only (no Game Mode support yet), persona-only (no
-party/NPC support yet). Actively evolving — a personal project, not yet an official catalog
-package.
+**Requires Marinara Engine 2.4.4+.** Roleplay only (no Game Mode yet), persona only (no party/NPC
+support yet). Actively evolving — not yet an official catalog package.
 
-## Features
+## The main feature: an LLM tracker that runs on its own
 
-- **Equip slots** — 16 slots (head, neck, eyes, ears, armor & clothing torso/legs, underwear
-  top/bottom, back, hands, both hands' weapon, feet, belt) arranged around the portrait. Each slot
-  shows the equipped item's own image, or built-in generated artwork if it doesn't have one.
-- **Bag** — add, edit, and remove items, each with a name, description, and quantity. Store an
-  item in the bag, a named stash (`stored:<name>`), or a slot (`equipped:<slot>`); search the Bag
-  by name or by slot. Split into three tabs — Items, Wearables (anything with a default slot
-  set), and Stored (anything in a named stash) — so a busy chat's inventory stays easy to scan.
-- **Item images** — give any item its own image: auto-matched by filename from a shared image
-  folder (so a pre-made image pack just works by copying its folder in), upload one directly from
-  the item's card, or generate one with AI (see Generate Image below).
-- **Saved outfits** — snapshot the current equip state under a name, then re-equip, edit, or
-  resnapshot it later in one click; delete ones you don't need. Search outfits by name, and the
-  dock shows which one (if any) is currently equipped — it stays equipped as long as its own saved
-  items are still worn, even if something extra (a picked-up item, an accessory) gets equipped
-  alongside it; swapping out one of the outfit's own items is what actually unequips it.
-- **Outfit portraits** — give a saved outfit its own portrait (uploaded or AI-generated), shown in
-  the dock in place of the persona's avatar whenever that outfit is equipped. An opt-in setting can
-  also push it to the persona's *real* Marinara avatar — see below for what that involves before
-  turning it on.
-- **Generate Image** — an AI-generated alternative to uploading, for both item images and outfit
-  portraits: click Generate on an item/outfit's image, review (and optionally edit) the filled-in
-  prompt, then generate. Uses whichever `image_generation` connection is picked in Settings →
-  Image generation (defaults to the Engine's own default connection if none is picked); the two
-  prompt templates there are editable too, pre-filled with sensible defaults to edit from rather
-  than write from scratch.
-- **Export / import** — back up or transfer a chat's items and outfits as a JSON file.
-- **Slot-group toggles** — hide underwear (off by default), armor, or weapons slots entirely if
-  a chat doesn't need them.
-- **Appearance macro** — feeds the current outfit or equipped items into a per-chat variable, so
-  Illustrator picks up what's actually equipped when generating images. Requires placing
-  `{{getvar::quartermaster_appearance_persona}}` in the persona's own Appearance field once —
-  Quartermaster keeps that variable's value up to date, but doesn't add the token for you.
-- **Narrator context** — the narrator gets a live summary of what's equipped/carried/stored each
-  turn, replacing the Engine's built-in inventory block.
-- **Auto-tracking agent** — an optional agent reads each turn's narration and keeps equip state
-  and inventory in sync automatically, no manual updates required.
-- **Restore Inventory** — a safety net for a bad agent turn: the state from just before the last
-  auto-tracking update is always one click away in Settings, in case a turn wipes or badly mangles
-  the inventory and there's no export file to fall back on.
-- **Build Wardrobe** — describe a style direction in plain text and get back a proposed set of new
-  items and saved outfits to review before anything is added; outfits it builds can reuse your
-  existing wearable items instead of always inventing new ones. No images at generation time — add
-  those yourself afterward (upload or Generate Image), same as any manually-added item.
-- **Dock display controls** — UI Size resizes the whole dock; Thumbnail Size resizes item/portrait
-  images within it; either column (Outfits / Equipped / Bag) can be collapsed to a narrow strip to
-  save space.
+Quartermaster's core feature is the tracking agent — set it up once, and it keeps running every
+turn without you ever needing to open the dock again. It reads the story and creates, equips,
+unequips, stores, and discards items on its own, no manual upkeep required.
+
+Everything else is optional, for when you want more:
+- **Outfits and images** are extras for anyone who wants deeper wardrobe management or visuals —
+  not required to get value from the tracker.
+- The **appearance macro** only updates automatically if you've placed it in your persona card's
+  Appearance block; leave it out and Quartermaster won't touch your persona at all.
+
+## The Dock
+
+Opened from the chevron above the Engine's native Tracker Panel. A floating, resizable window with
+its own UI Size and Thumbnail Size controls, split into three sections: **Outfits**, **Equipped
+items** (around your portrait), and **Inventory**.
+
+- Each section can be collapsed to a narrow strip to save space.
+- Narrow the dock (or view it on a small screen) and the three sections stack vertically instead
+  of side-by-side.
+- Matches whatever theme you're running — no separate light/dark setting to configure.
+- Should work on mobile, though this hasn't actually been tested yet.
+
+## Equip Slots & Outfits
+
+**16 equip slots** arranged around the portrait: head, neck, eyes, ears, armor & clothing
+(torso/legs), underwear (top/bottom), back, hands, a weapon slot for each hand, feet, and belt.
+Each slot shows the equipped item's own image, or built-in art if it doesn't have one.
+
+**Saved outfits** snapshot your current equip state under a name, and can carry their own
+description text too (the whole-look description — this feeds both outfit-portrait generation and
+Build Wardrobe):
+- Equip/Unequip, edit, or **resnapshot** it (update it to whatever's currently equipped) any time.
+- The dock shows which outfit (if any) is currently active — and it *stays* marked as equipped
+  even if you add something extra on top (a pickup, an accessory). Only swapping out one of the
+  outfit's own pieces actually unequips it.
+- Give an outfit its own portrait (uploaded or generated) and the dock shows that in place of
+  your persona's usual avatar whenever it's equipped. An opt-in setting can push this to your
+  persona's *real* Marinara avatar too — see "Before enabling..." below before turning it on.
+
+## Inventory (the Bag)
+
+Add, edit, and remove items — name, description, quantity, and where it lives:
+- **Bag** (just carried), a **named stash** (e.g. "in the car," "at home" — not carried on your
+  person), or **equipped** in a specific slot.
+- Give an item a **default slot**, so it always knows which slot it belongs to when equipped using
+  the "Equip" buttons.
+
+The Bag is split into three tabs so a busy inventory stays easy to scan:
+- **Items** — everything else.
+- **Wearables** — anything with a default slot set.
+- **Stored** — anything tucked away in a named stash (this wins over "wearable" if both apply).
+
+Other conveniences:
+- **Quantity** adjusts right on the item's card — no need to open the full editor for the one
+  field you're touching constantly.
+- **Search** works two ways: by name, or by which slot an item's set to fill by default.
+- Click an **empty equip slot** on the portrait ring and the Bag auto-filters to whatever could
+  actually fill it — including stashed items, not just what's sitting loose in the bag.
+- **Export/Import** your whole setup (items, outfits, settings) as a JSON file — carry your setup
+  between chats, or back it up before reinstalling Marinara Engine.
+
+## Item Images & Generated Art
+
+Give any item — or any saved outfit — its own picture, three ways:
+1. **Auto-match**: drop images into your Engine's `data/gallery/quartermaster/items` folder, named
+   to match; item pictures show up on their own. This makes sharing a full image pack with friends
+   as simple as sharing that folder.
+2. **Upload** one directly from the item or outfit's card.
+3. **Generate** one with AI: pick Generate, review (and optionally tweak) the filled-in prompt,
+   then go. Uses whichever image connection you've picked in Settings → Image Generation, and both
+   prompt templates (item images, outfit portraits) are fully editable there too — pre-filled with
+   sensible defaults so you're editing, not writing from scratch.
+
+Settings also has a **Refresh Images** button, which clears the missing-image cache so an item
+without a picture stops silently skipping its image lookup on every repaint. In practice: if
+you've just dropped new images into the gallery folder for items that were already missing
+pictures, click Refresh Images and they'll pick up the new files.
+
+## The Quartermaster Agent (automation)
+
+An agent that reads each turn's narration and keeps your inventory in sync on its own — adding and
+removing items, equipping and unequipping them (individually or as a full saved outfit) as the
+story calls for it. Its prompt is fully editable from the Agents menu, within the constraints of
+the JSON output it needs to produce.
+
+- **Build Wardrobe**: describe a style in plain language and get back a proposed set of new items
+  and outfits to review before anything's added — it'll reuse wearable items you already have
+  instead of always inventing new ones. Uses the *same* connection as the tracking agent (set once
+  in the Agents menu — switch it there and both move together).
+- **Restore Inventory**: a safety net in Settings. If the agent mangles a turn, you can revert to
+  the inventory state from right before its last automatic update, in one click — even with no
+  export file to fall back on. (This only rewinds the agent's own last change, not any manual
+  edits you've made since.)
+
+## The Appearance Macro
+
+Drop `{{getvar::quartermaster_appearance_persona}}` into your persona's Appearance field once, and
+Quartermaster keeps it updated automatically from then on — feeding your current outfit or
+equipped items to anything that reads the persona's appearance, like Illustrator. Pick whether it
+feeds outfit descriptions or a plain list of equipped item names in Settings. Leave the macro out,
+and it does nothing — no forced changes to your persona.
+
+## Tracker Panel
+
+The chevron above the Engine's native Tracker Panel opens the Dock.
+
+The Tracker Panel itself also always shows its own "Quartermaster" section alongside the Engine's
+other tracker sections — click it to expand three independently-collapsible sub-sections:
+- **Equipped** — with a one-click unequip per item.
+- **Outfits** — with equip/unequip buttons.
+- **Inventory** — everything not currently equipped, grouped by where it's kept (Bag first, then
+  each named stash as its own labeled group), so you're never seeing an item listed twice.
 
 ## Before enabling "replace persona's real avatar on equip"
 
@@ -67,11 +132,16 @@ persona's *real* avatar elsewhere in Marinara.
 
 ## Planned
 
-- **Party / multi-character support** — persona-only today; the storage layer is already built to
+- **Party / multi-character support** — persona-only today; the storage layer's already built to
   extend to this without a rewrite.
-- **A distributable item-image pack** — matching works today; a curated pack to ship isn't decided.
-- **Game Mode support** — currently Roleplay-only; being investigated as a later step, after
-  Roleplay mode is feature-complete.
+- **A distributable item-image pack** — image matching already works today, and sharing a pack
+  with friends is already possible; a curated official one just isn't decided yet.
+- **Game Mode support** — Roleplay-only for now; being investigated as a later expansion.
+- **Optional automatic image generation** for newly-created items — on/off toggle, not yet built.
+- **Optional stat boosts on equipped items** — numeric modifiers an item could grant while worn
+  (+2 STR, +5 HP, etc.); not yet built.
+- **Deeper integration with other agents** — beyond the appearance macro Illustrator already
+  reads, exposing equip/inventory state for other packages to build on.
 
 ## Contributing
 
@@ -92,12 +162,23 @@ Rebuild after any change:
 node scripts/build-quartermaster-package.mjs
 ```
 
-This regenerates `client.js`/`manifest.json`/`locales/en.json`, hashes `server.mjs`/`agents.json`,
-and writes `artifacts/quartermaster-<version>.zip`. `INCOMPLETE_PACKAGE_IDS`
-(`scripts/catalog-incomplete.mjs`) keeps this package out of every published catalog until it's
-ready for testers.
+This regenerates `client.js`/`manifest.json`/`locales/en.json`, hashes `server.mjs`/`agents.json`
+and every bundled icon, and writes `artifacts/quartermaster-<version>.zip` — refusing to silently
+overwrite an already-released version's artifact file if you forget to bump `VERSION` first.
+`INCOMPLETE_PACKAGE_IDS` (`scripts/catalog-incomplete.mjs`) keeps this package out of every
+published catalog until it's ready for testers.
 
 ## Changelog
+
+### 0.1.10
+
+- Rewrote this Features section for readability and completeness, and documented several real
+  features that hadn't been written down before: the Bag's Items/Wearables/Stored tabs, outfit
+  resnapshotting, the "stays equipped through extras" behavior, the Tracker Panel's per-stash
+  grouping, the Refresh Images setting, and Build Wardrobe sharing its LLM connection with the
+  tracking agent.
+- Updated the in-app description (Download Agents) to mention saved outfits, AI-generated art,
+  and the tracker agent's own automation.
 
 ### 0.1.9
 

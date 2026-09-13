@@ -1,5 +1,17 @@
 # Quartermaster changelog
 
+## 0.1.10 — 2026-09-13
+- Rewrote the README's Features section for readability and completeness: organized by what you
+  actually interact with (the Dock, Equip Slots & Outfits, Inventory, Item Images, the tracking
+  agent, the Appearance Macro, the Tracker Panel) instead of a flat bullet list, and documented
+  several real features that were previously undocumented -- the Bag's Items/Wearables/Stored
+  tabs, outfit resnapshotting, the "stays equipped through extras" behavior, the Tracker Panel's
+  per-stash grouping, the Refresh Images setting, and Build Wardrobe sharing its LLM connection
+  with the tracking agent.
+- Updated the in-app description (shown in Download Agents) to mention saved outfits, AI-generated
+  art, and the tracker agent's own automation -- it hadn't been touched since before those
+  features shipped.
+
 ## 0.1.9 — 2026-09-11
 - Fixed a regression from 0.1.8's new Bag tabs: clicking an empty equip slot's quick-fill
   shortcut only searched the Wearables tab, so a wearable item currently stashed (Stored tab)

@@ -72,7 +72,7 @@ These packages are being built in this repository but are not ready for the stab
 | --- | --- | --- | --- |
 | Gacha Forge | [`gacha-forge`](packages/gacha-forge/manifest.json) | Staging only | A complete gacha game mode: describe a world and it builds the rest — banners to pull on, a generated cast, story chapters told by a visual-novel narrator, and the battles, gear and events that grow around them, all from **Home → Gacha Forge**. Offered to Engine `staging` testers while the game mode is exercised. |
 | Pixelforge | [`pixelforge`](packages/pixelforge/manifest.json) | In development | A walkable pixel-art RPG Experience for Game Mode: generated settlements, NPCs, and story-driven exploration. Under active development; not yet listed for users. |
-| Quartermaster | [`quartermaster`](packages/quartermaster/manifest.json) | In development | A per-chat RPG character sheet and inventory manager: equip slots, item locations, saved outfits, and a narration-driven tracker agent. Under active development; not yet listed for users. |
+| Quartermaster | [`quartermaster`](packages/quartermaster/manifest.json) | In development | A per-chat RPG character sheet and inventory manager: equip slots, a full inventory with saved outfits, AI-generated item and outfit art, and a narration-driven tracker agent that runs on its own. Under active development; not yet listed for users. |
 
 ### Localization sources
 

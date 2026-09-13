@@ -41,7 +41,7 @@ const PACKAGE_ID = "quartermaster";
 // release (0.1.0-dev.2 < 0.1.0), so once a plain 0.1.0 is installed, no
 // prerelease build can ever look newer to Download Agents. Never reset the
 // version back down afterward, even across a long dev-iteration stretch.
-const VERSION = "0.1.9";
+const VERSION = "0.1.10";
 // Declared against the exact staging Engine this scaffold was built and tested
 // against. Do not lower this to reach stable users — see CONTRIBUTING.md.
 const ENGINE_MIN = "2.4.4";
@@ -52,7 +52,7 @@ const BUILT_AGAINST = Object.freeze({
   engineCommit: "5c5a0bc8e7e4a6ef213dee45bf37fc7fba589e33",
 });
 const BASE_DESCRIPTION =
-  "A per-chat RPG character sheet and inventory manager for Roleplay mode: equip slots arranged around your persona's portrait, item locations (bag, stored, equipped), and saved outfits, plus an optional tracker agent that keeps equipped items and inventory in sync with the story as you play.";
+  "A per-chat RPG character sheet and inventory manager for Roleplay mode: equip slots arranged around your persona's portrait, a full inventory with saved outfits, AI-generated item and outfit art, and a tracker agent that keeps everything in sync with the story on its own.";
 // Local/fork dev testing (installing an unpublished build via a self-hosted
 // catalog — see CONTRIBUTING.md's MARINARA_CATALOG_INCLUDE_INCOMPLETE note)
 // needs the artifact to resolve from wherever it's actually pushed, not the
