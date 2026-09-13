@@ -10,6 +10,9 @@ Requires **Marinara Engine 2.4.5+** (capability API 1.10 and full selected-lore 
 client-only: no server entrypoint, no restart after install. The package agent definition is a
 runtime-inert stub that satisfies the catalog loader; all behavior lives in `client.js`.
 
+Pixelforge is in early development. Everything in this document, including numbers, mechanisms and
+planned designs, is subject to change.
+
 ## How to play
 
 Install Pixelforge from the agent catalog, create a **Game Mode** chat, and choose **Pixelforge**
@@ -40,12 +43,15 @@ count rather than by a model, so declining no longer means a cozy village whatev
 village called Hearthvale."* — an empty Setting has no words to ask for anything else. Leave only
 the name empty and your text still picks the kit, whose own default name (*Meridian Base*, for the
 colony) fills the loading screen, the generation call and the world itself; a name you do type
-reaches all three. Type your own Setting and it is used exactly as written, to the first **8,000
-characters** — what lies past that stays out of the world call, a bound the launch keeps so an
-oversized nested config cannot fail the launch itself.
+reaches all three. Type your own Setting and it is used as you wrote it, trimmed only of leading and
+trailing whitespace and never cut short: however long it runs, the whole text reaches the GM's
+per-turn prompt. The length bounds left are on the two
+generation calls: the world-writing call clips the preferences it sends at **7,800 characters**, and
+the work-writing call clips them against whatever the world's own digest leaves of the same budget,
+because the Engine's experience-generation route caps that field at 8,000 and refuses a longer one.
 
 **Three things the form stopped emitting**, all of them answers it was giving on your behalf: the
-**party list** (Game Mode's own setup owns that question — for this release a Pixelforge game starts
+**party list** (Game Mode's own setup owns that question — until the setup seam lands, a Pixelforge game starts
 with an empty party, and moving the picker to its real owner remains planned), the preset **genre and story
 goals**, and the **map-guidance line**, which is deleted outright rather than rewritten: the GM is
 never to be instructed to keep the player bound to a location, and the world need not be compact or
@@ -186,10 +192,10 @@ board is the last place you want a mis-press), and it takes two presses.
 
 **Where the work comes from.** A chat that generates its own world now makes a **second** generation
 call after the brief is sealed, writing the jobs its own people would actually post — a miller who
-wants fish, a forager who wants word carried — plus a matrix of things they say, which a later
-release will put behind an Ask key. It happens once, at creation, behind the same loading screen;
-after that the board restocks itself every day with no calls at all. If that second call fails,
-nothing is lost and trying again is free: your world is already written and settled.
+wants fish, a forager who wants word carried — plus a matrix of things they say, which 0.14 put
+behind the talk window's ask rows (below). It happens once, at creation, behind the same loading
+screen; after that the board restocks itself every day with no calls at all. If that second call
+fails, nothing is lost and trying again is free: your world is already written and settled.
 
 **Worlds made before 0.13 have no work written for them**, and their boards say so plainly rather
 than pretending — "No work posted here", never "not yet" and never "check back". Chats that declined
@@ -206,7 +212,11 @@ tropics get a wet half of the year and a dry one; a desert gets rain that hardly
 almost always light when it does. Days are fair, overcast, rainy, stormy or snowy, and rain and snow
 come light or heavy. **The sky is the same every time you load** — it is worked out from the world's
 seed and the day, so it costs nothing, saves nothing, and a rewind puts back the weather that was
-actually there.
+actually there. The storyteller can pin one: the package gives the GM a weather tag, and the Engine
+writes the word it names (plus light or heavy for rain and snow) straight into the chat's own data.
+That row carries no days, so it holds from day one onward and never lapses until the GM sets it
+again, and a rewind keeps it rather than clearing it; only a row written into that data by hand can
+name the days it covers.
 
 **The town notices.** On a wet or snowy morning the people who would have been out in it go home to
 their own firesides instead — the streets empty and the windows light up — while anyone whose work
@@ -344,8 +354,10 @@ Two tiers, resolved at runtime with graceful degradation:
   bundled zlib, so rebuilding on a different Node release may churn them — harmlessly, because the
   build re-stamps every hash from its own output and CI verifies committed bytes without rebuilding. Served through the engine's package-asset route via
   `contributions.assets`.
-- **Tier 0 (fallback)** — procedural Canvas painters inside `client.js`. If assets fail to load
-  (or on engines without asset serving) the game still runs, just plainer.
+- **Tier 0 (fallback)** — procedural Canvas painters inside `client.js`. The game still runs, just
+  plainer, whenever Tier 1 cannot answer: a fetch that fails, a theme with no sheet of its own yet,
+  a shipped sheet too small to hold its own id map, or a host that passes no package id to fetch
+  with.
 
 ## Layout
 

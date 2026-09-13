@@ -13,8 +13,9 @@ PF.brief = (() => {
   // every 8 rows and every 9 columns, and a map only 30 tall has room for two
   // rows of them however wide it is — so a village used to lay six lots on 1320
   // tiles and read as a hamlet with a lot of grass. Lots per rank now run
-  // 4 / 8 / 16 / 36 / 80, which is the first progression where each rank looks
-  // like a bigger VERSION of the one below rather than the same place zoomed.
+  // 4 / 8 / 20 / 36 / 80 before the `buildings` ceiling below clamps them, which
+  // is the first progression where each rank looks like a bigger VERSION of the
+  // one below rather than the same place zoomed.
   //
   // `buildings` is the ceiling on how many of those lots get laid out, and it is
   // deliberately kept ABOVE what the population arithmetic asks for at each rank
@@ -182,11 +183,14 @@ PF.brief = (() => {
   }
 
   /** THE ART MODULE'S ID LIST, READ THROUGH ONE DOOR (0.16.2). Four call sites
-   *  in this module now ask 10-art what kits exist, and three of them run BEFORE
-   *  the network request inside generate()'s try — whose catch reports
-   *  `onFailure("network")`. A partial `PF.art` (a `themeIds` that throws) would
-   *  therefore burn a paid call and blame the network for a type error, from
-   *  three new places at once, so the read is done here and the throw stops
+   *  in this module ask 10-art what kits exist, and three of them sit on the
+   *  generation path: guidance() and schema() run inside generate()'s try BEFORE
+   *  the network request, and validate()'s read runs AFTER the response on the
+   *  same path. (defaults() is the fourth and generation never reaches it.) That
+   *  try's catch reports `onFailure("network")`, so a partial `PF.art` (a
+   *  `themeIds` that throws) would blame the network for a type error from any
+   *  of the three, and from the one after the response it would also burn the
+   *  paid call it had just made. So the read is done here and the throw stops
    *  here. The SHAPE check stays at the four sites, spelled out each time
    *  (`Array.isArray(list) && list.length`), because "there is an authority" is
    *  the thing each of them branches on and it should be readable where it is
@@ -1147,8 +1151,10 @@ PF.brief = (() => {
       `  standing (optional, default resident): one of ${STANDING.join(" | ")}. transient = passing`,
       "  through; fringe = lives apart at the edges (hermit, outcast, refugee); destitute = no home.",
       "  Keep most people resident; a crossroads or waystation may have many transients.",
-      "- backgroundPopulation: total inhabitants including the cast (0-500). This is narrative",
-      "  texture for the map description — it never creates buildings.",
+      "- backgroundPopulation: how populous the place is, cast included (0-500). It informs the flavor and",
+      "  situation you write, and within what a settlement of this size class can hold it also moves how",
+      "  many homes are built, up or down; the compiled town derives its head count from it rather than",
+      "  matching it exactly. It never changes the size class; 0 means the usual number of homes.",
       "",
       "Only the cast, features, and places you name will exist. Keep names in the player's language.",
       // THE LORE CLAUSE, AND IT SHIPS ONLY WHEN LORE DOES. The entries the player

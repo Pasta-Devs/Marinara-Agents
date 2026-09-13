@@ -25500,29 +25500,29 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       "…and the reader that hands the theme to the brief call agrees with the wizard that wrote it",
     );
 
-    // ── (7) THE CONFIG THE PACKAGE HANDS BACK IS BOUNDED ──────────────────────
-    // `/game/create`'s chooser nests the package's whole returned config inside
-    // itself (`experienceConfig: cfg`) and the route's refine measures THAT
-    // nested copy against 32,000 characters, while `setting` is declared
-    // `z.string().min(1)` with no maximum. So the object this leg measures is the
-    // package's own config — one copy, exactly what the refine sees — and the
-    // Setting box is the only field that can push it over.
+    // ── (7) THE SETTING THE PACKAGE HANDS BACK IS NOT CLIPPED ─────────────────
+    // `setting` is a TOP-LEVEL field of the host's setup schema, declared
+    // `z.string().min(1)` with no maximum. The route's length refine measures
+    // `experienceConfig` alone, against 262,144 characters, and that object holds
+    // only the package's own scalars: a seed, a theme, two flags, a world name
+    // and at most a list of lore entry ids. Nothing typed in the Setting box
+    // reaches it. So the player's whole description ships, and this leg pins that
+    // it arrives at full length rather than trimmed to the old 8,000 bound.
     const huge = await mountWizard();
-    huge.settingIn.value = "riverstone ".repeat(4_000); // 44,000 characters
+    const typedSetting = "riverstone ".repeat(4_000); // 44,000 characters
+    huge.settingIn.value = typedSetting;
     await fire(huge.launchBtn, "click");
-    const bounded = huge.launches[0].config;
-    assert.equal(bounded.setting.length, 8_000, "the Setting the package emits is capped at 8,000 characters");
-    assert.ok(
-      JSON.stringify(bounded).length < 32_000,
-      "…which keeps the nested copy inside the cap that would otherwise 400 the launch on a field the player never sees",
+    const emitted = huge.launches[0].config;
+    assert.equal(
+      emitted.setting,
+      typedSetting.trim(),
+      "the whole Setting box reaches the config, verbatim and unclipped",
     );
-    // The doubled shape the chooser actually builds, kept as a strictly LOOSER
-    // second leg: it is larger than the object the refine measures, so it cannot
-    // false-pass, and it is what a reader of NewGameExperienceChooser expects to
-    // see checked.
+    assert.equal(emitted.setting.length, 43_999, "…at its full length, far past the 8,000 characters it used to lose");
+    // The object the refine actually measures, which the Setting box cannot grow.
     assert.ok(
-      JSON.stringify({ ...bounded, experienceConfig: bounded }).length < 32_000,
-      "…and so does the doubled shape the chooser hands the route",
+      JSON.stringify(emitted.experienceConfig).length < 262_144,
+      "…while the package's own config object stays inside the cap the route enforces on it",
     );
   } finally {
     loadedPF.api.getJson = realGetJson;

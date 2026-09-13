@@ -128,9 +128,10 @@ PF.core = {
     PF.save.ensurePresent(this, meta);
 
     // THE GM'S SKY, RECONCILED. The host hands us the whole metadata blob on
-    // every props delivery, so a future writer patching `pixelforgeWeather`
-    // mid-story is answered here — the town re-places under the new sky the
-    // moment the key lands, without waiting for a boundary.
+    // every props delivery, so the storyteller's `weather` verb patching
+    // `pixelforgeWeather` mid-story is answered here, and the town re-places
+    // under the new sky the moment the key lands, without waiting for a
+    // boundary.
     //
     // COMPARED AGAINST THE APPLIED MEMO, never against `sim.weatherOverride`.
     // The memo tracks METADATA, which a console never touches, so a summoned

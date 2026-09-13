@@ -725,11 +725,21 @@ PF.save = {
     return snap;
   },
 
-  /** Where /game/create actually stores the wizard config (review finding):
-   *  the chooser wraps our cfg as setupConfig.experienceConfig = cfg, and the
-   *  server persists the whole setupConfig under meta.gameSetupConfig — so our
-   *  own `experienceConfig.seed` lands two levels deep. Read every plausible
-   *  depth so a future un-nesting doesn't strand old games. */
+  /** Where /game/create actually stores the wizard config: the chooser wraps our
+   *  cfg as setupConfig.experienceConfig = cfg.experienceConfig ?? cfg, and the
+   *  server persists the whole setupConfig under meta.gameSetupConfig. Our own
+   *  `experienceConfig.seed` therefore lands ONE level deep on every chat created
+   *  since the host stopped re-wrapping a config that already carries that key.
+   *
+   *  The deeper read is a LEGACY path, not future-proofing. The host used to wrap
+   *  unconditionally, so a chat created before that change keeps its seed two
+   *  levels down. A saved game survives the shallower read on its save row alone,
+   *  since `simFromSaved` takes `saved.seed` first, but the readers with no
+   *  save-side fallback do not: the generate and pack flags, the world name and
+   *  the picked lore ids live only in this config, and a legacy chat that has not
+   *  saved yet has nowhere else to get its seed. Both depths stay, innermost
+   *  first, so an older game keeps rebuilding from its own number. Every other
+   *  reader below covers both depths for exactly this reason. */
   _configSeed(meta) {
     const setup =
       meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
@@ -2415,7 +2425,7 @@ PF.save = {
     }
   },
 
-  /** The wizard's theme, from the same double-nested config home as the seed. */
+  /** The wizard's theme, from the same config home as the seed, at both depths. */
   _configTheme(meta) {
     const setup =
       meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
@@ -2434,7 +2444,7 @@ PF.save = {
   },
 
   /** THE LOREBOOK ENTRIES THE PLAYER TICKED (0.16.2, R-D6), from the same
-   *  double-nested config home as the seed, the theme and the name.
+   *  config home as the seed, the theme and the name.
    *
    *  ENTRY ids and never book ids: the ruling is that "the player must be able to
    *  select specific lorebook entries rather than the entire lorebook getting
@@ -2467,7 +2477,7 @@ PF.save = {
   },
 
   /** THE NAME THE PLAYER TYPED IN THE WIZARD (0.16.1), from the same
-   *  double-nested config home as the seed and the theme. "Typed" resolves at
+   *  config home as the seed and the theme. "Typed" resolves at
    *  write time: the wizard stores the field's value trimmed, and an emptied
    *  field stores the theme's default name instead — a world needs SOME name,
    *  and an empty string is not one.

@@ -281,11 +281,15 @@ PF.schedule = (() => {
     // the tile every zone guarantees walkable, and was standable in all 480
     // compiled zones tried, but the guarantee should live in the code.
     //
-    // Unreachable in practice, and deliberately not escalated to a null return:
-    // the smallest zone measured holds 119 standable tiles, comfortably more
-    // than any one zone's occupants even now that the mint fills a city (see
-    // npcOccupies in 30-sim.js for the measured population numbers), so this is
-    // a floor under a contract, not a live path.
+    // Unreachable in practice, and deliberately not escalated to a null return.
+    // The comparison has to be made PER ZONE, because the smallest zone and the
+    // most crowded one are never the same place: the smallest measured holds 62
+    // standable tiles (a 14x10 dwelling interior, sheltering a household of
+    // three), while the zones that hold a hundred-odd occupants are the city
+    // exteriors, which are two orders of magnitude bigger (see npcOccupies in
+    // 30-sim.js for the measured population numbers). Across every zone, scale,
+    // theme and daypart measured, the tightest case still left 59 standable
+    // tiles spare, so this is a floor under a contract, not a live path.
     if (standable(zone, zone.spawn.x, zone.spawn.y)) return { x: zone.spawn.x, y: zone.spawn.y };
     for (let y = 0; y < zone.h; y++) {
       for (let x = 0; x < zone.w; x++) if (standable(zone, x, y)) return { x, y };
