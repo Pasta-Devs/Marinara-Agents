@@ -4,7 +4,11 @@ import { join } from "node:path";
 import { compileImagePrompt } from "../sources/engine/packages/shared/dist/utils/image-prompt-compiler.js";
 import { normalizeImageGenerationProfile } from "../sources/engine/packages/shared/dist/constants/image-generation-defaults.js";
 import { normalizeImageStyleProfileSettings } from "../sources/engine/packages/shared/dist/constants/image-style-profiles.js";
-import { selectNoodleImageProviderPrompt } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-image-prompt";
+import {
+  capFallbackImagePrompt,
+  MAX_FALLBACK_IMAGE_PROMPT_LENGTH,
+  selectNoodleImageProviderPrompt,
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-image-prompt";
 
 const root = join(import.meta.dirname, "..");
 
@@ -31,6 +35,25 @@ const root = join(import.meta.dirname, "..");
   assert.equal(reasons.length, 2);
   assert.equal(selectNoodleImageProviderPrompt({ rewrittenPrompt: null, rawPrompt: longDraft, onFallback }), longDraft);
   assert.equal(reasons.length, 2);
+}
+
+// The cap cuts on a boundary: a mid-word cut mangles the last, most specific visual detail.
+{
+  assert.equal(capFallbackImagePrompt("short prompt"), "short prompt");
+
+  const sentences = `${"Wide shot of a lit room. ".repeat(200)}Trailing filler.`;
+  const capped = capFallbackImagePrompt(sentences);
+  assert.ok(capped.length <= MAX_FALLBACK_IMAGE_PROMPT_LENGTH);
+  assert.ok(capped.endsWith("."), "a cap must land on a sentence end when one is near the ceiling");
+  assert.ok(sentences.startsWith(capped), "the kept text is the head, where the draft and appearance live");
+
+  const words = `${"detail ".repeat(1_000)}tail`;
+  const cappedWords = capFallbackImagePrompt(words);
+  assert.ok(cappedWords.length <= MAX_FALLBACK_IMAGE_PROMPT_LENGTH);
+  assert.ok(cappedWords.endsWith("detail"), "no mid-word cut");
+
+  // No boundary at all: the hard ceiling still holds.
+  assert.equal(capFallbackImagePrompt("x".repeat(4_000)).length, MAX_FALLBACK_IMAGE_PROMPT_LENGTH);
 }
 const rawPrompt = "A person reading beside a window.";
 const renderedTemplatePrompt =

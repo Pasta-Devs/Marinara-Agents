@@ -2318,12 +2318,21 @@ export function createSlurpStorage(db: DB) {
       return this.withoutHiddenAmbientAccounts(rows.map(mapAccount), options.includeHidden);
     },
 
-    async getAccountById(id: string): Promise<NoodleAccount | null> {
+    /** Single-row sibling of `withoutHiddenAmbientAccounts`, so id reads hide what lists hide. */
+    async withoutHiddenAmbientAccount<T extends NoodleAccount>(
+      account: T | null,
+      includeHidden = false,
+    ): Promise<T | null> {
+      if (!account) return null;
+      return (await this.withoutHiddenAmbientAccounts([account], includeHidden))[0] ?? null;
+    },
+
+    async getAccountById(id: string, options: { includeHidden?: boolean } = {}): Promise<NoodleAccount | null> {
       const rows = await db
         .select()
         .from(noodleAccounts)
         .where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.platform, "slurp")));
-      return rows[0] ? mapAccount(rows[0]) : null;
+      return this.withoutHiddenAmbientAccount(rows[0] ? mapAccount(rows[0]) : null, options.includeHidden);
     },
 
     /**
@@ -2461,12 +2470,12 @@ export function createSlurpStorage(db: DB) {
       return this.withoutHiddenAmbientAccounts(rows.map(mapAccount), options.includeHidden);
     },
 
-    async getNoodlerAccountById(id: string): Promise<SlurpAccount | null> {
+    async getNoodlerAccountById(id: string, options: { includeHidden?: boolean } = {}): Promise<SlurpAccount | null> {
       const rows = await db
         .select()
         .from(noodleAccounts)
         .where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.platform, "slurp")));
-      return rows[0] ? mapAccount(rows[0]) : null;
+      return this.withoutHiddenAmbientAccount(rows[0] ? mapAccount(rows[0]) : null, options.includeHidden);
     },
 
     async getNoodlerAccountForSource(
@@ -2537,7 +2546,7 @@ export function createSlurpStorage(db: DB) {
     },
 
     async deleteNoodlerAccount(id: string): Promise<NoodleAccount | null> {
-      const existing = await this.getNoodlerAccountById(id);
+      const existing = await this.getNoodlerAccountById(id, { includeHidden: true });
       if (!existing) return null;
       const postRows = await db.select().from(noodlePosts).where(eq(noodlePosts.authorAccountId, id));
       const postIds = postRows.map((post) => post.id);
@@ -2955,7 +2964,7 @@ export function createSlurpStorage(db: DB) {
         });
         return accountId;
       });
-      return (await this.getAccountById(id))!;
+      return (await this.getAccountById(id, { includeHidden: true }))!;
     },
 
     async updateAccount(id: string, input: NoodleAccountUpdateInput): Promise<NoodleAccount | null> {

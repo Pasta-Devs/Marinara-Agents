@@ -22,11 +22,12 @@ assert.match(
   /const rawRewriteInput = redactIdentity\(reviewedOverride\?\.prompt \|\| compiledDraft\?\.prompt \|\| draftPrompt\);/u,
 );
 
-// When no rewrite survives, the provider gets the capped draft, not the uncapped rendered template
-// that stacked appearance, personality, and image habits into one prompt.
+// When no rewrite survives, the provider gets the rendered template — the only document carrying
+// appearance notes and image habits, without which fallback pictures show the wrong character. The
+// length cap in selectNoodleImageProviderPrompt is what keeps that stack bounded.
 assert.match(
   images,
-  /const rawProviderPrompt = redactIdentity\(reviewedOverride\?\.prompt \|\| compiledDraft\?\.prompt \|\| draftPrompt\);/u,
+  /const rawProviderPrompt = redactIdentity\(reviewedOverride\?\.prompt \|\| compiledPrompt\.prompt\);/u,
 );
 assert.match(images, /rawPrompt: rawProviderPrompt,\s*rewriteAttempted,\s*onFallback:/u);
 // Garnish ad images honour the interpretation setting and share the same rewrite and fallback.

@@ -475,11 +475,7 @@ function sendNoodlerMediaError(reply: FastifyReply, error: unknown) {
   if (statusCode === 500) logger.error(error, "[slurp] Image request failed");
   return reply.code(statusCode).send({
     error:
-      statusCode === 500
-        ? "Image request failed."
-        : tooLarge
-          ? "Slurp image is too large."
-          : (error as Error).message,
+      statusCode === 500 ? "Image request failed." : tooLarge ? "Slurp image is too large." : (error as Error).message,
   });
 }
 
@@ -850,7 +846,8 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
     const operation = await tryNoodleOperation("identity", async () => {
-      const account = await noodle.getAccountById(id);
+      // Ambient management edits the roster while it is hidden, so it reads past the hide filter.
+      const account = await noodle.getAccountById(id, { includeHidden: true });
       if (!account || !isAmbientNoodleAccount(account)) return null;
       return noodle.updateAccountProfile(id, { ...parsed.data, profile: { profileManuallyEdited: true } });
     });
@@ -874,9 +871,9 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!connection) return reply.code(400).send({ error: "Select a Slurp generation connection first." });
     const operation = await tryNoodleOperation("identity", async () => {
       await ensureAmbientNoodleAccounts(noodle, settings.allowRandomUsers);
-      const accounts = (await Promise.all(parsed.data.accountIds.map((id) => noodle.getAccountById(id)))).filter(
-        (account): account is NoodleAccount => account !== null,
-      );
+      const accounts = (
+        await Promise.all(parsed.data.accountIds.map((id) => noodle.getAccountById(id, { includeHidden: true })))
+      ).filter((account): account is NoodleAccount => account !== null);
       if (accounts.length !== parsed.data.accountIds.length || accounts.some((a) => !isAmbientNoodleAccount(a))) {
         return { status: "invalid" } as const;
       }
@@ -2235,10 +2232,16 @@ export async function slurpRoutes(app: FastifyInstance) {
 
   app.delete("/noodler/ads/pool/:id", async (req) => {
     const { id } = req.params as { id: string };
-    const existing = (await ads.pool.listAll()).find((ad) => ad.id === id);
+    // Scoped to Slurp: the pool is shared with other Garnish platforms, whose ads this route owns no
+    // part of.
+    const existing = (await ads.pool.listAll(SLURP_GARNISH_PLATFORM)).find((ad) => ad.id === id);
+    if (!existing) return { ok: true };
+    // Otherwise every deleted ad leaves its artwork behind on disk forever. Builtins are only
+    // hidden, but artwork generated for an edited builtin is still ours to clean up.
+    const generatedImageUrl = await ads.pool.releaseGeneratedImage(id);
     await ads.pool.remove(id);
-    // Otherwise every deleted ad leaves its artwork behind on disk forever. Builtins are only hidden.
-    if (existing?.origin !== "builtin") unlinkGarnishAdImage(id, existing?.imageUrl);
+    if (existing.origin !== "builtin") unlinkGarnishAdImage(id, existing.imageUrl);
+    else if (generatedImageUrl) unlinkGarnishAdImage(id, generatedImageUrl);
     return { ok: true };
   });
 
@@ -2251,6 +2254,10 @@ export async function slurpRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const parsed = garnishAdPatchSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    // Scoped like the other pool routes: an id from another Garnish platform is not editable here.
+    if (!(await ads.pool.listAll(SLURP_GARNISH_PLATFORM)).some((ad) => ad.id === id)) {
+      return reply.code(404).send({ error: "Not Found" });
+    }
     const updated = await ads.pool.update(id, parsed.data);
     if (!updated) return reply.code(404).send({ error: "Not Found" });
     return updated;
@@ -3622,10 +3629,12 @@ export async function slurpRoutes(app: FastifyInstance) {
         return { ...current, creatorConnectionIds };
       });
       try {
-        const target = await noodle.getNoodlerAccountById(id);
-        // A deleted ambient account stays deleted; the seeder skips dismissed ids.
-        if (target && isAmbientNoodleAccount(target)) await dismissAmbientNoodleAccount(noodle, target.entityId);
+        const target = await noodle.getNoodlerAccountById(id, { includeHidden: true });
         const deleted = await noodle.deleteNoodlerAccount(id);
+        // A deleted ambient account stays deleted; the seeder skips dismissed ids. Record the
+        // dismissal only after the delete succeeded, or a failed delete would hide a live account.
+        if (deleted && target && isAmbientNoodleAccount(target))
+          await dismissAmbientNoodleAccount(noodle, target.entityId);
         if (deleted) removeNoodlerAccountMedia(id);
         return deleted;
       } catch (error) {

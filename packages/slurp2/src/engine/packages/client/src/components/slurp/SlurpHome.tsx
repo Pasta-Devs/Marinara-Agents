@@ -4073,6 +4073,17 @@ function StageProfileView({
         leadingActions={
           !editing && !viewingOwnCreator && viewerCreator ? (
             <>
+              {/* A subscription already implies a follow, so subscribers get a static badge instead of a
+                  toggle they cannot actually turn off. */}
+              {viewerCreator.subscribed ? (
+                <span
+                  aria-label={localizeUi("ui.slurp.profile.subscribed")}
+                  title={localizeUi("ui.slurp.profile.subscribed")}
+                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--noodle-accent)]/50 bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]"
+                >
+                  <BookmarkCheck size={19} />
+                </span>
+              ) : (
               <button
                 type="button"
                 disabled={followPending}
@@ -4092,6 +4103,7 @@ function StageProfileView({
               >
                 {viewerCreator.followed ? <BookmarkCheck size={19} /> : <Bookmark size={19} />}
               </button>
+              )}
               <button
                 type="button"
                 disabled={subscriptionPending}

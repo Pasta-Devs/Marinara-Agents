@@ -1,7 +1,9 @@
 /**
  * #115: a restore must leave settings alone unless the user opts in AND the archive carries
  * slurp2 settings, so a Legacy import can no longer wipe every setting.
- * #123: subscribing implies following; the Following feed reads one union set.
+ * #123: subscribing implies following; the Following feed reads one union set. Because the union
+ * pins followed=true, a subscriber could never unfollow, so the follow toggle is hidden behind the
+ * subscribed flag and replaced by a static "Subscribed" badge.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -38,5 +40,18 @@ assert.match(settingsUi, /startSlurpRestore\(file, restoreImportSettings\)/u);
 
 const home = read("client/src/components/slurp/SlurpHome.tsx");
 assert.doesNotMatch(home, /followingAccountIds/u, "the client must use the server's followed flag, not the raw follow list");
+assert.match(
+  routes,
+  /subscribed: context\.subscribedIds\.has\(account\.id\)/u,
+  "the creator payload that carries followed must also carry subscribed",
+);
+const followButton = home.indexOf("onClick={() => onToggleFollow(");
+assert.ok(followButton > 0, "the profile follow toggle must still exist for non-subscribers");
+const beforeFollow = home.slice(0, followButton);
+assert.match(
+  beforeFollow.slice(beforeFollow.lastIndexOf("leadingActions=")),
+  /viewerCreator\.subscribed \? \(/u,
+  "the follow toggle must be gated on viewerCreator.subscribed",
+);
 
 console.log("slurp2 restore settings and follow regression passed");

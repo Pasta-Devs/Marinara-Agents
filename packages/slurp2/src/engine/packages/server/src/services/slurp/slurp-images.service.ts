@@ -243,9 +243,11 @@ export async function generateNoodlerPostImage(input: {
   // drop appearance and image habits — the exact context loss this flag exists to stop. Only a
   // human-reviewed override displaces the template.
   const reviewedOverride = input.retryStoredPrompt ? null : compiledOverride;
-  // When no rewrite survives the provider gets the draft, capped by selectNoodleImageProviderPrompt.
-  // The rendered template stacked appearance, personality, and image habits into an uncapped prompt.
-  const rawProviderPrompt = redactIdentity(reviewedOverride?.prompt || compiledDraft?.prompt || draftPrompt);
+  // When no rewrite survives the provider gets the rendered template, not the bare draft: it is the
+  // only document carrying appearance notes and the character's image habits, so dropping it made
+  // fallback pictures look like someone else. selectNoodleImageProviderPrompt caps it on a word
+  // boundary, which is what the uncapped stack of appearance, personality and habits needed.
+  const rawProviderPrompt = redactIdentity(reviewedOverride?.prompt || compiledPrompt.prompt);
   // The rewriter gets the visual intent only. It receives appearance, personality, and image habits
   // through the labelled `characterContext` block below, so handing it the rendered template too
   // sent the same three values twice and asked it to "preserve the visual facts" in a personality

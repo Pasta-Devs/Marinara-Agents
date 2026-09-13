@@ -77,6 +77,21 @@ export function createGarnishAdsStorage(db: DB) {
       return target ? this.add({ ...target, ...patch }) : null;
     },
 
+    /**
+     * Drop generated artwork from an ad and report the file that is now unreferenced.
+     *
+     * An edited builtin is stored with origin "builtin", so origin alone cannot tell a shipped
+     * image from one we generated — comparing against the base ad can. The builtin's own image is
+     * put back, so a retired builtin still renders if it is restored later.
+     */
+    async releaseGeneratedImage(adId: string): Promise<string | null> {
+      const current = (await this.listAll()).find((ad) => ad.id === adId);
+      const base = GARNISH_BASE_ADS.find((ad) => ad.id === adId);
+      if (!current?.imageUrl || current.imageUrl === base?.imageUrl) return null;
+      if (base) await this.update(adId, { imageUrl: base.imageUrl ?? null });
+      return current.imageUrl;
+    },
+
     async replaceAll(ads: GarnishAd[]): Promise<void> {
       await writeStored(ads);
     },

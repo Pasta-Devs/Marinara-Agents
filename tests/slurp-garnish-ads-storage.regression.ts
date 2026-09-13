@@ -64,6 +64,28 @@ async function main() {
     assert.equal(await find("user-1"), undefined, "removing a stored ad must delete it");
     assert.equal(await pool.update("missing", { brand: "x" }), null);
 
+    // Artwork generated for an edited builtin is ours to clean up. Origin stays "builtin" on a
+    // stored override, so the delete guard could never see it; releaseGeneratedImage reports it and
+    // puts the builtin's own image back, so a restore still renders.
+    await pool.update(builtinId, { imageUrl: "/media/garnish/builtin/generated.png" });
+    assert.equal(await pool.releaseGeneratedImage(builtinId), "/media/garnish/builtin/generated.png");
+    assert.equal((await find(builtinId))?.imageUrl, GARNISH_BASE_ADS[0].imageUrl ?? null);
+    assert.equal(await pool.releaseGeneratedImage(builtinId), null, "nothing left to release");
+    assert.equal((await find(builtinId))?.origin, "builtin", "restore semantics are untouched");
+    assert.equal(await pool.releaseGeneratedImage("missing"), null);
+
+    // The Slurp routes must scope pool lookups to the Slurp platform, or an id from another
+    // Garnish platform is editable and deletable through them.
+    const routes = (await import("node:fs")).readFileSync(
+      "packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts",
+      "utf8",
+    );
+    const patchRoute = routes.slice(routes.indexOf('app.patch("/noodler/ads/pool/:id"'));
+    assert.match(patchRoute.slice(0, 600), /ads\.pool\.listAll\(SLURP_GARNISH_PLATFORM\)/u);
+    const deleteRoute = routes.slice(routes.indexOf('app.delete("/noodler/ads/pool/:id"'));
+    assert.match(deleteRoute.slice(0, 800), /ads\.pool\.listAll\(SLURP_GARNISH_PLATFORM\)/u);
+    assert.match(deleteRoute.slice(0, 800), /await ads\.pool\.releaseGeneratedImage\(id\)/u);
+
     console.log("garnish-ads storage: ok");
   } finally {
     await rm(root, { recursive: true, force: true });

@@ -151,6 +151,48 @@ async function main() {
     assert.equal(withoutHiddenAmbientAccounts(listed, true).length, listed.length);
   }
 
+  // ── Single-row reads hide what the lists hide ───────────────────────────────
+  // Listing was filtered but id reads were not, so a hidden ambient author still resolved through
+  // a deep link and rendered on stored comments.
+  {
+    const storage = readFileSync(
+      "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
+      "utf8",
+    );
+    for (const method of ["getAccountById", "getNoodlerAccountById"]) {
+      assert.match(
+        storage,
+        new RegExp(`async ${method}\\(id: string, options: \\{ includeHidden\\?: boolean \\} = \\{\\}\\)`, "u"),
+        `${method} must take the includeHidden escape hatch`,
+      );
+    }
+    assert.equal(
+      storage.split("withoutHiddenAmbientAccount(rows[0] ? mapAccount(rows[0]) : null, options.includeHidden)").length -
+        1,
+      2,
+      "both id reads route through the shared hide filter",
+    );
+    // Guards must still see hidden rows, or a hidden ambient account could never be deleted.
+    assert.match(storage, /const existing = await this\.getNoodlerAccountById\(id, \{ includeHidden: true \}\);/u);
+
+    const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
+    assert.match(
+      routes,
+      /getAccountById\(id, \{ includeHidden: true \}\);\n\s*if \(!account \|\| !isAmbientNoodleAccount/u,
+    );
+    assert.match(routes, /getAccountById\(id, \{ includeHidden: true \}\)\)/u, "reroll reads past the hide filter");
+
+    // The dismissal is only recorded once the delete actually succeeded.
+    assert.match(
+      routes,
+      /const deleted = await noodle\.deleteNoodlerAccount\(id\);[\s\S]{0,300}?if \(deleted && target && isAmbientNoodleAccount\(target\)\)\s*\n?\s*await dismissAmbientNoodleAccount/u,
+    );
+    assert.doesNotMatch(
+      routes,
+      /await dismissAmbientNoodleAccount\(noodle, target\.entityId\);\s*\n\s*const deleted = await noodle\.deleteNoodlerAccount/u,
+    );
+  }
+
   // ── Switched off, nothing is seeded ─────────────────────────────────────────
   {
     const store = fakeStorage();
