@@ -4896,7 +4896,6 @@ function ViewerHub({
   const searchTerm = search.trim().toLowerCase();
   const { moments, feed, searchResults, discoveredCreators, suggestedCreators } = useMemo(() => {
     const searchable = (value: unknown) => (typeof value === "string" ? value.toLowerCase() : "");
-    const followedCreatorIds = new Set(scope?.viewer.settings.social.followingAccountIds ?? []);
     const creators = scope?.creators ?? [];
     // Keep a Creator's active Stories together. This makes one shelf tile a sequence rather than
     // making the next tap jump to an unrelated Creator.
@@ -4929,7 +4928,7 @@ function ViewerHub({
     return {
       moments: nextMoments,
       feed: allPosts
-        .filter(({ creator }) => tab === "all" || followedCreatorIds.has(creator.profile.id))
+        .filter(({ creator }) => tab === "all" || creator.followed)
         .filter(matchesSearch)
         .sort(newestFirst),
       searchResults: searchTerm ? allPosts.filter(matchesSearch).sort(newestFirst) : [],

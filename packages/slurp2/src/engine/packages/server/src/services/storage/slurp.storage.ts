@@ -348,6 +348,8 @@ export const slurpSettingsSchema = z.object({
   imageGenerationIncludeDescriptions: z.boolean(),
   autoPostingImagesEnabled: z.boolean(),
   allowRandomUsers: z.boolean(),
+  /** Ambient roster entity ids the user deleted; the seeder never recreates these. */
+  dismissedAmbientProfileIds: z.array(z.string()),
   allowProfessorMari: z.boolean(),
   participantSelectionMode: z.enum(["all", "random", "exact"]),
   participantMin: z.number().int().min(1).max(24),
@@ -984,6 +986,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   imageGenerationIncludeDescriptions: false,
   autoPostingImagesEnabled: false,
   allowRandomUsers: false,
+  dismissedAmbientProfileIds: [],
   allowProfessorMari: false,
   participantSelectionMode: "random",
   participantMin: 1,
@@ -2069,8 +2072,13 @@ export function createSlurpStorage(db: DB) {
     async importSlurpBackup(backup: {
       settings?: Record<string, string>;
       tables?: Record<string, unknown[]>;
+      /** Settings are replaced only on explicit opt-in, and only when the archive carries some. */
+      importSettings?: boolean;
     }): Promise<{ tables: Record<string, number>; settings: number; skipped: string[] }> {
       const skipped: string[] = [];
+      const replaceSettings =
+        backup.importSettings === true &&
+        Object.keys(backup.settings ?? {}).some((key) => key.startsWith(SLURP_SETTINGS_NAMESPACE));
       const written: Record<string, number> = {};
       const incoming = backup.tables ?? {};
       for (const name of Object.keys(incoming)) {
@@ -2092,25 +2100,27 @@ export function createSlurpStorage(db: DB) {
           for (const value of values) await tx.insert(table).values(value);
           written[name] = values.length;
         }
-        const settingsTx = createAppSettingsStorage(tx);
-        const stale = await tx
-          .select()
-          .from(appSettings)
-          .where(like(appSettings.key, `${SLURP_SETTINGS_NAMESPACE}%`));
-        for (const row of stale) await settingsTx.remove(String(row.key));
-        for (const [key, value] of Object.entries(backup.settings ?? {})) {
-          // A backup must never reach outside this package's own settings namespace.
-          if (!key.startsWith(SLURP_SETTINGS_NAMESPACE)) {
-            skipped.push(key);
-            continue;
+        if (replaceSettings) {
+          const settingsTx = createAppSettingsStorage(tx);
+          const stale = await tx
+            .select()
+            .from(appSettings)
+            .where(like(appSettings.key, `${SLURP_SETTINGS_NAMESPACE}%`));
+          for (const row of stale) await settingsTx.remove(String(row.key));
+          for (const [key, value] of Object.entries(backup.settings ?? {})) {
+            // A backup must never reach outside this package's own settings namespace.
+            if (!key.startsWith(SLURP_SETTINGS_NAMESPACE)) {
+              skipped.push(key);
+              continue;
+            }
+            await settingsTx.set(key, value);
           }
-          await settingsTx.set(key, value);
         }
         await tx._fileStore.flush();
       });
-      const settingsCount = Object.keys(backup.settings ?? {}).filter((key) =>
-        key.startsWith(SLURP_SETTINGS_NAMESPACE),
-      ).length;
+      const settingsCount = replaceSettings
+        ? Object.keys(backup.settings ?? {}).filter((key) => key.startsWith(SLURP_SETTINGS_NAMESPACE)).length
+        : 0;
       return { tables: written, settings: settingsCount, skipped };
     },
 

@@ -195,7 +195,11 @@ import {
 } from "../services/slurp/slurp-project.js";
 import { readSlurpStudioSnapshot, writeSlurpStudioSnapshot } from "../services/slurp/slurp-studio-snapshot.js";
 import { rerollAmbientNoodleProfiles } from "../services/slurp/slurp-ambient-profile-generation.service.js";
-import { ensureAmbientNoodleAccounts, isAmbientNoodleAccount } from "../services/slurp/slurp-ambient-profiles.js";
+import {
+  dismissAmbientNoodleAccount,
+  ensureAmbientNoodleAccounts,
+  isAmbientNoodleAccount,
+} from "../services/slurp/slurp-ambient-profiles.js";
 import { generateInvitedNoodlePostDraft } from "../services/slurp/slurp-invited-post-draft.service.js";
 import { isDirectlyInvitedNoodleCharacter } from "../services/slurp/slurp-invited-post-draft-access.js";
 import { tryNoodleOperation } from "../services/slurp/slurp-operation-lock.js";
@@ -684,7 +688,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     return job;
   };
 
-  const createRestoreJob = (archive: Buffer) => {
+  const createRestoreJob = (archive: Buffer, importSettings: boolean) => {
     const job = newBackupJob("restore", "Waiting for the restore worker.");
     backupJobs.set(job.id, job);
     void runExclusive(job, async () => {
@@ -745,7 +749,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       job.stage = "writing-data";
       job.state = "writing";
       job.detail = `Restoring ${job.creators} creator${job.creators === 1 ? "" : "s"} and ${job.posts} post${job.posts === 1 ? "" : "s"}.`;
-      const result = await noodle.importSlurpBackup({ settings, tables });
+      const result = await noodle.importSlurpBackup({ settings, tables, importSettings });
       job.skipped = result.skipped;
 
       job.stage = "writing-media";
@@ -808,7 +812,9 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!Buffer.isBuffer(body) || body.length === 0) {
       return reply.code(400).send({ error: "Upload a Slurp backup archive." });
     }
-    return reply.code(202).send(createRestoreJob(body));
+    // Settings stay untouched unless the user ticked "also import settings" in the restore dialog.
+    const importSettings = (req.query as { importSettings?: string } | undefined)?.importSettings === "1";
+    return reply.code(202).send(createRestoreJob(body, importSettings));
   });
 
   /**
@@ -830,6 +836,27 @@ export async function slurpRoutes(app: FastifyInstance) {
         avatarUrl: account.avatarUrl,
       })),
     };
+  });
+
+  /** Edit an ambient profile. The manual-edit flag keeps the seeder and legacy rename off it. */
+  app.patch("/ambient-profiles/:id", async (req, reply) => {
+    const parsed = z
+      .object({
+        displayName: z.string().trim().min(1).max(120),
+        handle: z.string().trim().min(1).max(36),
+        bio: z.string().max(500),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { id } = req.params as { id: string };
+    const operation = await tryNoodleOperation("identity", async () => {
+      const account = await noodle.getAccountById(id);
+      if (!account || !isAmbientNoodleAccount(account)) return null;
+      return noodle.updateAccountProfile(id, { ...parsed.data, profile: { profileManuallyEdited: true } });
+    });
+    if (!operation.acquired) return reply.code(409).send({ error: NOODLE_IDENTITY_LOCK_BUSY });
+    if (!operation.value) return reply.code(404).send({ error: "Ambient profile not found" });
+    return operation.value;
   });
 
   /**
@@ -1335,7 +1362,8 @@ export async function slurpRoutes(app: FastifyInstance) {
       noodle.listPostUnlocksForViewer(viewer.id),
     ]);
     const subscribedIds = new Set(subscriptions.map((item) => item.creatorAccountId));
-    const followedIds = new Set(viewer.settings.social.followingAccountIds ?? []);
+    // A subscriber always follows: the Following feed and every `followed` flag read this one set.
+    const followedIds = new Set([...(viewer.settings.social.followingAccountIds ?? []), ...subscribedIds]);
     const unlockedIds = new Set(unlocks.map((item) => item.postId));
     const profileById = new Map(profiles.map((profile) => [profile.id, projectNoodlerAudienceProfile(profile)]));
     const visibleAccounts = accounts.filter(
@@ -3594,6 +3622,9 @@ export async function slurpRoutes(app: FastifyInstance) {
         return { ...current, creatorConnectionIds };
       });
       try {
+        const target = await noodle.getNoodlerAccountById(id);
+        // A deleted ambient account stays deleted; the seeder skips dismissed ids.
+        if (target && isAmbientNoodleAccount(target)) await dismissAmbientNoodleAccount(noodle, target.entityId);
         const deleted = await noodle.deleteNoodlerAccount(id);
         if (deleted) removeNoodlerAccountMedia(id);
         return deleted;

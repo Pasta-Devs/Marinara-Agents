@@ -460,8 +460,8 @@ export async function downloadSlurpBackup(id: string): Promise<void> {
 }
 
 /** Upload an archive and start the restore. The reply is the job to poll, not the result. */
-export async function startSlurpRestore(archive: File | Blob): Promise<SlurpBackupJob> {
-  const response = await api.raw("/slurp2/restore/jobs", {
+export async function startSlurpRestore(archive: File | Blob, importSettings = false): Promise<SlurpBackupJob> {
+  const response = await api.raw(`/slurp2/restore/jobs${importSettings ? "?importSettings=1" : ""}`, {
     method: "POST",
     headers: { "Content-Type": "application/zip" },
     body: archive,
@@ -1390,6 +1390,20 @@ export function useRerollAmbientProfiles() {
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
         qc.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "ambient-profiles"] }),
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerEligibleAccountsRoot() }),
+      ]),
+  });
+}
+
+/** Edit an ambient profile's name, handle, and bio. */
+export function useUpdateAmbientProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string; displayName: string; handle: string; bio: string }) =>
+      api.patch<NoodleAccount>(`/slurp2/ambient-profiles/${encodeURIComponent(id)}`, body),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
+        qc.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "ambient-profiles"] }),
       ]),
   });
 }

@@ -111,7 +111,7 @@ export async function rerollAmbientNoodleProfiles(input: {
     {
       role: "system",
       content: [
-        "Create replacement identities for fake ambient users on a fictional social network called Noodle.",
+        "Create replacement identities for fake ambient users on a fictional creator platform called Slurp.",
         "Make every profile distinct from its current identity and from the other generated profiles.",
         "Profiles should feel like plausible recurring background users with varied personalities, interests, and posting styles.",
         "Create concise profile metadata only. Do not write posts or interactions.",

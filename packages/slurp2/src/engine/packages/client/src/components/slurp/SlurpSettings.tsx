@@ -31,6 +31,7 @@ import { formatClockTime, formatDateTime } from "./SlurpDateTime";
 import {
   useSlurpAmbientProfiles,
   useRerollAmbientProfiles,
+  useUpdateAmbientProfile,
   useDeleteNoodlerStageProfile,
   useSetSlurpCreatorMessaging,
   useSetSlurpCreatorPrice,
@@ -383,6 +384,7 @@ export function SlurpSettings({
   const [backupJob, setBackupJob] = useState<SlurpBackupJob | null>(null);
   const [backupPending, setBackupPending] = useState(false);
   const [restorePending, setRestorePending] = useState(false);
+  const [restoreImportSettings, setRestoreImportSettings] = useState(false);
   const restoreInputRef = useRef<HTMLInputElement | null>(null);
 
   /** Poll a job to a terminal state, surfacing each step so a long run does not look stuck. */
@@ -2433,6 +2435,23 @@ export function SlurpSettings({
                     <p className="mt-2 max-w-2xl text-xs leading-5 text-[var(--muted-foreground)]">
                       {t("ui.slurp.settings.advanced.restoreDetail")}
                     </p>
+                    <label className="mt-2 flex max-w-2xl items-start gap-2 text-xs leading-5">
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={restoreImportSettings}
+                        disabled={restorePending}
+                        onChange={(event) => setRestoreImportSettings(event.target.checked)}
+                      />
+                      <span>
+                        <span className="font-semibold">{t("ui.slurp.settings.advanced.restoreImportSettings")}</span>
+                        {restoreImportSettings && (
+                          <span className="block text-[var(--muted-foreground)]">
+                            {t("ui.slurp.settings.advanced.restoreImportSettingsWarning")}
+                          </span>
+                        )}
+                      </span>
+                    </label>
                     <input
                       ref={restoreInputRef}
                       type="file"
@@ -2444,7 +2463,7 @@ export function SlurpSettings({
                         if (!file) return;
                         if (!window.confirm(t("ui.slurp.settings.advanced.restoreConfirm"))) return;
                         setRestorePending(true);
-                        void startSlurpRestore(file)
+                        void startSlurpRestore(file, restoreImportSettings)
                           .then(async (job) => {
                             const done = await followBackupJob(job);
                             toast.success(
@@ -3491,8 +3510,13 @@ function AmbientProfilesPanel({
   const { t } = useTranslation();
   const profilesQuery = useSlurpAmbientProfiles();
   const reroll = useRerollAmbientProfiles();
+  const update = useUpdateAmbientProfile();
+  const remove = useDeleteNoodlerStageProfile();
   const profiles = profilesQuery.data?.items ?? [];
   const [selected, setSelected] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ id: string; displayName: string; handle: string; bio: string } | null>(
+    null,
+  );
 
   const rerollIds = (accountIds: string[], id: string | null) => {
     if (accountIds.length === 0) return;
@@ -3534,28 +3558,101 @@ function AmbientProfilesPanel({
       />
       {profiles.length > 0 && (
         <ul className="space-y-2">
-          {profiles.map((profile) => (
-            <li
-              key={profile.id}
-              className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] p-3"
-            >
-              <span className="flex min-w-0 flex-col">
-                <span className="truncate text-xs font-semibold">
-                  {profile.displayName} <span className="text-[var(--slurp-muted)]">@{profile.handle}</span>
-                </span>
-                <span className="truncate text-[0.7rem] text-[var(--slurp-muted)]">{profile.bio}</span>
-              </span>
-              <button
-                type="button"
-                disabled={reroll.isPending}
-                onClick={() => rerollIds([profile.id], profile.id)}
-                className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[var(--border)] px-2.5 text-[0.7rem] font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+          {profiles.map((profile) =>
+            editing?.id === profile.id ? (
+              <li key={profile.id} className="space-y-2 rounded-lg border border-[var(--border)] p-3">
+                {(["displayName", "handle", "bio"] as const).map((field) => (
+                  <label key={field} className="block text-[0.7rem] font-semibold">
+                    {t(`ui.slurp.settings.ambient.fields.${field}`)}
+                    <input
+                      value={editing[field]}
+                      onChange={(event) => setEditing({ ...editing, [field]: event.target.value })}
+                      className="mt-1 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+                    />
+                  </label>
+                ))}
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditing(null)}
+                    className="inline-flex min-h-9 items-center rounded-lg border border-[var(--border)] px-2.5 text-[0.7rem] font-semibold hover:bg-[var(--accent)]"
+                  >
+                    {t("ui.slurp.settings.ambient.cancel")}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={update.isPending || !editing.displayName.trim() || !editing.handle.trim()}
+                    onClick={() =>
+                      update.mutate(editing, {
+                        onSuccess: () => setEditing(null),
+                        onError: (error) => toast.error(errorMessage(error)),
+                      })
+                    }
+                    className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[var(--noodle-accent)] px-2.5 text-[0.7rem] font-bold text-zinc-950 disabled:opacity-50"
+                  >
+                    <Save size={12} />
+                    {t("ui.slurp.settings.ambient.save")}
+                  </button>
+                </div>
+              </li>
+            ) : (
+              <li
+                key={profile.id}
+                className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] p-3"
               >
-                <RefreshCw size={12} className={selected === profile.id ? "animate-spin" : ""} />
-                {t("ui.slurp.settings.ambient.reroll")}
-              </button>
-            </li>
-          ))}
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate text-xs font-semibold">
+                    {profile.displayName} <span className="text-[var(--slurp-muted)]">@{profile.handle}</span>
+                  </span>
+                  <span className="truncate text-[0.7rem] text-[var(--slurp-muted)]">{profile.bio}</span>
+                </span>
+                <span className="flex shrink-0 gap-1.5">
+                  <button
+                    type="button"
+                    disabled={reroll.isPending}
+                    onClick={() => rerollIds([profile.id], profile.id)}
+                    className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[var(--border)] px-2.5 text-[0.7rem] font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+                  >
+                    <RefreshCw size={12} className={selected === profile.id ? "animate-spin" : ""} />
+                    {t("ui.slurp.settings.ambient.reroll")}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={t("ui.slurp.settings.ambient.edit")}
+                    title={t("ui.slurp.settings.ambient.edit")}
+                    onClick={() =>
+                      setEditing({
+                        id: profile.id,
+                        displayName: profile.displayName,
+                        handle: profile.handle,
+                        bio: profile.bio,
+                      })
+                    }
+                    className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg border border-[var(--border)] hover:bg-[var(--accent)]"
+                  >
+                    <Pencil size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={t("ui.slurp.settings.ambient.delete")}
+                    title={t("ui.slurp.settings.ambient.delete")}
+                    disabled={remove.isPending}
+                    onClick={() => {
+                      if (!window.confirm(t("ui.slurp.settings.ambient.deleteConfirm", { name: profile.displayName })))
+                        return;
+                      remove.mutate(profile.id, {
+                        onSuccess: () => void profilesQuery.refetch(),
+                        onError: (error) => toast.error(errorMessage(error)),
+                      });
+                    }}
+                    className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg border border-[var(--border)] hover:bg-[var(--accent)] disabled:opacity-50"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </span>
+              </li>
+            ),
+          )}
         </ul>
       )}
     </div>
