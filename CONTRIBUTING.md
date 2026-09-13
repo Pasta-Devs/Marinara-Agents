@@ -173,6 +173,8 @@ For a translation, copy the package's English catalog to a BCP 47 locale filenam
 
 These package-adjacent metadata catalogs do not localize executable package interfaces by themselves. Package-owned interfaces keep their own UI catalogs, such as Long-Term Memory's `src/engine/.../locales/en.json`. Loading localized package metadata in **Agents → Download Agents** remains Engine-owned integration work; do not extend the strict Engine manifest or catalog schema from this repository alone.
 
+Noodle and Memory Nag UI translations remain partial, but `scripts/package-ui-translation-baseline.json` records the keys already shipped in each translated catalog. Localization validation names any removed locale/key, including a removal disguised by adding another translation. Add newly reviewed translations to this baseline before release. An intentional key rename or removal must update its baseline in the same PR and explain why the translation is no longer needed; do not lower coverage merely to pass validation.
+
 Also manually install or update affected packages through **Agents → Download Agents** in a compatible Marinara Engine checkout. Verify the supported chat modes, restart behavior, uninstall cleanup, and an offline restart when relevant. Describe exactly what was tested in the PR; do not tick checklist items that were not personally verified.
 
 ## Pull Request Expectations

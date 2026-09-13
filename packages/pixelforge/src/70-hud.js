@@ -2672,6 +2672,7 @@ PF.Hud = class {
     // job is a sentence true on every one of those arms. In the memo key for the
     // same reason `gateWhy` is: a stage that changed without the state changing
     // would leave the wrong sentence up.
+    const gateDetail = gate ? PF.save.gate.failureDetail : null;
     const gateStage = gate ? (PF.save.gate.stage ?? "brief") : null;
     // WHETHER THIS GATE IS A POST-START ONE (0.16 §2.10d). In the memo key for
     // exactly the reason `gateWhy` and `gateStage` are: it decides both the note
@@ -2707,6 +2708,7 @@ PF.Hud = class {
       spatialAvail !== this._spatialAvail ||
       gate !== this._gate ||
       gateWhy !== this._gateWhy ||
+      gateDetail !== this._gateDetail ||
       gateStage !== this._gateStage ||
       gatePost !== this._gatePost ||
       gateCascade !== this._gateCascade ||
@@ -2717,6 +2719,7 @@ PF.Hud = class {
       this._spatialAvail = spatialAvail;
       this._gate = gate;
       this._gateWhy = gateWhy;
+      this._gateDetail = gateDetail;
       this._gateStage = gateStage;
       this._gatePost = gatePost;
       this._gateCascade = gateCascade;
@@ -2732,7 +2735,15 @@ PF.Hud = class {
       // editing branches rather than adding a row, and the strings the player
       // reads were the part nothing watched.
       this.gateTitle.textContent = PF.save.gateTitle(gateStage, gate, gateName);
-      this.gateBody.textContent = PF.save.gateBody(gateStage, gate, gateWhy, gatePost, gateCascade, gateName);
+      this.gateBody.textContent = PF.save.gateBody(
+        gateStage,
+        gate,
+        gateWhy,
+        gatePost,
+        gateCascade,
+        gateName,
+        gateDetail,
+      );
       this.topbar.style.display = gate ? "none" : "";
       // Replay: the host owns the whole screen. Combat: keep a minimal HUD —
       // the mode is inferred from the narrative gameActiveState, which can flip

@@ -31,6 +31,6 @@
     "test:noodle:regressions": "sh -c 'for test in tests/noodle*.regression.ts tests/noodler-*.regression.ts tests/slurp-*.regression.ts tests/slurp2-*.regression.ts; do tsx \"$test\" || exit 1; done'",
     "test:noodle:quality": "node scripts/evaluate-noodle-generation.mjs tests/fixtures/noodle-generation-quality.samples.json",
     "test:security": "node scripts/tests/catalog-path-safety.regression.mjs && tsx tests/long-term-memory-index-keys.regression.ts",
-    "typecheck:packages": "node scripts/typecheck-packages.mjs slurp slurp2"
+    "typecheck:packages": "node scripts/typecheck-packages.mjs noodle slurp slurp2 long-term-memory memory-nag"
   }
 }

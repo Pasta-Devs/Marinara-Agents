@@ -12,7 +12,7 @@ import { logDebugOverride } from "../../lib/logger.js";
 import { resolveBaseUrl } from "../generation/connection-base-url.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
 import { resolveStoredChatOptions } from "../generation/generation-parameters.js";
-import { noodleImageContext } from "./slurp-image-prompt.js";
+import { prepareSlurpPostImageContexts } from "./slurp-post-image-context.js";
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { parseGameJsonish } from "../game/jsonish.js";
 import { requireModelAnswer } from "./slurp-model-answer.js";
@@ -61,6 +61,7 @@ export function buildNoodlerCreatorReplyMessages(input: {
   publicIdentity: PublicIdentity | null;
   generationGuidance: string;
   scheduleContext?: string;
+  imageContext?: string;
   /**
    * What this viewer is to this Creator.
    *
@@ -111,8 +112,7 @@ export function buildNoodlerCreatorReplyMessages(input: {
     post: {
       title: protect(input.post.title),
       content: protect(input.post.content),
-      // The picture the creator is replying about. Without it every reply talks past the image.
-      ...(noodleImageContext(input.post) && { image: noodleImageContext(input.post) }),
+      image: protect(input.imageContext) || undefined,
     },
     viewer: {
       displayName: protect(input.viewer.displayName),
@@ -146,6 +146,8 @@ export async function generateNoodlerCreatorReply(input: {
   post: NoodlerManagedPost;
   parent: NoodleInteraction;
   connection: GenerationConnection;
+  /** Only the player reply operation may opt in after its viewer access claim succeeds. */
+  allowLockedImageContext?: boolean;
   debugMode?: boolean;
 }): Promise<{ content: string; moodShift: SlurpMoodShift }> {
   const connections = createConnectionsStorage(input.db);
@@ -179,6 +181,13 @@ export async function generateNoodlerCreatorReply(input: {
   // both of which were already recorded and never reached this prompt.
   const relationship = await describeCommenterRelationship(input.db, input.creator.id, input.viewer.id);
   const creatorCondition = await describeSlurpPostCondition(input.db, input.creator.id);
+  const imageContexts = await prepareSlurpPostImageContexts({
+    posts: [input.post],
+    mode: settings.imageContextMode,
+    captioning: { enabled: true, connectionId: input.connection.id, connection: input.connection, provider },
+    allowLocked: input.allowLockedImageContext === true,
+    debugMode: input.debugMode,
+  });
   const messages = buildNoodlerCreatorReplyMessages({
     ...input,
     disclosureMode,
@@ -188,6 +197,7 @@ export async function generateNoodlerCreatorReply(input: {
     characterCanon,
     relationship,
     creatorCondition,
+    imageContext: imageContexts.get(input.post.id),
   });
   const debugMode = input.debugMode === true || isDebugAgentsEnabled();
   const options = {

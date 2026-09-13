@@ -286,7 +286,7 @@ async function removeOwnedSourceSnapshots(excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.2.22",
+    version: "1.2.23",
     minEngineVersion: "2.4.4",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
@@ -342,7 +342,7 @@ const features = [
   },
   {
     id: "slurp",
-    version: "1.50.1",
+    version: "1.51.0",
     minEngineVersion: "2.4.3",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp Legacy",
@@ -399,7 +399,7 @@ const features = [
   },
   {
     id: "slurp2",
-    version: "0.0.5",
+    version: "0.0.6",
     minEngineVersion: "2.4.5",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp Remastered",
@@ -459,7 +459,7 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.2.27",
+    version: "1.3.0",
     minEngineVersion: "2.4.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
@@ -484,7 +484,7 @@ const features = [
   },
   {
     id: "memory-nag",
-    version: "1.1.1",
+    version: "1.1.2",
     minEngineVersion: "2.4.4",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Memory Nag",
@@ -556,7 +556,7 @@ const features = [
   {
     id: "conversation-calls",
     name: "Calls",
-    version: "1.0.14",
+    version: "1.0.15",
     minEngineVersion: "2.4.1",
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],

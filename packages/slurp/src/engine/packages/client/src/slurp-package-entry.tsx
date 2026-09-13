@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Toaster } from "sonner";
 import i18next from "i18next";
 import { I18nextProvider, initReactI18next } from "react-i18next";
 import english from "./localization/locales/en.json";
@@ -94,6 +95,7 @@ function SlurpPackageRoot({ element }: { element: CapabilityElement }) {
           <div className="h-full min-h-0 overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
             <SlurpHome navigation={navigation} onNavigate={setNavigation} />
             <AppDialogRenderer />
+            <Toaster richColors />
           </div>
         </ModalPortalContext.Provider>
       </QueryClientProvider>

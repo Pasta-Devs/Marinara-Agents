@@ -3695,3 +3695,10 @@
     cursor: pointer;
     text-decoration: underline;
 }
+
+/* Keep keyboard focus distinct from damage, wounds, and lock decoration. */
+.bh-slot-card[role="button"]:focus-visible {
+    outline: 2px solid var(--bh-accent, currentColor);
+    outline-offset: 2px;
+    opacity: 1;
+}

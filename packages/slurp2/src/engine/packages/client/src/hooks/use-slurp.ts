@@ -6,6 +6,7 @@ import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { api } from "../lib/api-client";
+import { refreshSlurpCreatorBatch } from "../lib/slurp-refresh-batch";
 import { useSlurpUIStore } from "../stores/slurp-package.store";
 import type {
   NoodleAccount,
@@ -330,6 +331,7 @@ export type SlurpSettings = {
   autoPostGenerationMode: "pre_generate" | "on_demand";
   fanActivityEnabled: boolean;
   generationConnectionId: string | null;
+  imageContextMode: "auto" | "imagePrompt" | "vision";
   imageGenerationConnectionId: string | null;
   imageGenerationPrompt: string;
   imagePromptInterpretation: string;
@@ -2072,13 +2074,19 @@ export function useRunNoodlerAutoPostNow() {
   });
 }
 
-export function useRefreshTargetedNoodlerCreatorsNow() {
+export function useRefreshTargetedNoodlerCreatorsNow(onRemaining?: (remaining: number) => void) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: { accountIds: string[]; executionId?: string; access?: "public" | "locked" }) =>
-      api.post<{ outcomes: NoodlerRefreshNowOutcome[] }>("/slurp2/noodler/auto-post/refresh-targeted", {
-        ...input,
-      }),
+      refreshSlurpCreatorBatch(
+        input.accountIds,
+        (accountId) =>
+          api.post<{ outcomes: NoodlerRefreshNowOutcome[] }>("/slurp2/noodler/auto-post/refresh-targeted", {
+            ...input,
+            accountIds: [accountId],
+          }),
+        onRemaining,
+      ),
     onSuccess: () =>
       Promise.all([
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),

@@ -1340,7 +1340,6 @@ export function useNoodlePostCardController(options: NoodlePostCardControllerOpt
   const cancelEditingPost = () => {
     setEditingPostId(null);
     setEditingPostContent("");
-    setEditingPostTitle("");
     setEditingPostPoll(null);
     imageEditor.reset();
   };
@@ -1368,7 +1367,6 @@ export function useNoodlePostCardController(options: NoodlePostCardControllerOpt
   const startEditingPost = (post: NoodlePostCardModel) => {
     setPostMenuId(null);
     setEditingPostId(post.id);
-    setEditingPostTitle(post.title ?? "");
     setEditingPostContent(post.content);
     const poll = readNoodlePollFromMetadata(post.metadata);
     setEditingPostPoll(

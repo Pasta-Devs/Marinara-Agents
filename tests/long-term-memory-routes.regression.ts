@@ -375,6 +375,9 @@ async function main(routeScenario: RouteScenario) {
             },
           },
           resources: {
+            async listLorebooks() {
+              return [];
+            },
             async listCharacters() {
               return [
                 {
@@ -2725,6 +2728,47 @@ async function main(routeScenario: RouteScenario) {
         preview.json().samples.some((sample: any) => sample.sourceId === "game-a:game-session-1"),
         true,
       );
+      const firstSourcePage = await app.inject({
+        method: "POST",
+        url: "/api/long-term-memory/import/preview",
+        headers,
+        payload: { source: "chats", limit: 1 },
+      });
+      assert.equal(firstSourcePage.statusCode, 200, firstSourcePage.body);
+      assert.equal(firstSourcePage.json().hasMore, true);
+      const sourceCursor = firstSourcePage.json().nextCursor;
+      const nextSourcePage = await app.inject({
+        method: "POST",
+        url: "/api/long-term-memory/import/preview",
+        headers,
+        payload: { source: "chats", limit: 1, cursor: sourceCursor, query: "  " },
+      });
+      assert.equal(nextSourcePage.statusCode, 200, nextSourcePage.body);
+      assert.notEqual(nextSourcePage.json().samples[0].sourceId, firstSourcePage.json().samples[0].sourceId);
+      for (const payload of [
+        { source: "chats", cursor: "malformed-cursor" },
+        { source: "characters", cursor: sourceCursor },
+        { source: "chats", cursor: sourceCursor, query: "different search" },
+        { source: "chats", cursor: sourceCursor, mode: "roleplay" },
+        { source: "chats", cursor: sourceCursor, sourceScope: { chatId: "chat-a" } },
+      ]) {
+        const invalidPage = await app.inject({
+          method: "POST",
+          url: "/api/long-term-memory/import/preview",
+          headers,
+          payload,
+        });
+        assert.equal(invalidPage.statusCode, 400, invalidPage.body);
+        assert.equal(invalidPage.json().code, "ltm_invalid_source_cursor");
+      }
+      const invalidLoreCursor = await app.inject({
+        method: "POST",
+        url: "/api/long-term-memory/import/lorebooks/preview",
+        headers,
+        payload: { cursor: "malformed-cursor" },
+      });
+      assert.equal(invalidLoreCursor.statusCode, 400, invalidLoreCursor.body);
+      assert.equal(invalidLoreCursor.json().code, "ltm_invalid_source_cursor");
       const excludedByChatIds = await app.inject({
         method: "POST",
         url: "/api/long-term-memory/import/preview",

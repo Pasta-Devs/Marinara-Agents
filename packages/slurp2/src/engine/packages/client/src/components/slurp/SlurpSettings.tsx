@@ -338,6 +338,7 @@ export function SlurpSettings({
   const [imagePromptEditorOpen, setImagePromptEditorOpen] = useState(false);
   const [refreshModalOpen, setRefreshModalOpen] = useState(false);
   const [refreshAccountIds, setRefreshAccountIds] = useState<Set<string>>(new Set());
+  const [refreshRemaining, setRefreshRemaining] = useState(0);
   const [refreshAccess, setRefreshAccess] = useState<"public" | "locked">("locked");
   const [scheduleCreatorId, setScheduleCreatorId] = useState<string | null>(null);
   const [selectedCreatorId, setSelectedCreatorId] = useState<string | null>(null);
@@ -374,7 +375,7 @@ export function SlurpSettings({
   const updateScheduleSlot = useUpdateNoodlerScheduleSlot();
   const refreshConversationSchedule = useRefreshNoodlerConversationSchedule();
   const refreshFans = useRefreshNoodlerFanActivityNow();
-  const refreshCreators = useRefreshTargetedNoodlerCreatorsNow();
+  const refreshCreators = useRefreshTargetedNoodlerCreatorsNow(setRefreshRemaining);
   const updateImages = useUpdateSlurpImageConnections();
   const deleteCreator = useDeleteNoodlerStageProfile();
   const setCreatorMessaging = useSetSlurpCreatorMessaging();
@@ -934,6 +935,23 @@ export function SlurpSettings({
                     title={t("ui.slurp.settings.images.title")}
                     detail={t("ui.slurp.settings.images.detail")}
                   />
+                  <Field
+                    label={t("ui.slurp.settings.images.contextMode")}
+                    detail={t("ui.slurp.settings.images.contextModeDetail")}
+                  >
+                    <select
+                      value={settings.imageContextMode}
+                      disabled={updateSettings.isPending}
+                      onChange={(event) =>
+                        void update("imageContextMode", event.target.value as SlurpSettings["imageContextMode"])
+                      }
+                      className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                    >
+                      <option value="auto">{t("ui.slurp.settings.images.contextAuto")}</option>
+                      <option value="imagePrompt">{t("ui.slurp.settings.images.contextPrompt")}</option>
+                      <option value="vision">{t("ui.slurp.settings.images.contextVision")}</option>
+                    </select>
+                  </Field>
                   <div
                     className={`flex items-start gap-3 rounded-xl p-4 ring-1 ring-inset ${imagesReady ? "bg-[color-mix(in_srgb,var(--slurp-success)_8%,var(--slurp-surface-raised))] ring-[var(--slurp-success)]/25" : "bg-[color-mix(in_srgb,var(--slurp-warning)_8%,var(--slurp-surface-raised))] ring-[var(--slurp-warning)]/25"}`}
                   >
@@ -2850,6 +2868,7 @@ export function SlurpSettings({
                 <button
                   type="button"
                   onClick={() => setRefreshAccountIds(new Set(automationCreators.map((creator) => creator.id)))}
+                  disabled={refreshCreators.isPending}
                   className="text-[var(--noodle-accent)] hover:underline"
                 >
                   {t("ui.slurp.settings.refresh.selectAll")}
@@ -2857,6 +2876,7 @@ export function SlurpSettings({
                 <button
                   type="button"
                   onClick={() => setRefreshAccountIds(new Set())}
+                  disabled={refreshCreators.isPending}
                   className="text-[var(--muted-foreground)] hover:underline"
                 >
                   {t("ui.slurp.settings.refresh.clear")}
@@ -2872,6 +2892,7 @@ export function SlurpSettings({
                   <input
                     type="checkbox"
                     checked={refreshAccountIds.has(creator.id)}
+                    disabled={refreshCreators.isPending}
                     onChange={(event) =>
                       setRefreshAccountIds((current) => {
                         const next = new Set(current);
@@ -2904,6 +2925,7 @@ export function SlurpSettings({
                   key={access}
                   type="button"
                   aria-pressed={refreshAccess === access}
+                  disabled={refreshCreators.isPending}
                   onClick={() => setRefreshAccess(access)}
                   className={`min-h-10 rounded-lg text-sm font-semibold capitalize ${refreshAccess === access ? "bg-[var(--noodle-accent)] text-zinc-950" : "text-[var(--muted-foreground)] hover:bg-[var(--accent)]"}`}
                 >
@@ -2947,7 +2969,11 @@ export function SlurpSettings({
               className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-50"
             >
               {refreshCreators.isPending ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              {t("ui.slurp.settings.refresh.generate", { count: refreshAccountIds.size || "" })}
+              <span role={refreshCreators.isPending ? "status" : undefined}>
+                {refreshCreators.isPending
+                  ? t("ui.slurp.settings.refresh.remaining", { count: refreshRemaining })
+                  : t("ui.slurp.settings.refresh.generate", { count: refreshAccountIds.size || "" })}
+              </span>
             </button>
           </div>
         </div>

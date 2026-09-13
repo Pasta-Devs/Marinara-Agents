@@ -50,6 +50,7 @@ export async function generateAndApplyNoodlerCreatorReply(
         viewer: claim.viewer,
         post: claim.post,
         parent: claim.parent,
+        allowLockedImageContext: true,
         connection,
         debugMode: input.debugMode,
       }));

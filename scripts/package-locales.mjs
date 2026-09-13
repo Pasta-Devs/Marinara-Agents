@@ -87,3 +87,17 @@ export async function writeEnglishPackageLocale(packageRoot, manifest, agentDefi
     serializePackageLocale(buildEnglishPackageLocale(manifest, agentDefinitions)),
   );
 }
+
+/** Partial catalogs may grow independently, but shipped translations must not disappear silently. */
+export async function validateShippedUiTranslations(repoRoot) {
+  const baseline = JSON.parse(await readFile(join(repoRoot, "scripts/package-ui-translation-baseline.json"), "utf8"));
+  for (const [path, shippedKeys] of Object.entries(baseline)) {
+    const catalog = JSON.parse(await readFile(join(repoRoot, path), "utf8"));
+    const missing = shippedKeys.filter((key) => !Object.hasOwn(catalog, key));
+    if (missing.length) {
+      throw new Error(
+        `${path} lost shipped translation keys: ${missing.join(", ")}. Restore them or document an intentional baseline change.`,
+      );
+    }
+  }
+}

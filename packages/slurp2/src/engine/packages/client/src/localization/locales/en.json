@@ -2323,5 +2323,11 @@
   "ui.slurp.settings.advanced.restoreImportSettingsWarning": "Your current Slurp settings, including per-persona viewer settings, will be replaced by the ones in the backup. Legacy backups never change settings.",
   "ui.slurp.settings.advanced.restoreSuccess": "Restore complete. {{creators}} creators and {{posts}} posts.",
   "ui.slurp.settings.advanced.restoreSkipped_one": "{{count}} archive entry was skipped.",
-  "ui.slurp.settings.advanced.restoreSkipped_other": "{{count}} archive entries were skipped."
+  "ui.slurp.settings.advanced.restoreSkipped_other": "{{count}} archive entries were skipped.",
+  "ui.slurp.settings.refresh.remaining": "{{count}} remaining",
+  "ui.slurp.settings.images.contextMode": "Image context for reactions",
+  "ui.slurp.settings.images.contextModeDetail": "Fans and creator replies can use stored image prompts or descriptions from the Creator text connection. Auto prefers the stored prompt and uses vision for other images. Vision requires an image-capable model. Locked images stay hidden from public fan reactions.",
+  "ui.slurp.settings.images.contextAuto": "Auto: prompt, then vision",
+  "ui.slurp.settings.images.contextPrompt": "Stored image prompt only",
+  "ui.slurp.settings.images.contextVision": "Vision description"
 }

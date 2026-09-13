@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -112,7 +112,15 @@ async function main() {
   } = await import(`${source}/rejected-suggestions.ts`);
 
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-storage-"));
-  const logger = { debug() {}, info() {}, warn() {}, error() {} };
+  const warnings: unknown[][] = [];
+  const logger = {
+    debug() {},
+    info() {},
+    warn(...args: unknown[]) {
+      warnings.push(args);
+    },
+    error() {},
+  };
   const releaseHost = configurePackageRuntime({ dataDir, logger });
   const root = join(dataDir, "long-term-memory");
   const freshRoot = join(dataDir, "fresh-long-term-memory");
@@ -320,6 +328,32 @@ async function main() {
         await readFile(dirs.eventLog, "utf8"),
         `malformed event\n${JSON.stringify({ ts: "2026-07-17T00:00:00.000Z", type: "new.event" })}\n`,
       );
+
+      const activityBackup = `${dirs.activityIndex}.retention-proof`;
+      await rename(dirs.activityIndex, activityBackup);
+      await writeFile(dirs.activityIndex, "unavailable derived index");
+      try {
+        const previousWarnings = warnings.length;
+        const recoverable = await runLongTermMemoryRetention({
+          root,
+          now: new Date("2026-07-18T00:00:00Z"),
+          force: true,
+        });
+        assert.equal(recoverable.eventsRemoved, 0);
+        assert.ok(
+          warnings
+            .slice(previousWarnings)
+            .some(
+              (args) =>
+                args[1] instanceof Error && args[0] === "[ltm] Deferred activity index pruning during retention",
+            ),
+          "a failed derived-index prune logs a recoverable warning rather than a missing-logger exception",
+        );
+        assert.equal((await new LongTermMemoryStorage(root).getNote(noteInput.id))?.id, noteInput.id);
+      } finally {
+        await rm(dirs.activityIndex, { force: true });
+        await rename(activityBackup, dirs.activityIndex);
+      }
 
       const exported = await exportLongTermMemoryData(root);
       assert.equal(exported.format, "marinara-long-term-memory");

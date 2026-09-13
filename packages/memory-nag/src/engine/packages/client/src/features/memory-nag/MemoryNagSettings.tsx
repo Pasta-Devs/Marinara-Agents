@@ -196,10 +196,11 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
     setProgress(null);
     let created = 0;
     let resolved = 0;
+    let scanId: string | undefined;
     let previousProgress: Pick<MemoryNagScanProgress, "checkpointMessageId" | "processed"> | null = null;
     try {
       await saveSettings();
-      let range: { startMessageId: string; endMessageId: string; afterMessageId?: string } | undefined;
+      let range: { startMessageId: string; endMessageId: string; afterMessageId?: string; scanId?: string } | undefined;
       if (scanScope === "range") {
         const start = Number(rangeStart);
         const end = Number(rangeEnd);
@@ -219,6 +220,14 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
           throw new Error(t("memoryNag.settings.rangeInvalid", { count: messageIds.length }));
         }
         range = { startMessageId: messageIds[start - 1], endMessageId: messageIds[end - 1] };
+        const session = await memoryNagRequest<{ scanId: string }>(
+          `/scan/${encodeURIComponent(chatId)}/range`,
+          "POST",
+          range,
+          controller.signal,
+        );
+        scanId = session.scanId;
+        range.scanId = scanId;
       }
       while (!controller.signal.aborted) {
         const next = await memoryNagRequest<MemoryNagScanProgress>(
@@ -248,6 +257,14 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
     } catch (error) {
       if (!controller.signal.aborted) setScanMessage(error instanceof Error ? error.message : String(error));
     } finally {
+      if (scanId) {
+        await memoryNagRequest(
+          `/scan/${encodeURIComponent(chatId)}/range/${encodeURIComponent(scanId)}`,
+          "DELETE",
+          undefined,
+          AbortSignal.timeout(5_000),
+        ).catch(() => undefined);
+      }
       if (scanController.current === controller) scanController.current = null;
       setScanning(false);
     }

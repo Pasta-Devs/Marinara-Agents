@@ -8,7 +8,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createPortal } from "react-dom";
 import {
   BookOpen,
@@ -42,7 +42,15 @@ import type {
   LtmExtractSourceNoteResponse,
   LtmGlobalSettings,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { invalidateLtmQueries, ltmScopeTargetsKey, queryKeys, request } from "./api";
+import {
+  invalidateLtmQueries,
+  fetchSourceDetails,
+  ltmScopeTargetsKey,
+  mergeSourcePreviewPages,
+  mergeLorebookPreviewPages,
+  queryKeys,
+  request,
+} from "./api";
 import { Button, ClickSurface, IconButton, InfoPopover, StatusSurface, inputClass } from "./shared-controls";
 import { humanizeLabel, labelKeys, localizedLabel, noteTypeLabel } from "./display-labels";
 import type { LongTermMemoryDestinationProps, SourceTab } from "./types";
@@ -1731,33 +1739,48 @@ export default function SourcesWorkspace({
   const sourceScope = sourceTarget?.sourceScope;
   const previewScope = source === "chats" ? sourceScope : undefined;
   const effectiveImportScope = `${sourceTargetId}:${[...selectedDestinationTargetIds].sort().join(",")}`;
-  const preview = useQuery({
-    queryKey: [...queryKeys.preview, source, previewScope, modeFilter, sourceQuery],
-    queryFn: () =>
+  const preview = useInfiniteQuery({
+    queryKey: [...queryKeys.preview, "pages", source, previewScope, modeFilter, sourceQuery],
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    queryFn: ({ pageParam, signal }) =>
       request<
         LtmInteropPreviewResponse,
-        { source: Source; limit: number; sourceScope?: LtmScope; mode?: LtmMode; query?: string }
-      >("/import/preview", "POST", {
-        source,
-        limit: 100,
-        ...(previewScope ? { sourceScope: previewScope } : {}),
-        ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
-        ...(sourceQuery.trim() ? { query: sourceQuery } : {}),
-      }),
-    enabled: sourceContextMatchesProps && sourceTargetResolved && source !== "lorebooks",
-  });
-  const lorebookPreview = useQuery({
-    queryKey: [...queryKeys.lorebookPreview, previewScope, modeFilter, sourceQuery],
-    queryFn: () =>
-      request<LtmLorebookPreviewResponse, { limit: number; sourceScope?: LtmScope; mode?: LtmMode; query?: string }>(
-        "/import/lorebooks/preview",
+        { source: Source; limit: number; sourceScope?: LtmScope; mode?: LtmMode; query?: string; cursor?: string }
+      >(
+        "/import/preview",
         "POST",
         {
+          source,
           limit: 100,
+          ...(pageParam ? { cursor: pageParam } : {}),
           ...(previewScope ? { sourceScope: previewScope } : {}),
           ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
           ...(sourceQuery.trim() ? { query: sourceQuery } : {}),
         },
+        signal,
+      ),
+    enabled: sourceContextMatchesProps && sourceTargetResolved && source !== "lorebooks",
+  });
+  const lorebookPreview = useInfiniteQuery({
+    queryKey: [...queryKeys.lorebookPreview, "pages", previewScope, modeFilter, sourceQuery],
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    queryFn: ({ pageParam, signal }) =>
+      request<
+        LtmLorebookPreviewResponse,
+        { limit: number; sourceScope?: LtmScope; mode?: LtmMode; query?: string; cursor?: string }
+      >(
+        "/import/lorebooks/preview",
+        "POST",
+        {
+          limit: 100,
+          ...(pageParam ? { cursor: pageParam } : {}),
+          ...(previewScope ? { sourceScope: previewScope } : {}),
+          ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
+          ...(sourceQuery.trim() ? { query: sourceQuery } : {}),
+        },
+        signal,
       ),
     enabled: sourceContextMatchesProps && sourceTargetResolved && source === "lorebooks",
   });
@@ -1781,8 +1804,13 @@ export default function SourcesWorkspace({
       source !== "lorebooks" &&
       focusedFlatSourceId !== null,
   });
-  const previewData = sourceContextMatchesProps && sourceTargetResolved ? preview.data : undefined;
-  const lorebookPreviewData = sourceContextMatchesProps && sourceTargetResolved ? lorebookPreview.data : undefined;
+  const mergedPreview = useMemo(() => mergeSourcePreviewPages(preview.data?.pages), [preview.data?.pages]);
+  const mergedLorebookPreview = useMemo(
+    () => mergeLorebookPreviewPages(lorebookPreview.data?.pages),
+    [lorebookPreview.data?.pages],
+  );
+  const previewData = sourceContextMatchesProps && sourceTargetResolved ? mergedPreview : undefined;
+  const lorebookPreviewData = sourceContextMatchesProps && sourceTargetResolved ? mergedLorebookPreview : undefined;
   const sourceDetailsData = sourceContextMatchesProps && sourceTargetResolved ? sourceDetails.data : undefined;
   const rows = [...(previewData?.samples ?? [])].sort((left, right) => {
     if (source !== "chats" || !props.chatId) return 0;
@@ -1834,19 +1862,19 @@ export default function SourcesWorkspace({
   const openLorebookSourceIds = openLorebookEntry?.candidates.map((candidate) => candidate.sourceId) ?? [];
   const lorebookDetails = useQuery({
     queryKey: [...queryKeys.lorebookPreview, "details", previewScope, modeFilter, openLorebookSourceIds],
-    queryFn: () =>
-      request<
-        LtmSourceDetailsResponse,
-        { source: Source; sourceIds: string[]; sourceScope?: LtmScope; mode?: LtmMode }
-      >("/import/source-details", "POST", {
-        source: "lorebooks",
-        sourceIds: openLorebookSourceIds,
-        ...(previewScope ? { sourceScope: previewScope } : {}),
-        ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
-      }),
+    queryFn: ({ signal }) =>
+      fetchSourceDetails(
+        {
+          source: "lorebooks",
+          sourceIds: openLorebookSourceIds,
+          ...(previewScope ? { sourceScope: previewScope } : {}),
+          ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
+        },
+        signal,
+      ),
     enabled: source === "lorebooks" && openLorebookSourceIds.length > 0,
   });
-  const allLorebooks = lorebookPreviewData?.books ?? [];
+  const allLorebooks = useMemo(() => lorebookPreviewData?.books ?? [], [lorebookPreviewData]);
   const activeLorebooks = allLorebooks.filter((book) =>
     sourceStatusFilter === "all"
       ? true
@@ -2857,10 +2885,21 @@ export default function SourcesWorkspace({
                         </Button>
                       </div>
                     </div>
-                    {lorebookPreviewData?.truncated ? (
-                      <p role="note" className="text-xs text-[var(--marinara-editor-warning)]">
-                        {localizeUi("ui.longTermMemory.sourcesworkspace.moreThan100Matches")}
-                      </p>
+                    {lorebookPreview.hasNextPage ? (
+                      <Button
+                        disabled={lorebookPreview.isFetching}
+                        onClick={() => void lorebookPreview.fetchNextPage()}
+                        data-ltm-source-action="load-more"
+                      >
+                        {lorebookPreview.isFetchingNextPage ? (
+                          <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
+                        ) : null}
+                        {localizeUi(
+                          lorebookPreview.isFetchingNextPage
+                            ? "ui.longTermMemory.sourcesworkspace.loadingMoreSources"
+                            : "ui.longTermMemory.sourcesworkspace.loadMoreSources",
+                        )}
+                      </Button>
                     ) : null}
                     <label className="relative block">
                       <Search
@@ -3319,10 +3358,21 @@ export default function SourcesWorkspace({
                         </Button>
                       </div>
                     </div>
-                    {previewData?.truncated ? (
-                      <p role="note" className="text-xs text-[var(--marinara-editor-warning)]">
-                        {localizeUi("ui.longTermMemory.sourcesworkspace.moreThan100Matches")}
-                      </p>
+                    {preview.hasNextPage ? (
+                      <Button
+                        disabled={preview.isFetching}
+                        onClick={() => void preview.fetchNextPage()}
+                        data-ltm-source-action="load-more"
+                      >
+                        {preview.isFetchingNextPage ? (
+                          <Loader2 aria-hidden="true" size="0.75rem" className="animate-spin" />
+                        ) : null}
+                        {localizeUi(
+                          preview.isFetchingNextPage
+                            ? "ui.longTermMemory.sourcesworkspace.loadingMoreSources"
+                            : "ui.longTermMemory.sourcesworkspace.loadMoreSources",
+                        )}
+                      </Button>
                     ) : null}
                     <label className="relative block">
                       <Search

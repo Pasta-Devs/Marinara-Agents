@@ -1,4 +1,4 @@
-// Pixelforge 0.16.4 — Marinara Engine game-surface Experience (single-file client bundle)
+// Pixelforge 0.16.5 — Marinara Engine game-surface Experience (single-file client bundle)
 // Built from packages/pixelforge/src (20 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -2910,10 +2910,6 @@ PF.brief = (() => {
         if (!controller.signal.aborted)
           response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
       }
-      if (response.status === 422 && response.body?.code === "context_limit") {
-        onFailure?.("context_limit");
-        return null;
-      }
       const rawOf = (r) =>
         r.status === 422 && r.body?.truncated && typeof r.body.raw === "string" ? r.body.raw : null;
       let bestRaw = rawOf(response);
@@ -2922,6 +2918,17 @@ PF.brief = (() => {
         response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
         const retryRaw = rawOf(response);
         if (retryRaw && (!bestRaw || retryRaw.length > bestRaw.length)) bestRaw = retryRaw;
+      }
+      if (response.status === 422 && response.body?.code === "context_limit") {
+        onFailure?.("context_limit", {
+          estimatedInputTokens: response.body.estimatedInputTokens,
+          inputBudget: response.body.inputBudget,
+        });
+        return null;
+      }
+      if (response.status === 413) {
+        onFailure?.("request_too_large");
+        return null;
       }
       if (
         response.status === 200 &&
@@ -16540,13 +16547,14 @@ PF.save = {
    *  refused request are the same screen but not the same sentence, and a
    *  deterministic 400 that reads as a mystery is a player pressing a button that
    *  will never work. Absent for the throw path, which has no verdict to report. */
-  _failGate(core, kind, stage) {
+  _failGate(core, kind, stage, detail) {
     if (!this.gateHolds(core)) return;
     this.gate = {
       ...this.gate,
       state: "failed",
       attempts: this.gate.attempts + 1,
       failure: typeof kind === "string" && kind ? kind : null,
+      failureDetail: detail ?? null,
       // WHICH CALL FAILED, carried onto the failure because the two are not the
       // same news. A brief-stage failure means the setting is still open; a
       // pack-stage one means it is spent and kept, and only the work posted in the
@@ -16590,7 +16598,7 @@ PF.save = {
    *  the setting is written and settled, and a screen that says the save failed
    *  beside a screen that says the world is safe is one a player has to guess
    *  at. What did not store at the pack stage is the WORK, not the world. */
-  gateReason(kind, stage) {
+  gateReason(kind, stage, detail) {
     // THE TWO STAGE-FORKED KINDS ARE THE ROW'S NOW (0.16 §2.10a). They used to
     // be ternaries here, which is a shape that costs one edit per kind per new
     // stage; the rest of the switch is genuinely cross-stage and stays shared.
@@ -16614,7 +16622,17 @@ PF.save = {
       // generic below rather than borrowing another stage's sentence.
       case "unavailable":
         return "The engine could not take the request just now — it may be busy with something else.";
+      case "request_too_large":
+        return "The selected lorebook entries make this request too large to send. Untick some entries and try again.";
       case "context_limit":
+        if (
+          Number.isFinite(detail?.estimatedInputTokens) &&
+          detail.estimatedInputTokens >= 0 &&
+          Number.isFinite(detail?.inputBudget) &&
+          detail.inputBudget >= 0
+        ) {
+          return `This request needs about ${Math.ceil(detail.estimatedInputTokens).toLocaleString()} input tokens; the connection allows ${Math.floor(detail.inputBudget).toLocaleString()}. Reduce the request or choose a connection with a larger context.`;
+        }
         return "The selected lore and world request exceed the model’s context limit. Choose fewer lorebook entries or a connection with a larger context.";
       case "network":
         return "The request did not get through.";
@@ -16722,9 +16740,10 @@ PF.save = {
    *  — what did not finish and what it costs to try again — and dropping the
    *  world's name into a sentence about a call that was refused buys nothing the
    *  title above does not already say. */
-  gateBody(stage, state, kind, postStart, cascaded, worldName) {
+  gateBody(stage, state, kind, postStart, cascaded, worldName, detail) {
     const row = this.stage(stage) ?? this.stage("brief");
-    if (state === "failed") return `${this.gateReason(kind, stage)} ${this.gateStageNote(stage, postStart, cascaded)}`;
+    if (state === "failed")
+      return `${this.gateReason(kind, stage, detail)} ${this.gateStageNote(stage, postStart, cascaded)}`;
     const named = typeof worldName === "string" ? worldName.trim() : "";
     return named ? row.screens.generating.bodyNamed(named) : row.screens.generating.body;
   },
@@ -17249,6 +17268,7 @@ PF.save = {
       // READ-SITE 1 — the call-one gate: the intended override.
       if (briefWanted || force === "brief") {
         let failure = null;
+        let failureDetail;
         sealed = await PF.brief.generate(chatId, {
           // RUNG 2, and it is passed for that reason rather than as a legacy hint:
           // `generate()`'s `theme` is exactly what reaches `validate()`'s second
@@ -17265,8 +17285,9 @@ PF.save = {
           // preferences against that field's 8,000-character cap. Empty is the
           // ordinary case and sends no key at all.
           lorebookEntryIds: this._configLoreEntryIds(meta),
-          onFailure: (kind) => {
+          onFailure: (kind, detail) => {
             failure = kind;
+            failureDetail = detail;
           },
         });
         if (!sealed) {
@@ -17277,7 +17298,7 @@ PF.save = {
           // escape on any branch: sealing a default world for a player who wrote
           // three paragraphs of setting is the outcome ruling #7 exists to forbid,
           // and a deterministic failure is the one case they could never undo.
-          if (chatId === core.chatId) this._failGate(core, failure, "brief");
+          if (chatId === core.chatId) this._failGate(core, failure, "brief", failureDetail);
           return;
         }
         // THE SEAL PATCH CARRIES THE MARKER'S COPY (plan §2.2a). One PATCH, two
@@ -17374,20 +17395,22 @@ PF.save = {
       if (wantPack) {
         this._stageGate(core, "pack");
         let failure = null;
+        let failureDetail;
         const pack = await PF.pack.generate(chatId, {
           theme,
           seed,
           brief: sealed,
           preferences,
-          onFailure: (kind) => {
+          onFailure: (kind, detail) => {
             failure = kind;
+            failureDetail = detail;
           },
         });
         if (!pack) {
           // THE WORLD IS ALREADY SAFE HERE, which is the whole difference between
           // this failure and the one above: the brief is sealed and stored, so the
           // retry screen says so and the retry costs one call, not a world.
-          if (chatId === core.chatId) this._failGate(core, failure, "pack");
+          if (chatId === core.chatId) this._failGate(core, failure, "pack", failureDetail);
           return;
         }
         const packStored = await storeWithRetry(
@@ -24917,6 +24940,7 @@ PF.Hud = class {
     // job is a sentence true on every one of those arms. In the memo key for the
     // same reason `gateWhy` is: a stage that changed without the state changing
     // would leave the wrong sentence up.
+    const gateDetail = gate ? PF.save.gate.failureDetail : null;
     const gateStage = gate ? (PF.save.gate.stage ?? "brief") : null;
     // WHETHER THIS GATE IS A POST-START ONE (0.16 §2.10d). In the memo key for
     // exactly the reason `gateWhy` and `gateStage` are: it decides both the note
@@ -24952,6 +24976,7 @@ PF.Hud = class {
       spatialAvail !== this._spatialAvail ||
       gate !== this._gate ||
       gateWhy !== this._gateWhy ||
+      gateDetail !== this._gateDetail ||
       gateStage !== this._gateStage ||
       gatePost !== this._gatePost ||
       gateCascade !== this._gateCascade ||
@@ -24962,6 +24987,7 @@ PF.Hud = class {
       this._spatialAvail = spatialAvail;
       this._gate = gate;
       this._gateWhy = gateWhy;
+      this._gateDetail = gateDetail;
       this._gateStage = gateStage;
       this._gatePost = gatePost;
       this._gateCascade = gateCascade;
@@ -24977,7 +25003,15 @@ PF.Hud = class {
       // editing branches rather than adding a row, and the strings the player
       // reads were the part nothing watched.
       this.gateTitle.textContent = PF.save.gateTitle(gateStage, gate, gateName);
-      this.gateBody.textContent = PF.save.gateBody(gateStage, gate, gateWhy, gatePost, gateCascade, gateName);
+      this.gateBody.textContent = PF.save.gateBody(
+        gateStage,
+        gate,
+        gateWhy,
+        gatePost,
+        gateCascade,
+        gateName,
+        gateDetail,
+      );
       this.topbar.style.display = gate ? "none" : "";
       // Replay: the host owns the whole screen. Combat: keep a minimal HUD —
       // the mode is inferred from the narrative gameActiveState, which can flip
@@ -25904,6 +25938,19 @@ PF.mountSetup = (el, props) => {
     // JSON STRING, which is why the list used to be a column of nanoids). That
     // parse retires WITH its reader rather than being kept warm for a list
     // nothing renders; the Engine's own character picker is where it lives now.
+    let chatMeta = {};
+    const chatId = el._pfProps?.chatId;
+    if (typeof chatId === "string" && chatId) {
+      try {
+        const chat = await PF.api.getJson(`/chats/${encodeURIComponent(chatId)}`);
+        const metadata = typeof chat?.metadata === "string" ? JSON.parse(chat.metadata) : chat?.metadata;
+        if (metadata && typeof metadata === "object" && !Array.isArray(metadata)) chatMeta = metadata;
+      } catch {
+        // Older or unavailable hosts keep the shared-library picker usable.
+      }
+    }
+    const excludedBooks = new Set(Array.isArray(chatMeta.excludedLorebookIds) ? chatMeta.excludedLorebookIds : []);
+    const entryOverrides = chatMeta.entryStateOverrides ?? {};
     try {
       const books = await PF.api.getJson("/lorebooks");
       loreBox.replaceChildren();
@@ -25914,7 +25961,7 @@ PF.mountSetup = (el, props) => {
         // offering a choice the server has already made. `parseLorebookRow` gives
         // a real boolean here; the string is accepted too, because an unparsed
         // projection is what every other row read in this file has had to survive.
-        if (book.enabled === false || book.enabled === "false") continue;
+        if (book.enabled === false || book.enabled === "false" || excludedBooks.has(book.id)) continue;
         const name = typeof book.name === "string" && book.name ? book.name : book.id;
         const noteEl = PF.el("div", { style: "font:11px/1.5 inherit;opacity:0.75;padding-left:16px;" });
         loreBooks.set(book.id, {
@@ -25971,7 +26018,13 @@ PF.mountSetup = (el, props) => {
                 // A DISABLED ENTRY IS NOT OFFERED EITHER, for the same reason its
                 // book is not: `parseEntryRow` gives a real boolean, the server
                 // refuses one anyway, and not offering it is the honest half.
-                .filter((row) => row.enabled !== false && row.enabled !== "false")
+                .filter(
+                  (row) =>
+                    row.enabled !== false &&
+                    row.enabled !== "false" &&
+                    entryOverrides[row.id]?.enabled !== false &&
+                    entryOverrides[row.id]?.enabled !== "false",
+                )
                 .sort((a, b) => {
                   const constant = (row) => (row.constant === true || row.constant === "true" ? 0 : 1);
                   if (constant(a) !== constant(b)) return constant(a) - constant(b);
