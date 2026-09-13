@@ -209,6 +209,18 @@ export function useCreateSlurpAd() {
   });
 }
 
+export function useUpdateSlurpAd() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...patch }: Partial<SlurpAdInput> & { id: string; retiredAt?: null }) =>
+      api.patch<SlurpPromotion>(`/slurp2/noodler/ads/pool/${encodeURIComponent(id)}`, patch),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: noodleKeys.adPool() });
+      void qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() });
+    },
+  });
+}
+
 export function useDeleteSlurpAd() {
   const qc = useQueryClient();
   return useMutation({

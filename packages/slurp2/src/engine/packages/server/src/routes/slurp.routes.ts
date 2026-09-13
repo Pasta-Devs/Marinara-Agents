@@ -2209,9 +2209,23 @@ export async function slurpRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const existing = (await ads.pool.listAll()).find((ad) => ad.id === id);
     await ads.pool.remove(id);
-    // Otherwise every deleted ad leaves its artwork behind on disk forever.
-    unlinkGarnishAdImage(id, existing?.imageUrl);
+    // Otherwise every deleted ad leaves its artwork behind on disk forever. Builtins are only hidden.
+    if (existing?.origin !== "builtin") unlinkGarnishAdImage(id, existing?.imageUrl);
     return { ok: true };
+  });
+
+  const garnishAdPatchSchema = garnishAdInputSchema
+    .omit({ id: true })
+    .partial()
+    .extend({ retiredAt: z.null().optional() });
+
+  app.patch("/noodler/ads/pool/:id", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const parsed = garnishAdPatchSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const updated = await ads.pool.update(id, parsed.data);
+    if (!updated) return reply.code(404).send({ error: "Not Found" });
+    return updated;
   });
 
   app.post("/noodler/ads/:id/image", async (req, reply) => {

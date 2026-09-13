@@ -243,11 +243,9 @@ export async function generateNoodlerPostImage(input: {
   // drop appearance and image habits — the exact context loss this flag exists to stop. Only a
   // human-reviewed override displaces the template.
   const reviewedOverride = input.retryStoredPrompt ? null : compiledOverride;
-  // NOODLE_IMAGE_POST documents itself as terminal — "everything this produces is sent to the image
-  // model verbatim" — and it is the only document carrying the appearance notes. It is therefore
-  // what the provider gets when no rewrite survives, rather than the bare draft, which drops
-  // appearance and the character's image habits entirely.
-  const rawProviderPrompt = redactIdentity(reviewedOverride?.prompt || compiledPrompt.prompt);
+  // When no rewrite survives the provider gets the draft, capped by selectNoodleImageProviderPrompt.
+  // The rendered template stacked appearance, personality, and image habits into an uncapped prompt.
+  const rawProviderPrompt = redactIdentity(reviewedOverride?.prompt || compiledDraft?.prompt || draftPrompt);
   // The rewriter gets the visual intent only. It receives appearance, personality, and image habits
   // through the labelled `characterContext` block below, so handing it the rendered template too
   // sent the same three values twice and asked it to "preserve the visual facts" in a personality
@@ -279,19 +277,21 @@ export async function generateNoodlerPostImage(input: {
   // A stored draft we generated ourselves is not a reviewed decision, so a retry still runs
   // interpretation. Only a prompt a human actually approved is sent through untouched.
   const skipInterpretation = Boolean(input.promptOverride) && !input.retryStoredPrompt;
-  const rewrittenPrompt =
+  const rewriteAttempted = Boolean(
     (imagePromptInstructions || characterContext || styleGuidance) &&
     input.settings.enableImageInterpretation !== false &&
-    !skipInterpretation
-      ? await rewriteNoodleImagePrompt({
-          db: input.db,
-          prompt: rawRewriteInput,
-          interpretationInstruction: input.settings.imagePromptInterpretation,
-          instructions: redactIdentity(imagePromptInstructions),
-          characterContext,
-          styleGuidance,
-        })
-      : null;
+    !skipInterpretation,
+  );
+  const rewrittenPrompt = rewriteAttempted
+    ? await rewriteNoodleImagePrompt({
+        db: input.db,
+        prompt: rawRewriteInput,
+        interpretationInstruction: input.settings.imagePromptInterpretation,
+        instructions: redactIdentity(imagePromptInstructions),
+        characterContext,
+        styleGuidance,
+      })
+    : null;
   // The style profile is an Engine setting, not something the interpretation model owns. The
   // rewrite is a text transformation, and it freely drops the style's positive tags and wording,
   // so the rewritten text is compiled again before it reaches the provider. Without this the style
@@ -310,6 +310,9 @@ export async function generateNoodlerPostImage(input: {
     selectNoodleImageProviderPrompt({
       rewrittenPrompt: compiledRewrittenPrompt?.prompt || rewrittenPrompt,
       rawPrompt: rawProviderPrompt,
+      rewriteAttempted,
+      onFallback: (reason) =>
+        logger.warn("[noodle] Image prompt rewrite unusable (%s); sending the capped draft", reason),
       // Art style and the character's image habits are meant to reach the provider, so a rewrite
       // that applies them is doing its job. Personality never belongs in a visual prompt at any
       // length; the instruction fields are guidance and only leak as a copied block.

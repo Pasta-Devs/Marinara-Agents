@@ -54,7 +54,9 @@ export function createGarnishAdsStorage(db: DB) {
       return ad;
     },
 
+    /** Builtin ads cannot be deleted, so removing one hides it instead. */
     async remove(adId: string): Promise<void> {
+      if (GARNISH_BASE_ADS.some((ad) => ad.id === adId)) return this.retire(adId);
       const stored = await readStored();
       await writeStored(stored.filter((ad) => ad.id !== adId));
     },
@@ -64,6 +66,15 @@ export function createGarnishAdsStorage(db: DB) {
       const target = all.find((ad) => ad.id === adId);
       if (!target) return;
       await this.add({ ...target, retiredAt: at });
+    },
+
+    /** Editing or restoring a builtin stores an override copy under the same id. */
+    async update(
+      adId: string,
+      patch: Partial<Omit<GarnishAd, "id" | "platform" | "origin">>,
+    ): Promise<GarnishAd | null> {
+      const target = (await this.listAll()).find((ad) => ad.id === adId);
+      return target ? this.add({ ...target, ...patch }) : null;
     },
 
     async replaceAll(ads: GarnishAd[]): Promise<void> {

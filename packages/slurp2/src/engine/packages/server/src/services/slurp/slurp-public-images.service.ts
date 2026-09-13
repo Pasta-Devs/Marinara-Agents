@@ -245,19 +245,21 @@ export async function generateNoodlePostImage(input: {
   ]
     .filter(Boolean)
     .join("\n\n");
-  const rewrittenPrompt =
+  const rewriteAttempted = Boolean(
     (imagePromptInstructions || characterContext || styleGuidance) &&
     input.settings.enableImageInterpretation !== false &&
-    !input.promptOverride
-      ? await rewriteNoodleImagePrompt({
-          db: input.db,
-          prompt: rawFinalPrompt,
-          interpretationInstruction: input.settings.imagePromptInterpretation,
-          instructions: imagePromptInstructions,
-          characterContext,
-          styleGuidance,
-        })
-      : null;
+    !input.promptOverride,
+  );
+  const rewrittenPrompt = rewriteAttempted
+    ? await rewriteNoodleImagePrompt({
+        db: input.db,
+        prompt: rawFinalPrompt,
+        interpretationInstruction: input.settings.imagePromptInterpretation,
+        instructions: imagePromptInstructions,
+        characterContext,
+        styleGuidance,
+      })
+    : null;
   // The style profile is an Engine setting, not something the interpretation model owns. The
   // rewrite is a text transformation, and it freely drops the style's positive tags and wording,
   // so the rewritten text is compiled again before it reaches the provider. Without this the style
@@ -275,6 +277,9 @@ export async function generateNoodlePostImage(input: {
   const finalPrompt = selectNoodleImageProviderPrompt({
     rewrittenPrompt: compiledRewrittenPrompt?.prompt || rewrittenPrompt,
     rawPrompt: rawProviderPrompt,
+    rewriteAttempted,
+    onFallback: (reason) =>
+      logger.warn("[noodle] Image prompt rewrite unusable (%s); sending the capped draft", reason),
     // Art style and the character's image habits are meant to reach the provider, so a rewrite
     // that applies them is doing its job. Personality never belongs in a visual prompt at any
     // length; the instruction fields are guidance and only leak as a copied block.

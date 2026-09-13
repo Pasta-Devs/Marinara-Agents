@@ -7,6 +7,31 @@ import { normalizeImageStyleProfileSettings } from "../sources/engine/packages/s
 import { selectNoodleImageProviderPrompt } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-image-prompt";
 
 const root = join(import.meta.dirname, "..");
+
+// A rewrite that could not run, or that was rejected, falls back to the draft capped at 1500 chars
+// and reports why. A deliberate skip (interpretation off, reviewed prompt) sends the draft untouched.
+{
+  const longDraft = "x".repeat(4_000);
+  const reasons: string[] = [];
+  const onFallback = (reason: string) => reasons.push(reason);
+  assert.equal(
+    selectNoodleImageProviderPrompt({ rewrittenPrompt: null, rawPrompt: longDraft, rewriteAttempted: true, onFallback })
+      .length,
+    1_500,
+  );
+  assert.equal(
+    selectNoodleImageProviderPrompt({
+      rewrittenPrompt: "Personality: guarded",
+      rawPrompt: longDraft,
+      rewriteAttempted: true,
+      onFallback,
+    }).length,
+    1_500,
+  );
+  assert.equal(reasons.length, 2);
+  assert.equal(selectNoodleImageProviderPrompt({ rewrittenPrompt: null, rawPrompt: longDraft, onFallback }), longDraft);
+  assert.equal(reasons.length, 2);
+}
 const rawPrompt = "A person reading beside a window.";
 const renderedTemplatePrompt =
   "Create a post. User image instructions: private instructions. Personality: private context.";

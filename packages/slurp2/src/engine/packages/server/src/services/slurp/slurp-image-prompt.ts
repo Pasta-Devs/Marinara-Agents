@@ -12,6 +12,9 @@ function stripCodeFence(value: string): string {
 // callers a labelled block and extend `hasInternalMarker` rather than lowering this.
 const MIN_GUIDANCE_BLOCK_LENGTH = 40;
 
+/** A fallback draft is the post's visual idea, not a context dump, so it never needs more than this. */
+export const MAX_FALLBACK_IMAGE_PROMPT_LENGTH = 1_500;
+
 /** Select only the visual prompt that can be sent to an image provider. */
 export function selectNoodleImageProviderPrompt(input: {
   rewrittenPrompt: string | null | undefined;
@@ -20,9 +23,21 @@ export function selectNoodleImageProviderPrompt(input: {
   privateContext?: ReadonlyArray<string | null | undefined>;
   /** Authored to steer the image, so only a copied block counts as a leak. */
   guidanceContext?: ReadonlyArray<string | null | undefined>;
+  /** The rewrite was expected to run, so an empty result is a fallback rather than a deliberate skip. */
+  rewriteAttempted?: boolean;
+  /** Called with the reason whenever an attempted or rejected rewrite falls back to the draft. */
+  onFallback?: (reason: string) => void;
 }): string {
+  const fallback = (reason: string) => {
+    input.onFallback?.(reason);
+    return input.rawPrompt.slice(0, MAX_FALLBACK_IMAGE_PROMPT_LENGTH);
+  };
   const rewrittenPrompt = input.rewrittenPrompt?.trim();
-  if (!rewrittenPrompt) return input.rawPrompt;
+  if (!rewrittenPrompt) {
+    return input.rewriteAttempted
+      ? fallback("the rewrite did not run or returned nothing (check the agent text connection)")
+      : input.rawPrompt;
+  }
 
   const normalizedPrompt = rewrittenPrompt.toLocaleLowerCase().replace(/\s+/gu, " ");
   const hasInternalMarker =
@@ -38,7 +53,10 @@ export function selectNoodleImageProviderPrompt(input: {
   const copiesPrivateContext = copies(input.privateContext, 2);
   const copiesGuidance = copies(input.guidanceContext, MIN_GUIDANCE_BLOCK_LENGTH);
 
-  return hasInternalMarker || copiesPrivateContext || copiesGuidance ? input.rawPrompt : rewrittenPrompt;
+  if (hasInternalMarker) return fallback("the rewrite contained an internal prompt label");
+  if (copiesPrivateContext) return fallback("the rewrite copied private character context");
+  if (copiesGuidance) return fallback("the rewrite copied an image guidance block");
+  return rewrittenPrompt;
 }
 
 /**
