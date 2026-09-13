@@ -80,6 +80,7 @@ type VideoGenerationConnection = {
   model?: string | null;
   videoGenerationSource?: string | null;
   videoService?: string | null;
+  comfyuiWorkflow?: string | null;
   defaultParameters?: string | null;
 };
 
@@ -659,12 +660,13 @@ function resolveVideoConnection(connection: VideoGenerationConnection) {
       ? videoDefaults.service
       : inferVideoSource(connection.model || "", connection.baseUrl || ""));
   const serviceHint =
-    connection.videoService ||
+    (source === "swarmui" ? "swarmui" : connection.videoService) ||
     (source === "google_ai_studio" ? inferVideoSource(connection.model || "", connection.baseUrl || "") : source);
   const isXaiVideo = source === "xai" || serviceHint === "xai";
   const isGoogleVeoVideo = source === "google_veo" || serviceHint === "google_veo";
   const isOpenRouterVideo = source === "openrouter" || serviceHint === "openrouter";
   const isSeedanceVideo = source === "seedance" || serviceHint === "seedance";
+  const isSwarmUiVideo = source === "swarmui" || serviceHint === "swarmui";
   return {
     source,
     serviceHint,
@@ -678,7 +680,9 @@ function resolveVideoConnection(connection: VideoGenerationConnection) {
             ? DEFAULT_OPENROUTER_VIDEO_BASE_URL
             : isSeedanceVideo
               ? DEFAULT_SEEDANCE_VIDEO_BASE_URL
-              : DEFAULT_GEMINI_OMNI_BASE_URL),
+              : isSwarmUiVideo
+                ? "http://127.0.0.1:7801"
+                : DEFAULT_GEMINI_OMNI_BASE_URL),
     model:
       connection.model ||
       (isXaiVideo
@@ -689,7 +693,9 @@ function resolveVideoConnection(connection: VideoGenerationConnection) {
             ? DEFAULT_OPENROUTER_VIDEO_MODEL
             : isSeedanceVideo
               ? DEFAULT_SEEDANCE_VIDEO_MODEL
-              : DEFAULT_GEMINI_OMNI_MODEL),
+              : isSwarmUiVideo
+                ? ""
+                : DEFAULT_GEMINI_OMNI_MODEL),
     resolution: isXaiVideo
       ? videoDefaults.xai.resolution
       : isGoogleVeoVideo
@@ -698,7 +704,12 @@ function resolveVideoConnection(connection: VideoGenerationConnection) {
           ? videoDefaults.openrouter.resolution
           : isSeedanceVideo
             ? videoDefaults.seedance.resolution
-            : undefined,
+            : isSwarmUiVideo
+              ? videoDefaults.comfyui.resolution
+              : undefined,
+    comfyWorkflow: connection.comfyuiWorkflow || undefined,
+    comfyLoras: isSwarmUiVideo ? videoDefaults.comfyui.loras : [],
+    comfyFps: isSwarmUiVideo ? videoDefaults.comfyui.fps : undefined,
     publicReferenceUpload: resolveVideoReferencePublicUploadOptions(isSeedanceVideo, videoDefaults.seedance),
   };
 }
@@ -814,6 +825,10 @@ async function runGenerationJob(input: {
           durationSeconds,
           aspectRatio: "16:9",
           resolution: resolved.resolution,
+          comfyWorkflow: resolved.comfyWorkflow,
+          comfyLoras: resolved.comfyLoras,
+          fps: resolved.comfyFps,
+          debugMode: input.debugMode,
           ...(reference ? { referenceImage: reference.image, lastFrameImage: reference.image } : {}),
           publicReferenceUpload: resolved.publicReferenceUpload,
           fallback: input.fallback,
@@ -943,6 +958,10 @@ async function runCustomClipGenerationJob(input: {
         durationSeconds,
         aspectRatio: "16:9",
         resolution: resolved.resolution,
+        comfyWorkflow: resolved.comfyWorkflow,
+        comfyLoras: resolved.comfyLoras,
+        fps: resolved.comfyFps,
+        debugMode: input.debugMode,
         ...(reference ? { referenceImage: reference.image, lastFrameImage: reference.image } : {}),
         publicReferenceUpload: resolved.publicReferenceUpload,
         fallback: input.fallback,
