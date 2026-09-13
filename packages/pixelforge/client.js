@@ -3136,9 +3136,10 @@ PF.brief = (() => {
       `  standing (optional, default resident): one of ${STANDING.join(" | ")}. transient = passing`,
       "  through; fringe = lives apart at the edges (hermit, outcast, refugee); destitute = no home.",
       "  Keep most people resident; a crossroads or waystation may have many transients.",
-      "- backgroundPopulation: total inhabitants including the cast (0-500). It informs the flavor and",
+      "- backgroundPopulation: how populous the place is, cast included (0-500). It informs the flavor and",
       "  situation you write, and within what a settlement of this size class can hold it also moves how",
-      "  many homes are built, up or down. It never changes the size class; 0 means the usual number of homes.",
+      "  many homes are built, up or down; the compiled town derives its head count from it rather than",
+      "  matching it exactly. It never changes the size class; 0 means the usual number of homes.",
       "",
       "Only the cast, features, and places you name will exist. Keep names in the player's language.",
       // THE LORE CLAUSE, AND IT SHIPS ONLY WHEN LORE DOES. The entries the player

@@ -296,13 +296,14 @@ response is **never stored** (checkpoints capture by value — see #5110).
      **last free lot goes to housing**. A workshop or a named place that would leave a family with
      nowhere to sleep is not built; the house is, and the merge below puts every remaining
      household under it. `dwelling lots = min(lots left, households still owed a roof)`;
-   - **over-subscription MERGES households into multi-family blocks, and NOBODY is dropped**: the
+   - **over-subscription MERGES households into multi-family blocks, and no household is dropped**: the
      households that outrun the dwelling lots are dealt round-robin across the lots there are, so a
      settlement at its limit reads as addresses holding more than one household rather than as a
      bunkhouse beside eleven single houses. There is no drop list and no kind priority order: a
      special that cannot afford a lot is simply never built (the reservation above), and no cast
      member loses a roof to make room for one. A second person whose kind runs an already-built
-     special (a second merchant, a second maker) is skipped rather than given a duplicate shop.
+     special (a second merchant, a second maker) keeps their roof but gets no duplicate shop: only
+     the building is skipped, never the person.
      **Planned:** a settlement that runs out of ground grows instead of tightening, upgraded to a
      megastructure spanning more than one chunk of map, or to a place that exists across several
      maps. Nothing of that is built and no release carries it;

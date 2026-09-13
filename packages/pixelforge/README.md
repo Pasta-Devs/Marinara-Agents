@@ -43,8 +43,9 @@ count rather than by a model, so declining no longer means a cozy village whatev
 village called Hearthvale."* — an empty Setting has no words to ask for anything else. Leave only
 the name empty and your text still picks the kit, whose own default name (*Meridian Base*, for the
 colony) fills the loading screen, the generation call and the world itself; a name you do type
-reaches all three. Type your own Setting and it is used exactly as written, all of it: however long
-it runs, the whole text reaches the GM's per-turn prompt. The length bounds left are on the two
+reaches all three. Type your own Setting and it is used as you wrote it, trimmed only of leading and
+trailing whitespace and never cut short: however long it runs, the whole text reaches the GM's
+per-turn prompt. The length bounds left are on the two
 generation calls: the world-writing call clips the preferences it sends at **7,800 characters**, and
 the work-writing call clips them against whatever the world's own digest leaves of the same budget,
 because the Engine's experience-generation route caps that field at 8,000 and refuses a longer one.

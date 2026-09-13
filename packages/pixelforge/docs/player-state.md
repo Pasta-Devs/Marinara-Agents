@@ -3499,10 +3499,10 @@ every older artifact zip is untouched.
 the widest of the line: `10-art.js`, `15-assets.js`, `17-weather.js`, `18-brief.js`, `20-world.js`,
 `25-schedule.js`, `30-sim.js`, `40-render.js`, `50-spatial.js`, `58-player.js`, `59-economy.js`,
 `60-save.js`, `80-setup.js` and `90-element.js` all move, with `test-brief.mjs` and the build script
-moving beside them and neither reaching the bundle. **`client.js` at 1,492,194 bytes** (sha256
-`1ae2fe6828362ac8b2a8ef864c3aa36584128d5f4b17f200f04e920110b8acad`), **the `0.16.6` artifact zip at
-1,505,643** (sha256 `2a6cf1a15872633396c5522ffefbb6ad9214cda1ab63f9e9fee5c994c2e32674`), both **up
-7,642 bytes** on 0.16.5's 1,484,552 and 1,498,001. The same delta in both places is what a
+moving beside them and neither reaching the bundle. **`client.js` at 1,492,291 bytes** (sha256
+`58f1e0334994b7ed89ca0251ecb6d838ac00d8c9fe0a1114b19f8bb8636d82d5`), **the `0.16.6` artifact zip at
+1,505,740** (sha256 `a2842febc5090e19e045c721a8456d6dfda39ad6cbfa743b3e4afb1b707f3550`), both **up
+7,739 bytes** on 0.16.5's 1,484,552 and 1,498,001. The same delta in both places is what a
 source-only release looks like. Art byte-unchanged, and the comparison is against `staging` itself:
 both theme tile sheets and `atlas.json` sha256-match `git show staging:<path>` exactly.
 `manifest.json` moved the **three lines** a source-only release moves (the version, and `client.js`'s
