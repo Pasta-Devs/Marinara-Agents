@@ -2,6 +2,7 @@
 
 ## 1.2.23 — 2026-09-13
 
+- Editing or cancelling a timeline post no longer fails on a removed title field. Fixed the image settings type used by release validation.
 - Applying a saved prompt asks before replacing the current prompt, including edits already saved as the active prompt.
 - Cancel works immediately in Delete All Noodle Data; only deletion requires typing DELETE.
 - A running timeline refresh blocks duplicate refresh requests instead of queuing extra generations.

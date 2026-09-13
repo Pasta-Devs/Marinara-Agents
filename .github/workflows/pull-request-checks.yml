@@ -34,6 +34,9 @@ jobs:
       - name: Check formatting and lint
         run: npm run check
 
+      - name: Check package source names
+        run: npm run typecheck:packages
+
       - name: Test package security invariants
         run: npm run test:security
 

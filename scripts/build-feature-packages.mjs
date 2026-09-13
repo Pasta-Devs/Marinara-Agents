@@ -399,7 +399,7 @@ const features = [
   },
   {
     id: "slurp2",
-    version: "0.0.5",
+    version: "0.0.6",
     minEngineVersion: "2.4.5",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp Remastered",
@@ -484,7 +484,7 @@ const features = [
   },
   {
     id: "memory-nag",
-    version: "1.1.1",
+    version: "1.1.2",
     minEngineVersion: "2.4.4",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Memory Nag",

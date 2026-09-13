@@ -204,7 +204,8 @@ export async function generateNoodlePostImage(input: {
   });
   const styleGuidance = resolveImageStyleGuidanceText(imageSettings.styleProfiles, compiledPrompt.profile.id);
   const enableImageInterpretation =
-    (input.settings as NoodleSettings & { enableImageInterpretation?: boolean }).enableImageInterpretation !== false;
+    (input.settings as PackageNoodleSettings & { enableImageInterpretation?: boolean }).enableImageInterpretation !==
+    false;
   const rawFinalPrompt = input.promptOverride?.prompt.trim() || compiledPrompt.prompt;
   const imagePromptInstructions = input.imageConnection.imagePromptInstructions?.trim();
   const instructionLine = imagePromptInstructions

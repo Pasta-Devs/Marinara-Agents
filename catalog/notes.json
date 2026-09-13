@@ -26,7 +26,7 @@
         {
           "version": "1.3.0",
           "date": "2026-09-13",
-          "notes": "- Load additional pages of chat summaries, characters, and lorebook sources without losing filters, selections, or import status.",
+          "notes": "- Load additional pages of chat summaries, characters, and lorebook sources without losing filters, selections, or import status.\n- Keep retention cleanup recoverable when activity-index pruning fails.",
           "highlight": true
         },
         {
@@ -88,6 +88,12 @@
     "memory-nag": {
       "versions": [
         {
+          "version": "1.1.2",
+          "date": "2026-09-13",
+          "notes": "Automatic scans wait while a manual message-range scan is active, avoiding duplicate model charges between batches. Finished, stopped, failed, and abandoned scans release the guard without losing checkpoint progress.",
+          "highlight": false
+        },
+        {
           "version": "1.1.1",
           "date": "2026-09-11",
           "notes": "Send the saved admin secret on plain-HTTP remote clients too, matching the Engine, so Create Memories no longer fails with an X-Admin-Secret error on LAN and Termux setups.",
@@ -106,7 +112,7 @@
         {
           "version": "1.2.23",
           "date": "2026-09-13",
-          "notes": "- Applying a saved prompt asks before replacing the current prompt, including edits already saved as the active prompt.\n- Cancel works immediately in Delete All Noodle Data; only deletion requires typing DELETE.\n- A running timeline refresh blocks duplicate refresh requests instead of queuing extra generations.\n- GLM 5.3 on NanoGPT and Z.AI keeps its required reasoning enabled when the selected effort is None.",
+          "notes": "- Editing or cancelling a timeline post no longer fails on a removed title field. Fixed the image settings type used by release validation.\n- Applying a saved prompt asks before replacing the current prompt, including edits already saved as the active prompt.\n- Cancel works immediately in Delete All Noodle Data; only deletion requires typing DELETE.\n- A running timeline refresh blocks duplicate refresh requests instead of queuing extra generations.\n- GLM 5.3 on NanoGPT and Z.AI keeps its required reasoning enabled when the selected effort is None.",
           "highlight": false
         },
         {
@@ -146,7 +152,7 @@
         {
           "version": "1.51.0",
           "date": "2026-09-13",
-          "notes": "- Fan reactions and creator replies can use stored image prompts or vision descriptions. Auto prefers the stored prompt, with vision as a fallback for uploaded images. Public fans never receive locked images, and descriptions follow the creator's identity protection.\n- The targeted creator refresh shows the remaining count as each generation finishes, including failed or skipped jobs.",
+          "notes": "- Completion and error notifications now appear inside the standalone package.\n- Fan reactions and creator replies can use stored image prompts or vision descriptions. Auto prefers the stored prompt, with vision as a fallback for uploaded images. Public fans never receive locked images, and descriptions follow the creator's identity protection.\n- The targeted creator refresh shows the remaining count as each generation finishes, including failed or skipped jobs.",
           "highlight": true
         },
         {
@@ -177,6 +183,12 @@
     },
     "slurp2": {
       "versions": [
+        {
+          "version": "0.0.6",
+          "date": "2026-09-13",
+          "notes": "- Added image context options for reactions: stored prompts, vision descriptions, or automatic selection. Public fan reactions keep locked images hidden and respect Creator identity privacy.\n- Generation now shows how many Creators remain, including skipped or failed requests.\n- Restored visible success and error notifications for Slurp actions.",
+          "highlight": false
+        },
         {
           "version": "0.0.5",
           "date": "2026-09-13",

@@ -3,6 +3,7 @@
 ## 1.3.0 — 2026-09-13
 
 - Load additional pages of chat summaries, characters, and lorebook sources without losing filters, selections, or import status.
+- Keep retention cleanup recoverable when activity-index pruning fails.
 
 ## 1.2.27 - 2026-09-12
 

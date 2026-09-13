@@ -13,6 +13,63 @@ import { readMemoryNagVault, updateMemoryNagVault } from "./vault.js";
 
 const scanQueues = new Map<string, Promise<void>>();
 const MEMORY_NAG_SCAN_MAX_TOKENS = 4096;
+const MANUAL_SCAN_IDLE_MS = 60_000;
+const manualScans = new Map<
+  string,
+  {
+    id: string;
+    startMessageId: string;
+    endMessageId: string;
+    expiresAt: number;
+  }
+>();
+
+function manualScan(chatId: string) {
+  const session = manualScans.get(chatId);
+  // ponytail: sessions only bridge client requests; an abandoned idle session
+  // expires on the next scan attempt. Durable resumable jobs are unnecessary here.
+  if (session && session.expiresAt <= Date.now()) {
+    manualScans.delete(chatId);
+    return undefined;
+  }
+  return session;
+}
+
+function scanConflict(): Error & { statusCode: number } {
+  return Object.assign(new Error("This message-range scan is no longer active, or another scan is running."), {
+    statusCode: 409,
+  });
+}
+
+export function endMemoryNagRangeScan(chatId: string, scanId: string): boolean {
+  if (manualScans.get(chatId)?.id !== scanId) return false;
+  manualScans.delete(chatId);
+  return true;
+}
+
+export async function startMemoryNagRangeScan(chatId: string, range: unknown): Promise<{ scanId: string }> {
+  return withScanLock(chatId, async () => {
+    if (manualScan(chatId)) throw scanConflict();
+    const runtime = getMemoryNagRuntime();
+    const chat = await runtime.persistence.getChat(chatId);
+    if (!chat || chat.mode !== "roleplay") throw new Error("Memory Nag is available only in Roleplay chats.");
+    const messages = (await runtime.persistence.listMessages(chatId)).filter(
+      (message) => message.role === "user" || message.role === "assistant",
+    );
+    const window = memoryNagScanWindow(messages, range);
+    if (!window || window.after !== window.start) {
+      throw Object.assign(new Error("Choose a valid message range from this chat."), { statusCode: 400 });
+    }
+    const id = randomUUID();
+    manualScans.set(chatId, {
+      id,
+      startMessageId: messages[window.start]!.id,
+      endMessageId: messages[window.end - 1]!.id,
+      expiresAt: Date.now() + MANUAL_SCAN_IDLE_MS,
+    });
+    return { scanId: id };
+  });
+}
 
 async function withScanLock<T>(chatId: string, task: () => Promise<T>): Promise<T> {
   const previous = scanQueues.get(chatId) ?? Promise.resolve();
@@ -287,13 +344,42 @@ async function scanMemoryNagBatchUnlocked(chatId: string, range?: unknown): Prom
 }
 
 export async function scanMemoryNagBatch(chatId: string, range?: unknown): Promise<MemoryNagScanProgress> {
-  return withScanLock(chatId, () => scanMemoryNagBatchUnlocked(chatId, range));
+  return withScanLock(chatId, async () => {
+    const session = manualScan(chatId);
+    const requested = range && typeof range === "object" ? (range as Record<string, unknown>) : undefined;
+    if (session || requested?.scanId !== undefined) {
+      if (
+        !session ||
+        requested?.scanId !== session.id ||
+        requested.startMessageId !== session.startMessageId ||
+        requested.endMessageId !== session.endMessageId
+      ) {
+        throw scanConflict();
+      }
+    }
+    try {
+      const result = await scanMemoryNagBatchUnlocked(chatId, range);
+      if (session && manualScans.get(chatId) === session) {
+        if (result.done) endMemoryNagRangeScan(chatId, session.id);
+        else {
+          session.expiresAt = Date.now() + MANUAL_SCAN_IDLE_MS;
+        }
+      }
+      return result;
+    } catch (error) {
+      if (session) endMemoryNagRangeScan(chatId, session.id);
+      throw error;
+    }
+  });
 }
 
 export async function scanMemoryNagIfDue(chatId: string): Promise<void> {
-  const runtime = getMemoryNagRuntime();
-  const [vault, messages] = await Promise.all([readMemoryNagVault(chatId), runtime.persistence.listMessages(chatId)]);
-  const relevant = messages.filter((message) => message.role === "user" || message.role === "assistant");
-  if (relevant.length - memoryNagScanStart(vault, relevant) < vault.settings.messagesPerBatch) return;
-  await scanMemoryNagBatch(chatId);
+  await withScanLock(chatId, async () => {
+    if (manualScan(chatId)) return;
+    const runtime = getMemoryNagRuntime();
+    const [vault, messages] = await Promise.all([readMemoryNagVault(chatId), runtime.persistence.listMessages(chatId)]);
+    const relevant = messages.filter((message) => message.role === "user" || message.role === "assistant");
+    if (relevant.length - memoryNagScanStart(vault, relevant) < vault.settings.messagesPerBatch) return;
+    await scanMemoryNagBatchUnlocked(chatId);
+  });
 }
