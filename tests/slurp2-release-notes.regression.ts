@@ -9,6 +9,7 @@ import { join } from "node:path";
 // @ts-expect-error -- plain .mjs helper, no types published.
 import { parsePackageChangelog } from "../scripts/catalog-release-notes.mjs";
 import {
+  getSlurp2UnseenReleases,
   SLURP2_RELEASES,
   SLURP2_VERSION,
 } from "../packages/slurp2/src/engine/packages/client/src/components/slurp/slurp2-release.ts";
@@ -36,5 +37,22 @@ assert.deepEqual(
   })),
   "the splash release notes must mirror CHANGELOG.md",
 );
+
+assert.deepEqual(
+  getSlurp2UnseenReleases(null).map((release) => release.version),
+  SLURP2_RELEASES.map((release) => release.version),
+  "a fresh install must retain the complete release history for progressive disclosure",
+);
+assert.deepEqual(
+  getSlurp2UnseenReleases("0.0.4").map((release) => release.version),
+  ["0.0.5"],
+  "an update from the previous release must show only the new release",
+);
+assert.deepEqual(
+  getSlurp2UnseenReleases("0.0.2").map((release) => release.version),
+  ["0.0.5", "0.0.4", "0.0.3"],
+  "a skipped update must retain every unseen release",
+);
+assert.deepEqual(getSlurp2UnseenReleases("0.0.5"), [], "the current release must not reopen an acknowledged splash");
 
 console.log("slurp2 release notes mirror CHANGELOG.md");
