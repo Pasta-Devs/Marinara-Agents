@@ -417,7 +417,7 @@ async function main(routeScenario: RouteScenario) {
         },
         registerService(name: string, service: unknown) {
           if (name === "long-term-memory:storage") storageService = service;
-          return () => void service || void name;
+          return () => undefined;
         },
         registerPrivilegedRoutes: (routes: any, options: { prefix: string }) =>
           registerCapabilityPrivilegedRoutes(app, installed as any, routes, options),

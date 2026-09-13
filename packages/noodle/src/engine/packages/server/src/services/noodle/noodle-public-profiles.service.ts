@@ -15,12 +15,7 @@ import { noodleAccountsNeedingProfiles } from "./noodle-profile-selection.js";
 import { normalizeNoodleHandle } from "./noodle-handle.js";
 import { NOODLE_ADULT_PLATFORM_POLICY } from "./noodle-prompt.js";
 import { NOODLE_JSON_OUTPUT_HEADING, noodleResponseFormat } from "./noodle-response-format.js";
-import {
-  characterContextFromRow,
-  escapePromptAttribute,
-  generatedProfileSettings,
-  parseRecord,
-} from "./noodle-public-support.js";
+import { characterContextFromRow, escapePromptAttribute, generatedProfileSettings } from "./noodle-public-support.js";
 
 function shuffle<T>(items: T[]): T[] {
   const next = [...items];

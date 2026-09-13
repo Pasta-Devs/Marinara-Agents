@@ -78,6 +78,12 @@
     "noodle": {
       "versions": [
         {
+          "version": "1.2.22",
+          "date": "2026-09-13",
+          "notes": "- Maintenance: simplify the inline composer's visibility checks and remove unused code.",
+          "highlight": false
+        },
+        {
           "version": "1.2.21",
           "date": "2026-09-07",
           "notes": "- Fixed \"Load more\" on the timeline, which failed on every page after the first.\n- Fixed a manually chosen profile avatar being replaced by the character card image.\n- Applying a saved prompt now asks before it discards unsaved prompt changes.\n- Ambient accounts no longer post images.\n- Removed leftover NoodleR wording from the image generation settings.",
@@ -105,6 +111,12 @@
     },
     "slurp": {
       "versions": [
+        {
+          "version": "1.50.1",
+          "date": "2026-09-13",
+          "notes": "- Maintenance: remove unused legacy code and an unnecessary settings read when checking the posting schedule.",
+          "highlight": false
+        },
         {
           "version": "1.50.0",
           "date": "2026-09-11",

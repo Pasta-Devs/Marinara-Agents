@@ -31,7 +31,6 @@ import {
 } from "./slurp-generation.service.js";
 import { noodleResponseFormat } from "./slurp-response-format.js";
 import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js";
-import { createChatsStorage } from "../storage/chats.storage.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;

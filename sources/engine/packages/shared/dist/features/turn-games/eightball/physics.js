@@ -225,7 +225,6 @@ function runOuterStep(active, dt, ctx) {
         if (!ev || ev.t > remaining) {
             advanceAll(active, remaining);
             ctx.simTime += remaining;
-            remaining = 0;
             forceCaptureOutOfBounds(active, ctx);
             break;
         }

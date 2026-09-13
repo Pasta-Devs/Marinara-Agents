@@ -1,5 +1,9 @@
 # Noodle release notes
 
+## 1.2.22 — 2026-09-13
+
+- Maintenance: simplify the inline composer's visibility checks and remove unused code.
+
 ## 1.2.21 — 2026-09-07
 
 - Fixed "Load more" on the timeline, which failed on every page after the first.
