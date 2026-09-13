@@ -67,11 +67,7 @@ export function withoutHiddenAmbientAccounts<T extends Pick<NoodleAccount, "kind
 
 type AmbientSeedStorage = Pick<
   ReturnType<typeof createSlurpStorage>,
-  | "getSettings"
-  | "updateSettings"
-  | "getSlurpAccountForEntity"
-  | "updateAccount"
-  | "upsertAccountFromProfile"
+  "getSettings" | "updateSettings" | "getSlurpAccountForEntity" | "updateAccount" | "upsertAccountFromProfile"
 >;
 
 /** Remember a deleted ambient account so the seeder leaves it deleted. */
@@ -85,7 +81,10 @@ export async function dismissAmbientNoodleAccount(noodle: AmbientSeedStorage, en
  * Create the missing, non-dismissed roster accounts. Switched off, nothing is created or deleted:
  * existing rows are returned as-is (storage hides them from every listing) so edits survive.
  */
-export async function ensureAmbientNoodleAccounts(noodle: AmbientSeedStorage, invited: boolean): Promise<NoodleAccount[]> {
+export async function ensureAmbientNoodleAccounts(
+  noodle: AmbientSeedStorage,
+  invited: boolean,
+): Promise<NoodleAccount[]> {
   let resolveTurn!: () => void;
   const previousTurn = ambientSeedQueue;
   ambientSeedQueue = new Promise<void>((resolve) => {

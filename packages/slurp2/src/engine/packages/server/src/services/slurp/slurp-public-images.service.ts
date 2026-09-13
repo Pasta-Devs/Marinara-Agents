@@ -278,8 +278,7 @@ export async function generateNoodlePostImage(input: {
     rewrittenPrompt: compiledRewrittenPrompt?.prompt || rewrittenPrompt,
     rawPrompt: rawProviderPrompt,
     rewriteAttempted,
-    onFallback: (reason) =>
-      logger.warn("[slurp] Image prompt rewrite unusable (%s); sending the capped draft", reason),
+    onFallback: (reason) => logger.warn("[slurp] Image prompt rewrite unusable (%s); sending the capped draft", reason),
     // Art style and the character's image habits are meant to reach the provider, so a rewrite
     // that applies them is doing its job. Personality never belongs in a visual prompt at any
     // length; the instruction fields are guidance and only leak as a copied block.

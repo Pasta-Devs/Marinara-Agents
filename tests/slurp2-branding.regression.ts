@@ -64,7 +64,9 @@ assert.deepEqual(
 );
 
 // Server log tags.
-const taggedFiles = files.filter((file) => /\[(?:debug\/)?noodler?\]/u.test(readFileSync(join(engineRoot, file), "utf8")));
+const taggedFiles = files.filter((file) =>
+  /\[(?:debug\/)?noodler?\]/u.test(readFileSync(join(engineRoot, file), "utf8")),
+);
 assert.deepEqual(taggedFiles, [], "server log tags must read [slurp] / [debug/slurp]");
 
 // Locale values: only the strings that compare Slurp with the Noodle app may say Noodle.

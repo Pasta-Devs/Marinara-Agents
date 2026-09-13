@@ -4084,25 +4084,25 @@ function StageProfileView({
                   <BookmarkCheck size={19} />
                 </span>
               ) : (
-              <button
-                type="button"
-                disabled={followPending}
-                onClick={() => onToggleFollow(profile.id, viewerCreator.followed)}
-                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--noodle-divider)] text-[var(--noodle-accent)] transition-[background-color,opacity,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50"
-                aria-label={
-                  viewerCreator.followed
-                    ? localizeUi("ui.noodle.connections.tabs.following")
-                    : localizeUi("ui.slurp.profile.follow")
-                }
-                aria-pressed={viewerCreator.followed}
-                title={
-                  viewerCreator.followed
-                    ? localizeUi("ui.noodle.connections.tabs.following")
-                    : localizeUi("ui.slurp.profile.follow")
-                }
-              >
-                {viewerCreator.followed ? <BookmarkCheck size={19} /> : <Bookmark size={19} />}
-              </button>
+                <button
+                  type="button"
+                  disabled={followPending}
+                  onClick={() => onToggleFollow(profile.id, viewerCreator.followed)}
+                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--noodle-divider)] text-[var(--noodle-accent)] transition-[background-color,opacity,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label={
+                    viewerCreator.followed
+                      ? localizeUi("ui.noodle.connections.tabs.following")
+                      : localizeUi("ui.slurp.profile.follow")
+                  }
+                  aria-pressed={viewerCreator.followed}
+                  title={
+                    viewerCreator.followed
+                      ? localizeUi("ui.noodle.connections.tabs.following")
+                      : localizeUi("ui.slurp.profile.follow")
+                  }
+                >
+                  {viewerCreator.followed ? <BookmarkCheck size={19} /> : <Bookmark size={19} />}
+                </button>
               )}
               <button
                 type="button"

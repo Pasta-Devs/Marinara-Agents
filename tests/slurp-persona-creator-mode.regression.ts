@@ -36,6 +36,9 @@ assert.match(
   /targets: creators\.flatMap/u,
   "pulse targets must come from every creator, not automaticCreators",
 );
-assert.match(read(base + "slurp-world.operation.ts"), /const creators: SlurpWorldCreator\[\] = await Promise\.all\(\s*accounts\.map/u);
+assert.match(
+  read(base + "slurp-world.operation.ts"),
+  /const creators: SlurpWorldCreator\[\] = await Promise\.all\(\s*accounts\.map/u,
+);
 
 console.log("slurp persona creator mode regression: ok");

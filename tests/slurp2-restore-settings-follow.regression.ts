@@ -21,7 +21,10 @@ assert.match(
   "settings are replaced only on opt-in with slurp2 settings present",
 );
 const guard = importBody.indexOf("if (replaceSettings) {");
-assert.ok(guard > 0 && guard < importBody.indexOf("settingsTx.remove("), "the settings wipe must sit behind the opt-in guard");
+assert.ok(
+  guard > 0 && guard < importBody.indexOf("settingsTx.remove("),
+  "the settings wipe must sit behind the opt-in guard",
+);
 
 const routes = read("server/src/routes/slurp.routes.ts");
 assert.match(routes, /importSlurpBackup\(\{ settings, tables, importSettings \}\)/u);
@@ -39,7 +42,11 @@ assert.match(settingsUi, /useState\(false\);\n\s*const \[restoreImportSettings/u
 assert.match(settingsUi, /startSlurpRestore\(file, restoreImportSettings\)/u);
 
 const home = read("client/src/components/slurp/SlurpHome.tsx");
-assert.doesNotMatch(home, /followingAccountIds/u, "the client must use the server's followed flag, not the raw follow list");
+assert.doesNotMatch(
+  home,
+  /followingAccountIds/u,
+  "the client must use the server's followed flag, not the raw follow list",
+);
 assert.match(
   routes,
   /subscribed: context\.subscribedIds\.has\(account\.id\)/u,

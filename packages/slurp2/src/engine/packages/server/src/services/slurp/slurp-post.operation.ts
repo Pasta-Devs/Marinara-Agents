@@ -273,11 +273,7 @@ export async function createNoodlerPost(
     try {
       await noodle.discardPreparedPostsAfterManualPost(input.targetAccountId, post.createdAt);
     } catch (error) {
-      logger.warn(
-        error,
-        "[slurp] Failed to discard prepared posts after a manual post for %s",
-        input.targetAccountId,
-      );
+      logger.warn(error, "[slurp] Failed to discard prepared posts after a manual post for %s", input.targetAccountId);
     }
     return { status: "created", post } as const;
   });
