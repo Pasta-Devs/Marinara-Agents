@@ -7,6 +7,7 @@ import {
   readPackageAgentDefinitions,
   readPackageManifest,
   serializePackageLocale,
+  validateShippedUiTranslations,
 } from "./package-locales.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -273,6 +274,7 @@ if (JSON.stringify(memoryNagUiLocaleFiles) !== JSON.stringify(expectedMemoryNagU
 
 const memoryNagEnglish = JSON.parse(await readFile(join(memoryNagUiLocaleRoot, "en.json"), "utf8"));
 const memoryNagEnglishKeys = Object.keys(memoryNagEnglish).filter((key) => key !== "_meta");
+const memoryNagLocaleCounts = [];
 for (const localeFile of memoryNagUiLocaleFiles) {
   const locale = localeFile.slice(0, -".json".length);
   const catalog = JSON.parse(await readFile(join(memoryNagUiLocaleRoot, localeFile), "utf8"));
@@ -285,6 +287,7 @@ for (const localeFile of memoryNagUiLocaleFiles) {
     throw new Error(`Memory Nag ${locale} UI localization direction must be ${expectedDirection}`);
   }
   const keys = Object.keys(catalog).filter((key) => key !== "_meta");
+  memoryNagLocaleCounts.push(`${locale}=${keys.length}`);
   if (keys.some((key) => !memoryNagEnglishKeys.includes(key))) {
     throw new Error(`Memory Nag ${locale} UI localization contains an unknown English key`);
   }
@@ -301,4 +304,5 @@ for (const localeFile of memoryNagUiLocaleFiles) {
   }
 }
 
-console.log(`Memory Nag UI locales valid: ${memoryNagUiLocaleFiles.length} catalogs.`);
+await validateShippedUiTranslations(repoRoot);
+console.log(`Memory Nag UI locales valid: ${memoryNagLocaleCounts.join(", ")}.`);

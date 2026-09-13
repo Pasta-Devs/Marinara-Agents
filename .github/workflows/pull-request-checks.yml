@@ -58,7 +58,9 @@ jobs:
         run: node scripts/test-catalog-lanes.mjs
 
       - name: Validate package localization catalogs
-        run: node scripts/validate-package-locales.mjs
+        run: |
+          node scripts/tests/ui-translation-retention.regression.mjs
+          node scripts/validate-package-locales.mjs
 
       # A package bundles shared Engine components but owns its locale catalog, so a component from
       # a shared folder can ship with no strings and render raw key names to users.
