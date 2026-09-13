@@ -179,7 +179,8 @@ try {
   };
   await calls.startConversationCallCharacterVideoGeneration(input);
   let manifest;
-  for (let attempt = 0; attempt < 100; attempt++) {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
     manifest = await calls.getConversationCallCharacterVideoManifest(input);
     if (!manifest.generating) break;
     await new Promise((resolve) => setTimeout(resolve, 10));
