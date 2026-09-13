@@ -1531,11 +1531,7 @@ export function SlurpSettings({
                                         cancelLabel: t("ui.slurp.actions.cancel"),
                                       }).then((confirmed) => {
                                         if (!confirmed) return;
-                                        refreshConversationSchedule.mutate(selectedCreator.id, {
-                                          onSuccess: () =>
-                                            toast.success(t("ui.slurp.settings.creators.scheduleRefreshed")),
-                                          onError: (error) => toast.error(errorMessage(error)),
-                                        });
+                                        refreshConversationSchedule.mutate(selectedCreator.id);
                                       });
                                     }}
                                     className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"

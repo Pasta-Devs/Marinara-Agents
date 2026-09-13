@@ -9,6 +9,7 @@ export function normalizeSlurpFanActivityRows(
     if (!activity || typeof activity !== "object" || Array.isArray(activity)) return [];
     const row = activity as Record<string, unknown>;
     const targetPostId = row.targetPostId ?? row.postId ?? row.targetId;
+    const type = row.type ?? row.kind ?? row.action;
     return [
       {
         ...row,
@@ -18,7 +19,8 @@ export function normalizeSlurpFanActivityRows(
           row.creatorId ??
           (typeof targetPostId === "string" ? creatorAccountIdByPostId.get(targetPostId) : undefined),
         targetPostId,
-        content: row.content ?? null,
+        type: type === "comment" ? "reply" : type,
+        content: row.content ?? row.text ?? row.comment ?? null,
         // Kept as a plain field rather than added to the shared generated-activity schema, which
         // this package cannot change. `parseGeneratedFanActivityResponse` reads it back off the
         // normalised row after the schema has stripped it.

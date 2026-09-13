@@ -192,7 +192,7 @@ function buildFanActivityMessages(input: {
     "Likes have null content. Replies are one short sentence, normally under 180 characters, natural, relevant, and not repetitive.",
     "Each post lists the comments already under it. Never repeat a point somebody has already made.",
     'To answer one of those comments instead of the post, set "parentInteractionId" to that comment\'s id. Leave it out to comment on the post itself. Some replies should answer other people; a comment section where nobody talks to anybody is a list, not a conversation.',
-    "Return JSON only with an activities array.",
+    'Return JSON only, shaped as {"activities":[{"creatorAccountId":"...","actorHandle":"...","targetPostId":"...","type":"like"|"reply","content":null|"...","parentInteractionId":"..."}]}. Use exactly these field names; "parentInteractionId" is optional.',
     "Each actor handle has a weight; prefer higher-weight actors more often, proportionally.",
     slurpAudienceToneInstruction(input.settings.audienceTone),
     "Actors carry traits and a relationship to the creator. Write each reply as that specific person: a long-standing paying regular does not sound like somebody who arrived yesterday, and somebody whose trait is 'emoji only' does not write a paragraph.",
@@ -266,7 +266,8 @@ async function generateFanActivity(input: {
     maxTokens: clampGenerationMaxOutputTokens({
       provider: input.connection.provider,
       model: input.connection.model,
-      maxTokens: 1024,
+      // A row with its ids is ~80 tokens and settings allow 36 rows; 1024 cut the array mid-row.
+      maxTokens: 3072,
       maxTokensOverride: input.connection.maxTokensOverride,
     }),
     stream: false,
@@ -287,7 +288,7 @@ async function generateFanActivity(input: {
     creatorAccountIdByPostId,
   );
   if (parsed.rejected > 0) {
-    logger.warn("Ignored %d malformed generated NoodleR fan activities", parsed.rejected);
+    logger.warn("Ignored %d malformed generated Slurp fan activities", parsed.rejected);
   }
   return parsed.value;
 }

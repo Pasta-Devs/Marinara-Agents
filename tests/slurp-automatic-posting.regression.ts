@@ -210,6 +210,16 @@ assert.equal(koboldActivity.rows.length, 2, "KoboldCpp audience arrays and field
 assert.equal(koboldActivity.rows[1]?.creatorAccountId, "creator-1");
 assert.equal(koboldActivity.rows[0]?.actorHandle, "late_night_raider");
 assert.equal(koboldActivity.rows[0]?.targetPostId, "post-1");
+const aliasedActivity = normalizeSlurpFanActivityRows({
+  activities: [
+    { actorHandle: "a", creatorAccountId: "creator-1", targetPostId: "post-1", kind: "comment", text: "Nice." },
+    { actorHandle: "b", creatorAccountId: "creator-1", targetPostId: "post-1", action: "reply", comment: "Same." },
+  ],
+});
+assert.equal(aliasedActivity.rows[0]?.type, "reply", "a comment type must map to reply");
+assert.equal(aliasedActivity.rows[0]?.content, "Nice.");
+assert.equal(aliasedActivity.rows[1]?.type, "reply");
+assert.equal(aliasedActivity.rows[1]?.content, "Same.");
 
 const generatedAt = new Date("2026-08-20T15:25:00.000Z");
 const publicationTime = new Date("2026-08-21T08:30:00.000Z");

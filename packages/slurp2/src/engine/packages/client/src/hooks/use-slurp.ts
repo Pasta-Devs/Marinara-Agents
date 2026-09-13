@@ -2027,12 +2027,21 @@ export function useUpdateNoodlerScheduleSlot() {
 
 export function useRefreshNoodlerConversationSchedule() {
   const qc = useQueryClient();
+  const { t: localizeUi } = useUiTranslation();
+  // Toasts live here, not in mutate() callbacks: those are dropped if the caller unmounts first.
   return useMutation({
     mutationFn: (accountId: string) =>
       api.post<{ state: "active"; blocks: number }>(
         `/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/conversation-schedule/refresh`,
       ),
-    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
+    onSuccess: () => {
+      toast.success(localizeUi("ui.slurp.settings.creators.scheduleRefreshed"));
+      return qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() });
+    },
+    onError: (error) =>
+      toast.error(
+        error instanceof Error ? error.message : localizeUi("ui.slurp.settings.creators.scheduleRefreshFailed"),
+      ),
   });
 }
 
@@ -2254,7 +2263,12 @@ export type SlurpThreadRelationship = {
   spentCoins: number;
   coolUntil: string | null;
   dayVibe: string | null;
-  availability: { online: boolean; activity: string | null; minutesUntilOnline: number | null };
+  availability: {
+    online: boolean;
+    activity: string | null;
+    minutesUntilOnline: number | null;
+    estimated?: boolean;
+  };
   audienceTone: "warm" | "mixed" | "unfiltered";
   imageMode: "friendly" | "hostile" | "none";
   creatorState: {
@@ -2361,7 +2375,12 @@ export function useSlurpThread(threadId: string | null, personaId: string | null
         creatorLastActiveAt: string | null;
         creatorLastMessageAt: string | null;
         creatorAutoPosting: boolean;
-        creatorAvailability?: { online: boolean; activity: string | null; minutesUntilOnline: number | null };
+        creatorAvailability?: {
+          online: boolean;
+          activity: string | null;
+          minutesUntilOnline: number | null;
+          estimated?: boolean;
+        };
         messaging: SlurpCreatorMessaging;
         commissions: SlurpCommission[];
         subscribed?: boolean;
@@ -2413,7 +2432,12 @@ export function useSlurpCompose(creatorAccountId: string | null, personaId: stri
         creatorLastActiveAt?: string | null;
         creatorLastMessageAt?: string | null;
         creatorAutoPosting?: boolean;
-        creatorAvailability?: { online: boolean; activity: string | null; minutesUntilOnline: number | null };
+        creatorAvailability?: {
+          online: boolean;
+          activity: string | null;
+          minutesUntilOnline: number | null;
+          estimated?: boolean;
+        };
         messaging: SlurpCreatorMessaging;
         commissions: SlurpCommission[];
         subscribed?: boolean;
