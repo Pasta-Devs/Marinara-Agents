@@ -1,7 +1,8 @@
 import { Check, Coins, LayoutGrid, List, Tags, UsersRound, X } from "lucide-react";
 import { useTranslation as useUiTranslation } from "react-i18next";
+import { useSlurpSettings } from "../../hooks/use-slurp";
 import {
-  SLURP_DISCOVERY_TAG_GROUPS,
+  groupSlurpDiscoveryTags,
   type SlurpDiscoverLayout,
   type SlurpDiscoverSort,
   type SlurpDiscoveryGender,
@@ -81,6 +82,7 @@ export function SlurpDiscoverToolbar({
   onClear: () => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
+  const tagGroups = groupSlurpDiscoveryTags(useSlurpSettings().data?.discoveryTags);
   return (
     <div className="space-y-3 border-y border-[var(--noodle-divider)] bg-[linear-gradient(110deg,color-mix(in_srgb,var(--slurp-surface)_96%,transparent),color-mix(in_srgb,var(--noodle-accent)_5%,var(--slurp-surface)))] px-4 py-4 sm:px-5">
       <div className="flex flex-wrap items-center gap-2">
@@ -159,7 +161,7 @@ export function SlurpDiscoverToolbar({
           active={tags.size > 0}
         >
           <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
-            {SLURP_DISCOVERY_TAG_GROUPS.map((group) => (
+            {tagGroups.map((group) => (
               <fieldset key={group.id}>
                 <legend className="mb-1 text-[11px] font-black uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
                   {localizeUi(`ui.slurp.discover.tagGroup.${group.id}`, { defaultValue: group.id })}

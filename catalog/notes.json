@@ -184,15 +184,15 @@
     "slurp2": {
       "versions": [
         {
-          "version": "0.1.0",
+          "version": "0.0.7",
           "date": "2026-09-13",
-          "notes": "- Rebuilt Discover around direct subscription actions, persistent grid and list views, and filters for subscription status, gender, weekly price, and Creator tags.\n- Added Recommended, Newest, Most liked, and Most subscribed sorting with stable results.\n- Added editable Creator gender and tags, including safe custom tags and AI-suggested curated tags during profile creation and redrafting.",
-          "highlight": true
+          "notes": "- Rebuilt Discover around direct subscription actions, persistent grid and list views, and filters for subscription status, gender, weekly price, and Creator tags.\n- Added Recommended, Newest, Most liked, and Most subscribed sorting with stable results.\n- Added editable Creator gender and tags, including safe custom tags and AI-suggested curated tags during profile creation and redrafting.\n- Added Arcs with automatic suggestions, pacing, focus, allowed kinds, and delivery to posts, messages, fan comments, and notifications.\n- Moved message, photo, subscription, and tip prices from the profile information box to the action that uses each price.\n- Hid the Follow control for subscribed Creators because a subscription already includes following.\n- Made Open the default Creator identity mode and removed the Secret identity tier.\n- Fixed persona Creator creation when Slurp already has the persona's viewer identity.",
+          "highlight": false
         },
         {
           "version": "0.0.6",
           "date": "2026-09-13",
-          "notes": "- Added image context options for reactions: stored prompts, vision descriptions, or automatic selection. Public fan reactions keep locked images hidden and respect Creator identity privacy.\n- Generation now shows how many Creators remain, including skipped or failed requests.\n- Restored visible success and error notifications for Slurp actions.",
+          "notes": "- Added image context options for reactions: stored prompts, vision descriptions, or automatic selection. Public fan reactions keep locked images hidden and respect Creator identity privacy.\n- Generation now shows how many Creators remain, including skipped or failed requests.\n- Restored visible success and error notifications for Slurp actions.\n- Fixed persona Creator creation when Slurp already has the persona's viewer identity. The viewer and Creator accounts can now coexist for one persona.",
           "highlight": false
         },
         {

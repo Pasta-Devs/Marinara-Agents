@@ -12,6 +12,22 @@ export const SLURP_DISCOVERY_TAG_GROUPS = [
 
 export const SLURP_DISCOVERY_TAGS = SLURP_DISCOVERY_TAG_GROUPS.flatMap((group) => [...group.tags]);
 export const SLURP_DISCOVERY_TAG_LIMIT = 8;
+export const SLURP_DISCOVERY_MIN_TAGS = 3;
+
+/** Groups the `discoveryTags` setting for display, keeping first-seen group order. Falls back to the seed. */
+export function groupSlurpDiscoveryTags(
+  entries: ReadonlyArray<{ tag: string; group: string }> | undefined,
+): Array<{ id: string; tags: string[] }> {
+  if (!entries) return SLURP_DISCOVERY_TAG_GROUPS.map((group) => ({ id: group.id, tags: [...group.tags] }));
+  const groups = new Map<string, string[]>();
+  for (const { tag, group } of entries) groups.set(group, [...(groups.get(group) ?? []), tag]);
+  return [...groups].map(([id, tags]) => ({ id, tags }));
+}
+
+/** Existing Creators may predate the gender and tag requirement; they are flagged, never blocked. */
+export function isSlurpDiscoveryProfileIncomplete(profile: { gender?: unknown; tags?: readonly string[] }): boolean {
+  return !profile.gender || (profile.tags?.length ?? 0) < SLURP_DISCOVERY_MIN_TAGS;
+}
 export const SLURP_DISCOVERY_TAG_MAX_LENGTH = 24;
 
 export type SlurpDiscoveryGender = "male" | "female" | "other";

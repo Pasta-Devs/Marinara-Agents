@@ -46,6 +46,7 @@ import {
 import { notesForPrompt, type SlurpNoteOperation, type SlurpThreadNote } from "./slurp-thread-notes.js";
 import { slurpIntensityBand, type SlurpCreatorState, type SlurpThreadState } from "./slurp-creator-state.js";
 import { slurpAudienceArcDescription } from "./slurp-audience-arc.js";
+import { slurpArcLifeLine } from "./slurp-project.js";
 import { SLURP_PLATFORM_CONTEXT } from "./slurp-prompt.js";
 import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
 import type { SlurpMessage } from "../storage/slurp-messages.storage.js";
@@ -269,7 +270,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
   publicIdentity: Parameters<typeof noodlerIdentityInstruction>[1];
 }> {
   const slurp = createSlurpStorage(input.db);
-  const disclosureMode = input.creator.settings.privacy.identityDisclosure ?? "secret";
+  const disclosureMode = input.creator.settings.privacy.identityDisclosure ?? "open";
   const publicIdentity = await resolveNoodlerPublicIdentity(input.db, input.creator);
   const settings = await slurp.getSettings();
   const source = await slurp.resolveAccountSource(input.creator);
@@ -308,6 +309,15 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
       access: post.access,
       imageUrl: post.imageUrl,
     }));
+  // The arc the feed is posting about, so a DM and the feed come from the same life. Protected like
+  // every other supplied value: a Secret Creator's arc title can name a real place.
+  const creatorArc = settings.arcAffectsMood
+    ? (protectNoodlerGeneratedIdentity(
+        slurpArcLifeLine(await slurp.listProjects(input.creator.id).catch(() => [])),
+        disclosureMode,
+        publicIdentity,
+      ) ?? null)
+    : null;
   const stance = resolveSlurpStance({
     rapportTier: input.rapport.tier,
     rapportScore: input.rapport.score,
@@ -320,6 +330,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
       ),
     ),
     audienceArc: tie ? slurpAudienceArcDescription(tie.audienceArc) : null,
+    creatorArc,
     dayVibe: input.dayVibe ?? null,
     availability,
     subscribed: input.subscribed,

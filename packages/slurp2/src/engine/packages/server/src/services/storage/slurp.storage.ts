@@ -57,6 +57,9 @@ export {
 // Re-exported above for consumers; imported here because a re-export creates no local binding.
 import { noodlerUnlockPriceFromMetadata } from "../slurp/slurp-prices.js";
 import {
+  replaceSlurpDiscoveryTag,
+  SLURP_DISCOVERY_TAG_MAX_LENGTH,
+  SLURP_DISCOVERY_TAG_SEED,
   slurpDiscoveryFields,
   type SlurpDiscoveryGender,
   type SlurpStageProfileInput,
@@ -80,16 +83,61 @@ import {
 import { openSlurpGoal, readSlurpGoal, slurpGoalKey, slurpGoalProgress, type SlurpGoal } from "../slurp/slurp-goal.js";
 import {
   activeSlurpProjects,
+  isSlurpCrossover,
   makeSlurpProject,
+  readSlurpCrossoverRef,
+  readSlurpProject,
   readSlurpProjects,
+  slurpCrossoverLeave,
+  slurpCrossoverMerge,
+  slurpCrossoverPartner,
+  slurpCrossoverStart,
+  slurpCrossoverView,
   SLURP_PROJECT_CHAPTER_MAX_LENGTH,
   SLURP_PROJECT_DIRECTION_MAX_LENGTH,
-  SLURP_PROJECT_MAX_ACTIVE,
   SLURP_PROJECT_MAX_CHAPTERS,
   SLURP_PROJECT_TITLE_MAX_LENGTH,
+  slurpArcFanVotes,
+  slurpArcChapterMood,
+  slurpArcEffectMultiplier,
+  slurpArcResolveProfile,
+  SLURP_ARC_STAT_EFFECTS,
+  SLURP_ARC_BIO_MAX_LENGTH,
+  SLURP_ARC_LOCATION_MAX_LENGTH,
+  type SlurpArcEffectStat,
   slurpProjectAdvance,
+  slurpProjectChapter,
+  slurpProjectChoose,
+  slurpProjectDirect,
+  slurpProjectPollDue,
+  slurpProjectRecord,
   slurpProjectsKey,
+  slurpProjectTick,
+  slurpArcAutoKey,
+  slurpArcConfigKey,
+  slurpAutoArcCount,
+  readSlurpCreatorArcConfig,
+  resolveSlurpArcConfig,
+  type SlurpCreatorArcConfig,
+  type SlurpResolvedArcConfig,
+  slurpArcsWithoutFocus,
+  slurpArcLibraryFromLegacy,
+  slurpAutoArcPick,
+  slurpArcTypeFromProject,
+  slurpGeneratedArcProject,
+  SLURP_ARC_AUTO_MODES,
+  SLURP_ARC_SOURCES,
+  SLURP_ARC_INTENSITIES,
+  SLURP_ARC_LIBRARY_SEED,
+  SLURP_ARC_MAX_DURATION_DAYS,
+  SLURP_ARC_PACES,
+  SLURP_ARC_TONE_MAX_LENGTH,
+  SLURP_ARC_TYPE_NAME_MAX_LENGTH,
+  SLURP_DEFAULT_ARC_AUTO_MODE,
+  SLURP_DEFAULT_ARC_PACE,
   SLURP_PROJECT_STATUSES,
+  type SlurpArcDirectorAction,
+  type SlurpArcIntensity,
   type SlurpProject,
   type SlurpProjectStatus,
 } from "../slurp/slurp-project.js";
@@ -190,6 +238,7 @@ import { noodlerPostImageRetryAttempts, NOODLER_POST_IMAGE_RETRY_LIMIT } from ".
 import { enqueueSlurpFinancial } from "./slurp-financial-queue.js";
 import {
   addSlurpModifier,
+  SLURP_MODIFIER_KINDS,
   applySlurpCreatorStateDelta,
   creatorStateDeltaForSignal,
   decaySlurpCreatorState,
@@ -326,6 +375,99 @@ export const slurpSettingsSchema = z.object({
   storyRate: z.enum(SLURP_STORY_RATE),
   /** Share of a Creator's automatic posts that continue a project rather than standing alone. */
   projectRate: z.enum(SLURP_PROJECT_RATE),
+  /** Multiplies every arc chapter's day range. */
+  arcPace: z.enum(SLURP_ARC_PACES),
+  /** The Creator's running arc reaches their direct messages. */
+  arcAffectsMood: z.boolean(),
+  /** The Creator's running arc reaches the audience that comments on their posts. */
+  arcFanReactions: z.boolean(),
+  /** Whether the world tick starts or suggests arcs for Creators with none running. */
+  arcAutoMode: z.enum(SLURP_ARC_AUTO_MODES),
+  arcCooldownWeeks: z.number().int().min(1).max(8),
+  /** Where automatic arcs come from: the library, the model, or both. */
+  arcSource: z.enum(SLURP_ARC_SOURCES),
+  /** Most Creators with an automatic arc active or suggested at once. Manual arcs do not count. */
+  arcMaxConcurrentAuto: z.number().int().min(1).max(20),
+  /** Off: arcs run by themselves. On: the Arcs panel may pause, skip, go back, relabel, twist, and end arcs. */
+  arcDirectorMode: z.boolean(),
+  /** How long an arc's fan poll stays open before the world tick settles it. */
+  arcPollHours: z.number().int().min(1).max(168),
+  /** Cap on arc chapter effects on follower growth, earnings, and fan loyalty: off, ±10%, or ±50%. */
+  arcStatEffects: z.enum(SLURP_ARC_STAT_EFFECTS),
+  /** Whether the world tick may start automatic arcs shared by two Creators. */
+  arcCrossovers: z.boolean(),
+  /** Arc types Slurp and the player start arcs from. Replaces the v1 `arcAllowedKinds`. */
+  arcLibrary: z
+    .array(
+      z.object({
+        id: z.string().trim().min(1).max(128),
+        name: z.string().trim().min(1).max(SLURP_ARC_TYPE_NAME_MAX_LENGTH),
+        description: z.string().trim().max(SLURP_PROJECT_DIRECTION_MAX_LENGTH),
+        chapters: z
+          .array(
+            z.object({
+              label: z.string().trim().min(1).max(SLURP_PROJECT_CHAPTER_MAX_LENGTH),
+              minDays: z.number().int().min(0).max(90),
+              maxDays: z.number().int().min(0).max(90),
+              /** A fan poll at the end of this chapter; the winner's chapters are inserted after it. */
+              choice: z
+                .object({
+                  question: z.string().trim().min(1).max(240),
+                  options: z
+                    .array(
+                      z.object({
+                        label: z.string().trim().min(1).max(120),
+                        chapters: z
+                          .array(
+                            z.object({
+                              label: z.string().trim().min(1).max(SLURP_PROJECT_CHAPTER_MAX_LENGTH),
+                              minDays: z.number().int().min(0).max(90),
+                              maxDays: z.number().int().min(0).max(90),
+                            }),
+                          )
+                          .max(4),
+                      }),
+                    )
+                    .min(2)
+                    .max(4),
+                })
+                .optional(),
+              mood: z.enum(SLURP_MODIFIER_KINDS).optional(),
+              effects: z
+                .object({
+                  growth: z.number().int().min(-50).max(50).optional(),
+                  earnings: z.number().int().min(-50).max(50).optional(),
+                  loyalty: z.number().int().min(-50).max(50).optional(),
+                })
+                .optional(),
+              profile: z
+                .object({
+                  bio: z.string().trim().max(SLURP_ARC_BIO_MAX_LENGTH).optional(),
+                  location: z.string().trim().max(SLURP_ARC_LOCATION_MAX_LENGTH).optional(),
+                })
+                .optional(),
+            }),
+          )
+          .max(SLURP_PROJECT_MAX_CHAPTERS),
+        revertProfileAtEnd: z.boolean().optional(),
+        tags: z.array(z.string().trim().min(1).max(SLURP_DISCOVERY_TAG_MAX_LENGTH)).max(50),
+        tone: z.string().trim().max(SLURP_ARC_TONE_MAX_LENGTH).default(""),
+        durationDays: z.number().int().min(1).max(SLURP_ARC_MAX_DURATION_DAYS).default(14),
+        enabled: z.boolean(),
+        builtin: z.boolean(),
+        hidden: z.boolean().default(false),
+      }),
+    )
+    .max(200),
+  /** The curated Discover tags and the group each is shown under. Creators may still carry custom tags. */
+  discoveryTags: z
+    .array(
+      z.object({
+        tag: z.string().trim().min(1).max(SLURP_DISCOVERY_TAG_MAX_LENGTH),
+        group: z.string().trim().min(1).max(40),
+      }),
+    )
+    .max(200),
   /** Stories are shown in their own tall frame, so they carry their own size. */
   storyImageWidth: z.number().int().min(64).max(4096),
   storyImageHeight: z.number().int().min(64).max(4096),
@@ -561,7 +703,7 @@ export function noodlerReservePolicyFingerprint(
     sourceId: account.sourceEntityId,
     sourceUpdatedAt: sourceUpdatedAt ?? null,
     stageProfileUpdatedAt: account.updatedAt,
-    disclosure: account.settings.privacy.identityDisclosure ?? "secret",
+    disclosure: account.settings.privacy.identityDisclosure ?? "open",
     stagePersonality: account.settings.privacy.stagePersonality ?? "",
     access: account.settings.privacy.access,
     scheduler: account.settings.scheduler.autoPosting,
@@ -627,6 +769,7 @@ type InsertInteractionCommand = {
   imageUrl?: string | null;
   parentInteractionId: string | null;
 };
+type SlurpAccountRole = "creator" | "viewer";
 type NoodlerWorldInteractionInput = {
   creatorAccountId: string;
   actorId: string;
@@ -790,7 +933,10 @@ export function normalizeNoodleAccountSettings(value: unknown): SlurpNoodleAccou
     ...(rawNoodleFeedSeenAt !== undefined && validSocialField("noodleFeedSeenAt", rawNoodleFeedSeenAt)),
   };
   const privacy = {
-    ...(rawIdentityDisclosure !== undefined && validPrivacyField("identityDisclosure", rawIdentityDisclosure)),
+    // Slurp no longer offers Secret. A stored Secret Creator reads as Hinted, the closest tier that
+    // still keeps the source name and handle protected.
+    ...(rawIdentityDisclosure !== undefined &&
+      validPrivacyField("identityDisclosure", rawIdentityDisclosure === "secret" ? "hinted" : rawIdentityDisclosure)),
     ...(rawStagePersonality !== undefined && validPrivacyField("stagePersonality", rawStagePersonality)),
     access: {
       hiddenFromAccountIds: parseStringArray(rawAccess.hiddenFromAccountIds),
@@ -989,6 +1135,19 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   imageHeight: 1536,
   storyRate: SLURP_DEFAULT_STORY_RATE,
   projectRate: SLURP_DEFAULT_PROJECT_RATE,
+  arcPace: SLURP_DEFAULT_ARC_PACE,
+  discoveryTags: SLURP_DISCOVERY_TAG_SEED.map((entry) => ({ ...entry })),
+  arcAffectsMood: true,
+  arcFanReactions: true,
+  arcAutoMode: SLURP_DEFAULT_ARC_AUTO_MODE,
+  arcCooldownWeeks: 3,
+  arcSource: "mixed",
+  arcMaxConcurrentAuto: 2,
+  arcDirectorMode: false,
+  arcPollHours: 24,
+  arcStatEffects: "small",
+  arcCrossovers: true,
+  arcLibrary: slurpArcLibraryFromLegacy(undefined),
   // 4:5. The composer crops an uploaded Story to whatever ratio is configured here, so the two
   // halves of the feature stay one shape.
   storyImageWidth: 1024,
@@ -1106,6 +1265,7 @@ export function normalizeSlurpSettings(raw: unknown): SlurpSettings {
       ? NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION
       : rawRecord.imagePromptInterpretation;
   candidate.nightQuiet = rawRecord.nightQuiet ?? DEFAULT_SLURP_SETTINGS.nightQuiet;
+  candidate.arcLibrary = rawRecord.arcLibrary ?? slurpArcLibraryFromLegacy(rawRecord.arcAllowedKinds);
   candidate.onboarding = rawRecord.onboarding ?? DEFAULT_SLURP_SETTINGS.onboarding;
   candidate.fanArchetypeWeights = {
     ...DEFAULT_SLURP_SETTINGS.fanArchetypeWeights,
@@ -1363,6 +1523,69 @@ export function createSlurpStorage(db: DB) {
   const characters = createCharactersStorage(db);
   let publicHandleReconciliation: Promise<void> | null = null;
 
+  /** One Creator's stored projects list as raw entries: projects and crossover references. */
+  const readProjectEntries = async (creatorAccountId: string): Promise<unknown[]> => {
+    try {
+      const parsed = JSON.parse((await settingsStore.get(slurpProjectsKey(creatorAccountId))) ?? "[]");
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+  const isProjectEntry = (entry: unknown, projectId: string) =>
+    readSlurpCrossoverRef(entry)?.projectId === projectId || readSlurpProject(entry)?.id === projectId;
+
+  /**
+   * One Creator's projects, from their point of view. A crossover is stored once, in its first
+   * participant's list; every other participant's `{ crossoverOf }` reference resolves to that record.
+   */
+  const loadProjects = async (creatorAccountId: string): Promise<SlurpProject[]> => {
+    const out: SlurpProject[] = [];
+    for (const entry of await readProjectEntries(creatorAccountId)) {
+      const ref = readSlurpCrossoverRef(entry);
+      const project = ref
+        ? readSlurpProjects(await settingsStore.get(slurpProjectsKey(ref.ownerCreatorId))).find(
+            (stored) => stored.id === ref.projectId && stored.creatorIds.includes(creatorAccountId),
+          )
+        : readSlurpProject(entry);
+      if (project) out.push(slurpCrossoverView(project, creatorAccountId));
+    }
+    return out;
+  };
+
+  /**
+   * Save one Creator's list as `loadProjects` returned it. A crossover is merged onto its stored
+   * record, so advancing, polls, and Director actions all land on the one record.
+   * ponytail: read-merge-write without a lock, same as single arcs; two writers in one tick can lose one update.
+   */
+  const writeProjects = async (creatorAccountId: string, projects: readonly SlurpProject[], at = new Date()) => {
+    const entries: unknown[] = [];
+    for (const project of projects) {
+      const { partnerNames: _names, ...plain } = project;
+      if (!isSlurpCrossover(plain)) {
+        entries.push(plain);
+        continue;
+      }
+      const ownerId = plain.creatorIds[0]!;
+      const ownerEntries = ownerId === creatorAccountId ? null : await readProjectEntries(ownerId);
+      const stored = readSlurpProjects(await settingsStore.get(slurpProjectsKey(ownerId))).find(
+        (entry) => entry.id === plain.id,
+      );
+      const merged = stored ? slurpCrossoverMerge(stored, plain, creatorAccountId, at) : plain;
+      if (!ownerEntries) {
+        entries.push(merged);
+        continue;
+      }
+      if (!stored) continue;
+      entries.push({ crossoverOf: { ownerCreatorId: ownerId, projectId: plain.id } });
+      await settingsStore.set(
+        slurpProjectsKey(ownerId),
+        JSON.stringify(ownerEntries.map((entry) => (readSlurpProject(entry)?.id === plain.id ? merged : entry))),
+      );
+    }
+    await settingsStore.set(slurpProjectsKey(creatorAccountId), JSON.stringify(entries));
+  };
+
   /**
    * Per-creator subscription prices, as one `creatorAccountId -> coins` blob. A creator that sets
    * no price of its own is billed at the Slurp-wide default, so this map stays small and no
@@ -1496,6 +1719,11 @@ export function createSlurpStorage(db: DB) {
     note?: string,
     id?: string,
   ) => {
+    // Arc stat effects: every Creator credit passes here, so this is the one place earnings scale.
+    const settings = normalizeSlurpSettings(await settingsStore.get(SLURP_SETTINGS_KEY));
+    amount = Math.floor(
+      amount * slurpArcEffectMultiplier(await loadProjects(creatorAccountId), "earnings", settings.arcStatEffects),
+    );
     const current = readSlurpEarnings(await settingsStore.get(slurpEarningsKey(creatorAccountId)));
     const next = earnCreatorIncome(current, kind, amount, new Date(), note, id);
     if (next === current) return;
@@ -2150,6 +2378,71 @@ export function createSlurpStorage(db: DB) {
       return this.updateSettings(input);
     },
 
+    /** How many Creators and arc types carry each tag, keyed by lower-cased tag. */
+    async countDiscoveryTagUsage(): Promise<{ creators: Record<string, number>; arcTypes: Record<string, number> }> {
+      const count = (counts: Record<string, number>, tags: readonly string[]) => {
+        for (const tag of tags) counts[tag.toLocaleLowerCase()] = (counts[tag.toLocaleLowerCase()] ?? 0) + 1;
+      };
+      const creators: Record<string, number> = {};
+      for (const account of await this.listNoodlerAccounts()) {
+        if (!isSlurpViewerActorAccount(account)) count(creators, account.settings.profile.tags ?? []);
+      }
+      const arcTypes: Record<string, number> = {};
+      for (const type of (await this.getSettings()).arcLibrary) count(arcTypes, type.tags);
+      return { creators, arcTypes };
+    },
+
+    /**
+     * Rename (`to` set) or delete (`to` null) a tag in the setting, on every arc type, and on every Creator profile.
+     * A rename onto an existing tag merges the two.
+     */
+    /** Put a built-in arc type back to its shipped state, visible and enabled. */
+    async resetArcType(id: string): Promise<SlurpSettings | null> {
+      const seed = SLURP_ARC_LIBRARY_SEED.find((type) => type.id === id);
+      const current = await this.getSettings();
+      if (!seed || !current.arcLibrary.some((type) => type.id === id)) return null;
+      return this.updateSettings({
+        arcLibrary: current.arcLibrary.map((type) => (type.id === id ? structuredClone(seed) : type)),
+      });
+    },
+
+    async replaceDiscoveryTag(from: string, to: string | null): Promise<SlurpSettings> {
+      const key = from.toLocaleLowerCase();
+      const current = await this.getSettings();
+      const seen = new Set<string>();
+      const discoveryTags = current.discoveryTags.flatMap((entry) => {
+        const tag = entry.tag.toLocaleLowerCase() === key ? to : entry.tag;
+        if (!tag || seen.has(tag.toLocaleLowerCase())) return [];
+        seen.add(tag.toLocaleLowerCase());
+        return [{ ...entry, tag }];
+      });
+      const arcLibrary = current.arcLibrary.map((type) =>
+        type.tags.some((tag) => tag.toLocaleLowerCase() === key)
+          ? { ...type, tags: replaceSlurpDiscoveryTag(type.tags, from, to) }
+          : type,
+      );
+      const settings = await this.updateSettings({ discoveryTags, arcLibrary });
+      await db.transaction(async (tx) => {
+        const rows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.platform, "slurp"));
+        for (const row of rows) {
+          const accountSettings = normalizeNoodleAccountSettings(row.settings);
+          const tags = accountSettings.profile.tags ?? [];
+          if (!tags.some((tag) => tag.toLocaleLowerCase() === key)) continue;
+          await tx
+            .update(noodleAccounts)
+            .set({
+              settings: JSON.stringify({
+                ...accountSettings,
+                profile: { ...accountSettings.profile, tags: replaceSlurpDiscoveryTag(tags, from, to) },
+              } satisfies SlurpNoodleAccountSettings),
+              updatedAt: now(),
+            })
+            .where(eq(noodleAccounts.id, row.id));
+        }
+      });
+      return settings;
+    },
+
     async deleteAllSlurpData(): Promise<{ deletedCreators: number; deletedPosts: number }> {
       const accounts = await db.select().from(noodleAccounts).where(eq(noodleAccounts.platform, "slurp"));
       const accountIds = accounts.map((account) => account.id);
@@ -2205,6 +2498,8 @@ export function createSlurpStorage(db: DB) {
         for (const accountId of accountIds) {
           await settings.remove(`${SLURP_CREATOR_STATE_KEY}.${accountId}`);
           await settings.remove(slurpProjectsKey(accountId));
+          await settings.remove(slurpArcAutoKey(accountId));
+          await settings.remove(slurpArcConfigKey(accountId));
         }
         for (const personaId of personaIds) await settings.remove(slurpViewerSettingsKey(personaId));
         await settings.remove(SLURP_SETTINGS_KEY);
@@ -2453,7 +2748,11 @@ export function createSlurpStorage(db: DB) {
       return existing;
     },
 
-    async getSlurpAccountForEntity(kind: NoodleAccountKind, entityId: string): Promise<SlurpAccount | null> {
+    async getSlurpAccountForEntity(
+      kind: NoodleAccountKind,
+      entityId: string,
+      role: SlurpAccountRole = "creator",
+    ): Promise<SlurpAccount | null> {
       const rows = await db
         .select()
         .from(noodleAccounts)
@@ -2464,7 +2763,13 @@ export function createSlurpStorage(db: DB) {
             eq(noodleAccounts.platform, "slurp"),
           ),
         );
-      return rows[0] ? mapAccount(rows[0]) : null;
+      return (
+        rows
+          .map(mapAccount)
+          .find((account) =>
+            role === "viewer" ? isSlurpViewerActorAccount(account) : !isSlurpViewerActorAccount(account),
+          ) ?? null
+      );
     },
 
     async getAccountsByEntities(kind: NoodleAccountKind, entityIds: string[]): Promise<SlurpAccount[]> {
@@ -2503,17 +2808,7 @@ export function createSlurpStorage(db: DB) {
       sourceKind: SlurpSourceKind,
       sourceEntityId: string,
     ): Promise<SlurpAccount | null> {
-      const rows = await db
-        .select()
-        .from(noodleAccounts)
-        .where(
-          and(
-            eq(noodleAccounts.platform, "slurp"),
-            eq(noodleAccounts.sourceKind, sourceKind),
-            eq(noodleAccounts.sourceEntityId, sourceEntityId),
-          ),
-        );
-      return rows[0] ? mapAccount(rows[0]) : null;
+      return this.getSlurpAccountForEntity(sourceKind, sourceEntityId, "creator");
     },
 
     async patchViewerSettings(
@@ -2569,6 +2864,7 @@ export function createSlurpStorage(db: DB) {
     async deleteNoodlerAccount(id: string): Promise<NoodleAccount | null> {
       const existing = await this.getNoodlerAccountById(id, { includeHidden: true });
       if (!existing) return null;
+      await this.leaveCrossovers(id);
       const postRows = await db.select().from(noodlePosts).where(eq(noodlePosts.authorAccountId, id));
       const postIds = postRows.map((post) => post.id);
       const interactionRows =
@@ -2687,9 +2983,9 @@ export function createSlurpStorage(db: DB) {
             sourceStatus: !currentSource
               ? { state: "missing" as const }
               : compareMinimizedNoodlerSourceSnapshot(
-                  baseline ?? minimizeNoodlerSourceSnapshot(currentSource, disclosureMode ?? "secret"),
+                  baseline ?? minimizeNoodlerSourceSnapshot(currentSource, disclosureMode ?? "open"),
                   currentSource,
-                  disclosureMode ?? "secret",
+                  disclosureMode ?? "open",
                 ),
             publicIdentity:
               publicAccount && (disclosureMode === "open" || disclosureMode === "hinted")
@@ -2929,7 +3225,11 @@ export function createSlurpStorage(db: DB) {
       syncIdentity?: boolean;
     }): Promise<NoodleAccount> {
       await reconcilePublicHandles();
-      const existing = await this.getSlurpAccountForEntity(input.kind, input.entityId);
+      const existing = await this.getSlurpAccountForEntity(
+        input.kind,
+        input.entityId,
+        input.kind === "persona" && input.invited !== false ? "viewer" : "creator",
+      );
       if (existing) {
         return db.transaction(async (tx) => {
           const rows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, existing.id));
@@ -3669,14 +3969,14 @@ export function createSlurpStorage(db: DB) {
               updatedAt: at.toISOString(),
             })
             .where(eq(noodlerPreparedPosts.id, current.id));
-          return true;
+          return postId;
         });
         if (!didPublish) continue;
         published += 1;
         // Outside the transaction on purpose. Advancing is bookkeeping, not part of publishing:
         // a project that failed to advance must not roll back a post the audience can already see.
         if (typeof item.payload.projectId === "string" && item.payload.projectId) {
-          await this.advanceProject(item.creatorAccountId, item.payload.projectId);
+          await this.advanceProject(item.creatorAccountId, item.payload.projectId, didPublish);
         }
       }
       for (const path of discardedMediaPaths) unlinkNoodlerMedia(path);
@@ -6749,9 +7049,74 @@ export function createSlurpStorage(db: DB) {
       return goal;
     },
 
+    /** This Creator's stored arc overrides. Missing fields use the global settings. */
+    async getArcConfig(creatorAccountId: string): Promise<SlurpCreatorArcConfig> {
+      return readSlurpCreatorArcConfig(await settingsStore.get(slurpArcConfigKey(creatorAccountId)));
+    },
+
+    /** Replace this Creator's overrides. An empty config is "Reset to global". */
+    async setArcConfig(creatorAccountId: string, config: SlurpCreatorArcConfig): Promise<SlurpCreatorArcConfig> {
+      const next = readSlurpCreatorArcConfig(config);
+      if (Object.keys(next).length) await settingsStore.set(slurpArcConfigKey(creatorAccountId), JSON.stringify(next));
+      else await settingsStore.remove(slurpArcConfigKey(creatorAccountId));
+      return next;
+    },
+
+    async resolveArcConfig(creatorAccountId: string): Promise<SlurpResolvedArcConfig> {
+      return resolveSlurpArcConfig(await this.getSettings(), await this.getArcConfig(creatorAccountId));
+    },
+
     /** Every project this Creator has, newest first. Paused and complete ones are included. */
     async listProjects(creatorAccountId: string): Promise<SlurpProject[]> {
-      return readSlurpProjects(await settingsStore.get(slurpProjectsKey(creatorAccountId)));
+      const projects = await loadProjects(creatorAccountId);
+      // The other participants by public display name, never the source character behind them.
+      for (const project of projects.filter(isSlurpCrossover)) {
+        const names: string[] = [];
+        for (const id of project.creatorIds.filter((entry) => entry !== creatorAccountId)) {
+          const account = await this.getNoodlerAccountById(id, { includeHidden: true });
+          if (account) names.push(account.displayName);
+        }
+        project.partnerNames = names;
+      }
+      return projects;
+    },
+
+    /** Whether every Creator in the arc (or this Creator, for a single arc) is below `maxActive`. */
+    async arcHasRoom(creatorAccountId: string, project?: SlurpProject | null): Promise<boolean> {
+      for (const id of project && isSlurpCrossover(project) ? project.creatorIds : [creatorAccountId]) {
+        if (activeSlurpProjects(await loadProjects(id)).length >= (await this.resolveArcConfig(id)).maxActive)
+          return false;
+      }
+      return true;
+    },
+
+    /**
+     * Take a deleted Creator out of every crossover. The record moves to the next participant when it
+     * was stored with the deleted one; below two participants it becomes a normal arc of whoever is left.
+     */
+    async leaveCrossovers(creatorAccountId: string): Promise<void> {
+      for (const project of (await loadProjects(creatorAccountId)).filter(isSlurpCrossover)) {
+        const stored = readSlurpProjects(await settingsStore.get(slurpProjectsKey(project.creatorIds[0]!))).find(
+          (entry) => entry.id === project.id,
+        );
+        if (!stored) continue;
+        const left = slurpCrossoverLeave(stored, creatorAccountId);
+        const newOwner = stored.creatorIds.find((id) => id !== creatorAccountId)!;
+        for (const id of stored.creatorIds) {
+          const entries = await readProjectEntries(id);
+          const next =
+            id === creatorAccountId
+              ? entries.filter((entry) => !isProjectEntry(entry, project.id))
+              : entries.map((entry) =>
+                  !isProjectEntry(entry, project.id)
+                    ? entry
+                    : id === newOwner
+                      ? left
+                      : { crossoverOf: { ownerCreatorId: newOwner, projectId: project.id } },
+                );
+          await settingsStore.set(slurpProjectsKey(id), JSON.stringify(next));
+        }
+      }
     },
 
     /** The projects that may claim a post right now. */
@@ -6766,19 +7131,40 @@ export function createSlurpStorage(db: DB) {
     /**
      * Open a project.
      *
-     * Refuses past `SLURP_PROJECT_MAX_ACTIVE` rather than opening a fourth that would publish too
+     * Refuses past the Creator's resolved `maxActive` rather than opening a fourth that would publish too
      * rarely to follow. Returns null on an unusable title, which is the one field it cannot invent.
      */
     async createProject(
       creatorAccountId: string,
-      input: { title: string; direction?: string; chapters?: string[] },
+      input: {
+        title?: string;
+        direction?: string;
+        chapters?: string[];
+        typeId?: string | null;
+        durationDays?: number | null;
+        intensity?: SlurpArcIntensity;
+        /** Up to two more Creators for a crossover. The caller checks ownership. */
+        crossoverWith?: string[];
+      },
     ): Promise<SlurpProject | null> {
       const projects = await this.listProjects(creatorAccountId);
-      if (activeSlurpProjects(projects).length >= SLURP_PROJECT_MAX_ACTIVE) return null;
-      const project = makeSlurpProject(newId(), input, new Date());
-      if (!project) return null;
-      await settingsStore.set(slurpProjectsKey(creatorAccountId), JSON.stringify([project, ...projects]));
-      return project;
+      const creatorIds = [...new Set([creatorAccountId, ...(input.crossoverWith ?? [])])];
+      // A crossover counts against every participant's limit.
+      for (const id of creatorIds) {
+        if (activeSlurpProjects(await loadProjects(id)).length >= (await this.resolveArcConfig(id)).maxActive)
+          return null;
+      }
+      const type = input.typeId
+        ? ((await this.getSettings()).arcLibrary.find((entry) => entry.id === input.typeId) ?? null)
+        : null;
+      const made = makeSlurpProject(newId(), { ...input, type }, new Date());
+      if (!made) return null;
+      const project = slurpCrossoverStart(made, creatorIds);
+      const rest = project.intensity === "focus" ? slurpArcsWithoutFocus(projects) : projects;
+      await writeProjects(creatorAccountId, [project, ...rest]);
+      for (const id of project.creatorIds.slice(1))
+        await writeProjects(id, [slurpCrossoverView(project, id), ...(await loadProjects(id))]);
+      return slurpCrossoverView(project, creatorAccountId);
     },
 
     /**
@@ -6790,7 +7176,15 @@ export function createSlurpStorage(db: DB) {
     async updateProject(
       creatorAccountId: string,
       projectId: string,
-      patch: { title?: string; direction?: string; chapters?: string[]; chapter?: number; status?: SlurpProjectStatus },
+      patch: {
+        title?: string;
+        direction?: string;
+        chapters?: string[];
+        chapter?: number;
+        status?: SlurpProjectStatus;
+        intensity?: SlurpArcIntensity;
+        durationDays?: number | null;
+      },
     ): Promise<SlurpProject | null> {
       const projects = await this.listProjects(creatorAccountId);
       const index = projects.findIndex((project) => project.id === projectId);
@@ -6801,7 +7195,7 @@ export function createSlurpStorage(db: DB) {
       if (
         patch.status === "active" &&
         current.status !== "active" &&
-        activeSlurpProjects(projects).length >= SLURP_PROJECT_MAX_ACTIVE
+        !(await this.arcHasRoom(creatorAccountId, current))
       )
         return null;
       const chapters = patch.chapters
@@ -6813,8 +7207,14 @@ export function createSlurpStorage(db: DB) {
       const title =
         patch.title === undefined ? current.title : patch.title.trim().slice(0, SLURP_PROJECT_TITLE_MAX_LENGTH);
       if (!title) return null;
-      const chapter = patch.chapter === undefined ? current.chapter : Math.floor(patch.chapter);
-      const next: SlurpProject = {
+      // Clamped here as well as on read, so a shortened chapter list cannot leave the pointer
+      // past the end and strand the project one post short of finishing.
+      const chapter = Math.min(
+        Math.max(0, patch.chapter === undefined ? current.chapter : Math.floor(patch.chapter)),
+        Math.max(0, chapters.length - 1),
+      );
+      const updatedAt = now();
+      const edited: SlurpProject = {
         ...current,
         title,
         direction:
@@ -6822,16 +7222,25 @@ export function createSlurpStorage(db: DB) {
             ? current.direction
             : patch.direction.trim().slice(0, SLURP_PROJECT_DIRECTION_MAX_LENGTH),
         chapters,
-        // Clamped here as well as on read, so a shortened chapter list cannot leave the pointer
-        // past the end and strand the project one post short of finishing.
-        chapter: Math.min(Math.max(0, chapter), Math.max(0, chapters.length - 1)),
+        chapter,
+        durationDays: patch.durationDays === undefined ? current.durationDays : patch.durationDays,
+        // Day ranges stay with the chapter at the same index; a chapter the player added has none.
+        phaseDays: current.phaseDays.slice(0, chapters.length),
+        reach: current.reach.slice(0, chapters.length),
+        // A chapter set by hand starts its clock now, or it would time out on the next tick.
+        chapterStartedAt: chapter === current.chapter ? current.chapterStartedAt : updatedAt,
         status: SLURP_PROJECT_STATUSES.includes(patch.status as SlurpProjectStatus)
           ? (patch.status as SlurpProjectStatus)
           : current.status,
-        updatedAt: now(),
+        intensity: SLURP_ARC_INTENSITIES.includes(patch.intensity as SlurpArcIntensity)
+          ? (patch.intensity as SlurpArcIntensity)
+          : current.intensity,
+        updatedAt,
       };
-      projects[index] = next;
-      await settingsStore.set(slurpProjectsKey(creatorAccountId), JSON.stringify(projects));
+      const next = slurpProjectRecord(current, edited, new Date(updatedAt));
+      const saved = next.intensity === "focus" ? slurpArcsWithoutFocus(projects) : projects;
+      saved[index] = next;
+      await writeProjects(creatorAccountId, saved);
       return next;
     },
 
@@ -6842,10 +7251,20 @@ export function createSlurpStorage(db: DB) {
      * and a post that has already been read cannot be un-published by tidying the Studio.
      */
     async deleteProject(creatorAccountId: string, projectId: string): Promise<boolean> {
-      const projects = await this.listProjects(creatorAccountId);
-      const remaining = projects.filter((project) => project.id !== projectId);
-      if (remaining.length === projects.length) return false;
-      await settingsStore.set(slurpProjectsKey(creatorAccountId), JSON.stringify(remaining));
+      const removed = (await loadProjects(creatorAccountId)).find((project) => project.id === projectId);
+      if (!removed) return false;
+      // A crossover is one arc: deleting it removes the record and every participant's reference.
+      const ids = isSlurpCrossover(removed) ? removed.creatorIds : [creatorAccountId];
+      for (const id of ids) {
+        const entries = await readProjectEntries(id);
+        await settingsStore.set(
+          slurpProjectsKey(id),
+          JSON.stringify(entries.filter((entry) => !isProjectEntry(entry, projectId))),
+        );
+      }
+      // Dismissing an automatic suggestion restarts the cooldown, so the next one does not follow at once.
+      if (removed.status === "suggested" && removed.origin === "auto")
+        for (const id of ids) await settingsStore.set(slurpArcAutoKey(id), now());
       return true;
     },
 
@@ -6855,14 +7274,315 @@ export function createSlurpStorage(db: DB) {
      * Called after publication, never at generation: advancing on a draft would skip a chapter
      * every time a generation failed.
      */
-    async advanceProject(creatorAccountId: string, projectId: string): Promise<SlurpProject | null> {
+    async advanceProject(creatorAccountId: string, projectId: string, postId?: string): Promise<SlurpProject | null> {
       const projects = await this.listProjects(creatorAccountId);
       const index = projects.findIndex((project) => project.id === projectId);
       if (index < 0) return null;
-      const next = slurpProjectAdvance(projects[index]!, new Date());
+      const current = projects[index]!;
+      const at = new Date();
+      // The first published post that carries a poll opens the chapter's choice.
+      // ponytail: two posts prepared before the first publishes both carry the poll; only the first one's votes count.
+      const pollPost =
+        postId && current.choices[current.chapter] && !current.pollPostId
+          ? await this.getNoodlerPostById(postId)
+          : null;
+      const poll = pollPost?.metadata.poll
+        ? { postId: pollPost.id, hours: (await this.getSettings()).arcPollHours }
+        : undefined;
+      // The twist was used by this post, so it is cleared here, at publication.
+      // ponytail: posts prepared before this one publishes also carry the twist; clear at prepare time if that shows.
+      const { pace } = await this.resolveArcConfig(creatorAccountId);
+      const next = slurpProjectRecord(
+        current,
+        { ...slurpProjectAdvance(current, at, pace, poll), twist: "" },
+        at,
+        postId,
+        creatorAccountId,
+      );
       projects[index] = next;
-      await settingsStore.set(slurpProjectsKey(creatorAccountId), JSON.stringify(projects));
+      await writeProjects(creatorAccountId, projects, at);
+      await this.recordArcChange(creatorAccountId, current, next);
       return next;
+    },
+
+    /**
+     * One Director mode action. Null when it does not apply, or when resuming would pass `maxActive`.
+     * The caller checks `arcDirectorMode`.
+     */
+    async directProject(
+      creatorAccountId: string,
+      projectId: string,
+      action: SlurpArcDirectorAction,
+      value?: string,
+    ): Promise<SlurpProject | null> {
+      const projects = await this.listProjects(creatorAccountId);
+      const index = projects.findIndex((project) => project.id === projectId);
+      if (index < 0) return null;
+      const current = projects[index]!;
+      if (action === "resume" && !(await this.arcHasRoom(creatorAccountId, current))) return null;
+      const votes = action === "choose" ? await this.projectPollVotes(current) : [];
+      const next = slurpProjectDirect(current, action, new Date(), value, Math.random, votes);
+      if (!next) return null;
+      projects[index] = next;
+      await writeProjects(creatorAccountId, projects);
+      await this.recordArcChange(creatorAccountId, current, next);
+      return next;
+    },
+
+    /** The running arcs' multiplier for one stat, under `arcStatEffects`. */
+    async arcEffectMultiplier(creatorAccountId: string, stat: SlurpArcEffectStat): Promise<number> {
+      return slurpArcEffectMultiplier(
+        await this.listProjects(creatorAccountId),
+        stat,
+        (await this.getSettings()).arcStatEffects,
+      );
+    },
+
+    /**
+     * Apply or reject an arc's pending profile change. Apply writes through the ordinary profile
+     * update and keeps the replaced values for a revert. Null when nothing is pending.
+     */
+    async resolveArcProfile(creatorAccountId: string, projectId: string, apply: boolean): Promise<SlurpProject | null> {
+      const projects = await this.listProjects(creatorAccountId);
+      const index = projects.findIndex((project) => project.id === projectId);
+      const creator = index < 0 ? null : await this.getNoodlerAccountById(creatorAccountId);
+      if (!creator) return null;
+      const resolved = slurpArcResolveProfile(projects[index]!, apply, {
+        bio: creator.bio ?? "",
+        location: creator.settings.profile.location ?? "",
+      });
+      if (!resolved) return null;
+      if (resolved.write)
+        await this.updateAccountProfile(creatorAccountId, {
+          ...(resolved.write.bio !== undefined ? { bio: resolved.write.bio } : {}),
+          ...(resolved.write.location !== undefined ? { profile: { location: resolved.write.location } } : {}),
+        });
+      projects[index] = { ...resolved.project, updatedAt: now() };
+      await writeProjects(creatorAccountId, projects);
+      return projects[index]!;
+    },
+
+    /**
+     * Tell the player an arc moved on or finished. An open-ended arc that only counted a post is
+     * not news, so nothing is recorded for it.
+     */
+    async recordArcChange(creatorAccountId: string, before: SlurpProject, after: SlurpProject): Promise<void> {
+      // A choice settled by this change: the fans hear what won.
+      const poll =
+        before.choices[before.chapter] && !after.choices[before.chapter]
+          ? [...after.history].reverse().find((entry) => entry.poll)?.poll
+          : undefined;
+      const pollNote = poll ? `, fans chose: ${poll.winner}` : "";
+      const label = `${after.chapters.length ? `${after.title} (${slurpProjectChapter(after)})` : after.title}${pollNote}`;
+      // A chapter's mood arrives through the ordinary modifier list, so it expires like any other feeling.
+      const mood =
+        after.chapter !== before.chapter && after.status !== "complete"
+          ? slurpArcChapterMood(after, (await this.getSettings()).arcAffectsMood)
+          : null;
+      // A crossover moves every participant: mood and events reach each of them.
+      for (const id of isSlurpCrossover(after) ? after.creatorIds : [creatorAccountId]) {
+        if (mood) await mutateCreatorStateNow(id, (state) => addSlurpModifier(state, mood, after.title));
+        if (after.status === "complete" && before.status !== "complete") {
+          await this.recordCreatorEvent(id, "arc_complete", {
+            actorLabel: `${after.title}${pollNote}`,
+            subjectId: after.id,
+          });
+        } else if (after.chapter !== before.chapter) {
+          await this.recordCreatorEvent(id, "arc_phase", { actorLabel: label, subjectId: after.id });
+        }
+      }
+    },
+
+    /**
+     * Votes per option for the arc's open choice: real votes on its poll post (the player's and
+     * generated accounts'), plus seeded simulated fan votes while `arcFanReactions` is on. No poll
+     * post means no votes at all, so the pick is left to chance.
+     */
+    async projectPollVotes(project: SlurpProject): Promise<number[]> {
+      const choice = project.choices[project.chapter];
+      if (!choice || !project.pollPostId) return [];
+      const counts = (await this.getSettings()).arcFanReactions
+        ? slurpArcFanVotes(project, choice.options.length)
+        : choice.options.map(() => 0);
+      for (const interaction of await this.listNoodlerInteractions([project.pollPostId])) {
+        if (interaction.type !== "vote") continue;
+        // Poll option ids are `option-1`… in option order (createNoodlePoll).
+        const index = Number(/^option-(\d+)$/.exec(interaction.content ?? "")?.[1]) - 1;
+        if (index >= 0 && index < counts.length) counts[index]! += 1;
+      }
+      return counts;
+    },
+
+    /**
+     * Move on every arc whose chapter has run out of time. Returns the arcs that moved, so the world
+     * tick can tell the player about them. Writes nothing when nothing moved.
+     */
+    async tickProjects(creatorAccountId: string, at = new Date()): Promise<SlurpProject[]> {
+      const projects = await this.listProjects(creatorAccountId);
+      const { pace } = await this.resolveArcConfig(creatorAccountId);
+      const ticked: SlurpProject[] = [];
+      for (const project of projects) {
+        // A crossover ticks once, in the list that stores it.
+        if (isSlurpCrossover(project) && project.creatorIds[0] !== creatorAccountId) {
+          ticked.push(project);
+          continue;
+        }
+        if (slurpProjectPollDue(project, at, pace)) {
+          ticked.push(slurpProjectChoose(project, at, await this.projectPollVotes(project)) ?? project);
+          continue;
+        }
+        const next = slurpProjectTick(project, at, pace);
+        ticked.push(next === project ? project : slurpProjectRecord(project, next, at));
+      }
+      const moved = ticked.filter((project, index) => project !== projects[index]);
+      if (moved.length) await writeProjects(creatorAccountId, ticked, at);
+      for (const [index, project] of ticked.entries()) {
+        if (project !== projects[index]) await this.recordArcChange(creatorAccountId, projects[index]!, project);
+      }
+      return moved;
+    },
+
+    /**
+     * Start or suggest an automatic arc for a Creator with none running, when the settings allow it
+     * and the cooldown has passed. The cooldown starts at the suggestion, so dismissing one does not
+     * bring the next one sooner.
+     */
+    async rollAutoArc(
+      creatorAccountId: string,
+      at = new Date(),
+      /** Asks the model for an arc; resolves the raw JSON or null. Without it, generated picks start nothing. */
+      generate?: (creatorAccountId: string, partnerIds: string[]) => Promise<unknown>,
+    ): Promise<SlurpProject | null> {
+      const settings = await this.getSettings();
+      const config = resolveSlurpArcConfig(settings, await this.getArcConfig(creatorAccountId));
+      if (config.autoMode === "off") return null;
+      const creator = await this.getNoodlerAccountById(creatorAccountId, { includeHidden: true });
+      const roll = async () => {
+        const projects = await this.listProjects(creatorAccountId);
+        // ponytail: reads every Creator's projects per roll (O(n²) per maintenance tick); pass the count in from the world tick if Creator counts grow large.
+        let concurrentAuto = 0;
+        for (const account of await this.listNoodlerAccounts({ includeHidden: true })) {
+          concurrentAuto += slurpAutoArcCount(await loadProjects(account.id), account.id);
+        }
+        const pick = slurpAutoArcPick({
+          creatorAccountId,
+          at,
+          projects,
+          library: settings.arcLibrary,
+          creatorTags: creator?.settings.profile.tags ?? [],
+          lastAutoAt: await settingsStore.get(slurpArcAutoKey(creatorAccountId)),
+          cooldownWeeks: config.cooldownWeeks,
+          allowedTypeIds: config.allowedTypeIds,
+          createdAt: creator?.createdAt ?? null,
+          concurrentAuto,
+          maxConcurrentAuto: settings.arcMaxConcurrentAuto,
+          source: config.source,
+        });
+        return { pick, projects };
+      };
+      let { pick, projects } = await roll();
+      if (!pick) return null;
+      const partnerId = creator && config.crossovers ? await this.autoCrossoverPartner(creator, at) : null;
+      const status = config.autoMode === "suggest" ? "suggested" : "active";
+      let project: SlurpProject | null;
+      if ("type" in pick) {
+        project = makeSlurpProject(newId(), { type: pick.type, origin: "auto" }, at);
+        if (project) project = { ...project, status };
+      } else {
+        if (!generate) return null;
+        // The model call runs with nothing held; the roll is checked again before anything is written,
+        // so another arc started meanwhile still counts against the cap and the cooldown.
+        const raw = await generate(creatorAccountId, partnerId ? [partnerId] : []).catch(() => null);
+        project = slurpGeneratedArcProject(newId(), raw, at, { origin: "auto", status });
+        if (!project) return null;
+        ({ pick, projects } = await roll());
+        if (!pick) return null;
+      }
+      if (!project) return null;
+      project = slurpCrossoverStart(project, partnerId ? [creatorAccountId, partnerId] : []);
+      await writeProjects(creatorAccountId, [project, ...projects], at);
+      if (partnerId)
+        await writeProjects(
+          partnerId,
+          [slurpCrossoverView(project, partnerId), ...(await loadProjects(partnerId))],
+          at,
+        );
+      // The cooldown starts for every participant.
+      for (const id of isSlurpCrossover(project) ? project.creatorIds : [creatorAccountId]) {
+        await settingsStore.set(slurpArcAutoKey(id), at.toISOString());
+        await this.recordCreatorEvent(id, "arc_started", {
+          actorLabel: project.title,
+          subjectId: project.id,
+        });
+      }
+      return slurpCrossoverView(project, creatorAccountId);
+    },
+
+    /**
+     * A partner for an automatic crossover, or null. Only a Creator of the same owner, with an open
+     * identity and nobody hidden from, whose own arc rules would allow an automatic arc right now. A
+     * protected-identity Creator is never paired automatically: the other profile would reveal it.
+     */
+    async autoCrossoverPartner(
+      creator: NonNullable<Awaited<ReturnType<typeof this.getNoodlerAccountById>>>,
+      at: Date,
+    ): Promise<string | null> {
+      const open = (account: typeof creator) =>
+        (account.settings.privacy.identityDisclosure ?? "open") === "open" &&
+        account.settings.privacy.access.hiddenFromAccountIds.length === 0;
+      if (!open(creator)) return null;
+      const sameOwner = (account: typeof creator) =>
+        (account.sourceKind === "persona") === (creator.sourceKind === "persona") &&
+        (creator.sourceKind !== "persona" || account.sourceEntityId === creator.sourceEntityId);
+      const ties = [
+        ...(await this.listSubscriptionsForViewer(creator.id)),
+        ...(await this.listSubscriptionsForCreator(creator.id)),
+      ];
+      const candidates = [];
+      for (const account of await this.listNoodlerAccounts()) {
+        if (account.id === creator.id || isSlurpViewerActorAccount(account)) continue;
+        const config = await this.resolveArcConfig(account.id);
+        const cooldown = Math.max(1, config.cooldownWeeks) * 7 * 86_400_000;
+        const last = Date.parse((await settingsStore.get(slurpArcAutoKey(account.id))) ?? "");
+        const created = Date.parse(account.createdAt ?? "");
+        candidates.push({
+          id: account.id,
+          tags: account.settings.profile.tags ?? [],
+          related: ties.some((tie) => tie.viewerAccountId === account.id || tie.creatorAccountId === account.id),
+          eligible:
+            config.autoMode !== "off" &&
+            config.crossovers &&
+            open(account) &&
+            sameOwner(account) &&
+            !(at.getTime() - last < cooldown) &&
+            !(at.getTime() - created < cooldown) &&
+            activeSlurpProjects(await loadProjects(account.id)).length < config.maxActive,
+        });
+      }
+      return slurpCrossoverPartner({
+        creatorAccountId: creator.id,
+        at,
+        creatorTags: creator.settings.profile.tags ?? [],
+        candidates,
+      });
+    },
+
+    /** Store a model-invented arc the player asked for. It waits as a suggestion until accepted. */
+    async addGeneratedProject(creatorAccountId: string, raw: unknown): Promise<SlurpProject | null> {
+      const project = slurpGeneratedArcProject(newId(), raw, new Date(), { origin: "manual", status: "suggested" });
+      if (!project) return null;
+      const projects = await this.listProjects(creatorAccountId);
+      await writeProjects(creatorAccountId, [project, ...projects]);
+      return project;
+    },
+
+    /** Copy an arc into the library as a custom type. */
+    async saveProjectToLibrary(creatorAccountId: string, projectId: string) {
+      const project = await this.getProject(creatorAccountId, projectId);
+      if (!project) return null;
+      const type = slurpArcTypeFromProject(project, `custom-${newId()}`);
+      const settings = await this.updateSettings({ arcLibrary: [...(await this.getSettings()).arcLibrary, type] });
+      return settings.arcLibrary.find((entry) => entry.id === type.id) ?? null;
     },
 
     /** One project's own posts, newest first, for the Studio and for generation continuity. */

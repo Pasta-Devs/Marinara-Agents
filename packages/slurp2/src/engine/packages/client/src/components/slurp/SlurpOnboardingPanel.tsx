@@ -64,7 +64,7 @@ type CompletionKind = NoodlerOnboardingCompletion | "creationFailed";
 const clampPostsPerDay = (raw: string) =>
   Math.max(1, Math.min(NOODLER_POSTS_PER_DAY_MAX, Math.round(Number(raw)) || 1));
 
-const DISCLOSURES: NoodleIdentityDisclosure[] = ["open", "hinted", "secret"];
+const DISCLOSURES: NoodleIdentityDisclosure[] = ["open", "hinted"];
 const DEFAULT_ACTIVITY_PATCH = slurpActivityPresetPatch(SLURP_DEFAULT_ACTIVITY_PRESET);
 const DEFAULT_POSTS_PER_DAY = DEFAULT_ACTIVITY_PATCH.postsPerDay!;
 
@@ -135,7 +135,7 @@ export function SlurpOnboardingWizard({
   const [activityChoice, setActivityChoice] = useState<SlurpActivityPreset | null>(SLURP_DEFAULT_ACTIVITY_PRESET);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectionInitialized, setSelectionInitialized] = useState(false);
-  const [disclosure, setDisclosure] = useState<NoodleIdentityDisclosure>("hinted");
+  const [disclosure, setDisclosure] = useState<NoodleIdentityDisclosure>("open");
   const [exceptions, setExceptions] = useState<Record<string, NoodleIdentityDisclosure>>({});
   const [autoPostingEnabled, setAutoPostingEnabled] = useState(true);
   const [postsPerDay, setPostsPerDay] = useState(DEFAULT_POSTS_PER_DAY);
@@ -164,16 +164,12 @@ export function SlurpOnboardingWizard({
     displayName:
       disclosure === "open"
         ? t("ui.noodle.noodlerwizard.identityPreview.openName")
-        : disclosure === "hinted"
-          ? t("ui.noodle.noodlerwizard.identityPreview.hintedName")
-          : t("ui.noodle.noodlerwizard.identityPreview.secretName"),
+        : t("ui.noodle.noodlerwizard.identityPreview.hintedName"),
     handle:
       disclosure === "open"
         ? t("ui.noodle.noodlerwizard.identityPreview.openHandle")
-        : disclosure === "hinted"
-          ? t("ui.noodle.noodlerwizard.identityPreview.hintedHandle")
-          : t("ui.noodle.noodlerwizard.identityPreview.secretHandle"),
-    avatarUrl: disclosure === "secret" ? null : "/sprites/mari/chibi-professor-mari.png",
+        : t("ui.noodle.noodlerwizard.identityPreview.hintedHandle"),
+    avatarUrl: "/sprites/mari/chibi-professor-mari.png",
     disclosureMode: disclosure,
   };
 
@@ -191,7 +187,7 @@ export function SlurpOnboardingWizard({
     setSelected(new Set());
     setSelectionInitialized(false);
     setSettingsSeeded(false);
-    setDisclosure("hinted");
+    setDisclosure("open");
     setExceptions({});
     setGenerateNow(true);
     setCreatedIds([]);

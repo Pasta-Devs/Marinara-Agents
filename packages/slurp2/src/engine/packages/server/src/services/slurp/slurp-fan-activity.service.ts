@@ -22,6 +22,8 @@ import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { createSlurpStorage, type SlurpSettings } from "../storage/slurp.storage.js";
 import { slurpAudienceToneInstruction } from "./slurp-tone.js";
 import { slurpAudienceArcDescription, type SlurpAudienceArc } from "./slurp-audience-arc.js";
+import { slurpArcLifeLine } from "./slurp-project.js";
+import { protectNoodlerGeneratedIdentity, resolveNoodlerPublicIdentity } from "./slurp-generation.service.js";
 import {
   NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR,
   NOODLE_FAN_ACTIVITY_MAX_CREATORS_PER_RUN,
@@ -80,6 +82,8 @@ export interface NoodlerFanCreatorCandidate {
     }
   >;
   identities: NoodlerFanIdentity[];
+  /** What is going on in the Creator's life, from their running arc. Already protected. */
+  arc?: string | null;
 }
 
 function weightedIdentitySequence(identities: NoodlerFanIdentity[], weights: NoodlerFanArchetypeWeights) {
@@ -193,6 +197,7 @@ function buildFanActivityMessages(input: {
     "Use only supplied creator IDs, actor handles, and post IDs. Never invent identifiers.",
     "Likes have null content. Replies are one short sentence, normally under 180 characters, natural, relevant, and not repetitive.",
     "Each post lists the comments already under it. Never repeat a point somebody has already made.",
+    'A creator may list what is "currentlyGoingOn" in their life. Regulars who know them may mention it now and then; most comments should still be about the post itself.',
     'To answer one of those comments instead of the post, set "parentInteractionId" to that comment\'s id. Leave it out to comment on the post itself. Some replies should answer other people; a comment section where nobody talks to anybody is a list, not a conversation.',
     'Return JSON only, shaped as {"activities":[{"creatorAccountId":"...","actorHandle":"...","targetPostId":"...","type":"like"|"reply","content":null|"...","parentInteractionId":"..."}]}. Use exactly these field names; "parentInteractionId" is optional.',
     "Each actor handle has a weight; prefer higher-weight actors more often, proportionally.",
@@ -207,6 +212,7 @@ function buildFanActivityMessages(input: {
       displayName: candidate.creator.displayName,
       handle: candidate.creator.handle,
       bio: candidate.creator.bio,
+      ...(candidate.arc ? { currentlyGoingOn: candidate.arc } : {}),
     },
     // Each actor arrives as a person, not a name. A comment from "a regular who has spent 240
     // coins here over four months and only shows up at night" is a different comment from one by
@@ -355,7 +361,8 @@ export function parseGeneratedFanActivityResponse(
 
 export async function prepareNoodlerFanCreatorCandidates(input: {
   db: DB;
-  settings: Pick<SlurpSettings, "fanActivityEnabled" | "fanArchetypeWeights">;
+  settings: Pick<SlurpSettings, "fanActivityEnabled" | "fanArchetypeWeights"> &
+    Partial<Pick<SlurpSettings, "arcFanReactions">>;
   creatorIds: string[];
   identityProvider?: NoodlerFanIdentityProvider;
 }): Promise<NoodlerFanCreatorCandidate[]> {
@@ -385,6 +392,22 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
     }
     commentsByPost.set(interaction.postId, list);
   }
+  // The running arc, so a regular can ask how the move is going. Protected before it leaves: fan
+  // comments are public, and an arc title can name a Secret Creator's real city.
+  const arcByCreator = new Map<string, string | null>();
+  if (input.settings.arcFanReactions !== false) {
+    for (const creator of creators) {
+      const line = slurpArcLifeLine(await noodle.listProjects(creator.id).catch(() => []));
+      if (!line) continue;
+      const publicIdentity = await resolveNoodlerPublicIdentity(input.db, creator).catch(() => null);
+      arcByCreator.set(
+        creator.id,
+        publicIdentity
+          ? protectNoodlerGeneratedIdentity(line, creator.settings.privacy.identityDisclosure ?? "open", publicIdentity)
+          : null,
+      );
+    }
+  }
   return creators.flatMap((creator) => {
     const policy = resolveNoodlerFanActivityPolicy(input.settings, creator);
     if (!policy.enabled) return [];
@@ -401,7 +424,8 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
       comments: commentsByPost.get(post.id) ?? [],
     }));
     const identities = provider.resolve(policy.archetypeWeights, creator.id);
-    return posts.length > 0 && identities.length > 0 ? [{ creator, policy, posts, identities }] : [];
+    const arc = arcByCreator.get(creator.id) ?? null;
+    return posts.length > 0 && identities.length > 0 ? [{ creator, policy, posts, identities, arc }] : [];
   });
 }
 

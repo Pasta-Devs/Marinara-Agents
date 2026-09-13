@@ -6,6 +6,15 @@ type SlurpManagedStageProfile = NoodlerManagedStageProfile & {
   tags: string[];
 };
 
+/**
+ * The disclosure a Creator actually gets. Slurp offers only Open and Hinted; the shared type still
+ * carries `secret`, so a stored or submitted Secret Creator becomes Hinted, the closest tier that
+ * still keeps the source name and handle protected.
+ */
+export function slurpDisclosureMode<T extends NoodleIdentityDisclosure | null | undefined>(mode: T) {
+  return (mode === "secret" ? "hinted" : mode) as T extends "secret" ? "hinted" : T;
+}
+
 const DISCLOSURE_RANK: Record<NoodleIdentityDisclosure, number> = {
   secret: 0,
   hinted: 1,

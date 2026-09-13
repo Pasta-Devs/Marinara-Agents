@@ -4,7 +4,6 @@ import {
   ArrowRight,
   Bell,
   Bookmark,
-  BookmarkCheck,
   BriefcaseBusiness,
   Check,
   ChevronDown,
@@ -124,6 +123,7 @@ import {
   useUpdateNoodlerFanActivity,
   useUpdateNoodlerStageProfile,
   useUpdateNoodlerProfileLocation,
+  useSlurpArcs,
   useSlurpSettings,
   useRecordSlurpStoryView,
   useSlurpStoryViews,
@@ -159,7 +159,7 @@ import {
   useNoodlePostCardController,
 } from "./SlurpPostCard";
 import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
-import { SlurpProjectsPanel } from "./SlurpProjectsPanel";
+import { SlurpArcTimelineCard, SlurpProjectsPanel } from "./SlurpProjectsPanel";
 import { SlurpFanCard } from "./SlurpFanCard";
 import { LockedSlurpPostCard, SlurpCreatorPostCard } from "./SlurpCreatorPostCard";
 import { SlurpSparkleVeil } from "./SlurpSparkleVeil";
@@ -200,6 +200,7 @@ import { SlurpDiscoveryProfileEditor } from "./SlurpDiscoveryProfileEditor";
 import { SlurpDiscoverToolbar } from "./SlurpDiscoverToolbar";
 import {
   filterAndSortSlurpCreators,
+  isSlurpDiscoveryProfileIncomplete,
   SLURP_DISCOVERY_TAGS,
   type SlurpDiscoverLayout,
   type SlurpDiscoverSort,
@@ -440,14 +441,6 @@ function disclosureOptions(t: ReturnType<typeof useUiTranslation>["t"]): Disclos
       detail: t("ui.noodle.disclosure.hinted.detail"),
       guidance: t("ui.noodle.disclosure.hinted.guidance"),
     },
-    {
-      value: "secret",
-      label: "Separate persona",
-      shortLabel: "Secret",
-      detail: "Create a genuinely separate identity with no public connection.",
-      guidance:
-        "The AI receives a reduced, non-identifying inspiration brief and avoids distinctive canonical details.",
-    },
   ];
 }
 
@@ -456,7 +449,7 @@ const EMPTY_STAGE_PROFILE: SlurpStageProfileInput = {
   handle: "",
   bio: "",
   stagePersonality: "",
-  disclosureMode: "hinted",
+  disclosureMode: "open",
   gender: null,
   tags: [],
 };
@@ -720,7 +713,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   } | null>(null);
   const [creationStep, setCreationStep] = useState<"source" | "disclosure" | "draft" | "automatic" | null>(null);
   const [autoPostSetupId, setAutoPostSetupId] = useState<string | null>(null);
-  const [creationDisclosure, setCreationDisclosure] = useState<NoodleIdentityDisclosure>("hinted");
+  const [creationDisclosure, setCreationDisclosure] = useState<NoodleIdentityDisclosure>("open");
   const [draftGuidance, setDraftGuidance] = useState("");
   const [draftConnectionId, setDraftConnectionId] = useState("");
   const [previousDraft, setPreviousDraft] = useState<SlurpStageProfileInput | null>(null);
@@ -2395,6 +2388,14 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="truncate text-sm font-bold">{profile.displayName}</h3>
                         <DisclosureBadge mode={profile.disclosureMode} />
+                        {isSlurpDiscoveryProfileIncomplete(profile) && (
+                          <span
+                            title={localizeUi("ui.slurp.profile.incompleteDetail")}
+                            className="rounded-full border border-amber-500/50 px-2 py-0.5 text-[0.68rem] font-bold text-amber-600 dark:text-amber-400"
+                          >
+                            {localizeUi("ui.slurp.profile.incomplete")}
+                          </span>
+                        )}
                       </div>
                       <p className="truncate text-xs text-[var(--muted-foreground)]">
                         {profile.disclosureMode
@@ -2626,6 +2627,8 @@ function StageProfileForm({
   const relationshipPickerMenuRef = useRef<HTMLDivElement>(null);
   const canSave =
     Boolean((isEditing || sourceAccountId) && draft.displayName.trim() && draft.handle.trim()) &&
+    // A new Creator needs a gender and at least 3 tags; the server enforces the same rule.
+    (isEditing || !isSlurpDiscoveryProfileIncomplete(draft)) &&
     !isPending &&
     !isGenerating;
   const selectedConnection = connections.find((connection) => connection.id === connectionId) ?? null;
@@ -3629,9 +3632,7 @@ function StageProfileView({
   const updateFanActivity = useUpdateNoodlerFanActivity();
   const tipCreator = useTipSlurpCreator();
   const [tipOpen, setTipOpen] = useState(false);
-  // What this Creator charges for, in one place, before the fan pays for anything. The compose
-  // query is the viewer-facing source of these prices, so this needs no new server data.
-  // ponytail: reuses the compose query; give it its own light endpoint if the profile gets heavy.
+  // The compose query is the viewer-facing source for action prices and messaging policy.
   const offerMessaging = useSlurpCompose(profile.id, viewerAccount?.entityId ?? null).data?.messaging ?? null;
   const [customTip, setCustomTip] = useState("");
   const [locationDraft, setLocationDraft] = useState(
@@ -3686,6 +3687,7 @@ function StageProfileView({
   // The goal the audience sees. It rides on the viewer scope beside `subscriptionPrice`, because
   // the audience profile projection is a strict allowlist and must stay that way.
   const goalForViewer = noodlerGoalOf(viewerCreator);
+  const arcsQuery = useSlurpArcs(viewerAccount?.entityId ?? null, profile.id);
   const editing = Boolean(profileDraft);
   const editDraft = profileDraft ?? {
     displayName: profile.displayName,
@@ -4114,17 +4116,7 @@ function StageProfileView({
         leadingActions={
           !editing && !viewingOwnCreator && viewerCreator ? (
             <>
-              {/* A subscription already implies a follow, so subscribers get a static badge instead of a
-                  toggle they cannot actually turn off. */}
-              {viewerCreator.subscribed ? (
-                <span
-                  aria-label={localizeUi("ui.slurp.profile.subscribed")}
-                  title={localizeUi("ui.slurp.profile.subscribed")}
-                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--noodle-accent)]/50 bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]"
-                >
-                  <BookmarkCheck size={19} />
-                </span>
-              ) : (
+              {!viewerCreator.subscribed && (
                 <button
                   type="button"
                   disabled={followPending}
@@ -4142,7 +4134,7 @@ function StageProfileView({
                       : localizeUi("ui.slurp.profile.follow")
                   }
                 >
-                  {viewerCreator.followed ? <BookmarkCheck size={19} /> : <Bookmark size={19} />}
+                  <Bookmark size={19} />
                 </button>
               )}
               <button
@@ -4191,13 +4183,28 @@ function StageProfileView({
                   </>
                 )}
               </button>
+              {!viewerCreator.subscribed && (
+                <span className="max-w-52 text-[0.68rem] leading-4 text-[var(--muted-foreground)]">
+                  {localizeUi("ui.slurp.profile.subscribeBenefits", {
+                    defaultValue: "Faster replies · Free chat photos · Subscriber-only posts",
+                  })}
+                </span>
+              )}
               <button
                 type="button"
+                disabled={offerMessaging?.dmPolicy === "closed"}
                 onClick={() => onOpenMessages(profile.id)}
                 className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-[var(--noodle-divider)] px-4 text-sm font-bold transition-[background-color,opacity,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100"
               >
                 <MessageCircle size={16} aria-hidden="true" />
-                {localizeUi("ui.slurp.profile.message", { defaultValue: "Message" })}
+                {offerMessaging?.dmPolicy === "paid" && !viewerCreator.subscribed && offerMessaging.requestFee > 0
+                  ? localizeUi("ui.slurp.profile.requestMessage", {
+                      defaultValue: "Request message · {{count}} coins",
+                      count: offerMessaging.requestFee,
+                    })
+                  : offerMessaging?.dmPolicy === "closed"
+                    ? localizeUi("ui.slurp.profile.messagingUnavailable", { defaultValue: "Messaging unavailable" })
+                    : localizeUi("ui.slurp.profile.message", { defaultValue: "Message" })}
               </button>
               <div className="relative">
                 <button
@@ -4280,56 +4287,7 @@ function StageProfileView({
         status={creatorStatus}
         stats={{ followers: followerTotal, subscribers: subscriberTotal, likes: profileLikeTotal }}
         location={profileLocation}
-        bioContent={
-          profileBioBody || offerMessaging ? (
-            <div className="space-y-3">
-              {profileBioBody ? <p className="whitespace-pre-wrap text-sm leading-6">{profileBioBody}</p> : null}
-              {offerMessaging ? (
-                <div className="rounded-lg border border-[var(--noodle-divider)] p-3 text-sm">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                    {localizeUi("ui.slurp.profile.offer.title", { defaultValue: "What you can buy here" })}
-                  </p>
-                  <ul className="mt-2 space-y-1 text-[var(--muted-foreground)]">
-                    <li>
-                      {localizeUi(`ui.slurp.profile.offer.dm.${offerMessaging.dmPolicy}`, {
-                        defaultValue: "Direct messages are open.",
-                      })}
-                    </li>
-                    {offerMessaging.requestFee > 0 ? (
-                      <li>
-                        {localizeUi("ui.slurp.profile.offer.requestFee", {
-                          defaultValue:
-                            "A message request costs {{count}} coins. It opens the thread; it does not buy a reply.",
-                          count: offerMessaging.requestFee,
-                        })}
-                      </li>
-                    ) : null}
-                    {offerMessaging.ppvPrice > 0 ? (
-                      <li>
-                        {localizeUi("ui.slurp.profile.offer.ppv", {
-                          defaultValue: "Locked photos in chat cost {{count}} coins each.",
-                          count: offerMessaging.ppvPrice,
-                        })}
-                      </li>
-                    ) : null}
-                    <li>
-                      {localizeUi("ui.slurp.profile.offer.subscribe", {
-                        defaultValue:
-                          "Subscribing at {{count}} / week gets faster replies, free photos in chat, and subscriber-only posts.",
-                        count: slurpSubscriptionPriceOf(profile),
-                      })}
-                    </li>
-                    <li>
-                      {localizeUi("ui.slurp.profile.offer.tip", {
-                        defaultValue: "A tip buys nothing. It is a gift, and she may or may not answer it.",
-                      })}
-                    </li>
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-          ) : null
-        }
+        bioContent={profileBioBody ? <p className="whitespace-pre-wrap text-sm leading-6">{profileBioBody}</p> : null}
         bioCollapsible={profileBioBody.length > 280 || profileBioBody.split("\n").length > 4}
         contentActions={null}
         tabs={[
@@ -4386,6 +4344,13 @@ function StageProfileView({
                   />
                 </div>
               </section>
+            )}
+            {!editing && arcsQuery.data && (
+              <SlurpArcTimelineCard
+                arcs={arcsQuery.data.arcs}
+                onOpenPost={postCardCtx.openPost}
+                onOpenProfile={postCardCtx.openAuthorProfile}
+              />
             )}
             {managedCreator && !editing && (
               <section data-slurp-creator-tools className="min-w-0">
@@ -5046,12 +5011,13 @@ function ViewerHub({
     discoverMinimumPrice ||
     discoverMaximumPrice,
   );
+  const discoveryTagSettings = useSlurpSettings().data?.discoveryTags;
   const customDiscoverTags = useMemo(() => {
-    const curated = new Set<string>(SLURP_DISCOVERY_TAGS);
+    const curated = new Set<string>(discoveryTagSettings?.map((entry) => entry.tag) ?? SLURP_DISCOVERY_TAGS);
     return [...new Set(discoveredCreators.flatMap((creator) => creator.profile.tags ?? []))]
       .filter((tag) => !curated.has(tag))
       .sort((left, right) => left.localeCompare(right));
-  }, [discoveredCreators]);
+  }, [discoveredCreators, discoveryTagSettings]);
   const toggleDiscoverSetValue = <T,>(setter: Dispatch<SetStateAction<Set<T>>>, value: T) =>
     setter((current) => {
       const next = new Set(current);
@@ -7323,9 +7289,7 @@ function DisclosureBadge({ mode, detail }: { mode: NoodleIdentityDisclosure | nu
       ? localizeUi("ui.slurp.disclosure.openDetail")
       : mode === "hinted"
         ? localizeUi("ui.slurp.disclosure.hintedDetail")
-        : mode === "secret"
-          ? localizeUi("ui.slurp.disclosure.secretDetail")
-          : localizeUi("ui.slurp.disclosure.setupDetail");
+        : localizeUi("ui.slurp.disclosure.setupDetail");
   return (
     <HelpTooltip
       label={label}
@@ -7629,7 +7593,13 @@ function SlurpStudioView({
 
               {/* What this Creator is posting about, above who is reading it: the thread is the
                   thing the player steers, and the audience is the result. */}
-              {personaId && <SlurpProjectsPanel personaId={personaId} creatorAccountId={creator.id} />}
+              {personaId && (
+                <SlurpProjectsPanel
+                  personaId={personaId}
+                  creatorAccountId={creator.id}
+                  otherCreators={creators.filter((other) => other.id !== creator.id)}
+                />
+              )}
 
               {creator.topFans.length > 0 && (
                 <div>
@@ -8290,6 +8260,8 @@ function SlurpNotificationsView({
       return { icon: MessageCircle, tone: "bg-[var(--noodle-accent)]/14 text-[var(--noodle-accent)]" };
     if (kind === "comment" || kind === "returned" || kind === "audience_arc")
       return { icon: Heart, tone: "bg-sky-500/14 text-sky-300" };
+    if (kind === "arc_phase" || kind === "arc_complete" || kind === "arc_started")
+      return { icon: Star, tone: "bg-amber-500/14 text-amber-300" };
     if (kind === "tip") return { icon: Coins, tone: "bg-emerald-500/14 text-emerald-300" };
     if (kind === "unlock" || kind === "ppv_unlock") return { icon: Lock, tone: "bg-violet-500/14 text-violet-300" };
     if (kind === "subscribed") return { icon: Crown, tone: "bg-fuchsia-500/14 text-fuchsia-300" };

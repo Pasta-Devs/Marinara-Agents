@@ -14,13 +14,14 @@ assert.deepEqual(normalizeSlurpDiscoveryTags(["  Cosplay ", "cosplay", "ＦＥ�
   "cosplay",
   "feet",
 ]);
-assert.deepEqual(normalizeSlurpDiscoveryTags(["art", "invented"], true), ["art"]);
+assert.deepEqual(normalizeSlurpDiscoveryTags(["art", "invented"], ["art"]), ["art"]);
 assert.deepEqual(normalizeSlurpDiscoveryTags(["My   Vibe", "my vibe"]), ["My Vibe"]);
 assert.equal(slurpDiscoveryProfileSchema.safeParse({ gender: "female", tags: ["art"] }).success, true);
 assert.equal(slurpDiscoveryProfileSchema.safeParse({ gender: null, tags: Array(9).fill("art") }).success, false);
-assert.deepEqual(slurpGeneratedDiscoveryProfileSchema.parse({ gender: null, tags: ["art", "invented"] }), {
+// The allowed list is the `discoveryTags` setting, applied by the draft service after parsing.
+assert.deepEqual(slurpGeneratedDiscoveryProfileSchema.parse({ gender: null, tags: ["Art", "invented"] }), {
   gender: null,
-  tags: ["art"],
+  tags: ["art", "invented"],
 });
 assert.equal(
   slurpGeneratedDiscoveryProfileSchema.safeParse({ gender: "female" }).success,

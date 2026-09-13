@@ -339,6 +339,19 @@ export type SlurpSettings = {
   imageHeight: number;
   storyRate: "off" | "rare" | "regular" | "often";
   projectRate: "off" | "rare" | "regular" | "often";
+  arcPace: "slow" | "normal" | "fast";
+  arcAffectsMood: boolean;
+  arcFanReactions: boolean;
+  arcAutoMode: "off" | "suggest" | "auto";
+  arcCooldownWeeks: number;
+  arcSource: "library" | "generated" | "mixed";
+  arcMaxConcurrentAuto: number;
+  arcDirectorMode: boolean;
+  arcPollHours: number;
+  arcStatEffects: "off" | "small" | "big";
+  arcCrossovers: boolean;
+  arcLibrary: SlurpArcType[];
+  discoveryTags: Array<{ tag: string; group: string }>;
   storyImageWidth: number;
   storyImageHeight: number;
   refreshesPerDay: number;
@@ -499,6 +512,43 @@ export function useUpdateSlurpSettings() {
     onSuccess: (settings) => {
       queryClient.setQueryData(noodleKeys.settings(), settings);
       return queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerFanStatus() });
+    },
+  });
+}
+
+/** Put a built-in arc type back to its shipped state. */
+export function useResetSlurpArcType() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post<SlurpSettings>(`/slurp2/arc-library/${encodeURIComponent(id)}/reset`, {}),
+    onSuccess: (settings) => queryClient.setQueryData(noodleKeys.settings(), settings),
+  });
+}
+
+/** Creators and arc types per tag, keyed by lower-cased tag. */
+export function useSlurpDiscoveryTagUsage(enabled: boolean) {
+  return useQuery({
+    queryKey: [...noodleKeys.settings(), "discovery-tag-usage"],
+    queryFn: () =>
+      api.get<{ creators: Record<string, number>; arcTypes: Record<string, number> }>("/slurp2/discovery-tags/usage"),
+    enabled,
+  });
+}
+
+/** Rename (`to` set) or delete (`to` null) a tag everywhere, Creator profiles included. */
+export function useReplaceSlurpDiscoveryTag() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ from, to }: { from: string; to: string | null }) =>
+      to === null
+        ? api.post<SlurpSettings>("/slurp2/discovery-tags/delete", { tag: from })
+        : api.post<SlurpSettings>("/slurp2/discovery-tags/rename", { from, to }),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(noodleKeys.settings(), settings);
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: [...noodleKeys.settings(), "discovery-tag-usage"] }),
+        queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+      ]);
     },
   });
 }
@@ -725,7 +775,10 @@ export type SlurpEventKind =
   | "message"
   | "milestone"
   | "audience_arc"
-  | "returned";
+  | "returned"
+  | "arc_phase"
+  | "arc_complete"
+  | "arc_started";
 
 export type SlurpEventItem = {
   id: string;
@@ -816,10 +869,198 @@ export type SlurpProject = {
   direction: string;
   chapters: string[];
   chapter: number;
-  status: "active" | "paused" | "complete";
+  status: "active" | "paused" | "complete" | "suggested";
   posts: number;
   startedAt: string;
   updatedAt: string;
+  typeId: string | null;
+  tone: string;
+  durationDays: number | null;
+  phaseDays: ({ min: number; max: number } | null)[];
+  chapterStartedAt: string;
+  intensity: "background" | "focus";
+  origin: "manual" | "auto";
+  generated: boolean;
+  history: SlurpArcHistoryEntry[];
+  completedAt: string | null;
+  twist: string;
+  choices: (SlurpArcChoice | null)[];
+  pollPostId: string | null;
+  pollClosesAt: string | null;
+  reach: (SlurpArcChapterReach | null)[];
+  revertProfileAtEnd: boolean;
+  pendingProfile: { chapter: number; bio?: string; location?: string; proposedAt: string; revert: boolean } | null;
+  previousProfile: { bio?: string; location?: string } | null;
+  /** A crossover's Creators; empty for a single-Creator arc. */
+  creatorIds: string[];
+  /** The other participants' display names. */
+  partnerNames?: string[];
+};
+
+/** Mirrors `SlurpArcChapterReach` on the server: what one chapter changes beyond its posts. */
+export type SlurpArcChapterReach = {
+  mood?: string;
+  effects?: SlurpArcEffects;
+  profile?: { bio?: string; location?: string };
+};
+
+export type SlurpArcEffects = { growth?: number; earnings?: number; loyalty?: number };
+
+/** Mirrors `SlurpArcChoice` on the server: a fan poll at the end of a chapter. */
+export type SlurpArcChoice = {
+  question: string;
+  options: { label: string; chapters: { label: string; minDays: number; maxDays: number }[] }[];
+};
+
+/** Mirrors `SlurpArcHistoryEntry` on the server: one chapter visit. */
+export type SlurpArcHistoryEntry = {
+  chapter: number;
+  label: string;
+  startedAt: string;
+  endedAt: string | null;
+  postIds: string[];
+  poll?: {
+    question: string;
+    winner: string;
+    votes: { label: string; count: number }[];
+    decidedBy: "fans" | "director" | "chance";
+  };
+  /** Before the `arcStatEffects` cap. */
+  effects?: SlurpArcEffects;
+};
+
+/** The viewer-safe part of an arc, for the profile timeline. */
+export type SlurpArcTimeline = Pick<
+  SlurpProject,
+  "id" | "title" | "tone" | "chapters" | "chapter" | "status" | "startedAt" | "completedAt" | "history"
+> & {
+  openChoice: { question: string; closesAt: string | null } | null;
+  /** The other Creators in a crossover this viewer may see. */
+  partners?: { id: string; handle: string; displayName: string; avatarUrl: string | null }[];
+};
+
+/** A Creator's running and past arcs, as any viewer may see them. Empty for a hidden Creator. */
+export function useSlurpArcs(personaId: string | null, creatorAccountId: string | null) {
+  return useQuery({
+    queryKey: [...noodleKeys.noodlerRoot(), "projects", "arcs", creatorAccountId ?? "none", personaId ?? "none"],
+    queryFn: () =>
+      api.get<{ arcs: SlurpArcTimeline[] }>(
+        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId!)}/arcs?personaId=${encodeURIComponent(personaId!)}`,
+      ),
+    enabled: Boolean(personaId) && Boolean(creatorAccountId),
+  });
+}
+
+/** One Director mode action. The server refuses it while Director mode is off. */
+export function useDirectSlurpProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      creatorAccountId,
+      projectId,
+      ...body
+    }: {
+      creatorAccountId: string;
+      projectId: string;
+      personaId: string;
+      action: "pause" | "resume" | "skip" | "back" | "label" | "twist" | "end" | "choose";
+      value?: string;
+    }) =>
+      api.post<{ project: SlurpProject }>(
+        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects/${encodeURIComponent(projectId)}/director`,
+        body,
+      ),
+    onSuccess: () => invalidateSlurpProjects(qc),
+  });
+}
+
+/** Apply or reject an arc's pending profile change. Not a Director action. */
+export function useResolveSlurpArcProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      creatorAccountId,
+      projectId,
+      ...body
+    }: {
+      creatorAccountId: string;
+      projectId: string;
+      personaId: string;
+      apply: boolean;
+    }) =>
+      api.post<{ project: SlurpProject }>(
+        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects/${encodeURIComponent(projectId)}/profile`,
+        body,
+      ),
+    // The profile itself changed too, so every Creator view refetches.
+    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+  });
+}
+
+/** Mirrors `SlurpCreatorArcConfig` on the server. A missing field uses the global setting. */
+export type SlurpCreatorArcConfig = {
+  autoMode?: "off" | "suggest" | "auto";
+  source?: "library" | "generated" | "mixed";
+  cooldownWeeks?: number;
+  pace?: "slow" | "normal" | "fast";
+  allowedTypeIds?: string[];
+  maxActive?: number;
+  crossovers?: boolean;
+};
+
+const slurpArcConfigKey = (creatorAccountId: string | null, personaId: string | null) => [
+  ...noodleKeys.noodlerRoot(),
+  "arc-config",
+  creatorAccountId ?? "none",
+  personaId ?? "none",
+];
+
+export function useSlurpArcConfig(personaId: string | null, creatorAccountId: string | null) {
+  return useQuery({
+    queryKey: slurpArcConfigKey(creatorAccountId, personaId),
+    queryFn: () =>
+      api.get<{ config: SlurpCreatorArcConfig }>(
+        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId!)}/arc-config?personaId=${encodeURIComponent(personaId!)}`,
+      ),
+    enabled: Boolean(personaId) && Boolean(creatorAccountId),
+  });
+}
+
+/** Replaces the whole config: send `{}` to reset every field to global. */
+export function useUpdateSlurpArcConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      creatorAccountId,
+      personaId,
+      config,
+    }: {
+      creatorAccountId: string;
+      personaId: string;
+      config: SlurpCreatorArcConfig;
+    }) =>
+      api.put<{ config: SlurpCreatorArcConfig }>(
+        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/arc-config`,
+        { personaId, ...config },
+      ),
+    onSuccess: (data, { creatorAccountId, personaId }) =>
+      qc.setQueryData(slurpArcConfigKey(creatorAccountId, personaId), data),
+  });
+}
+
+/** Mirrors `SlurpArcType` on the server: one entry of the `arcLibrary` setting. */
+export type SlurpArcType = {
+  id: string;
+  name: string;
+  description: string;
+  chapters: ({ label: string; minDays: number; maxDays: number; choice?: SlurpArcChoice } & SlurpArcChapterReach)[];
+  revertProfileAtEnd?: boolean;
+  tags: string[];
+  tone: string;
+  durationDays: number;
+  enabled: boolean;
+  builtin: boolean;
+  hidden: boolean;
 };
 
 /**
@@ -854,12 +1095,49 @@ export function useCreateSlurpProject() {
       title: string;
       direction: string;
       chapters: string[];
+      typeId: string | null;
+      durationDays?: number | null;
+      crossoverWith?: string[];
     }) =>
       api.post<{ project: SlurpProject }>(
         `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects`,
         body,
       ),
     onSuccess: () => invalidateSlurpProjects(qc),
+  });
+}
+
+/** Ask the model for an arc. It comes back as a suggestion to accept, edit, or dismiss. */
+export function useGenerateSlurpProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ creatorAccountId, personaId }: { creatorAccountId: string; personaId: string }) =>
+      api.post<{ project: SlurpProject }>(
+        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects/generate`,
+        { personaId },
+      ),
+    onSuccess: () => invalidateSlurpProjects(qc),
+  });
+}
+
+/** Copy an arc into the arc library as a custom type. */
+export function useSaveSlurpProjectToLibrary() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      creatorAccountId,
+      projectId,
+      personaId,
+    }: {
+      creatorAccountId: string;
+      projectId: string;
+      personaId: string;
+    }) =>
+      api.post<{ type: SlurpArcType }>(
+        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects/${encodeURIComponent(projectId)}/library`,
+        { personaId },
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.settings() }),
   });
 }
 
@@ -879,6 +1157,8 @@ export function useUpdateSlurpProject() {
       chapters?: string[];
       chapter?: number;
       status?: SlurpProject["status"];
+      intensity?: SlurpProject["intensity"];
+      durationDays?: number | null;
     }) =>
       api.patch<{ project: SlurpProject }>(
         `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects/${encodeURIComponent(projectId)}`,

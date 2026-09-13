@@ -41,7 +41,13 @@ import { getErrorMessage } from "./slurp-public-support.js";
 import { noodleResponseFormat } from "./slurp-response-format.js";
 import { buildSlurpPostTimingContext } from "./slurp-post-timing.js";
 import { slurpPostProject, slurpPostVariation, slurpPostVariationInstruction } from "./slurp-post-variation.js";
-import { slurpProjectChapter, slurpProjectInstruction, type SlurpProject } from "./slurp-project.js";
+import {
+  slurpArcImageLine,
+  slurpArcRotation,
+  slurpProjectChapter,
+  slurpProjectInstruction,
+  type SlurpProject,
+} from "./slurp-project.js";
 import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js";
 import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
 import { createChatsStorage } from "../storage/chats.storage.js";
@@ -125,14 +131,12 @@ export function noodlerIdentityInstruction(
   if (mode === "open" && publicIdentity) {
     return `Disclosure is open. This is the same public creator. Use the linked identity ${publicIdentity.displayName} (@${publicIdentity.handle}) directly when relevant.`;
   }
-  if (mode === "hinted") {
-    return [
-      "Disclosure is hinted. The creator's other public life is an open secret.",
-      "Use indirect clues from the same person's public life — appearance, voice, interests, routines, and recurring themes — so regular followers may recognize them.",
-      "Never write the public name or handle. Never confirm a guess and never flatly deny one; deflect, joke, or change the subject.",
-    ].join(" ");
-  }
-  return "Disclosure is secret. Do not mention, imply, or identify any linked public persona.";
+  // Slurp offers only Open and Hinted, so anything that is not a usable Open identity is Hinted.
+  return [
+    "Disclosure is hinted. The creator's other public life is an open secret.",
+    "Use indirect clues from the same person's public life — appearance, voice, interests, routines, and recurring themes — so regular followers may recognize them.",
+    "Never write the public name or handle. Never confirm a guess and never flatly deny one; deflect, joke, or change the subject.",
+  ].join(" ");
 }
 
 export function buildNoodlerPublicIdentity(
@@ -311,6 +315,18 @@ export function buildNoodlerPostMessages(input: {
             // Protected like every other supplied value: a Secret Creator who typed their city
             // into a direction field must not have it read back out through the project block.
             chapter: protect(slurpProjectChapter(input.project.project) ?? "") || null,
+            tone: protect(input.project.project.tone),
+            twist: protect(input.project.project.twist),
+            // Only until the poll post publishes; after that the choice waits for its votes.
+            choice: input.project.project.pollPostId
+              ? null
+              : (() => {
+                  const choice = input.project.project.choices[input.project.project.chapter];
+                  return choice
+                    ? { question: protect(choice.question), options: choice.options.map((option) => protect(option.label)) }
+                    : null;
+                })(),
+            partners: input.project.project.partnerNames ?? [],
             history: input.project.posts
               .slice()
               .reverse()
@@ -408,7 +424,7 @@ export async function generateNoodlerPost(
     input.admissionMode ?? { kind: "foreground" },
   );
   const recentPosts = await noodle.listNoodlerPostsByAccount(account.id, 8);
-  const disclosureMode = account.settings.privacy.identityDisclosure ?? "secret";
+  const disclosureMode = account.settings.privacy.identityDisclosure ?? "open";
   const linkedPublicAccount = await noodle.resolveAccountSource(account as SlurpAccount);
   const scheduleContext = linkedPublicAccount
     ? await resolveSlurpCreatorScheduleContext(
@@ -435,7 +451,12 @@ export async function generateNoodlerPost(
   // rotations down for the same reason: their direction is the subject, and a second one fights it.
   const project = directed
     ? null
-    : slurpPostProject(account.id, sequence, await noodle.listActiveProjects(account.id), settings.projectRate);
+    : slurpPostProject(
+        account.id,
+        sequence,
+        slurpArcRotation(await noodle.listActiveProjects(account.id)),
+        settings.projectRate,
+      );
   // The project's own posts, not the page's. The page history is already supplied above and says
   // nothing about where this thread had got to.
   const projectPosts = project ? await noodle.listPostsByProject(project.id, 4) : [];
@@ -565,12 +586,28 @@ export async function generateNoodlerPost(
   // A Story the player asked for outranks the rotation, which never fires on a directed post.
   const storyVariation = (variation?.story === true || input.request.postType === "story") && imagesEnabled;
 
-  // Identity protection applies to the image prompt too, not only post text.
+  // Identity protection applies to the image prompt too, not only post text. The arc's chapter line
+  // joins the prompt before protection, so a chapter naming a real place is redacted the same way.
+  const arcImageLine = slurpArcImageLine(project);
   const draftImagePrompt = imagesEnabled
-    ? protectNoodlerGeneratedIdentity(generated.imagePrompt, disclosureMode, publicIdentity)
+    ? protectNoodlerGeneratedIdentity(
+        generated.imagePrompt && arcImageLine ? `${generated.imagePrompt}\n${arcImageLine}` : generated.imagePrompt,
+        disclosureMode,
+        publicIdentity,
+      )
     : null;
 
   const projectChapter = project ? slurpProjectChapter(project) : null;
+  // An open arc choice is posted as a real poll, attached here rather than parsed from the text.
+  const arcChoice = project && !project.pollPostId ? (project.choices[project.chapter] ?? null) : null;
+  const arcPoll = arcChoice
+    ? createNoodlePoll({
+        question: protectBoundedNoodlerGeneratedText(arcChoice.question, disclosureMode, publicIdentity, 240),
+        options: arcChoice.options.map((option) =>
+          protectBoundedNoodlerGeneratedText(option.label, disclosureMode, publicIdentity, 120),
+        ),
+      })
+    : null;
 
   const baseInput = {
     authorAccountId: account.id,
@@ -588,7 +625,7 @@ export async function generateNoodlerPost(
       // unlock price and keeps it across refreshes and edits instead of falling back to 1.
       ...(input.request.access === "locked" ? noodlerUnlockPriceMetadata(settings.walletUnlockCost) : {}),
       ...(input.request.executionId ? { noodlerWizardExecutionId: input.request.executionId } : {}),
-      ...(input.request.poll ? { poll: createNoodlePoll(input.request.poll) } : {}),
+      ...(input.request.poll ? { poll: createNoodlePoll(input.request.poll) } : arcPoll ? { poll: arcPoll } : {}),
       ...(input.request.imageCrop ? { imageCrop: input.request.imageCrop } : {}),
     },
   };
@@ -627,7 +664,7 @@ export async function generateNoodlerPost(
     if (!post) throw new Error("Failed to persist the generated Slurp post.");
     // Advanced here, after the row lands, rather than when the project was chosen: a generation
     // that failed halfway would otherwise skip a chapter and the thread would have a hole in it.
-    if (project) await noodle.advanceProject(account.id, project.id);
+    if (project) await noodle.advanceProject(account.id, project.id, post.id);
     return post;
   };
 

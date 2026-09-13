@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
 import { Check, Plus, Search, X } from "lucide-react";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import type { SlurpDiscoveryGender } from "../../hooks/use-slurp";
+import { useSlurpSettings, type SlurpDiscoveryGender } from "../../hooks/use-slurp";
 import {
+  groupSlurpDiscoveryTags,
   normalizeSlurpDiscoveryTag,
   normalizeSlurpDiscoveryTags,
-  SLURP_DISCOVERY_TAG_GROUPS,
+  SLURP_DISCOVERY_MIN_TAGS,
   SLURP_DISCOVERY_TAG_LIMIT,
   SLURP_DISCOVERY_TAG_MAX_LENGTH,
 } from "../../lib/slurp-discovery";
@@ -25,16 +26,19 @@ export function SlurpDiscoveryProfileEditor({
   const { t: localizeUi } = useUiTranslation();
   const [search, setSearch] = useState("");
   const [customTag, setCustomTag] = useState("");
+  const discoveryTags = useSlurpSettings().data?.discoveryTags;
   const normalizedSearch = normalizeSlurpDiscoveryTag(search).toLocaleLowerCase();
   const groups = useMemo(
     () =>
-      SLURP_DISCOVERY_TAG_GROUPS.map((group) => ({
-        ...group,
-        tags: group.tags.filter((tag) =>
-          localizeUi(`ui.slurp.tags.${tag}`, { defaultValue: tag }).toLocaleLowerCase().includes(normalizedSearch),
-        ),
-      })).filter((group) => group.tags.length > 0),
-    [localizeUi, normalizedSearch],
+      groupSlurpDiscoveryTags(discoveryTags)
+        .map((group) => ({
+          ...group,
+          tags: group.tags.filter((tag) =>
+            localizeUi(`ui.slurp.tags.${tag}`, { defaultValue: tag }).toLocaleLowerCase().includes(normalizedSearch),
+          ),
+        }))
+        .filter((group) => group.tags.length > 0),
+    [discoveryTags, localizeUi, normalizedSearch],
   );
   const toggleTag = (tag: string) => {
     onChange({
@@ -88,6 +92,8 @@ export function SlurpDiscoveryProfileEditor({
           </span>
           <span className="text-xs tabular-nums text-[var(--muted-foreground)]">
             {tags.length}/{SLURP_DISCOVERY_TAG_LIMIT}
+            {tags.length < SLURP_DISCOVERY_MIN_TAGS &&
+              ` · ${localizeUi("ui.slurp.discover.minTags", { count: SLURP_DISCOVERY_MIN_TAGS })}`}
           </span>
         </div>
         {tags.length > 0 && (

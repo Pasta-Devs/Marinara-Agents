@@ -2,7 +2,7 @@
 // client has no route that serves CHANGELOG.md. So the notes are mirrored here, and
 // `tests/slurp2-release-notes.regression.ts` fails the build if this file drifts from
 // `packages/slurp2/CHANGELOG.md` or from the version in `manifest.json`.
-export const SLURP2_VERSION = "0.1.0";
+export const SLURP2_VERSION = "0.0.7";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -13,12 +13,17 @@ export interface Slurp2ReleaseEntry {
 /** Newest first, same order as CHANGELOG.md. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
   {
-    version: "0.1.0",
+    version: "0.0.7",
     date: "2026-09-13",
     notes: [
       "Rebuilt Discover around direct subscription actions, persistent grid and list views, and filters for subscription status, gender, weekly price, and Creator tags.",
       "Added Recommended, Newest, Most liked, and Most subscribed sorting with stable results.",
       "Added editable Creator gender and tags, including safe custom tags and AI-suggested curated tags during profile creation and redrafting.",
+      "Added Arcs with automatic suggestions, pacing, focus, allowed kinds, and delivery to posts, messages, fan comments, and notifications.",
+      "Moved message, photo, subscription, and tip prices from the profile information box to the action that uses each price.",
+      "Hid the Follow control for subscribed Creators because a subscription already includes following.",
+      "Made Open the default Creator identity mode and removed the Secret identity tier.",
+      "Fixed persona Creator creation when Slurp already has the persona's viewer identity.",
     ],
   },
   {
@@ -28,6 +33,7 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
       "Added image context options for reactions: stored prompts, vision descriptions, or automatic selection. Public fan reactions keep locked images hidden and respect Creator identity privacy.",
       "Generation now shows how many Creators remain, including skipped or failed requests.",
       "Restored visible success and error notifications for Slurp actions.",
+      "Fixed persona Creator creation when Slurp already has the persona's viewer identity. The viewer and Creator accounts can now coexist for one persona.",
     ],
   },
   {
