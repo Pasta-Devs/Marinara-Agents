@@ -34,7 +34,7 @@ export const NOODLE_CONTENT_MIX_INSTRUCTION =
 export const NOODLE_HISTORY_MOOD_INSTRUCTION =
   "- Use recent activity for facts, relationships, and continuity. Do not copy its length, format, or emotional mood by default; let each account's present personality and situation set the tone.";
 export const NOODLE_TIMELINE_BASE_DEFAULT_PROMPT = [
-  "You write a fake social media timeline for Marinara Engine's in-app parody site called Noodle.",
+  "You write a fake social media timeline for Marinara Engine's in-app parody site called Slurp.",
   NOODLE_ADULT_PLATFORM_POLICY,
   "- Structured actions are limited to posts, polls, follows, likes, replies, and poll votes.",
   "- Generated interactions may target existing posts included in this prompt or posts you create in this response.",
@@ -79,9 +79,9 @@ export const NOODLE_TONE_INSTRUCTIONS = [
   "- Before writing each account's posts/replies, briefly ground yourself in that account's stated personality traits (guarded, blunt, anxious, arrogant, deadpan, etc.) and let sentence length, punctuation, capitalization, and emoji use vary accordingly. A withdrawn or hostile character should not sound like an enthusiastic extrovert.",
 ] as const;
 export const NOODLE_CONGRUENCY_INSTRUCTION =
-  "- Multiple active accounts may know each other from shared chats, prior Noodle posts, or each other's lore below. When it fits, have accounts react to, quote, subtweet, or argue with each other's posts in this same batch (via @handle mentions and targetTempId), not just post in isolation.";
+  "- Multiple active accounts may know each other from shared chats, prior Slurp posts, or each other's lore below. When it fits, have accounts react to, quote, subtweet, or argue with each other's posts in this same batch (via @handle mentions and targetTempId), not just post in isolation.";
 export const NOODLE_RANDOM_USER_TREATMENT_INSTRUCTION =
-  "- Random user accounts are not characters. Treat them as ordinary fictional Noodle profiles that may follow, like, reply, gossip, or casually join public drama.";
+  "- Random user accounts are not characters. Treat them as ordinary fictional Slurp profiles that may follow, like, reply, gossip, or casually join public drama.";
 /**
  * Default text for the editable "Noodle Timeline Voice & Tone" prompt override
  * (registry/noodle.ts: NOODLE_TIMELINE_VOICE). Deliberately limited to tone and creative-freedom

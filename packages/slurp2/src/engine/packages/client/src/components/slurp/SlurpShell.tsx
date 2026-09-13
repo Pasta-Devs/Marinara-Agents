@@ -1045,19 +1045,18 @@ export function NoodleShell({
               )}
             >
               {/* A page swap with no motion reads as a glitch. One short fade, keyed by the
-                  destination, says "this is a different room" without slowing anyone down. */}
-              <AnimatePresence mode="wait" initial={false}>
-                <motion.div
-                  key={activeView}
-                  initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
-                  animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: prefersReducedMotion ? 0.12 : 0.18, ease: "easeOut" }}
-                  className="flex min-h-0 w-full flex-1 flex-col"
-                >
-                  {children}
-                </motion.div>
-              </AnimatePresence>
+                  destination, says "this is a different room" without slowing anyone down.
+                  No AnimatePresence: an exiting child that never finishes its exit stays mounted at
+                  opacity 0 and blanks the whole column, so the key alone drives the remount. */}
+              <motion.div
+                key={activeView}
+                initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
+                animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                transition={{ duration: prefersReducedMotion ? 0.12 : 0.18, ease: "easeOut" }}
+                className="flex min-h-0 w-full flex-1 flex-col"
+              >
+                {children}
+              </motion.div>
             </main>
             {slurpActive && resolvedContextualRail === "blank" ? (
               <aside

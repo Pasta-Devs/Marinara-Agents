@@ -243,10 +243,10 @@ export async function generateNoodlerPostImage(input: {
   // drop appearance and image habits — the exact context loss this flag exists to stop. Only a
   // human-reviewed override displaces the template.
   const reviewedOverride = input.retryStoredPrompt ? null : compiledOverride;
-  // NOODLE_IMAGE_POST documents itself as terminal — "everything this produces is sent to the image
-  // model verbatim" — and it is the only document carrying the appearance notes. It is therefore
-  // what the provider gets when no rewrite survives, rather than the bare draft, which drops
-  // appearance and the character's image habits entirely.
+  // When no rewrite survives the provider gets the rendered template, not the bare draft: it is the
+  // only document carrying appearance notes and the character's image habits, so dropping it made
+  // fallback pictures look like someone else. selectNoodleImageProviderPrompt caps it on a word
+  // boundary, which is what the uncapped stack of appearance, personality and habits needed.
   const rawProviderPrompt = redactIdentity(reviewedOverride?.prompt || compiledPrompt.prompt);
   // The rewriter gets the visual intent only. It receives appearance, personality, and image habits
   // through the labelled `characterContext` block below, so handing it the rendered template too
@@ -279,19 +279,21 @@ export async function generateNoodlerPostImage(input: {
   // A stored draft we generated ourselves is not a reviewed decision, so a retry still runs
   // interpretation. Only a prompt a human actually approved is sent through untouched.
   const skipInterpretation = Boolean(input.promptOverride) && !input.retryStoredPrompt;
-  const rewrittenPrompt =
+  const rewriteAttempted = Boolean(
     (imagePromptInstructions || characterContext || styleGuidance) &&
     input.settings.enableImageInterpretation !== false &&
-    !skipInterpretation
-      ? await rewriteNoodleImagePrompt({
-          db: input.db,
-          prompt: rawRewriteInput,
-          interpretationInstruction: input.settings.imagePromptInterpretation,
-          instructions: redactIdentity(imagePromptInstructions),
-          characterContext,
-          styleGuidance,
-        })
-      : null;
+    !skipInterpretation,
+  );
+  const rewrittenPrompt = rewriteAttempted
+    ? await rewriteNoodleImagePrompt({
+        db: input.db,
+        prompt: rawRewriteInput,
+        interpretationInstruction: input.settings.imagePromptInterpretation,
+        instructions: redactIdentity(imagePromptInstructions),
+        characterContext,
+        styleGuidance,
+      })
+    : null;
   // The style profile is an Engine setting, not something the interpretation model owns. The
   // rewrite is a text transformation, and it freely drops the style's positive tags and wording,
   // so the rewritten text is compiled again before it reaches the provider. Without this the style
@@ -310,6 +312,9 @@ export async function generateNoodlerPostImage(input: {
     selectNoodleImageProviderPrompt({
       rewrittenPrompt: compiledRewrittenPrompt?.prompt || rewrittenPrompt,
       rawPrompt: rawProviderPrompt,
+      rewriteAttempted,
+      onFallback: (reason) =>
+        logger.warn("[slurp] Image prompt rewrite unusable (%s); sending the capped draft", reason),
       // Art style and the character's image habits are meant to reach the provider, so a rewrite
       // that applies them is doing its job. Personality never belongs in a visual prompt at any
       // length; the instruction fields are guidance and only leak as a copied block.
@@ -356,7 +361,7 @@ export async function generateNoodlerPostImage(input: {
       metadata: {},
       preview: {
         kind: "illustration",
-        title: `${input.account.displayName} NoodleR image`,
+        title: `${input.account.displayName} Slurp image`,
         prompt: finalPrompt,
         negativePrompt: finalNegativePrompt,
         width: previewSize.width,
@@ -388,7 +393,7 @@ export async function generateNoodlerPostImage(input: {
       await input.onProviderAttemptFailure?.(attempt);
       logger.warn(
         error,
-        "[noodler] Image generation attempt %d/%d failed for %s",
+        "[slurp] Image generation attempt %d/%d failed for %s",
         attempt,
         maxAttempts,
         input.account.displayName,
@@ -401,7 +406,7 @@ export async function generateNoodlerPostImage(input: {
   try {
     await createSlurpStorage(input.db).adjustCreatorState(input.account.id, { energy: -SLURP_ENERGY_COST.image });
   } catch (error) {
-    logger.warn(error, "[noodler] Could not charge image energy for %s", input.account.id);
+    logger.warn(error, "[slurp] Could not charge image energy for %s", input.account.id);
   }
   const file = stageImageToDisk(
     `${NOODLER_MEDIA_PREFIX}${input.account.id}`,
@@ -483,7 +488,7 @@ export function createNoodlerNoodleImagesService(db: DB) {
           claimOwned = await noodle.renewPostImageClaim(claimed.id, claimToken, imageClaimLeaseUntil());
         } catch (error) {
           claimOwned = false;
-          logger.warn(error, "[noodler] Failed to renew reviewed image claim for post %s", claimed.id);
+          logger.warn(error, "[slurp] Failed to renew reviewed image claim for post %s", claimed.id);
         }
       };
       const renewalTimer = setInterval(() => void renewClaim(), REVIEWED_IMAGE_CLAIM_RENEW_MS);
@@ -516,7 +521,7 @@ export function createNoodlerNoodleImagesService(db: DB) {
           deferred += 1;
           continue;
         }
-        logger.warn(error, "[noodler] Failed to generate reviewed image for %s", account.displayName);
+        logger.warn(error, "[slurp] Failed to generate reviewed image for %s", account.displayName);
         await renewClaim();
         if (claimOwned) {
           const attempts = noodlerPostImageRetryAttempts(claimed.metadata) + 1;
@@ -580,7 +585,7 @@ export function createNoodlerNoodleImagesService(db: DB) {
         try {
           await noodle.releasePostImageClaim(claimed.id, claimToken);
         } catch (releaseError) {
-          logger.warn(releaseError, "[noodler] Failed to release reviewed image claim for post %s", claimed.id);
+          logger.warn(releaseError, "[slurp] Failed to release reviewed image claim for post %s", claimed.id);
         }
         throw error;
       }

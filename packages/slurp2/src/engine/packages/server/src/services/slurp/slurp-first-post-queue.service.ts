@@ -147,7 +147,7 @@ export function createSlurpFirstPostQueue(db: DB) {
           updatedAt: now(),
         })
         .where(eq(noodlerFirstPostJobs.id, job.id));
-      logger.warn(error, "[noodler] First-post job %s failed%s", job.id, retry ? "; retry queued" : "");
+      logger.warn(error, "[slurp] First-post job %s failed%s", job.id, retry ? "; retry queued" : "");
     }
     return true;
   };
@@ -157,7 +157,7 @@ export function createSlurpFirstPostQueue(db: DB) {
     try {
       await processOne();
     } catch (error) {
-      logger.error(error, "[noodler] First-post queue poll failed");
+      logger.error(error, "[slurp] First-post queue poll failed");
     } finally {
       if (active) timer = setTimeout(poll, POLL_MS);
     }
@@ -185,10 +185,10 @@ export function createSlurpFirstPostQueue(db: DB) {
               .where(eq(noodlerFirstPostJobs.id, job.id));
           }
           if (stranded.length > 0) {
-            logger.warn("[noodler] Requeued %d first-post job(s) left running by a restart", stranded.length);
+            logger.warn("[slurp] Requeued %d first-post job(s) left running by a restart", stranded.length);
           }
         } catch (error) {
-          logger.error(error, "[noodler] Failed to requeue stranded first-post jobs");
+          logger.error(error, "[slurp] Failed to requeue stranded first-post jobs");
         }
         void poll();
       })();
