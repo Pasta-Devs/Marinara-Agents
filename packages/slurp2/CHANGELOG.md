@@ -4,6 +4,7 @@
 
 - Added image context options for reactions: stored prompts, vision descriptions, or automatic selection. Public fan reactions keep locked images hidden and respect Creator identity privacy.
 - Generation now shows how many Creators remain, including skipped or failed requests.
+- Restored visible success and error notifications for Slurp actions.
 
 ## 0.0.5 — 2026-09-13
 
