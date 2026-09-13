@@ -270,7 +270,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
   publicIdentity: Parameters<typeof noodlerIdentityInstruction>[1];
 }> {
   const slurp = createSlurpStorage(input.db);
-  const disclosureMode = input.creator.settings.privacy.identityDisclosure ?? "secret";
+  const disclosureMode = input.creator.settings.privacy.identityDisclosure ?? "open";
   const publicIdentity = await resolveNoodlerPublicIdentity(input.db, input.creator);
   const settings = await slurp.getSettings();
   const source = await slurp.resolveAccountSource(input.creator);

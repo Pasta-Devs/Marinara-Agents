@@ -194,17 +194,11 @@ assert.match(
   "concealed Slurp Creators must still receive the source card, minus the lookupable canon",
 );
 
-// A concealed creator still posts their body — it is the page. Concealment is framing, not a
-// vaguer description, so every mode sends the same appearance and secret adds a face-avoiding guard.
+// A hinted creator still posts their body — it is the page — so every mode sends the same appearance.
 assert.match(
   slurpImages,
   /imageGenerationIncludeDescriptions\) \{\s*characterDescription = sourceAppearance;/u,
   "Slurp image prompts must describe the same body in every disclosure mode",
-);
-assert.match(
-  slurpImages,
-  /disclosureMode === "secret"\s*\?\s*"Compose so the face cannot be identified/u,
-  "secret Slurp images must hide the face through composition rather than a vaguer body",
 );
 assert.match(
   slurpImages,
@@ -227,11 +221,8 @@ assert.match(
   "public Slurp image prompts must interpret character context without connection instructions",
 );
 assert.match(slurpPublicImages, /enableImageInterpretation !== false/u);
-assert.match(
-  slurpImages,
-  /input\.disclosureMode !== "secret"[\s\S]*referenceImages/u,
-  "secret Slurp identities must not receive avatar reference images",
-);
+// Slurp offers only Open and Hinted, and both keep avatar reference images.
+assert.doesNotMatch(slurpImages, /"secret"/u, "Slurp images must not branch on the removed Secret tier");
 
 const noodleHome = readFileSync(
   join(root, "packages/noodle/src/engine/packages/client/src/components/noodle/NoodleHome.tsx"),

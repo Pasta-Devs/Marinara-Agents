@@ -150,11 +150,20 @@ const imagesPrivacy = readFileSync(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-images.service.ts",
   "utf8",
 );
-// Secret still gets no image references. Open and Hinted do, for personas as well as characters.
+// Open and Hinted both get image references, for personas as well as characters. Slurp has no
+// Secret tier any more, so nothing gates references on disclosure.
 assert.match(
   imagesPrivacy,
-  /!input\.suppressCharacterContext && input\.disclosureMode !== "secret" && input\.linkedPublicAccount/u,
+  /!input\.suppressCharacterContext && input\.linkedPublicAccount \? input\.linkedPublicAccount/u,
 );
+assert.doesNotMatch(imagesPrivacy, /"secret"/u);
+// A stored or submitted Secret Creator becomes Hinted, and a Creator with no mode is Open.
+const storagePrivacy = readFileSync(
+  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
+  "utf8",
+);
+assert.match(storagePrivacy, /rawIdentityDisclosure === "secret" \? "hinted" : rawIdentityDisclosure/u);
+assert.doesNotMatch(storagePrivacy, /\?\? "secret"/u);
 
 const draftPrivacy = readFileSync(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-stage-profile-draft.service.ts",

@@ -421,14 +421,6 @@ function disclosureOptions(t: ReturnType<typeof useUiTranslation>["t"]): Disclos
       detail: t("ui.noodle.disclosure.hinted.detail"),
       guidance: t("ui.noodle.disclosure.hinted.guidance"),
     },
-    {
-      value: "secret",
-      label: "Separate persona",
-      shortLabel: "Secret",
-      detail: "Create a genuinely separate identity with no public connection.",
-      guidance:
-        "The AI receives a reduced, non-identifying inspiration brief and avoids distinctive canonical details.",
-    },
   ];
 }
 
@@ -437,7 +429,7 @@ const EMPTY_STAGE_PROFILE: NoodleStageProfileInput = {
   handle: "",
   bio: "",
   stagePersonality: "",
-  disclosureMode: "hinted",
+  disclosureMode: "open",
 };
 
 const fieldClass =
@@ -699,7 +691,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   } | null>(null);
   const [creationStep, setCreationStep] = useState<"source" | "disclosure" | "draft" | "automatic" | null>(null);
   const [autoPostSetupId, setAutoPostSetupId] = useState<string | null>(null);
-  const [creationDisclosure, setCreationDisclosure] = useState<NoodleIdentityDisclosure>("hinted");
+  const [creationDisclosure, setCreationDisclosure] = useState<NoodleIdentityDisclosure>("open");
   const [draftGuidance, setDraftGuidance] = useState("");
   const [draftConnectionId, setDraftConnectionId] = useState("");
   const [previousDraft, setPreviousDraft] = useState<NoodleStageProfileInput | null>(null);
@@ -7127,9 +7119,7 @@ function DisclosureBadge({ mode, detail }: { mode: NoodleIdentityDisclosure | nu
       ? localizeUi("ui.slurp.disclosure.openDetail")
       : mode === "hinted"
         ? localizeUi("ui.slurp.disclosure.hintedDetail")
-        : mode === "secret"
-          ? localizeUi("ui.slurp.disclosure.secretDetail")
-          : localizeUi("ui.slurp.disclosure.setupDetail");
+        : localizeUi("ui.slurp.disclosure.setupDetail");
   return (
     <HelpTooltip
       label={label}

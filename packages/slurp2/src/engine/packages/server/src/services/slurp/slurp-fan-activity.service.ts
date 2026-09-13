@@ -370,11 +370,7 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
       arcByCreator.set(
         creator.id,
         publicIdentity
-          ? protectNoodlerGeneratedIdentity(
-              line,
-              creator.settings.privacy.identityDisclosure ?? "secret",
-              publicIdentity,
-            )
+          ? protectNoodlerGeneratedIdentity(line, creator.settings.privacy.identityDisclosure ?? "open", publicIdentity)
           : null,
       );
     }

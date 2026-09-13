@@ -135,7 +135,7 @@ const noodlerProfileSchema = {
     handle: { type: "string" },
     bio: { type: "string" },
     stagePersonality: { type: "string" },
-    disclosureMode: { type: "string", enum: ["open", "hinted", "secret"] },
+    disclosureMode: { type: "string", enum: ["open", "hinted"] },
   },
   required: ["displayName", "handle", "bio", "stagePersonality", "disclosureMode"],
   additionalProperties: false,

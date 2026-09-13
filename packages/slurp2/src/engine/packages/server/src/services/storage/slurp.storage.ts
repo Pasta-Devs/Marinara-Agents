@@ -567,7 +567,7 @@ export function noodlerReservePolicyFingerprint(
     sourceId: account.sourceEntityId,
     sourceUpdatedAt: sourceUpdatedAt ?? null,
     stageProfileUpdatedAt: account.updatedAt,
-    disclosure: account.settings.privacy.identityDisclosure ?? "secret",
+    disclosure: account.settings.privacy.identityDisclosure ?? "open",
     stagePersonality: account.settings.privacy.stagePersonality ?? "",
     access: account.settings.privacy.access,
     scheduler: account.settings.scheduler.autoPosting,
@@ -795,7 +795,10 @@ export function normalizeNoodleAccountSettings(value: unknown): NoodleAccountSet
     ...(rawNoodleFeedSeenAt !== undefined && validSocialField("noodleFeedSeenAt", rawNoodleFeedSeenAt)),
   };
   const privacy = {
-    ...(rawIdentityDisclosure !== undefined && validPrivacyField("identityDisclosure", rawIdentityDisclosure)),
+    // Slurp no longer offers Secret. A stored Secret Creator reads as Hinted, the closest tier that
+    // still keeps the source name and handle protected.
+    ...(rawIdentityDisclosure !== undefined &&
+      validPrivacyField("identityDisclosure", rawIdentityDisclosure === "secret" ? "hinted" : rawIdentityDisclosure)),
     ...(rawStagePersonality !== undefined && validPrivacyField("stagePersonality", rawStagePersonality)),
     access: {
       hiddenFromAccountIds: parseStringArray(rawAccess.hiddenFromAccountIds),
@@ -2696,9 +2699,9 @@ export function createSlurpStorage(db: DB) {
             sourceStatus: !currentSource
               ? { state: "missing" as const }
               : compareMinimizedNoodlerSourceSnapshot(
-                  baseline ?? minimizeNoodlerSourceSnapshot(currentSource, disclosureMode ?? "secret"),
+                  baseline ?? minimizeNoodlerSourceSnapshot(currentSource, disclosureMode ?? "open"),
                   currentSource,
-                  disclosureMode ?? "secret",
+                  disclosureMode ?? "open",
                 ),
             publicIdentity:
               publicAccount && (disclosureMode === "open" || disclosureMode === "hinted")

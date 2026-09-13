@@ -117,18 +117,14 @@ export async function generateNoodlerPostImage(input: {
   let characterImageInstructions = "";
   let characterPersonality = "";
   let referenceImages: string[] | undefined;
-  // Identity protection applies to reference selection and appearance text. A SECRET creator gets
-  // no source image references or identifying physical description.
-  // A HINTED creator also keeps image references: the same body, tattoos, and rooms can show up
-  // while the source name and handle stay protected.
+  // Open and Hinted creators both keep image references: the same body, tattoos, and rooms can show
+  // up while a Hinted creator's source name and handle stay protected.
   // Personas carry personality, appearance, and an avatar exactly like characters do, but this
   // branch used to require kind === "character". A persona-owned Creator therefore got appearance
   // text and nothing else in every mode, so "Open" quietly meant something weaker for a persona
-  // than for a character. Both kinds are eligible; Secret still gets no references at all.
+  // than for a character. Both kinds are eligible.
   const referenceSubject =
-    !input.suppressCharacterContext && input.disclosureMode !== "secret" && input.linkedPublicAccount
-      ? input.linkedPublicAccount
-      : null;
+    !input.suppressCharacterContext && input.linkedPublicAccount ? input.linkedPublicAccount : null;
   const sourceCharacter =
     input.linkedPublicAccount?.kind === "character"
       ? await input.characters.getById(input.linkedPublicAccount.entityId)
@@ -142,8 +138,7 @@ export async function generateNoodlerPostImage(input: {
     : sourcePersona?.appearance?.trim() || "";
   // Every mode shows the same body — it is the page. Reducing a concealed creator to a handful of
   // approved tokens made them shapeless without hiding anything linkable, since a build and a hair
-  // colour identify nobody. Secret withholds the face and one-of-a-kind markers through the
-  // composition guard below instead.
+  // colour identify nobody.
   if (!input.suppressCharacterContext && sourceAppearance && input.settings.imageGenerationIncludeDescriptions) {
     characterDescription = sourceAppearance;
   }
@@ -322,14 +317,7 @@ export async function generateNoodlerPostImage(input: {
       guidanceContext: [configuredImageInstructions, connectionImageInstructions],
     }),
   );
-  // A creator hiding their identity still posts their body — that is the page. What they actually
-  // withhold is the face and any one-of-a-kind marker, and they withhold it through framing rather
-  // than by describing themselves vaguely.
-  const anonymityGuard =
-    input.disclosureMode === "secret"
-      ? "Compose so the face cannot be identified: crop above the chin, turn away from the camera, or obscure the face with hair, a hand, an object, or shadow. Do not depict one-of-a-kind identifying marks such as a signature scar, tattoo, species trait, or unusual anatomy."
-      : "";
-  const finalPrompt = [finalPromptBase, anonymityGuard, input.compositionGuard].filter(Boolean).join("\n\n");
+  const finalPrompt = [finalPromptBase, input.compositionGuard].filter(Boolean).join("\n\n");
   // A reviewer who cleared the negative prompt still gets the style profile's own negatives back,
   // for the same reason the positive prompt is recompiled above.
   const baseNegativePrompt =
@@ -478,7 +466,7 @@ export function createNoodlerNoodleImagesService(db: DB) {
         await noodle.releasePostImageClaim(claimed.id, claimToken);
         continue;
       }
-      const disclosureMode = account.settings.privacy.identityDisclosure ?? "secret";
+      const disclosureMode = account.settings.privacy.identityDisclosure ?? "open";
       const linkedPublicAccount = await noodle.resolveAccountSource(account);
 
       let claimOwned = true;
@@ -551,7 +539,7 @@ export function createNoodlerNoodleImagesService(db: DB) {
       // changed during the (potentially long) provider call, the staged image was built from a
       // now-stale appearance policy, so discard it and finalize as failed rather than publish it.
       const fresh = await noodle.getNoodlerAccountById(claimed.authorAccountId);
-      const freshDisclosure = fresh?.settings.privacy.identityDisclosure ?? "secret";
+      const freshDisclosure = fresh?.settings.privacy.identityDisclosure ?? "open";
       if (
         !fresh ||
         freshDisclosure !== disclosureMode ||

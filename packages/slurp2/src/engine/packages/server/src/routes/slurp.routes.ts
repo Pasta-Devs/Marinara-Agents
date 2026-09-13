@@ -134,7 +134,11 @@ import { compareNoodlerSourceSnapshots, minimizeNoodlerSourceSnapshot } from "..
 import { resolveNoodlerSourceSnapshot } from "../services/slurp/slurp-source-resolve.js";
 import { canViewNoodlerPost, isNoodlerHiddenFromViewer } from "../services/slurp/slurp-access.js";
 import { noodlerUnseenCreatorAccountIds } from "../services/slurp/slurp-viewer-unseen.js";
-import { noodlerDisclosureReviewReasons, projectNoodlerAudienceProfile } from "../services/slurp/slurp-disclosure.js";
+import {
+  noodlerDisclosureReviewReasons,
+  projectNoodlerAudienceProfile,
+  slurpDisclosureMode,
+} from "../services/slurp/slurp-disclosure.js";
 import { createNoodlerNoodleImagesService } from "../services/slurp/slurp-images.service.js";
 import {
   NOODLER_MEDIA_URL_PREFIX,
@@ -1248,7 +1252,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const locked = await tryNoodlerAccountOperation(id, async () => {
       const account = await noodle.getNoodlerAccountById(id);
-      if (!account || (account.settings.privacy.identityDisclosure ?? "secret") !== "open") return null;
+      if (!account || (account.settings.privacy.identityDisclosure ?? "open") !== "open") return null;
       const source = await noodle.resolveAccountSource(account);
       if (!source?.avatarUrl) return false;
       const oldAvatarUrl = account.avatarUrl;
@@ -3255,6 +3259,8 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!publicAccount) {
       return reply.code(404).send({ error: "Noodle account not found" });
     }
+    // The shared schema still accepts Secret; Slurp creates it as Hinted.
+    parsed.data.stageProfile.disclosureMode = slurpDisclosureMode(parsed.data.stageProfile.disclosureMode);
     const sourceSnapshot = publicAccount ? await resolveNoodlerSourceSnapshot(app.db, publicAccount) : null;
     if (
       publicAccount &&
@@ -3265,7 +3271,7 @@ export async function slurpRoutes(app: FastifyInstance) {
         (sourceSnapshot && stageProfileContainsSourceDetails(parsed.data.stageProfile, sourceSnapshot)))
     ) {
       return reply.code(400).send({
-        error: "Hinted and secret stage profiles cannot use identifying source names or details.",
+        error: "Hinted stage profiles cannot use identifying source names or details.",
       });
     }
     try {
@@ -3358,7 +3364,7 @@ export async function slurpRoutes(app: FastifyInstance) {
         }
         return;
       }
-      const accountDisclosure = disclosureExceptions[noodleAccountId] ?? disclosureMode;
+      const accountDisclosure = slurpDisclosureMode(disclosureExceptions[noodleAccountId] ?? disclosureMode);
       if (!publicAccount) {
         skipped.push(noodleAccountId);
         noteReason(noodleAccountId, "The source character or persona no longer exists in Noodle.");
@@ -3470,6 +3476,8 @@ export async function slurpRoutes(app: FastifyInstance) {
       const noodlerAccount = await noodle.getNoodlerAccountById(id);
       const publicAccount = noodlerAccount ? await noodle.resolveAccountSource(noodlerAccount) : null;
       const currentSourceSnapshot = publicAccount ? await resolveNoodlerSourceSnapshot(app.db, publicAccount) : null;
+      // The shared schema still accepts Secret; Slurp saves it as Hinted.
+      parsed.data.disclosureMode = slurpDisclosureMode(parsed.data.disclosureMode);
       if (
         publicAccount &&
         (stageProfileContainsPublicIdentity(parsed.data, await resolveNoodlerPublicIdentity(publicAccount)) ||
@@ -3491,7 +3499,7 @@ export async function slurpRoutes(app: FastifyInstance) {
         return { status: "source_revision_conflict" } as const;
       }
       if (noodlerAccount) {
-        const currentMode = noodlerAccount.settings.privacy.identityDisclosure ?? "secret";
+        const currentMode = noodlerAccount.settings.privacy.identityDisclosure ?? "open";
         const [publishedPosts, preparedPosts] = await Promise.all([
           noodle.listAllNoodlerPostsByAccount(id),
           noodle.listNoodlerPreparedPosts(),
@@ -3540,7 +3548,7 @@ export async function slurpRoutes(app: FastifyInstance) {
         // The downgrade throws away unreleased reserve posts; say how many.
         discardedPreparedPostCount = preparedForCreator.length;
       }
-      const currentMode = noodlerAccount?.settings.privacy.identityDisclosure ?? "secret";
+      const currentMode = noodlerAccount?.settings.privacy.identityDisclosure ?? "open";
       const sourceSnapshot =
         currentSourceSnapshot &&
         (parsed.data.disclosureMode !== currentMode || (parsed.data.acceptSourceChanges && sourceRevisionIsCurrent))
@@ -3567,7 +3575,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     }
     if (locked.value.status === "identity_conflict") {
       return reply.code(400).send({
-        error: "Hinted and secret stage profiles cannot use identifying source names or details.",
+        error: "Hinted stage profiles cannot use identifying source names or details.",
       });
     }
     if (locked.value.status === "disclosure_review_required") {
@@ -3601,7 +3609,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       if (!account || !sourceSnapshot) return false;
       await noodle.updateNoodlerSourceSnapshot(
         id,
-        minimizeNoodlerSourceSnapshot(sourceSnapshot, account.settings.privacy.identityDisclosure ?? "secret"),
+        minimizeNoodlerSourceSnapshot(sourceSnapshot, account.settings.privacy.identityDisclosure ?? "open"),
       );
       return true;
     });

@@ -136,8 +136,8 @@ const draft = readFileSync(
 const briefRule = /ignoring short connecting words/gu;
 assert.equal(
   [...draft.matchAll(briefRule)].length,
-  2,
-  "both concealed briefs must state the rule in the validator's own terms",
+  1,
+  "the hinted brief must state the rule in the validator's own terms",
 );
 // stagePersonality is generated here, so this is where it has to be defined.
 assert.match(draft, /stagePersonality is the performance, not the person/u);

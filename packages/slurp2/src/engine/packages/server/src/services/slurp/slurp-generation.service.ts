@@ -125,14 +125,12 @@ export function noodlerIdentityInstruction(
   if (mode === "open" && publicIdentity) {
     return `Disclosure is open. This is the same public creator. Use the linked identity ${publicIdentity.displayName} (@${publicIdentity.handle}) directly when relevant.`;
   }
-  if (mode === "hinted") {
-    return [
-      "Disclosure is hinted. The creator's other public life is an open secret.",
-      "Use indirect clues from the same person's public life — appearance, voice, interests, routines, and recurring themes — so regular followers may recognize them.",
-      "Never write the public name or handle. Never confirm a guess and never flatly deny one; deflect, joke, or change the subject.",
-    ].join(" ");
-  }
-  return "Disclosure is secret. Do not mention, imply, or identify any linked public persona.";
+  // Slurp offers only Open and Hinted, so anything that is not a usable Open identity is Hinted.
+  return [
+    "Disclosure is hinted. The creator's other public life is an open secret.",
+    "Use indirect clues from the same person's public life — appearance, voice, interests, routines, and recurring themes — so regular followers may recognize them.",
+    "Never write the public name or handle. Never confirm a guess and never flatly deny one; deflect, joke, or change the subject.",
+  ].join(" ");
 }
 
 export function buildNoodlerPublicIdentity(
@@ -408,7 +406,7 @@ export async function generateNoodlerPost(
     input.admissionMode ?? { kind: "foreground" },
   );
   const recentPosts = await noodle.listNoodlerPostsByAccount(account.id, 8);
-  const disclosureMode = account.settings.privacy.identityDisclosure ?? "secret";
+  const disclosureMode = account.settings.privacy.identityDisclosure ?? "open";
   const linkedPublicAccount = await noodle.resolveAccountSource(account as SlurpAccount);
   const scheduleContext = linkedPublicAccount
     ? await resolveSlurpCreatorScheduleContext(
