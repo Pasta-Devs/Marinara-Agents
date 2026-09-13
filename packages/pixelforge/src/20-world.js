@@ -1753,8 +1753,10 @@ PF.world = (() => {
   //
   //   - The GATHERING always. Guest rooms upstairs is the shape an inn has had
   //     for as long as there have been inns, its berth budget is the largest band
-  //     the compiler lays (four to ten), and it is where a travelling group or a
-  //     player party goes.
+  //     the compiler lays (three to twelve, the table plus prosperity: see
+  //     GUEST_BERTHS, where the table stops at eleven so a thriving city lands
+  //     on twelve, the ceiling a thirteenth berth would fall through), and it is
+  //     where a travelling group or a player party goes.
   //   - The SANCTUARY always, but a BELL TOWER rather than a storey.
   //   - A HOUSE only when it is LARGE OR MERGED: four or more sleeping under one
   //     roof, or a block the over-subscription merge put more than one household
@@ -3541,8 +3543,13 @@ PF.world = (() => {
       // the door apron of the building they run for the whole of daylight, with
       // the lit common room and the counter behind them; a sanctuary's keeper did
       // the same on the church step, and the keeper schedule tier holds them
-      // there dawn to dusk. Both default briefs home their host at the root, so
-      // this was every default world.
+      // there dawn to dusk. Both worked-example briefs home their host at the
+      // gathering itself, so neither of them is the case this covers: a host
+      // homed IN the inn takes the named-building branch instead and gets the
+      // room's walkable middle. What reaches this is a brief that homes its host
+      // or its keeper at the settlement root, which is what the validator writes
+      // whenever a cast member arrives without a `home` of their own, and what
+      // the synthesized cast does for every one of its four.
       //
       // The station comes off the ZONE because the furnisher is what knows it.
       // Same handle shape the minted loop builds, so the promotion needs no
@@ -4254,9 +4261,14 @@ PF.world = (() => {
       // WHO LETS THE ROOMS: the cast member the specials pass bound to the
       // gathering's building — the `host` kind, the innkeeper — and only if the
       // brief named nobody, whoever the brief homed there. Deliberately NOT the
-      // `_sched.keeper` tier: that tier is PLACE_BOUND_SPECIALS, which is the
-      // sanctuary alone, so a gathering's owner never carries it and reading it
-      // here would leave every inn in the game with nobody behind the counter.
+      // `_sched.keeper` tier, which answers a different question in both
+      // directions. It is set for the HEAD RESIDENT of any named building (see
+      // headOfBuilding) as well as for the owner of a PLACE_BOUND_SPECIALS one,
+      // so a healer living at her infirmary and an elder at the moot house carry
+      // it too and it never picked the inn out; and it is NOT set for a host the
+      // brief homed at the settlement root instead of at the inn, so reading it
+      // here would leave exactly those inns with nobody behind the counter.
+      // Owning the gathering's facade is the fact this block actually wants.
       const facade = buildings.find((b) => b.boundPlace === gatheringPlace);
       const host = facade?.owner ?? headOfBuilding.get(gatheringZoneId) ?? null;
       // BOTH MARKS OR NEITHER. A brief can name a gathering and home nobody in it

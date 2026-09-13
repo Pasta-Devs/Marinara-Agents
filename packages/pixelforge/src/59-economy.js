@@ -2,9 +2,11 @@
 // The player block has held a pouch, a purse and a `home` field since S5 slice 3
 // and nothing has ever put anything in them. This is the layer that does: the
 // item VOCABULARY (what a `{t,k}` row is called and how it reads in this theme),
-// the fixed PRICE list, and the one live transaction 0.11 ships — renting a berth
-// at the settlement's inn, which is simultaneously S3's first money sink and the
-// bed P5's day-ledger boundary will need (plan §2, Decisions #2).
+// the fixed PRICE list, and the transactions the build ships. The FIRST of them
+// is renting a berth at the settlement's inn, which is simultaneously S3's first
+// money sink and the bed P5's day-ledger boundary will need (plan §2, Decisions
+// #2). Buying a rod charges the purse as well, and sleeping and fishing spend
+// the clock against the same content.
 //
 // WHY A BERTH AND NOT A HOUSE. Maintainer ruling #2: there is NO automatic home.
 // A modern setting probably houses its protagonist and a fantasy adventurer
@@ -14,12 +16,13 @@
 // the plan and deliberately not here.
 //
 // Everything below is CONTENT plus the game-facing entry points: the OFFERS
-// (berthOffer, rodOffer) describe and never charge, so the HUD can call them
-// every frame; the VERBS (rentBerth, buyRod, grantStartingPurse) mutate. The
-// rest — _skin, currency, money, describe, price, the catch tables — is the
-// vocabulary those read through. It holds no state of its own: what persists
-// goes through the shipped mutators (award/grant/setHome/log/bump) and lives in
-// the player block, which is what makes it rewind-safe.
+// (berthOffer, sleepOffer, rodOffer, fishOffer) describe and never charge, so
+// the HUD can call them every frame; the VERBS (rentBerth, sleep, buyRod, fish,
+// grantStartingPurse) mutate. The rest — _skin, currency, money, describe,
+// price, the catch tables — is the vocabulary those read through. It holds no
+// state of its own: what persists goes through the shipped mutators
+// (award/grant/setHome/log/bump) and lives in the player block, which is what
+// makes it rewind-safe.
 
 // The catch table's TYPE vocabulary — the fixed shared roles a table entry can
 // be, and the one non-catch yield water gives up. A table row carries a role and
@@ -326,11 +329,13 @@ const PRICES = {
 };
 
 // What a new game starts with. It exists because a sink with no source is not a
-// feature: the real income is the quest layer (P4, roadmap 0.13), so without this
-// the one transaction 0.11 ships would be unreachable in a shipped game and only
-// ever exercised by a test that minted its own money. Granted ONCE, on the first
-// sealed world to come up on a block nothing has touched — see grantStartingPurse
-// for why that condition and not a default value.
+// feature: the real income is the quest layer (P4), which the settlement job
+// board now ships, and without this the first transaction would have been
+// unreachable in a shipped game before that landed and only ever exercised by a
+// test that minted its own money. It stays because a new game still opens before
+// any board work is done. Granted ONCE, on the first sealed world to come up on
+// a block nothing has touched — see grantStartingPurse for why that condition
+// and not a default value.
 const STARTING_PURSE = 40;
 
 // "Line and tackle included" — the stack of bait that rides the FIRST rod
@@ -375,15 +380,18 @@ const STARTER_BAIT = 8;
 //
 // PRICE INTERPLAY — A NOTE FOR TUNERS, NOT AN INVARIANT (maintainer override,
 // 2026-08-24). Nothing in this build asserts that a starting purse can afford a
-// rod, a berth, or both, and that is deliberate: 0.12 ships no income mechanic,
-// nobody is required to sleep in a rented berth, and income arrives in later
-// releases. The rod-against-berth fork is a PLAYER's choice and the build
+// rod, a berth, or both, and that is deliberate: nobody is required to sleep in
+// a rented berth, and the settlement job board is the income the fork is decided
+// against. The rod-against-berth fork is a PLAYER's choice and the build
 // declines to have an opinion about it. What a tuner should know while moving
 // numbers: STARTING_PURSE 40 against a 12-coin berth and the 6-coin fantasy
 // entry rod leaves room for both several times over, while the 24-credit sci-fi
-// rod turns the same purse into a real decision — and a player who spends the
-// purse down before buying is priced out of fishing until income lands, which is
-// an accepted limitation and not a bug.
+// rod turns the same purse into a real decision. A player who spends the purse
+// down before buying is not stranded: the board's smallest errand pays 6
+// (61-pack TUNING.reward, `visit`), which is exactly the fantasy entry rod, so
+// one walk buys the thing that starts fishing, while the sci-fi rod at 24 is
+// four of them. What still holds is that nothing GUARANTEES the opening purse
+// covers a rod or a berth, which is an accepted looseness and not a bug.
 const TUNING = {
   // THE SUCCESS CURVE, one family for every cast:
   //     p = base(level) * toolMult[toolTier] * modMult[modTier]
@@ -430,8 +438,11 @@ const TUNING = {
   // bites implicitly — summoning rain IS summoning the ×2, with no new machinery
   // — so a GM who wants faster bites has one. The direct knob, a
   // `fishBite:<word>:<multiplier>` write over these keys validated against the
-  // closed weather-word enum, is a line in the GM write-back channel's FR: that
-  // channel does not exist yet and this release builds NO read slot for it. The
+  // closed weather-word enum, would be a third verb on the GM write-back
+  // channel. That channel SHIPS: the package declares its verb table in
+  // `gm-verbs.json` and the engine validates every call against it (62-gm), and
+  // two verbs ride it today, `weather` and `standing`. What is missing is a
+  // bite-rate verb on the table, and this file builds NO read slot for one. The
   // row exists to tune the multiplier itself, not to get faster bites at all.
   biteRate: { overcast: 2, rain: 2, snow: 2, storm: 2 },
   // THE REGION'S WATER (ruling B3-2): the bite's base is DERIVED from the axes
@@ -1527,9 +1538,14 @@ PF.economy = {
     // THE 2×2, both halves. A theme with no table for a spot kind is water the
     // player can stand at and the verb cannot answer for; an EMPTY table is the
     // same hole with a shape, and it would divide by a zero weight rather than
-    // refuse. The wilds `water-feature` never places today (slice-1 verify F1)
-    // and its tables are still required — settlements and the legacy world reach
-    // that kind, and the drop is a placement fact, not a vocabulary one.
+    // refuse. Every one of these tables is live content: settlements and the
+    // legacy world hold a `water-feature`, the wilds hold a `water-crossing`,
+    // and a wilds `water-feature` now places when a brief asks for one, because
+    // the bridge ruling gave that tag a second placement pass with the road band
+    // off the busy set, which is what stopped the wilds pool being refused on
+    // every anchor that touched the road (20-world, the wilds feature loop). So
+    // none of these tables is vocabulary kept against a placement that cannot
+    // happen.
     const byTag = CATCH_TABLES[theme];
     if (!byTag) throw new Error(`pixelforge: theme "${theme}" ships no catch tables`);
     for (const tag of SPOT_TAGS) {
@@ -1597,9 +1613,10 @@ PF.economy = {
     // answers null for "not for sale here", and a rod the build means to sell
     // and forgot to price is indistinguishable from one it deliberately does
     // not stock. KEY EXISTENCE ONLY: no assertion couples these numbers to the
-    // purse or to the berth (maintainer override, 2026-08-24 — income arrives
-    // in later releases and berth-sleeping is optional), so what the build
-    // insists on is that a quotable rung is quotable, never that it is cheap.
+    // purse or to the berth (maintainer override, 2026-08-24: berth-sleeping is
+    // optional and nothing couples the opening purse to a price), and since 0.15
+    // the board is what an empty purse earns, so what the build insists on is
+    // that a quotable rung is quotable, never that it is cheap.
     for (const tier of ROD_TIERS) {
       // …and a rung has to be a rung. A tier that is not on the QUALITY ladder
       // resolves to crude at every read, so the ladder would quote a rod nobody

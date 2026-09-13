@@ -1,5 +1,8 @@
 # The player state block — S5 (wire contract and machinery)
 
+Pixelforge is in early development. Everything in this document, including numbers, mechanisms and
+planned designs, is subject to change.
+
 **Architecture:** the world is a pure function of `(seed, theme, brief, clock)`; the _player_ is not.
 One namespaced, versioned `player` block inside the save snapshot holds everything that cannot be
 recomputed — the pouch and the purse, skills and equipped tools, the relationship ledger, quest
@@ -824,14 +827,15 @@ anchor unmoved, so the row comes back with `anchorMatched: true` and the anchor 
 world. The ordinal cures only the anchor-_moved_ degraded case. This is unchanged from pre-seam
 behaviour, and accepted.
 
-**Status.** #5406 and #5407 are **merged to Engine `staging`** (#5407 via PR #5411, merge
-`ac353645`; #5406 via PR #5417, merge `d32ebe9dd`; #5405's save-management verbs via PR #5416,
-merge `d561f3400` — all 2026-08-22/23) but are **not yet in a tagged Engine release**. This
-package's `builtAgainst` is 2.4.3, which predates all three, so on a current install the route
-reports `anchorMatched` but neither `writeOrdinal` nor `rawState`, every reader above is dormant,
-the byte ladder decides, and row 1's legacy inference (below) stands in for `rawState`. Nothing
-has to change here when the next Engine release ships the fields — the readers go live off their
-presence alone.
+**Status.** #5406 and #5407 were merged to Engine `staging` (#5407 via PR #5411, merge `ac353645`;
+#5406 via PR #5417, merge `d32ebe9dd`; #5405's save-management verbs via PR #5416, merge
+`d561f3400` — all 2026-08-22/23) and **shipped in tagged Engine 2.4.4**. This package's
+`builtAgainst` is 2.4.5 and `engine.min` is 2.4.5 too, so **every supported install is past that
+tag**: the route reports `anchorMatched`, `writeOrdinal` and, on the failure path, `rawState`, and
+every reader above is **live** rather than dormant. The byte ladder is still there and still
+decides wherever either side is unorderable: a row cloned from before the feature, say, or a mirror
+clobbered by a whole-blob metadata write. Row 1's legacy inference (below) survives as the last of
+three arms rather than as a stand-in for `rawState`.
 
 ### 5.3 The freshness clocks
 
@@ -880,11 +884,13 @@ bug report, not a backup**: nothing client-side can turn it back into a world. T
 nulls the key again. The _telling_ is separate and deliberately not every site: the turn edge repairs
 nothing and nothing visible changed there, so it stays silent.
 
-Row 1's detection has two arms. Engine #5407 would hand the raw stored text back on the failure path
-only, so the PRESENCE of `rawState`/`stateUnparseable` is the corruption signal — that is what keeps
-a damaged row distinguishable from a legitimately stored `null`. Today's engines ship neither, so the
-legacy inference stands in: we only ever PUT a shaped object, so exists-with-nothing-shaped can only
-be damage.
+Row 1's detection has three arms, tested in that order. Engine #5407 hands the raw stored text back
+on the failure path only, so `stateUnparseable === true` is the corruption signal proper and a
+non-null `rawState` is the second. Between them they keep a damaged row distinguishable from a
+legitimately stored `null`, and every supported engine ships both (§5.2), so those two answer the
+ordinary case. The legacy inference is the **third** arm and covers what the fields cannot: a row the
+engine parsed fine that is not shaped like a save. We only ever PUT a shaped object, so
+exists-with-nothing-shaped can only be damage.
 
 ---
 
@@ -949,17 +955,26 @@ guard was written for lands AFTER the brief is stored and cached, so by the time
 That branch used to lift the gate bare, which started play IN THE PLACEHOLDER. It now recompiles from
 the brief that is already sealed and lifts onto that.
 
-`_failGate(core, kind)` sets `state: "failed"`, increments `attempts`, and records the ladder's own
-verdict so the retry screen can say something truer than "something went wrong". `gateReason(kind)`
-maps `refused | unavailable | network | timeout | storage` to one sentence each, with an honest
-generic for an absent or unknown kind — a throw has no verdict to report, and a kind a newer ladder
-invents must not blank the panel. `"refused"` earns its own sentence: a deterministic 400/422 gives
-the same answer every time, and a player pressing a button that will never work deserves to be told.
+`_failGate(core, kind, stage, detail)` sets `state: "failed"`, increments `attempts`, and records the
+ladder's own verdict, plus WHICH call failed and whatever the failure carried with it, so the retry
+screen can say something truer than "something went wrong". `gateReason(kind, stage, detail)` answers
+eight kinds: `refused`, `storage`, `thin`, `unavailable`, `request_too_large`, `context_limit`,
+`network` and `timeout`, with an honest generic for an absent or unknown kind. A throw has no
+verdict to report, and a kind a newer ladder invents must not blank the panel. `"refused"` earns its
+own sentence: a deterministic 400/422 gives the same answer every time, and a player pressing a
+button that will never work deserves to be told. **Two of the eight read by STAGE**: `refused` and
+`storage` come off the stage's own `reasons` table rather than from the shared switch, because
+"rewrite your setting" is brief-stage advice and "the world did not save" and "the work did not save"
+are different news. `context_limit` is the one that composes rather than picks, quoting the measured
+input tokens against the connection's budget when the failure carried both.
+
 **The per-kind sentences** live in `60-save.js`, not in the HUD, for the reason every other decision
 in that module does: the HUD needs a DOM and the harness has none, so a string that has to be pinned
-lives where it can be. The chrome AROUND them is the HUD's own and is not pinnable: the retry
-screen's title ("The world didn't finish being written.") and the trailing paragraph after
-`gateReason` are hard-coded in `70-hud.js`.
+lives where it can be. **So does the chrome around them, now.** The retry screen's title and the
+trailing paragraph after `gateReason` are rows in the same stage table (`screens.failed.title`, and
+`screens.note`/`screens.postStartNote` read through `gateStageNote`), reached by `gateTitle` and
+`gateBody`, so both are pinnable without a browser. What remains the HUD's own is the two button
+labels: *"Try again"* and *"Keep playing without it"*.
 
 `retryGeneration(core)` is the only caller of the retry button; everything else re-arms by revisiting
 the chat.
@@ -970,11 +985,18 @@ the chat.
 outcome leaves the chat **unsealed**: the key stays absent, the gate shows a retry screen, and the
 next visit arms it again. The ladder splits those outcomes two ways, and only one side is a list.
 **Transient** is the enumerated set — 404 route-absent, 409, 429, any 5xx, a network error, the
-budget timeout — and it is complete as written. **Deterministic is the FALL-THROUGH**: everything
-that is not in that set lands in `"refused"`, which is the 400 contract failure and the
-`provider_error`/parse-failure 422 the branch was written for, but also a 401, a 403, and any status
-a future engine invents. That is deliberate — a status this build cannot place is one it should not
-promise to retry — but it means `"refused"` is a catch-all, not a second enumeration.
+budget timeout — and it is complete as written. **Two deterministic outcomes are named ahead of the
+fall-through**, because each has an answer a player can act on: a 422 carrying `code:
+"context_limit"` is tested FIRST of all and reported as `"context_limit"`, which is the kind whose
+sentence quotes the measured request size against the connection's budget; a 413 is reported as
+`"request_too_large"`, which is the one that points at the lorebook selection. **Everything else
+deterministic is the FALL-THROUGH**: it lands in `"refused"`, which is the 400 contract failure and
+the `provider_error`/parse-failure 422 the branch was written for, but also a 401, a 403, and any
+status a future engine invents. That is deliberate, because a status this build cannot place is one
+it should not promise to retry, but it means `"refused"` is a catch-all rather than a second
+enumeration. So the brief's ladder reports **six** kinds in all: `context_limit`,
+`request_too_large`, `unavailable`, `refused`, `network`, `timeout`. The pack's ladder adds a seventh
+of its own, `"thin"`, and this module adds `"storage"`.
 
 This is a revision. The 0.4.0 ladder sealed the themed default world on a deterministic or paid
 failure, reasoning that a paid call per visit is worse than the default world. That decision predates
@@ -982,7 +1004,10 @@ the gate, which now holds play precisely so nobody invests in a world that is go
 so sealing a default is no longer "the world they were already walking in", it is a permanent
 decision made on the player's behalf in the one case they cannot undo. The `userContent` clamp
 (cut at 7,800 chars against the route's 8,000 — the sent payload is 7,801, because the ellipsis is
-appended after the slice) also makes a reachable 400 a contract bug rather than a long setting. The
+appended after the slice) also makes a reachable 400 a contract bug rather than a long setting. That
+8,000 is a real wall and not a house rule: the experience-generation route declares
+`userContent: z.string().max(8_000)`, so a longer field is a rejected request rather than a long one.
+It bounds the world-generation call ALONE, and nothing else the player's Setting text reaches. The
 cost is accepted by choice (§11): a generation failure blocks play behind retry instead of degrading
 into a sandbox.
 
@@ -1722,10 +1747,18 @@ summer, unless the world it is snowing in is one where that means something. Mea
 
 #### The GM override
 
-**Written by nothing in this release except a browser console**, and that is a verified constraint
-rather than a scope cut: the host dispatches capability events on engine-defined type strings only,
-so there is no surface a real writer could sit on yet. That is the feature request's job. What
-ships is the READ side, whole and verifiable.
+**The storyteller is the writer.** `gm-verbs.json` ships a `weather` verb whose `effect` is `state`
+and whose `metadataKey` is `pixelforgeWeather`, and the Engine writes the verb's arguments straight
+into the chat's metadata under that key (`capability-gm-verb-runtime.service.ts`). So an override
+arrives in ordinary play, from the narrator, and the props reconciler (§7.9's boot placement, and `90-element`'s
+`onMainProps`) answers it the moment the key lands. A browser console remains a debugging shortcut
+and touches the RUNTIME slot only, which is why the reconciler compares metadata against its own
+applied memo rather than against the live field.
+
+**The verb takes a word and an optional intensity, and nothing else.** Five words: `fair`,
+`overcast`, `rain`, `storm`, `snow`, with `light`/`heavy` taken by `rain` and `snow` only and
+ignored by the other three. There is no day argument, which is what §11's row about the override's
+reach is about.
 
 **Residency: chat metadata, at the key `pixelforgeWeather`.** Not the save envelope — a grep of the
 serializer for `weather|latitude|precipitation` finds exactly two lines, both reads into the runtime
@@ -1737,13 +1770,19 @@ stored row survives verbatim for the build that understands it. That is the whol
 argument and it is the pack key's own. An intensity on a word that takes none is dropped and the row
 survives — a GM who wrote `{word: "storm", intensity: "heavy"}` meant a storm.
 
-**It is a day-RANGE predicate**, `[sinceDay ?? 1, untilDay ?? ∞]`, and the range is what makes the
-rewind behaviour correct rather than merely convenient. The override is chat-scoped configuration,
-like the brief and the content pack: **it does not rewind with the story.** `sinceDay` clamps the
-start, so a rewind to before it was ever set restores the derived sky; a rewind INTO the range
-re-arms it, which is right, because that is the sky that day already had the first time through. A
-cleared range is simply gone. **That is the honest residual, and it is a trade**: the alternative —
-a sky that rewinds with the transcript — would need a save field, and weather has none by design.
+**It is a day-RANGE predicate**, `[sinceDay ?? 1, untilDay ?? ∞]`, **and the shipped verb fills
+neither end.** The Engine writes the verb's arguments verbatim, and the verb takes a word and an
+optional intensity only, so a storyteller-set sky is a row with no days on it: it reads as day one
+through forever, which makes it retroactive to the first day and permanent until it is set again.
+The range is therefore a hand-written row's affordance, not the narrator's.
+
+Where a range IS present the predicate is what makes the rewind behaviour correct rather than merely
+convenient. The override is chat-scoped configuration, like the brief and the content pack: **it does
+not rewind with the story.** `sinceDay` clamps the start, so a rewind to before that day restores the
+derived sky; a rewind INTO the range re-arms it, which is right, because that is the sky that day
+already had the first time through. A cleared range is simply gone. **That is the honest residual,
+and it is a trade**: the alternative, a sky that rewinds with the transcript, would need a save
+field, and weather has none by design.
 
 **The reconciler and its memo.** The load path folds the key into `sim.weatherOverride` and stamps
 `sim._weatherMetaApplied` with a SERIALIZED WHOLE of the folded row — never the word alone — ahead
@@ -2352,16 +2391,19 @@ or a line of a generation prompt.
 **`loreEntryIds`** — the lorebook **entries** the player ticked in the picker, a flat `string[]` of
 entry ids and never book ids, because the ruling that put the picker here is *"the player must be
 able to select specific lorebook entries rather than the entire lorebook getting sent."*
-`_configLoreEntryIds` reads it at both nesting depths like every sibling reader, and it does three
-things at the reader rather than trusting the writer, on `_configWorldName`'s precedent: it **filters**
-to non-empty strings, **dedupes** (the server counts a repeated id once and the wire cap counts it
-twice, so a duplicate is a slot spent on nothing), and **clips at 100**, which is `LORE_ENTRY_IDS_MAX`
-and matches the route's own `z.array(z.string()).max(100)`. The clip is not tidiness: a list past 100
-is a 400 on the whole call — a retry screen, for a chat whose config the picker's own ceiling never
-saw — and `/game/create`'s reuse-an-existing-chat arm rewrites `gameSetupConfig` wholesale, so *"the
-picker wrote it"* is not something a read site may assume. **The key is absent on every chat that
-never opened the picker**, which is most of them and is not a migration: an empty list sends no key at
-all and the brief call is byte-identical to the one this package sent before the picker existed.
+`_configLoreEntryIds` reads it at both nesting depths like every sibling reader, and it does two
+things at the reader rather than trusting the writer, on `_configWorldName`'s precedent: it
+**filters** to non-empty strings and **dedupes**, because the same entry belongs in the request once.
+**It does not clip.** `LORE_ENTRY_IDS_MAX` was deleted in 0.16.3 together with the route's own
+`.max(100)`: the field is `z.array(z.string()).optional()` now, the route raised its body limit to
+1 MiB because entry ids can outgrow 64 KiB before their content outgrows a model, and the wall that
+actually binds is the model's context, which the route checks against the assembled selection before
+it generates. A reader that clipped would silently drop picks the player made and the call would
+have taken. `/game/create`'s reuse-an-existing-chat arm still rewrites `gameSetupConfig` wholesale, so
+*"the picker wrote it"* remains something no read site may assume, which is what the filter and the
+dedupe are for. **The key is absent on every chat that never opened the picker**, which is most of
+them and is not a migration: an empty list sends no key at all and the brief call is byte-identical
+to the one this package sent before the picker existed.
 
 **And `theme` stopped being an answer the config OWNS.** Through 0.16.1 it was the dropdown's value
 and every generator downstream read it. From 0.16.2 the dropdown is deleted, so the stored value is
@@ -2424,9 +2466,11 @@ rule.
 FAILURE rather than a thin success: the gate holds, the retry screen says the world is safe, and
 nothing is stored. A pack is the one artifact whose absence is survivable, so sealing a hollow one
 would trade a free retry for a permanent nothing. The floor is a pair of `TUNING` rows — three
-templates and twelve dialogue lines — chosen from the truncation arithmetic written out beside them,
-and the ladder gained one failure kind the brief's does not have, `"thin"`, so a 200 that seals to
-null is reported as what it is rather than folded into `"refused"`.
+templates and ten dialogue lines — chosen from the truncation arithmetic written out beside them.
+The ten started at twelve and moved down once a real floor-connection emission landed on twelve, and
+the number is to be revisited much later in development. The ladder gained one failure kind the
+brief's does not have, `"thin"`, so a 200 that seals to null is reported as what it is rather than
+folded into `"refused"`.
 
 ### 9.3 The lifecycle: accept, progress, complete, abandon
 
@@ -2586,9 +2630,14 @@ map for the tab is how one of them comes to say something the other does not.
 | `filled`          | That work is done for today — the board posts it again another day.            |
 | `dup`             | You are already on that one.                                                   |
 | `not-done`        | That one isn't finished yet.                                                   |
+| `not-offered`     | The board isn't posting that one now.                                          |
 | `unknown-id`      | That job is no longer on your list.                                            |
 | `abandon-unknown` | That job is no longer on your list.                                            |
 | _anything else_   | There is nothing to do at the board just now.                                  |
+
+**`not-offered` is the row that left the day's selection between the draw and the press**: the day
+rolled over under an open menu, or a rebuild landed beneath it. It says something about that ROW
+rather than about the list, on `unknown-id`'s own reasoning.
 
 Two things about that table are deliberate. **The at-cap copy names both reliefs** and both are
 built — finishing is the board's own hand-in, setting aside is the quest tab's per-row confirm — so
@@ -2743,7 +2792,7 @@ it is written as a range.
 | what | where it lands | measured |
 | ---- | -------------- | -------- |
 | the header's two new words | the **prompt**, every turn, permanently | **14 to 24 chars per turn.** The paren group went from `(<daypart>)` to `(<daypart>, <weather>, <season>)`, so the growth is 4 chars of separator plus the two words. The weather label runs 4 (`fair`) to 10 (`light rain`, `heavy rain`, `light snow`, `heavy snow`), the season word 6 (`spring`) to 10 (`wet season`). A range and not a number, because the label is intensity-variable |
-| the `pixelforgeWeather` metadata row | **chat metadata**, and only when a writer exists to write it | **38 bytes** for `{"word":"storm"}` with its key name; **52** with a two-digit `sinceDay`; **85** with `word` + `intensity` + `sinceDay` + `untilDay` at two digits each. Day numbers are not capped — `positiveDay()` takes any safe integer — so the true maximum is **113** at `Number.MAX_SAFE_INTEGER` days. Nothing in 0.14 writes it |
+| the `pixelforgeWeather` metadata row | **chat metadata**, written by the `weather` GM verb | **38 bytes** for `{"word":"storm"}` with its key name; **52** with a two-digit `sinceDay`; **85** with `word` + `intensity` + `sinceDay` + `untilDay` at two digits each. Day numbers are not capped — `positiveDay()` takes any safe integer — so the true maximum is **113** at `Number.MAX_SAFE_INTEGER` days. The verb writes at most `word` + `intensity`, so the day forms are a hand-written row's only |
 | the generation digest's climate pair | the **generation request**, once per world | **+2 rows, 21 → 23**, and **136 chars** at their widest (a temperate/moderate world, whose reachable-word list is the longest). The digest's whole worst case is pinned at **2,718 chars** against a `userContent` clamp of 8,000 |
 | a pack line's `w` tag | the **sealed pack**, on new packs only | the widest legal line row is **294 bytes** serialized — a 200-char line carrying both the topic tag and the sky tag, on the widest handle the location vocabulary names (`settlement`, ten characters). Measured and pinned, not rounded |
 | the default packs' enrichment | **nothing stored** — the default pack is a read-time fallback and is never written | cozy-village **5,475 → 8,705 bytes** (+3,230) and sci-fi-colony **5,558 → 8,844** (+3,286), each going from 32 lines to **56** to carry the coverage floor of two any-weather stranger lines per (handle × topic) |
@@ -2814,9 +2863,10 @@ synchronously.
 literal does not move by a byte: `artTheme` is **transport-only** — a property of the request schema
 and of the model's reply, read once by `validate()` and dropped, so it appears in no stored bytes
 this build writes — and `loreEntryIds` is **chat metadata**, one more key in the same
-`experienceConfig` object the seed and the theme have always lived in (§9.2), capped at 100 ids by
-the reader. What the release does move is a `_repairs` line or two on the seal, in the two cases
-where the call had something honest to say about the picks and only then.
+`experienceConfig` object the seed and the theme have always lived in (§9.2), filtered and
+de-duplicated by the reader and bounded by nothing else since 0.16.3 (§9.2). What the release does
+move is a `_repairs` line or two on the seal, in the two cases where the call had something honest to
+say about the picks and only then.
 
 ---
 
@@ -2828,11 +2878,11 @@ Mirrored from the S5 plan's own table. These are decisions, not oversights.
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | pre-S5 builds delete the block on first flush                                                                                                                                                                                                                              | accepted                                                                       |
 | metadata mode never rewinds; a checkpoint load does not restore there                                                                                                                                                                                                      | engine gap                                                                     |
-| probe-failed session: rewind off; pinned play lost at the next routes boot unless promoted                                                                                                                                                                                 | accepted **until a tagged Engine release carries #5406** (merged to `staging`) |
+| probe-failed session: rewind off; pinned play lost at the next routes boot unless promoted                                                                                                                                                                                 | accepted; #5406 shipped in Engine 2.4.4 and cures all but the residual below   |
 | #5406 seam residual: a degraded session that sent NO narration leaves the anchor unmoved (`anchorMatched: true`), so the route row still wins the boot comparison and that session's metadata-only writes are lost — the ordinal cures only the anchor-moved degraded case | accepted; unchanged from pre-seam behaviour                                    |
 | a lost flush after an accepted sleep, or a rewind across a sleep, can re-tell a day                                                                                                                                                                                        | **accepted (maintainer)**                                                      |
 | unslept days beyond three survive as stubs                                                                                                                                                                                                                                 | **accepted (maintainer)**                                                      |
-| corrupt row contents unrecoverable client-side                                                                                                                                                                                                                             | accepted **until a tagged Engine release carries #5407** (merged to `staging`) |
+| corrupt row contents unrecoverable client-side                                                                                                                                                                                                                             | accepted; #5407's raw text (Engine 2.4.4) is detection, never recovery         |
 | a generation failure blocks play behind a retry screen — no sandbox world                                                                                                                                                                                                  | **by choice (maintainer)**                                                     |
 | the GET→PUT race is narrowed, not closed; a teardown after an undetected seam can still overwrite                                                                                                                                                                          | accepted                                                                       |
 | an intra-message swipe-compare rewinds offline actions                                                                                                                                                                                                                     | pair-anchoring by design                                                       |
@@ -2881,8 +2931,8 @@ Added by 0.14, and the same rule again — every row is somebody's decision on t
 
 | limitation (0.14) | status |
 | ----------------- | ------ |
-| **the GM weather override has no writer.** The read side is whole — fold, range predicate, reconciler, boot placement, the town's answer — and the only thing that can write the key is a browser console. The host dispatches capability events on engine-defined type strings only, so there is no surface a real writer can sit on | **by dependency**; the enumerated Engine FR is what unblocks it |
-| **the override does not rewind with the story, and re-arms inside its own range.** `sinceDay` clamps the start, so a rewind to before it was set restores the derived sky; a rewind INTO `[sinceDay, untilDay]` re-arms it — which is that day's own first-pass sky. A cleared range is gone | **accepted trade**: the alternative needs a save field, and weather has none by design |
+| **the GM weather override had no writer in 0.14.** The read side shipped whole (fold, range predicate, reconciler, boot placement, the town's answer) and the only thing that could write the key was a browser console | **closed since**: the package's `weather` GM verb is the writer, and the Engine stores its arguments at `pixelforgeWeather` |
+| **a storyteller-set sky has no day window, and the override does not rewind with the story.** The verb writes a word and at most an intensity, so the stored row carries no `sinceDay` or `untilDay` and folds to day one through forever: retroactive to the first day, and permanent until it is set again. A hand-written row can carry a range, and then `sinceDay` clamps the start, so a rewind to before it restores the derived sky and a rewind INTO `[sinceDay, untilDay]` re-arms it, which is that day's own first-pass sky. A cleared range is gone | **accepted trade**: the alternative needs a save field, and weather has none by design |
 | **the override key gets no self-heal.** It inherits the #5076 whole-blob-erase hazard like every package metadata key, and unlike the save and quarantine keys there is nothing to re-derive it from. A vanished row reads as "no override", never as corruption | accepted; a future writer re-writes rather than repairs |
 | **an override files no ledger line.** The notable-sky park fires only on a LIVE day crossing, so a sky summoned mid-day changes the header, the tint, the bias and the bite immediately and records nothing. Same for an expiry | **by design** (the park is mover-only, which is what keeps a reload silent) |
 | **the friend register is sealed and unread.** Ruling 4: 0.14 serves the stranger register only. On the live measured pack that is 7 of 12 lines written and never served (5 stranger served, 7 friend sealed) | **maintainer ruling**; the relationship ledger (ROADMAP P2) is what reads it |
@@ -2943,7 +2993,7 @@ one has no way to work it out from the screen:
 | **the picker's SERVER half lives in the Engine, and this package ships against Engines that predate it.** On an older Engine the request field is an unknown key: the world is written without the lore and the reply carries no lorebook block at all | **by dependency**, and the reading is deliberately soft. An absent block is a version skew, not a refusal, so it is a `console.warn` and **nothing is stored** — a `_repairs` line saying the picks were refused would outlive the mismatch and still be sitting in a checkpoint long after the Engine was updated. A block that IS present and reports zero included is the other thing entirely, and that one is written down |
 | **a truncated reply cannot say what became of the picks.** The 422 salvage path carries no lorebook block whatever the call did, and on that path an absent block does not even separate an old Engine from one cut off before writing it | recorded rather than guessed: the `_repairs` line says the entries were **sent** and that the cut-off reply did not say what became of them |
 | **the World Map now roots itself with no hint from this package.** `spatialMapInstructions` is deleted outright — root location and all — so nothing tells the host where the world's map should start | **maintainer ruling R-D4**, and the principle is the point: *the GM is never instructed to keep the player bound to a location, and the world need not be compact or walkable.* Verified to change no branch (the field is optional and the map-mode inference is `??`-guarded behind the explicit `gameWorldMapMode`); what it actually looks like is on the browser-pass list |
-| **the player's Setting text is clipped at 8,000 characters** on the way into the config, derived from `capPreferences`' 7,800 clamp | **accepted**, and the cost is stated rather than denied: text past the clip does not reach the GM's per-turn prompt either. The unclipped alternative is a config the host refuses on a field the player never sees |
+| **the world-generation call clamps the Setting text at 7,800 characters**, against the route's own `userContent: z.string().max(8_000)` | **accepted**, because it is the Engine's wall rather than a choice: a longer field is a rejected request. It bounds that one call and nothing else, so the full Setting text reaches the storyteller's per-turn prompt unclipped |
 | **the declined path's kit is a word count, not a model.** A chat that turns generation off resolves its theme by counting how many of its setting's words each kit's lexicon claims, with a tie or no hits at all landing on `cozy-village` | **by design** — it is deterministic, costs no call, and is the honest default a player who wrote nothing already gets. It can disagree with what the model would have chosen for the same text; whether it agrees often enough to be a floor is on the playtest list |
 
 **On the packless row, and it is a posture rather than a debt.** The compatibility window **rolls
@@ -2954,10 +3004,10 @@ document is honesty documentation for the CURRENT era's saves and never a promis
 is exactly why the board fixture is unconditional — is a **convenience for recent worlds, not an
 obligation to old ones**, and it is recorded on the roadmap with that caveat attached.
 
-Two of these name **filed** Engine FRs — **#5406** (authoritative write ordering) and **#5407**
-(`rawState` on parse failure). Both are **merged to Engine `staging`** but not yet in a tagged
-release, and this package's `builtAgainst` 2.4.3 predates them; §5.2 and §5.4 describe the client
-readers that are already in place and dormant until an Engine release carries the fields.
+Two of these named **filed** Engine FRs: **#5406** (authoritative write ordering) and **#5407**
+(`rawState` on parse failure). Both **shipped in tagged Engine 2.4.4**, and this package's
+`builtAgainst` and `engine.min` are both 2.4.5, so the client readers §5.2 and §5.4 describe are
+**live on every supported install** rather than waiting on a release.
 
 **Two further Engine asks are enumerated but not filed**, both from 0.12's panels and neither
 blocking anything:
@@ -3128,10 +3178,10 @@ owed is the browser's own number rather than a guess:**
 
 **And the metadata path END-TO-END, once, which the console recipe deliberately does not cover.**
 The documented incantation touches the runtime slot only, by design. What wants proving is the real
-path: patch the chat metadata with
-`{ pixelforgeWeather: { word: "storm", sinceDay: <day> } }`, and watch the props delivery arrive,
-the reconciler assign and re-resolve **exactly once**, the town answer, and a reload restore the same
-sky from the row.
+path: have the storyteller call the `weather` verb, and watch the props delivery arrive, the
+reconciler assign and re-resolve **exactly once**, the town answer, and a reload restore the same sky
+from the row. The day range is the other half and the verb cannot write it, so that half still wants
+a hand-patched `{ pixelforgeWeather: { word: "storm", sinceDay: <day> } }`.
 
 **0.16.2's own items, and all four are setup-form questions the DOM shim cannot answer** — it has no
 layout, no scroll and no focus, so everything below is asserted as far as the write and no further:
@@ -3142,11 +3192,12 @@ layout, no scroll and no focus, so everything below is asserted as far as the wr
    books against that box, an entry list long enough to scroll inside a box that already scrolls,
    and whether the per-book refusal note is readable where it renders (under the book header, above
    its own entries) or is lost above the fold.
-2. **The running budget line, read as a player rather than as an author.** It reads
-   `<used> / <budget> tokens from <book> · <total> / 3000 tokens for the call (N entries)` and it
-   grows a clause per book that has anything ticked. Two questions no assertion answers: does it wrap
-   into something unreadable at three or four books, and does a player understand that a refusal is
-   about **one book's own** budget rather than the call's?
+2. **The running count line, read as a player rather than as an author.** It reads
+   `N entries · about <total> tokens for the call. The engine checks the model's context limit
+   before generation.` It is one clause, whatever is ticked and in however many books, because
+   0.16.3 removed the per-book budgets and the call total they were measured against. The question
+   no assertion answers is whether the token figure reads as informative or as a limit the player is
+   being warned about, since nothing here refuses on it.
 3. **The empty Setting box and the empty name box, together.** Both are placeholders now, and the
    launch button re-derives its label from the setting text on every keystroke. What wants watching
    is the label actually moving — type "hab ring" and the button should stop saying *Begin in
@@ -3164,14 +3215,19 @@ the strip.
 **Owed by:** whoever runs the browser lane before the release goes out — the maintainer, or a
 contributor doing it on their behalf. This package ships no browser test that covers any of it.
 
-### 12.3 The maintainer's playtest — 0.16 is the one that was promised
+### 12.3 The maintainer's playtest: the first pass ran, and most of the agenda is still owed
 
-**This is the first procedural playtest in the project's history, and that is not a figure of
-speech.** Every release since 0.4 has generated worlds; none of them has been walked through by the
-maintainer with the generation actually running. Ruling 2 of the 0.16 round settled it — *"I will
-playtest, yes. After these decisions. If another round is needed after playtesting too, that's
-fine"* — so the questions below are an agenda with a date rather than a list of hopes, and further
-rounds are expected rather than a failure.
+**The first procedural playtest in the project's history happened on 2026-09-07, against the 0.16.0
+build.** Every release since 0.4 had generated worlds and none had been walked through by the
+maintainer with the generation actually running; that pass was the first, and it settled things
+immediately. The feedback it produced is what 0.16.1 was written to answer, and the releases after it
+have kept answering. Ruling 2 of the 0.16 round is what put it on the calendar, *"I will playtest,
+yes. After these decisions. If another round is needed after playtesting too, that's fine"*, and
+further rounds are expected rather than a failure.
+
+**What follows is still an agenda, not a report.** The first pass hit the setup form and the first
+minutes of a world hardest, which is where its corrections landed; the felt questions below are the
+ones a longer session has to answer, and they are owed rather than answered.
 
 **The headline questions, in the order a session would meet them:**
 
@@ -3232,11 +3288,13 @@ edit and a green suite, which is the shape the ruling asked for.
 
 **Two 0.12 rulings are still PROVISIONAL, and now four releases have built on them.** The fishing
 **trigger UX** (M5 — a proximity-gated button rather than a verb menu) and the **journal panel's
-shape** (M11) were ruled provisionally, to be settled at a playtest that has not yet happened.
-0.13's board button copies M5's pattern; 0.13's tab strip lives inside M11's panel; and 0.14's
-window is a fourth proximity-gated surface in the same family. The exposure stays deliberately
-contained — trigger-only gating, a thin list mechanism, a window whose latch is runtime-only — but
-containment is a claim about the code, not a substitute for the playtest.
+shape** (M11) were ruled provisionally, to be settled at a playtest. The first pass ran and did not
+reach either of them, because its corrections were the setup form's and the first minutes of a
+world's, so both are still owed. 0.13's board button copies M5's pattern; 0.13's tab strip lives
+inside M11's panel; and 0.14's window is a fourth proximity-gated surface in the same family. The
+exposure stays deliberately contained — trigger-only gating, a thin list mechanism, a window whose
+latch is runtime-only — but containment is a claim about the code, not a substitute for the
+playtest.
 
 **0.14 ships with artwork IN and a playtest promised** (ruling 5), and these are the felt questions
 it exists to answer:
@@ -3314,10 +3372,11 @@ very long line — whether it is truncated, refused, or passed through. A refusa
 generic toast and the typed text is not preserved. **Honestly unverified**, and it stays that way
 until somebody with the engine side in view answers it.
 
-**Owed by:** the maintainer. Until the 0.12 playtest happens both of its rulings stay provisional,
-and a reshape after either is a scheduled cost rather than a regression.
+**Owed by:** the maintainer. Until a session walks up to a fishing spot and sits with the journal,
+both 0.12 rulings stay provisional, and a reshape after either is a scheduled cost rather than a
+regression.
 
-### 12.4 Release prep — nothing currently owed
+### 12.4 Release prep: the bake record, current through 0.16.6, and the browser passes of §12.2 and §12.3 are still owed
 
 **0.16's bake ran in-cycle, like 0.14's and 0.15's, and its headline is a NON-event: no art
 moved.** The release adds a whole terrain vocabulary and it is painted entirely out of the shipped
@@ -3402,6 +3461,62 @@ twenty modules and the wrapper by hand produces a buffer that is **byte-identica
 - **The `?v=` cache key moved with the version**, as it does every release. With the art unchanged
   that buys nothing again and costs one re-fetch of identical bytes — the honest reading rather than
   a benefit worth claiming, and the second release running where it is the correct thing to say.
+
+**The 0.16.3 bake (2026-09-09).** A three-module release over the same twenty-module tree:
+`80-setup.js` loses the entry-id ceiling and its per-book budget arithmetic, `60-save.js` the
+reader's clip, and `18-brief.js` gains the context-limit arm of the ladder (the oversized-request
+arm is 0.16.5's), with `test-brief.mjs` moving beside them and not reaching the bundle.
+**`client.js` at 1,482,295 bytes** (sha256
+`e25d3b3b83a077302378e7a830690033e406214332302c4380d63eed8050c75e`), **the `0.16.3` artifact
+zip at 1,495,744** (sha256 `6c1593ceecfa290cd7bf6aae0599bd7bc16eabba9bb516d4577eb5d7415f22ac`), both
+**down 10,759 bytes** on 0.16.2's 1,493,054 and 1,506,503. The same delta in both places is what a
+source-only deletion looks like. Art byte-unchanged again: both theme sheets and `atlas.json`
+sha256-match the previous release exactly, in the shipped copies and in the regenerated
+`build/assets/`, and every asset row in `manifest.json` is untouched. **This is the one release in
+the 0.16 line whose manifest moved more than three lines**, and the extra ones are the point of it:
+`builtAgainst`'s `engineVersion`/`engineCommit` pair and `engine.min` all moved 2.4.3 to 2.4.5,
+because the unbounded id list and the context check are 2.4.5's. Every older artifact zip is
+untouched.
+
+**The 0.16.4 bake (2026-09-13).** A one-module release: `20-world.js` loses an unused rendering
+alias and nothing else in the tree moves. **`client.js` at 1,482,273 bytes** (sha256
+`7e7e639a49be1e1b2bac5dae0a2e53adaf018b0d6dc4141c30dd97d0e6bb6144`), **the `0.16.4` artifact zip at
+1,495,722** (sha256 `44516a29ad0523b4c3eb261222026b3c30ae92cdf36c997cbb4307dcfc4a4275`), both **down
+22 bytes**, which is the whole of the release stated in the only unit that cannot flatter it. Art
+byte-unchanged, `manifest.json` moved the **three lines** a source-only release moves (the version,
+and `client.js`'s sha256/bytes pair), and every older artifact zip is untouched.
+
+**The 0.16.5 bake (2026-09-13).** A four-module release over the same twenty-module tree:
+`18-brief.js` and `60-save.js` carry the measured-size failure detail, `70-hud.js` the sentence that
+reads it back, `80-setup.js` the chat-disabled lorebook and entry omissions, with `test-brief.mjs`
+moving beside them and not reaching the bundle. **`client.js` at 1,484,552 bytes** (sha256
+`41bf3590eefeae71d9873977868fc644bd25e329d53f9a5acddcbf2d102bb68f`), **the `0.16.5` artifact zip at
+1,498,001** (sha256 `ca634ac1f94af58a5eccea0cd63a967da39a07cee164aae756511ea368221094`), both **up
+2,279 bytes** on 0.16.4. Art byte-unchanged again, `manifest.json` moved the same three lines, and
+every older artifact zip is untouched.
+
+**The 0.16.6 bake (2026-09-13).** A fourteen-module release over the same twenty-module tree, and
+the widest of the line: `10-art.js`, `15-assets.js`, `17-weather.js`, `18-brief.js`, `20-world.js`,
+`25-schedule.js`, `30-sim.js`, `40-render.js`, `50-spatial.js`, `58-player.js`, `59-economy.js`,
+`60-save.js`, `80-setup.js` and `90-element.js` all move, with `test-brief.mjs` and the build script
+moving beside them and neither reaching the bundle. **`client.js` at 1,492,291 bytes** (sha256
+`58f1e0334994b7ed89ca0251ecb6d838ac00d8c9fe0a1114b19f8bb8636d82d5`), **the `0.16.6` artifact zip at
+1,505,740** (sha256 `a2842febc5090e19e045c721a8456d6dfda39ad6cbfa743b3e4afb1b707f3550`), both **up
+7,739 bytes** on 0.16.5's 1,484,552 and 1,498,001. The same delta in both places is what a
+source-only release looks like. Art byte-unchanged, and the comparison is against `staging` itself:
+both theme tile sheets and `atlas.json` sha256-match `git show staging:<path>` exactly.
+`manifest.json` moved the **three lines** a source-only release moves (the version, and `client.js`'s
+sha256/bytes pair), every asset row in it is untouched, and every older artifact zip is untouched.
+**Two consecutive bakes over the same tree produced byte-identical output**, so the artifact is
+reproducible rather than merely deterministic-by-design.
+
+**Four more releases where the art did not move, and the `?v=` cache key moved anyway**, as it does
+every release. It buys nothing while the assets are identical and costs one re-fetch of the same
+bytes, which stays the honest reading rather than a benefit worth claiming.
+
+**Owed by:** the maintainer. The bake record is clean, but a clean bake closes nothing in the rest
+of section 12. The browser passes listed in §12.2 and the playtest agenda in §12.3 are still owed,
+and they stay owed until somebody runs them in a real browser.
 
 **Older prep, kept because it is the record of how this went the last two times.** **This section
 flipped for 0.14 and has flipped back: the rebuild ran in-cycle rather than being
