@@ -363,9 +363,15 @@ async function main() {
       const sharedPaginationPreview = ltmLorebookPreviewResponseSchema.parse(
         await previewPackageLorebooks({ query: "pagination", limit: 100 }, join(dataDir, "long-term-memory")),
       );
-      assert.equal(sharedPaginationPreview.books.length, 2);
-      assert.equal(sharedPaginationPreview.books[1]?.counts.candidates, 1);
-      assert.equal(sharedPaginationPreview.books[1]?.totals.candidates, 1);
+      assert.equal(sharedPaginationPreview.books.length, 1);
+      const continuedLorebooks = await previewPackageLorebooks(
+        { query: "pagination", limit: 100, cursor: sharedPaginationPreview.nextCursor! },
+        join(dataDir, "long-term-memory"),
+      );
+      assert.equal(continuedLorebooks.books.length, 2);
+      assert.equal(continuedLorebooks.books[1]?.counts.candidates, 1);
+      assert.equal(continuedLorebooks.books[1]?.totals.candidates, 1);
+      assert.equal(continuedLorebooks.hasMore, false);
       assert.equal(sharedPaginationPreview.totals.candidates, 102);
       assert.equal(sharedPaginationPreview.truncated, true);
       const manyBooksPreview = ltmLorebookPreviewResponseSchema.parse(

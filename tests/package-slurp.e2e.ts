@@ -83,6 +83,96 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.describe("standalone Slurp package", () => {
+  test("image context choices persist and creator refresh counts down", async ({ page }, testInfo) => {
+    const initialSettings = await (await getSlurpSettings(page)).json();
+    let profileId: string | null = null;
+    const releases: Array<() => void> = [];
+    try {
+      expect(
+        (
+          await page.request.patch("/api/slurp/settings", {
+            data: { onboarding: "completed", imageContextMode: "auto" },
+          })
+        ).ok(),
+      ).toBe(true);
+      const profileResponse = await page.request.post("/api/slurp/accounts/__professor_mari__/noodler", {
+        data: {
+          stageProfile: {
+            displayName: "Image context fixture",
+            handle: `image_fixture_${Date.now()}`,
+            bio: "Fixture",
+            stagePersonality: "Concise",
+            disclosureMode: "open",
+          },
+        },
+      });
+      expect(profileResponse.ok()).toBe(true);
+      profileId = ((await profileResponse.json()) as { id: string }).id;
+      const profiles = (await (await page.request.get("/api/slurp/noodler/accounts")).json()) as Array<
+        Record<string, unknown>
+      >;
+      const profile = profiles.find(({ id }) => id === profileId)!;
+      expect(profile).toBeTruthy();
+      await page.route("**/api/slurp/noodler/accounts", (route) =>
+        route.fulfill({
+          json: [0, 1, 2].map((index) => ({
+            ...profile,
+            id: `progress-${index}`,
+            displayName: `Creator ${index + 1}`,
+          })),
+        }),
+      );
+      await page.route("**/api/slurp/noodler/auto-post/refresh-targeted", async (route) => {
+        const body = route.request().postDataJSON() as { accountIds: string[] };
+        expect(body.accountIds).toHaveLength(1);
+        await new Promise<void>((resolve) => releases.push(resolve));
+        await route.fulfill({ json: { outcomes: [{ accountId: body.accountIds[0], status: "generated" }] } });
+      });
+      await page.addInitScript(() =>
+        localStorage.setItem(
+          "marinara:slurp:package-ui",
+          JSON.stringify({ navigation: { mode: "creator-settings", section: "images" }, onboardingState: "completed" }),
+        ),
+      );
+      await page.goto("/");
+      await openSlurp(page);
+      const choice = page.getByRole("combobox", { name: /Image context for reactions/ });
+      await expect(choice).toHaveValue("auto");
+      for (const mode of ["imagePrompt", "vision", "auto"]) {
+        await choice.selectOption(mode);
+        await expect
+          .poll(
+            async () =>
+              ((await (await page.request.get("/api/slurp/settings")).json()) as { imageContextMode: string })
+                .imageContextMode,
+          )
+          .toBe(mode);
+      }
+      await page.screenshot({ path: testInfo.outputPath("slurp-image-context-settings.png") });
+      await page.getByRole("button", { name: "Publishing", exact: true }).click();
+      await page.getByRole("button", { name: "Refresh Slurp now", exact: true }).click();
+      const dialog = page.getByRole("dialog", { name: "Refresh Slurp now", exact: true });
+      await dialog.getByRole("button", { name: "Generate 3", exact: true }).click();
+      await expect.poll(() => releases.length).toBe(3);
+      await expect(dialog.getByRole("status")).toHaveText("3 remaining");
+      releases[0]!();
+      await expect(dialog.getByRole("status")).toHaveText("2 remaining");
+      await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeDisabled();
+      await page.screenshot({ path: testInfo.outputPath("slurp-remaining-generations.png") });
+      releases[1]!();
+      await expect(dialog.getByRole("status")).toHaveText("1 remaining");
+      releases[2]!();
+      await expect(dialog).toBeHidden();
+      await expect(page.getByText("3 published.", { exact: true })).toBeVisible();
+    } finally {
+      releases.forEach((release) => release());
+      await page.request.patch("/api/slurp/settings", {
+        data: { imageContextMode: initialSettings.imageContextMode, onboarding: initialSettings.onboarding },
+      });
+      if (profileId) await page.request.delete(`/api/slurp/noodler/accounts/${profileId}`);
+    }
+  });
+
   test("opens as an enabled pink Creator surface", async ({ page }) => {
     const errors = collectUnexpectedErrors(page);
     const settingsResponse = await getSlurpSettings(page);

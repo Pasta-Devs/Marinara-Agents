@@ -52,14 +52,15 @@ const STATE = {
   },
 };
 
-// Markup digests produced by the extension's renderer for the fixture above.
+// Markup digests verified byte-for-byte against GetBeholder/Beholder-ST#4
+// (434a2f2), including the shared keyboard-accessibility attributes.
 const EXPECTED_RENDER = {
-  "paired/front": "64cd9fee2ac71a31",
-  "paired/back": "9ae3c8247520f181",
-  "columns/front": "f6dd8dc85e3a833b",
-  "columns/back": "06dc2548b64d47b0",
-  "list/front": "32aa4e2856cb4201",
-  "list/back": "d96c948af5a6a897",
+  "paired/front": "432bdf9266add92f",
+  "paired/back": "e0d52f1c25a791fd",
+  "columns/front": "86cb398d429cd09d",
+  "columns/back": "79af15f4e3c27685",
+  "list/front": "454cb65d87122813",
+  "list/back": "31833126c6ee508a",
 };
 
 // The renderer half of the bundle: everything before the dock, which is the part

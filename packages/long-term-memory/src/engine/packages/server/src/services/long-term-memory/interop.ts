@@ -42,6 +42,7 @@ import { LtmServiceError } from "./service-error.js";
 
 type Candidate = {
   sourceId: string;
+  previewOrder?: string;
   title: string;
   sourceText: string;
   sourceNoteId: string;
@@ -501,6 +502,9 @@ async function candidates(
               : [`source_import_chat_${identifier(chat.name, "chat")}_${hash(seed)}`];
         result.push({
           sourceId,
+          ...(chatMode === "conversation"
+            ? { previewOrder: `${chat.id}\0${entry.range.split(".").reverse().join("-")}\0${entry.id}` }
+            : {}),
           title,
           sourceText: entry.content,
           sourceNoteId: sourceNoteIdForProvenance(provenance),
@@ -601,31 +605,66 @@ function previewSample(row: Candidate, note: LtmNote | undefined) {
       }
     : { ...base, status: "pending" as const, freshness: "new" as const };
 }
+function previewPage<T>(rows: T[], request: LtmLorebookPreviewRequest, source: string, key: (row: T) => string) {
+  const binding = hash(
+    JSON.stringify([
+      source,
+      scopeKey(requestedSourceScope(request)),
+      request.mode ?? null,
+      normalizedSearchText(request.query ?? ""),
+    ]),
+    64,
+  );
+  let after = "";
+  if (request.cursor) {
+    try {
+      const cursor = JSON.parse(Buffer.from(request.cursor, "base64url").toString("utf8"));
+      if (cursor.v !== 1 || cursor.binding !== binding || typeof cursor.after !== "string" || cursor.after.length > 512)
+        throw new Error();
+      after = cursor.after;
+    } catch {
+      throw new LtmServiceError(
+        "The source cursor is invalid for these filters. Refresh the preview.",
+        400,
+        "ltm_invalid_source_cursor",
+      );
+    }
+  }
+  const ordered = rows
+    .filter((row) => key(row) > after)
+    .sort((left, right) => (key(left) < key(right) ? -1 : key(left) > key(right) ? 1 : 0));
+  const items = ordered.slice(0, request.limit);
+  const hasMore = ordered.length > items.length;
+  const nextCursor = hasMore
+    ? Buffer.from(JSON.stringify({ v: 1, binding, after: key(items.at(-1)!) })).toString("base64url")
+    : null;
+  return { items, hasMore, nextCursor };
+}
+
 export async function previewPackageInterop(
   request: LtmInteropPreviewRequest,
   root: string,
 ): Promise<LtmInteropPreviewResponse> {
-  const sourceScope = requestedSourceScope(request),
-    rows = await candidates({ ...request, sourceScope, includeOutOfScope: sourceScope !== undefined }),
-    storage = new LongTermMemoryStorage(root),
-    matchExisting = await existingMatcher(storage),
-    allSamples = rows.flatMap((row) => {
-      const existing = matchExisting(row);
-      return candidateVisibleInScope(row, sourceScope) ? [previewSample(row, existing)] : [];
-    }),
-    samples = allSamples.slice(0, request.limit);
+  const sourceScope = requestedSourceScope(request);
+  const rows = (await candidates({ ...request, sourceScope, includeOutOfScope: sourceScope !== undefined })).filter(
+    (row) => candidateVisibleInScope(row, sourceScope),
+  );
+  const matchExisting = await existingMatcher(new LongTermMemoryStorage(root));
+  const page = previewPage(rows, request, request.source, (row) => row.previewOrder ?? row.sourceId);
+  // ponytail: host resource APIs list complete source records; only this page gets
+  // rendered previews and freshness hashes. Host-side cursors can replace the scan later.
+  const samples = page.items.map((row) => previewSample(row, matchExisting(row)));
+  const imported = rows.filter((row) => matchExisting(row)).length;
   return {
     source: request.source,
     scanned: samples.length,
     draftable: samples.filter((item) => item.status === "pending").length,
     importedCount: samples.filter((item) => item.status === "imported").length,
     samples,
-    totals: {
-      matches: allSamples.length,
-      ready: allSamples.filter((item) => item.status === "pending").length,
-      imported: allSamples.filter((item) => item.status === "imported").length,
-    },
-    truncated: allSamples.length > samples.length,
+    totals: { matches: rows.length, ready: rows.length - imported, imported },
+    truncated: page.hasMore,
+    hasMore: page.hasMore,
+    nextCursor: page.nextCursor,
   };
 }
 
@@ -633,127 +672,114 @@ export async function previewPackageLorebooks(
   request: LtmLorebookPreviewRequest,
   root: string,
 ): Promise<LtmLorebookPreviewResponse> {
-  const sourceScope = requestedSourceScope(request),
-    storage = new LongTermMemoryStorage(root),
-    matchExisting = await existingMatcher(storage),
-    resources = await getPackageResources().listLorebooks(),
-    matchingBooks = normalizeLorebooks(resources)
-      .map((book) => {
-        const bookMatches = matchesQuery(
-            {
-              sourceId: book.id,
-              title: book.name,
-              sourceText: [book.description, book.category, ...book.tags].join("\n"),
-              summary: book.description,
-            },
-            request.query,
-          ),
-          rows = book.candidates
-            .filter((row) => {
-              return (
-                (!request.mode || row.modes.includes(request.mode)) &&
-                candidateVisibleInScope(row, sourceScope) &&
-                (bookMatches || matchesQuery(row, request.query))
-              );
-            })
-            .map((row) => mode(row, importedSourceMode(row.provenance.kind, request.mode))),
-          grouped = new Map<
-            string,
-            {
-              id: string;
-              name: string;
-              candidates: ReturnType<typeof previewSample>[];
-            }
-          >();
-        for (const row of rows) {
-          const id = row.lorebookEntryId!,
-            entry = grouped.get(id) ?? {
-              id,
-              name: row.lorebookEntryName!,
-              candidates: [],
-            };
-          entry.candidates.push(previewSample(row, matchExisting(row)));
-          grouped.set(id, entry);
-        }
-        const entries = [...grouped.values()].map((entry) => ({
-            ...entry,
-            candidateCount: entry.candidates.length,
-          })),
-          samples = entries.flatMap((entry) => entry.candidates),
-          imported = samples.filter((sample) => sample.status === "imported").length;
-        return {
-          id: book.id,
-          name: book.name,
-          description: book.description.length > 600 ? `${book.description.slice(0, 597)}...` : book.description,
-          category: book.category,
-          tags: book.tags,
-          scope: book.scope,
-          counts: {
-            entries: entries.length,
-            candidates: samples.length,
-            pending: samples.length - imported,
-            imported,
-          },
-          entries,
-        };
-      })
-      .filter((book) => !request.query || book.counts.candidates > 0),
-    totalEntries = matchingBooks.reduce((count, book) => count + book.counts.entries, 0),
-    totalCandidates = matchingBooks.reduce((count, book) => count + book.counts.candidates, 0),
-    totalImported = matchingBooks.reduce((count, book) => count + book.counts.imported, 0);
-  let remaining = request.limit;
-  const visibleBooks = matchingBooks.slice(0, 100);
-  let candidateBooksRemaining = visibleBooks.filter((book) => book.counts.candidates > 0).length;
-  const books = visibleBooks.map((book) => {
-      let allocation =
-        book.counts.candidates === 0 || remaining === 0
-          ? 0
-          : candidateBooksRemaining <= remaining
-            ? Math.min(book.counts.candidates, Math.max(1, remaining - candidateBooksRemaining + 1))
-            : 1;
-      if (book.counts.candidates > 0) candidateBooksRemaining -= 1;
-      const entries = book.entries.flatMap((entry) => {
-          if (!allocation) return [];
-          const candidates = entry.candidates.slice(0, allocation);
-          allocation -= candidates.length;
-          return candidates.length ? [{ ...entry, candidateCount: candidates.length, candidates }] : [];
-        }),
-        candidates = entries.flatMap((entry) => entry.candidates),
-        imported = candidates.filter((candidate) => candidate.status === "imported").length;
-      remaining -= candidates.length;
+  const sourceScope = requestedSourceScope(request);
+  const matchExisting = await existingMatcher(new LongTermMemoryStorage(root));
+  const matchingBooks = normalizeLorebooks(await getPackageResources().listLorebooks())
+    .map((book) => {
+      const bookMatches = matchesQuery(
+        {
+          sourceId: book.id,
+          title: book.name,
+          sourceText: [book.description, book.category, ...book.tags].join("\n"),
+          summary: book.description,
+        },
+        request.query,
+      );
+      const rows = book.candidates
+        .filter(
+          (row) =>
+            (!request.mode || row.modes.includes(request.mode)) &&
+            candidateVisibleInScope(row, sourceScope) &&
+            (bookMatches || matchesQuery(row, request.query)),
+        )
+        .map((row) => mode(row, importedSourceMode(row.provenance.kind, request.mode)));
+      const imported = rows.filter((row) => matchExisting(row)).length;
       return {
         ...book,
-        counts: {
-          entries: entries.length,
-          candidates: candidates.length,
-          pending: candidates.length - imported,
+        candidates: rows,
+        totals: {
+          entries: new Set(rows.map((row) => row.lorebookEntryId)).size,
+          candidates: rows.length,
+          pending: rows.length - imported,
           imported,
         },
-        totals: book.counts,
-        entries,
       };
-    }),
-    entries = books.reduce((count, book) => count + book.entries.length, 0),
-    samples = books.flatMap((book) => book.entries.flatMap((entry) => entry.candidates)),
-    candidatesCount = samples.length,
-    imported = samples.filter((sample) => sample.status === "imported").length;
-  return {
-    counts: {
-      books: books.length,
+    })
+    .filter((book) => !normalizedSearchText(request.query ?? "") || book.candidates.length > 0);
+  // An empty book occupies one position, so it remains browsable without an
+  // independent book cap. A large entry can continue in the next page.
+  const positions = matchingBooks.flatMap((book) =>
+    book.candidates.length
+      ? book.candidates.map((candidate) => ({ book, candidate: candidate as Candidate | null }))
+      : [{ book, candidate: null }],
+  );
+  const page = previewPage(
+    positions,
+    request,
+    "lorebook-groups",
+    ({ book, candidate }) => `${book.id}\0${candidate?.sourceId ?? ""}`,
+  );
+  const pageBooks = new Map<string, typeof page.items>();
+  for (const position of page.items) {
+    const rows = pageBooks.get(position.book.id) ?? [];
+    rows.push(position);
+    pageBooks.set(position.book.id, rows);
+  }
+  const books = [...pageBooks.values()].map((positions) => {
+    const book = positions[0]!.book;
+    const grouped = new Map<string, LtmLorebookPreviewResponse["books"][number]["entries"][number]>();
+    for (const { candidate } of positions) {
+      if (!candidate) continue;
+      const id = candidate.lorebookEntryId!;
+      const entry = grouped.get(id) ?? { id, name: candidate.lorebookEntryName!, candidates: [], candidateCount: 0 };
+      entry.candidates.push(previewSample(candidate, matchExisting(candidate)));
+      entry.candidateCount = entry.candidates.length;
+      grouped.set(id, entry);
+    }
+    const entries = [...grouped.values()];
+    const samples = entries.flatMap((entry) => entry.candidates);
+    const imported = samples.filter((sample) => sample.status === "imported").length;
+    return {
+      id: book.id,
+      name: book.name,
+      description: book.description.length > 600 ? `${book.description.slice(0, 597)}...` : book.description,
+      category: book.category,
+      tags: book.tags,
+      scope: book.scope,
       entries,
-      candidates: candidatesCount,
-      pending: candidatesCount - imported,
-      imported,
-    },
+      counts: { entries: entries.length, candidates: samples.length, pending: samples.length - imported, imported },
+      totals: book.totals,
+    };
+  });
+  const counts = (values: typeof books) =>
+    values.reduce(
+      (result, book) => {
+        const count = book.counts;
+        return {
+          entries: result.entries + count.entries,
+          candidates: result.candidates + count.candidates,
+          pending: result.pending + count.pending,
+          imported: result.imported + count.imported,
+        };
+      },
+      { entries: 0, candidates: 0, pending: 0, imported: 0 },
+    );
+  const totals = matchingBooks.reduce(
+    (sum, book) => ({
+      entries: sum.entries + book.totals.entries,
+      candidates: sum.candidates + book.totals.candidates,
+      pending: sum.pending + book.totals.pending,
+      imported: sum.imported + book.totals.imported,
+    }),
+    { entries: 0, candidates: 0, pending: 0, imported: 0 },
+  );
+  return {
+    counts: { books: books.length, ...counts(books) },
     books,
-    totals: {
-      books: matchingBooks.length,
-      entries: totalEntries,
-      candidates: totalCandidates,
-      pending: totalCandidates - totalImported,
-      imported: totalImported,
-    },
-    truncated: matchingBooks.length > books.length || totalCandidates > candidatesCount,
+    totals: { books: matchingBooks.length, ...totals },
+    truncated: page.hasMore,
+    hasMore: page.hasMore,
+    nextCursor: page.nextCursor,
   };
 }
 

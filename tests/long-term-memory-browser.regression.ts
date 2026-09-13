@@ -1006,9 +1006,37 @@ async function main() {
           };
           return send(200, { note: legacyGlobalNote });
         }
-        if (request.method === "POST" && url.pathname.endsWith("/import/preview"))
+        if (request.method === "POST" && url.pathname.endsWith("/import/preview")) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+          const pagedCharacters = body.source === "characters" && !body.query;
+          if (pagedCharacters && body.cursor === "characters-page-2") {
+            return send(200, {
+              source: "characters",
+              scanned: 1,
+              draftable: 1,
+              importedCount: 0,
+              samples: [
+                {
+                  sourceId: "character-next-page",
+                  title: "Next page character",
+                  importMode: "roleplay",
+                  mutationCount: 1,
+                  summary: "A source beyond the initial page.",
+                  snippet: "Append this source without losing the previous selection.",
+                  status: "pending",
+                  freshness: "new",
+                },
+              ],
+              totals: { matches: 3, ready: 2, imported: 1 },
+              truncated: false,
+              hasMore: false,
+              nextCursor: null,
+            });
+          }
           return send(200, {
-            source: "chats",
+            source: body.source ?? "chats",
             scanned: 2,
             draftable: 1,
             importedCount: 1,
@@ -1036,9 +1064,12 @@ async function main() {
                 freshness: "new",
               },
             ],
-            totals: { matches: 2, ready: 1, imported: 1 },
-            truncated: false,
+            totals: { matches: pagedCharacters ? 3 : 2, ready: pagedCharacters ? 2 : 1, imported: 1 },
+            truncated: pagedCharacters,
+            hasMore: pagedCharacters,
+            nextCursor: pagedCharacters ? "characters-page-2" : null,
           });
+        }
         if (request.method === "POST" && url.pathname.endsWith("/import/lorebooks/preview")) {
           const books = [
             {
@@ -3606,6 +3637,50 @@ async function main() {
         "ready",
       );
       await page.locator('[data-ltm-source-row-status][data-ltm-source-id="character-outside-current-chat"]').waitFor();
+      const selectedCharacter = page.locator('[data-ltm-source-select="character-outside-current-chat"]');
+      if (!(await selectedCharacter.isVisible())) {
+        await page
+          .locator('[data-ltm-source-preview="characters"]')
+          .getByRole("button", { name: "Select", exact: true })
+          .click();
+      }
+      await selectedCharacter.check();
+      await page.locator('[data-ltm-source-action="load-more"]').click();
+      await page.locator('[data-ltm-source-row-status][data-ltm-source-id="character-next-page"]').waitFor();
+      assert.equal(await selectedCharacter.isChecked(), true, "pagination preserves the selected source");
+      assert.equal(
+        await page.locator('[data-ltm-source-action="load-more"]').count(),
+        0,
+        "last page removes Load more",
+      );
+      assert.equal(
+        sourcePreviewRequests.filter((request) => request.source === "characters").at(-1)?.cursor,
+        "characters-page-2",
+      );
+      if (visualOutputDir)
+        await page.screenshot({
+          path: join(visualOutputDir, "long-term-memory-source-pagination-desktop.png"),
+          fullPage: true,
+        });
+      const searchRestart = page.waitForRequest(
+        (request) =>
+          request.method() === "POST" &&
+          request.url().endsWith("/import/preview") &&
+          request.postDataJSON()?.query === "Navigator",
+      );
+      await page.locator("[data-ltm-source-search]").fill("Navigator");
+      assert.equal(
+        Object.hasOwn((await searchRestart).postDataJSON(), "cursor"),
+        false,
+        "changing search restarts at the first page",
+      );
+      await page
+        .locator('[data-ltm-source-row-status][data-ltm-source-id="character-next-page"]')
+        .waitFor({ state: "detached" });
+      await page.locator("[data-ltm-source-search]").fill("");
+      await page.locator('[data-ltm-source-row-status][data-ltm-source-id="character-next-page"]').waitFor();
+      assert.equal(await selectedCharacter.isChecked(), true);
+      await selectedCharacter.uncheck();
       const characterPreviewRequest = sourcePreviewRequests.filter((request) => request.source === "characters").at(-1);
       assert.ok(characterPreviewRequest);
       assert.equal(Object.hasOwn(characterPreviewRequest, "sourceScope"), false);

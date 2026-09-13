@@ -1,5 +1,9 @@
 # Pixelforge release notes
 
+## 0.16.5 — 2026-09-13
+
+- World-generation failures show the measured request size and available context, and oversized requests identify the lore selection. World setup omits lorebooks and entries disabled for the chat.
+
 ## 0.16.4 — 2026-09-13
 
 - Maintenance: remove an unused world-rendering alias.

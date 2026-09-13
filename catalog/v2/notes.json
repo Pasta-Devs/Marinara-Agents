@@ -1,8 +1,34 @@
 {
   "schemaVersion": 1,
   "packages": {
+    "beholder": {
+      "versions": [
+        {
+          "version": "1.3.11",
+          "date": "2026-09-13",
+          "notes": "- Paper-doll slots can be reached by keyboard and opened with Enter or Space. Their focus outline stays visible, and closing the editor returns focus to its slot.",
+          "highlight": false
+        }
+      ]
+    },
+    "conversation-calls": {
+      "versions": [
+        {
+          "version": "1.0.15",
+          "date": "2026-09-13",
+          "notes": "- Keep required reasoning enabled for GLM 5.3 on NanoGPT and Z.AI when the selected effort is None.",
+          "highlight": false
+        }
+      ]
+    },
     "long-term-memory": {
       "versions": [
+        {
+          "version": "1.3.0",
+          "date": "2026-09-13",
+          "notes": "- Load additional pages of chat summaries, characters, and lorebook sources without losing filters, selections, or import status.",
+          "highlight": true
+        },
         {
           "version": "1.2.27",
           "date": "2026-09-12",
@@ -78,6 +104,12 @@
     "noodle": {
       "versions": [
         {
+          "version": "1.2.23",
+          "date": "2026-09-13",
+          "notes": "- Applying a saved prompt asks before replacing the current prompt, including edits already saved as the active prompt.\n- Cancel works immediately in Delete All Noodle Data; only deletion requires typing DELETE.\n- A running timeline refresh blocks duplicate refresh requests instead of queuing extra generations.\n- GLM 5.3 on NanoGPT and Z.AI keeps its required reasoning enabled when the selected effort is None.",
+          "highlight": false
+        },
+        {
           "version": "1.2.22",
           "date": "2026-09-13",
           "notes": "- Maintenance: simplify the inline composer's visibility checks and remove unused code.",
@@ -111,6 +143,12 @@
     },
     "slurp": {
       "versions": [
+        {
+          "version": "1.51.0",
+          "date": "2026-09-13",
+          "notes": "- Fan reactions and creator replies can use stored image prompts or vision descriptions. Auto prefers the stored prompt, with vision as a fallback for uploaded images. Public fans never receive locked images, and descriptions follow the creator's identity protection.\n- The targeted creator refresh shows the remaining count as each generation finishes, including failed or skipped jobs.",
+          "highlight": true
+        },
         {
           "version": "1.50.1",
           "date": "2026-09-13",

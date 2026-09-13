@@ -52,7 +52,10 @@ BH.editor = {
   },
 
   close() {
-    document.querySelector(".bh-editor")?.remove();
+    const editor = document.querySelector(".bh-editor");
+    const restoreFocus = editor?.contains(document.activeElement);
+    editor?.remove();
+    if (restoreFocus) this.open?.trigger?.focus();
     if (this.dismissHandlers) {
       document.removeEventListener("click", this.dismissHandlers.click, true);
       document.removeEventListener("keydown", this.dismissHandlers.keydown, true);
@@ -134,7 +137,7 @@ BH.editor = {
     // against the page instead, so it drifted the moment anything scrolled.
     const panel = BH.dock.panel;
     (panel ?? document.body).appendChild(editor);
-    this.open = { character: characterName, slot: slotName, element: editor };
+    this.open = { character: characterName, slot: slotName, element: editor, trigger: card };
 
     if (panel) {
       const panelRect = panel.getBoundingClientRect();

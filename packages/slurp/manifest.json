@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "slurp",
   "name": "Slurp Legacy",
-  "version": "1.50.1",
+  "version": "1.51.0",
   "description": "Legacy Slurp version. This package is being reworked and is on hold. New development is happening in Slurp Remastered. Bug fixes are not planned for this version. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
   "localizations": {
     "de": {
@@ -62,13 +62,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "db4c5ec0b3b64ff03dd489ad24a086474c4e8e041644d6242722f9552eb9975a",
-      "bytes": 2163081
+      "sha256": "a5cb558e8d8fd1e589b8164704dcf662fa9e8bd53b1b8d95611b6c0505dceb66",
+      "bytes": 2170157
     },
     {
       "path": "client.js",
-      "sha256": "bde87cfb05c18269a13a0578fee90597ba59127235414d41c7dcb9939bf69a01",
-      "bytes": 2454159
+      "sha256": "fdc60091a147639b523c78752caf1289bc9c1c99ddbc7aa5652a6385abda3b2f",
+      "bytes": 2456105
     },
     {
       "path": "slurp-logo.png",

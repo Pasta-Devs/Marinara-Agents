@@ -1,5 +1,9 @@
 # Long-Term Memory changelog
 
+## 1.3.0 — 2026-09-13
+
+- Load additional pages of chat summaries, characters, and lorebook sources without losing filters, selections, or import status.
+
 ## 1.2.27 - 2026-09-12
 
 - Displayed and searched renamed chat branches consistently in Sources and imported summary evidence.
