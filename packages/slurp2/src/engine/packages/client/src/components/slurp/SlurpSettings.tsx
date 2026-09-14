@@ -67,6 +67,7 @@ import {
   useImportSlurpAds,
   useSlurpConnections,
   useSlurpSettings,
+  useRunSlurpAutopurge,
   useUpdateNoodlerAutoPosting,
   useUpdateNoodlerScheduleSlot,
   useRefreshNoodlerConversationSchedule,
@@ -309,6 +310,7 @@ export function SlurpSettings({
   const { t, i18n } = useTranslation();
   const settingsQuery = useSlurpSettings();
   const updateSettings = useUpdateSlurpSettings();
+  const runAutopurge = useRunSlurpAutopurge();
   const section = navigation.section ?? "overview";
   const tagUsage = useSlurpDiscoveryTagUsage(section === "tags");
   const replaceTag = useReplaceSlurpDiscoveryTag();
@@ -355,12 +357,16 @@ export function SlurpSettings({
   const [adsWorldDraft, setAdsWorldDraft] = useState<string | null>(null);
   const [reactionBankDraft, setReactionBankDraft] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [autopurgeNextDraft, setAutopurgeNextDraft] = useState("");
   useEffect(() => {
     if (settings) {
       if (!generationGuidanceEditorOpen) setGenerationGuidanceDraft(settings.generationGuidance);
       if (!imagePromptEditorOpen) setImagePromptDraft(settings.imageGenerationPrompt);
     }
   }, [generationGuidanceEditorOpen, imagePromptEditorOpen, settings]);
+  useEffect(() => {
+    setAutopurgeNextDraft(settings?.autopurgeNextRunAt ? localDateTimeValue(settings.autopurgeNextRunAt) : "");
+  }, [settings?.autopurgeNextRunAt]);
   const save = async (patch: Partial<SlurpSettings>) => {
     setSaveState("saving");
     try {
@@ -374,6 +380,13 @@ export function SlurpSettings({
     }
   };
   const update = (key: keyof SlurpSettings, value: unknown) => save({ [key]: value } as Partial<SlurpSettings>);
+  // A new retention period restarts the schedule from now, so a shorter period takes effect right away.
+  const saveRetention = (patch: Partial<Pick<SlurpSettings, "autopurgeRetentionValue" | "autopurgeRetentionUnit">>) =>
+    save(
+      settings?.autopurgeEnabled
+        ? { ...patch, autopurgeNextRunAt: nextAutopurgeDate({ ...settings, ...patch }) }
+        : patch,
+    );
   const accountsQuery = useNoodlerAccounts(section === "overview" || section === "creators" || section === "general");
   const imageSettingsQuery = useSlurpImageConnections(
     section === "overview" || section === "images" || section === "creators",
@@ -431,6 +444,7 @@ export function SlurpSettings({
     SLURP_GUIDANCE_LEVELS.find((level) => SLURP_GUIDANCE_PRESETS[level] === settings?.generationGuidance) ?? null;
   const imagePromptIsDefault = settings?.imageGenerationPrompt === DEFAULT_SLURP_IMAGE_GENERATION_PROMPT;
   const activityPreset = settings && slurpActivityPresetForSettings(settings);
+  const autopurgeNextTime = Date.parse(autopurgeNextDraft);
   const creators = accountsQuery.data ?? [];
   const autoPostingCreators = automationCreators.filter((creator) => creator.autoPosting.enabled);
   const automaticPublishingActive = settings?.autoPostingScheduleEnabled && autoPostingCreators.length > 0;
@@ -496,6 +510,38 @@ export function SlurpSettings({
         onSuccess: () => toast.success(t("ui.slurp.settings.creators.deleted", { name: creator.displayName })),
         onError: (error) => toast.error(errorMessage(error)),
       });
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
+  };
+
+  const runAutopurgeNow = async () => {
+    if (!settings) return;
+    try {
+      const confirmed = await showConfirmDialog({
+        title: t("ui.slurp.settings.autopurge.runConfirmTitle"),
+        message: settings.autopurgeKeepPosts
+          ? t(
+              settings.autopurgeIncludeMessageMedia
+                ? "ui.slurp.settings.autopurge.runConfirmMediaOnlyWithMessages"
+                : "ui.slurp.settings.autopurge.runConfirmMediaOnly",
+            )
+          : t(
+              settings.autopurgeIncludeMessageMedia
+                ? "ui.slurp.settings.autopurge.runConfirmPostsWithMessages"
+                : "ui.slurp.settings.autopurge.runConfirmPosts",
+            ),
+        confirmLabel: t("ui.slurp.settings.autopurge.runNow"),
+      });
+      if (!confirmed) return;
+      const result = await runAutopurge.mutateAsync();
+      toast.success(
+        t("ui.slurp.settings.autopurge.runSuccess", {
+          posts: result.deletedPosts,
+          postMedia: result.removedPostMedia,
+          messageMedia: result.removedMessageMedia,
+        }),
+      );
     } catch (error) {
       toast.error(errorMessage(error));
     }
@@ -2683,6 +2729,132 @@ export function SlurpSettings({
                 </div>
               )}
 
+              {section === "autopurge" && (
+                <div className="space-y-5">
+                  <SectionTitle
+                    title={t("ui.slurp.settings.autopurge.title")}
+                    detail={t("ui.slurp.settings.autopurge.detail")}
+                  />
+                  <GuidanceBox
+                    title={t("ui.slurp.settings.autopurge.localOnly")}
+                    detail={t("ui.slurp.settings.autopurge.localOnlyDetail")}
+                  />
+
+                  <SettingsGroup title={t("ui.slurp.settings.autopurge.retentionGroup")}>
+                    <Field
+                      label={t("ui.slurp.settings.autopurge.olderThan")}
+                      detail={t("ui.slurp.settings.autopurge.olderThanDetail")}
+                    >
+                      <div className="grid gap-2 sm:grid-cols-[minmax(8rem,1fr)_minmax(9rem,1fr)]">
+                        <NumberSetting
+                          value={settings.autopurgeRetentionValue}
+                          min={1}
+                          max={365}
+                          onSave={(value) => saveRetention({ autopurgeRetentionValue: value })}
+                        />
+                        <select
+                          aria-label={t("ui.slurp.settings.autopurge.unit")}
+                          value={settings.autopurgeRetentionUnit}
+                          disabled={updateSettings.isPending}
+                          onChange={(event) =>
+                            void saveRetention({
+                              autopurgeRetentionUnit: event.target.value as SlurpSettings["autopurgeRetentionUnit"],
+                            })
+                          }
+                          className="h-11 min-w-0 rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                        >
+                          {(["days", "weeks", "months"] as const).map((unit) => (
+                            <option key={unit} value={unit}>
+                              {t(`ui.slurp.settings.autopurge.units.${unit}`)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </Field>
+                    <Toggle
+                      label={t("ui.slurp.settings.autopurge.keepPosts")}
+                      detail={t("ui.slurp.settings.autopurge.keepPostsDetail")}
+                      value={settings.autopurgeKeepPosts}
+                      onChange={(value) => void update("autopurgeKeepPosts", value)}
+                    />
+                    <Toggle
+                      label={t("ui.slurp.settings.autopurge.includeMessageMedia")}
+                      detail={t("ui.slurp.settings.autopurge.includeMessageMediaDetail")}
+                      value={settings.autopurgeIncludeMessageMedia}
+                      onChange={(value) => void update("autopurgeIncludeMessageMedia", value)}
+                    />
+                  </SettingsGroup>
+
+                  <SettingsGroup title={t("ui.slurp.settings.autopurge.scheduleGroup")}>
+                    <Toggle
+                      label={t("ui.slurp.settings.autopurge.schedule")}
+                      detail={t("ui.slurp.settings.autopurge.scheduleDetail")}
+                      value={settings.autopurgeEnabled}
+                      onChange={(enabled) => {
+                        const existing = settings.autopurgeNextRunAt;
+                        const nextRunAt =
+                          enabled && (!existing || Date.parse(existing) <= Date.now())
+                            ? nextAutopurgeDate(settings)
+                            : existing;
+                        void save({ autopurgeEnabled: enabled, autopurgeNextRunAt: enabled ? nextRunAt : null });
+                      }}
+                    />
+                    {settings.autopurgeEnabled && (
+                      <Field
+                        label={t("ui.slurp.settings.autopurge.nextRun")}
+                        detail={t("ui.slurp.settings.autopurge.nextRunDetail")}
+                      >
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <input
+                            type="datetime-local"
+                            value={autopurgeNextDraft}
+                            min={localDateTimeValue(new Date(Date.now() + 60_000).toISOString())}
+                            onChange={(event) => setAutopurgeNextDraft(event.target.value)}
+                            className="min-h-11 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] sm:text-sm"
+                          />
+                          <button
+                            type="button"
+                            disabled={
+                              updateSettings.isPending ||
+                              !autopurgeNextDraft ||
+                              !Number.isFinite(autopurgeNextTime) ||
+                              autopurgeNextTime <= Date.now()
+                            }
+                            onClick={() => void save({ autopurgeNextRunAt: new Date(autopurgeNextTime).toISOString() })}
+                            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--slurp-outline)] px-4 text-sm font-bold transition-[background-color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:opacity-50"
+                          >
+                            <Save size={15} aria-hidden="true" />
+                            {t("ui.slurp.settings.autopurge.saveNextRun")}
+                          </button>
+                        </div>
+                      </Field>
+                    )}
+                  </SettingsGroup>
+
+                  <section className="flex flex-col gap-4 rounded-xl bg-[var(--slurp-surface-raised)] p-4 ring-1 ring-inset ring-[var(--slurp-warning)]/35 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+                    <div>
+                      <h3 className="text-sm font-bold">{t("ui.slurp.settings.autopurge.runNowTitle")}</h3>
+                      <p className="mt-1 max-w-2xl text-xs leading-5 text-[var(--slurp-muted)]">
+                        {t("ui.slurp.settings.autopurge.runNowDetail")}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={runAutopurge.isPending}
+                      onClick={() => void runAutopurgeNow()}
+                      className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-[var(--noodle-accent-foreground)] transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:opacity-50"
+                    >
+                      {runAutopurge.isPending ? (
+                        <Loader2 size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                      ) : (
+                        <Trash2 size={15} aria-hidden="true" />
+                      )}
+                      {t("ui.slurp.settings.autopurge.runNow")}
+                    </button>
+                  </section>
+                </div>
+              )}
+
               {section === "advanced" && (
                 <div className="space-y-5">
                   <SectionTitle
@@ -3341,6 +3513,24 @@ function localDateTimeValue(value: string): string {
   const date = new Date(value);
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 16);
+}
+
+function nextAutopurgeDate(
+  settings: Pick<SlurpSettings, "autopurgeRetentionValue" | "autopurgeRetentionUnit">,
+): string {
+  // Mirrors server nextSlurpAutopurgeRunAt (UTC math); keep both in sync.
+  const next = new Date();
+  if (settings.autopurgeRetentionUnit === "months") {
+    const day = next.getUTCDate();
+    next.setUTCDate(1);
+    next.setUTCMonth(next.getUTCMonth() + settings.autopurgeRetentionValue);
+    const lastDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
+    next.setUTCDate(Math.min(day, lastDay));
+  } else
+    next.setUTCDate(
+      next.getUTCDate() + settings.autopurgeRetentionValue * (settings.autopurgeRetentionUnit === "weeks" ? 7 : 1),
+    );
+  return next.toISOString();
 }
 
 function ScheduleSlotEditor({
