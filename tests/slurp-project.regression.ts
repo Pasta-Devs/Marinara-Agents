@@ -278,7 +278,7 @@ assert.match(generation, /title: protect\(input\.project\.project\.title\)/u);
 assert.match(generation, /direction: protect\(input\.project\.project\.direction\)/u);
 // Both publication paths stamp the post and advance only after the row lands.
 assert.match(generation, /projectId: project\?\.id \?\? null/u);
-assert.match(generation, /if \(project\) await noodle\.advanceProject\(account\.id, project\.id(?:, post\.id)?\)/u);
+assert.match(generation, /if \(project\) await noodle\.advanceProject\(account\.id, project\.id, post\.id\)/u);
 
 const publish = read("services/storage/slurp.storage.ts");
 assert.match(publish, /projectId: typeof payload\.projectId === "string" \? payload\.projectId : null/u);

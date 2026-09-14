@@ -173,7 +173,7 @@ export async function generateNoodlerPostImage(input: {
           chatCharacters: [
             {
               id: row.id,
-              name: referenceSubject.displayName || row.name,
+              name: input.account.displayName || row.name,
               avatarPath: row.avatarPath,
               appearance: row.appearance,
             },

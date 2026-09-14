@@ -22,6 +22,8 @@ import { cn } from "../../lib/utils";
 export const SLURP_COIN_SRC =
   "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48Y2lyY2xlIGN4PSIyNTYiIGN5PSIyNTYiIHI9IjIyMCIgZmlsbD0iI0YwNUE5RCIgc3Ryb2tlPSIjMTExMTExIiBzdHJva2Utd2lkdGg9IjI4Ii8+PGNpcmNsZSBjeD0iMjU2IiBjeT0iMjU2IiByPSIxOTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0ZGOUJDNiIgc3Ryb2tlLXdpZHRoPSI4IiBvcGFjaXR5PSIuNiIvPjx0ZXh0IHg9IjI1NiIgeT0iMzM5IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0iQXJpYWwsIEhlbHZldGljYSwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIzMjAiIGZvbnQtd2VpZ2h0PSI3MDAiIGZpbGw9IiNGRkZGRkYiPmM8L3RleHQ+PC9zdmc+";
 
+export const DEFAULT_SLURP_SUBSCRIPTION_PRICE = 5;
+
 export function SlurpCoin({ className, size = "1em" }: { className?: string; size?: number | string }) {
   return (
     <img

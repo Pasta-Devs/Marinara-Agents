@@ -210,9 +210,13 @@ export function scoreSlurpRapport(
     },
   ];
   const gain = Number.isFinite(options?.gain) && options!.gain! > 0 ? options!.gain! : 1;
-  const total = contributions.reduce((sum, entry) => sum + (entry.points > 0 ? entry.points * gain : entry.points), 0);
+  const adjustedContributions = contributions.map((entry) => ({
+    ...entry,
+    points: entry.points > 0 ? round(entry.points * gain) : entry.points,
+  }));
+  const total = adjustedContributions.reduce((sum, entry) => sum + entry.points, 0);
   const score = Math.max(0, Math.min(100, Math.round(total)));
-  return { score, tier: slurpRapportTier(score), contributions };
+  return { score, tier: slurpRapportTier(score), contributions: adjustedContributions };
 }
 
 /**

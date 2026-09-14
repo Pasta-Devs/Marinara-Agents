@@ -5,7 +5,7 @@ import { useNearViewportSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
 import { ProfileInitial } from "./SlurpShell";
 import { SlurpEmptyArtwork } from "./SlurpEmptyArtwork";
 import { Check, Loader2 } from "lucide-react";
-import { SlurpCoinAmount } from "./SlurpCoin";
+import { DEFAULT_SLURP_SUBSCRIPTION_PRICE, SlurpCoinAmount } from "./SlurpCoin";
 import type { SlurpDiscoverLayout, SlurpDiscoveryGender } from "../../lib/slurp-discovery";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 
@@ -183,7 +183,10 @@ export function SlurpCreatorProfileCard({
               ) : (
                 <>
                   {localizeUi("ui.slurp.discover.subscribe", { defaultValue: "Subscribe" })} ·{" "}
-                  <SlurpCoinAmount amount={`${creator.subscriptionPrice ?? 0}/week`} size={13} />
+                  <SlurpCoinAmount
+                    amount={`${creator.subscriptionPrice ?? DEFAULT_SLURP_SUBSCRIPTION_PRICE}/week`}
+                    size={13}
+                  />
                 </>
               )}
             </button>

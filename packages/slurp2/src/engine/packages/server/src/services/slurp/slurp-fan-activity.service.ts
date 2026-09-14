@@ -395,18 +395,41 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
   // comments are public, and an arc title can name a Secret Creator's real city.
   const arcByCreator = new Map<string, string | null>();
   if (input.settings.arcFanReactions !== false) {
-    for (const creator of creators) {
-      const projects = await noodle.listProjects(creator.id).catch(() => []);
-      const line = slurpArcLifeLine(projects.map((project) => ({ ...project, partnerNames: [] })));
-      if (!line) continue;
-      const publicIdentity = await resolveNoodlerPublicIdentity(input.db, creator).catch(() => null);
-      arcByCreator.set(
-        creator.id,
-        publicIdentity
-          ? protectNoodlerGeneratedIdentity(line, creator.settings.privacy.identityDisclosure ?? "open", publicIdentity)
-          : null,
-      );
-    }
+    const accountsById = new Map((await noodle.listNoodlerAccounts()).map((account) => [account.id, account]));
+    const arcEntries = await Promise.all(
+      creators.map(async (creator): Promise<[string, string | null]> => {
+        const projects = await noodle.listProjects(creator.id).catch(() => []);
+        const filteredProjects = await Promise.all(
+          projects.map(async (project) => {
+            const partnerNames = await Promise.all(
+              project.creatorIds
+                .filter((id) => id !== creator.id)
+                .map((id) => {
+                  const partner = accountsById.get(id) ?? null;
+                  return partner && (partner.settings.privacy.identityDisclosure ?? "open") === "open"
+                    ? partner.displayName
+                    : null;
+                }),
+            );
+            return { ...project, partnerNames: partnerNames.filter((name): name is string => name !== null) };
+          }),
+        );
+        const line = slurpArcLifeLine(filteredProjects);
+        if (!line) return [creator.id, null];
+        const publicIdentity = await resolveNoodlerPublicIdentity(input.db, creator).catch(() => null);
+        return [
+          creator.id,
+          publicIdentity
+            ? protectNoodlerGeneratedIdentity(
+                line,
+                creator.settings.privacy.identityDisclosure ?? "open",
+                publicIdentity,
+              )
+            : null,
+        ];
+      }),
+    );
+    for (const [creatorId, line] of arcEntries) arcByCreator.set(creatorId, line);
   }
   return creators.flatMap((creator) => {
     const policy = resolveNoodlerFanActivityPolicy(input.settings, creator);
