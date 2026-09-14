@@ -92,16 +92,23 @@ pictures, click Refresh Images and they'll pick up the new files.
 An agent that reads each turn's narration and keeps your inventory in sync on its own — adding and
 removing items, equipping and unequipping them (individually or as a full saved outfit) as the
 story calls for it. Its prompt is fully editable from the Agents menu, within the constraints of
-the JSON output it needs to produce.
+the JSON output it needs to produce. It targets specific changes each turn rather than re-stating
+the whole inventory, so an item it doesn't mention is never at risk of being dropped, no matter how
+large your inventory gets.
 
 - **Build Wardrobe**: describe a style in plain language and get back a proposed set of new items
   and outfits to review before anything's added — it'll reuse wearable items you already have
   instead of always inventing new ones. Uses the *same* connection as the tracking agent (set once
   in the Agents menu — switch it there and both move together).
-- **Restore Inventory**: a safety net in Settings. If the agent mangles a turn, you can revert to
-  the inventory state from right before its last automatic update, in one click — even with no
-  export file to fall back on. (This only rewinds the agent's own last change, not any manual
-  edits you've made since.)
+- **Recent Automatic Update**: right in Settings, a plain-language readout of what the last turn
+  actually added, changed, or removed, alongside the agent's own stated reasoning. Each changed
+  item gets its own Revert button, for undoing one specific mistake without touching anything else
+  the turn got right — reverting refuses rather than overwrites if that item has changed again
+  since, so it can't clobber something newer.
+- **Restore Inventory**: a whole-state safety net in Settings, for when a turn goes wrong in a
+  bigger way than a single item. Revert to the inventory state from right before the agent's last
+  automatic update, in one click — even with no export file to fall back on. (This only rewinds
+  the agent's own last change, not any manual edits you've made since.)
 
 ## The Appearance Macro
 
