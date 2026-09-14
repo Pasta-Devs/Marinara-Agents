@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.0.11 — 2026-09-14
+
+- Fixed AI Creator drafts failing when the model left out gender or tags.
+
 ## 0.0.10 — 2026-09-14
 
 - Rebuilt the audience as a deterministic simulation with editable fan types, presets, a seven-day estimate, and JSON import and export.

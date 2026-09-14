@@ -61,5 +61,8 @@ export function normalizeNoodlerStageProfileDraft(value: unknown): Record<string
     const tagsAlias = ["categories", "themes", "interests"].find((key) => Array.isArray(normalized[key]));
     if (tagsAlias) normalized.tags = normalized[tagsAlias];
   }
+  // Gender and tags are optional on a Creator. A model that leaves them out must not fail the draft.
+  if (normalized.gender === undefined || normalized.gender === "") normalized.gender = null;
+  if (!Array.isArray(normalized.tags)) normalized.tags = [];
   return normalized;
 }
