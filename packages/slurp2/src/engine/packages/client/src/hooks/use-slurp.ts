@@ -413,11 +413,25 @@ export type SlurpSettings = {
   messagesRecentPostAwayMaxMinutes: number;
   messagesStalePostAwayMinMinutes: number;
   messagesStalePostAwayMaxMinutes: number;
+  autopurgeEnabled: boolean;
+  autopurgeRetentionValue: number;
+  autopurgeRetentionUnit: "days" | "weeks" | "months";
+  autopurgeKeepPosts: boolean;
+  autopurgeIncludeMessageMedia: boolean;
+  autopurgeNextRunAt: string | null;
   nightQuiet: boolean;
   onboarding: "not_started" | "in_progress" | "completed";
 };
 
 export type SlurpSettingsUpdate = Partial<SlurpSettings>;
+
+export type SlurpAutopurgeResult = {
+  cutoff: string;
+  deletedPosts: number;
+  removedPostMedia: number;
+  removedMessageMedia: number;
+  nextRunAt: string | null;
+};
 
 export type SlurpScheduleSlot = {
   id: string;
@@ -512,6 +526,18 @@ export function useUpdateSlurpSettings() {
     onSuccess: (settings) => {
       queryClient.setQueryData(noodleKeys.settings(), settings);
       return queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerFanStatus() });
+    },
+  });
+}
+
+export function useRunSlurpAutopurge() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<SlurpAutopurgeResult>("/slurp2/autopurge/run", {}),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: noodleKeys.settings() });
+      void queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() });
+      return result;
     },
   });
 }

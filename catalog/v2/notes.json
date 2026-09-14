@@ -226,6 +226,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.0.9",
+          "date": "2026-09-14",
+          "notes": "- Added Autopurge with configurable day, week, or month retention; media-only or full-post cleanup; optional direct-message media cleanup; an immediate purge action; and restart-safe scheduling for overdue purges.",
+          "highlight": false
+        },
+        {
           "version": "0.0.8",
           "date": "2026-09-14",
           "notes": "- Bug fixes for discovery filters and translations, subscription prices, image references, fan privacy, rapport details, message fees, arc editing and generation, profile validation, regression tests, and test-output handling.",
