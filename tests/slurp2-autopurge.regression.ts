@@ -4,7 +4,7 @@ import { join } from "node:path";
 import {
   moveSlurpAutopurgeDate,
   nextSlurpAutopurgeRunAt,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-autopurge-time.ts";
+} from "../packages/slurp2/src/engine/packages/shared/src/slurp-autopurge-time.ts";
 
 const root = join(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
@@ -33,6 +33,7 @@ const scheduler = read(
 const serverEntry = read("packages/slurp2/src/engine/packages/server/src/services/slurp/server-entry.ts");
 const settings = read("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 const client = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx");
+const media = read("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-media.ts");
 
 assert.match(
   settings,
@@ -40,16 +41,29 @@ assert.match(
 );
 assert.match(settings, /autopurgeKeepPosts: true,[\s\S]*autopurgeIncludeMessageMedia: false/u);
 assert.match(operation, /postsToStrip[\s\S]*imageUrl: null[\s\S]*metadata: JSON\.stringify/u);
+const postsLoopStart = operation.indexOf("for (const post of postsToStrip)");
+const messagesLoopStart = operation.indexOf("for (const message of messagesToStrip)");
+const deletedPostsBoundary = operation.indexOf("if (deletedPostIds");
+assert.notEqual(postsLoopStart, -1);
+assert.notEqual(messagesLoopStart, -1);
+assert.notEqual(deletedPostsBoundary, -1);
 assert.doesNotMatch(
-  operation.slice(operation.indexOf("for (const post of postsToStrip)"), operation.indexOf("for (const message")),
+  operation.slice(postsLoopStart, messagesLoopStart),
   /imagePrompt:/u,
   "media-only purges must preserve the post prompt",
 );
 assert.doesNotMatch(
-  operation.slice(operation.indexOf("for (const message of messagesToStrip)"), operation.indexOf("if (deletedPostIds")),
+  operation.slice(messagesLoopStart, deletedPostsBoundary),
   /content:/u,
   "message-media purges must preserve message text",
 );
+assert.match(media, /function unlinkNoodlerMedia\([\s\S]*\): boolean/u);
+assert.match(
+  operation,
+  /if \(unlinkNoodlerMedia\(path\)\) removedMediaPaths\.add\(path\)[\s\S]*Retain a failed path's database reference/u,
+  "failed filesystem cleanup must remain referenced for a later retry",
+);
+assert.match(operation, /removedPostMedia: new Set\(postMedia\.filter\([\s\S]*removedMessageMedia: new Set/u);
 assert.match(operation, /trySlurpDataDeletion/u, "manual and scheduled purges must use the destructive-work lock");
 assert.match(scheduler, /if \(Date\.parse\(settings\.autopurgeNextRunAt\) > Date\.now\(\)\) return;/u);
 assert.match(scheduler, /void pollNow\(\);/u, "the scheduler must check for overdue work during startup");

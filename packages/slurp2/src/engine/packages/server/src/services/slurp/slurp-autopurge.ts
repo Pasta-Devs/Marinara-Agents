@@ -15,9 +15,9 @@ import { now } from "../../utils/id-generator.js";
 import { createSlurpStorage, type SlurpSettings } from "../storage/slurp.storage.js";
 import { trySlurpDataDeletion } from "./slurp-operation-lock.js";
 import { NOODLER_MEDIA_PREFIX, unlinkNoodlerMedia } from "./slurp-media.js";
-import { moveSlurpAutopurgeDate, nextSlurpAutopurgeRunAt } from "./slurp-autopurge-time.js";
+import { moveSlurpAutopurgeDate, nextSlurpAutopurgeRunAt } from "../../../../shared/src/slurp-autopurge-time.js";
 
-export { moveSlurpAutopurgeDate, nextSlurpAutopurgeRunAt } from "./slurp-autopurge-time.js";
+export { moveSlurpAutopurgeDate, nextSlurpAutopurgeRunAt } from "../../../../shared/src/slurp-autopurge-time.js";
 
 export type SlurpAutopurgeResult = {
   cutoff: string;
@@ -86,9 +86,28 @@ async function purgeUnlocked(db: DB, settings: SlurpSettings): Promise<Omit<Slur
     const path = ownedMediaPath(message.metadata);
     return path ? [path] : [];
   });
-  const postsToDelete = settings.autopurgeKeepPosts ? [] : oldPosts;
-  const postsToStrip = settings.autopurgeKeepPosts ? oldPosts.filter((post) => ownedMediaPath(post.metadata)) : [];
-  const messagesToStrip = oldMessages.filter((message) => ownedMediaPath(message.metadata));
+  const removedMediaPaths = new Set<string>();
+  for (const path of new Set([...postMedia, ...messageMedia])) {
+    if (unlinkNoodlerMedia(path)) removedMediaPaths.add(path);
+  }
+  const mediaRemovalSucceeded = (metadata: unknown): boolean => {
+    const path = ownedMediaPath(metadata);
+    return !path || removedMediaPaths.has(path);
+  };
+  // Retain a failed path's database reference so the next purge selects and retries it.
+  const postsToDelete = settings.autopurgeKeepPosts
+    ? []
+    : oldPosts.filter((post) => mediaRemovalSucceeded(post.metadata));
+  const postsToStrip = settings.autopurgeKeepPosts
+    ? oldPosts.filter((post) => {
+        const path = ownedMediaPath(post.metadata);
+        return path ? removedMediaPaths.has(path) : false;
+      })
+    : [];
+  const messagesToStrip = oldMessages.filter((message) => {
+    const path = ownedMediaPath(message.metadata);
+    return path ? removedMediaPaths.has(path) : false;
+  });
   const deletedPostIds = postsToDelete.map((post) => post.id);
   const deletedInteractionIds = deletedPostIds.length
     ? (await db.select().from(noodleInteractions).where(inArray(noodleInteractions.postId, deletedPostIds))).map(
@@ -145,12 +164,11 @@ async function purgeUnlocked(db: DB, settings: SlurpSettings): Promise<Omit<Slur
     await tx._fileStore.flush();
   });
 
-  for (const path of new Set([...postMedia, ...messageMedia])) unlinkNoodlerMedia(path);
   return {
     cutoff,
     deletedPosts: postsToDelete.length,
-    removedPostMedia: new Set(postMedia).size,
-    removedMessageMedia: new Set(messageMedia).size,
+    removedPostMedia: new Set(postMedia.filter((path) => removedMediaPaths.has(path))).size,
+    removedMessageMedia: new Set(messageMedia.filter((path) => removedMediaPaths.has(path))).size,
   };
 }
 

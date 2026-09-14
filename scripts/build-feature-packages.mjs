@@ -161,6 +161,7 @@ const slurpOwnedSourcePaths = [
 // The remaster owns strictly more of the tree than the frozen legacy package does.
 const slurp2OwnedSourcePaths = [
   ...slurpOwnedSourcePaths,
+  "packages/shared/src/slurp-autopurge-time.ts",
   "packages/client/src/hooks/use-slurp-media-src.ts",
   "packages/client/src/lib/api-client.ts",
   "packages/client/src/lib/slurp-custom-emojis.ts",

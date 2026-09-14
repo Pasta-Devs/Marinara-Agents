@@ -22,6 +22,7 @@ import {
   Upload,
   UsersRound,
 } from "lucide-react";
+import { nextSlurpAutopurgeRunAt } from "../../../../shared/src/slurp-autopurge-time.js";
 import type { ReactNode } from "react";
 import { api } from "../../lib/api-client";
 import { cn } from "../../lib/utils";
@@ -384,7 +385,7 @@ export function SlurpSettings({
   const saveRetention = (patch: Partial<Pick<SlurpSettings, "autopurgeRetentionValue" | "autopurgeRetentionUnit">>) =>
     save(
       settings?.autopurgeEnabled
-        ? { ...patch, autopurgeNextRunAt: nextAutopurgeDate({ ...settings, ...patch }) }
+        ? { ...patch, autopurgeNextRunAt: nextSlurpAutopurgeRunAt({ ...settings, ...patch }) }
         : patch,
     );
   const accountsQuery = useNoodlerAccounts(section === "overview" || section === "creators" || section === "general");
@@ -2794,7 +2795,7 @@ export function SlurpSettings({
                         const existing = settings.autopurgeNextRunAt;
                         const nextRunAt =
                           enabled && (!existing || Date.parse(existing) <= Date.now())
-                            ? nextAutopurgeDate(settings)
+                            ? nextSlurpAutopurgeRunAt(settings)
                             : existing;
                         void save({ autopurgeEnabled: enabled, autopurgeNextRunAt: enabled ? nextRunAt : null });
                       }}
@@ -3513,24 +3514,6 @@ function localDateTimeValue(value: string): string {
   const date = new Date(value);
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 16);
-}
-
-function nextAutopurgeDate(
-  settings: Pick<SlurpSettings, "autopurgeRetentionValue" | "autopurgeRetentionUnit">,
-): string {
-  // Mirrors server nextSlurpAutopurgeRunAt (UTC math); keep both in sync.
-  const next = new Date();
-  if (settings.autopurgeRetentionUnit === "months") {
-    const day = next.getUTCDate();
-    next.setUTCDate(1);
-    next.setUTCMonth(next.getUTCMonth() + settings.autopurgeRetentionValue);
-    const lastDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
-    next.setUTCDate(Math.min(day, lastDay));
-  } else
-    next.setUTCDate(
-      next.getUTCDate() + settings.autopurgeRetentionValue * (settings.autopurgeRetentionUnit === "weeks" ? 7 : 1),
-    );
-  return next.toISOString();
 }
 
 function ScheduleSlotEditor({
