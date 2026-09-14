@@ -27,6 +27,7 @@ import {
 import { tryNoodleOperation } from "./slurp-operation-lock.js";
 import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
 import { NOODLER_FAN_IDENTITY_PREFIX, populationNoodlerFanIdentityProvider } from "./slurp-fan-identity-provider.js";
+import { slurpResolveFanType } from "./slurp-fan-types.js";
 import { newId } from "../../utils/id-generator.js";
 
 const FAN_PLAN_ROW_PREFIX = "fan-day:";
@@ -253,7 +254,11 @@ export async function runNoodlerFanActivity(input: {
         ...returning.slice(0, FAN_RUN_RETURNING).map((member) => member.id.replace(/^slurp-fan:/u, "")),
         ...Array.from({ length: FAN_RUN_NEWCOMERS }, () => newId()),
       ];
-      const cast = await Promise.all(seeds.map((seed) => population.ensure(seed, at)));
+      // Each member carries their Fan Type's voice, which is the one thing that makes a Lurker's
+      // three words and a Superfan's paragraph read as two different people.
+      const cast = (await Promise.all(seeds.map((seed) => population.ensure(seed, at, settings.fanTypes)))).map(
+        (member) => ({ ...member, voice: slurpResolveFanType(settings.fanTypes, member).voice }),
+      );
       // Mark the drawn cast as recently active. `listAll` orders by that column, so without this
       // it kept ordering by creation time: the same earliest members were redrawn forever and
       // anybody who actually showed up sank out of the pool. Regulars could never recur.

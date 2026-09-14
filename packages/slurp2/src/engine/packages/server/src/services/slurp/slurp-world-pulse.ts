@@ -33,6 +33,54 @@ import {
 
 type PulseTuning = SlurpSimulationTuning["pulse"];
 
+/**
+ * What one actor's Fan Type makes them do, for the caller that has resolved one.
+ *
+ * Optional throughout: passing nothing keeps the fixed 18/16/66 split the pulse has always used,
+ * which is what every existing caller and test expects. With weights, a Lurker likes and almost
+ * never comments, a Newcomer follows far more often, and a Troll does neither much.
+ */
+export type SlurpPulseActorWeights = {
+  /** How often this person is picked to act at all. */
+  activity: number;
+  like: number;
+  follow: number;
+  comment: number;
+  /** Share of their reactions that is a follow. `funnel.followChance`. */
+  followChance: number;
+};
+
+/** The fixed split the pulse used before Fan Types: comments 18%, follows 16%, likes the rest. */
+const DEFAULT_COMMENT_SHARE = 0.18;
+
+function pickActor(
+  audience: readonly string[],
+  weights: ReadonlyMap<string, SlurpPulseActorWeights> | undefined,
+  random: () => number,
+): string {
+  if (!weights) return audience[Math.floor(random() * audience.length)]!;
+  const total = audience.reduce((sum, id) => sum + Math.max(0, weights.get(id)?.activity ?? 1), 0);
+  if (!(total > 0)) return audience[Math.floor(random() * audience.length)]!;
+  let roll = random() * total;
+  for (const id of audience) {
+    roll -= Math.max(0, weights.get(id)?.activity ?? 1);
+    if (roll <= 0) return id;
+  }
+  return audience[audience.length - 1]!;
+}
+
+function pickKind(actorWeight: SlurpPulseActorWeights | undefined, roll: number): SlurpPulseAction["kind"] {
+  if (!actorWeight) return roll < DEFAULT_COMMENT_SHARE ? "comment" : roll < 0.34 ? "follow" : "like";
+  const followShare = Math.min(0.9, Math.max(0, actorWeight.followChance));
+  const comment = DEFAULT_COMMENT_SHARE * Math.max(0, actorWeight.comment);
+  const follow = followShare * Math.max(0, actorWeight.follow);
+  const like = Math.max(0, 1 - DEFAULT_COMMENT_SHARE - followShare) * Math.max(0, actorWeight.like);
+  const total = comment + follow + like;
+  if (!(total > 0)) return "like";
+  const scaled = roll * total;
+  return scaled < comment ? "comment" : scaled < comment + follow ? "follow" : "like";
+}
+
 /** Posts older than this no longer collect new reactions (realistic default; see `pulse.postMaxAgeHours`). */
 export const SLURP_PULSE_POST_MAX_AGE_HOURS = SLURP_REALISTIC_TUNING.pulse.postMaxAgeHours;
 
@@ -121,6 +169,8 @@ export function planSlurpWorldPulse(
     seed: string;
     /** Activity multiplier. Zero means nothing arrives while you read, which is the point of "off". */
     activity?: number;
+    /** Per-actor Fan Type behaviour, keyed by actor id. Absent keeps the old fixed split. */
+    actorWeights?: ReadonlyMap<string, SlurpPulseActorWeights>;
   },
   tuning: PulseTuning = SLURP_REALISTIC_TUNING.pulse,
 ): SlurpPulseAction[] {
@@ -163,7 +213,7 @@ export function planSlurpWorldPulse(
   for (let index = 0; index < budget * 3 && actions.length < budget; index += 1) {
     let roll = random() * totalWeight;
     const chosen = weighted.find((entry) => (roll -= entry.weight) <= 0) ?? weighted[0]!;
-    const actor = input.audience[Math.floor(random() * input.audience.length)]!;
+    const actor = pickActor(input.audience, input.actorWeights, random);
     const key = `${chosen.target.postId}:${actor}`;
     if (used.has(key)) continue;
     used.add(key);
@@ -177,7 +227,7 @@ export function planSlurpWorldPulse(
       creatorAccountId: chosen.target.creatorAccountId,
       postId: chosen.target.postId,
       actorAccountId: actor,
-      kind: kindRoll < 0.18 ? "comment" : kindRoll < 0.34 ? "follow" : "like",
+      kind: pickKind(input.actorWeights?.get(actor), kindRoll),
     });
   }
 
@@ -197,7 +247,7 @@ export function planSlurpWorldPulse(
   for (let index = 0; index < extra * 3 && actions.length < target; index += 1) {
     let roll = random() * totalWeight;
     const chosen = weighted.find((entry) => (roll -= entry.weight) <= 0) ?? weighted[0]!;
-    const actor = input.audience[Math.floor(random() * input.audience.length)]!;
+    const actor = pickActor(input.audience, input.actorWeights, random);
     const key = `${chosen.target.postId}:${actor}`;
     if (used.has(key)) continue;
     used.add(key);

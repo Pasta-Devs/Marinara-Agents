@@ -20,6 +20,7 @@ import {
   type SlurpSpendTier,
 } from "../slurp/slurp-population.js";
 import { slurpReactivationStage } from "../slurp/slurp-population.js";
+import type { SlurpFanType } from "../slurp/slurp-fan-types.js";
 
 export { SLURP_FUNNEL_STAGES, SLURP_NAMED_CAST_LIMIT, type SlurpFunnelStage };
 
@@ -62,6 +63,7 @@ function mapMember(row: Record<string, unknown>): SlurpPopulationMember & { last
     handle: String(row.handle),
     displayName: String(row.displayName),
     archetype: String(row.archetype) as SlurpPopulationMember["archetype"],
+    fanTypeId: (row.fanTypeId as string | null) ?? null,
     traits,
     spendTier: String(row.spendTier) as SlurpSpendTier,
     activeHour: int(row.activeHour),
@@ -101,8 +103,8 @@ export function createSlurpPopulationStorage(db: DB) {
      * The seed is the identity. Two calls with the same seed return the same person whether or not
      * a row existed, so nothing has to be materialised before it is interesting.
      */
-    async ensure(seed: string, at = new Date()): Promise<SlurpPopulationMember> {
-      const generated = generateSlurpPopulationMember(seed, at);
+    async ensure(seed: string, at = new Date(), fanTypes?: readonly SlurpFanType[]): Promise<SlurpPopulationMember> {
+      const generated = generateSlurpPopulationMember(seed, at, fanTypes);
       const existing = await db.select().from(slurpPopulation).where(eq(slurpPopulation.id, generated.id));
       if (existing[0]) return mapMember(existing[0] as Record<string, unknown>);
       const timestamp = now();
@@ -113,6 +115,7 @@ export function createSlurpPopulationStorage(db: DB) {
           handle: generated.handle,
           displayName: generated.displayName,
           archetype: generated.archetype,
+          fanTypeId: generated.fanTypeId,
           traits: JSON.stringify(generated.traits),
           spendTier: generated.spendTier,
           activeHour: String(generated.activeHour),

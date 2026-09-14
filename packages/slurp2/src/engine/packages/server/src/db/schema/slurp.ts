@@ -504,6 +504,9 @@ export const slurpPopulation = fileTable(
     handle: text("handle").notNull(),
     displayName: text("display_name").notNull(),
     archetype: text("archetype").notNull(),
+    /** Which Fan Type this person is. Missing on a row written before Fan Types existed; those
+     * resolve through `archetype` at read time rather than needing a migration pass. */
+    fanTypeId: text("fan_type_id"),
     traits: text("traits").notNull().default("[]"),
     spendTier: text("spend_tier").notNull().default("none"),
     activeHour: text("active_hour").notNull().default("12"),

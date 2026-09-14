@@ -17,6 +17,7 @@
  * world tick, which is the one place allowed to advance time.
  */
 
+import { slurpBuiltinFanTypeForTier } from "./slurp-fan-types.js";
 import type { SlurpSpendTier } from "./slurp-population.js";
 import { SLURP_FUNNEL_STAGES, type SlurpFunnelStage } from "./slurp-population.js";
 import { SLURP_REALISTIC_TUNING, type SlurpSimulationTuning } from "./slurp-tuning.js";
@@ -28,12 +29,10 @@ import { SLURP_REALISTIC_TUNING, type SlurpSimulationTuning } from "./slurp-tuni
  * everybody pays is neither believable nor interesting, because then the few who do pay stop
  * meaning anything. `none` is the majority of the population and never subscribes.
  */
-export const SLURP_AUDIENCE_WEEKLY_BUDGET: Record<SlurpSpendTier, number> = {
-  none: 0,
-  light: 20,
-  regular: 60,
-  whale: 200,
-};
+export const SLURP_AUDIENCE_WEEKLY_BUDGET: Record<SlurpSpendTier, number> = tierTable((type) => {
+  const [low, high] = type.spend.weeklyBudget;
+  return (low + high) / 2;
+});
 
 /** A subscription is billed a week at a time, matching the viewer-side subscription period. */
 export const SLURP_AUDIENCE_SUBSCRIPTION_DAYS = 7;
@@ -44,18 +43,36 @@ export const SLURP_AUDIENCE_SUBSCRIPTION_DAYS = 7;
  * Low on purpose. A follower list that empties into the subscriber list within a week is not a
  * funnel, it is a queue, and the movement is what the player is supposed to be able to read.
  */
-const DAILY_CONVERSION_CHANCE: Record<SlurpSpendTier, number> = {
-  none: 0,
-  light: 0.02,
-  regular: 0.05,
-  whale: 0.12,
-};
+const DAILY_CONVERSION_CHANCE: Record<SlurpSpendTier, number> = tierTable((type) => type.funnel.subConversionPerDay);
+
+/**
+ * A tier table read off the built-in Fan Types rather than written out again.
+ *
+ * These numbers used to be two literals here. They are a Fan Type's business now, and a caller
+ * that knows the member's type passes its values directly; this only answers for a caller that
+ * still has nothing but a tier, so it must not drift from the built-ins it stands for.
+ */
+function tierTable(read: (type: NonNullable<ReturnType<typeof slurpBuiltinFanTypeForTier>>) => number) {
+  const table = { none: 0, light: 0, regular: 0, whale: 0 } as Record<SlurpSpendTier, number>;
+  for (const tier of Object.keys(table) as SlurpSpendTier[]) {
+    const type = slurpBuiltinFanTypeForTier(tier);
+    if (type) table[tier] = read(type);
+  }
+  return table;
+}
 
 export type SlurpAudienceSubscriptionSubject = {
   memberId: string;
   creatorAccountId: string;
   stage: SlurpFunnelStage;
   spendTier: SlurpSpendTier;
+  /**
+   * This member's own weekly budget, from their Fan Type. Falls back to the tier's built-in value
+   * for a caller that has not resolved a type — ambient accounts, and the older tests.
+   */
+  weeklyBudget?: number;
+  /** This member's own daily conversion chance, from their Fan Type. */
+  subConversionPerDay?: number;
   /** The Creator's weekly price, in coins. */
   price: number;
   /** When the current subscription is paid up to, or null for somebody who has never paid. */
@@ -84,7 +101,7 @@ export function slurpAudienceSubscriptionDecision(
   at: Date,
   funnel: Pick<SlurpSimulationTuning["funnel"], "rollCadence" | "conversionGrowth"> = SLURP_REALISTIC_TUNING.funnel,
 ): SlurpAudienceSubscriptionDecision {
-  const budget = SLURP_AUDIENCE_WEEKLY_BUDGET[subject.spendTier] ?? 0;
+  const budget = subject.weeklyBudget ?? SLURP_AUDIENCE_WEEKLY_BUDGET[subject.spendTier] ?? 0;
   const price = Math.max(0, Math.floor(subject.price));
   const affordable = budget > 0 && price <= budget;
   const paidThrough = subject.paidThroughAt ? Date.parse(subject.paidThroughAt) : NaN;
@@ -109,6 +126,7 @@ export function slurpAudienceSubscriptionDecision(
     funnel.conversionGrowth,
     subject.interactions ?? 0,
     Number.isFinite(followedAt) ? (at.getTime() - followedAt) / 86_400_000 : 0,
+    subject.subConversionPerDay,
   );
   const key = slurpAudienceRollKey(at, funnel.rollCadence);
   return roll(`${subject.memberId}:${subject.creatorAccountId}:${key}`) < chance ? "subscribe" : "none";
@@ -123,8 +141,9 @@ export function slurpAudienceConversionChance(
   growth: number,
   interactions: number,
   daysFollowing: number,
+  subConversionPerDay?: number,
 ): number {
-  const base = DAILY_CONVERSION_CHANCE[spendTier] ?? 0;
+  const base = subConversionPerDay ?? DAILY_CONVERSION_CHANCE[spendTier] ?? 0;
   if (!(growth > 0) || base === 0) return base;
   const engaged = Math.min(1, Math.max(0, interactions) / 20 + Math.max(0, daysFollowing) / 30);
   return Math.min(0.95, base * Math.min(3, 1 + growth * engaged));

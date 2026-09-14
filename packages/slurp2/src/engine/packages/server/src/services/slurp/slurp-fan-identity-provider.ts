@@ -1,4 +1,5 @@
 import type { NoodleAuthorSnapshot, NoodlerFanArchetype, NoodlerFanArchetypeWeights } from "@marinara-engine/shared";
+import { slurpFanVoiceForPrompt } from "./slurp-fan-types.js";
 
 export const NOODLER_FAN_IDENTITY_PREFIX = "noodler-fan:";
 
@@ -16,6 +17,8 @@ export interface NoodlerFanIdentity {
   persona?: {
     traits: string[];
     spendTier: string;
+    /** The Fan Type's voice, truncated. How this person writes, in their own words. */
+    voice?: string;
     /** Funnel stage with this Creator, when there is a tie. */
     stage?: string;
     /** Coins spent with this Creator, ever. */
@@ -86,6 +89,8 @@ export type NoodlerFanCastMember = {
   archetype: NoodlerFanArchetype;
   traits: string[];
   spendTier: string;
+  /** The voice of this member's Fan Type. Optional: a caller that has no types passes nothing. */
+  voice?: string;
 };
 
 /** One member's history with one creator, keyed by creator then by member. */
@@ -111,6 +116,7 @@ export function populationNoodlerFanIdentityProvider(
             persona: {
               traits: member.traits,
               spendTier: member.spendTier,
+              ...(slurpFanVoiceForPrompt(member.voice) ? { voice: slurpFanVoiceForPrompt(member.voice) } : {}),
               ...(tie
                 ? { stage: tie.stage, spent: tie.spent, knownForDays: tie.knownForDays, audienceArc: tie.audienceArc }
                 : {}),

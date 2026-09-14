@@ -20,7 +20,15 @@ import { isAmbientNoodleAccount } from "./slurp-ambient-profiles.js";
 import { tryNoodleOperation } from "./slurp-operation-lock.js";
 import { slurpCapTickEvents } from "./slurp-tuning.js";
 import { slurpCreatorReach } from "./slurp-reach.js";
-import { generateSlurpPopulationMember, slurpMembersActiveAt, type SlurpSpendTier } from "./slurp-population.js";
+import { slurpMembersActiveAt } from "./slurp-population.js";
+import {
+  slurpFanTypeCommissionBudget,
+  slurpFanTypeSpendTier,
+  slurpFanTypeWeeklyBudget,
+  slurpPickFanType,
+  slurpResolveFanType,
+  type SlurpFanType,
+} from "./slurp-fan-types.js";
 import { isNotableAudienceArcChange, slurpNextAudienceArc } from "./slurp-audience-arc.js";
 import { slurpAudiencePaidThrough, slurpAudienceSubscriptionDecision } from "./slurp-audience-subscription.js";
 import { slurpPlatformScaleMultiplier, slurpWorldActivityMultiplier } from "./slurp-scale.js";
@@ -173,7 +181,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     // somebody to act and an old one keeps gaining faces.
     const newcomers = await Promise.all(
       Array.from({ length: Math.max(0, WORLD_AUDIENCE_POOL - returning.length) }, () =>
-        population.ensure(newId(), until),
+        population.ensure(newId(), until, settings.fanTypes),
       ),
     );
     const ambientIds = allAccounts.filter((account) => isAmbientNoodleAccount(account)).map((account) => account.id);
@@ -184,6 +192,24 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     const pool = [...returning, ...newcomers];
     const awake = slurpMembersActiveAt(pool, until.getUTCHours(), WORLD_AUDIENCE_POOL);
     const audience = [...awake.map((member) => member.id), ...ambient];
+    // What each actor's Fan Type makes them do. Ambient accounts have no row, so they read as the
+    // fallback type rather than dropping out of the weighting entirely.
+    const actorWeights = new Map(
+      audience.map((id) => {
+        const member = pool.find((entry) => entry.id === id);
+        const type = slurpResolveFanType(settings.fanTypes, member ?? {});
+        return [
+          id,
+          {
+            activity: type.behavior.activity,
+            like: type.behavior.like,
+            follow: type.behavior.follow,
+            comment: type.behavior.comment,
+            followChance: type.funnel.followChance,
+          },
+        ] as const;
+      }),
+    );
 
     const messages = createSlurpMessagesStorage(db);
     const cutoff = new Date(until.getTime() - RECENT_POST_DAYS * 86_400_000).toISOString();
@@ -272,33 +298,42 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     // already settles. Only a first subscribe and a lapse are notified — a renewal every week from
     // every subscriber is the flood the readable-handful rule exists to prevent.
     const ambientSet = new Set(ambientIds);
-    const spendTiers = new Map<string, SlurpSpendTier | null>();
+    /** Resolved once per distinct member per tick: the Fan Type is what decides money now. */
+    const fanTypeFor = new Map<string, SlurpFanType | null>();
     for (const account of accounts) {
       const price = await noodle.getCreatorSubscriptionPrice(account.id).catch(() => 0);
       for (const tie of await population.listTiesForCreator(account.id)) {
         // Mirrors the `none` branches of `slurpAudienceSubscriptionDecision` that ignore spend tier.
         const paidThrough = tie.paidThroughAt ? Date.parse(tie.paidThroughAt) : Number.NaN;
         if (Number.isFinite(paidThrough) ? until.getTime() < paidThrough : tie.stage !== "follower") continue;
-        if (!spendTiers.has(tie.memberId)) {
+        if (!fanTypeFor.has(tie.memberId)) {
           const member = await population.get(tie.memberId).catch(() => null);
-          spendTiers.set(
+          fanTypeFor.set(
             tie.memberId,
-            member?.spendTier ??
-              (!ambientSet.has(tie.memberId)
+            member
+              ? slurpResolveFanType(settings.fanTypes, member)
+              : !ambientSet.has(tie.memberId)
                 ? null
-                : tuning.funnel.ambientCanPay
-                  ? generateSlurpPopulationMember(tie.memberId, until).spendTier
-                  : "none"),
+                : // An ambient account has no population row. It is mapped onto a Fan Type by id,
+                  // the same weighted draw a member gets, rather than onto a tier the id happened
+                  // to hash to. Switched off, it reads as somebody with no budget, which never
+                  // subscribes and lets an already-paid one lapse.
+                  tuning.funnel.ambientCanPay
+                  ? slurpPickFanType(settings.fanTypes, tie.memberId)
+                  : null,
           );
         }
-        const spendTier = spendTiers.get(tie.memberId);
-        if (!spendTier) continue;
+        const fanType = fanTypeFor.get(tie.memberId);
+        if (!fanType) continue;
+        const weeklyBudget = slurpFanTypeWeeklyBudget(fanType, tie.memberId);
         const decision = slurpAudienceSubscriptionDecision(
           {
             memberId: tie.memberId,
             creatorAccountId: account.id,
             stage: tie.stage,
-            spendTier,
+            spendTier: slurpFanTypeSpendTier(weeklyBudget),
+            weeklyBudget,
+            subConversionPerDay: fanType.funnel.subConversionPerDay,
             price,
             paidThroughAt: tie.paidThroughAt,
             interactions: tie.interactions,
@@ -344,9 +379,9 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       if (!Number.isFinite(quotedFor) || quotedFor < 1) continue;
       const member = await population.get(commission.viewerAccountId).catch(() => null);
       if (!member) continue;
-      // Cheap work is taken, expensive work is haggled away. `spendTier` is the person's appetite
-      // and was stored on every member from the start without ever being read here.
-      const budget = { none: 0, light: 40, regular: 120, whale: 400 }[member.spendTier] ?? 40;
+      // Cheap work is taken, expensive work is haggled away. The appetite is the Fan Type's
+      // `spend.commissionBudget` now, so raising it is a setting rather than a patched constant.
+      const budget = slurpFanTypeCommissionBudget(slurpResolveFanType(settings.fanTypes, member), member.id);
       const accepts = budget > 0 && commission.price <= budget;
       await messages.settleAudienceCommission(commission.id, accepts ? "accept" : "decline").catch(() => null);
     }
@@ -403,6 +438,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       {
         elapsedMinutes: (until.getTime() - pulseSince.getTime()) / 60_000,
         audience,
+        actorWeights,
         seed: `${pulseSince.toISOString()}:${until.toISOString()}`,
         activity,
         targets: creators.flatMap((creator) =>

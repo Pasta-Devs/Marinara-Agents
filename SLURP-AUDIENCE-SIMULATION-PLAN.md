@@ -9,18 +9,18 @@ This is a handoff artifact. A fresh agent should be able to pick up any slice fr
 
 ## Status
 
-| Slice | What | State |
-| ----- | ---- | ----- |
-| 1 | Simulation Tuning object, presets, rules read values from Tuning | done |
-| 2 | Simulation bug fixes (follow type, subs every tick, ambient pay, like budget, trickle, conversion growth) | done |
-| 3 | Free clock: server timer, lock, catch-up cap | done |
-| 4 | Simulation settings UI + live estimate | done |
-| 5 | Fan Types: model, built-ins, migration, voice in prompts | not started |
-| 6 | Per-type reaction banks, batched bank growth, rebalance population | not started |
-| 7 | Fan Types editor UI | not started |
-| 8 | Model Worker: job queue, budget ledger, modes | not started |
-| 9 | AI Budget UI, Prompts UI, Import/Export | not started |
-| 10 | Version bump 0.0.10, CHANGELOG, rebuild package + catalog, validation | not started |
+| Slice | What                                                                                                      | State       |
+| ----- | --------------------------------------------------------------------------------------------------------- | ----------- |
+| 1     | Simulation Tuning object, presets, rules read values from Tuning                                          | done        |
+| 2     | Simulation bug fixes (follow type, subs every tick, ambient pay, like budget, trickle, conversion growth) | done        |
+| 3     | Free clock: server timer, lock, catch-up cap                                                              | done        |
+| 4     | Simulation settings UI + live estimate                                                                    | done        |
+| 5     | Fan Types: model, built-ins, migration, voice in prompts                                                  | done        |
+| 6     | Per-type reaction banks, batched bank growth, rebalance population                                        | not started |
+| 7     | Fan Types editor UI                                                                                       | not started |
+| 8     | Model Worker: job queue, budget ledger, modes                                                             | not started |
+| 9     | AI Budget UI, Prompts UI, Import/Export                                                                   | not started |
+| 10    | Version bump 0.0.10, CHANGELOG, rebuild package + catalog, validation                                     | not started |
 
 ## Why
 
@@ -73,13 +73,13 @@ Free Clock (tick) ──jobs──► Model Worker (queue · priority · budget 
 
 ## Tiers
 
-| Tier | Content | Cost | Clock |
-| ---- | ------- | ---- | ----- |
-| 0 Numbers | reach, counts, funnel, subs, churn, arcs, income, mood | free | every tick |
-| 1 Bank text | pulse comments, request templates, creator replies | free | every tick |
-| 2 Rewrite | placeholder → specific text when read | model | worker |
-| 3 Generation | comment threads, DM replies, briefs, arcs, schedules | model | worker |
-| Bank growth | one batched call fills all low per-type banks | model, rare | worker |
+| Tier         | Content                                                | Cost        | Clock      |
+| ------------ | ------------------------------------------------------ | ----------- | ---------- |
+| 0 Numbers    | reach, counts, funnel, subs, churn, arcs, income, mood | free        | every tick |
+| 1 Bank text  | pulse comments, request templates, creator replies     | free        | every tick |
+| 2 Rewrite    | placeholder → specific text when read                  | model       | worker     |
+| 3 Generation | comment threads, DM replies, briefs, arcs, schedules   | model       | worker     |
+| Bank growth  | one batched call fills all low per-type banks          | model, rare | worker     |
 
 ## Data model
 
@@ -122,16 +122,16 @@ FanType {
 
 Built-ins (editable, resettable):
 
-| Engine archetype | Built-in | Sketch |
-| ---------------- | -------- | ------ |
-| ordinary | Regular | medium activity, light spender |
-| eccentric | Night Owl | late peak, odd voice |
-| crossFandom | Crossover Fan | comments, rarely pays |
-| raider | Troll | blunt voice, no spend |
-| organicDiscovery | Newcomer | high follow chance, low loyalty |
-| freeResource | Lurker | likes only, never pays |
-| ordinary | Superfan | converts, tips, long comments |
-| ordinary | Whale | rare, big budget, commissions |
+| Engine archetype | Built-in      | Sketch                          |
+| ---------------- | ------------- | ------------------------------- |
+| ordinary         | Regular       | medium activity, light spender  |
+| eccentric        | Night Owl     | late peak, odd voice            |
+| crossFandom      | Crossover Fan | comments, rarely pays           |
+| raider           | Troll         | blunt voice, no spend           |
+| organicDiscovery | Newcomer      | high follow chance, low loyalty |
+| freeResource     | Lurker        | likes only, never pays          |
+| ordinary         | Superfan      | converts, tips, long comments   |
+| ordinary         | Whale         | rare, big budget, commissions   |
 
 ### ModelBudget (Slurp settings)
 
@@ -146,14 +146,14 @@ ModelBudget {
 
 ### Table changes
 
-| Table | Change |
-| ----- | ------ |
-| `slurpPopulation` | add `fanTypeId`; `weeklyBudget` numeric (from `spendTier` range) |
-| `slurpAudienceTies` | add `followedAt` |
-| interactions | follows get their own interaction type |
-| `slurpPendingText` | generalized to model jobs (kind, subject, priority, status, attempts, expiresAt) |
-| reaction bank | keyed by `fanTypeId` |
-| new budget ledger | calls per hour/day, survives restarts |
+| Table               | Change                                                                           |
+| ------------------- | -------------------------------------------------------------------------------- |
+| `slurpPopulation`   | add `fanTypeId`; `weeklyBudget` numeric (from `spendTier` range)                 |
+| `slurpAudienceTies` | add `followedAt`                                                                 |
+| interactions        | follows get their own interaction type                                           |
+| `slurpPendingText`  | generalized to model jobs (kind, subject, priority, status, attempts, expiresAt) |
+| reaction bank       | keyed by `fanTypeId`                                                             |
+| new budget ledger   | calls per hour/day, survives restarts                                            |
 
 ## Free Clock
 
@@ -179,15 +179,15 @@ No step calls the model.
 
 ## Model Worker
 
-| Priority | Job | Trigger |
-| -------- | --- | ------- |
-| 1 | `dm_reply` | player messaged a fan |
-| 2 | `rewrite` | placeholder item opened/visible |
-| 3 | `thread` | post published |
-| 4 | `brief` | commission request open |
-| 5 | `bank_grow` | a type's bank below target or repeating (one batched call for all low types) |
-| 6 | `arc` / `schedule` | weekly |
-| 7 | `fan_type_voice` | user clicks "Draft voice" |
+| Priority | Job                | Trigger                                                                      |
+| -------- | ------------------ | ---------------------------------------------------------------------------- |
+| 1        | `dm_reply`         | player messaged a fan                                                        |
+| 2        | `rewrite`          | placeholder item opened/visible                                              |
+| 3        | `thread`           | post published                                                               |
+| 4        | `brief`            | commission request open                                                      |
+| 5        | `bank_grow`        | a type's bank below target or repeating (one batched call for all low types) |
+| 6        | `arc` / `schedule` | weekly                                                                       |
+| 7        | `fan_type_voice`   | user clicks "Draft voice"                                                    |
 
 Modes: `off` (banks only), `present` (default; worker runs while a Slurp client is active),
 `background` (opt-in; timer also drains priorities 3–6).
@@ -312,3 +312,41 @@ Derived on `origin/staging` (8924a8c8) before slice 1, running each test with `n
   so `ambientCanPay` is visible in it. The model-calls column is slice 9's.
 - Import/export and the Fan Types, AI Budget and Prompts sections are still unbuilt; the panel is
   mounted inside the existing Audience section rather than in new nav sections.
+
+## Slice 5 notes (for later slices)
+
+- `services/slurp/slurp-fan-types.ts` is the module slices 6–9 read. Public API:
+  `slurpFanTypeSchema` / `slurpFanTypesSchema` / `SlurpFanType`, `SLURP_BUILTIN_FAN_TYPES`,
+  `slurpFanTypesDefault()`, `slurpNormalizeFanTypes()`, `slurpResolveFanType(types, member)`,
+  `slurpFallbackFanType()`, `slurpPickFanType(types, seed)`, `slurpFanTypeWeeklyBudget()`,
+  `slurpFanTypeCommissionBudget()`, `slurpFanTypeSpendTier()`, `slurpBuiltinFanTypeForTier()`,
+  `slurpFanTypeActiveHour()`, `slurpFanTypeTraits()`, `slurpFanVoiceForPrompt()`,
+  `SLURP_FAN_VOICE_MAX` (600) / `SLURP_FAN_VOICE_PROMPT_MAX` (240).
+- Settings hold `fanTypes: FanType[]`, defaulting to the eight built-ins. `normalizeSlurpSettings`
+  repairs rather than replaces: unparseable or duplicate entries are dropped, an empty result falls
+  back to the built-ins, and an all-disabled list re-enables built-in Regular.
+- Built-in shares are chosen for two distributions the rest of the code depends on: the old spend
+  mix (62 / 25 / 11 / 2) and every Engine archetype holding more than a tenth of the crowd
+  (`slurp-population.regression.ts` asserts the second). Editing a share moves both. Regular 25,
+  Night Owl 11, Crossover Fan 11, Troll 11, Newcomer 11, Lurker 18, Superfan 11, Whale 2.
+- `spendTier` was kept, not removed: it is derived from the member's weekly budget
+  (`slurpFanTypeSpendTier`) and is still the vocabulary of prompts, the fan card and the route
+  payloads. `SLURP_AUDIENCE_WEEKLY_BUDGET` and the daily-conversion table are now read off the
+  built-ins rather than written out again, so they cannot drift from them.
+- `slurpAudienceSubscriptionDecision` takes optional `weeklyBudget` and `subConversionPerDay`;
+  without them it falls back to the tier tables, which is what the estimate and the old tests do.
+  Slice 9's estimate should start passing the resolved type through.
+- `slurpPopulation.fanTypeId` is a new nullable file-table column (the `followedAt` precedent).
+  Old rows read null and resolve through `archetype`; there is no migration pass and none is needed.
+- Wired: `behavior.activity` (pulse actor pick), `behavior.like` / `follow` / `comment` and
+  `funnel.followChance` (pulse kind pick, via `planSlurpWorldPulse({ actorWeights })`),
+  `spend.weeklyBudget` + `funnel.subConversionPerDay` (subscription pass),
+  `spend.commissionBudget` (audience commission settlement), `activeHours` / `traits` /
+  `engineArchetype` (generation), `voice` (fan-activity, pending-text rewrite, DM prompts).
+- Still unread: `behavior.question` / `dm` / `commission` / `tip` / `unlock`, `spend.tipChance`,
+  `funnel.loyaltyDays` / `renewChance`, `tone`, `bank.targetSize`. The first group belongs to
+  `slurp-world.ts`, which decides per creator rather than per actor and would need a per-actor
+  pass; `bank.targetSize` and `tone` are slice 6's, the rest belong with the funnel rework.
+- `planSlurpWorldPulse` is unchanged when `actorWeights` is absent, so the estimate and the older
+  pulse tests still see the fixed 18 / 16 / 66 split. Slice 9's estimate can pass weights to show
+  fan types in the preview.

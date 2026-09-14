@@ -33,6 +33,7 @@ import { parseGameJsonish } from "../game/jsonish.js";
 import { requireModelAnswer } from "./slurp-model-answer.js";
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { resolveSlurpTextConnection } from "./slurp-connection.js";
+import { slurpFanVoiceForPrompt, slurpResolveFanType } from "./slurp-fan-types.js";
 import { NOODLER_UNTRUSTED_CONTENT_INSTRUCTION } from "./slurp-generation.service.js";
 import type { APIProvider } from "@marinara-engine/shared";
 
@@ -78,6 +79,8 @@ function buildMessages(input: {
   kind: SlurpPendingKind;
   creator: { displayName: string; handle: string; bio: string };
   speaker: string;
+  /** How this fan's Fan Type writes. Short; a rewrite is one or two sentences. */
+  speakerVoice?: string;
   placeholder: string;
   post?: { title: string | null; content: string | null } | null;
 }) {
@@ -108,7 +111,7 @@ function buildMessages(input: {
 
   const data = {
     creator: input.creator,
-    fan: input.speaker,
+    fan: input.speakerVoice ? { name: input.speaker, voice: input.speakerVoice } : input.speaker,
     ...(input.post ? { post: input.post } : {}),
     placeholderToReplace: input.placeholder,
   };
@@ -185,8 +188,9 @@ export async function drainSlurpPendingText(db: DB, limit = DRAIN_LIMIT): Promis
         continue;
       }
       const actorId = row.actorLabel ? String(row.actorLabel) : null;
+      const member = actorId ? await population.get(actorId).catch(() => null) : null;
       const speaker =
-        (actorId ? (await population.get(actorId))?.displayName : null) ??
+        member?.displayName ??
         (actorId ? (await noodle.getNoodlerAccountById(actorId))?.displayName : null) ??
         "a reader";
       const post = row.postId ? await noodle.getNoodlerPostById(String(row.postId)) : null;
@@ -196,6 +200,11 @@ export async function drainSlurpPendingText(db: DB, limit = DRAIN_LIMIT): Promis
           kind,
           creator: { displayName: creator.displayName, handle: creator.handle, bio: creator.bio },
           speaker,
+          // A placeholder rewritten in the fan's own voice is the whole point of the upgrade.
+          speakerVoice:
+            kind === "delivery"
+              ? undefined
+              : slurpFanVoiceForPrompt(slurpResolveFanType(settings.fanTypes, member ?? {}).voice),
           placeholder,
           post: post ? { title: post.title, content: post.content } : null,
         }),

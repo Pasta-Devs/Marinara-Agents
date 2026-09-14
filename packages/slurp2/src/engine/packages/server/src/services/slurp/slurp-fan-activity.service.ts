@@ -204,6 +204,7 @@ function buildFanActivityMessages(input: {
     'Return JSON only, shaped as {"activities":[{"creatorAccountId":"...","actorHandle":"...","targetPostId":"...","type":"like"|"reply","content":null|"...","parentInteractionId":"..."}]}. Use exactly these field names; "parentInteractionId" is optional.',
     "Each actor handle has a weight; prefer higher-weight actors more often, proportionally.",
     slurpAudienceToneInstruction(input.settings.audienceTone, prompts.tones),
+    "An actor's voice is how that kind of person writes. Follow it; it outranks any general style note for that actor's own lines.",
     "Actors carry traits and a relationship to the creator. Write each reply as that specific person: a long-standing paying regular does not sound like somebody who arrived yesterday, and somebody whose trait is 'emoji only' does not write a paragraph.",
     `At most ${input.settings.fanLikesPerRefresh} likes and ${input.settings.fanRepliesPerRefresh} replies total.`,
     `At most ${NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR} activities for any creator.`,
@@ -227,6 +228,7 @@ function buildFanActivityMessages(input: {
         ...(identity.persona
           ? {
               traits: identity.persona.traits,
+              ...(identity.persona.voice ? { voice: identity.persona.voice } : {}),
               relationship: describeFanRelationship(identity.persona),
             }
           : {}),

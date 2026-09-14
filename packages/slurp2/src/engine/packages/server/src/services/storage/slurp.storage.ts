@@ -143,6 +143,7 @@ import {
 } from "../slurp/slurp-project.js";
 import { SLURP_AUDIENCE_TONES, SLURP_DEFAULT_AUDIENCE_TONE } from "../slurp/slurp-tone.js";
 import { SLURP_REALISTIC_TUNING, slurpSimulationTuningSchema } from "../slurp/slurp-tuning.js";
+import { slurpFanTypesDefault, slurpFanTypesSchema, slurpNormalizeFanTypes } from "../slurp/slurp-fan-types.js";
 import {
   SLURP_DEFAULT_PLATFORM_SCALE,
   SLURP_DEFAULT_WORLD_ACTIVITY,
@@ -583,6 +584,8 @@ export const slurpSettingsSchema = z.object({
   autopurgeNextRunAt: z.string().datetime({ offset: true }).nullable(),
   /** Every number the audience simulation runs on. See `slurp-tuning.ts`; a partial object fills from Realistic. */
   simulationTuning: slurpSimulationTuningSchema,
+  /** Who is in the audience. See `slurp-fan-types.ts`; an empty or broken list falls back to the built-ins. */
+  fanTypes: slurpFanTypesSchema,
   nightQuiet: z.boolean(),
   onboarding: z.enum(["not_started", "in_progress", "completed"]),
 });
@@ -1238,6 +1241,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   autopurgeIncludeMessageMedia: false,
   autopurgeNextRunAt: null,
   simulationTuning: SLURP_REALISTIC_TUNING,
+  fanTypes: slurpFanTypesDefault(),
   nightQuiet: false,
   onboarding: "not_started",
 };
@@ -1281,6 +1285,10 @@ export function normalizeSlurpSettings(raw: unknown): SlurpSettings {
       ? NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION
       : rawRecord.imagePromptInterpretation;
   candidate.nightQuiet = rawRecord.nightQuiet ?? DEFAULT_SLURP_SETTINGS.nightQuiet;
+  // Repaired rather than replaced: a player who edited one type must not lose the other seven
+  // because a single field went out of range. An all-disabled list re-enables built-in Regular,
+  // which is the one state the tick cannot run in — there would be nobody to pick.
+  candidate.fanTypes = slurpNormalizeFanTypes(rawRecord.fanTypes ?? DEFAULT_SLURP_SETTINGS.fanTypes);
   candidate.arcLibrary = rawRecord.arcLibrary ?? slurpArcLibraryFromLegacy(rawRecord.arcAllowedKinds);
   candidate.onboarding = rawRecord.onboarding ?? DEFAULT_SLURP_SETTINGS.onboarding;
   candidate.fanArchetypeWeights = {
