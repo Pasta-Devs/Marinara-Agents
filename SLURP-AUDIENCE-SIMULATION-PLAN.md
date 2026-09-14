@@ -14,7 +14,7 @@ This is a handoff artifact. A fresh agent should be able to pick up any slice fr
 | 1 | Simulation Tuning object, presets, rules read values from Tuning | done |
 | 2 | Simulation bug fixes (follow type, subs every tick, ambient pay, like budget, trickle, conversion growth) | done |
 | 3 | Free clock: server timer, lock, catch-up cap | done |
-| 4 | Simulation settings UI + live estimate | not started |
+| 4 | Simulation settings UI + live estimate | done |
 | 5 | Fan Types: model, built-ins, migration, voice in prompts | not started |
 | 6 | Per-type reaction banks, batched bank growth, rebalance population | not started |
 | 7 | Fan Types editor UI | not started |
@@ -287,3 +287,28 @@ Derived on `origin/staging` (8924a8c8) before slice 1, running each test with `n
   storage are not counted; they are bounded by `world.maxActionsPerTick`.
 - Subscription scan skips the member read for ties that cannot decide (paid through the future, or
   unpaid and not `follower`). Still a full tie scan; batch getter deferred.
+
+## Slice 4 notes (for later slices)
+
+- The client imports the server rule modules directly by relative path
+  (`../../../../server/src/services/slurp/...`), as it already imports `packages/shared/src`. The
+  bundler resolves it and `zod` comes along from `packages/shared/node_modules`; nothing had to move
+  into a shared package. Slices 5–9 should keep doing this rather than duplicating rules.
+- `SlurpSettings.tsx` lost its five shared controls to `SlurpSettingsControls.tsx`
+  (`NumberSetting`, `SectionTitle`, `SettingsGroup`, `GuidanceBox`, `Field`, `Toggle`). Fan Types,
+  AI Budget and Prompts panels should import those, not copy them. `NumberSetting` now takes
+  `integer={false}` for fractional fields.
+- `SlurpSimulationSettings.tsx` reads every min/max and whether a field is a whole number off
+  `slurpSimulationTuningSchema` at runtime, so a changed range needs no UI edit. New fields only
+  need a row in its `FIELDS`/`TOGGLES` tables plus two `en.json` keys.
+- A preset keeps the current `prompts` block rather than overwriting it: prompt text is edited in
+  its own section (slice 9) and a preset must not silently throw it away.
+- Preset values reviewed: quiet is half the activity (6 min/reaction, 3 per tick, like budget 0.5,
+  curves ×0.5), lively is two to three times (1.2 min/reaction, 15 per tick, like budget 1.5, a
+  0.1 old-post trickle, curves ×2.5), generous is lively plus an hourly conversion roll,
+  `ambientCanPay`, `conversionGrowth` 3, like budget 2 and an 80-coin commission price.
+- The estimate (`slurp-simulation-estimate.ts`) runs the real rule functions over seven days for a
+  fixed sample creator, mirrors the tick's separate pulse mark, and treats half the pool as ambient
+  so `ambientCanPay` is visible in it. The model-calls column is slice 9's.
+- Import/export and the Fan Types, AI Budget and Prompts sections are still unbuilt; the panel is
+  mounted inside the existing Audience section rather than in new nav sections.

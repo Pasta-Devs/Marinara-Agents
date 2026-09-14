@@ -121,24 +121,43 @@ const scaleCurves = (world: SlurpSimulationTuning["world"], factor: number): Slu
 
 const PRESETS: Record<Exclude<SlurpTuningPreset, "custom">, SlurpSimulationTuning> = {
   realistic: R,
+  // Half the activity: reactions cost twice the time, half the actions, half the request curves.
   quiet: {
     ...R,
     preset: "quiet",
-    pulse: { ...R.pulse, minutesPerReaction: 6, maxPerTick: 3, poolSize: 16 },
+    pulse: { ...R.pulse, minutesPerReaction: 6, maxPerTick: 3, likeBudgetScale: 0.5, poolSize: 16 },
     world: { ...scaleCurves(R.world, 0.5), maxActionsPerTick: 2, maxOpenRequests: 2 },
   },
+  // Two to three times the events: reactions arrive two and a half times as fast against a cap
+  // that is not the thing holding them back, and old posts keep a small trickle.
   lively: {
     ...R,
     preset: "lively",
-    pulse: { ...R.pulse, minutesPerReaction: 1.5, maxPerTick: 12, poolSize: 48 },
-    world: { ...scaleCurves(R.world, 2), maxActionsPerTick: 8, maxOpenRequests: 5 },
+    pulse: {
+      ...R.pulse,
+      minutesPerReaction: 1.2,
+      maxPerTick: 15,
+      likeBudgetScale: 1.5,
+      oldPostTrickle: 0.1,
+      poolSize: 48,
+    },
+    world: { ...scaleCurves(R.world, 2.5), maxActionsPerTick: 8, maxOpenRequests: 5 },
   },
+  // Lively, plus a crowd that pays: ambient accounts have a budget, engagement raises conversion
+  // to its ceiling, and commissions are worth twice what they are elsewhere.
   generous: {
     ...R,
     preset: "generous",
-    pulse: { ...R.pulse, minutesPerReaction: 1.5, maxPerTick: 12, poolSize: 48 },
-    world: { ...scaleCurves(R.world, 2), maxActionsPerTick: 8, maxOpenRequests: 5 },
-    funnel: { ...R.funnel, ambientCanPay: true, conversionGrowth: 1 },
+    pulse: {
+      ...R.pulse,
+      minutesPerReaction: 1.2,
+      maxPerTick: 15,
+      likeBudgetScale: 2,
+      oldPostTrickle: 0.1,
+      poolSize: 48,
+    },
+    world: { ...scaleCurves(R.world, 2.5), maxActionsPerTick: 8, maxOpenRequests: 5 },
+    funnel: { ...R.funnel, rollCadence: "hourly", ambientCanPay: true, conversionGrowth: 3 },
     economy: { audienceCommissionPrice: 80 },
   },
 };

@@ -6,6 +6,7 @@ import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { api } from "../lib/api-client";
+import type { SlurpSimulationTuning } from "../../../server/src/services/slurp/slurp-tuning.js";
 import { refreshSlurpCreatorBatch } from "../lib/slurp-refresh-batch";
 import { useSlurpUIStore } from "../stores/slurp-package.store";
 import type {
@@ -420,6 +421,8 @@ export type SlurpSettings = {
   autopurgeIncludeMessageMedia: boolean;
   autopurgeNextRunAt: string | null;
   nightQuiet: boolean;
+  /** Every number the audience simulation runs on. The server fills anything missing from Realistic. */
+  simulationTuning: SlurpSimulationTuning;
   onboarding: "not_started" | "in_progress" | "completed";
 };
 
