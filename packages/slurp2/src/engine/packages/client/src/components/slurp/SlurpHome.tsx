@@ -293,6 +293,8 @@ interface NoodlerPostSubmission {
   postType: "post" | "story";
   linkedPostId: string | null;
   unlockPrice: number | null;
+  /** Ask the AI for an image: written by the model on a guided post, from the text on a manual one. */
+  generateImage: boolean;
 }
 
 type SlurpViewerCreator = NonNullable<ReturnType<typeof useNoodlerViewer>["data"]>["creators"][number];
@@ -307,6 +309,7 @@ interface NoodlerPostDraft {
   linkedPostId: string | null;
   /** Price for this locked post. Null uses the Creator's price. */
   unlockPrice: number | null;
+  generateImage: boolean;
 }
 
 interface PendingNoodlerImage {
@@ -322,6 +325,7 @@ const EMPTY_NOODLER_POST_DRAFT: NoodlerPostDraft = {
   postType: "post",
   linkedPostId: null,
   unlockPrice: null,
+  generateImage: false,
 };
 
 function isEmptyNoodlerPostDraft(draft: NoodlerPostDraft): boolean {
@@ -332,7 +336,8 @@ function isEmptyNoodlerPostDraft(draft: NoodlerPostDraft): boolean {
     !draft.image &&
     !draft.poll &&
     draft.postType === EMPTY_NOODLER_POST_DRAFT.postType &&
-    draft.linkedPostId === EMPTY_NOODLER_POST_DRAFT.linkedPostId
+    draft.linkedPostId === EMPTY_NOODLER_POST_DRAFT.linkedPostId &&
+    draft.generateImage === EMPTY_NOODLER_POST_DRAFT.generateImage
   );
 }
 
@@ -1267,7 +1272,8 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
           if (generationId !== profileDraftGenerationIdRef.current) return;
           if (draftForGeneration) setPreviousDraft(draftForGeneration);
           if (noodlerAccountId) setAcceptSourceChangesForProfileId(noodlerAccountId);
-          const { sourceSnapshot, sourceRevisionToken, ...stageProfile } = draft;
+          const { sourceSnapshot, sourceRevisionToken, notes, ...stageProfile } = draft;
+          if (notes?.length) toast.info(notes.join(" "));
           setDraftSourceSnapshot(sourceSnapshot ?? null);
           setDraftSourceRevisionToken(sourceRevisionToken ?? null);
           setProfileDraft(stageProfile);
@@ -1423,9 +1429,14 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     postType,
     linkedPostId,
     unlockPrice,
+    generateImage,
   }: NoodlerPostSubmission) => {
-    await createPost.mutateAsync({
+    // A manual post keeps its own text as the image directions, so the same render path a
+    // generated post uses can draw it right after publishing.
+    const wantsImage = generateImage && !image;
+    const created = await createPost.mutateAsync({
       unlockPrice: access === "locked" ? unlockPrice : null,
+      ...(wantsImage ? { imagePrompt: body.trim() || title.trim() } : {}),
       targetAccountId: profileId,
       title,
       content: body,
@@ -1437,6 +1448,18 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
       linkedPostId: linkedPostId ?? null,
     });
     toast.success(localizeUi("ui.noodle.noodlerhome.noodlerPostPublished"));
+    if (wantsImage && created?.id) {
+      await generatePostImage.mutateAsync({ id: created.id, accountId: profileId }).catch((error: unknown) =>
+        toast.error(
+          errorMessage(
+            error,
+            localizeUi("ui.slurp.composer.aiImageFailed", {
+              defaultValue: "The post was published, but its image could not be created.",
+            }),
+          ),
+        ),
+      );
+    }
   };
 
   const submitGuidedPost = async ({
@@ -1448,6 +1471,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     poll,
     format,
     postType,
+    generateImage,
   }: NoodlerPostSubmission) => {
     if (!(await confirmProviderDisclosure())) return;
     const guide = serializeNoodlerPostGuide(title, body);
@@ -1455,6 +1479,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
       mode: "noodler",
       targetAccountId: profileId,
       ...(guide ? { noodlerPostGuide: guide } : {}),
+      ...(generateImage ? { generateImage: true } : {}),
       access,
       image,
       poll,
@@ -6604,7 +6629,7 @@ function NoodlerPostComposer({
   const mediaToolRef = useRef<HTMLDivElement | null>(null);
   const accessToolRef = useRef<HTMLDivElement | null>(null);
   const composerBusyRef = useRef(false);
-  const { title, body, access, image, poll, postType, linkedPostId, unlockPrice } = draft;
+  const { title, body, access, image, poll, postType, linkedPostId, unlockPrice, generateImage } = draft;
   const linkablePosts = availablePosts
     .map((entry) => ("managed" in entry ? entry.managed : entry.viewerPost))
     .filter((post): post is NoodlerManagedPost | NoodlerPostView => Boolean(post) && !isSlurpStory(post));
@@ -6747,6 +6772,7 @@ function NoodlerPostComposer({
     postType,
     linkedPostId: linkedPostId ?? null,
     unlockPrice: access === "locked" ? (unlockPrice ?? null) : null,
+    generateImage: generateImage && !image,
   });
 
   const publish = async () => {
@@ -6915,21 +6941,41 @@ function NoodlerPostComposer({
             onClick: () => toggleTool("media"),
           }}
           trailing={
-            <div ref={accessToolRef} className="relative">
+            <>
               <button
                 type="button"
-                onClick={() => toggleTool("access")}
-                disabled={composerBusy}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] disabled:opacity-50"
-                aria-label={localizeUi("ui.noodle.noodlerpostcomposer.postVisibilityValue", {
-                  value: localizeUi(`ui.noodle.postaccess.${access}`),
+                onClick={() => updateDraft({ generateImage: !generateImage })}
+                disabled={composerBusy || Boolean(image)}
+                aria-pressed={generateImage}
+                title={localizeUi("ui.slurp.composer.aiImageHint", {
+                  defaultValue: "Let the AI create an image for this post from your text.",
                 })}
-                title={localizeUi(`ui.noodle.postaccess.${access}.hint`)}
+                className={cn(
+                  "inline-flex h-9 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold disabled:opacity-50",
+                  generateImage
+                    ? "bg-[var(--noodle-accent)]/15 text-[var(--noodle-accent)]"
+                    : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]",
+                )}
               >
-                <Lock size={13} />
-                {localizeUi(`ui.noodle.postaccess.${access}`)}
+                <Sparkles size={13} />
+                {localizeUi("ui.slurp.composer.aiImage", { defaultValue: "AI image" })}
               </button>
-            </div>
+              <div ref={accessToolRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => toggleTool("access")}
+                  disabled={composerBusy}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] disabled:opacity-50"
+                  aria-label={localizeUi("ui.noodle.noodlerpostcomposer.postVisibilityValue", {
+                    value: localizeUi(`ui.noodle.postaccess.${access}`),
+                  })}
+                  title={localizeUi(`ui.noodle.postaccess.${access}.hint`)}
+                >
+                  <Lock size={13} />
+                  {localizeUi(`ui.noodle.postaccess.${access}`)}
+                </button>
+              </div>
+            </>
           }
         />
       }

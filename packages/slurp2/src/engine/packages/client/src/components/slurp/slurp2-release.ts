@@ -2,7 +2,7 @@
 // client has no route that serves CHANGELOG.md. So the notes are mirrored here, and
 // `tests/slurp2-release-notes.regression.ts` fails the build if this file drifts from
 // `packages/slurp2/CHANGELOG.md` or from the version in `manifest.json`.
-export const SLURP2_VERSION = "0.0.11";
+export const SLURP2_VERSION = "0.0.12";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -12,6 +12,15 @@ export interface Slurp2ReleaseEntry {
 
 /** Newest first, same order as CHANGELOG.md. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.0.12",
+    date: "2026-09-15",
+    notes: [
+      "AI Creator drafts are repaired instead of failing: long text is shortened, gender and tag spellings are understood, broken JSON is fixed, and the form lists what still needs a choice.",
+      "Persona Creators now have the same drafting tools as character Creators: AI post drafts from your own text, and an AI image toggle in the composer for drafted and manual posts.",
+      "Fixed bulk Creator creation skipping open-mode Creators with a wrong gender and tags reason, and draft errors now show the real cause.",
+    ],
+  },
   {
     version: "0.0.11",
     date: "2026-09-14",

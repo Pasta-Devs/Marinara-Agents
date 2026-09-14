@@ -1694,6 +1694,8 @@ export function useGenerateNoodlerStageProfileDraft() {
           SlurpStageProfileInput & {
             sourceSnapshot?: NoodlerSourceSnapshot;
             sourceRevisionToken?: string;
+            /** What the server repaired or still needs. Shown once, never saved. */
+            notes?: string[];
           }
         >("/slurp2/noodler/stage-profile-draft", input, {
           signal: controller.signal,
@@ -1803,6 +1805,8 @@ type NoodlerCreatePostRequest = Omit<NoodlerPostCreateInput, "uploadedImageUrl" 
   linkedPostId?: string | null;
   /** Price for this locked post. Null uses the Creator's price. */
   unlockPrice?: number | null;
+  /** Image directions to keep on the post, so its image can be rendered afterwards. */
+  imagePrompt?: string | null;
 } & NoodlerFormatRequest;
 
 type NoodlerGeneratePostRequest = Omit<NoodlerGenerationRequest, "uploadedImageUrl" | "imageCrop"> & {
