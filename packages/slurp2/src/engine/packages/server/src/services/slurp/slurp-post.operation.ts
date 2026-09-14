@@ -92,7 +92,9 @@ export async function generateAndApplyNoodlerPost(
     // A persona-sourced Creator is the player: nothing writes for it unattended. An explicit
     // request from its owner — the composer's Guide button — is a different thing and is allowed,
     // which is what gives these Creators the same drafting tools as character Creators.
-    if (account.kind === "persona" && account.sourceKind === "persona" && admissionMode?.kind === "background") {
+    // Only a foreground request carries an owner behind it. Every unattended caller (the scheduler,
+    // the first-post worker, run-now, bulk refresh) passes background or no mode at all, and stays blocked.
+    if (account.kind === "persona" && account.sourceKind === "persona" && admissionMode?.kind !== "foreground") {
       return { status: "disabled" } as const;
     }
     const publicAccount = await noodle.resolveAccountSource(account);

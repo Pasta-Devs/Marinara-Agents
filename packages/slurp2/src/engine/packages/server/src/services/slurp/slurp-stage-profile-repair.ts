@@ -102,8 +102,15 @@ export function repairSlurpStageProfileDraft(
   const tagInput = Array.isArray(raw.tags) ? raw.tags : typeof raw.tags === "string" ? raw.tags.split(/[,;|]/u) : [];
   const offered = tagInput.filter((tag): tag is string => typeof tag === "string" && tag.trim() !== "");
   const tags = normalizeSlurpDiscoveryTags(offered, allowedTags);
-  if (offered.length > tags.length) {
-    notes.push(`${offered.length - tags.length} suggested tag(s) were not in your tag list and were left out.`);
+  // `normalizeSlurpDiscoveryTags` also drops duplicates and stops at the tag limit, so count the
+  // ones the tag list refused on their own rather than blaming the list for every removal.
+  const disallowed = allowedTags
+    ? offered.filter((tag) => normalizeSlurpDiscoveryTags([tag], allowedTags).length === 0).length
+    : 0;
+  if (disallowed > 0) {
+    notes.push(`${disallowed} suggested tag(s) were not in your tag list and were left out.`);
+  } else if (offered.length > tags.length) {
+    notes.push("Repeated or extra tags were left out.");
   }
   if (tags.length < SLURP_DISCOVERY_MIN_TAGS)
     notes.push(`Add at least ${SLURP_DISCOVERY_MIN_TAGS} tags before saving.`);

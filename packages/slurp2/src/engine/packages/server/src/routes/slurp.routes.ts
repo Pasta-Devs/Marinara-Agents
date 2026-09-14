@@ -251,7 +251,7 @@ const slurpNoodlerPostCreateWithMediaSchema = slurpNoodlerPostCreateBaseSchema
   .extend({
     postType: slurpPostTypeSchema.default("post"),
     linkedPostId: z.string().trim().min(1).nullable().optional(),
-    imagePrompt: z.string().trim().max(2000).optional(),
+    imagePrompt: z.string().trim().max(2000).nullable().optional(),
     // Multipart bodies carry numbers as text, and an empty field means "use the Creator's price".
     unlockPrice: z.preprocess(
       (value) => (value === "" || value === null ? undefined : value),
@@ -3755,7 +3755,7 @@ export async function slurpRoutes(app: FastifyInstance) {
           skipped.push(noodleAccountId);
           noteReason(
             noodleAccountId,
-            validatedProfile.error.issues.some((issue) => issue.message === SLURP_NEW_CREATOR_DISCOVERY_MESSAGE)
+            validatedProfile.error.issues.every((issue) => issue.message === SLURP_NEW_CREATOR_DISCOVERY_MESSAGE)
               ? "The generated stage profile did not include a valid gender and at least 3 tags."
               : `The generated stage profile could not be used: ${validatedProfile.error.issues
                   .map((issue) => `${issue.path.slice(1).join(".") || "profile"} ${issue.message}`)

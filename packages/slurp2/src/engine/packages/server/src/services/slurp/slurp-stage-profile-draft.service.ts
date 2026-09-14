@@ -248,6 +248,7 @@ export async function generateNoodlerStageProfileDraft(
   } as const;
   const response = await provider.chatComplete(messages, completionOptions);
   let repaired = parseNoodlerStageProfileDraft(response.content ?? "", allowedTags);
+  let lastAnswer = response.content ?? "";
   // One retry, only when nothing usable came back. A draft with fixable fields is repaired instead,
   // so a long bio or a missing gender no longer costs a second model call or fails the draft.
   if (!repaired) {
@@ -267,9 +268,11 @@ export async function generateNoodlerStageProfileDraft(
       completionOptions,
     );
     repaired = parseNoodlerStageProfileDraft(retry.content ?? "", allowedTags);
+    lastAnswer = retry.content ?? "";
   }
   if (!repaired) {
-    requireModelAnswer(response.content ?? "", "a creator profile");
+    // An empty last answer has its own advice (raise max output tokens); anything else is unusable JSON.
+    requireModelAnswer(lastAnswer, "a creator profile");
     throw new Error(
       "The model did not return a usable creator profile. Try again, or pick a model that answers with JSON.",
     );

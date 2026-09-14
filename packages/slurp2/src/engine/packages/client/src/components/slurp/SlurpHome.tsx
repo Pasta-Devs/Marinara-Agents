@@ -336,7 +336,8 @@ function isEmptyNoodlerPostDraft(draft: NoodlerPostDraft): boolean {
     !draft.image &&
     !draft.poll &&
     draft.postType === EMPTY_NOODLER_POST_DRAFT.postType &&
-    draft.linkedPostId === EMPTY_NOODLER_POST_DRAFT.linkedPostId
+    draft.linkedPostId === EMPTY_NOODLER_POST_DRAFT.linkedPostId &&
+    draft.generateImage === EMPTY_NOODLER_POST_DRAFT.generateImage
   );
 }
 

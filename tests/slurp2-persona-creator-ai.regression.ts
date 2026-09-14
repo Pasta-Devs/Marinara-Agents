@@ -13,8 +13,8 @@ const read = (path: string) => readFileSync(path, "utf8");
 const postOperation = read(`${server}services/slurp/slurp-post.operation.ts`);
 assert.match(
   postOperation,
-  /account\.kind === "persona" && account\.sourceKind === "persona" && admissionMode\?\.kind === "background"/u,
-  "only unattended generation is refused for a persona-sourced Creator",
+  /account\.kind === "persona" && account\.sourceKind === "persona" && admissionMode\?\.kind !== "foreground"/u,
+  "only a foreground request from the owner may draft for a persona-sourced Creator",
 );
 // The automatic paths still leave them out entirely.
 assert.match(
@@ -35,7 +35,7 @@ const routes = read(`${server}routes/slurp.routes.ts`);
 assert.match(routes, /generateImage: z\.boolean\(\)\.optional\(\)/u);
 assert.match(
   routes,
-  /imagePrompt: z\.string\(\)\.trim\(\)\.max\(2000\)\.optional\(\)/u,
+  /imagePrompt: z\.string\(\)\.trim\(\)\.max\(2000\)\.nullable\(\)\.optional\(\)/u,
   "a manual post may carry image directions",
 );
 assert.match(postOperation, /imagePrompt: input\.imagePrompt\?\.trim\(\) \|\| null/u);
