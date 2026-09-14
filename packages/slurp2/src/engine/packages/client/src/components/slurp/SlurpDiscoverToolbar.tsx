@@ -1,4 +1,5 @@
 import { Check, Coins, LayoutGrid, List, Tags, UsersRound, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { useSlurpSettings } from "../../hooks/use-slurp";
 import {
@@ -16,15 +17,25 @@ function FilterMenu({
   label,
   icon: Icon,
   active,
+  menuId,
+  openMenu,
+  setOpenMenu,
   children,
 }: {
   label: string;
   icon: typeof UsersRound;
   active?: boolean;
+  menuId: string;
+  openMenu: string | null;
+  setOpenMenu: (id: string | null) => void;
   children: React.ReactNode;
 }) {
   return (
-    <details className="group relative">
+    <details
+      className="group relative"
+      open={openMenu === menuId}
+      onToggle={(event) => setOpenMenu(event.currentTarget.open ? menuId : openMenu === menuId ? null : openMenu)}
+    >
       <summary
         className={cn(
           triggerClass,
@@ -82,7 +93,22 @@ export function SlurpDiscoverToolbar({
   onClear: () => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
   const tagGroups = groupSlurpDiscoveryTags(useSlurpSettings().data?.discoveryTags);
+  useEffect(() => {
+    const dismiss = (event: PointerEvent) => {
+      if (!(event.target instanceof Node) || !(event.target as Element).closest("details")) setOpenMenu(null);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpenMenu(null);
+    };
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("keydown", escape);
+    };
+  }, []);
   return (
     <div className="space-y-3 border-y border-[var(--noodle-divider)] bg-[linear-gradient(110deg,color-mix(in_srgb,var(--slurp-surface)_96%,transparent),color-mix(in_srgb,var(--noodle-accent)_5%,var(--slurp-surface)))] px-4 py-4 sm:px-5">
       <div className="flex flex-wrap items-center gap-2">
@@ -102,6 +128,9 @@ export function SlurpDiscoverToolbar({
           label={`${localizeUi("ui.slurp.discover.genderLabel", { defaultValue: "Gender" })}${genders.size ? ` · ${genders.size}` : ""}`}
           icon={UsersRound}
           active={genders.size > 0}
+          menuId="gender"
+          openMenu={openMenu}
+          setOpenMenu={setOpenMenu}
         >
           <fieldset className="space-y-1">
             <legend className="sr-only">
@@ -127,6 +156,9 @@ export function SlurpDiscoverToolbar({
           label={localizeUi("ui.slurp.discover.price", { defaultValue: "Price" })}
           icon={Coins}
           active={Boolean(minimumPrice || maximumPrice)}
+          menuId="price"
+          openMenu={openMenu}
+          setOpenMenu={setOpenMenu}
         >
           <div className="grid grid-cols-2 gap-3">
             <label className="space-y-1 text-xs font-bold">
@@ -159,6 +191,9 @@ export function SlurpDiscoverToolbar({
           label={`${localizeUi("ui.slurp.discover.tagsLabel", { defaultValue: "Tags" })}${tags.size ? ` · ${tags.size}` : ""}`}
           icon={Tags}
           active={tags.size > 0}
+          menuId="tags"
+          openMenu={openMenu}
+          setOpenMenu={setOpenMenu}
         >
           <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
             {tagGroups.map((group) => (
@@ -180,29 +215,29 @@ export function SlurpDiscoverToolbar({
                     {localizeUi(`ui.slurp.tags.${tag}`, { defaultValue: tag })}
                   </label>
                 ))}
-                {customTags.length > 0 && (
-                  <fieldset>
-                    <legend className="mb-1 text-[11px] font-black uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
-                      {localizeUi("ui.slurp.discover.tagGroup.custom", { defaultValue: "Custom" })}
-                    </legend>
-                    {customTags.map((tag) => (
-                      <label
-                        key={tag}
-                        className="flex min-h-9 cursor-pointer items-center gap-3 rounded-lg px-2 text-sm hover:bg-[var(--accent)]"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={tags.has(tag)}
-                          onChange={() => onTagToggle(tag)}
-                          className="accent-[var(--noodle-accent)]"
-                        />
-                        {tag}
-                      </label>
-                    ))}
-                  </fieldset>
-                )}
               </fieldset>
             ))}
+            {customTags.length > 0 && (
+              <fieldset>
+                <legend className="mb-1 text-[11px] font-black uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
+                  {localizeUi("ui.slurp.discover.tagGroup.custom", { defaultValue: "Custom" })}
+                </legend>
+                {customTags.map((tag) => (
+                  <label
+                    key={tag}
+                    className="flex min-h-9 cursor-pointer items-center gap-3 rounded-lg px-2 text-sm hover:bg-[var(--accent)]"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={tags.has(tag)}
+                      onChange={() => onTagToggle(tag)}
+                      className="accent-[var(--noodle-accent)]"
+                    />
+                    {tag}
+                  </label>
+                ))}
+              </fieldset>
+            )}
           </div>
         </FilterMenu>
         <label className="ml-auto flex min-h-10 items-center gap-2 rounded-full border border-[var(--noodle-divider)] bg-[var(--slurp-surface)] px-3 text-xs font-bold">

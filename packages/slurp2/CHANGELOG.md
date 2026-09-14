@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.0.8 — 2026-09-14
+
+- Bug fixes for discovery filters and translations, subscription prices, image references, fan privacy, rapport details, message fees, arc editing and generation, profile validation, regression tests, and test-output handling.
+
 ## 0.0.7 — 2026-09-13
 
 - Rebuilt Discover around direct subscription actions, persistent grid and list views, and filters for subscription status, gender, weekly price, and Creator tags.

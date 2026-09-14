@@ -49,7 +49,7 @@ assert.match(
 // select the requested role instead of whichever row the file store returns first.
 assert.match(
   schema,
-  /keys: \["sourceKind", "sourceEntityId"\][\s\S]*?row\.kind === "persona" && row\.invited === "true"/u,
+  /keys: \["sourceKind", "sourceEntityId"\](?:(?!keys:)[\s\S])*?row\.kind === "persona" && row\.invited === "true"/u,
 );
 assert.match(
   schema,
