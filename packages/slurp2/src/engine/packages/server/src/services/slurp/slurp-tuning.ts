@@ -147,3 +147,34 @@ const PRESETS: Record<Exclude<SlurpTuningPreset, "custom">, SlurpSimulationTunin
 export function slurpTuningForPreset(preset: SlurpTuningPreset): SlurpSimulationTuning {
   return structuredClone(preset === "custom" ? R : PRESETS[preset]);
 }
+
+/** The background world pass when `clock.backgroundTimer` is off: a few catch-ups a day. */
+export const SLURP_WORLD_IDLE_POLL_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * Whether the world timer should tick now. It wakes every `tickMinutes` either way, so toggling
+ * `backgroundTimer` takes effect without a restart; off keeps the old four-a-day cadence.
+ */
+export function slurpWorldTimerDue(
+  clock: Pick<SlurpSimulationTuning["clock"], "backgroundTimer">,
+  lastRunMs: number,
+  nowMs: number,
+): boolean {
+  return clock.backgroundTimer || nowMs - lastRunMs >= SLURP_WORLD_IDLE_POLL_MS;
+}
+
+/**
+ * The same storage with `recordCreatorEvent` capped at `max` calls (never past the hard ceiling).
+ * Storage methods call `this.recordCreatorEvent`, so arc events written inside the storage count too.
+ */
+export function slurpCapTickEvents<T extends { recordCreatorEvent: (...args: never[]) => Promise<void> }>(
+  storage: T,
+  max: number,
+): T {
+  let left = Math.min(max, SLURP_TUNING_EVENTS_PER_TICK_CEILING);
+  return {
+    ...storage,
+    recordCreatorEvent: (...args: Parameters<T["recordCreatorEvent"]>) =>
+      left-- > 0 ? storage.recordCreatorEvent(...args) : Promise.resolve(),
+  };
+}

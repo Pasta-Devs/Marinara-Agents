@@ -18,6 +18,7 @@ import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js
 import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
 import { isAmbientNoodleAccount } from "./slurp-ambient-profiles.js";
 import { tryNoodleOperation } from "./slurp-operation-lock.js";
+import { slurpCapTickEvents } from "./slurp-tuning.js";
 import { slurpCreatorReach } from "./slurp-reach.js";
 import { generateSlurpPopulationMember, slurpMembersActiveAt, type SlurpSpendTier } from "./slurp-population.js";
 import { isNotableAudienceArcChange, slurpNextAudienceArc } from "./slurp-audience-arc.js";
@@ -126,6 +127,9 @@ async function readPulseMark(db: DB): Promise<Date | null> {
  * simulate yet, and inventing one would open a brand-new install onto a backlog it never earned.
  */
 export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<SlurpWorldResult> {
+  // The one guard for every caller (read catch-up and timer): a second call while a tick runs gets
+  // `busy` and applies nothing, and the mark is read inside the claim, so nothing double-applies.
+  // ponytail: in-process lock only; a multi-process deployment needs a DB lease on TICK_KEY.
   const operation = await tryNoodleOperation("slurp-world-tick", async () => {
     const since = await readLastTick(db);
     if (!since) {
@@ -133,11 +137,12 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       return { status: "idle" as const, actions: 0 };
     }
 
-    const noodle = createSlurpStorage(db);
-    const settings = await noodle.getSettings();
+    const settings = await createSlurpStorage(db).getSettings();
     const activity = slurpWorldActivityMultiplier(settings.worldActivity);
     const scale = slurpPlatformScaleMultiplier(settings.platformScale);
     const tuning = settings.simulationTuning;
+    // Every event this tick writes goes through one budget, arc events inside storage included.
+    const noodle = slurpCapTickEvents(createSlurpStorage(db), tuning.clock.maxEventsPerTick);
     /** Churn is a full scan, so it only runs when enough time has passed for it to find anything. */
     const CHURN_MIN_ELAPSED_DAYS = tuning.funnel.churnDays;
     /** How many people the world keeps on hand to act. Small: actions per tick are capped anyway. */
@@ -253,8 +258,10 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     // cadence. The roll is deterministic per `funnel.rollCadence` bucket and a payment sets
     // `paidThroughAt` a week ahead, so repeated ticks cannot bill the same person twice.
     //
-    // ponytail: a full tie scan per tick with one member read per distinct member. Add a batch
-    // member getter, or a due-date index on ties, if the audience grows past a few thousand rows.
+    // ponytail: a full tie scan per tick with one member read per distinct member. Ties that cannot
+    // decide anything (paid through the future, or unpaid and not a follower) skip the member read.
+    // Add a batch member getter, or a due-date index on ties, if the audience grows past a few
+    // thousand rows.
     //
     // Ambient accounts hold ties but no population row. They pay only with `funnel.ambientCanPay`,
     // on the spend tier their id would generate; otherwise they read as `none`, which never
@@ -269,6 +276,9 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     for (const account of accounts) {
       const price = await noodle.getCreatorSubscriptionPrice(account.id).catch(() => 0);
       for (const tie of await population.listTiesForCreator(account.id)) {
+        // Mirrors the `none` branches of `slurpAudienceSubscriptionDecision` that ignore spend tier.
+        const paidThrough = tie.paidThroughAt ? Date.parse(tie.paidThroughAt) : Number.NaN;
+        if (Number.isFinite(paidThrough) ? until.getTime() < paidThrough : tie.stage !== "follower") continue;
         if (!spendTiers.has(tie.memberId)) {
           const member = await population.get(tie.memberId).catch(() => null);
           spendTiers.set(
@@ -528,7 +538,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     let applied = 0;
     for (const action of plan) {
       try {
-        if (await applyAction(db, action, until)) applied += 1;
+        if (await applyAction(db, action, until, noodle)) applied += 1;
       } catch (error) {
         // One failed action must not abandon the rest of the tick, and must never stop the mark
         // being written — otherwise the same stretch of time is replayed on every call.
@@ -576,8 +586,12 @@ async function resolveActor(
   };
 }
 
-async function applyAction(db: DB, action: SlurpWorldAction, at: Date): Promise<boolean> {
-  const noodle = createSlurpStorage(db);
+async function applyAction(
+  db: DB,
+  action: SlurpWorldAction,
+  at: Date,
+  noodle: ReturnType<typeof createSlurpStorage>,
+): Promise<boolean> {
   const actor = await resolveActor(db, action.actorAccountId);
   if (!actor) return false;
 

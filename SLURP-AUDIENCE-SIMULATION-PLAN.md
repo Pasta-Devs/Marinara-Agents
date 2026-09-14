@@ -13,7 +13,7 @@ This is a handoff artifact. A fresh agent should be able to pick up any slice fr
 | ----- | ---- | ----- |
 | 1 | Simulation Tuning object, presets, rules read values from Tuning | done |
 | 2 | Simulation bug fixes (follow type, subs every tick, ambient pay, like budget, trickle, conversion growth) | done |
-| 3 | Free clock: server timer, lock, catch-up cap | not started |
+| 3 | Free clock: server timer, lock, catch-up cap | done |
 | 4 | Simulation settings UI + live estimate | not started |
 | 5 | Fan Types: model, built-ins, migration, voice in prompts | not started |
 | 6 | Per-type reaction banks, batched bank growth, rebalance population | not started |
@@ -273,3 +273,17 @@ Derived on `origin/staging` (8924a8c8) before slice 1, running each test with `n
   `planSlurpWorldPulse` directly.
 - `clock.catchUpHours` now drives `slurpWorldElapsedDays` (72h = old 3 days). `tickMinutes`,
   `backgroundTimer` and `maxEventsPerTick` are still unread (slice 3).
+
+## Slice 3 notes (for later slices)
+
+- The timer is the existing `slurp-world-scheduler.service.ts` (already started/stopped via
+  `addTeardown` in `server-entry.ts`). It wakes every `clock.tickMinutes`, re-reads settings each
+  wake, and ticks when `slurpWorldTimerDue` says so: every wake with `backgroundTimer`, else the old
+  6h cadence (`SLURP_WORLD_IDLE_POLL_MS`). Slice 8's background worker mode can hang off this wake.
+- Lock: no new guard. `tryNoodleOperation("slurp-world-tick")` already refuses overlapping ticks
+  (`busy`) for the read catch-up and the timer. In-process only (`ponytail:` note for a DB lease).
+- `clock.maxEventsPerTick` caps `recordCreatorEvent` through `slurpCapTickEvents` (tick storage,
+  including arc events written inside storage). Commission/message events written by the messages
+  storage are not counted; they are bounded by `world.maxActionsPerTick`.
+- Subscription scan skips the member read for ties that cannot decide (paid through the future, or
+  unpaid and not `follower`). Still a full tie scan; batch getter deferred.
