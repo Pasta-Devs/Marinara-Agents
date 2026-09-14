@@ -2,7 +2,7 @@
 
 ## 0.0.11 — 2026-09-14
 
-- Fixed AI Creator drafts failing when the model left out gender or tags.
+- Fixed AI Creator drafts that failed or could not be saved because the model left out gender or gave fewer than three tags.
 
 ## 0.0.10 — 2026-09-14
 

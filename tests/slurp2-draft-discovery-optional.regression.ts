@@ -22,4 +22,17 @@ assert.equal(
   false,
 );
 
-console.log("slurp2 draft discovery optional regression passed");
+// The prompt must ask for what the create step requires: a gender and at least three tags.
+import("node:fs").then(({ readFileSync }) => {
+  const service = readFileSync(
+    new URL(
+      "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-stage-profile-draft.service.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(service, /gender must be male, female, or other\./u);
+  assert.doesNotMatch(service, /otherwise use null/u, "the prompt must not invite a null gender");
+  assert.match(service, /three to eight relevant values/u);
+  console.log("slurp2 draft discovery optional regression passed");
+});

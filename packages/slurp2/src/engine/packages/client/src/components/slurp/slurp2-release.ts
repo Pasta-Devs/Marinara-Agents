@@ -15,7 +15,9 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
   {
     version: "0.0.11",
     date: "2026-09-14",
-    notes: ["Fixed AI Creator drafts failing when the model left out gender or tags."],
+    notes: [
+      "Fixed AI Creator drafts that failed or could not be saved because the model left out gender or gave fewer than three tags.",
+    ],
   },
   {
     version: "0.0.10",
