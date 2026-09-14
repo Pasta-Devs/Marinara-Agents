@@ -184,6 +184,32 @@ export const SLURP_SHIPPED_REACTIONS = [
   "the audacity honestly",
 ] as const;
 
+/**
+ * A starter bank per built-in Fan Type.
+ *
+ * Three bodies each, not thirty: the point is that a Lurker sounds unlike a Troll on the first
+ * tick of a fresh install, before any model call has ever run. Volume still comes from the shared
+ * bank underneath and from `slurp-reaction-bank.operation.ts` growing each type past this floor.
+ */
+export const SLURP_SHIPPED_TYPE_REACTIONS: Readonly<Record<string, readonly string[]>> = {
+  regular: ["this is lovely", "always a good one", "made my evening"],
+  "night-owl": ["3am and here I am", "why am I awake for this", "the night shift approves"],
+  "crossover-fan": [
+    "found you through someone else and stayed",
+    "this beats what I came from",
+    "recommending you again",
+  ],
+  troll: ["sure ok", "bold of you to post this", "not paying for it though"],
+  newcomer: ["new here, is it always like this", "wait how did I not know about you", "just followed"],
+  lurker: ["🫶", "👀", "❤️"],
+  superfan: [
+    "been here since the early ones and this is top three",
+    "you have gotten so good at this",
+    "I noticed the change and I love it",
+  ],
+  whale: ["worth every coin", "put this in the shop", "take my money honestly"],
+};
+
 const REACTION_TAILS = ["", "", "", " 🔥", " 😍", " 🥺", "!!", "…", " ❤️", " 😭"] as const;
 
 /**
@@ -198,7 +224,21 @@ const REACTION_TAILS = ["", "", "", " 🔥", " 😍", " 🥺", "!!", "…", " �
  * floor, and the stored bank is what carries volume past it.
  */
 export function slurpAudienceReaction(seed: string, extraBodies: readonly string[] = []): string {
-  const bodies = extraBodies.length > 0 ? [...SLURP_SHIPPED_REACTIONS, ...extraBodies] : SLURP_SHIPPED_REACTIONS;
+  return slurpAudienceReactionFrom(
+    seed,
+    extraBodies.length > 0 ? [...SLURP_SHIPPED_REACTIONS, ...extraBodies] : SLURP_SHIPPED_REACTIONS,
+  );
+}
+
+/**
+ * The same line, from a body pool the caller chose.
+ *
+ * Per-type banks need the pool decided outside this function — a Troll drawing from the shared
+ * shipped bodies is exactly what the fan types were added to stop. An empty pool falls back to the
+ * shipped bodies, so a caller can never produce a blank comment.
+ */
+export function slurpAudienceReactionFrom(seed: string, pool: readonly string[]): string {
+  const bodies = pool.length > 0 ? pool : SLURP_SHIPPED_REACTIONS;
   const opener = REACTION_OPENERS[pickIndex(seed, "reaction-open", REACTION_OPENERS.length)]!;
   const body = bodies[pickIndex(seed, "reaction", bodies.length)]!;
   const tail = REACTION_TAILS[pickIndex(seed, "reaction-tail", REACTION_TAILS.length)]!;

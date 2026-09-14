@@ -144,6 +144,7 @@ import {
 import { SLURP_AUDIENCE_TONES, SLURP_DEFAULT_AUDIENCE_TONE } from "../slurp/slurp-tone.js";
 import { SLURP_REALISTIC_TUNING, slurpSimulationTuningSchema } from "../slurp/slurp-tuning.js";
 import { slurpFanTypesDefault, slurpFanTypesSchema, slurpNormalizeFanTypes } from "../slurp/slurp-fan-types.js";
+import { slurpNormalizeReactionBanks, type SlurpReactionBanks } from "../slurp/slurp-reaction-bank.js";
 import {
   SLURP_DEFAULT_PLATFORM_SCALE,
   SLURP_DEFAULT_WORLD_ACTIVITY,
@@ -485,7 +486,7 @@ export const slurpSettingsSchema = z.object({
    * the player can edit or clear in Settings, and somewhere a rare, cheap generation can leave new
    * lines behind. One call buys hundreds of comments.
    */
-  audienceReactionBank: z.array(z.string().min(1).max(120)).max(400),
+  audienceReactionBank: z.unknown().transform(slurpNormalizeReactionBanks),
   worldActivity: z.enum(SLURP_WORLD_ACTIVITY),
   platformScale: z.enum(SLURP_PLATFORM_SCALE),
   generationConnectionId: z.string().nullable(),
@@ -1219,7 +1220,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   fanRepliesPerRefresh: 6,
   // Ships empty: the shipped bodies carry a new install on their own, and a bank the player never
   // asked for should not arrive pre-filled with lines they did not choose.
-  audienceReactionBank: [],
+  audienceReactionBank: { shared: [], byType: {} } as SlurpReactionBanks,
   fanArchetypeWeights: {
     ordinary: 1,
     eccentric: 1,

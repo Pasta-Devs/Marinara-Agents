@@ -119,7 +119,7 @@ assert.match(
 // post are three words, and paying a model for the highest-volume, least-readable text on the
 // platform is the worst trade available.
 assert.match(world, /type: isComment \? "reply" : "like"/u);
-assert.match(world, /content: isComment \? slurpAudienceReaction\(/u);
+assert.match(world, /content: isComment\s*\?\s*slurpAudienceReactionFrom\(/u);
 const applyPulseBody = world.slice(world.indexOf("async function applyPulse"));
 assert.doesNotMatch(applyPulseBody.slice(0, 1500), /generate|Generation|connection/u, "the pulse must stay free");
 

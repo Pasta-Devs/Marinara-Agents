@@ -3036,12 +3036,12 @@ export function SlurpSettings({
                         <Field
                           label={t("ui.slurp.settings.audience.reactionBank")}
                           detail={t("ui.slurp.settings.audience.reactionBankDetail", {
-                            count: settings.audienceReactionBank.length,
+                            count: settings.audienceReactionBank.shared.length,
                           })}
                         >
                           <textarea
                             rows={6}
-                            value={reactionBankDraft ?? settings.audienceReactionBank.join("\n")}
+                            value={reactionBankDraft ?? settings.audienceReactionBank.shared.join("\n")}
                             onChange={(event) => setReactionBankDraft(event.target.value)}
                             onBlur={() => {
                               const draft = reactionBankDraft;
@@ -3058,8 +3058,10 @@ export function SlurpSettings({
                                 seen.add(key);
                                 next.push(body);
                               }
-                              if (next.join("\n") !== settings.audienceReactionBank.join("\n"))
-                                void update("audienceReactionBank", next);
+                              // The box edits the shared bank only; per-type banks have their own
+                              // editor in the Fan Types panel.
+                              if (next.join("\n") !== settings.audienceReactionBank.shared.join("\n"))
+                                void update("audienceReactionBank", { ...settings.audienceReactionBank, shared: next });
                             }}
                             className="w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] p-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
                           />

@@ -37,6 +37,7 @@ import {
   type NoodlerPostView,
 } from "@marinara-engine/shared";
 import { SLURP_FUNNEL_STAGES, SLURP_NAMED_CAST_LIMIT } from "../services/slurp/slurp-population.js";
+import { planSlurpFanTypeRebalance } from "../services/slurp/slurp-fan-types.js";
 
 /**
  * A subscriber row, widened for the generated audience.
@@ -562,6 +563,25 @@ export async function slurpRoutes(app: FastifyInstance) {
   app.post("/arc-library/:id/reset", async (req, reply) => {
     const settings = await noodle.resetArcType((req.params as { id: string }).id);
     return settings ?? reply.code(404).send({ error: "Not a built-in arc type." });
+  });
+  // Shares only ever applied to new members. Preview and apply run the same deterministic plan, so
+  // what the player is shown is what gets written.
+  async function planFanTypeRebalance() {
+    const settings = await noodle.getSlurpSettings();
+    const members = await createSlurpPopulationStorage(app.db).listAll(5000);
+    return planSlurpFanTypeRebalance(members, settings.fanTypes);
+  }
+  app.get("/fan-types/rebalance/preview", async () => {
+    const plan = await planFanTypeRebalance();
+    return { changed: plan.changes.length, counts: plan.counts };
+  });
+  app.post("/fan-types/rebalance", async () => {
+    const plan = await planFanTypeRebalance();
+    const population = createSlurpPopulationStorage(app.db);
+    for (const change of plan.changes) {
+      await population.setFanType(change.memberId, change.to).catch(() => undefined);
+    }
+    return { changed: plan.changes.length, counts: plan.counts };
   });
   app.get("/discovery-tags/usage", async () => noodle.countDiscoveryTagUsage());
   app.post("/discovery-tags/rename", async (req, reply) => {

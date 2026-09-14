@@ -35,11 +35,13 @@ import { slurpPlatformScaleMultiplier, slurpWorldActivityMultiplier } from "./sl
 import {
   slurpAudienceOpener,
   slurpAudienceQuestion,
-  slurpAudienceReaction,
+  slurpAudienceReactionFrom,
+  SLURP_SHIPPED_TYPE_REACTIONS,
   slurpCommissionBrief,
   slurpCreatorOpener,
   slurpCreatorReaction,
 } from "./slurp-world-copy.js";
+import { slurpReactionBodiesForType, type SlurpReactionBanks } from "./slurp-reaction-bank.js";
 import { enqueueSlurpPendingText } from "./slurp-pending-text.service.js";
 import { generateSlurpArc } from "./slurp-arc-generation.service.js";
 import {
@@ -338,6 +340,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
             paidThroughAt: tie.paidThroughAt,
             interactions: tie.interactions,
             followedAt: tie.followedAt,
+            renewChance: fanType.funnel.renewChance,
           },
           until,
           tuning.funnel,
@@ -459,7 +462,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     const landedBy = new Map<string, number>();
     for (const action of pulse) {
       try {
-        if (await applyPulse(db, action, settings.audienceReactionBank)) {
+        if (await applyPulse(db, action, settings.audienceReactionBank, settings.fanTypes)) {
           pulsed += 1;
           const weight = action.kind === "follow" ? 3 : 1;
           landedBy.set(action.creatorAccountId, (landedBy.get(action.creatorAccountId) ?? 0) + weight);
@@ -600,7 +603,15 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
 async function resolveActor(
   db: DB,
   actorAccountId: string,
-): Promise<{ id: string; entityId: string; handle: string; displayName: string; avatarUrl: string | null } | null> {
+): Promise<{
+  id: string;
+  entityId: string;
+  handle: string;
+  displayName: string;
+  avatarUrl: string | null;
+  fanTypeId?: string | null;
+  archetype?: string;
+} | null> {
   const account = await createSlurpStorage(db).getNoodlerAccountById(actorAccountId);
   if (account) {
     return {
@@ -619,6 +630,8 @@ async function resolveActor(
     handle: member.handle,
     displayName: member.displayName,
     avatarUrl: null,
+    fanTypeId: member.fanTypeId,
+    archetype: member.archetype,
   };
 }
 
@@ -717,17 +730,36 @@ async function applyAction(
  * highest-volume text on the platform and the least worth reading. The batched run keeps the
  * model, and keeps it for comments that have actually seen the post.
  */
-async function applyPulse(db: DB, action: SlurpPulseAction, reactionBank: readonly string[]): Promise<boolean> {
+async function applyPulse(
+  db: DB,
+  action: SlurpPulseAction,
+  banks: SlurpReactionBanks,
+  fanTypes: readonly SlurpFanType[],
+): Promise<boolean> {
   const noodle = createSlurpStorage(db);
   const actor = await resolveActor(db, action.actorAccountId);
   if (!actor) return false;
   const isComment = action.kind === "comment";
+  // Whose words these are. A comment is the only place the audience is heard, so it draws from the
+  // actor's own Fan Type bank before the shared one.
+  // An ambient account has no population row, so it is drawn onto a type by id, as the money pass
+  // already does, rather than all sounding like the fallback type.
+  const fanTypeId = !isComment
+    ? null
+    : actor.fanTypeId || actor.archetype
+      ? slurpResolveFanType(fanTypes, actor).id
+      : slurpPickFanType(fanTypes, actor.id).id;
   const result = await noodle.createNoodlerWorldInteraction(action.postId, {
     creatorAccountId: action.creatorAccountId,
     actorId: actor.id,
     type: isComment ? "reply" : "like",
     // Tier 1 copy, so this stays free: the pulse runs unattended and must never call the model.
-    content: isComment ? slurpAudienceReaction(`${action.postId}:${actor.id}`, reactionBank) : null,
+    content: isComment
+      ? slurpAudienceReactionFrom(
+          `${action.postId}:${actor.id}`,
+          slurpReactionBodiesForType(banks, fanTypeId, SLURP_SHIPPED_TYPE_REACTIONS[fanTypeId ?? ""] ?? []),
+        )
+      : null,
   });
   if (!result) return false;
   const advance = slurpPulseTieAdvance(action.kind, result.created);

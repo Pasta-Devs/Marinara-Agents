@@ -12,8 +12,13 @@ import { createSlurpStorage } from "../storage/slurp.storage.js";
 import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { slurpAudienceToneInstruction } from "./slurp-tone.js";
-import { mergeSlurpReactionBank, SLURP_REACTION_BANK_TARGET } from "./slurp-reaction-bank.js";
-import { SLURP_SHIPPED_REACTIONS } from "./slurp-world-copy.js";
+import {
+  mergeSlurpReactionBankBatch,
+  SLURP_REACTION_BANK_TARGET,
+  slurpReactionBodiesForType,
+} from "./slurp-reaction-bank.js";
+import { slurpFanVoiceForPrompt } from "./slurp-fan-types.js";
+import { SLURP_SHIPPED_REACTIONS, SLURP_SHIPPED_TYPE_REACTIONS } from "./slurp-world-copy.js";
 
 /**
  * Growing the free comment bank.
@@ -31,16 +36,34 @@ import { SLURP_SHIPPED_REACTIONS } from "./slurp-world-copy.js";
  * fails, or returns nothing usable leaves the shipped bodies doing their job.
  */
 
-/** How many to ask for in one call. Enough to be worth the round trip, short enough to parse. */
-const BATCH = 40;
+/** How many to ask for per bank in one call. Enough to be worth the round trip, short to parse. */
+const PER_BANK = 20;
+
+/** Never ask about more banks than this in one call, however many types the player defined. */
+const MAX_BANKS = 9;
 
 export type SlurpReactionBankOutcome = "idle" | "filled" | "busy" | "unavailable";
 
-/** Ask for one batch of new bodies. Returns what survived normalisation. */
+/**
+ * Ask for one batch of new bodies, for every bank that is under target.
+ *
+ * One call, not one per Fan Type: eight types under target would otherwise be eight generations
+ * for text nobody pays attention to, which is the trade this whole bank exists to avoid. Each bank
+ * gets its own key in the answer, described by its type's name, voice and tone so a Troll does not
+ * come back sounding like a Superfan.
+ */
 export async function topUpSlurpReactionBank(db: DB): Promise<SlurpReactionBankOutcome> {
   const noodle = createSlurpStorage(db);
   const settings = await noodle.getSettings();
-  if (settings.audienceReactionBank.length >= SLURP_REACTION_BANK_TARGET) return "idle";
+  const banks = settings.audienceReactionBank;
+  const targets: Record<string, number> = {};
+  if (banks.shared.length < SLURP_REACTION_BANK_TARGET) targets.shared = SLURP_REACTION_BANK_TARGET;
+  const types = settings.fanTypes
+    .filter((type) => type.enabled && type.bank.targetSize > 0)
+    .filter((type) => (banks.byType[type.id] ?? []).length < type.bank.targetSize)
+    .slice(0, MAX_BANKS);
+  for (const type of types) targets[type.id] = type.bank.targetSize;
+  if (Object.keys(targets).length === 0) return "idle";
 
   const connection = await resolveSlurpTextConnection(createConnectionsStorage(db), settings.generationConnectionId);
   if (!connection) return "unavailable";
@@ -61,19 +84,42 @@ export async function topUpSlurpReactionBank(db: DB): Promise<SlurpReactionBankO
       connection.treatAsLocalEndpoint === "true",
       connection.defaultParameters,
     );
+    const briefs = [
+      ...(targets.shared === undefined
+        ? []
+        : [`"shared": comments anybody could leave. Avoid: ${SLURP_SHIPPED_REACTIONS.slice(0, 12).join(", ")}`]),
+      ...types.map((type) => {
+        const sample = slurpReactionBodiesForType(
+          { shared: [], byType: banks.byType },
+          type.id,
+          SLURP_SHIPPED_TYPE_REACTIONS[type.id] ?? [],
+        ).slice(0, 6);
+        return [
+          `"${type.id}": ${type.name}.`,
+          slurpFanVoiceForPrompt(type.voice) ? `Voice: ${slurpFanVoiceForPrompt(type.voice)}` : "",
+          type.tone ? `Tone: ${type.tone}.` : "",
+          sample.length > 0 ? `They already say: ${sample.join(", ")}. Write different ones.` : "",
+        ]
+          .filter(Boolean)
+          .join(" ");
+      }),
+    ];
     const response = await provider.chatComplete(
       [
         {
           role: "system",
           content: [
-            `Write ${BATCH} short throwaway comments a fan leaves under a post they liked.`,
+            `Write ${PER_BANK} short throwaway comments for each group below, as that group would leave them under a post they liked.`,
             "These are the noise floor of a comment section: three or four words from somebody who wanted to be seen saying them. Not reviews, not questions, not compliments with reasons.",
             "Lower case. No trailing punctuation and no emoji — those are added separately.",
             "Each one must say nothing specific about the post: they are reused under thousands of different pictures.",
             "Never name a person, a body part, an act, a place, or a price.",
             slurpAudienceToneInstruction(settings.audienceTone, settings.simulationTuning.prompts.tones),
-            `Avoid anything close to these, which are already in the bank: ${[...SLURP_SHIPPED_REACTIONS, ...settings.audienceReactionBank].join(", ")}`,
-            'Return JSON only: {"lines": ["...", "..."]}',
+            "Groups:",
+            ...briefs,
+            `Return JSON only, one key per group: {${Object.keys(targets)
+              .map((id) => `"${id}": ["...", "..."]`)
+              .join(", ")}}`,
           ].join("\n"),
         },
         { role: "user", content: "Write the lines." },
@@ -88,7 +134,7 @@ export async function topUpSlurpReactionBank(db: DB): Promise<SlurpReactionBankO
         maxTokens: clampGenerationMaxOutputTokens({
           provider: connection.provider,
           model: connection.model,
-          maxTokens: 1024,
+          maxTokens: 512 + 256 * Object.keys(targets).length,
           maxTokensOverride: connection.maxTokensOverride,
         }),
         stream: false,
@@ -96,15 +142,21 @@ export async function topUpSlurpReactionBank(db: DB): Promise<SlurpReactionBankO
     );
     // Guarded like every other Slurp parse: an empty provider answer must name its cause and its
     // fix, not surface as "Unexpected end of JSON input" in a log nobody can act on.
-    const parsed = parseGameJsonish(requireModelAnswer(response.content ?? "", "free comment lines"));
-    const lines = Array.isArray(parsed) ? parsed : ((parsed as { lines?: unknown })?.lines ?? []);
-    const merged = mergeSlurpReactionBank(settings.audienceReactionBank, Array.isArray(lines) ? lines : []);
-    if (merged.length === settings.audienceReactionBank.length) return "unavailable";
+    // A refused or malformed run is a no-op, never a failed tick: the shipped bodies keep working.
+    let parsed: unknown;
+    try {
+      parsed = parseGameJsonish(requireModelAnswer(response.content ?? "", "free comment lines"));
+    } catch (error) {
+      logger.warn(error, "[slurp-bank] Could not read the comment bank answer");
+      return "unavailable";
+    }
+    const merged = mergeSlurpReactionBankBatch(banks, parsed, targets);
+    if (merged === banks) return "unavailable";
     await noodle.updateSettings({ audienceReactionBank: merged });
     logger.info(
-      "[slurp-bank] Added %d free comment lines (bank now %d)",
-      merged.length - settings.audienceReactionBank.length,
-      merged.length,
+      "[slurp-bank] Grew %d comment banks (shared now %d)",
+      Object.keys(targets).length,
+      merged.shared.length,
     );
     return "filled";
   } finally {

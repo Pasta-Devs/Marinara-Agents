@@ -81,6 +81,8 @@ export type SlurpAudienceSubscriptionSubject = {
   interactions?: number;
   /** When they became a follower. Null for a tie that predates the column. */
   followedAt?: string | null;
+  /** The Fan Type's `funnel.renewChance`. Missing reads as 1: everybody affordable renews. */
+  renewChance?: number;
 };
 
 export type SlurpAudienceSubscriptionDecision = "subscribe" | "renew" | "lapse" | "none";
@@ -112,7 +114,13 @@ export function slurpAudienceSubscriptionDecision(
     if (at.getTime() < paidThrough) return "none";
     // The price went past what this person will pay, or they were priced in and are not any more.
     // Somebody leaving because the Creator raised the price is a readable reason to leave.
-    return affordable ? "renew" : "lapse";
+    if (!affordable) return "lapse";
+    // Not everybody renews just because they can. Rolled on the same key as the conversion roll, so
+    // the answer is stable inside a bucket rather than flipping between two page loads.
+    const renewChance = subject.renewChance ?? 1;
+    if (renewChance >= 1) return "renew";
+    const renewKey = slurpAudienceRollKey(at, funnel.rollCadence);
+    return roll(`renew:${subject.memberId}:${subject.creatorAccountId}:${renewKey}`) < renewChance ? "renew" : "lapse";
   }
 
   if (!affordable) return "none";

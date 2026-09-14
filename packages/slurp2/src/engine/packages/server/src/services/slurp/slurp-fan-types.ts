@@ -374,3 +374,41 @@ export function slurpFanVoiceForPrompt(voice: string | null | undefined): string
     .trim();
   return trimmed ? trimmed.slice(0, SLURP_FAN_VOICE_PROMPT_MAX) : undefined;
 }
+
+/** One member, as much of them as a rebalance needs. */
+export type SlurpRebalanceMember = { id: string; fanTypeId?: string | null; archetype?: string };
+
+export type SlurpFanTypeRebalance = {
+  /** Only the members whose type actually changes. */
+  changes: Array<{ memberId: string; from: string; to: string }>;
+  /** Per type id: how many members hold it now, and how many would after. */
+  counts: Record<string, { before: number; after: number }>;
+};
+
+/**
+ * Reassign the existing population to the current shares.
+ *
+ * Shares only ever applied to new members, so a player who moved a slider watched nothing happen
+ * to the crowd they already had. This is the same weighted draw generation uses, over the member
+ * id, so it is deterministic: the preview a player approves is exactly what the apply writes, and
+ * running it twice changes nothing the second time.
+ */
+export function planSlurpFanTypeRebalance(
+  members: readonly SlurpRebalanceMember[],
+  types: readonly SlurpFanType[],
+): SlurpFanTypeRebalance {
+  const counts: Record<string, { before: number; after: number }> = {};
+  const bump = (id: string, key: "before" | "after") => {
+    counts[id] ??= { before: 0, after: 0 };
+    counts[id][key] += 1;
+  };
+  const changes: SlurpFanTypeRebalance["changes"] = [];
+  for (const member of members) {
+    const from = slurpResolveFanType(types, member).id;
+    const to = slurpPickFanType(types, member.id).id;
+    bump(from, "before");
+    bump(to, "after");
+    if (from !== to) changes.push({ memberId: member.id, from, to });
+  }
+  return { changes, counts };
+}

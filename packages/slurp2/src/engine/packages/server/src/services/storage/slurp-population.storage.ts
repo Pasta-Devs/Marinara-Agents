@@ -140,6 +140,11 @@ export function createSlurpPopulationStorage(db: DB) {
       return rows.map((row) => mapMember(row as Record<string, unknown>));
     },
 
+    /** Move one member onto another Fan Type. Used by the rebalance; nothing else rewrites this. */
+    async setFanType(memberId: string, fanTypeId: string): Promise<void> {
+      await db.update(slurpPopulation).set({ fanTypeId }).where(eq(slurpPopulation.id, memberId));
+    },
+
     async touch(memberId: string): Promise<void> {
       await db.update(slurpPopulation).set({ lastActiveAt: now() }).where(eq(slurpPopulation.id, memberId));
     },

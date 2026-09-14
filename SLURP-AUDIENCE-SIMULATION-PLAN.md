@@ -9,18 +9,20 @@ This is a handoff artifact. A fresh agent should be able to pick up any slice fr
 
 ## Status
 
-| Slice | What                                                                                                      | State       |
-| ----- | --------------------------------------------------------------------------------------------------------- | ----------- |
-| 1     | Simulation Tuning object, presets, rules read values from Tuning                                          | done        |
-| 2     | Simulation bug fixes (follow type, subs every tick, ambient pay, like budget, trickle, conversion growth) | done        |
-| 3     | Free clock: server timer, lock, catch-up cap                                                              | done        |
-| 4     | Simulation settings UI + live estimate                                                                    | done        |
-| 5     | Fan Types: model, built-ins, migration, voice in prompts                                                  | done        |
-| 6     | Per-type reaction banks, batched bank growth, rebalance population                                        | not started |
-| 7     | Fan Types editor UI                                                                                       | not started |
-| 8     | Model Worker: job queue, budget ledger, modes                                                             | not started |
-| 9     | AI Budget UI, Prompts UI, Import/Export                                                                   | not started |
-| 10    | Version bump 0.0.10, CHANGELOG, rebuild package + catalog, validation                                     | not started |
+| Slice | What                                                                                                                          | State       |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| 1     | Simulation Tuning object, presets, rules read values from Tuning                                                              | done        |
+| 2     | Simulation bug fixes (follow type, subs every tick, ambient pay, like budget, trickle, conversion growth)                     | done        |
+| 3     | Free clock: server timer, lock, catch-up cap                                                                                  | done        |
+| 4     | Simulation settings UI + live estimate                                                                                        | done        |
+| 5     | Fan Types: model, built-ins, migration, voice in prompts                                                                      | done        |
+| 6     | Per-type reaction banks, batched bank growth, rebalance population                                                            | done        |
+| 6a    | Believability, cheap: weekly/daily rhythm, visible lapse + price complaints, word of mouth + viral luck, likes on older posts | not started |
+| 6b    | Believability, medium: per-actor world events (fan-type question/dm/commission/tip weights), fan memory in prompts            | not started |
+| 7     | Fan Types editor UI                                                                                                           | not started |
+| 8     | Model Worker: job queue, budget ledger, modes                                                                                 | not started |
+| 9     | AI Budget UI, Prompts UI, Import/Export                                                                                       | not started |
+| 10    | Version bump 0.0.10, CHANGELOG, rebuild package + catalog, validation                                                         | not started |
 
 ## Why
 
@@ -350,3 +352,30 @@ Derived on `origin/staging` (8924a8c8) before slice 1, running each test with `n
 - `planSlurpWorldPulse` is unchanged when `actorWeights` is absent, so the estimate and the older
   pulse tests still see the fixed 18 / 16 / 66 split. Slice 9's estimate can pass weights to show
   fan types in the preview.
+
+## Slice 6 notes (for later slices)
+
+- Storage kept its name and changed shape: `settings.audienceReactionBank` is now
+  `{ shared: string[], byType: Record<fanTypeId, string[]> }`. The schema entry is
+  `z.unknown().transform(slurpNormalizeReactionBanks)`, so a legacy flat array normalises into
+  `shared` with nothing dropped and no migration pass. The Settings textarea edits `shared` only.
+- `slurp-reaction-bank.ts` is the pure module slice 7 reads: `slurpNormalizeReactionBanks`,
+  `slurpReactionBodiesForType(banks, fanTypeId, starters)`, `mergeSlurpReactionBankBatch`,
+  `SLURP_TYPE_BANK_THIN` (12). A type under twelve bodies of its own also draws the shared bank;
+  at or above it, only its own. `SLURP_SHIPPED_TYPE_REACTIONS` in `slurp-world-copy.ts` holds three
+  starter bodies per built-in, so a fresh install already sounds different per type.
+- `slurpAudienceReactionFrom(seed, pool)` is the new entry point; `slurpAudienceReaction` is a thin
+  wrapper over it and is unchanged for old callers.
+- Growth is one call for every bank under target (`shared` plus up to nine types), each brief
+  carrying the type's name, voice, tone and a six-line sample, answered as `{ [bankId]: string[] }`.
+  Refused, malformed, or all-duplicate answers return `unavailable` and write nothing.
+- Rebalance: `planSlurpFanTypeRebalance(members, types)` in `slurp-fan-types.ts` (pure, deterministic
+  on the member id, so preview equals apply and a second run is a no-op) plus
+  `GET /slurp/fan-types/rebalance/preview` and `POST /slurp/fan-types/rebalance`, both returning
+  `{ changed, counts: { [typeId]: { before, after } } }`. Storage gained `population.setFanType`.
+  Reads at most 5000 members; a bigger population needs paging.
+- `funnel.renewChance` is wired: an affordable subscriber now rolls to renew on the same cadence key
+  as the conversion roll. `funnel.loyaltyDays` was skipped — nothing stores when a subscription
+  began, only `paidThroughAt`, so it needs a column and belongs with the funnel rework.
+- `bank.targetSize` and `tone` are now read. Still unread from slice 5: `behavior.question` / `dm` /
+  `commission` / `tip` / `unlock`, `spend.tipChance`, `funnel.loyaltyDays`.

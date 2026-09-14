@@ -392,7 +392,7 @@ export type SlurpSettings = {
   maxRepliesPerRefresh: number;
   allowGalleryImageAttachments: boolean;
   fanActivityRunsPerDay: number;
-  audienceReactionBank: string[];
+  audienceReactionBank: { shared: string[]; byType: Record<string, string[]> };
   fanLikesPerRefresh: number;
   fanRepliesPerRefresh: number;
   fanArchetypeWeights: Record<string, number>;
