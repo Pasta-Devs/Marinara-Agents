@@ -22,14 +22,18 @@ Everything else is optional, for when you want more:
 ## The Dock
 
 Opened from the chevron above the Engine's native Tracker Panel. A floating, resizable window with
-its own UI Size and Thumbnail Size controls, split into three sections: **Outfits**, **Equipped
-items** (around your portrait), and **Inventory**.
+its own UI Size and Thumbnail Size controls, split into two top-level tabs:
 
-- Each section can be collapsed to a narrow strip to save space.
-- Narrow the dock (or view it on a small screen) and the three sections stack vertically instead
-  of side-by-side.
-- Matches whatever theme you're running — no separate light/dark setting to configure.
-- Should work on mobile, though this hasn't actually been tested yet.
+- **Inventory** — Recent Agent Update (see below) above three sections: **Outfits**, **Equipped
+  items** (around your portrait), and **Bag**. Each section can be collapsed to a narrow strip to
+  save space, and they stack vertically instead of side-by-side once the dock (or your screen) gets
+  narrow.
+- **Settings** — grouped under Appearance, Display, Image Generation, and Data, with a small `?`
+  next to anything that needs more explaining than its label alone — tap or hover it for details,
+  rather than a permanent paragraph taking up space whether you need it or not.
+
+Matches whatever theme you're running — no separate light/dark setting to configure. Should work on
+mobile, though this hasn't actually been tested yet.
 
 ## Equip Slots & Outfits
 
@@ -50,11 +54,17 @@ Build Wardrobe):
 
 ## Inventory (the Bag)
 
-Add, edit, and remove items — name, description, quantity, and where it lives:
+**+ Add Item** opens a small modal (name, description, quantity, and where it lives) rather than
+leaving an add form always open and eating space above the list:
 - **Bag** (just carried), a **named stash** (e.g. "in the car," "at home" — not carried on your
   person), or **equipped** in a specific slot.
 - Give an item a **default slot**, so it always knows which slot it belongs to when equipped using
   the "Equip" buttons.
+
+Each item's card shows Edit and Delete behind a small **⋯** menu — only Equip stays a visible
+button — so the description gets more room instead of clipping. Slot and stash info only shows on
+the card when there's actually something to say (a default slot set, or a named stash) — a plain
+bag item with no default slot shows neither line at all.
 
 The Bag is split into three tabs so a busy inventory stays easy to scan:
 - **Items** — everything else.
@@ -100,12 +110,14 @@ large your inventory gets.
   and outfits to review before anything's added — it'll reuse wearable items you already have
   instead of always inventing new ones. Uses the *same* connection as the tracking agent (set once
   in the Agents menu — switch it there and both move together).
-- **Recent Automatic Update**: right in Settings, a plain-language readout of what the last turn
-  actually added, changed, or removed, alongside the agent's own stated reasoning. Each changed
-  item gets its own Revert button, for undoing one specific mistake without touching anything else
-  the turn got right — reverting refuses rather than overwrites if that item has changed again
-  since, so it can't clobber something newer.
-- **Restore Inventory**: a whole-state safety net in Settings, for when a turn goes wrong in a
+- **Recent Agent Update**: a collapsible section on the Inventory tab (right next to Restore
+  Inventory below) showing what the last turn actually added, changed, or removed — colored rows
+  (green/yellow/red) with a Revert button beside each one, for undoing one specific mistake without
+  touching anything else the turn got right. Reverting refuses rather than overwrites if that item
+  has changed again since, so it can't clobber something newer. The agent's own stated reasoning
+  shows underneath, even on a turn that changed nothing. Collapsed, the header still shows a
+  compact `+N ↑N −N` count so you can tell at a glance whether there's anything worth expanding for.
+- **Restore Inventory**: a whole-state safety net right beside it, for when a turn goes wrong in a
   bigger way than a single item. Revert to the inventory state from right before the agent's last
   automatic update, in one click — even with no export file to fall back on. (This only rewinds
   the agent's own last change, not any manual edits you've made since.)
@@ -176,6 +188,24 @@ overwrite an already-released version's artifact file if you forget to bump `VER
 published catalog until it's ready for testers.
 
 ## Changelog
+
+### 0.1.12
+
+- Dock layout overhaul. Settings moved to its own top-level tab (Inventory/Settings), grouped
+  under Appearance/Display/Image Generation/Data, with hover-and-tap info tooltips replacing the
+  permanent explanatory paragraphs that used to sit under every control. Recent Automatic Update
+  (renamed Recent Agent Update) moved into Settings' old spot, right next to Restore Inventory —
+  its collapsed header now shows a compact +N/↑N/−N count, its rows are colored (green/yellow/red,
+  keeping the existing symbols too), Revert sits to the left of each row, and it now shows the
+  agent's own reasoning even on a turn that changed nothing.
+- Item and outfit cards collapse Edit/Update/Delete into a "⋯" menu and promote Equip up to the
+  name row — descriptions get the width that used to go to a fixed action column. Delete still
+  confirms from inside the menu. The item-image and outfit-portrait "×" remove buttons now confirm
+  before clearing too (they didn't before).
+- "Stored at: Bag" and "Default Slot" no longer render on an item's card when they carry no real
+  information (plain bag, no default slot set) — only shown when there's something to actually say.
+- Add Item is now a modal (Cancel/Add Item) instead of an always-open inline form in the Bag
+  column, matching the Outfits column's own compact search-plus-action header.
 
 ### 0.1.11
 

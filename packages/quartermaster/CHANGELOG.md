@@ -1,5 +1,17 @@
 # Quartermaster changelog
 
+## 0.1.12 — 2026-09-14 [highlight]
+- Dock layout overhaul. Settings moved to its own top-level tab (Inventory/Settings), grouped
+  under Appearance/Display/Image Generation/Data with hover-and-tap info tooltips instead of
+  permanent explanatory paragraphs. Recent Automatic Update (renamed Recent Agent Update) moved
+  into Settings' old spot next to Restore Inventory, gained a collapsed-header +N/↑N/−N count,
+  colored rows, a left-side Revert button, and now shows the agent's reasoning even on a quiet
+  turn. Item/outfit cards collapse Edit/Update/Delete into a "⋯" menu and promote Equip to the
+  name row, giving descriptions the reclaimed width; Delete confirms there too. The item-image
+  and outfit-portrait remove buttons now confirm before clearing (they didn't before). "Stored
+  at: Bag" and "Default Slot" no longer render when they carry no information. Add Item is now
+  a modal instead of an always-open inline form.
+
 ## 0.1.11 — 2026-09-13 [highlight]
 - The tracking agent now targets specific changes (add/update/remove an item, equip an outfit)
   instead of re-listing the whole inventory every turn, using a short tag for existing items

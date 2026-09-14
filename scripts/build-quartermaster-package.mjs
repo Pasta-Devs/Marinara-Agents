@@ -41,7 +41,7 @@ const PACKAGE_ID = "quartermaster";
 // release (0.1.0-dev.2 < 0.1.0), so once a plain 0.1.0 is installed, no
 // prerelease build can ever look newer to Download Agents. Never reset the
 // version back down afterward, even across a long dev-iteration stretch.
-const VERSION = "0.1.11";
+const VERSION = "0.1.12";
 // Declared against the exact staging Engine this scaffold was built and tested
 // against. Do not lower this to reach stable users — see CONTRIBUTING.md.
 const ENGINE_MIN = "2.4.4";

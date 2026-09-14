@@ -76,6 +76,13 @@ const QM_DOCK_STYLE = `
   background:var(--border, rgba(128,128,128,0.4)); border-radius:3px;
 }
 .qm-desc-scroll::-webkit-scrollbar-thumb:hover{ background:var(--muted-foreground, rgba(128,128,128,0.6)); }
+.qm-tooltip-wrap{ position:relative; display:inline-flex; }
+.qm-tooltip-popover{ display:none; }
+.qm-tooltip-wrap:hover .qm-tooltip-popover,
+.qm-tooltip-wrap.qm-tooltip-open .qm-tooltip-popover{ display:block; }
+.qm-overflow-wrap{ position:relative; display:inline-flex; }
+.qm-overflow-menu{ display:none; }
+.qm-overflow-wrap.qm-overflow-open .qm-overflow-menu{ display:flex; }
 @media (max-width:767px){
   #qm-dock-root{
     top:var(--qm-mobile-top,0px) !important; left:0 !important; right:0 !important; bottom:0 !important;
@@ -269,41 +276,17 @@ const QM_ADD_ITEM_FRAME_STYLE = {
   boxSizing: "border-box",
 };
 
-// An item/outfit card's description preview should fill the card from the
-// row below the name down to the bottom, instead of sitting in a small
-// fixed box leaving the rest of the card's height unused next to a taller
-// portrait — while capping out and scrolling instead of growing the card
-// for a very long description, and never overflowing past the card itself.
-//
-// Three earlier revisions tried to get this from a JS-computed row height
-// and a JS-computed description max-height, and got it wrong each time: a
-// hand-measured constant for the action column's real button-stack height
-// (Edit/Update/Equip for outfits, Edit/Equip for items) came up short
-// against real font/line-height rendering (confirmed live, still
-// overflowing, twice, at different Thumbnail Sizes each time); and even
-// once overflow was fully fixed by dropping the computed height entirely
-// (leaving it "auto" so flexbox sizes the row to its tallest child), a
-// generous independent max-height on the description itself let long
-// descriptions visibly grow the card taller than the button stack needs —
-// not wrong, but not what was wanted: the buttons should set the card's
-// size, with the description scrolling within THAT, never expanding past
-// it.
-//
-// The actual fix: measure the action column's real rendered height, live,
-// after each render, and use exactly that as the description's max-height
-// — not a guessed constant, the browser's own measurement of its own real
-// content, so there's nothing left to get subtly wrong. actionColumn gets
-// alignSelf:"flex-start" specifically so it's never stretched by a taller
-// sibling — without that, its own rendered height would reflect whatever
-// the description just grew it to, not its true natural size, making the
-// measurement circular. _applyCardDescriptionCaps (below) runs once per
-// repaint via requestAnimationFrame (mirroring _updateConnectorLines'
-// own pattern — both need a real layout pass to measure against) and
-// divides out the current zoom factor: getBoundingClientRect() reports
-// the ZOOMED size when the UI Size control's CSS zoom is active, but the
-// max-height being SET will also be re-zoomed once applied, so using the
-// raw measured value directly would double-scale it.
+// An item/outfit card's description preview scrolls within a fixed cap
+// instead of growing the card for a very long description. Used to be
+// measured live against a same-row action column's real rendered height
+// (three earlier revisions of that, each subtly wrong — see git history if
+// this history matters again); that action column no longer exists at all
+// now that Edit/Update/Delete collapsed into the "⋯" overflow menu and the
+// description runs full width, so there's nothing left to measure against
+// — a plain fixed cap is simpler and, with the action column gone, no
+// longer trading anything away.
 const QM_DESC_LINE_HEIGHT_PX = 14;
+const QM_CARD_DESC_MAX_HEIGHT_PX = QM_DESC_LINE_HEIGHT_PX * 5;
 
 function qmBuildCardCornerDot(corner) {
   const dot = document.createElement("span");
@@ -417,6 +400,32 @@ function qmLocationLabel(location) {
   return location;
 }
 
+// Tracks whichever "tap-opened" popover (an info tooltip, a card's overflow
+// menu) is currently open -- at most one at a time, whatever kind -- so one
+// document-level click listener can close it when the next click lands
+// anywhere else. Both popover kinds share this: opening one always closes
+// whatever else was open first.
+let qmOpenPopover = null; // { wrapper, openClass } | null
+let qmPopoverDocumentListenerBound = false;
+function qmClosePopover() {
+  if (qmOpenPopover) qmOpenPopover.wrapper.classList.remove(qmOpenPopover.openClass);
+  qmOpenPopover = null;
+}
+function qmBindPopoverDocumentListener() {
+  if (qmPopoverDocumentListenerBound || typeof document === "undefined") return;
+  qmPopoverDocumentListenerBound = true;
+  document.addEventListener("click", () => qmClosePopover());
+}
+function qmTogglePopover(wrapper, openClass, event) {
+  event.stopPropagation();
+  const alreadyOpen = qmOpenPopover && qmOpenPopover.wrapper === wrapper;
+  qmClosePopover();
+  if (!alreadyOpen) {
+    wrapper.classList.add(openClass);
+    qmOpenPopover = { wrapper, openClass };
+  }
+}
+
 function qmReadColumnCollapsed() {
   const result = { outfits: false, equipped: false, bag: false };
   try {
@@ -484,17 +493,20 @@ QM.dock = {
   itemPromptTextarea: null,
   outfitPromptTextarea: null,
   settingsSection: null,
-  settingsContent: null,
-  settingsChevron: null,
+  inventoryView: null,
+  settingsView: null,
+  viewTabButtons: null,
   underwearToggle: null,
   armorToggle: null,
   weaponsToggle: null,
   replaceRealAvatarToggle: null,
   restoreInventoryButton: null,
   recentChangesContainer: null,
+  recentUpdateContainer: null,
+  recentUpdateChevron: null,
+  recentUpdateCountBadge: null,
   equippedContainer: null,
   outfitsContainer: null,
-  form: null,
   listContainer: null,
   portraitWrapper: null,
   portraitImage: null,
@@ -507,10 +519,13 @@ QM.dock = {
   bodyWidth: QM_WINDOW_DEFAULT_WIDTH,
   uiSize: qmReadUiSize(),
   thumbnailSize: qmReadThumbnailSize(),
-  // Collapsed by default to keep the dock compact; not persisted — a session
-  // -only UI preference, unlike geometry/uiSize which are worth remembering
-  // across visits.
-  settingsExpanded: false,
+  // Top-level dock view: the 3-column inventory grid (plus Recent Agent
+  // Update above it) or the restructured Settings groups. A session-only UI
+  // preference, same as bagTab/recentUpdateExpanded below — not reset on
+  // chat switch, unlike geometry/uiSize which are worth persisting for real.
+  activeView: "inventory",
+  // Collapsed by default to keep the dock compact.
+  recentUpdateExpanded: false,
   // Which equip slot's picker is open, if any — set by clicking a slot box,
   // cleared by picking an item, clicking the same slot again, closing the
   // dock, or switching chats (see close()/QM.state.setChat's own reset).
@@ -520,11 +535,13 @@ QM.dock = {
   saveOutfitBackdrop: null,
   wardrobeBuilderBackdrop: null,
   imageGenBackdrop: null,
+  addItemBackdrop: null,
   _itemEditorEscapeHandler: null,
   _outfitEditorEscapeHandler: null,
   _saveOutfitEscapeHandler: null,
   _wardrobeEscapeHandler: null,
   _imageGenEscapeHandler: null,
+  _addItemEscapeHandler: null,
   bagSearchQuery: "",
   bagSearchMode: "name",
   bagSearchInput: null,
@@ -562,11 +579,13 @@ QM.dock = {
     this._unbindEscapeClose(this._saveOutfitEscapeHandler);
     this._unbindEscapeClose(this._wardrobeEscapeHandler);
     this._unbindEscapeClose(this._imageGenEscapeHandler);
+    this._unbindEscapeClose(this._addItemEscapeHandler);
     this._itemEditorEscapeHandler = null;
     this._outfitEditorEscapeHandler = null;
     this._saveOutfitEscapeHandler = null;
     this._wardrobeEscapeHandler = null;
     this._imageGenEscapeHandler = null;
+    this._addItemEscapeHandler = null;
     this.columns = null;
     this.zoomWrapper = null;
     this.uiSizeButtons = null;
@@ -577,8 +596,9 @@ QM.dock = {
     this.itemPromptTextarea = null;
     this.outfitPromptTextarea = null;
     this.settingsSection = null;
-    this.settingsContent = null;
-    this.settingsChevron = null;
+    this.inventoryView = null;
+    this.settingsView = null;
+    this.viewTabButtons = null;
     this.underwearToggle = null;
     this.armorToggle = null;
     this.weaponsToggle = null;
@@ -587,7 +607,6 @@ QM.dock = {
     this.recentChangesContainer = null;
     this.equippedContainer = null;
     this.outfitsContainer = null;
-    this.form = null;
     this.listContainer = null;
     this.portraitWrapper = null;
     this.portraitImage = null;
@@ -607,6 +626,10 @@ QM.dock = {
     this.saveOutfitBackdrop = null;
     this.wardrobeBuilderBackdrop = null;
     this.imageGenBackdrop = null;
+    this.addItemBackdrop = null;
+    this.recentUpdateContainer = null;
+    this.recentUpdateChevron = null;
+    this.recentUpdateCountBadge = null;
   },
 
   isOpen() {
@@ -1006,7 +1029,7 @@ QM.dock = {
       return;
     }
 
-    if (!this.form || !this.body.contains(this.form)) {
+    if (!this.zoomWrapper || !this.body.contains(this.zoomWrapper)) {
       // Outside the zoom wrapper, so it stays a fixed-size, stable control
       // no matter what size it's currently set to.
       const uiSizeRow = this._buildUiSizeRow();
@@ -1027,6 +1050,27 @@ QM.dock = {
       this.errorNode = QM.textNode("");
       this.errorNode.style.color = QM_COLOR_DANGER;
       this.errorNode.style.display = "none";
+
+      // Top-level Inventory/Settings switch — same active/inactive
+      // background-swap idiom as QM_BAG_TABS, not the bordered
+      // section-header style used by the 3 columns below.
+      const viewTabRow = document.createElement("div");
+      Object.assign(viewTabRow.style, { display: "flex", gap: "4px", marginBottom: "8px" });
+      this.viewTabButtons = {};
+      for (const [key, label] of [
+        ["inventory", "Inventory"],
+        ["settings", "Settings"],
+      ]) {
+        const button = QM.button(label);
+        Object.assign(button.style, { flex: "1", padding: "4px 8px" });
+        button.addEventListener("click", () => {
+          if (this.activeView === key) return;
+          this.activeView = key;
+          this._applyActiveView();
+        });
+        this.viewTabButtons[key] = button;
+        viewTabRow.appendChild(button);
+      }
 
       this.settingsSection = this._buildSettingsSection();
 
@@ -1070,17 +1114,26 @@ QM.dock = {
 
       const bagColumn = document.createElement("div");
       Object.assign(bagColumn.style, { flex: "1", minWidth: "0", width: "100%" });
-      this.form = this._buildAddItemForm();
-      const bagTabRow = this._buildBagTabRow();
       const bagSearchRow = this._buildBagSearchRow();
+      const bagTabRow = this._buildBagTabRow();
       this.listContainer = document.createElement("div");
       const bagBody = document.createElement("div");
-      bagBody.append(this.form, bagTabRow, bagSearchRow, this.listContainer);
+      bagBody.append(bagSearchRow, bagTabRow, this.listContainer);
       bagColumn.append(this._buildSectionHeader("bag", "Bag", bagBody, bagColumn), bagBody);
 
       columns.append(outfitsColumn, equippedColumn, bagColumn);
-      this.zoomWrapper.append(this.errorNode, this.settingsSection, columns);
+
+      // Inventory view: Recent Agent Update (moved into the slot the old
+      // Settings accordion used to occupy) above the 3-column grid. Settings
+      // view: the regrouped settings content. Visibility toggled by
+      // _applyActiveView, not rebuilt on every tab switch.
+      this.inventoryView = document.createElement("div");
+      this.inventoryView.append(this._buildRecentUpdateSection(), columns);
+      this.settingsView = this.settingsSection;
+
+      this.zoomWrapper.append(this.errorNode, viewTabRow, this.inventoryView, this.settingsView);
       this.body.replaceChildren(sizeControlsRow, this.zoomWrapper);
+      this._applyActiveView();
       this._applySectionHeaders();
       this._applyUiSize();
       this._applyThumbnailSize();
@@ -1096,6 +1149,7 @@ QM.dock = {
     this._applyBagSearch();
     this._applyOutfitSearch();
     this._applySectionHeaders();
+    this._applyRecentUpdateHeader();
     this.feedSelect.value = QM.state.appearanceFeedMode;
     this.underwearToggle.checked = QM.state.showUnderwear;
     this.armorToggle.checked = QM.state.showArmor;
@@ -1156,7 +1210,6 @@ QM.dock = {
     this.outfitsContainer.replaceChildren(this._buildOutfitsList());
     this._applyBagTabs();
     this.listContainer.replaceChildren(this._buildItemList());
-    requestAnimationFrame(() => this._applyCardDescriptionCaps());
   },
 
   // Controls what QM.state.updateAppearanceFeedMode writes into this chat's
@@ -1187,23 +1240,18 @@ QM.dock = {
     select.addEventListener("change", () => QM.state.updateAppearanceFeedMode(select.value));
     this.feedSelect = select;
 
-    row.append(label, select);
-
-    const note = document.createElement("p");
-    note.textContent =
+    const tooltip = this._buildInfoTooltip(
       "Writes the chosen text into a per-chat variable so a {{getvar::quartermaster_appearance_persona}} " +
-      "token in the persona's own Appearance field resolves to it — letting image generation (e.g. " +
-      "Illustrator) pick up what's actually equipped. Off writes nothing; Outfit description uses the " +
-      "saved outfit that exactly matches the current equip state (falling back to a plain list of " +
-      "equipped item names when nothing matches, e.g. after equipping something outside any saved " +
-      "outfit); Equipped item names always lists what's equipped, regardless of outfit.";
-    Object.assign(note.style, {
-      margin: "4px 0 0",
-      fontSize: "11px",
-      color: "var(--muted-foreground, currentcolor)",
-    });
+        "token in the persona's own Appearance field resolves to it — letting image generation (e.g. " +
+        "Illustrator) pick up what's actually equipped. Off writes nothing; Outfit description uses the " +
+        "saved outfit that exactly matches the current equip state (falling back to a plain list of " +
+        "equipped item names when nothing matches, e.g. after equipping something outside any saved " +
+        "outfit); Equipped item names always lists what's equipped, regardless of outfit.",
+    );
 
-    wrapper.append(row, note);
+    row.append(label, select, tooltip);
+
+    wrapper.append(row);
     return wrapper;
   },
 
@@ -1453,108 +1501,160 @@ QM.dock = {
     }
   },
 
-  // A collapsible wrapper (chevron + label, click to expand) around the
-  // slot-visibility toggles — collapsed by default to keep the dock compact
-  // when there's nothing to configure. Built once; the toggle checkboxes
-  // inside get their checked state synced every repaint (_paint), same as
-  // the other cached form-like controls.
-  _buildSettingsSection() {
-    const section = document.createElement("div");
-    Object.assign(section.style, {
-      border: "1px solid var(--border, rgba(128,128,128,0.3))",
+  // A small "?" badge revealing `text` in a positioned popover — on hover
+  // (desktop, pure CSS via .qm-tooltip-wrap:hover in QM_DOCK_STYLE) AND on
+  // click/tap (qmTogglePopover's .qm-tooltip-open class), since :hover
+  // alone is unreachable on a touchscreen and this dock commits to mobile
+  // support. Replaces the permanent explanatory paragraphs Settings used to
+  // carry under every control — shown on demand instead of always taking
+  // vertical space.
+  _buildInfoTooltip(text) {
+    const wrapper = document.createElement("span");
+    wrapper.className = "qm-tooltip-wrap";
+
+    const badge = document.createElement("button");
+    badge.type = "button";
+    badge.textContent = "?";
+    badge.setAttribute("aria-label", "More info");
+    Object.assign(badge.style, {
+      width: "14px",
+      height: "14px",
+      borderRadius: "50%",
+      border: "1px solid var(--border, rgba(128,128,128,0.4))",
+      background: "var(--secondary, transparent)",
+      color: "var(--muted-foreground, inherit)",
+      fontSize: "10px",
+      lineHeight: "12px",
+      padding: "0",
+      cursor: "pointer",
+      flexShrink: "0",
+    });
+    badge.addEventListener("click", (event) => qmTogglePopover(wrapper, "qm-tooltip-open", event));
+    qmBindPopoverDocumentListener();
+
+    const popover = document.createElement("div");
+    popover.className = "qm-tooltip-popover";
+    popover.textContent = text;
+    Object.assign(popover.style, {
+      position: "absolute",
+      top: "18px",
+      left: "0",
+      zIndex: "30",
+      width: "220px",
+      padding: "8px",
       borderRadius: "var(--radius, 4px)",
-      marginBottom: "8px",
+      border: "1px solid var(--border, rgba(128,128,128,0.4))",
+      background: "var(--popover, var(--card, #1a1a1a))",
+      color: "var(--popover-foreground, inherit)",
+      fontSize: "11px",
+      lineHeight: "1.4",
+      boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
+    });
+
+    wrapper.append(badge, popover);
+    return wrapper;
+  },
+
+  // A "⋯" button opening a small dropdown of secondary actions — used by
+  // both item and outfit cards to collapse Edit/Update/Delete out of the
+  // name row, so Equip can live there instead and the description gets the
+  // width that used to go to a fixed action column. Click-only (no hover
+  // reveal, unlike the info tooltip) since this holds real actions,
+  // including a destructive one -- hovering shouldn't be enough to expose
+  // them. Each action's own onClick is responsible for any confirmation it
+  // needs (Delete already confirms via window.confirm).
+  _buildCardOverflowMenu(actions) {
+    const wrapper = document.createElement("span");
+    wrapper.className = "qm-overflow-wrap";
+
+    const button = QM.button("⋯", { border: true, bg: "transparent", fg: "inherit" });
+    Object.assign(button.style, { padding: "2px 8px", flexShrink: "0" });
+    button.addEventListener("click", (event) => qmTogglePopover(wrapper, "qm-overflow-open", event));
+
+    const menu = document.createElement("div");
+    menu.className = "qm-overflow-menu";
+    Object.assign(menu.style, {
+      position: "absolute",
+      top: "100%",
+      right: "0",
+      zIndex: "30",
+      marginTop: "2px",
+      flexDirection: "column",
+      minWidth: "110px",
+      borderRadius: "var(--radius, 4px)",
+      border: "1px solid var(--border, rgba(128,128,128,0.4))",
+      background: "var(--popover, var(--card, #1a1a1a))",
+      boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
       overflow: "hidden",
     });
+    for (const action of actions) {
+      const menuItem = document.createElement("button");
+      menuItem.type = "button";
+      menuItem.textContent = action.label;
+      Object.assign(menuItem.style, {
+        display: "block",
+        width: "100%",
+        padding: "6px 10px",
+        textAlign: "left",
+        background: "transparent",
+        border: "none",
+        color: action.danger ? QM_COLOR_DANGER : "inherit",
+        cursor: "pointer",
+        font: "inherit",
+        fontSize: "11px",
+      });
+      menuItem.addEventListener("click", (event) => {
+        event.stopPropagation();
+        qmClosePopover();
+        action.onClick();
+      });
+      menu.appendChild(menuItem);
+    }
 
-    const header = document.createElement("button");
-    header.type = "button";
-    Object.assign(header.style, {
-      display: "flex",
-      alignItems: "center",
-      gap: "6px",
-      width: "100%",
-      padding: "6px 8px",
-      background: "var(--secondary, transparent)",
-      color: "inherit",
-      border: "none",
-      font: "inherit",
-      textAlign: "left",
-      cursor: "pointer",
-    });
+    wrapper.append(button, menu);
+    return wrapper;
+  },
 
-    const chevron = document.createElement("span");
-    chevron.textContent = "▸";
-    Object.assign(chevron.style, {
-      display: "inline-block",
-      transition: "transform 0.15s ease",
-      transform: this.settingsExpanded ? "rotate(90deg)" : "rotate(0deg)",
-    });
-    this.settingsChevron = chevron;
-
-    const label = document.createElement("span");
-    label.textContent = "Settings";
-    Object.assign(label.style, {
+  // Small caps-label divider used to break Settings' controls into named
+  // groups — Appearance/Display/Image Generation/Data — instead of one flat
+  // run of unrelated rows.
+  _buildSettingsGroupHeader(label) {
+    const wrapper = document.createElement("div");
+    Object.assign(wrapper.style, { marginTop: "12px", marginBottom: "6px" });
+    const text = document.createElement("div");
+    text.textContent = label;
+    Object.assign(text.style, {
       fontWeight: "600",
-      fontSize: "12px",
+      fontSize: "11px",
       textTransform: "uppercase",
       letterSpacing: "0.04em",
+      color: "var(--muted-foreground, inherit)",
+      marginBottom: "6px",
     });
+    const rule = document.createElement("div");
+    rule.style.borderTop = "1px solid var(--border, rgba(128,128,128,0.3))";
+    wrapper.append(text, rule);
+    return wrapper;
+  },
 
-    header.append(chevron, label);
-    header.addEventListener("click", () => {
-      this.settingsExpanded = !this.settingsExpanded;
-      this.settingsContent.style.maxHeight = this.settingsExpanded ? "1400px" : "0px";
-      this.settingsChevron.style.transform = this.settingsExpanded ? "rotate(90deg)" : "rotate(0deg)";
-    });
-
-    // max-height + overflow:hidden, not display:none/"" — display can't be
-    // transitioned, so the section used to snap open/closed instantly. 1400px
-    // is a generous ceiling for the current content (the appearance-feed
-    // picker + its description, slot toggles, the real-avatar toggle + its
-    // warning note, export/import, the image-generation connection picker +
-    // two prompt-template textareas, and Recent Changes' own list, which can
-    // run to MAX_TRACKER_OPERATIONS_PER_TURN rows on a busy turn); it doesn't
-    // need to track real content height since it's never the constraining
-    // factor once expanded.
-    const content = document.createElement("div");
-    Object.assign(content.style, {
-      padding: "0 8px",
-      maxHeight: this.settingsExpanded ? "1400px" : "0px",
-      overflow: "hidden",
-      transition: "max-height 0.2s ease",
-    });
-    // A thin rule between each setting, purely for visual separation in a
-    // section that otherwise runs several unrelated controls together with
-    // nothing marking where one ends and the next begins.
-    const divider = () => {
-      const rule = document.createElement("div");
-      Object.assign(rule.style, {
-        borderTop: "1px solid var(--border, rgba(128,128,128,0.3))",
-        margin: "8px 0",
-      });
-      return rule;
-    };
-    content.append(
+  // The Settings tab's content — grouped, not a flat list of nine unrelated
+  // rows. No accordion/chevron of its own any more: which top-level view
+  // (Inventory vs Settings) is showing is what controls visibility now, see
+  // _paint()'s own top-level tab switch.
+  _buildSettingsSection() {
+    const section = document.createElement("div");
+    section.append(
+      this._buildSettingsGroupHeader("Appearance"),
       this._buildAppearanceFeedRow(),
-      divider(),
-      this._buildSlotVisibilityRow(),
-      divider(),
       this._buildRealAvatarToggleRow(),
-      divider(),
+      this._buildSettingsGroupHeader("Display"),
+      this._buildSlotVisibilityRow(),
+      this._buildSettingsGroupHeader("Image Generation"),
       this._buildImageGenerationSettingsRow(),
-      divider(),
-      this._buildExportImportRow(),
-      divider(),
       this._buildRefreshImagesRow(),
-      divider(),
-      this._buildRestoreInventoryRow(),
-      divider(),
-      this._buildRecentChangesRow(),
+      this._buildSettingsGroupHeader("Data"),
+      this._buildExportImportRow(),
     );
-    this.settingsContent = content;
-
-    section.append(header, content);
     return section;
   },
 
@@ -1691,31 +1791,94 @@ QM.dock = {
     return row;
   },
 
-  // What the last tracker-agent turn actually did, reviewable and
-  // per-item-revertable — additive to Restore Inventory above, for "one
-  // specific thing is wrong" rather than "everything's a mess." The list
-  // body is rebuilt every _paint (this.recentChangesContainer, wired up
-  // next to restoreInventoryButton's own live update) since it tracks
-  // QM.state.lastTrackerChange, not a one-time snapshot.
-  _buildRecentChangesRow() {
-    const wrapper = document.createElement("div");
+  // The collapsible accordion that replaced Settings in this same visual
+  // slot (see _paint()'s top-level view split) — everything about reviewing
+  // and recovering from what the tracker agent just did, in one place:
+  // Restore Inventory (whole-state) above the per-item Recent Agent Update
+  // list. Collapsed by default; the header itself always shows a compact
+  // +N/↑N/−N count (see _applyRecentUpdateHeader) so there's something to
+  // glance at without expanding.
+  _buildRecentUpdateSection() {
+    const section = document.createElement("div");
+    Object.assign(section.style, {
+      border: "1px solid var(--border, rgba(128,128,128,0.3))",
+      borderRadius: "var(--radius, 4px)",
+      marginBottom: "8px",
+      overflow: "hidden",
+    });
 
-    const heading = document.createElement("div");
-    heading.textContent = "Recent Automatic Update";
-    Object.assign(heading.style, {
-      fontSize: "11px",
+    const header = document.createElement("button");
+    header.type = "button";
+    Object.assign(header.style, {
+      display: "flex",
+      alignItems: "center",
+      gap: "6px",
+      width: "100%",
+      padding: "6px 8px",
+      background: "var(--secondary, transparent)",
+      color: "inherit",
+      border: "none",
+      font: "inherit",
+      textAlign: "left",
+      cursor: "pointer",
+    });
+
+    const chevron = document.createElement("span");
+    chevron.textContent = "▸";
+    Object.assign(chevron.style, {
+      display: "inline-block",
+      transition: "transform 0.15s ease",
+      transform: this.recentUpdateExpanded ? "rotate(90deg)" : "rotate(0deg)",
+    });
+    this.recentUpdateChevron = chevron;
+
+    const label = document.createElement("span");
+    label.textContent = "Recent Agent Update";
+    Object.assign(label.style, {
       fontWeight: "600",
+      fontSize: "12px",
       textTransform: "uppercase",
       letterSpacing: "0.04em",
-      color: "var(--muted-foreground, inherit)",
-      marginBottom: "6px",
+    });
+
+    const countBadge = document.createElement("span");
+    Object.assign(countBadge.style, {
+      fontSize: "11px",
+      fontWeight: "600",
+      marginLeft: "auto",
+      display: "flex",
+      gap: "8px",
+    });
+    this.recentUpdateCountBadge = countBadge;
+
+    header.append(chevron, label, countBadge);
+    header.addEventListener("click", () => {
+      this.recentUpdateExpanded = !this.recentUpdateExpanded;
+      content.style.maxHeight = this.recentUpdateExpanded ? "700px" : "0px";
+      this.recentUpdateChevron.style.transform = this.recentUpdateExpanded ? "rotate(90deg)" : "rotate(0deg)";
+    });
+
+    // Same max-height + overflow:hidden transition technique as the old
+    // Settings accordion (display can't be transitioned) — 700px comfortably
+    // covers Restore Inventory's one row plus MAX_TRACKER_OPERATIONS_PER_TURN
+    // rows of Recent Agent Update on a busy turn.
+    const content = document.createElement("div");
+    Object.assign(content.style, {
+      padding: "8px",
+      display: "flex",
+      flexDirection: "column",
+      gap: "8px",
+      maxHeight: this.recentUpdateExpanded ? "700px" : "0px",
+      overflow: "hidden",
+      transition: "max-height 0.2s ease",
     });
 
     const container = document.createElement("div");
     this.recentChangesContainer = container;
+    content.append(this._buildRestoreInventoryRow(), container);
 
-    wrapper.append(heading, container);
-    return wrapper;
+    section.append(header, content);
+    return section;
   },
 
   // One row per touched item (never per field) — Revert resets everything
@@ -1723,6 +1886,8 @@ QM.dock = {
   // text is computed here from the raw before/after values the server
   // persisted, so a row only mentions fields that actually changed
   // ("qty 2→1 · moved to Bag") instead of restating every field regardless.
+  // Reasoning is shown whether or not anything changed -- a quiet turn is
+  // still worth reading the agent's own reasoning for.
   _buildRecentChangesList() {
     const change = QM.state.lastTrackerChange;
     const list = document.createElement("div");
@@ -1731,54 +1896,64 @@ QM.dock = {
     const hasAnyChange =
       change && (change.addedItems.length > 0 || change.updatedItems.length > 0 || change.removedItems.length > 0);
     if (!hasAnyChange) {
-      const empty = QM.textNode("Nothing changed on the last automatic update.");
+      const empty = QM.textNode(change ? "Nothing changed on the last automatic update." : "No automatic updates yet.");
       Object.assign(empty.style, { fontSize: "11px", color: "var(--muted-foreground, inherit)" });
       list.appendChild(empty);
-      return list;
-    }
+      if (!change || !change.reasoning) return list;
+    } else {
+      // Revert sits to the LEFT of the item text -- right beside what it
+      // applies to, not trailing off on the far side of the row.
+      const buildRow = (symbol, color, label, name, detail, itemId) => {
+        const row = document.createElement("div");
+        Object.assign(row.style, { display: "flex", alignItems: "center", gap: "8px", fontSize: "11px" });
 
-    const buildRow = (symbol, label, name, detail, itemId) => {
-      const row = document.createElement("div");
-      Object.assign(row.style, { display: "flex", alignItems: "center", gap: "8px", fontSize: "11px" });
+        if (itemId) {
+          const revertButton = QM.button("Revert", {
+            bg: "var(--secondary, transparent)",
+            fg: "var(--secondary-foreground, inherit)",
+            border: true,
+          });
+          Object.assign(revertButton.style, { padding: "2px 8px", fontSize: "10px", flexShrink: "0" });
+          revertButton.addEventListener("click", async () => {
+            revertButton.disabled = true;
+            await QM.state.revertTrackerItem(itemId);
+          });
+          row.appendChild(revertButton);
+        }
 
-      const text = document.createElement("span");
-      text.style.flex = "1";
-      text.textContent = `${symbol} ${label}  ${name}${detail ? `  ${detail}` : ""}`;
-      row.appendChild(text);
+        const text = document.createElement("span");
+        text.style.flex = "1";
+        text.style.color = color;
+        text.textContent = `${symbol} ${label}  ${name}${detail ? `  ${detail}` : ""}`;
+        row.appendChild(text);
+        return row;
+      };
 
-      if (itemId) {
-        const revertButton = QM.button("Revert", {
-          bg: "var(--secondary, transparent)",
-          fg: "var(--secondary-foreground, inherit)",
-          border: true,
-        });
-        Object.assign(revertButton.style, { padding: "2px 8px", fontSize: "10px", flexShrink: "0" });
-        revertButton.addEventListener("click", async () => {
-          revertButton.disabled = true;
-          await QM.state.revertTrackerItem(itemId);
-        });
-        row.appendChild(revertButton);
+      const fieldDiffText = (before, after) => {
+        const parts = [];
+        if (before.quantity !== after.quantity) parts.push(`qty ${before.quantity}→${after.quantity}`);
+        if (before.location !== after.location) parts.push(`moved to ${qmLocationLabel(after.location)}`);
+        if (before.description !== after.description) parts.push("description changed");
+        return parts.join(" · ");
+      };
+
+      for (const entry of change.addedItems) {
+        list.appendChild(buildRow("+", QM_COLOR_SUCCESS, "Added", entry.name, "", entry.id));
       }
-      return row;
-    };
-
-    const fieldDiffText = (before, after) => {
-      const parts = [];
-      if (before.quantity !== after.quantity) parts.push(`qty ${before.quantity}→${after.quantity}`);
-      if (before.location !== after.location) parts.push(`moved to ${qmLocationLabel(after.location)}`);
-      if (before.description !== after.description) parts.push("description changed");
-      return parts.join(" · ");
-    };
-
-    for (const entry of change.addedItems) list.appendChild(buildRow("+", "Added", entry.name, "", entry.id));
-    for (const entry of change.updatedItems) {
-      list.appendChild(buildRow("↑", "Updated", entry.name, fieldDiffText(entry.before, entry.after), entry.id));
+      for (const entry of change.updatedItems) {
+        list.appendChild(
+          buildRow("↑", QM_COLOR_WARNING, "Updated", entry.name, fieldDiffText(entry.before, entry.after), entry.id),
+        );
+      }
+      for (const entry of change.removedItems) {
+        list.appendChild(buildRow("−", QM_COLOR_DANGER, "Removed", entry.name, "", entry.id));
+      }
+      if (change.equippedOutfitName) {
+        list.appendChild(buildRow("⚙", "inherit", "Equipped outfit:", change.equippedOutfitName, "", null));
+      }
     }
-    for (const entry of change.removedItems) list.appendChild(buildRow("−", "Removed", entry.name, "", entry.id));
-    if (change.equippedOutfitName) {
-      list.appendChild(buildRow("⚙", "Equipped outfit:", change.equippedOutfitName, "", null));
-    }
-    if (change.reasoning) {
+
+    if (change && change.reasoning) {
       const reasoning = document.createElement("div");
       reasoning.textContent = `Reasoning: "${change.reasoning}"`;
       Object.assign(reasoning.style, {
@@ -1790,6 +1965,30 @@ QM.dock = {
       list.appendChild(reasoning);
     }
     return list;
+  },
+
+  // Keeps the accordion header's collapsed-state count readout
+  // (+N / ↑N / −N, same symbols and colors the expanded rows use) in sync
+  // every paint — a glanceable summary of what changed without expanding.
+  // A segment is omitted entirely when its count is 0, so a quiet turn
+  // shows nothing extra in the header at all.
+  _applyRecentUpdateHeader() {
+    const change = QM.state.lastTrackerChange;
+    const counts = [
+      { count: change ? change.addedItems.length : 0, symbol: "+", color: QM_COLOR_SUCCESS },
+      { count: change ? change.updatedItems.length : 0, symbol: "↑", color: QM_COLOR_WARNING },
+      { count: change ? change.removedItems.length : 0, symbol: "−", color: QM_COLOR_DANGER },
+    ];
+    this.recentUpdateCountBadge.replaceChildren(
+      ...counts
+        .filter((entry) => entry.count > 0)
+        .map((entry) => {
+          const span = document.createElement("span");
+          span.textContent = `${entry.symbol}${entry.count}`;
+          span.style.color = entry.color;
+          return span;
+        }),
+    );
   },
 
   // A single row, one checkbox per group: "Show Slots: [ ] Underwear
@@ -1849,7 +2048,7 @@ QM.dock = {
   // unaffected, this dock's own portrait display is unaffected either way.
   _buildRealAvatarToggleRow() {
     const wrapper = document.createElement("div");
-    Object.assign(wrapper.style, { fontSize: "12px" });
+    Object.assign(wrapper.style, { display: "flex", alignItems: "center", gap: "6px", fontSize: "12px" });
 
     const checkboxLabel = document.createElement("label");
     Object.assign(checkboxLabel.style, { display: "flex", alignItems: "center", gap: "4px", cursor: "pointer" });
@@ -1861,18 +2060,13 @@ QM.dock = {
     checkboxLabel.append(checkbox, text);
     this.replaceRealAvatarToggle = checkbox;
 
-    const note = document.createElement("p");
-    note.textContent =
+    const tooltip = this._buildInfoTooltip(
       "Reverts automatically when unequipped. Each change adds a permanent entry to the persona's " +
-      "version history (can't be turned off), and other Marinara screens showing this avatar may take " +
-      "a bit to catch up visually — image generation itself isn't affected.";
-    Object.assign(note.style, {
-      margin: "4px 0 0",
-      fontSize: "11px",
-      color: "var(--muted-foreground, currentcolor)",
-    });
+        "version history (can't be turned off), and other Marinara screens showing this avatar may take " +
+        "a bit to catch up visually — image generation itself isn't affected.",
+    );
 
-    wrapper.append(checkboxLabel, note);
+    wrapper.append(checkboxLabel, tooltip);
     return wrapper;
   },
 
@@ -2102,32 +2296,6 @@ QM.dock = {
     wrapper.appendChild(actionsRow);
 
     return wrapper;
-  },
-
-  // Called (via requestAnimationFrame, so real layout exists) after every
-  // outfits/Bag list rebuild — see _buildSectionHeader-adjacent call sites
-  // in render(), the outfit search input, and the Bag search input/mode
-  // toggle. Measures each card's actionColumn (Edit/Update/Equip, or
-  // Edit/Equip — alignSelf:"flex-start" there keeps its rendered height
-  // always its true natural size, never stretched by its sibling) and
-  // applies that exact height as the neighboring descriptionPreview's own
-  // max-height, so the description always scrolls within exactly the room
-  // the buttons already need rather than a guessed constant that's
-  // repeatedly come up wrong in the real app (see the comment above
-  // QM_DESC_LINE_HEIGHT_PX). Divides out the zoom factor since
-  // getBoundingClientRect() reports the post-zoom size but the max-height
-  // being set here will itself be re-zoomed once applied.
-  _applyCardDescriptionCaps() {
-    if (!this.root) return;
-    const zoom = this._zoomFactor();
-    const rows = this.root.querySelectorAll(".qm-card-desc-row");
-    for (const rowEl of rows) {
-      const descriptionPreview = rowEl.children[0];
-      const actionColumn = rowEl.children[1];
-      if (!descriptionPreview || !actionColumn) continue;
-      const actionsHeightPx = actionColumn.getBoundingClientRect().height / zoom;
-      if (actionsHeightPx > 0) descriptionPreview.style.maxHeight = `${Math.round(actionsHeightPx)}px`;
-    }
   },
 
   // Called (via requestAnimationFrame, so real layout exists) after every
@@ -2529,7 +2697,6 @@ QM.dock = {
     searchInput.addEventListener("input", () => {
       this.outfitSearchQuery = searchInput.value;
       this.outfitsContainer.replaceChildren(this._buildOutfitsList());
-      requestAnimationFrame(() => this._applyCardDescriptionCaps());
     });
     this.outfitSearchInput = searchInput;
 
@@ -2543,6 +2710,24 @@ QM.dock = {
   _applyOutfitSearch() {
     if (this.outfitSearchInput && this.outfitSearchInput.value !== this.outfitSearchQuery) {
       this.outfitSearchInput.value = this.outfitSearchQuery;
+    }
+  },
+
+  // Shows whichever of inventoryView/settingsView matches this.activeView
+  // and updates the tab buttons' active styling -- called once at initial
+  // build and again on every tab click. Both views stay built (not
+  // rebuilt/discarded on switch), same reasoning as everywhere else in this
+  // file that avoids losing in-progress state (an open equip-slot picker,
+  // an unsaved textarea edit) to an unnecessary rebuild.
+  _applyActiveView() {
+    if (!this.inventoryView || !this.settingsView || !this.viewTabButtons) return;
+    this.inventoryView.style.display = this.activeView === "inventory" ? "" : "none";
+    this.settingsView.style.display = this.activeView === "settings" ? "" : "none";
+    for (const [key, button] of Object.entries(this.viewTabButtons)) {
+      const active = key === this.activeView;
+      button.style.background = active ? "var(--primary, #444)" : "var(--secondary, transparent)";
+      button.style.color = active ? "var(--primary-foreground, #fff)" : "var(--secondary-foreground, inherit)";
+      button.style.border = active ? "none" : "1px solid var(--border, rgba(0,0,0,0.2))";
     }
   },
 
@@ -2666,7 +2851,11 @@ QM.dock = {
         color: QM_COLOR_DANGER_FG,
         border: "none",
       });
-      removeButton.addEventListener("click", () => QM.state.deleteOutfitPortrait(outfit.id));
+      removeButton.addEventListener("click", () => {
+        if (window.confirm("Remove this outfit's portrait? This can't be undone.")) {
+          QM.state.deleteOutfitPortrait(outfit.id);
+        }
+      });
       wrapper.appendChild(removeButton);
     }
 
@@ -2754,7 +2943,11 @@ QM.dock = {
       border: "none",
       display: "none",
     });
-    removeButton.addEventListener("click", () => QM.state.deleteItemImage(item.id));
+    removeButton.addEventListener("click", () => {
+      if (window.confirm(`Remove ${item.name}'s image? This can't be undone.`)) {
+        QM.state.deleteItemImage(item.id);
+      }
+    });
 
     // No matching image (uploaded or pack) — fall back to that item's own
     // default-slot icon rather than the bare "+" mark, same artwork the
@@ -2882,67 +3075,67 @@ QM.dock = {
       });
       nameLine.appendChild(badge);
     }
-    const deleteButton = QM.button("Delete", { bg: QM_COLOR_DANGER, fg: QM_COLOR_DANGER_FG });
-    deleteButton.addEventListener("click", () => {
-      if (window.confirm(`Delete "${outfit.name}"? This can't be undone.`)) QM.state.deleteOutfit(outfit.id);
-    });
-    nameLine.appendChild(deleteButton);
+
+    // [Name] [Equipped?] [⋯] [Equip] -- Edit/Update/Delete collapsed into
+    // the overflow menu, Equip promoted up here so the description below
+    // (no more actionColumn beside it) gets the full card width.
+    const overflowMenu = this._buildCardOverflowMenu([
+      { label: "Edit", onClick: () => this._openOutfitEditor(outfit) },
+      {
+        label: "Update",
+        onClick: () => QM.state.updateOutfit(outfit.id, { resnapshot: true }),
+      },
+      {
+        label: "Delete",
+        danger: true,
+        onClick: () => {
+          if (window.confirm(`Delete "${outfit.name}"? This can't be undone.`)) QM.state.deleteOutfit(outfit.id);
+        },
+      },
+    ]);
+    nameLine.appendChild(overflowMenu);
+    const equipButton = QM.button("Equip");
+    equipButton.disabled = equipped;
+    equipButton.style.opacity = equipped ? "0.5" : "1";
+    equipButton.addEventListener("click", () => QM.state.equipOutfit(outfit.id));
+    nameLine.appendChild(equipButton);
 
     const descriptionRow = document.createElement("div");
     descriptionRow.className = "qm-card-desc-row";
-    Object.assign(descriptionRow.style, { display: "flex", gap: "6px" });
     const descriptionPreview = document.createElement("span");
     descriptionPreview.className = "qm-desc-scroll";
     descriptionPreview.textContent = outfit.description || "No description";
     Object.assign(descriptionPreview.style, {
-      flex: "1",
-      minWidth: "0",
+      display: "block",
       fontSize: "11px",
       lineHeight: `${QM_DESC_LINE_HEIGHT_PX}px`,
+      maxHeight: `${QM_CARD_DESC_MAX_HEIGHT_PX}px`,
       overflowY: "auto",
       whiteSpace: "normal",
       wordBreak: "break-word",
       color: "var(--muted-foreground, currentcolor)",
       fontStyle: outfit.description ? "normal" : "italic",
     });
-    const actionColumn = document.createElement("div");
-    Object.assign(actionColumn.style, {
-      display: "flex",
-      flexDirection: "column",
-      justifyContent: "space-between",
-      gap: "4px",
-      alignSelf: "flex-start",
-    });
-    const editButton = QM.button("Edit", { border: true, bg: "transparent", fg: "inherit" });
-    editButton.addEventListener("click", () => this._openOutfitEditor(outfit));
-    const updateButton = QM.button("Update", { border: true, bg: "transparent", fg: "inherit" });
-    updateButton.title = "Resave the currently-equipped items into this outfit";
-    updateButton.addEventListener("click", () => QM.state.updateOutfit(outfit.id, { resnapshot: true }));
-    const equipButton = QM.button("Equip");
-    equipButton.disabled = equipped;
-    equipButton.style.opacity = equipped ? "0.5" : "1";
-    equipButton.addEventListener("click", () => QM.state.equipOutfit(outfit.id));
-    actionColumn.append(editButton, updateButton, equipButton);
-    descriptionRow.append(descriptionPreview, actionColumn);
+    descriptionRow.appendChild(descriptionPreview);
 
     detailsColumn.append(nameLine, descriptionRow);
     row.append(portraitControl, detailsColumn);
     return row;
   },
 
-  // Shaped like an item card (same 3-row rhythm, same frame technique) but
-  // outlined in the Add button's own success color rather than the theme
-  // accent, so it reads as a distinct "create new" form rather than one
-  // more item in the list below it. No image control — there's no item id
-  // yet to attach an uploaded image to until after creation.
-  _buildAddItemForm() {
+  // Lives inside the Add Item modal (_openAddItemModal) now, not inline in
+  // the Bag column — the modal's own panel already carries the success-
+  // colored frame (matching _openSaveOutfitModal's), so this form doesn't
+  // need QM_ADD_ITEM_FRAME_STYLE of its own any more. No image control —
+  // there's no item id yet to attach an uploaded image to until after
+  // creation. `onAdded` fires after a successful add, once fields are
+  // reset — the modal uses it to close itself.
+  _buildAddItemForm(onAdded) {
     const form = document.createElement("form");
     Object.assign(form.style, {
       display: "flex",
       flexDirection: "column",
-      gap: "4px",
-      marginBottom: "8px",
-      ...QM_ADD_ITEM_FRAME_STYLE,
+      gap: "6px",
     });
 
     const nameLine = document.createElement("div");
@@ -2960,10 +3153,7 @@ QM.dock = {
     quantityInput.value = "1";
     quantityInput.style.width = "56px";
 
-    const addButton = QM.button("Add", { bg: QM_COLOR_SUCCESS, fg: QM_COLOR_SUCCESS_FG });
-    addButton.type = "submit";
-
-    nameLine.append(nameInput, quantityInput, addButton);
+    nameLine.append(nameInput, quantityInput);
 
     const slotLine = document.createElement("div");
     Object.assign(slotLine.style, { display: "flex", alignItems: "center", gap: "6px" });
@@ -3006,7 +3196,19 @@ QM.dock = {
     descriptionInput.style.width = "100%";
     descriptionInput.style.boxSizing = "border-box";
 
-    form.append(nameLine, slotLine, descriptionInput);
+    // Footer lives inside the <form> (so Enter in a text field and clicking
+    // "Add Item" both submit the same way) but is visually its own row —
+    // Cancel is a plain type="button" so it can never accidentally submit.
+    const footer = document.createElement("div");
+    Object.assign(footer.style, { display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "4px" });
+    const cancelButton = QM.button("Cancel", { border: true, bg: "transparent", fg: "inherit" });
+    cancelButton.type = "button";
+    cancelButton.addEventListener("click", () => this._closeAddItemModal());
+    const addButton = QM.button("Add Item", { bg: QM_COLOR_SUCCESS, fg: QM_COLOR_SUCCESS_FG });
+    addButton.type = "submit";
+    footer.append(cancelButton, addButton);
+
+    form.append(nameLine, slotLine, descriptionInput, footer);
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       const name = nameInput.value.trim();
@@ -3026,6 +3228,7 @@ QM.dock = {
       descriptionInput.value = "";
       slotSelect.value = "";
       storedInput.value = "";
+      onAdded?.();
     });
 
     return form;
@@ -3057,7 +3260,6 @@ QM.dock = {
         this.bagTab = key;
         this._applyBagTabs();
         this.listContainer.replaceChildren(this._buildItemList());
-        requestAnimationFrame(() => this._applyCardDescriptionCaps());
       });
       this.bagTabButtons[key] = button;
       row.appendChild(button);
@@ -3093,7 +3295,6 @@ QM.dock = {
     searchInput.addEventListener("input", () => {
       this.bagSearchQuery = searchInput.value;
       this.listContainer.replaceChildren(this._buildItemList());
-      requestAnimationFrame(() => this._applyCardDescriptionCaps());
     });
     this.bagSearchInput = searchInput;
     row.appendChild(searchInput);
@@ -3107,11 +3308,15 @@ QM.dock = {
         this.bagSearchMode = mode;
         this._applyBagSearch();
         this.listContainer.replaceChildren(this._buildItemList());
-        requestAnimationFrame(() => this._applyCardDescriptionCaps());
       });
       this.bagSearchModeButtons[mode] = button;
       row.appendChild(button);
     }
+
+    const addItemButton = QM.button("+ Add Item", { border: true, bg: "transparent", fg: "inherit" });
+    addItemButton.addEventListener("click", () => this._openAddItemModal());
+    row.appendChild(addItemButton);
+
     this._applyBagSearch();
     return row;
   },
@@ -3345,11 +3550,8 @@ QM.dock = {
   // moved). Only quantity stays directly on the card, per the request: it's
   // the one field someone adjusts constantly during play (used a charge,
   // picked up another), while the rest are set-once-and-rarely-touched.
-  // Three stacked mini-rows beside one full-height image, matching the
-  // layout spec exactly:
-  //   name ............................. qty  [Delete]
-  //   slot .................................... Stored at: X
-  //   description preview ............ [Edit] [Equip]
+  // Layout: [name ... qty] [⋯] [Equip] / slot+stored (only when either
+  // carries real info, see below) / description, full width.
   _buildItemRow(item) {
     const thumbnailPx = QM_THUMBNAIL_SIZES[this.thumbnailSize];
     const row = document.createElement("li");
@@ -3401,61 +3603,22 @@ QM.dock = {
     quantityInput.style.width = "48px";
     quantityInput.addEventListener("change", () => QM.state.updateItem(item.id, { quantity: quantityInput.value }));
 
-    const deleteButton = QM.button("Delete", { bg: QM_COLOR_DANGER, fg: QM_COLOR_DANGER_FG });
-    deleteButton.addEventListener("click", () => {
-      if (window.confirm(`Delete "${item.name}"? This can't be undone.`)) QM.state.deleteItem(item.id);
-    });
-    nameLine.append(nameLabel, quantityInput, deleteButton);
+    nameLine.append(nameLabel, quantityInput);
 
-    const slotLine = document.createElement("div");
-    Object.assign(slotLine.style, { display: "flex", alignItems: "center", gap: "6px", fontSize: "11px" });
-    const slotLabel = document.createElement("span");
-    slotLabel.textContent = item.defaultSlot ? QM_SLOT_LABELS[item.defaultSlot] : "Default Slot";
-    Object.assign(slotLabel.style, {
-      flex: "1",
-      minWidth: "0",
-      overflow: "hidden",
-      textOverflow: "ellipsis",
-      whiteSpace: "nowrap",
-      color: item.defaultSlot ? "inherit" : "var(--muted-foreground, currentcolor)",
-      fontStyle: item.defaultSlot ? "normal" : "italic",
-    });
-    const storedLabel = document.createElement("span");
-    storedLabel.textContent = `Stored at: ${item.location.startsWith("stored:") ? item.location.slice("stored:".length) : "Bag"}`;
-    Object.assign(storedLabel.style, { color: "var(--muted-foreground, currentcolor)", whiteSpace: "nowrap" });
-    slotLine.append(slotLabel, storedLabel);
-
-    // qm-card-desc-row is how _applyCardDescriptionCaps finds this pair —
-    // see that method's own comment and the one above QM_DESC_LINE_HEIGHT_PX
-    // for why the description's max-height is measured from the action
-    // column live rather than computed here.
-    const descriptionLine = document.createElement("div");
-    descriptionLine.className = "qm-card-desc-row";
-    Object.assign(descriptionLine.style, { display: "flex", gap: "6px" });
-    const descriptionPreview = document.createElement("span");
-    descriptionPreview.className = "qm-desc-scroll";
-    descriptionPreview.textContent = item.description || "No description";
-    Object.assign(descriptionPreview.style, {
-      flex: "1",
-      minWidth: "0",
-      fontSize: "11px",
-      lineHeight: `${QM_DESC_LINE_HEIGHT_PX}px`,
-      overflowY: "auto",
-      whiteSpace: "normal",
-      wordBreak: "break-word",
-      color: "var(--muted-foreground, currentcolor)",
-      fontStyle: item.description ? "normal" : "italic",
-    });
-    const actionColumn = document.createElement("div");
-    Object.assign(actionColumn.style, {
-      display: "flex",
-      flexDirection: "column",
-      justifyContent: "space-between",
-      gap: "4px",
-      alignSelf: "flex-start",
-    });
-    const editButton = QM.button("Edit", { border: true, bg: "transparent", fg: "inherit" });
-    editButton.addEventListener("click", () => this._openItemEditor(item));
+    // [⋯] [Equip] -- Edit/Delete collapsed into the overflow menu, Equip
+    // promoted up here so the description below (no more actionColumn
+    // beside it) gets the full card width.
+    const overflowMenu = this._buildCardOverflowMenu([
+      { label: "Edit", onClick: () => this._openItemEditor(item) },
+      {
+        label: "Delete",
+        danger: true,
+        onClick: () => {
+          if (window.confirm(`Delete "${item.name}"? This can't be undone.`)) QM.state.deleteItem(item.id);
+        },
+      },
+    ]);
+    nameLine.appendChild(overflowMenu);
     const equipButton = QM.button("Equip");
     // A stored defaultSlot can still point at a slot whose group has since
     // been hidden (the editor's slot picker just won't offer it as an
@@ -3467,10 +3630,60 @@ QM.dock = {
     equipButton.addEventListener("click", () => {
       if (canEquip) QM.state.updateItem(item.id, { location: `equipped:${item.defaultSlot}` });
     });
-    actionColumn.append(editButton, equipButton);
-    descriptionLine.append(descriptionPreview, actionColumn);
+    nameLine.appendChild(equipButton);
 
-    detailsColumn.append(nameLine, slotLine, descriptionLine);
+    // Slot/stored-at info only takes a row at all when it actually carries
+    // information -- "Default Slot" (no slot set) and "Stored at: Bag"
+    // (plain bag, not a named stash) are both the common case and pure
+    // noise, so that row is entirely omitted for them; detailsColumn's
+    // justify-content:space-between then hands the reclaimed height to the
+    // description below instead.
+    const detailRows = [nameLine];
+    const storedText = item.location.startsWith("stored:") ? item.location.slice("stored:".length) : null;
+    if (item.defaultSlot || storedText) {
+      const slotLine = document.createElement("div");
+      Object.assign(slotLine.style, { display: "flex", alignItems: "center", gap: "6px", fontSize: "11px" });
+      if (item.defaultSlot) {
+        const slotLabel = document.createElement("span");
+        slotLabel.textContent = QM_SLOT_LABELS[item.defaultSlot];
+        Object.assign(slotLabel.style, {
+          flex: "1",
+          minWidth: "0",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        });
+        slotLine.appendChild(slotLabel);
+      }
+      if (storedText) {
+        const storedLabel = document.createElement("span");
+        storedLabel.textContent = `Stored at: ${storedText}`;
+        Object.assign(storedLabel.style, { color: "var(--muted-foreground, currentcolor)", whiteSpace: "nowrap" });
+        slotLine.appendChild(storedLabel);
+      }
+      detailRows.push(slotLine);
+    }
+
+    const descriptionLine = document.createElement("div");
+    descriptionLine.className = "qm-card-desc-row";
+    const descriptionPreview = document.createElement("span");
+    descriptionPreview.className = "qm-desc-scroll";
+    descriptionPreview.textContent = item.description || "No description";
+    Object.assign(descriptionPreview.style, {
+      display: "block",
+      fontSize: "11px",
+      lineHeight: `${QM_DESC_LINE_HEIGHT_PX}px`,
+      maxHeight: `${QM_CARD_DESC_MAX_HEIGHT_PX}px`,
+      overflowY: "auto",
+      whiteSpace: "normal",
+      wordBreak: "break-word",
+      color: "var(--muted-foreground, currentcolor)",
+      fontStyle: item.description ? "normal" : "italic",
+    });
+    descriptionLine.appendChild(descriptionPreview);
+    detailRows.push(descriptionLine);
+
+    detailsColumn.append(...detailRows);
     row.append(imageControl, detailsColumn);
     return row;
   },
@@ -3853,5 +4066,72 @@ QM.dock = {
     this.saveOutfitBackdrop = null;
     this._unbindEscapeClose(this._saveOutfitEscapeHandler);
     this._saveOutfitEscapeHandler = null;
+  },
+
+  // A modal rather than the old inline collapse/expand toggle: a toggle
+  // button has the awkward property that a second click could mean either
+  // "collapse this" or "submit," which is exactly the ambiguity a modal
+  // avoids. Same shell as _openSaveOutfitModal (backdrop/panel/Escape
+  // pattern); the form itself is _buildAddItemForm's, unchanged internally,
+  // just rebuilt fresh each open so it always starts blank.
+  _openAddItemModal() {
+    this._closeAddItemModal();
+    const backdrop = document.createElement("div");
+    Object.assign(backdrop.style, {
+      position: "absolute",
+      inset: "0",
+      background: "rgba(0, 0, 0, 0.55)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "16px",
+      boxSizing: "border-box",
+      zIndex: "30",
+    });
+    backdrop.addEventListener("pointerdown", (event) => {
+      if (event.target === backdrop) this._closeAddItemModal();
+    });
+
+    const panel = document.createElement("div");
+    Object.assign(panel.style, {
+      background: "var(--card, #1c1c1c)",
+      border: `1px solid ${QM_COLOR_SUCCESS}`,
+      borderRadius: "var(--radius, 6px)",
+      padding: "12px",
+      width: "min(320px, 100%)",
+      maxHeight: "100%",
+      overflowY: "auto",
+      boxSizing: "border-box",
+      boxShadow: "0 8px 24px rgba(0, 0, 0, 0.45)",
+      display: "flex",
+      flexDirection: "column",
+      gap: "8px",
+    });
+    panel.addEventListener("pointerdown", (event) => event.stopPropagation());
+
+    const header = document.createElement("div");
+    Object.assign(header.style, { display: "flex", alignItems: "center", justifyContent: "space-between" });
+    const title = document.createElement("strong");
+    title.textContent = "Add Item";
+    title.style.fontSize = "13px";
+    const closeButton = QM.button("×", { bg: "transparent", border: true, fg: "inherit" });
+    closeButton.style.padding = "0 6px";
+    closeButton.addEventListener("click", () => this._closeAddItemModal());
+    header.append(title, closeButton);
+
+    const form = this._buildAddItemForm(() => this._closeAddItemModal());
+
+    panel.append(header, form);
+    backdrop.appendChild(panel);
+    this.addItemBackdrop = backdrop;
+    (this.root || this.body).appendChild(backdrop);
+    this._addItemEscapeHandler = this._bindEscapeClose(() => this._closeAddItemModal());
+  },
+
+  _closeAddItemModal() {
+    this.addItemBackdrop?.remove();
+    this.addItemBackdrop = null;
+    this._unbindEscapeClose(this._addItemEscapeHandler);
+    this._addItemEscapeHandler = null;
   },
 };

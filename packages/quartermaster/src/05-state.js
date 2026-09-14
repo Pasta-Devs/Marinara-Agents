@@ -140,6 +140,7 @@ const QM_COLOR_DANGER = "#dc2626";
 const QM_COLOR_DANGER_FG = "#fff";
 const QM_COLOR_SUCCESS = "#16a34a";
 const QM_COLOR_SUCCESS_FG = "#fff";
+const QM_COLOR_WARNING = "#ca8a04";
 
 function qmSortByName(list) {
   return list.slice().sort((a, b) => a.name.localeCompare(b.name));

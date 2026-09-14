@@ -133,6 +133,7 @@ export default tseslint.config(
         QM_COLOR_DANGER_FG: "readonly",
         QM_COLOR_SUCCESS: "readonly",
         QM_COLOR_SUCCESS_FG: "readonly",
+        QM_COLOR_WARNING: "readonly",
         QM_ICON_SVG: "readonly",
         QM_OVERLAY_TOP_SLOTS: "readonly",
         QM_OVERLAY_BOTTOM_SLOTS: "readonly",
