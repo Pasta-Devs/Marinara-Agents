@@ -17,6 +17,7 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
     date: "2026-09-15",
     notes: [
       "AI Creator drafts are repaired instead of failing: long text is shortened, gender and tag spellings are understood, broken JSON is fixed, and the form lists what still needs a choice.",
+      "Persona Creators now have the same drafting tools as character Creators: AI post drafts from your own text, and an AI image toggle in the composer for drafted and manual posts.",
       "Fixed bulk Creator creation skipping open-mode Creators with a wrong gender and tags reason, and draft errors now show the real cause.",
     ],
   },

@@ -85,6 +85,8 @@ export type PreparedNoodlerPostResult = {
 };
 
 type FormattedNoodlerGenerationRequest = NoodlerGenerationRequest & {
+  /** The composer asked for an image on this post, whatever the scheduler's image setting is. */
+  generateImage?: boolean;
   format?: NoodlerContentFormat;
   /** The guided path can ask for a Story outright instead of waiting for the rotation. */
   postType?: "post" | "story";
@@ -396,7 +398,9 @@ export async function generateNoodlerPost(
   const { account } = input;
   const settings = await noodle.getSettings();
   const autoPosting = account.settings.scheduler.autoPosting;
-  const imagesEnabled = autoPosting?.imagesEnabled === true && !input.media;
+  // The composer's AI image toggle is a request from the user, so it counts like the scheduler's
+  // own setting. Without this a Creator with scheduled images off could never ask for one.
+  const imagesEnabled = (autoPosting?.imagesEnabled === true || input.request.generateImage === true) && !input.media;
 
   const connections = createConnectionsStorage(db);
   const fallbackConnection = await connections.getFallbackForMain();

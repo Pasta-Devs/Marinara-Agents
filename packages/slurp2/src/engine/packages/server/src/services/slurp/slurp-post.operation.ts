@@ -89,7 +89,10 @@ export async function generateAndApplyNoodlerPost(
     if (!account) {
       return { status: "noodler_account_not_found" } as const;
     }
-    if (account.kind === "persona" && account.sourceKind === "persona") {
+    // A persona-sourced Creator is the player: nothing writes for it unattended. An explicit
+    // request from its owner — the composer's Guide button — is a different thing and is allowed,
+    // which is what gives these Creators the same drafting tools as character Creators.
+    if (account.kind === "persona" && account.sourceKind === "persona" && admissionMode?.kind === "background") {
       return { status: "disabled" } as const;
     }
     const publicAccount = await noodle.resolveAccountSource(account);
@@ -231,6 +234,8 @@ export async function createNoodlerPost(
     linkedPostId?: string | null;
     /** This post's own unlock price. Absent uses the Creator's price, then Settings. */
     unlockPrice?: number | null;
+    /** Image directions kept on a manual post, so its image can be rendered afterwards. */
+    imagePrompt?: string | null;
   },
   media?: NoodlerPostMediaUpload,
 ): Promise<CreateNoodlerPostResult> {
@@ -253,6 +258,7 @@ export async function createNoodlerPost(
           content: input.content,
           source: "manual",
           access: input.access,
+          imagePrompt: input.imagePrompt?.trim() || null,
           imageUrl: persistedMedia?.imageUrl ?? null,
           metadata: {
             noodlerContentFormat: input.format ?? "caption",

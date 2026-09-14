@@ -240,7 +240,7 @@ const slurpNoodlerGenerationRequestSchema = (
   noodlerGenerationRequestSchema instanceof z.ZodEffects
     ? noodlerGenerationRequestSchema.innerType()
     : noodlerGenerationRequestSchema
-).extend({ postType: slurpPostTypeSchema.default("post") });
+).extend({ postType: slurpPostTypeSchema.default("post"), generateImage: z.boolean().optional() });
 
 const slurpNoodlerPostCreateBaseSchema = (
   noodlerPostCreateWithMediaSchema instanceof z.ZodEffects
@@ -251,18 +251,30 @@ const slurpNoodlerPostCreateWithMediaSchema = slurpNoodlerPostCreateBaseSchema
   .extend({
     postType: slurpPostTypeSchema.default("post"),
     linkedPostId: z.string().trim().min(1).nullable().optional(),
+    imagePrompt: z.string().trim().max(2000).optional(),
     // Multipart bodies carry numbers as text, and an empty field means "use the Creator's price".
     unlockPrice: z.preprocess(
       (value) => (value === "" || value === null ? undefined : value),
       z.coerce.number().int().min(0).max(9999).optional(),
     ),
   })
-  .superRefine(({ postType: _postType, linkedPostId: _linkedPostId, unlockPrice: _unlockPrice, ...rest }, ctx) => {
-    const result = noodlerPostCreateWithMediaSchema.safeParse(rest);
-    if (!result.success) {
-      for (const issue of result.error.issues) ctx.addIssue(issue);
-    }
-  });
+  .superRefine(
+    (
+      {
+        postType: _postType,
+        linkedPostId: _linkedPostId,
+        unlockPrice: _unlockPrice,
+        imagePrompt: _imagePrompt,
+        ...rest
+      },
+      ctx,
+    ) => {
+      const result = noodlerPostCreateWithMediaSchema.safeParse(rest);
+      if (!result.success) {
+        for (const issue of result.error.issues) ctx.addIssue(issue);
+      }
+    },
+  );
 const slurpNoodlerPostCreateSchema = slurpNoodlerPostCreateWithMediaSchema.superRefine((input, ctx) => {
   if (!input.content && !input.poll && !input.uploadedImageUrl) {
     ctx.addIssue({
