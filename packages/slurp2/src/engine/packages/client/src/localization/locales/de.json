@@ -234,7 +234,7 @@
   "ui.slurp.discover.searchTags": "Tags suchen",
   "ui.slurp.discover.customTag": "Eigenen Tag hinzufügen",
   "ui.slurp.discover.addTag": "Hinzufügen",
-  "ui.slurp.discover.minTags": "mindestens {{count}} zum Erstellen",
+  "ui.slurp.discover.minTags": "Zum Erstellen sind mindestens {{count}} Tags erforderlich",
   "ui.slurp.profile.discoveryProfile": "Entdeckungsprofil",
   "ui.slurp.profile.discoveryProfileDetail": "Hilf den richtigen Personen, diesen Creator zu finden. KI-Vorschläge können immer bearbeitet werden",
   "ui.slurp.subscription.cancelTitle": "Abonnement kündigen?",

@@ -395,6 +395,7 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
   // comments are public, and an arc title can name a Secret Creator's real city.
   const arcByCreator = new Map<string, string | null>();
   if (input.settings.arcFanReactions !== false) {
+    const accountsById = new Map((await noodle.listNoodlerAccounts()).map((account) => [account.id, account]));
     const arcEntries = await Promise.all(
       creators.map(async (creator): Promise<[string, string | null]> => {
         const projects = await noodle.listProjects(creator.id).catch(() => []);
@@ -403,8 +404,8 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
             const partnerNames = await Promise.all(
               project.creatorIds
                 .filter((id) => id !== creator.id)
-                .map(async (id) => {
-                  const partner = await noodle.getNoodlerAccountById(id).catch(() => null);
+                .map((id) => {
+                  const partner = accountsById.get(id) ?? null;
                   return partner && (partner.settings.privacy.identityDisclosure ?? "open") === "open"
                     ? partner.displayName
                     : null;
