@@ -15,6 +15,19 @@ assert.deepEqual(parse({ ...base, gender: "male", tags: ["art", "music"] }), {
   gender: "male",
   tags: ["art", "music"],
 });
+// An omitted tags value may take an array alias; a malformed one is refused so the retry can fix it.
+assert.deepEqual(parse({ ...base, gender: "other", themes: ["art", "music"] }), {
+  gender: "other",
+  tags: ["art", "music"],
+});
+const refuses = (value: unknown) =>
+  slurpGeneratedDiscoveryProfileSchema.safeParse(normalizeNoodlerStageProfileDraft(value)).success === false;
+assert.ok(refuses({ ...base, gender: "female", tags: "art, music" }), "a string tags value must be refused");
+assert.ok(refuses({ ...base, gender: "female", tags: { first: "art" } }), "an object tags value must be refused");
+assert.ok(
+  refuses({ ...base, gender: "female", tags: "art", themes: ["art", "music"] }),
+  "a malformed tags value must not be replaced by an alias",
+);
 // A value the schema does not allow is still refused, so the model's retry prompt stays useful.
 assert.equal(
   slurpGeneratedDiscoveryProfileSchema.safeParse(normalizeNoodlerStageProfileDraft({ ...base, gender: "robot" }))
