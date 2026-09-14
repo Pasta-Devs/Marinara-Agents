@@ -1,5 +1,9 @@
 # Pixelforge release notes
 
+## 0.16.7 — 2026-09-14
+
+- Prepare and save the world before Engine starts the opening narration, so the GM knows the actual starting place and residents. Preparation failures keep the existing retry screen, and play stays paused until Continue.
+
 ## 0.16.6 — 2026-09-13
 
 - The Setting text you type in the setup form is no longer cut at 8,000 characters before it reaches the storyteller. World generation still trims its own copy to fit the Engine's 8,000-character request limit.

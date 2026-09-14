@@ -22,6 +22,11 @@ resumes where you left off.
 
 ## World generation (0.4.0)
 
+On Engine hosts supporting Capability API 1.17, Pixelforge prepares and saves its world before the
+opening narration. Start waits for preparation; failures keep the existing retry screen. The first
+GM request receives the actual world context and starting residents, and movement and the clock
+stay paused until Continue. Existing saved worlds are reused without generating them again.
+
 Since 0.4.0 the wizard's preferences drive what the world *is*, under one rule: **the LLM decides
 what exists, the algorithm decides where every tile goes.** After launch the surface makes one
 host-run structured generation call (`POST /api/game/:chatId/experience-generation`, Engine

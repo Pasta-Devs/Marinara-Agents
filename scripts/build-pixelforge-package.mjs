@@ -23,8 +23,8 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageRoot = join(repoRoot, "packages/pixelforge");
 const artifactsDir = join(repoRoot, "artifacts");
 
-const VERSION = "0.16.6";
-const CAPABILITY_API = Object.freeze({ major: 1, minor: 10 });
+const VERSION = "0.16.7";
+const CAPABILITY_API = Object.freeze({ major: 1, minor: 17 });
 const ENGINE_MIN = "2.4.5"; // world-generation selections use full lore entries and explicit context checks
 const MAX_ENGINE_EXCLUSIVE = "4.0.0";
 const BASE_DESCRIPTION =
@@ -138,7 +138,7 @@ const manifest = {
   entrypoints: { agents: "agents.json", client: "client.js" },
   contributions: {
     slots: ["game-surface"],
-    gameSurface: { surfaceClass: "pixelforge-surface" },
+    gameSurface: { surfaceClass: "pixelforge-surface", prepareBeforeStart: true },
     assets: { paths: declaredAssetPaths },
   },
   files: [
