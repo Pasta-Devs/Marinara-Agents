@@ -37,6 +37,7 @@ import {
   type NoodlerPostView,
 } from "@marinara-engine/shared";
 import { SLURP_FUNNEL_STAGES, SLURP_NAMED_CAST_LIMIT } from "../services/slurp/slurp-population.js";
+import { planSlurpFanTypeRebalance } from "../services/slurp/slurp-fan-types.js";
 
 /**
  * A subscriber row, widened for the generated audience.
@@ -187,6 +188,8 @@ import { createSlurpEventsStorage } from "../services/storage/slurp-events.stora
 import { advanceSlurpWorld } from "../services/slurp/slurp-world.operation.js";
 import { drainSlurpAudienceReplies } from "../services/slurp/slurp-audience-reply.operation.js";
 import { drainSlurpPendingText } from "../services/slurp/slurp-pending-text.service.js";
+import { topUpSlurpReactionBank } from "../services/slurp/slurp-reaction-bank.operation.js";
+import { getSlurpModelBudgetLedger } from "../services/slurp/slurp-model-worker.js";
 import { createSlurpPopulationStorage } from "../services/storage/slurp-population.storage.js";
 import { groupSlurpEvents } from "../services/slurp/slurp-event-weight.js";
 import {
@@ -248,8 +251,13 @@ const slurpNoodlerPostCreateWithMediaSchema = slurpNoodlerPostCreateBaseSchema
   .extend({
     postType: slurpPostTypeSchema.default("post"),
     linkedPostId: z.string().trim().min(1).nullable().optional(),
+    // Multipart bodies carry numbers as text, and an empty field means "use the Creator's price".
+    unlockPrice: z.preprocess(
+      (value) => (value === "" || value === null ? undefined : value),
+      z.coerce.number().int().min(0).max(9999).optional(),
+    ),
   })
-  .superRefine(({ postType: _postType, linkedPostId: _linkedPostId, ...rest }, ctx) => {
+  .superRefine(({ postType: _postType, linkedPostId: _linkedPostId, unlockPrice: _unlockPrice, ...rest }, ctx) => {
     const result = noodlerPostCreateWithMediaSchema.safeParse(rest);
     if (!result.success) {
       for (const issue of result.error.issues) ctx.addIssue(issue);
@@ -562,6 +570,27 @@ export async function slurpRoutes(app: FastifyInstance) {
   app.post("/arc-library/:id/reset", async (req, reply) => {
     const settings = await noodle.resetArcType((req.params as { id: string }).id);
     return settings ?? reply.code(404).send({ error: "Not a built-in arc type." });
+  });
+  // Shares only ever applied to new members. Preview and apply run the same deterministic plan, so
+  // what the player is shown is what gets written.
+  async function planFanTypeRebalance() {
+    const settings = await noodle.getSlurpSettings();
+    const members = await createSlurpPopulationStorage(app.db).listAll(5000);
+    return planSlurpFanTypeRebalance(members, settings.fanTypes);
+  }
+  app.get("/fan-types/rebalance/preview", async () => {
+    const plan = await planFanTypeRebalance();
+    return { changed: plan.changes.length, counts: plan.counts };
+  });
+  app.get("/model-budget/usage", async () => getSlurpModelBudgetLedger(app.db));
+  app.post("/fan-types/rebalance", async () => {
+    const plan = await planFanTypeRebalance();
+    // All or nothing: a failed write rolls the pass back instead of reporting the planned count.
+    await app.db.transaction(async (tx) => {
+      const population = createSlurpPopulationStorage(tx);
+      for (const change of plan.changes) await population.setFanType(change.memberId, change.to);
+    });
+    return { changed: plan.changes.length, counts: plan.counts };
   });
   app.get("/discovery-tags/usage", async () => noodle.countDiscoveryTagUsage());
   app.post("/discovery-tags/rename", async (req, reply) => {
@@ -1000,10 +1029,8 @@ export async function slurpRoutes(app: FastifyInstance) {
     }
     const character = await characters.getById(source.entityId);
     if (!character) return reply.code(404).send({ error: "Linked Engine character not found." });
-    const connection = await resolveSlurpTextConnection(
-      connections,
-      (await noodle.getSettings()).generationConnectionId,
-    );
+    const scheduleSettings = await noodle.getSettings();
+    const connection = await resolveSlurpTextConnection(connections, scheduleSettings.generationConnectionId);
     if (!connection) return reply.code(409).send({ error: "Select a text generation connection first." });
     const data = (typeof character.data === "string" ? JSON.parse(character.data) : character.data) as Record<
       string,
@@ -1013,11 +1040,15 @@ export async function slurpRoutes(app: FastifyInstance) {
       data.extensions && typeof data.extensions === "object" && !Array.isArray(data.extensions)
         ? (data.extensions as Record<string, unknown>)
         : {};
-    const generated = await generateSlurpConversationSchedule(connection, {
-      name: String(data.name ?? source.displayName),
-      description: String(data.description ?? ""),
-      personality: String(data.personality ?? ""),
-    });
+    const generated = await generateSlurpConversationSchedule(
+      connection,
+      {
+        name: String(data.name ?? source.displayName),
+        description: String(data.description ?? ""),
+        personality: String(data.personality ?? ""),
+      },
+      scheduleSettings.simulationTuning.prompts.scheduleExtra,
+    );
     const today = new Date();
     const monday = new Date(today);
     monday.setDate(today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1));
@@ -1191,7 +1222,8 @@ export async function slurpRoutes(app: FastifyInstance) {
     // Real followers come from the audience funnel, and only from there. Following also moves the
     // funnel now, so adding the social following list on top would count the same person twice —
     // at 25x weight each.
-    const countsScale = slurpPlatformScaleMultiplier((await noodle.getSettings()).platformScale);
+    const countsScaleSettings = await noodle.getSettings();
+    const countsScale = slurpPlatformScaleMultiplier(countsScaleSettings.platformScale);
     const countsPopulation = createSlurpPopulationStorage(app.db);
     const countsFunnel = await countsPopulation.countFollowersForCreators(creators.map((creator) => creator.id));
     const countsSubscribers = await countsPopulation.countSubscribersForCreators(creators.map((creator) => creator.id));
@@ -1214,6 +1246,7 @@ export async function slurpRoutes(app: FastifyInstance) {
               scale: countsScale,
             },
             at,
+            countsScaleSettings.simulationTuning.reach,
           ),
         },
       ]),
@@ -1529,7 +1562,8 @@ export async function slurpRoutes(app: FastifyInstance) {
     const projectedAt = new Date();
     const authorIds = [...new Set(posts.map((post) => post.authorAccountId))];
     const projectionFunnel = await createSlurpPopulationStorage(app.db).countFollowersForCreators(authorIds);
-    const projectionScale = slurpPlatformScaleMultiplier((await noodle.getSettings()).platformScale);
+    const projectionScaleSettings = await noodle.getSettings();
+    const projectionScale = slurpPlatformScaleMultiplier(projectionScaleSettings.platformScale);
     const reachByAccountId = new Map(
       authorIds.map((accountId) => {
         const account = context.accountById.get(accountId);
@@ -1544,6 +1578,7 @@ export async function slurpRoutes(app: FastifyInstance) {
                   scale: projectionScale,
                 },
                 projectedAt,
+                projectionScaleSettings.simulationTuning.reach,
               )
             : 0,
         ] as const;
@@ -2073,6 +2108,11 @@ export async function slurpRoutes(app: FastifyInstance) {
     await drainSlurpPendingText(app.db).catch((error: unknown) =>
       logger.warn(error, "[slurp-pending] Drain on open failed"),
     );
+    // Present mode grows reusable banks only while somebody is here. Background mode also reaches
+    // this path, but the durable ledger still makes it one shared budget.
+    await topUpSlurpReactionBank(app.db, "present").catch((error: unknown) =>
+      logger.warn(error, "[slurp-bank] Top-up on open failed"),
+    );
     // Tier 2 the other way round: the creator answering the audience rather than the audience
     // being rewritten. Same rule and same reason it lives here — unattended work never calls the
     // model, so a written answer is spent with the player present and against a comment thread
@@ -2189,7 +2229,8 @@ export async function slurpRoutes(app: FastifyInstance) {
     const operated = accounts.filter((account) => creatorBelongsToViewer(account, viewer));
     const population = createSlurpPopulationStorage(app.db);
     const studioFunnel = await population.countFollowersForCreators(operated.map((account) => account.id));
-    const studioScale = slurpPlatformScaleMultiplier((await noodle.getSettings()).platformScale);
+    const studioScaleSettings = await noodle.getSettings();
+    const studioScale = slurpPlatformScaleMultiplier(studioScaleSettings.platformScale);
     const at = new Date();
     const snapshot = await readSlurpStudioSnapshot(app.db, viewer.id);
 
@@ -2216,6 +2257,7 @@ export async function slurpRoutes(app: FastifyInstance) {
             scale: studioScale,
           },
           at,
+          studioScaleSettings.simulationTuning.reach,
         );
         const earnings = await noodle.getEarnings(account.id);
         const goal = await noodle.getGoal(account.id);
@@ -3317,6 +3359,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     const population = createSlurpPopulationStorage(app.db);
     const at = new Date();
     const followerFloor = SLURP_FUNNEL_STAGES.indexOf("follower");
+    const followersSettings = await noodle.getSettings();
     const items = (await population.listNamedCast(id, SLURP_NAMED_CAST_LIMIT * 3))
       .filter(
         (entry) =>
@@ -3342,9 +3385,10 @@ export async function slurpRoutes(app: FastifyInstance) {
           accountId: creator.id,
           createdAt: creator.createdAt,
           realFollowers: (await population.countFollowersForCreators([id])).get(id) ?? 0,
-          scale: slurpPlatformScaleMultiplier((await noodle.getSettings()).platformScale),
+          scale: slurpPlatformScaleMultiplier(followersSettings.platformScale),
         },
         at,
+        followersSettings.simulationTuning.reach,
       ),
     };
   });

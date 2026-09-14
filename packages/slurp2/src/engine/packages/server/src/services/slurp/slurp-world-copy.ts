@@ -14,6 +14,8 @@
  * before reaching for the model — the combinations here already run into the hundreds.
  */
 
+import type { SlurpAudienceTone } from "./slurp-tone.js";
+
 const COMMISSION_OPENERS = [
   "Would you take a request?",
   "Hoping you have space for a commission.",
@@ -31,6 +33,12 @@ const COMMISSION_ASKS = [
   "whatever you have been wanting to make and have not yet",
   "something I can keep for myself rather than scroll past",
   "a piece with the feel of your older work",
+  "a quick sketch, nothing polished",
+  "a detailed full-body piece with a proper background",
+  "the two of us together in one scene",
+  "a small set of three around the same theme",
+  "a simple headshot I can use as an icon",
+  "a painted scene, as detailed as you like",
 ] as const;
 
 const COMMISSION_CLOSERS = [
@@ -39,6 +47,7 @@ const COMMISSION_CLOSERS = [
   "Say a price and I will send it over.",
   "Happy to wait for a slot.",
   "Whatever you think is fair.",
+  "I would love it by tonight if you can.",
 ] as const;
 
 const QUESTIONS = [
@@ -184,6 +193,32 @@ export const SLURP_SHIPPED_REACTIONS = [
   "the audacity honestly",
 ] as const;
 
+/**
+ * A starter bank per built-in Fan Type.
+ *
+ * Three bodies each, not thirty: the point is that a Lurker sounds unlike a Troll on the first
+ * tick of a fresh install, before any model call has ever run. Volume still comes from the shared
+ * bank underneath and from `slurp-reaction-bank.operation.ts` growing each type past this floor.
+ */
+export const SLURP_SHIPPED_TYPE_REACTIONS: Readonly<Record<string, readonly string[]>> = {
+  regular: ["this is lovely", "always a good one", "made my evening"],
+  "night-owl": ["3am and here I am", "why am I awake for this", "the night shift approves"],
+  "crossover-fan": [
+    "found you through someone else and stayed",
+    "this beats what I came from",
+    "recommending you again",
+  ],
+  troll: ["sure ok", "bold of you to post this", "not paying for it though"],
+  newcomer: ["new here, is it always like this", "wait how did I not know about you", "just followed"],
+  lurker: ["🫶", "👀", "❤️"],
+  superfan: [
+    "been here since the early ones and this is top three",
+    "you have gotten so good at this",
+    "I noticed the change and I love it",
+  ],
+  whale: ["worth every coin", "put this in the shop", "take my money honestly"],
+};
+
 const REACTION_TAILS = ["", "", "", " 🔥", " 😍", " 🥺", "!!", "…", " ❤️", " 😭"] as const;
 
 /**
@@ -198,7 +233,21 @@ const REACTION_TAILS = ["", "", "", " 🔥", " 😍", " 🥺", "!!", "…", " �
  * floor, and the stored bank is what carries volume past it.
  */
 export function slurpAudienceReaction(seed: string, extraBodies: readonly string[] = []): string {
-  const bodies = extraBodies.length > 0 ? [...SLURP_SHIPPED_REACTIONS, ...extraBodies] : SLURP_SHIPPED_REACTIONS;
+  return slurpAudienceReactionFrom(
+    seed,
+    extraBodies.length > 0 ? [...SLURP_SHIPPED_REACTIONS, ...extraBodies] : SLURP_SHIPPED_REACTIONS,
+  );
+}
+
+/**
+ * The same line, from a body pool the caller chose.
+ *
+ * Per-type banks need the pool decided outside this function — a Troll drawing from the shared
+ * shipped bodies is exactly what the fan types were added to stop. An empty pool falls back to the
+ * shipped bodies, so a caller can never produce a blank comment.
+ */
+export function slurpAudienceReactionFrom(seed: string, pool: readonly string[]): string {
+  const bodies = pool.length > 0 ? pool : SLURP_SHIPPED_REACTIONS;
   const opener = REACTION_OPENERS[pickIndex(seed, "reaction-open", REACTION_OPENERS.length)]!;
   const body = bodies[pickIndex(seed, "reaction", bodies.length)]!;
   const tail = REACTION_TAILS[pickIndex(seed, "reaction-tail", REACTION_TAILS.length)]!;
@@ -267,4 +316,51 @@ const COLD = [
 export function slurpCreatorOpener(seed: string, kind: "missed" | "cold"): string {
   const bank = kind === "missed" ? MISSED : COLD;
   return bank[pickIndex(seed, `creator-dm-${kind}`, bank.length)]!;
+}
+
+/**
+ * Why somebody stopped paying, in words.
+ *
+ * A lapse was silent: the tie moved to `lapsed` and the player saw a name with no reason attached,
+ * which is the least useful shape a loss can have. The reason is already known at the point of the
+ * decision — the price went past what they will pay, they stopped turning up, or they simply
+ * drifted — so saying it costs nothing and is the difference between a number moving and something
+ * happening.
+ *
+ * Tone-aware, because this is the one place the audience gets to be unkind. A warm audience loses
+ * people quietly; an unfiltered one says why on the way out. `warm` is never allowed a cruel line,
+ * whatever the reason: that is the promise the setting makes.
+ */
+const LAPSE_NOTES: Record<"price" | "quiet" | "drift", Record<"warm" | "blunt", readonly string[]>> = {
+  price: {
+    warm: [
+      "cannot stretch to the subscription this month, sorry",
+      "the price is a bit much for me right now",
+      "pausing this one until money is easier",
+    ],
+    blunt: [
+      "not paying that much for it",
+      "the price went up and I did not",
+      "was fine at the old price. not at this one",
+    ],
+  },
+  quiet: {
+    warm: ["been away from here for a while", "not been around much lately", "life got busy, stepping back"],
+    blunt: ["nothing new worth staying for", "gone quiet, so have I", "there stopped being a reason to check"],
+  },
+  drift: {
+    warm: [
+      "off to spend my coins elsewhere for a bit",
+      "still lovely, just not for me at the moment",
+      "moving on, no hard feelings",
+    ],
+    blunt: ["not into it any more", "was good while it lasted", "found other things to follow"],
+  },
+};
+
+export type SlurpLapseReason = "price" | "quiet" | "drift";
+
+export function slurpLapseNote(seed: string, reason: SlurpLapseReason, tone: SlurpAudienceTone): string {
+  const bank = LAPSE_NOTES[reason][tone === "warm" ? "warm" : "blunt"];
+  return bank[pickIndex(seed, `lapse-${reason}`, bank.length)]!;
 }

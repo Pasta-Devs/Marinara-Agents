@@ -427,6 +427,10 @@ export const slurpCommissions = fileTable("slurp2_commissions", {
   deliveryClaimToken: text("delivery_claim_token"),
   /** Lease start time. A stopped worker's claim may be recovered after five minutes. */
   deliveryClaimedAt: text("delivery_claimed_at"),
+  /** A fan's pending counter-offer. The Creator answers it by quoting again or holding the price. */
+  counterPrice: text("counter_price"),
+  /** Counter-offers made so far. The price is final after `SLURP_COMMISSION_MAX_HAGGLE_ROUNDS`. */
+  haggleRounds: text("haggle_rounds").notNull().default("0"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
@@ -478,6 +482,8 @@ export const slurpEvents = fileTable("slurp2_events", {
   subjectId: text("subject_id"),
   /** Who acted, for display. Stored rather than joined so a departed fan still renders. */
   actorLabel: text("actor_label"),
+  /** One readable line about the event, from a Tier 1 bank. Null for events that need none. */
+  note: text("note"),
   /** Stable payment operation that produced this event, when the action must be idempotent. */
   operationId: text("operation_id"),
   /** Coins, follower counts, or a milestone target, depending on kind. */
@@ -504,6 +510,9 @@ export const slurpPopulation = fileTable(
     handle: text("handle").notNull(),
     displayName: text("display_name").notNull(),
     archetype: text("archetype").notNull(),
+    /** Which Fan Type this person is. Missing on a row written before Fan Types existed; those
+     * resolve through `archetype` at read time rather than needing a migration pass. */
+    fanTypeId: text("fan_type_id"),
     traits: text("traits").notNull().default("[]"),
     spendTier: text("spend_tier").notNull().default("none"),
     activeHour: text("active_hour").notNull().default("12"),
@@ -538,6 +547,9 @@ export const slurpAudienceTies = fileTable(
      */
     tipped: text("tipped").notNull().default("0"),
     unlocked: text("unlocked").notNull().default("0"),
+    /** Spend in the current rolling seven-day fan budget window. */
+    weeklySpent: text("weekly_spent").notNull().default("0"),
+    weeklySpendStartedAt: text("weekly_spend_started_at"),
     /**
      * Where this relationship is heading, as opposed to where it stands.
      *
@@ -556,6 +568,8 @@ export const slurpAudienceTies = fileTable(
      * them lapse.
      */
     paidThroughAt: text("paid_through_at"),
+    /** When this member first reached follower. Null for a tie that predates the column. */
+    followedAt: text("followed_at"),
     interactions: text("interactions").notNull().default("0"),
     firstSeenAt: text("first_seen_at").notNull(),
     lastSeenAt: text("last_seen_at").notNull(),
@@ -583,5 +597,23 @@ export const slurpPendingText = fileTable("slurp2_pending_text", {
   /** The post a question is about. Null for the other kinds. */
   postId: text("post_id"),
   actorLabel: text("actor_label"),
+  /** General worker kind. Existing rows default to rewrite. */
+  jobKind: text("job_kind").notNull().default("rewrite"),
+  /** pending | running | failed. Successful jobs are removed. */
+  status: text("status").notNull().default("pending"),
+  priority: text("priority").notNull().default("2"),
+  attempts: text("attempts").notNull().default("0"),
+  claimedAt: text("claimed_at"),
+  expiresAt: text("expires_at"),
   createdAt: text("created_at").notNull(),
+});
+
+/** New name for the generalized queue; the physical table stays put so existing jobs survive. */
+export const slurpModelJobs = slurpPendingText;
+
+/** One cross-process lease for the free world tick. */
+export const slurpWorldClaims = fileTable("slurp2_world_claims", {
+  id: text("id").primaryKey(),
+  token: text("token").notNull(),
+  claimedAt: text("claimed_at").notNull(),
 });

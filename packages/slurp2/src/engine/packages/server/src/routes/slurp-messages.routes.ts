@@ -34,6 +34,11 @@ import { createConnectionsStorage } from "../services/storage/connections.storag
 import { isDebugAgentsEnabled } from "../config/runtime-config.js";
 import { slurpCommissionDeliveryDelayMs } from "../services/slurp/slurp-messaging.js";
 import {
+  slurpCommissionQuote,
+  slurpDynamicPriceTarget,
+  type SlurpCommissionPricing,
+} from "../services/slurp/slurp-creator-pricing.js";
+import {
   isAllowedImageBuffer,
   resolveNoodlerMediaAbsolutePath,
   slurpMessageMediaUrl,
@@ -163,7 +168,16 @@ const messagingPatchSchema = z.object({
   ppvPrice: z.number().int().min(0).max(9999).optional(),
   rapportWeights: rapportWeightsSchema.optional(),
   proactiveMessages: z.boolean().optional(),
+  unlockPrice: z.number().int().min(0).max(9999).nullable().optional(),
+  commissionBase: z.number().int().min(1).max(99999).optional(),
+  commissionMin: z.number().int().min(1).max(99999).optional(),
+  commissionMax: z.number().int().min(1).max(99999).optional(),
+  autoQuote: z.boolean().optional(),
 });
+
+/** The quote each open brief would get from the Creator's own pricing, for the quote form. */
+const withSuggestedQuotes = <T extends { brief: string }>(commissions: T[], pricing: SlurpCommissionPricing) =>
+  commissions.map((commission) => ({ ...commission, suggestedPrice: slurpCommissionQuote(commission.brief, pricing) }));
 
 export async function slurpMessageRoutes(app: FastifyInstance) {
   const slurp = createSlurpStorage(app.db);
@@ -360,7 +374,10 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       counterpart,
       ...(await creatorPresence(creator, thread.id)),
       messaging: await messages.getCreatorMessaging(thread.creatorAccountId),
-      commissions: await messages.listCommissionsForThread(thread.id),
+      commissions: withSuggestedQuotes(
+        await messages.listCommissionsForThread(thread.id),
+        await messages.getCreatorMessaging(thread.creatorAccountId),
+      ),
       relationship: {
         side,
         tier: thread.rapport.tier,
@@ -762,6 +779,21 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     return { commission: updated };
   });
 
+  /** The fan offers a lower price. A character Creator answers at once; a persona Creator answers by hand. */
+  app.post("/messages/commissions/:commissionId/counter", async (req, reply) => {
+    const parsed = commissionQuoteSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const commission = await messages.getCommission((req.params as { commissionId: string }).commissionId);
+    if (!commission || commission.viewerAccountId !== parsed.data.personaId)
+      return reply.code(404).send({ error: "Commission not found" });
+    const countered = await messages.counterCommission(commission.id, parsed.data.price);
+    if (!countered) return reply.code(409).send({ error: "This quote is not open to an offer." });
+    const creator = await slurp.getNoodlerAccountById(commission.creatorAccountId);
+    if (!creator || creator.sourceKind === "persona") return { commission: countered };
+    const pricing = await messages.getCreatorMessaging(commission.creatorAccountId);
+    return { commission: (await messages.answerCommissionCounter(commission.id, pricing.commissionMin)) ?? countered };
+  });
+
   app.post("/messages/commissions/:commissionId/accept", async (req, reply) => {
     const parsed = personaQuerySchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
@@ -1146,9 +1178,20 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       return reply.code(403).send({ error: "Only the Creator's owner can read messaging settings." });
     // The weekly price rides along: it is already public on every profile, and the Creator's own
     // settings panel needs it beside the message prices rather than through a second request.
+    const settings = await slurp.getSettings();
+    const demand = {
+      followers: (await population.countFollowersForCreators([creatorAccountId])).get(creatorAccountId) ?? 0,
+      subscribers: (await population.countSubscribersForCreators([creatorAccountId])).get(creatorAccountId) ?? 0,
+    };
     return {
       messaging: await messages.getCreatorMessaging(creatorAccountId),
       subscriptionPrice: await slurp.getCreatorSubscriptionPrice(creatorAccountId),
+      // What the market would bear at this audience size. Shown beside the fields, never applied.
+      suggested: {
+        subscriptionPrice: slurpDynamicPriceTarget(settings.walletSubscriptionCost, demand),
+        unlockPrice: slurpDynamicPriceTarget(settings.walletUnlockCost, demand),
+        commissionBase: slurpDynamicPriceTarget(settings.simulationTuning.economy.audienceCommissionPrice, demand),
+      },
     };
   });
 

@@ -192,7 +192,7 @@ export async function replyToSlurpMessage(
       const settings = await slurp.getSettings();
       const connection = await resolveSlurpTextConnection(
         createConnectionsStorage(db),
-        settings.generationConnectionId,
+        settings.modelBudget.connectionId ?? settings.generationConnectionId,
       );
       if (!connection) return { status: "connection_not_found" } as const;
       const messaging = await messagesStore.getCreatorMessaging(thread.creatorAccountId);

@@ -147,6 +147,8 @@ export const mapCommission = (row: Record<string, unknown>): SlurpCommission => 
   deliveryId: (row.deliveryId as string | null) ?? null,
   deliveryClaimToken: (row.deliveryClaimToken as string | null) ?? null,
   deliveryClaimedAt: (row.deliveryClaimedAt as string | null) ?? null,
+  counterPrice: row.counterPrice == null ? null : int(String(row.counterPrice)),
+  haggleRounds: int(String(row.haggleRounds ?? "0")),
   createdAt: String(row.createdAt),
   updatedAt: String(row.updatedAt),
 });

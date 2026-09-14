@@ -234,10 +234,14 @@ assert.match(
 const postOperation = read(join(server, "services/slurp/slurp-post.operation.ts"));
 // Settings → Wallet → "Unlock a post" is documented as the default a locked post is stamped with.
 // Both creation paths called the helper with no argument, so every locked post cost the shipped 1.
-assert.match(postOperation, /const unlockPrice = \(await noodle\.getSettings\(\)\)\.walletUnlockCost;/u);
+// The posts own price wins, then the Creators, then the Settings default.
+assert.match(
+  postOperation,
+  /input\.unlockPrice \?\?[\s\S]{0,160}?\.unlockPrice \?\?\s*\(await noodle\.getSettings\(\)\)\.walletUnlockCost;/u,
+);
 assert.doesNotMatch(postOperation, /noodlerUnlockPriceMetadata\(\)/u, "a locked post must be stamped with the setting");
 assert.doesNotMatch(generation, /noodlerUnlockPriceMetadata\(\)/u);
-assert.match(generation, /noodlerUnlockPriceMetadata\(settings\.walletUnlockCost\)/u);
+assert.match(generation, /noodlerUnlockPriceMetadata\([\s\S]{0,160}?\.unlockPrice \?\?\s*settings\.walletUnlockCost/u);
 
 // ── Subscribe ────────────────────────────────────────────
 

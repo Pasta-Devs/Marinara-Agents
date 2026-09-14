@@ -142,6 +142,10 @@ import {
   type SlurpProjectStatus,
 } from "../slurp/slurp-project.js";
 import { SLURP_AUDIENCE_TONES, SLURP_DEFAULT_AUDIENCE_TONE } from "../slurp/slurp-tone.js";
+import { SLURP_REALISTIC_TUNING, slurpSimulationTuningSchema } from "../slurp/slurp-tuning.js";
+import { slurpFanTypesDefault, slurpFanTypesSchema, slurpNormalizeFanTypes } from "../slurp/slurp-fan-types.js";
+import { slurpNormalizeReactionBanks, type SlurpReactionBanks } from "../slurp/slurp-reaction-bank.js";
+import { slurpModelBudgetSchema } from "../slurp/slurp-model-budget.js";
 import {
   SLURP_DEFAULT_PLATFORM_SCALE,
   SLURP_DEFAULT_WORLD_ACTIVITY,
@@ -213,6 +217,7 @@ import {
   slurpCommissions,
   slurpFollowUps,
   slurpPaymentCompensations,
+  slurpWorldClaims,
 } from "../../db/schema/slurp.js";
 import { appSettings } from "../../db/schema/app-settings.js";
 import {
@@ -300,6 +305,7 @@ const SLURP_BACKUP_TABLES = {
   commissions: slurpCommissions,
   paymentCompensations: slurpPaymentCompensations,
   pendingText: slurpPendingText,
+  worldClaims: slurpWorldClaims,
 } as const;
 
 type SlurpBackupTableName = keyof typeof SLURP_BACKUP_TABLES;
@@ -483,7 +489,7 @@ export const slurpSettingsSchema = z.object({
    * the player can edit or clear in Settings, and somewhere a rare, cheap generation can leave new
    * lines behind. One call buys hundreds of comments.
    */
-  audienceReactionBank: z.array(z.string().min(1).max(120)).max(400),
+  audienceReactionBank: z.unknown().transform(slurpNormalizeReactionBanks),
   worldActivity: z.enum(SLURP_WORLD_ACTIVITY),
   platformScale: z.enum(SLURP_PLATFORM_SCALE),
   generationConnectionId: z.string().nullable(),
@@ -539,6 +545,10 @@ export const slurpSettingsSchema = z.object({
   walletEnabled: z.boolean(),
   walletUnlockCost: z.number().int().min(0).max(9999),
   walletSubscriptionCost: z.number().int().min(0).max(9999),
+  /** Character Creators move their own prices once a week from popularity and demand. */
+  pricingDynamicCharacters: z.boolean(),
+  /** Largest change one weekly price adjustment may make, as a percentage of the current price. */
+  pricingMaxWeeklyChangePercent: z.number().int().min(0).max(100),
   /** Daily stipend tops the balance up to this floor. Zero disables the stipend. */
   walletStipendFloor: z.number().int().min(0).max(99_999),
   walletDayStartHour: z.number().int().min(0).max(23),
@@ -580,6 +590,12 @@ export const slurpSettingsSchema = z.object({
   autopurgeKeepPosts: z.boolean(),
   autopurgeIncludeMessageMedia: z.boolean(),
   autopurgeNextRunAt: z.string().datetime({ offset: true }).nullable(),
+  /** Every number the audience simulation runs on. See `slurp-tuning.ts`; a partial object fills from Realistic. */
+  simulationTuning: slurpSimulationTuningSchema,
+  /** Who is in the audience. See `slurp-fan-types.ts`; an empty or broken list falls back to the built-ins. */
+  fanTypes: slurpFanTypesSchema,
+  /** Which visible text may call a model, and the hard hourly/daily budget for it. */
+  modelBudget: slurpModelBudgetSchema,
   nightQuiet: z.boolean(),
   onboarding: z.enum(["not_started", "in_progress", "completed"]),
 });
@@ -1128,6 +1144,8 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   walletEnabled: true,
   walletUnlockCost: SLURP_DEFAULT_ECONOMY.unlockCost,
   walletSubscriptionCost: SLURP_DEFAULT_ECONOMY.subscriptionCost,
+  pricingDynamicCharacters: true,
+  pricingMaxWeeklyChangePercent: 15,
   walletStipendFloor: SLURP_DEFAULT_ECONOMY.stipendFloor,
   walletDayStartHour: SLURP_DEFAULT_ECONOMY.dayStartHour,
   walletAdReward: SLURP_DEFAULT_ECONOMY.adReward,
@@ -1213,7 +1231,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   fanRepliesPerRefresh: 6,
   // Ships empty: the shipped bodies carry a new install on their own, and a bank the player never
   // asked for should not arrive pre-filled with lines they did not choose.
-  audienceReactionBank: [],
+  audienceReactionBank: { shared: [], byType: {} } as SlurpReactionBanks,
   fanArchetypeWeights: {
     ordinary: 1,
     eccentric: 1,
@@ -1234,6 +1252,9 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   autopurgeKeepPosts: true,
   autopurgeIncludeMessageMedia: false,
   autopurgeNextRunAt: null,
+  simulationTuning: SLURP_REALISTIC_TUNING,
+  fanTypes: slurpFanTypesDefault(),
+  modelBudget: slurpModelBudgetSchema.parse({}),
   nightQuiet: false,
   onboarding: "not_started",
 };
@@ -1277,6 +1298,10 @@ export function normalizeSlurpSettings(raw: unknown): SlurpSettings {
       ? NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION
       : rawRecord.imagePromptInterpretation;
   candidate.nightQuiet = rawRecord.nightQuiet ?? DEFAULT_SLURP_SETTINGS.nightQuiet;
+  // Repaired rather than replaced: a player who edited one type must not lose the other seven
+  // because a single field went out of range. An all-disabled list re-enables built-in Regular,
+  // which is the one state the tick cannot run in — there would be nobody to pick.
+  candidate.fanTypes = slurpNormalizeFanTypes(rawRecord.fanTypes ?? DEFAULT_SLURP_SETTINGS.fanTypes);
   candidate.arcLibrary = rawRecord.arcLibrary ?? slurpArcLibraryFromLegacy(rawRecord.arcAllowedKinds);
   candidate.onboarding = rawRecord.onboarding ?? DEFAULT_SLURP_SETTINGS.onboarding;
   candidate.fanArchetypeWeights = {
@@ -6491,8 +6516,12 @@ export function createSlurpStorage(db: DB) {
         );
       // Losing a subscriber is news. A world that only reports good outcomes has no stakes.
       await this.recordCreatorEvent(creatorAccountId, "lapsed", { actorLabel: viewerAccountId });
+      // Ending a subscription is not an unfollow: a viewer still in Following stays a follower.
+      const stillFollowing = (await this.getViewer(viewerAccountId))?.settings.social.followingAccountIds?.includes(
+        creatorAccountId,
+      );
       await createSlurpPopulationStorage(db)
-        .lapseTie(viewerAccountId, creatorAccountId)
+        .lapseTie(viewerAccountId, creatorAccountId, stillFollowing ? "follower" : "lapsed")
         .catch(() => undefined);
     },
 
@@ -6546,6 +6575,28 @@ export function createSlurpStorage(db: DB) {
         total: db.count(noodleAccountSubscriptions, base),
         nextCursor: rows.length > boundedLimit && last ? { createdAt: last.createdAt, id: last.id } : null,
       };
+    },
+
+    /**
+     * Record a generated audience member buying a locked post without inventing a spendable
+     * viewer wallet. The world operation owns payment and tie accounting; this unique row makes
+     * the purchase visible in counts and prevents charging twice.
+     */
+    async recordAudiencePostUnlock(
+      viewerAccountId: string,
+      creatorAccountId: string,
+      postId: string,
+    ): Promise<boolean> {
+      const rows = await db.select().from(noodlePosts).where(eq(noodlePosts.id, postId));
+      const post = rows[0];
+      if (!post || post.authorAccountId !== creatorAccountId || post.access !== "locked") return false;
+      try {
+        await db.insert(noodlePostUnlocks).values({ id: newId(), viewerAccountId, postId, createdAt: now() });
+        return true;
+      } catch (error) {
+        if (isFileUniqueConstraintError(error, "slurp2_post_unlocks", ["viewerAccountId", "postId"])) return false;
+        throw error;
+      }
     },
 
     /**
@@ -6897,7 +6948,7 @@ export function createSlurpStorage(db: DB) {
     async creditCreatorIncome(
       creatorAccountId: string,
       price: number,
-      reason: "unlock" | "subscribe" | "renew" | "messageRequest" | "ppv" | "commission",
+      reason: "unlock" | "subscribe" | "renew" | "tip" | "messageRequest" | "ppv" | "commission",
       operationId?: string,
     ) {
       const settings = await this.getSettings();
@@ -6923,21 +6974,23 @@ export function createSlurpStorage(db: DB) {
      */
     async notifyCreatorIncome(
       creatorAccountId: string,
-      reason: "unlock" | "subscribe" | "renew" | "messageRequest" | "ppv" | "commission",
+      reason: "unlock" | "subscribe" | "renew" | "tip" | "messageRequest" | "ppv" | "commission",
       amount: number,
       actorLabel?: string | null,
       subjectId?: string | null,
     ): Promise<void> {
       const kind: SlurpEventKind =
-        reason === "subscribe" || reason === "renew"
-          ? "subscribed"
-          : reason === "ppv"
-            ? "ppv_unlock"
-            : reason === "messageRequest"
-              ? "message"
-              : reason === "commission"
-                ? "commission_accepted"
-                : "unlock";
+        reason === "tip"
+          ? "tip"
+          : reason === "subscribe" || reason === "renew"
+            ? "subscribed"
+            : reason === "ppv"
+              ? "ppv_unlock"
+              : reason === "messageRequest"
+                ? "message"
+                : reason === "commission"
+                  ? "commission_accepted"
+                  : "unlock";
       await this.recordCreatorEvent(creatorAccountId, kind, { amount, actorLabel, subjectId });
     },
 
@@ -6982,7 +7035,7 @@ export function createSlurpStorage(db: DB) {
     async recordCreatorEvent(
       creatorAccountId: string,
       kind: SlurpEventKind,
-      detail: { subjectId?: string | null; actorLabel?: string | null; amount?: number } = {},
+      detail: { subjectId?: string | null; actorLabel?: string | null; amount?: number; note?: string | null } = {},
     ): Promise<void> {
       try {
         const creator = await this.getNoodlerAccountById(creatorAccountId);

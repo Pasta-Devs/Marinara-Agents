@@ -23,6 +23,10 @@ import {
   UsersRound,
 } from "lucide-react";
 import { nextSlurpAutopurgeRunAt } from "../../../../shared/src/slurp-autopurge-time.js";
+import { Field, GuidanceBox, NumberSetting, SectionTitle, SettingsGroup, Toggle } from "./SlurpSettingsControls";
+import { SlurpSimulationSettings } from "./SlurpSimulationSettings";
+import { SlurpFanTypesSettings } from "./SlurpFanTypesSettings";
+import { SlurpAudienceConfigSettings } from "./SlurpAudienceConfigSettings";
 import type { ReactNode } from "react";
 import { api } from "../../lib/api-client";
 import { cn } from "../../lib/utils";
@@ -95,6 +99,7 @@ import {
   SLURP_ROW_ACTIVE_CLASS,
   SLURP_ROW_CLASS,
   SLURP_TOGGLE_ACTIVE_CLASS,
+  SlurpMediaImg,
 } from "./SlurpShell";
 import {
   SLURP_ACTIVITY_PRESETS,
@@ -132,61 +137,6 @@ const DEFAULT_SLURP_IMAGE_GENERATION_PROMPT =
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Could not update settings.";
-}
-
-function NumberSetting({
-  value,
-  min,
-  max,
-  onSave,
-}: {
-  value: number;
-  min: number;
-  max: number;
-  onSave: (value: number) => Promise<boolean> | boolean | void;
-}) {
-  const [draft, setDraft] = useState(String(value));
-  useEffect(() => setDraft(String(value)), [value]);
-  const saveQueueRef = useRef(Promise.resolve());
-  const saveGenerationRef = useRef(0);
-  const commit = async (raw = draft, resetInvalid = true) => {
-    const next = Number(raw);
-    if (!raw.trim() || !Number.isInteger(next) || next < min || next > max) {
-      if (resetInvalid) setDraft(String(value));
-      return;
-    }
-    // Serialize saves so a slow older request can't land after a newer one and persist a
-    // stale value; skip a queued save (and its failure recovery) once a later edit has
-    // already superseded it. Compare a generation token, not the value itself — a sequence
-    // like 1 -> 2 -> 1 would otherwise let the first save's failure recovery match the last.
-    // Swallow rejections so one failed save doesn't wedge the queue for every save after it.
-    const saveGeneration = ++saveGenerationRef.current;
-    saveQueueRef.current = saveQueueRef.current.then(async () => {
-      if (saveGenerationRef.current !== saveGeneration) return;
-      try {
-        if ((await onSave(next)) === false && saveGenerationRef.current === saveGeneration) setDraft(String(value));
-      } catch {
-        if (saveGenerationRef.current === saveGeneration) setDraft(String(value));
-      }
-    });
-    await saveQueueRef.current;
-  };
-  return (
-    <input
-      type="number"
-      min={min}
-      max={max}
-      value={draft}
-      onChange={(event) => {
-        const nextDraft = event.target.value;
-        setDraft(nextDraft);
-        void commit(nextDraft, false);
-      }}
-      onBlur={() => void commit()}
-      onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
-      className="h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base outline-none transition-colors focus:border-[var(--noodle-accent)] focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/30 sm:text-sm"
-    />
-  );
 }
 
 // Same row, same highlight as every other Slurp destination.
@@ -426,7 +376,11 @@ export function SlurpSettings({
   const adoptSourceIdentity = useAdoptNoodlerSourceIdentity();
   const dismissSourceChanges = useDismissNoodlerSourceChanges();
   const connectionsQuery = useSlurpConnections(
-    section === "overview" || section === "general" || section === "images" || section === "creators",
+    section === "overview" ||
+      section === "general" ||
+      section === "images" ||
+      section === "creators" ||
+      section === "audience",
   );
   const imageConnections = (connectionsQuery.data ?? []).filter(
     (connection) => connection.provider === "image_generation",
@@ -2020,6 +1974,34 @@ export function SlurpSettings({
                       onSave={(value) => update("walletSubscriptionCost", value)}
                     />
                   </Field>
+                  <Toggle
+                    label={t("ui.slurp.settings.wallet.pricingDynamicCharacters", {
+                      defaultValue: "Character Creators set their own prices",
+                    })}
+                    detail={t("ui.slurp.settings.wallet.pricingDynamicCharactersDetail", {
+                      defaultValue:
+                        "Once a week, each character Creator moves its subscription, locked post, and commission prices with its popularity. Current subscribers keep their price.",
+                    })}
+                    value={settings.pricingDynamicCharacters}
+                    onChange={(value) => update("pricingDynamicCharacters", value)}
+                  />
+                  {settings.pricingDynamicCharacters && (
+                    <Field
+                      label={t("ui.slurp.settings.wallet.pricingMaxWeeklyChange", {
+                        defaultValue: "Largest weekly price change, %",
+                      })}
+                      detail={t("ui.slurp.settings.wallet.pricingMaxWeeklyChangeDetail", {
+                        defaultValue: "How far one weekly adjustment may move a price. Zero freezes prices.",
+                      })}
+                    >
+                      <NumberSetting
+                        value={settings.pricingMaxWeeklyChangePercent}
+                        min={0}
+                        max={100}
+                        onSave={(value) => update("pricingMaxWeeklyChangePercent", value)}
+                      />
+                    </Field>
+                  )}
                   <Field
                     label={t("ui.slurp.settings.wallet.stipendFloor", { defaultValue: "Daily top-up floor" })}
                     detail={t("ui.slurp.settings.wallet.stipendFloorDetail", {
@@ -2448,7 +2430,7 @@ export function SlurpSettings({
                             className="flex items-start gap-3 rounded-lg bg-[var(--slurp-surface-raised)] p-3 ring-1 ring-inset ring-[var(--slurp-outline)]"
                           >
                             {ad.imageUrl ? (
-                              <img
+                              <SlurpMediaImg
                                 src={ad.imageUrl}
                                 alt=""
                                 loading="lazy"
@@ -3089,12 +3071,12 @@ export function SlurpSettings({
                         <Field
                           label={t("ui.slurp.settings.audience.reactionBank")}
                           detail={t("ui.slurp.settings.audience.reactionBankDetail", {
-                            count: settings.audienceReactionBank.length,
+                            count: settings.audienceReactionBank.shared.length,
                           })}
                         >
                           <textarea
                             rows={6}
-                            value={reactionBankDraft ?? settings.audienceReactionBank.join("\n")}
+                            value={reactionBankDraft ?? settings.audienceReactionBank.shared.join("\n")}
                             onChange={(event) => setReactionBankDraft(event.target.value)}
                             onBlur={() => {
                               const draft = reactionBankDraft;
@@ -3111,8 +3093,10 @@ export function SlurpSettings({
                                 seen.add(key);
                                 next.push(body);
                               }
-                              if (next.join("\n") !== settings.audienceReactionBank.join("\n"))
-                                void update("audienceReactionBank", next);
+                              // The box edits the shared bank only; per-type banks have their own
+                              // editor in the Fan Types panel.
+                              if (next.join("\n") !== settings.audienceReactionBank.shared.join("\n"))
+                                void update("audienceReactionBank", { ...settings.audienceReactionBank, shared: next });
                             }}
                             className="w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] p-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
                           />
@@ -3271,6 +3255,23 @@ export function SlurpSettings({
                   <AmbientProfilesPanel
                     allowRandomUsers={settings.allowRandomUsers}
                     onAllowRandomUsersChange={(value) => update("allowRandomUsers", value)}
+                  />
+                  <SlurpFanTypesSettings
+                    fanTypes={settings.fanTypes}
+                    bankCounts={settings.audienceReactionBank.byType}
+                    onSave={(fanTypes) => update("fanTypes", fanTypes)}
+                  />
+                  {/* Every number the simulation runs on, in its own file: this one is long enough. */}
+                  <SlurpSimulationSettings
+                    tuning={settings.simulationTuning}
+                    onSave={(next) => void update("simulationTuning", next)}
+                  />
+                  <SlurpAudienceConfigSettings
+                    tuning={settings.simulationTuning}
+                    fanTypes={settings.fanTypes}
+                    budget={settings.modelBudget}
+                    connections={connectionsQuery.data ?? []}
+                    onSave={(patch) => save(patch)}
                   />
                   <div className="space-y-3 pt-2">
                     <div>
@@ -4500,89 +4501,6 @@ function ArcLibraryEditor({
   );
 }
 
-function SectionTitle({ title, detail }: { title: string; detail: string }) {
-  return (
-    <div>
-      <h2 className="text-lg font-black tracking-tight text-balance">{title}</h2>
-      <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)] text-pretty">{detail}</p>
-    </div>
-  );
-}
-/** A labelled group of related settings. Used by every section that has more than a handful. */
-function SettingsGroup({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section
-      className="space-y-4 rounded-xl bg-[var(--slurp-surface-raised,var(--background))] p-4 shadow-[var(--slurp-shadow-raised)] sm:p-5"
-      aria-label={title}
-    >
-      <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--noodle-accent-foreground)]">{title}</h3>
-      {children}
-    </section>
-  );
-}
-function GuidanceBox({ title, detail }: { title: string; detail: string }) {
-  return (
-    <div className="relative overflow-hidden rounded-xl bg-[var(--noodle-accent)]/[0.065] p-4 ring-1 ring-inset ring-[var(--noodle-accent)]/20 sm:p-5">
-      <span className="absolute inset-y-3 start-0 w-0.5 rounded-full bg-[var(--noodle-accent)]" aria-hidden="true" />
-      <p className="text-sm font-bold text-[var(--noodle-accent)]">{title}</p>
-      <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)] text-pretty">{detail}</p>
-    </div>
-  );
-}
-function Field({ label, detail, children }: { label: string; detail?: string; children: ReactNode }) {
-  return (
-    <label className="block space-y-2 text-sm font-semibold">
-      <span className="flex items-center gap-1.5">
-        <span>{label}</span>
-        {detail && (
-          <span title={detail} aria-label={detail} className="inline-flex text-[var(--muted-foreground)]">
-            <CircleHelp size={14} strokeWidth={2} aria-hidden="true" />
-          </span>
-        )}
-      </span>
-      {detail && <span className="block text-xs font-normal leading-5 text-[var(--muted-foreground)]">{detail}</span>}
-      {children}
-    </label>
-  );
-}
-function Toggle({
-  label,
-  detail,
-  value,
-  onChange,
-  compact = false,
-}: {
-  label: string;
-  detail?: string;
-  value: boolean;
-  onChange: (value: boolean) => void;
-  compact?: boolean;
-}) {
-  return (
-    <label
-      data-slurp-setting-toggle
-      className={`group flex ${compact ? "min-h-11" : "min-h-16"} cursor-pointer items-center justify-between gap-4 rounded-lg bg-[var(--slurp-surface-raised,var(--background))] px-3 py-2 text-sm shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-transparent transition-[background-color,box-shadow] hover:bg-[var(--accent)]/40 hover:ring-[var(--border)] focus-within:ring-2 focus-within:ring-[var(--noodle-accent)] motion-reduce:transition-none`}
-    >
-      <span className="min-w-0">
-        <span className="block font-semibold">{label}</span>
-        {detail && (
-          <span className="mt-1 block text-xs font-normal leading-5 text-[var(--muted-foreground)]">{detail}</span>
-        )}
-      </span>
-      <input
-        type="checkbox"
-        role="switch"
-        checked={value}
-        onChange={(event) => onChange(event.target.checked)}
-        className="peer sr-only"
-      />
-      <span
-        aria-hidden="true"
-        className="relative h-7 w-12 shrink-0 rounded-full bg-[var(--muted-foreground)]/25 shadow-inner transition-colors after:absolute after:left-1 after:top-1 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-[var(--noodle-accent)] peer-checked:after:translate-x-5 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:after:transition-none"
-      />
-    </label>
-  );
-}
 function PromptCard({
   title,
   value,
@@ -4971,6 +4889,102 @@ function CreatorMessagingGroup({
           }
         />
       </Field>
+      <Field
+        label={t("ui.slurp.settings.creators.unlockPrice", { defaultValue: "Locked post price" })}
+        detail={t("ui.slurp.settings.creators.unlockPriceDetail", {
+          defaultValue: "Default price for this Creator's locked posts. Zero uses the Wallet default.",
+        })}
+      >
+        <NumberSetting
+          value={messaging.unlockPrice ?? 0}
+          min={0}
+          max={9999}
+          onSave={(value) => patch({ creatorAccountId: creatorId, personaId, unlockPrice: value || null })}
+        />
+      </Field>
+      <Field
+        label={t("ui.slurp.settings.creators.commissionBase", { defaultValue: "Commission base price" })}
+        detail={t("ui.slurp.settings.creators.commissionBaseDetail", {
+          defaultValue:
+            "Price for an average brief. A quick sketch quotes lower, a detailed scene or a set quotes higher.",
+        })}
+      >
+        <NumberSetting
+          value={messaging.commissionBase}
+          min={1}
+          max={99999}
+          onSave={(value) => patch({ creatorAccountId: creatorId, personaId, commissionBase: value })}
+        />
+      </Field>
+      <Field
+        label={t("ui.slurp.settings.creators.commissionMin", { defaultValue: "Lowest commission price" })}
+        detail={t("ui.slurp.settings.creators.commissionMinDetail", {
+          defaultValue: "No quote goes below this, and haggling never meets a fan under it.",
+        })}
+      >
+        <NumberSetting
+          value={messaging.commissionMin}
+          min={1}
+          max={99999}
+          onSave={(value) => patch({ creatorAccountId: creatorId, personaId, commissionMin: value })}
+        />
+      </Field>
+      <Field
+        label={t("ui.slurp.settings.creators.commissionMax", { defaultValue: "Highest commission price" })}
+        detail={t("ui.slurp.settings.creators.commissionMaxDetail", {
+          defaultValue: "No quote goes above this, however large the brief.",
+        })}
+      >
+        <NumberSetting
+          value={messaging.commissionMax}
+          min={1}
+          max={99999}
+          onSave={(value) => patch({ creatorAccountId: creatorId, personaId, commissionMax: value })}
+        />
+      </Field>
+      <Toggle
+        label={t("ui.slurp.settings.creators.autoQuote", { defaultValue: "Quote audience commissions automatically" })}
+        detail={t("ui.slurp.settings.creators.autoQuoteDetail", {
+          defaultValue:
+            "Audience briefs get a quote from the prices above. You still answer offers and your own fans by hand.",
+        })}
+        value={messaging.autoQuote}
+        onChange={(value) => patch({ creatorAccountId: creatorId, personaId, autoQuote: value })}
+      />
+      {query.data?.suggested && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--accent)] p-3 text-xs">
+          <span>
+            {t("ui.slurp.settings.creators.suggestedPrices", {
+              defaultValue:
+                "Suggested for your audience: {{subscription}}/week · {{unlock}} per locked post · {{commission}} commission base",
+              subscription: query.data.suggested.subscriptionPrice,
+              unlock: query.data.suggested.unlockPrice,
+              commission: query.data.suggested.commissionBase,
+            })}
+          </span>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              const suggested = query.data?.suggested;
+              if (!suggested) return;
+              patch({
+                creatorAccountId: creatorId,
+                personaId,
+                unlockPrice: suggested.unlockPrice || null,
+                commissionBase: suggested.commissionBase,
+              });
+              setPrice.mutate(
+                { accountId: creatorId, personaId, price: suggested.subscriptionPrice },
+                { onError: (error) => toast.error(errorMessage(error)) },
+              );
+            }}
+            className="min-h-9 rounded-lg px-3 font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)] focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
+          >
+            {t("ui.slurp.settings.creators.useSuggestedPrices", { defaultValue: "Use suggestions" })}
+          </button>
+        </div>
+      )}
     </SettingsGroup>
   );
 }

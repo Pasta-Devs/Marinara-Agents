@@ -19,7 +19,7 @@ export type SlurpAudienceTone = (typeof SLURP_AUDIENCE_TONES)[number];
 
 export const SLURP_DEFAULT_AUDIENCE_TONE: SlurpAudienceTone = "mixed";
 
-const TONE_INSTRUCTIONS: Record<SlurpAudienceTone, string> = {
+export const SLURP_AUDIENCE_TONE_INSTRUCTIONS: Record<SlurpAudienceTone, string> = {
   warm: "The audience is kind. Nobody is cruel, dismissive, or critical. People who lose interest simply go quiet rather than saying anything unkind.",
   mixed:
     "The audience is mostly supportive but honest. Blunt reactions, mild disappointment, and people saying a post did not land for them all happen, and are said plainly rather than cruelly. Nobody is abusive.",
@@ -27,8 +27,12 @@ const TONE_INSTRUCTIONS: Record<SlurpAudienceTone, string> = {
     "The audience is a real crowd and not a fan club. Alongside the supportive majority there are critics, people who complain about the price, people who liked the older work better, and people who unsubscribe loudly. Keep it in character and never abusive, but do not soften a reaction that would honestly be cold.",
 };
 
-export function slurpAudienceToneInstruction(tone: SlurpAudienceTone | undefined): string {
-  return TONE_INSTRUCTIONS[tone ?? SLURP_DEFAULT_AUDIENCE_TONE];
+export function slurpAudienceToneInstruction(
+  tone: SlurpAudienceTone | undefined,
+  /** Tuned tone texts from Simulation Tuning. Omitted means the shipped texts. */
+  tones: Record<SlurpAudienceTone, string> = SLURP_AUDIENCE_TONE_INSTRUCTIONS,
+): string {
+  return tones[tone ?? SLURP_DEFAULT_AUDIENCE_TONE];
 }
 
 /** Read a stored value back, falling back rather than throwing on anything unexpected. */

@@ -19,8 +19,8 @@ assert.match(storage, /async listAudienceBriefCommissions\(\)/u);
 assert.match(storage, /population\.get\(viewerAccountId\)/u);
 assert.match(storage, /async listAutomatedBriefCommissions\(\)/u);
 assert.match(world, /listAutomatedBriefCommissions\(\)/u);
-assert.match(world, /quoteCommission\(commission\.id, AUDIENCE_COMMISSION_PRICE\)/u);
-assert.match(world, /const AUDIENCE_COMMISSION_PRICE = 40/u);
+// The quote reads the brief through the Creator's own pricing, not one fixed price for every request.
+assert.match(world, /quoteCommission\(commission\.id, slurpCommissionQuote\(commission\.brief, pricing\)\)/u);
 assert.match(world, /listQuotedCommissions\(\)/u);
 assert.match(world, /settleAudienceCommission\(commission\.id/u);
 

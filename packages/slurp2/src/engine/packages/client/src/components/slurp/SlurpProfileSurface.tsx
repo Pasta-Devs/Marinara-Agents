@@ -1,7 +1,7 @@
 import { Heart, MapPin, Sparkles, Upload, Users } from "lucide-react";
 import type { ChangeEvent, CSSProperties, ReactNode, RefObject } from "react";
 import { cn } from "../../lib/utils";
-import { Avatar } from "./SlurpShell";
+import { Avatar, SlurpMediaImg } from "./SlurpShell";
 import { SlurpEmptyArtwork } from "./SlurpEmptyArtwork";
 import { useTranslation as useUiTranslation } from "react-i18next";
 
@@ -186,7 +186,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
             aria-label={banner.canEdit ? localizeUi("ui.noodle.noodleprofilesurface.uploadBanner") : undefined}
           >
             {banner.url ? (
-              <img src={banner.url} alt="" className="h-full w-full object-cover" />
+              <SlurpMediaImg src={banner.url} alt="" className="h-full w-full object-cover" />
             ) : (
               <div className="relative h-full overflow-hidden bg-[var(--noodle-accent)]/10">
                 <SlurpEmptyArtwork className="absolute inset-0 opacity-90" />

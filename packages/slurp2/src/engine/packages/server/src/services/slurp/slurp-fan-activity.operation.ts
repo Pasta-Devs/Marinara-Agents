@@ -27,7 +27,9 @@ import {
 import { tryNoodleOperation } from "./slurp-operation-lock.js";
 import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
 import { NOODLER_FAN_IDENTITY_PREFIX, populationNoodlerFanIdentityProvider } from "./slurp-fan-identity-provider.js";
+import { slurpFanMemoryForPrompt, slurpResolveFanType } from "./slurp-fan-types.js";
 import { newId } from "../../utils/id-generator.js";
+import { claimSlurpModelBudget, slurpModelWorkerAllows } from "./slurp-model-worker.js";
 
 const FAN_PLAN_ROW_PREFIX = "fan-day:";
 
@@ -200,7 +202,7 @@ export async function runNoodlerFanActivity(input: {
   at?: Date;
   debugMode?: boolean;
 }): Promise<NoodlerFanRunResult> {
-  const operation = await tryNoodleOperation("noodler-fan-activity", async () => {
+  const operation = await tryNoodleOperation<NoodlerFanRunResult>("noodler-fan-activity", async () => {
     const at = input.at ?? new Date();
     const noodle = createSlurpStorage(input.db);
     const settings = await noodle.getSettings();
@@ -241,6 +243,13 @@ export async function runNoodlerFanActivity(input: {
         plan = claimNoodleFanActivityRun(plan, run.id, at);
         run = plan.runs.find((candidate) => candidate.id === run!.id)!;
       }
+      const workerContext = input.mode === "manual" ? "present" : "background";
+      if (
+        !slurpModelWorkerAllows(settings.modelBudget, workerContext) ||
+        !(await claimSlurpModelBudget(input.db, settings.modelBudget, "thread", at))
+      ) {
+        return { status: "limit_reached", created: 0 };
+      }
       await writePlan(input.db, plan);
 
       // Draw the cast for this run: mostly people who have acted before, so regulars recur and
@@ -253,7 +262,11 @@ export async function runNoodlerFanActivity(input: {
         ...returning.slice(0, FAN_RUN_RETURNING).map((member) => member.id.replace(/^slurp-fan:/u, "")),
         ...Array.from({ length: FAN_RUN_NEWCOMERS }, () => newId()),
       ];
-      const cast = await Promise.all(seeds.map((seed) => population.ensure(seed, at)));
+      // Each member carries their Fan Type's voice, which is the one thing that makes a Lurker's
+      // three words and a Superfan's paragraph read as two different people.
+      const cast = (await Promise.all(seeds.map((seed) => population.ensure(seed, at, settings.fanTypes)))).map(
+        (member) => ({ ...member, voice: slurpResolveFanType(settings.fanTypes, member).voice }),
+      );
       // Mark the drawn cast as recently active. `listAll` orders by that column, so without this
       // it kept ordering by creation time: the same earliest members were redrawn forever and
       // anybody who actually showed up sank out of the pool. Regulars could never recur.
@@ -279,6 +292,7 @@ export async function runNoodlerFanActivity(input: {
                         Math.round((at.getTime() - Date.parse(tie.firstSeenAt)) / 86_400_000) || 0,
                       ),
                       audienceArc: tie.audienceArc,
+                      memory: slurpFanMemoryForPrompt(tie, at),
                     },
                   ]),
                 ),

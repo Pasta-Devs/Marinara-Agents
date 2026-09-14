@@ -78,6 +78,7 @@ async function main() {
       logDebugOverride: () => undefined,
       weightedIdentitySequence: () => [],
       slurpAudienceToneInstruction: () => "Audience tone",
+      SLURP_REALISTIC_TUNING: { prompts: { tones: {}, fanActivityExtra: "", replyMaxChars: 180 } },
       NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR: 4,
       noodleSamplingOptions: () => ({}),
       resolveStoredChatOptions: () => ({}),

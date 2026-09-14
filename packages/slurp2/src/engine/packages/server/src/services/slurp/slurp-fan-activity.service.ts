@@ -20,6 +20,7 @@ import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { createSlurpStorage, type SlurpSettings } from "../storage/slurp.storage.js";
 import { slurpAudienceToneInstruction } from "./slurp-tone.js";
+import { SLURP_REALISTIC_TUNING } from "./slurp-tuning.js";
 import { slurpAudienceArcDescription, type SlurpAudienceArc } from "./slurp-audience-arc.js";
 import { slurpArcLifeLine } from "./slurp-project.js";
 import { protectNoodlerGeneratedIdentity, resolveNoodlerPublicIdentity } from "./slurp-generation.service.js";
@@ -165,6 +166,7 @@ function describeFanRelationship(persona: {
   spent?: number;
   knownForDays?: number;
   audienceArc?: string;
+  memory?: string;
 }): string {
   const parts: string[] = [];
   if (persona.stage && persona.stage !== "stranger") parts.push(persona.stage);
@@ -181,29 +183,36 @@ function describeFanRelationship(persona: {
   }
   if (persona.spent) parts.push(`has spent ${persona.spent} coins here`);
   else if (persona.spendTier === "none") parts.push("has never paid for anything");
-  return parts.length > 0 ? parts.join(", ") : "no history with this creator yet";
+  const line = parts.length > 0 ? parts.join(", ") : "no history with this creator yet";
+  // The memory is the same counters said out loud, so a fan can refer to what happened between
+  // them rather than writing as though they arrived this minute.
+  return persona.memory ? `${line}. ${persona.memory}` : line;
 }
 
 function buildFanActivityMessages(input: {
   creators: NoodlerFanCreatorCandidate[];
-  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone">;
+  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone"> &
+    Partial<Pick<SlurpSettings, "simulationTuning">>;
   imageContexts?: ReadonlyMap<string, string>;
 }): ChatMessage[] {
+  const prompts = input.settings.simulationTuning?.prompts ?? SLURP_REALISTIC_TUNING.prompts;
   const system = [
     "Propose quiet synthetic audience activity for the supplied Slurp posts.",
     "A post's image field describes its attached picture. Treat it as something the actor can see, and never ask to be shown an image that is already described.",
     "Posts marked locked are paid posts. Only subscribers see them, so react to the title and the fact it is paid; never invent or state its hidden contents.",
     "Use only supplied creator IDs, actor handles, and post IDs. Never invent identifiers.",
-    "Likes have null content. Replies are one short sentence, normally under 180 characters, natural, relevant, and not repetitive.",
+    `Likes have null content. Replies are one short sentence, normally under ${prompts.replyMaxChars} characters, natural, relevant, and not repetitive.`,
     "Each post lists the comments already under it. Never repeat a point somebody has already made.",
     'A creator may list what is "currentlyGoingOn" in their life. Regulars who know them may mention it now and then; most comments should still be about the post itself.',
     'To answer one of those comments instead of the post, set "parentInteractionId" to that comment\'s id. Leave it out to comment on the post itself. Some replies should answer other people; a comment section where nobody talks to anybody is a list, not a conversation.',
     'Return JSON only, shaped as {"activities":[{"creatorAccountId":"...","actorHandle":"...","targetPostId":"...","type":"like"|"reply","content":null|"...","parentInteractionId":"..."}]}. Use exactly these field names; "parentInteractionId" is optional.',
     "Each actor handle has a weight; prefer higher-weight actors more often, proportionally.",
-    slurpAudienceToneInstruction(input.settings.audienceTone),
+    slurpAudienceToneInstruction(input.settings.audienceTone, prompts.tones),
+    "An actor's voice is how that kind of person writes. Follow it; it outranks any general style note for that actor's own lines.",
     "Actors carry traits and a relationship to the creator. Write each reply as that specific person: a long-standing paying regular does not sound like somebody who arrived yesterday, and somebody whose trait is 'emoji only' does not write a paragraph.",
     `At most ${input.settings.fanLikesPerRefresh} likes and ${input.settings.fanRepliesPerRefresh} replies total.`,
     `At most ${NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR} activities for any creator.`,
+    ...(prompts.fanActivityExtra.trim() ? [prompts.fanActivityExtra.trim()] : []),
   ].join("\n");
   const creators = input.creators.map((candidate) => ({
     creatorAccountId: candidate.creator.id,
@@ -223,6 +232,7 @@ function buildFanActivityMessages(input: {
         ...(identity.persona
           ? {
               traits: identity.persona.traits,
+              ...(identity.persona.voice ? { voice: identity.persona.voice } : {}),
               relationship: describeFanRelationship(identity.persona),
             }
           : {}),
@@ -477,6 +487,12 @@ export async function generateNoodlerFanActivityBatch(input: {
   });
 }
 
-export async function resolveNoodlerFanConnection(db: DB, settings: Pick<SlurpSettings, "generationConnectionId">) {
-  return resolveSlurpTextConnection(createConnectionsStorage(db), settings.generationConnectionId);
+export async function resolveNoodlerFanConnection(
+  db: DB,
+  settings: Pick<SlurpSettings, "generationConnectionId" | "modelBudget">,
+) {
+  return resolveSlurpTextConnection(
+    createConnectionsStorage(db),
+    settings.modelBudget.connectionId ?? settings.generationConnectionId,
+  );
 }

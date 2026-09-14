@@ -27,20 +27,16 @@
  * list. See `slurp-wallet.ts` for the numbers that must stay exact.
  */
 
-/** Smallest audience a creator can be born with. Below this a profile reads as abandoned. */
-const MIN_BASE_REACH = 240;
+import { SLURP_REALISTIC_TUNING, type SlurpSimulationTuning } from "./slurp-tuning.js";
 
-/** Largest audience before real signal is added. Log-spread, so most creators sit well under it. */
-const MAX_BASE_REACH = 34_000;
-
-/** Days for a creator's audience to reach roughly 63% of its ceiling. */
-const REACH_GROWTH_DAYS = 45;
+/*
+ * Creator reach numbers live in Simulation Tuning (`reach`): `floor` is the smallest audience a
+ * creator is born with, `ceiling` the largest before real signal (log-spread), `growthDays` the
+ * days to reach ~63% of it, and `realFollowerWeight` what one real follower counts for.
+ */
 
 /** Days for a post to collect roughly 63% of the impressions it will ever get. */
 const POST_SETTLE_DAYS = 2.5;
-
-/** A real follower counts for far more than a synthetic one: it is a person the player chose. */
-const REAL_FOLLOWER_WEIGHT = 25;
 
 const DAY_MS = 86_400_000;
 
@@ -104,12 +100,14 @@ export function slurpCreatorReach(
     scale?: number;
   },
   at: Date = new Date(),
+  tuning: SlurpSimulationTuning["reach"] = SLURP_REALISTIC_TUNING.reach,
 ): number {
   const spread = unitFor(input.accountId, "reach");
   const scale = Number.isFinite(input.scale) && (input.scale ?? 1) > 0 ? input.scale! : 1;
-  const ceiling = MIN_BASE_REACH * Math.pow(MAX_BASE_REACH / MIN_BASE_REACH, spread);
-  const grown = ceiling * settle(ageInDays(input.createdAt, at), REACH_GROWTH_DAYS);
-  return Math.round((MIN_BASE_REACH + grown) * scale + Math.max(0, input.realFollowers) * REAL_FOLLOWER_WEIGHT);
+  const floor = Math.max(1, tuning.floor);
+  const ceiling = floor * Math.pow(Math.max(floor, tuning.ceiling) / floor, spread);
+  const grown = ceiling * settle(ageInDays(input.createdAt, at), tuning.growthDays);
+  return Math.round((floor + grown) * scale + Math.max(0, input.realFollowers) * tuning.realFollowerWeight);
 }
 
 /**

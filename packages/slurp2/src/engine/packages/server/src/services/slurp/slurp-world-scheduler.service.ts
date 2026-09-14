@@ -3,6 +3,8 @@ import { logger } from "../../lib/logger.js";
 import { slurpPollBackoffMs } from "./slurp-poll-backoff.js";
 import { advanceSlurpWorld } from "./slurp-world.operation.js";
 import { topUpSlurpReactionBank } from "./slurp-reaction-bank.operation.js";
+import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { slurpWorldTimerDue } from "./slurp-tuning.js";
 
 /**
  * The background half of the world clock.
@@ -19,14 +21,16 @@ import { topUpSlurpReactionBank } from "./slurp-reaction-bank.operation.js";
  */
 const INITIAL_DELAY_MS = 90_000;
 
-/** Four times a day. Often enough that the world is never far behind, rare enough to stay quiet. */
-const POLL_MS = 6 * 60 * 60 * 1000;
+/** Fallback wake interval when settings cannot be read. Normally `clock.tickMinutes`. */
+const POLL_MS = 5 * 60 * 1000;
 
 export function startSlurpWorldScheduler(app: FastifyInstance, registerStop?: (stop: () => Promise<void>) => void) {
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let active: Promise<unknown> | null = null;
   let consecutiveFailures = 0;
+  let lastRunMs = 0;
+  let pollMs = POLL_MS;
   const schedule = (delay: number) => {
     if (stopped) return;
     timer = setTimeout(() => void poll(), delay);
@@ -37,6 +41,12 @@ export function startSlurpWorldScheduler(app: FastifyInstance, registerStop?: (s
     // `active` covers the whole pass, not just the tick: `stop()` awaits it, and the bank top-up
     // below is a provider call that must not be left in flight after shutdown returns.
     active = (async () => {
+      // Re-read every wake, so `backgroundTimer` and `tickMinutes` apply without a restart. Off
+      // keeps the old four-catch-ups-a-day cadence; on ticks every `tickMinutes`.
+      const { clock } = (await createSlurpStorage(app.db).getSettings()).simulationTuning;
+      pollMs = clock.tickMinutes * 60_000;
+      if (!slurpWorldTimerDue(clock, lastRunMs, Date.now())) return;
+      lastRunMs = Date.now();
       const result = await advanceSlurpWorld(app.db);
       if (result.actions > 0) logger.info("[slurp-world] Tick applied %d actions", result.actions);
       // After the tick, and never in a way that can fail it: the bank feeds the free comments the
@@ -53,7 +63,7 @@ export function startSlurpWorldScheduler(app: FastifyInstance, registerStop?: (s
       logger.warn(error, "[slurp-world] Tick failed");
     } finally {
       active = null;
-      schedule(slurpPollBackoffMs(POLL_MS, consecutiveFailures));
+      schedule(slurpPollBackoffMs(pollMs, consecutiveFailures));
     }
   };
   const stop = async () => {

@@ -206,6 +206,19 @@ export function NewSinceLastVisitDivider() {
   );
 }
 
+/**
+ * An `<img>` for a URL that may be served by this package. Slurp's own media routes sit behind the
+ * Engine's X-Admin-Secret gate, which a bare `src` cannot pass, so those load through the API client.
+ */
+export function SlurpMediaImg({
+  src,
+  ...props
+}: { src: string | null | undefined } & Omit<React.ComponentProps<"img">, "src">) {
+  const resolved = useSlurpMediaSrc(src);
+  if (!resolved) return null;
+  return <img src={resolved} {...props} />;
+}
+
 export function Avatar({
   account,
   size = "md",

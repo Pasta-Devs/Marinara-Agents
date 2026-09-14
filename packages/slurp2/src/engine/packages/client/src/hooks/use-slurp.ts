@@ -6,6 +6,9 @@ import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { api } from "../lib/api-client";
+import type { SlurpSimulationTuning } from "../../../server/src/services/slurp/slurp-tuning.js";
+import type { SlurpFanType } from "../../../server/src/services/slurp/slurp-fan-types.js";
+import type { SlurpModelBudget } from "../../../server/src/services/slurp/slurp-model-budget.js";
 import { refreshSlurpCreatorBatch } from "../lib/slurp-refresh-batch";
 import { useSlurpUIStore } from "../stores/slurp-package.store";
 import type {
@@ -328,6 +331,8 @@ export type SlurpSettings = {
   walletEnabled: boolean;
   walletUnlockCost: number;
   walletSubscriptionCost: number;
+  pricingDynamicCharacters: boolean;
+  pricingMaxWeeklyChangePercent: number;
   walletStipendFloor: number;
   walletDayStartHour: number;
   walletAdReward: number;
@@ -391,10 +396,12 @@ export type SlurpSettings = {
   maxRepliesPerRefresh: number;
   allowGalleryImageAttachments: boolean;
   fanActivityRunsPerDay: number;
-  audienceReactionBank: string[];
+  audienceReactionBank: { shared: string[]; byType: Record<string, string[]> };
   fanLikesPerRefresh: number;
   fanRepliesPerRefresh: number;
   fanArchetypeWeights: Record<string, number>;
+  /** Editable audience personas and their numeric behavior. */
+  fanTypes: SlurpFanType[];
   /** Creators answer while you are away. Off leaves the background reply loop asleep. */
   messagesAwayRepliesEnabled: boolean;
   messagesReplyBubbleLimit: number;
@@ -420,6 +427,10 @@ export type SlurpSettings = {
   autopurgeIncludeMessageMedia: boolean;
   autopurgeNextRunAt: string | null;
   nightQuiet: boolean;
+  /** Every number the audience simulation runs on. The server fills anything missing from Realistic. */
+  simulationTuning: SlurpSimulationTuning;
+  /** When model-written audience text may run and how many calls it may spend. */
+  modelBudget: SlurpModelBudget;
   onboarding: "not_started" | "in_progress" | "completed";
 };
 
@@ -813,6 +824,8 @@ export type SlurpEventItem = {
   subjectId: string | null;
   actorLabel: string | null;
   actorAvatarUrl: string | null;
+  /** One readable line about the event, from the free bank. Null for events that need none. */
+  note: string | null;
   amount: number;
   weight: number;
   createdAt: string;
@@ -1788,6 +1801,8 @@ type NoodlerCreatePostRequest = Omit<NoodlerPostCreateInput, "uploadedImageUrl" 
   image?: NoodlerPostDraftImage | null;
   postType?: "post" | "story";
   linkedPostId?: string | null;
+  /** Price for this locked post. Null uses the Creator's price. */
+  unlockPrice?: number | null;
 } & NoodlerFormatRequest;
 
 type NoodlerGeneratePostRequest = Omit<NoodlerGenerationRequest, "uploadedImageUrl" | "imageCrop"> & {
@@ -2535,6 +2550,12 @@ export type SlurpCreatorMessaging = {
   ppvPrice: number;
   rapportWeights: Record<string, number>;
   proactiveMessages: boolean;
+  unlockPrice: number | null;
+  commissionBase: number;
+  commissionMin: number;
+  commissionMax: number;
+  autoQuote: boolean;
+  pricedAt: string | null;
 };
 
 export type SlurpMessage = {
@@ -2599,6 +2620,11 @@ export type SlurpCommission = {
   deliveryMessageId: string | null;
   /** When a character Creator's finished piece is due to arrive. Null when a person delivers it. */
   deliverAt?: string | null;
+  /** A fan's pending counter-offer, waiting for the Creator. */
+  counterPrice?: number | null;
+  haggleRounds?: number;
+  /** What the Creator's own pricing would quote for this brief. */
+  suggestedPrice?: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -3004,6 +3030,19 @@ export function useQuoteSlurpCommission() {
   });
 }
 
+/** Offer the Creator a lower price than its quote. */
+export function useCounterSlurpCommission() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { commissionId: string; personaId: string; price: number }) =>
+      api.post<{ commission: SlurpCommission }>(
+        `/slurp2/messages/commissions/${encodeURIComponent(input.commissionId)}/counter`,
+        input,
+      ),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
+  });
+}
+
 export function useAcceptSlurpCommission() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -3144,7 +3183,11 @@ export function useSlurpCreatorMessagingSettings(creatorAccountId: string | null
       personaId ?? "none",
     ],
     queryFn: () =>
-      api.get<{ messaging: SlurpCreatorMessaging; subscriptionPrice: number }>(
+      api.get<{
+        messaging: SlurpCreatorMessaging;
+        subscriptionPrice: number;
+        suggested?: { subscriptionPrice: number; unlockPrice: number; commissionBase: number };
+      }>(
         `/slurp2/messages/creators/${encodeURIComponent(creatorAccountId!)}/settings?personaId=${encodeURIComponent(personaId!)}`,
       ),
     enabled: Boolean(creatorAccountId && personaId),
