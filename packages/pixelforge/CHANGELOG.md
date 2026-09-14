@@ -1,5 +1,9 @@
 # Pixelforge release notes
 
+## 0.16.8 — 2026-09-14
+
+- Use the Engine setup wizard for party, world, goals, and lore choices, with the world seed beside the Experience toggle.
+
 ## 0.16.7 — 2026-09-14
 
 - Prepare and save the world before Engine starts the opening narration, so the GM knows the actual starting place and residents. Preparation failures keep the existing retry screen, and play stays paused until Continue.
