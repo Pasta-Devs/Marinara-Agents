@@ -280,7 +280,7 @@
         "schemaVersion": 1,
         "id": "character-tracker",
         "name": "Character Tracker",
-        "version": "1.0.2",
+        "version": "1.1.0",
         "description": "Tracks which characters are present in the scene, their mood, actions, appearance, outfit, thoughts, and per-character stats (HP, etc.). Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
@@ -295,8 +295,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "8517d76056388156a1ab25aa49021d201f7df169e030750d95186bf33da6daf9",
-            "bytes": 2526
+            "sha256": "504ac24e4092f1e847717103398c88f67b0598b92a726721df72ed71860481c5",
+            "bytes": 3341
           }
         ],
         "permissions": [
@@ -311,9 +311,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/character-tracker.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/character-tracker-1.0.2.zip",
-        "sha256": "58590b6a69dbd457552f492077835538a1ffa36c858722e01f6e372f64057043",
-        "bytes": 1841
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/character-tracker-1.1.0.zip",
+        "sha256": "16f255450688654df0f7462350427a9e881b91e58c8c9d8daa0caa00da162420",
+        "bytes": 2214
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#character-tracker"
     },
@@ -473,7 +473,7 @@
         "schemaVersion": 1,
         "id": "custom-tracker",
         "name": "Custom Tracker",
-        "version": "1.0.2",
+        "version": "1.1.0",
         "description": "Tracks user-defined fields (currencies, counters, flags, or any custom data). Add any fields you want the model to keep track of during the roleplay. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
@@ -488,8 +488,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "e59a4d4ebda0364cced40f4aa056ed49fa44221253a85a140ece86732a028b1b",
-            "bytes": 1490
+            "sha256": "40acf7260fb727a9ac1e61f3a1227cb0945ac3596cab0ce7bc984abae4e3261f",
+            "bytes": 2196
           }
         ],
         "permissions": [
@@ -504,9 +504,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/custom-tracker.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/custom-tracker-1.0.2.zip",
-        "sha256": "27d82d923007fe49df03a5399da817bbbf0261d032067f7dd24bfb057d655020",
-        "bytes": 1462
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/custom-tracker-1.1.0.zip",
+        "sha256": "3d54d8b50fdc57da092a9f5d7b3f14d04e5f2c63f5291e9f7d339b0488a9f178",
+        "bytes": 1791
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#custom-tracker"
     },
@@ -767,7 +767,7 @@
         "schemaVersion": 1,
         "id": "inventory-tracker",
         "name": "Inventory Tracker",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "description": "Tracks currencies, equipped gear, and carried items as separate structured lists with compact quantities. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.4.3",
@@ -782,8 +782,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "1ba0380f1d01e66f0ba3ca01a4b57bff57d4016f2c479b3c49fec8d4a9fd0a80",
-            "bytes": 1616
+            "sha256": "e6fee10460ba004a0182e586139c57117b3f46ab0c1594a067ad9deba255a0d2",
+            "bytes": 2474
           }
         ],
         "permissions": [
@@ -798,9 +798,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/inventory-tracker.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/inventory-tracker-1.0.0.zip",
-        "sha256": "bd2b5ef5677b8e0c53c62f4b4d6b7e9940afadc54d4df6f36121e15db2dab3c8",
-        "bytes": 1464
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/inventory-tracker-1.1.0.zip",
+        "sha256": "3f40bf9fcc01f4618b0f531b18498ec668d27527971dcdbea9871a954bf18774",
+        "bytes": 1863
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#inventory-tracker"
     },
@@ -1986,7 +1986,7 @@
         "schemaVersion": 1,
         "id": "world-state",
         "name": "World State",
-        "version": "1.0.4",
+        "version": "1.1.0",
         "description": "Tracks date, time, weather, location, temperature, and custom world details automatically. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
@@ -2001,8 +2001,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "1a492846367d34c4fc55c193f4dfe1df9f70ad0402d1b56bf084c60d7cec5a13",
-            "bytes": 2168
+            "sha256": "45e832101a2f1573e00f8b4f0619a67e798e5ff1503a4d1c3356af83f13ed0bb",
+            "bytes": 2866
           }
         ],
         "permissions": [
@@ -2017,9 +2017,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/world-state.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/world-state-1.0.4.zip",
-        "sha256": "110df266b87d7c273dd3854b64fac1e2debf6c862807085998ef4dc4ccb0e6cf",
-        "bytes": 1694
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/world-state-1.1.0.zip",
+        "sha256": "bedf93879675900da43eedf85320898788fd54920342070ba8dba6b24e339f49",
+        "bytes": 2004
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#world-state"
     }

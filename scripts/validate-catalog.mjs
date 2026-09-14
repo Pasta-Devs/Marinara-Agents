@@ -257,7 +257,7 @@ const pixelforgeBoundary = await assertPackagePrivateImportBoundary({
   sourceRoot: join(repoRoot, "packages/pixelforge/src"),
   boundaryPath: join(repoRoot, "packages/pixelforge/engine-boundary.json"),
   displayName: "Pixelforge",
-  capabilityApi: { major: 1, minor: 10 },
+  capabilityApi: { major: 1, minor: 17 },
 });
 
 const hierarchicalMapsClientSourceRoot = join(repoRoot, "packages/hierarchical-maps/src/engine/packages/client/src");

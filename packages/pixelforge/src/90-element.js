@@ -118,6 +118,7 @@ PF.core = {
     if (!p || typeof p.chatId !== "string") return;
     if (p.chatId !== this.chatId) this._switchChat(p);
     this.host = p;
+    if (p.startup === true) this.input.up = this.input.down = this.input.left = this.input.right = false;
     // Tier-1 art rides the packageId/packageVersion the host injects (engine
     // #5092); load() is idempotent and Tier-0 remains the fallback throughout.
     void PF.assets.load(this);
@@ -183,6 +184,47 @@ PF.core = {
     // changes the package can't see, and it dedupes identical declarations
     // by value itself — a package-side cache only causes lost declarations.
     this._declareChrome();
+    this._declareStartup();
+  },
+
+  _declareStartup() {
+    const host = this.host;
+    const gated = PF.save.gateHolds(this);
+    // Keep the existing preparation/retry controls usable, then freeze the HUD
+    // until Engine hands over play. Internal initialization/state writes still run.
+    if (this._mainEl) this._mainEl.inert = host?.startup === true && !gated;
+    if (host?.startup !== true || typeof host.setStartupReady !== "function") return;
+    const sim = this.sim;
+    if (!sim || sim.world.interim || gated || PF.save.mode === null || PF.save._generating.has(this.chatId)) {
+      host.setStartupReady(null);
+      return;
+    }
+    // composePrefix stages an intro receipt; readiness is not an accepted GM
+    // turn, so preserve that receipt and leave every one-shot flag untouched.
+    const pending = sim._pendingIntro;
+    const intro = sim.intro;
+    let context;
+    try {
+      context = sim.composePrefix(null);
+    } finally {
+      sim._pendingIntro = pending;
+      sim.intro = intro;
+    }
+    const zone = sim.world.zones[sim.world.startZone];
+    const residents = [...new Set((zone?.npcs ?? []).map((npc) => `${npc.name} (${npc.role})`))];
+    const cast = [];
+    let used = context.length + 100;
+    for (const resident of residents) {
+      if (used + resident.length + 2 > 8000) break;
+      cast.push(resident);
+      used += resident.length + 2;
+    }
+    if (cast.length) context += `\n[Characters at the starting location: ${cast.join("; ")}]`;
+    if (cast.length < residents.length)
+      context += `\n[${residents.length - cast.length} additional starting residents.]`;
+    // An unexpectedly oversized prefix reaches the host's visible validation
+    // error instead of silently losing setting/location text to truncation.
+    host.setStartupReady(context);
   },
 
   _switchChat(p) {
@@ -316,7 +358,7 @@ PF.core = {
         // The gate takes the input claim with it: while it holds there is nothing
         // to walk in, and leaving the claim up would strand the player with the
         // classic turn chrome hidden behind a loading panel.
-        providesPlayerInput: this.sim.mode === "walk" && !PF.save.gateHolds(this),
+        providesPlayerInput: this.sim.mode === "walk" && !PF.save.gateHolds(this) && this.host?.startup !== true,
         // Transient: asked only while a cutscene beat runs. The host restores
         // the player's own setting the moment we stop asking, and its own
         // safety rules still outrank us, so this can never trap a player.
@@ -414,7 +456,7 @@ PF.core = {
    *  is sent, and the GM is not told a conversation started. */
   openTalk(npc) {
     const sim = this.sim;
-    if (!sim || !npc) return;
+    if (!sim || !npc || this.host?.startup === true) return;
     this._talkAnchor = npc;
     sim.talkAnchorId = npc.id;
     // THE CUTSCENE CLEAR AT OPEN, on `setMode`'s own idiom two screens up and for
@@ -520,7 +562,7 @@ PF.core = {
       this.hud?.toast("They're not there any more.");
       return;
     }
-    if (PF.save.gateHolds(this)) return;
+    if (PF.save.gateHolds(this) || this.host?.startup === true) return;
     if (typeof this.host?.sendMessage !== "function") return;
     if (this.host.isStreaming) {
       this.hud?.toast("The story is still being written…");
@@ -803,7 +845,7 @@ PF.core = {
         this.closeTalk();
         return;
       }
-      if (PF.save.gateHolds(this)) return; // nothing to walk in yet
+      if (PF.save.gateHolds(this) || this.host?.startup === true) return; // nothing to walk in yet
       // Typing goes to whoever is being typed into — the host's message box, or
       // the window's own Say field, which carries its own Escape and Enter.
       if (typing) return;
@@ -898,9 +940,10 @@ PF.core = {
       this._raf = requestAnimationFrame(tick);
       const dt = Math.min(0.1, (t - this._lastT) / 1000);
       this._lastT = t;
+      this._declareStartup();
       const sim = this.sim;
       if (!sim) return;
-      if (PF.save.gateHolds(this)) {
+      if (PF.save.gateHolds(this) || this.host?.startup === true) {
         // THE LOADING GATE, ahead of every mode: no step, no clock, no draw. A sim
         // that stepped behind the loading panel would age a world nobody is in,
         // dirty itself against a save path that refuses to write, and burn the

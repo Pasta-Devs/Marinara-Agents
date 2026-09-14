@@ -11,6 +11,16 @@
         }
       ]
     },
+    "character-tracker": {
+      "versions": [
+        {
+          "version": "1.1.0",
+          "date": "2026-09-14",
+          "notes": "- On compatible Engines, report only changed or removed tracker values while preserving unchanged state and locked rows. Older Engines retain the full-output format.",
+          "highlight": false
+        }
+      ]
+    },
     "conversation-calls": {
       "versions": [
         {
@@ -23,6 +33,26 @@
           "version": "1.0.15",
           "date": "2026-09-13",
           "notes": "- Keep required reasoning enabled for GLM 5.3 on NanoGPT and Z.AI when the selected effort is None.",
+          "highlight": false
+        }
+      ]
+    },
+    "custom-tracker": {
+      "versions": [
+        {
+          "version": "1.1.0",
+          "date": "2026-09-14",
+          "notes": "- On compatible Engines, report only changed or removed tracker values while preserving unchanged state and locked rows. Older Engines retain the full-output format.",
+          "highlight": false
+        }
+      ]
+    },
+    "inventory-tracker": {
+      "versions": [
+        {
+          "version": "1.1.0",
+          "date": "2026-09-14",
+          "notes": "- On compatible Engines, report only changed or removed tracker values while preserving unchanged state and locked rows. Older Engines retain the full-output format.",
           "highlight": false
         }
       ]
@@ -230,6 +260,16 @@
           "date": "2026-09-12",
           "notes": "- First release of the Slurp remaster as its own package. It installs beside Slurp Legacy and keeps its own separate data.\n- Added direct messages, scheduled follow-ups, commissions, an audience funnel, and creator earnings kept apart from spending money.\n- Added a backup export and restore. A Slurp Legacy backup can be restored here, which is how you move your data across.\n- Added a welcome screen. It appears after the install and after every update, warns that this is alpha software, and lists what changed.",
           "highlight": true
+        }
+      ]
+    },
+    "world-state": {
+      "versions": [
+        {
+          "version": "1.1.0",
+          "date": "2026-09-14",
+          "notes": "- On compatible Engines, report only changed or removed tracker values while preserving unchanged state and locked rows. Older Engines retain the full-output format.",
+          "highlight": false
         }
       ]
     }
