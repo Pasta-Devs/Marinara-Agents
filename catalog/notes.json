@@ -50,6 +50,12 @@
     "inventory-tracker": {
       "versions": [
         {
+          "version": "1.2.0",
+          "date": "2026-09-14",
+          "notes": "- Track established item descriptions and storage locations on compatible Engines, preserving unchanged details and locked values.",
+          "highlight": true
+        },
+        {
           "version": "1.1.0",
           "date": "2026-09-14",
           "notes": "- On compatible Engines, report only changed or removed tracker values while preserving unchanged state and locked rows. Older Engines retain the full-output format.",

@@ -51,6 +51,11 @@ jobs:
           npx tsx tests/memory-nag-range.regression.ts
           node tests/pixelforge-weather-contract.regression.mjs
 
+      - name: Test Pixelforge world, setup, and startup contracts
+        run: |
+          node packages/pixelforge/test-brief.mjs
+          node tests/pixelforge-startup.regression.mjs
+
       - name: Test Beholder client bundle contract
         run: npx tsx tests/beholder-client-contract.regression.ts
 

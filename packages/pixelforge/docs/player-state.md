@@ -2360,7 +2360,17 @@ stores it beside the brief it sealed, and `packExpected()` reads only that copy,
 **A chat sealed before 0.13 carries no copy and is therefore never expected to have a pack.** That
 is the packless-veteran ruling, and §11 records it as a limitation rather than a bug.
 
-**What the wizard actually writes into `experienceConfig`, and the one field 0.16.1 added.** The
+**Current setup contract (0.16.8 / Capability API 1.18).** The Engine wizard writes the declared
+`seed`, `generate: true` and `packWanted: true` into `experienceConfig`. Party and story preferences
+remain in the Engine's normal setup fields; `activeLorebookEntryIds` is the authoritative selection
+and an explicit empty array clears it. The package reads legacy `loreEntryIds` only when that Engine
+field is absent. `12-theme.js` resolves the initial art kit from the Engine Setting; the existing
+`pixelforgeBrief.theme` seal pins the final kit across subsequent Setting edits. There is no new
+save key, migration, settlement-name control or decline control. Legacy names, themes, picks and
+declined-world flags remain readable. The 0.16.7 startup gate still waits for persistence and keeps
+movement paused through Engine Continue.
+
+**Historical package-form config (0.16.1–0.16.7), retained for existing saves.** The
 object holds four keys the package owns outright — `seed`, `theme`, `generate` and `packWanted` —
 read back at both nesting depths by `_configSeed`, `_configTheme` and `_configPackWanted`, because
 `/game/create`'s chooser re-nests the whole config one level deeper on the way to the host. **0.16.1
@@ -2988,7 +2998,7 @@ one has no way to work it out from the screen:
 
 | limitation (0.16.2) | status |
 | ------------------- | ------ |
-| **every Pixelforge game this release starts with an EMPTY party, and the question is asked zero times.** The package's own picker is deleted and the classic Party step never runs, because the Experience chooser swaps the classic wizard out at step 0 — so this is not "asked twice, answered once", it is not asked at all | **accepted for one release** (maintainer ruling R-D1, *"just ship the deletions now"*); the question gets its real owner when the setup seam lands (ROADMAP **S6**). Acceptable because the villagers are NPCs the GM plays and a party is additive rather than load-bearing for the walkable world — a cost, not a tidy-up |
+| **every Pixelforge game this release starts with an EMPTY party, and the question is asked zero times.** The package's own picker is deleted and the classic Party step never runs, because the Experience chooser swaps the classic wizard out at step 0 — so this is not "asked twice, answered once", it is not asked at all | **resolved in 0.16.8** by the Engine Party step; the former limitation was accepted temporarily (maintainer ruling R-D1, *"just ship the deletions now"*); the question gets its real owner when the setup seam lands (ROADMAP **S6**). Acceptable because the villagers are NPCs the GM plays and a party is additive rather than load-bearing for the walkable world — a cost, not a tidy-up |
 | **a lorebook entry filtered to *include specific characters* will not reach a Pixelforge world, even when the player explicitly ticks it.** An empty party means the active-character set is empty, so the include filter matches nobody and the entry is refused — in the same release that adds the entry picker, which is what makes it worth a row of its own | **named, not fixed.** Nothing in 0.16.2 can fix it: the party deletion is ruled and the Party step is the seam's. It goes away when the party question finds its owner. In the release notes and on the browser-pass list |
 | **the picker's SERVER half lives in the Engine, and this package ships against Engines that predate it.** On an older Engine the request field is an unknown key: the world is written without the lore and the reply carries no lorebook block at all | **by dependency**, and the reading is deliberately soft. An absent block is a version skew, not a refusal, so it is a `console.warn` and **nothing is stored** — a `_repairs` line saying the picks were refused would outlive the mismatch and still be sitting in a checkpoint long after the Engine was updated. A block that IS present and reports zero included is the other thing entirely, and that one is written down |
 | **a truncated reply cannot say what became of the picks.** The 422 salvage path carries no lorebook block whatever the call did, and on that path an absent block does not even separate an old Engine from one cut off before writing it | recorded rather than guessed: the `_repairs` line says the entries were **sent** and that the cut-off reply did not say what became of them |

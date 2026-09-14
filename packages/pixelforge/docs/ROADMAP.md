@@ -374,7 +374,14 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 
 **Depends on:** nothing technically; it is a decision, not a dependency. Sequence it **with or before its first consumer** — which under the suggested plan is S3 in 0.11. **Do not let the first consumer define the schema by accident.**
 
-### S6. The setup flow retires into Game Mode's own *(new — maintainer playtest, 2026-08-24)*
+### S6. The setup flow retires into Game Mode's own _(shipped in 0.16.8 with Capability API 1.18)_
+
+**Delivered:** the package form is deleted. The manifest declares only an inline seed, constant
+`generate: true` / `packWanted: true`, and `enableCustomWidgets: false`. The Engine owns party,
+Setting, tone, difficulty, rating, goals and per-entry lore selection; Pixelforge reads those answers.
+The Setting resolver lives in `12-theme.js`; the final kit stays in the existing sealed brief.
+Startup readiness from 0.16.7 is retained. Older manifests keep the Engine's legacy setup dialog;
+0.16.8 requires the API 1.18 host. The notes below record the decisions leading to this shape.
 
 **What:** Pixelforge should not carry a parallel setup. `80-setup.js` replaces the classic wizard body wholesale and has to emit the *entire* required `gameSetupConfig` — genre, setting, tone, difficulty, gmMode, party, plus the World-Maps and combat fields — because the host refuses a launch without them. So every question Game Mode already asks gets asked a second time, on a second form, against a second set of defaults that drift from the engine's. The direction is the other way round: **a toggle on the normal Game Mode setup** that says this chat is played as Pixelforge, plus **an inline seed field** on that same form — copy, paste, reroll, hand it to somebody else — and the package's own dialog goes away. What the package genuinely needs is three fields wide (theme, seed, generate-or-decline) and belongs beside the toggle.
 
@@ -429,7 +436,7 @@ carrying that is genuinely necessary, and that the Engine's setup does not alrea
 removed outright or asked for on that screen, and what the package reads may be drawn from the
 sections the player has already filled in there. So the seam is not just a seed field beside an
 otherwise unchanged form: every remaining package question is answered by a field Game Mode already
-owns, prompted on Game Mode's own screen, or dropped. No release carries it yet.
+owns, prompted on Game Mode's own screen, or dropped. This destination ships in 0.16.8.
 
 **What the reshaping does to the cost, and it runs the friendly way.** It is a **simplification**
 rather than a bigger job: with the classic path doing the launching, the three losses the Experience

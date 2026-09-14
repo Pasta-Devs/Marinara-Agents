@@ -670,9 +670,8 @@ PF.save = {
    *  later. */
   _briefResealed: new Set(),
 
-  /** Reads core.sim and core.chatId and NOTHING else: 80-setup calls this with
-   *  a synthetic two-key core, and reaching for core.host/hud/render there
-   *  throws inside the wizard's launch handler.
+  /** Reads core.sim and core.chatId only; minimal callers and the load-time
+   *  assertion provide a synthetic two-key core without host/hud/render.
    *
    *  `dropCarry` is the pre-flight fallback (see _snapshotWithoutCarry): the
    *  same snapshot with a newer build's unreadable block left out. */
@@ -716,7 +715,7 @@ PF.save = {
     // deletes a newer build's field. That is the exact slice-1 failure, rebuilt
     // one branch at a time. serialize() takes an absent block and hands back the
     // default one, which is what makes the unconditional emission possible on
-    // the synthetic cores 80-setup and the load-time assertion build.
+    // the synthetic cores the snapshot regression and load-time assertion build.
     // `dropCarry` is threaded DOWN into the block serializer as well: since the
     // block keeps a newer build's unknown player-level keys too (58-player
     // PLAYER_KEYS), a pre-flight that shed only the envelope's carry would leave
@@ -2191,6 +2190,7 @@ PF.save = {
         setup.tone ? `Tone: ${setup.tone}` : "",
         setup.difficulty ? `Difficulty: ${setup.difficulty}` : "",
         setup.rating ? `Rating: ${setup.rating}` : "",
+        setup.playerGoals ? `Goals: ${setup.playerGoals}` : "",
       ]
         .filter(Boolean)
         .join("\n");
@@ -2425,7 +2425,8 @@ PF.save = {
     }
   },
 
-  /** The wizard's theme, from the same config home as the seed, at both depths. */
+  /** Preserve legacy explicit themes; new games derive the fallback from Engine Setting.
+   *  The sealed brief already persists the final theme and outranks this fallback. */
   _configTheme(meta) {
     const setup =
       meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
@@ -2440,7 +2441,7 @@ PF.save = {
     for (const candidate of [inner?.theme, outer?.theme]) {
       if (typeof candidate === "string" && candidate) return candidate;
     }
-    return null;
+    return typeof setup?.setting === "string" ? PF.theme.themeFromWords(setup.setting) : null;
   },
 
   /** THE LOREBOOK ENTRIES THE PLAYER TICKED (0.16.2, R-D6), from the same
@@ -2467,6 +2468,10 @@ PF.save = {
       outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null
         ? outer.experienceConfig
         : null;
+    // An explicit Engine selection, including [], supersedes legacy package picks.
+    if (Array.isArray(setup?.activeLorebookEntryIds)) {
+      return [...new Set(setup.activeLorebookEntryIds.filter((id) => typeof id === "string" && id))];
+    }
     for (const candidate of [inner?.loreEntryIds, outer?.loreEntryIds]) {
       if (!Array.isArray(candidate)) continue;
       // The same entry belongs in the request only once.
