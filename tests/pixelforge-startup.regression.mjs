@@ -32,6 +32,7 @@ const core = PF.core;
 const declarations = [];
 const stored = new Map();
 let posts = 0;
+const requests = [];
 let failGeneration = false;
 let releaseStorage;
 const storageWait = new Promise((resolve) => {
@@ -42,14 +43,16 @@ PF.api.patchMetadata = async (chatId, patch) => {
   if (patch.pixelforgeBrief && chatId === "fresh") await storageWait;
   stored.set(chatId, { ...stored.get(chatId), ...patch });
 };
-PF.api.postExperienceGeneration = async () => {
+PF.api.postExperienceGeneration = async (_chatId, request) => {
   posts++;
+  requests.push(request);
   return failGeneration
     ? { status: 503, body: { error: "Synthetic unavailable model" } }
     : {
         status: 200,
         body: {
           ok: true,
+          lorebook: { includedEntries: 2, skippedEntries: [] },
           data: {
             scale: "village",
             name: "Slateport",
@@ -72,7 +75,18 @@ const props = (chatId, chatMeta) => ({
   setStartupReady: (context) => declarations.push(context),
   setExperienceChrome() {},
 });
-const config = { gameSetupConfig: { experienceConfig: { generate: true, seed: 4242, theme: "cozy-village" } } };
+const config = {
+  gameSetupConfig: {
+    setting: "A sealed colony in orbit around a frozen moon.",
+    tone: "Hopeful",
+    difficulty: "hard",
+    rating: "mature",
+    playerGoals: "Find the lost expedition.",
+    partyCharacterIds: ["player-picked-companion"],
+    activeLorebookEntryIds: ["orbital-station", "expedition"],
+    experienceConfig: { generate: true, seed: 4242 },
+  },
+};
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 const frame = () => {
   const [id, run] = frames.entries().next().value;
@@ -85,6 +99,10 @@ try {
   core.attachMain(first, props("fresh", config));
   await settle();
   assert.equal(posts, 1);
+  assert.deepEqual(requests[0].lorebookEntryIds, config.gameSetupConfig.activeLorebookEntryIds);
+  for (const text of ["A sealed colony in orbit", "Hopeful", "hard", "mature", "Find the lost expedition."]) {
+    assert.ok(requests[0].userContent.includes(text), `Engine setup reaches world preparation: ${text}`);
+  }
   assert.equal(declarations.at(-1), null, "an unpersisted world cannot enable Start");
   assert.equal(PF.save.gateHolds(core), true);
   assert.equal(first.inert, false, "the existing loading/retry controls remain reachable");
@@ -102,6 +120,11 @@ try {
   const intro = structuredClone(core.sim.intro);
   frame();
   assert.ok(stored.get("fresh").pixelforgeBrief, "the actual generated brief was persisted first");
+  assert.equal(
+    stored.get("fresh").pixelforgeBrief.theme,
+    "sci-fi-colony",
+    "Engine Setting resolves the missing model artTheme and is sealed in metadata",
+  );
   const context = declarations.at(-1);
   assert.equal(typeof context, "string");
   assert.ok(context.length <= 8000);
@@ -137,11 +160,18 @@ try {
   sim.step = step;
 
   // Saved worlds do not need another paid preparation call.
-  core.onMainProps(props("saved", { ...config, ...stored.get("fresh") }));
+  core.onMainProps(
+    props("saved", {
+      ...config,
+      gameSetupConfig: { ...config.gameSetupConfig, setting: "A cozy village beside an orchard." },
+      ...stored.get("fresh"),
+    }),
+  );
   await settle();
   await PF.save._flushChain;
   frame();
   assert.equal(posts, 1);
+  assert.equal(core.sim.world.theme, "sci-fi-colony", "later Setting edits cannot repaint the sealed world");
   assert.equal(typeof declarations.at(-1), "string");
 
   failGeneration = true;

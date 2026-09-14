@@ -37,5 +37,11 @@ for (const packageId of ["world-state", "character-tracker", "custom-tracker", "
 }
 assert.match(prompt, /Every existing quantity change MUST include qty, including qty:1/);
 assert.match(prompt, /Only new items may omit qty for 1/);
+const example = JSON.parse(prompt.split("Schema:\n")[1].split("\nRules:")[0]);
+assert.equal(typeof example.inventory[0].description, "string");
+assert.equal(typeof example.inventory[0].location, "string");
+assert.match(prompt, /never invent item properties or storage locations/);
+assert.match(prompt, /Preserve known details in full arrays/);
+assert.match(prompt, /For incremental updates, omit unchanged details/);
 
 console.log("Inventory Tracker package contract regression passed.");

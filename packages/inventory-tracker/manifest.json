@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "inventory-tracker",
   "name": "Inventory Tracker",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Tracks currencies, equipped gear, and carried items as separate structured lists with compact quantities. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
   "engine": {
     "min": "2.4.3",
@@ -17,8 +17,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "e6fee10460ba004a0182e586139c57117b3f46ab0c1594a067ad9deba255a0d2",
-      "bytes": 2474
+      "sha256": "bbb14a375cfac0f3418f8c8a9cf58d8c7dd2ecf176bd091a6211257b228801d9",
+      "bytes": 2866
     }
   ],
   "permissions": [

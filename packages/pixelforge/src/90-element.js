@@ -1020,10 +1020,6 @@ class PixelforgeElement extends HTMLElement {
     try {
       const view = this.getAttribute("view");
       const p = this._props;
-      if (view === "setup") {
-        if (p && typeof p.onLaunch === "function") PF.mountSetup(this, p);
-        return;
-      }
       if (view !== "surface" || !p) return;
       if (p.layer === "underlay") PF.core.attachUnderlay(this, p);
       else if (typeof p.chatId === "string") PF.core.attachMain(this, p);
