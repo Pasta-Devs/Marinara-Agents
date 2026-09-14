@@ -185,3 +185,21 @@ function roll(key: string): number {
 export function slurpAudiencePaidThrough(at: Date): string {
   return new Date(at.getTime() + SLURP_AUDIENCE_SUBSCRIPTION_DAYS * 86_400_000).toISOString();
 }
+
+/**
+ * Why this person stopped paying.
+ *
+ * Pure, and deliberately the same three answers the copy bank writes lines for. Price comes first
+ * because it is the one the player can act on: somebody who left because the subscription got
+ * expensive is a different fact from somebody who drifted away, and a loss with no reason on it is
+ * a number, not an event.
+ */
+export function slurpLapseReason(input: {
+  weeklyBudget: number;
+  price: number;
+  /** Days since this person last did anything with this Creator. */
+  daysSinceSeen: number;
+}): "price" | "quiet" | "drift" {
+  if (input.weeklyBudget > 0 && Math.max(0, Math.floor(input.price)) > input.weeklyBudget) return "price";
+  return input.daysSinceSeen >= 7 ? "quiet" : "drift";
+}

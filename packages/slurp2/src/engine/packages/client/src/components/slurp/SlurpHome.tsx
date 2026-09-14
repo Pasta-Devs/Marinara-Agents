@@ -8221,11 +8221,14 @@ function SlurpNotificationsView({
   const unseenIds = new Set(unseen.flatMap((entry) => (entry.type === "single" ? [entry.event.id] : entry.ids)));
   const describeEvent = (event: SlurpEventItem) => {
     const { kind, amount, actorLabel } = event;
-    return localizeUi(`ui.slurp.events.single.${kind}`, {
+    const line = localizeUi(`ui.slurp.events.single.${kind}`, {
       defaultValue: kind,
       amount,
       who: actorLabel ?? localizeUi("ui.slurp.events.someone", { defaultValue: "Someone" }),
     });
+    // The free bank's line, when the event carries one. A loss that says why it happened is an
+    // event; the same loss without it is a number moving.
+    return event.note ? `${line} “${event.note}”` : line;
   };
 
   const groupTitle = (kind: SlurpEventItem["kind"]) =>

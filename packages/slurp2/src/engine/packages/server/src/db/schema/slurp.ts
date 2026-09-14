@@ -478,6 +478,8 @@ export const slurpEvents = fileTable("slurp2_events", {
   subjectId: text("subject_id"),
   /** Who acted, for display. Stored rather than joined so a departed fan still renders. */
   actorLabel: text("actor_label"),
+  /** One readable line about the event, from a Tier 1 bank. Null for events that need none. */
+  note: text("note"),
   /** Stable payment operation that produced this event, when the action must be idempotent. */
   operationId: text("operation_id"),
   /** Coins, follower counts, or a milestone target, depending on kind. */

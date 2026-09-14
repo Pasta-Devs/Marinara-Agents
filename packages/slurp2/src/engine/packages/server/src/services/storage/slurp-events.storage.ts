@@ -19,6 +19,7 @@ export type SlurpEvent = SlurpEventLike & {
   creatorAccountId: string | null;
   subjectId: string | null;
   actorLabel: string | null;
+  note: string | null;
   operationId: string | null;
   seenAt: string | null;
 };
@@ -29,6 +30,7 @@ export type SlurpEventInput = {
   creatorAccountId?: string | null;
   subjectId?: string | null;
   actorLabel?: string | null;
+  note?: string | null;
   operationId?: string | null;
   amount?: number;
 };
@@ -52,6 +54,7 @@ function mapEvent(row: any): SlurpEvent {
     creatorAccountId: (row.creatorAccountId as string | null) ?? null,
     subjectId: (row.subjectId as string | null) ?? null,
     actorLabel: (row.actorLabel as string | null) ?? null,
+    note: (row.note as string | null) ?? null,
     operationId: (row.operationId as string | null) ?? null,
     amount: int(row.amount),
     weight: int(row.weight),
@@ -84,6 +87,7 @@ export function createSlurpEventsStorage(db: DB) {
         creatorAccountId: input.creatorAccountId ?? null,
         subjectId: input.subjectId ?? null,
         actorLabel: input.actorLabel ?? null,
+        note: input.note?.trim() || null,
         operationId: input.operationId ?? null,
         amount: String(amount),
         weight: String(slurpEventWeight(input.kind, amount)),

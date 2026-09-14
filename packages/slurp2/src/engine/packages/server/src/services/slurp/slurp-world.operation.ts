@@ -18,7 +18,8 @@ import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js
 import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
 import { isAmbientNoodleAccount } from "./slurp-ambient-profiles.js";
 import { tryNoodleOperation } from "./slurp-operation-lock.js";
-import { slurpCapTickEvents } from "./slurp-tuning.js";
+import { readSlurpAudienceTone } from "./slurp-tone.js";
+import { slurpCapTickEvents, slurpRhythmMultiplier } from "./slurp-tuning.js";
 import { slurpCreatorReach } from "./slurp-reach.js";
 import { slurpMembersActiveAt } from "./slurp-population.js";
 import {
@@ -30,7 +31,11 @@ import {
   type SlurpFanType,
 } from "./slurp-fan-types.js";
 import { isNotableAudienceArcChange, slurpNextAudienceArc } from "./slurp-audience-arc.js";
-import { slurpAudiencePaidThrough, slurpAudienceSubscriptionDecision } from "./slurp-audience-subscription.js";
+import {
+  slurpAudiencePaidThrough,
+  slurpAudienceSubscriptionDecision,
+  slurpLapseReason,
+} from "./slurp-audience-subscription.js";
 import { slurpPlatformScaleMultiplier, slurpWorldActivityMultiplier } from "./slurp-scale.js";
 import {
   slurpAudienceOpener,
@@ -40,6 +45,7 @@ import {
   slurpCommissionBrief,
   slurpCreatorOpener,
   slurpCreatorReaction,
+  slurpLapseNote,
 } from "./slurp-world-copy.js";
 import { slurpReactionBodiesForType, type SlurpReactionBanks } from "./slurp-reaction-bank.js";
 import { enqueueSlurpPendingText } from "./slurp-pending-text.service.js";
@@ -151,6 +157,9 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     const activity = slurpWorldActivityMultiplier(settings.worldActivity);
     const scale = slurpPlatformScaleMultiplier(settings.platformScale);
     const tuning = settings.simulationTuning;
+    // Deep night is quiet and the evening is busy, everywhere at once. One multiplier on top of the
+    // world-activity dial, so every rule that already takes `activity` gets a rhythm for nothing.
+    const rhythm = slurpRhythmMultiplier(until, tuning.rhythm);
     // Every event this tick writes goes through one budget, arc events inside storage included.
     const noodle = slurpCapTickEvents(createSlurpStorage(db), tuning.clock.maxEventsPerTick);
     /** Churn is a full scan, so it only runs when enough time has passed for it to find anything. */
@@ -348,7 +357,20 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
         if (decision === "none") continue;
         if (decision === "lapse") {
           await population.lapseTie(tie.memberId, account.id).catch(() => undefined);
-          await noodle.recordCreatorEvent(account.id, "lapsed", { actorLabel: tie.memberId });
+          // A loss with no reason on it is a number, not an event. The reason is known here, the
+          // line is free, and the tone setting decides whether the crowd says it kindly.
+          await noodle.recordCreatorEvent(account.id, "lapsed", {
+            actorLabel: tie.memberId,
+            note: slurpLapseNote(
+              `${tie.memberId}:${account.id}:${until.toISOString().slice(0, 10)}`,
+              slurpLapseReason({
+                weeklyBudget,
+                price,
+                daysSinceSeen: (until.getTime() - Date.parse(tie.lastSeenAt)) / 86_400_000,
+              }),
+              readSlurpAudienceTone(settings.audienceTone),
+            ),
+          });
           continue;
         }
         await population
@@ -443,7 +465,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
         audience,
         actorWeights,
         seed: `${pulseSince.toISOString()}:${until.toISOString()}`,
-        activity,
+        activity: activity * rhythm,
         targets: creators.flatMap((creator) =>
           (postsByAccount.get(creator.id) ?? [])
             .filter((post) => post.access !== "draft")
@@ -571,7 +593,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     }
 
     const plan = planSlurpWorldTick(
-      { since, until, creators, audience, activity, catchUpHours: tuning.clock.catchUpHours },
+      { since, until, creators, audience, activity: activity * rhythm, catchUpHours: tuning.clock.catchUpHours },
       tuning.world,
     );
     let applied = 0;

@@ -28,7 +28,7 @@ type Path = readonly string[];
 type NumberField = { path: Path; label: string; detail: string; advanced?: boolean };
 
 /** The groups, in the order the plan lays them out. Everything not listed here is `advanced`. */
-const GROUPS = ["clock", "reach", "pulse", "world", "funnel", "economy"] as const;
+const GROUPS = ["clock", "rhythm", "reach", "pulse", "world", "funnel", "economy"] as const;
 type Group = (typeof GROUPS)[number];
 
 const FIELDS: Record<Group, NumberField[]> = {
@@ -46,6 +46,11 @@ const FIELDS: Record<Group, NumberField[]> = {
       detail: "Most notifications one tick writes.",
       advanced: true,
     },
+  ],
+  rhythm: [
+    { path: ["rhythm", "nightLow"], label: "Deep night", detail: "How busy four in the morning is." },
+    { path: ["rhythm", "eveningHigh"], label: "Evening peak", detail: "How busy nine in the evening is." },
+    { path: ["rhythm", "weekendBoost"], label: "Weekend boost", detail: "Extra activity on Saturday and Sunday." },
   ],
   reach: [
     { path: ["reach", "floor"], label: "Starting followers", detail: "What a brand-new creator appears to have." },
@@ -95,6 +100,29 @@ const FIELDS: Record<Group, NumberField[]> = {
       path: ["pulse", "oldPostTrickle"],
       label: "Old post trickle",
       detail: "Share of reactions older posts still get.",
+      advanced: true,
+    },
+    {
+      path: ["pulse", "wordOfMouth"],
+      label: "Word of mouth",
+      detail: "Share of followers who bring somebody new each day.",
+    },
+    {
+      path: ["pulse", "viralChance"],
+      label: "Viral chance",
+      detail: "Chance a post is seen far past its usual reach.",
+      advanced: true,
+    },
+    {
+      path: ["pulse", "viralMultiplier"],
+      label: "Viral reach",
+      detail: "How much a lucky post outdraws the others.",
+      advanced: true,
+    },
+    {
+      path: ["pulse", "viralHours"],
+      label: "Viral window",
+      detail: "Hours a lucky post keeps its luck.",
       advanced: true,
     },
     {
@@ -185,6 +213,13 @@ const FIELDS: Record<Group, NumberField[]> = {
 
 /** The switches and choices, by group. */
 const TOGGLES: Record<string, { path: Path; label: string; detail: string; advanced?: boolean }[]> = {
+  rhythm: [
+    {
+      path: ["rhythm", "enabled"],
+      label: "Daily and weekly rhythm",
+      detail: "Quiet overnight, busy in the evening, busier at the weekend.",
+    },
+  ],
   clock: [
     {
       path: ["clock", "backgroundTimer"],

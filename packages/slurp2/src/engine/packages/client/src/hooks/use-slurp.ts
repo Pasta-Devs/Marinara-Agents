@@ -816,6 +816,8 @@ export type SlurpEventItem = {
   subjectId: string | null;
   actorLabel: string | null;
   actorAvatarUrl: string | null;
+  /** One readable line about the event, from the free bank. Null for events that need none. */
+  note: string | null;
   amount: number;
   weight: number;
   createdAt: string;

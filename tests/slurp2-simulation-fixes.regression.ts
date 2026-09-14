@@ -94,7 +94,9 @@ assert.equal(count(pulse({ ...R.pulse, likeBudgetScale: 0 }), "like"), 0, "scale
 
 // ── Old post trickle ────────────────────────────────────────────────────────
 const old = [{ creatorAccountId: "c1", postId: "old", ageHours: 200, creatorReach: 30_000 }];
-assert.deepEqual(pulse(R.pulse, { targets: old }), [], "trickle 0 leaves old posts silent");
+// The realistic trickle is no longer zero, so silence is what a zero setting buys, not the default.
+assert.deepEqual(pulse({ ...R.pulse, oldPostTrickle: 0 }, { targets: old }), [], "trickle 0 leaves old posts silent");
+assert.ok(pulse(R.pulse, { targets: old }).length > 0, "the realistic trickle keeps an old post alive");
 assert.ok(pulse({ ...R.pulse, oldPostTrickle: 0.5 }, { targets: old }).length > 0, "trickle reaches old posts");
 const mixed = pulse(
   { ...R.pulse, oldPostTrickle: 0.2, maxPerTick: 40 },

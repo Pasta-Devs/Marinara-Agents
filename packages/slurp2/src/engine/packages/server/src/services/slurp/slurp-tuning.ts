@@ -51,6 +51,14 @@ export const slurpSimulationTuningSchema = z.object({
       maxEventsPerTick: int(1, SLURP_TUNING_EVENTS_PER_TICK_CEILING, 14),
     })
     .default({}),
+  rhythm: z
+    .object({
+      enabled: z.boolean().default(true),
+      nightLow: num(0, 1, 0.7),
+      eveningHigh: num(1, 4, 1.25),
+      weekendBoost: num(1, 4, 1.1),
+    })
+    .default({}),
   reach: z
     .object({
       floor: int(0, 1_000_000, 240),
@@ -66,8 +74,12 @@ export const slurpSimulationTuningSchema = z.object({
       maxPerTick: int(0, SLURP_TUNING_PULSE_PER_TICK_CEILING, 6),
       likeBudgetScale: num(0, 20, 1),
       postMaxAgeHours: int(1, 24 * 60, 48),
-      oldPostTrickle: num(0, 1, 0),
+      oldPostTrickle: num(0, 1, 0.05),
       poolSize: int(1, 500, 24),
+      wordOfMouth: num(0, 0.05, 0.002),
+      viralChance: num(0, 1, 0.02),
+      viralMultiplier: num(1, 20, 4),
+      viralHours: int(1, 24 * 14, 12),
     })
     .default({}),
   world: z
@@ -125,7 +137,18 @@ const PRESETS: Record<Exclude<SlurpTuningPreset, "custom">, SlurpSimulationTunin
   quiet: {
     ...R,
     preset: "quiet",
-    pulse: { ...R.pulse, minutesPerReaction: 6, maxPerTick: 3, likeBudgetScale: 0.5, poolSize: 16 },
+    rhythm: { ...R.rhythm, nightLow: 0.5, eveningHigh: 1.15, weekendBoost: 1.05 },
+    pulse: {
+      ...R.pulse,
+      minutesPerReaction: 6,
+      maxPerTick: 3,
+      likeBudgetScale: 0.5,
+      poolSize: 16,
+      oldPostTrickle: 0.02,
+      wordOfMouth: 0.001,
+      viralChance: 0.01,
+      viralMultiplier: 2.5,
+    },
     world: { ...scaleCurves(R.world, 0.5), maxActionsPerTick: 2, maxOpenRequests: 2 },
   },
   // Two to three times the events: reactions arrive two and a half times as fast against a cap
@@ -133,6 +156,7 @@ const PRESETS: Record<Exclude<SlurpTuningPreset, "custom">, SlurpSimulationTunin
   lively: {
     ...R,
     preset: "lively",
+    rhythm: { ...R.rhythm, nightLow: 0.8, eveningHigh: 1.5, weekendBoost: 1.2 },
     pulse: {
       ...R.pulse,
       minutesPerReaction: 1.2,
@@ -140,6 +164,10 @@ const PRESETS: Record<Exclude<SlurpTuningPreset, "custom">, SlurpSimulationTunin
       likeBudgetScale: 1.5,
       oldPostTrickle: 0.1,
       poolSize: 48,
+      wordOfMouth: 0.004,
+      viralChance: 0.05,
+      viralMultiplier: 6,
+      viralHours: 18,
     },
     world: { ...scaleCurves(R.world, 2.5), maxActionsPerTick: 8, maxOpenRequests: 5 },
   },
@@ -148,6 +176,7 @@ const PRESETS: Record<Exclude<SlurpTuningPreset, "custom">, SlurpSimulationTunin
   generous: {
     ...R,
     preset: "generous",
+    rhythm: { ...R.rhythm, nightLow: 0.85, eveningHigh: 1.5, weekendBoost: 1.2 },
     pulse: {
       ...R.pulse,
       minutesPerReaction: 1.2,
@@ -155,6 +184,10 @@ const PRESETS: Record<Exclude<SlurpTuningPreset, "custom">, SlurpSimulationTunin
       likeBudgetScale: 2,
       oldPostTrickle: 0.1,
       poolSize: 48,
+      wordOfMouth: 0.006,
+      viralChance: 0.08,
+      viralMultiplier: 6,
+      viralHours: 18,
     },
     world: { ...scaleCurves(R.world, 2.5), maxActionsPerTick: 8, maxOpenRequests: 5 },
     funnel: { ...R.funnel, rollCadence: "hourly", ambientCanPay: true, conversionGrowth: 3 },
@@ -165,6 +198,38 @@ const PRESETS: Record<Exclude<SlurpTuningPreset, "custom">, SlurpSimulationTunin
 /** The tuning a preset stands for. `custom` has no values of its own, so it reads as realistic. */
 export function slurpTuningForPreset(preset: SlurpTuningPreset): SlurpSimulationTuning {
   return structuredClone(preset === "custom" ? R : PRESETS[preset]);
+}
+
+/**
+ * How busy the platform is at this hour of this day, as a multiplier on activity.
+ *
+ * A crowd that behaves identically at four in the morning and nine in the evening is the single
+ * cheapest tell that nothing behind the feed is real. This is the whole fix: one number, applied
+ * to the pulse budget and the world-event rates, so every rule that already takes an `activity`
+ * multiplier gets a rhythm for free.
+ *
+ * The shape is a table rather than arithmetic because the curve is not symmetric — the trough is
+ * around four in the morning and the peak around nine in the evening, seventeen hours apart — and
+ * a table of twenty-four numbers is both shorter and easier to read than the phase maths that
+ * would reproduce it. UTC, like every other clock in the simulation.
+ *
+ * `nightQuiet` is a different setting and stays one: it holds back the *Creator's* auto-posting
+ * overnight, in local time. This is the audience, and the audience does not stop, it thins out.
+ */
+const HOUR_SHAPE = [
+  0.15, 0.06, 0.02, 0, 0, 0.04, 0.12, 0.24, 0.36, 0.44, 0.5, 0.54, 0.58, 0.6, 0.62, 0.66, 0.72, 0.8, 0.88, 0.95, 1,
+  0.98, 0.8, 0.45,
+] as const;
+
+export function slurpRhythmMultiplier(
+  at: Date,
+  rhythm: SlurpSimulationTuning["rhythm"] = SLURP_REALISTIC_TUNING.rhythm,
+): number {
+  if (!rhythm.enabled) return 1;
+  const shape = HOUR_SHAPE[at.getUTCHours()] ?? 0.5;
+  const day = at.getUTCDay();
+  const weekend = day === 0 || day === 6 ? rhythm.weekendBoost : 1;
+  return (rhythm.nightLow + (rhythm.eveningHigh - rhythm.nightLow) * shape) * weekend;
 }
 
 /** The background world pass when `clock.backgroundTimer` is off: a few catch-ups a day. */

@@ -6995,7 +6995,7 @@ export function createSlurpStorage(db: DB) {
     async recordCreatorEvent(
       creatorAccountId: string,
       kind: SlurpEventKind,
-      detail: { subjectId?: string | null; actorLabel?: string | null; amount?: number } = {},
+      detail: { subjectId?: string | null; actorLabel?: string | null; amount?: number; note?: string | null } = {},
     ): Promise<void> {
       try {
         const creator = await this.getNoodlerAccountById(creatorAccountId);

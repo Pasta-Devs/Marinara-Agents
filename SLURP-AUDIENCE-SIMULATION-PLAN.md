@@ -17,7 +17,7 @@ This is a handoff artifact. A fresh agent should be able to pick up any slice fr
 | 4     | Simulation settings UI + live estimate                                                                                        | done        |
 | 5     | Fan Types: model, built-ins, migration, voice in prompts                                                                      | done        |
 | 6     | Per-type reaction banks, batched bank growth, rebalance population                                                            | done        |
-| 6a    | Believability, cheap: weekly/daily rhythm, visible lapse + price complaints, word of mouth + viral luck, likes on older posts | not started |
+| 6a    | Believability, cheap: weekly/daily rhythm, visible lapse + price complaints, word of mouth + viral luck, likes on older posts | done        |
 | 6b    | Believability, medium: per-actor world events (fan-type question/dm/commission/tip weights), fan memory in prompts            | not started |
 | 7     | Fan Types editor UI                                                                                                           | not started |
 | 8     | Model Worker: job queue, budget ledger, modes                                                                                 | not started |
@@ -379,3 +379,38 @@ Derived on `origin/staging` (8924a8c8) before slice 1, running each test with `n
   began, only `paidThroughAt`, so it needs a column and belongs with the funnel rework.
 - `bank.targetSize` and `tone` are now read. Still unread from slice 5: `behavior.question` / `dm` /
   `commission` / `tip` / `unlock`, `spend.tipChance`, `funnel.loyaltyDays`.
+
+## Slice 6a notes (for later slices)
+
+- `slurpRhythmMultiplier(at, rhythm)` lives in `slurp-tuning.ts` (no new module: it is four lines
+  of table lookup and belongs next to the settings it reads). It multiplies the existing `activity`
+  dial in `slurp-world.operation.ts`, so both `planSlurpWorldPulse` and `planSlurpWorldTick` get a
+  rhythm with no new plumbing, and the estimate applies the same multiplier per simulated tick.
+  UTC. `HOUR_SHAPE` is a 24-number table rather than phase maths because the trough (04:00) and the
+  peak (21:00) are seventeen hours apart, not twelve.
+- `nightQuiet` was left alone: it holds back the _Creator's_ auto-posting overnight, in local time.
+  The rhythm is the audience thinning out, which is a different thing, so nothing was merged.
+- New tuning: `rhythm { enabled true, nightLow 0.7, eveningHigh 1.25, weekendBoost 1.1 }` and
+  `pulse { wordOfMouth 0.002, viralChance 0.02, viralMultiplier 4, viralHours 12 }`.
+  `pulse.oldPostTrickle` moved from 0 to 0.05. Realistic swings by less than 2.5× across a day,
+  which is deliberate: this is texture, not a behaviour change.
+- Word of mouth is a second pass in `planSlurpWorldPulse`, like the like budget: expected follows
+  are `reach × wordOfMouth × days`, with the fractional part taken as a chance rather than floored
+  away (at a five-minute tick the fraction is the whole of the expected value). Clamped to
+  `SLURP_TUNING_PULSE_PER_TICK_CEILING` before the loop, and it skips actors whose Fan Type never
+  follows. It lands on top of `maxPerTick`, so `slurp-world-pulse.regression.ts` now bounds a plan
+  by the hard ceiling rather than by `maxPerTick`.
+- `slurpPostViralMultiplier(postId, ageHours, pulse)` is deterministic on the post id and
+  time-boxed by `viralHours`; it multiplies that post's weight inside the plan, so it costs nothing
+  and cannot add actions.
+- Lapses are now readable. `slurpLapseReason()` (`slurp-audience-subscription.ts`) answers
+  price / quiet / drift from budget, price and days since seen; `slurpLapseNote()`
+  (`slurp-world-copy.ts`) writes the line, with a separate warm bank so a warm audience never
+  produces the blunt version. `slurpEvents` gained a nullable `note` column (the `followedAt`
+  precedent: no migration pass), the route spreads it through, and `describeEvent` in
+  `SlurpHome.tsx` appends it in quotes. Any later event kind can carry a bank line the same way.
+- Only the subscription path writes the event. The churn pass lapses non-subscribers, and
+  "let their subscription lapse" would be a lie about somebody who only ever liked a post.
+- The dedupe key was checked, not changed: `createNoodlerWorldInteraction` dedupes on
+  (post, actor, **type**, parent), so a like never blocks a later comment on the same post. The
+  plan's own `postId:actor` key is per pulse only.

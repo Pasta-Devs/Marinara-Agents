@@ -15,7 +15,11 @@ import {
 } from "../../../../server/src/services/slurp/slurp-audience-subscription.js";
 import { generateSlurpPopulationMember } from "../../../../server/src/services/slurp/slurp-population.js";
 import { slurpCreatorReach } from "../../../../server/src/services/slurp/slurp-reach.js";
-import { slurpWorldTimerDue, type SlurpSimulationTuning } from "../../../../server/src/services/slurp/slurp-tuning.js";
+import {
+  slurpRhythmMultiplier,
+  slurpWorldTimerDue,
+  type SlurpSimulationTuning,
+} from "../../../../server/src/services/slurp/slurp-tuning.js";
 import { planSlurpWorldPulse } from "../../../../server/src/services/slurp/slurp-world-pulse.js";
 import { planSlurpWorldTick } from "../../../../server/src/services/slurp/slurp-world.js";
 
@@ -124,6 +128,7 @@ export function estimateSlurpSimulation(
     if (!slurpWorldTimerDue(tuning.clock, lastRunMs, nowMs)) continue;
     lastRunMs = nowMs;
     const at = new Date(nowMs);
+    const rhythm = slurpRhythmMultiplier(at, tuning.rhythm);
     followers = slurpCreatorReach(
       { accountId: sample.accountId, createdAt, realFollowers: sample.realFollowers + counts.follows },
       at,
@@ -141,7 +146,15 @@ export function estimateSlurpSimulation(
     // The pulse keeps its own mark, as the tick does: time too short to buy a whole reaction
     // carries into the next tick instead of being rounded away several hundred times a day.
     const pulse = planSlurpWorldPulse(
-      { elapsedMinutes: (nowMs - pulseSinceMs) / 60_000, targets, audience, seed: `${pulseSinceMs}:${nowMs}` },
+      {
+        elapsedMinutes: (nowMs - pulseSinceMs) / 60_000,
+        targets,
+        audience,
+        seed: `${pulseSinceMs}:${nowMs}`,
+        // The platform's rhythm, exactly as the tick applies it: quiet at four in the morning,
+        // busy in the evening, busier at the weekend.
+        activity: rhythm,
+      },
       tuning.pulse,
     );
     if (pulse.length > 0) pulseSinceMs = nowMs;
@@ -171,6 +184,7 @@ export function estimateSlurpSimulation(
         until: at,
         creators: [{ id: sample.accountId, followers, recentPostIds, openRequests: 0 }],
         audience,
+        activity: rhythm,
         catchUpHours: tuning.clock.catchUpHours,
       },
       tuning.world,

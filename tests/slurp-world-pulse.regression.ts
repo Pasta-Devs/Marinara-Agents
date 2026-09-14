@@ -8,6 +8,10 @@ import {
   SLURP_PULSE_MAX_PER_TICK,
   SLURP_PULSE_POST_MAX_AGE_HOURS,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world-pulse.js";
+import {
+  SLURP_REALISTIC_TUNING,
+  SLURP_TUNING_PULSE_PER_TICK_CEILING,
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-tuning.js";
 
 const targets = [
   { creatorAccountId: "c1", postId: "fresh", ageHours: 0.5, creatorReach: 3_000 },
@@ -48,16 +52,20 @@ for (let index = 0; index < 300; index += 1) {
 }
 assert.ok((landed.get("fresh") ?? 0) > (landed.get("day") ?? 0) * 3, "fresh posts must dominate");
 
-// A finished post collects nothing.
+// A finished post collects nothing once the old-post trickle is switched off. The realistic
+// trickle is a small non-zero share now, so this pins the zero setting rather than the default.
 assert.deepEqual(
-  planSlurpWorldPulse({
-    elapsedMinutes: 120,
-    audience,
-    seed: "old",
-    targets: [
-      { creatorAccountId: "c1", postId: "stale", ageHours: SLURP_PULSE_POST_MAX_AGE_HOURS + 1, creatorReach: 9_000 },
-    ],
-  }),
+  planSlurpWorldPulse(
+    {
+      elapsedMinutes: 120,
+      audience,
+      seed: "old",
+      targets: [
+        { creatorAccountId: "c1", postId: "stale", ageHours: SLURP_PULSE_POST_MAX_AGE_HOURS + 1, creatorReach: 9_000 },
+      ],
+    },
+    { ...SLURP_REALISTIC_TUNING.pulse, oldPostTrickle: 0 },
+  ),
   [],
 );
 
@@ -70,7 +78,9 @@ for (let index = 0; index < 200; index += 1) {
   const plan = planSlurpWorldPulse({ elapsedMinutes: 90, targets, audience, seed: `dup${index}` });
   const keys = plan.map((action) => `${action.postId}:${action.actorAccountId}`);
   assert.equal(new Set(keys).size, keys.length, "a pulse repeated an actor on one post");
-  assert.ok(plan.length <= SLURP_PULSE_MAX_PER_TICK);
+  // Word of mouth adds its follows on top of the shared plan, as the like budget does, so the
+  // bound here is the hard ceiling rather than `maxPerTick`.
+  assert.ok(plan.length <= SLURP_TUNING_PULSE_PER_TICK_CEILING);
 }
 
 // Mostly likes, with follows rare enough to mean something.

@@ -107,7 +107,7 @@ assert.match(world, /slurpWorldActivityMultiplier\(settings\.worldActivity\)/u);
 assert.match(world, /slurpPlatformScaleMultiplier\(settings\.platformScale\)/u);
 assert.match(
   world,
-  /planSlurpWorldTick\(\s*\{ since, until, creators, audience, activity, catchUpHours: tuning\.clock\.catchUpHours \},\s*tuning\.world,?\s*\)/u,
+  /planSlurpWorldTick\(\s*\{ since, until, creators, audience, activity: activity \* rhythm, catchUpHours: tuning\.clock\.catchUpHours \},\s*tuning\.world,?\s*\)/u,
 );
 assert.match(world, /if \(activity === 0\) \{[\s\S]*writeLastTick/u);
 

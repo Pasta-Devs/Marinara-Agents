@@ -14,6 +14,8 @@
  * before reaching for the model — the combinations here already run into the hundreds.
  */
 
+import type { SlurpAudienceTone } from "./slurp-tone.js";
+
 const COMMISSION_OPENERS = [
   "Would you take a request?",
   "Hoping you have space for a commission.",
@@ -307,4 +309,51 @@ const COLD = [
 export function slurpCreatorOpener(seed: string, kind: "missed" | "cold"): string {
   const bank = kind === "missed" ? MISSED : COLD;
   return bank[pickIndex(seed, `creator-dm-${kind}`, bank.length)]!;
+}
+
+/**
+ * Why somebody stopped paying, in words.
+ *
+ * A lapse was silent: the tie moved to `lapsed` and the player saw a name with no reason attached,
+ * which is the least useful shape a loss can have. The reason is already known at the point of the
+ * decision — the price went past what they will pay, they stopped turning up, or they simply
+ * drifted — so saying it costs nothing and is the difference between a number moving and something
+ * happening.
+ *
+ * Tone-aware, because this is the one place the audience gets to be unkind. A warm audience loses
+ * people quietly; an unfiltered one says why on the way out. `warm` is never allowed a cruel line,
+ * whatever the reason: that is the promise the setting makes.
+ */
+const LAPSE_NOTES: Record<"price" | "quiet" | "drift", Record<"warm" | "blunt", readonly string[]>> = {
+  price: {
+    warm: [
+      "cannot stretch to the subscription this month, sorry",
+      "the price is a bit much for me right now",
+      "pausing this one until money is easier",
+    ],
+    blunt: [
+      "not paying that much for it",
+      "the price went up and I did not",
+      "was fine at the old price. not at this one",
+    ],
+  },
+  quiet: {
+    warm: ["been away from here for a while", "not been around much lately", "life got busy, stepping back"],
+    blunt: ["nothing new worth staying for", "gone quiet, so have I", "there stopped being a reason to check"],
+  },
+  drift: {
+    warm: [
+      "off to spend my coins elsewhere for a bit",
+      "still lovely, just not for me at the moment",
+      "moving on, no hard feelings",
+    ],
+    blunt: ["not into it any more", "was good while it lasted", "found other things to follow"],
+  },
+};
+
+export type SlurpLapseReason = "price" | "quiet" | "drift";
+
+export function slurpLapseNote(seed: string, reason: SlurpLapseReason, tone: SlurpAudienceTone): string {
+  const bank = LAPSE_NOTES[reason][tone === "warm" ? "warm" : "blunt"];
+  return bank[pickIndex(seed, `lapse-${reason}`, bank.length)]!;
 }

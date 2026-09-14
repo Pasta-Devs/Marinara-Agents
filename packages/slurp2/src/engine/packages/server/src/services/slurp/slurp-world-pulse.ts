@@ -154,6 +154,23 @@ export function slurpPulseBudget(
 }
 
 /**
+ * A post that got lucky.
+ *
+ * Real feeds are not smooth: most posts do what the average says and one in fifty is seen by
+ * people the creator never reached. Deterministic on the post id, so a post is either lucky or it
+ * is not and it cannot flicker between two ticks, and time-boxed by `viralHours`, so the luck runs
+ * out rather than making one post the permanent centre of the platform.
+ */
+export function slurpPostViralMultiplier(
+  postId: string,
+  ageHours: number,
+  tuning: PulseTuning = SLURP_REALISTIC_TUNING.pulse,
+): number {
+  if (!(tuning.viralChance > 0) || ageHours > tuning.viralHours) return 1;
+  return mulberry32(hashSeed(`viral:${postId}`))() < tuning.viralChance ? tuning.viralMultiplier : 1;
+}
+
+/**
  * What arrives in this pulse.
  *
  * Newer posts attract more than older ones, which is what makes a post you just made feel like it
@@ -201,9 +218,10 @@ export function planSlurpWorldPulse(
     .map((target) => ({
       target,
       weight:
-        target.ageHours <= tuning.postMaxAgeHours
+        (target.ageHours <= tuning.postMaxAgeHours
           ? 1 / (1 + target.ageHours)
-          : (tuning.oldPostTrickle / (1 + target.ageHours)) * (tuning.postMaxAgeHours / target.ageHours),
+          : (tuning.oldPostTrickle / (1 + target.ageHours)) * (tuning.postMaxAgeHours / target.ageHours)) *
+        slurpPostViralMultiplier(target.postId, target.ageHours, tuning),
     }))
     .sort((left, right) => right.weight - left.weight);
   const totalWeight = weighted.reduce((sum, entry) => sum + entry.weight, 0);
@@ -228,6 +246,39 @@ export function planSlurpWorldPulse(
       postId: chosen.target.postId,
       actorAccountId: actor,
       kind: pickKind(input.actorWeights?.get(actor), kindRoll),
+    });
+  }
+
+  // Word of mouth. A share of the people already following bring somebody new, so growth compounds
+  // instead of depending entirely on the player publishing. Rolled on the same generator as the
+  // rest of the plan, so it is deterministic per seed, and it takes the fractional part as a
+  // chance rather than flooring it away — at a five-minute tick the whole expected value is the
+  // fraction, so flooring would mean the rule never fired at all.
+  const followsBefore = actions.filter((action) => action.kind === "follow").length;
+  const days = (input.elapsedMinutes * activity) / 1440;
+  const expected = totalReach * Math.max(0, tuning.wordOfMouth) * days;
+  // Clamped to the hard ceiling before the loop, so a bad setting cannot ask for a million.
+  const mouths = Math.min(
+    SLURP_TUNING_PULSE_PER_TICK_CEILING,
+    Math.floor(expected) + (random() < expected - Math.floor(expected) ? 1 : 0),
+  );
+  for (let index = 0; index < mouths * 3 && actions.length < SLURP_TUNING_PULSE_PER_TICK_CEILING; index += 1) {
+    if (actions.filter((action) => action.kind === "follow").length >= followsBefore + mouths) break;
+    let roll = random() * totalWeight;
+    const chosen = weighted.find((entry) => (roll -= entry.weight) <= 0) ?? weighted[0]!;
+    const actor = pickActor(input.audience, input.actorWeights, random);
+    // A recommendation still has to land on somebody who follows people. A crowd of Lurkers hears
+    // about the Creator and carries on lurking.
+    const weight = input.actorWeights?.get(actor);
+    if (weight && (weight.follow <= 0 || weight.followChance <= 0)) continue;
+    const key = `${chosen.target.postId}:${actor}`;
+    if (used.has(key)) continue;
+    used.add(key);
+    actions.push({
+      creatorAccountId: chosen.target.creatorAccountId,
+      postId: chosen.target.postId,
+      actorAccountId: actor,
+      kind: "follow",
     });
   }
 
