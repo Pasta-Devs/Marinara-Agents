@@ -190,6 +190,7 @@ function qmStateSnapshotForChangeDetection() {
     personaAvatarUrl: QM.state.personaAvatarUrl,
     replaceRealAvatarOnEquip: QM.state.replaceRealAvatarOnEquip,
     previousSnapshot: QM.state.previousSnapshot,
+    lastTrackerChange: QM.state.lastTrackerChange,
   });
 }
 
@@ -264,6 +265,10 @@ QM.state = {
   // Inventory" in Settings has something to revert to. See
   // server.mjs's own comment for the single-level (not full history) scope.
   previousSnapshot: null,
+  // What the last tracker-agent turn actually did, in review-able form —
+  // the Recent Changes view in Settings. Always in lockstep with
+  // previousSnapshot (see server.mjs's reconcileTrackerOutput).
+  lastTrackerChange: null,
   // Generate Image settings — a purely local, per-chat preference read only
   // when Quartermaster itself generates an image; see server.mjs's own
   // field comments for why this never affects any other feature. Empty
@@ -294,6 +299,7 @@ QM.state = {
     this.showWeapons = true;
     this.personaAvatarUrl = null;
     this.previousSnapshot = null;
+    this.lastTrackerChange = null;
     this.imageConnectionId = null;
     this.itemImagePromptTemplate = "";
     this.outfitPortraitPromptTemplate = "";
@@ -351,6 +357,7 @@ QM.state = {
         personaAvatarUrl: result.personaAvatarUrl || null,
         replaceRealAvatarOnEquip: result.replaceRealAvatarOnEquip === true,
         previousSnapshot: result.previousSnapshot ?? null,
+        lastTrackerChange: result.lastTrackerChange ?? null,
         imageConnectionId: result.imageConnectionId ?? null,
         itemImagePromptTemplate: result.itemImagePromptTemplate || "",
         outfitPortraitPromptTemplate: result.outfitPortraitPromptTemplate || "",
@@ -373,6 +380,7 @@ QM.state = {
         personaAvatarUrl: this.personaAvatarUrl,
         replaceRealAvatarOnEquip: this.replaceRealAvatarOnEquip,
         previousSnapshot: this.previousSnapshot,
+        lastTrackerChange: this.lastTrackerChange,
         imageConnectionId: this.imageConnectionId,
         itemImagePromptTemplate: this.itemImagePromptTemplate,
         outfitPortraitPromptTemplate: this.outfitPortraitPromptTemplate,
@@ -402,6 +410,7 @@ QM.state = {
       if (result.replaceRealAvatarOnEquip !== undefined)
         this.replaceRealAvatarOnEquip = result.replaceRealAvatarOnEquip;
       if (result.previousSnapshot !== undefined) this.previousSnapshot = result.previousSnapshot;
+      if (result.lastTrackerChange !== undefined) this.lastTrackerChange = result.lastTrackerChange;
       if (result.imageConnectionId !== undefined) this.imageConnectionId = result.imageConnectionId;
       if (result.itemImagePromptTemplate !== undefined) this.itemImagePromptTemplate = result.itemImagePromptTemplate;
       if (result.outfitPortraitPromptTemplate !== undefined)
@@ -435,6 +444,9 @@ QM.state = {
   },
   restoreInventory() {
     return this._mutate(QM.restoreInventory(this.chatId, QM_OWNER_ID));
+  },
+  revertTrackerItem(itemId) {
+    return this._mutate(QM.revertTrackerItem(this.chatId, QM_OWNER_ID, itemId));
   },
   // Read-only — doesn't touch `this` state, just hands the caller (the dock's
   // export button) the payload to write out as a file.

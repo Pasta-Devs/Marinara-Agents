@@ -96,6 +96,15 @@ const MAX_ITEM_DESCRIPTION_LENGTH = 4000;
 const MAX_STORED_LOCATION_LENGTH = 200;
 const MAX_OUTFIT_NAME_LENGTH = 200;
 const MAX_OUTFIT_DESCRIPTION_LENGTH = 4000;
+// A single tracker-agent turn touching more items than this is far more
+// likely a malformed/hallucinated response than a real narrative event —
+// reconcileTrackerOutput skips the whole turn (logged, not applied) rather
+// than trust a suspiciously large batch. See that function's own comment.
+const MAX_TRACKER_OPERATIONS_PER_TURN = 25;
+// The tracker's own "reasoning" field, now persisted into lastTrackerChange
+// (not just logged) so the Recent Changes UI can show it -- capped short
+// since it's meant to be brief, unlike a real item/outfit description.
+const MAX_TRACKER_REASONING_LENGTH = 500;
 
 // ── Generate Image (item/outfit portrait AI generation) ─────────────────────
 // Ported from the legacy RPG Inventory extension's own default prompt
@@ -742,6 +751,23 @@ function qmNormalizeMatchKey(name) {
   return typeof name === "string" ? name.trim().toLowerCase().replace(/[-_\s]+/g, "") : "";
 }
 
+// Base-26 letter tag for outfits (A, B, ... Z, AA, AB, ...) -- shared between
+// formatAgentRuntimeContext (assigning the tag the model sees) and
+// reconcileTrackerOutput (resolving the model's returned tag back to a real
+// outfit). Both sides must stay in lockstep with the plain array order of
+// state.outfits -- never a re-sorted view -- since they read the exact same
+// array within one pipeline turn (see the agent-runtime service comment
+// below for why nothing can mutate it in between).
+function qmOutfitTagLetter(index) {
+  let n = index;
+  let letters = "";
+  do {
+    letters = String.fromCharCode(65 + (n % 26)) + letters;
+    n = Math.floor(n / 26) - 1;
+  } while (n >= 0);
+  return letters;
+}
+
 // The tracker agent's own <agent_runtime_context> — plain dash-list text
 // instead of a JSON object. A returned object gets JSON.stringify'd and
 // HTML-entity-escaped by the engine when it's embedded into the prompt
@@ -749,17 +775,31 @@ function qmNormalizeMatchKey(name) {
 // which burns tokens and is harder for the model to scan than a flat list.
 // Matches the plain-list style the built-in Background agent's own
 // <available_backgrounds> block uses for the same reason.
+//
+// Each item/outfit carries a bracketed tag ([1], [2]... / [A], [B]...) so
+// the model can target an EXISTING one exactly, instead of having to retype
+// its name closely enough for qmNormalizeMatchKey to fuzzy-match it back —
+// a wrong or slightly-off retyped name under a targeted-update scheme risks
+// silently mutating the wrong item, where a garbled tag just fails to match
+// anything. Tags are plain array-index based (item N -> index N-1, outfit
+// letter -> qmOutfitTagLetter(index)) -- reconcileTrackerOutput rebuilds the
+// identical mapping from the same freshly-loaded arrays to resolve them.
 function formatAgentRuntimeContext(items, outfitNames) {
   const lines = ["Items:"];
   if (items.length === 0) {
     lines.push("(none)");
   } else {
-    for (const item of items) {
-      const description = item.description ? `: ${item.description}` : "";
-      lines.push(`- ${item.name}${description} (qty ${item.quantity}, ${item.location})`);
-    }
+    items.forEach((item, index) => {
+      const description = item.description ? ` -- ${item.description}` : "";
+      lines.push(`[${index + 1}] ${item.name}${description} (qty ${item.quantity}, ${item.location})`);
+    });
   }
-  lines.push(outfitNames.length > 0 ? `Outfits: ${outfitNames.join(", ")}` : "Outfits: (none)");
+  lines.push("Outfits:");
+  if (outfitNames.length === 0) {
+    lines.push("(none)");
+  } else {
+    outfitNames.forEach((name, index) => lines.push(`[${qmOutfitTagLetter(index)}] ${name}`));
+  }
   return lines.join("\n");
 }
 
@@ -968,80 +1008,175 @@ async function generateWardrobeProposal({
   return { ok: false, error: "generation-failed" };
 }
 
-// Full-snapshot semantics, matching every other tracker in this ecosystem
-// (Inventory Tracker/Character Tracker/World State): an
-// item not present in `data.items` this turn is removed. `equipOutfit`, when
-// it matches a saved outfit, is authoritative for equip state and overrides
-// any "equipped:<slot>" location on that outfit's own items — the outfit is
-// the whole point of the shortcut, so its items are also exempt from the
-// full-snapshot deletion rule even if the agent doesn't re-list them.
+// Patch semantics, NOT full-snapshot (see git history for the prior design,
+// which matched every other tracker in this ecosystem — Inventory Tracker/
+// Character Tracker/World State — but risked a weaker model's incomplete
+// re-listing silently deleting anything it forgot to mention, and risked a
+// large inventory's own full re-listing hitting the agent's maxTokens cap
+// mid-output). The tracker now targets EXISTING items/outfits by the exact
+// bracketed tag formatAgentRuntimeContext showed it ([1].. items, [A]..
+// outfits) instead of retyping a name for qmNormalizeMatchKey to fuzzy-match
+// back — a garbled tag just fails to resolve, where a garbled retyped name
+// could plausibly land on the wrong item. Nothing is deleted by omission any
+// more: only an explicit "removeItem" entry removes anything.
 async function reconcileTrackerOutput(documents, persistState, chatId, ownerId, data, logger) {
   if (!data || typeof data !== "object" || Array.isArray(data)) return;
+
+  const addEntries = Array.isArray(data.addItem) ? data.addItem : [];
+  const updateEntries = Array.isArray(data.updateItem) ? data.updateItem : [];
+  const removeEntries = Array.isArray(data.removeItem) ? data.removeItem : [];
+  const totalOps = addEntries.length + updateEntries.length + removeEntries.length;
+  if (totalOps > MAX_TRACKER_OPERATIONS_PER_TURN) {
+    // A turn genuinely touching this many items is far less likely than a
+    // malformed/hallucinated response — skip the WHOLE turn (nothing
+    // partially applied), same as a JSON-parse failure already does
+    // upstream: the next turn's context is unaffected and gets a fresh try.
+    logger?.warn(
+      "[quartermaster] tracker turn touched %d items (cap %d) -- skipping the whole turn as likely malformed",
+      totalOps,
+      MAX_TRACKER_OPERATIONS_PER_TURN,
+    );
+    return;
+  }
+
   const state = await loadInventoryState(documents, chatId, ownerId);
 
   // Snapshot exactly as this turn found it, before any of this turn's own
-  // changes apply — the "Restore Inventory" safety net for a tracker-agent
-  // turn that wipes or badly mangles the inventory (see the /restore route).
-  // Overwrites whatever was snapshotted last turn: single-level undo by
-  // design, not a full history stack, so this is unconditional regardless of
-  // whether this turn's response turns out to actually be fine. Items are
-  // flat objects (a shallow clone is enough); outfits get their own `slots`
-  // map shallow-cloned too since applyOutfitEquip below can replace slot
-  // entries in place on the very same outfit objects.
+  // changes apply. Serves two purposes: the existing "Restore Inventory"
+  // whole-state safety net, AND the "before" side of the lastTrackerChange
+  // diff below. Overwrites whatever was snapshotted last turn: single-level
+  // undo by design, not a full history stack.
   state.previousSnapshot = {
     items: state.items.map((item) => ({ ...item })),
     outfits: state.outfits.map((savedOutfit) => ({ ...savedOutfit, slots: { ...savedOutfit.slots } })),
   };
 
+  // Tag maps built from these exact arrays in their stored (never re-sorted)
+  // order — must match formatAgentRuntimeContext's own assignment exactly,
+  // which it does as long as nothing mutates state.items/state.outfits
+  // between this turn's prepareContext and finalizeResult (true: the
+  // agent-runtime service below only reads/writes through this same store,
+  // and one pipeline turn never interleaves with another).
+  const itemByTag = new Map(state.items.map((item, index) => [index + 1, item]));
+  const outfitByTag = new Map(state.outfits.map((savedOutfit, index) => [qmOutfitTagLetter(index), savedOutfit]));
+
   let outfit = null;
-  if (typeof data.equipOutfit === "string" && data.equipOutfit.trim()) {
-    const key = qmNormalizeMatchKey(data.equipOutfit);
-    outfit = state.outfits.find((candidate) => qmNormalizeMatchKey(candidate.name) === key) || null;
+  if (data.equipOutfit !== null && data.equipOutfit !== undefined) {
+    outfit = outfitByTag.get(String(data.equipOutfit).trim().toUpperCase()) || null;
+    if (!outfit) {
+      logger?.warn("[quartermaster] tracker equipOutfit targeted an unknown tag %s -- skipped", JSON.stringify(data.equipOutfit));
+    }
   }
-  const seenIds = new Set();
   // applyOutfitEquip mutates outfit.slots to the resolved (possibly freshly
-  // recreated) item ids, so outfitItemIds has to be read back AFTER it runs,
-  // not computed from the pre-equip slots.
+  // recreated) item ids, so outfitItemIds has to be read back AFTER it runs.
   let outfitItemIds = null;
   if (outfit) {
     applyOutfitEquip(state, outfit);
     outfitItemIds = new Set(Object.values(outfit.slots).map((snapshot) => snapshot.itemId));
-    for (const id of outfitItemIds) seenIds.add(id);
   }
 
-  const entries = Array.isArray(data.items) ? data.items : [];
-  for (const entry of entries) {
+  for (const entry of addEntries) {
     if (!entry || typeof entry !== "object") continue;
     const name = normalizeText(entry.name, MAX_ITEM_NAME_LENGTH);
     if (!name) continue;
     const key = qmNormalizeMatchKey(name);
 
+    // Same find-or-create-by-normalized-name merge the full-snapshot design
+    // always used: an "addItem" for something already tracked under this
+    // name merges into it instead of creating a duplicate. Only merges on a
+    // matching NAME, never similarity — "Blue Hat" and "Red Hat" always stay
+    // separate items.
     let item = state.items.find((candidate) => qmNormalizeMatchKey(candidate.name) === key);
     if (!item) {
       item = { id: randomUUID(), name, description: "", quantity: 1, location: "bag", defaultSlot: null };
       state.items.push(item);
     }
-    seenIds.add(item.id);
 
     if (entry.description !== undefined) item.description = normalizeText(entry.description, MAX_ITEM_DESCRIPTION_LENGTH);
     if (entry.quantity !== undefined) item.quantity = normalizeQuantity(entry.quantity);
-
-    // An item the active outfit already placed keeps that placement,
-    // regardless of what this entry's own location says — the outfit is
-    // authoritative (see the file comment above).
-    if (outfitItemIds && outfitItemIds.has(item.id)) continue;
-    const rawLocation = typeof entry.location === "string" ? entry.location : "bag";
-    const location = normalizeLocation(rawLocation, state);
-    if (location !== null) applyLocation(state.items, item, location);
+    // An item the active outfit already placed keeps that placement — the
+    // outfit is authoritative over its own slots this turn.
+    if (!(outfitItemIds && outfitItemIds.has(item.id))) {
+      const rawLocation = typeof entry.location === "string" ? entry.location : "bag";
+      const location = normalizeLocation(rawLocation, state);
+      if (location !== null) applyLocation(state.items, item, location);
+    }
   }
 
-  // Full snapshot: anything not re-stated (or covered by the active outfit)
-  // this turn is gone. Saved outfits are NOT pruned when an item they
-  // reference disappears here — see applyOutfitEquip's own comment: the
-  // outfit keeps its own name/description snapshot precisely so it can
-  // recreate the item next time it's equipped, rather than silently losing
-  // that slot to a full-snapshot turn that (correctly or not) omitted it.
-  state.items = state.items.filter((item) => seenIds.has(item.id));
+  for (const entry of updateEntries) {
+    if (!entry || typeof entry !== "object") continue;
+    const item = itemByTag.get(Number(entry.target));
+    if (!item) {
+      logger?.warn("[quartermaster] tracker updateItem targeted an unknown tag %s -- skipped", JSON.stringify(entry.target));
+      continue;
+    }
+    // Patch-only, guarded by KEY PRESENCE, not truthiness: an omitted key
+    // leaves that field completely untouched; a key present with an empty/
+    // falsy value ("", 0) is a deliberate change and does apply. location
+    // in particular must NOT default to anything here (unlike addItem's
+    // "bag" default for a brand-new item) — defaulting a missing location
+    // to "bag" on an update would silently reset an item's placement every
+    // time only its quantity/description changed.
+    if ("description" in entry) item.description = normalizeText(entry.description, MAX_ITEM_DESCRIPTION_LENGTH);
+    if ("quantity" in entry) item.quantity = normalizeQuantity(entry.quantity);
+    if ("location" in entry && !(outfitItemIds && outfitItemIds.has(item.id))) {
+      const location = typeof entry.location === "string" ? normalizeLocation(entry.location, state) : null;
+      if (location !== null) applyLocation(state.items, item, location);
+    }
+  }
+
+  const removeIds = new Set();
+  for (const tag of removeEntries) {
+    const item = itemByTag.get(Number(tag));
+    if (!item) {
+      logger?.warn("[quartermaster] tracker removeItem targeted an unknown tag %s -- skipped", JSON.stringify(tag));
+      continue;
+    }
+    removeIds.add(item.id);
+  }
+  // Saved outfits are NOT pruned when an item they reference is removed here
+  // — see applyOutfitEquip's own comment: the outfit keeps its own name/
+  // description snapshot precisely so it can recreate the item next time
+  // it's equipped.
+  if (removeIds.size > 0) state.items = state.items.filter((item) => !removeIds.has(item.id));
+
+  // lastTrackerChange: one diff pass against previousSnapshot, taken AFTER
+  // every operation above has applied. This uniformly covers a plain add,
+  // an addItem that merged into an existing item, and an outfit-equip's own
+  // side effects on its items (including anything it unequipped), with no
+  // bookkeeping needed at each call site above. Always overwritten — even
+  // to an empty record on a turn that changed nothing — same single-turn
+  // scope as previousSnapshot, so the two always describe the same
+  // most-recent turn. See the /revert-item route for how a stale entry here
+  // (something changed again since) is guarded against rather than blindly
+  // overwritten.
+  const fieldsOf = (item) => ({ description: item.description, quantity: item.quantity, location: item.location });
+  const beforeById = new Map(state.previousSnapshot.items.map((item) => [item.id, item]));
+  const afterById = new Map(state.items.map((item) => [item.id, item]));
+  const changeLog = {
+    appliedAt: new Date().toISOString(),
+    reasoning: normalizeText(data.reasoning, MAX_TRACKER_REASONING_LENGTH),
+    addedItems: [],
+    updatedItems: [],
+    removedItems: [],
+    equippedOutfitName: outfit ? outfit.name : null,
+  };
+  for (const [id, after] of afterById) {
+    const before = beforeById.get(id);
+    if (!before) {
+      changeLog.addedItems.push({ id, name: after.name });
+    } else if (
+      before.description !== after.description ||
+      before.quantity !== after.quantity ||
+      before.location !== after.location
+    ) {
+      changeLog.updatedItems.push({ id, name: after.name, before: fieldsOf(before), after: fieldsOf(after) });
+    }
+  }
+  for (const [id, before] of beforeById) {
+    if (!afterById.has(id)) changeLog.removedItems.push({ id, name: before.name, before: fieldsOf(before) });
+  }
+  state.lastTrackerChange = changeLog;
 
   await persistState(chatId, ownerId, state);
 }
@@ -1192,6 +1327,25 @@ async function loadInventoryState(documents, chatId, ownerId) {
         ? {
             items: Array.isArray(doc.data.previousSnapshot.items) ? doc.data.previousSnapshot.items : [],
             outfits: Array.isArray(doc.data.previousSnapshot.outfits) ? doc.data.previousSnapshot.outfits : [],
+          }
+        : null,
+    // What the last tracker-agent turn actually did, in review-able form —
+    // the "Recent Changes" view in Settings, plus the source of truth for
+    // /revert-item's per-item undo. Written by reconcileTrackerOutput
+    // alongside previousSnapshot (same single-turn scope, always in
+    // lockstep with it — see that function's own comment).
+    lastTrackerChange:
+      doc?.data?.lastTrackerChange && typeof doc.data.lastTrackerChange === "object"
+        ? {
+            appliedAt: typeof doc.data.lastTrackerChange.appliedAt === "string" ? doc.data.lastTrackerChange.appliedAt : "",
+            reasoning: typeof doc.data.lastTrackerChange.reasoning === "string" ? doc.data.lastTrackerChange.reasoning : "",
+            addedItems: Array.isArray(doc.data.lastTrackerChange.addedItems) ? doc.data.lastTrackerChange.addedItems : [],
+            updatedItems: Array.isArray(doc.data.lastTrackerChange.updatedItems) ? doc.data.lastTrackerChange.updatedItems : [],
+            removedItems: Array.isArray(doc.data.lastTrackerChange.removedItems) ? doc.data.lastTrackerChange.removedItems : [],
+            equippedOutfitName:
+              typeof doc.data.lastTrackerChange.equippedOutfitName === "string"
+                ? doc.data.lastTrackerChange.equippedOutfitName
+                : null,
           }
         : null,
     // Generate Image settings -- a purely local preference read only when
@@ -1555,6 +1709,84 @@ export async function activate(context) {
 
         await persistState(chatId, ownerId, state);
         return { items: state.items, outfits: state.outfits, previousSnapshot: state.previousSnapshot };
+      });
+
+      // Per-item undo, additive to the whole-inventory /restore above — for
+      // "one specific thing from the last turn is wrong," not "everything's
+      // a mess." Matches strictly by id against lastTrackerChange's own
+      // self-contained before/after values (never falls back to name, so a
+      // stale entry can never land on an unrelated item that happens to
+      // reuse a name later) and refuses rather than overwrites if the item
+      // has moved on since — something else (a manual edit, a later turn)
+      // changed it again after this record was made. See
+      // reconcileTrackerOutput's own comment on why lastTrackerChange is a
+      // fresh diff every turn, not a rolling history.
+      routes.post("/inventory/:chatId/:ownerId/revert-item", async (request, reply) => {
+        const { chatId, ownerId } = request.params;
+        const itemId = typeof request.body?.itemId === "string" ? request.body.itemId : "";
+        if (!itemId) return reply.status(400).send({ error: "itemId is required" });
+
+        const state = await loadInventoryState(documents, chatId, ownerId);
+        const change = state.lastTrackerChange;
+        if (!change) return reply.status(409).send({ error: "Nothing to revert" });
+
+        const fieldsMatch = (item, fields) =>
+          item.description === fields.description && item.quantity === fields.quantity && item.location === fields.location;
+
+        const addedIndex = change.addedItems.findIndex((entry) => entry.id === itemId);
+        const updatedIndex = change.updatedItems.findIndex((entry) => entry.id === itemId);
+        const removedIndex = change.removedItems.findIndex((entry) => entry.id === itemId);
+
+        if (addedIndex !== -1) {
+          // "Before" an add is "didn't exist" — reverting just removes it,
+          // but only while it's still exactly what the turn created.
+          const item = state.items.find((candidate) => candidate.id === itemId);
+          if (!item) return reply.status(409).send({ error: "Item no longer exists" });
+          state.items = state.items.filter((candidate) => candidate.id !== itemId);
+          change.addedItems.splice(addedIndex, 1);
+        } else if (updatedIndex !== -1) {
+          const entry = change.updatedItems[updatedIndex];
+          const item = state.items.find((candidate) => candidate.id === itemId);
+          if (!item) return reply.status(409).send({ error: "Item no longer exists" });
+          if (!fieldsMatch(item, entry.after)) {
+            return reply.status(409).send({ error: "This item has changed since -- can't safely revert" });
+          }
+          item.description = entry.before.description;
+          item.quantity = entry.before.quantity;
+          const location = normalizeLocation(entry.before.location, state);
+          if (location !== null) applyLocation(state.items, item, location);
+          change.updatedItems.splice(updatedIndex, 1);
+        } else if (removedIndex !== -1) {
+          const entry = change.removedItems[removedIndex];
+          if (state.items.some((candidate) => candidate.id === itemId)) {
+            return reply.status(409).send({ error: "Item already exists again -- can't safely revert" });
+          }
+          // Fresh id, not the dead one — nothing else references an item's
+          // id across a deletion (outfits keep their own name/description
+          // slot snapshot, not a live item reference), so there's no reason
+          // to reclaim it.
+          const item = {
+            id: randomUUID(),
+            name: entry.name,
+            description: entry.before.description,
+            quantity: entry.before.quantity,
+            location: "bag",
+            defaultSlot: null,
+          };
+          const location = normalizeLocation(entry.before.location, state);
+          if (location !== null) applyLocation(state.items, item, location);
+          state.items.push(item);
+          change.removedItems.splice(removedIndex, 1);
+        } else {
+          return reply.status(404).send({ error: "Nothing to revert for this item" });
+        }
+
+        state.lastTrackerChange = change;
+        const active = state.outfits.find((candidate) => outfitMatchesCurrent(candidate, state.items));
+        await syncRealAvatarForOutfit(persistence, resources, context.dataDir, chatId, state, active ?? null);
+
+        await persistState(chatId, ownerId, state);
+        return { items: state.items, outfits: state.outfits, lastTrackerChange: state.lastTrackerChange };
       });
 
       routes.delete("/inventory/:chatId/:ownerId/items/:itemId", async (request, reply) => {

@@ -170,6 +170,18 @@ published catalog until it's ready for testers.
 
 ## Changelog
 
+### 0.1.11
+
+- The tracking agent now targets specific changes (add/update/remove an item, equip an outfit)
+  instead of re-listing the whole inventory every turn, referring to existing items and outfits by
+  a short tag instead of retyping their names. An item the model doesn't mention is never dropped,
+  and a large inventory can no longer have the model's own output get cut off mid-listing and lose
+  whatever didn't make it in. A turn touching an implausible number of items is rejected outright.
+- Added a "Recent Automatic Update" view in Settings: what the last turn added, changed, or
+  removed, with the tracker's own reasoning, and a per-item Revert button for correcting one
+  specific mistake without reverting everything else. A revert refuses rather than overwriting if
+  that item has changed again since.
+
 ### 0.1.10
 
 - Rewrote this Features section for readability and completeness, and documented several real

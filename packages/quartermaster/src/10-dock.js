@@ -406,6 +406,17 @@ function qmItemMatchesBagTab(item, tab) {
   return tab === "wearables" ? Boolean(item.defaultSlot) : !item.defaultSlot;
 }
 
+// A raw location string ("bag", "equipped:head", "stored:closet") into
+// something readable for the Recent Changes list -- used nowhere else that
+// needs this exact phrasing, so kept local rather than folded into an
+// existing per-call-site formatter.
+function qmLocationLabel(location) {
+  if (location === "bag") return "Bag";
+  if (location.startsWith("equipped:")) return QM_SLOT_LABELS[location.slice("equipped:".length)] || location;
+  if (location.startsWith("stored:")) return location.slice("stored:".length);
+  return location;
+}
+
 function qmReadColumnCollapsed() {
   const result = { outfits: false, equipped: false, bag: false };
   try {
@@ -480,6 +491,7 @@ QM.dock = {
   weaponsToggle: null,
   replaceRealAvatarToggle: null,
   restoreInventoryButton: null,
+  recentChangesContainer: null,
   equippedContainer: null,
   outfitsContainer: null,
   form: null,
@@ -572,6 +584,7 @@ QM.dock = {
     this.weaponsToggle = null;
     this.replaceRealAvatarToggle = null;
     this.restoreInventoryButton = null;
+    this.recentChangesContainer = null;
     this.equippedContainer = null;
     this.outfitsContainer = null;
     this.form = null;
@@ -1089,6 +1102,7 @@ QM.dock = {
     this.weaponsToggle.checked = QM.state.showWeapons;
     this.replaceRealAvatarToggle.checked = QM.state.replaceRealAvatarOnEquip;
     this.restoreInventoryButton.disabled = !QM.state.previousSnapshot;
+    this.recentChangesContainer.replaceChildren(this._buildRecentChangesList());
     if (this.imageConnectionSelect && !this.imageConnectionSelect.disabled) {
       this.imageConnectionSelect.value = QM.state.imageConnectionId || "";
     }
@@ -1490,21 +1504,23 @@ QM.dock = {
     header.append(chevron, label);
     header.addEventListener("click", () => {
       this.settingsExpanded = !this.settingsExpanded;
-      this.settingsContent.style.maxHeight = this.settingsExpanded ? "900px" : "0px";
+      this.settingsContent.style.maxHeight = this.settingsExpanded ? "1400px" : "0px";
       this.settingsChevron.style.transform = this.settingsExpanded ? "rotate(90deg)" : "rotate(0deg)";
     });
 
     // max-height + overflow:hidden, not display:none/"" — display can't be
-    // transitioned, so the section used to snap open/closed instantly. 900px
+    // transitioned, so the section used to snap open/closed instantly. 1400px
     // is a generous ceiling for the current content (the appearance-feed
     // picker + its description, slot toggles, the real-avatar toggle + its
     // warning note, export/import, the image-generation connection picker +
-    // two prompt-template textareas); it doesn't need to track real content
-    // height since it's never the constraining factor once expanded.
+    // two prompt-template textareas, and Recent Changes' own list, which can
+    // run to MAX_TRACKER_OPERATIONS_PER_TURN rows on a busy turn); it doesn't
+    // need to track real content height since it's never the constraining
+    // factor once expanded.
     const content = document.createElement("div");
     Object.assign(content.style, {
       padding: "0 8px",
-      maxHeight: this.settingsExpanded ? "900px" : "0px",
+      maxHeight: this.settingsExpanded ? "1400px" : "0px",
       overflow: "hidden",
       transition: "max-height 0.2s ease",
     });
@@ -1533,6 +1549,8 @@ QM.dock = {
       this._buildRefreshImagesRow(),
       divider(),
       this._buildRestoreInventoryRow(),
+      divider(),
+      this._buildRecentChangesRow(),
     );
     this.settingsContent = content;
 
@@ -1671,6 +1689,107 @@ QM.dock = {
 
     row.append(description, restoreButton);
     return row;
+  },
+
+  // What the last tracker-agent turn actually did, reviewable and
+  // per-item-revertable — additive to Restore Inventory above, for "one
+  // specific thing is wrong" rather than "everything's a mess." The list
+  // body is rebuilt every _paint (this.recentChangesContainer, wired up
+  // next to restoreInventoryButton's own live update) since it tracks
+  // QM.state.lastTrackerChange, not a one-time snapshot.
+  _buildRecentChangesRow() {
+    const wrapper = document.createElement("div");
+
+    const heading = document.createElement("div");
+    heading.textContent = "Recent Automatic Update";
+    Object.assign(heading.style, {
+      fontSize: "11px",
+      fontWeight: "600",
+      textTransform: "uppercase",
+      letterSpacing: "0.04em",
+      color: "var(--muted-foreground, inherit)",
+      marginBottom: "6px",
+    });
+
+    const container = document.createElement("div");
+    this.recentChangesContainer = container;
+
+    wrapper.append(heading, container);
+    return wrapper;
+  },
+
+  // One row per touched item (never per field) — Revert resets everything
+  // about that item atomically, matching how the server records it. Diff
+  // text is computed here from the raw before/after values the server
+  // persisted, so a row only mentions fields that actually changed
+  // ("qty 2→1 · moved to Bag") instead of restating every field regardless.
+  _buildRecentChangesList() {
+    const change = QM.state.lastTrackerChange;
+    const list = document.createElement("div");
+    Object.assign(list.style, { display: "flex", flexDirection: "column", gap: "4px" });
+
+    const hasAnyChange =
+      change && (change.addedItems.length > 0 || change.updatedItems.length > 0 || change.removedItems.length > 0);
+    if (!hasAnyChange) {
+      const empty = QM.textNode("Nothing changed on the last automatic update.");
+      Object.assign(empty.style, { fontSize: "11px", color: "var(--muted-foreground, inherit)" });
+      list.appendChild(empty);
+      return list;
+    }
+
+    const buildRow = (symbol, label, name, detail, itemId) => {
+      const row = document.createElement("div");
+      Object.assign(row.style, { display: "flex", alignItems: "center", gap: "8px", fontSize: "11px" });
+
+      const text = document.createElement("span");
+      text.style.flex = "1";
+      text.textContent = `${symbol} ${label}  ${name}${detail ? `  ${detail}` : ""}`;
+      row.appendChild(text);
+
+      if (itemId) {
+        const revertButton = QM.button("Revert", {
+          bg: "var(--secondary, transparent)",
+          fg: "var(--secondary-foreground, inherit)",
+          border: true,
+        });
+        Object.assign(revertButton.style, { padding: "2px 8px", fontSize: "10px", flexShrink: "0" });
+        revertButton.addEventListener("click", async () => {
+          revertButton.disabled = true;
+          await QM.state.revertTrackerItem(itemId);
+        });
+        row.appendChild(revertButton);
+      }
+      return row;
+    };
+
+    const fieldDiffText = (before, after) => {
+      const parts = [];
+      if (before.quantity !== after.quantity) parts.push(`qty ${before.quantity}→${after.quantity}`);
+      if (before.location !== after.location) parts.push(`moved to ${qmLocationLabel(after.location)}`);
+      if (before.description !== after.description) parts.push("description changed");
+      return parts.join(" · ");
+    };
+
+    for (const entry of change.addedItems) list.appendChild(buildRow("+", "Added", entry.name, "", entry.id));
+    for (const entry of change.updatedItems) {
+      list.appendChild(buildRow("↑", "Updated", entry.name, fieldDiffText(entry.before, entry.after), entry.id));
+    }
+    for (const entry of change.removedItems) list.appendChild(buildRow("−", "Removed", entry.name, "", entry.id));
+    if (change.equippedOutfitName) {
+      list.appendChild(buildRow("⚙", "Equipped outfit:", change.equippedOutfitName, "", null));
+    }
+    if (change.reasoning) {
+      const reasoning = document.createElement("div");
+      reasoning.textContent = `Reasoning: "${change.reasoning}"`;
+      Object.assign(reasoning.style, {
+        fontSize: "11px",
+        fontStyle: "italic",
+        color: "var(--muted-foreground, inherit)",
+        marginTop: "4px",
+      });
+      list.appendChild(reasoning);
+    }
+    return list;
   },
 
   // A single row, one checkbox per group: "Show Slots: [ ] Underwear

@@ -119,6 +119,15 @@ QM.restoreInventory = (chatId, ownerId) =>
     body: "{}",
   });
 
+// Per-item undo from the Recent Changes view — see server.mjs's
+// /revert-item route for the staleness guard (refuses rather than
+// overwrites if the item changed again since the recorded turn).
+QM.revertTrackerItem = (chatId, ownerId, itemId) =>
+  qmRequest(`/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/revert-item`, {
+    method: "POST",
+    body: JSON.stringify({ itemId }),
+  });
+
 QM.uploadItemImage = (chatId, ownerId, itemId, imageDataUrl) =>
   qmRequest(
     `/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/items/${encodeURIComponent(itemId)}/image`,

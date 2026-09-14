@@ -1,5 +1,16 @@
 # Quartermaster changelog
 
+## 0.1.11 — 2026-09-13 [highlight]
+- The tracking agent now targets specific changes (add/update/remove an item, equip an outfit)
+  instead of re-listing the whole inventory every turn, using a short tag for existing items
+  instead of retyping names. An item the model doesn't mention is never dropped, and a large
+  inventory can't have the model's own output cut off mid-listing and lose whatever didn't fit.
+  An implausibly large turn is rejected outright rather than applied.
+- Added a "Recent Automatic Update" view in Settings: what the last turn added, changed, or
+  removed, with the tracker's reasoning and a per-item Revert button for fixing one mistake
+  without reverting everything else. A revert refuses rather than overwriting if that item has
+  changed again since.
+
 ## 0.1.10 — 2026-09-13
 - Rewrote the README's Features section for readability and completeness: organized by what you
   actually interact with (the Dock, Equip Slots & Outfits, Inventory, Item Images, the tracking
