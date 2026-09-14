@@ -25,6 +25,7 @@ import {
 import { nextSlurpAutopurgeRunAt } from "../../../../shared/src/slurp-autopurge-time.js";
 import { Field, GuidanceBox, NumberSetting, SectionTitle, SettingsGroup, Toggle } from "./SlurpSettingsControls";
 import { SlurpSimulationSettings } from "./SlurpSimulationSettings";
+import { SlurpFanTypesSettings } from "./SlurpFanTypesSettings";
 import type { ReactNode } from "react";
 import { api } from "../../lib/api-client";
 import { cn } from "../../lib/utils";
@@ -3220,6 +3221,11 @@ export function SlurpSettings({
                   <AmbientProfilesPanel
                     allowRandomUsers={settings.allowRandomUsers}
                     onAllowRandomUsersChange={(value) => update("allowRandomUsers", value)}
+                  />
+                  <SlurpFanTypesSettings
+                    fanTypes={settings.fanTypes}
+                    bankCounts={settings.audienceReactionBank.byType}
+                    onSave={(fanTypes) => update("fanTypes", fanTypes)}
                   />
                   {/* Every number the simulation runs on, in its own file: this one is long enough. */}
                   <SlurpSimulationSettings

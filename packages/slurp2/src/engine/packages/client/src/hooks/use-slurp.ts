@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { api } from "../lib/api-client";
 import type { SlurpSimulationTuning } from "../../../server/src/services/slurp/slurp-tuning.js";
+import type { SlurpFanType } from "../../../server/src/services/slurp/slurp-fan-types.js";
 import { refreshSlurpCreatorBatch } from "../lib/slurp-refresh-batch";
 import { useSlurpUIStore } from "../stores/slurp-package.store";
 import type {
@@ -396,6 +397,8 @@ export type SlurpSettings = {
   fanLikesPerRefresh: number;
   fanRepliesPerRefresh: number;
   fanArchetypeWeights: Record<string, number>;
+  /** Editable audience personas and their numeric behavior. */
+  fanTypes: SlurpFanType[];
   /** Creators answer while you are away. Off leaves the background reply loop asleep. */
   messagesAwayRepliesEnabled: boolean;
   messagesReplyBubbleLimit: number;
