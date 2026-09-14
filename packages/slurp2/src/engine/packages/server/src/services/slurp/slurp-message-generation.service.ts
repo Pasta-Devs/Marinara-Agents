@@ -81,8 +81,6 @@ export function buildSlurpMessageChat(input: {
   isRequest: boolean;
   /** Everything about how to behave, already resolved. See `slurp-stance.ts`. */
   stance: SlurpStance;
-  /** What the creator has posted lately, so "loved your new set" can be answered. */
-  recentPosts?: { id: string; title: string | null; content: string; access: string; imageUrl: string | null }[];
   /** Facts kept from earlier in this conversation, beyond the history window. */
   notes?: SlurpThreadNote[];
   threadState?: SlurpThreadState;
@@ -92,6 +90,7 @@ export function buildSlurpMessageChat(input: {
   scheduleContext?: string;
   disclosureMode: Parameters<typeof noodlerIdentityInstruction>[0];
   publicIdentity: Parameters<typeof noodlerIdentityInstruction>[1];
+  /** What the creator has posted lately, so "loved your new set" can be answered. */
   recentPosts: Array<{ id: string; title: string | null; content: string; access: string; imageUrl: string | null }>;
 }): ChatMessage[] {
   const protect = (value: string | null | undefined) =>

@@ -2,7 +2,7 @@
 // client has no route that serves CHANGELOG.md. So the notes are mirrored here, and
 // `tests/slurp2-release-notes.regression.ts` fails the build if this file drifts from
 // `packages/slurp2/CHANGELOG.md` or from the version in `manifest.json`.
-export const SLURP2_VERSION = "0.0.9";
+export const SLURP2_VERSION = "0.0.10";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -12,6 +12,17 @@ export interface Slurp2ReleaseEntry {
 
 /** Newest first, same order as CHANGELOG.md. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.0.10",
+    date: "2026-09-14",
+    notes: [
+      "Rebuilt the audience as a frequent, deterministic simulation with configurable reach, reactions, subscriptions, churn, requests, timing, viral luck, word of mouth, and older-post activity.",
+      "Added eight editable fan types with their own behavior, spending, conversion, schedule, voice, traits, reaction bank, and population share. Custom types can be added, duplicated, removed, and used to rebalance existing fans.",
+      "Added separate free-simulation and AI-text clocks, with foreground/background/off modes, connection selection, hourly and daily call limits, per-job controls, retry-safe queued rewrites, and visible usage.",
+      "Added audience presets, a seven-day outcome estimate, editable audience prompts, and validated JSON import and export for the complete audience setup.",
+      "Fixed follow progression after an existing like, subscription checks being delayed until maintenance, thin like pacing, and silent subscription lapses.",
+    ],
+  },
   {
     version: "0.0.9",
     date: "2026-09-14",

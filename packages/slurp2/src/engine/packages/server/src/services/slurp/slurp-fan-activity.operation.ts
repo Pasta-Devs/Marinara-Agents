@@ -202,7 +202,7 @@ export async function runNoodlerFanActivity(input: {
   at?: Date;
   debugMode?: boolean;
 }): Promise<NoodlerFanRunResult> {
-  const operation = await tryNoodleOperation("noodler-fan-activity", async () => {
+  const operation = await tryNoodleOperation<NoodlerFanRunResult>("noodler-fan-activity", async () => {
     const at = input.at ?? new Date();
     const noodle = createSlurpStorage(input.db);
     const settings = await noodle.getSettings();

@@ -1,5 +1,13 @@
 # Slurp Remastered release notes
 
+## 0.0.10 — 2026-09-14
+
+- Rebuilt the audience as a frequent, deterministic simulation with configurable reach, reactions, subscriptions, churn, requests, timing, viral luck, word of mouth, and older-post activity.
+- Added eight editable fan types with their own behavior, spending, conversion, schedule, voice, traits, reaction bank, and population share. Custom types can be added, duplicated, removed, and used to rebalance existing fans.
+- Added separate free-simulation and AI-text clocks, with foreground/background/off modes, connection selection, hourly and daily call limits, per-job controls, retry-safe queued rewrites, and visible usage.
+- Added audience presets, a seven-day outcome estimate, editable audience prompts, and validated JSON import and export for the complete audience setup.
+- Fixed follow progression after an existing like, subscription checks being delayed until maintenance, thin like pacing, and silent subscription lapses.
+
 ## 0.0.9 — 2026-09-14
 
 - Added Autopurge with configurable day, week, or month retention; media-only or full-post cleanup; optional direct-message media cleanup; an immediate purge action; and restart-safe scheduling for overdue purges.
