@@ -205,6 +205,7 @@ export const SLURP_BUILTIN_FAN_TYPES: readonly SlurpFanType[] = [
 
 export const slurpFanTypesSchema = z
   .array(slurpFanTypeSchema)
+  .min(1)
   .max(60)
   .default(() => structuredClone(SLURP_BUILTIN_FAN_TYPES) as SlurpFanType[]);
 

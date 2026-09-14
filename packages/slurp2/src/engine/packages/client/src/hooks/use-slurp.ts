@@ -8,6 +8,7 @@ import { useTranslation as useUiTranslation } from "react-i18next";
 import { api } from "../lib/api-client";
 import type { SlurpSimulationTuning } from "../../../server/src/services/slurp/slurp-tuning.js";
 import type { SlurpFanType } from "../../../server/src/services/slurp/slurp-fan-types.js";
+import type { SlurpModelBudget } from "../../../server/src/services/slurp/slurp-model-budget.js";
 import { refreshSlurpCreatorBatch } from "../lib/slurp-refresh-batch";
 import { useSlurpUIStore } from "../stores/slurp-package.store";
 import type {
@@ -426,6 +427,8 @@ export type SlurpSettings = {
   nightQuiet: boolean;
   /** Every number the audience simulation runs on. The server fills anything missing from Realistic. */
   simulationTuning: SlurpSimulationTuning;
+  /** When model-written audience text may run and how many calls it may spend. */
+  modelBudget: SlurpModelBudget;
   onboarding: "not_started" | "in_progress" | "completed";
 };
 

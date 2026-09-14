@@ -26,6 +26,7 @@ import { nextSlurpAutopurgeRunAt } from "../../../../shared/src/slurp-autopurge-
 import { Field, GuidanceBox, NumberSetting, SectionTitle, SettingsGroup, Toggle } from "./SlurpSettingsControls";
 import { SlurpSimulationSettings } from "./SlurpSimulationSettings";
 import { SlurpFanTypesSettings } from "./SlurpFanTypesSettings";
+import { SlurpAudienceConfigSettings } from "./SlurpAudienceConfigSettings";
 import type { ReactNode } from "react";
 import { api } from "../../lib/api-client";
 import { cn } from "../../lib/utils";
@@ -374,7 +375,11 @@ export function SlurpSettings({
   const adoptSourceIdentity = useAdoptNoodlerSourceIdentity();
   const dismissSourceChanges = useDismissNoodlerSourceChanges();
   const connectionsQuery = useSlurpConnections(
-    section === "overview" || section === "general" || section === "images" || section === "creators",
+    section === "overview" ||
+      section === "general" ||
+      section === "images" ||
+      section === "creators" ||
+      section === "audience",
   );
   const imageConnections = (connectionsQuery.data ?? []).filter(
     (connection) => connection.provider === "image_generation",
@@ -3231,6 +3236,13 @@ export function SlurpSettings({
                   <SlurpSimulationSettings
                     tuning={settings.simulationTuning}
                     onSave={(next) => void update("simulationTuning", next)}
+                  />
+                  <SlurpAudienceConfigSettings
+                    tuning={settings.simulationTuning}
+                    fanTypes={settings.fanTypes}
+                    budget={settings.modelBudget}
+                    connections={connectionsQuery.data ?? []}
+                    onSave={(patch) => save(patch)}
                   />
                   <div className="space-y-3 pt-2">
                     <div>
