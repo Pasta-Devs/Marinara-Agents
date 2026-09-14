@@ -2529,6 +2529,8 @@
   "ui.slurp.discover.view.grid": "Grid view",
   "ui.slurp.discover.view.list": "List view",
   "ui.slurp.discover.resultCount_one": "{{count}} creator",
+  "ui.slurp.discover.resultCount_few": "{{count}} creators",
+  "ui.slurp.discover.resultCount_many": "{{count}} creators",
   "ui.slurp.discover.resultCount_other": "{{count}} creators",
   "ui.slurp.discover.clearFilters": "Clear filters",
   "ui.slurp.discover.noMatches": "No Creators match these filters",

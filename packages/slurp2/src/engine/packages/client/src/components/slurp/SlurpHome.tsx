@@ -163,7 +163,7 @@ import { SlurpArcTimelineCard, SlurpProjectsPanel } from "./SlurpProjectsPanel";
 import { SlurpFanCard } from "./SlurpFanCard";
 import { LockedSlurpPostCard, SlurpCreatorPostCard } from "./SlurpCreatorPostCard";
 import { SlurpSparkleVeil } from "./SlurpSparkleVeil";
-import { SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "./SlurpCoin";
+import { DEFAULT_SLURP_SUBSCRIPTION_PRICE, SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "./SlurpCoin";
 import { ChatImageLightbox } from "../chat/ChatImageLightbox";
 import { useNearViewportSlurpMediaSrc, useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
 import { SlurpOnboardingWizard } from "./SlurpOnboardingPanel";
@@ -336,8 +336,6 @@ function isSlurpStory(post: NoodlerPostView | NoodlerManagedPost): boolean {
   return (post as NoodlerPostView & { story?: boolean }).story === true || post.metadata?.noodlerPostType === "story";
 }
 
-const DEFAULT_SLURP_SUBSCRIPTION_PRICE = 5;
-
 function slurpSubscriptionPriceOf(profile: unknown): number {
   const price = (profile as { subscriptionPrice?: unknown } | null)?.subscriptionPrice;
   return typeof price === "number" && price >= 0 ? price : DEFAULT_SLURP_SUBSCRIPTION_PRICE;
@@ -346,6 +344,12 @@ function slurpSubscriptionPriceOf(profile: unknown): number {
 function linkedPostIdForStory(post: NoodlerPostView): string | null {
   const linkedPostId = (post as NoodlerPostView & { linkedPostId?: unknown }).linkedPostId;
   return typeof linkedPostId === "string" && linkedPostId.length > 0 ? linkedPostId : null;
+}
+
+function parsePrice(value: string): number | null {
+  if (!value.trim()) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
 function NoodlerDraftImageFrame({ image }: { image: NoodlerPostDraftImage }) {
@@ -4971,11 +4975,6 @@ function ViewerHub({
         .slice(0, 3),
     };
   }, [authorProfile?.id, momentCutoff, scope, searchTerm, tab]);
-  const parsePrice = (value: string) => {
-    if (!value.trim()) return null;
-    const parsed = Number(value);
-    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
-  };
   const filteredDiscoveredCreators = useMemo(
     () =>
       filterAndSortSlurpCreators(

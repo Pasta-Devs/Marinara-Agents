@@ -176,10 +176,10 @@ const promptSafety = readFileSync(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-prompt-safety.ts",
   "utf8",
 );
-const concealedPrompt = promptSafety.slice(
-  promptSafety.indexOf("export function noodlerConcealedSourceText"),
-  promptSafety.indexOf("/** Character canon is private behavioral context"),
-);
+const concealedStart = promptSafety.indexOf("export function noodlerConcealedSourceText");
+const concealedEnd = promptSafety.indexOf("/** Character canon is private behavioral context");
+assert.ok(concealedStart >= 0 && concealedEnd > concealedStart, "concealed-seed slice markers must exist");
+const concealedPrompt = promptSafety.slice(concealedStart, concealedEnd);
 assert.doesNotMatch(concealedPrompt, /scenario|backstory|source\.name/u);
 
 const artworkPrivacy = readFileSync(
