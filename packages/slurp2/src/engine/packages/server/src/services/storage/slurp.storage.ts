@@ -145,6 +145,7 @@ import { SLURP_AUDIENCE_TONES, SLURP_DEFAULT_AUDIENCE_TONE } from "../slurp/slur
 import { SLURP_REALISTIC_TUNING, slurpSimulationTuningSchema } from "../slurp/slurp-tuning.js";
 import { slurpFanTypesDefault, slurpFanTypesSchema, slurpNormalizeFanTypes } from "../slurp/slurp-fan-types.js";
 import { slurpNormalizeReactionBanks, type SlurpReactionBanks } from "../slurp/slurp-reaction-bank.js";
+import { slurpModelBudgetSchema } from "../slurp/slurp-model-budget.js";
 import {
   SLURP_DEFAULT_PLATFORM_SCALE,
   SLURP_DEFAULT_WORLD_ACTIVITY,
@@ -587,6 +588,8 @@ export const slurpSettingsSchema = z.object({
   simulationTuning: slurpSimulationTuningSchema,
   /** Who is in the audience. See `slurp-fan-types.ts`; an empty or broken list falls back to the built-ins. */
   fanTypes: slurpFanTypesSchema,
+  /** Which visible text may call a model, and the hard hourly/daily budget for it. */
+  modelBudget: slurpModelBudgetSchema,
   nightQuiet: z.boolean(),
   onboarding: z.enum(["not_started", "in_progress", "completed"]),
 });
@@ -1243,6 +1246,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   autopurgeNextRunAt: null,
   simulationTuning: SLURP_REALISTIC_TUNING,
   fanTypes: slurpFanTypesDefault(),
+  modelBudget: slurpModelBudgetSchema.parse({}),
   nightQuiet: false,
   onboarding: "not_started",
 };

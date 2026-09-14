@@ -29,6 +29,7 @@ import { createSlurpPopulationStorage } from "../storage/slurp-population.storag
 import { NOODLER_FAN_IDENTITY_PREFIX, populationNoodlerFanIdentityProvider } from "./slurp-fan-identity-provider.js";
 import { slurpFanMemoryForPrompt, slurpResolveFanType } from "./slurp-fan-types.js";
 import { newId } from "../../utils/id-generator.js";
+import { claimSlurpModelBudget, slurpModelWorkerAllows } from "./slurp-model-worker.js";
 
 const FAN_PLAN_ROW_PREFIX = "fan-day:";
 
@@ -241,6 +242,13 @@ export async function runNoodlerFanActivity(input: {
         if (!run) return { status: "not_due", created: 0 };
         plan = claimNoodleFanActivityRun(plan, run.id, at);
         run = plan.runs.find((candidate) => candidate.id === run!.id)!;
+      }
+      const workerContext = input.mode === "manual" ? "present" : "background";
+      if (
+        !slurpModelWorkerAllows(settings.modelBudget, workerContext) ||
+        !(await claimSlurpModelBudget(input.db, settings.modelBudget, "thread", at))
+      ) {
+        return { status: "limit_reached", created: 0 };
       }
       await writePlan(input.db, plan);
 

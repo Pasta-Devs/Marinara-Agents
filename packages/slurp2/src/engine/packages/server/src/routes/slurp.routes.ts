@@ -188,6 +188,8 @@ import { createSlurpEventsStorage } from "../services/storage/slurp-events.stora
 import { advanceSlurpWorld } from "../services/slurp/slurp-world.operation.js";
 import { drainSlurpAudienceReplies } from "../services/slurp/slurp-audience-reply.operation.js";
 import { drainSlurpPendingText } from "../services/slurp/slurp-pending-text.service.js";
+import { topUpSlurpReactionBank } from "../services/slurp/slurp-reaction-bank.operation.js";
+import { getSlurpModelBudgetLedger } from "../services/slurp/slurp-model-worker.js";
 import { createSlurpPopulationStorage } from "../services/storage/slurp-population.storage.js";
 import { groupSlurpEvents } from "../services/slurp/slurp-event-weight.js";
 import {
@@ -575,6 +577,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     const plan = await planFanTypeRebalance();
     return { changed: plan.changes.length, counts: plan.counts };
   });
+  app.get("/model-budget/usage", async () => getSlurpModelBudgetLedger(app.db));
   app.post("/fan-types/rebalance", async () => {
     const plan = await planFanTypeRebalance();
     const population = createSlurpPopulationStorage(app.db);
@@ -2098,6 +2101,11 @@ export async function slurpRoutes(app: FastifyInstance) {
     // is where that debt is paid, with the player present and against text they are about to read.
     await drainSlurpPendingText(app.db).catch((error: unknown) =>
       logger.warn(error, "[slurp-pending] Drain on open failed"),
+    );
+    // Present mode grows reusable banks only while somebody is here. Background mode also reaches
+    // this path, but the durable ledger still makes it one shared budget.
+    await topUpSlurpReactionBank(app.db, "present").catch((error: unknown) =>
+      logger.warn(error, "[slurp-bank] Top-up on open failed"),
     );
     // Tier 2 the other way round: the creator answering the audience rather than the audience
     // being rewritten. Same rule and same reason it lives here — unattended work never calls the

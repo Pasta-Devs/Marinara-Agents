@@ -53,6 +53,7 @@ import { slurpFanMemoryForPrompt, slurpFanVoiceForPrompt, slurpResolveFanType } 
 import type { SlurpMessage } from "../storage/slurp-messages.storage.js";
 import type { SlurpDmPolicy } from "./slurp-messaging.js";
 import { resolveNoodlerCharacterCanon } from "./slurp-source-resolve.js";
+import { claimSlurpModelBudget, slurpModelWorkerAllows, type SlurpModelWorkerContext } from "./slurp-model-worker.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -263,6 +264,8 @@ export type SlurpMessagePromptInput = {
   debugMode?: boolean;
   /** Extra instruction for scheduled or otherwise specialized replies. */
   generationGuidance?: string;
+  /** Scheduled follow-ups are background; direct replies default to present. */
+  workerContext?: SlurpModelWorkerContext;
 };
 
 /**
@@ -396,6 +399,11 @@ function protectNoteOperation(
 
 export async function generateSlurpMessageReply(input: SlurpMessagePromptInput): Promise<SlurpGeneratedDmReply> {
   const { messages, stance, disclosureMode, publicIdentity, recentPosts } = await buildSlurpMessagePrompt(input);
+  const budget = (await createSlurpStorage(input.db).getSettings()).modelBudget;
+  const context = input.workerContext ?? "present";
+  if (!slurpModelWorkerAllows(budget, context) || !(await claimSlurpModelBudget(input.db, budget, "dm_reply"))) {
+    throw new Error("Slurp AI budget does not allow this reply yet.");
+  }
   const connections = createConnectionsStorage(input.db);
   const fallbackConnection = await connections.getFallbackForMain();
   const provider = withConnectionFallbackProvider({

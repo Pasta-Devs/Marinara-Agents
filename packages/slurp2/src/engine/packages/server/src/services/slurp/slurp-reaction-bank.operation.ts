@@ -18,6 +18,7 @@ import {
   slurpReactionBodiesForType,
 } from "./slurp-reaction-bank.js";
 import { slurpFanVoiceForPrompt } from "./slurp-fan-types.js";
+import { claimSlurpModelBudget, slurpModelWorkerAllows, type SlurpModelWorkerContext } from "./slurp-model-worker.js";
 import { SLURP_SHIPPED_REACTIONS, SLURP_SHIPPED_TYPE_REACTIONS } from "./slurp-world-copy.js";
 
 /**
@@ -52,9 +53,13 @@ export type SlurpReactionBankOutcome = "idle" | "filled" | "busy" | "unavailable
  * gets its own key in the answer, described by its type's name, voice and tone so a Troll does not
  * come back sounding like a Superfan.
  */
-export async function topUpSlurpReactionBank(db: DB): Promise<SlurpReactionBankOutcome> {
+export async function topUpSlurpReactionBank(
+  db: DB,
+  context: SlurpModelWorkerContext = "background",
+): Promise<SlurpReactionBankOutcome> {
   const noodle = createSlurpStorage(db);
   const settings = await noodle.getSettings();
+  if (!slurpModelWorkerAllows(settings.modelBudget, context)) return "idle";
   const banks = settings.audienceReactionBank;
   const targets: Record<string, number> = {};
   if (banks.shared.length < SLURP_REACTION_BANK_TARGET) targets.shared = SLURP_REACTION_BANK_TARGET;
@@ -65,7 +70,10 @@ export async function topUpSlurpReactionBank(db: DB): Promise<SlurpReactionBankO
   for (const type of types) targets[type.id] = type.bank.targetSize;
   if (Object.keys(targets).length === 0) return "idle";
 
-  const connection = await resolveSlurpTextConnection(createConnectionsStorage(db), settings.generationConnectionId);
+  const connection = await resolveSlurpTextConnection(
+    createConnectionsStorage(db),
+    settings.modelBudget.connectionId ?? settings.generationConnectionId,
+  );
   if (!connection) return "unavailable";
   // The bank is the least urgent work Slurp does, so it yields to everything: anything the player
   // started, and any other background run already holding this connection.
@@ -73,6 +81,7 @@ export async function topUpSlurpReactionBank(db: DB): Promise<SlurpReactionBankO
   if (!admission.acquired) return "busy";
 
   try {
+    if (!(await claimSlurpModelBudget(db, settings.modelBudget, "bank_grow"))) return "busy";
     const provider = createLLMProvider(
       connection.provider,
       resolveBaseUrl(connection),

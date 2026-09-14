@@ -20,7 +20,7 @@ This is a handoff artifact. A fresh agent should be able to pick up any slice fr
 | 6a    | Believability, cheap: weekly/daily rhythm, visible lapse + price complaints, word of mouth + viral luck, likes on older posts | done        |
 | 6b    | Believability, medium: per-actor world events (fan-type question/dm/commission/tip weights), fan memory in prompts            | done        |
 | 7     | Fan Types editor UI                                                                                                           | done        |
-| 8     | Model Worker: job queue, budget ledger, modes                                                                                 | not started |
+| 8     | Model Worker: job queue, budget ledger, modes                                                                                 | done        |
 | 9     | AI Budget UI, Prompts UI, Import/Export                                                                                       | not started |
 | 10    | Version bump 0.0.10, CHANGELOG, rebuild package + catalog, validation                                                         | not started |
 

@@ -26,14 +26,17 @@ assert.match(
 // The drain only runs on a read, and only for the newest few. Opening after a week away must not
 // stall behind a queue.
 assert.match(service, /const DRAIN_LIMIT = 2;/u);
-assert.match(service, /\.orderBy\(desc\(slurpPendingText\.createdAt\)\)\s*\.limit\(limit\)/u);
+assert.match(
+  service,
+  /\.orderBy\(asc\(slurpPendingText\.priority\), desc\(slurpPendingText\.createdAt\)\)\s*\.limit\(limit\)/u,
+);
 
 // A host that cannot hold the queue table has nothing queued, so the drain must read that as an
 // empty queue. Without this the catch-up warned on every page load about a queue that cannot exist.
 assert.match(service, /if \(isUnsupportedTableError\(error\)\) return 0;/u);
 // The host throws while the query is built, not when it is awaited, so a rejection handler on the
 // builder never runs. This must stay a try.
-assert.match(service, /try \{\s*rows = await db\.select\(\)\.from\(slurpPendingText\)/u);
+assert.match(service, /try \{[\s\S]*rows = await db[\s\S]*\.from\(slurpPendingText\)/u);
 assert.match(service, /if \(!isUnsupportedTableError\(error\)\) \{/u, "enqueue must not log per write either");
 
 // ── Failure is always survivable ────────────────────────────────────────────
@@ -41,8 +44,9 @@ assert.match(service, /if \(!isUnsupportedTableError\(error\)\) \{/u, "enqueue m
 assert.match(service, /if \(!connection\) return 0;/u, "no connection must not be an error");
 assert.match(service, /A placeholder that never gets rewritten is still a usable placeholder\./u);
 assert.match(service, /if \(content\) \{/u, "an empty rewrite must leave the placeholder alone");
-// A row that keeps failing would block the queue behind it on every read, so it is dropped.
-assert.match(service, /Drop the row rather than retrying forever/u);
+// A transient failure retries, but a permanently bad row cannot block the queue forever.
+assert.match(service, /JOB_MAX_ATTEMPTS/u);
+assert.match(service, /attempts >= JOB_MAX_ATTEMPTS \? "failed" : "pending"/u);
 
 // ── The fan is speaking, not the Creator ────────────────────────────────────
 // These are a fan's words. A rewrite that answered on the Creator's behalf would put words in the

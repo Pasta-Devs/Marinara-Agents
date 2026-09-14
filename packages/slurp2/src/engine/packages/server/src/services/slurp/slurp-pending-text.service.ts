@@ -16,7 +16,7 @@
  */
 import type { DB } from "../../db/connection.js";
 import { isUnsupportedTableError } from "../storage/slurp-host-tables.js";
-import { desc, eq } from "../../db/file-query.js";
+import { asc, desc, eq } from "../../db/file-query.js";
 import { logger } from "../../lib/logger.js";
 import { slurpPendingText } from "../../db/schema/slurp.js";
 import { newId, now } from "../../utils/id-generator.js";
@@ -36,11 +36,19 @@ import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { slurpFanMemoryForPrompt, slurpFanVoiceForPrompt, slurpResolveFanType } from "./slurp-fan-types.js";
 import { NOODLER_UNTRUSTED_CONTENT_INSTRUCTION } from "./slurp-generation.service.js";
 import type { APIProvider } from "@marinara-engine/shared";
+import {
+  claimSlurpModelBudget,
+  slurpModelWorkerAllows,
+  type SlurpModelJobKind,
+  type SlurpModelWorkerContext,
+} from "./slurp-model-worker.js";
 
 export type SlurpPendingKind = "commission" | "question" | "opener" | "delivery";
 
 /** Rewritten per drain. Small: a long absence must not stall the first read behind a queue. */
 const DRAIN_LIMIT = 2;
+const JOB_MAX_ATTEMPTS = 3;
+const JOB_TTL_MS = 7 * 86_400_000;
 
 /** Longest a rewrite may be. These are one-liners; a paragraph would not fit where they render. */
 const MAX_LENGTH: Record<SlurpPendingKind, number> = { commission: 400, question: 180, opener: 240, delivery: 240 };
@@ -63,6 +71,11 @@ export async function enqueueSlurpPendingText(
       creatorAccountId: input.creatorAccountId,
       postId: input.postId ?? null,
       actorLabel: input.actorLabel ?? null,
+      jobKind: input.kind === "commission" ? "brief" : "rewrite",
+      priority: input.kind === "commission" ? "4" : "2",
+      status: "pending",
+      attempts: "0",
+      expiresAt: new Date(Date.now() + JOB_TTL_MS).toISOString(),
       createdAt: now(),
     });
   } catch (error) {
@@ -136,14 +149,36 @@ function buildMessages(input: {
  * Called from a read, so the player is present and the spend is against text they are about to
  * see. Returns how many were rewritten.
  */
-export async function drainSlurpPendingText(db: DB, limit = DRAIN_LIMIT): Promise<number> {
+export async function drainSlurpPendingText(
+  db: DB,
+  limit = DRAIN_LIMIT,
+  context: SlurpModelWorkerContext = "present",
+): Promise<number> {
+  const noodle = createSlurpStorage(db);
+  const settings = await noodle.getSettings();
+  if (!slurpModelWorkerAllows(settings.modelBudget, context)) return 0;
   // Nothing was ever queued on a host that cannot hold the table, so there is nothing to drain.
   // Without this the catch-up on open warns on every page load about a queue that cannot exist.
   // An unsupported table throws while the query is being built, not when it is awaited, so this
   // has to be a try rather than a rejection handler.
   let rows;
   try {
-    rows = await db.select().from(slurpPendingText).orderBy(desc(slurpPendingText.createdAt)).limit(limit);
+    const staleClaimBefore = Date.now() - 10 * 60_000;
+    for (const claimed of await db.select().from(slurpPendingText).where(eq(slurpPendingText.status, "running"))) {
+      const claimedAt = claimed.claimedAt ? Date.parse(String(claimed.claimedAt)) : Number.NaN;
+      if (!Number.isFinite(claimedAt) || claimedAt <= staleClaimBefore) {
+        await db
+          .update(slurpPendingText)
+          .set({ status: "pending", claimedAt: null })
+          .where(eq(slurpPendingText.id, String(claimed.id)));
+      }
+    }
+    rows = await db
+      .select()
+      .from(slurpPendingText)
+      .where(eq(slurpPendingText.status, "pending"))
+      .orderBy(asc(slurpPendingText.priority), desc(slurpPendingText.createdAt))
+      .limit(limit);
   } catch (error) {
     // Nothing was ever queued on a host that cannot hold the table, so there is nothing to drain.
     if (isUnsupportedTableError(error)) return 0;
@@ -151,9 +186,10 @@ export async function drainSlurpPendingText(db: DB, limit = DRAIN_LIMIT): Promis
   }
   if (rows.length === 0) return 0;
 
-  const noodle = createSlurpStorage(db);
-  const settings = await noodle.getSettings();
-  const connection = await resolveSlurpTextConnection(createConnectionsStorage(db), settings.generationConnectionId);
+  const connection = await resolveSlurpTextConnection(
+    createConnectionsStorage(db),
+    settings.modelBudget.connectionId ?? settings.generationConnectionId,
+  );
   // No connection is not a failure. The placeholders stay, and stay usable.
   if (!connection) return 0;
 
@@ -184,6 +220,18 @@ export async function drainSlurpPendingText(db: DB, limit = DRAIN_LIMIT): Promis
 
   for (const row of rows) {
     const id = String(row.id);
+    const expiresAt = row.expiresAt ? Date.parse(String(row.expiresAt)) : Number.POSITIVE_INFINITY;
+    if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) {
+      await db.delete(slurpPendingText).where(eq(slurpPendingText.id, id));
+      continue;
+    }
+    const jobKind = (row.jobKind === "brief" ? "brief" : "rewrite") as SlurpModelJobKind;
+    if (!(await claimSlurpModelBudget(db, settings.modelBudget, jobKind))) break;
+    const attempts = Math.max(0, Number.parseInt(String(row.attempts ?? "0"), 10) || 0) + 1;
+    await db
+      .update(slurpPendingText)
+      .set({ status: "running", attempts: String(attempts), claimedAt: now() })
+      .where(eq(slurpPendingText.id, id));
     try {
       const kind = String(row.kind) as SlurpPendingKind;
       const creator = await noodle.getNoodlerAccountById(String(row.creatorAccountId));
@@ -249,11 +297,10 @@ export async function drainSlurpPendingText(db: DB, limit = DRAIN_LIMIT): Promis
       }
       await db.delete(slurpPendingText).where(eq(slurpPendingText.id, id));
     } catch (error) {
-      // Drop the row rather than retrying forever: a rewrite that keeps failing would block the
-      // queue behind it on every single read.
       logger.warn(error, "[slurp-pending] Could not rewrite %s", id);
       await db
-        .delete(slurpPendingText)
+        .update(slurpPendingText)
+        .set({ status: attempts >= JOB_MAX_ATTEMPTS ? "failed" : "pending", claimedAt: null })
         .where(eq(slurpPendingText.id, id))
         .catch(() => undefined);
     }

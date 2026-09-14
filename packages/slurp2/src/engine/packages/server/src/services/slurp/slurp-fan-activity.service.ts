@@ -487,6 +487,12 @@ export async function generateNoodlerFanActivityBatch(input: {
   });
 }
 
-export async function resolveNoodlerFanConnection(db: DB, settings: Pick<SlurpSettings, "generationConnectionId">) {
-  return resolveSlurpTextConnection(createConnectionsStorage(db), settings.generationConnectionId);
+export async function resolveNoodlerFanConnection(
+  db: DB,
+  settings: Pick<SlurpSettings, "generationConnectionId" | "modelBudget">,
+) {
+  return resolveSlurpTextConnection(
+    createConnectionsStorage(db),
+    settings.modelBudget.connectionId ?? settings.generationConnectionId,
+  );
 }

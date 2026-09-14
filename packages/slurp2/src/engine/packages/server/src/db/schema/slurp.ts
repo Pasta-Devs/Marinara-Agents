@@ -590,5 +590,16 @@ export const slurpPendingText = fileTable("slurp2_pending_text", {
   /** The post a question is about. Null for the other kinds. */
   postId: text("post_id"),
   actorLabel: text("actor_label"),
+  /** General worker kind. Existing rows default to rewrite. */
+  jobKind: text("job_kind").notNull().default("rewrite"),
+  /** pending | running | failed. Successful jobs are removed. */
+  status: text("status").notNull().default("pending"),
+  priority: text("priority").notNull().default("2"),
+  attempts: text("attempts").notNull().default("0"),
+  claimedAt: text("claimed_at"),
+  expiresAt: text("expires_at"),
   createdAt: text("created_at").notNull(),
 });
+
+/** New name for the generalized queue; the physical table stays put so existing jobs survive. */
+export const slurpModelJobs = slurpPendingText;
