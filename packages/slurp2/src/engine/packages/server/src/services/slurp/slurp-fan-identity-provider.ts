@@ -27,6 +27,8 @@ export interface NoodlerFanIdentity {
     knownForDays?: number;
     /** Where the relationship is heading. */
     audienceArc?: string;
+    /** A few lines of shared history, derived from the tie. Free: no call, no column. */
+    memory?: string;
   };
 }
 
@@ -96,7 +98,7 @@ export type NoodlerFanCastMember = {
 /** One member's history with one creator, keyed by creator then by member. */
 export type NoodlerFanTieLookup = ReadonlyMap<
   string,
-  ReadonlyMap<string, { stage: string; spent: number; knownForDays: number; audienceArc: string }>
+  ReadonlyMap<string, { stage: string; spent: number; knownForDays: number; audienceArc: string; memory?: string }>
 >;
 
 export function populationNoodlerFanIdentityProvider(
@@ -118,7 +120,13 @@ export function populationNoodlerFanIdentityProvider(
               spendTier: member.spendTier,
               ...(slurpFanVoiceForPrompt(member.voice) ? { voice: slurpFanVoiceForPrompt(member.voice) } : {}),
               ...(tie
-                ? { stage: tie.stage, spent: tie.spent, knownForDays: tie.knownForDays, audienceArc: tie.audienceArc }
+                ? {
+                    stage: tie.stage,
+                    spent: tie.spent,
+                    knownForDays: tie.knownForDays,
+                    audienceArc: tie.audienceArc,
+                    ...(tie.memory ? { memory: tie.memory } : {}),
+                  }
                 : {}),
             },
             snapshot: {

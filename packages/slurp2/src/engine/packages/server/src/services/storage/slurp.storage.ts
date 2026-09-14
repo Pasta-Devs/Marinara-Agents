@@ -6562,6 +6562,28 @@ export function createSlurpStorage(db: DB) {
     },
 
     /**
+     * Record a generated audience member buying a locked post without inventing a spendable
+     * viewer wallet. The world operation owns payment and tie accounting; this unique row makes
+     * the purchase visible in counts and prevents charging twice.
+     */
+    async recordAudiencePostUnlock(
+      viewerAccountId: string,
+      creatorAccountId: string,
+      postId: string,
+    ): Promise<boolean> {
+      const rows = await db.select().from(noodlePosts).where(eq(noodlePosts.id, postId));
+      const post = rows[0];
+      if (!post || post.authorAccountId !== creatorAccountId || post.access !== "locked") return false;
+      try {
+        await db.insert(noodlePostUnlocks).values({ id: newId(), viewerAccountId, postId, createdAt: now() });
+        return true;
+      } catch (error) {
+        if (isFileUniqueConstraintError(error, "slurp2_post_unlocks", ["viewerAccountId", "postId"])) return false;
+        throw error;
+      }
+    },
+
+    /**
      * Unlock a locked post for a viewer.
      *
      * Returns `null` when the viewer cannot afford it, which is the same "no" the caller already
@@ -6910,7 +6932,7 @@ export function createSlurpStorage(db: DB) {
     async creditCreatorIncome(
       creatorAccountId: string,
       price: number,
-      reason: "unlock" | "subscribe" | "renew" | "messageRequest" | "ppv" | "commission",
+      reason: "unlock" | "subscribe" | "renew" | "tip" | "messageRequest" | "ppv" | "commission",
       operationId?: string,
     ) {
       const settings = await this.getSettings();
@@ -6936,21 +6958,23 @@ export function createSlurpStorage(db: DB) {
      */
     async notifyCreatorIncome(
       creatorAccountId: string,
-      reason: "unlock" | "subscribe" | "renew" | "messageRequest" | "ppv" | "commission",
+      reason: "unlock" | "subscribe" | "renew" | "tip" | "messageRequest" | "ppv" | "commission",
       amount: number,
       actorLabel?: string | null,
       subjectId?: string | null,
     ): Promise<void> {
       const kind: SlurpEventKind =
-        reason === "subscribe" || reason === "renew"
-          ? "subscribed"
-          : reason === "ppv"
-            ? "ppv_unlock"
-            : reason === "messageRequest"
-              ? "message"
-              : reason === "commission"
-                ? "commission_accepted"
-                : "unlock";
+        reason === "tip"
+          ? "tip"
+          : reason === "subscribe" || reason === "renew"
+            ? "subscribed"
+            : reason === "ppv"
+              ? "ppv_unlock"
+              : reason === "messageRequest"
+                ? "message"
+                : reason === "commission"
+                  ? "commission_accepted"
+                  : "unlock";
       await this.recordCreatorEvent(creatorAccountId, kind, { amount, actorLabel, subjectId });
     },
 

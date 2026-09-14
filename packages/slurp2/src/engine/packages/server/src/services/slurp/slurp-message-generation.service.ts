@@ -49,7 +49,7 @@ import { slurpAudienceArcDescription } from "./slurp-audience-arc.js";
 import { slurpArcLifeLine } from "./slurp-project.js";
 import { SLURP_PLATFORM_CONTEXT } from "./slurp-prompt.js";
 import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
-import { slurpFanVoiceForPrompt, slurpResolveFanType } from "./slurp-fan-types.js";
+import { slurpFanMemoryForPrompt, slurpFanVoiceForPrompt, slurpResolveFanType } from "./slurp-fan-types.js";
 import type { SlurpMessage } from "../storage/slurp-messages.storage.js";
 import type { SlurpDmPolicy } from "./slurp-messaging.js";
 import { resolveNoodlerCharacterCanon } from "./slurp-source-resolve.js";
@@ -70,6 +70,8 @@ export function buildSlurpMessageChat(input: {
   viewer: NoodleAccount;
   /** How this fan's Fan Type writes, when the fan is a generated audience member. */
   fanVoice?: string;
+  /** Short shared history derived from the audience tie. */
+  fanMemory?: string;
   history: SlurpMessage[];
   rapport: SlurpRapport;
   availability: SlurpCreatorAvailability;
@@ -159,6 +161,7 @@ export function buildSlurpMessageChat(input: {
       // Only for a generated audience member; a player persona writes their own side and needs no
       // description. Context for the creator's reply, never an instruction to write the fan's part.
       ...(input.fanVoice ? { voice: input.fanVoice } : {}),
+      ...(input.fanMemory ? { memory: input.fanMemory } : {}),
     },
     relationship: describeSlurpRapport(input.rapport, protect(input.viewer.displayName) || "this fan"),
     ...(known
@@ -313,6 +316,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
   const fanVoice = fanMember
     ? slurpFanVoiceForPrompt(slurpResolveFanType(settings.fanTypes, fanMember).voice)
     : undefined;
+  const fanMemory = fanMember ? slurpFanMemoryForPrompt(tie) : undefined;
   const recentPosts = recentPostRows
     .filter((post) => post.access !== "draft")
     .slice(0, RECENT_POSTS)
@@ -359,6 +363,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
   const messages = buildSlurpMessageChat({
     ...input,
     fanVoice,
+    fanMemory,
     stance,
     recentPosts,
     availability,

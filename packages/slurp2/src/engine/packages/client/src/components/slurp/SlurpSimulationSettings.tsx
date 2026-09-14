@@ -188,6 +188,12 @@ const FIELDS: Record<Group, NumberField[]> = {
       advanced: true,
     },
     { path: ["world", "question", "cap"], label: "Question cap", detail: "Highest chance per day.", advanced: true },
+    {
+      path: ["world", "unlockChancePerDay"],
+      label: "Unlock chance",
+      detail: "Daily chance an eligible fan buys a locked post.",
+      advanced: true,
+    },
   ],
   funnel: [
     {
@@ -207,6 +213,12 @@ const FIELDS: Record<Group, NumberField[]> = {
       path: ["economy", "audienceCommissionPrice"],
       label: "Commission price",
       detail: "Coins an audience commission pays.",
+    },
+    {
+      path: ["economy", "audienceTipShare"],
+      label: "Tip size",
+      detail: "Share of a fan's weekly budget paid by one tip.",
+      advanced: true,
     },
   ],
 };

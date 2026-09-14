@@ -90,6 +90,8 @@ export const slurpSimulationTuningSchema = z.object({
       message: curve(60, 0.3, 0.07, 10),
       question: curve(10, 2.5, 0.45, 20),
       questionNeedsRecentPost: z.boolean().default(true),
+      /** Chance per day that an eligible fan buys one affordable locked post. */
+      unlockChancePerDay: num(0, 1, 0.04),
     })
     .default({}),
   funnel: z
@@ -100,7 +102,13 @@ export const slurpSimulationTuningSchema = z.object({
       conversionGrowth: num(0, 10, 0),
     })
     .default({}),
-  economy: z.object({ audienceCommissionPrice: int(0, 99_999, 40) }).default({}),
+  economy: z
+    .object({
+      audienceCommissionPrice: int(0, 99_999, 40),
+      /** Share of a fan's weekly budget one tip is worth. A Whale tips like a Whale for free. */
+      audienceTipShare: num(0, 1, 0.25),
+    })
+    .default({}),
   prompts: z
     .object({
       tones: z
@@ -129,6 +137,7 @@ const scaleCurves = (world: SlurpSimulationTuning["world"], factor: number): Slu
   commission: { ...world.commission, curve: world.commission.curve * factor },
   message: { ...world.message, curve: world.message.curve * factor },
   question: { ...world.question, curve: world.question.curve * factor },
+  unlockChancePerDay: world.unlockChancePerDay * factor,
 });
 
 const PRESETS: Record<Exclude<SlurpTuningPreset, "custom">, SlurpSimulationTuning> = {
@@ -150,6 +159,7 @@ const PRESETS: Record<Exclude<SlurpTuningPreset, "custom">, SlurpSimulationTunin
       viralMultiplier: 2.5,
     },
     world: { ...scaleCurves(R.world, 0.5), maxActionsPerTick: 2, maxOpenRequests: 2 },
+    economy: { ...R.economy, audienceTipShare: 0.15 },
   },
   // Two to three times the events: reactions arrive two and a half times as fast against a cap
   // that is not the thing holding them back, and old posts keep a small trickle.
@@ -170,6 +180,7 @@ const PRESETS: Record<Exclude<SlurpTuningPreset, "custom">, SlurpSimulationTunin
       viralHours: 18,
     },
     world: { ...scaleCurves(R.world, 2.5), maxActionsPerTick: 8, maxOpenRequests: 5 },
+    economy: { ...R.economy, audienceTipShare: 0.3 },
   },
   // Lively, plus a crowd that pays: ambient accounts have a budget, engagement raises conversion
   // to its ceiling, and commissions are worth twice what they are elsewhere.
@@ -191,7 +202,7 @@ const PRESETS: Record<Exclude<SlurpTuningPreset, "custom">, SlurpSimulationTunin
     },
     world: { ...scaleCurves(R.world, 2.5), maxActionsPerTick: 8, maxOpenRequests: 5 },
     funnel: { ...R.funnel, rollCadence: "hourly", ambientCanPay: true, conversionGrowth: 3 },
-    economy: { audienceCommissionPrice: 80 },
+    economy: { audienceCommissionPrice: 80, audienceTipShare: 0.4 },
   },
 };
 

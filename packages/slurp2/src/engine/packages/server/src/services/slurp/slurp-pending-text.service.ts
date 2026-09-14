@@ -33,7 +33,7 @@ import { parseGameJsonish } from "../game/jsonish.js";
 import { requireModelAnswer } from "./slurp-model-answer.js";
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { resolveSlurpTextConnection } from "./slurp-connection.js";
-import { slurpFanVoiceForPrompt, slurpResolveFanType } from "./slurp-fan-types.js";
+import { slurpFanMemoryForPrompt, slurpFanVoiceForPrompt, slurpResolveFanType } from "./slurp-fan-types.js";
 import { NOODLER_UNTRUSTED_CONTENT_INSTRUCTION } from "./slurp-generation.service.js";
 import type { APIProvider } from "@marinara-engine/shared";
 
@@ -81,6 +81,8 @@ function buildMessages(input: {
   speaker: string;
   /** How this fan's Fan Type writes. Short; a rewrite is one or two sentences. */
   speakerVoice?: string;
+  /** Short shared history derived from the audience tie. */
+  speakerMemory?: string;
   placeholder: string;
   post?: { title: string | null; content: string | null } | null;
 }) {
@@ -111,7 +113,14 @@ function buildMessages(input: {
 
   const data = {
     creator: input.creator,
-    fan: input.speakerVoice ? { name: input.speaker, voice: input.speakerVoice } : input.speaker,
+    fan:
+      input.speakerVoice || input.speakerMemory
+        ? {
+            name: input.speaker,
+            ...(input.speakerVoice ? { voice: input.speakerVoice } : {}),
+            ...(input.speakerMemory ? { memory: input.speakerMemory } : {}),
+          }
+        : input.speaker,
     ...(input.post ? { post: input.post } : {}),
     placeholderToReplace: input.placeholder,
   };
@@ -189,6 +198,9 @@ export async function drainSlurpPendingText(db: DB, limit = DRAIN_LIMIT): Promis
       }
       const actorId = row.actorLabel ? String(row.actorLabel) : null;
       const member = actorId ? await population.get(actorId).catch(() => null) : null;
+      const tie = actorId
+        ? (await population.listTiesForCreator(creator.id).catch(() => [])).find((entry) => entry.memberId === actorId)
+        : undefined;
       const speaker =
         member?.displayName ??
         (actorId ? (await noodle.getNoodlerAccountById(actorId))?.displayName : null) ??
@@ -205,6 +217,7 @@ export async function drainSlurpPendingText(db: DB, limit = DRAIN_LIMIT): Promis
             kind === "delivery"
               ? undefined
               : slurpFanVoiceForPrompt(slurpResolveFanType(settings.fanTypes, member ?? {}).voice),
+          speakerMemory: kind === "delivery" || !member ? undefined : slurpFanMemoryForPrompt(tie),
           placeholder,
           post: post ? { title: post.title, content: post.content } : null,
         }),

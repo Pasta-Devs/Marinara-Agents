@@ -166,6 +166,7 @@ function describeFanRelationship(persona: {
   spent?: number;
   knownForDays?: number;
   audienceArc?: string;
+  memory?: string;
 }): string {
   const parts: string[] = [];
   if (persona.stage && persona.stage !== "stranger") parts.push(persona.stage);
@@ -182,7 +183,10 @@ function describeFanRelationship(persona: {
   }
   if (persona.spent) parts.push(`has spent ${persona.spent} coins here`);
   else if (persona.spendTier === "none") parts.push("has never paid for anything");
-  return parts.length > 0 ? parts.join(", ") : "no history with this creator yet";
+  const line = parts.length > 0 ? parts.join(", ") : "no history with this creator yet";
+  // The memory is the same counters said out loud, so a fan can refer to what happened between
+  // them rather than writing as though they arrived this minute.
+  return persona.memory ? `${line}. ${persona.memory}` : line;
 }
 
 function buildFanActivityMessages(input: {

@@ -52,6 +52,7 @@ import { enqueueSlurpPendingText } from "./slurp-pending-text.service.js";
 import { generateSlurpArc } from "./slurp-arc-generation.service.js";
 import {
   planSlurpWorldTick,
+  slurpAudienceTipAmount,
   slurpCreatorOpenerKind,
   slurpQuestionPostIds,
   slurpCreatorReplyChance,
@@ -62,6 +63,7 @@ import {
 } from "./slurp-world.js";
 import { SLURP_POST_LANDED_REACTIONS } from "./slurp-creator-state.js";
 import { planSlurpWorldPulse, slurpPulseTieAdvance, type SlurpPulseAction } from "./slurp-world-pulse.js";
+import { noodlerUnlockPriceFromMetadata } from "./slurp-prices.js";
 
 const TICK_KEY = "slurp2.world.tick";
 const MAINTENANCE_KEY = "slurp2.world.maintenance";
@@ -209,6 +211,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       audience.map((id) => {
         const member = pool.find((entry) => entry.id === id);
         const type = slurpResolveFanType(settings.fanTypes, member ?? {});
+        const weeklyBudget = slurpFanTypeWeeklyBudget(type, id);
         return [
           id,
           {
@@ -217,6 +220,14 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
             follow: type.behavior.follow,
             comment: type.behavior.comment,
             followChance: type.funnel.followChance,
+            question: type.behavior.question,
+            dm: type.behavior.dm,
+            commission: type.behavior.commission,
+            tip: type.behavior.tip,
+            unlock: type.behavior.unlock,
+            tipChance: type.spend.tipChance,
+            weeklyBudget,
+            tipAmount: slurpAudienceTipAmount(weeklyBudget, tuning.economy.audienceTipShare),
           },
         ] as const;
       }),
@@ -227,6 +238,14 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     const postsByAccount = await noodle.listNoodlerPostsByAccounts(
       accounts.map((account) => account.id),
       8,
+    );
+    // One read per Creator feeds churn, subscriptions, event eligibility and prompt memory. A
+    // second scan of the same tie table would make the configurable clock pay for the same data
+    // several times every minute.
+    const tiesByCreator = new Map(
+      await Promise.all(
+        accounts.map(async (account) => [account.id, await population.listTiesForCreator(account.id)] as const),
+      ),
     );
 
     // Churn. Somebody who has not been near a Creator in a long time drifts out of the funnel, so
@@ -240,7 +259,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     const maintenanceSince = maintenanceMark ?? since;
     const maintenanceDue = (until.getTime() - maintenanceSince.getTime()) / 86_400_000 >= CHURN_MIN_ELAPSED_DAYS;
     for (const account of maintenanceDue ? accounts : []) {
-      for (const tie of await population.listTiesForCreator(account.id)) {
+      for (const tie of tiesByCreator.get(account.id) ?? []) {
         if (tie.stage === "lapsed" || tie.stage === "stranger" || tie.stage === "subscriber") continue;
         if (tie.lastSeenAt >= staleBefore) continue;
         await population.lapseTie(tie.memberId, account.id).catch(() => undefined);
@@ -264,7 +283,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     // cadence as churn because it reads the same silence, and because recomputing a three-week
     // trajectory on every page load would be a full scan for nothing.
     for (const account of maintenanceDue ? accounts : []) {
-      for (const tie of await population.listTiesForCreator(account.id)) {
+      for (const tie of tiesByCreator.get(account.id) ?? []) {
         if (tie.stage === "stranger") continue;
         const next = slurpNextAudienceArc({
           stage: tie.stage,
@@ -438,6 +457,9 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
           cutoff,
           tuning.world.questionNeedsRecentPost,
         ),
+        lockedPosts: (postsByAccount.get(account.id) ?? [])
+          .filter((post) => post.access === "locked")
+          .map((post) => ({ id: post.id, price: noodlerUnlockPriceFromMetadata(post.metadata) })),
         // A queue nobody answered gets no more. Asking again while three requests sit unread is
         // how an obligation layer turns into a chore.
         // Unanswered conversations count with unanswered commissions. Both are somebody waiting on
@@ -593,7 +615,17 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     }
 
     const plan = planSlurpWorldTick(
-      { since, until, creators, audience, activity: activity * rhythm, catchUpHours: tuning.clock.catchUpHours },
+      {
+        since,
+        until,
+        creators,
+        audience,
+        actorWeights,
+        stageOf: (creatorAccountId, actorAccountId) =>
+          tiesByCreator.get(creatorAccountId)?.find((tie) => tie.memberId === actorAccountId)?.stage,
+        activity: activity * rhythm,
+        catchUpHours: tuning.clock.catchUpHours,
+      },
       tuning.world,
     );
     let applied = 0;
@@ -665,6 +697,39 @@ async function applyAction(
 ): Promise<boolean> {
   const actor = await resolveActor(db, action.actorAccountId);
   if (!actor) return false;
+
+  if (action.kind === "tip") {
+    const operationId = `audience-tip:${action.creatorAccountId}:${actor.id}:${localDayKey(at)}`;
+    if (await noodle.hasCreatorIncomeOperation(action.creatorAccountId, operationId)) return false;
+    await noodle.creditCreatorIncome(action.creatorAccountId, action.amount, "tip", operationId);
+    await createSlurpPopulationStorage(db)
+      .advanceTie(actor.id, action.creatorAccountId, {
+        stage: "follower",
+        spent: action.amount,
+        tipped: action.amount,
+        interactions: 1,
+      })
+      .catch(() => undefined);
+    await noodle.notifyCreatorIncome(action.creatorAccountId, "tip", action.amount, actor.id);
+    return true;
+  }
+
+  if (action.kind === "unlock") {
+    const created = await noodle.recordAudiencePostUnlock(actor.id, action.creatorAccountId, action.postId);
+    if (!created) return false;
+    const operationId = `audience-unlock:${action.postId}:${actor.id}`;
+    await noodle.creditCreatorIncome(action.creatorAccountId, action.amount, "unlock", operationId);
+    await createSlurpPopulationStorage(db)
+      .advanceTie(actor.id, action.creatorAccountId, {
+        stage: "liker",
+        spent: action.amount,
+        unlocked: action.amount,
+        interactions: 1,
+      })
+      .catch(() => undefined);
+    await noodle.notifyCreatorIncome(action.creatorAccountId, "unlock", action.amount, actor.id, action.postId);
+    return true;
+  }
 
   if (action.kind === "message") {
     const messages = createSlurpMessagesStorage(db);

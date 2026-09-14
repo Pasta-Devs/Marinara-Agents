@@ -27,7 +27,7 @@ import {
 import { tryNoodleOperation } from "./slurp-operation-lock.js";
 import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
 import { NOODLER_FAN_IDENTITY_PREFIX, populationNoodlerFanIdentityProvider } from "./slurp-fan-identity-provider.js";
-import { slurpResolveFanType } from "./slurp-fan-types.js";
+import { slurpFanMemoryForPrompt, slurpResolveFanType } from "./slurp-fan-types.js";
 import { newId } from "../../utils/id-generator.js";
 
 const FAN_PLAN_ROW_PREFIX = "fan-day:";
@@ -284,6 +284,7 @@ export async function runNoodlerFanActivity(input: {
                         Math.round((at.getTime() - Date.parse(tie.firstSeenAt)) / 86_400_000) || 0,
                       ),
                       audienceArc: tie.audienceArc,
+                      memory: slurpFanMemoryForPrompt(tie, at),
                     },
                   ]),
                 ),

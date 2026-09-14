@@ -375,6 +375,53 @@ export function slurpFanVoiceForPrompt(voice: string | null | undefined): string
   return trimmed ? trimmed.slice(0, SLURP_FAN_VOICE_PROMPT_MAX) : undefined;
 }
 
+/** Longest a memory may be. It rides next to the voice in the same prompts, so it stays short. */
+export const SLURP_FAN_MEMORY_MAX = 200;
+
+/** What one tie remembers. Every field is already on the tie row; none of it costs a query. */
+export type SlurpFanMemorySubject = {
+  stage?: string;
+  spent?: number;
+  interactions?: number;
+  followedAt?: string | null;
+  lastSeenAt?: string | null;
+  audienceArc?: string | null;
+};
+
+/**
+ * A few lines of shared history, in the fan's file rather than in a model call.
+ *
+ * A tie holds counters and nothing ever said them out loud, so every fan wrote as though they had
+ * arrived that minute. This is the cheapest possible fix: the counters, in words, derived where
+ * the prompt is built. No column, no call, no state to keep in step.
+ */
+export function slurpFanMemoryForPrompt(
+  tie: SlurpFanMemorySubject | null | undefined,
+  at: Date = new Date(),
+): string | undefined {
+  if (!tie) return undefined;
+  const days = (value: string | null | undefined): number | null => {
+    const parsed = value ? Date.parse(value) : Number.NaN;
+    if (!Number.isFinite(parsed)) return null;
+    const out = Math.floor((at.getTime() - parsed) / 86_400_000);
+    return out >= 0 ? out : null;
+  };
+  const following = days(tie.followedAt);
+  const quiet = days(tie.lastSeenAt);
+  const spent = Math.max(0, Math.round(tie.spent ?? 0));
+  const interactions = Math.max(0, Math.round(tie.interactions ?? 0));
+  const lines = [
+    following !== null && following >= 1 ? `Has followed for ${following} days.` : "",
+    tie.stage === "subscriber" ? "Subscribes." : tie.stage === "lapsed" ? "Used to pay, stopped." : "",
+    spent > 0 ? `Has paid ${spent} coins in total.` : "",
+    interactions >= 3 ? `Has turned up ${interactions} times.` : "",
+    tie.audienceArc && tie.audienceArc !== "steady" ? `Lately: ${tie.audienceArc}.` : "",
+    quiet !== null && quiet >= 14 ? `Last seen ${quiet} days ago.` : "",
+  ].filter(Boolean);
+  // Four short lines is a memory; a paragraph is a biography nobody asked the model to read.
+  return lines.length > 0 ? lines.slice(0, 4).join(" ").slice(0, SLURP_FAN_MEMORY_MAX) : undefined;
+}
+
 /** One member, as much of them as a rebalance needs. */
 export type SlurpRebalanceMember = { id: string; fanTypeId?: string | null; archetype?: string };
 
