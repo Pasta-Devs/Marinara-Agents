@@ -40,6 +40,8 @@ export type SlurpAudienceTie = {
   audienceArcSince: string | null;
   /** When this member's subscription is paid up to. Null for anybody who has never subscribed. */
   paidThroughAt: string | null;
+  /** When they first reached follower. Null for anybody who never did, or a tie that predates it. */
+  followedAt: string | null;
 };
 
 const int = (value: unknown): number => {
@@ -87,6 +89,7 @@ function mapTie(row: Record<string, unknown>): SlurpAudienceTie {
       : "steady",
     audienceArcSince: (row.audienceArcSince as string | null) ?? null,
     paidThroughAt: (row.paidThroughAt as string | null) ?? null,
+    followedAt: (row.followedAt as string | null) ?? null,
   };
 }
 
@@ -203,6 +206,11 @@ export function createSlurpPopulationStorage(db: DB) {
         interactions: String(tie.interactions + Math.max(0, Math.floor(input.interactions ?? 0))),
         lastSeenAt: now(),
         ...(tie.stage === "lapsed" && stage !== "lapsed" ? { audienceArc: "returning", audienceArcSince: now() } : {}),
+        ...(!tie.followedAt &&
+        SLURP_FUNNEL_STAGES.indexOf(stage as (typeof SLURP_FUNNEL_STAGES)[number]) >=
+          SLURP_FUNNEL_STAGES.indexOf("follower")
+          ? { followedAt: now() }
+          : {}),
       };
       await db.update(slurpAudienceTies).set(next).where(eq(slurpAudienceTies.id, tie.id));
       return {

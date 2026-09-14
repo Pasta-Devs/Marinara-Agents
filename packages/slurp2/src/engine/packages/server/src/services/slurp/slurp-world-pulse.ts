@@ -126,8 +126,12 @@ export function planSlurpWorldPulse(
 ): SlurpPulseAction[] {
   const activity = Number.isFinite(input.activity) ? Math.max(0, input.activity ?? 1) : 1;
   if (activity === 0) return [];
+  // Past `postMaxAgeHours` a post is silent, unless `oldPostTrickle` keeps a small share for it.
   const fresh = input.targets.filter(
-    (target) => Number.isFinite(target.ageHours) && target.ageHours >= 0 && target.ageHours <= tuning.postMaxAgeHours,
+    (target) =>
+      Number.isFinite(target.ageHours) &&
+      target.ageHours >= 0 &&
+      (target.ageHours <= tuning.postMaxAgeHours || tuning.oldPostTrickle > 0),
   );
   if (fresh.length === 0 || input.audience.length === 0) return [];
 
@@ -144,7 +148,13 @@ export function planSlurpWorldPulse(
   // Weight toward the newest posts: a reaction on something you published minutes ago is the whole
   // point, and one on a two-day-old post is noise.
   const weighted = fresh
-    .map((target) => ({ target, weight: 1 / (1 + target.ageHours) }))
+    .map((target) => ({
+      target,
+      weight:
+        target.ageHours <= tuning.postMaxAgeHours
+          ? 1 / (1 + target.ageHours)
+          : (tuning.oldPostTrickle / (1 + target.ageHours)) * (tuning.postMaxAgeHours / target.ageHours),
+    }))
     .sort((left, right) => right.weight - left.weight);
   const totalWeight = weighted.reduce((sum, entry) => sum + entry.weight, 0);
 
@@ -170,5 +180,46 @@ export function planSlurpWorldPulse(
       kind: kindRoll < 0.18 ? "comment" : kindRoll < 0.34 ? "follow" : "like",
     });
   }
+
+  // Likes get their own budget. Scale 1 is the shared plan above, exactly; below 1 drops a share of
+  // its likes, above 1 adds reach-scaled likes that only the hard ceiling bounds, never `maxPerTick`.
+  if (tuning.likeBudgetScale < 1) {
+    let keep = Math.floor(actions.filter((action) => action.kind === "like").length * tuning.likeBudgetScale);
+    return actions.filter((action) => action.kind !== "like" || keep-- > 0);
+  }
+  const reachScale = Math.sqrt(totalReach / tuning.referenceReach);
+  const earned = Math.floor(((input.elapsedMinutes * activity) / tuning.minutesPerReaction) * reachScale);
+  const extra = Math.min(
+    SLURP_TUNING_PULSE_PER_TICK_CEILING - actions.length,
+    Math.floor(earned * (tuning.likeBudgetScale - 1)),
+  );
+  const target = actions.length + Math.max(0, extra);
+  for (let index = 0; index < extra * 3 && actions.length < target; index += 1) {
+    let roll = random() * totalWeight;
+    const chosen = weighted.find((entry) => (roll -= entry.weight) <= 0) ?? weighted[0]!;
+    const actor = input.audience[Math.floor(random() * input.audience.length)]!;
+    const key = `${chosen.target.postId}:${actor}`;
+    if (used.has(key)) continue;
+    used.add(key);
+    actions.push({
+      creatorAccountId: chosen.target.creatorAccountId,
+      postId: chosen.target.postId,
+      actorAccountId: actor,
+      kind: "like",
+    });
+  }
   return actions;
+}
+
+/**
+ * How one applied reaction moves the tie. A follow also writes a like row, and that row may
+ * already exist from an earlier like; the follow still counts, it just adds no interaction.
+ * A like or comment that wrote nothing is not news.
+ */
+export function slurpPulseTieAdvance(
+  kind: SlurpPulseAction["kind"],
+  created: boolean,
+): { stage: "follower" | "liker"; interactions: number } | null {
+  if (kind === "follow") return { stage: "follower", interactions: created ? 1 : 0 };
+  return created ? { stage: "liker", interactions: 1 } : null;
 }

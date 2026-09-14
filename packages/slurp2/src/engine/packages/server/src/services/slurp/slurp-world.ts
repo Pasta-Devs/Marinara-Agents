@@ -148,11 +148,29 @@ export function slurpQuestionChancePerDay(
 }
 
 /** Days of world time to apply, capped so a long absence does not become a backlog. */
-export function slurpWorldElapsedDays(since: Date | null, until: Date): number {
+export function slurpWorldElapsedDays(
+  since: Date | null,
+  until: Date,
+  catchUpHours = SLURP_REALISTIC_TUNING.clock.catchUpHours,
+): number {
   if (!since) return 0;
   const days = (until.getTime() - since.getTime()) / DAY_MS;
   if (!Number.isFinite(days) || days <= 0) return 0;
-  return Math.min(SLURP_WORLD_MAX_CATCHUP_DAYS, days);
+  return Math.min(catchUpHours / 24, days);
+}
+
+/**
+ * Posts a question may land under. With `needsRecent` only posts newer than `cutoff`; without it
+ * the creator's latest posts at any age. Drafts never.
+ */
+export function slurpQuestionPostIds(
+  posts: readonly { id: string; createdAt: string; access: string }[],
+  cutoff: string,
+  needsRecent: boolean,
+): string[] {
+  return posts
+    .filter((post) => post.access !== "draft" && (!needsRecent || post.createdAt >= cutoff))
+    .map((post) => post.id);
 }
 
 /**
@@ -174,13 +192,15 @@ export function planSlurpWorldTick(
      * wants to write undisturbed gets exactly that, not a quieter version of being interrupted.
      */
     activity?: number;
+    /** `clock.catchUpHours`: the longest stretch one tick simulates. */
+    catchUpHours?: number;
   },
   tuning: WorldTuning = SLURP_REALISTIC_TUNING.world,
 ): SlurpWorldAction[] {
   const maxActions = Math.min(tuning.maxActionsPerTick, SLURP_TUNING_ACTIONS_PER_TICK_CEILING);
   const activity = Number.isFinite(input.activity) ? Math.max(0, input.activity ?? 1) : 1;
   if (activity === 0) return [];
-  const days = slurpWorldElapsedDays(input.since, input.until) * activity;
+  const days = slurpWorldElapsedDays(input.since, input.until, input.catchUpHours) * activity;
   if (days <= 0 || input.audience.length === 0 || input.creators.length === 0) return [];
 
   const random = mulberry32(hashSeed(`${input.until.toISOString()}:${input.creators.length}`));

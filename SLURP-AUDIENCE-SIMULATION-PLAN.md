@@ -12,7 +12,7 @@ This is a handoff artifact. A fresh agent should be able to pick up any slice fr
 | Slice | What | State |
 | ----- | ---- | ----- |
 | 1 | Simulation Tuning object, presets, rules read values from Tuning | done |
-| 2 | Simulation bug fixes (follow type, subs every tick, ambient pay, like budget, trickle, conversion growth) | not started |
+| 2 | Simulation bug fixes (follow type, subs every tick, ambient pay, like budget, trickle, conversion growth) | done |
 | 3 | Free clock: server timer, lock, catch-up cap | not started |
 | 4 | Simulation settings UI + live estimate | not started |
 | 5 | Fan Types: model, built-ins, migration, voice in prompts | not started |
@@ -255,3 +255,21 @@ Derived on `origin/staging` (8924a8c8) before slice 1, running each test with `n
   `slurp-payment-clarity`, `slurp-phase1-durability`, `slurp-population`, `slurp-ppv-paywall`,
   `slurp-relationship-panel`, `slurp-stance`, `slurp-studio`.
 - `node scripts/typecheck-packages.mjs slurp2`: no undefined names (clean).
+
+## Slice 2 notes (for later slices)
+
+- Follows still write a `"like"` row; the tie advances even when that row exists
+  (`slurpPulseTieAdvance`). A distinct follow interaction type was skipped: the Engine interaction
+  schema and like counts would need it too. Revisit with Fan Types if follows must be listable per post.
+- `slurpAudienceTies.followedAt` added (file table, nullable; old rows read null = 0 days following).
+  It is set once when a tie first reaches follower and is not cleared on lapse.
+- Subscriptions run every tick: full tie scan with a per-tick member cache (`ponytail:` in
+  `slurp-world.operation.ts`). Slice 3 (server timer) multiplies this cost; add a batch member getter
+  or a due-date filter if ticks get slow.
+- Ambient accounts pay on the spend tier their id would generate when `ambientCanPay`; slice 5 should
+  map them onto a Fan Type instead.
+- `pulse.likeBudgetScale`: 1 = shared plan exactly; <1 drops a share of likes; >1 adds reach-scaled
+  likes bounded only by `SLURP_TUNING_PULSE_PER_TICK_CEILING`. Slice 4 live estimate should call
+  `planSlurpWorldPulse` directly.
+- `clock.catchUpHours` now drives `slurpWorldElapsedDays` (72h = old 3 days). `tickMinutes`,
+  `backgroundTimer` and `maxEventsPerTick` are still unread (slice 3).

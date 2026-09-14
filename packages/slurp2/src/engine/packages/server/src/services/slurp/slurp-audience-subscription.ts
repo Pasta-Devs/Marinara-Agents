@@ -19,6 +19,7 @@
 
 import type { SlurpSpendTier } from "./slurp-population.js";
 import { SLURP_FUNNEL_STAGES, type SlurpFunnelStage } from "./slurp-population.js";
+import { SLURP_REALISTIC_TUNING, type SlurpSimulationTuning } from "./slurp-tuning.js";
 
 /**
  * What one person will spend on one Creator in a week, by appetite.
@@ -59,6 +60,10 @@ export type SlurpAudienceSubscriptionSubject = {
   price: number;
   /** When the current subscription is paid up to, or null for somebody who has never paid. */
   paidThroughAt: string | null;
+  /** Engagement with this Creator, for `funnel.conversionGrowth`. Missing reads as none. */
+  interactions?: number;
+  /** When they became a follower. Null for a tie that predates the column. */
+  followedAt?: string | null;
 };
 
 export type SlurpAudienceSubscriptionDecision = "subscribe" | "renew" | "lapse" | "none";
@@ -77,6 +82,7 @@ const SUBSCRIBER_INDEX = SLURP_FUNNEL_STAGES.indexOf("subscriber");
 export function slurpAudienceSubscriptionDecision(
   subject: SlurpAudienceSubscriptionSubject,
   at: Date,
+  funnel: Pick<SlurpSimulationTuning["funnel"], "rollCadence" | "conversionGrowth"> = SLURP_REALISTIC_TUNING.funnel,
 ): SlurpAudienceSubscriptionDecision {
   const budget = SLURP_AUDIENCE_WEEKLY_BUDGET[subject.spendTier] ?? 0;
   const price = Math.max(0, Math.floor(subject.price));
@@ -97,13 +103,36 @@ export function slurpAudienceSubscriptionDecision(
   // stage is never skipped: the funnel is the thing the player reads.
   const stageIndex = SLURP_FUNNEL_STAGES.indexOf(subject.stage as (typeof SLURP_FUNNEL_STAGES)[number]);
   if (stageIndex < FOLLOWER_INDEX || stageIndex >= SUBSCRIBER_INDEX) return "none";
-  const chance = DAILY_CONVERSION_CHANCE[subject.spendTier] ?? 0;
-  return roll(`${subject.memberId}:${subject.creatorAccountId}:${dayKey(at)}`) < chance ? "subscribe" : "none";
+  const followedAt = subject.followedAt ? Date.parse(subject.followedAt) : NaN;
+  const chance = slurpAudienceConversionChance(
+    subject.spendTier,
+    funnel.conversionGrowth,
+    subject.interactions ?? 0,
+    Number.isFinite(followedAt) ? (at.getTime() - followedAt) / 86_400_000 : 0,
+  );
+  const key = slurpAudienceRollKey(at, funnel.rollCadence);
+  return roll(`${subject.memberId}:${subject.creatorAccountId}:${key}`) < chance ? "subscribe" : "none";
 }
 
-/** The UTC day, so every read inside one day rolls the same answer. */
-function dayKey(at: Date): string {
-  return at.toISOString().slice(0, 10);
+/**
+ * The chance for one roll. `growth` 0 is the flat tier chance; above that, engagement and time
+ * following raise it, up to three times the tier chance and never past 0.95.
+ */
+export function slurpAudienceConversionChance(
+  spendTier: SlurpSpendTier,
+  growth: number,
+  interactions: number,
+  daysFollowing: number,
+): number {
+  const base = DAILY_CONVERSION_CHANCE[spendTier] ?? 0;
+  if (!(growth > 0) || base === 0) return base;
+  const engaged = Math.min(1, Math.max(0, interactions) / 20 + Math.max(0, daysFollowing) / 30);
+  return Math.min(0.95, base * Math.min(3, 1 + growth * engaged));
+}
+
+/** The UTC day (or hour), so every read inside one bucket rolls the same answer. */
+export function slurpAudienceRollKey(at: Date, cadence: "daily" | "hourly"): string {
+  return at.toISOString().slice(0, cadence === "hourly" ? 13 : 10);
 }
 
 /**

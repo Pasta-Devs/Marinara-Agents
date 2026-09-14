@@ -556,6 +556,8 @@ export const slurpAudienceTies = fileTable(
      * them lapse.
      */
     paidThroughAt: text("paid_through_at"),
+    /** When this member first reached follower. Null for a tie that predates the column. */
+    followedAt: text("followed_at"),
     interactions: text("interactions").notNull().default("0"),
     firstSeenAt: text("first_seen_at").notNull(),
     lastSeenAt: text("last_seen_at").notNull(),

@@ -19,7 +19,7 @@ import { createSlurpPopulationStorage } from "../storage/slurp-population.storag
 import { isAmbientNoodleAccount } from "./slurp-ambient-profiles.js";
 import { tryNoodleOperation } from "./slurp-operation-lock.js";
 import { slurpCreatorReach } from "./slurp-reach.js";
-import { slurpMembersActiveAt } from "./slurp-population.js";
+import { generateSlurpPopulationMember, slurpMembersActiveAt, type SlurpSpendTier } from "./slurp-population.js";
 import { isNotableAudienceArcChange, slurpNextAudienceArc } from "./slurp-audience-arc.js";
 import { slurpAudiencePaidThrough, slurpAudienceSubscriptionDecision } from "./slurp-audience-subscription.js";
 import { slurpPlatformScaleMultiplier, slurpWorldActivityMultiplier } from "./slurp-scale.js";
@@ -36,6 +36,7 @@ import { generateSlurpArc } from "./slurp-arc-generation.service.js";
 import {
   planSlurpWorldTick,
   slurpCreatorOpenerKind,
+  slurpQuestionPostIds,
   slurpCreatorReplyChance,
   SLURP_MAX_CREATOR_OPENERS_PER_TICK,
   SLURP_MAX_CREATOR_REPLIES_PER_TICK,
@@ -43,7 +44,7 @@ import {
   type SlurpWorldCreator,
 } from "./slurp-world.js";
 import { SLURP_POST_LANDED_REACTIONS } from "./slurp-creator-state.js";
-import { planSlurpWorldPulse, type SlurpPulseAction } from "./slurp-world-pulse.js";
+import { planSlurpWorldPulse, slurpPulseTieAdvance, type SlurpPulseAction } from "./slurp-world-pulse.js";
 
 const TICK_KEY = "slurp2.world.tick";
 const MAINTENANCE_KEY = "slurp2.world.maintenance";
@@ -170,9 +171,8 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
         population.ensure(newId(), until),
       ),
     );
-    const ambient = settings.allowRandomUsers
-      ? allAccounts.filter((account) => isAmbientNoodleAccount(account)).map((account) => account.id)
-      : [];
+    const ambientIds = allAccounts.filter((account) => isAmbientNoodleAccount(account)).map((account) => account.id);
+    const ambient = settings.allowRandomUsers ? ambientIds : [];
     // Who is actually around at this hour. `activeHour` has been stored on every member since the
     // population shipped and read by nothing, so a night owl and an early riser were equally likely
     // to turn up at four in the morning.
@@ -249,29 +249,53 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     // The audience pays. A follower who can afford the price converts, a subscriber renews when
     // their week runs out, and somebody priced out lapses.
     //
-    // Runs on the churn cadence and for the same reason: this is a full scan of every tie of every
-    // Creator, and nobody's paid week expires between two page loads. The decision is deterministic
-    // per day, so the catch-up path cannot bill the same person twice for one day either.
+    // Runs every tick, so a conversion or a lapse lands when it is due rather than on the churn
+    // cadence. The roll is deterministic per `funnel.rollCadence` bucket and a payment sets
+    // `paidThroughAt` a week ahead, so repeated ticks cannot bill the same person twice.
+    //
+    // ponytail: a full tie scan per tick with one member read per distinct member. Add a batch
+    // member getter, or a due-date index on ties, if the audience grows past a few thousand rows.
+    //
+    // Ambient accounts hold ties but no population row. They pay only with `funnel.ambientCanPay`,
+    // on the spend tier their id would generate; otherwise they read as `none`, which never
+    // subscribes and lets an already-paid one lapse.
     //
     // No wallet is touched. An audience member is not a viewer and holds no balance; the money is
     // credited to the Creator and that is the whole transaction, exactly as an audience commission
     // already settles. Only a first subscribe and a lapse are notified — a renewal every week from
     // every subscriber is the flood the readable-handful rule exists to prevent.
-    for (const account of maintenanceDue ? accounts : []) {
+    const ambientSet = new Set(ambientIds);
+    const spendTiers = new Map<string, SlurpSpendTier | null>();
+    for (const account of accounts) {
       const price = await noodle.getCreatorSubscriptionPrice(account.id).catch(() => 0);
       for (const tie of await population.listTiesForCreator(account.id)) {
-        const member = await population.get(tie.memberId).catch(() => null);
-        if (!member) continue;
+        if (!spendTiers.has(tie.memberId)) {
+          const member = await population.get(tie.memberId).catch(() => null);
+          spendTiers.set(
+            tie.memberId,
+            member?.spendTier ??
+              (!ambientSet.has(tie.memberId)
+                ? null
+                : tuning.funnel.ambientCanPay
+                  ? generateSlurpPopulationMember(tie.memberId, until).spendTier
+                  : "none"),
+          );
+        }
+        const spendTier = spendTiers.get(tie.memberId);
+        if (!spendTier) continue;
         const decision = slurpAudienceSubscriptionDecision(
           {
             memberId: tie.memberId,
             creatorAccountId: account.id,
             stage: tie.stage,
-            spendTier: member.spendTier,
+            spendTier,
             price,
             paidThroughAt: tie.paidThroughAt,
+            interactions: tie.interactions,
+            followedAt: tie.followedAt,
           },
           until,
+          tuning.funnel,
         );
         if (decision === "none") continue;
         if (decision === "lapse") {
@@ -339,9 +363,11 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
             tuning.reach,
           ) * (await noodle.arcEffectMultiplier(account.id, "growth")),
         ),
-        recentPostIds: (postsByAccount.get(account.id) ?? [])
-          .filter((post) => post.createdAt >= cutoff && post.access !== "draft")
-          .map((post) => post.id),
+        recentPostIds: slurpQuestionPostIds(
+          postsByAccount.get(account.id) ?? [],
+          cutoff,
+          tuning.world.questionNeedsRecentPost,
+        ),
         // A queue nobody answered gets no more. Asking again while three requests sit unread is
         // how an obligation layer turns into a chore.
         // Unanswered conversations count with unanswered commissions. Both are somebody waiting on
@@ -495,7 +521,10 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       }
     }
 
-    const plan = planSlurpWorldTick({ since, until, creators, audience, activity }, tuning.world);
+    const plan = planSlurpWorldTick(
+      { since, until, creators, audience, activity, catchUpHours: tuning.clock.catchUpHours },
+      tuning.world,
+    );
     let applied = 0;
     for (const action of plan) {
       try {
@@ -631,7 +660,7 @@ async function applyAction(db: DB, action: SlurpWorldAction, at: Date): Promise<
  *
  * Free tier: no model call, ever. All three kinds write a real interaction row, so they show as
  * named people, feed the funnel, and cost nothing. A "follow" differs only in how far it moves the
- * tie — there is no separate follow row for a synthetic fan.
+ * tie. A follow still counts when its like row already exists, so an earlier like never blocks it.
  *
  * A "comment" carries Tier 1 copy. Most comments on a real post are three words from somebody who
  * wanted to be seen typing them, and paying a model to write those is backwards: they are the
@@ -650,14 +679,16 @@ async function applyPulse(db: DB, action: SlurpPulseAction, reactionBank: readon
     // Tier 1 copy, so this stays free: the pulse runs unattended and must never call the model.
     content: isComment ? slurpAudienceReaction(`${action.postId}:${actor.id}`, reactionBank) : null,
   });
-  if (!result?.created) return false;
+  if (!result) return false;
+  const advance = slurpPulseTieAdvance(action.kind, result.created);
+  if (!advance) return false;
   const population = createSlurpPopulationStorage(db);
-  await population
-    .advanceTie(actor.id, action.creatorAccountId, {
-      stage: action.kind === "follow" ? "follower" : "liker",
-      interactions: 1,
-    })
-    .catch(() => undefined);
+  // A follow whose like row already existed counts only when it actually moves the tie.
+  const before = result.created
+    ? null
+    : await population.ensureTie(actor.id, action.creatorAccountId).catch(() => null);
+  const after = await population.advanceTie(actor.id, action.creatorAccountId, advance).catch(() => null);
+  if (!result.created && (!before || !after || after.stage === before.stage)) return false;
   await population.touch(actor.id).catch(() => undefined);
   return true;
 }
