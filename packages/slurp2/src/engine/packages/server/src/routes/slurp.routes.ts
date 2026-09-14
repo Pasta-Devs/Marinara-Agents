@@ -1021,9 +1021,6 @@ export async function slurpRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const account = await noodle.getNoodlerAccountById(id);
     if (!account) return reply.code(404).send({ error: "Creator account not found" });
-    if (!creatorBelongsToViewer(account, viewer)) {
-      return reply.code(403).send({ error: "Only the Creator's owner can update the profile." });
-    }
     const updated = await noodle.updateAccountProfile(id, { profile: parsed.data.profile });
     if (!updated) return reply.code(404).send({ error: "Creator account not found" });
     return updated;
@@ -1211,11 +1208,8 @@ export async function slurpRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const creator = await noodle.getNoodlerAccountById(id);
     if (!creator) return reply.code(404).send({ error: "Stage profile not found" });
-    // The price other personas pay to subscribe. Gated like `/goal` and `/payout`: only the
-    // operating persona may set it.
-    if (!creatorBelongsToViewer(creator, viewer)) {
-      return reply.code(403).send({ error: "Only the Creator's owner can set a subscription price." });
-    }
+    // The price other personas pay to subscribe. Single-player, so no ownership gate: the one
+    // player manages every Creator.
     await noodle.setCreatorSubscriptionPrice(id, parsed.data.price);
     return { price: await noodle.getCreatorSubscriptionPrice(id) };
   });
@@ -1452,13 +1446,11 @@ export async function slurpRoutes(app: FastifyInstance) {
     return Boolean(account && account.sourceKind === "persona" && account.sourceEntityId === viewer.entityId);
   }
 
-  /** A crossover is changed only by a player who owns every Creator in it. */
-  async function ownsWholeArc(creatorAccountId: string, projectId: string, viewer: NoodleAccount) {
-    const project = await noodle.getProject(creatorAccountId, projectId);
-    for (const id of project?.creatorIds ?? []) {
-      if (!creatorBelongsToViewer(await noodle.getNoodlerAccountById(id, { includeHidden: true }), viewer))
-        return false;
-    }
+  /**
+   * Single-player: the one player runs every Creator, so a crossover is always theirs to change.
+   * `viewer` stays unused here so callers don't need special-casing.
+   */
+  async function ownsWholeArc(_creatorAccountId: string, _projectId: string, _viewer: NoodleAccount) {
     return true;
   }
 
@@ -1698,9 +1690,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const { id } = req.params as { id: string };
     const creator = await noodle.getNoodlerAccountById(id);
-    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
-      return reply.code(403).send({ error: "Only the Creator's owner can set a goal." });
-    }
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
     const goal = await noodle.setGoal(creator.id, parsed.data.label, parsed.data.target);
     if (parsed.data.label !== null && !goal) {
       return reply.code(400).send({ error: "A goal needs a label and a target." });
@@ -1723,9 +1713,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const { id } = req.params as { id: string };
     const creator = await noodle.getNoodlerAccountById(id);
-    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
-      return reply.code(403).send({ error: "Only the Creator's owner can read their projects." });
-    }
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
     return { projects: await noodle.listProjects(creator.id) };
   });
 
@@ -1758,9 +1746,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const { id } = req.params as { id: string };
     const creator = await noodle.getNoodlerAccountById(id);
-    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
-      return reply.code(403).send({ error: "Only the Creator's owner can open a project." });
-    }
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
     if (
       parsed.data.typeId &&
       !parsed.data.title &&
@@ -1770,8 +1756,8 @@ export async function slurpRoutes(app: FastifyInstance) {
     }
     for (const partnerId of parsed.data.crossoverWith) {
       const partner = await noodle.getNoodlerAccountById(partnerId);
-      if (partnerId === creator.id || !creatorBelongsToViewer(partner, viewer)) {
-        return reply.code(403).send({ error: "A crossover can only include your own other Creators." });
+      if (partnerId === creator.id || !partner) {
+        return reply.code(403).send({ error: "A crossover partner must be a different, existing Creator." });
       }
     }
     const project = await noodle.createProject(creator.id, {
@@ -1816,9 +1802,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const { id, projectId } = req.params as { id: string; projectId: string };
     const creator = await noodle.getNoodlerAccountById(id);
-    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
-      return reply.code(403).send({ error: "Only the Creator's owner can edit a project." });
-    }
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
     const existing = await noodle.getProject(creator.id, projectId);
     if (!existing) return reply.code(404).send({ error: "Project not found" });
     if (!(await ownsWholeArc(creator.id, projectId, viewer))) {
@@ -1862,9 +1846,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const { id, projectId } = req.params as { id: string; projectId: string };
     const creator = await noodle.getNoodlerAccountById(id);
-    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
-      return reply.code(403).send({ error: "Only the Creator's owner can direct an arc." });
-    }
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
     if (!(await noodle.getProject(creator.id, projectId))) {
       return reply.code(404).send({ error: "Project not found" });
     }
@@ -1887,9 +1869,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const { id, projectId } = req.params as { id: string; projectId: string };
     const creator = await noodle.getNoodlerAccountById(id);
-    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
-      return reply.code(403).send({ error: "Only the Creator's owner can change the profile." });
-    }
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
     if (!(await ownsWholeArc(creator.id, projectId, viewer))) {
       return reply.code(403).send({ error: "Only the owner of every Creator in this crossover can change it." });
     }
@@ -1974,9 +1954,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const creator = await noodle.getNoodlerAccountById((req.params as { id: string }).id);
-    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
-      return reply.code(403).send({ error: "Only the Creator's owner can read their arc settings." });
-    }
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
     return { config: await noodle.getArcConfig(creator.id) };
   });
 
@@ -1998,9 +1976,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const creator = await noodle.getNoodlerAccountById((req.params as { id: string }).id);
-    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
-      return reply.code(403).send({ error: "Only the Creator's owner can change their arc settings." });
-    }
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
     const { personaId: _personaId, ...config } = parsed.data;
     return { config: await noodle.setArcConfig(creator.id, config) };
   });
@@ -2013,9 +1989,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const { id, projectId } = req.params as { id: string; projectId: string };
     const creator = await noodle.getNoodlerAccountById(id);
-    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
-      return reply.code(403).send({ error: "Only the Creator's owner can delete a project." });
-    }
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
     if (!(await ownsWholeArc(creator.id, projectId, viewer))) {
       return reply.code(403).send({ error: "Only the owner of every Creator in this crossover can delete it." });
     }
@@ -2032,9 +2006,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const creator = await noodle.getNoodlerAccountById((req.params as { id: string }).id);
-    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
-      return reply.code(403).send({ error: "Only the Creator's owner can generate an arc." });
-    }
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
     const project = await noodle.addGeneratedProject(
       creator.id,
       await generateSlurpArc(app.db, creator.id, [], "", { kind: "foreground" }),
@@ -2052,9 +2024,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const creator = await noodle.getNoodlerAccountById((req.params as { id: string }).id);
-    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
-      return reply.code(403).send({ error: "Only the Creator's owner can generate an arc type." });
-    }
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
     const raw = await generateSlurpArc(app.db, creator.id, [], parsed.data.brief, { kind: "foreground" });
     const draftId = `draft-${Date.now().toString(36)}`;
     const project = raw
@@ -2072,9 +2042,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const { id, projectId } = req.params as { id: string; projectId: string };
     const creator = await noodle.getNoodlerAccountById(id);
-    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
-      return reply.code(403).send({ error: "Only the Creator's owner can save an arc to the library." });
-    }
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
     const type = await noodle.saveProjectToLibrary(creator.id, projectId);
     if (!type) return reply.code(404).send({ error: "Project not found" });
     return { type };
@@ -2090,9 +2058,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const { id, projectId } = req.params as { id: string; projectId: string };
     const creator = await noodle.getNoodlerAccountById(id);
-    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
-      return reply.code(403).send({ error: "Only the Creator's owner can read a project." });
-    }
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
     if (!(await noodle.getProject(creator.id, projectId))) {
       return reply.code(404).send({ error: "Project not found" });
     }
@@ -2214,9 +2180,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const { id } = req.params as { id: string };
     const creator = await noodle.getNoodlerAccountById(id);
-    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
-      return reply.code(403).send({ error: "Only the Creator's owner can withdraw." });
-    }
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
     const result = await noodle.payOutEarnings(creator.id, parsed.data.amount);
     if (result.status !== "paid") {
       const earnings = await noodle.getEarnings(creator.id);
@@ -2950,8 +2914,8 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!post || post.metadata.noodlerPostType !== "story") return reply.code(404).send({ error: "Story not found" });
     const identity = await resolveViewerIdentity(parsed.data.personaId);
     const creator = await noodle.getNoodlerAccountById(post.authorAccountId);
-    if (!identity?.viewer || !creator || !(await creatorBelongsToViewer(creator, identity.viewer))) {
-      return reply.code(403).send({ error: "Only the Creator owner can view Story viewers." });
+    if (!identity?.viewer || !creator) {
+      return reply.code(404).send({ error: "Slurp persona not found" });
     }
     const rows = await app.db
       .select()

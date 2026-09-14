@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.0.13 — 2026-09-15
+
+- Fixed Creator management (profile, goal, subscription price, projects, arcs, payout, and Story viewers) rejecting edits with "Only the Creator's owner can..." — Slurp is single-player, so any Creator is now always yours to manage.
+
 ## 0.0.12 — 2026-09-15
 
 - AI Creator drafts are repaired instead of failing: long text is shortened, gender and tag spellings are understood, broken JSON is fixed, and the form lists what still needs a choice.

@@ -301,12 +301,8 @@ for (const route of [
 assert.equal(
   routes.split("accounts/:id/projects").length - 1,
   9,
-  "every project route is under the owner-checked creator path",
+  "every project route is under the Creator-scoped path",
 );
-assert.match(routes, /Only the Creator's owner can read their projects\./u);
-assert.match(routes, /Only the Creator's owner can open a project\./u);
-assert.match(routes, /Only the Creator's owner can edit a project\./u);
-assert.match(routes, /Only the Creator's owner can delete a project\./u);
 // Posts are only served once the project has been confirmed to belong to this Creator, so a
 // guessed project id cannot read someone else's thread.
 assert.match(routes, /if \(!\(await noodle\.getProject\(creator\.id, projectId\)\)\) \{\s+return reply\.code\(404\)/u);

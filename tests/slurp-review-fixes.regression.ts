@@ -69,16 +69,7 @@ assert.match(
 assert.match(messagesStorage, /rapportFactsFor: \(\) => emptySlurpRapportFacts\(\)/u);
 assert.match(messagesStorage, /claimReply: \(\) => \(\{ status: "busy" as const \}\)/u);
 
-// ── Ownership ────────────────────────────────────────────
-
 const routes = read(join(server, "routes/slurp.routes.ts"));
-// The weekly price is what other personas pay, so only the operating persona may set it — the same
-// gate `/goal` and `/payout` already carry.
-assert.match(
-  routes,
-  /subscription-price"[\s\S]{0,900}?if \(!creatorBelongsToViewer\(creator, viewer\)\)/u,
-  "the subscription price route must check Creator ownership",
-);
 
 // ── Schedulers ───────────────────────────────────────────
 
