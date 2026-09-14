@@ -390,13 +390,16 @@ export function createSlurpPopulationStorage(db: DB) {
     const wanted = new Set(creatorAccountIds);
     const counts = new Map<string, number>();
     for (const id of wanted) counts.set(id, 0);
+    // Only the subscriber count can double-count, and only when there is a Creator to count for.
     const personaSubscriptions = new Set(
-      (
-        await db
-          .select()
-          .from(noodleAccountSubscriptions)
-          .where(inArray(noodleAccountSubscriptions.creatorAccountId, [...wanted]))
-      ).map((subscription) => `${subscription.viewerAccountId}:${subscription.creatorAccountId}`),
+      from !== "subscriber" || wanted.size === 0
+        ? []
+        : (
+            await db
+              .select()
+              .from(noodleAccountSubscriptions)
+              .where(inArray(noodleAccountSubscriptions.creatorAccountId, [...wanted]))
+          ).map((subscription) => `${subscription.viewerAccountId}:${subscription.creatorAccountId}`),
     );
     const rows = await db.select().from(slurpAudienceTies);
     for (const row of rows) {
@@ -412,7 +415,8 @@ export function createSlurpPopulationStorage(db: DB) {
   // An Engine without `registerTables` rejects every package-owned table, and the funnel is read
   // by surfaces that predate it. Behave as an empty audience there rather than failing the page.
   return tolerateMissingTables(storage, {
-    ensure: (seed: string, at = new Date()) => generateSlurpPopulationMember(seed, at),
+    ensure: (seed: string, at = new Date(), fanTypes?: readonly SlurpFanType[]) =>
+      generateSlurpPopulationMember(seed, at, fanTypes),
     get: () => null,
     listAll: () => [],
     listTiesForCreator: () => [],

@@ -71,6 +71,13 @@ export function readSlurpCreatorMessaging(
     typeof input === "number" && Number.isInteger(input) && input >= 0 && input <= 9999 ? input : fallback;
   const bigCoins = (input: unknown, fallback: number) =>
     typeof input === "number" && Number.isInteger(input) && input >= 1 && input <= 99_999 ? input : fallback;
+  // Bounds are edited one field at a time, so keep them ordered: min ≤ base ≤ max.
+  const commissionMin = bigCoins(raw.commissionMin, defaults.commissionMin);
+  const commissionMax = Math.max(commissionMin, bigCoins(raw.commissionMax, defaults.commissionMax));
+  const commissionBase = Math.min(
+    commissionMax,
+    Math.max(commissionMin, bigCoins(raw.commissionBase, defaults.commissionBase)),
+  );
   return {
     dmPolicy: SLURP_DM_POLICIES.includes(raw.dmPolicy as SlurpDmPolicy)
       ? (raw.dmPolicy as SlurpDmPolicy)
@@ -80,9 +87,9 @@ export function readSlurpCreatorMessaging(
     rapportWeights: readSlurpRapportWeights(raw.rapportWeights),
     proactiveMessages: typeof raw.proactiveMessages === "boolean" ? raw.proactiveMessages : defaults.proactiveMessages,
     unlockPrice: typeof raw.unlockPrice === "number" ? coins(raw.unlockPrice, 0) : defaults.unlockPrice,
-    commissionBase: bigCoins(raw.commissionBase, defaults.commissionBase),
-    commissionMin: bigCoins(raw.commissionMin, defaults.commissionMin),
-    commissionMax: bigCoins(raw.commissionMax, defaults.commissionMax),
+    commissionBase,
+    commissionMin,
+    commissionMax,
     autoQuote: typeof raw.autoQuote === "boolean" ? raw.autoQuote : defaults.autoQuote,
     pricedAt: typeof raw.pricedAt === "string" ? raw.pricedAt : defaults.pricedAt,
   };

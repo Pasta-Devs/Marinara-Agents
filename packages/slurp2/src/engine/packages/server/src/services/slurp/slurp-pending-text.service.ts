@@ -173,6 +173,13 @@ export async function drainSlurpPendingText(
           .where(eq(slurpPendingText.id, String(claimed.id)));
       }
     }
+    // A row that failed for good never reaches the expiry check below, so expire those here.
+    for (const failed of await db.select().from(slurpPendingText).where(eq(slurpPendingText.status, "failed"))) {
+      const failedExpiry = failed.expiresAt ? Date.parse(String(failed.expiresAt)) : Number.NaN;
+      if (Number.isFinite(failedExpiry) && failedExpiry <= Date.now()) {
+        await db.delete(slurpPendingText).where(eq(slurpPendingText.id, String(failed.id)));
+      }
+    }
     const pendingRows = await db
       .select()
       .from(slurpPendingText)
@@ -237,24 +244,31 @@ export async function drainSlurpPendingText(
       continue;
     }
     const jobKind = (row.jobKind === "brief" ? "brief" : "rewrite") as SlurpModelJobKind;
-    if (!(await claimSlurpModelBudget(db, settings.modelBudget, jobKind))) break;
+    // Everything that needs no model is checked first, so a stale row never spends budget.
+    const kind = String(row.kind) as SlurpPendingKind;
+    const creator = await noodle.getNoodlerAccountById(String(row.creatorAccountId));
+    const placeholder = creator ? await readPlaceholder(db, kind, String(row.subjectId)) : null;
+    if (!creator || !placeholder) {
+      await db.delete(slurpPendingText).where(eq(slurpPendingText.id, id));
+      continue;
+    }
+    // Claim the row before the budget, so a concurrent drain that got here first is skipped.
+    // ponytail: read-then-write claim, not atomic across processes; a conditional update if that race shows up.
+    const [current] = await db.select().from(slurpPendingText).where(eq(slurpPendingText.id, id));
+    if (!current || current.status !== "pending") continue;
     const attempts = Math.max(0, Number.parseInt(String(row.attempts ?? "0"), 10) || 0) + 1;
     await db
       .update(slurpPendingText)
       .set({ status: "running", attempts: String(attempts), claimedAt: now() })
       .where(eq(slurpPendingText.id, id));
+    if (!(await claimSlurpModelBudget(db, settings.modelBudget, jobKind))) {
+      await db
+        .update(slurpPendingText)
+        .set({ status: "pending", attempts: String(attempts - 1), claimedAt: null })
+        .where(eq(slurpPendingText.id, id));
+      break;
+    }
     try {
-      const kind = String(row.kind) as SlurpPendingKind;
-      const creator = await noodle.getNoodlerAccountById(String(row.creatorAccountId));
-      if (!creator) {
-        await db.delete(slurpPendingText).where(eq(slurpPendingText.id, id));
-        continue;
-      }
-      const placeholder = await readPlaceholder(db, kind, String(row.subjectId));
-      if (!placeholder) {
-        await db.delete(slurpPendingText).where(eq(slurpPendingText.id, id));
-        continue;
-      }
       const actorId = row.actorLabel ? String(row.actorLabel) : null;
       const member = actorId ? await population.get(actorId).catch(() => null) : null;
       const tie = actorId

@@ -4971,7 +4971,7 @@ function CreatorMessagingGroup({
               patch({
                 creatorAccountId: creatorId,
                 personaId,
-                unlockPrice: suggested.unlockPrice,
+                unlockPrice: suggested.unlockPrice || null,
                 commissionBase: suggested.commissionBase,
               });
               setPrice.mutate(

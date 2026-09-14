@@ -26,6 +26,8 @@ assert.equal(slurpCommissionQuote("quick sketch", { ...pricing, commissionMin: 3
 
 // A Creator takes a close offer, meets a middling one, and holds against a lowball or a last round.
 assert.deepEqual(slurpCreatorHaggle({ quote: 100, offer: 92, floor: 10, round: 1 }), { kind: "accept" });
+// A close offer under the minimum is met at the minimum, never accepted below it.
+assert.deepEqual(slurpCreatorHaggle({ quote: 100, offer: 95, floor: 100, round: 1 }), { kind: "meet", price: 100 });
 assert.deepEqual(slurpCreatorHaggle({ quote: 100, offer: 60, floor: 10, round: 1 }), { kind: "meet", price: 80 });
 assert.deepEqual(slurpCreatorHaggle({ quote: 100, offer: 60, floor: 90, round: 1 }), { kind: "hold" });
 assert.deepEqual(slurpCreatorHaggle({ quote: 100, offer: 60, floor: 10, round: SLURP_COMMISSION_MAX_HAGGLE_ROUNDS }), {

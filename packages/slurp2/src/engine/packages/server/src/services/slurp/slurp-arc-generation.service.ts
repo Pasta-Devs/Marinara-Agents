@@ -113,7 +113,10 @@ export async function generateSlurpArc(
     if (!slurpModelWorkerAllows(settings.modelBudget, workerContext)) return null;
     if (!(await claimSlurpModelBudget(db, settings.modelBudget, "arc"))) return null;
     const connections = createConnectionsStorage(db);
-    const connection = await resolveSlurpTextConnection(connections, settings.generationConnectionId);
+    const connection = await resolveSlurpTextConnection(
+      connections,
+      settings.modelBudget.connectionId ?? settings.generationConnectionId,
+    );
     if (!connection) return null;
     const posts = (await slurp.listNoodlerPostsByAccounts([creator.id], 6)).get(creator.id) ?? [];
     const messages = buildSlurpArcGenerationMessages({

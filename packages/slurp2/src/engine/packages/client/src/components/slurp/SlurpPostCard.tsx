@@ -1599,9 +1599,16 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
   }
   for (const reply of replies) appendReplyBranch(reply);
   const replyThreads = slurpReplyThreads(orderedReplies, replyById);
-  const visibleThreads = commentsExpanded ? replyThreads : replyThreads.slice(-2);
+  // An older thread stays on screen while it holds the open reply composer or a linked comment.
+  const threadIsActive = (thread: (typeof replyThreads)[number]) =>
+    [thread.root, ...thread.children].some(
+      (reply) => reply.id === highlightedInteractionId || reply.id === replyParentInteractionId,
+    );
+  const visibleThreads = commentsExpanded
+    ? replyThreads
+    : replyThreads.filter((thread, index) => index >= replyThreads.length - 2 || threadIsActive(thread));
   const hiddenReplyCount = replyThreads
-    .slice(0, replyThreads.length - visibleThreads.length)
+    .filter((thread) => !visibleThreads.includes(thread))
     .reduce((sum, thread) => sum + 1 + thread.children.length, 0);
   const toggleThread = (rootId: string) =>
     setExpandedThreadIds((current) => {

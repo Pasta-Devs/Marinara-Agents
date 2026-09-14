@@ -16,7 +16,10 @@ import {
   slurpQuestionPostIds,
   slurpWorldElapsedDays,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.js";
-import { SLURP_REALISTIC_TUNING } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-tuning.js";
+import {
+  SLURP_REALISTIC_TUNING,
+  SLURP_TUNING_PULSE_PER_TICK_CEILING,
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-tuning.js";
 
 const R = SLURP_REALISTIC_TUNING;
 
@@ -89,7 +92,7 @@ assert.deepEqual(pulse({ ...R.pulse, likeBudgetScale: 1 }), realistic, "scale 1 
 const scaled = pulse({ ...R.pulse, likeBudgetScale: 4 });
 assert.ok(count(scaled, "like") > count(realistic, "like"), "a bigger like budget adds likes");
 assert.ok(count(scaled, "follow") + count(scaled, "comment") <= R.pulse.maxPerTick, "follows stay capped");
-assert.ok(scaled.length <= 40, "the hard ceiling holds");
+assert.ok(scaled.length <= SLURP_TUNING_PULSE_PER_TICK_CEILING, "the hard ceiling holds");
 assert.equal(count(pulse({ ...R.pulse, likeBudgetScale: 0 }), "like"), 0, "scale 0 drops likes");
 
 // ── Old post trickle ────────────────────────────────────────────────────────

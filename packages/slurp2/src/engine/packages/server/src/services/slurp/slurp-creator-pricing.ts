@@ -55,7 +55,7 @@ export function slurpCreatorHaggle(input: {
   floor: number;
   round: number;
 }): SlurpCreatorHaggleAnswer {
-  if (input.offer >= input.quote * 0.9) return { kind: "accept" };
+  if (input.offer >= input.quote * 0.9 && input.offer >= input.floor) return { kind: "accept" };
   if (input.round >= SLURP_COMMISSION_MAX_HAGGLE_ROUNDS || input.offer < input.floor * 0.75) return { kind: "hold" };
   return { kind: "meet", price: Math.max(input.floor, Math.round((input.quote + input.offer) / 2)) };
 }

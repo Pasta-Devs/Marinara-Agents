@@ -474,7 +474,9 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
             });
             continue;
           }
-          if (!(await population.reserveWeeklySpend(tie.memberId, account.id, price, weeklyBudget, until))) continue;
+          // A free subscription reserves nothing; the budget helper refuses zero and would stop the funnel.
+          if (price > 0 && !(await population.reserveWeeklySpend(tie.memberId, account.id, price, weeklyBudget, until)))
+            continue;
           await population
             .advanceTie(tie.memberId, account.id, { stage: "subscriber", spent: price, hasSubscription: true })
             .catch(() => undefined);
@@ -856,7 +858,11 @@ async function applyAction(
     )
       return false;
     const created = await noodle.recordAudiencePostUnlock(actor.id, action.creatorAccountId, action.postId);
-    if (!created) return false;
+    if (!created) {
+      // A stale or duplicate unlock must hand its reservation back, or it blocks the week's budget.
+      await population.releaseWeeklySpend(actor.id, action.creatorAccountId, action.amount, at).catch(() => undefined);
+      return false;
+    }
     const operationId = `audience-unlock:${action.postId}:${actor.id}`;
     await noodle.creditCreatorIncome(action.creatorAccountId, action.amount, "unlock", operationId);
     await population

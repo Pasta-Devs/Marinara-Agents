@@ -456,7 +456,8 @@ export function planSlurpFanTypeRebalance(
     const to = slurpPickFanType(types, member.id).id;
     bump(from, "before");
     bump(to, "after");
-    if (from !== to) changes.push({ memberId: member.id, from, to });
+    // Compare what is stored: a stale id resolves to the fallback now but could come back later.
+    if (member.fanTypeId !== to) changes.push({ memberId: member.id, from, to });
   }
   return { changes, counts };
 }

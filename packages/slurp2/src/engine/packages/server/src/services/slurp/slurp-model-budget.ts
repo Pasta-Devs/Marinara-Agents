@@ -63,14 +63,22 @@ export function readSlurpModelBudgetLedger(raw: string | null | undefined, at = 
   } catch {
     parsed = {};
   }
+  // A hand-edited or corrupt counter must read as zero, never as NaN that passes every limit.
+  const count = (value: unknown) =>
+    typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
   const sameDay = parsed.day === dayKey(at);
   const sameHour = sameDay && parsed.hour === hourKey(at);
   return {
     hour: hourKey(at),
     day: dayKey(at),
-    callsThisHour: sameHour ? Math.max(0, Math.floor(parsed.callsThisHour ?? 0)) : 0,
-    callsToday: sameDay ? Math.max(0, Math.floor(parsed.callsToday ?? 0)) : 0,
-    byKindToday: sameDay && parsed.byKindToday && typeof parsed.byKindToday === "object" ? parsed.byKindToday : {},
+    callsThisHour: sameHour ? count(parsed.callsThisHour) : 0,
+    callsToday: sameDay ? count(parsed.callsToday) : 0,
+    byKindToday:
+      sameDay && parsed.byKindToday && typeof parsed.byKindToday === "object"
+        ? (Object.fromEntries(
+            Object.entries(parsed.byKindToday).map(([kind, value]) => [kind, count(value)]),
+          ) as SlurpModelBudgetLedger["byKindToday"])
+        : {},
   };
 }
 

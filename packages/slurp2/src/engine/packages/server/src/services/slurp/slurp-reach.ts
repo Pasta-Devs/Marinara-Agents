@@ -107,7 +107,7 @@ export function slurpCreatorReach(
   const floor = Math.max(1, tuning.floor);
   const ceiling = floor * Math.pow(Math.max(floor, tuning.ceiling) / floor, spread);
   const grown = ceiling * settle(ageInDays(input.createdAt, at), tuning.growthDays);
-  return Math.round((tuning.floor + grown) * scale + Math.max(0, input.realFollowers) * tuning.realFollowerWeight);
+  return Math.round((floor + grown) * scale + Math.max(0, input.realFollowers) * tuning.realFollowerWeight);
 }
 
 /**

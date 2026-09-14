@@ -84,13 +84,19 @@ export function SlurpFanTypesSettings({
   const addDraft = async () => {
     if (!draft || fanTypes.some((type) => type.id === draft.id)) return saveDraft();
     setSaving(true);
-    const ok = await onSave([...fanTypes, slurpFanTypeSchema.parse(draft)]);
-    setStatus(
-      ok
-        ? t("ui.slurp.settings.fanTypes.saved", { defaultValue: "Fan type saved." })
-        : t("ui.slurp.settings.fanTypes.saveError", { defaultValue: "Unable to save this fan type." }),
-    );
-    setSaving(false);
+    try {
+      const parsed = slurpFanTypeSchema.safeParse(draft);
+      const ok = parsed.success && (await onSave([...fanTypes, parsed.data]));
+      setStatus(
+        ok
+          ? t("ui.slurp.settings.fanTypes.saved", { defaultValue: "Fan type saved." })
+          : t("ui.slurp.settings.fanTypes.saveError", { defaultValue: "Unable to save this fan type." }),
+      );
+    } catch {
+      setStatus(t("ui.slurp.settings.fanTypes.saveError", { defaultValue: "Unable to save this fan type." }));
+    } finally {
+      setSaving(false);
+    }
   };
   const remove = async () => {
     if (!selected || fanTypes.length <= 1) return;

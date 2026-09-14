@@ -585,10 +585,11 @@ export async function slurpRoutes(app: FastifyInstance) {
   app.get("/model-budget/usage", async () => getSlurpModelBudgetLedger(app.db));
   app.post("/fan-types/rebalance", async () => {
     const plan = await planFanTypeRebalance();
-    const population = createSlurpPopulationStorage(app.db);
-    for (const change of plan.changes) {
-      await population.setFanType(change.memberId, change.to).catch(() => undefined);
-    }
+    // All or nothing: a failed write rolls the pass back instead of reporting the planned count.
+    await app.db.transaction(async (tx) => {
+      const population = createSlurpPopulationStorage(tx);
+      for (const change of plan.changes) await population.setFanType(change.memberId, change.to);
+    });
     return { changed: plan.changes.length, counts: plan.counts };
   });
   app.get("/discovery-tags/usage", async () => noodle.countDiscoveryTagUsage());
