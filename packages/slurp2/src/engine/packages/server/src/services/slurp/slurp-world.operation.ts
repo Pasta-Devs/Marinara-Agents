@@ -86,12 +86,6 @@ const RECENT_POST_DAYS = 7;
 /** Silence this long and somebody drifts out of the funnel. Churn is the cure for repetition. */
 const CHURN_SILENT_DAYS = 45;
 
-/** Churn is a full scan, so it only runs when enough time has passed for it to find anything. */
-const CHURN_MIN_ELAPSED_DAYS = 0.5;
-
-/** How many people the world keeps on hand to act. Small: actions per tick are capped anyway. */
-const WORLD_AUDIENCE_POOL = 24;
-
 export type SlurpWorldResult = {
   status: "advanced" | "idle" | "busy";
   actions: number;
@@ -142,6 +136,11 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     const settings = await noodle.getSettings();
     const activity = slurpWorldActivityMultiplier(settings.worldActivity);
     const scale = slurpPlatformScaleMultiplier(settings.platformScale);
+    const tuning = settings.simulationTuning;
+    /** Churn is a full scan, so it only runs when enough time has passed for it to find anything. */
+    const CHURN_MIN_ELAPSED_DAYS = tuning.funnel.churnDays;
+    /** How many people the world keeps on hand to act. Small: actions per tick are capped anyway. */
+    const WORLD_AUDIENCE_POOL = tuning.pulse.poolSize;
     if (activity === 0) {
       await writeLastTick(db, until);
       return { status: "idle" as const, actions: 0 };
@@ -296,7 +295,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
 
     // Automated Creators review briefs on the world tick. Do not quote during request creation: the
     // fan must see a real review step and the Creator must have time to decline or revise the quote.
-    const AUDIENCE_COMMISSION_PRICE = 40;
+    const AUDIENCE_COMMISSION_PRICE = tuning.economy.audienceCommissionPrice;
     for (const commission of await messages.listAutomatedBriefCommissions()) {
       await messages.quoteCommission(commission.id, AUDIENCE_COMMISSION_PRICE).catch(() => null);
     }
@@ -337,6 +336,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
               scale,
             },
             until,
+            tuning.reach,
           ) * (await noodle.arcEffectMultiplier(account.id, "growth")),
         ),
         recentPostIds: (postsByAccount.get(account.id) ?? [])
@@ -363,22 +363,25 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
     // Measured from the pulse's own mark, not the tick's, so time too short to buy a whole
     // reaction is kept rather than discarded. See `PULSE_KEY`.
     const pulseSince = (await readPulseMark(db)) ?? since;
-    const pulse = planSlurpWorldPulse({
-      elapsedMinutes: (until.getTime() - pulseSince.getTime()) / 60_000,
-      audience,
-      seed: `${pulseSince.toISOString()}:${until.toISOString()}`,
-      activity,
-      targets: creators.flatMap((creator) =>
-        (postsByAccount.get(creator.id) ?? [])
-          .filter((post) => post.access !== "draft")
-          .map((post) => ({
-            creatorAccountId: creator.id,
-            postId: post.id,
-            ageHours: (until.getTime() - Date.parse(post.createdAt)) / 3_600_000,
-            creatorReach: creator.followers,
-          })),
-      ),
-    });
+    const pulse = planSlurpWorldPulse(
+      {
+        elapsedMinutes: (until.getTime() - pulseSince.getTime()) / 60_000,
+        audience,
+        seed: `${pulseSince.toISOString()}:${until.toISOString()}`,
+        activity,
+        targets: creators.flatMap((creator) =>
+          (postsByAccount.get(creator.id) ?? [])
+            .filter((post) => post.access !== "draft")
+            .map((post) => ({
+              creatorAccountId: creator.id,
+              postId: post.id,
+              ageHours: (until.getTime() - Date.parse(post.createdAt)) / 3_600_000,
+              creatorReach: creator.followers,
+            })),
+        ),
+      },
+      tuning.pulse,
+    );
     let pulsed = 0;
     // A follow is the rare one that actually moves the funnel, so it is worth more than a like.
     const landedBy = new Map<string, number>();
@@ -492,7 +495,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       }
     }
 
-    const plan = planSlurpWorldTick({ since, until, creators, audience, activity });
+    const plan = planSlurpWorldTick({ since, until, creators, audience, activity }, tuning.world);
     let applied = 0;
     for (const action of plan) {
       try {

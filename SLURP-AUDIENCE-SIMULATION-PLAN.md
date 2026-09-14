@@ -11,7 +11,7 @@ This is a handoff artifact. A fresh agent should be able to pick up any slice fr
 
 | Slice | What | State |
 | ----- | ---- | ----- |
-| 1 | Simulation Tuning object, presets, rules read values from Tuning | not started |
+| 1 | Simulation Tuning object, presets, rules read values from Tuning | done |
 | 2 | Simulation bug fixes (follow type, subs every tick, ambient pay, like budget, trickle, conversion growth) | not started |
 | 3 | Free clock: server timer, lock, catch-up cap | not started |
 | 4 | Simulation settings UI + live estimate | not started |
@@ -243,3 +243,15 @@ Import/Export: `{ version, tuning, fanTypes, budget }` JSON, validated and clamp
   fan type deletion fallback, follow-after-like.
 - Re-derive the pre-existing slurp test failure baseline before comparing.
 - `npm run check`, catalog/locale/release-notes validators, rebuild slurp2 package and catalog.
+
+## Baseline (pre-existing failures)
+
+Derived on `origin/staging` (8924a8c8) before slice 1, running each test with `npx tsx`.
+
+- `tests/slurp2-*.regression.ts` (21 files): 3 fail — `slurp2-branding`, `slurp2-bughunt`,
+  `slurp2-restore-settings-follow`.
+- `tests/slurp-*.regression.ts` (85 files): 12 fail — `slurp-alive`, `slurp-feed-layout`,
+  `slurp-identity`, `slurp-lifecycle-safety`, `slurp-onboarding-failure-reasons`,
+  `slurp-payment-clarity`, `slurp-phase1-durability`, `slurp-population`, `slurp-ppv-paywall`,
+  `slurp-relationship-panel`, `slurp-stance`, `slurp-studio`.
+- `node scripts/typecheck-packages.mjs slurp2`: no undefined names (clean).

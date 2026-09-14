@@ -21,6 +21,12 @@
  * to prevent.
  */
 
+import {
+  SLURP_REALISTIC_TUNING,
+  SLURP_TUNING_ACTIONS_PER_TICK_CEILING,
+  type SlurpSimulationTuning,
+} from "./slurp-tuning.js";
+
 export type SlurpWorldAction =
   /** Somebody asks the Creator to make something. */
   | { kind: "commission"; creatorAccountId: string; actorAccountId: string }
@@ -49,11 +55,20 @@ export type SlurpWorldCreator = {
  */
 export const SLURP_WORLD_MAX_CATCHUP_DAYS = 3;
 
-/** Never start a new request while this many are already unanswered. */
-export const SLURP_WORLD_MAX_OPEN_REQUESTS = 3;
+/** Never start a new request while this many are already unanswered (realistic `world.maxOpenRequests`). */
+export const SLURP_WORLD_MAX_OPEN_REQUESTS = SLURP_REALISTIC_TUNING.world.maxOpenRequests;
 
-/** Ceiling per tick across every Creator, so a large roster cannot flood the notification list. */
-export const SLURP_WORLD_MAX_ACTIONS = 4;
+/** Ceiling per tick across every Creator (realistic `world.maxActionsPerTick`), so a roster cannot flood. */
+export const SLURP_WORLD_MAX_ACTIONS = SLURP_REALISTIC_TUNING.world.maxActionsPerTick;
+
+type WorldTuning = SlurpSimulationTuning["world"];
+type ChanceCurve = WorldTuning["commission"];
+
+function chancePerDay(followers: number, curve: ChanceCurve): number {
+  const count = Number.isFinite(followers) ? Math.max(0, followers) : 0;
+  if (count < curve.floor || count <= 0) return 0;
+  return Math.min(curve.cap, Math.log10(count / Math.max(1, curve.floor)) * curve.curve);
+}
 
 const DAY_MS = 86_400_000;
 
@@ -69,9 +84,7 @@ const DAY_MS = 86_400_000;
  * Set well under the synthetic floor so day one is not silent. The per-tick action ceiling
  * (`SLURP_WORLD_MAX_ACTIONS`) and the unanswered-queue limit still hold the volume down.
  */
-const QUESTION_FLOOR = 10;
-const COMMISSION_FLOOR = 40;
-const MESSAGE_FLOOR = 60;
+// Floors, caps and coefficients now live in Simulation Tuning (`world.commission|message|question`).
 
 /** Deterministic, so a plan can be asserted in a test and reproduced from a log. */
 function mulberry32(seed: number) {
@@ -103,10 +116,11 @@ function hashSeed(value: string): number {
  * Scales with audience on a log curve: a Creator with ten times the followers gets more requests,
  * but not ten times as many, because the player's time to answer them did not scale at all.
  */
-export function slurpCommissionChancePerDay(followers: number): number {
-  const count = Number.isFinite(followers) ? Math.max(0, followers) : 0;
-  if (count < COMMISSION_FLOOR) return 0;
-  return Math.min(0.5, Math.log10(count / COMMISSION_FLOOR) * 0.09);
+export function slurpCommissionChancePerDay(
+  followers: number,
+  curve: ChanceCurve = SLURP_REALISTIC_TUNING.world.commission,
+): number {
+  return chancePerDay(followers, curve);
 }
 
 /**
@@ -116,20 +130,21 @@ export function slurpCommissionChancePerDay(followers: number): number {
  * strongest signal the world can send — somebody addressed *you* — and it stops being a signal the
  * moment it is routine.
  */
-export function slurpMessageChancePerDay(followers: number): number {
-  const count = Number.isFinite(followers) ? Math.max(0, followers) : 0;
-  if (count < MESSAGE_FLOOR) return 0;
-  // Coefficient held under the commission curve's, and against a higher floor, so an unprompted
-  // message stays the rarest thing the world does at every audience size. That is the design rule
-  // this function was written around; lowering the floor must not quietly overturn it.
-  return Math.min(0.3, Math.log10(count / MESSAGE_FLOOR) * 0.07);
+export function slurpMessageChancePerDay(
+  followers: number,
+  // Realistic holds the coefficient under the commission curve's, against a higher floor, so an
+  // unprompted message stays the rarest thing the world does at every audience size.
+  curve: ChanceCurve = SLURP_REALISTIC_TUNING.world.message,
+): number {
+  return chancePerDay(followers, curve);
 }
 
 /** Chance per day that somebody asks a question under a recent post. Commoner and lighter. */
-export function slurpQuestionChancePerDay(followers: number): number {
-  const count = Number.isFinite(followers) ? Math.max(0, followers) : 0;
-  if (count < QUESTION_FLOOR) return 0;
-  return Math.min(2.5, Math.log10(count / QUESTION_FLOOR) * 0.45);
+export function slurpQuestionChancePerDay(
+  followers: number,
+  curve: ChanceCurve = SLURP_REALISTIC_TUNING.world.question,
+): number {
+  return chancePerDay(followers, curve);
 }
 
 /** Days of world time to apply, capped so a long absence does not become a backlog. */
@@ -147,18 +162,22 @@ export function slurpWorldElapsedDays(since: Date | null, until: Date): number {
  * A first ever tick (`since` is null) also does nothing: there is no stretch of time to simulate,
  * and inventing one would mean a brand-new install opens to a backlog it never earned.
  */
-export function planSlurpWorldTick(input: {
-  since: Date | null;
-  until: Date;
-  creators: readonly SlurpWorldCreator[];
-  /** Account ids that may act. Empty means the world stays silent. */
-  audience: readonly string[];
-  /**
-   * Activity multiplier from the world-activity dial. Zero is a real off switch: somebody who
-   * wants to write undisturbed gets exactly that, not a quieter version of being interrupted.
-   */
-  activity?: number;
-}): SlurpWorldAction[] {
+export function planSlurpWorldTick(
+  input: {
+    since: Date | null;
+    until: Date;
+    creators: readonly SlurpWorldCreator[];
+    /** Account ids that may act. Empty means the world stays silent. */
+    audience: readonly string[];
+    /**
+     * Activity multiplier from the world-activity dial. Zero is a real off switch: somebody who
+     * wants to write undisturbed gets exactly that, not a quieter version of being interrupted.
+     */
+    activity?: number;
+  },
+  tuning: WorldTuning = SLURP_REALISTIC_TUNING.world,
+): SlurpWorldAction[] {
+  const maxActions = Math.min(tuning.maxActionsPerTick, SLURP_TUNING_ACTIONS_PER_TICK_CEILING);
   const activity = Number.isFinite(input.activity) ? Math.max(0, input.activity ?? 1) : 1;
   if (activity === 0) return [];
   const days = slurpWorldElapsedDays(input.since, input.until) * activity;
@@ -178,27 +197,30 @@ export function planSlurpWorldTick(input: {
   }
 
   for (const creator of order) {
-    if (actions.length >= SLURP_WORLD_MAX_ACTIONS) break;
-    if (creator.openRequests >= SLURP_WORLD_MAX_OPEN_REQUESTS) continue;
+    if (actions.length >= maxActions) break;
+    if (creator.openRequests >= tuning.maxOpenRequests) continue;
 
-    if (random() < slurpCommissionChancePerDay(creator.followers) * days) {
+    if (random() < slurpCommissionChancePerDay(creator.followers, tuning.commission) * days) {
       actions.push({ kind: "commission", creatorAccountId: creator.id, actorAccountId: pick() });
       // One heavy ask per Creator per tick. Two at once reads as a glitch, not as popularity.
       continue;
     }
 
-    if (random() < slurpMessageChancePerDay(creator.followers) * days) {
+    if (random() < slurpMessageChancePerDay(creator.followers, tuning.message) * days) {
       actions.push({ kind: "message", creatorAccountId: creator.id, actorAccountId: pick() });
       continue;
     }
 
-    if (creator.recentPostIds.length > 0 && random() < slurpQuestionChancePerDay(creator.followers) * days) {
+    if (
+      creator.recentPostIds.length > 0 &&
+      random() < slurpQuestionChancePerDay(creator.followers, tuning.question) * days
+    ) {
       const postId = creator.recentPostIds[Math.floor(random() * creator.recentPostIds.length)]!;
       actions.push({ kind: "question", creatorAccountId: creator.id, actorAccountId: pick(), postId });
     }
   }
 
-  return actions.slice(0, SLURP_WORLD_MAX_ACTIONS);
+  return actions.slice(0, maxActions);
 }
 
 /**

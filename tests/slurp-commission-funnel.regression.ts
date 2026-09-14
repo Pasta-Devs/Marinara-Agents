@@ -20,7 +20,7 @@ assert.match(storage, /population\.get\(viewerAccountId\)/u);
 assert.match(storage, /async listAutomatedBriefCommissions\(\)/u);
 assert.match(world, /listAutomatedBriefCommissions\(\)/u);
 assert.match(world, /quoteCommission\(commission\.id, AUDIENCE_COMMISSION_PRICE\)/u);
-assert.match(world, /const AUDIENCE_COMMISSION_PRICE = 40/u);
+assert.match(world, /const AUDIENCE_COMMISSION_PRICE = tuning\.economy\.audienceCommissionPrice/u);
 assert.match(world, /listQuotedCommissions\(\)/u);
 assert.match(world, /settleAudienceCommission\(commission\.id/u);
 

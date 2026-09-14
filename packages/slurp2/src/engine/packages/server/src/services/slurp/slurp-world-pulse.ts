@@ -25,17 +25,19 @@
  * hundred at once.
  */
 
-/** Posts older than this no longer collect new reactions. A week-old post is finished. */
-export const SLURP_PULSE_POST_MAX_AGE_HOURS = 48;
+import {
+  SLURP_REALISTIC_TUNING,
+  SLURP_TUNING_PULSE_PER_TICK_CEILING,
+  type SlurpSimulationTuning,
+} from "./slurp-tuning.js";
 
-/** Nothing arrives faster than this, however large the audience. Six at once reads as a glitch. */
-export const SLURP_PULSE_MAX_PER_TICK = 6;
+type PulseTuning = SlurpSimulationTuning["pulse"];
 
-/** Minutes of elapsed time that buy one reaction for a creator of reference size. */
-const MINUTES_PER_REACTION = 3;
+/** Posts older than this no longer collect new reactions (realistic default; see `pulse.postMaxAgeHours`). */
+export const SLURP_PULSE_POST_MAX_AGE_HOURS = SLURP_REALISTIC_TUNING.pulse.postMaxAgeHours;
 
-/** Audience size at which a Creator earns reactions at the reference rate. */
-const REFERENCE_REACH = 3_000;
+/** Nothing arrives faster than this, however large the audience (realistic default; see `pulse.maxPerTick`). */
+export const SLURP_PULSE_MAX_PER_TICK = SLURP_REALISTIC_TUNING.pulse.maxPerTick;
 
 export type SlurpPulseTarget = {
   creatorAccountId: string;
@@ -90,12 +92,17 @@ function hashSeed(value: string): number {
  * making the feed unreadable, and the number the player can absorb in one sitting did not scale
  * with their follower count.
  */
-export function slurpPulseBudget(elapsedMinutes: number, totalReach: number): number {
+export function slurpPulseBudget(
+  elapsedMinutes: number,
+  totalReach: number,
+  tuning: PulseTuning = SLURP_REALISTIC_TUNING.pulse,
+): number {
   if (!Number.isFinite(elapsedMinutes) || elapsedMinutes <= 0) return 0;
   const reach = Number.isFinite(totalReach) ? Math.max(0, totalReach) : 0;
   if (reach <= 0) return 0;
-  const scale = Math.sqrt(reach / REFERENCE_REACH);
-  return Math.min(SLURP_PULSE_MAX_PER_TICK, Math.floor((elapsedMinutes / MINUTES_PER_REACTION) * scale));
+  const scale = Math.sqrt(reach / tuning.referenceReach);
+  const cap = Math.min(tuning.maxPerTick, SLURP_TUNING_PULSE_PER_TICK_CEILING);
+  return Math.min(cap, Math.floor((elapsedMinutes / tuning.minutesPerReaction) * scale));
 }
 
 /**
@@ -105,20 +112,22 @@ export function slurpPulseBudget(elapsedMinutes: number, totalReach: number): nu
  * landed. Returns an empty plan when there is nobody to act, nothing recent to act on, or too
  * little time has passed.
  */
-export function planSlurpWorldPulse(input: {
-  elapsedMinutes: number;
-  targets: readonly SlurpPulseTarget[];
-  audience: readonly string[];
-  /** Anything already in this pulse's window, so a pulse never re-likes the same post twice. */
-  seed: string;
-  /** Activity multiplier. Zero means nothing arrives while you read, which is the point of "off". */
-  activity?: number;
-}): SlurpPulseAction[] {
+export function planSlurpWorldPulse(
+  input: {
+    elapsedMinutes: number;
+    targets: readonly SlurpPulseTarget[];
+    audience: readonly string[];
+    /** Anything already in this pulse's window, so a pulse never re-likes the same post twice. */
+    seed: string;
+    /** Activity multiplier. Zero means nothing arrives while you read, which is the point of "off". */
+    activity?: number;
+  },
+  tuning: PulseTuning = SLURP_REALISTIC_TUNING.pulse,
+): SlurpPulseAction[] {
   const activity = Number.isFinite(input.activity) ? Math.max(0, input.activity ?? 1) : 1;
   if (activity === 0) return [];
   const fresh = input.targets.filter(
-    (target) =>
-      Number.isFinite(target.ageHours) && target.ageHours >= 0 && target.ageHours <= SLURP_PULSE_POST_MAX_AGE_HOURS,
+    (target) => Number.isFinite(target.ageHours) && target.ageHours >= 0 && target.ageHours <= tuning.postMaxAgeHours,
   );
   if (fresh.length === 0 || input.audience.length === 0) return [];
 
@@ -128,7 +137,7 @@ export function planSlurpWorldPulse(input: {
   // busier both did nothing. Reach belongs to a Creator, so one with eight fresh posts counts once.
   const reachByCreator = new Map(fresh.map((target) => [target.creatorAccountId, Math.max(0, target.creatorReach)]));
   const totalReach = [...reachByCreator.values()].reduce((sum, value) => sum + value, 0);
-  const budget = slurpPulseBudget(input.elapsedMinutes * activity, totalReach);
+  const budget = slurpPulseBudget(input.elapsedMinutes * activity, totalReach, tuning);
   if (budget <= 0) return [];
 
   const random = mulberry32(hashSeed(input.seed));

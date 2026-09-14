@@ -71,7 +71,7 @@ export async function topUpSlurpReactionBank(db: DB): Promise<SlurpReactionBankO
             "Lower case. No trailing punctuation and no emoji — those are added separately.",
             "Each one must say nothing specific about the post: they are reused under thousands of different pictures.",
             "Never name a person, a body part, an act, a place, or a price.",
-            slurpAudienceToneInstruction(settings.audienceTone),
+            slurpAudienceToneInstruction(settings.audienceTone, settings.simulationTuning.prompts.tones),
             `Avoid anything close to these, which are already in the bank: ${[...SLURP_SHIPPED_REACTIONS, ...settings.audienceReactionBank].join(", ")}`,
             'Return JSON only: {"lines": ["...", "..."]}',
           ].join("\n"),

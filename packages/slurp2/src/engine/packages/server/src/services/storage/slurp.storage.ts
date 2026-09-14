@@ -142,6 +142,7 @@ import {
   type SlurpProjectStatus,
 } from "../slurp/slurp-project.js";
 import { SLURP_AUDIENCE_TONES, SLURP_DEFAULT_AUDIENCE_TONE } from "../slurp/slurp-tone.js";
+import { SLURP_REALISTIC_TUNING, slurpSimulationTuningSchema } from "../slurp/slurp-tuning.js";
 import {
   SLURP_DEFAULT_PLATFORM_SCALE,
   SLURP_DEFAULT_WORLD_ACTIVITY,
@@ -580,6 +581,8 @@ export const slurpSettingsSchema = z.object({
   autopurgeKeepPosts: z.boolean(),
   autopurgeIncludeMessageMedia: z.boolean(),
   autopurgeNextRunAt: z.string().datetime({ offset: true }).nullable(),
+  /** Every number the audience simulation runs on. See `slurp-tuning.ts`; a partial object fills from Realistic. */
+  simulationTuning: slurpSimulationTuningSchema,
   nightQuiet: z.boolean(),
   onboarding: z.enum(["not_started", "in_progress", "completed"]),
 });
@@ -1234,6 +1237,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   autopurgeKeepPosts: true,
   autopurgeIncludeMessageMedia: false,
   autopurgeNextRunAt: null,
+  simulationTuning: SLURP_REALISTIC_TUNING,
   nightQuiet: false,
   onboarding: "not_started",
 };

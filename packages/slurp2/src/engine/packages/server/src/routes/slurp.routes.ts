@@ -1000,10 +1000,8 @@ export async function slurpRoutes(app: FastifyInstance) {
     }
     const character = await characters.getById(source.entityId);
     if (!character) return reply.code(404).send({ error: "Linked Engine character not found." });
-    const connection = await resolveSlurpTextConnection(
-      connections,
-      (await noodle.getSettings()).generationConnectionId,
-    );
+    const scheduleSettings = await noodle.getSettings();
+    const connection = await resolveSlurpTextConnection(connections, scheduleSettings.generationConnectionId);
     if (!connection) return reply.code(409).send({ error: "Select a text generation connection first." });
     const data = (typeof character.data === "string" ? JSON.parse(character.data) : character.data) as Record<
       string,
@@ -1013,11 +1011,15 @@ export async function slurpRoutes(app: FastifyInstance) {
       data.extensions && typeof data.extensions === "object" && !Array.isArray(data.extensions)
         ? (data.extensions as Record<string, unknown>)
         : {};
-    const generated = await generateSlurpConversationSchedule(connection, {
-      name: String(data.name ?? source.displayName),
-      description: String(data.description ?? ""),
-      personality: String(data.personality ?? ""),
-    });
+    const generated = await generateSlurpConversationSchedule(
+      connection,
+      {
+        name: String(data.name ?? source.displayName),
+        description: String(data.description ?? ""),
+        personality: String(data.personality ?? ""),
+      },
+      scheduleSettings.simulationTuning.prompts.scheduleExtra,
+    );
     const today = new Date();
     const monday = new Date(today);
     monday.setDate(today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1));
@@ -1191,7 +1193,8 @@ export async function slurpRoutes(app: FastifyInstance) {
     // Real followers come from the audience funnel, and only from there. Following also moves the
     // funnel now, so adding the social following list on top would count the same person twice —
     // at 25x weight each.
-    const countsScale = slurpPlatformScaleMultiplier((await noodle.getSettings()).platformScale);
+    const countsScaleSettings = await noodle.getSettings();
+    const countsScale = slurpPlatformScaleMultiplier(countsScaleSettings.platformScale);
     const countsPopulation = createSlurpPopulationStorage(app.db);
     const countsFunnel = await countsPopulation.countFollowersForCreators(creators.map((creator) => creator.id));
     const countsSubscribers = await countsPopulation.countSubscribersForCreators(creators.map((creator) => creator.id));
@@ -1214,6 +1217,7 @@ export async function slurpRoutes(app: FastifyInstance) {
               scale: countsScale,
             },
             at,
+            countsScaleSettings.simulationTuning.reach,
           ),
         },
       ]),
@@ -1529,7 +1533,8 @@ export async function slurpRoutes(app: FastifyInstance) {
     const projectedAt = new Date();
     const authorIds = [...new Set(posts.map((post) => post.authorAccountId))];
     const projectionFunnel = await createSlurpPopulationStorage(app.db).countFollowersForCreators(authorIds);
-    const projectionScale = slurpPlatformScaleMultiplier((await noodle.getSettings()).platformScale);
+    const projectionScaleSettings = await noodle.getSettings();
+    const projectionScale = slurpPlatformScaleMultiplier(projectionScaleSettings.platformScale);
     const reachByAccountId = new Map(
       authorIds.map((accountId) => {
         const account = context.accountById.get(accountId);
@@ -1544,6 +1549,7 @@ export async function slurpRoutes(app: FastifyInstance) {
                   scale: projectionScale,
                 },
                 projectedAt,
+                projectionScaleSettings.simulationTuning.reach,
               )
             : 0,
         ] as const;
@@ -2189,7 +2195,8 @@ export async function slurpRoutes(app: FastifyInstance) {
     const operated = accounts.filter((account) => creatorBelongsToViewer(account, viewer));
     const population = createSlurpPopulationStorage(app.db);
     const studioFunnel = await population.countFollowersForCreators(operated.map((account) => account.id));
-    const studioScale = slurpPlatformScaleMultiplier((await noodle.getSettings()).platformScale);
+    const studioScaleSettings = await noodle.getSettings();
+    const studioScale = slurpPlatformScaleMultiplier(studioScaleSettings.platformScale);
     const at = new Date();
     const snapshot = await readSlurpStudioSnapshot(app.db, viewer.id);
 
@@ -2216,6 +2223,7 @@ export async function slurpRoutes(app: FastifyInstance) {
             scale: studioScale,
           },
           at,
+          studioScaleSettings.simulationTuning.reach,
         );
         const earnings = await noodle.getEarnings(account.id);
         const goal = await noodle.getGoal(account.id);
@@ -3317,6 +3325,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     const population = createSlurpPopulationStorage(app.db);
     const at = new Date();
     const followerFloor = SLURP_FUNNEL_STAGES.indexOf("follower");
+    const followersSettings = await noodle.getSettings();
     const items = (await population.listNamedCast(id, SLURP_NAMED_CAST_LIMIT * 3))
       .filter(
         (entry) =>
@@ -3342,9 +3351,10 @@ export async function slurpRoutes(app: FastifyInstance) {
           accountId: creator.id,
           createdAt: creator.createdAt,
           realFollowers: (await population.countFollowersForCreators([id])).get(id) ?? 0,
-          scale: slurpPlatformScaleMultiplier((await noodle.getSettings()).platformScale),
+          scale: slurpPlatformScaleMultiplier(followersSettings.platformScale),
         },
         at,
+        followersSettings.simulationTuning.reach,
       ),
     };
   });

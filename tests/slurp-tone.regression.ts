@@ -41,7 +41,7 @@ const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 // It has to reach the prompt the audience actually speaks through.
 const fanService = read("server/src/services/slurp/slurp-fan-activity.service.ts");
-assert.match(fanService, /slurpAudienceToneInstruction\(input\.settings\.audienceTone\)/u);
+assert.match(fanService, /slurpAudienceToneInstruction\(input\.settings\.audienceTone, prompts\.tones\)/u);
 
 const storage = read("server/src/services/storage/slurp.storage.ts");
 assert.match(storage, /audienceTone: z\.enum\(SLURP_AUDIENCE_TONES\)/u);
