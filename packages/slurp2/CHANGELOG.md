@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.0.9 — 2026-09-14
+
+- Added Autopurge with configurable day, week, or month retention; media-only or full-post cleanup; optional direct-message media cleanup; an immediate purge action; and restart-safe scheduling for overdue purges.
+
 ## 0.0.8 — 2026-09-14
 
 - Bug fixes for discovery filters and translations, subscription prices, image references, fan privacy, rapport details, message fees, arc editing and generation, profile validation, regression tests, and test-output handling.

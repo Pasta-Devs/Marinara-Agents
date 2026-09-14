@@ -11,6 +11,7 @@ import { createSlurpActivationLifecycle } from "./slurp-activation-lifecycle.js"
 import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
 import * as slurpSchema from "../../db/schema/slurp.js";
 import { createSlurpFirstPostQueue } from "./slurp-first-post-queue.service.js";
+import { startSlurpAutopurgeScheduler } from "./slurp-autopurge-scheduler.service.js";
 
 const lifecycle = createSlurpActivationLifecycle();
 
@@ -71,6 +72,7 @@ export async function activate({
     startSlurpPaymentRecoveryScheduler(app, addTeardown);
     startSlurpFollowUpScheduler(app, addTeardown);
     startSlurpWorldScheduler(app, addTeardown);
+    startSlurpAutopurgeScheduler(app, addTeardown);
   });
 }
 

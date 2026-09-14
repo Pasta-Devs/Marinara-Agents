@@ -51,6 +51,7 @@ export const SLURP_SETTINGS_SECTIONS = [
   "audience",
   "ads",
   "wallet",
+  "autopurge",
   "advanced",
 ] as const;
 

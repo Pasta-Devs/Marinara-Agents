@@ -91,6 +91,7 @@ import {
   updateNoodlerPostWithMedia,
 } from "../services/slurp/slurp-post.operation.js";
 import { tryNoodlerAccountOperation } from "../services/slurp/slurp-account-operation-lock.js";
+import { runSlurpAutopurge } from "../services/slurp/slurp-autopurge.js";
 import { createSlurpFirstPostQueue } from "../services/slurp/slurp-first-post-queue.service.js";
 import { trySlurpDataDeletion, trySlurpWrite } from "../services/slurp/slurp-operation-lock.js";
 import {
@@ -550,6 +551,13 @@ export async function slurpRoutes(app: FastifyInstance) {
     const body = slurpSettingsSchema.partial().safeParse(req.body ?? {});
     if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
     return noodle.updateSlurpSettings(body.data);
+  });
+  app.post("/autopurge/run", async (_req, reply) => {
+    const outcome = await runSlurpAutopurge(app.db, { reschedule: false });
+    if (outcome.status === "busy") {
+      return reply.code(409).send({ error: "Another Slurp backup or cleanup is already running." });
+    }
+    return outcome.result;
   });
   app.post("/arc-library/:id/reset", async (req, reply) => {
     const settings = await noodle.resetArcType((req.params as { id: string }).id);
