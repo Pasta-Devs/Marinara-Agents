@@ -45,24 +45,29 @@ assert.deepEqual(
 );
 assert.deepEqual(
   getSlurp2UnseenReleases("0.0.4").map((release) => release.version),
-  ["0.0.10", "0.0.9", "0.0.8", "0.0.7", "0.0.6", "0.0.5"],
+  ["0.0.11", "0.0.10", "0.0.9", "0.0.8", "0.0.7", "0.0.6", "0.0.5"],
   "an update from the previous release must show only the new release",
 );
 assert.deepEqual(
   getSlurp2UnseenReleases("0.0.2").map((release) => release.version),
-  ["0.0.10", "0.0.9", "0.0.8", "0.0.7", "0.0.6", "0.0.5", "0.0.4", "0.0.3"],
+  ["0.0.11", "0.0.10", "0.0.9", "0.0.8", "0.0.7", "0.0.6", "0.0.5", "0.0.4", "0.0.3"],
   "a skipped update must retain every unseen release",
 );
 assert.deepEqual(
   getSlurp2UnseenReleases("0.0.8").map((release) => release.version),
-  ["0.0.10", "0.0.9"],
+  ["0.0.11", "0.0.10", "0.0.9"],
   "an update from 0.0.8 must show both newer releases",
 );
 assert.deepEqual(
   getSlurp2UnseenReleases("0.0.9").map((release) => release.version),
-  ["0.0.10"],
+  ["0.0.11", "0.0.10"],
   "an update from 0.0.9 must show the audience release",
 );
-assert.deepEqual(getSlurp2UnseenReleases("0.0.10"), [], "the current release must not reopen an acknowledged splash");
+assert.deepEqual(
+  getSlurp2UnseenReleases("0.0.10").map((release) => release.version),
+  ["0.0.11"],
+  "an update from 0.0.10 must show the draft fix",
+);
+assert.deepEqual(getSlurp2UnseenReleases("0.0.11"), [], "the current release must not reopen an acknowledged splash");
 
 console.log("slurp2 release notes mirror CHANGELOG.md");

@@ -105,8 +105,10 @@ export function buildNoodlerStageProfileDraftMessages(input: {
         // disclosureMode is chosen by the caller and stripped by the parser, so asking for it only
         // invites the model to second-guess a decision it does not own.
         "Return JSON only with displayName, handle, bio, stagePersonality, gender, and tags.",
-        "gender must be male, female, other, or null. Only infer it when the source clearly supports it; otherwise use null.",
-        `tags must contain at most eight relevant values selected only from: ${input.allowedTags.join(", ")}.`,
+        // A new Creator cannot be saved without a gender and three tags, so the draft must supply them.
+        // Asking for null "when unclear" produced drafts that the create step then refused.
+        "gender must be male, female, or other. Choose the one the source supports best; use other when it is unclear. Never leave it out or use null.",
+        `tags must contain three to eight relevant values selected only from: ${input.allowedTags.join(", ")}. Always include at least three.`,
         // The post prompt states the person-vs-performance contract to the model that *consumes*
         // stagePersonality, but the model that writes it was never told what the field is for. The
         // obvious guess is "restate the personality", which collapses the two layers into one trait
@@ -252,7 +254,7 @@ export async function generateNoodlerStageProfileDraft(
         {
           role: "user",
           content:
-            "That was not a valid stage profile object. Return exactly one JSON object with string keys displayName, handle, bio, and stagePersonality; gender as male, female, other, or null; and tags as an array of up to eight allowed tag strings. No other keys, no prose.",
+            "That was not a valid stage profile object. Return exactly one JSON object with string keys displayName, handle, bio, and stagePersonality; gender as male, female, or other; and tags as an array of three to eight allowed tag strings. No other keys, no prose.",
         },
       ],
       completionOptions,
