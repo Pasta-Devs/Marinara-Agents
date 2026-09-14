@@ -26,14 +26,11 @@ import {
   stageProfileContainsPublicIdentity,
 } from "./slurp-generation.service.js";
 import { resolveNoodlerSourceSnapshot } from "./slurp-source-resolve.js";
-import { normalizeNoodlerStageProfileDraft } from "./slurp-stage-profile-normalize.js";
+import { jsonrepair } from "jsonrepair";
+import { repairSlurpStageProfileDraft, SLURP_STAGE_PROFILE_LIMITS } from "./slurp-stage-profile-repair.js";
 import { noodlerConcealedSourceText, noodlerSourceText } from "./slurp-prompt-safety.js";
 import { createNoodlerSourceRevisionToken } from "./slurp-source-revision.js";
-import {
-  normalizeSlurpDiscoveryTags,
-  slurpGeneratedDiscoveryProfileSchema,
-  type SlurpStageProfileInput,
-} from "./slurp-discovery-profile.js";
+import type { SlurpStageProfileInput } from "./slurp-discovery-profile.js";
 
 /** Used only when a source card carries no usable prose, so the model still gets a starting point. */
 const CONCEALED_SOURCE_FALLBACK_BRIEF = "General temperament and creative interests from the source profile.";
@@ -109,6 +106,7 @@ export function buildNoodlerStageProfileDraftMessages(input: {
         // Asking for null "when unclear" produced drafts that the create step then refused.
         "gender must be male, female, or other. Choose the one the source supports best; use other when it is unclear. Never leave it out or use null.",
         `tags must contain three to eight relevant values selected only from: ${input.allowedTags.join(", ")}. Always include at least three.`,
+        `Length limits: displayName at most ${SLURP_STAGE_PROFILE_LIMITS.displayName} characters, handle at most ${SLURP_STAGE_PROFILE_LIMITS.handle} characters without @, bio at most ${SLURP_STAGE_PROFILE_LIMITS.bio} characters, stagePersonality at most ${SLURP_STAGE_PROFILE_LIMITS.stagePersonality} characters (three to six sentences).`,
         // The post prompt states the person-vs-performance contract to the model that *consumes*
         // stagePersonality, but the model that writes it was never told what the field is for. The
         // obvious guess is "restate the personality", which collapses the two layers into one trait
@@ -132,16 +130,28 @@ export function buildNoodlerStageProfileDraftMessages(input: {
   ];
 }
 
-const noodlerStageProfileDraftSchema = noodleStageProfileDraftResponseSchema
-  .omit({ disclosureMode: true })
-  .extend(slurpGeneratedDiscoveryProfileSchema.shape)
-  .strip();
-
-export function parseNoodlerStageProfileDraft(content: string) {
-  const normalized = normalizeNoodlerStageProfileDraft(
-    parseGameJsonish(requireModelAnswer(content, "a creator profile")),
-  );
-  return noodlerStageProfileDraftSchema.parse(normalized);
+/**
+ * Read one model answer into a repaired draft, or null when nothing usable came back.
+ *
+ * The tolerant game parser handles fences, prose, and trailing commas. `jsonrepair` is the last
+ * resort for what it cannot read: single-quoted values and unescaped quotes inside a value.
+ */
+export function parseNoodlerStageProfileDraft(content: string, allowedTags?: readonly string[]) {
+  const answer = content.trim();
+  if (!answer) return null;
+  let value: unknown;
+  try {
+    value = parseGameJsonish(answer);
+  } catch {
+    const start = answer.indexOf("{");
+    const end = answer.lastIndexOf("}");
+    try {
+      value = JSON.parse(jsonrepair(start >= 0 && end > start ? answer.slice(start, end + 1) : answer));
+    } catch {
+      return null;
+    }
+  }
+  return repairSlurpStageProfileDraft(value, allowedTags);
 }
 
 export async function generateNoodlerStageProfileDraft(
@@ -237,13 +247,10 @@ export async function generateNoodlerStageProfileDraft(
     responseFormat: noodleResponseFormat(input.connection.model, "noodler_profile"),
   } as const;
   const response = await provider.chatComplete(messages, completionOptions);
-  let parsedDraft: ReturnType<typeof parseNoodlerStageProfileDraft>;
-  try {
-    parsedDraft = parseNoodlerStageProfileDraft(response.content ?? "");
-  } catch {
-    // One retry with the field names spelled out, same sampling options as the first attempt.
-    // Without the retry a single malformed answer fails the creator outright, which is what the
-    // wizard reported as "creation failed".
+  let repaired = parseNoodlerStageProfileDraft(response.content ?? "", allowedTags);
+  // One retry, only when nothing usable came back. A draft with fixable fields is repaired instead,
+  // so a long bio or a missing gender no longer costs a second model call or fails the draft.
+  if (!repaired) {
     const retry = await provider.chatComplete(
       [
         ...messages,
@@ -254,16 +261,35 @@ export async function generateNoodlerStageProfileDraft(
         {
           role: "user",
           content:
-            "That was not a valid stage profile object. Return exactly one JSON object with string keys displayName, handle, bio, and stagePersonality; gender as male, female, or other; and tags as an array of three to eight allowed tag strings. No other keys, no prose.",
+            "That was not a valid stage profile object. Return exactly one JSON object with string keys displayName, handle, bio, and stagePersonality; gender as male, female, or other; and tags as an array of three to eight allowed tag strings. Use double quotes. No other keys, no prose.",
         },
       ],
       completionOptions,
     );
-    parsedDraft = parseNoodlerStageProfileDraft(retry.content ?? "");
+    repaired = parseNoodlerStageProfileDraft(retry.content ?? "", allowedTags);
+  }
+  if (!repaired) {
+    requireModelAnswer(response.content ?? "", "a creator profile");
+    throw new Error(
+      "The model did not return a usable creator profile. Try again, or pick a model that answers with JSON.",
+    );
+  }
+  const parsedDraft = repaired.draft;
+  const notes = [...repaired.notes];
+  // A hinted draft that names its source in prose is rewritten, not rejected. The name and handle
+  // still have to be the model's own; the check below refuses those.
+  if (input.request.disclosureMode !== "open") {
+    for (const field of ["bio", "stagePersonality"] as const) {
+      const protectedValue =
+        protectNoodlerGeneratedIdentity(parsedDraft[field], input.request.disclosureMode, identity) ?? "";
+      if (protectedValue !== parsedDraft[field].trim()) {
+        parsedDraft[field] = protectedValue;
+        notes.push(`The source name was removed from the ${field === "bio" ? "bio" : "stage personality"}.`);
+      }
+    }
   }
   const draft = {
     ...parsedDraft,
-    tags: normalizeSlurpDiscoveryTags(parsedDraft.tags, allowedTags),
     disclosureMode: input.request.disclosureMode,
   };
   if (input.request.disclosureMode !== "open" && stageProfileContainsPublicIdentity(draft, identity)) {
@@ -271,6 +297,8 @@ export async function generateNoodlerStageProfileDraft(
   }
   return {
     ...draft,
+    // What the repair changed or still needs, for the create form. Never saved on the Creator.
+    notes,
     ...(input.request.disclosureMode === "open"
       ? {
           displayName: publicAccount.displayName,

@@ -1,5 +1,10 @@
 # Slurp Remastered release notes
 
+## 0.0.12 — 2026-09-15
+
+- AI Creator drafts are repaired instead of failing: long text is shortened, gender and tag spellings are understood, broken JSON is fixed, and the form lists what still needs a choice.
+- Fixed bulk Creator creation skipping open-mode Creators with a wrong gender and tags reason, and draft errors now show the real cause.
+
 ## 0.0.11 — 2026-09-14
 
 - Fixed AI Creator drafts that failed or could not be saved because the model left out gender or gave fewer than three tags.

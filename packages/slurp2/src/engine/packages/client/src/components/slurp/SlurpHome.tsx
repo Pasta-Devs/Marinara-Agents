@@ -1267,7 +1267,8 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
           if (generationId !== profileDraftGenerationIdRef.current) return;
           if (draftForGeneration) setPreviousDraft(draftForGeneration);
           if (noodlerAccountId) setAcceptSourceChangesForProfileId(noodlerAccountId);
-          const { sourceSnapshot, sourceRevisionToken, ...stageProfile } = draft;
+          const { sourceSnapshot, sourceRevisionToken, notes, ...stageProfile } = draft;
+          if (notes?.length) toast.info(notes.join(" "));
           setDraftSourceSnapshot(sourceSnapshot ?? null);
           setDraftSourceRevisionToken(sourceRevisionToken ?? null);
           setProfileDraft(stageProfile);

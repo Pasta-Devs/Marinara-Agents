@@ -296,10 +296,11 @@ const slurpBulkNoodlerAccountCreateSchema = noodleBulkNoodlerAccountCreateSchema
 
 const slurpStageProfileSchema = noodleStageProfileSchema.extend(slurpDiscoveryProfileSchema.shape);
 // Older clients could skip gender and tags; a new Creator needs both so Discover can find them.
+const SLURP_NEW_CREATOR_DISCOVERY_MESSAGE = "A new Creator needs a gender and at least 3 tags.";
 const slurpNoodlerAccountCreateSchema = z
   .object({
     stageProfile: slurpStageProfileSchema.refine(slurpDiscoveryProfileComplete, {
-      message: "A new Creator needs a gender and at least 3 tags.",
+      message: SLURP_NEW_CREATOR_DISCOVERY_MESSAGE,
       path: ["tags"],
     }),
   })
@@ -3560,9 +3561,10 @@ export async function slurpRoutes(app: FastifyInstance) {
         "[slurp] Stage profile draft generation failed using %s",
         connection.model || connection.provider,
       );
-      return reply
-        .code(500)
-        .send({ error: "Stage profile draft generation failed. Check the generation connection and try again." });
+      // The reason is written for the user (no JSON, empty answer, leaked identity), so show it.
+      return reply.code(500).send({
+        error: `Stage profile draft generation failed: ${getErrorMessage(error)}`,
+      });
     }
   });
 
@@ -3728,12 +3730,24 @@ export async function slurpRoutes(app: FastifyInstance) {
           },
           connection,
         });
-        const validatedProfile = slurpNoodlerAccountCreateSchema.safeParse({ stageProfile });
+        // The draft carries form-only keys (notes, source snapshot, revision token) that the strict
+        // create schema refuses. Validating them made every open-mode Creator skip with a wrong reason.
+        const {
+          notes: _notes,
+          sourceSnapshot: _draftSnapshot,
+          sourceRevisionToken: _draftToken,
+          ...generatedProfile
+        } = stageProfile as typeof stageProfile & { sourceSnapshot?: unknown; sourceRevisionToken?: unknown };
+        const validatedProfile = slurpNoodlerAccountCreateSchema.safeParse({ stageProfile: generatedProfile });
         if (!validatedProfile.success) {
           skipped.push(noodleAccountId);
           noteReason(
             noodleAccountId,
-            "The generated stage profile did not include a valid gender and at least 3 tags.",
+            validatedProfile.error.issues.some((issue) => issue.message === SLURP_NEW_CREATOR_DISCOVERY_MESSAGE)
+              ? "The generated stage profile did not include a valid gender and at least 3 tags."
+              : `The generated stage profile could not be used: ${validatedProfile.error.issues
+                  .map((issue) => `${issue.path.slice(1).join(".") || "profile"} ${issue.message}`)
+                  .join("; ")}`,
           );
           return;
         }

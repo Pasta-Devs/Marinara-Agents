@@ -1694,6 +1694,8 @@ export function useGenerateNoodlerStageProfileDraft() {
           SlurpStageProfileInput & {
             sourceSnapshot?: NoodlerSourceSnapshot;
             sourceRevisionToken?: string;
+            /** What the server repaired or still needs. Shown once, never saved. */
+            notes?: string[];
           }
         >("/slurp2/noodler/stage-profile-draft", input, {
           signal: controller.signal,
