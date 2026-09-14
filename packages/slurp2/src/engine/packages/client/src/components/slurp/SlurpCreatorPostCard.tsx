@@ -8,6 +8,7 @@
 import {
   AtSign,
   Bell,
+  ChevronDown,
   Eye,
   Heart,
   Image as ImageIcon,
@@ -40,7 +41,7 @@ import { ConversationMediaPickerPanel } from "../chat/ConversationMediaPickerPan
 import type { ChatImage } from "../../hooks/use-gallery";
 import { useNearViewportSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
 import { Modal } from "../ui/Modal";
-import { Avatar, ProfileInitial } from "./SlurpShell";
+import { Avatar, ProfileInitial, SlurpMediaImg } from "./SlurpShell";
 import { formatTime } from "./SlurpDateTime";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import {
@@ -55,6 +56,8 @@ import {
   NoodleMentionSuggestions,
   NoodlePollCard,
   NoodleTextContent,
+  SlurpClampedText,
+  slurpReplyThreads,
   NoodleToolButton,
   SlurpToolPopover,
   PostImageEditControls,
@@ -644,6 +647,8 @@ export function SlurpCreatorPostCard({
   const isEditingPost = Boolean(ctx.postManagement) && editingPostId === post.id;
   const imageCrop = readNoodlePostImageCrop(post.metadata);
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
+  const [commentsExpanded, setCommentsExpanded] = useState(false);
+  const [expandedThreadIds, setExpandedThreadIds] = useState<ReadonlySet<string>>(new Set());
   const {
     src: postImageSrc,
     observe: observePostImage,
@@ -712,6 +717,17 @@ export function SlurpCreatorPostCard({
       replyLikesByParentId: nextReplyLikesByParentId,
     };
   }, [postInteractions]);
+  const replyThreads = slurpReplyThreads(orderedReplies, replyById);
+  const visibleThreads = commentsExpanded ? replyThreads : replyThreads.slice(-2);
+  const hiddenReplyCount = replyThreads
+    .slice(0, replyThreads.length - visibleThreads.length)
+    .reduce((sum, thread) => sum + 1 + thread.children.length, 0);
+  const toggleThread = (rootId: string) =>
+    setExpandedThreadIds((current) => {
+      const next = new Set(current);
+      if (!next.delete(rootId)) next.add(rootId);
+      return next;
+    });
   const replyTarget = replyParentInteractionId ? (replyById.get(replyParentInteractionId) ?? null) : null;
   const replyTargetActor = replyTarget
     ? (accountById.get(replyTarget.actorAccountId) ?? replyTarget.actorSnapshot)
@@ -920,6 +936,224 @@ export function SlurpCreatorPostCard({
       )}
     </div>
   );
+  const renderReplyRow = (reply: NoodleInteraction, nested: boolean) => {
+    const actorAccount = accountById.get(reply.actorAccountId) ?? null;
+    const actor = actorAccount ?? reply.actorSnapshot;
+    const parentReply = reply.parentInteractionId ? (replyById.get(reply.parentInteractionId) ?? null) : null;
+    const parentActorAccount = parentReply ? (accountById.get(parentReply.actorAccountId) ?? null) : null;
+    const parentActor = parentActorAccount ?? parentReply?.actorSnapshot ?? null;
+    const replyLikes = replyLikesByParentId.get(reply.id) ?? [];
+    const likedReplyByPersona = personaAccount
+      ? replyLikes.some((interaction) => interaction.actorAccountId === personaAccount.id)
+      : false;
+    const canManageReply = canManageReplyOverride
+      ? canManageReplyOverride(reply)
+      : Boolean(
+          personaAccount &&
+          canManageNoodleReply({
+            actorKind: actorAccount?.kind ?? reply.actorSnapshot?.kind,
+            actorAccountId: reply.actorAccountId,
+            personaAccountId: personaAccount.id,
+          }),
+        );
+    return (
+      <Fragment key={reply.id}>
+        <div
+          data-noodle-interaction-id={reply.id}
+          tabIndex={-1}
+          className={cn(
+            "grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-2 border-b border-[var(--noodle-divider)] bg-transparent py-3 text-xs outline-none transition-shadow duration-300 last:border-b-0",
+            nested && "border-b-0 py-2",
+            highlightedInteractionId === reply.id && "rounded-lg ring-1 ring-inset ring-[var(--noodle-accent)]/70",
+          )}
+        >
+          <button
+            type="button"
+            onClick={() => openProfile(actorAccount)}
+            disabled={!actorAccount}
+            className="h-8 w-8 shrink-0 rounded-full text-left transition-opacity enabled:hover:opacity-80 disabled:cursor-default"
+            title={
+              actorAccount
+                ? localizeUi("ui.noodle.noodlehome.viewValue1", {
+                    value1: actorAccount.handle,
+                  })
+                : undefined
+            }
+          >
+            <Avatar
+              account={
+                actor ?? {
+                  displayName: localizeUi("ui.slurp.profile.fallbackUser"),
+                  avatarUrl: null,
+                }
+              }
+              size="sm"
+            />
+          </button>
+          <div className="min-w-0 bg-transparent">
+            <div
+              data-noodle-comment-metadata
+              className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[var(--noodle-accent-foreground)]"
+            >
+              <button
+                type="button"
+                onClick={() => openProfile(actorAccount)}
+                disabled={!actorAccount}
+                className="max-w-full truncate font-semibold !text-[var(--foreground)] transition-colors enabled:hover:!text-[var(--noodle-accent)] disabled:cursor-default"
+              >
+                {actor?.displayName ?? localizeUi("ui.slurp.profile.fallbackUser")}
+              </button>
+              <span className="truncate !text-[var(--noodle-accent-foreground)]">@{actor?.handle ?? "slurp"}</span>
+              <span className="!text-[var(--noodle-accent-foreground)] opacity-75">
+                · {formatTime(reply.createdAt, i18n.language)}
+              </span>
+            </div>
+            {parentActor && parentReply?.parentInteractionId && (
+              <p className="mt-0.5 text-[var(--muted-foreground)]">
+                {localizeUi("ui.noodle.noodlepostcard.replyingTo")}{" "}
+                {parentActorAccount ? (
+                  <button
+                    type="button"
+                    onClick={() => openProfile(parentActorAccount)}
+                    className="font-medium text-[var(--noodle-accent)] hover:underline focus-visible:rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70"
+                    aria-label={localizeUi("ui.noodle.profile.viewHandleProfile", {
+                      handle: parentActorAccount.handle,
+                    })}
+                  >
+                    @{parentActorAccount.handle}
+                  </button>
+                ) : (
+                  <span className="text-[var(--noodle-accent)]">@{parentActor.handle}</span>
+                )}
+              </p>
+            )}
+            {editingReplyId === reply.id ? (
+              <div className="mt-2 space-y-2" data-component="NoodleView.CommentEditor">
+                <textarea
+                  value={editingReplyContent}
+                  onChange={(event) => setEditingReplyContent(event.target.value)}
+                  className={cn(textareaClass, "min-h-20 resize-y")}
+                  placeholder={localizeUi("ui.noodle.noodlepostcard.editComment")}
+                  autoFocus
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={cancelEditingReply}
+                    disabled={updateInteraction.isPending}
+                    className="h-8 rounded-full px-3 text-xs font-semibold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--noodle-accent)]/10 hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70 disabled:opacity-50"
+                  >
+                    {localizeUi("chat.delete.dialog.cancel")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => saveEditedReply(post, reply)}
+                    disabled={(!editingReplyContent.trim() && !reply.imageUrl) || updateInteraction.isPending}
+                    className="h-8 rounded-full bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {updateInteraction.isPending
+                      ? localizeUi("ui.noodle.noodlehome.saving")
+                      : localizeUi("ui.noodle.noodlehome.save")}
+                  </button>
+                </div>
+              </div>
+            ) : reply.content ? (
+              <NoodleTextContent
+                content={reply.content}
+                accountByHandle={accountByHandle}
+                onOpenProfile={openProfile}
+                className="mt-1 leading-5"
+              />
+            ) : null}
+            {reply.imageUrl && (
+              <button
+                type="button"
+                onClick={() =>
+                  setImageLightbox(createNoodleLightboxImage(reply.id, reply.imageUrl!, reply.content ?? ""))
+                }
+                className="mt-2 block w-full overflow-hidden rounded-xl text-left ring-offset-[var(--background)] transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2"
+                title={localizeUi("ui.noodle.noodlepostcard.openImage")}
+                aria-label={localizeUi("ui.noodle.noodlepostcard.openCommentImage")}
+              >
+                <SlurpMediaImg
+                  src={reply.imageUrl}
+                  alt={localizeUi("ui.noodle.noodlepostcard.commentImageAlt", {
+                    name: actor?.displayName ?? localizeUi("ui.slurp.profile.fallbackUser"),
+                  })}
+                  className="max-h-72 w-full object-cover"
+                />
+              </button>
+            )}
+            <div className="mt-1.5 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => reactToReply(post, reply, likedReplyByPersona)}
+                disabled={!personaAccount || reactionPendingFor(post.id, "like", reply.id)}
+                className={cn(
+                  noodleCommentActionClass,
+                  "px-2 font-medium",
+                  likedReplyByPersona && "bg-[var(--noodle-accent)]/10",
+                )}
+                title={
+                  likedReplyByPersona
+                    ? localizeUi("ui.noodle.noodlepostcard.unlikeComment")
+                    : localizeUi("ui.noodle.noodlepostcard.likeComment")
+                }
+                aria-busy={reactionPendingFor(post.id, "like", reply.id)}
+              >
+                <Heart
+                  size={14}
+                  fill={likedReplyByPersona ? "currentColor" : "none"}
+                  strokeWidth={likedReplyByPersona ? 2.4 : 2}
+                  className={cn(
+                    "transition-[fill,transform] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                    likedReplyByPersona && "scale-110",
+                  )}
+                />
+                {replyLikes.length > 0 && replyLikes.length}
+              </button>
+              <button
+                type="button"
+                onClick={() => openReplyComposer(post.id, reply.id)}
+                disabled={!personaAccount}
+                className={cn(noodleCommentActionClass, "w-7")}
+                title={localizeUi("ui.noodle.noodlepostcard.reply")}
+                aria-label={localizeUi("ui.noodle.noodlepostcard.reply")}
+              >
+                <MessageCircle size={14} />
+              </button>
+              {canManageReply && editingReplyId !== reply.id && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => startEditingReply(reply)}
+                    disabled={updateInteraction.isPending || deleteInteraction.isPending}
+                    className={cn(noodleCommentActionClass, "w-7")}
+                    title={localizeUi("ui.noodle.noodlepostcard.editComment")}
+                    aria-label={localizeUi("ui.noodle.noodlepostcard.editComment")}
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteNoodleReply(post, reply)}
+                    disabled={updateInteraction.isPending || deleteInteraction.isPending}
+                    className={cn(noodleCommentActionClass, "w-7")}
+                    title={localizeUi("ui.noodle.noodlepostcard.deleteComment")}
+                    aria-label={localizeUi("ui.noodle.noodlepostcard.deleteComment")}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+        {replyPostId === post.id && replyParentInteractionId === reply.id && renderReplyComposer(true)}
+      </Fragment>
+    );
+  };
+
   return (
     <article
       key={post.id}
@@ -1206,7 +1440,7 @@ export function SlurpCreatorPostCard({
           <>
             {post.title && <h3 className="mt-2 break-words text-lg font-bold leading-snug">{post.title}</h3>}
             {!poll || ctx.deduplicatePollBody === false || post.content.trim() !== poll.question ? (
-              <NoodleTextContent
+              <SlurpClampedText
                 content={post.content}
                 accountByHandle={accountByHandle}
                 onOpenProfile={openProfile}
@@ -1259,6 +1493,7 @@ export function SlurpCreatorPostCard({
             disabled={!personaAccount}
             onClick={() => openReplyComposer(post.id)}
             title={localizeUi("ui.noodle.noodlepostcard.reply")}
+            aria-label={localizeUi("ui.noodle.noodlepostcard.reply")}
           >
             <MessageCircle size={18} />
             {replies.length}
@@ -1275,222 +1510,58 @@ export function SlurpCreatorPostCard({
 
         {replies.length > 0 && (
           <div className="mt-3 border-t border-[var(--noodle-divider)]">
-            {orderedReplies.map((reply) => {
-              const actorAccount = accountById.get(reply.actorAccountId) ?? null;
-              const actor = actorAccount ?? reply.actorSnapshot;
-              const parentReply = reply.parentInteractionId ? (replyById.get(reply.parentInteractionId) ?? null) : null;
-              const parentActorAccount = parentReply ? (accountById.get(parentReply.actorAccountId) ?? null) : null;
-              const parentActor = parentActorAccount ?? parentReply?.actorSnapshot ?? null;
-              const replyLikes = replyLikesByParentId.get(reply.id) ?? [];
-              const likedReplyByPersona = personaAccount
-                ? replyLikes.some((interaction) => interaction.actorAccountId === personaAccount.id)
-                : false;
-              const canManageReply = canManageReplyOverride
-                ? canManageReplyOverride(reply)
-                : Boolean(
-                    personaAccount &&
-                    canManageNoodleReply({
-                      actorKind: actorAccount?.kind ?? reply.actorSnapshot?.kind,
-                      actorAccountId: reply.actorAccountId,
-                      personaAccountId: personaAccount.id,
-                    }),
-                  );
+            {replyThreads.length > 2 && (
+              <button
+                type="button"
+                onClick={() => setCommentsExpanded((expanded) => !expanded)}
+                className="flex min-h-10 w-full items-center justify-between gap-2 px-2 text-start text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
+                aria-expanded={commentsExpanded}
+              >
+                <span>
+                  {commentsExpanded
+                    ? localizeUi("ui.noodle.noodlepostcard.hideComments", { defaultValue: "Hide comments" })
+                    : localizeUi("ui.noodle.noodlepostcard.showMoreComments", {
+                        defaultValue: "Show {{count}} more comments",
+                        count: hiddenReplyCount,
+                      })}
+                </span>
+                <ChevronDown
+                  size={16}
+                  className={cn("transition-transform", commentsExpanded && "rotate-180")}
+                  aria-hidden="true"
+                />
+              </button>
+            )}
+            {visibleThreads.map((thread) => {
+              const threadOpen =
+                expandedThreadIds.has(thread.root.id) ||
+                thread.children.some(
+                  (child) => child.id === highlightedInteractionId || child.id === replyParentInteractionId,
+                );
+              const shownChildren = threadOpen ? thread.children : thread.children.slice(0, 1);
               return (
-                <Fragment key={reply.id}>
-                  <div
-                    data-noodle-interaction-id={reply.id}
-                    tabIndex={-1}
-                    className={cn(
-                      "grid grid-cols-[2rem_minmax(0,1fr)] items-start gap-2 border-b border-[var(--noodle-divider)] bg-transparent py-3 text-xs outline-none transition-shadow duration-300 last:border-b-0",
-                      highlightedInteractionId === reply.id &&
-                        "rounded-lg ring-1 ring-inset ring-[var(--noodle-accent)]/70",
-                    )}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => openProfile(actorAccount)}
-                      disabled={!actorAccount}
-                      className="h-8 w-8 shrink-0 rounded-full text-left transition-opacity enabled:hover:opacity-80 disabled:cursor-default"
-                      title={
-                        actorAccount
-                          ? localizeUi("ui.noodle.noodlehome.viewValue1", {
-                              value1: actorAccount.handle,
-                            })
-                          : undefined
-                      }
-                    >
-                      <Avatar
-                        account={
-                          actor ?? {
-                            displayName: localizeUi("ui.slurp.profile.fallbackUser"),
-                            avatarUrl: null,
-                          }
-                        }
-                        size="sm"
-                      />
-                    </button>
-                    <div className="min-w-0 bg-transparent">
-                      <div
-                        data-noodle-comment-metadata
-                        className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[var(--noodle-accent-foreground)]"
-                      >
+                <Fragment key={thread.root.id}>
+                  {renderReplyRow(thread.root, false)}
+                  {shownChildren.length > 0 && (
+                    <div className="ml-10 border-l-2 border-[var(--noodle-divider)] pl-3">
+                      {shownChildren.map((child) => renderReplyRow(child, true))}
+                      {thread.children.length > 1 && (
                         <button
                           type="button"
-                          onClick={() => openProfile(actorAccount)}
-                          disabled={!actorAccount}
-                          className="max-w-full truncate font-semibold !text-[var(--foreground)] transition-colors enabled:hover:!text-[var(--noodle-accent)] disabled:cursor-default"
+                          onClick={() => toggleThread(thread.root.id)}
+                          aria-expanded={threadOpen}
+                          className="mb-2 min-h-8 rounded px-1 text-xs font-semibold text-[var(--noodle-accent)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
                         >
-                          {actor?.displayName ?? localizeUi("ui.slurp.profile.fallbackUser")}
-                        </button>
-                        <span className="truncate !text-[var(--noodle-accent-foreground)]">
-                          @{actor?.handle ?? "slurp"}
-                        </span>
-                        <span className="!text-[var(--noodle-accent-foreground)] opacity-75">
-                          · {formatTime(reply.createdAt, i18n.language)}
-                        </span>
-                      </div>
-                      {parentActor && (
-                        <p className="mt-0.5 text-[var(--muted-foreground)]">
-                          {localizeUi("ui.noodle.noodlepostcard.replyingTo")}{" "}
-                          {parentActorAccount ? (
-                            <button
-                              type="button"
-                              onClick={() => openProfile(parentActorAccount)}
-                              className="font-medium text-[var(--noodle-accent)] hover:underline focus-visible:rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70"
-                              aria-label={localizeUi("ui.noodle.profile.viewHandleProfile", {
-                                handle: parentActorAccount.handle,
+                          {threadOpen
+                            ? localizeUi("ui.noodle.noodlepostcard.hideReplies", { defaultValue: "Hide replies" })
+                            : localizeUi("ui.noodle.noodlepostcard.viewMoreReplies", {
+                                defaultValue: "View {{count}} more replies",
+                                count: thread.children.length - 1,
                               })}
-                            >
-                              @{parentActorAccount.handle}
-                            </button>
-                          ) : (
-                            <span className="text-[var(--noodle-accent)]">@{parentActor.handle}</span>
-                          )}
-                        </p>
-                      )}
-                      {editingReplyId === reply.id ? (
-                        <div className="mt-2 space-y-2" data-component="NoodleView.CommentEditor">
-                          <textarea
-                            value={editingReplyContent}
-                            onChange={(event) => setEditingReplyContent(event.target.value)}
-                            className={cn(textareaClass, "min-h-20 resize-y")}
-                            placeholder={localizeUi("ui.noodle.noodlepostcard.editComment")}
-                            autoFocus
-                          />
-                          <div className="flex justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={cancelEditingReply}
-                              disabled={updateInteraction.isPending}
-                              className="h-8 rounded-full px-3 text-xs font-semibold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--noodle-accent)]/10 hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70 disabled:opacity-50"
-                            >
-                              {localizeUi("chat.delete.dialog.cancel")}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => saveEditedReply(post, reply)}
-                              disabled={(!editingReplyContent.trim() && !reply.imageUrl) || updateInteraction.isPending}
-                              className="h-8 rounded-full bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              {updateInteraction.isPending
-                                ? localizeUi("ui.noodle.noodlehome.saving")
-                                : localizeUi("ui.noodle.noodlehome.save")}
-                            </button>
-                          </div>
-                        </div>
-                      ) : reply.content ? (
-                        <NoodleTextContent
-                          content={reply.content}
-                          accountByHandle={accountByHandle}
-                          onOpenProfile={openProfile}
-                          className="mt-1 leading-5"
-                        />
-                      ) : null}
-                      {reply.imageUrl && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setImageLightbox(createNoodleLightboxImage(reply.id, reply.imageUrl!, reply.content ?? ""))
-                          }
-                          className="mt-2 block w-full overflow-hidden rounded-xl text-left ring-offset-[var(--background)] transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2"
-                          title={localizeUi("ui.noodle.noodlepostcard.openImage")}
-                          aria-label={localizeUi("ui.noodle.noodlepostcard.openCommentImage")}
-                        >
-                          <img
-                            src={reply.imageUrl}
-                            alt={localizeUi("ui.noodle.noodlepostcard.commentImageAlt", {
-                              name: actor?.displayName ?? localizeUi("ui.slurp.profile.fallbackUser"),
-                            })}
-                            className="max-h-72 w-full object-cover"
-                          />
                         </button>
                       )}
-                      <div className="mt-1.5 flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => reactToReply(post, reply, likedReplyByPersona)}
-                          disabled={!personaAccount || reactionPendingFor(post.id, "like", reply.id)}
-                          className={cn(
-                            noodleCommentActionClass,
-                            "px-2 font-medium",
-                            likedReplyByPersona && "bg-[var(--noodle-accent)]/10",
-                          )}
-                          title={
-                            likedReplyByPersona
-                              ? localizeUi("ui.noodle.noodlepostcard.unlikeComment")
-                              : localizeUi("ui.noodle.noodlepostcard.likeComment")
-                          }
-                          aria-busy={reactionPendingFor(post.id, "like", reply.id)}
-                        >
-                          <Heart
-                            size={14}
-                            fill={likedReplyByPersona ? "currentColor" : "none"}
-                            strokeWidth={likedReplyByPersona ? 2.4 : 2}
-                            className={cn(
-                              "transition-[fill,transform] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                              likedReplyByPersona && "scale-110",
-                            )}
-                          />
-                          {replyLikes.length > 0 && replyLikes.length}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openReplyComposer(post.id, reply.id)}
-                          disabled={!personaAccount}
-                          className={cn(noodleCommentActionClass, "w-7")}
-                          title={localizeUi("ui.noodle.noodlepostcard.reply")}
-                          aria-label={localizeUi("ui.noodle.noodlepostcard.reply")}
-                        >
-                          <MessageCircle size={14} />
-                        </button>
-                        {canManageReply && editingReplyId !== reply.id && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => startEditingReply(reply)}
-                              disabled={updateInteraction.isPending || deleteInteraction.isPending}
-                              className={cn(noodleCommentActionClass, "w-7")}
-                              title={localizeUi("ui.noodle.noodlepostcard.editComment")}
-                              aria-label={localizeUi("ui.noodle.noodlepostcard.editComment")}
-                            >
-                              <Pencil size={14} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => deleteNoodleReply(post, reply)}
-                              disabled={updateInteraction.isPending || deleteInteraction.isPending}
-                              className={cn(noodleCommentActionClass, "w-7")}
-                              title={localizeUi("ui.noodle.noodlepostcard.deleteComment")}
-                              aria-label={localizeUi("ui.noodle.noodlepostcard.deleteComment")}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </>
-                        )}
-                      </div>
                     </div>
-                  </div>
-                  {replyPostId === post.id && replyParentInteractionId === reply.id && renderReplyComposer(true)}
+                  )}
                 </Fragment>
               );
             })}

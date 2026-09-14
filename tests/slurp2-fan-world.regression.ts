@@ -6,6 +6,7 @@ import {
   slurpFanMemoryForPrompt,
   SLURP_FAN_MEMORY_MAX,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-fan-types.js";
+import { slurpAudienceWeeklySpend } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-audience-subscription.js";
 import {
   planSlurpWorldTick,
   slurpAudienceTipAmount,
@@ -109,6 +110,23 @@ assert.deepEqual(
   "a fan cannot unlock a post outside their configured budget",
 );
 assert.equal(slurpAudienceTipAmount(80, 0.25), 20);
+const firstSpend = slurpAudienceWeeklySpend({ spent: 0, startedAt: null }, 20, 30, at);
+assert.deepEqual(firstSpend, { spent: 20, startedAt: at.toISOString() });
+assert.equal(
+  slurpAudienceWeeklySpend({ spent: firstSpend!.spent, startedAt: firstSpend!.startedAt }, 11, 30, at),
+  null,
+  "tips and unlocks share one weekly spending ceiling",
+);
+assert.equal(
+  slurpAudienceWeeklySpend(
+    { spent: firstSpend!.spent, startedAt: firstSpend!.startedAt },
+    11,
+    30,
+    new Date(at.getTime() + 7 * 86_400_000),
+  ).spent,
+  11,
+  "the weekly spending window resets after seven days",
+);
 
 const memory = slurpFanMemoryForPrompt(
   {

@@ -33,6 +33,12 @@ const COMMISSION_ASKS = [
   "whatever you have been wanting to make and have not yet",
   "something I can keep for myself rather than scroll past",
   "a piece with the feel of your older work",
+  "a quick sketch, nothing polished",
+  "a detailed full-body piece with a proper background",
+  "the two of us together in one scene",
+  "a small set of three around the same theme",
+  "a simple headshot I can use as an icon",
+  "a painted scene, as detailed as you like",
 ] as const;
 
 const COMMISSION_CLOSERS = [
@@ -41,6 +47,7 @@ const COMMISSION_CLOSERS = [
   "Say a price and I will send it over.",
   "Happy to wait for a slot.",
   "Whatever you think is fair.",
+  "I would love it by tonight if you can.",
 ] as const;
 
 const QUESTIONS = [

@@ -251,8 +251,13 @@ const slurpNoodlerPostCreateWithMediaSchema = slurpNoodlerPostCreateBaseSchema
   .extend({
     postType: slurpPostTypeSchema.default("post"),
     linkedPostId: z.string().trim().min(1).nullable().optional(),
+    // Multipart bodies carry numbers as text, and an empty field means "use the Creator's price".
+    unlockPrice: z.preprocess(
+      (value) => (value === "" || value === null ? undefined : value),
+      z.coerce.number().int().min(0).max(9999).optional(),
+    ),
   })
-  .superRefine(({ postType: _postType, linkedPostId: _linkedPostId, ...rest }, ctx) => {
+  .superRefine(({ postType: _postType, linkedPostId: _linkedPostId, unlockPrice: _unlockPrice, ...rest }, ctx) => {
     const result = noodlerPostCreateWithMediaSchema.safeParse(rest);
     if (!result.success) {
       for (const issue of result.error.issues) ctx.addIssue(issue);

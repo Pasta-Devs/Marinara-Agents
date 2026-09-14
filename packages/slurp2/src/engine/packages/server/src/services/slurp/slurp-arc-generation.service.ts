@@ -19,6 +19,7 @@ import { withConnectionAdmissionProvider, type ConnectionAdmissionMode } from ".
 import { SLURP_MODIFIER_KINDS } from "./slurp-creator-state.js";
 import { modelAnswerForCorrection, requireModelAnswer } from "./slurp-model-answer.js";
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
+import { claimSlurpModelBudget, slurpModelWorkerAllows } from "./slurp-model-worker.js";
 
 export function buildSlurpArcGenerationMessages(input: {
   stagePersonality: string;
@@ -108,6 +109,9 @@ export async function generateSlurpArc(
         });
     }
     const settings = await slurp.getSettings();
+    const workerContext = admissionMode.kind === "background" ? "background" : "present";
+    if (!slurpModelWorkerAllows(settings.modelBudget, workerContext)) return null;
+    if (!(await claimSlurpModelBudget(db, settings.modelBudget, "arc"))) return null;
     const connections = createConnectionsStorage(db);
     const connection = await resolveSlurpTextConnection(connections, settings.generationConnectionId);
     if (!connection) return null;
@@ -163,6 +167,7 @@ export async function generateSlurpArc(
     } catch {
       // One retry with the shape spelled out, same as the stage profile draft.
       const answer = modelAnswerForCorrection(response.content);
+      if (!(await claimSlurpModelBudget(db, settings.modelBudget, "arc"))) return null;
       const retry = await provider.chatComplete(
         [
           ...messages,

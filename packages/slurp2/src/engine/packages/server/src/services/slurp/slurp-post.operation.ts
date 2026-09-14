@@ -7,6 +7,7 @@ import {
   type NoodlePostAccess,
   type NoodlerRefreshNowOutcome,
 } from "@marinara-engine/shared";
+import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
 import type { NoodleImagePromptReviewItem } from "./slurp-public-images.service.js";
 import type { DB } from "../../db/connection.js";
 import { logger } from "../../lib/logger.js";
@@ -228,6 +229,8 @@ export async function createNoodlerPost(
     format?: NoodlerContentFormat;
     postType?: "post" | "story";
     linkedPostId?: string | null;
+    /** This post's own unlock price. Absent uses the Creator's price, then Settings. */
+    unlockPrice?: number | null;
   },
   media?: NoodlerPostMediaUpload,
 ): Promise<CreateNoodlerPostResult> {
@@ -237,7 +240,10 @@ export async function createNoodlerPost(
     // Settings → Wallet → "Unlock a post" is the default price a locked post is stamped with.
     // Calling the helper with no argument stamped the shipped 1 instead, so the setting did
     // nothing and every locked post cost one coin whatever the player configured.
-    const unlockPrice = (await noodle.getSettings()).walletUnlockCost;
+    const unlockPrice =
+      input.unlockPrice ??
+      (await createSlurpMessagesStorage(db).getCreatorMessaging(input.targetAccountId)).unlockPrice ??
+      (await noodle.getSettings()).walletUnlockCost;
     const persist = (persistedMedia?: { imageUrl: string; noodlerMediaPath: string }) => {
       const create = async () => {
         return noodle.createNoodlerPost({

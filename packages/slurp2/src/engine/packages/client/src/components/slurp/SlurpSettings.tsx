@@ -99,6 +99,7 @@ import {
   SLURP_ROW_ACTIVE_CLASS,
   SLURP_ROW_CLASS,
   SLURP_TOGGLE_ACTIVE_CLASS,
+  SlurpMediaImg,
 } from "./SlurpShell";
 import {
   SLURP_ACTIVITY_PRESETS,
@@ -1973,6 +1974,34 @@ export function SlurpSettings({
                       onSave={(value) => update("walletSubscriptionCost", value)}
                     />
                   </Field>
+                  <Toggle
+                    label={t("ui.slurp.settings.wallet.pricingDynamicCharacters", {
+                      defaultValue: "Character Creators set their own prices",
+                    })}
+                    detail={t("ui.slurp.settings.wallet.pricingDynamicCharactersDetail", {
+                      defaultValue:
+                        "Once a week, each character Creator moves its subscription, locked post, and commission prices with its popularity. Current subscribers keep their price.",
+                    })}
+                    value={settings.pricingDynamicCharacters}
+                    onChange={(value) => update("pricingDynamicCharacters", value)}
+                  />
+                  {settings.pricingDynamicCharacters && (
+                    <Field
+                      label={t("ui.slurp.settings.wallet.pricingMaxWeeklyChange", {
+                        defaultValue: "Largest weekly price change, %",
+                      })}
+                      detail={t("ui.slurp.settings.wallet.pricingMaxWeeklyChangeDetail", {
+                        defaultValue: "How far one weekly adjustment may move a price. Zero freezes prices.",
+                      })}
+                    >
+                      <NumberSetting
+                        value={settings.pricingMaxWeeklyChangePercent}
+                        min={0}
+                        max={100}
+                        onSave={(value) => update("pricingMaxWeeklyChangePercent", value)}
+                      />
+                    </Field>
+                  )}
                   <Field
                     label={t("ui.slurp.settings.wallet.stipendFloor", { defaultValue: "Daily top-up floor" })}
                     detail={t("ui.slurp.settings.wallet.stipendFloorDetail", {
@@ -2401,7 +2430,7 @@ export function SlurpSettings({
                             className="flex items-start gap-3 rounded-lg bg-[var(--slurp-surface-raised)] p-3 ring-1 ring-inset ring-[var(--slurp-outline)]"
                           >
                             {ad.imageUrl ? (
-                              <img
+                              <SlurpMediaImg
                                 src={ad.imageUrl}
                                 alt=""
                                 loading="lazy"
@@ -4860,6 +4889,102 @@ function CreatorMessagingGroup({
           }
         />
       </Field>
+      <Field
+        label={t("ui.slurp.settings.creators.unlockPrice", { defaultValue: "Locked post price" })}
+        detail={t("ui.slurp.settings.creators.unlockPriceDetail", {
+          defaultValue: "Default price for this Creator's locked posts. Zero uses the Wallet default.",
+        })}
+      >
+        <NumberSetting
+          value={messaging.unlockPrice ?? 0}
+          min={0}
+          max={9999}
+          onSave={(value) => patch({ creatorAccountId: creatorId, personaId, unlockPrice: value || null })}
+        />
+      </Field>
+      <Field
+        label={t("ui.slurp.settings.creators.commissionBase", { defaultValue: "Commission base price" })}
+        detail={t("ui.slurp.settings.creators.commissionBaseDetail", {
+          defaultValue:
+            "Price for an average brief. A quick sketch quotes lower, a detailed scene or a set quotes higher.",
+        })}
+      >
+        <NumberSetting
+          value={messaging.commissionBase}
+          min={1}
+          max={99999}
+          onSave={(value) => patch({ creatorAccountId: creatorId, personaId, commissionBase: value })}
+        />
+      </Field>
+      <Field
+        label={t("ui.slurp.settings.creators.commissionMin", { defaultValue: "Lowest commission price" })}
+        detail={t("ui.slurp.settings.creators.commissionMinDetail", {
+          defaultValue: "No quote goes below this, and haggling never meets a fan under it.",
+        })}
+      >
+        <NumberSetting
+          value={messaging.commissionMin}
+          min={1}
+          max={99999}
+          onSave={(value) => patch({ creatorAccountId: creatorId, personaId, commissionMin: value })}
+        />
+      </Field>
+      <Field
+        label={t("ui.slurp.settings.creators.commissionMax", { defaultValue: "Highest commission price" })}
+        detail={t("ui.slurp.settings.creators.commissionMaxDetail", {
+          defaultValue: "No quote goes above this, however large the brief.",
+        })}
+      >
+        <NumberSetting
+          value={messaging.commissionMax}
+          min={1}
+          max={99999}
+          onSave={(value) => patch({ creatorAccountId: creatorId, personaId, commissionMax: value })}
+        />
+      </Field>
+      <Toggle
+        label={t("ui.slurp.settings.creators.autoQuote", { defaultValue: "Quote audience commissions automatically" })}
+        detail={t("ui.slurp.settings.creators.autoQuoteDetail", {
+          defaultValue:
+            "Audience briefs get a quote from the prices above. You still answer offers and your own fans by hand.",
+        })}
+        value={messaging.autoQuote}
+        onChange={(value) => patch({ creatorAccountId: creatorId, personaId, autoQuote: value })}
+      />
+      {query.data?.suggested && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--accent)] p-3 text-xs">
+          <span>
+            {t("ui.slurp.settings.creators.suggestedPrices", {
+              defaultValue:
+                "Suggested for your audience: {{subscription}}/week · {{unlock}} per locked post · {{commission}} commission base",
+              subscription: query.data.suggested.subscriptionPrice,
+              unlock: query.data.suggested.unlockPrice,
+              commission: query.data.suggested.commissionBase,
+            })}
+          </span>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              const suggested = query.data?.suggested;
+              if (!suggested) return;
+              patch({
+                creatorAccountId: creatorId,
+                personaId,
+                unlockPrice: suggested.unlockPrice,
+                commissionBase: suggested.commissionBase,
+              });
+              setPrice.mutate(
+                { accountId: creatorId, personaId, price: suggested.subscriptionPrice },
+                { onError: (error) => toast.error(errorMessage(error)) },
+              );
+            }}
+            className="min-h-9 rounded-lg px-3 font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)] focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
+          >
+            {t("ui.slurp.settings.creators.useSuggestedPrices", { defaultValue: "Use suggestions" })}
+          </button>
+        </div>
+      )}
     </SettingsGroup>
   );
 }

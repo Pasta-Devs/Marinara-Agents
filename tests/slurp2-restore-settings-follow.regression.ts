@@ -57,7 +57,9 @@ assert.ok(followButton > 0, "the profile follow toggle must still exist for non-
 const beforeFollow = home.slice(0, followButton);
 assert.match(
   beforeFollow.slice(beforeFollow.lastIndexOf("leadingActions=")),
-  /viewerCreator\.subscribed \? \(/u,
+  // 0.0.8 dropped the static badge: the subscribe button already shows the subscription, so the
+  // follow toggle is simply hidden while subscribed.
+  /\{!viewerCreator\.subscribed && \(/u,
   "the follow toggle must be gated on viewerCreator.subscribed",
 );
 

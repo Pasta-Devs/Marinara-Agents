@@ -30,6 +30,16 @@ export type SlurpCreatorMessaging = {
   rapportWeights: SlurpRapportWeights;
   /** Off: this Creator never writes first — no follow-ups and no other unprompted direct message. */
   proactiveMessages: boolean;
+  /** Price stamped on this Creator's new locked posts. Null uses Settings → Wallet. */
+  unlockPrice: number | null;
+  /** Commission price for an average brief. Quotes scale from it by how much the brief asks for. */
+  commissionBase: number;
+  commissionMin: number;
+  commissionMax: number;
+  /** Quote audience briefs automatically. Character Creators always do. */
+  autoQuote: boolean;
+  /** Last weekly dynamic price adjustment. */
+  pricedAt: string | null;
 };
 
 export const SLURP_DEFAULT_CREATOR_MESSAGING: SlurpCreatorMessaging = {
@@ -38,6 +48,12 @@ export const SLURP_DEFAULT_CREATOR_MESSAGING: SlurpCreatorMessaging = {
   ppvPrice: 8,
   rapportWeights: readSlurpRapportWeights(undefined),
   proactiveMessages: true,
+  unlockPrice: null,
+  commissionBase: 40,
+  commissionMin: 10,
+  commissionMax: 400,
+  autoQuote: false,
+  pricedAt: null,
 };
 
 /**
@@ -53,6 +69,8 @@ export function readSlurpCreatorMessaging(
   const raw = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
   const coins = (input: unknown, fallback: number) =>
     typeof input === "number" && Number.isInteger(input) && input >= 0 && input <= 9999 ? input : fallback;
+  const bigCoins = (input: unknown, fallback: number) =>
+    typeof input === "number" && Number.isInteger(input) && input >= 1 && input <= 99_999 ? input : fallback;
   return {
     dmPolicy: SLURP_DM_POLICIES.includes(raw.dmPolicy as SlurpDmPolicy)
       ? (raw.dmPolicy as SlurpDmPolicy)
@@ -61,6 +79,12 @@ export function readSlurpCreatorMessaging(
     ppvPrice: coins(raw.ppvPrice, defaults.ppvPrice),
     rapportWeights: readSlurpRapportWeights(raw.rapportWeights),
     proactiveMessages: typeof raw.proactiveMessages === "boolean" ? raw.proactiveMessages : defaults.proactiveMessages,
+    unlockPrice: typeof raw.unlockPrice === "number" ? coins(raw.unlockPrice, 0) : defaults.unlockPrice,
+    commissionBase: bigCoins(raw.commissionBase, defaults.commissionBase),
+    commissionMin: bigCoins(raw.commissionMin, defaults.commissionMin),
+    commissionMax: bigCoins(raw.commissionMax, defaults.commissionMax),
+    autoQuote: typeof raw.autoQuote === "boolean" ? raw.autoQuote : defaults.autoQuote,
+    pricedAt: typeof raw.pricedAt === "string" ? raw.pricedAt : defaults.pricedAt,
   };
 }
 

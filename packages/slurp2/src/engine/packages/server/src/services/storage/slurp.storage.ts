@@ -217,6 +217,7 @@ import {
   slurpCommissions,
   slurpFollowUps,
   slurpPaymentCompensations,
+  slurpWorldClaims,
 } from "../../db/schema/slurp.js";
 import { appSettings } from "../../db/schema/app-settings.js";
 import {
@@ -304,6 +305,7 @@ const SLURP_BACKUP_TABLES = {
   commissions: slurpCommissions,
   paymentCompensations: slurpPaymentCompensations,
   pendingText: slurpPendingText,
+  worldClaims: slurpWorldClaims,
 } as const;
 
 type SlurpBackupTableName = keyof typeof SLURP_BACKUP_TABLES;
@@ -543,6 +545,10 @@ export const slurpSettingsSchema = z.object({
   walletEnabled: z.boolean(),
   walletUnlockCost: z.number().int().min(0).max(9999),
   walletSubscriptionCost: z.number().int().min(0).max(9999),
+  /** Character Creators move their own prices once a week from popularity and demand. */
+  pricingDynamicCharacters: z.boolean(),
+  /** Largest change one weekly price adjustment may make, as a percentage of the current price. */
+  pricingMaxWeeklyChangePercent: z.number().int().min(0).max(100),
   /** Daily stipend tops the balance up to this floor. Zero disables the stipend. */
   walletStipendFloor: z.number().int().min(0).max(99_999),
   walletDayStartHour: z.number().int().min(0).max(23),
@@ -1138,6 +1144,8 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   walletEnabled: true,
   walletUnlockCost: SLURP_DEFAULT_ECONOMY.unlockCost,
   walletSubscriptionCost: SLURP_DEFAULT_ECONOMY.subscriptionCost,
+  pricingDynamicCharacters: true,
+  pricingMaxWeeklyChangePercent: 15,
   walletStipendFloor: SLURP_DEFAULT_ECONOMY.stipendFloor,
   walletDayStartHour: SLURP_DEFAULT_ECONOMY.dayStartHour,
   walletAdReward: SLURP_DEFAULT_ECONOMY.adReward,
@@ -6508,8 +6516,12 @@ export function createSlurpStorage(db: DB) {
         );
       // Losing a subscriber is news. A world that only reports good outcomes has no stakes.
       await this.recordCreatorEvent(creatorAccountId, "lapsed", { actorLabel: viewerAccountId });
+      // Ending a subscription is not an unfollow: a viewer still in Following stays a follower.
+      const stillFollowing = (await this.getViewer(viewerAccountId))?.settings.social.followingAccountIds?.includes(
+        creatorAccountId,
+      );
       await createSlurpPopulationStorage(db)
-        .lapseTie(viewerAccountId, creatorAccountId)
+        .lapseTie(viewerAccountId, creatorAccountId, stillFollowing ? "follower" : "lapsed")
         .catch(() => undefined);
     },
 

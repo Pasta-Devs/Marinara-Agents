@@ -2,11 +2,12 @@
 
 ## 0.0.10 — 2026-09-14
 
-- Rebuilt the audience as a frequent, deterministic simulation with configurable reach, reactions, subscriptions, churn, requests, timing, viral luck, word of mouth, and older-post activity.
-- Added eight editable fan types with their own behavior, spending, conversion, schedule, voice, traits, reaction bank, and population share. Custom types can be added, duplicated, removed, and used to rebalance existing fans.
-- Added separate free-simulation and AI-text clocks, with foreground/background/off modes, connection selection, hourly and daily call limits, per-job controls, retry-safe queued rewrites, and visible usage.
-- Added audience presets, a seven-day outcome estimate, editable audience prompts, and validated JSON import and export for the complete audience setup.
-- Fixed follow progression after an existing like, subscription checks being delayed until maintenance, thin like pacing, and silent subscription lapses.
+- Rebuilt the audience as a deterministic simulation with editable fan types, presets, a seven-day estimate, and JSON import and export.
+- Added separate free-simulation and AI-text clocks with call limits, a shared model budget, weekly fan spending limits, and a multi-process world lease.
+- Added Creator pricing: own subscription, post, and commission prices with suggestions, commission quotes that follow the brief, haggling, and weekly dynamic prices for character Creators.
+- Long posts and long comment threads now collapse, and replies nest under the comment they answer.
+- Fixed doubled subscriber totals, lost followers after an ended subscription, tips missing from fan relationships, thin like pacing, and silent subscription lapses.
+- Fixed Slurp images failing with an X-Admin-Secret error on remote installs, and sent image connection custom parameters such as LoRA settings.
 
 ## 0.0.9 — 2026-09-14
 

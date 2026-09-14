@@ -38,6 +38,11 @@ import { createSlurpEventsStorage } from "./slurp-events.storage.js";
 import { createSlurpStorage } from "./slurp.storage.js";
 import { createSlurpPopulationStorage } from "./slurp-population.storage.js";
 import {
+  slurpFanTypeCommissionBudget,
+  slurpFanTypeWeeklyBudget,
+  slurpResolveFanType,
+} from "../slurp/slurp-fan-types.js";
+import {
   admitSlurpThread,
   readSlurpCreatorMessaging,
   slurpMessagePreview,
@@ -53,6 +58,7 @@ import {
   type SlurpRapportFacts,
 } from "../slurp/slurp-rapport.js";
 import { createSlurpReplyQueueStorage } from "./slurp-reply-queue.storage.js";
+import { SLURP_COMMISSION_MAX_HAGGLE_ROUNDS, slurpCreatorHaggle } from "../slurp/slurp-creator-pricing.js";
 import { DAY, int, json, mapCommission, mapMessage, mapThread, now } from "./slurp-messages.helpers.js";
 import type {
   SlurpCommission,
@@ -605,6 +611,7 @@ export function createSlurpMessagesStorage(db: DB) {
       dmPolicy: settings.messagesDefaultDmPolicy as SlurpCreatorMessaging["dmPolicy"],
       requestFee: settings.messagesDefaultRequestFee,
       ppvPrice: settings.messagesDefaultPpvPrice,
+      commissionBase: settings.simulationTuning.economy.audienceCommissionPrice,
     };
   };
 
@@ -1493,6 +1500,8 @@ export function createSlurpMessagesStorage(db: DB) {
         brief,
         price: "0",
         deliveryMessageId: null,
+        counterPrice: null,
+        haggleRounds: "0",
         createdAt: timestamp,
         updatedAt: timestamp,
       };
@@ -1651,8 +1660,23 @@ export function createSlurpMessagesStorage(db: DB) {
     ): Promise<SlurpCommission | null> {
       const commission = await storage.getCommission(id);
       if (!commission || commission.state !== "quoted") return commission;
-      if (!(await createSlurpPopulationStorage(db).get(commission.viewerAccountId))) return commission;
+      const population = createSlurpPopulationStorage(db);
+      const member = await population.get(commission.viewerAccountId);
+      if (!member) return commission;
       if (decision === "decline") {
+        await db
+          .update(slurpCommissions)
+          .set({ state: "declined", updatedAt: now() })
+          .where(eq(slurpCommissions.id, id));
+        return storage.getCommission(id);
+      }
+      const fanType = slurpResolveFanType((await slurp.getSettings()).fanTypes, member);
+      const commissionBudget = slurpFanTypeCommissionBudget(fanType, member.id);
+      const weeklyBudget = slurpFanTypeWeeklyBudget(fanType, member.id);
+      if (
+        commission.price > commissionBudget ||
+        !(await population.reserveWeeklySpend(member.id, commission.creatorAccountId, commission.price, weeklyBudget))
+      ) {
         await db
           .update(slurpCommissions)
           .set({ state: "declined", updatedAt: now() })
@@ -1699,7 +1723,7 @@ export function createSlurpMessagesStorage(db: DB) {
       const timestamp = now();
       await db
         .update(slurpCommissions)
-        .set({ state: "quoted", price: String(price), updatedAt: timestamp })
+        .set({ state: "quoted", price: String(price), counterPrice: null, updatedAt: timestamp })
         .where(eq(slurpCommissions.id, id));
       const commission = await storage.getCommission(id);
       if (commission) {
@@ -1713,6 +1737,59 @@ export function createSlurpMessagesStorage(db: DB) {
         });
       }
       return storage.getCommission(id);
+    },
+
+    /** A fan offers less than the quote. Null when the quote is not open to an offer. */
+    async counterCommission(id: string, price: number): Promise<SlurpCommission | null> {
+      return queueCommissionOperation(id, () => storage.counterCommissionUnlocked(id, price));
+    },
+
+    async counterCommissionUnlocked(id: string, price: number): Promise<SlurpCommission | null> {
+      const existing = await storage.getCommission(id);
+      if (!existing || existing.state !== "quoted" || existing.counterPrice !== null) return null;
+      if (existing.haggleRounds >= SLURP_COMMISSION_MAX_HAGGLE_ROUNDS || price < 1 || price >= existing.price)
+        return null;
+      await db
+        .update(slurpCommissions)
+        .set({ counterPrice: String(price), haggleRounds: String(existing.haggleRounds + 1), updatedAt: now() })
+        .where(eq(slurpCommissions.id, id));
+      await storage.appendMessage(existing.threadId, {
+        senderAccountId: existing.viewerAccountId,
+        role: "viewer",
+        kind: "system",
+        content: `Offered ${price} coins instead of ${existing.price}.`,
+        metadata: { commissionId: id },
+      });
+      return storage.getCommission(id);
+    },
+
+    /** An automated Creator answers a pending counter-offer: take it, meet halfway, or hold the price. */
+    async answerCommissionCounter(id: string, floor: number): Promise<SlurpCommission | null> {
+      return queueCommissionOperation(id, async () => {
+        const existing = await storage.getCommission(id);
+        if (!existing || existing.state !== "quoted" || existing.counterPrice === null) return existing;
+        const answer = slurpCreatorHaggle({
+          quote: existing.price,
+          offer: existing.counterPrice,
+          floor,
+          round: existing.haggleRounds,
+        });
+        if (answer.kind === "accept") return storage.quoteCommissionUnlocked(id, existing.counterPrice);
+        if (answer.kind === "meet") return storage.quoteCommissionUnlocked(id, answer.price);
+        await db
+          .update(slurpCommissions)
+          .set({ counterPrice: null, haggleRounds: String(SLURP_COMMISSION_MAX_HAGGLE_ROUNDS), updatedAt: now() })
+          .where(eq(slurpCommissions.id, id));
+        await storage.appendMessage(existing.threadId, {
+          senderAccountId: existing.creatorAccountId,
+          role: "creator",
+          kind: "commission_quote",
+          content: `My price stands at ${existing.price} coins.`,
+          price: existing.price,
+          metadata: { commissionId: id },
+        });
+        return storage.getCommission(id);
+      });
     },
 
     async acceptCommission(id: string): Promise<SlurpCommission | null> {

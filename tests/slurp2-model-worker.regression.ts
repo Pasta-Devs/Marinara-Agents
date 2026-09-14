@@ -28,6 +28,8 @@ const root = join(import.meta.dirname, "..", "packages", "slurp2", "src", "engin
 const schema = readFileSync(join(root, "db/schema/slurp.ts"), "utf8");
 const pending = readFileSync(join(root, "services/slurp/slurp-pending-text.service.ts"), "utf8");
 const scheduler = readFileSync(join(root, "services/slurp/slurp-world-scheduler.service.ts"), "utf8");
+assert.match(pending, /modelBudget\.jobs/u, "queued jobs read the live per-kind policy");
+assert.match(pending, /\.sort\(/u, "queued jobs are ordered before the drain limit");
 assert.match(schema, /export const slurpModelJobs = slurpPendingText/u, "existing rewrite jobs migrate in place");
 assert.match(schema, /jobKind: text\("job_kind"\)/u);
 assert.match(schema, /attempts: text\("attempts"\)/u);

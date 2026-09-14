@@ -16,7 +16,7 @@
  */
 import type { DB } from "../../db/connection.js";
 import { isUnsupportedTableError } from "../storage/slurp-host-tables.js";
-import { asc, desc, eq } from "../../db/file-query.js";
+import { desc, eq } from "../../db/file-query.js";
 import { logger } from "../../lib/logger.js";
 import { slurpPendingText } from "../../db/schema/slurp.js";
 import { newId, now } from "../../utils/id-generator.js";
@@ -173,12 +173,23 @@ export async function drainSlurpPendingText(
           .where(eq(slurpPendingText.id, String(claimed.id)));
       }
     }
-    rows = await db
+    const pendingRows = await db
       .select()
       .from(slurpPendingText)
       .where(eq(slurpPendingText.status, "pending"))
-      .orderBy(asc(slurpPendingText.priority), desc(slurpPendingText.createdAt))
-      .limit(limit);
+      .orderBy(desc(slurpPendingText.createdAt));
+    rows = pendingRows
+      .sort((left, right) => {
+        const leftPolicy =
+          settings.modelBudget.jobs[(left.jobKind === "brief" ? "brief" : "rewrite") as SlurpModelJobKind];
+        const rightPolicy =
+          settings.modelBudget.jobs[(right.jobKind === "brief" ? "brief" : "rewrite") as SlurpModelJobKind];
+        return (
+          (leftPolicy?.priority ?? Number(left.priority)) - (rightPolicy?.priority ?? Number(right.priority)) ||
+          String(right.createdAt).localeCompare(String(left.createdAt))
+        );
+      })
+      .slice(0, limit);
   } catch (error) {
     // Nothing was ever queued on a host that cannot hold the table, so there is nothing to drain.
     if (isUnsupportedTableError(error)) return 0;

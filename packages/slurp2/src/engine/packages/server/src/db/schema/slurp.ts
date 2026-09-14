@@ -427,6 +427,10 @@ export const slurpCommissions = fileTable("slurp2_commissions", {
   deliveryClaimToken: text("delivery_claim_token"),
   /** Lease start time. A stopped worker's claim may be recovered after five minutes. */
   deliveryClaimedAt: text("delivery_claimed_at"),
+  /** A fan's pending counter-offer. The Creator answers it by quoting again or holding the price. */
+  counterPrice: text("counter_price"),
+  /** Counter-offers made so far. The price is final after `SLURP_COMMISSION_MAX_HAGGLE_ROUNDS`. */
+  haggleRounds: text("haggle_rounds").notNull().default("0"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
@@ -543,6 +547,9 @@ export const slurpAudienceTies = fileTable(
      */
     tipped: text("tipped").notNull().default("0"),
     unlocked: text("unlocked").notNull().default("0"),
+    /** Spend in the current rolling seven-day fan budget window. */
+    weeklySpent: text("weekly_spent").notNull().default("0"),
+    weeklySpendStartedAt: text("weekly_spend_started_at"),
     /**
      * Where this relationship is heading, as opposed to where it stands.
      *
@@ -603,3 +610,10 @@ export const slurpPendingText = fileTable("slurp2_pending_text", {
 
 /** New name for the generalized queue; the physical table stays put so existing jobs survive. */
 export const slurpModelJobs = slurpPendingText;
+
+/** One cross-process lease for the free world tick. */
+export const slurpWorldClaims = fileTable("slurp2_world_claims", {
+  id: text("id").primaryKey(),
+  token: text("token").notNull(),
+  claimedAt: text("claimed_at").notNull(),
+});

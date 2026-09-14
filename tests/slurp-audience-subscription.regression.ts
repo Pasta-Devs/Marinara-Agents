@@ -123,7 +123,9 @@ const storage = readFileSync(
   "utf8",
 );
 assert.ok(
-  storage.includes('.set({ stage: "lapsed", paidThroughAt: null })'),
+  // `lapseTie` takes the stage (a still-following viewer keeps `follower`); billing clears either way.
+  storage.includes('stage: "lapsed" | "follower" = "lapsed"') &&
+    storage.includes(".set({ stage, paidThroughAt: null })"),
   "a lapse must clear the billing state, or a returning member reads as still paid up",
 );
 

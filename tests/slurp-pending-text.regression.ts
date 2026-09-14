@@ -28,7 +28,7 @@ assert.match(
 assert.match(service, /const DRAIN_LIMIT = 2;/u);
 assert.match(
   service,
-  /\.orderBy\(asc\(slurpPendingText\.priority\), desc\(slurpPendingText\.createdAt\)\)\s*\.limit\(limit\)/u,
+  /\(leftPolicy\?\.priority \?\? Number\(left\.priority\)\) - \(rightPolicy\?\.priority \?\? Number\(right\.priority\)\)[\s\S]*?\.slice\(0, limit\)/u,
 );
 
 // A host that cannot hold the queue table has nothing queued, so the drain must read that as an
@@ -36,7 +36,10 @@ assert.match(
 assert.match(service, /if \(isUnsupportedTableError\(error\)\) return 0;/u);
 // The host throws while the query is built, not when it is awaited, so a rejection handler on the
 // builder never runs. This must stay a try.
-assert.match(service, /try \{[\s\S]*rows = await db[\s\S]*\.from\(slurpPendingText\)/u);
+assert.match(
+  service,
+  /try \{[\s\S]*const pendingRows = await db[\s\S]*\.from\(slurpPendingText\)[\s\S]*rows = pendingRows/u,
+);
 assert.match(service, /if \(!isUnsupportedTableError\(error\)\) \{/u, "enqueue must not log per write either");
 
 // ── Failure is always survivable ────────────────────────────────────────────

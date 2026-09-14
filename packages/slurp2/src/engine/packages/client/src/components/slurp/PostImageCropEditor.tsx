@@ -3,6 +3,7 @@ import { Crop, Move, RotateCcw } from "lucide-react";
 import type { NoodlePostImageCrop } from "@marinara-engine/shared";
 import { cn } from "../../lib/utils";
 import { useTranslation as useUiTranslation } from "react-i18next";
+import { useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
 
 type CropAspect = "original" | "square" | "portrait" | "landscape";
 
@@ -430,9 +431,11 @@ export function PostImageFrame({
 
 function ImageWithSource({ source, ...props }: { source: string } & Omit<React.ComponentProps<"img">, "src">) {
   const imageRef = useRef<HTMLImageElement>(null);
+  // Package media needs the admin header a bare `src` cannot send; see useSlurpMediaSrc.
+  const resolved = useSlurpMediaSrc(source);
   useEffect(() => {
-    if (imageRef.current) imageRef.current.src = safeImageSource(source);
-  }, [source]);
+    if (imageRef.current && resolved) imageRef.current.src = safeImageSource(resolved);
+  }, [resolved]);
   return <img ref={imageRef} {...props} />;
 }
 

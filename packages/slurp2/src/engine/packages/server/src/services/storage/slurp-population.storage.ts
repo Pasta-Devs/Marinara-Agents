@@ -6,10 +6,10 @@
  * count is reach, and the rows are the people who did something.
  */
 import { tolerateMissingTables } from "./slurp-host-tables.js";
-import { and, asc, desc, eq } from "../../db/file-query.js";
+import { and, asc, desc, eq, inArray } from "../../db/file-query.js";
 import { now } from "../../utils/id-generator.js";
 import type { DB } from "../../db/connection.js";
-import { slurpAudienceTies, slurpPopulation } from "../../db/schema/slurp.js";
+import { noodleAccountSubscriptions, slurpAudienceTies, slurpPopulation } from "../../db/schema/slurp.js";
 import { SLURP_AUDIENCE_ARCS, type SlurpAudienceArc } from "../slurp/slurp-audience-arc.js";
 import {
   generateSlurpPopulationMember,
@@ -21,6 +21,7 @@ import {
 } from "../slurp/slurp-population.js";
 import { slurpReactivationStage } from "../slurp/slurp-population.js";
 import type { SlurpFanType } from "../slurp/slurp-fan-types.js";
+import { slurpAudienceWeeklySpend } from "../slurp/slurp-audience-subscription.js";
 
 export { SLURP_FUNNEL_STAGES, SLURP_NAMED_CAST_LIMIT, type SlurpFunnelStage };
 
@@ -33,6 +34,8 @@ export type SlurpAudienceTie = {
   /** The `spent` split. Rapport weighs a tip and an unlock differently, so they are kept apart. */
   tipped: number;
   unlocked: number;
+  weeklySpent: number;
+  weeklySpendStartedAt: string | null;
   interactions: number;
   firstSeenAt: string;
   lastSeenAt: string;
@@ -83,6 +86,8 @@ function mapTie(row: Record<string, unknown>): SlurpAudienceTie {
     // unsplit rather than as NaN poisoning every score derived from it.
     tipped: int(row.tipped),
     unlocked: int(row.unlocked),
+    weeklySpent: int(row.weeklySpent),
+    weeklySpendStartedAt: (row.weeklySpendStartedAt as string | null) ?? null,
     interactions: int(row.interactions),
     firstSeenAt: String(row.firstSeenAt),
     lastSeenAt: String(row.lastSeenAt),
@@ -165,6 +170,8 @@ export function createSlurpPopulationStorage(db: DB) {
         spent: "0",
         tipped: "0",
         unlocked: "0",
+        weeklySpent: "0",
+        weeklySpendStartedAt: null,
         interactions: "0",
         firstSeenAt: timestamp,
         lastSeenAt: timestamp,
@@ -238,7 +245,7 @@ export function createSlurpPopulationStorage(db: DB) {
      * invented a relationship at the moment it ended, so unfollowing somebody you had never
      * engaged with wrote a row saying you had drifted away from them.
      */
-    async lapseTie(memberId: string, creatorAccountId: string): Promise<void> {
+    async lapseTie(memberId: string, creatorAccountId: string, stage: "lapsed" | "follower" = "lapsed"): Promise<void> {
       const rows = await db
         .select()
         .from(slurpAudienceTies)
@@ -246,7 +253,7 @@ export function createSlurpPopulationStorage(db: DB) {
       if (!rows[0]) return;
       await db
         .update(slurpAudienceTies)
-        .set({ stage: "lapsed", paidThroughAt: null })
+        .set({ stage, paidThroughAt: null })
         .where(eq(slurpAudienceTies.id, String(rows[0].id)));
     },
 
@@ -266,6 +273,59 @@ export function createSlurpPopulationStorage(db: DB) {
      */
     async setTiePaidThrough(tieId: string, paidThroughAt: string | null): Promise<void> {
       await db.update(slurpAudienceTies).set({ paidThroughAt }).where(eq(slurpAudienceTies.id, tieId));
+    },
+
+    /** Reserve one audience payment inside its seven-day budget window. */
+    async reserveWeeklySpend(
+      memberId: string,
+      creatorAccountId: string,
+      amount: number,
+      budget: number,
+      at = new Date(),
+    ): Promise<boolean> {
+      if (!Number.isInteger(amount) || amount <= 0 || !Number.isFinite(budget) || amount > budget) return false;
+      await storage.ensureTie(memberId, creatorAccountId);
+      return db.transaction(async (tx) => {
+        const rows = await tx
+          .select()
+          .from(slurpAudienceTies)
+          .where(
+            and(eq(slurpAudienceTies.memberId, memberId), eq(slurpAudienceTies.creatorAccountId, creatorAccountId)),
+          );
+        if (!rows[0]) return false;
+        const tie = mapTie(rows[0] as Record<string, unknown>);
+        const reservation = slurpAudienceWeeklySpend(
+          { spent: tie.weeklySpent, startedAt: tie.weeklySpendStartedAt },
+          amount,
+          budget,
+          at,
+        );
+        if (!reservation) return false;
+        await tx
+          .update(slurpAudienceTies)
+          .set({
+            weeklySpent: String(reservation.spent),
+            weeklySpendStartedAt: reservation.startedAt,
+          })
+          .where(eq(slurpAudienceTies.id, tie.id));
+        return true;
+      });
+    },
+
+    async releaseWeeklySpend(
+      memberId: string,
+      creatorAccountId: string,
+      amount: number,
+      at = new Date(),
+    ): Promise<void> {
+      if (!Number.isInteger(amount) || amount <= 0) return;
+      const tie = await storage.ensureTie(memberId, creatorAccountId);
+      const started = tie.weeklySpendStartedAt ? Date.parse(tie.weeklySpendStartedAt) : Number.NaN;
+      if (!Number.isFinite(started) || at.getTime() - started >= 7 * 86_400_000) return;
+      await db
+        .update(slurpAudienceTies)
+        .set({ weeklySpent: String(Math.max(0, tie.weeklySpent - amount)) })
+        .where(eq(slurpAudienceTies.id, tie.id));
     },
 
     async listTiesForCreator(creatorAccountId: string): Promise<SlurpAudienceTie[]> {
@@ -330,10 +390,19 @@ export function createSlurpPopulationStorage(db: DB) {
     const wanted = new Set(creatorAccountIds);
     const counts = new Map<string, number>();
     for (const id of wanted) counts.set(id, 0);
+    const personaSubscriptions = new Set(
+      (
+        await db
+          .select()
+          .from(noodleAccountSubscriptions)
+          .where(inArray(noodleAccountSubscriptions.creatorAccountId, [...wanted]))
+      ).map((subscription) => `${subscription.viewerAccountId}:${subscription.creatorAccountId}`),
+    );
     const rows = await db.select().from(slurpAudienceTies);
     for (const row of rows) {
       const tie = mapTie(row as Record<string, unknown>);
       if (!wanted.has(tie.creatorAccountId)) continue;
+      if (from === "subscriber" && personaSubscriptions.has(`${tie.memberId}:${tie.creatorAccountId}`)) continue;
       const index = SLURP_FUNNEL_STAGES.indexOf(tie.stage as (typeof SLURP_FUNNEL_STAGES)[number]);
       if (index >= floor && index >= 0) counts.set(tie.creatorAccountId, (counts.get(tie.creatorAccountId) ?? 0) + 1);
     }

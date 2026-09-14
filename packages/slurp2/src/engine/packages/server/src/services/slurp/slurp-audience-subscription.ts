@@ -186,6 +186,21 @@ export function slurpAudiencePaidThrough(at: Date): string {
   return new Date(at.getTime() + SLURP_AUDIENCE_SUBSCRIPTION_DAYS * 86_400_000).toISOString();
 }
 
+/** Reserve one payment inside a fan's rolling seven-day spending window. */
+export function slurpAudienceWeeklySpend(
+  current: { spent: number; startedAt: string | null },
+  amount: number,
+  budget: number,
+  at: Date,
+): { spent: number; startedAt: string } | null {
+  if (!Number.isInteger(amount) || amount <= 0 || !Number.isFinite(budget) || amount > budget) return null;
+  const started = current.startedAt ? Date.parse(current.startedAt) : Number.NaN;
+  const fresh = !Number.isFinite(started) || at.getTime() - started >= SLURP_AUDIENCE_SUBSCRIPTION_DAYS * 86_400_000;
+  const spent = fresh ? 0 : Math.max(0, Math.floor(current.spent));
+  if (spent + amount > budget) return null;
+  return { spent: spent + amount, startedAt: fresh ? at.toISOString() : current.startedAt! };
+}
+
 /**
  * Why this person stopped paying.
  *

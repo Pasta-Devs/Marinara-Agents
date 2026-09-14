@@ -626,7 +626,12 @@ export async function generateNoodlerPost(
       noodlerContentFormat: format,
       // Stamped at creation like a manual post, so a generated locked post honours the configured
       // unlock price and keeps it across refreshes and edits instead of falling back to 1.
-      ...(input.request.access === "locked" ? noodlerUnlockPriceMetadata(settings.walletUnlockCost) : {}),
+      ...(input.request.access === "locked"
+        ? noodlerUnlockPriceMetadata(
+            (await createSlurpMessagesStorage(db).getCreatorMessaging(account.id)).unlockPrice ??
+              settings.walletUnlockCost,
+          )
+        : {}),
       ...(input.request.executionId ? { noodlerWizardExecutionId: input.request.executionId } : {}),
       ...(input.request.poll ? { poll: createNoodlePoll(input.request.poll) } : arcPoll ? { poll: arcPoll } : {}),
       ...(input.request.imageCrop ? { imageCrop: input.request.imageCrop } : {}),

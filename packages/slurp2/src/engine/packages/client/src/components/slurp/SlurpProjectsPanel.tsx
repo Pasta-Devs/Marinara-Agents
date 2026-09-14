@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { SlurpMediaImg } from "./SlurpShell";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import {
   useCreateSlurpProject,
@@ -617,7 +618,9 @@ export function SlurpArcTimelineCard({
               onClick={() => onOpenProfile?.(partner.id)}
               className="inline-flex items-center gap-1 font-semibold underline"
             >
-              {partner.avatarUrl && <img src={partner.avatarUrl} alt="" className="size-4 rounded-full object-cover" />}
+              {partner.avatarUrl && (
+                <SlurpMediaImg src={partner.avatarUrl} alt="" className="size-4 rounded-full object-cover" />
+              )}
               {partner.displayName}
             </button>
           ))}

@@ -292,6 +292,7 @@ interface NoodlerPostSubmission {
   format: NoodlerContentFormat;
   postType: "post" | "story";
   linkedPostId: string | null;
+  unlockPrice: number | null;
 }
 
 type SlurpViewerCreator = NonNullable<ReturnType<typeof useNoodlerViewer>["data"]>["creators"][number];
@@ -304,6 +305,8 @@ interface NoodlerPostDraft {
   poll: NoodlePollInput | null;
   postType: "post" | "story";
   linkedPostId: string | null;
+  /** Price for this locked post. Null uses the Creator's price. */
+  unlockPrice: number | null;
 }
 
 interface PendingNoodlerImage {
@@ -318,6 +321,7 @@ const EMPTY_NOODLER_POST_DRAFT: NoodlerPostDraft = {
   poll: null,
   postType: "post",
   linkedPostId: null,
+  unlockPrice: null,
 };
 
 function isEmptyNoodlerPostDraft(draft: NoodlerPostDraft): boolean {
@@ -1418,8 +1422,10 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     format,
     postType,
     linkedPostId,
+    unlockPrice,
   }: NoodlerPostSubmission) => {
     await createPost.mutateAsync({
+      unlockPrice: access === "locked" ? unlockPrice : null,
       targetAccountId: profileId,
       title,
       content: body,
@@ -6598,7 +6604,7 @@ function NoodlerPostComposer({
   const mediaToolRef = useRef<HTMLDivElement | null>(null);
   const accessToolRef = useRef<HTMLDivElement | null>(null);
   const composerBusyRef = useRef(false);
-  const { title, body, access, image, poll, postType, linkedPostId } = draft;
+  const { title, body, access, image, poll, postType, linkedPostId, unlockPrice } = draft;
   const linkablePosts = availablePosts
     .map((entry) => ("managed" in entry ? entry.managed : entry.viewerPost))
     .filter((post): post is NoodlerManagedPost | NoodlerPostView => Boolean(post) && !isSlurpStory(post));
@@ -6740,6 +6746,7 @@ function NoodlerPostComposer({
     format: derivedFormat(),
     postType,
     linkedPostId: linkedPostId ?? null,
+    unlockPrice: access === "locked" ? (unlockPrice ?? null) : null,
   });
 
   const publish = async () => {
@@ -7041,6 +7048,29 @@ function NoodlerPostComposer({
                     </button>
                   ))}
                 </div>
+                {access === "locked" && (
+                  <label className="flex items-center justify-between gap-2 text-xs font-semibold">
+                    {localizeUi("ui.noodle.noodlerpostcomposer.unlockPrice", { defaultValue: "Price" })}
+                    <input
+                      type="number"
+                      min={0}
+                      max={9999}
+                      value={unlockPrice ?? ""}
+                      placeholder={localizeUi("ui.noodle.noodlerpostcomposer.unlockPriceDefault", {
+                        defaultValue: "Creator default",
+                      })}
+                      onChange={(event) =>
+                        updateDraft({
+                          unlockPrice:
+                            event.target.value === ""
+                              ? null
+                              : Math.min(9999, Math.max(0, Math.floor(Number(event.target.value) || 0))),
+                        })
+                      }
+                      className="h-9 w-28 rounded-lg bg-[var(--accent)] px-2 text-sm tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+                    />
+                  </label>
+                )}
               </div>
             </NoodleAnchoredPopover>
           )}
