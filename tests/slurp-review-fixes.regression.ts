@@ -379,7 +379,7 @@ assert.match(messagesView2, /generateImage,/u);
 const slurpRoutesSource = read(join(server, "routes/slurp.routes.ts"));
 assert.match(
   slurpRoutesSource,
-  /isFileUniqueConstraintError\(error, "slurp2_interactions", \[[\s\S]*?"postId"[\s\S]*?"actorAccountId"[\s\S]*?"type"[\s\S]*?"parentInteractionId"[\s\S]*?\]\)/u,
+  /isSlurpFileUniqueConstraintError\(error, "slurp2_interactions", \[[\s\S]*?"postId"[\s\S]*?"actorAccountId"[\s\S]*?"type"[\s\S]*?"parentInteractionId"[\s\S]*?\]\)/u,
   "concurrent Story views must use the file-store uniqueness error",
 );
 assert.match(

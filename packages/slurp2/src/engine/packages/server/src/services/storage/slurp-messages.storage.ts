@@ -10,7 +10,6 @@ import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, or } from 
 import { newId } from "../../utils/id-generator.js";
 import type { DB } from "../../db/connection.js";
 import { logger } from "../../lib/logger.js";
-import { isFileUniqueConstraintError } from "../../db/file-schema.js";
 import {
   slurpCommissions,
   slurpPaymentCompensations,
@@ -20,6 +19,7 @@ import {
   slurpFollowUps,
   slurpThreads,
 } from "../../db/schema/slurp.js";
+import { isSlurpFileUniqueConstraintError } from "./slurp-file-errors.js";
 import { applySlurpMood, type SlurpMoodShift } from "../slurp/slurp-mood.js";
 import {
   applySlurpThreadNotes,
@@ -148,7 +148,7 @@ async function compensateSlurpPayment(
         updatedAt: timestamp,
       });
     } catch (error) {
-      if (!isFileUniqueConstraintError(error, "slurp2_payment_compensations", ["id"])) throw error;
+      if (!isSlurpFileUniqueConstraintError(error, "slurp2_payment_compensations", ["id"])) throw error;
     }
   }
   try {
@@ -345,7 +345,7 @@ async function createSlurpPaymentIntentUnlocked(
       updatedAt: timestamp,
     });
   } catch (error) {
-    if (!isFileUniqueConstraintError(error, "slurp2_payment_compensations", ["id"])) throw error;
+    if (!isSlurpFileUniqueConstraintError(error, "slurp2_payment_compensations", ["id"])) throw error;
   }
   const existing = (
     await db.select().from(slurpPaymentCompensations).where(eq(slurpPaymentCompensations.id, compensationId))
@@ -1067,7 +1067,7 @@ export function createSlurpMessagesStorage(db: DB) {
       try {
         await db.insert(slurpThreads).values(row);
       } catch (error) {
-        if (!isFileUniqueConstraintError(error, "slurp2_threads", ["viewerAccountId", "creatorAccountId"])) {
+        if (!isSlurpFileUniqueConstraintError(error, "slurp2_threads", ["viewerAccountId", "creatorAccountId"])) {
           if (feePaid > 0) {
             await compensateSlurpPayment(
               slurp,
@@ -1235,7 +1235,7 @@ export function createSlurpMessagesStorage(db: DB) {
           stored = true;
         });
       } catch (error) {
-        if (input.id && isFileUniqueConstraintError(error, "slurp2_messages", ["id"]))
+        if (input.id && isSlurpFileUniqueConstraintError(error, "slurp2_messages", ["id"]))
           return storage.getMessageById(input.id);
         throw error;
       }

@@ -17,12 +17,12 @@ import {
 } from "./slurp-creator-pricing.js";
 import type { DB } from "../../db/connection.js";
 import { and, eq } from "../../db/file-query.js";
-import { isFileUniqueConstraintError } from "../../db/file-schema.js";
 import { slurpWorldClaims } from "../../db/schema/slurp.js";
 import { logger } from "../../lib/logger.js";
 import { newId } from "../../utils/id-generator.js";
 import { createAppSettingsStorage } from "../storage/app-settings.storage.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { isSlurpFileUniqueConstraintError } from "../storage/slurp-file-errors.js";
 import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
 import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
 import { isAmbientNoodleAccount } from "./slurp-ambient-profiles.js";
@@ -167,7 +167,7 @@ async function claimWorldTick(db: DB, at: Date): Promise<(() => Promise<void>) |
     });
   } catch (error) {
     if (error instanceof Error && error.message === "slurp world tick is already claimed") return null;
-    if (isFileUniqueConstraintError(error, "slurp2_world_claims", ["id"])) return null;
+    if (isSlurpFileUniqueConstraintError(error, "slurp2_world_claims", ["id"])) return null;
     throw error;
   }
   return async () => {

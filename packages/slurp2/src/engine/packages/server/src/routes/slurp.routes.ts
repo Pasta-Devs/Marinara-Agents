@@ -75,7 +75,7 @@ import { NOODLER_SUBSCRIPTION_COST, noodlerUnlockPriceFromMetadata } from "../se
 import { slurpDayKey, SLURP_DEV_CHEAT_MAX_COINS } from "../services/slurp/slurp-wallet.js";
 import { settleAgentJobsWithConcurrencyLimit } from "../services/agents/agent-concurrency.js";
 import { logger } from "../lib/logger.js";
-import { isFileUniqueConstraintError } from "../db/file-schema.js";
+import { isSlurpFileUniqueConstraintError } from "../services/storage/slurp-file-errors.js";
 import { isAllowedImageBuffer, safeFetch } from "../utils/security.js";
 
 import { NOODLER_FAN_IDENTITY_PREFIX } from "../services/slurp/slurp-fan-identity-provider.js";
@@ -2741,6 +2741,11 @@ export async function slurpRoutes(app: FastifyInstance) {
     return readable;
   }
 
+  async function resolveInteractableNoodlerPost(personaId: string, postId: string) {
+    const readable = await resolveReadableNoodlerPost(personaId, postId);
+    return !readable || readable.locked ? null : readable;
+  }
+
   // Access-checked serving for NoodleR-owned media. This entire router is installed
   // through registerPrivilegedRoutes, so the host authenticates the Engine owner before
   // any handler runs. A persona query additionally gates that owner-scoped request as a fan
@@ -2828,8 +2833,9 @@ export async function slurpRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const identity = await resolveViewerIdentity(parsed.data.personaId);
     if (!identity?.actor) return reply.code(404).send({ error: "Slurp viewer profile not found" });
-    const gated = await resolveGatedNoodlerPost(parsed.data.personaId, id);
+    const gated = await resolveInteractableNoodlerPost(parsed.data.personaId, id);
     if (!gated) return reply.code(404).send({ error: "Slurp post not found" });
+    const actor = creatorBelongsToViewer(gated.creator, identity.viewer) ? gated.creator : identity.actor;
     if (parsed.data.type === "vote") {
       const poll = readNoodlePollFromMetadata(gated.post.metadata);
       const optionId = parsed.data.content?.trim() ?? "";
@@ -2838,7 +2844,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       }
     }
     const interaction = await noodle.createNoodlerInteraction(id, {
-      actorAccountId: identity.actor.id,
+      actorAccountId: actor.id,
       viewerPersonaId: identity.personaId,
       type: parsed.data.type,
       content: parsed.data.content ?? null,
@@ -2847,7 +2853,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!interaction) return reply.code(400).send({ error: "Could not add that Slurp interaction." });
     // Taking part pays, capped per day. A like is one tap, so only the interactions that cost the
     // player something to write are rewarded — otherwise the cap is reached by tapping hearts.
-    if (parsed.data.type === "reply" || parsed.data.type === "vote") {
+    if (actor.id !== gated.creator.id && (parsed.data.type === "reply" || parsed.data.type === "vote")) {
       await noodle.earnCoins(identity.personaId, "engagement", parsed.data.type);
     }
     return reply.code(201).send(interaction);
@@ -2893,7 +2899,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       });
     } catch (error) {
       if (
-        !isFileUniqueConstraintError(error, "slurp2_interactions", [
+        !isSlurpFileUniqueConstraintError(error, "slurp2_interactions", [
           "postId",
           "actorAccountId",
           "type",
@@ -2989,10 +2995,11 @@ export async function slurpRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const identity = await resolveViewerIdentity(parsed.data.personaId);
     if (!identity?.actor) return reply.code(404).send({ error: "Slurp viewer profile not found" });
-    const gated = await resolveGatedNoodlerPost(parsed.data.personaId, id);
+    const gated = await resolveInteractableNoodlerPost(parsed.data.personaId, id);
     if (!gated) return reply.code(404).send({ error: "Slurp post not found" });
+    const actor = creatorBelongsToViewer(gated.creator, identity.viewer) ? gated.creator : identity.actor;
     const interaction = await noodle.deleteNoodlerInteraction(id, {
-      actorAccountId: identity.actor.id,
+      actorAccountId: actor.id,
       viewerPersonaId: identity.personaId,
       type: parsed.data.type,
       parentInteractionId: parsed.data.parentInteractionId ?? null,
@@ -3014,6 +3021,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     const actor = await noodle.getNoodlerAccountById(interaction.actorAccountId);
     const canManage =
       interaction.actorAccountId === identity.actor.id ||
+      creatorBelongsToViewer(actor, identity.viewer) ||
       (actor?.kind === "character" && actor.sourceKind === "character");
     if (!canManage) return reply.code(403).send({ error: "You can only edit comments owned by this persona." });
     const content = parsed.data.content === undefined ? interaction.content : parsed.data.content?.trim() || null;
@@ -3037,6 +3045,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     const actor = await noodle.getNoodlerAccountById(interaction.actorAccountId);
     const canManage =
       interaction.actorAccountId === identity.actor.id ||
+      creatorBelongsToViewer(actor, identity.viewer) ||
       (actor?.kind === "character" && actor.sourceKind === "character");
     if (!canManage) return reply.code(403).send({ error: "You can only delete comments owned by this persona." });
     const deleted = await noodle.deleteInteractionById(interactionId);
@@ -3624,7 +3633,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       if (!profile) throw new Error("Failed to load the created Slurp stage profile.");
       return reply.code(201).send(profile);
     } catch (error) {
-      if (isFileUniqueConstraintError(error, "slurp2_accounts", ["sourceKind", "sourceEntityId"])) {
+      if (isSlurpFileUniqueConstraintError(error, "slurp2_accounts", ["sourceKind", "sourceEntityId"])) {
         return reply.code(409).send({
           error: "A Slurp creator already exists for this Noodle account.",
         });
@@ -3763,7 +3772,7 @@ export async function slurpRoutes(app: FastifyInstance) {
         await applyAutoPosting(account.id);
         created.push(account.id);
       } catch (error) {
-        if (isFileUniqueConstraintError(error, "slurp2_accounts", ["sourceKind", "sourceEntityId"])) {
+        if (isSlurpFileUniqueConstraintError(error, "slurp2_accounts", ["sourceKind", "sourceEntityId"])) {
           const replayed = await noodle.getNoodlerAccountForSource(
             publicAccount.kind as "character" | "persona",
             publicAccount.entityId,

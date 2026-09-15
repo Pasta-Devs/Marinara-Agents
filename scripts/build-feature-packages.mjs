@@ -169,6 +169,7 @@ const slurp2OwnedSourcePaths = [
   "packages/client/src/lib/slurp-refresh-batch.ts",
   "packages/server/src/routes/slurp-messages.routes.ts",
   "packages/server/src/services/storage/slurp-financial-queue.ts",
+  "packages/server/src/services/storage/slurp-file-errors.ts",
   "packages/server/src/services/storage/slurp-host-tables.ts",
   "packages/server/src/services/storage/slurp-messages.helpers.ts",
   "packages/server/src/services/storage/slurp-messages.storage.ts",

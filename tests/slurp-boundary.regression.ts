@@ -84,7 +84,7 @@ const slurpReplyQueue = readFileSync(
 assert.match(slurpReplyQueue, /removeForThread/u, "Slurp delayed replies must have a package-owned cancellation path");
 assert.match(
   slurpReplyQueue,
-  /isFileUniqueConstraintError/u,
+  /isSlurpFileUniqueConstraintError/u,
   "Slurp delayed reply enqueue must tolerate duplicate rows",
 );
 assert.match(

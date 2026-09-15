@@ -16,7 +16,9 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
     version: "0.0.13",
     date: "2026-09-15",
     notes: [
-      "Fixed Creator management (profile, goal, subscription price, projects, arcs, payout, and Story viewers) rejecting edits with \"Only the Creator's owner can...\" — Slurp is single-player, so any Creator is now always yours to manage.",
+      'Fixed Creator management (profile, goal, subscription price, projects, arcs, payout, and Story viewers) rejecting edits with "Only the Creator\'s owner can..." — Slurp is single-player, so any Creator is now always yours to manage.',
+      "Fixed direct-message replies crashing when two reply attempts collided, along with other duplicate-safe storage operations that crossed the package boundary.",
+      "Persona Creators can now like and reply to their own posts as their public Creator identity.",
     ],
   },
   {
