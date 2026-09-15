@@ -3167,7 +3167,7 @@
         "schemaVersion": 1,
         "id": "slurp2",
         "name": "Slurp Remastered",
-        "version": "0.0.15",
+        "version": "0.0.16",
         "description": "The Slurp remaster. It installs beside Slurp Legacy and keeps its own separate data: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp Remastered.",
         "localizations": {
           "de": {
@@ -3227,13 +3227,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "f78bff8fc083df44012bee98b9baabd8c008463b9cb008be5faee78f77faef49",
-            "bytes": 2675294
+            "sha256": "0f26b97d54c9cc26a43409d03feb01066f19d0d1e5a1f976cb25abaca5b1be0e",
+            "bytes": 2677191
           },
           {
             "path": "client.js",
-            "sha256": "494c1c4bd3cd2f9ef3973794ff2466a639148d83836b716ef05dded941389397",
-            "bytes": 3272505
+            "sha256": "e2961ce599d81fe5f57f6b59e2257bd956d24ef79a4c8b083f57e499dcacdcfb",
+            "bytes": 3285752
           },
           {
             "path": "slurp2-logo.png",
@@ -3259,9 +3259,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp2.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.0.15.zip",
-        "sha256": "5ef12147420fd07cb9aa9285cd7776581c709395a51982c7fc5fc07c73e39411",
-        "bytes": 6104374
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.0.16.zip",
+        "sha256": "9bbf0118ff5ed07f13bc49690f8fe49ac2bc1e54e02450f31b24e37f626086a8",
+        "bytes": 6119518
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp2/README.md"
     },

@@ -23,7 +23,7 @@ import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { createSlurpStorage, type SlurpSettings } from "../storage/slurp.storage.js";
-import { slurpAudienceToneInstruction } from "./slurp-tone.js";
+import { SLURP_AUDIENCE_TONES, slurpAudienceToneInstruction, type SlurpAudienceTone } from "./slurp-tone.js";
 import { SLURP_REALISTIC_TUNING } from "./slurp-tuning.js";
 import { slurpAudienceArcDescription, type SlurpAudienceArc } from "./slurp-audience-arc.js";
 import { slurpArcLifeLine } from "./slurp-project.js";
@@ -200,6 +200,15 @@ function buildFanActivityMessages(input: {
   imageContexts?: ReadonlyMap<string, string>;
 }): ChatMessage[] {
   const prompts = input.settings.simulationTuning?.prompts ?? SLURP_REALISTIC_TUNING.prompts;
+  // A Fan Type may override the crowd tone. Only the tones somebody in this run actually carries
+  // reach the prompt, so a run with no overrides reads exactly as before.
+  const overrideTones = [
+    ...new Set(
+      input.creators.flatMap((candidate) =>
+        candidate.identities.flatMap((identity) => (identity.persona?.tone ? [identity.persona.tone] : [])),
+      ),
+    ),
+  ].filter((tone): tone is SlurpAudienceTone => SLURP_AUDIENCE_TONES.includes(tone as SlurpAudienceTone));
   const system = [
     "Propose quiet synthetic audience activity for the supplied Slurp posts.",
     "A post's image field describes its attached picture. Treat it as something the actor can see, and never ask to be shown an image that is already described.",
@@ -212,6 +221,7 @@ function buildFanActivityMessages(input: {
     'Return JSON only, shaped as {"activities":[{"creatorAccountId":"...","actorHandle":"...","targetPostId":"...","type":"like"|"reply","content":null|"...","parentInteractionId":"..."}]}. Use exactly these field names; "parentInteractionId" is optional.',
     "Each actor handle has a weight; prefer higher-weight actors more often, proportionally.",
     slurpAudienceToneInstruction(input.settings.audienceTone, prompts.tones),
+    ...overrideTones.map((tone) => `Actors whose tone is "${tone}" follow this instead: ${prompts.tones[tone]}`),
     "An actor's voice is how that kind of person writes. Follow it; it outranks any general style note for that actor's own lines.",
     "Actors carry traits and a relationship to the creator. Write each reply as that specific person: a long-standing paying regular does not sound like somebody who arrived yesterday, and somebody whose trait is 'emoji only' does not write a paragraph.",
     `At most ${input.settings.fanLikesPerRefresh} likes and ${input.settings.fanRepliesPerRefresh} replies total.`,
@@ -237,6 +247,9 @@ function buildFanActivityMessages(input: {
           ? {
               traits: identity.persona.traits,
               ...(identity.persona.voice ? { voice: identity.persona.voice } : {}),
+              ...(SLURP_AUDIENCE_TONES.includes(identity.persona.tone as SlurpAudienceTone)
+                ? { tone: identity.persona.tone }
+                : {}),
               relationship: describeFanRelationship(identity.persona),
             }
           : {}),

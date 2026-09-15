@@ -265,7 +265,10 @@ export async function runNoodlerFanActivity(input: {
       // Each member carries their Fan Type's voice, which is the one thing that makes a Lurker's
       // three words and a Superfan's paragraph read as two different people.
       const cast = (await Promise.all(seeds.map((seed) => population.ensure(seed, at, settings.fanTypes)))).map(
-        (member) => ({ ...member, voice: slurpResolveFanType(settings.fanTypes, member).voice }),
+        (member) => {
+          const type = slurpResolveFanType(settings.fanTypes, member);
+          return { ...member, voice: type.voice, tone: type.tone };
+        },
       );
       // Mark the drawn cast as recently active. `listAll` orders by that column, so without this
       // it kept ordering by creation time: the same earliest members were redrawn forever and

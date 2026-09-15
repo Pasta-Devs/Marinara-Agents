@@ -14,11 +14,8 @@ import { useDeferredValue, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   SLURP_REALISTIC_TUNING,
-  SLURP_TUNING_PRESETS,
   slurpSimulationTuningSchema,
-  slurpTuningForPreset,
   type SlurpSimulationTuning,
-  type SlurpTuningPreset,
 } from "../../../../server/src/services/slurp/slurp-tuning.js";
 import { estimateSlurpSimulation, SLURP_ESTIMATE_SAMPLE } from "./slurp-simulation-estimate";
 import { Field, NumberSetting, SectionTitle, SettingsGroup, Toggle } from "./SlurpSettingsControls";
@@ -326,34 +323,6 @@ export function SlurpSimulationSettings({
   return (
     <div className="space-y-6">
       <SectionTitle title={t("ui.slurp.settings.simulation.title")} detail={t("ui.slurp.settings.simulation.detail")} />
-
-      <SettingsGroup title={t("ui.slurp.settings.simulation.presetGroup")}>
-        <div className="flex flex-wrap gap-2">
-          {SLURP_TUNING_PRESETS.map((preset) => (
-            <button
-              key={preset}
-              type="button"
-              aria-pressed={draft.preset === preset}
-              disabled={preset === "custom"}
-              onClick={() =>
-                preset !== "custom" &&
-                // Prompt text belongs to its own section; a preset must not silently rewrite it.
-                apply({ ...slurpTuningForPreset(preset as SlurpTuningPreset), prompts: draft.prompts })
-              }
-              className={`min-h-11 rounded-xl px-4 text-sm font-semibold ring-1 ring-inset transition-colors disabled:opacity-60 ${
-                draft.preset === preset
-                  ? "bg-[var(--noodle-accent)]/15 text-[var(--noodle-accent-foreground)] ring-[var(--noodle-accent)]/40"
-                  : "text-[var(--slurp-muted)] ring-[var(--slurp-outline)] hover:bg-[var(--accent)]/40"
-              }`}
-            >
-              {t(`ui.slurp.settings.simulation.presets.${preset}`)}
-            </button>
-          ))}
-        </div>
-        <p className="text-xs leading-5 text-[var(--muted-foreground)]">
-          {t(`ui.slurp.settings.simulation.presetDetail.${draft.preset}`)}
-        </p>
-      </SettingsGroup>
 
       <SettingsGroup title={t("ui.slurp.settings.simulation.estimate.title")}>
         <p className="text-xs leading-5 text-[var(--muted-foreground)]">

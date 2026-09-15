@@ -38,10 +38,13 @@ function freshType(source?: SlurpFanType): SlurpFanType {
 export function SlurpFanTypesSettings({
   fanTypes,
   bankCounts,
+  crowdTone,
   onSave,
 }: {
   fanTypes: readonly SlurpFanType[];
   bankCounts: Readonly<Record<string, string[]>>;
+  /** The Audience tone a type without an override inherits. */
+  crowdTone: "warm" | "mixed" | "unfiltered";
   onSave: (fanTypes: SlurpFanType[]) => Promise<boolean>;
 }) {
   const { t } = useTranslation();
@@ -290,11 +293,13 @@ export function SlurpFanTypesSettings({
                   onChange={(event) => set("tone", event.target.value || undefined)}
                 >
                   <option value="">
-                    {t("ui.slurp.settings.fanTypes.globalTone", { defaultValue: "Use audience tone" })}
+                    {t("ui.slurp.settings.fanTypes.crowdTone", {
+                      tone: t(`ui.slurp.settings.audience.tone.${crowdTone}`),
+                    })}
                   </option>
-                  <option value="warm">Warm</option>
-                  <option value="mixed">Mixed</option>
-                  <option value="unfiltered">Unfiltered</option>
+                  <option value="warm">{t("ui.slurp.settings.audience.tone.warm")}</option>
+                  <option value="mixed">{t("ui.slurp.settings.audience.tone.mixed")}</option>
+                  <option value="unfiltered">{t("ui.slurp.settings.audience.tone.unfiltered")}</option>
                 </select>
               </Field>
             </div>

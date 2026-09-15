@@ -273,3 +273,68 @@ export function slurpCapTickEvents<T extends { recordCreatorEvent: (...args: nev
       left-- > 0 ? storage.recordCreatorEvent(...args) : Promise.resolve(),
   };
 }
+
+/**
+ * The one Activity choice on Settings -> Audience.
+ *
+ * A preset is the simulation tuning plus the three fan-run numbers and the world dial, so a
+ * player picks one word instead of learning that four settings in three places move together.
+ * `off` stops everything the crowd does and leaves the numbers alone, so turning it back on
+ * restores exactly what was there.
+ */
+export const SLURP_AUDIENCE_PRESETS = ["off", "quiet", "realistic", "lively", "generous"] as const;
+export type SlurpAudiencePreset = (typeof SLURP_AUDIENCE_PRESETS)[number];
+
+/** [runs per day, likes per run, replies per run]. Realistic is the shipped default. */
+const FAN_RUNS: Record<Exclude<SlurpAudiencePreset, "off">, [number, number, number]> = {
+  quiet: [4, 1, 3],
+  realistic: [8, 2, 6],
+  lively: [16, 3, 9],
+  generous: [16, 4, 12],
+};
+
+type SlurpAudiencePresetSettings = {
+  fanActivityEnabled: boolean;
+  worldActivity: string;
+  fanActivityRunsPerDay: number;
+  fanLikesPerRefresh: number;
+  fanRepliesPerRefresh: number;
+  simulationTuning: SlurpSimulationTuning;
+};
+
+/** The settings patch a preset implies. Prompts and the background timer are the player's own. */
+export function slurpAudiencePresetPatch(
+  preset: SlurpAudiencePreset,
+  current: Pick<SlurpAudiencePresetSettings, "simulationTuning">,
+): Partial<SlurpAudiencePresetSettings> & { worldActivity: "off" | "normal" } {
+  if (preset === "off") return { fanActivityEnabled: false, worldActivity: "off" };
+  const [runs, likes, replies] = FAN_RUNS[preset];
+  const tuning = slurpTuningForPreset(preset);
+  return {
+    simulationTuning: {
+      ...tuning,
+      prompts: current.simulationTuning.prompts,
+      clock: { ...tuning.clock, backgroundTimer: current.simulationTuning.clock.backgroundTimer },
+    },
+    fanActivityEnabled: true,
+    worldActivity: "normal",
+    fanActivityRunsPerDay: runs,
+    fanLikesPerRefresh: likes,
+    fanRepliesPerRefresh: replies,
+  };
+}
+
+/** Which preset stored settings correspond to, or `custom` when anything was changed by hand. */
+export function slurpAudiencePresetFor(settings: SlurpAudiencePresetSettings): SlurpAudiencePreset | "custom" {
+  if (!settings.fanActivityEnabled && settings.worldActivity === "off") return "off";
+  const preset = settings.simulationTuning.preset;
+  if (preset === "custom" || !settings.fanActivityEnabled || settings.worldActivity !== "normal") return "custom";
+  const [runs, likes, replies] = FAN_RUNS[preset];
+  // ponytail: trusts the stored tuning preset label (field edits set it to custom); compare every
+  // tuning value if a preset label ever drifts from its numbers.
+  return settings.fanActivityRunsPerDay === runs &&
+    settings.fanLikesPerRefresh === likes &&
+    settings.fanRepliesPerRefresh === replies
+    ? preset
+    : "custom";
+}

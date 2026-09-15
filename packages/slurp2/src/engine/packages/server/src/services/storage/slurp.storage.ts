@@ -64,6 +64,8 @@ import {
   slurpDiscoveryFields,
   type SlurpDiscoveryGender,
   type SlurpStageProfileInput,
+  normalizeSlurpDiscoveryTag,
+  normalizeSlurpDiscoveryTags,
 } from "../slurp/slurp-discovery-profile.js";
 import {
   applyStipend,
@@ -2504,6 +2506,68 @@ export function createSlurpStorage(db: DB) {
         }
       });
       return settings;
+    },
+
+    /**
+     * One edit applied to many Creators in one transaction: gender, tags (replace, add, remove), auto-post and images.
+     * Viewer actors are never touched. A persona Creator cannot be switched to auto-post; that part is skipped.
+     */
+    // ponytail: no per-account operation lock, unlike the full stage-profile save; take the locks if bulk edits race generation.
+    async bulkUpdateCreatorProfiles(
+      ids: readonly string[],
+      patch: {
+        gender?: SlurpDiscoveryGender | null;
+        tags?: string[];
+        addTags?: string[];
+        removeTags?: string[];
+        autoPosting?: boolean;
+        imagesEnabled?: boolean;
+      },
+    ): Promise<{ updated: number; skipped: number; tagLimitReached: number }> {
+      const key = (tag: string) => normalizeSlurpDiscoveryTag(tag).toLocaleLowerCase();
+      const creatorIds = new Set(
+        (await this.listNoodlerAccounts())
+          .filter((account) => ids.includes(account.id) && !isSlurpViewerActorAccount(account))
+          .map((account) => account.id),
+      );
+      const remove = new Set((patch.removeTags ?? []).map(key));
+      let updated = 0;
+      let skipped = 0;
+      let tagLimitReached = 0;
+      await db.transaction(async (tx) => {
+        const rows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.platform, "slurp"));
+        for (const row of rows) {
+          if (!creatorIds.has(row.id)) continue;
+          const current = normalizeNoodleAccountSettings(row.settings);
+          const candidate = [...(patch.tags ?? current.profile.tags ?? []), ...(patch.addTags ?? [])].filter(
+            (tag) => !remove.has(key(tag)),
+          );
+          const tags = normalizeSlurpDiscoveryTags(candidate);
+          if (new Set(candidate.map(key)).size > tags.length) tagLimitReached += 1;
+          const auto = current.scheduler.autoPosting ?? defaultAutoPostingSettings();
+          const blocked = patch.autoPosting === true && row.sourceKind === "persona" && row.kind === "persona";
+          if (blocked) skipped += 1;
+          await tx
+            .update(noodleAccounts)
+            .set({
+              settings: JSON.stringify({
+                ...current,
+                profile: { ...current.profile, ...(patch.gender !== undefined && { gender: patch.gender }), tags },
+                scheduler: {
+                  ...current.scheduler,
+                  autoPosting: {
+                    enabled: patch.autoPosting !== undefined && !blocked ? patch.autoPosting : auto.enabled,
+                    imagesEnabled: patch.imagesEnabled ?? auto.imagesEnabled,
+                  },
+                },
+              } satisfies SlurpNoodleAccountSettings),
+              updatedAt: now(),
+            })
+            .where(eq(noodleAccounts.id, row.id));
+          updated += 1;
+        }
+      });
+      return { updated, skipped: skipped + (ids.length - creatorIds.size), tagLimitReached };
     },
 
     async deleteAllSlurpData(): Promise<{ deletedCreators: number; deletedPosts: number }> {
