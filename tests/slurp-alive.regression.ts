@@ -111,11 +111,11 @@ assert.match(messageOperation, /isRequest && history\.some\(\(message\) => messa
 assert.doesNotMatch(messageOperation, /isRequest: false/u, "the cautious-first-reply branch was unreachable");
 assert.match(
   messagesStorage,
-  /state: input\.role === "creator" && thread\.state === "request" \? "active" : thread\.state,/u,
+  /state: input\.role === "creator" && current\.state === "request" \? "active" : current\.state,/u,
   "the guarded first answer must open the conversation so later turns can continue",
 );
 assert.match(
-  messagesStorage,
+  read("server/src/services/storage/slurp-reply-methods.ts"),
   /inArray\(slurpThreads\.state, \["active", "request"\]\)/u,
   "an off-hours request must be visible to the reply scheduler",
 );
@@ -154,7 +154,11 @@ assert.match(fanOperation, /run\.creatorIds\.map\(/u);
 assert.match(messagesStorage, /settleAudienceCommission/u);
 const worldOperation = read("server/src/services/slurp/slurp-world.operation.ts");
 assert.match(worldOperation, /listQuotedCommissions/u);
-assert.match(worldOperation, /member\.spendTier/u, "appetite decides, so the answer is about a person");
+assert.match(
+  worldOperation,
+  /slurpFanTypeCommissionBudget\(slurpResolveFanType\(settings\.fanTypes, member\), member\.id\)/u,
+  "the member’s configured Fan Type must decide their commission budget",
+);
 // Never the instant the price is named.
 assert.match(worldOperation, /quotedFor < 1/u);
 

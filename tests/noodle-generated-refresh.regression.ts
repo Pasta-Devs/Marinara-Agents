@@ -1,13 +1,39 @@
 import assert from "node:assert/strict";
-import {
+import { createRequire, registerHooks } from "node:module";
+const require = createRequire(import.meta.url);
+
+// The builder overlays captured host sources onto each package. These parser
+// fixtures need only its JSON helper, not a full copied server tree.
+const sourceHooks = registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (
+      specifier === "../game/jsonish.js" &&
+      context.parentURL?.includes("/src/engine/packages/server/src/services/")
+    ) {
+      return nextResolve(
+        new URL("../sources/engine/packages/server/src/services/game/jsonish.ts", import.meta.url).href,
+        context,
+      );
+    }
+    return nextResolve(specifier, context);
+  },
+});
+const {
   NOODLE_EMPTY_TIMELINE_REASON,
   parseNoodleGeneratedRefresh,
   parseNoodleGeneratedRefreshResponse,
   validateNoodleGeneratedRefresh,
-} from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-generated-refresh";
-import { parseNoodleGeneratedProfiles } from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-generated-profiles";
-import { parseNoodleGeneratedProfiles as parseSlurpGeneratedProfiles } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generated-profiles";
-import { parseNoodleGeneratedRefreshResponse as parseSlurpGeneratedRefreshResponse } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generated-refresh";
+} = require("../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-generated-refresh");
+const {
+  parseNoodleGeneratedProfiles,
+} = require("../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-generated-profiles");
+const {
+  parseNoodleGeneratedProfiles: parseSlurpGeneratedProfiles,
+} = require("../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generated-profiles");
+const {
+  parseNoodleGeneratedRefreshResponse: parseSlurpGeneratedRefreshResponse,
+} = require("../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generated-refresh");
+sourceHooks.deregister();
 
 assert.deepEqual(parseNoodleGeneratedProfiles([]), { profiles: [], rejected: [] });
 assert.deepEqual(

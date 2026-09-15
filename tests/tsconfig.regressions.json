@@ -1,0 +1,7 @@
+{
+  "compilerOptions": {
+    "paths": {
+      "@marinara-engine/shared": ["../sources/package-shared.ts"]
+    }
+  }
+}

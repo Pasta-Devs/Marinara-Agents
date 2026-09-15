@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { cp, mkdir, mkdtemp, readFile, rm, symlink } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const repoRoot = resolve(dirname(process.argv[1] ?? process.cwd()), "..");
-const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || "/home/dev/projects/Marinara-Engine");
+const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || join(repoRoot, "../Marinara-Engine"));
 let overlayRoot = "";
 let dataDir = "";
 
@@ -75,6 +75,16 @@ async function main() {
       join(repoRoot, "packages/slurp2/src/engine/packages/server/src"),
       join(overlayRoot, "packages/server/src"),
       { recursive: true, force: true },
+    );
+    // Slurp2's schema uses the package-relative slurp.ts name. Keep the host's
+    // legacy schema in its barrel; package tables are registered explicitly below.
+    const schemaRoot = join(overlayRoot, "packages/server/src/db/schema");
+    await cp(join(engineRoot, "packages/server/src/db/schema/slurp.ts"), join(schemaRoot, "host-slurp.ts"));
+    const hostSchema = await readFile(join(schemaRoot, "index.ts"), "utf8");
+    assert.ok(hostSchema.includes('export * from "./slurp.js";'));
+    await writeFile(
+      join(schemaRoot, "index.ts"),
+      hostSchema.replace('export * from "./slurp.js";', 'export * from "./host-slurp.js";'),
     );
     await symlink(join(engineRoot, "node_modules"), join(overlayRoot, "node_modules"), "dir");
     await symlink(

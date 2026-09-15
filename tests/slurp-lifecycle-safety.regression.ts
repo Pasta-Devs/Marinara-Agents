@@ -15,6 +15,9 @@ const imageConnections = read(
 const home = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
 const storage = read("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 const settings = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx");
+const settingsControls = read(
+  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpSettingsControls.tsx",
+);
 const profileSurface = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpProfileSurface.tsx");
 const englishLocale = read("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json");
 const creatorPostCard = read(
@@ -168,11 +171,12 @@ assert.doesNotMatch(
   /navigation\.mode === "creator-settings"[\s\S]{0,700}rightRail=/u,
   "Settings must not add a duplicate summary rail",
 );
-assert.match(
-  home,
-  /inboxThreadContext \? \([\s\S]*?slurp-conversation-rail-heading/u,
-  "Inbox rail must appear only for an open conversation",
+const inboxRoute = home.slice(
+  home.indexOf('if (navigation.mode === "creator" && navigation.view === "messages")'),
+  home.indexOf('if (navigation.mode === "creator" && navigation.view === "profiles")'),
 );
+assert.match(inboxRoute, /<NoodleShell \{\.\.\.shellProps\} contextualRail="spanning">\s*<SlurpInboxView/u);
+assert.doesNotMatch(inboxRoute, /rightRail=/u, "The Inbox workspace must not reserve a second conversation rail");
 assert.doesNotMatch(home, /ui\.slurp\.home\.tonight/u, "the rail must not carry a heading with no content under it");
 assert.match(home, /SLURP_MOMENT_WINDOW_MS = 72 \* 60 \* 60 \* 1000/u);
 assert.match(home, /data-component="SlurpHome\.Moments"/u, "Home must expose the real 24-hour Moments shelf");
@@ -302,8 +306,10 @@ assert.match(
   "Only Home and Discover reserve the contextual rail by default",
 );
 assert.doesNotMatch(settings, /max-w-\[1096px\]/u, "settings must fill the shared Slurp desktop frame");
-assert.match(settings, /data-slurp-setting-toggle/u);
-assert.match(settings, /role="switch"/u, "polished settings toggles must retain native checkbox semantics");
+assert.match(settings, /import \{[^}]*Toggle \} from "\.\/SlurpSettingsControls"/u);
+assert.match(settings, /<Toggle/u, "Settings must use the extracted shared toggle");
+assert.match(settingsControls, /data-slurp-setting-toggle/u);
+assert.match(settingsControls, /role="switch"/u, "polished settings toggles must retain native checkbox semantics");
 assert.match(settings, /snap-x grid-flow-col/u, "creator settings must stay browsable before master-detail fits");
 assert.match(settings, /xl:sticky xl:top-4/u, "the wide-screen Creator list must remain visible beside its detail");
 assert.match(settings, /ui\.slurp\.settings\.creators\.personaAutomationDetail/u);

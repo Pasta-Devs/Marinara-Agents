@@ -1,5 +1,57 @@
 import assert from "node:assert/strict";
-import { buildGeneratedCharacterScheduleContext } from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-public-prompt.service";
+import { readFileSync } from "node:fs";
+import { stripTypeScriptTypes } from "node:module";
+import { runInNewContext } from "node:vm";
+import {
+  getTodaySchedule,
+  scheduleNeedsRefresh,
+} from "../sources/engine/packages/server/src/services/conversation/schedule.service.js";
+import {
+  normalizePromptTimeZone,
+  resolveConversationTimeZone,
+  toZonedWallClockDate,
+} from "../sources/engine/packages/server/src/services/conversation/timezone.js";
+import { areConversationSchedulesEnabled } from "../sources/engine/packages/server/src/services/generation/conversation-context-utils.js";
+
+// Run the owned function with its real captured schedule helpers. Importing the
+// whole prompt service would require unrelated storage, provider and image setup.
+const promptSource = readFileSync(
+  new URL(
+    "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-public-prompt.service.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const supportSource = readFileSync(
+  new URL(
+    "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-public-support.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const scheduleSource = promptSource.slice(
+  promptSource.indexOf("function parseWeekSchedule("),
+  promptSource.indexOf("/**", promptSource.indexOf("export async function buildGeneratedCharacterScheduleContext(")),
+);
+const recordSource = supportSource.slice(
+  supportSource.indexOf("export function parseRecord("),
+  supportSource.indexOf("export function parseStringArray("),
+);
+assert.ok(scheduleSource.includes("export async function buildGeneratedCharacterScheduleContext("));
+assert.ok(recordSource.includes("export function parseRecord("));
+const buildGeneratedCharacterScheduleContext = runInNewContext(
+  stripTypeScriptTypes(
+    `${recordSource}\n${scheduleSource}\nbuildGeneratedCharacterScheduleContext;`.replace(/^export /gmu, ""),
+  ),
+  {
+    getTodaySchedule,
+    scheduleNeedsRefresh,
+    normalizePromptTimeZone,
+    resolveConversationTimeZone,
+    toZonedWallClockDate,
+    areConversationSchedulesEnabled,
+  },
+) as typeof import("../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-public-prompt.service.js").buildGeneratedCharacterScheduleContext;
 
 const characterId = "character-breakfast";
 const schedule = {
@@ -105,9 +157,19 @@ async function main() {
     "No generated schedules are available for today.",
   );
 
-  assert.match(
+  // PDT is UTC-7: these instants are Monday 18:00 and 08:00 locally.
+  assert.equal(
     await contextAt(
       "2026-08-17T01:00:00.000Z",
+      [enabledChat(schedule, { conversationTimeZone: "America/Los_Angeles" })],
+      "UTC",
+    ),
+    "No generated schedules are available for today.",
+    "The Sunday local date must not read Monday’s schedule",
+  );
+  assert.match(
+    await contextAt(
+      "2026-08-18T01:00:00.000Z",
       [enabledChat(schedule, { conversationTimeZone: "America/Los_Angeles" })],
       "UTC",
     ),
@@ -115,7 +177,7 @@ async function main() {
   );
   assert.match(
     await contextAt(
-      "2026-08-17T06:00:00.000Z",
+      "2026-08-17T15:00:00.000Z",
       [enabledChat(schedule, { conversationTimeZone: "America/Los_Angeles" })],
       "UTC",
     ),

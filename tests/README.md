@@ -73,6 +73,23 @@ MARINARA_ENGINE_ROOT="$PWD" MARINARA_VISUAL_OUTPUT_DIR=/tmp/marinara-visuals \
   "$PWD/../Marinara-Agents/tests/long-term-memory-lifecycle.regression.ts"
 ```
 
+## Social source regressions
+
+Run the complete Noodle, Slurp Legacy, and Slurp Remastered source suite from
+this checkout after `npm ci`:
+
+```bash
+MARINARA_ENGINE_ROOT=../Marinara-Engine npm run test:noodle:regressions
+```
+
+The neighboring Engine needs its installed dependencies and built shared
+package. Source-only fixtures use `tests/tsconfig.regressions.json` to resolve
+`@marinara-engine/shared` through the same captured compatibility entry as the
+package builder. The Slurp file-native durability fixture instead uses the
+real Engine's shared module and an isolated temporary source/data overlay.
+It preserves the host's legacy tables while registering Slurp Remastered's
+package-owned tables. No real user data or provider connection is used.
+
 ## Long-Term Memory test ownership
 
 Choose the narrowest layer that exercises a contract. Similar assertions at

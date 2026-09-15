@@ -37,15 +37,20 @@ assert.match(storage, /unsubscribe\(viewerAccountId, creatorAccountId, true, tru
 
 // 5.1 / 5.3 / 5.4 copy and the cancel confirmation.
 const home = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
-assert.match(home, /ui\.slurp\.profile\.offer\.title/u);
+assert.match(home, /ui\.slurp\.profile\.subscribeBenefits/u, "The inline subscription offer must explain its benefits");
+assert.match(
+  home,
+  /slurpSubscriptionPriceOf\(profile\)\} \/ week/u,
+  "The subscription action must show its weekly price",
+);
 assert.match(home, /ui\.slurp\.profile\.cancelSubscriptionConfirm/u);
 const messages = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx");
 assert.match(messages, /ui\.slurp\.messages\.requestFeeHint/u);
 assert.match(messages, /ui\.slurp\.messages\.commissionRefundHint/u);
 const locales = JSON.parse(read("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json"));
 for (const key of [
-  "ui.slurp.profile.offer.title",
-  "ui.slurp.profile.offer.tip",
+  "ui.slurp.profile.subscribeBenefits",
+  "ui.slurp.profile.tip",
   "ui.slurp.profile.cancelSubscriptionDetail",
   "ui.slurp.messages.commissionRefundHint",
   "ui.slurp.messages.requestFeeHint",

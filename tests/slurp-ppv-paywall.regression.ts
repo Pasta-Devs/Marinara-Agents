@@ -20,7 +20,7 @@ const routes = readFileSync(join(src, "routes/slurp-messages.routes.ts"), "utf8"
 assert.match(
   routes,
   /const visibleMessages = async \(threadId: string, side: "viewer" \| "creator"\)/u,
-  "masking must live in one helper, not be repeated per route",
+  "full thread responses must retain the masking helper",
 );
 // The picture is masked with the text: a locked message is usually sold on its image.
 assert.match(
@@ -28,8 +28,45 @@ assert.match(
   /message\.kind === "ppv" && !message\.unlockedAt\s*\? \{ \.\.\.message, content: "", imageUrl: null \}/u,
 );
 
-// Every route that returns a thread's messages has to go through it.
-const raw = [...routes.matchAll(/messages: (?!await visibleMessages|thread \? await visibleMessages)[^\n]*/gu)];
+// Paginated responses apply the same policy to their page instead of reading the whole thread.
+// Execute those actual mapping expressions so accepting the paged route syntax cannot hide a leak.
+const pagedMappings = [...routes.matchAll(/messages: (page\.messages\.map\(\(message\) =>[\s\S]*?\n\s*\)),/gu)];
+assert.equal(pagedMappings.length, 2, "both paginated message responses must be covered");
+const page = {
+  messages: [
+    { kind: "ppv", content: secret, imageUrl: "/locked.png", unlockedAt: null, metadata: {} },
+    { kind: "ppv", content: secret, imageUrl: "/unlocked.png", unlockedAt: "paid", metadata: {} },
+    { kind: "text", content: "hello there", imageUrl: null, metadata: {} },
+    {
+      kind: "post_preview",
+      content: secret,
+      imageUrl: "/preview.png",
+      metadata: { previewLocked: true, content: secret, imageUrl: "/preview.png" },
+    },
+  ],
+};
+for (const [index, match] of pagedMappings.entries()) {
+  const mapPage = new Function("page", "side", `return ${match[1]}`) as (
+    inputPage: typeof page,
+    side: "viewer" | "creator",
+  ) => typeof page.messages;
+  const visible = mapPage(page, "viewer");
+  assert.equal(visible[0]!.content, "");
+  assert.equal(visible[0]!.imageUrl, null);
+  assert.deepEqual(visible.slice(1, 3), page.messages.slice(1, 3));
+  assert.equal(visible[3]!.content, "");
+  assert.equal(visible[3]!.imageUrl, null);
+  assert.equal(visible[3]!.metadata.content, "");
+  assert.equal(visible[3]!.metadata.imageUrl, null);
+  if (index === 0) assert.deepEqual(mapPage(page, "creator"), page.messages);
+}
+
+// Every other response must use the full-thread helper or the empty no-thread fallback.
+const raw = [
+  ...routes.matchAll(
+    /messages: (?!await visibleMessages|thread \? await visibleMessages|page\.messages\.map\(|\[\])[^\n]*/gu,
+  ),
+];
 assert.equal(raw.length, 0, `a route returns messages without masking: ${raw.map((m) => m[0]).join(", ")}`);
 
 console.log("slurp ppv paywall regression passed");

@@ -62,7 +62,8 @@ assert.match(contentFormat, /caption: 300,/u);
 assert.match(storage, /slice\(0, noodlerContentLimitFor\(nextMetadata\)\)/u, "edits honour the post's own cap");
 assert.doesNotMatch(storage, /trim\(\)\.slice\(0, 4000\)/u, "no flat 4000-character truncation");
 assert.match(generation, /NOODLER_FORMAT_MAX_LENGTH\[format\]/u);
-assert.match(generation, /noodlerContentFormat: input\.request\.format \?\? "caption"/u);
+assert.match(generation, /const format = input\.request\.format \?\? variation\?\.format \?\? "caption"/u);
+assert.match(generation, /noodlerContentFormat: format,/u, "stored posts retain the selected variation format");
 assert.match(operations, /format: "caption",\s+access: "locked"/u);
 // The reserve path deliberately passes no format: pinning `caption` there defeated the variation
 // rotation, so an automatic post was always a caption.
