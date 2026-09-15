@@ -189,6 +189,18 @@ published catalog until it's ready for testers.
 
 ## Changelog
 
+### 0.1.13
+
+- Fixed Recent Agent Update's collapsed box showing a sliver of Restore Inventory underneath —
+  its vertical padding wasn't included in the collapsed max-height calculation. Also shrank its
+  header text to match the other section labels.
+- Info tooltips and card overflow menus no longer clip against the dock's own edge (previously
+  clipped by the Bag/Outfits column's own scroll container) — they now flip to whichever side
+  actually has room, re-checked every time they open.
+- Shrank the item card's quantity field to match the width of the "⋯" button beside it — it
+  rarely needs more room than that.
+- "+ Add Item" is now green, matching Save Current Outfit's own styling.
+
 ### 0.1.12
 
 - Settings moved to its own top-level tab (Inventory/Settings) instead of an accordion that pushed

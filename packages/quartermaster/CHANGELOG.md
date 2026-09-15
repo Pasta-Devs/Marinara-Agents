@@ -1,5 +1,13 @@
 # Quartermaster changelog
 
+## 0.1.13 — 2026-09-14
+- Fixed Recent Agent Update's collapsed box showing a sliver of Restore Inventory underneath —
+  its vertical padding wasn't included in the collapsed max-height. Also shrank its header text.
+- Info tooltips and card overflow menus no longer clip against the dock's own edge; they now flip
+  to whichever side actually has room.
+- Shrank the item card's quantity field to match the "⋯" button beside it.
+- "+ Add Item" is now green, matching Save Current Outfit.
+
 ## 0.1.12 — 2026-09-14 [highlight]
 - Dock layout overhaul: Settings moved to its own top-level tab (Inventory/Settings) instead of an
   accordion, grouped under Appearance/Display/Image Generation/Data, with hover-and-tap info

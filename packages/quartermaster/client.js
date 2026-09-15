@@ -1,4 +1,4 @@
-// Quartermaster 0.1.12 — Marinara Engine roleplay-tracker capability (single-file client bundle)
+// Quartermaster 0.1.13 — Marinara Engine roleplay-tracker capability (single-file client bundle)
 // Built from packages/quartermaster/src (10 modules) by scripts/build-quartermaster-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -1545,13 +1545,43 @@ function qmBindPopoverDocumentListener() {
   qmPopoverDocumentListenerBound = true;
   document.addEventListener("click", () => qmClosePopover());
 }
-function qmTogglePopover(wrapper, openClass, event) {
+// `onOpen`, when given, runs after the popover's now-visible via
+// requestAnimationFrame (so it has real layout to measure) -- used to clamp
+// it back inside the dock's own bounds, see qmClampPopoverToContainer.
+function qmTogglePopover(wrapper, openClass, event, onOpen) {
   event.stopPropagation();
   const alreadyOpen = qmOpenPopover && qmOpenPopover.wrapper === wrapper;
   qmClosePopover();
   if (!alreadyOpen) {
     wrapper.classList.add(openClass);
     qmOpenPopover = { wrapper, openClass };
+    if (onOpen) requestAnimationFrame(onOpen);
+  }
+}
+
+// Re-measures `popoverEl` against `containerEl` (the dock's own scrollable
+// body -- the ask is "stay inside the dock," not just the browser viewport)
+// and flips whichever edge it would otherwise clip through. Resets to
+// `defaults` first so a stale flip from a previous open never carries over
+// to this one (a different trigger, or the dock having since been resized).
+// This is why #qm-dock-body's own overflow:auto used to visibly clip these:
+// a position:absolute descendant is still clipped by the nearest ancestor
+// whose overflow isn't "visible," regardless of which direction it grows.
+function qmClampPopoverToContainer(popoverEl, containerEl, defaults) {
+  Object.assign(popoverEl.style, defaults);
+  if (!containerEl) return;
+  const containerRect = containerEl.getBoundingClientRect();
+  const rect = popoverEl.getBoundingClientRect();
+  if (rect.right > containerRect.right) {
+    popoverEl.style.left = "auto";
+    popoverEl.style.right = "0";
+  } else if (rect.left < containerRect.left) {
+    popoverEl.style.left = "0";
+    popoverEl.style.right = "auto";
+  }
+  if (rect.bottom > containerRect.bottom) {
+    popoverEl.style.top = "auto";
+    popoverEl.style.bottom = "100%";
   }
 }
 
@@ -2658,9 +2688,6 @@ QM.dock = {
       cursor: "pointer",
       flexShrink: "0",
     });
-    badge.addEventListener("click", (event) => qmTogglePopover(wrapper, "qm-tooltip-open", event));
-    qmBindPopoverDocumentListener();
-
     const popover = document.createElement("div");
     popover.className = "qm-tooltip-popover";
     popover.textContent = text;
@@ -2680,6 +2707,16 @@ QM.dock = {
       boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
     });
 
+    // Defaults it may get flipped away from -- see qmClampPopoverToContainer.
+    // Re-clamped on every open (click OR hover), since #qm-dock-body's own
+    // overflow:auto clips a stray edge otherwise, regardless of growth
+    // direction.
+    const tooltipDefaults = { left: "0", right: "auto", top: "18px", bottom: "auto" };
+    const clampToDock = () => qmClampPopoverToContainer(popover, this.body, tooltipDefaults);
+    wrapper.addEventListener("mouseenter", () => requestAnimationFrame(clampToDock));
+    badge.addEventListener("click", (event) => qmTogglePopover(wrapper, "qm-tooltip-open", event, clampToDock));
+    qmBindPopoverDocumentListener();
+
     wrapper.append(badge, popover);
     return wrapper;
   },
@@ -2697,8 +2734,7 @@ QM.dock = {
     wrapper.className = "qm-overflow-wrap";
 
     const button = QM.button("⋯", { border: true, bg: "transparent", fg: "inherit" });
-    Object.assign(button.style, { padding: "2px 8px", flexShrink: "0" });
-    button.addEventListener("click", (event) => qmTogglePopover(wrapper, "qm-overflow-open", event));
+    Object.assign(button.style, { width: "32px", padding: "2px 0", flexShrink: "0" });
 
     const menu = document.createElement("div");
     menu.className = "qm-overflow-menu";
@@ -2716,6 +2752,20 @@ QM.dock = {
       boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
       overflow: "hidden",
     });
+
+    // Defaults it may get flipped away from -- see qmClampPopoverToContainer.
+    // Right-aligned by default (grows leftward from the button, since the
+    // button itself usually sits near a card's right edge); re-clamped on
+    // every open since #qm-dock-body's own overflow:auto otherwise clips
+    // whichever edge this would cross, most often the bottom for a card
+    // near the end of a scrolled list.
+    const menuDefaults = { left: "auto", right: "0", top: "100%", bottom: "auto" };
+    button.addEventListener("click", (event) =>
+      qmTogglePopover(wrapper, "qm-overflow-open", event, () =>
+        qmClampPopoverToContainer(menu, this.body, menuDefaults),
+      ),
+    );
+
     for (const action of actions) {
       const menuItem = document.createElement("button");
       menuItem.type = "button";
@@ -2965,7 +3015,7 @@ QM.dock = {
     label.textContent = "Recent Agent Update";
     Object.assign(label.style, {
       fontWeight: "600",
-      fontSize: "12px",
+      fontSize: "11px",
       textTransform: "uppercase",
       letterSpacing: "0.04em",
     });
@@ -2990,10 +3040,15 @@ QM.dock = {
     // Same max-height + overflow:hidden transition technique as the old
     // Settings accordion (display can't be transitioned) — 700px comfortably
     // covers Restore Inventory's one row plus MAX_TRACKER_OPERATIONS_PER_TURN
-    // rows of Recent Agent Update on a busy turn.
+    // rows of Recent Agent Update on a busy turn. boxSizing:"border-box" is
+    // load-bearing here, not decorative: without it, "maxHeight:0" only caps
+    // the CONTENT height, and this element's own vertical padding still
+    // renders at full size collapsed, visibly peeking a sliver of Restore
+    // Inventory's button/text through underneath the collapsed header.
     const content = document.createElement("div");
     Object.assign(content.style, {
       padding: "8px",
+      boxSizing: "border-box",
       display: "flex",
       flexDirection: "column",
       gap: "8px",
@@ -4442,7 +4497,7 @@ QM.dock = {
       row.appendChild(button);
     }
 
-    const addItemButton = QM.button("+ Add Item", { border: true, bg: "transparent", fg: "inherit" });
+    const addItemButton = QM.button("+ Add Item", { bg: QM_COLOR_SUCCESS, fg: QM_COLOR_SUCCESS_FG });
     addItemButton.addEventListener("click", () => this._openAddItemModal());
     row.appendChild(addItemButton);
 
@@ -4729,7 +4784,9 @@ QM.dock = {
     // a brand-new item's starting quantity still does.
     quantityInput.min = "0";
     quantityInput.value = String(item.quantity);
-    quantityInput.style.width = "48px";
+    // Matches the "⋯" button's own width beside it -- it'll rarely hold a
+    // number wide enough to need more room than that.
+    quantityInput.style.width = "32px";
     quantityInput.addEventListener("change", () => QM.state.updateItem(item.id, { quantity: quantityInput.value }));
 
     nameLine.append(nameLabel, quantityInput);
