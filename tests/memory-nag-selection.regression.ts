@@ -10,6 +10,7 @@ import { shortlistMemoryNags } from "../packages/memory-nag/src/engine/packages/
 import {
   buildMemoryNagScanMessages,
   memoryNagScanStart,
+  scanMemoryNagIfDue,
 } from "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/scanner.ts";
 import { memoryNagAgentRuntime } from "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/agent-runtime.ts";
 import { configureMemoryNagRuntime } from "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/package-runtime.ts";
@@ -297,7 +298,13 @@ async function assertFailedRecallPreservesCompletedRecall(): Promise<void> {
       "a failed recall must preserve the last completed recall timestamp and nag data",
     );
   } finally {
-    releaseRuntime();
+    // Finalization schedules background scans; drain this chat's queue before
+    // removing the runtime fixture they still depend on.
+    try {
+      await scanMemoryNagIfDue("failed-recall");
+    } finally {
+      releaseRuntime();
+    }
   }
 }
 assert.equal(
@@ -308,20 +315,29 @@ assert.equal(
   null,
 );
 
-const registeredRoutes: Array<{ method: string; options: Record<string, unknown> }> = [];
+const registeredRoutes: Array<{ method: string; path: string; options: Record<string, unknown> }> = [];
 const routeCollector = Object.fromEntries(
   ["delete", "get", "patch", "post", "put"].map((method) => [
     method,
-    (_path: string, options: unknown, handler?: unknown) => {
+    (path: string, options: unknown, handler?: unknown) => {
       registeredRoutes.push({
         method,
+        path,
         options: typeof handler === "function" && options && typeof options === "object" ? options : {},
       });
     },
   ]),
 );
 void memoryNagRoutes(routeCollector as never, {});
-assert.equal(registeredRoutes.length, 8);
+assert.equal(registeredRoutes.length, 11);
+assert.deepEqual(
+  registeredRoutes.filter((route) => route.path.includes("/range")).map(({ method, path }) => ({ method, path })),
+  [
+    { method: "post", path: "/scan/:chatId/range" },
+    { method: "delete", path: "/scan/:chatId/range/:scanId" },
+  ],
+  "the two added routes start and release an authenticated Roleplay range session",
+);
 assert.ok(
   registeredRoutes.every((route) => typeof route.options.preHandler === "function"),
   "every Memory Nag route must carry its Roleplay-only guard without relying on package-level Fastify hooks",

@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { unlink } from "node:fs/promises";
 import {
   ltmRejectedSuggestionSchema,
   type LtmExtractionDroppedCandidate,
@@ -26,13 +25,21 @@ function normalize(value: unknown): unknown {
   return value;
 }
 
-function fingerprint(source: LtmExtractionDraft["source"], candidate: LtmExtractionDroppedCandidate) {
+function fingerprint(
+  source: LtmExtractionDraft["source"],
+  candidate: LtmExtractionDroppedCandidate,
+  includeRecoveryCandidate = true,
+) {
+  const { validatorCode: _validatorCode, recoveryCandidate: _recoveryCandidate, ...legacyCandidate } = candidate;
+  const fingerprintCandidate = includeRecoveryCandidate
+    ? { ...legacyCandidate, ...(candidate.recoveryCandidate ? { recoveryCandidate: candidate.recoveryCandidate } : {}) }
+    : legacyCandidate;
   return createHash("sha256")
     .update(
       JSON.stringify(
         normalize({
           sourceNoteId: source.sourceNoteId,
-          candidate: { ...candidate, index: undefined },
+          candidate: { ...fingerprintCandidate, index: undefined },
         }),
       ),
     )
@@ -103,19 +110,25 @@ export async function addRejectedSuggestions(draft: LtmExtractionDraft, root = g
     const timestamp = nowIso();
     for (const candidate of candidates) {
       const value = fingerprint(draft.source, candidate);
-      const current = byFingerprint.get(value);
+      const legacyValue = fingerprint(draft.source, candidate, false);
+      const current =
+        byFingerprint.get(value) ??
+        [...byFingerprint.values()].find((item) => fingerprint(item.source, item.candidate, false) === legacyValue);
       if (current) {
-        byFingerprint.set(
-          value,
-          ltmRejectedSuggestionSchema.parse({
-            ...current,
-            source: draft.source,
-            scope: draft.scope,
-            modes: draft.modes,
-            candidate,
-            lastSeenAt: timestamp,
-          }),
-        );
+        const mergedCandidate =
+          current.candidate.recoveryCandidate && !candidate.recoveryCandidate
+            ? { ...candidate, recoveryCandidate: current.candidate.recoveryCandidate }
+            : candidate;
+        const updated = ltmRejectedSuggestionSchema.parse({
+          ...current,
+          source: draft.source,
+          scope: draft.scope,
+          modes: draft.modes,
+          candidate: mergedCandidate,
+          lastSeenAt: timestamp,
+        });
+        for (const [key, item] of byFingerprint) if (item.id === current.id) byFingerprint.delete(key);
+        byFingerprint.set(updated.fingerprint, updated);
         continue;
       }
       if (byFingerprint.size >= LTM_REJECTED_SUGGESTIONS_LIMIT)
@@ -137,7 +150,11 @@ export async function addRejectedSuggestions(draft: LtmExtractionDraft, root = g
     const next = sortSuggestions([...byFingerprint.values()]);
     await writeJsonAtomic(path, next);
     return next.filter((item) =>
-      candidates.some((candidate) => fingerprint(draft.source, candidate) === item.fingerprint),
+      candidates.some((candidate) => {
+        const value = fingerprint(draft.source, candidate);
+        const legacyValue = fingerprint(draft.source, candidate, false);
+        return value === item.fingerprint || fingerprint(item.source, item.candidate, false) === legacyValue;
+      }),
     );
   });
 }
@@ -176,8 +193,12 @@ export async function writeRejectedSuggestions(suggestions: LtmRejectedSuggestio
   });
 }
 
-export async function deleteAllRejectedSuggestions(root = getLongTermMemoryRoot()) {
+export async function deleteRejectedSuggestionsForSource(sourceNoteId: string, root = getLongTermMemoryRoot()) {
   return withLtmVaultLock(root, async () => {
-    await unlink(ltmRejectedSuggestionsPath(root)).catch(() => {});
+    const existing = await readSuggestionsUnlocked(root);
+    const next = existing.filter((item) => item.source.sourceNoteId !== sourceNoteId);
+    const deletedCount = existing.length - next.length;
+    if (deletedCount) await writeJsonAtomic(ltmRejectedSuggestionsPath(root), next);
+    return { deletedCount, sourceNoteId };
   });
 }

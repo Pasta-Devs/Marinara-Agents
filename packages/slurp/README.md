@@ -1,6 +1,6 @@
-# Slurp
+# Slurp Legacy
 
-Slurp is the local Creator and fan roleplay feed. Create local Creator profiles from Engine characters or personas, publish public or locked Slurp posts, and simulate subscriptions, unlocks, replies, and audience activity.
+Slurp Legacy is the older local Creator and fan roleplay feed. This package is being reworked and is on hold. New development is happening in Slurp Remastered. Bug fixes are not planned for this version.
 
 The shipped default guidance is adult-first. It can produce flirty, suggestive, sensual, and explicit posts when they fit the Creator. Review generated content and edit the guidance for a different balance.
 

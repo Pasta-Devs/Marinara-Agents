@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, inArray, isNull, lt } from "../../db/file-query.js";
+import { and, desc, eq, gt, inArray, isNull, lt, or } from "../../db/file-query.js";
 import type { DB } from "../../db/connection.js";
 import { isFileUniqueConstraintError } from "../../db/file-schema.js";
 import {
@@ -12,7 +12,6 @@ import {
 } from "../../db/schema/noodle.js";
 import { newId, now } from "../../utils/id-generator.js";
 import {
-  clearNoodleRefreshFailure,
   noodleRefreshSchedulerStatus,
   reconcileNoodleRefreshSchedule,
   parsePersistedNoodleRefreshSchedule,
@@ -20,7 +19,7 @@ import {
   type PersistedNoodleRefreshSchedule,
 } from "../noodle/noodle-refresh-schedule.js";
 import { pruneNoodleRefreshRuns } from "./noodle-refresh-run-retention.js";
-import { createNoodlePoll, readNoodlePollFromMetadata } from "@marinara-engine/shared";
+import { createNoodlePoll, readNoodlePollFromMetadata, type NoodleSettings } from "@marinara-engine/shared";
 import {
   applyNoodleCleanupIfStillStale,
   staleNoodleAccountIds,
@@ -29,6 +28,7 @@ import {
 export type { NoodleDataDeletionCounts } from "../noodle/noodle-data-cleanup.js";
 
 const SETTINGS_ID = "noodle.settings";
+export type PackageNoodleSettings = NoodleSettings & { imageWidth: number; imageHeight: number };
 const DEFAULT_SETTINGS: Record<string, unknown> = {
   refreshesPerDay: 2,
   participantSelectionMode: "random_range",
@@ -40,6 +40,8 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
   maxLikesPerRefresh: 18,
   maxImagesPerRefresh: 3,
   enableImagePrompts: false,
+  imageWidth: 1024,
+  imageHeight: 1536,
   enableImageInterpretation: true,
   imageGenerationConnectionId: null,
   imageGenerationPrompt:
@@ -66,6 +68,15 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
 };
 const PUBLIC_SETTING_KEYS = new Set([...Object.keys(DEFAULT_SETTINGS), "refreshSchedule"]);
 const DEFAULT_ACCOUNT_SETTINGS = { profile: {}, social: {} };
+const IMAGE_DIMENSION_MIN = 64;
+const IMAGE_DIMENSION_MAX = 4096;
+
+function imageDimension(value: unknown, fallback: number): number {
+  const numeric = typeof value === "number" || typeof value === "string" ? Number(value) : NaN;
+  return Number.isInteger(numeric) && numeric >= IMAGE_DIMENSION_MIN && numeric <= IMAGE_DIMENSION_MAX
+    ? numeric
+    : fallback;
+}
 
 type Row<T> = T extends { $inferSelect: infer S } ? S : never;
 type AccountRow = Row<typeof noodleAccounts>;
@@ -363,21 +374,26 @@ export function createNoodleStorage(db: DB) {
 
   return {
     async getSettings() {
-      return { ...DEFAULT_SETTINGS, ...(await getSettingsRaw()) };
+      const settings = { ...DEFAULT_SETTINGS, ...(await getSettingsRaw()) };
+      return {
+        ...settings,
+        imageWidth: imageDimension(settings.imageWidth, 1024),
+        imageHeight: imageDimension(settings.imageHeight, 1536),
+      } as PackageNoodleSettings;
     },
     async updateSettings(input: Record<string, unknown>) {
       const patch = Object.fromEntries(
         Object.entries(input).filter(([key]) => PUBLIC_SETTING_KEYS.has(key) && key !== "refreshSchedule"),
       );
       if ("promptPresets" in patch) patch.promptPresets = sanitizePromptPresets(patch.promptPresets);
+      if ("imageWidth" in patch) patch.imageWidth = imageDimension(patch.imageWidth, 1024);
+      if ("imageHeight" in patch) patch.imageHeight = imageDimension(patch.imageHeight, 1536);
       const next = { ...(await this.getSettings()), ...patch };
       await saveSettingsRaw(next);
       const schedule = await this.getRefreshSchedule();
       if (schedule)
         await this.saveRefreshSchedule(
-          clearNoodleRefreshFailure(
-            reconcileNoodleRefreshSchedule(schedule, Number(next.refreshesPerDay ?? 0), new Date()),
-          ),
+          reconcileNoodleRefreshSchedule(schedule, Number(next.refreshesPerDay ?? 0), new Date()),
         );
       return this.getSettings();
     },
@@ -608,6 +624,37 @@ export function createNoodleStorage(db: DB) {
         .orderBy(desc(noodlePosts.createdAt))
         .limit(Math.max(1, Math.min(300, Math.floor(options.limit ?? 120))));
       return rows.map(mapPost);
+    },
+    async listPostPage(options: { limit?: number; cursorAt?: string; cursorId?: string } = {}) {
+      const ids = await publicIds();
+      if (!ids.length) return { items: [], interactions: [], nextCursor: null };
+      const limit = Math.max(1, Math.min(100, Math.floor(options.limit ?? 20)));
+      const cursor =
+        options.cursorAt && options.cursorId
+          ? or(
+              lt(noodlePosts.createdAt, options.cursorAt),
+              and(eq(noodlePosts.createdAt, options.cursorAt), lt(noodlePosts.id, options.cursorId)),
+            )
+          : null;
+      const rows = await db
+        .select()
+        .from(noodlePosts)
+        .where(
+          cursor ? and(inArray(noodlePosts.authorAccountId, ids), cursor) : inArray(noodlePosts.authorAccountId, ids),
+        )
+        .orderBy(desc(noodlePosts.createdAt), desc(noodlePosts.id))
+        .limit(limit + 1);
+      const items = rows.slice(0, limit).map(mapPost);
+      const last = items.at(-1);
+      return {
+        items,
+        interactions: await this.listInteractions(items.map((post) => post.id)),
+        nextCursor: rows.length > limit && last ? { createdAt: last.createdAt, id: last.id } : null,
+      };
+    },
+    async listNotificationData() {
+      const posts = await this.listPosts({ limit: 300 });
+      return { posts, interactions: await this.listInteractions(posts.map((post: any) => post.id)) };
     },
     async listPostsBefore(before: string) {
       const ids = await publicIds();
@@ -1340,10 +1387,10 @@ export function createNoodleStorage(db: DB) {
       });
       return counts;
     },
-    async bootstrap() {
+    async bootstrap(options: { postLimit?: number } = {}) {
       const settings = await this.getSettings();
       const schedule = await this.ensureRefreshSchedule(new Date(), settings);
-      const posts = await this.listPosts({ limit: 160 });
+      const posts = await this.listPosts({ limit: options.postLimit ?? 160 });
       return {
         settings,
         scheduler: noodleRefreshSchedulerStatus(schedule, new Date()),

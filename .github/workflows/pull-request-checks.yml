@@ -34,26 +34,58 @@ jobs:
       - name: Check formatting and lint
         run: npm run check
 
+      - name: Check package source names
+        run: npm run typecheck:packages
+
       - name: Test package security invariants
         run: npm run test:security
+
+      - name: Test Calls SwarmUI video generation
+        run: node tests/calls-swarmui-video.regression.mjs
 
       - name: Test Memory Nag recall selection
         run: npx tsx tests/memory-nag-selection.regression.ts
 
+      - name: Test Memory Nag ranges and Pixelforge weather contract
+        run: |
+          npx tsx tests/memory-nag-range.regression.ts
+          node tests/pixelforge-weather-contract.regression.mjs
+
+      - name: Test Pixelforge world, setup, and startup contracts
+        run: |
+          node packages/pixelforge/test-brief.mjs
+          node tests/pixelforge-startup.regression.mjs
+
       - name: Test Beholder client bundle contract
         run: npx tsx tests/beholder-client-contract.regression.ts
+
+      # Prints how much of the reference extension's interface this package actually
+      # renders. It is here so the number is read from a run rather than asserted from
+      # memory — three separate claims of parity were wrong before this test existed.
+      - name: Measure Beholder UI parity against the reference extension
+        run: npx tsx tests/beholder-parity.regression.ts
 
       - name: Test catalog lane routing and build provenance
         run: node scripts/test-catalog-lanes.mjs
 
       - name: Validate package localization catalogs
-        run: node scripts/validate-package-locales.mjs
+        run: |
+          node scripts/tests/ui-translation-retention.regression.mjs
+          node scripts/validate-package-locales.mjs
+
+      # A package bundles shared Engine components but owns its locale catalog, so a component from
+      # a shared folder can ship with no strings and render raw key names to users.
+      - name: Validate bundled localization keys resolve
+        run: node scripts/validate-package-locale-keys.mjs
 
       - name: Validate catalogs, packages, artifacts, and README coverage
         run: node scripts/validate-catalog.mjs
 
       - name: Test catalog generatedAt determinism
         run: node scripts/tests/catalog-generatedat-determinism.regression.mjs
+
+      - name: Test package release notes
+        run: node scripts/tests/catalog-release-notes.regression.mjs
 
       - name: Test World Maps UI contracts
         run: node tests/world-maps-ui-contract.regression.mjs

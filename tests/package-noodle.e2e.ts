@@ -10,7 +10,6 @@ const APP_VERSION = (
   }
 ).version;
 const NOODLE_BLUE_RGB = "rgb(126, 167, 255)";
-const NOODLE_LIGHT_FOREGROUND = "color(srgb 0.360482 0.453112 0.708674 / 0.986)";
 
 function createDeferred() {
   let resolve!: () => void;
@@ -43,11 +42,27 @@ async function prepareFreshClient(page: Page) {
           hasCompletedOnboarding: true,
           rightPanelOpen: false,
           sidebarOpen: false,
+          // Fixed package-color assertions need a non-animated host accent.
+          appAccentPulseMode: false,
         },
         version: 65,
       }),
     );
   }, APP_VERSION);
+}
+
+async function prepareNoodlePersona(page: Page, name: string) {
+  const response = await page.request.post("/api/characters/personas", {
+    data: { name, description: "Temporary browser regression persona." },
+  });
+  expect(response.ok()).toBe(true);
+  const persona = (await response.json()) as { id: string };
+  await page.addInitScript((personaId) => {
+    const key = "marinara:noodle:ui";
+    if (localStorage.getItem(key)) return;
+    localStorage.setItem(key, JSON.stringify({ noodleSelectedPersonaId: personaId }));
+  }, persona.id);
+  return persona.id;
 }
 
 async function openNoodle(page: Page) {
@@ -60,6 +75,21 @@ async function openNoodle(page: Page) {
     return;
   }
   await welcomeDialog.getByRole("button", { name: "Start reading" }).click();
+}
+
+async function openNoodleSettings(page: Page) {
+  const noodle = page.locator('[data-component="NoodleView"]');
+  const mobileNav = noodle.locator('[data-component="NoodleView.MobileBottomNav"]');
+  if (await mobileNav.isVisible()) {
+    await mobileNav.getByRole("button", { name: "Open Noodle account menu" }).click();
+    await page
+      .getByRole("dialog", { name: "Noodle account menu" })
+      .getByRole("button", { name: "Settings", exact: true })
+      .click();
+  } else {
+    await noodle.getByRole("button", { name: "Settings", exact: true }).click();
+  }
+  await expect(noodle.getByRole("heading", { name: "Noodle settings" })).toBeVisible();
 }
 
 async function setStoredTheme(page: Page, theme: "dark" | "light") {
@@ -92,34 +122,37 @@ async function setStoredTheme(page: Page, theme: "dark" | "light") {
   );
 }
 
-async function expectSurfaceAccent(locator: Locator, accent: string, foreground: string) {
+async function expectSurfaceAccent(locator: Locator, accent: string) {
   await expect
     .poll(() =>
-      locator.evaluate(
-        (element, expected) => {
-          const probe = document.createElement("span");
-          probe.style.color = "var(--noodle-accent-foreground)";
-          element.appendChild(probe);
+      locator.evaluate((element) => {
+        const target = element as HTMLElement;
+        const property = "--noodle-accent-foreground";
+        const originalValue = target.style.getPropertyValue(property);
+        const originalPriority = target.style.getPropertyPriority(property);
+        const originalColor = target.style.getPropertyValue("color");
+        const originalColorPriority = target.style.getPropertyPriority("color");
+        const sentinel = "rgb(1, 2, 3)";
+        try {
+          target.style.setProperty("color", sentinel, "important");
+          const resolvedSentinel = getComputedStyle(element).color;
+          if (originalColor) target.style.setProperty("color", originalColor, originalColorPriority);
+          else target.style.removeProperty("color");
+          target.style.setProperty(property, sentinel);
           const elementStyle = getComputedStyle(element);
-          const resolvedForeground = getComputedStyle(probe).color;
-          const result = {
+          return {
             accent: elementStyle.getPropertyValue("--noodle-accent").trim(),
-            color: elementStyle.color,
-            expected,
-            resolvedForeground,
+            usesForeground: elementStyle.color === resolvedSentinel,
           };
-          probe.remove();
-          return result;
-        },
-        { accent, foreground },
-      ),
+        } finally {
+          if (originalColor) target.style.setProperty("color", originalColor, originalColorPriority);
+          else target.style.removeProperty("color");
+          if (originalValue) target.style.setProperty(property, originalValue, originalPriority);
+          else target.style.removeProperty(property);
+        }
+      }),
     )
-    .toEqual({
-      accent,
-      color: foreground,
-      expected: { accent, foreground },
-      resolvedForeground: foreground,
-    });
+    .toEqual({ accent, usesForeground: true });
 }
 
 test.beforeEach(async ({ page }) => {
@@ -131,6 +164,168 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.describe("package-owned Noodle interface", () => {
+  test("timeline posts can be edited, cancelled, and saved", async ({ page }, testInfo) => {
+    const errors = collectUnexpectedErrors(page);
+    const bootstrapResponse = await page.request.get("/api/noodle");
+    expect(bootstrapResponse.ok()).toBe(true);
+    const bootstrap = (await bootstrapResponse.json()) as {
+      accounts: Array<{ entityId: string; kind: string; invited: boolean }>;
+    };
+    const author = bootstrap.accounts.find((account) => account.kind === "character" && account.invited);
+    expect(author).toBeDefined();
+    const originalContent = `Post editing regression ${Date.now()}`;
+    const postResponse = await page.request.post("/api/noodle/posts", {
+      data: { authorKind: "character", authorEntityId: author!.entityId, content: originalContent },
+    });
+    expect(postResponse.ok()).toBe(true);
+    const post = (await postResponse.json()) as { id: string };
+    let updates = 0;
+    page.on("request", (request) => {
+      if (request.method() === "PATCH" && new URL(request.url()).pathname === `/api/noodle/posts/${post.id}`)
+        updates += 1;
+    });
+    try {
+      await page.goto("/");
+      await openNoodle(page);
+      await page.evaluate(async () => {
+        const { useUIStore } = await import("/src/stores/ui.store.ts" as string);
+        useUIStore.setState({ appAccentPulseMode: true, appAccentRgbMode: false });
+      });
+      await expect(page.locator("html")).toHaveAttribute("data-marinara-accent-animation", /.+/);
+      const article = page.locator(`[data-noodle-post-id="${post.id}"]`);
+      await expect(article).toContainText(originalContent);
+      const postActions = article.getByRole("button", { name: "Post actions", exact: true });
+      await expect(postActions.locator("svg")).toHaveCSS("color", NOODLE_BLUE_RGB);
+      await postActions.click();
+      const articleColor = await article.evaluate((element) => getComputedStyle(element).color);
+      for (const name of ["Edit", "Delete"]) {
+        const action = article.getByRole("button", { name, exact: true });
+        await expect(action.locator("svg")).toHaveCSS("color", NOODLE_BLUE_RGB);
+        await expect(action).toHaveCSS("color", articleColor);
+        if (!testInfo.project.name.includes("mobile")) {
+          await action.hover();
+          await expect(action).toHaveCSS("background-color", "oklab(0.735633 -0.0133562 -0.135208 / 0.1)");
+        }
+      }
+      await page.screenshot({ path: testInfo.outputPath("noodle-post-menu-colors.png") });
+      await article.getByRole("button", { name: "Edit", exact: true }).click();
+      const editor = article.getByPlaceholder("What's simmering?");
+      await expect(editor).toHaveValue(originalContent);
+      await editor.fill("A cancelled edit must not be saved.");
+      await article.getByRole("button", { name: "Cancel", exact: true }).click();
+      await expect(editor).not.toBeVisible();
+      await expect(article).toContainText(originalContent);
+      expect(updates).toBe(0);
+
+      await article.getByRole("button", { name: "Post actions", exact: true }).click();
+      await article.getByRole("button", { name: "Edit", exact: true }).click();
+      await expect(editor).toHaveValue(originalContent);
+      const editedContent = `${originalContent}, now saved.`;
+      await editor.fill(editedContent);
+      await page.screenshot({ path: testInfo.outputPath("noodle-post-editing.png") });
+      const saveResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === "PATCH" &&
+          new URL(response.url()).pathname === `/api/noodle/posts/${post.id}`,
+      );
+      await article.getByRole("button", { name: "Save", exact: true }).click();
+      expect((await saveResponse).ok()).toBe(true);
+      await expect(editor).not.toBeVisible();
+      await expect(article).toContainText(editedContent);
+      const posts = (await (await page.request.get("/api/noodle/posts")).json()) as Array<{
+        id: string;
+        content: string;
+      }>;
+      expect(posts.find((entry) => entry.id === post.id)?.content).toBe(editedContent);
+      expect(updates).toBe(1);
+      const noodle = page.locator('[data-component="NoodleView"]');
+      await noodle.getByRole("button", { name: "Search", exact: true }).click();
+      const search = noodle.locator("label").filter({ has: page.getByPlaceholder("Search posts or @users") });
+      await expect(search.locator("svg:visible").first()).toHaveCSS("color", NOODLE_BLUE_RGB);
+      await page.screenshot({ path: testInfo.outputPath("noodle-search-colors.png") });
+      expect(errors).toEqual([]);
+    } finally {
+      await page.request.delete(`/api/noodle/posts/${post.id}`, { timeout: 5_000 }).catch(() => undefined);
+    }
+  });
+
+  test("Delete All Noodle Data can be cancelled before typing DELETE", async ({ page }, testInfo) => {
+    let deletions = 0;
+    page.on("request", (request) => {
+      if (request.method() === "DELETE" && new URL(request.url()).pathname === "/api/noodle/data") deletions += 1;
+    });
+    await page.goto("/");
+    await openNoodle(page);
+    const noodle = page.locator('[data-component="NoodleView"]');
+    await openNoodleSettings(page);
+    await noodle.getByRole("button", { name: "Advanced", exact: true }).click();
+    await noodle.getByRole("button", { name: "Delete All Noodle Data", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Delete All Noodle Data", exact: true });
+    await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeEnabled();
+    await expect(dialog.getByRole("button", { name: "Delete All Data", exact: true })).toBeDisabled();
+    await expect(dialog.locator(".mari-modal-panel")).toHaveCSS("opacity", "1");
+    await page.screenshot({ path: testInfo.outputPath("delete-all-cancel.png") });
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(dialog).not.toBeVisible();
+    await noodle.getByRole("button", { name: "Delete All Noodle Data", exact: true }).click();
+    await dialog.getByRole("textbox", { name: "DELETE", exact: true }).fill("DELETE");
+    await expect(dialog.getByRole("button", { name: "Delete All Data", exact: true })).toBeEnabled();
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(dialog).not.toBeVisible();
+    expect(deletions).toBe(0);
+  });
+
+  test("saved prompt replacement confirms before changing the active custom prompt", async ({ page }, testInfo) => {
+    const promptPath = "/api/prompt-overrides/noodle.timelineBase";
+    const initialDetail = (await (await page.request.get(promptPath)).json()) as {
+      override: { template: string; enabled: boolean } | null;
+    };
+    const initialBootstrap = (await (await page.request.get("/api/noodle")).json()) as {
+      settings: { promptPresets?: unknown[] };
+    };
+    const preset = {
+      name: "Replacement confirmation fixture",
+      key: "noodle.timelineBase",
+      template: "A saved timeline prompt.",
+    };
+    const activePrompt = "My edited active timeline prompt, not saved on the preset shelf.";
+    try {
+      expect((await page.request.put(promptPath, { data: { template: activePrompt, enabled: true } })).ok()).toBe(true);
+      expect((await page.request.put("/api/noodle/settings", { data: { promptPresets: [preset] } })).ok()).toBe(true);
+      await page.goto("/");
+      await openNoodle(page);
+      const noodle = page.locator('[data-component="NoodleView"]');
+      await openNoodleSettings(page);
+      await noodle.getByRole("button", { name: "Advanced", exact: true }).click();
+      const promptSetting = noodle.locator('[data-component="NoodleView.PromptSetting"]');
+      await expect(promptSetting).toContainText(activePrompt);
+      await promptSetting.getByRole("combobox", { name: "Saved prompts", exact: true }).selectOption(preset.name);
+      const dialog = page.getByRole("dialog", { name: "Replace current prompt?", exact: true });
+      await expect(dialog).toContainText("including any unsaved edits");
+      await expect(dialog.locator(".mari-modal-panel")).toHaveCSS("opacity", "1");
+      await page.screenshot({ path: testInfo.outputPath("prompt-replacement-confirmation.png") });
+      await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+      await expect(dialog).not.toBeVisible();
+      await expect(promptSetting).toContainText(activePrompt);
+      expect(
+        ((await (await page.request.get(promptPath)).json()) as { override: { template: string } }).override.template,
+      ).toBe(activePrompt);
+      await promptSetting.getByRole("combobox", { name: "Saved prompts", exact: true }).selectOption(preset.name);
+      await dialog.getByRole("button", { name: "Apply preset", exact: true }).click();
+      await expect(dialog).not.toBeVisible();
+      await expect(promptSetting).toContainText(preset.template);
+      expect(
+        ((await (await page.request.get(promptPath)).json()) as { override: { template: string } }).override.template,
+      ).toBe(preset.template);
+    } finally {
+      if (initialDetail.override) await page.request.put(promptPath, { data: initialDetail.override });
+      else await page.request.delete(promptPath);
+      await page.request.put("/api/noodle/settings", {
+        data: { promptPresets: initialBootstrap.settings.promptPresets ?? [] },
+      });
+    }
+  });
+
   test("Noodle interface icons consistently use Noodle blue", async ({ page }, testInfo) => {
     test.skip(!testInfo.project.name.includes("desktop"), "The full Noodle settings surface is covered on desktop.");
 
@@ -540,27 +735,9 @@ test.describe("package-owned Noodle interface", () => {
 
   test("Noodle posts tag invited characters with @handle mentions", async ({ page }) => {
     const errors = collectUnexpectedErrors(page);
-    const activePersonaResponse = await page.request.get("/api/characters/personas/active");
-    const activePersona = activePersonaResponse.ok()
-      ? ((await activePersonaResponse.json()) as { id?: string } | null)
-      : null;
-    let personaId = activePersona?.id ?? null;
-    let createdPersonaId: string | null = null;
+    const personaId = await prepareNoodlePersona(page, "Noodle Mention Regression");
+    const createdPersonaId = personaId;
     let createdPostId: string | null = null;
-    if (!personaId) {
-      const personaResponse = await page.request.post("/api/characters/personas", {
-        data: {
-          name: "Noodle Mention Regression",
-          description: "Temporary browser regression persona.",
-        },
-      });
-      expect(personaResponse.ok()).toBe(true);
-      const createdPersona = (await personaResponse.json()) as { id: string };
-      personaId = createdPersona.id;
-      createdPersonaId = createdPersona.id;
-      const activateResponse = await page.request.put(`/api/characters/personas/${createdPersona.id}/activate`);
-      expect(activateResponse.ok()).toBe(true);
-    }
 
     const initialBootstrapResponse = await page.request.get("/api/noodle");
     expect(initialBootstrapResponse.ok()).toBe(true);
@@ -665,28 +842,9 @@ test.describe("package-owned Noodle interface", () => {
 
   test("Noodle renders safe non-link Markdown and keeps known mentions interactive", async ({ page }) => {
     const errors = collectUnexpectedErrors(page);
-    const activePersonaResponse = await page.request.get("/api/characters/personas/active");
-    const activePersona = activePersonaResponse.ok()
-      ? ((await activePersonaResponse.json()) as { id?: string } | null)
-      : null;
-    let personaId = activePersona?.id ?? null;
-    let createdPersonaId: string | null = null;
+    const personaId = await prepareNoodlePersona(page, "Noodle Markdown Regression");
+    const createdPersonaId = personaId;
     let createdPostId: string | null = null;
-
-    if (!personaId) {
-      const personaResponse = await page.request.post("/api/characters/personas", {
-        data: {
-          name: "Noodle Markdown Regression",
-          description: "Temporary browser regression persona.",
-        },
-      });
-      expect(personaResponse.ok()).toBe(true);
-      const persona = (await personaResponse.json()) as { id: string };
-      personaId = persona.id;
-      createdPersonaId = persona.id;
-      const activateResponse = await page.request.put(`/api/characters/personas/${persona.id}/activate`);
-      expect(activateResponse.ok()).toBe(true);
-    }
 
     const bootstrapResponse = await page.request.get("/api/noodle");
     expect(bootstrapResponse.ok()).toBe(true);
@@ -781,27 +939,9 @@ test.describe("package-owned Noodle interface", () => {
 
   test("Noodle polls support character creation and voting on both sides", async ({ page }) => {
     const errors = collectUnexpectedErrors(page);
-    const activePersonaResponse = await page.request.get("/api/characters/personas/active");
-    const activePersona = activePersonaResponse.ok()
-      ? ((await activePersonaResponse.json()) as { id?: string } | null)
-      : null;
-    let personaId = activePersona?.id ?? null;
-    let createdPersonaId: string | null = null;
+    const personaId = await prepareNoodlePersona(page, "Noodle Poll Regression");
+    const createdPersonaId = personaId;
     const createdPostIds: string[] = [];
-    if (!personaId) {
-      const personaResponse = await page.request.post("/api/characters/personas", {
-        data: {
-          name: "Noodle Poll Regression",
-          description: "Temporary browser regression persona.",
-        },
-      });
-      expect(personaResponse.ok()).toBe(true);
-      const createdPersona = (await personaResponse.json()) as { id: string };
-      personaId = createdPersona.id;
-      createdPersonaId = createdPersona.id;
-      const activateResponse = await page.request.put(`/api/characters/personas/${createdPersona.id}/activate`);
-      expect(activateResponse.ok()).toBe(true);
-    }
 
     const initialBootstrapResponse = await page.request.get("/api/noodle");
     expect(initialBootstrapResponse.ok()).toBe(true);
@@ -933,27 +1073,9 @@ test.describe("package-owned Noodle interface", () => {
     test.skip(!testInfo.project.name.includes("desktop"), "Reaction stability is covered on desktop.");
 
     const errors = collectUnexpectedErrors(page);
-    const activePersonaResponse = await page.request.get("/api/characters/personas/active");
-    const activePersona = activePersonaResponse.ok()
-      ? ((await activePersonaResponse.json()) as { id?: string } | null)
-      : null;
-    let personaId = activePersona?.id ?? null;
-    let createdPersonaId: string | null = null;
+    const personaId = await prepareNoodlePersona(page, "Noodle Reaction Regression");
+    const createdPersonaId = personaId;
     const createdPostIds: string[] = [];
-    if (!personaId) {
-      const personaResponse = await page.request.post("/api/characters/personas", {
-        data: {
-          name: "Noodle Reaction Regression",
-          description: "Temporary browser regression persona.",
-        },
-      });
-      expect(personaResponse.ok()).toBe(true);
-      const createdPersona = (await personaResponse.json()) as { id: string };
-      personaId = createdPersona.id;
-      createdPersonaId = createdPersona.id;
-      const activateResponse = await page.request.put(`/api/characters/personas/${createdPersona.id}/activate`);
-      expect(activateResponse.ok()).toBe(true);
-    }
 
     await page.request.get("/api/noodle");
     for (const label of ["First", "Second"]) {
@@ -1049,25 +1171,8 @@ test.describe("package-owned Noodle interface", () => {
     let controlPostId: string | null = null;
 
     try {
-      const activePersonaResponse = await page.request.get("/api/characters/personas/active");
-      const activePersona = activePersonaResponse.ok()
-        ? ((await activePersonaResponse.json()) as { id?: string } | null)
-        : null;
-      personaId = activePersona?.id ?? null;
-      if (!personaId) {
-        const personaResponse = await page.request.post("/api/characters/personas", {
-          data: {
-            name: "Noodle Comment Owner",
-            description: "Temporary browser regression persona.",
-          },
-        });
-        expect(personaResponse.ok()).toBe(true);
-        const createdPersona = (await personaResponse.json()) as { id: string };
-        personaId = createdPersona.id;
-        createdPersonaId = createdPersona.id;
-        const activateResponse = await page.request.put(`/api/characters/personas/${createdPersona.id}/activate`);
-        expect(activateResponse.ok()).toBe(true);
-      }
+      createdPersonaId = await prepareNoodlePersona(page, "Noodle Comment Owner");
+      personaId = createdPersonaId;
 
       await page.request.get("/api/noodle");
       const postResponse = await page.request.post("/api/noodle/posts", {
@@ -1146,18 +1251,10 @@ test.describe("package-owned Noodle interface", () => {
       await openNoodle(page);
       await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
       await expect(ownComment).toBeVisible();
-      await expectSurfaceAccent(
-        ownComment.locator("[data-noodle-avatar-fallback]"),
-        "#7EA7FF",
-        NOODLE_LIGHT_FOREGROUND,
-      );
-      await expectSurfaceAccent(
-        ownComment.locator("[data-noodle-comment-metadata]"),
-        "#7EA7FF",
-        NOODLE_LIGHT_FOREGROUND,
-      );
+      await expectSurfaceAccent(ownComment.locator("[data-noodle-avatar-fallback]"), "#7EA7FF");
+      await expectSurfaceAccent(ownComment.locator("[data-noodle-comment-metadata]"), "#7EA7FF");
       for (const name of ["Like comment", "Edit comment", "Delete comment"]) {
-        await expectSurfaceAccent(ownComment.getByRole("button", { name }), "#7EA7FF", NOODLE_LIGHT_FOREGROUND);
+        await expectSurfaceAccent(ownComment.getByRole("button", { name }), "#7EA7FF");
       }
 
       await characterComment.getByRole("button", { name: "Edit comment" }).click();
@@ -1210,29 +1307,11 @@ test.describe("package-owned Noodle interface", () => {
 
   test("Noodle post and reply composers autocomplete character handles", async ({ page }) => {
     const errors = collectUnexpectedErrors(page);
-    let personaId: string | null = null;
     let createdPersonaId: string | null = null;
     let postId: string | null = null;
 
     try {
-      const activePersonaResponse = await page.request.get("/api/characters/personas/active");
-      const activePersona = activePersonaResponse.ok()
-        ? ((await activePersonaResponse.json()) as { id?: string } | null)
-        : null;
-      personaId = activePersona?.id ?? null;
-      if (!personaId) {
-        const personaResponse = await page.request.post("/api/characters/personas", {
-          data: {
-            name: "Noodle Mention Tester",
-            description: "Temporary browser regression persona.",
-          },
-        });
-        expect(personaResponse.ok()).toBe(true);
-        const createdPersona = (await personaResponse.json()) as { id: string };
-        createdPersonaId = createdPersona.id;
-        const activateResponse = await page.request.put(`/api/characters/personas/${createdPersona.id}/activate`);
-        expect(activateResponse.ok()).toBe(true);
-      }
+      createdPersonaId = await prepareNoodlePersona(page, "Noodle Mention Tester");
 
       const bootstrapResponse = await page.request.get("/api/noodle");
       expect(bootstrapResponse.ok()).toBe(true);
@@ -1325,23 +1404,7 @@ test.describe("package-owned Noodle interface", () => {
     let postId: string | null = null;
 
     try {
-      const activePersonaResponse = await page.request.get("/api/characters/personas/active");
-      const activePersona = activePersonaResponse.ok()
-        ? ((await activePersonaResponse.json()) as { id?: string } | null)
-        : null;
-      if (!activePersona?.id) {
-        const personaResponse = await page.request.post("/api/characters/personas", {
-          data: {
-            name: "Noodle Cursor Tester",
-            description: "Temporary browser regression persona.",
-          },
-        });
-        expect(personaResponse.ok()).toBe(true);
-        const createdPersona = (await personaResponse.json()) as { id: string };
-        createdPersonaId = createdPersona.id;
-        const activateResponse = await page.request.put(`/api/characters/personas/${createdPersona.id}/activate`);
-        expect(activateResponse.ok()).toBe(true);
-      }
+      createdPersonaId = await prepareNoodlePersona(page, "Noodle Cursor Tester");
 
       const bootstrapResponse = await page.request.get("/api/noodle");
       expect(bootstrapResponse.ok()).toBe(true);
@@ -1416,26 +1479,8 @@ test.describe("package-owned Noodle interface", () => {
     test.skip(!testInfo.project.name.includes("mobile"), "Reply notification focus is covered on mobile.");
 
     const errors = collectUnexpectedErrors(page);
-    const activePersonaResponse = await page.request.get("/api/characters/personas/active");
-    const activePersona = activePersonaResponse.ok()
-      ? ((await activePersonaResponse.json()) as { id?: string } | null)
-      : null;
-    let personaId = activePersona?.id ?? null;
-    let createdPersonaId: string | null = null;
-    if (!personaId) {
-      const personaResponse = await page.request.post("/api/characters/personas", {
-        data: {
-          name: "Noodle Notification Regression",
-          description: "Temporary browser regression persona.",
-        },
-      });
-      expect(personaResponse.ok()).toBe(true);
-      const createdPersona = (await personaResponse.json()) as { id: string };
-      personaId = createdPersona.id;
-      createdPersonaId = createdPersona.id;
-      const activateResponse = await page.request.put(`/api/characters/personas/${createdPersona.id}/activate`);
-      expect(activateResponse.ok()).toBe(true);
-    }
+    const personaId = await prepareNoodlePersona(page, "Noodle Notification Regression");
+    const createdPersonaId = personaId;
 
     const createdPostIds: string[] = [];
     try {
@@ -1528,26 +1573,8 @@ test.describe("package-owned Noodle interface", () => {
     test.skip(!testInfo.project.name.includes("desktop"), "Timeline bump ordering is covered on desktop.");
 
     const errors = collectUnexpectedErrors(page);
-    const activePersonaResponse = await page.request.get("/api/characters/personas/active");
-    const activePersona = activePersonaResponse.ok()
-      ? ((await activePersonaResponse.json()) as { id?: string } | null)
-      : null;
-    let personaId = activePersona?.id ?? null;
-    let createdPersonaId: string | null = null;
-    if (!personaId) {
-      const personaResponse = await page.request.post("/api/characters/personas", {
-        data: {
-          name: "Noodle Bump Regression",
-          description: "Temporary browser regression persona.",
-        },
-      });
-      expect(personaResponse.ok()).toBe(true);
-      const createdPersona = (await personaResponse.json()) as { id: string };
-      personaId = createdPersona.id;
-      createdPersonaId = createdPersona.id;
-      const activateResponse = await page.request.put(`/api/characters/personas/${createdPersona.id}/activate`);
-      expect(activateResponse.ok()).toBe(true);
-    }
+    const personaId = await prepareNoodlePersona(page, "Noodle Bump Regression");
+    const createdPersonaId = personaId;
 
     const createdPostIds: string[] = [];
     try {
@@ -1689,8 +1716,13 @@ test.describe("package-owned Noodle interface", () => {
     // The home timeline's own sticky bar stands in for the old header when a step
     // needs to prove the reader landed back on the timeline.
     const homeHeader = noodle.locator('[data-component="NoodleView.MobileHeader"]');
+    const timelineTabs = noodle.locator('[data-component="NoodleView.TimelineTabs"]');
+    const mobileMenuTrigger = homeHeader.locator('[data-component="NoodleView.MobileMenuTrigger"]');
     await expect(homeButton).toBeVisible();
     await expect(homeButton).toHaveAttribute("aria-current", "page");
+    await expect(mobileMenuTrigger).toBeVisible();
+    await expect(mobileMenuTrigger.locator("svg.lucide-menu")).toBeVisible();
+    await expect(mobileMenuTrigger.locator("[data-noodle-avatar-fallback], img")).toHaveCount(0);
     const bottomNavIconColors = await bottomNav
       .locator("svg:visible")
       .evaluateAll((icons) => Array.from(new Set(icons.map((icon) => getComputedStyle(icon).color))));
@@ -1804,6 +1836,20 @@ test.describe("package-owned Noodle interface", () => {
       element.scrollTo({ top: element.scrollHeight });
     });
     expect(await timelineScroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    await expect
+      .poll(async () => {
+        const headerBottom = await homeHeader.evaluate((element) => element.getBoundingClientRect().bottom);
+        const scrollerTop = await timelineScroller.evaluate((element) => element.getBoundingClientRect().top);
+        return headerBottom - scrollerTop;
+      })
+      .toBeLessThanOrEqual(1);
+    await expect
+      .poll(async () => {
+        const tabsTop = await timelineTabs.evaluate((element) => element.getBoundingClientRect().top);
+        const scrollerTop = await timelineScroller.evaluate((element) => element.getBoundingClientRect().top);
+        return tabsTop - scrollerTop;
+      })
+      .toBeLessThan(0);
     await bottomNav.getByRole("button", { name: "Noodle home" }).click();
     await expect(homeHeader).toBeVisible();
     await expect.poll(() => timelineScroller.evaluate((element) => element.scrollTop)).toBe(0);

@@ -2,6 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   type LtmImportSourceNotesRequest,
   type LtmImportSourceNotesResponse,
+  type LtmSourceDetailsRequest,
+  type LtmSourceDetailsResponse,
   type LtmInteropPreviewRequest,
   type LtmInteropPreviewFreshness,
   type LtmInteropPreviewResponse,
@@ -16,14 +18,22 @@ import {
   getLtmScopeChatIds,
   getLtmScopeGroupIds,
   getLtmScopePersonaIds,
-  ltmScopesOverlap,
+  isGlobalLtmScope,
+  normalizeLtmScope,
   withMergedLtmScopeLinks,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
-import { ltmModeForChatMode, normalizeLtmChatCharacterIds, resolveChatLtmScope } from "./chat-scope.js";
+import {
+  ltmModeForChatMode,
+  normalizeLtmChatCharacterIds,
+  resolveChatLtmScope,
+  resolveChatLtmWriteScope,
+  getLtmChatDisplayName,
+  parseLtmChatMetadata,
+} from "./chat-scope.js";
 import { DEFAULT_LTM_IMPORTED_SOURCE_MODE } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
 import { nowIso } from "./ltm-utils.js";
 import { getPackageLanguageModels, getPackagePersistence, getPackageResources } from "./package-runtime.js";
-import { processLongTermMemorySourceBatch } from "./source-processing.js";
+import { processLongTermMemorySourceBatch, type ImportedSourceItem } from "./source-processing.js";
 import { getLtmExtractionConfig } from "./extraction-config.js";
 import { extractionFingerprintForLtmSourceMaterial } from "./source-hash.js";
 import { inferSourceProvenance, sourceNoteIdForProvenance } from "./source-identity.js";
@@ -32,6 +42,7 @@ import { LtmServiceError } from "./service-error.js";
 
 type Candidate = {
   sourceId: string;
+  previewOrder?: string;
   title: string;
   sourceText: string;
   sourceNoteId: string;
@@ -266,39 +277,78 @@ function summaries(metadata: Record<string, unknown>, chatMode: LtmMode) {
       : [];
   return [...ordinary, ...sessions];
 }
-function scoped(candidate: Candidate, override?: LtmScope) {
-  return withMergedLtmScopeLinks({ ...candidate.scope, ...override }, {});
-}
-function mode(candidate: Candidate, value?: LtmMode) {
-  return value ? { ...candidate, modes: [value], extractionMode: value } : candidate;
+function mode(candidate: Candidate, value?: LtmMode, availabilityModes?: LtmMode[]) {
+  const modes =
+    availabilityModes && availabilityModes.length > 0 ? availabilityModes : value ? [value] : candidate.modes;
+  const extractionMode = value ?? candidate.extractionMode ?? candidate.modes[0] ?? "roleplay";
+  return { ...candidate, modes, extractionMode };
 }
 function importedSourceMode(source: Candidate["provenance"]["kind"], requested?: LtmMode) {
   return requested ?? (source === "chat_summary" ? undefined : DEFAULT_LTM_IMPORTED_SOURCE_MODE);
 }
-function fingerprint(candidate: Candidate, scope: LtmScope) {
+function candidateFingerprintForNote(candidate: Candidate, note: LtmNote) {
   return extractionFingerprintForLtmSourceMaterial({
     noteId: candidate.sourceNoteId,
     sourceTitle: candidate.title,
     sourceText: candidate.sourceText,
     evidence: candidate.evidence,
     provenance: candidate.provenance,
-    scope,
-    modes: candidate.modes,
-    extractionMode: candidate.extractionMode,
+    scope: note.destinationScope ?? note.scope,
+    modes: note.modes,
+    extractionMode: note.extractionFingerprint?.extractionMode ?? candidate.extractionMode,
+  });
+}
+
+function requestedSourceScope(request: { sourceScope?: LtmScope; scope?: LtmScope }) {
+  return request.sourceScope ?? request.scope;
+}
+
+function scopeKey(scope: LtmScope | undefined) {
+  const normalized = normalizeLtmScope(scope);
+  const chatIds = normalized.chatIds ? [...normalized.chatIds].sort() : undefined;
+  const groupIds = normalized.groupIds ? [...normalized.groupIds].sort() : undefined;
+  const personaIds = normalized.personaIds ? [...normalized.personaIds].sort() : undefined;
+  return JSON.stringify({
+    ...normalized,
+    ...(chatIds ? { chatId: chatIds[0], chatIds } : {}),
+    ...(groupIds ? { groupId: groupIds[0], groupIds } : {}),
+    ...(normalized.characterIds ? { characterIds: [...normalized.characterIds].sort() } : {}),
+    ...(personaIds ? { personaId: personaIds[0], personaIds } : {}),
   });
 }
 
 function matchesScope(candidate: Candidate, scope?: LtmScope) {
-  if (!scope) return true;
-  if (candidate.provenance.kind === "character") {
-    return Boolean(candidate.scope.characterIds?.some((id) => scope.characterIds?.includes(id)));
-  }
-  return matchesImportScope(candidate.scope, scope);
+  return !scope || candidate.provenance.kind !== "chat_summary" || matchesChatSummaryScope(candidate.scope, scope);
 }
 
-function matchesImportScope(candidateScope: LtmScope, scope?: LtmScope) {
+function candidateVisibleInScope(candidate: Candidate, scope: LtmScope | undefined) {
+  return matchesScope(candidate, scope);
+}
+
+function matchesChatSummaryScope(candidateScope: LtmScope, scope?: LtmScope) {
   if (!scope) return true;
-  return ltmScopesOverlap(candidateScope, scope, { includeGlobal: false });
+  const scopeGroupIds = new Set(getLtmScopeGroupIds(scope));
+  if (scopeGroupIds.size) {
+    const candidateGroupIds = new Set(getLtmScopeGroupIds(candidateScope));
+    if (![...candidateGroupIds].some((id) => scopeGroupIds.has(id))) return false;
+  } else {
+    const scopeChatIds = new Set(getLtmScopeChatIds(scope));
+    if (scopeChatIds.size) {
+      const candidateChatIds = new Set(getLtmScopeChatIds(candidateScope));
+      if (![...candidateChatIds].some((id) => scopeChatIds.has(id))) return false;
+    }
+  }
+  const scopeCharacterIds = new Set(scope.characterIds ?? []);
+  if (scopeCharacterIds.size) {
+    const candidateCharacterIds = new Set(candidateScope.characterIds ?? []);
+    if (![...candidateCharacterIds].some((id) => scopeCharacterIds.has(id))) return false;
+  }
+  const scopePersonaIds = new Set(getLtmScopePersonaIds(scope));
+  if (scopePersonaIds.size) {
+    const candidatePersonaIds = new Set(getLtmScopePersonaIds(candidateScope));
+    if (![...candidatePersonaIds].some((id) => scopePersonaIds.has(id))) return false;
+  }
+  return true;
 }
 
 function lorebookScope(data: Record<string, unknown>) {
@@ -383,10 +433,12 @@ function normalizeLorebooks(books: Array<{ id: string; data: unknown; entries: u
 async function candidates(
   request: {
     source: "characters" | "lorebooks" | "chats";
-    limit: number;
-    scope?: LtmScope;
+    sourceScope?: LtmScope;
     mode?: LtmMode;
+    modes?: LtmMode[];
     chatId?: string;
+    query?: string;
+    includeOutOfScope?: boolean;
   },
   selected?: Set<string>,
 ) {
@@ -420,28 +472,18 @@ async function candidates(
   if (request.source === "lorebooks")
     for (const book of normalizeLorebooks(await getPackageResources().listLorebooks())) result.push(...book.candidates);
   if (request.source === "chats") {
-    const scopeIds = new Set(getLtmScopeChatIds(request.scope));
-    const scopeGroupIds = new Set(getLtmScopeGroupIds(request.scope));
-    const scopeCharacterIds = new Set(request.scope?.characterIds ?? []);
-    const scopePersonaIds = new Set(getLtmScopePersonaIds(request.scope));
-    const hasScopeFilter =
-      scopeIds.size > 0 || scopeGroupIds.size > 0 || scopeCharacterIds.size > 0 || scopePersonaIds.size > 0;
-    const broaderScope =
-      hasScopeFilter &&
-      (scopeGroupIds.size > 0 || scopeIds.size > 1 || scopeCharacterIds.size > 0 || scopePersonaIds.size > 0);
+    const scopeIds = new Set(getLtmScopeChatIds(request.sourceScope));
+    const scopeGroupIds = new Set(getLtmScopeGroupIds(request.sourceScope));
+    const broaderScope = scopeGroupIds.size > 0 || scopeIds.size > 1;
     for (const chat of await getPackagePersistence().listChats()) {
       if (normalizeLtmChatCharacterIds(chat.characterIds).includes(PROFESSOR_MARI_CHARACTER_ID)) continue;
-      if (request.chatId && !broaderScope && chat.id !== request.chatId) continue;
-      if (
-        hasScopeFilter &&
-        !scopeIds.has(chat.id) &&
-        !(chat.groupId && scopeGroupIds.has(chat.groupId)) &&
-        !normalizeLtmChatCharacterIds(chat.characterIds).some((id) => scopeCharacterIds.has(id)) &&
-        !(chat.personaId && scopePersonaIds.has(chat.personaId))
-      )
-        continue;
-      const metadata = object(chat.metadata),
-        chatMode = ltmModeForChatMode(chat.mode);
+      if (!request.includeOutOfScope) {
+        if (!request.sourceScope && request.chatId && !broaderScope && chat.id !== request.chatId) continue;
+        if (scopeGroupIds.size ? !scopeGroupIds.has(chat.groupId) : scopeIds.size && !scopeIds.has(chat.id)) continue;
+      }
+      const metadata = parseLtmChatMetadata(chat.metadata),
+        chatMode = ltmModeForChatMode(chat.mode),
+        chatDisplayName = getLtmChatDisplayName(chat) || "Chat";
       for (const entry of summaries(metadata, chatMode)) {
         const sourceId = `${chat.id}:${entry.id}`,
           provenance = {
@@ -449,7 +491,7 @@ async function candidates(
             sourceId: chat.id,
             entryId: entry.id,
           },
-          title = `${chat.name || "Chat"}, msgs ${entry.range}`,
+          title = `${chatDisplayName}, msgs ${entry.range}`,
           seed = `${chat.id}:${entry.id}`,
           legacy =
             entry.origin === "legacy"
@@ -460,6 +502,9 @@ async function candidates(
               : [`source_import_chat_${identifier(chat.name, "chat")}_${hash(seed)}`];
         result.push({
           sourceId,
+          ...(chatMode === "conversation"
+            ? { previewOrder: `${chat.id}\0${entry.range.split(".").reverse().join("-")}\0${entry.id}` }
+            : {}),
           title,
           sourceText: entry.content,
           sourceNoteId: sourceNoteIdForProvenance(provenance),
@@ -468,7 +513,7 @@ async function candidates(
           importTags: [],
           evidence: [
             `chat:${chat.id}`,
-            `chat_name:${chat.name || "Chat"}`,
+            `chat_name:${chatDisplayName}`,
             `summary_entry:${entry.id}`,
             `message_range:${entry.range}`,
           ],
@@ -485,14 +530,29 @@ async function candidates(
   }
   const filtered = result.filter(
       (item) =>
-        matchesScope(item, request.scope) &&
+        (request.includeOutOfScope || matchesScope(item, request.sourceScope)) &&
         (!request.mode || item.modes.includes(request.mode)) &&
+        matchesQuery(item, request.query) &&
         (!selected || selected.has(item.sourceId)),
     ),
     ordered = selected ? [...selected].flatMap((id) => filtered.filter((item) => item.sourceId === id)) : filtered;
-  return ordered
-    .slice(0, Math.max(request.limit, selected?.size ?? 0))
-    .map((item) => mode(item, importedSourceMode(item.provenance.kind, request.mode)));
+  return ordered.map((item) => mode(item, importedSourceMode(item.provenance.kind, request.mode), request.modes));
+}
+
+function normalizedSearchText(value: string) {
+  return value.normalize("NFKC").replace(/\s+/gu, " ").trim().toLocaleLowerCase();
+}
+
+function matchesQuery(
+  candidate: Pick<Candidate, "sourceId" | "title" | "summary" | "sourceText" | "lorebookEntryName">,
+  query?: string,
+) {
+  if (!query) return true;
+  const needle = normalizedSearchText(query);
+  if (!needle) return true;
+  return [candidate.sourceId, candidate.title, candidate.summary, candidate.sourceText, candidate.lorebookEntryName]
+    .filter((value): value is string => Boolean(value))
+    .some((value) => normalizedSearchText(value).includes(needle));
 }
 
 function provenanceKey(provenance: LtmSourceProvenance) {
@@ -516,7 +576,7 @@ async function existingMatcher(storage: LongTermMemoryStorage) {
 
 function previewFreshness(
   note: LtmNote,
-  candidateFingerprint: ReturnType<typeof fingerprint>,
+  candidateFingerprint: ReturnType<typeof candidateFingerprintForNote>,
 ): LtmInteropPreviewFreshness {
   const existingFingerprint = note.extractionFingerprint;
   if (!existingFingerprint) return "extraction_incomplete";
@@ -526,7 +586,7 @@ function previewFreshness(
   return JSON.stringify(existingContext) === JSON.stringify(candidateContext) ? "current" : "context_updated";
 }
 
-function previewSample(row: Candidate, note: LtmNote | undefined, scope?: LtmScope) {
+function previewSample(row: Candidate, note: LtmNote | undefined) {
   const base = {
     sourceId: row.sourceId,
     title: row.title,
@@ -539,26 +599,72 @@ function previewSample(row: Candidate, note: LtmNote | undefined, scope?: LtmSco
     ? {
         ...base,
         status: "imported" as const,
-        freshness: previewFreshness(note, fingerprint(row, scoped(row, scope))),
+        freshness: previewFreshness(note, candidateFingerprintForNote(row, note)),
         existingNoteId: note.id,
         existingNoteTitle: note.title || row.title,
       }
     : { ...base, status: "pending" as const, freshness: "new" as const };
 }
+function previewPage<T>(rows: T[], request: LtmLorebookPreviewRequest, source: string, key: (row: T) => string) {
+  const binding = hash(
+    JSON.stringify([
+      source,
+      scopeKey(requestedSourceScope(request)),
+      request.mode ?? null,
+      normalizedSearchText(request.query ?? ""),
+    ]),
+    64,
+  );
+  let after = "";
+  if (request.cursor) {
+    try {
+      const cursor = JSON.parse(Buffer.from(request.cursor, "base64url").toString("utf8"));
+      if (cursor.v !== 1 || cursor.binding !== binding || typeof cursor.after !== "string" || cursor.after.length > 512)
+        throw new Error();
+      after = cursor.after;
+    } catch {
+      throw new LtmServiceError(
+        "The source cursor is invalid for these filters. Refresh the preview.",
+        400,
+        "ltm_invalid_source_cursor",
+      );
+    }
+  }
+  const ordered = rows
+    .filter((row) => key(row) > after)
+    .sort((left, right) => (key(left) < key(right) ? -1 : key(left) > key(right) ? 1 : 0));
+  const items = ordered.slice(0, request.limit);
+  const hasMore = ordered.length > items.length;
+  const nextCursor = hasMore
+    ? Buffer.from(JSON.stringify({ v: 1, binding, after: key(items.at(-1)!) })).toString("base64url")
+    : null;
+  return { items, hasMore, nextCursor };
+}
+
 export async function previewPackageInterop(
   request: LtmInteropPreviewRequest,
   root: string,
 ): Promise<LtmInteropPreviewResponse> {
-  const rows = await candidates(request),
-    storage = new LongTermMemoryStorage(root),
-    matchExisting = await existingMatcher(storage),
-    samples = rows.map((row) => previewSample(row, matchExisting(row), request.scope));
+  const sourceScope = requestedSourceScope(request);
+  const rows = (await candidates({ ...request, sourceScope, includeOutOfScope: sourceScope !== undefined })).filter(
+    (row) => candidateVisibleInScope(row, sourceScope),
+  );
+  const matchExisting = await existingMatcher(new LongTermMemoryStorage(root));
+  const page = previewPage(rows, request, request.source, (row) => row.previewOrder ?? row.sourceId);
+  // ponytail: host resource APIs list complete source records; only this page gets
+  // rendered previews and freshness hashes. Host-side cursors can replace the scan later.
+  const samples = page.items.map((row) => previewSample(row, matchExisting(row)));
+  const imported = rows.filter((row) => matchExisting(row)).length;
   return {
     source: request.source,
     scanned: samples.length,
     draftable: samples.filter((item) => item.status === "pending").length,
     importedCount: samples.filter((item) => item.status === "imported").length,
     samples,
+    totals: { matches: rows.length, ready: rows.length - imported, imported },
+    truncated: page.hasMore,
+    hasMore: page.hasMore,
+    nextCursor: page.nextCursor,
   };
 }
 
@@ -566,67 +672,145 @@ export async function previewPackageLorebooks(
   request: LtmLorebookPreviewRequest,
   root: string,
 ): Promise<LtmLorebookPreviewResponse> {
-  const storage = new LongTermMemoryStorage(root),
-    matchExisting = await existingMatcher(storage),
-    resources = (await getPackageResources().listLorebooks())
-      .filter((book) => matchesImportScope(lorebookScope(object(book.data)), request.scope))
-      .slice(0, request.limit),
-    books = normalizeLorebooks(resources).map((book) => {
+  const sourceScope = requestedSourceScope(request);
+  const matchExisting = await existingMatcher(new LongTermMemoryStorage(root));
+  const matchingBooks = normalizeLorebooks(await getPackageResources().listLorebooks())
+    .map((book) => {
+      const bookMatches = matchesQuery(
+        {
+          sourceId: book.id,
+          title: book.name,
+          sourceText: [book.description, book.category, ...book.tags].join("\n"),
+          summary: book.description,
+        },
+        request.query,
+      );
       const rows = book.candidates
-          .filter((row) => (!request.mode || row.modes.includes(request.mode)) && matchesScope(row, request.scope))
-          .map((row) => mode(row, importedSourceMode(row.provenance.kind, request.mode))),
-        grouped = new Map<
-          string,
-          {
-            id: string;
-            name: string;
-            candidates: ReturnType<typeof previewSample>[];
-          }
-        >();
-      for (const row of rows) {
-        const id = row.lorebookEntryId!,
-          entry = grouped.get(id) ?? {
-            id,
-            name: row.lorebookEntryName!,
-            candidates: [],
-          };
-        entry.candidates.push(previewSample(row, matchExisting(row), request.scope));
-        grouped.set(id, entry);
-      }
-      const entries = [...grouped.values()].map((entry) => ({
-          ...entry,
-          candidateCount: entry.candidates.length,
-        })),
-        samples = entries.flatMap((entry) => entry.candidates),
-        imported = samples.filter((sample) => sample.status === "imported").length;
+        .filter(
+          (row) =>
+            (!request.mode || row.modes.includes(request.mode)) &&
+            candidateVisibleInScope(row, sourceScope) &&
+            (bookMatches || matchesQuery(row, request.query)),
+        )
+        .map((row) => mode(row, importedSourceMode(row.provenance.kind, request.mode)));
+      const imported = rows.filter((row) => matchExisting(row)).length;
       return {
-        id: book.id,
-        name: book.name,
-        description: book.description.length > 600 ? `${book.description.slice(0, 597)}...` : book.description,
-        category: book.category,
-        tags: book.tags,
-        scope: book.scope,
-        counts: {
-          entries: entries.length,
-          candidates: samples.length,
-          pending: samples.length - imported,
+        ...book,
+        candidates: rows,
+        totals: {
+          entries: new Set(rows.map((row) => row.lorebookEntryId)).size,
+          candidates: rows.length,
+          pending: rows.length - imported,
           imported,
         },
-        entries,
       };
-    }),
-    entries = books.reduce((count, book) => count + book.counts.entries, 0),
-    candidatesCount = books.reduce((count, book) => count + book.counts.candidates, 0),
-    imported = books.reduce((count, book) => count + book.counts.imported, 0);
-  return {
-    counts: {
-      books: books.length,
+    })
+    .filter((book) => !normalizedSearchText(request.query ?? "") || book.candidates.length > 0);
+  // An empty book occupies one position, so it remains browsable without an
+  // independent book cap. A large entry can continue in the next page.
+  const positions = matchingBooks.flatMap((book) =>
+    book.candidates.length
+      ? book.candidates.map((candidate) => ({ book, candidate: candidate as Candidate | null }))
+      : [{ book, candidate: null }],
+  );
+  const page = previewPage(
+    positions,
+    request,
+    "lorebook-groups",
+    ({ book, candidate }) => `${book.id}\0${candidate?.sourceId ?? ""}`,
+  );
+  const pageBooks = new Map<string, typeof page.items>();
+  for (const position of page.items) {
+    const rows = pageBooks.get(position.book.id) ?? [];
+    rows.push(position);
+    pageBooks.set(position.book.id, rows);
+  }
+  const books = [...pageBooks.values()].map((positions) => {
+    const book = positions[0]!.book;
+    const grouped = new Map<string, LtmLorebookPreviewResponse["books"][number]["entries"][number]>();
+    for (const { candidate } of positions) {
+      if (!candidate) continue;
+      const id = candidate.lorebookEntryId!;
+      const entry = grouped.get(id) ?? { id, name: candidate.lorebookEntryName!, candidates: [], candidateCount: 0 };
+      entry.candidates.push(previewSample(candidate, matchExisting(candidate)));
+      entry.candidateCount = entry.candidates.length;
+      grouped.set(id, entry);
+    }
+    const entries = [...grouped.values()];
+    const samples = entries.flatMap((entry) => entry.candidates);
+    const imported = samples.filter((sample) => sample.status === "imported").length;
+    return {
+      id: book.id,
+      name: book.name,
+      description: book.description.length > 600 ? `${book.description.slice(0, 597)}...` : book.description,
+      category: book.category,
+      tags: book.tags,
+      scope: book.scope,
       entries,
-      candidates: candidatesCount,
-      pending: candidatesCount - imported,
-      imported,
-    },
+      counts: { entries: entries.length, candidates: samples.length, pending: samples.length - imported, imported },
+      totals: book.totals,
+    };
+  });
+  const counts = (values: typeof books) =>
+    values.reduce(
+      (result, book) => {
+        const count = book.counts;
+        return {
+          entries: result.entries + count.entries,
+          candidates: result.candidates + count.candidates,
+          pending: result.pending + count.pending,
+          imported: result.imported + count.imported,
+        };
+      },
+      { entries: 0, candidates: 0, pending: 0, imported: 0 },
+    );
+  const totals = matchingBooks.reduce(
+    (sum, book) => ({
+      entries: sum.entries + book.totals.entries,
+      candidates: sum.candidates + book.totals.candidates,
+      pending: sum.pending + book.totals.pending,
+      imported: sum.imported + book.totals.imported,
+    }),
+    { entries: 0, candidates: 0, pending: 0, imported: 0 },
+  );
+  return {
+    counts: { books: books.length, ...counts(books) },
     books,
+    totals: { books: matchingBooks.length, ...totals },
+    truncated: page.hasMore,
+    hasMore: page.hasMore,
+    nextCursor: page.nextCursor,
+  };
+}
+
+export async function sourcePackageDetails(
+  request: LtmSourceDetailsRequest,
+  root: string,
+): Promise<LtmSourceDetailsResponse> {
+  const sourceScope = requestedSourceScope(request),
+    rows = await candidates(
+      {
+        source: request.source,
+        sourceScope,
+        mode: request.mode,
+        chatId: request.chatId,
+        includeOutOfScope: sourceScope !== undefined,
+      },
+      new Set(request.sourceIds),
+    ),
+    storage = new LongTermMemoryStorage(root),
+    matchExisting = await existingMatcher(storage),
+    details = rows.flatMap((row) => {
+      const existing = matchExisting(row);
+      return candidateVisibleInScope(row, sourceScope)
+        ? [{ ...previewSample(row, existing), content: row.sourceText.slice(0, 500_000) }]
+        : [];
+    }),
+    resolvedIds = new Set(details.map((detail) => detail.sourceId));
+  return {
+    source: request.source,
+    details,
+    missingSourceIds: request.sourceIds.filter((sourceId) => !resolvedIds.has(sourceId)),
   };
 }
 export async function importPackageInterop(
@@ -636,12 +820,38 @@ export async function importPackageInterop(
 ): Promise<LtmImportSourceNotesResponse> {
   const chat = request.chatId ? await getPackagePersistence().getChat(request.chatId) : null;
   if (request.chatId && !chat) throw new LtmServiceError("Chat not found", 404, "ltm_chat_not_found");
-  const operationId = randomUUID(),
+  if (request.destinationScope && isGlobalLtmScope(request.destinationScope))
+    throw new LtmServiceError(
+      "Choose at least one destination for imported memories.",
+      400,
+      "ltm_destination_scope_required",
+    );
+  const sourceScope = requestedSourceScope(request),
+    legacyScopeRequest = request.sourceScope === undefined && request.scope !== undefined,
+    legacyDestinationScope =
+      legacyScopeRequest && request.scope && !isGlobalLtmScope(request.scope) ? request.scope : undefined,
+    destinationScope =
+      request.destinationScope ??
+      (legacyScopeRequest ? legacyDestinationScope : chat ? resolveChatLtmWriteScope(chat) : undefined),
+    operationId = randomUUID(),
     selected = new Set(request.sourceIds),
-    rows = await candidates(request, selected),
+    storage = new LongTermMemoryStorage(root),
+    matchExisting = await existingMatcher(storage),
+    candidateRows = await candidates(
+      { ...request, sourceScope, includeOutOfScope: sourceScope !== undefined },
+      selected,
+    ),
+    rows = candidateRows.filter((row) => candidateVisibleInScope(row, sourceScope)),
     resolvedIds = new Set(rows.map((item) => item.sourceId)),
     missingSourceIds = request.sourceIds.filter((id) => !resolvedIds.has(id));
   throwIfAborted(signal);
+  if (!destinationScope && !chat && !legacyScopeRequest && rows.some((row) => !isGlobalLtmScope(row.scope)))
+    throw new LtmServiceError(
+      "Choose a destination before importing scoped memories.",
+      400,
+      "ltm_destination_scope_required",
+    );
+  const extractionScope = destinationScope ?? rows[0]?.scope;
   const extractionConfig = await getLtmExtractionConfig(root, request.mode);
   const useExtractionAgent = rows.some(
     (row) =>
@@ -666,19 +876,37 @@ export async function importPackageInterop(
     }
   }
   throwIfAborted(signal);
-  const storage = new LongTermMemoryStorage(root),
-    matchExisting = await existingMatcher(storage),
-    written: Array<{
-      sourceId: string;
-      title: string;
-      note: LtmNote;
-      created: boolean;
-      deterministicSourceText?: string;
-    }> = [],
+  const written: ImportedSourceItem[] = [],
     writeFailures: LtmImportSourceNotesResponse["writeFailures"] = [];
+  const conflictingSourceIds = new Set<string>();
+  if (destinationScope) {
+    for (const row of rows) {
+      const existing = matchExisting(row);
+      if (!existing) continue;
+      const existingDestinationScope =
+        existing.destinationScope ?? existing.extractionFingerprint?.scope ?? existing.scope;
+      if (scopeKey(existingDestinationScope) !== scopeKey(destinationScope)) {
+        conflictingSourceIds.add(row.sourceId);
+        writeFailures.push({
+          sourceId: row.sourceId,
+          title: row.title,
+          sourceWriteStatus: "failed",
+          extractionStatus: "not_started",
+          retryable: false,
+          error: {
+            code: "ltm_source_destination_conflict",
+            message: `Source ${row.title} is already imported with a different destination. Manage its availability in Memory Vault.`,
+          },
+        });
+      }
+    }
+  }
   for (const row of rows) {
+    if (conflictingSourceIds.has(row.sourceId)) continue;
     try {
-      const scope = scoped(row, request.scope),
+      const sourceNoteScope =
+          row.provenance.kind === "chat_summary" ? { chatIds: [row.provenance.sourceId] } : row.scope,
+        scope = withMergedLtmScopeLinks(sourceNoteScope, destinationScope ?? row.scope),
         input = {
           id: row.sourceNoteId,
           title: row.title,
@@ -686,6 +914,7 @@ export async function importPackageInterop(
           status: "active" as const,
           modes: row.modes,
           scope,
+          ...(destinationScope ? { destinationScope } : {}),
           tags: ["source_summary", row.sourceTag, ...row.importTags],
           keywords: [],
           links: [],
@@ -706,8 +935,9 @@ export async function importPackageInterop(
           ? await storage.updateNote(existing.id, {
               title: row.title,
               status: "active",
-              modes: row.modes,
+              modes: request.modes ?? (request.mode ? [request.mode] : undefined) ?? existing.modes ?? row.modes,
               scope,
+              ...(destinationScope ? { destinationScope } : {}),
               tags: Array.from(new Set([...existing.tags, ...input.tags])),
               provenance: row.provenance,
               sections: { ...existing.sections, source: input.sections.source },
@@ -718,6 +948,7 @@ export async function importPackageInterop(
         title: row.title,
         note,
         created: !existing,
+        extractionMode: row.extractionMode,
         ...(row.deterministicSourceText ? { deterministicSourceText: row.deterministicSourceText } : {}),
       });
     } catch (error) {
@@ -739,8 +970,10 @@ export async function importPackageInterop(
           items: written,
           languageModel: resolved,
           mode: request.mode,
+          modes: request.modes,
           instruction: request.instruction,
           operationId,
+          scope: extractionScope,
           chatId: request.chatId,
           signal,
           applyLowRisk: request.applyLowRisk,

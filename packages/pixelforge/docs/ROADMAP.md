@@ -1,4 +1,8 @@
+> September 2026 contract clarification (Engine #5903): the shipped GM weather verb in gm-verbs.json accepts only word and optional intensity. It sets the current global sky until changed again; it does not promise a weather history that rewinds with the story. Absolute sinceDay/untilDay arguments remain unavailable to the GM. The older day-range reader below describes legacy/manual metadata only. A future day-window API needs a trustworthy write-time anchor; advanceDays additionally needs repeat/regeneration semantics, and fishBite remains deferred (fair has no tuning row).
+
 # Pixelforge Roadmap
+
+Pixelforge is in early development. Everything in this document, including numbers, mechanisms and planned designs, is subject to change.
 
 **Revised 2026-08-21.** This replaces the flat 19-item discovery-order list. It folds in the design brief of the same date (missing pillars, new features, and per-item companions) and three maintainer rulings, recorded below so they are never re-litigated by accident. The old numbers survive as aliases — see the index — but the flat list itself is retired.
 
@@ -9,6 +13,157 @@
 **Updated 2026-08-24, second playtest.** Three more items and one amendment, all from the same day's second session: **S7** — the engine generates HUD widgets this surface never draws, and one of them is a second purse; **P7** — the GM narrates transactions that no ledger ever sees; **E7** — generic NPC dialogue comes off the narration channel and becomes an `Ask` tree. **L6 is amended** with the maintainer's refined ruling on when the GM may move the player at all, which turns location into the pacing mechanism rather than a thing the narrator routes around. S7, P7 and E7 all describe the same seam from three sides — the engine and the package each running half a game — so read them together.
 
 **Updated 2026-08-25, the 0.12 pass.** A progress pass and a growth pass together. Progress: 0.11 gets the shipped-history row it never got, and the release bullets are corrected against what the two releases actually contain — **0.11 did not ship S2 or L2**, and 0.12 is S4 + P3's fishing vertical + P5 + the bridge treatment. S2, S4, S7, L2, P1, P3, P5, P7, the sequencing list and the second pillar carry entry-level notes where the work moved them, and open questions 5 and 7 record the answers 0.12 gave them. Growth: seven items enter, all of them maintainer rulings taken during the 0.12 design — **L7** autonomous world change and factions; **P8** ruleset-pluggable character sheets; **P9** boons and enchanted equipment; **P10** the sleep-deprivation debuff; **P11** the smart device and online shopping; **W8** the swamp biome; **W9** a "modern" theme. L2 is amended with the weather→schedule bias the same ruling round settled. The groups, the three rulings and the sequencing shape are untouched.
+
+**Updated 2026-08-28, the 0.13 pass.** A progress pass and a ruling pass together. Progress: **P4
+and E1 shipped**, so both carry as-built sections and the 0.13 release bullet is rewritten from a
+suggestion into a record; **P7**'s gap enumeration is updated (the quest family widens it rather
+than closing it — the GM can neither mint a quest nor pay one out); **S2** notes that the board
+routed around it a second time; open question **2** records the answer 0.13 gave it, **6**
+records that combat-shaped quests are deferred again and now *structurally*, and **10** is answered
+outright. Rulings, all maintainer, 2026-08-25: the **quest-system REVISIT** milestone joins P4 with
+its trigger conditions named; **tutorial / first-time introductory quests** are recorded as a future
+concept; and the three **future reward classes** — character-level XP, tangible assets and
+collectibles, reputation — each become an entry gated on the system that would give it meaning,
+with **P12** opened for the character-level system that does not exist. The groups, the three
+rulings and the sequencing shape are untouched. Post-review, maintainer-authorized: the
+shipped-history table gains the 0.12 and 0.13 rows it was owed, and P4's remaining diverged
+planning lines take the strikethrough treatment the open questions already use.
+
+**Updated 2026-09-02.** One section added and nothing re-cut: **Inspirations — the games checked
+first**, the maintainer's own list (2026-08-28) of the systems worth reading before a requested
+feature is designed, with the register that governs how they may be used. L7 gains the
+traveling-groups half of its Kenshi reference, which the ruling names and the entry did not. No
+item, group, ruling or sequencing decision moved.
+
+**Updated 2026-09-04, the 0.15 pass.** A progress pass: **P2's heuristic layer shipped**, so the
+entry carries an as-built section and the release table gains the 0.15 row. The ladder 0.11 built
+storage for finally moves — earned crossings at the verb sites, no new save field — and the three
+consumers built ahead of it cash out together: the pack's friend register serves at the friendly
+rung (Ruling 4's own sunset clause honoured, not overridden), the talk window and the turn header
+say the standing where it says something, and quest rapport becomes movement (a finished job weighs
+three encounters). E1's companion (iii) note and E7's Ruling 4 note are updated to as-served; Open
+Question 2's "last thing between you" line gains a third writer and stays open. What did NOT ship:
+gifts (no give verb exists — recorded on the entry, not invented), demotion and hostility writers
+(S1's lane), and E4/L4's threshold consumers, which now have a live ladder to read. No group,
+ruling or sequencing decision moved.
+
+**Updated 2026-09-02, the 0.14 pass.** A progress pass and a ruling pass. Progress: **L2 and E7
+shipped**, so both carry as-built sections and the 0.14 release bullet is rewritten from a
+suggestion into a record. L2 landed **whole and then some** — the function, the header word and the
+tint were the whole of the old item, and the release also carries a two-axis climate model, a
+365-day per-world calendar and the schedule bias the 2026-08-24 amendment added; what did *not*
+land is the **week layer**, which is now recorded as **L2b**. E7 landed as the talk window and takes
+the maintainer's own "we'll revisit dialogue generation later" as a scheduled revisit rather than a
+gap. Entry-level notes where the work moved things: **S1** records the four vocabularies that now
+want its channel and the one already-built consumer waiting on it; **S2** records that the
+proximity primitive merged and `feature.flavor` joined the schema-v2 bundle; **P7** gains the
+weather override as a consumer that was read-complete and, at that release, writer-less; **W10**
+opens for procedural world-history generation. Open questions: **3** absorbs `feature.flavor`, **8** is answered in part
+and **stays open knowingly**, **11** gets its answer at the E key, and **14** records that P7's
+verbs and the weather write are now one channel ask. Rulings, all maintainer, 2026-08-28: seasons
+ship and the week does not (an override of the earlier day-grain-only recommendation); the window
+stops the clock; the say input is uncapped; intensity rides rain and snow; the substance floor comes
+down to 10; the falling pass is in, with `performance.now()` as a declared determinism exception;
+and the sky moves the fishing **bite rate** rather than the catch mix. The groups, the three 2026-08-21
+rulings and the sequencing shape are untouched.
+
+**Updated 2026-09-06, the 0.16 pass.** A progress pass and a ruling pass, and the ruling half is the
+larger one. Progress: **W2's lazily-compiled sub-zones shipped, amended** — at *wilderness* grain
+rather than at the enterables grain the item describes, cell-addressed rather than
+`hash(seed, edgeId, depth)`, so the entry carries an as-built section and keeps its open half
+(enterable ruins and lookouts are still nobody's); W2's stale "the snapshot has no discovery field"
+clause is **corrected** (the field shipped in 0.11 and 0.16 is its first writer), and its prose
+companion shipped in bounded form. The settlement itself learned to vary with its seed, which is
+**W7's texture question answered from a direction W7 did not name** — not more venues, but a town
+whose streets are not the last town's. Open question **2**'s discovery residual is closed by
+construction and says so. Rulings, all maintainer, 2026-09-05, and three of them open entries:
+wilderness and town variety ship now while **multiple settlements wait for 0.17** (recorded as a
+companion on W1, with the two concrete things a second settlement breaks); the fallback map gets
+**nothing** and a **generation retry surface** instead, which shipped and opens **S9**; layout
+freezing once a region has been loaded, plus the world remembering what you did and regenerating or
+dying on its own, become **one entry** — **S8**, the persistence umbrella; and single structures
+spanning multiple maps open **W11**. The 0.16 release row records what landed. No group, no
+sequencing decision and none of the three 2026-08-21 rulings moved.
+
+**Updated 2026-09-07, the 0.16.1 pass.** A playtest pass rather than a design one, and it moves two
+entries and opens a third. 0.16.1 is the setup wizard's patch: the first playtest of 0.16.0 named a
+world "Pallet Town", cleared the Setting box, and walked into Hearthvale — because four of the
+config's prompt-bearing fields were the theme preset and only one of them had a control, and the
+game NAME reached no generator at all. **S6** gains a second down payment (the preset is a
+placeholder now, and the typed name is templated into the fields that carry it — the *parallel form*
+itself is untouched and is still the item). **S7 is ANSWERED, by its own cheapest option** — the
+package declines widget generation at setup, which also closes the "Review Starting Widgets" step
+the maintainer clicked through, and the entry keeps its two unchosen options on the record because
+the decision is reversible. **W12 opens:** street topology is a new partitioner rather than a fifth
+variety lever, written down after a read of what 0.16 actually varies. **S1 gains an integration
+note** — the GM and the walkable world are running two different casts, which the newly shipped
+`standing` verb is the first thing to trip over. No group, no ruling and no sequencing decision
+moved.
+
+**Updated 2026-09-08, the 0.16.2 pass.** A ruling pass, and eight maintainer answers taken in one
+round are what move it. 0.16.2 is the deletions release — the theme dropdown, the party picker, the
+preset genre and story goals, and the map-guidance field — plus the three things that had to ride
+with them (the kit resolved inside the generation call, a declined world's kit derived from the same
+words, the package's own config keys bounded) and one new control, the per-entry lorebook picker.
+**S6's DESTINATION is rewritten rather than paid down**, and that is the largest single move in this
+pass: the ruling is that there should be **no separate Pixelforge game-creation menu at all**, so
+the entry stops asking for a form three or four fields wide and asks for a seed field inline in Game
+Mode's own setup. 0.16.2 removes theme from the ask; removing the form itself carries no release
+number. **S1's two-casts integration note is REDIRECTED** — the roster-merge direction it listed
+first is rejected outright
+(*"names should not be roster-based to begin with"*), and #747 is re-scoped to seeded name tables
+both sides mint from. **Three entries open, all of them filed rather than built this cycle:** **S10**
+— the GM fetching and semantic-searching lorebook entries at play time, which is a *surface* over
+search the Engine already has; **S11** — setup import does not round-trip an Experience's own params,
+so a shared Pixelforge setup restores none of them; and **E8** — seeded name tables, which is the
+degraded world's names and the two-casts agreement recognised as **one** piece of work rather than
+two. **W12 is untouched**, deliberately: street topology is still a partitioner and nothing in this
+release went near it. No group, no ruling and no sequencing decision moved.
+
+**Inspirations — the games checked first (maintainer, 2026-08-28).** When the maintainer asks for a
+feature, these are the games whose systems get looked at before anything is designed. **THE
+REGISTER IS BINDING, and it is the one the Dwarf Fortress direction was already stated in:
+inspiration for BALANCE, never doctrine, and nothing copied one-to-one.** A named game is a place
+to look, not a spec to match — every one of these has scope Pixelforge does not want, and taking a
+system means taking the *shape* of it and leaving that behind.
+
+- **Dwarf Fortress — procedural worldgen, and it is the excellent reference.** Regions, biomes,
+  weather, resources: the more of a world's texture the package mints procedurally, the less
+  worldgen leans on the user's LLM connection, which is the whole balance argument in one sentence.
+  **History generation is worth studying too, with a caveat that is part of the reference and not a
+  footnote:** DF's scope is fantasy plus historical fiction, and Pixelforge's history generation has
+  to accommodate different settings and different time periods — a colony's founding is not a
+  dwarven age. **Never import DF-only content classes** — evil weather is the named example. The
+  direction in action: 0.14's two minted climate axes (latitude and precipitation, with the sky, the
+  seasons and the year derived from them) are exactly this — rolled words and one derivation give
+  every world a distinct climate identity that costs the connection nothing.
+- **Kenshi — factions, world evolution without the player, and traveling groups.** The first two are
+  already the whole premise of **L7**, which names this reference and Dwarf Fortress beside it; read
+  it there rather than here. Traveling groups — caravans, patrols, bands moving *between*
+  settlements rather than around one — are the third part of the same reference and are recorded on
+  that entry.
+- **Stardew Valley — the quintessential pixel-RPG experience.** The farming and crafting systems are
+  the parts to read, and their home is **P6**'s future. **The counterweight stays exactly where it
+  is:** reflex minigames are on the Will Not Build list and stay there (Ruling 2 — RNG tables with
+  skill and equipment inputs instead), because Stardew built reflex layers to fill the place a
+  narrator occupies here.
+- **Minecraft — chunk-style, region-lazy world generation. SHIPPED in 0.16, and the reference grew
+  a second half in the same ruling round.** Compile the region when somebody walks into it,
+  deterministically from the seed, rather than up front: that is the wilderness lattice (**W2**,
+  as-built), and the same idea at settlement grain is still what **W3**'s districts want. The
+  second half is the **save model** rather than the generator — *"once a chunk is loaded in, it
+  stays that layout so that save files across updates that potentially affect seeds or the way
+  things generate in the world don't get horribly messed up"* — which is **S8**(a), and it is the
+  part of the reference that has to land before the first release that moves a generator under a
+  world somebody is living in.
+- **Pokémon-style and turn-based 5e / V20 combat.** The maintainer's long-held combat plans, and
+  they are an **engine-side track** — see the Will Not Build entry, which records the substance:
+  the engine owns combat, the package hands off and freezes. 5e and V20 turn up on this roadmap in
+  a second place for a second reason: they are the rulesets **P8**'s pluggable character sheets are
+  meant to wear.
+
+The maintainer named other early inspirations that the records do not recover. This section grows as
+they resurface; an addition is a maintainer's word, not a contributor's inference.
 
 **How this document is organized, and why.** Items are grouped by **which layer of the package they extend**, not by when anyone thought of them. Discovery order tells you when an idea arrived; a contributor deciding what to build next needs to know what a thing touches, what it depends on, and what it unlocks. The five groups mirror the package's real seams: **S** — substrate (channels and data everything else hangs off), **L** — the living settlement (the world moving without the player), **P** — the player's stake (ownership, progression, and the things the player does), **W** — the wider world (exploration and settlement variety), **E** — the cast (people as content). After the groups: sequencing, the will-not-build list, and open questions.
 
@@ -25,8 +180,14 @@ A reader should see the arc: each release made the world *more specific* without
 | **0.7** | NPC daypart schedules — the kind×standing table resolved at dawn/day/dusk/night; 5 real seconds per game minute. *(Old item 7 — shipped.)* |
 | **0.8** | Interiors, beds and bunks, rooms as partitions, the live-work housing model, floors (upper storeys, cellars, bell tower), tall buildings, roof-transparency bubble. |
 | **0.9** | Cast bindings: `workplace`, the worker schedule tier, one head per building, household ids as an id space, and the `city` scale at 96×72. |
-| **0.10** | **It grew, and it landed in two halves.** **Interiors (the original scope):** rooms vs **areas** — open floor with a purpose, recorded rather than walled (the vacated dining band and the kitchen corner are areas). Note honestly: the recorded 0.9 decision was a *walled*, prosperity-gated kitchen; 0.10 shipped areas instead because a walled kitchen needs a second band the cottage cannot spare — an interim override awaiting the maintainer's yes/no, not a settled reversal, with the walls waiting on the taller shells the sizer now builds; **size follows program** — a house is as big as its household (width and a second room band from the sleep plan, capped at **three bedrooms** so the bunk/density rule stays live; a merged tenement keeps the plain shell), a trade is sized by its trade (a farm gets frontage, a smith gets floor, a duty station is a hut with a door; roomy footprints start at village, because an outpost cannot spare the ground); a **`hearth` in every dwelling**, with the dawn and dusk schedule tiers anchored to it (see L3); and a harness guard that **every placed tile has art**, added after a hearth with no painter passed the entire suite. *Interiors still open:* the full wings-and-spine partitioner, the rest of the room vocabulary — `bedroom` rooms plus `dining`/`kitchen`/`corridor` areas (and the old `dormitory()` fallback) exist; bath, workroom, storage, shopfloor, taproom, nave, council, quarters, guestroom, unit, reception, privy, stable, washhouse, study, loft and porch do not — and per-trade workroom placement. **Settlement scale (grew into this release):** a street-grid lot allocator replaces the two hardcoded rows (runs centred on their span, lots claimed nearest-the-crossroad first); maps raised to 28×20 / 48×28 / 60×40 / 76×52 / **104×72**, seating 4 / 8 / 16 / 36 / **80 lots**; **population now derives from the sealed axes** — households per rank 3/6/12/24/45, leaned by prosperity, clamped to the lots that actually exist — and the compiler **mints residents** (names, kinds, schedules, beds) to fill the town, so the cast is no longer the whole population (measured: village ~25, town ~60, city ~120); `backgroundPopulation` gains its first consumer with the §9 reservation honoured — it moves a settlement *within* its rank's band and can never set the band; day anchors spread (a minted resident holds the street outside their own door; a quarter of the town keeps the square); per-rank caps on how many places and features a rank may seal, over-asks recorded in `repairs`; round-robin household distribution (the apartment primitive — an address can hold more than one household); leftover lots become kitchen gardens (loose ranks) or public **parks** (dense ranks — every third leftover lot, never more than six). *(Old item 13 — its "deferred decoration" description is retired; this is a release, not a nice-to-have. Its runtime companion is L3.)* |
+| **0.10** | **It grew, and it landed in two halves.** **Interiors (the original scope):** rooms vs **areas** — open floor with a purpose, recorded rather than walled (the vacated dining band and the kitchen corner are areas). Note honestly: the recorded 0.9 decision was a *walled*, prosperity-gated kitchen; 0.10 shipped areas instead because a walled kitchen needs a second band the cottage cannot spare — an interim override awaiting the maintainer's yes/no, not a settled reversal, with the walls waiting on the taller shells the sizer now builds; **size follows program** — a house is as big as its household (width and a second room band from the sleep plan, capped at **three bedrooms** so the bunk/density rule stays live; a merged tenement keeps the plain shell), a trade is sized by its trade (a farm gets frontage, a smith gets floor, a duty station is a hut with a door; roomy footprints start at village, because an outpost cannot spare the ground); a **`hearth` in every dwelling**, with the dawn and dusk schedule tiers anchored to it (see L3); and a harness guard that **every placed tile has art**, added after a hearth with no painter passed the entire suite. *Interiors still open:* the full wings-and-spine partitioner, the rest of the room vocabulary — `bedroom` rooms plus `dining`/`kitchen`/`corridor` areas (and the old `dormitory()` fallback) exist; bath, workroom, storage, shopfloor, taproom, nave, council, quarters, guestroom, unit, reception, privy, stable, washhouse, study, loft and porch do not — and per-trade workroom placement. **Settlement scale (grew into this release):** a street-grid lot allocator replaces the two hardcoded rows (runs centred on their span, lots claimed nearest-the-crossroad first); maps raised to 28×20 / 48×28 / 60×40 / 76×52 / **104×72**, seating 4 / 8 / 20 / 36 / **80 lots**, clamped by each rank's building budget (today 4 / 8 / 16 / 34 / 76); **population now derives from the sealed axes** — households per rank 3/6/12/24/45, leaned by prosperity, clamped to the lots that actually exist — and the compiler **mints residents** (names, kinds, schedules, beds) to fill the town, so the cast is no longer the whole population (measured: village ~25, town ~60, city ~120); `backgroundPopulation` gains its first consumer with the §9 reservation honoured — it moves a settlement *within* its rank's band and can never set the band; day anchors spread (a minted resident holds the street outside their own door; a quarter of the town keeps the square); per-rank caps on how many places and features a rank may seal, over-asks recorded in `repairs`; round-robin household distribution (the apartment primitive — an address can hold more than one household); leftover lots become kitchen gardens (loose ranks) or public **parks** (dense ranks — every third leftover lot, never more than six). *(Old item 13 — its "deferred decoration" description is retired; this is a release, not a nice-to-have. Its runtime companion is L3.)* |
 | **0.11** | **The save learns to hold a person.** **S5 — the player state block:** one namespaced, versioned `player` key inside the snapshot for everything that cannot be recomputed — pouch and purse, skills and equipped tools, the relationship ledger, quest state, the day-ledger buffer, discovery state, the home anchor — with its own version, migration on read, and a newer build's unknown keys re-emitted rather than deleted. Beside it: world-identity **stamps** (seed, brief hash, mint stamp) that sever a save whose world changed under it, a four-slot **quarantine bag** in its own metadata key that holds what was severed until the world comes home, and one **GET decision ladder** replacing four sites that each guessed differently at "is this row mine, and is it newer than what I hold?". Full specification in `docs/player-state.md`. **S3 — the pouch:** an item vocabulary, per-theme skins and currency (a colony pays in credits and issues berth chits), fixed price lists, and a starting purse paid once on the first sealed world. **P1's field, by the player-driven path:** there is no automatic home, so the bed is a **berth rented at the settlement's inn** — the one transaction 0.11 ships, and the trigger P5 needed. **The loading gate:** a chat configured to generate no longer plays a throwaway world while it waits, and no failure ever seals a default on the player's behalf — a retry screen says which kind of failure it was. Down payments on three later items: S6's generate-or-decline checkbox, E7's "Skip story & talk?" guard, and W7's bug half (the venue post-condition now runs against the sealed cast, not the model's draft). **Not in it, despite the old suggestion bullet: S2 and L2.** |
+| **0.12** | **A day gets something to be about.** **P3's fishing on S4's skill substrate:** a cast spends a fixed window of clock and the roll is seeded from resolved values — same state, same minute, same fish — so a failed cast is a fixed point you escape by spending different time, never by reloading; catch tables per (theme, spot-kind) whose rows carry a shared **role** and a **variant slug**, so a colony stocks real fish beside flavoured ones and a kelp never merges into a carp; bait is a yield in its own right; a session loops windows ("fish until dusk"), wraps midnight, and writes one batched ledger line per day it spans. **The economy around the verb:** the inn keeper doubles as outfitter and quotes the next rod rung the player lacks — never free, never forced, priced per theme (the sci-fi markup is an interim until P11), the first purchase carrying a starter bait stack. **Sleep and the daily recap — P5's flush, activated:** "Sleep until [daypart]" gated on the P1 bed anchor; any completed sleep stages every fully-elapsed day, and the next accepted turn tells the GM the wrap-up — the only channel fishing content ever takes to the model; world-event notices become their own told-flagged ledger band. **The panels:** a day-grouped journal and a live character sheet on topbar chips and the `C` key, with the descriptor seam P8 and P9 will plug into. **Under it all:** the per-zone feature register and the `nearFeature` proximity read (the trigger idiom S2 keeps being routed around by), and road-meets-water becoming a walkable **bridge** — which un-blocked wilds ponds and seeded W8. *(M5's button UX and M11's panel shape were ruled provisionally and stay conclusive-at-playtest.)* |
+| **0.13** | **Settlements post work.** **E1's content pack:** a second sealed artifact per world — one generation call behind the same loading gate as the brief, fed a digest of the sealed cast and places, floor-checked for substance (an under-floor answer reports as *thin*: retry free, nothing sealed, never dressed up as a refusal), salvaged from truncation when the templates survive the cut; a hand-authored default pack serves skipped and legacy worlds; and the read door re-applies the seal's own grain and verb rules — one authority, so a stored pack cannot smuggle in what the seal would have refused. **P4's board:** a compiler fixture in every settlement, anchored at the gathering place, then the green or the market, then the spine road by spawn; daily offers deterministic per (seed, day) over the surviving templates; accept and turn-in at the board; **a day's work fills once** (a completed template re-offers tomorrow); a packless world's board says "no work posted here" and nothing else. **The lifecycle:** catch N, deliver-as-errand (one GM call, spent at the greeting — the family's only one), visit — progress event-driven at the verb sites, never swept; rewards **money and rapport only**, per the reward ruling: quests never grant skill experience, the completion passes no verb to `award()`, and a boot fence keeps the quest path from ever minting a skills ladder. **The tab:** the journal grows a strip of `{label, render, memoSync}` triples — P8's extended view lands later without surgery — and the quest tab shares the board's own row renderer, holds the done-work tallies in two labelled groups (this world's / travels with you), and carries the per-row set-aside behind a one-press confirm. *(Pre-0.13 worlds stay packless — the rolling-compat posture; a 0.14 opt-in regeneration is recorded as a convenience, never an obligation.)* |
+| **0.14** | **The sky, the year, and somebody to talk to.** **L2, whole and then wider:** every world is minted a **climate** on two axes — latitude (`equatorial`/`tropical`/`temperate`/`subpolar`/`polar`) and precipitation (`arid`/`moderate`/`wet`) — each rolled on its own named side stream from a per-theme distribution, so *every existing seed keeps its exact layout and gains a climate*, and a brief may pin either axis. On top of it a **365-day calendar whose phase is the world's own** (which subsumes the hemisphere question: "southern" and "day 1 lands in autumn" are one offset), with the season SET taken from the latitude — two seasons in the tropics, four poleward. From those, **one continuous derivation** replaces every hand-written per-climate table: temperature is spent as a magnitude through two clamped ramps, snow is a *share* of the wet mass rather than a separate roll, and a storm gate keyed on genuine warmth is why a polar year cannot produce a thunderstorm at any precipitation in any season. Walked whole at boot — all **48** latitude × precipitation × season rows, the count asserted, plus a degeneracy clause so five bands buy five skies. **Five weather words** (`fair`/`overcast`/`rain`/`storm`/`snow`) with **light/heavy** as a second, smaller axis on rain and snow only: it reaches the header label, the rain tint and the falling pass and stops — the catch tables, the schedule bias and the ground swap all stay five-valued. On screen: tints that compound with the night ramp, a falling pass at 45 streaks (light) / 120 (heavy) whose phase is `performance.now()` — **the one declared determinism exception in the package** — and a **snow ground substitution** that is a paint-time rename read by the renderer and nobody else, so a compiled world holds `grass` in January exactly as it does in July. Paths, roads, stone and dirt stay bare; water stays water. **Zero save fields**, exactly as schedules do. **The town answers the sky** (the 2026-08-24 amendment, redesigned): on rain, storm or snow anyone the schedule would have standing outdoors is sent to **their own fireside** — capacity-neutral by construction, because the wet 07:00 pass is the dusk relocation run early — keyed on **interior-zone membership** rather than roofedness, with `post` (the watch, the grower, the keeper, the stall) exempt. A first snow or an incoming storm files a ledger line, but only when a **live** clock mover crosses a day, so a reload is silent. **P3's promised modifier, ruled and rebuilt:** grey and wet skies move the **bite rate**, not the catch mix — `×2` chances under overcast, rain, snow and storm, composed as a hazard exponent so the ruling's "still RNG determined" survives (≈1.7× catches per window at the curve floor, never a guaranteed cast) — and the *base* rate derives from the world's own precipitation (arid ×0.7 / moderate ×1.0 / wet ×1.3), so an arid world fishes sparse without losing a single species. Two of 0.12's four weather columns were provably inert and all four are gone; **storm alone** keeps a mix lean, because it is the only one that ever moved the draw (rare share 4.5% → 10.5%). **E7's `Ask` tree, as the interact press:** pressing E beside somebody opens a window that **stops the clock while the player stays mobile** and the town keeps milling — a conversation must never burn the afternoon — offering the compiled record's own answers ("what do you do", "where do you live" — free for a minted resident, no generated word needed), up to four pack topics (rumors, work, this place, passing the time), the escalation pair, a hand-over row per live errand, and the two doors to the GM: "Just talk" and a Say field that is deliberately uncapped. It opens inside 26px and closes at 32 — one tile of slack, derived rather than tuned — and it is mutually exclusive with all three panels in both directions. **Always stranger** (Ruling 4): the friend register is written, sealed and unread, because friendship is P2's and a stopgap would be a promotion nobody earned. **A branch with no line does not render**, which produces an inversion the release ships with knowingly: the enriched default packs (32 → 56 lines a theme, **8,705**/**8,844** bytes) render all four branches on a legacy world, while a thin sealed pack renders one or two — so the world that paid two GM calls meets the thinnest window. The answer to that is a wider generation, not a merge: the pack call now asks for four topics, a sky tag and mostly-stranger lines, gets the world's climate in its digest (+2 rows), and the substance floor came down **12 → 10** to match. Under it all: **not one new save field, in the block or the envelope** — the wire literal does not move by a byte, and the header's two new words (14-24 chars a turn) are the release's only permanent per-turn cost. *(**The week layer did not ship** — see L2b.)* |
+| **0.15** | **The town starts knowing you.** **P2's heuristic layer, whole:** the disposition ladder stored since 0.11 finally moves — a rung is EARNED when the encounter count crosses its line (acquainted 3 / friendly 10 / close 25, `docs/player-state.md` §13), weights live at the verb sites (talk, purchase and berth stay one; **a finished job counts three** — the reward ruling's rapport cashing out as movement), and each site declares a **verb class**: small talk builds the count forever but can never leave a row above **acquainted**, while a job, a berth and a purchase — doing something for somebody, or being their business — may cross any line. A press moves the row **at most one rung**, and the explicit-`d` setter stays the setter, so S1's future precise arm is rate-limited rather than fought. **The friend register serves** at the friendly rung, friend-first at every relaxation of the ask ladder, per SPEAKER — the same bench answers a friend and a stranger differently in the same hour, everyone short of friendly meets 0.14's stranger-only window byte for byte in a town with no friends in it (the served set is per branch and shared across speakers, so a friend's presses spend from the same day's pool), and the generation guidance stops promising "a later release" and says who reads a friend line now. **The standing shows everywhere the person does**: the turn header's near clause (`near: Alder Vance (hedge-mayor, friendly)` — a stranger stays wordless, 0.14's cost discipline), the window title (`· friendly`, hostile outranking the rung), and a rise on 0.12's level-toast precedent, **composed into the receipt of the press that earned it** ("Handed in to Alder — 6 coins · they know you now.") rather than said beside it, because one surface with one timer means two toasts in a tick is one toast — and never re-announced, since nothing is stored to re-announce. **Zero new save fields** — the block held all of it since 0.11. *(Not shipped, recorded on the entries: gifts await a give verb; demotion and `h` writers are S1's; L4/E4 threshold reads now have a ladder to read.)* |
+
+| **0.16** | **The wilderness opens, and no two towns share a map.** **W2's lazily-compiled sub-zones, at wilderness grain (`src/21-lattice.js`):** the settlement stands at cell **(0,0)** of a lattice with no edge, and every other cell already HAS a definition — terrain, name, whatever landmark it carries — whether or not a zone for it has ever been built, so materialising one is a **cache fill, not a decision** (`compileChunk`/`ensure`). Three rules carry it: **one cell, one stream** (every cell draws from `hash(seed,"wild",cx,cy)` and from nothing else, so compiling the cell east of you cannot move a tile in the cell north of you, in the town, or depend on which you walked into first); **gates are arithmetic, never records** (an edge is `zone.gates`, where it leads is computed at step time, nothing is written into `zone.portals` — so the shipped "every portal's target exists" contract needs no relaxation, there is nothing to dangle when a neighbour is evicted and nothing to duplicate when it comes back, and where a brief's own wilds already holds a cell the RECORD wins and no gate is written at all); and **gates are punched in two phases** (positions reserved before the tree scatter, painted after everything else, with the pocket seal moved to run after the paint — the late punch is not taste: the `struggling` scuffing loop draws the main stream once per painted path tile, so a seam laid with the road block would re-lay every world that already exists). **Six terrain classes** — `woods`, `heath`, `scree`, `fen`, `outfield`, `oldwall` — composed from the **shipped tile vocabulary with zero new art**, weighted by the world's stamped climate axes, its stamped `surround` (felt hardest in ring 1 and let go further out) and how far out the cell sits; both themes ship and the reading is honest, since 10-art re-skins trunk and canopy so a colony's `woods` is a mast field and its `oldwall` a collapsed bulkhead, with a per-theme word book that says so in the colony's own words. **~1 landmark in 7 cells (C12)** — the two classes that always carry one (`fen`, `oldwall`) plus a 12% roll on the two that may (`heath`, `scree`); `woods` and `outfield` carry none — and a landmark is the only thing written down: `player.found` is an eighty-row ledger that evicts the oldest by day, so filing every patch of heath would fill it with terrain inside a day's walking. **Residency (C5):** the nine most-recently-entered cells stand and everything older is dropped least-recently-first, refusals first (the zone under the player, the settlement by name as well as by id, everything the brief named, any cell holding an NPC — vacuous today, load-bearing the day it is not), with **two clears per eviction** because the megabytes are the renderer's two composites, not the tile arrays (`render.invalidateZone`, which had carried no runtime caller since it was written). Dropping country is free rather than lossy for exactly one reason: **a cell walked back into recompiles byte-identically**. **The walk is free too:** a cell-to-cell step writes nothing event-shaped and rides the shipped thirty-second positional autosave, because out here crossing a boundary is not an event, it is what walking IS — everything else keeps the write it had. **A signpost, not a verb:** standing beside an edge reads the bearing and the name of the country over it, computed from the cell rather than from a resident zone. **C10 held and given a lane of its own:** no cell ever claims a World Maps row (`mapExport = false`) — crash-safety rather than taste, since that route is additive with no delete and its planner dereferences zones across its awaits. **The fallback map gets nothing** (ruling 4): no cell, no gate, no anchor table, no surround, and `ensure` refuses it outright. **The town stops being the last town's town (C2 ruled):** four levers, all off one side stream keyed like the mint's, in one fixed order — the **junction** (searched, never formula'd: candidates are enumerated against the lot allocator's own emptiness arithmetic and filtered to the centred yield, because `slots.length` is the supply cap the whole roster hangs off and a junction yielding one lot fewer would re-mint the town and sever every saved `rel` row in it), its **square** (a SET of shapes — 8×8, 11×6, 6×11 — pinned on `(w−2)(h−2)`, which is what keeps the scuff loop's draw count constant so everything downstream of the settlement comes out byte for byte the same), the four **band phases** (spending the allocator's centring slack toward the crossroad and never toward the trees, so they are yield-neutral by construction), and the **surround's own ground** (a stone verge along a rocky town's arteries, a thickened grass mottle inside a water town's ring — shipped tiles, and honest under snow, where a verge stays bare rock exactly as `scree` does). Terminals move with the crossroad because a terminal is where the road meets the edge; the legacy map is untouched and twenty frozen layout fingerprints prove it. Measured plan space: **737** layouts at outpost, 51,246 at hamlet, 227,760 at village, peaking at **3.9 million** at town, and 919,800 at city. The ladder is **not monotone**, and the city figure is written down rather than left off so nobody infers that bigger always means more: the margin the junction search keeps leaves a city **504** surviving candidates against a town's **1,268**, and the variety lane prints all five ranks on every run. **And one thing the small ranks do not do, said here rather than found in a playtest:** at outpost and hamlet the crossroad moves only sideways — every outpost that will ever compile puts its horizontal road on the same row, and so does every hamlet, because those maps have room for exactly one legal band depth. The road's silhouette is fixed at those two ranks and the variety there is the square, the band phases and the ground idiom; from village up the junction moves on both axes. **And a way out of a world that half-generated (ruling 4's replacement for the fallback-map question):** an ordered **stage registry** — brief, pack, with `historygen` and `storyboard` reserved by shape — where each row DERIVES what is standing every time it is asked rather than reading a log, because a durable failure record would have to be written from a code path whose own write may be the thing failing. A popup lists what did not finish and offers per-stage re-attempts: a **free same-seed rebuild**, a paid re-roll that **cascades** to everything downstream of it, a pack retry, a pack rewrite, and "keep playing" as a real answer that is remembered. **Ruling 8 is the law under all of it: no path ever moves the world's seed** — the seed is the world's identity for the life of the chat, because historygen and every future downstream stage must derive from the world that stands, so a regenerated stage re-runs what came after it instead of orphaning it. Everything that replaces the world **asks first, free presses included**, and the confirmation carries the whole keeps-and-loses contract. **Zero new keys in the player block and none in the save envelope**: the retry surface's three keys are chat metadata (**40**, **39** and a parked brief at ~**1.5 KB**), the lattice stores nothing at all, and a landmark costs the wire **47 bytes**. *(Not shipped, stated rather than implied: the wilderness does not remember you — S8; no NPCs in cells; a brief feature the town cannot fit is still silently dropped; and multiple settlements are 0.17's, see W1.)* |
 
 ---
 
@@ -49,7 +210,7 @@ The gaps the roadmap exists to close, in order of how much they matter for *this
 3. **Things** — no items, money, or ownership. Connective tissue for every action system.
 4. **The unknown** — everything exists at boot; travel is a dropdown. Exploration needs destinations that *don't exist yet*.
 5. **Progression** — social progression (rapport, reputation) first; and — revised per Ruling 1 — **light mechanical progression** (skills, tools, money) as the lean-play track. The earlier claim that XP doesn't matter here was half wrong: it doesn't matter *as a substitute for the narrator*, but it does matter as a way to play beside the narrator.
-6. **Call economy** *(new, named by Ruling 1)* — content that plays without spending LLM calls: canned dialogue, offline quests, deterministic weather. The header-and-injection discipline was already serving this pillar unnamed.
+6. **Call economy** *(new, named by Ruling 1)* — content that plays without spending LLM calls: canned dialogue, offline quests, deterministic weather. The header-and-injection discipline was already serving this pillar unnamed. **All three of those named examples are shipped as of 0.14** — the quest board in 0.13, the dialogue window and the deterministic sky in 0.14 — which is worth marking, because it means the pillar's next move is not another example but the one thing it has never had: **taking work off the connection at WORLD-GENERATION time rather than at play time** (W10). Every release so far has made *play* cheaper while creation still costs two calls.
 
 **Secondary tags.** Items below also carry lighter tags that are not pillars — they describe a quality an item serves rather than a gap it closes. The full set, so filtering stays consistent: **soft stakes** (closed doors, missed people, weather — the grade of risk the package's own systems trade in; combat risk exists too, it just lives with the engine, and the long-held combat-modes plan is its own engine-side track), **time-meaning** (the clock should be a decision, not a toll), **world-aliveness**, **world agency**, **world variety**, **world coherence**, **ownership**, **RP frame variety**, and **legibility**. A secondary tag never substitutes for a pillar; an item with only a secondary tag is polish, and should be read as such when sequencing.
 
@@ -74,13 +235,75 @@ The gaps the roadmap exists to close, in order of how much they matter for *this
 
 ## S — Substrate (load-bearing)
 
-These five gate more of the roadmap than everything else combined. Marked **LOAD-BEARING** with what each gates. **S6 and S7 are deliberately *not* among the five** — neither gates anything. They live here because both are about the seam between the package and its host rather than about the game: S6 is the channel every other item's configuration arrives through, and S7 is a channel the host is already using that this surface has never answered.
+These five gate more of the roadmap than everything else combined. Marked **LOAD-BEARING** with what each gates. **S6 through S11 are deliberately *not* among the five.** S6 and S7 are about the seam between the package and its host rather than about the game: S6 is the channel every other item's configuration arrives through, and S7 is a channel the host is already using that this surface has never answered. S8 and S9 arrived by maintainer ruling in 0.16 and sit here for a different reason — both are about **what a save owes across time**, which is S5's subject matter, and neither gates a feature so much as a promise (S8 the promise that a world you know stays the world you know; S9 the promise that a half-written world is recoverable rather than disposable). S10 and S11 arrived by maintainer ruling in 0.16.2 and are seam items like S6 and S7 — S10 is a GM-facing read channel over host data (so it belongs with S1's conversation rather than beside it), and S11 is the front door's other half, the one that lets a setup travel.
 
 ### S1. The GM write-back channel — LOAD-BEARING
 
 **What:** a bounded, closed vocabulary of world-state flags the GM can set through a structured side-channel (the package already consumes host signals; this is the reverse lane): `closed:<zone>`, `damaged:<zone>`, `shelter:<zone>`, `hold:<npc>@<zone>`, `gone:<npc>`, `hail:<npc>`. Flags select from **pre-built variants** — soot tint plus the existing roof-stripping, a boarded door, a nave re-laid with the existing `dormitory()`. The founding rule extended in time: *the LLM decides what happened; the algorithm decides how it looks.* The model never gains geometry authority.
 
-**Pillar:** Consequence. **Unlocks / gates:** old item 16 (refugees/tents become *one flag* plus a tent placer — build the mechanism, not the bespoke feature), quest outcomes with visible results, construction states (P6), the recruit's unmanned stall (E4), GM-driven hails (L5), disposition bumps (P2), protagonist steering (E5). **Depends on:** an engine-side structured GM-output channel — the one hard external dependency on this roadmap; start that conversation before anything else even if S1 ships later. **And a reload contract:** flags mutate the world, which `simFromSaved` rebuilds from the seed, so without one every consequence dies at the next load — see S5 for the three options, and pick one before shipping this. **Companion:** its first two consumers (shelter re-lay, boarded door) should ship *with* it so the channel is never live and invisible.
+**Pillar:** Consequence. **Unlocks / gates:** old item 16 (refugees/tents become *one flag* plus a tent placer — build the mechanism, not the bespoke feature), quest outcomes with visible results, construction states (P6), the recruit's unmanned stall (E4), GM-driven hails (L5), disposition bumps (P2), protagonist steering (E5). **Depends on:** an engine-side structured GM-output channel, **which now exists**: a package declares its closed verb vocabulary in a hash-pinned `gm-verbs.json`, the Engine refuses a table over 64 KB or one from a package without `chat-write`, renders a prompt line per verb, validates every call's arguments against the declared types and enums, and then either writes a state verb's arguments under the package's own chat-metadata key or delivers an event verb to the package live. Pixelforge ships two verbs on it. What this entry still waits on is the world-flag vocabulary itself and the persistence decision below, not the channel. **And a reload contract:** flags mutate the world, which `simFromSaved` rebuilds from the seed, so without one every consequence dies at the next load — see S5 for the three options, and pick one before shipping this. **Companion:** its first two consumers (shelter re-lay, boarded door) should ship *with* it so the channel is never live and invisible.
+
+**The vocabulary pass, 0.14: FOUR vocabularies now want this one channel, and the ask was written down** (maintainer ruling M14 — the feature request is filed this cycle). They are listed together because they are one delivery mechanism and one validation story, not because they have to ship together:
+
+| vocabulary | entries | what it needs from the package |
+| ---------- | ------- | ------------------------------ |
+| **world flags** (this item) | `closed:<zone>`, `damaged:<zone>`, `shelter:<zone>`, `hold:<npc>@<zone>`, `gone:<npc>`, `hail:<npc>` | the persistence decision above, before any of them can ship |
+| **weather** | `weather:<word>`, with an optional `intensity` on rain and snow | **nothing, and it shipped.** 0.14 built the read side (the fold, the day-range predicate, the reconciler and the town's answer) and 0.16 gave it its writer: the declared `weather` verb, whose arguments the Engine writes wholesale under `pixelforgeWeather`. The verb takes no day argument, so a sky it sets holds until it is set again, and the day window stays a read-side field nothing on this channel writes. A browser console is only a debugging shortcut now |
+| **economy verbs** (P7) | `rentBerth`, `grant`, `take`, `award`, or a narrower subset | new call-site logic, because the shipped verb *functions* assume a player-proximity precondition the GM does not have. Decided in the FR rather than discovered later: GM verbs carry validated target args against explicit allowlists, executed as a second GM-shaped implementation over the same gen-fenced mutators |
+| **one tuning row** | `fishBite:<word>:<multiplier>` over the bite-rate table | four rows, one per bad-weather word (`overcast`, `rain`, `snow`, `storm`), with `fair` as the unlisted baseline rather than a fifth row. Not free on the package side either: the table is closed, but nothing reads a write like this today, so this vocabulary needs a read slot the package has not built |
+
+**One already-built consumer is waiting on this channel and has been since 0.7:** `_hold` in `resolveSchedules()` — the seam that keeps a held NPC where the story put them. It is read every resolve and written by nothing. And the size question the open questions ask is answered while the answer is cheap: **a six-to-ten-entry closed enum is nowhere near the 262,144-char snapshot wall**, so the engine side should not over-design for a budget that does not exist. The validation split the FR asks for is the package's own seal-time discipline: the engine gates shape and enum membership before delivery, the package re-validates against the *live compiled world* at the point of use, because a flag naming a zone id this world does not have is well-formed and still wrong.
+
+**A GM time-skip verb (`advanceDays:<n>`) is NAMED as a natural candidate on the same channel and deliberately not designed** — 0.14's seasons are months long and the package's own time verbs are day-grain, so a GM who wants to show a player a winter has no way to get there. Maintainer's option.
+
+**INTEGRATION NOTE — THE GAME IS RUNNING TWO CASTS, AND THE FIRST SHIPPED VERB IS WHAT FOUND IT
+(0.16.1 playtest, and this is 0.17's to answer).** Measured on the playtest chat rather than
+reasoned about: the sealed brief's cast was **six** people — Mira, Rook, Tam, **Lily, Elder Bran,
+Farrow** — and the Engine's own `gameNpcs` roster, minted separately by the blueprint call from the
+same setup prose, was **three**: Mira, Tam, Rook, each with its own description, its own reputation
+number and its own World Map location. `gameJournal` tracks those three. The two halves agreed on
+the overlap **only because both were handed the same preset paragraph**, which 0.16.1 has now
+stopped doing — so from here the rosters are minted from one shared *name* and nothing else, and
+the overlap is whatever two independent calls happen to produce.
+
+**Why it lands on this entry rather than on P7 or E2.** `62-gm.js`'s `npcNamed` resolves the name
+the GM used against the **live compiled world**, which is the package's roster; the GM is prompted
+with the **Engine's** roster. So the first event verb on this channel already has a live seam: a
+`standing` verb naming somebody only `gameNpcs` knows is refused with a player-visible toast
+("*X isn't anyone in this world — nothing changed*"), and the three people the walkable world knows
+that the GM has never heard of can never be named at all. That refusal is correct — the package
+must not invent a row for somebody who is not in the world — but it is answering a mismatch rather
+than a mistake, and every further verb that takes an `npc` argument inherits it.
+
+**Three directions were listed here, unranked. THE FIRST ONE IS NOW REJECTED and the other two are
+moot, by maintainer ruling (R-D7, 2026-09-07):**
+
+> *"Names should not be roster-based to begin with. Seeded name tables should be sufficient."*
+
+So **there is nothing to merge, and merging was the wrong question.** The rejected direction was
+(i) *feed the Engine the sealed cast* — mint the brief first and hand the blueprint call the roster
+instead of letting it invent one. It is rejected in substance, not deferred: the mapping problems it
+would have had to engineer around (`GameNpc` wants `emoji`, `gender` and `pronouns` the brief never
+supplies; `descriptionSource` has a closed value set; a re-roll can clobber live play state) are
+**evidence for the rejection** rather than obstacles to solve, because they are the price of
+synchronising two rosters at all. The other two directions — (ii) reading `gameNpcs` at resolve time
+and binding to the nearest package person, (iii) naming the package's roster in the turn header —
+were both ways of living with a mismatch, and neither is worth building once the mismatch is not
+supposed to exist.
+
+**What replaces all three, in one line:** names are **derived from the same seed on both sides**, so
+the two casts agree by construction, no roster is copied, nothing is synchronised at a first seal,
+and there is no ordering dependency between the two calls. **#747 is re-scoped to that direction**
+rather than closed, and it carries the measurement above because the re-scoped issue still needs it.
+⚠ **It is the same work as the degraded map's name tables** — see **E8**, which is where the two meet
+and where they must be built once rather than twice.
+
+**Everything the measurement establishes is untouched by the ruling.** `62-gm.js`'s `npcNamed` still
+resolves against the live compiled world while the GM is prompted with the Engine's roster, so the
+shipped `standing` verb still refuses a name only `gameNpcs` knows, and the people the walkable world
+knows that the GM has never heard of still cannot be named at all. That refusal stays correct. What
+changes is the fix: seeded tables make the two lists agree, instead of a merge making one a copy of
+the other.
 
 ### S2. Inspect / Use — the second verb — LOAD-BEARING
 
@@ -89,6 +312,14 @@ These five gate more of the roadmap than everything else combined. Marked **LOAD
 **Pillar:** The second verb. **Unlocks / gates:** the REST of P3 (actions need a trigger), W2 (enterables need a door handle), P4 (the quest board is an inspectable), and the pouch's front door. The whole existing map — every placer output, every 0.10 room's furniture — becomes content overnight. **Depends on:** nothing. Cheapest high-leverage item in the document. **Companion:** a once-per-feature flavor injection using the existing zone-flavor metering, so first touches land prose without recurring cost.
 
 **It did NOT ship in 0.11, and 0.12 routed around it rather than through it.** The old suggestion bullet put S2 in 0.11; nothing of it was built. 0.12 then needed a trigger for fishing and the maintainer ruled a **proximity-gated button** instead of waiting (M5, provisional until the 0.12 playtest): the Fish action appears when the player stands beside registered water, exactly as the berth button appears beside a keeper. Two things follow, and both are load-bearing for whoever picks this up. First, **the §9 feature-name consumer is spent** — it landed with the register, so S2 no longer gets to claim it. Second, **the gating helper is deliberately shareable**: the button resolves its target through the same per-frame register lookup a Use verb would want, and the plan that built it promises exactly that much and no more. S2 is not smaller for having been routed around; it is one target vocabulary short of what it was.
+
+**And 0.13 routed around it a second time.** The sequencing list has said since the first draft that S2 gates *the quest board* — and the board shipped without it, on the same proximity pattern: a **fourth** `nearBoard` read beside `nearNpc`/`nearPortal`/`nearFeature`, and a Board button that appears when you stand next to the fixture. That is now three surfaces (Fish, the rod offer riding the keeper, the Board) reached by walking up to a thing rather than by inspecting it, which is worth reading two ways. It is evidence the proximity idiom is genuinely sufficient for a *single* affordance per object — and it is also the reason S2's cost keeps drifting downward on paper while the thing it would replace keeps growing: four proximity reads in `step()` and one button per surface is exactly the shape a general Inspect/Use verb exists to collapse. Whoever finally builds S2 inherits three call sites to fold in, not one, and the board is the first object where "look at it" and "use it" are plainly different actions.
+
+**0.14 did NOT route around it a third time — it did the one piece of S2 that was cheap and honest, and the maintainer ruled the rest out of scope** (M13: "S2 = primitive-merge only"). The four-offset neighbour walk that `nearFeature` and `nearBoard` each carried as their own literal is now **one helper**, so reaching eight neighbours is one edit instead of two places to remember. Each read keeps what makes it different, and that difference is pinned rather than trusted: `nearFeature` keeps its **two-sided** test — the tile is water AND lies in a registry rect — plus its bounds check; `nearBoard` keeps its reserved-id-first lookup and has **no water term at all**. The water predicate must never migrate to the board read, and there is a lane that says so.
+
+So the proximity idiom is now four reads sharing one primitive rather than four reads sharing a habit — which lowers S2's cost again on paper, and does not change what S2 is: **one target vocabulary short of what it was.**
+
+**And `feature.flavor` is now recorded on the schema-v2 bundle** (open question 3) rather than floating as an S2 companion. The entry's "once-per-feature flavor injection using the existing zone-flavor metering" needs a field on the feature item that the brief schema does not have, and adding one is a brief change — so it belongs in the one `briefVersion` window with E3, E6 and W4, not in a release that happens to build a proximity read.
 
 ### S3. The pouch — items and money — LOAD-BEARING
 
@@ -143,13 +374,123 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 
 **Depends on:** nothing technically; it is a decision, not a dependency. Sequence it **with or before its first consumer** — which under the suggested plan is S3 in 0.11. **Do not let the first consumer define the schema by accident.**
 
-### S6. The setup flow retires into Game Mode's own *(new — maintainer playtest, 2026-08-24)*
+### S6. The setup flow retires into Game Mode's own _(shipped in 0.16.8 with Capability API 1.18)_
+
+**Delivered:** the package form is deleted. The manifest declares only an inline seed, constant
+`generate: true` / `packWanted: true`, and `enableCustomWidgets: false`. The Engine owns party,
+Setting, tone, difficulty, rating, goals and per-entry lore selection; Pixelforge reads those answers.
+The Setting resolver lives in `12-theme.js`; the final kit stays in the existing sealed brief.
+Startup readiness from 0.16.7 is retained. Older manifests keep the Engine's legacy setup dialog;
+0.16.8 requires the API 1.18 host. The notes below record the decisions leading to this shape.
 
 **What:** Pixelforge should not carry a parallel setup. `80-setup.js` replaces the classic wizard body wholesale and has to emit the *entire* required `gameSetupConfig` — genre, setting, tone, difficulty, gmMode, party, plus the World-Maps and combat fields — because the host refuses a launch without them. So every question Game Mode already asks gets asked a second time, on a second form, against a second set of defaults that drift from the engine's. The direction is the other way round: **a toggle on the normal Game Mode setup** that says this chat is played as Pixelforge, plus **an inline seed field** on that same form — copy, paste, reroll, hand it to somebody else — and the package's own dialog goes away. What the package genuinely needs is three fields wide (theme, seed, generate-or-decline) and belongs beside the toggle.
 
 **Pillar:** none — this is the front door, not a gap in the game. **Secondary tag:** legibility. **Unlocks:** one obvious home for every future package setting instead of a second wizard that grows; a seed a player can share and get the same town back; and the end of the defaults drift, which is where the stale "Begin in Hearthvale" label over a sci-fi colony came from. **Depends on:** an engine-side seam — Game Mode's setup has to be able to host a package's own fields. Same class of conversation as S1's channel, and worth opening the same way: early, regardless of ship order. **Down payment shipped in 0.11:** the generate-or-decline toggle, the first of those three fields — unchecked boots the themed default world immediately, with no loading gate and no generation call ever made for that chat.
 
-### S7. The engine's HUD widgets — integrate or suppress *(new — maintainer playtest 2, 2026-08-24)*
+**0.16.1 paid the defaults-drift half of this entry, and the item survives it.** The drift this entry
+names as its own unlock — *"the end of the defaults drift, which is where the stale 'Begin in
+Hearthvale' label over a sci-fi colony came from"* — turned out to have a second and much worse
+form, found in the first 0.16 playtest: the second form was not a stale *label*, it was a stale
+*instruction*. Four prompt-bearing fields were the theme preset (`genre`, `setting`, `playerGoals`,
+`spatialMapInstructions`) and only `setting` had a control — and it had one as a pre-filled VALUE, so
+leaving it alone read as agreement and arrived at three generators as the player's own words. The
+patch makes the preset a placeholder, templates the typed name through `playerGoals` and
+`spatialMapInstructions`, and carries the name into the brief payload on
+`experienceConfig.worldName`. **What that does NOT do is retire the parallel form**, which is the
+whole item: it is still ten fields on a second dialog against a second set of defaults, still asking
+questions Game Mode's own setup asks, and still needing the engine seam this entry depends on. The
+patch made the second form *honest*; it did not make it unnecessary. **And it narrows the ask by
+one field:** with the presets templated rather than literal, what the package genuinely needs beside
+a Game Mode toggle is theme, seed, generate-or-decline **and a name it can read back** — four, not
+three, unless the host is willing to hand the chat's own name to the experience.
+
+**0.16.2 took a field off that ask by deleting the question rather than moving it, and it took two
+more off the form beside it.** The **theme selector is gone**: the kit is resolved from the player's
+own setting text — by the model inside the generation call that was already being paid for, and by a
+deterministic word count for a chat that declines generation — so there is no theme left to ask
+about on either form. The **party picker is gone** too, on the same reasoning from the other end:
+Game Mode's own setup owns that question, and the honest cost of deleting it ahead of the seam is
+written down rather than glossed: **the party question is asked ZERO times**, not twice, because the
+Experience chooser swaps the classic wizard out at step 0, so every Pixelforge game starts with an
+empty party. That is survivable (the villagers are NPCs the GM plays, and a party is additive rather
+than load-bearing for the walkable world) and it is a **cost, not a tidy-up**. It has run that way
+since 0.16.2 and still does, because the seam has not landed and carries no release number of its
+own: it stays the strongest argument this entry has ever had for landing the seam next.
+
+**THE DESTINATION IS REWRITTEN, 2026-09-07, and the maintainer's own words are the specification**
+(ruling R-D2, verbatim):
+
+> *"There should be no separate Pixelforge game creation menu, only when toggled on the seed value
+> should populate in its container where the player can edit it or randomize it if they wish."*
+
+So the end-state this entry walks toward is **not a smaller form**. It is **no package form at all**:
+toggling the Pixelforge Experience on inside Game Mode's own setup populates a **seed field inline**,
+in its own container, editable with a randomize affordance — and nothing else. Every "three fields
+wide" and "four, not three" reading above is therefore **superseded**, kept only as the record of how
+the ask shrank: nobody is asked anything twice because the classic wizard's questions simply stand,
+and the package reads what they produce.
+
+**AND THE DESTINATION IS WIDER THAN THE SEED FIELD** (maintainer, 2026-09-13). All of setup except
+the seed is handed over to Game Mode's own setup screen. Anything the package's own dialog was
+carrying that is genuinely necessary, and that the Engine's setup does not already collect, is either
+removed outright or asked for on that screen, and what the package reads may be drawn from the
+sections the player has already filled in there. So the seam is not just a seed field beside an
+otherwise unchanged form: every remaining package question is answered by a field Game Mode already
+owns, prompted on Game Mode's own screen, or dropped. This destination ships in 0.16.8.
+
+**What the reshaping does to the cost, and it runs the friendly way.** It is a **simplification**
+rather than a bigger job: with the classic path doing the launching, the three losses the Experience
+chooser currently carries — `preferences`, `shareLabels` and the map draft plan — stop needing to be
+carried across the seam at all and simply go away. The five structural requirements the package
+currently forces into `gameSetupConfig` become a **design obligation** of that seam rather than an
+override to argue about, with the recommended shape recorded here so it is not re-derived:
+manifest-declared, Engine-applied, and **visible to the player before they confirm**.
+
+**One reading is folded in and FLAGGED for veto, because the ruling may not have had it in front of
+it:** the Experience toggle subsumes the generate-or-decline choice — Experience on ⇒ a generated
+world — so the end-state carries no separate decline control. The legacy declined path is left
+exactly as it is, neither deleted nor developed (see **E8**). Vetoing that reading costs one
+checkbox.
+
+**Two gating dependencies, so the seam is not opened half-blind.** The picker 0.16.2 renders lives on
+the package modal this end-state deletes, so a per-entry lorebook surface on the **classic**
+Lorebooks step is a prerequisite rather than a follow-up — filed as an Engine FR, and it is a
+**surface-only** ask (the Engine already resolves an entry-id list end to end through
+`processLorebooks`' forced-entry path, with the eligibility filters intact. On an exact selection
+that path runs no ordinary scan at all, switches the per-book token budget and entry ceiling off, and
+truncates nothing at 100, so the wall is the model's own context rather than a lorebook budget; the
+100-entry cap still binds on the ordinary chat-turn path). And the setup-import gap is **S11**, which
+gets cheap the moment the seed field is the Engine's own.
+
+### S7. The engine's HUD widgets — integrate or suppress *(ANSWERED in 0.16.1 by suppression — maintainer playtest 2, 2026-08-24)*
+
+**ANSWERED, and by the cheapest of the three options: suppress at setup.** The wizard emits
+`enableCustomWidgets: false` and everything below follows from that one literal, with no Engine
+change. The entry is kept whole rather than rewritten, because the two options not taken are still
+the options, and the decision is reversible the day the package wants a rail of its own
+(`customHudWidgets` on the same config is the hook, and `game.routes.ts` flips the design prompt
+off when it is non-empty).
+
+**Why it was never `undefined`-safe, which is the part worth keeping.** The package had simply never
+emitted the key — and every gate on the engine side is written `!== false`, so `undefined` read as
+YES at all five of them: the setup call was handed the `<blueprint_widget_types>` catalogue and the
+`hudWidgets` output template (`gm-prompts.ts`), chat metadata recorded `enableCustomWidgets: true`
+on both the create and the reuse path (`game.routes.ts`), the GM was instructed to emit `[widget:]`
+commands for every changed widget on **every turn**, and `handleStartGameRequest` opened the "Review
+Starting Widgets" modal on `normalizedWidgets.length > 0` alone — which has no experience term and
+never needed one, because a Pixelforge chat now carries no widgets to review. So the four widgets
+the maintainer approved and never saw again were not a leak; they were the honest consequence of an
+absent key.
+
+**And the double bookkeeping was real while it lasted.** Two of the four the model invented for a
+"cozy village RPG" genre string were a **second purse** (Coppers) and a **second relationship
+ledger** (Village Bonds) beside the ones `59-economy.js` and `58-player.js` actually keep, with the
+GM instructed to maintain them every turn and the package's own header being the one the player
+looks at. That is P7's finding from the other side, and it stops accruing here.
+
+**What is NOT answered:** a player who wants a gauge for something Pixelforge has no opinion about
+loses it, which is the cost this option was always priced at. If that turns out to matter, option 2
+("render them, honestly, as the engine's") is the one 0.12 already made cheap.
 
 **What:** Game Mode's setup generates starting HUD widgets — stat blocks, gauges, counters, lists — writes them to `gameWidgetState` at chat creation, keeps feeding them to the GM's prompt, and lets the GM mutate them mid-turn with `[widget:]` tags. The engine's own HUD draws them on rails either side of the screen. Pixelforge does not draw them either, and they are not on the surface props — a package that wanted them would read `chatMeta.gameWidgetState` itself.
 
@@ -169,6 +510,136 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 
 **Depends on:** nothing to suppress — and suppressing is the only one of the three that also closes the prep modal, since a chat carrying no widgets never opens it. Rendering wants no engine change (the metadata is already on the props) but leaves the modal promising rails that never arrive, so it wants an engine-side gate on those three mounts as a companion. Mapping wants P7's decision and probably S1's channel. **Companion:** whichever is chosen, say it in the package README, because the surface currently makes a promise about "your own HUD" that the setup step contradicts to the player's face on the way in.
 
+### S8. World persistence — what a loaded region owes the next update *(new — maintainer ruling, 2026-09-05)*
+
+**What, in the ruling's own frame, and it is one item rather than three because the maintainer
+answered "both, actually":** once a region has been loaded, **its layout stays that layout** across
+updates that change seeds or generation — *"Minecraft's system … so that save files across updates
+that potentially affect seeds or the way things generate in the world don't get horribly messed
+up"* — **and** the world remembers what the player did in it, **and** it regenerates or dies
+naturally on its own. Three facets, one umbrella:
+
+- **(a) Layout pinning once loaded.** A region that has been visited keeps its geometry, so a later
+  generator change never reshapes a place somebody already knows. **The settlement exterior is in
+  scope, not only the wilderness** — the ruling's stated worry is save files across updates, not
+  chunks specifically, and 0.16 made `z1`'s own layout seed-varied, so a later change to the
+  junction search or the plaza set would reshape an existing town in exactly the way described.
+- **(b) The world remembers what you did.** Felled trees, gathered nodes, cleared ruins, placed
+  markers, doors left open — the mutations 0.16's anti-scope refuses wholesale, because a lattice
+  with no edge and nothing stored is what makes the walk free.
+- **(c) Natural regeneration and decay**, in the ruling's own hedged words: the world *"needs to
+  regenerate or die naturally as well, **ideally**"*, for *"pretty much any resource that isn't
+  non-living like minerals **I suppose**"*. Living resources — trees, fish, plants — regrow or die
+  on their own; non-living ones deplete permanently. Recorded as a direction with its hedges
+  attached; it is not yet a design.
+
+**Meanwhile, seed instability across updates is explicitly accepted** — *"Right now I don't really
+care if seed changes can alter already existing worlds and saves because it may make playtesting a
+bit simpler"* — which is what let 0.16 re-lay every existing compiled town, and 0.16 paid the one
+premium that keeps that safe: the layout search may never change how many building plots a town
+has, so a re-laid world keeps its people, its zone ids and every saved row that names them.
+
+**Pillar:** consequence — this is the largest single piece of it the roadmap has never had.
+**Secondary tags:** world aliveness, ownership. **Ruled as the 0.17 candidate.** *(One reading here
+is the package author's and is marked as such: whatever shape this takes has to be S5's, because
+all three facets are things a save has to hold, and (b) in particular would be the first
+player-authored world state the block has ever carried. The maintainer ruled the facets, not that
+framing.)* **Depends on:** S5's block for (b); nothing for (a) beyond deciding what a pinned layout
+is stored AS — the honest fork is "store the geometry" versus "store the generator version and keep
+every old generator", and they have very different costs. **Companion:** decide (a) before the next
+release that moves a generator, because every release that moves one without it spends exactly the
+goodwill this entry exists to protect.
+
+### S9. The generation retry surface — the stages it does not have yet *(shipped in 0.16 — maintainer ruling 4, 2026-09-05)*
+
+**What shipped**, and the entry exists for what it deliberately left empty. Ruling 4 refused to put
+anything on the fallback map — *"no one should play in the fallback map"* — and asked for a way out
+of it instead: *"if anything failed (like map/worldgen, historygen, GM storyboarding, or whatever
+else is generated before game start that fails or uses fallback appears on a popup window? Then the
+user can decide if they want to regenerate that one specific thing or just leave and generate a new
+game)"* — quoted as written, unbalanced paren and all, because every other ruling on this page is
+character-exact and a tidied one would be the odd entry out. 0.16 built it as an **ordered stage
+registry** where each row is a self-contained bundle of derive, re-attemptable modes and the
+sentences its screens read — so adding a stage is adding a row, not editing three call sites.
+
+**Two stage ids are RESERVED with no rows shipped, and that is the open half:** `historygen` and
+`storyboard`, both named by the ruling. Neither has a failure vocabulary yet — **W10**'s history
+generation is *designed to reduce* connection dependency, so it may fail like the content pack's
+substance floor rather than like a network call, and GM storyboarding has zero repo footprint and
+was named here for the first time. The registry accommodates them **by shape**, and a row is owed
+whenever either lands.
+
+**The law the surface is built under is ruling 8's**, and it binds every stage added later: *"seed
+change on worldgen reroll isn't okay, since historygen should be affected by worldgen and it may not
+make sense if historygen is made from a different world."* Generalised: **a regenerated stage must
+cascade downstream and may never orphan an artifact derived from its old value** — which is why the
+seed is immutable for the life of the chat, and why the paid world re-roll re-runs the content pack
+its new setting would otherwise strand. A stage that cannot say what is downstream of it is not
+ready for a row.
+
+**Pillar:** call economy — the whole point is re-running only what never succeeded, so a half-failed
+creation costs one call rather than a new game. **Secondary tag:** legibility. **Depends on:** W10
+for the `historygen` row; an engine-side answer for `storyboard`, which the package cannot see.
+
+### S10. The GM reads the lorebook — fetch and semantic search at play time *(new — maintainer ruling R-D6, 2026-09-07)*
+
+**What:** the GM should be able to **fetch and semantically search lorebook entries while play is
+running**, not only at world creation. The maintainer's own worked example is the whole item, and it
+is worth quoting because it names the behaviour rather than the mechanism:
+
+> *"Imagine the player starts in Pallet Town, but the GM knows other settlements from the lorebook
+> like Viridian City, Cinnabar Island, etc so when writing the details for a new settlement the
+> player encounters it will discern from the seed and/or the entry contents what it should name this
+> settlement."*
+
+So this is **authoring against existing history**, at the moment a place is first written, rather
+than a bigger context window. 0.16.2 ships the creation-time half — the player ticks entries and they
+ride the one world-writing call — and that half is a **one-shot**: the entries reach the brief and
+nothing reads a lorebook again for the life of the chat.
+
+⚠ **This item is much smaller than it reads, and the entry should say so or it will be sized as
+"build search".** The search **already exists** in the Engine, though not where this entry used to
+point: `GET /lorebooks/search/entries?q=` is a plain case-insensitive substring filter over an
+entry's name, content and keys, and always was. The meaning-ranked search is the storyteller's own
+`search_lorebook` tool, which ranks the chat's active entries by calibrated cosine over their
+embeddings, keeps those above a similarity floor, and keeps literal substring matches from
+any eligible entry beside them, which is what leaves an entry searchable when its vector is missing,
+stale or excluded (on the game path it refuses instead of falling back, so the lore has to be
+vectorized first). Either way the ask is **"expose fetch and search to the GM as a budgeted verb"**,
+which is a channel and a budget, not a retrieval system.
+
+**Pillar:** world coherence, with a call-economy edge — a name taken from lore the player already
+wrote costs nothing to invent and cannot contradict itself. **Secondary tag:** world variety.
+**Depends on:** **S1**'s channel, or whatever shape it takes: this is a GM-facing verb with an
+argument and a result, so it inherits that entry's whole validation and budget conversation, and it
+should be designed with it rather than beside it. **Companion:** the drop and budget rules the
+creation-time half settled, which 0.16.3 then changed under it. On an exact id list the per-book
+token budget, the entry ceiling and the 100-entry truncation are all switched off, so the wall is the
+model's context window and the caller checks the finished prompt against it; on an ordinary scan the
+older rules still hold, per-book token budgets binding, drops in the mechanism's own order rather
+than the picking order, and a count ceiling binding independently of the character budget. Which set
+this item inherits therefore depends on whether a play-time fetch resolves an exact id list or scans,
+and that is a live design question rather than something already settled. It is the same resolver
+underneath either way.
+
+### S11. Setup import does not round-trip an Experience's own params *(new — maintainer ruling R-D8, 2026-09-07)*
+
+**What:** Game Mode's setup can be exported and imported, and an imported Pixelforge setup
+**restores none of Pixelforge**. Measured rather than suspected: `GameSetupWizard.tsx` contains zero
+occurrences of `gameExperienceId` or `experienceConfig`, so importing a shared setup re-activates no
+Experience at all and restores none of `seed`, `generate` or `packWanted` — which means the one thing
+a player would most want to hand somebody else, *the world*, is exactly what does not travel. A seed
+that cannot be shared through the surface built for sharing setups is a seed field with half its
+purpose missing.
+
+**Pillar:** none — front-door plumbing, like **S6**. **Secondary tag:** legibility.
+**Unlocks:** "here, play my world" as a real gesture rather than a copied string and a spoken
+instruction. **Depends on:** an engine-side change, since the import surface is the Engine's.
+**And it gets CHEAP the moment S6's end-state lands** — once the seed lives in Game Mode's own setup
+as an ordinary field rather than inside a package-authored config blob, round-tripping it is whatever
+round-trips every other field on that form. **Sequence it after S6, not before**, or it is paid for
+twice.
+
 ---
 
 ## L — The living settlement
@@ -179,15 +650,37 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 
 **Pillar:** world-aliveness. **Companions that make it real rather than animation:** (i) **interception** — an NPC en route is talkable, and the header says "headed to the smithy," one token of pure GM fuel derived from state already held; (ii) **doors** — walkers visibly use them (door tiles are already non-solid and schedule-excluded); an NPC melting through a wall undoes the feature; (iii) **staggered departures** — hash-offset leave times ±20 minutes so the town doesn't move as one organism at 07:00. **Depends on:** nothing; cross-zone relocation machinery exists. **Unlocks:** hails (L5) get literal path-crossings.
 
-### L2. Weather and the calendar
+### L2. Weather and the calendar — SHIPPED in 0.14, whole and wider than the item
 
-**What:** weather as a **pure function of (seed, day, clockMin)** — the same trick schedules pull; zero save fields, rewind-safe. Rain tint and particles, snow ground-swap, storms. On top: a calendar — `day % 7` gives a week; market day fills the plaza with the existing stall placer; one assembly/sabbath/game-night day per theme.
+**What:** weather as a **pure function of (seed, day)** — the same trick schedules pull; zero save fields, rewind-safe. Rain tint and particles, snow ground-swap, storms. On top: a calendar — `day % 7` gives a week; market day fills the plaza with the existing stall placer; one assembly/sabbath/game-night day per theme.
 
-**Pillar:** time-meaning; Call economy (fully deterministic content). **Unlocks:** a load-bearing header token ("rainy dusk" writes half the scene), schedule modifiers (storm empties the plaza, fills the inn — the town visibly answers the sky), P3 modifiers (fish bite in rain — the clock becomes a decision), a reason to `waitUntil`, W4's calendar hooks (shift-change day, pilgrimage day). **Depends on:** nothing. The best cheap win on the roadmap. **Note:** stays package-local like the clock; the header word keeps the GM consistent (see Open Questions re host weather).
+**Correction to the line above, made where it was wrong rather than quietly:** the item said `(seed, day, clockMin)` and the shipped function is **day-grain** — the clock minute is not hashed, and it must not be, or the sky would flicker within an hour. The season is likewise *derived* from the day through the world's own calendar offset rather than hashed as a third input, which is what keeps a season a run of days instead of a per-day coin toss.
+
+**Pillar:** time-meaning; Call economy (fully deterministic content). **Unlocks:** a load-bearing header token ("rainy dusk" writes half the scene), schedule modifiers (~~storm empties the plaza, fills the inn~~ — **it empties the plaza and fills the HEARTHS**: see the amendment below and the as-built note under it — the town visibly answers the sky), P3 modifiers (fish bite in rain — the clock becomes a decision), a reason to `waitUntil`, W4's calendar hooks (shift-change day, pilgrimage day). **Depends on:** nothing. The best cheap win on the roadmap. **Note:** stays package-local like the clock; the header word keeps the GM consistent (see Open Questions re host weather).
 
 **It did not ship in 0.11 and was deliberately held out of 0.12** (maintainer ruling, 2026-08-24). 0.12 wanted exactly one of its three parts — a modifier column for the catch tables — and taking one part would have shipped weather that the world cannot see and the GM is never told about, which is the worst version of it. So **L2 lands WHOLE or not at all: the function, the header word, and the tint together.** Daypart is 0.12's only live modifier; the catch tables' second modifier column is comment-marked and empty, waiting for this.
 
 **AMENDED — the same ruling round adds a fourth part, and it is what makes weather a settlement feature rather than a filter over the screen. Weather BIASES NPC SCHEDULES: indoors unless the job is an outdoor one.** A shepherd is out in the rain and a scholar is not, so the storm that empties the plaza does it by moving named people to named places rather than by dimming the tiles they are standing on — which is the same discipline L3 applies to rooms and the schedule module has already learned once (the keeper tier exists because the church was empty exactly when players walked into it). The handle it needs is the trade half of E3's `kind` split, or a per-kind outdoor flag standing in for it until that lands. Note the cost this adds to the "best cheap win" label: the sky is cheap, the town answering it is not, and the item is now both.
+
+**SHIPPED in 0.14 — all four parts, plus a season layer the item did not ask for** (maintainer ruling, 2026-08-28: seasons are in scope; the week is not). The "lands whole or not at all" condition was met and then exceeded. What is built, and where it differs from the item as written:
+
+- **The function, and it is bigger than "roll a word".** Two minted climate axes per world — latitude × precipitation, rolled on their own named side streams so no existing seed's layout moves — and **one continuous derivation** from `(latitude, precipitation, season)` to the day's odds. There is no per-climate table anywhere: the "the tropics get no snow" kind of statement is arithmetic here, so a coefficient retune moves it instead of silently falsifying it. Walked whole at boot: 48 rows, the count asserted, with a degeneracy clause so five latitude bands cannot collapse into three.
+- **The calendar, and it is a YEAR rather than a week.** 365 days with a per-world phase over the full year, which subsumes the hemisphere question entirely, and a season SET taken from the latitude — two in the tropics, four poleward. **The season-structure mapping is an interpretation** of the ruling and is flagged as one for the maintainer to amend.
+- **The header word**, plus the season beside it: three words in the paren group, at 14-24 chars a turn, which is the release's only permanent per-turn cost.
+- **The tint, and the ground.** Tints compound with the night ramp; snow does not tint at all, because the snow TILES carry it — a paint-time rename read by the renderer and nothing else, so the zone arrays never move. Four new painters at both tiers, in both themes.
+- **The falling pass is IN** (ruled 2026-08-28), and it takes its phase from `performance.now()` — **the one declared determinism exception in the package**. It is safe because nothing sim-side reads it, and it is load-bearing for the talk window's time stop: under an open window the clock and the darkness ramp hold still, and the weather is the one surface left moving. No amendment to this item's own determinism claim is needed: the *sky* is still a pure function of `(seed, day)`; only how the streaks are drawn reads a wall clock.
+- **The bias, redesigned to HEARTH-FIRST.** The amendment above said "indoors"; the first design read that as one shelter interior and would have concentrated up to 113 residents into a 16×12 room. The shipped design sends each person to **their own fireside** — the anchors the dusk and night tiers already exercise every evening — which is capacity-neutral by construction, because the wet 07:00 pass is the dusk relocation run early. Keyed on **interior-zone membership**, never roofedness. The handle the item asked for (the trade half of E3's `kind` split) is **still not there**: the test reads the schedule policy's own name, so `post` is exempt and an outdoor-posted scholar is exempt exactly like the shepherd. Recorded as a limitation rather than solved.
+- **And it files a ledger line** — "First snow.", "Snow came in.", "A storm came in." — but only when a *live* clock mover crosses a day, so a reload never announces weather the world already had.
+
+**What the item promised and 0.14 did not build: the WEEK.** See L2b.
+
+### L2b. The week layer — market day, sabbath, game night *(the half of L2 that did not ship)*
+
+**What:** the remainder of L2's calendar half. `day % 7` gives a week; **market day** fills the plaza with the existing stall placer; one assembly / sabbath / game-night day per theme. The season layer 0.14 shipped is a different grain and does not stand in for it: a season decides what the sky does, a week decides what the *town* does on a particular morning.
+
+**Why it is its own entry now.** The 2026-08-28 ruling scoped 0.14 to seasons and explicitly overrode the earlier day-grain-only recommendation in the other direction — seasons in, week out — so this is a deliberate remainder rather than a slip, and it deserves a row somebody can schedule instead of a sentence inside a shipped item.
+
+**Pillar:** time-meaning; world-aliveness. **Unlocks:** a reason for a specific day to matter (the first thing on this roadmap that makes "come back Thursday" a sentence the GM can mean); W4's calendar hooks land on it directly; L4's opening hours get a second axis. **Depends on:** nothing — the calendar, the stall placer and the schedule relocation machinery all exist. **Companion:** decide up front whether a week is theme-flavoured (a colony's shift-change is not a sabbath) or one vocabulary with per-theme names, because the schedule table will be asked to key on it either way.
 
 ### L3. Room-grain schedules and occupancy *(runtime companion to 0.10)*
 
@@ -225,13 +718,21 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 
 ### L7. Autonomous world change — factions *(new — maintainer ruling, 2026-08-24)*
 
-**What:** the world should change **without the player being involved in it at all**. Dwarf Fortress and Kenshi are the named references, and the reference is the point: the interesting thing about those worlds is not that things happen, it is that things happen to *somebody else* and you find out afterwards. Factions are the shape the ruling gives it — bodies with interests that act on the settlement over days, so a town the player left is not the town they come back to.
+**What:** the world should change **without the player being involved in it at all**. Dwarf Fortress and Kenshi are the named references (see Inspirations), and the reference is the point: the interesting thing about those worlds is not that things happen, it is that things happen to *somebody else* and you find out afterwards. Factions are the shape the ruling gives it — bodies with interests that act on the settlement over days, so a town the player left is not the town they come back to.
+
+**And the visible half of the same reference: traveling groups.** Kenshi's world reads as alive largely because things are *moving through* it — caravans, patrols, bands with somewhere else to be. A faction that only exists in the notice band is a newspaper; a faction whose people walk the road past the player is a world. Recorded here as the second shape the ruling asks for, deliberately undesigned: it wants the same world-state decision everything in this entry wants, and it is the one part of it a player can see without reading anything.
 
 **No mechanism exists yet, and this entry is deliberately not designing one.** What it records is the ruling and the one seam already built for it. Every other item in this group moves people the compiler placed, on schedules the compiler wrote, inside a world that is a pure function of its seed — which is exactly the property a faction has to break, and that is S5's sibling world-state block all over again (see S5's three options; this item is the second consumer that decision was waiting for, after S1).
 
 **The seam that exists: the notice band.** 0.12 gave the journal a band that sits outside the day groups and answers "what happened to the world itself, rather than in your days in it" — severances, losses, a save coming home. Its framing sentence and its five writer-site strings were reviewed under a maintainer amendment (M3) that asked each of them to name **its kind's relationship to the player**, and the band was written to receive one more field it does not have yet: **an actor**. A notice that can say *who* did the thing is the difference between "the mill burned" and "the Hearth Guild burned the mill", and the band is the surface that sentence lands on. Nothing in 0.12 can produce an actor, which is stated in the code rather than implied — a faction is what fills that field in.
 
-**Pillar:** Consequence; world agency. **Secondary tags:** world-aliveness, world variety. **Unlocks:** the strongest reason yet to return to a settlement; quest hooks that write themselves (P4); a source of S1-shaped world flags that is not the GM, which is worth noticing — this and S1 want the same closed vocabulary of world mutations and should not invent two. **Depends on:** the world-persistence decision in S5, and it is the item that makes deferring that decision expensive. Reads well with W4's specialization axis (a mining town has something a faction wants) and W3's districts (a faction holds a ward).
+**0.16 did not move this and did make its dependency concrete.** The wilderness ships as a **total
+function with no memory** — a region the player walks out of is destroyed and rebuilt identically on
+return — which is the exact opposite of what a faction needs, and deliberately so for one release.
+The world-persistence decision this entry has been waiting on now has an entry of its own, ruled
+and named: **S8**. Read the dependency below as pointing there.
+
+**Pillar:** Consequence; world agency. **Secondary tags:** world-aliveness, world variety. **Unlocks:** the strongest reason yet to return to a settlement; quest hooks that write themselves (P4); a source of S1-shaped world flags that is not the GM, which is worth noticing — this and S1 want the same closed vocabulary of world mutations and should not invent two. **Depends on:** the world-persistence decision in S5, now carried by **S8**, and it is the item that makes deferring that decision expensive. Reads well with W4's specialization axis (a mining town has something a faction wants) and W3's districts (a faction holds a ward).
 
 ---
 
@@ -251,13 +752,25 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 
 **Pillar:** Progression (social) — and it fattens the *persistent* GM channel, where this architecture keeps its truth once one-shots burn. **Unlocks:** recruitment thresholds (E4), door access (L4), the data shape E6 shares, social memory at 400-turn horizons, quest rapport rewards. **Depends on:** nothing for the heuristic version; S1 for GM-driven bumps.
 
+**SHIPPED in 0.15 — the heuristic layer, on 0.11's storage, with two deliberate readings of the item's own text.** The five-step disposition is the stored four rungs plus `h` beside them (0.11's shape, kept): stranger/acquainted/friendly/close on the ladder, hostile as a flag that outranks the rung on every surface. **It has had its writer since 0.16**: the storyteller's declared `standing` verb both sets the flag and clears it, through the same relationship-bump path a press uses, which is S1's precise lane arriving. The promotion rule was built to be rate-limited rather than to fight that arm: a press moves a row at most ONE rung, a small-talk press needs a real line-crossing to move it at all, and an explicit `d` suppresses the heuristic on the call that set it. A demotion past every line therefore sticks; a demotion below a line the count can still cross is climbed back one rung at a time, and no further than acquainted until the player does something real (`docs/player-state.md` §13.2). The header surfacing landed exactly as the entry wrote it, wordless for strangers. The bump list landed at two of three: talk count and completed-quests-for-the-giver move the ladder (a job weighs three encounters — one hand-in makes an acquaintance, two make an acquaintance and *not yet* a friend); **gifts do not exist to bump** — there is no give verb in the package, and the entry keeps the word so the verb's arrival has a place to land. The maintainer's ruling split the list a second way: talk is a CASUAL verb and tops out at acquainted, while the job and the two counters are the MEANINGFUL ones that carry a row past it. **The fourth progression verb named in that ruling — "special talk trees", 0.14's escalation funnel — is recorded and NOT built**: when the funnel gains a completion signal it becomes a meaningful bump site beside the job. "Last thing between you" gained its third writer (a finished job files `Ran <title> for me.` beside the berth and purchase lines); whether the line is worth its bytes stays Open Question 2's to answer. What the rung buys today: the friend register in the talk window (E1/E7), the standing on three surfaces, and a live number for L4 and E4 to read — both still unbuilt, both no longer blocked.
+
+### P2a. The relationship model REVISIT *(maintainer ruling, 2026-09-04 — scheduled, not open)*
+
+**What:** a second pass over what a relationship IS, once 0.15's single earned axis has company. Today a row carries one disposition — how warm the person is to you — climbed by talk, jobs and commerce. The revisit is where that one axis becomes **several parallel ones**, because "how a person feels about you" is not one number: **friendship**, a **business/working** standing (the shopkeeper who gives you the regular's price is not your friend, they are your regular), **romantic** interest, and a general **interest/rapport** the person takes in you — potentially others as the world gives them meaning. Each is its own ladder with its own bump sites: a job moves the business axis where a gift or a shared talk-tree moves the friendship one, and a romantic axis answers to neither. The header and the talk window then read a *blend* rather than the single word 0.15 shows.
+
+**Why scheduled, not now:** 0.15's one axis is the honest width of the world under it — there is no give verb for gifts, no commerce depth for a business relationship to mean anything past the price break, and no dialogue surface where romance could be expressed rather than merely tracked. Parallel axes with nothing to move them would be four stored numbers where one is doing all the work, which is the shape this project keeps refusing. The revisit lands **when the verbs that would move the new axes exist** — gifts (P2's named gap), commerce depth (P6/P11), and the "special talk trees" P2 already reserves as its meaningful fourth verb.
+
+**Two things it must preserve.** The **storage** is 0.11's `rel[zone][name]` row and the revisit extends it additively (new axis fields beside `d`/`t`/`h`/`s`, the wire staying disposable-compatible per the rolling posture) rather than reshaping it. And the **rate-limiting discipline** 0.15 established — one rung per bump, small talk that caps out, an explicit S1 arm the heuristic does not fight — is a property each new axis inherits, not a thing to re-derive per ladder.
+
+**Pillar:** Progression (social). **Unlocks:** a business standing L4/E4 can gate on distinctly from friendship; romance as a first-class thread for the GM to write against; the blended standing the header and talk window would surface. **Depends on:** 0.15's ladder (shipped); the verbs that move each new axis (gifts, commerce depth, talk-trees — none built); **S1** for GM-driven bumps on any axis. **Companion:** if an axis needs a new bump site or a schema field it rides the same pack-v2 / brief-schema window P4a names — do not bump the artifact twice.
+
 ### P3. Time-passing actions *(old 10)*
 
 **What:** fishing, mining, foraging, crafting — every one advances the clock (talking stays free; combat's cost stays the GM's). Per Ruling 2, resolution is **RNG tables with inputs**: skill level (S4) and tool/bait quality (S3/S4) set what can be caught and the success rate. No reflex gates.
 
 **Pillar:** the second verb; time-meaning; Call economy (resolves offline). **The full stack, because any one part alone is a stub:** (i) **a target** — the action binds to a named feature via Use (S2), so the GM knows *where*; (ii) **a yield** — the fish exists afterward (S3); (iii) **a receipt** — `[Fished at the Millpond until dusk. Caught: one pale carp.]`, so the narrator can pay off the cost — or, leaner, the line goes to the P5 day ledger instead of spending a turn; (iv) **a modifier** — daypart/weather (L2) affects tables, making the clock a decision. Fold `waitUntil` in: "fish until dusk" as a compound gives actions an intent-sized grain. **Depends on:** S2, S3; S4 for the specified model; L2 for modifiers.
 
-**Fishing shipped whole in 0.12 — all four parts of the stack, which was the condition this item set for itself.** (i) **The target** is a per-zone **feature register**: the compiler records what it placed as `{id, tag, name, rect}` and the sim resolves "the player is standing beside registered water" every walking frame. Derived from the sealed brief, never serialized, so it costs no save bytes. The trigger is a proximity button rather than S2's Use verb (see S2). (ii) **The yield** is a per-`(theme, spot-kind)` catch table whose rows carry a shared **role** and a **variant slug**, so a kelp never merges into a carp in the pouch and a colony can stock real fish beside flavoured ones. Bait is a yield in its own right — fishing is its own supplier. (iii) **The receipt** takes the leaner branch this item already preferred: no per-cast turn is spent, and a session writes **one batched ledger line per day it spans** for P5 to tell. (iv) **The modifier** is daypart only; the weather column is built and empty (L2). Around them: a cast is one fixed **window** of clock that wraps midnight, a session is a loop over windows with a "fish until <daypart>" target, and every roll is seeded from resolved numbers so the same state on the same minute lands the same fish — which makes a failed cast a fixed point you escape by spending different time, and is the anti-save-scum property stated rather than discovered.
+**Fishing shipped whole in 0.12 — all four parts of the stack, which was the condition this item set for itself.** (i) **The target** is a per-zone **feature register**: the compiler records what it placed as `{id, tag, name, rect}` and the sim resolves "the player is standing beside registered water" every walking frame. Derived from the sealed brief, never serialized, so it costs no save bytes. The trigger is a proximity button rather than S2's Use verb (see S2). (ii) **The yield** is a per-`(theme, spot-kind)` catch table whose rows carry a shared **role** and a **variant slug**, so a kelp never merges into a carp in the pouch and a colony can stock real fish beside flavoured ones. Bait is a yield in its own right — fishing is its own supplier. (iii) **The receipt** takes the leaner branch this item already preferred: no per-cast turn is spent, and a session writes **one batched ledger line per day it spans** for P5 to tell. (iv) **The modifier** is daypart only; the weather column is built and empty (L2). **0.14 filled it, and not where 0.12 left the socket** — the ruling was that a bad sky does not change what is in the water, it changes how often something takes the hook, so the sky moves the **bite rate** (`×2` chances under overcast, rain, snow and storm, composed as a hazard exponent so a rainy cast is never a guaranteed one) and the *base* rate derives from the world's own precipitation axis (arid ×0.7 / moderate ×1.0 / wet ×1.3) rather than from a hardcoded interval. Two of the four columns 0.12 built turned out to be arithmetically inert — a row that scales every rarity equally cancels in the draw's own normalization — so all four came out and **storm alone** keeps a mix lean, being the only one that ever moved anything. The clock is now a decision twice over: which hour to fish, and which day. Around them: a cast is one fixed **window** of clock that wraps midnight, a session is a loop over windows with a "fish until <daypart>" target, and every roll is seeded from resolved numbers so the same state on the same minute lands the same fish — which makes a failed cast a fixed point you escape by spending different time, and is the anti-save-scum property stated rather than discovered.
 
 **Also shipped: the economy around it, because a verb with no acquisition is a verb nobody has.** Rods are **never free** (maintainer amendment): the inn keeper doubles as outfitter and sells the next rung the player lacks — no rod quotes `crude`, a crude owner quotes `decent`, a decent owner is quoted nothing and the button goes away. The first purchase throws in a starter bait stack at the theme's own first bait slug so it merges with what gets fished up. Acquisition is **per theme** because fishing means different things in different worlds: the fantasy entry rod is cheap, the sci-fi one is quoted at four times the price as an INTERIM until P11's hobby-store/online path lands and takes it off the keeper. And it is **never forced** — a proximity button, no modal, no gate, and nothing anywhere in the package depends on owning a rod.
 
@@ -265,16 +778,36 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 
 ### P4. The quest layer *(new — Ruling 1)*
 
-**What:** generic, grindable, **offline-resolvable** quests for money, XP, and rapport — the lean-with-AI-calls play mode.
+**What:** generic, grindable, **offline-resolvable** quests for money, ~~XP,~~ and rapport — the lean-with-AI-calls play mode.
 
-- **The board:** a diegetic surface with a placer per theme (parchment board / job kiosk / corkboard-and-gig-app) — inspectable via S2, ignorable forever.
+- **The board:** a diegetic surface with a placer per theme (parchment board / job kiosk / corkboard-and-gig-app) — ~~inspectable via S2~~, ignorable forever.
 - **The content:** quest templates authored **at creation in the same generation call as the E1 dialogue pack** (it is the same problem: canned content, state-indexed), refreshed at runtime by deterministic seeded templating (`hash(seed, day, board)`) so the board restocks without calls.
 - **The verbs:** only what the package can verify offline — gather/catch N (reads the pouch), deliver to X (reads position + talk), visit Y (reads zone entry). Combat-shaped quests wait for the engine-combat question (Open Questions).
-- **Rewards:** money (S3), XP (S4), rapport with the giver (P2).
+- ~~**Rewards:** money (S3), XP (S4), rapport with the giver (P2).~~
 - **The covenant:** quests resolve package-side; the GM is *informed at boundaries* (P5), never tracked step-by-step, and — design rule — **the quest layer must never make the narrator wrong**: quest state binds tiles and tables, not the GM's prose.
 - **Never forced:** no main-quest pointer, no quest-gated core systems; where W1 uses "by quest" as a travel key, the gate must accept alternative keys (vehicle, fee, rapport) so slice-of-life players are never conscripted.
 
 **Pillar:** Call economy; Progression (both kinds). **Unlocks:** an entire second way to play the same world. **Depends on:** S2, S3, S4, P5; E1's generation batch.
+
+**Shipped in 0.13, and one line of it did not survive contact.** The board is a **compiler fixture** — every settlement gets one, unconditionally, on a reserved id outside the brief's ordinal space, anchored at the gathering place, then the green or the market, then the spine road by spawn. Not inspectable via S2, which is still unbuilt: it is proximity-gated on a new fourth `nearBoard` read, the same pattern 0.12's Fish button used (see S2). The **content** is E1's pack, generated at creation in the second of two calls and re-read per day by `hash(seed, day, "b1")` over the surviving templates, so the board restocks without calls exactly as specified. The **verbs** are the three the package can verify offline — catch N (the fishing site counts it), deliver to X (an errand that completes in the greeting, the one quest verb that costs a GM call), visit Y (completes on entry) — and the fourth word the schema accepts, `gather`, folds to `catch` at the seal, so the enum ships four words and three mechanics. The **covenant** held: quest state binds tiles and tables, the GM is informed at the P5 wrap-up boundary and nowhere else, and nothing anywhere gates on having taken work.
+
+**The line that did not survive is the reward list**, and the maintainer replaced it rather than trimming it (2026-08-25). The old bullet read *money, XP, rapport*. The ruling: **quests never grant skill experience** — a quest's TASK may raise a skill, because catching fish for a catch order levels fishing through the catching itself, but the reward never does. **0.13's reward palette is money and rapport, and nothing else.** The reward derivation writes `xp = 0` structurally and the completion passes no verb to `award()`, so a row carrying a planted `xp` from anywhere else drops it at the gate. What the old bullet called "XP" was two different things wearing one word, and only one of them survives — see **P12** for the other.
+
+### P4a. The quest-system REVISIT *(maintainer ruling, 2026-08-25 — scheduled, not open)*
+
+**What:** a second pass over the whole quest layer, deliberately scheduled rather than left to drift, **when three things exist that do not exist yet**: more skills than the one 0.12 shipped, collectible resources worth carrying, and NPCs fleshed out enough to want something specific from a specific person. Today's realistic quest space is fishing, fetch-and-deliver and go-and-see, which is exactly the shipped verb set — the layer is not thin by oversight, it is as wide as the world under it.
+
+**The item the revisit owns first: `deliver` stops being an errand.** It is an errand today because **no quest-item type exists** and inventing one for a word would be a format change nothing else asks for — so no object moves, and what is delivered is word. **`deliver` stays an ERRAND until collectibles exist**, and item-carrying is part of the revisit rather than a fix that can be brought forward. The rest of the revisit is whatever the three preconditions make askable: a skill quest that is not a fishing quest, a fetch that fetches something, a giver who wants it because of who they are.
+
+**Depends on:** S4's ladder growing past one verb; P6's resources or an equivalent collectible; E2/E7 giving minted residents something to say. **Companion:** the pack schema is sealed, so a revisit that adds a verb or a target grain is a pack-v2 conversation — bundle it with OQ3's brief-schema window rather than bumping two artifacts twice.
+
+### P4b. Tutorial and first-time quests *(maintainer ruling, 2026-08-25 — recorded concept)*
+
+**What:** introductory quests that teach a skill or a mechanism the first time a player meets it — the board's own way of saying "there is a rod for sale and here is why you want one" without a modal, a tooltip, or a tutorial mode. Recorded as a **future concept** rather than scheduled: the mechanisms worth introducing are still arriving, and a tutorial written against a moving surface is a tutorial rewritten every release.
+
+**Two constraints it inherits and must not break.** *Never forced* is P4's, and a first-time quest is exactly the shape that erodes it — a tutorial the player cannot decline is a main-quest pointer wearing a friendly hat. And *the mechanical log stays mechanical*: a tutorial quest is still tiles and tables, so whatever teaches has to be the work itself, not a narrator explaining the work.
+
+**Pillar:** Progression; onboarding. **Depends on:** enough mechanisms to be worth introducing — realistically the same preconditions as P4a.
 
 ### P5. The day ledger and sleep wrap-up *(new — Ruling 1's boundary, generalized)*
 
@@ -298,14 +831,24 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 
 **Three parallel economies, and the package has no writer on any of the other two.** Money: the engine's `Coppers` widget beside S3's purse. Items: the engine's `gameInventory` beside the pouch — which is doubly pointed, because the package's own item vocabulary calls a `lodging-key` a **"room key"** in this very theme, so the two systems independently invented the same object and neither can see the other's. Rapport: the engine's `Village Bonds` stat block beside P2's `rel`. See S7: those widgets are the same finding from the other side.
 
-**Until this is bridged, the mechanical verbs are the only real economy.** In 0.11 that was the berth button and nothing else. **0.12 made the gap wider, not narrower**, and it is worth saying plainly: there are now four mechanical verbs the GM cannot see or move — renting a berth, buying a rod, fishing, and sleeping — plus a purse, a pouch full of named fish, a skill level, and a day ledger. The GM is told about exactly one slice of that, once a day, at the wrap-up, by a channel that runs one way. Everything else is a narrator improvising prices for a shop it has never been shown. What the GM says about money is flavour; what the button does is the game.
+**Until this is bridged, the mechanical verbs are the only real economy.** In 0.11 that was the berth button and nothing else. **0.12 made the gap wider, not narrower**, and it is worth saying plainly: there were then four mechanical verbs the GM could not see or move — renting a berth, buying a rod, fishing, and sleeping — plus a purse, a pouch full of named fish, a skill level, and a day ledger. The GM is told about exactly one slice of that, once a day, at the wrap-up, by a channel that runs one way. Everything else is a narrator improvising prices for a shop it has never been shown. What the GM says about money is flavour; what the button does is the game.
+
+**0.13 widened it again, and by more than one verb.** The quest family adds **five** GM-invisible verbs — taking work from the board, handing a finished job in, setting one aside, and the two that complete where they happen (a walk into a zone, an errand delivered in a greeting) — for a running total of **nine**, plus two completion counters and a live job list the narrator has no reader for. Said at the grain that matters: **the GM can neither mint a quest nor pay one out.** It cannot post work, cannot recognise work the board posted, cannot advance a count, and cannot hand over the reward — so a narrator that improvises a favour asked and a purse handed over has done all of it in prose, beside a board that still has the real job on it. The one channel that does exist runs the other way and once a day: the wrap-up now tells the GM that work was taken, filled or set aside, at day grain, after the fact.
+
+**Two consequences worth recording rather than rediscovering.** First, this is the reason the 0.13 design ruled the quest log **mechanical** — a log that tried to bind the narrator's questlines would be binding something the package cannot see move (S1/P7 territory, and P4's surviving design rule). Second, **selling is deferred here on purpose** (maintainer ruling, 2026-08-25): 0.13 ships no sell surface for fish or anything else, because there is nothing else to sell yet and because a fifth — now tenth — GM-invisible verb widens precisely the gap this item tracks. Income in 0.13 is quest completion, and selling rides this conversation rather than preceding it.
 
 **Two directions, and they are not alternatives so much as a cheap one and a right one.**
 
 - **Constrain by prompt contract** — the GM is told, in the injected header or the system prompt, that it narrates around the package's ledger and never moves it: no prices, no handovers, no granted objects. Cheap, immediate, and only as reliable as any prompt instruction, which is to say it will hold most turns and fail on the interesting one.
-- **Give the GM real verbs** — `rentBerth`, `grant`, `take`, `award` exposed as GM-visible actions or tools, so "you hand over the coins" IS `award({ money: -12 })` and the receipt the player sees is the purse changing. This is S1's channel wearing an economy hat: the same untrusted-model-output validation problem, the same bounded vocabulary discipline, and the same hard external dependency. Note it inherits S5's rewind contract for free — every one of those verbs is already a shipped mutator that writes into the route-anchored snapshot, so a rewound turn rewinds the purchase, which is exactly what a narrated purchase should do.
+- **Give the GM real verbs** — `rentBerth`, `grant`, `take`, `award` exposed as GM-visible actions or tools, so "you hand over the coins" IS `award({ money: -12 })` and the receipt the player sees is the purse changing. This is S1's channel wearing an economy hat: the same untrusted-model-output validation problem and the same bounded vocabulary discipline, on a channel that now exists. Note it inherits S5's rewind contract for free — every one of those verbs is already a shipped mutator that writes into the route-anchored snapshot, so a rewound turn rewinds the purchase, which is exactly what a narrated purchase should do.
 
 **Pillar:** Consequence; Things. **Unlocks:** the GM can finally pay a quest out (P4's rewards stop being prose), P2's disposition gets its precise bumps, and the "you already keep a berth here" refusal stops being the only sentence in the game that knows whether you paid. **Depends on:** S1's channel for the real version; nothing for the prompt contract. **Companion:** whichever way it goes, S7's decision has to agree with it — a widget the GM decrements and a purse the package decrements cannot both be the money.
+
+**0.14 does not narrow the gap, but it changes the shape of the ask — and it hands this item a working proof.** The four economy verbs are now scoped **on the same channel** as S1's world flags, the weather write and one tuning row, in one filed feature request (S1's vocabulary table). That matters for sequencing: P7 is no longer a separate engine conversation waiting behind S1's, it is one of four vocabularies in S1's.
+
+**One hard thing about the "real verbs" direction was found and decided rather than left for implementation.** The shipped verb *functions* — as distinct from the raw mutators under them — assume a **player-proximity precondition the GM does not have**. `berthOffer` resolves a keeper standing next to the player and refuses when there is none; `rentBerth` re-reads that offer before a single field moves. A GM-narrated purchase satisfies none of that by construction: the innkeeper in the prose may be three zones away. So exposing the existing functions is not the cheap half of this item, and the FR prices it accordingly — **GM verbs carry validated target arguments against explicit allowlists and are executed as a second, GM-shaped implementation** over the same gen-fenced mutators. The rewind contract is still inherited for free, because the mutators are unchanged.
+
+**And the proof this item was missing now runs in ordinary play.** 0.14's weather override is a complete package-side consumer of exactly the channel P7 wants: a validated closed vocabulary, folded defensively, landing in chat metadata, re-read on every props delivery, with a re-place already wired. 0.16 gave it its writer, the package's declared `weather` verb, so it is no longer built and dark: it is the smallest working version of this item's second direction. That changes what this item is asking for. **The channel is not the missing piece any more.** It shipped, and the package writes on it twice. What is missing for money is the economy vocabulary itself and the GM-shaped implementation under it.
 
 ### P8. Ruleset-pluggable character sheets *(new — maintainer ruling, 2026-08-24)*
 
@@ -346,6 +889,41 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 
 **Pillar:** Things (acquisition); world variety. **Secondary tag:** RP frame variety. **Unlocks:** a money sink that is not a person you have to stand next to — which matters more than it sounds, because every purchase in the package today requires finding a keeper; a natural home for goods no NPC would plausibly stock; and a second acquisition idiom for P9's equipment. **Depends on:** S3's vocabulary and price tables (exist). **Companion, and it is the constraint:** the device is a *theme-owned* surface, not a universal one — a cozy village must never grow a delivery app — so it wants the same per-theme gating the item skins already use, and a theme that has no device simply has none.
 
+### P12. A character level — the progression axis that does not exist *(new — maintainer ruling, 2026-08-25)*
+
+**What:** a **character-level** system: one number about the person, climbing on experience the character earns, distinct from S4's per-verb skill ladders. **It does not exist today and this entry is here to say so precisely**, because the word "XP" has been doing two jobs on this roadmap and only one of them was ever built. What S4 shipped is `skills.verbs.<verb> = {l, x}` — a level *per practised verb*, earned by practising that verb. A character level is the other axis, and there is no field for it, no curve, no source and no reader.
+
+**It is here because of what the reward ruling did to P4.** Quests may pay **level experience** as a reward class — but only once a character level exists, so until then the class is unreachable and 0.13's palette is money and rapport. This is deliberately the ordering: **the system first, the reward second.** A reward that mints its own progression axis is how a quest layer comes to own the pacing of a game that had not decided it wanted one.
+
+**Two questions it has to answer before it is worth building, and neither is technical.** What does a level *do* — is it a gate, a multiplier, a title, or a number the sheet shows? And where does its experience come from other than quests, because an axis fed only by board work is a board-work meter with a character's name on it.
+
+**Pillar:** Progression (the other kind). **Unlocks:** P4's level-XP reward class; a second thing P8's ruleset descriptors can be pluggable *about*. **Depends on:** the block (a new serialized field, under P10's own rules — field class, key list, wire order); P8 for where it is read. **Blocked on nothing but the design questions above.**
+
+### P13. Reputation — what the settlement thinks, as distinct from what a person thinks *(new — maintainer ruling, 2026-08-25)*
+
+**What:** a **settlement-scoped standing** — how the place regards you — kept apart from P2's `rel`, which is how one named person regards you. The two are genuinely different quantities: a village can be grateful to a stranger nobody in it has met twice, and a person can like you in a town that does not.
+
+**It is here as P4's third gated reward class**, on the same rule as P12: quests may pay reputation once reputation exists, and not before. 0.13 pays **rapport** — a `bump({t: 1})` on the giver, through the same settlement-scoped key every other bump uses — and calling that reputation would be the mistake this entry exists to prevent. Rapport is one row in `rel`; reputation is a fact about the zone.
+
+**The design question it opens, recorded so it is not answered by accident:** whether reputation is derived (a function over the `rel` rows the player has built, costing no save bytes) or stored (its own field, moved by explicit awards). Derived is cheaper and cannot drift; stored is the only one that can be *paid out* by a quest, which is the whole reason the class was named.
+
+**Pillar:** Consequence; Progression. **Unlocks:** P4's reputation reward class; a legible answer to "does this town know me" that is not a list of names. **Depends on:** P2 (exists). **Companion:** S7/P7 — the engine draws a `Village Bonds` stat block of its own, so whatever this becomes has to agree with that decision or be a fourth parallel economy.
+
+### The three reward classes, and why each one is an entry rather than a bullet *(maintainer ruling, 2026-08-25)*
+
+The ruling that emptied P4's reward list also said what may ever refill it, and **each class is gated on its own system existing**:
+
+| reward class                      | gate                                                     | status                                        |
+| --------------------------------- | ---------------------------------------------------------- | ----------------------------------------------- |
+| **money**                         | S3's purse                                                | **shipped** — 0.13 pays it                     |
+| **rapport with the giver**        | P2's `rel`                                                | **shipped** — 0.13 pays it                     |
+| **character-level experience**    | **P12** — no character-level system exists                | unreachable until P12                          |
+| **tangible assets / collectibles** | **P6** (resources) or an equivalent collectible system    | unreachable until something is worth carrying — and the same gate P4a's item-carrying `deliver` waits on |
+| **reputation**                    | **P13** — and it is not P2's rapport                      | unreachable until P13                          |
+| **skill experience**              | —                                                         | **never.** The task may raise a skill; the reward may not |
+
+The last row is the ruling's own, and it is a permanent exclusion rather than a gate: nothing that lands later makes skill XP an acceptable quest reward.
+
 ---
 
 ## W — The wider world
@@ -354,19 +932,71 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 
 **What:** gate travel by quest, vehicle, fee, or rapport — a gate must accept more than one key (see P4's covenant).
 
+**Companion — the second settlement, and what it breaks (0.17; C1 ruled 2026-09-05).** The
+maintainer approved wilderness and town variety for 0.16 on a stated condition that holds: *"if the
+seeding system already does not account for multiple settlements in one game currently"* — it does
+not. The brief has one settlement and no way to address a second, so multi-settlement worlds are
+0.17's, and the two concrete things a second settlement breaks are written down here rather than
+rediscovered: **(1)** the World Maps export syncs a world **once** and then holds it in a `WeakSet`
+of finished worlds (`55-maps-export.js` `_done`) that `maybeSync` returns early on, so a settlement
+materialised *after* that sync is invisible to the map forever; and **(2)** the lattice's residency
+policy refuses to evict anything the brief named, so a second settlement a player walked away from
+days ago stays resident permanently (`21-lattice.js` `residency`) — the refusal is correct for one
+town and wrong for a world of them. Both are cheap to fix deliberately and expensive to discover.
+
 **Pillar:** the unknown. **Companions:** **somewhere to go** (W2 — a gate with nothing behind it is a wall) and **the vehicle as a themed feature**: every theme names its vehicle in the placer registry — dock/boat, pad/shuttle, bus-stop/bicycle — one gating system, three skins; sailing generalized. The sailing case lives here: the boat is a travel key *and* a fishing multiplier *and* an exploration verb. **Depends on:** W2 for payoff; S3 for fees/tickets.
 
-### W2. Enterables and the expedition ladder *(old 19 + new)*
+### W2. Enterables and the expedition ladder *(old 19 + new — the lazy-compile half SHIPPED in 0.16, amended)*
 
 **What:** enterable ruins and lookouts — plus the reason to enter: **lazily-compiled sub-zones** chained off wilds edges and enterable features (the cave behind the ruin, deeper woods, a derelict deck below the hull), deterministic from `hash(seed, edgeId, depth)`, compiled on first entry. The unknown *exists without pre-existing*; the sealed brief stays sealed.
 
-**Pillar:** the unknown — the missing half of exploration: destinations that don't exist yet. **Unlocks:** W1 gets something behind the gate; P3's mining/foraging get places that feel earned; sailing gets shores worth landing on. **Companions:** the S2 once-per-feature flavor injection, so first entry always lands prose — and **discovery state**, which needs saying precisely because it is a promise the save format cannot currently keep. A found place staying found is save data, and the snapshot has no discovery field; `simFromSaved` restores none. So either it rides the versioned player block of Open Question 2 (rehydrated after `PF.world.build` and before `saved.zone` resolves), or **discovery is session-only and W2 must say so out loud**. Do not ship the ladder with the stronger promise implied and the weaker behaviour built. **Depends on:** S2; benefits from 0.10's room vocabulary; deliberately sequenced late because its payoff multiplies with what's coming — the one deferral justified by dependency, not art.
+**As built in 0.16 — the lazy-compile mechanism, at a grain this entry did not name.** What shipped
+is the **wilderness lattice**: an unbounded grid of regions around the settlement, materialised on
+arrival and dropped again when the player walks far enough away. Three amendments to the text
+above, each recorded rather than quietly absorbed:
+
+- **The grain is the wilderness, not the enterable.** The item chains sub-zones off *wilds edges and
+  enterable features*; 0.16 chains them off **every edge of every region**, and the enterable half —
+  the cave behind the ruin, the deck below the hull — is untouched. A landmark out in the country
+  is a thing to find and stand on, not yet a thing to go inside. **That half of this item is still
+  open**, and it is now the half with the shorter road: the substrate under it exists.
+- **The address is the cell, not `hash(seed, edgeId, depth)`.** A generalisation rather than a
+  substitution: a chain keyed on the edge you came through is order-dependent by construction (east
+  then north and north then east are two different edge chains), so what shipped keys on the
+  **cell** — `hash(seed, "wild", cx, cy)` — which makes the two orders name the same place and makes
+  a region a **total function** rather than a walk history. Depth survives as ring distance for the
+  terrain mix and nothing else.
+- **"The snapshot has no discovery field" is out of date and was already out of date.** That clause
+  is corrected rather than argued with: `player.found` **shipped in 0.11** as part of S5, was
+  declared and empty for five releases, and **0.16 is its first writer** — a landmark cell files a
+  row, an ordinary one files nothing. So the entry's own fork resolved in the stronger direction:
+  discovery is durable, not session-only, and the item never had to choose.
+
+**And the companion shipped in bounded form.** The once-per-feature flavor injection this entry
+asked for is live for the wilderness: a **landmark** cell carries one line of prose capped at 140
+characters and an ordinary cell carries none, so the injection budget is a function of **how many
+landmarks exist to find** rather than of how far anybody walks (measured: 12 of 47 cells carry prose
+across a three-ring walk, 1,015 characters in total). The **per-feature** injection S2 owns is still
+S2's.
+
+**What is still open here:** enterable ruins, lookouts and hulls; anything to *do* in a region
+(0.16's anti-scope refuses world mutation wholesale — see **S8**); and depth as a real ladder rather
+than as a distance term.
+
+**Pillar:** the unknown — the missing half of exploration: destinations that don't exist yet. **Unlocks:** W1 gets something behind the gate; P3's mining/foraging get places that feel earned; sailing gets shores worth landing on. **Companions:** the S2 once-per-feature flavor injection, so first entry always lands prose — and **discovery state**, which is settled rather than forked, and settled in the stronger direction (see the third amendment above). A found place staying found is save data, and the durable field is **`player.found`**: `21-lattice.js`'s `discoverCell` files a landmark cell through `58-player.js`'s `discover`, `PF.player.serialize` writes the rows into the versioned player block, and the restore's own player pass rehydrates them — eighty rows deep, evicting the oldest by day. So the ladder gets built on the stronger promise rather than against it, and **what is still open here is the enterables half above and nothing about the save format**. **Depends on:** S2; benefits from 0.10's room vocabulary; deliberately sequenced late because its payoff multiplies with what's coming — the one deferral justified by dependency, not art.
 
 ### W3. Cities and districts *(old 17 — the density half shipped in 0.10; districts remain)*
 
 **What:** the `city` scale shipped in 0.9 at 96×72; **0.10 shipped the density half** — the map raised to 104×72 with 80 lots, population derived from rank and prosperity (~120 souls measured), minted residents, round-robin households, parks on the lots nobody claimed, and day anchors spread so a quarter of the town keeps the square while the rest hold the street outside their own doors. What remains is **districts with their own gravity** — a ward `public` handle per district (the anchor spread stops the plaza crush, but "the street outside your own door" is a stopgap, not a neighbourhood; one plaza serving 104×72 is still a village in a coat), district market days (L2), and district names in the header. 0.10 turned this from polish into a due bill: at 80 lots and 120 souls the single-`public` town is visibly under-articulated. **A note on `backgroundPopulation`:** 0.10 gave the §9 reserved field its first consumer — it moves a settlement *within* its rank's band and can never set the band — so "cashed out as ambient walker density per district" is no longer the field's first job, but it survives as the district-grain second consumer if districts want it.
 
 **Companion — apartments as a choice, not only a fallback.** Round-robin sharing exists as over-subscription behaviour; a dense rank could *choose* to stack households — a tenement row, a hab block — and spend the ground it frees on district squares, markets and parks. The leftover-lot machinery already knows what to do with ground nobody built on; this hands it more of it, on purpose.
+
+**0.16 did not move this, and it is worth saying which half it did not move.** The release re-laid
+every settlement's streets from its own seed — the crossroad, the square, the band phases and the
+ground — so two cities no longer share a map. **A district is still not a thing**: one `public`
+handle still serves 104×72, the anchor spread is still the stopgap it was, and a varied layout with
+one centre is a differently-shaped village in a coat. If anything the bill is louder now, because a
+city's plaza can sit anywhere and there is still only one of it.
 
 **Pillar:** world variety. **Depends on:** L2 for district calendars; W6's map surface stops being optional at this scale.
 
@@ -394,6 +1024,13 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 
 **Pillar:** world variety. **Secondary tag:** legibility. **Relationship to W3 and W5, said plainly so nobody builds it twice:** W3 owns the district *machinery* (per-district `public` handles, district market days) and W5 owns *new* place-kinds with their schedule columns; W7 is the texture pass over both — floors and surfacing for the kinds that already exist, and names for the wards W3 carves. **Depends on:** nothing to start (the floor is a repair-layer change and a lot budget); W6 for the map half; S2 for the sign half.
 
+**0.16 answered part of the complaint this entry is about, from a direction it does not name.** The
+playtest note behind W7 is that a generated settlement reads as a grid of homes plus a farm; 0.16
+made *where those homes are* a function of the world's seed, so the sameness that ran across worlds
+is gone. **All three parts of this entry survive it untouched** — a venue floor per rank, district
+names, and being able to find the inn — because a town laid differently is not a town with more in
+it, and none of the three is a layout question.
+
 **The bug half is closed; this is the feature half.** 0.11 found the case where a settlement could seal with a keeper and *no gathering at all* — the §4.3 host synthesis ran against the model's draft cast, one pass before the quality floor topped a host up from stock, so a brief whose cast failed validation outright compiled fifteen zones of homes with no inn in them. The post-condition now runs against the sealed cast. That was a defect, and fixing it does not make a settlement varied; everything above still wants doing.
 
 ### W8. The swamp biome — settlements on platforms *(new — maintainer ruling, 2026-08-24)*
@@ -417,6 +1054,119 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 
 **Pillar:** world variety. **Secondary tag:** RP frame variety. **Depends on:** exactly the third-theme hygiene enumerated in W8 — the two items share that prerequisite entirely, and whichever lands first pays for both.
 
+### W10. Procedural world history *(new — maintainer ruling, 2026-08-28)*
+
+**What, in the ruling's own register:** grow the share of world texture the package mints
+procedurally — **in the tradition of Dwarf Fortress's generated history, taken as inspiration for
+balance rather than as a template** — so worldgen leans less on the user's LLM connection. Any
+design must accommodate non-fantasy settings, and it will be worked through with the maintainer as
+it approaches.
+
+**Direction, not devotion.** The reference and the rule that governs it are the Inspirations
+section's, and this entry does not restate them: read the Dwarf Fortress bullet there, including the
+caveat that is part of the reference and not a footnote — DF's scope is fantasy plus historical
+fiction, and a colony's founding is not a dwarven age. There is no copy target here and no feature
+list; the entry exists so the direction is on the record with the register attached.
+
+**0.16 did not touch this item and did two things to its surroundings.** It is the largest
+procedural mint the package has done — six terrain classes, per-cell naming and a landmark rate,
+all off the seed and costing the connection nothing, which is this pillar's argument made again at
+a larger scale — and it **reserved `historygen` a stage id** in the retry surface's registry
+(**S9**), so whenever history generation lands it inherits a recovery story rather than needing
+one. History itself remains unwritten and undesigned.
+
+**Pillar:** Call economy — this is the pillar's largest unclaimed territory, because everything the
+package can mint is something the connection is not asked to write. **Secondary tags:** world
+variety, world coherence. **Nearest thing to a precedent, and it is 0.14's:** the two climate axes
+are exactly this move at the smallest possible scale — two rolled words and one derivation give
+every world a distinct climate identity, a calendar and a year's worth of skies, and the connection
+pays nothing for any of it. **Depends on:** nothing to start, and that is the trap rather than the
+invitation — history that nothing reads is the most expensive prose the package could generate. It
+reads best beside **L7**'s world-state decision (a history is what a faction's past looks like),
+**E6**'s ties, **W4**'s specialization axis and **W6**'s reuse, and it should not be designed before
+somebody has decided which surface tells the player any of it. **Companion:** decide up front what
+history is *for* — GM fuel, place names, or a thing the player can ask about — because those are
+three different artifacts, and only the last one wants E7's window.
+
+### W11. Megastructures — one structure across many maps *(new — maintainer ruling 7, 2026-09-05)*
+
+**What, in the ruling's own words:** *"megastructures, like cities, dungeons, etc, that are one
+structure but may span multiple maps."* A single coherent place that is larger than a zone — not a
+city rendered as one big grid, and not a dungeon rendered as a corridor of unrelated rooms, but one
+structure whose parts are laid out across several of them and hold together as a thing.
+
+**The enabling mechanism is cross-chunk structure generation, and 0.16 laid its substrate.** The
+wilderness lattice makes "the region east of here" addressable and deterministic before anyone has
+been there, which is the precondition: a structure that spans maps has to be able to decide what it
+puts in a region the player has not reached, and be right about it when they arrive from the other
+side. What 0.16 does *not* have is any generator that writes across cells — every cell is a pure
+function of itself, deliberately (`hash(seed,"wild",cx,cy)` and nothing else), and that is the
+constraint a megastructure generator has to break on purpose and carefully.
+
+**Provenance, and what this entry now owns.** It was spawned by a question about brief features a
+settlement has no room for: should an unplaceable smithy spill into the woods? The first answer was
+no. The later ruling (2026-09-13) hands that case to this entry rather than leaving it homeless: a
+settlement that **runs out of lots may be upgraded to a megastructure**, spanning more than one map
+chunk, or becoming a place that exists across several maps. So running out of ground is a growth
+path for the settlement and not a placement failure to be patched at settlement grain, and **W11
+owns it**.
+
+**All of that is planned, and it carries no release number.** Nothing in the shipped code upgrades
+anything: a settlement that cannot fit a sealed feature still drops it with no log and no notice,
+exactly as it always has, and it will keep doing that until the upgrade path described here is
+built.
+
+**Pillar:** the unknown. **Secondary tags:** world variety, world coherence. **Depends on:** the
+lattice (shipped) for addressing; **S8**'s layout pinning, hard — a structure spanning regions is
+precisely the thing a generator change must never re-lay under a player halfway through it;
+**W3**'s districts, which are the same problem at settlement grain and should be designed with this
+in view rather than twice.
+
+### W12. Street topology — a second shape of town *(new — 0.16 playtest read, 2026-09-07)*
+
+**What:** every compiled settlement, at every scale, is **exactly one horizontal road and one
+vertical road meeting at a single crossroad**. That is not a tuning value anywhere; it is two
+unconditional `fillRect` calls in `20-world.js` — a 2-tile band spanning the full width at `midY`,
+a 2-tile band spanning the full height at `midX`, where `midX`/`midY` are simply `plan.spine.x` /
+`plan.spine.y` — recorded as the settlement's public ground in the same shape twice more. There is
+no loop, no count and no scale term: `scale.buildings` changes how many lots the four quadrants
+hold, never how many roads exist. Buildings are laid in exactly four bands — north, south, west and
+east of the junction (`BANDS`) — so the plan is structurally a **plus sign with four filled
+quadrants** whether the settlement is an outpost or a city. What this item asks for is a second
+answer to that question: a ring road, a T-junction with no fourth arm, a main street bent around a
+river, a settlement with no crossroad at all.
+
+**Why it is not a fifth lever, which is the whole reason it is written down.** 0.16's four variety
+levers move **where** the plus sign sits and **what it looks like** — the junction slides within a
+margin floor, each band's lot rhythm phases toward the crossroad, the plaza's rectangle is drawn
+from a fixed-area shape set (every shape pinned on `(w−2)(h−2) === 36`), and the ground idiom follows
+the surround — all four off one side stream keyed on seed and settlement name. They are worth what
+they cost: two worlds no longer share a map. But they all take the topology as given, and reading
+the file makes the reason plain: **`BANDS` and `gridYield` assume the four-quadrant shape, and
+`slots.length` is the supply cap the entire NPC roster hangs off.** A fifth lever that changed the
+road count would change the lot yield, which re-mints the town, which severs every saved `rel` row
+in it — which is exactly the argument that made 0.16's junction search enumerate candidates against
+the allocator's own arithmetic and filter to the **centred yield** rather than compute a position.
+So a second topology is **a new partitioner** — its own yield function, its own band vocabulary, its
+own margin rules — sitting beside the crossroad one and chosen per world, not a fifth entry in
+`TOWN_TUNE`.
+
+**And it is worth building because the levers cannot reach it.** The measured plan space is large —
+737 layouts at outpost up to 3.9 million at town — and every one of those layouts is the same road.
+At the two smallest ranks it is *literally* the same road: outpost and hamlet maps have room for
+exactly one legal band depth, so the crossroad moves only sideways and every outpost that will ever
+compile puts its horizontal road on the same row. Variety measured in layouts is not the same
+quantity as variety a player perceives, and a town's silhouette is the part they see from the first
+frame.
+
+**Pillar:** world variety. **Secondary tag:** world coherence. **Depends on:** **S8** first, and
+hard — a second partitioner is a generator change under worlds people are living in, which is
+precisely what S8(a)'s layout pinning exists to make safe; the honest sequencing is that this item
+cannot ship before a stored world can decline to be re-laid. **Reads with:** **W3** (a district is
+the other thing one centre cannot express), **W7** (a differently-laid town is still not a town with
+more in it), and **W8**, whose swamp settlements are the clearest case of a silhouette the crossroad
+partitioner cannot produce at all.
+
 ---
 
 ## E — The cast
@@ -426,6 +1176,20 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 **What:** canned dialogue generated at creation — now co-generated with P4's quest templates as **one offline content pack**, because they are the same problem: authored-once content that plays without calls.
 
 **Pillar:** Call economy. **Companions:** (i) **state-indexed, not flat** — lines keyed by daypart × location-handle × weather read as a living town; a flat pool reads as canned within five presses, and the creation call writes the matrix as cheaply as the pool; (ii) **the escalation seam** — one pre-written line per NPC gestures at the `situation` ("You heard about the mill, then?"), and pressing E again on it triggers the real LLM call: canned dialogue as a funnel *into* expensive content, not a wall in front of it; (iii) **two registers** (stranger/friend) so P2 has something to switch between; (iv) **overheard lines** — walking past two NPCs yields an ambient snippet; free rumor delivery, and quest hooks can ride it. **Depends on:** nothing to start; P2/L2 enrich the index.
+
+**The PACK shipped in 0.13; the DIALOGUE SURFACE that reads it did not.** What landed is the artifact and everything around it: a **second generation call** at creation behind the same loading gate as the brief, a sealed blob at its own chat-metadata key, a seal-time validator with a substance floor that fails rather than sealing something hollow, fold-at-read against the current world, and a hand-authored **default pack** for both themes that serves declined-generation and legacy chats. The index has all four committed axes — daypart × location-handle × weather (the weather column built and empty until L2, exactly as 0.12 left the catch tables) × register — plus the E7 topic seam as an optional per-line tag, and the escalation section is named as E7's convergence point. Both registers ship; overheard lines ship.
+
+**What 0.13 consumed of it is the TEMPLATE half only.** The board reads the templates; **nothing yet reads a dialogue line**, because the surface that would is E7's `Ask` tree and that is unbuilt. So the pack is currently a quest catalogue with a fully-authored dialogue matrix sitting behind it, waiting for a reader — which is the right order (the expensive half is the generation, and it happens once at creation whether one consumer exists or two), but it should be said plainly rather than left for someone to discover as dead content.
+
+**0.14 built the reader, and reading the matrix taught three things the writing could not.** The talk window serves the index, and the four committed axes all came alive at once — the **weather column filled** the moment L2 shipped the words for it (word-only, five-valued, and an untagged line reads as any sky), the topic seam became the four branches, the daypart axis became the ladder's nearest-the-hour ranking, and the escalation section became the convergence door it was named as. What reading it taught:
+
+- **Companion (i) was right and its failure mode is different from the one predicted.** A flat pool reads as canned in five presses; a *state-indexed* pool reads as canned by going SILENT, because pinning place and hour and topic at once leaves one line in a cell. That is why the reader ships a relaxation ladder and a per-(day, branch) served set rather than a cursor.
+- **Companion (iii) came out of the dark in 0.15.** Both registers serve: stranger to everyone, friend to any speaker the ladder has reached friendly with, friend-first at every relaxation. Ruling 4's sealing clause was its own sunset — "a promotion nobody earned" — and the promotion is earned now. The guidance moved with the read side a second time: it leans stranger (most of a town does not know the player) and buys real friend lines for the reader that exists, instead of promising a later release.
+- **Companion (iv) is still unread.** Overheard lines are sealed and no surface floats them. They want a surface of their own — an ambient bubble on a passing pair — not a branch in a window the player has already opened.
+
+The first live measurement is what shaped all of it: a real pack came back with 12 lines across 4 location handles × 4 dayparts — **below one line per cell** — with zero `place` and zero `smalltalk`, and 7 of the 12 in the register nothing reads. The response was to widen the ask, invert the register sentence, put the world's climate in the digest so the model knows which skies exist, and bring the substance floor down to 10. Whether that is enough is the live-run question on `docs/player-state.md` §12.1.
+
+**One deliberate exclusion, and it is the rolling-compat posture rather than an oversight.** Every chat sealed before 0.13 is **packless, permanently** — the seal-side marker that arms the pack call did not exist to be written, so no veteran chat is ever expected to have one, and the board tells those worlds so in its own words. A **0.14 retro-generation opt-in** — a per-chat, player-initiated "write work for this world?" on the board itself, which is precisely why the board fixture is unconditional — is **recorded as an idea and not as a commitment**. The caveat travels with it: the compatibility window **rolls with the game**, so retro-generation would be a convenience for RECENT worlds and never an obligation to old ones; old-alpha saves are not re-supported, and at full release the floor reaches back at most to late-Beta worlds. Anyone picking it up should also price what it costs: a gate armed and a paid call spent per veteran chat, plus a retry surface in front of a player who was not creating anything.
 
 ### E2. Algorithmic NPCs and field promotion *(old 2 — the filler half shipped in 0.10)*
 
@@ -473,13 +1237,69 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 
 **Down payment shipped in 0.11, and it is a stopgap:** Talk now asks before it spends unread narration ("Skip story & talk?"), because a greeting was silently ending the turn the player was still reading. That is a guard on the single pipe, not a second pipe. E7 is what makes it unnecessary.
 
+**SHIPPED in 0.14 as the talk window, and the ruling that shaped it is worth stating first: the Ask surface IS the interact press** (2026-08-28). Not a menu beside E — E itself. Pressing it beside somebody opens a window that **stops the clock while the player stays mobile**, and the town keeps milling around the frozen conversation because the world should stay alive while you read.
+
+What it serves, in the order the item asked for it: **name, occupation and where they live from the compiled record** — which is the "smallest honest first cut" this entry named, and it is what finally makes a minted resident askable without a single generated word; **four pack topics** (local rumors, work, this place, and passing the time); the escalation pair; a hand-over row per live errand; and **both convergence doors, always rendered** — "Just talk" and a Say field that cues the GM to answer as that NPC. The companion warning was taken literally: *the tree must never become the only channel*, so the doors never vanish, they dim with the title saying why.
+
+**Three things landed differently from the entry as written, each ruled:**
+
+- **Always stranger** (Ruling 4) — **retired on its own terms in 0.15.** The ruling sealed the friend register because a stopgap that *guessed* at friendship would be a promotion the player never earned; P2's crossing is the earning, so the register now serves at the friendly rung and the ruling's floor survives intact: an unmet or merely acquainted speaker still meets 0.14's stranger-only window byte for byte, in a town with no friends in it — the served set is per branch and shared across speakers, so once somebody IS a friend their presses spend from the same day's pool. And the friendly rung is not reachable by talking: under the 0.15 ruling only a job or a counter carries a row past acquainted, so the register opens to a player who has actually done something with that person. The 7-of-12 unserved measurement this bullet carried is settled the right way round — those lines wait for a friend now, not for a release.
+- **A branch with no line does not render**, which produces an inversion the release ships with knowingly: the enriched default packs render all four topics, and a thin *generated* pack renders one or two — so the world that paid two GM calls meets the thinnest window. The fix is a wider generation, not a merge, and 0.14 widened it; whether it is enough is a live-run question.
+- **The say input is uncapped** (ruled 2026-08-28), which is the one place in the package where composed turn text carries no named limit. The reasoning is that every other capped door is stored data re-entering composition and this is live player input. The residual is honest: a host refusal surfaces as the generic toast and the typed text is not preserved.
+
+**E1's escalation seam was built once, as this entry asked.** "Press them about it" is a ratchet that retires after an accepted press, and it is the same door E1 described from the other side.
+
+**What did NOT ship, and is not a gap so much as a scheduled revisit:** the maintainer's own note that *we'll revisit dialogue generation later*. 0.14 reads the pack E1 seals; it does not change how that pack is written beyond widening the ask (four topics, a sky tag, mostly-stranger lines) and lowering the substance floor to 10. The **overheard pool remains sealed and unread** — 0.13 wrote it, 0.14 does not surface it, and it wants a surface of its own rather than a branch in this window.
+
+**And the whole risk is now a playtest question rather than a design one:** did the free branches stop the maintainer reaching for the narrator? That is answerable only after play, and it is on the deferred-verification list in `docs/player-state.md` §12.3 with his name on it.
+
+### E8. Seeded name tables — the degraded world's names and the two casts, one piece of work *(new — maintainer rulings R-D3 + R-D7, 2026-09-07)*
+
+**Two rulings arrived on the same day, pointing at different problems, and they meet in one piece of
+work. Filing them as one entry is the whole point of the entry.**
+
+**The first half — the degraded map's names, and it is PARKED rather than planned** (R-D3, verbatim):
+
+> *"The fallback doesn't really matter at this point in time. We can revisit it way later down in
+> line in development, but right now it's worthless as we are missing a lot of content and I don't
+> want to bog down development by having to also develop the fallback on the side."*
+
+So **no fallback investment happens until the revisit**: no name mint, no fallback cast work, no
+`61-pack.js` giver or bark work, and — the part worth stating because it is easy to violate by
+accident — **nothing anywhere may claim the fallback improved.** What the revisit starts from is the
+measurement, kept for exactly that purpose: the degraded settlement rotates over three literal names,
+and the people in it are Mira, Tam, Rook and Fen in **every** seed and **both** themes. A world that
+is supposed to be a different world every time currently is not one, and that is what a name table
+fixes.
+
+**The second half — the two casts, and it is a REDIRECTION rather than a deferral** (R-D7, verbatim):
+
+> *"Names should not be roster-based to begin with. Seeded name tables should be sufficient."*
+
+The GM's roster and the walkable world's roster are minted by two independent calls and agreed only
+by accident (the full measurement lives on **S1**, which is where the mismatch surfaces at a verb).
+The rejected fix was to merge them. The ruled fix is that **both sides mint from the same seeded
+table**, so they agree by construction, nothing is copied and nothing is synchronised.
+
+⚠ **The two halves are the same fragment books, and that is why this is one entry.** The tables that
+make the degraded map stop shipping the same four people are the tables that make the two rosters
+agree. **Do not build them twice, and do not build either half early to make the other look cheap** —
+either half built alone pays the whole design cost of a name system and buys one of its two payoffs.
+
+**Pillar:** world variety, with a consequence edge on the roster half (a verb that cannot name
+somebody is a consequence that cannot land). **Secondary tag:** world coherence.
+**Depends on:** nothing technically — a seeded table is a pure function, which is why it fits the
+package's determinism covenant without a single new save field. What it waits on is the maintainer's
+own trigger: *"way later down in line in development"*, once the content the ruling says is missing
+exists. **Companion:** GitHub issue **#747**, re-scoped to this direction rather than closed.
+
 ---
 
 ## Sequencing
 
 **The load-bearing items and what they gate** (S4 joins them per Ruling 2; S5 was promoted out of the open questions):
 
-1. **S1 write-back** — gates consequence everywhere: old 16, quest outcomes, construction, recruit holes, GM hails, disposition bumps. Has the only hard external dependency (engine channel) — *open that conversation first regardless of ship order.*
+1. **S1 write-back** — gates consequence everywhere: old 16, quest outcomes, construction, recruit holes, GM hails, disposition bumps. *The engine channel it waited on has shipped as the package-declared verb table, and the package already writes on it, so what is left here is package-side: the world-flag vocabulary and the persistence decision under it.*
 2. **S2 Inspect/Use** — gates the rest of the action layer, the quest board, and enterables. *(Still open. It was slotted for 0.11 and did not ship; 0.12's fishing routed around it with a proximity button and spent the feature-name consumer on the way past — see S2.)*
 3. **S3 pouch + S4 skills/tools** — gate actions' yields, quest rewards, keys, gifts, the economy loop. *(Both shipped — S3 in 0.11, S4 in 0.12 — and the gate held: P3's fishing consumed them the release after, unmodified.)*
 4. **S5 player state block** — gates everything that has to survive a reload: S3, S4, P2, P4, P5, W2. Not a dependency so much as a decision that must be made *before* the first thing that needs it, or it gets made badly four times. *(Shipped in 0.11, and 0.12 was the test of it: three consumers landed — skills, equipped tools, the wrap-up marker — and the block took all three additively, with the wire format's pinned literal moving not one byte for two of them.)*
@@ -488,12 +1308,16 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 
 **The independent cheap track: L2 weather/calendar** — gates nothing, gated by nothing, pure function of the saved clock, zero save fields, immediate felt difference. The dessert; don't let it displace the substrate, don't let it wait a year either. **It has now been passed over twice** (0.11 slipped it, 0.12 held it deliberately so it could land whole), and the 2026-08-24 amendment made it less cheap than the label says — biasing NPC schedules by the weather is settlement work, not a tint. Re-read L2 before scheduling it against the old estimate.
 
+**Closed by 0.14, and the "cheap" label was wrong in a way worth keeping on the record.** L2 shipped, and it was not the dessert. Zero save fields held exactly as promised; gating nothing and being gated by nothing held too. What did not hold is the estimate: the sky itself was the small part, and the release grew a two-axis climate model, a per-world year, a schedule redesign after the first shelter design would have crushed 113 residents into one room, an art pass at both tiers, and a rebuilt fishing modifier — because "the town answers the sky" is settlement work in every direction it touches. **The general lesson for the next item that carries a cheap label: an item that changes what the world DOES is never the size of the thing that changes.** L2b inherits the label and should be read with the same suspicion.
+
 **Releases, as they actually landed and as they are suggested from here:**
 
 - **0.11 — shipped: S5 + S3 + P1's field** (see the history table). **S2 and L2 were in the suggestion and are not in the release**, which is worth saying rather than quietly re-listing them: the save block plus the pouch plus the loading gate was the whole of it, and the second verb and the weather both slipped whole.
 - **0.12 — in progress: S4 + P3's fishing vertical + P5, plus the bridge.** S4's ladder and skills, fishing with all four parts of P3's stack (target, yield, receipt, modifier), P5's Sleep + two-field flush + journal panel, and — falling out of the water the verb needed — the **bridge tile treatment** that lets a road cross a water rect instead of refusing the placement, which is what finally puts a `water-feature` in the wilds. Plus the **character sheet**, which is P8's seam shipped as a working panel. **L2 does NOT ride** (maintainer ruling): daypart is the only live modifier and the weather column is built and empty.
-- **0.13** — P4 quests + E1 offline content pack (one generation batch) + the quest board: the lean-play mode complete. **The quest log ships here as a tab (or filter) of 0.12's journal panel**, not as a new surface — quests land in a pane that has already earned its place. Deliberately NOT earlier: a quest log before P4 renders an empty list (nothing populates `quests.active` until the templates exist, and nothing verifies an objective until P3/S4 give the package things to count) — the same decoration-before-behavior rule that deferred room purposes in 0.8. And it stays the *mechanical* log per Ruling 1's surviving design rule: quest state binds tiles and tables, never the GM's prose — capturing GM-narrated questlines is S1/P7 territory and its own future conversation.
-- **S1 lands whenever the engine channel does** — slot its first consumers (shelter, boarded door) into whichever release that is.
+- **0.13 — shipped: P4 + E1's pack + the board + the log tab**, which is the committed bullet delivered whole. The board is a compiler fixture in every settlement, proximity-gated on a new fourth `nearBoard` read; the pack is a **second generation call** at creation, sealed at its own metadata key, folded per world at read and demoted to the shipped default pack when the brief under it changes; the three offline-verifiable verbs complete at their own sites through one completion path; and the log lands as **tab two of 0.12's journal panel** on a strip built for N tabs, P8's extended view being the committed third occupant. Deliberately NOT earlier: a quest log before P4 renders an empty list — the same decoration-before-behavior rule that deferred room purposes in 0.8. It stays the *mechanical* log per Ruling 1's surviving design rule: quest state binds tiles and tables, never the GM's prose. **Three things in the bullet did not land as written**, each ruled and each recorded above: rewards are money and rapport only (P4, and the reward-class table under P13), selling is deferred to P7's conversation, and the pack's dialogue half ships with no reader until E7 (E1). **Two 0.12 rulings it built on are still provisional** — the proximity trigger and the journal panel's shape — pending the maintainer playtest 0.12 is still owed.
+- **0.14 — shipped: L2 + E7 + the season layer.** The suggestion said weather and the Ask tree; the record is those two plus more calendar than the item asked for and less than it listed. L2 landed **whole and then wider** — two minted climate axes, a 365-day per-world year, one continuous derivation instead of any per-climate table, five words with light/heavy on rain and snow, the ground swap, the falling pass, and the hearth-first schedule bias the 2026-08-24 amendment added — and **the week did not land**, which is L2b now rather than a sentence inside a shipped item. E7 landed as the talk window: the interact press itself, the clock stopped while the player stays mobile, the compiled record answering for minted residents, four pack topics, and both convergence doors always rendered. P3 got the modifier column L2 was held for in 0.12, and it is **not** the column that was built: the sky moves the bite RATE, the region's water sets its base, and the catch mix keeps only its storm lean. **Five things in the bullet did not land as written**, each ruled and each recorded above: the week (L2b), the "fills the inn" destination (it fills the hearths), `(seed, day, clockMin)` (the sky is day-grain), the outdoor-job flag the bias wanted (there is none; `post` is the proxy), and E1's friend register (written, sealed, and served to nobody). **The engine ask is filed rather than deferred** (M14): S1's channel now carries four vocabularies in one feature request, and the weather half of it was read-complete and writer-less in the 0.14 package. The channel itself landed later, and the declared `weather` verb writes the override with it.
+- **0.16 — shipped: W2's lazy-compile half + the settlement's own variety + ruling 4's retry surface.** No suggestion bullet preceded it; the release came out of a maintainer question ("always the same main village map") and seven judgment calls answered in one round. What landed: the wilderness lattice at region grain (W2, amended — see the entry), a settlement whose crossroad, square, band phases and ground are all functions of its own seed, and a per-stage recovery surface for a world that half-generated. **What was ruled OUT of it and is worth reading beside what shipped:** no wilderness on the fallback map (nobody should be living there — the retry surface is the way out instead), no overflow of unplaceable brief features into the woods (that spawned **W11** rather than a placement rule), no second settlement (**W1**'s companion says what one breaks), and — the ruling that killed a designed feature outright — **no reseed on any recovery path**, because a regenerated world would orphan everything derived from the old one. **Two things shipped as limitations rather than as features**, stated in the release notes rather than discovered: the wilderness does not remember you (**S8**), and a town that cannot fit a sealed feature still drops it silently (unowned, recorded on **W11**).
+- **S1 can land whenever the package declares its flags**, because the engine channel it waited on has shipped: slot its first consumers (shelter, boarded door) into whichever release does that. **The 0.14 pass sharpened the ask before it landed**: four vocabularies, one channel, one validation split, with the size question answered while it was cheap. See S1.
 
 ---
 
@@ -513,22 +1337,22 @@ Kept deliberately, so old bad ideas are not re-litigated every few months. **Att
 
 Flagged so a future session doesn't rediscover them the hard way.
 
-1. **The S1 channel's shape.** Custom tool call? Tracker/state-patch? A capability-API addition? This is an *engine* conversation and the roadmap's only hard external dependency. Decide the vocabulary's size cap and the validation story (flags are untrusted model output — same repair discipline as the brief).
-2. **The player block's shape** *(the "whether" is settled — see S5, and so is the migration policy: migrate on read, own nested version, unknown keys preserved. This is what remains)*. Open: whether quest state stores completions only or full in-progress objectives; whether the relationship ledger's "last thing between you" line is worth its bytes; and how discovery state keys sub-zones so a re-seeded world does not resurrect a place that no longer compiles.
-3. **Brief schema v2 timing.** E3 (kind split, agenda), E6 (ties), and possibly W4 (specialization) all want brief changes — and 0.10 already made one without a bump: `backgroundPopulation` stopped being pure narrative texture and became the `householdTarget` input `20-world.js` reads, moving minted residents, dwellings and doors within the rank's band (it cannot change the rank, nor the guest wing, which is keyed on scale + prosperity). That is a MEANING change under the §1 rule. It went unbumped deliberately, because nothing reads `briefVersion` and the bundle below had not opened. Bundle them all into one `briefVersion` bump with one migration, and decide what happens to sealed v1 briefs (presumably: compile exactly as today — the 0.8 elder precedent), including whether a v1 brief's `backgroundPopulation` keeps leaning the mint or is ignored.
+1. ~~**The S1 channel's shape.**~~ **Answered: it is a package-declared verb table.** A package ships its closed vocabulary as a hash-pinned `gm-verbs.json`, the Engine refuses a table over 64 KB or one from a package without `chat-write`, renders a prompt line per verb, validates every call's arguments against the declared types and enums, and writes a state verb's arguments under the package's own chat-metadata key (an event verb is delivered live and writes no state row, though the Engine still records that the call ran on that swipe). So the size cap and the validation story are both settled, and the package's own half of the split stands: it re-validates against the live compiled world at the point of use, because a flag naming a zone id this world does not have is well-formed and still wrong. What remains is not an engine conversation. It is which world flags S1 declares, and what each of them does on arrival.
+2. **The player block's shape** *(the "whether" is settled — see S5, and so is the migration policy: migrate on read, own nested version, unknown keys preserved. This is what remains)*. Open: whether the relationship ledger's "last thing between you" line is worth its bytes (0.15 added a third writer on every finished job and did not answer the question — the line names the board row's own title, so a completion is at least distinguishable from another completion, but the 30-line cap is shared across the whole block and the busiest writer still crowds the others out); ~~*and how discovery state keys sub-zones so a re-seeded world does not resurrect a place that no longer compiles*~~ — **answered by 0.16, and by construction rather than by a rule.** A wilderness cell is a **total function of the world** (`hash(seed,"wild",cx,cy)` plus the stamped axes and surround), so a discovery row naming `w_3_-2` cannot resurrect anything: on a world where that cell still exists the row names the place it always named, and on a world where it does not — a different seed, or a chat whose world was replaced — the row is severed with the rest of the block by the shipped stamps, exactly like every other world-bound field. There is no key to design, because there is no record to dangle: the lattice writes **no portal, no anchor and no id** anywhere a save can reach it, and the ids it does mint are canonical-round-trip (`w_007_0` is refused as a spelling, so two ids can never name one place). The residual the question was really about — the *enterables* ladder, whose sub-zones would be chained rather than addressed — is still ahead, and W2 now carries it. ~~*whether quest state stores completions only or full in-progress objectives*~~ — **answered by 0.13, and the answer is both.** `quests.active` carries full in-progress objectives (an eight-field row with `have`/`n` on it, so a half-finished job survives a reload showing 2 of 5) and the two completion maps carry tallies keyed by TEMPLATE rather than by instance, so two carp orders a week apart are one counter at two. The cost is measured and small: ten active rows and both maps full is ~3.4 KB, 1.3% of the row cap (`docs/player-state.md` §10.2). The shape held additively — 0.13 added **no new key** to the block, because 0.11 declared all three empty.
+3. **Brief schema v2 timing.** E3 (kind split, agenda), E6 (ties), and possibly W4 (specialization) all want brief changes — and 0.10 already made one without a bump: `backgroundPopulation` stopped being pure narrative texture and became the `householdTarget` input `20-world.js` reads, moving minted residents, dwellings and doors within the rank's band (it cannot change the rank, nor the guest wing, which is keyed on scale + prosperity). That is a MEANING change under the §1 rule. It went unbumped deliberately, because nothing reads `briefVersion` and the bundle below had not opened. Bundle them all into one `briefVersion` bump with one migration, and decide what happens to sealed v1 briefs (presumably: compile exactly as today — the 0.8 elder precedent), including whether a v1 brief's `backgroundPopulation` keeps leaning the mint or is ignored. **Two 0.14 additions to the bundle, and one 0.14 precedent for how the window should behave.** The addition: **`feature.flavor`** joins the list — S2's once-per-feature flavor injection needs a field on the feature item that does not exist, and that is a brief change like the rest. The precedent: 0.14 added `latitude` and `precipitation` **without a bump and without a migration**, because they are strictly additive and **absent-preserving** — an unset axis is not defaulted, it is left out, so a pre-0.14 brief seals and loads byte-for-byte as it always did and simply rolls its climate from the seed. That is the shape a v2 field should take wherever it can: a MEANING change needs the bump, a genuinely optional new field does not, and mixing the two is what makes a migration hard to reason about.
 4. **Travel keys vs. forced questing.** W1's "by quest" key must never conscript slice-of-life players — codified in P4 as multiple-keys, but each gate's key *set* is a design decision per gate type. Who decides — brief, theme, or wizard?
 5. **Skill/XP visibility.** Numbers on screen serve the grind audience; diegetic prose ("your casts feel surer") serves the RP audience. Both? A HUD toggle? Decide before S4 ships, not after. *(0.12 answered it in practice and not in principle: a level change is toasted the moment it happens and the level then lives on the character sheet, while the xp behind it is sheet-only — so the one number that reaches a player who never opens a panel is the level, on the cast that earned it. That is a defensible default and not the full answer — nothing yet writes the diegetic register, and P8's ruleset descriptors are where a "prose spread" would live if anybody wants one.)*
-6. **Combat-shaped quests.** Offline resolution can't cover them (combat is the engine's, and its cost is the GM's). Defer, or let them exist as board entries that *route into* normal GM play rather than offline resolution?
+6. **Combat-shaped quests.** Offline resolution can't cover them (combat is the engine's, and its cost is the GM's). Defer, or let them exist as board entries that *route into* normal GM play rather than offline resolution? **0.13 deferred them again, and this time STRUCTURALLY rather than by omission**: the pack schema's verb field is a **sealed enum** of four words, so the generation call cannot author a combat quest and the seal validator would drop one that arrived anyway. The enum and the list of verb sites agree by construction — there is no word in the enum that no site advances, and no site for a word not in it. That is worth knowing before answering the question, because it changes what answering costs: the "route into GM play" option is now a **pack-schema change** (a sealed artifact, so a v2 conversation — bundle it with question 3's window) plus a new completion site, not a runtime branch somebody can add quietly.
 7. ~~**The wrap-up's turn cost.**~~ **Answered by 0.12: prefixed to the next player-initiated turn.** Sleep sends nothing at all — it moves the clock and leaves a marker — and the wrap-up rides whichever turn the player sends next for their own reasons, burning on accept like every other one-shot. So sleeping is free and the summary is a passenger. The residual the old question named is real and accepted rather than solved: a player who sleeps and never sends another turn strands the ledger, and so does a player who never sleeps (P5's two never-flush classes, which **P10** is the fix for).
-8. **Host weather vs. package weather.** The engine has host-side time/weather; the package deliberately owns its clock and should own its weather for the same reason — but the header word is the only synchronization. Is that enough, or does a host-weather chat need a reconcile rule?
+8. **Host weather vs. package weather.** The engine has host-side time/weather; the package deliberately owns its clock and should own its weather for the same reason — but the header word is the only synchronization. Is that enough, or does a host-weather chat need a reconcile rule? *(0.14 shipped the package half and the question **stays open, knowingly**. What changed: there are now **three** synchronized words rather than one — the daypart, the sky and the season — costing 14-24 chars a turn, forever, and measured in `docs/player-state.md` §10.3. What did not change: nothing reconciles, in either direction. The package neither reads a host weather value nor writes one, and a chat running host-side weather now has two systems narrating two skies at the same GM. **One thing 0.14 does add is the shape an answer could take:** the GM weather override is a validated, closed-vocabulary write into a package-owned metadata key, so "the host's weather sets the package's" is a channel problem rather than a design problem — it would be one more writer on S1's channel and not a new mechanism. **And the honest open half is the reverse direction**: nothing lets the package tell the host what sky it is showing, and the header word is still doing that job in prose. The per-session token cost of those words is on the deferred-verification list; the reconcile rule is still nobody's decision.)*
 9. **Where the player home comes from.** Compiler-minted always? Wizard-declared? Does the player join a `household` (id space exists) — and does a lodger-at-the-inn start read better for transient story frames?
-10. **The offline content pack's budget.** E1 + P4 generate at creation in one call; the sealed brief has an 8 KB budget with truncation order. The pack is bigger than the brief — separate sealed blob with its own budget and its own salvage rules, presumably. Decide before writing the generation guidance.
-11. **What a minted resident is at the E key** *(raised by 0.10's population mint)*. The sealed cast is now a minority: a city runs ~120 souls and most are minted with an empty persona. A minted resident has a name, kind, household, schedule and bed — everything but something to say. Do they ride the sealed cast's persona machinery, wait for E1's canned pool, hold for E2's field promotion, or a ladder of all three? Decide before E1's content pack is generated: its index needs to know whether it is writing for ten people or a hundred and twenty.
+10. ~~**The offline content pack's budget.**~~ **Answered by 0.13, and the guess in the question was right on the shape and wrong on the count.** The pack is its own sealed blob at its own chat-metadata key with its own salvage rules — but it is generated in a **SECOND call**, not the same one, because the pack has to be written *against the sealed brief* (its givers must be cast names and its targets must resolve in the compiled world), and a single call cannot condition on its own output. What it does NOT have is a storage budget: **the only real budget is the generation fit**, and the caps are seal-time validate bounds rather than a size target — a sealed blob is written once and never grows. The fit is the #5135 output floor, so the input splits digest-first (the world's own facts, then whatever room is left for the player's preferences) and the output carries a **substance floor** that FAILS rather than sealing something hollow. Measured sizes and the full arithmetic are in `docs/player-state.md` §9.2 and §10.2. **The residual is recorded rather than solved:** a floor connection whose model writes near the schema's cap on every row comes back under the floor on every attempt, which is that player's honest state.
+11. ~~**What a minted resident is at the E key**~~ *(raised by 0.10's population mint)*. **Answered by 0.14, and the answer is a ladder — with the surprise being which rung carries most of the weight.** The sealed cast is a minority: a city runs ~120 souls and most are minted with an empty persona. A minted resident has a name, kind, household, schedule and bed — everything but something to say. **What 0.14 does at the E key is answer from all three sources, in order, and the FIRST is the compiled record itself:** "What do you do?" and "Where do you live?" are rendered straight off the record — the role and the home zone the compiler already assigned — so a minted resident is askable *with no generated words at all*, which is exactly the "four `Ask` branches without a single generated word" this entry predicted. Above that sit E1's canned pool (the four topic branches, which are indexed by place and hour rather than by person, so they serve a minted resident and a sealed one identically) and the two convergence doors to the GM. E2's field promotion is untouched and still the third rung. **The household is recorded but not yet spoken**: the record answers what somebody does and where they live, and says nothing about who they live with — E6's ties are what would fill that branch, and the branch is not written. **And the index question resolved itself in the cheapest direction:** the pack is written for *places and hours*, not for people, so it never had to know whether it was writing for ten or a hundred and twenty.
 12. **Ties for the minted majority** *(raised by 0.10, lands on E6)*. The `ties` vocabulary is LLM-authored over the sealed cast, and the mint now creates most households — deterministically, at compile, where no LLM is present. Algorithmic ties for minted households (two adults sharing a surname and a roof are probably a couple), or no double beds outside the cast? Fold the answer into the one schema-v2 window (question 3) so beds are derived once.
-13. **Widgets: integrate or suppress** *(S7 — a maintainer decision, not an open design)*. Suppress at setup, render them honestly as the engine's, or map the money-like ones onto package state. The three do not compose and the third is the one that quietly creates two writers for one number. **Pairs with 14** — decide them together or the answers contradict.
-14. **Narrated transactions: prompt contract, or real verbs** *(P7)*. Tell the GM to narrate around the ledger and never move it, or hand it `rentBerth`/`grant`/`take`/`award` as actions it can actually call. The first is available today and holds most turns; the second is S1's channel wearing an economy hat and inherits the rewind contract for free. Until one of them lands, the mechanical verbs are the only real economy and the roadmap should keep saying so.
+13. ~~**Widgets: integrate or suppress**~~ *(S7 — a maintainer decision, not an open design)*. **Answered in 0.16.1 by suppression at setup:** the wizard emits `enableCustomWidgets: false` and everything follows from that one literal, with no Engine change, and the two options not taken stay available the day the package wants a rail of its own. The original framing, kept because the reasoning still holds: suppress at setup, render them honestly as the engine's, or map the money-like ones onto package state. The three do not compose and the third is the one that quietly creates two writers for one number. **It was paired with 14**, which is still open.
+14. **Narrated transactions: prompt contract, or real verbs** *(P7)*. Tell the GM to narrate around the ledger and never move it, or hand it `rentBerth`/`grant`/`take`/`award` as actions it can actually call. The first is available today and holds most turns; the second is S1's channel wearing an economy hat and inherits the rewind contract for free. Until one of them lands, the mechanical verbs are the only real economy and the roadmap should keep saying so. *(**0.14 does not answer it, and deliberately narrows what answering costs.** The four verbs are now scoped in the SAME filed feature request as S1's world flags, the weather write and one tuning row — one channel, one validation split, four vocabularies — so this stopped being a second engine conversation queued behind S1's. Two things were decided rather than deferred inside it: the verbs need a **second, GM-shaped implementation** over the same gen-fenced mutators, because the shipped verb functions assume a player-proximity precondition a narrator does not have; and the size worry is answered — a closed enum this small is nowhere near the row cap. The prompt-contract option is untouched and still available. What 0.14 added to the argument was a package-side consumer with nothing writing to it, and 0.16 finished that half: the channel shipped as the package-declared verb table, and the weather override now takes the storyteller's own writes. So this question no longer waits on an engine conversation. It is a choice between the prompt contract and declaring economy verbs on a channel that already exists.)*
 15. **Does the sim clock pause while the GM writes?** *(raised by playtest 2, lands on L6's amendment)*. Real seconds pass during generation and the package converts them, so a slow turn ages the town by the length of the wait. `30-sim.js` already freezes the clock in dialogue for the same reason — a conversation must not burn the afternoon — and `isStreaming` is already on the props, so the signal is free. What wants deciding is whether NPC wander pauses with it (in dialogue it deliberately does not: the world stays alive while you read) and what a paused clock does to `_clockAcc` across a chat switch.
 
 ---
 
-*Prepared 2026-08-21 from the design brief of the same date and three maintainer rulings, against source at `packages/pixelforge`; revised 2026-08-25 against the 0.12 tree (0.10 and 0.11 merged; 0.12 in progress). The through-line, one sentence: Pixelforge built a beautiful one-way radio — the world describes itself to the narrator every turn and can't hear anything back — and almost everything stubbed on this roadmap is stubbed because one of the two missing directions (GM→world, player→world) hasn't been opened yet.*
+*Prepared 2026-08-21 from the design brief of the same date and three maintainer rulings, against source at `packages/pixelforge`; revised 2026-08-25 against the 0.12 tree, and again 2026-08-28 against the 0.13 tree (0.10 through 0.12 merged; 0.13's quest layer built). The through-line, one sentence: Pixelforge built a beautiful one-way radio — the world describes itself to the narrator every turn and can't hear anything back — and almost everything stubbed on this roadmap is stubbed because one of the two missing directions (GM→world, player→world) hasn't been opened yet.*

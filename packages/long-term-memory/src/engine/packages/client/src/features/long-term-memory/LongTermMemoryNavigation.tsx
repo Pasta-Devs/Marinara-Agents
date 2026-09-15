@@ -1,6 +1,8 @@
-import { Database, FileInput, ListChecks, Settings2, type LucideIcon } from "lucide-react";
+import { Check, CircleAlert, Database, FileInput, ListChecks, Loader2, Settings2, type LucideIcon } from "lucide-react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { LongTermMemoryDestination } from "./types";
-import { useLtmTranslation } from "./localization";
+import { selectLtmPluralForm, useLtmTranslation } from "./localization";
+import { getLtmSourceTaskSnapshot, subscribeLtmSourceTask } from "./source-task";
 
 const destinations: Array<{
   id: LongTermMemoryDestination;
@@ -53,12 +55,79 @@ export function LongTermMemoryNavigation({
   badges?: LongTermMemoryNavigationBadges;
   mobile?: boolean;
 }) {
-  const { t: localizeUi } = useLtmTranslation();
+  const { locale, t: localizeUi } = useLtmTranslation();
+  const sourceTask = useSyncExternalStore(subscribeLtmSourceTask, getLtmSourceTaskSnapshot, getLtmSourceTaskSnapshot);
+  const activeSourceTask = sourceTask.active?.status === "running" ? sourceTask.active : null;
+  const latestSourceTask = sourceTask.latest;
+  const failureCount = latestSourceTask
+    ? latestSourceTask.status === "failed"
+      ? latestSourceTask.sourceCount
+      : latestSourceTask.status === "cancelled"
+        ? 0
+        : ["failed", "cancelled", "missing", "sourceWriteFailed"].reduce(
+            (count, key) => count + (latestSourceTask.safeResult?.counts?.[key] ?? 0),
+            0,
+          )
+    : 0;
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!latestSourceTask?.finishedAt || latestSourceTask.status !== "completed" || failureCount) return;
+    const remaining = Date.parse(latestSourceTask.finishedAt) + 5_000 - Date.now();
+    if (remaining <= 0) return;
+    setNow(Date.now());
+    const timeout = window.setTimeout(() => setNow(Date.now()), remaining);
+    return () => window.clearTimeout(timeout);
+  }, [failureCount, latestSourceTask?.finishedAt, latestSourceTask?.status]);
+  const unreadFailure = Boolean(failureCount && !latestSourceTask?.viewedAt);
+  const recentCompletion = Boolean(
+    latestSourceTask?.status === "completed" &&
+    !failureCount &&
+    latestSourceTask.finishedAt &&
+    now < Date.parse(latestSourceTask.finishedAt) + 5_000,
+  );
   const items = destinations.map((item) => {
     const active = item.id === destination;
     const badge = item.badge ? badges?.[item.badge] : undefined;
-    const label = localizeUi(mobile ? item.shortLabelKey : item.labelKey);
-    const Icon = item.icon;
+    const sourceTaskLabel =
+      item.id !== "sources"
+        ? null
+        : activeSourceTask?.kind === "import"
+          ? localizeUi("ui.longTermMemory.sourcesworkspace.importingSources", { count: activeSourceTask.sourceCount })
+          : activeSourceTask?.kind === "refresh"
+            ? localizeUi("ui.longTermMemory.sourcesworkspace.refreshingSources", {
+                count: activeSourceTask.sourceCount,
+              })
+            : activeSourceTask
+              ? localizeUi("ui.longTermMemory.sourcesworkspace.reExtractingSources", {
+                  count: activeSourceTask.sourceCount,
+                })
+              : latestSourceTask?.status === "cancelled" && !latestSourceTask.viewedAt
+                ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceTaskCancelled")
+                : unreadFailure
+                  ? localizeUi(
+                      selectLtmPluralForm(locale, failureCount) === "one"
+                        ? "ui.longTermMemory.sourcesworkspace.sourceTaskFailedCountOne"
+                        : "ui.longTermMemory.sourcesworkspace.sourceTaskFailedCountOther",
+                      { count: failureCount },
+                    )
+                  : recentCompletion && latestSourceTask
+                    ? localizeUi("ui.longTermMemory.sourcesworkspace.sourceTaskCompleted", {
+                        count: latestSourceTask.sourceCount,
+                      })
+                    : null;
+    const label =
+      item.id === "sources" && sourceTaskLabel
+        ? sourceTaskLabel
+        : localizeUi(mobile ? item.shortLabelKey : item.labelKey);
+    const Icon =
+      item.id === "sources" && activeSourceTask
+        ? Loader2
+        : item.id === "sources" && unreadFailure
+          ? CircleAlert
+          : item.id === "sources" && recentCompletion
+            ? Check
+            : item.icon;
+    const sourceTaskCount = activeSourceTask?.sourceCount ?? (unreadFailure ? failureCount : null);
     return (
       <button
         key={item.id}
@@ -74,9 +143,15 @@ export function LongTermMemoryNavigation({
             : "min-h-10 shrink-0 justify-start whitespace-nowrap px-3 text-left"
         }`}
       >
-        <Icon aria-hidden="true" size={mobile ? "1.125rem" : "0.875rem"} />
-        <span>{label}</span>
-        {typeof badge === "number" && badge > 0 ? (
+        <Icon
+          aria-hidden="true"
+          size={mobile ? "1.125rem" : "0.875rem"}
+          className={item.id === "sources" && activeSourceTask ? "animate-spin" : undefined}
+        />
+        <span aria-live={item.id === "sources" ? "polite" : undefined}>{label}</span>
+        {item.id === "sources" && sourceTaskCount ? (
+          <span data-ltm-badge>{sourceTaskCount}</span>
+        ) : typeof badge === "number" && badge > 0 ? (
           <span data-ltm-badge className="mari-editor-tab-badge">
             {badge}
           </span>

@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyPluginAsync } from "fastify";
+import type { FastifyInstance, FastifyPluginAsync, InjectOptions } from "fastify";
 import { noodleRoutes } from "../../routes/noodle.routes.js";
 import { buildRecentSocialMediaActivityBlock } from "./noodle-context.js";
 import { startNoodleRefreshScheduler } from "./noodle-refresh-scheduler.service.js";
@@ -16,6 +16,7 @@ export async function activate({
       routes: FastifyPluginAsync,
       options: { prefix: string },
     ): Promise<() => void | Promise<void>>;
+    runInternalRoute?: (options: InjectOptions | string) => ReturnType<FastifyInstance["inject"]>;
   };
 }) {
   // Capability routes are registered through the host's revocable privileged route slots.
@@ -29,7 +30,7 @@ export async function activate({
     api.registerService("noodle:backup", { pause: async <T>(run: () => Promise<T>) => run() }),
     api.registerService("noodle:prompt-context", { build: buildRecentSocialMediaActivityBlock }),
   ];
-  const schedulers = [startNoodleRefreshScheduler(app)];
+  const schedulers = [startNoodleRefreshScheduler(app, api.runInternalRoute)];
   active = true;
   return async () => {
     active = false;

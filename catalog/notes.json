@@ -1,0 +1,353 @@
+{
+  "schemaVersion": 1,
+  "packages": {
+    "beholder": {
+      "versions": [
+        {
+          "version": "1.3.11",
+          "date": "2026-09-13",
+          "notes": "- Paper-doll slots can be reached by keyboard and opened with Enter or Space. Their focus outline stays visible, and closing the editor returns focus to its slot.",
+          "highlight": false
+        }
+      ]
+    },
+    "character-tracker": {
+      "versions": [
+        {
+          "version": "1.1.0",
+          "date": "2026-09-14",
+          "notes": "- On compatible Engines, report only changed or removed tracker values while preserving unchanged state and locked rows. Older Engines retain the full-output format.",
+          "highlight": false
+        }
+      ]
+    },
+    "conversation-calls": {
+      "versions": [
+        {
+          "version": "1.0.16",
+          "date": "2026-09-13",
+          "notes": "- SwarmUI video connections now generate character call clips using their saved workflow, resolution, frame rate, and LoRAs. Backup SwarmUI connections keep their own workflow settings.",
+          "highlight": true
+        },
+        {
+          "version": "1.0.15",
+          "date": "2026-09-13",
+          "notes": "- Keep required reasoning enabled for GLM 5.3 on NanoGPT and Z.AI when the selected effort is None.",
+          "highlight": false
+        }
+      ]
+    },
+    "custom-tracker": {
+      "versions": [
+        {
+          "version": "1.1.0",
+          "date": "2026-09-14",
+          "notes": "- On compatible Engines, report only changed or removed tracker values while preserving unchanged state and locked rows. Older Engines retain the full-output format.",
+          "highlight": false
+        }
+      ]
+    },
+    "gacha-forge": {
+      "versions": [
+        {
+          "version": "1.8.0",
+          "date": "2026-09-14",
+          "notes": "- Combat is manual: on each turn you choose what a unit does and who it hits. Auto still plays the fight for you.\n- The Tower opens at Rank 20: a hundred floors, Tower Coin and a Tower shelf in the Shop, monthly floors built from your own story.\n- Bonds: every fight raises a unit's bond, and its levels open a conversation, a story chapter of their own, a Home background and an outfit.\n- Your character cards can be the banner cast, and outfit themes are yours to write, share and import.\n- Every skill and action has its own painted icon, and every screen has a ? that explains it the first time.\n- The unit sheet is split into tabs, the Gear tab shows a piece whole and compares changes, and Materials is a row of illustrated cards.\n- Combat Power measures how a unit really fights, and weapons, relics and skills were rebalanced to match their sheets.\n- Fixed: passives and skills do what they say, the game keeps your place when you come back, and screens no longer flash while they load.",
+          "highlight": true
+        },
+        {
+          "version": "1.7.0",
+          "date": "2026-09-05",
+          "notes": "- A whole chapter's scenes can be written in advance, so they open with no wait.\n- Leave a scene halfway and pick it up where you stopped instead of starting over.\n- Every banner now runs smaller side events alongside it: Tidewalk, Salvage Bingo and Supply Line.\n- Seasonal Event: ten draws at once, a daily boss, a party bonus and rewards for the coin you earn.\n- Items and rewards show a picture of the thing itself instead of a symbol.\n- Each connection generates one thing at a time, and whatever you are waiting for goes first.\n- Character names are capitalised, and your persona can be moved around the party and taken out of it.\n- Fixed: the top bar no longer cuts off its buttons, the Home no longer sends you back to Chapter One, and the battle screen no longer slides sideways.",
+          "highlight": false
+        }
+      ]
+    },
+    "inventory-tracker": {
+      "versions": [
+        {
+          "version": "1.2.0",
+          "date": "2026-09-14",
+          "notes": "- Track established item descriptions and storage locations on compatible Engines, preserving unchanged details and locked values.",
+          "highlight": true
+        },
+        {
+          "version": "1.1.0",
+          "date": "2026-09-14",
+          "notes": "- On compatible Engines, report only changed or removed tracker values while preserving unchanged state and locked rows. Older Engines retain the full-output format.",
+          "highlight": false
+        }
+      ]
+    },
+    "long-term-memory": {
+      "versions": [
+        {
+          "version": "1.3.0",
+          "date": "2026-09-13",
+          "notes": "- Load additional pages of chat summaries, characters, and lorebook sources without losing filters, selections, or import status.\n- Keep retention cleanup recoverable when activity-index pruning fails.",
+          "highlight": true
+        },
+        {
+          "version": "1.2.27",
+          "date": "2026-09-12",
+          "notes": "- Displayed and searched renamed chat branches consistently in Sources and imported summary evidence.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.26",
+          "date": "2026-09-10",
+          "notes": "- Added persistent chat-mode availability selection to Sources for memory imports.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.25",
+          "date": "2026-09-10",
+          "notes": "- Added a confirmed discard action for invalidated drafts, removing old proposals without changing saved memories.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.24",
+          "date": "2026-09-09",
+          "notes": "- Kept drafts with missing source notes visibly blocked without preventing review of other sources.\n- Showed context-loading error details alongside Retry and kept orphaned rejected suggestions accessible.",
+          "highlight": true
+        },
+        {
+          "version": "1.2.23",
+          "date": "2026-09-06",
+          "notes": "- Restored responsive Memory Vault and Sources loading by deferring local-character discovery.\n- Reused one aggregate local-character catalog and kept its loading and retry state visible.",
+          "highlight": true
+        },
+        {
+          "version": "1.2.22",
+          "date": "2026-09-06",
+          "notes": "- Kept user-selected source targets valid while isolating parent chat context transitions.\n- Prevented stale source previews and details from rendering during scope changes.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.21",
+          "date": "2026-09-05",
+          "notes": "- Reduced redundant vault scans across Review Queue, Memory Vault, and Sources loading.\n- Preserved local-character scope targets while reusing the existing note snapshot.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.20",
+          "date": "2026-09-04",
+          "notes": "- Added conversation-family-scoped Roleplay local-character memories and reviewable first-use mutations.\n- Kept Game Mode dynamic NPC metadata out of Long-Term Memory subjects and targets.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.19",
+          "date": "2026-09-04",
+          "notes": "- Bound the Sources destination panel and restored page scrolling when its list is hovered.\n- Restricted Already imported counts and rows to the selected source scope.",
+          "highlight": false
+        }
+      ]
+    },
+    "memory-nag": {
+      "versions": [
+        {
+          "version": "1.1.2",
+          "date": "2026-09-13",
+          "notes": "Automatic scans wait while a manual message-range scan is active, avoiding duplicate model charges between batches. Finished, stopped, failed, and abandoned scans release the guard without losing checkpoint progress.",
+          "highlight": false
+        },
+        {
+          "version": "1.1.1",
+          "date": "2026-09-11",
+          "notes": "Send the saved admin secret on plain-HTTP remote clients too, matching the Engine, so Create Memories no longer fails with an X-Admin-Secret error on LAN and Termux setups.",
+          "highlight": false
+        },
+        {
+          "version": "1.1.0",
+          "date": "2026-09-09",
+          "notes": "Choose all unprocessed messages or a specific message range when creating vault memories, so long chats can skip stale history. Closing the progress or prompt window keeps the underlying chat settings open.",
+          "highlight": false
+        }
+      ]
+    },
+    "noodle": {
+      "versions": [
+        {
+          "version": "1.2.24",
+          "date": "2026-09-15",
+          "notes": "- Search icons and post menus keep Noodle's selected accent when Engine Chroma animates.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.23",
+          "date": "2026-09-13",
+          "notes": "- Applying a saved prompt asks before replacing the current prompt, including edits already saved as the active prompt.\n- Cancel works immediately in Delete All Noodle Data; only deletion requires typing DELETE.\n- A running timeline refresh blocks duplicate refresh requests instead of queuing extra generations.\n- GLM 5.3 on NanoGPT and Z.AI keeps its required reasoning enabled when the selected effort is None.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.22",
+          "date": "2026-09-13",
+          "notes": "- Maintenance: simplify the inline composer's visibility checks and remove unused code.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.21",
+          "date": "2026-09-07",
+          "notes": "- Fixed \"Load more\" on the timeline, which failed on every page after the first.\n- Fixed a manually chosen profile avatar being replaced by the character card image.\n- Applying a saved prompt now asks before it discards unsaved prompt changes.\n- Ambient accounts no longer post images.\n- Removed leftover NoodleR wording from the image generation settings.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.20",
+          "date": "2026-09-03",
+          "notes": "- Added independent image width and height settings to Noodle settings.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.19",
+          "date": "2026-09-03",
+          "notes": "- Fixed automatic timeline refresh when Marinara requires an admin secret on loopback.",
+          "highlight": false
+        },
+        {
+          "version": "1.2.18",
+          "date": "2026-09-03",
+          "notes": "- Test the agent changelog feature with a highlighted patch release. No features were added.",
+          "highlight": true
+        }
+      ]
+    },
+    "slurp": {
+      "versions": [
+        {
+          "version": "1.51.0",
+          "date": "2026-09-13",
+          "notes": "- Completion and error notifications now appear inside the standalone package.\n- Fan reactions and creator replies can use stored image prompts or vision descriptions. Auto prefers the stored prompt, with vision as a fallback for uploaded images. Public fans never receive locked images, and descriptions follow the creator's identity protection.\n- The targeted creator refresh shows the remaining count as each generation finishes, including failed or skipped jobs.",
+          "highlight": true
+        },
+        {
+          "version": "1.50.1",
+          "date": "2026-09-13",
+          "notes": "- Maintenance: remove unused legacy code and an unnecessary settings read when checking the posting schedule.",
+          "highlight": false
+        },
+        {
+          "version": "1.50.0",
+          "date": "2026-09-11",
+          "notes": "- Mark Slurp as the legacy version while it is being reworked.\n- Add a full ZIP backup export containing Slurp data and media for migration.\n- New development is moving to Slurp Remastered. Bug fixes are not planned for this version.",
+          "highlight": true
+        },
+        {
+          "version": "1.0.31",
+          "date": "2026-09-09",
+          "notes": "- Include image generation guidance in the main Slurp post-generation prompt so image interpretation receives the generated image prompt and configured instructions.",
+          "highlight": false
+        },
+        {
+          "version": "1.0.30",
+          "date": "2026-09-08",
+          "notes": "- Preserve the selected image style profile after image prompt interpretation.",
+          "highlight": false
+        }
+      ]
+    },
+    "slurp2": {
+      "versions": [
+        {
+          "version": "0.0.15",
+          "date": "2026-09-15",
+          "notes": "- Fixed a wide post or story pushing the left and right sidebars off the screen.\n- The follow button on a Creator profile now shows whether you follow that Creator.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.14",
+          "date": "2026-09-15",
+          "notes": "- Fixed commissions drawing a new picture on every retry when the fan could not pay.\n- Fixed locked pay-per-view messages sending what their picture shows before the fan paid.\n- Pictures in messages, commissions and your recent posts now reach the AI as stored prompts or descriptions, with an optional image description model. Each picture is described once, and models that cannot read images are skipped.\n- Characters can remember their Slurp posts, messages, commissions, subscriptions and tips in Engine chats: turn on Carryover to chats in Settings and Include Slurp activity in the chat's settings.\n- Added lorebook context for Creator posts, prompt presets with import and export, a changed count and Reset section for each settings section, gallery images when no picture is generated, a Professor Mari Creator switch, and a per-character choice for chat image instructions.\n- Deleting all Slurp data now asks you to type DELETE, and the mobile bottom bar is smaller.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.13",
+          "date": "2026-09-15",
+          "notes": "- Fixed Creator management (profile, goal, subscription price, projects, arcs, payout, and Story viewers) rejecting edits with \"Only the Creator's owner can...\" — Slurp is single-player, so any Creator is now always yours to manage.\n- Fixed direct-message replies crashing when two reply attempts collided, along with other duplicate-safe storage operations that crossed the package boundary.\n- Persona Creators can now like and reply to their own posts as their public Creator identity.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.12",
+          "date": "2026-09-15",
+          "notes": "- AI Creator drafts are repaired instead of failing: long text is shortened, gender and tag spellings are understood, broken JSON is fixed, and the form lists what still needs a choice.\n- Persona Creators now have the same drafting tools as character Creators: AI post drafts from your own text, and an AI image toggle in the composer for drafted and manual posts.\n- Fixed bulk Creator creation skipping open-mode Creators with a wrong gender and tags reason, and draft errors now show the real cause.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.11",
+          "date": "2026-09-14",
+          "notes": "- Fixed AI Creator drafts that failed or could not be saved because the model left out gender or gave fewer than three tags.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.10",
+          "date": "2026-09-14",
+          "notes": "- Rebuilt the audience as a deterministic simulation with editable fan types, presets, a seven-day estimate, and JSON import and export.\n- Added separate free-simulation and AI-text clocks with call limits, a shared model budget, weekly fan spending limits, and a multi-process world lease.\n- Added Creator pricing: own subscription, post, and commission prices with suggestions, commission quotes that follow the brief, haggling, and weekly dynamic prices for character Creators.\n- Long posts and long comment threads now collapse, and replies nest under the comment they answer.\n- Fixed doubled subscriber totals, lost followers after an ended subscription, tips missing from fan relationships, thin like pacing, and silent subscription lapses.\n- Fixed Slurp images failing with an X-Admin-Secret error on remote installs, and sent image connection custom parameters such as LoRA settings.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.9",
+          "date": "2026-09-14",
+          "notes": "- Added Autopurge with configurable day, week, or month retention; media-only or full-post cleanup; optional direct-message media cleanup; an immediate purge action; and restart-safe scheduling for overdue purges.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.8",
+          "date": "2026-09-14",
+          "notes": "- Bug fixes for discovery filters and translations, subscription prices, image references, fan privacy, rapport details, message fees, arc editing and generation, profile validation, regression tests, and test-output handling.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.7",
+          "date": "2026-09-13",
+          "notes": "- Rebuilt Discover around direct subscription actions, persistent grid and list views, and filters for subscription status, gender, weekly price, and Creator tags.\n- Added Recommended, Newest, Most liked, and Most subscribed sorting with stable results.\n- Added editable Creator gender and tags, including safe custom tags and AI-suggested curated tags during profile creation and redrafting.\n- Added Arcs with automatic suggestions, pacing, focus, allowed kinds, and delivery to posts, messages, fan comments, and notifications.\n- Moved message, photo, subscription, and tip prices from the profile information box to the action that uses each price.\n- Hid the Follow control for subscribed Creators because a subscription already includes following.\n- Made Open the default Creator identity mode and removed the Secret identity tier.\n- Fixed persona Creator creation when Slurp already has the persona's viewer identity.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.6",
+          "date": "2026-09-13",
+          "notes": "- Added image context options for reactions: stored prompts, vision descriptions, or automatic selection. Public fan reactions keep locked images hidden and respect Creator identity privacy.\n- Generation now shows how many Creators remain, including skipped or failed requests.\n- Restored visible success and error notifications for Slurp actions.\n- Fixed persona Creator creation when Slurp already has the persona's viewer identity. The viewer and Creator accounts can now coexist for one persona.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.5",
+          "date": "2026-09-13",
+          "notes": "- Made the welcome screen shorter, put Gunterlie beside the greeting, linked Slurp General, and tucked older release notes behind an expander.\n- Corrected older ad ratings, fallback handles, onboarding text, and invalid digest account errors.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.4",
+          "date": "2026-09-12",
+          "notes": "- Fixed Refresh Conversation Schedule failing with \"chatComplete is not a function\". It now creates the schedule.\n- Fixed the Conversation Schedule refresh dialog and the settings loading screen showing raw text keys instead of words.\n- Fixed the header logo not loading. The logo is now built into Slurp and no longer depends on the package asset address.\n- Added Reply timing settings under Messaging: the longest wait, the wait when the return time is unknown, check-in waits for close and regular fans, and away times for Creators without a schedule.\n- Added Always reachable without a schedule. With it on, a Creator with no Conversation Schedule counts as online.\n- Corrected the Creator settings text that said a Creator without a Conversation Schedule is always reachable. Slurp guesses from their last post unless the new setting is on.",
+          "highlight": true
+        },
+        {
+          "version": "0.0.3",
+          "date": "2026-09-12",
+          "notes": "- Fixed Create post and Add story doing nothing on a Creator profile with a tip goal set. The goal used to hide the post composer.\n- Slurp Remastered now shows its color artwork in the Agents browser. The gray artwork is for Slurp Legacy only.",
+          "highlight": true
+        },
+        {
+          "version": "0.0.2",
+          "date": "2026-09-12",
+          "notes": "- Added a way to write your own ad in Settings. Give it a brand, a product, ad copy, and a rating, and it joins the pool.\n- Fixed feed ads stopping after the first server batch, content-rating limits being dropped, and one odd rating rejecting a whole batch.\n- Fixed ad actions paying out for ads that were never served, and restored read tracking on the default Following feed.\n- Fixed audience churn, relationship arcs, and subscription billing being starved by the world tick.\n- Fixed recent Creator activity being ignored when replies and follow-ups decide whether a Creator is online. Drafts no longer count as activity.\n- Stopped backups, restores, and deletion from overlapping world or Creator writes, and persona-operated Creators from speaking on their own.\n- Creators no longer write first when you have turned their proactive messages off.\n- Corrected the logo and the welcome screen's close control and keyboard focus.\n- A restore now says plainly that it overrides your settings.",
+          "highlight": true
+        },
+        {
+          "version": "0.0.1",
+          "date": "2026-09-12",
+          "notes": "- First release of the Slurp remaster as its own package. It installs beside Slurp Legacy and keeps its own separate data.\n- Added direct messages, scheduled follow-ups, commissions, an audience funnel, and creator earnings kept apart from spending money.\n- Added a backup export and restore. A Slurp Legacy backup can be restored here, which is how you move your data across.\n- Added a welcome screen. It appears after the install and after every update, warns that this is alpha software, and lists what changed.",
+          "highlight": true
+        }
+      ]
+    },
+    "world-state": {
+      "versions": [
+        {
+          "version": "1.1.0",
+          "date": "2026-09-14",
+          "notes": "- On compatible Engines, report only changed or removed tracker values while preserving unchanged state and locked rows. Older Engines retain the full-output format.",
+          "highlight": false
+        }
+      ]
+    }
+  }
+}

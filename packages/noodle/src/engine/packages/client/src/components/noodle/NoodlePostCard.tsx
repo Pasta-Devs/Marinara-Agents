@@ -1340,7 +1340,6 @@ export function useNoodlePostCardController(options: NoodlePostCardControllerOpt
   const cancelEditingPost = () => {
     setEditingPostId(null);
     setEditingPostContent("");
-    setEditingPostTitle("");
     setEditingPostPoll(null);
     imageEditor.reset();
   };
@@ -1368,7 +1367,6 @@ export function useNoodlePostCardController(options: NoodlePostCardControllerOpt
   const startEditingPost = (post: NoodlePostCardModel) => {
     setPostMenuId(null);
     setEditingPostId(post.id);
-    setEditingPostTitle(post.title ?? "");
     setEditingPostContent(post.content);
     const poll = readNoodlePollFromMetadata(post.metadata);
     setEditingPostPoll(
@@ -1837,7 +1835,7 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
                     <button
                       type="button"
                       onClick={() => startEditingPost(post)}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--accent)]"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--noodle-accent)]/10"
                     >
                       <Pencil size={14} className="text-[var(--noodle-accent)]" />
                       {localizeUi("ui.noodle.noodlepostcard.edit")}
@@ -1845,7 +1843,7 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
                     <button
                       type="button"
                       onClick={() => deleteNoodlePost(post)}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--accent)]"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--noodle-accent)]/10"
                     >
                       <Trash2 size={14} className="text-[var(--noodle-accent)]" />
                       {localizeUi("lorebook.editor.batch.delete")}

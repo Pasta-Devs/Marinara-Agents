@@ -45,11 +45,15 @@ import {
   ltmStatusResponseSchema,
   ltmWriteScopeSchema,
   ltmScopeSchema,
+  type LtmScope,
   ltmSectionKeySchema,
   ltmSectionSchema,
   ltmStatusSchema,
   ltmSourceDerivedMemoriesResponseSchema,
+  ltmSourceDetailsRequestSchema,
+  ltmSourceDetailsResponseSchema,
   ltmSubjectsSchema,
+  ltmRejectedSuggestionsClearResponseSchema,
   ltmRejectedSuggestionsResponseSchema,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { clearLtmDebugLog, exportLtmDebugLog, readLtmDebugLog } from "./debug-log.js";
@@ -71,7 +75,13 @@ import { getLtmGlobalSettings, updateLtmGlobalSettings } from "./settings.js";
 import type { LongTermMemoryDraftStore } from "./draft-store.js";
 import type { LongTermMemoryStorage } from "./storage.js";
 import { readLongTermMemoryInjectionReceipt } from "./usage.js";
-import { ltmModeForChatMode, normalizeLtmChatCharacterIds, resolveChatLtmScope } from "./chat-scope.js";
+import {
+  ltmModeForChatMode,
+  normalizeLtmChatCharacterIds,
+  resolveChatLtmScope,
+  resolveChatLtmWriteScope,
+  getLtmChatDisplayName,
+} from "./chat-scope.js";
 import { isLtmSourceNote } from "./source-extraction.js";
 import { processLongTermMemorySource } from "./source-processing.js";
 import {
@@ -79,6 +89,7 @@ import {
   PROFESSOR_MARI_CHARACTER_ID,
   previewPackageInterop,
   previewPackageLorebooks,
+  sourcePackageDetails,
 } from "./interop.js";
 import {
   getLtmScopeChatIds,
@@ -97,7 +108,11 @@ import {
   replaceLongTermMemoryData,
   resetLongTermMemorySettings,
 } from "./backup-restore.js";
-import { deleteRejectedSuggestion, listRejectedSuggestions } from "./rejected-suggestions.js";
+import {
+  deleteRejectedSuggestion,
+  deleteRejectedSuggestionsForSource,
+  listRejectedSuggestions,
+} from "./rejected-suggestions.js";
 
 const NOTE_BODY_LIMIT_BYTES = 512 * 1024;
 const DRAFT_BODY_LIMIT_BYTES = 512 * 1024;
@@ -362,6 +377,7 @@ const rejectedSuggestionsQuery = z
     chatId: z.string().min(1).max(120).optional(),
   })
   .strict();
+const rejectedSuggestionsDeleteQuery = z.object({ sourceNoteId: ltmNoteIdSchema }).strict();
 const acceptDraftBody = z
   .object({
     mutationIds: z.array(z.string().uuid()).min(1).optional(),
@@ -712,7 +728,8 @@ export function createLongTermMemoryRoutes(runtime: {
           .filter((chat): chat is NonNullable<typeof chat> => Boolean(chat))
           .map((chat) => ({
             id: chat.id,
-            label: chat.name?.trim() || "Untitled chat",
+            label: getLtmChatDisplayName(chat) || "Untitled chat",
+            chatName: chat.name?.trim() || "Untitled chat",
             mode: ltmModeForChatMode(chat.mode),
             groupId: chat.groupId,
             personaId: chat.personaId,
@@ -720,6 +737,11 @@ export function createLongTermMemoryRoutes(runtime: {
           }))
           .sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id)),
       );
+      const memoryPresence: LtmScope[] = [];
+      for (const note of notes) {
+        if (note.type === "source") continue;
+        memoryPresence.push(note.scope);
+      }
       const resourceById = new Map(eligibleResources.map((resource) => [resource.id, resource]));
       const visibleCharacterIds = includeAllChats
         ? new Set(eligibleResources.map((resource) => resource.id))
@@ -740,6 +762,7 @@ export function createLongTermMemoryRoutes(runtime: {
       );
       return {
         currentScope: currentChat ? resolveChatLtmScope(currentChat) : null,
+        memoryPresence,
         chats: namedChats,
         groups: numberDuplicateLabels(
           [...groupIds]
@@ -756,6 +779,7 @@ export function createLongTermMemoryRoutes(runtime: {
             .sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id)),
         ),
         characters: namedCharacters,
+        localCharacters: [],
         personas: numberDuplicateLabels(
           [...(includeAllChats ? personas : personas.filter((persona) => personaIds.has(persona.id)))]
             .filter((persona) => persona.id !== PROFESSOR_MARI_CHARACTER_ID)
@@ -770,6 +794,41 @@ export function createLongTermMemoryRoutes(runtime: {
             .sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id)),
         ),
       };
+    });
+    app.get<{ Querystring: unknown }>("/local-characters", async (request) => {
+      const { chatId, includeAllChats } = scopeTargetsQuery.parse(request.query);
+      const [notes, chats] = await Promise.all([storage.listNotes(), getPackagePersistence().listChats()]);
+      const eligibleChats = chats.filter(
+        (chat) => !normalizeLtmChatCharacterIds(chat.characterIds).includes(PROFESSOR_MARI_CHARACTER_ID),
+      );
+      const currentChat = chatId ? eligibleChats.find((chat) => chat.id === chatId) : undefined;
+      const catalogChats =
+        chatId === undefined && includeAllChats
+          ? eligibleChats.filter((chat) => chat.mode === "roleplay")
+          : currentChat?.mode === "roleplay"
+            ? includeAllChats
+              ? eligibleChats.filter((chat) => chat.mode === "roleplay")
+              : [currentChat]
+            : [];
+      if (!catalogChats.length) return [];
+      const catalogScope = {
+        chatIds: catalogChats.map((chat) => chat.id),
+        groupIds: [...new Set(catalogChats.flatMap((chat) => (chat.groupId ? [chat.groupId] : [])))],
+        characterIds: [...new Set(catalogChats.flatMap((chat) => normalizeLtmChatCharacterIds(chat.characterIds)))],
+        personaIds: [...new Set(catalogChats.flatMap((chat) => (chat.personaId ? [chat.personaId] : [])))],
+      };
+      const catalog = await loadTrustedLtmSubjectCatalog(catalogScope, root, notes);
+      return numberDuplicateLabels(
+        catalog.entries
+          .filter((entry) => entry.subject.ref?.kind === "local_character" && entry.familyId)
+          .map((entry) => ({
+            id: entry.subject.ref!.id,
+            label: entry.name,
+            comment: `Roleplay family ${entry.familyId}`,
+            familyId: entry.familyId!,
+          }))
+          .sort((left, right) => left.label.localeCompare(right.label) || left.id.localeCompare(right.id)),
+      );
     });
     app.get<{ Params: { id: string } }>("/notes/:id/derived", async (request, reply) => {
       const sourceNoteId = ltmNoteIdSchema.parse(request.params.id);
@@ -836,6 +895,13 @@ export function createLongTermMemoryRoutes(runtime: {
         const chat = chatId ? await getPackagePersistence().getChat(chatId) : null;
         if (explicitChatId && !chat) return reply.status(404).send({ error: "Chat not found" });
         const operationId = randomUUID();
+        const controller = new AbortController();
+        const abort = () => controller.abort();
+        const close = () => {
+          if (request.raw.aborted) abort();
+        };
+        request.raw.once("aborted", abort);
+        request.raw.once("close", close);
         try {
           let languageModel;
           try {
@@ -856,12 +922,19 @@ export function createLongTermMemoryRoutes(runtime: {
             await processLongTermMemorySource({
               sourceNote,
               languageModel,
-              scope: chat ? resolveChatLtmScope(chat) : sourceNote.scope,
-              modes: chat ? [ltmModeForChatMode(chat.mode)] : body.mode ? [body.mode] : undefined,
+              scope: sourceNote.destinationScope ?? (chat ? resolveChatLtmWriteScope(chat) : sourceNote.scope),
+              modes: sourceNote.modes?.length
+                ? sourceNote.modes
+                : chat
+                  ? [ltmModeForChatMode(chat.mode)]
+                  : body.mode
+                    ? [body.mode]
+                    : undefined,
               mode: body.mode,
               instruction: body.instruction,
               operationId,
               applyLowRisk: body.applyLowRisk,
+              signal: controller.signal,
               root,
               chatId: chat?.id,
             }),
@@ -870,33 +943,66 @@ export function createLongTermMemoryRoutes(runtime: {
           logger.error(error, "[ltm] Source note extraction route failed");
           const result = routeError(error, "Failed to extract long-term memory from source note");
           return reply.status(result.statusCode).send(result.body);
+        } finally {
+          request.raw.off("aborted", abort);
+          request.raw.off("close", close);
         }
       },
     );
-    app.post<{ Body: unknown }>("/import/preview", { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES }, async (request) =>
-      ltmInteropPreviewResponseSchema.parse(
-        await previewPackageInterop(ltmInteropPreviewRequestSchema.parse(request.body ?? {}), root),
-      ),
+    app.post<{ Body: unknown }>(
+      "/import/preview",
+      { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES },
+      async (request, reply) => {
+        try {
+          return ltmInteropPreviewResponseSchema.parse(
+            await previewPackageInterop(ltmInteropPreviewRequestSchema.parse(request.body ?? {}), root),
+          );
+        } catch (error) {
+          const result = routeError(error, "Could not load long-term memory source previews.");
+          return reply.status(result.statusCode).send(result.body);
+        }
+      },
+    );
+    app.post<{ Body: unknown }>(
+      "/import/source-details",
+      { bodyLimit: DRAFT_BODY_LIMIT_BYTES },
+      async (request, reply) => {
+        try {
+          return ltmSourceDetailsResponseSchema.parse(
+            await sourcePackageDetails(ltmSourceDetailsRequestSchema.parse(request.body ?? {}), root),
+          );
+        } catch (error) {
+          const result = routeError(error, "Could not load long-term memory source details.");
+          return reply.status(result.statusCode).send(result.body);
+        }
+      },
     );
     app.post<{ Body: unknown }>(
       "/import/lorebooks/preview",
       { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES },
-      async (request) =>
-        ltmLorebookPreviewResponseSchema.parse(
-          await previewPackageLorebooks(ltmLorebookPreviewRequestSchema.parse(request.body ?? {}), root),
-        ),
+      async (request, reply) => {
+        try {
+          return ltmLorebookPreviewResponseSchema.parse(
+            await previewPackageLorebooks(ltmLorebookPreviewRequestSchema.parse(request.body ?? {}), root),
+          );
+        } catch (error) {
+          const result = routeError(error, "Could not load long-term memory lorebook previews.");
+          return reply.status(result.statusCode).send(result.body);
+        }
+      },
     );
     app.post<{ Body: unknown }>(
       "/import/source-notes",
       { bodyLimit: DRAFT_BODY_LIMIT_BYTES },
       async (request, reply) => {
         const controller = new AbortController(),
-          abort = () => controller.abort();
+          abort = () => controller.abort(),
+          close = () => {
+            if (request.raw.aborted) abort();
+          };
         const body = ltmImportSourceNotesRequestSchema.parse(request.body ?? {});
         request.raw.once("aborted", abort);
-        request.raw.once("close", () => {
-          if (request.raw.aborted) abort();
-        });
+        request.raw.once("close", close);
         try {
           return ltmImportSourceNotesResponseSchema.parse(await importPackageInterop(body, root, controller.signal));
         } catch (error) {
@@ -904,6 +1010,7 @@ export function createLongTermMemoryRoutes(runtime: {
           return reply.status(result.statusCode).send(result.body);
         } finally {
           request.raw.off("aborted", abort);
+          request.raw.off("close", close);
         }
       },
     );
@@ -959,11 +1066,16 @@ export function createLongTermMemoryRoutes(runtime: {
     app.post<{ Body: unknown }>("/notes/batch", { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES }, async (request, reply) => {
       const parsed = ltmBulkNoteRequestSchema.safeParse(request.body ?? {});
       if (!parsed.success) return reply.status(400).send({ error: parsed.error.message });
-      const result = ltmBulkNoteResultSchema.parse(await storage.bulkMutateNotes(parsed.data));
-      return {
-        ...result,
-        rebuild: result.affectedNoteIds.length ? await rebuildAfterMutation() : null,
-      };
+      try {
+        const result = ltmBulkNoteResultSchema.parse(await storage.bulkMutateNotes(parsed.data));
+        return {
+          ...result,
+          rebuild: result.affectedNoteIds.length ? await rebuildAfterMutation() : null,
+        };
+      } catch (error) {
+        const result = routeError(error, "Could not update notes.");
+        return reply.status(result.statusCode).send(result.body);
+      }
     });
     app.post<{ Body: unknown }>("/notes", { bodyLimit: NOTE_BODY_LIMIT_BYTES }, async (request, reply) => {
       const parsed = createNoteBody.safeParse(request.body);
@@ -975,9 +1087,8 @@ export function createLongTermMemoryRoutes(runtime: {
         const rebuild = await rebuildAfterMutation(true);
         return reply.status(201).send({ note, rebuild });
       } catch (error) {
-        if (error instanceof LtmServiceError)
-          return reply.status(error.statusCode).send({ error: error.message, code: error.code });
-        throw error;
+        const result = routeError(error, "Could not create note.");
+        return reply.status(result.statusCode).send(result.body);
       }
     });
     app.patch<{ Params: { id: string }; Body: unknown }>(
@@ -1242,6 +1353,12 @@ export function createLongTermMemoryRoutes(runtime: {
       const query = rejectedSuggestionsQuery.parse(request.query);
       const suggestions = await listRejectedSuggestions(query, root);
       return ltmRejectedSuggestionsResponseSchema.parse({ suggestions, total: suggestions.length });
+    });
+    app.delete<{ Querystring: unknown }>("/rejected-suggestions", async (request) => {
+      const query = rejectedSuggestionsDeleteQuery.parse(request.query);
+      return ltmRejectedSuggestionsClearResponseSchema.parse(
+        await deleteRejectedSuggestionsForSource(query.sourceNoteId, root),
+      );
     });
     app.delete<{ Params: { id: string } }>("/rejected-suggestions/:id", async (request, reply) => {
       const parsed = z.string().uuid().safeParse(request.params.id);

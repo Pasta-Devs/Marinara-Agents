@@ -7,10 +7,19 @@
 //
 // Review-hardened: a generation counter guards cross-chat races (a refresh
 // started for chat A must never write into chat B's world). Transition
-// outcomes arrive two ways: engines with capability API 1.12 address the
-// commit/reject events to this package (onHostEvent — immediate), and on
-// older engines `pending` still self-clears after two refreshes with no
-// movement (the stale-count fallback; events simply never arrive there).
+// outcomes normally arrive as host events: the engine addresses the
+// commit/reject events to this package (onHostEvent, immediate). Every engine
+// the package can install on does that: the addressing shipped in Engine 2.4.3
+// (capability API 1.12, a soft seam delivered whatever the package declares),
+// below the 2.4.5 engine floor the manifest declares. The stale-count fallback,
+// `pending` self-clearing after two per-turn refreshes with no movement, covers
+// what the events still miss: the host can only address an event to this
+// package when it can resolve the chat's Experience package id, which comes
+// back empty when the chat's metadata names no Experience or when the dispatch
+// lands after a chat switch with the chat row gone from both caches, and some
+// rejections never reach the client as a reject event at all (a pre-stream
+// commit that fails without a spatial_* code, or an already-applied conflict
+// whose recovery read fails, both reconcile through a plain refresh instead).
 PF.spatial = {
   data: null, // last SpatialContextResponse (or null: unbound / not fetched)
   available: false,
@@ -48,7 +57,14 @@ PF.spatial = {
     if (!core.chatId) return;
     const gen = this._gen;
     const chatId = core.chatId;
-    // Latest-started wins: 1.12 event refreshes overlap the per-turn ones, and
+    // A THIRD CAPTURE, and a DIFFERENT counter from the two above — travel()
+    // below spells out the same distinction for the same reason. Those two fence
+    // this refresh's post-await branches; the PLAYER mutators fence on
+    // PF.save._gen, which moves on a chat switch, and the drift arm below is now
+    // a mutator caller (the visit verb completes at an arrival). Read pre-await,
+    // like everything else here, and it is the ONE capture this site adds.
+    const saveGen = PF.save._gen ?? 0;
+    // Latest-started wins: event refreshes overlap the per-turn ones, and
     // a slow pre-commit response landing AFTER a post-commit refresh would
     // otherwise roll the world back to the departed zone (review finding).
     const seq = ++this._seq;
@@ -90,8 +106,8 @@ PF.spatial = {
         } else if (countStale && ++this.pending.staleCount >= 2) {
           // Two turns with no movement → the transition was rejected somewhere
           // we can't observe. Let go so drift-following resumes. Event-driven
-          // refreshes pass countStale:false so 1.12 engines don't halve this
-          // fallback budget (review finding).
+          // refreshes pass countStale:false so live event delivery doesn't
+          // halve this fallback budget (review finding).
           this.pending = null;
           core.hud?.toast("Travel didn't happen — the story stayed put.");
         }
@@ -102,6 +118,20 @@ PF.spatial = {
         const target = zoneId ? world?.zones[zoneId] : null;
         if (target && core.sim && core.sim.zoneId !== zoneId) {
           core.sim.teleport(zoneId, target.spawn.x, target.spawn.y);
+          // THE VISIT VERB'S OTHER SITE (0.13 §2.3), and the async one. An
+          // arrival the GM narrated is an arrival: the player is standing in the
+          // zone the work named, and refusing to answer for it because they got
+          // there by being told rather than by walking would leave a row nothing
+          // can ever complete. Inside the zone-CHANGED test on purpose, so a
+          // refresh that finds the party where it already was settles nothing.
+          core.hud?.questFilled(PF.pack.visited(core, zoneId, saveGen));
+          // THE OTHER REAL ZONE-CHANGE CALLER'S SHARE OF THE ARRIVAL (0.16
+          // §2.3). This arm teleports without ever calling `_zoneChanged`, so
+          // the lattice would otherwise never hear about it: the cell the GM
+          // moved the player OUT of would stay the most-recently-entered one for
+          // the rest of the session, and the residency order that reads it would
+          // be describing a walk that stopped happening.
+          PF.lattice.enter(core, zoneId);
         }
         // Same class as a walked zone entry, so the same top surface: a narrated
         // arrival is the one notice most likely to print while the player is

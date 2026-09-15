@@ -1,5 +1,5 @@
 // ── Tier-0 procedural art ─────────────────────────────────────────────────────
-// The deterministic bottom rung: a fixed 32-colour ramp and canvas-painted
+// The deterministic bottom rung: a fixed 39-colour ramp and canvas-painted
 // tiles/sprites so the game is playable with zero assets and zero network.
 // Later tiers (authored atlas, AI bake) resolve above this and fall back here.
 //
@@ -41,6 +41,12 @@ PF.art = (() => {
     doorKnob: "#d9c07a",
     well: "#6f6f78",
     counter: "#725539",
+    // Snow: warm white, because the cozy theme's palette override is EMPTY —
+    // whatever is written here is the village's snow, and a cold blue-white
+    // over a warm village reads as a different game rather than a season.
+    snow1: "#eceadf",
+    snow2: "#d5d2c3",
+    snowHi: "#fbfaf2",
     night: "#1a2340",
     windowGlow: "#ffd98a",
     ink: "#22261f",
@@ -55,8 +61,9 @@ PF.art = (() => {
   const T = PF.TILE;
 
   /** One 16×16 tile canvas: Tier-1 (authored atlas) ?? Tier-0 (procedural).
-   *  Tier-1 only serves the theme it was authored for; other themes stay
-   *  procedural until themed atlases ship. */
+   *  Tier-1 serves whichever theme the loaded sheet was authored for, and both
+   *  shipped themes have an authored sheet. A theme with no baked sheet, or one
+   *  whose sheet failed to load, stays procedural. */
   const tileCache = new Map();
   function tile(id) {
     if (activeTheme === PF.assets?.atlasTheme) {
@@ -168,8 +175,12 @@ PF.art = (() => {
       px(g, 0, 0, T, 3, PAL.path1);
       px(g, 0, 3, T, 1, PAL.beam);
     },
+    /** UNFILLED, like the well below and for the same reason — plus the one
+     *  0.14 found: on a snow day the ground under a fence is SNOW, and a
+     *  painter that brought its own `grass1` with it laid a green square in the
+     *  middle of a snowfield. The invariant was already written here; the fence
+     *  and the tree were simply not honouring it. */
     fence(g) {
-      px(g, 0, 0, T, T, PAL.grass1);
       px(g, 2, 4, 2, 10, PAL.fence);
       px(g, 12, 4, 2, 10, PAL.fence);
       px(g, 0, 6, T, 2, PAL.fence);
@@ -186,8 +197,9 @@ PF.art = (() => {
       px(g, 4, 6, 8, 6, PAL.ink);
       px(g, 2, 2, 12, 2, PAL.beam);
     },
+    // Unfilled, for the fence's reason: a tree stands on whatever is under it,
+    // and in winter that is snow.
     trunk(g) {
-      px(g, 0, 0, T, T, PAL.grass1);
       px(g, 6, 2, 4, 14, PAL.trunk);
       px(g, 5, 12, 6, 2, PAL.leaf);
     },
@@ -342,6 +354,81 @@ PF.art = (() => {
       for (let plank = 4; plank < T - 3; plank += 4) px(g, 2, plank, T - 4, 1, PAL.path2);
       px(g, 2, 2, T - 4, 1, PAL.pathFleck);
     },
+    /** THE QUEST BOARD (0.13 §2.1), and the one object in a settlement the
+     *  COMPILER stands up rather than a brief. Posted boards on two legs, with
+     *  three ruled notices on the face — a silhouette that reads at 16px as
+     *  "something with writing on it" and not as another table.
+     *
+     *  TIER-0 ONLY, on `hearth`'s precedent and not by oversight. `atlas.json`'s
+     *  key order IS the shipped sheet's index map, so adding a key there without
+     *  re-baking the PNG would slide every tile under it and repaint the whole
+     *  world; 15-assets resolves Tier1 ?? Tier0 PER TILE and returns null for an
+     *  id the atlas has no index for, so the board simply draws procedurally in
+     *  both tiers until a sheet is next baked.
+     *
+     *  Unfilled, like `table` and `well` above and for the same reason: it stands
+     *  on grass, path and paving alike, and the ground under it should show. */
+    board(g) {
+      px(g, 3, 11, 2, 5, PAL.beam);
+      px(g, 11, 11, 2, 5, PAL.beam);
+      px(g, 2, 2, 12, 10, PAL.beam);
+      px(g, 3, 3, 10, 8, PAL.plaster);
+      px(g, 4, 4, 5, 1, PAL.ink);
+      px(g, 4, 6, 8, 1, PAL.ink);
+      px(g, 4, 8, 4, 1, PAL.ink);
+    },
+    // ── SNOW GROUND (0.14) ───────────────────────────────────────────────────
+    // The four tiles 17-weather's SUBS table swaps in on a snow day. They are
+    // ordinary painters and nothing about them is conditional: the renderer
+    // decides which name to ask for, and this file only answers.
+    //
+    // DELIBERATELY DITHER-FREE, and the reason is worth the line: every other
+    // ground painter scatters flecks from a theme-seeded rng, so the SAME
+    // painter run under two themes produces two different scatters. Snow reads
+    // flat anyway — and a fixed shape is what lets a test tell a themed snow
+    // tile from a base one that merely got recoloured, which is the miss that
+    // turns a comms mast into a leafy blob every winter.
+    grassSnow(g) {
+      px(g, 0, 0, T, T, PAL.snow1);
+      px(g, 0, 0, T, 1, PAL.snowHi);
+      px(g, 3, 5, 4, 1, PAL.snow2);
+      px(g, 10, 9, 4, 1, PAL.snow2);
+      px(g, 6, 12, 3, 1, PAL.snow2);
+      px(g, 12, 2, 2, 1, PAL.snowHi);
+      px(g, 1, 10, 2, 1, PAL.snowHi);
+    },
+    // The second grass tone under snow: the same white, laid a shade deeper, so
+    // the two-tone ground cover still reads as ground cover in winter.
+    grassSnow2(g) {
+      px(g, 0, 0, T, T, PAL.snow2);
+      px(g, 0, 0, T, 1, PAL.snow1);
+      px(g, 2, 4, 5, 1, PAL.snow1);
+      px(g, 9, 7, 5, 1, PAL.snow1);
+      px(g, 4, 11, 6, 1, PAL.snow1);
+      px(g, 11, 13, 3, 1, PAL.snowHi);
+    },
+    // A field under snow. The furrows still read as ridges — a crop tile has to
+    // stay a crop tile in winter, or the whole field is lawn until spring.
+    cropSnow(g) {
+      px(g, 0, 0, T, T, PAL.snow1);
+      for (let r = 2; r < T; r += 5) {
+        px(g, 1, r - 1, T - 2, 1, PAL.snowHi);
+        px(g, 1, r, T - 2, 1, PAL.snow2);
+      }
+    },
+    // The overhead layer: a treetop carrying snow. Transparent corners like the
+    // canopy it stands in for, so the roof-peek cutout and the ground under it
+    // both still work.
+    canopySnow(g) {
+      g.clearRect(0, 0, T, T);
+      px(g, 2, 2, 12, 12, PAL.snow2);
+      px(g, 1, 4, 14, 8, PAL.snow2);
+      px(g, 4, 1, 8, 14, PAL.snow2);
+      px(g, 3, 2, 10, 4, PAL.snow1);
+      px(g, 4, 1, 8, 2, PAL.snowHi);
+      px(g, 2, 5, 3, 1, PAL.snowHi);
+      px(g, 11, 5, 3, 1, PAL.snowHi);
+    },
   };
 
   // ── Themes ──────────────────────────────────────────────────────────────────
@@ -390,6 +477,11 @@ PF.art = (() => {
         doorKnob: "#8ff0e8",
         well: "#4d545e",
         counter: "#3f4854",
+        // Blue-white where the village is warm-white: the colony's light is
+        // cold, and its snow is lit by it.
+        snow1: "#dde6ef",
+        snow2: "#b9c6d4",
+        snowHi: "#f4f9ff",
         night: "#101726",
         windowGlow: "#8fd4ff",
       },
@@ -429,9 +521,11 @@ PF.art = (() => {
           for (let cx = 0; cx < T; cx += 4) px(g, cx, 0, 1, T, PAL.roof2);
           dither(g, rnd, PAL.roofHi, 3);
         },
-        // comms mast: the "tree" of the colony — steel pylon on regolith
+        // comms mast: the "tree" of the colony — a steel pylon, standing on
+        // whatever the ground under it is. Unfilled like the village tree: the
+        // colony's `grass1` is regolith brown, so the fill it used to bring was
+        // a brown square under every mast on a snow day.
         trunk(g) {
-          px(g, 0, 0, T, T, PAL.grass1);
           px(g, 7, 2, 2, 14, PAL.trunk);
           px(g, 5, 4, 6, 1, PAL.trunk);
           px(g, 6, 12, 4, 2, PAL.wallDark);
@@ -466,13 +560,60 @@ PF.art = (() => {
           px(g, 4, 9, 8, 1, PAL.wallDark);
           px(g, 4, 11, 8, 1, PAL.wallDark);
         },
-        // guard rail instead of a wooden fence
+        // guard rail instead of a wooden fence — unfilled, for the mast's reason
         fence(g) {
-          px(g, 0, 0, T, T, PAL.grass1);
           px(g, 2, 4, 2, 10, PAL.fence);
           px(g, 12, 4, 2, 10, PAL.fence);
           px(g, 0, 6, T, 1, PAL.trunk);
           px(g, 0, 9, T, 1, PAL.trunk);
+        },
+        // A JOB TERMINAL where the notice board stands: the same silhouette on
+        // the same legs, but the face is a lit screen and the notices are rows of
+        // glowing text. The palette swap alone could not carry this one — a
+        // colony posting paper on a plank is the sort of detail that makes a
+        // reskin read as a reskin (20-world's BOARD_NAMES names it in words; this
+        // is the picture half of the same skin).
+        board(g) {
+          px(g, 3, 11, 2, 5, PAL.beam);
+          px(g, 11, 11, 2, 5, PAL.beam);
+          px(g, 2, 2, 12, 10, PAL.trunk);
+          px(g, 3, 3, 10, 8, PAL.night);
+          px(g, 4, 4, 5, 1, PAL.doorKnob);
+          px(g, 4, 6, 8, 1, PAL.doorKnob);
+          px(g, 4, 8, 4, 1, PAL.leafHi);
+        },
+        // ── THE SNOW TWINS OF THE TWO IDS THIS THEME ALREADY OVERRIDES ───────
+        // `crop` and `canopy` are a hydroponics tray and a comms-mast head
+        // here, not a furrow and a treetop — so their snow twins need overrides
+        // too. Without these, a colony snow day falls through to the BASE snow
+        // painters and swaps tile SHAPES: the masts turn into leafy blobs and
+        // the trays into cozy furrows, every snow day, in both tiers, and no
+        // same-theme comparison can see it.
+        //
+        // `grass`/`grass2` are overridden by neither theme, so their snow twins
+        // need no entry here: the palette above recolours them and that is the
+        // whole difference.
+        //
+        // Frost on the tray rails rather than a covered tray: the bay is
+        // pressurised, and what the cold reaches is the frame.
+        cropSnow(g) {
+          px(g, 0, 0, T, T, PAL.floor2);
+          px(g, 1, 2, T - 2, 5, PAL.beam);
+          px(g, 1, 9, T - 2, 5, PAL.beam);
+          px(g, 2, 3, T - 4, 3, PAL.snow1);
+          px(g, 2, 10, T - 4, 3, PAL.snow1);
+          px(g, 1, 2, T - 2, 1, PAL.snowHi);
+          px(g, 1, 9, T - 2, 1, PAL.snowHi);
+        },
+        // Snow banked on the antenna crossarm — the mast silhouette, kept.
+        canopySnow(g) {
+          g.clearRect(0, 0, T, T);
+          px(g, 5, 0, 6, 2, PAL.snowHi);
+          px(g, 7, 2, 2, 3, PAL.trunk);
+          px(g, 3, 4, 10, 2, PAL.trunk);
+          px(g, 3, 3, 10, 1, PAL.snow1);
+          px(g, 2, 5, 2, 1, PAL.snow2);
+          px(g, 12, 5, 2, 1, PAL.snow2);
         },
       },
     },

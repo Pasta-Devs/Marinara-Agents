@@ -46,6 +46,7 @@ export type ExtractLongTermMemoryFromSourceNoteOptions = {
   scope?: LtmScope;
   modes?: LtmMode[];
   mode?: LtmMode;
+  extractionMode?: LtmMode;
   instruction?: string;
   signal?: AbortSignal;
   operationId?: string;
@@ -80,7 +81,7 @@ async function bindSourceNoteToExtractionContext(options: {
 }) {
   const { sourceNote } = options;
   if (
-    stableJsonHash(sourceNote.scope) === stableJsonHash(options.scope) &&
+    stableJsonHash(sourceNote.destinationScope ?? sourceNote.scope) === stableJsonHash(options.scope) &&
     stableJsonHash(sourceNote.modes) === stableJsonHash(options.modes)
   ) {
     return sourceNote;
@@ -88,7 +89,7 @@ async function bindSourceNoteToExtractionContext(options: {
 
   return options.storage.updateNote(
     sourceNote.id,
-    { scope: options.scope, modes: options.modes },
+    { destinationScope: options.scope, modes: options.modes },
     {
       actor: "maintenance_api",
       cause: "source_extraction.context_bound",
@@ -306,7 +307,20 @@ async function getExistingTypedNotes(options: {
     ? trustedLtmIdentityNotesForSource({
         sourceText: options.sourceText,
         sourceTitle: options.sourceTitle,
-        catalog: options.trustedSubjectCatalog,
+        mode: options.mode,
+        catalog: {
+          ...options.trustedSubjectCatalog,
+          entries:
+            options.mode === "roleplay"
+              ? options.trustedSubjectCatalog.entries
+              : options.trustedSubjectCatalog.entries.filter((entry) => entry.subject.ref?.kind !== "local_character"),
+          notes:
+            options.mode === "roleplay"
+              ? options.trustedSubjectCatalog.notes
+              : options.trustedSubjectCatalog.notes.filter(
+                  (note) => !note.subjects?.some((subject) => subject.ref?.kind === "local_character"),
+                ),
+        },
       })
     : [];
   const noteIds = Array.from(
@@ -363,16 +377,23 @@ async function extractLongTermMemoryFromSourceNoteInner(
     );
   }
 
-  const requestedScope = options.scope ?? sourceNote.scope;
+  const requestedScope = options.scope ?? sourceNote.destinationScope ?? sourceNote.scope;
   const importedWithoutChatContext =
     !options.chatId && (sourceNote.provenance?.kind === "character" || sourceNote.provenance?.kind === "lorebook");
   const requestedModes = options.modes?.length
     ? options.modes
-    : importedWithoutChatContext && !options.mode
-      ? [DEFAULT_LTM_IMPORTED_SOURCE_MODE]
-      : sourceNote.modes;
-  const resolvedMode = options.mode ?? requestedModes[0] ?? "roleplay";
-  if (!requestedModes.includes(resolvedMode)) {
+    : sourceNote.modes?.length
+      ? sourceNote.modes
+      : importedWithoutChatContext && !options.mode
+        ? [DEFAULT_LTM_IMPORTED_SOURCE_MODE]
+        : sourceNote.modes;
+  const resolvedMode =
+    options.extractionMode ??
+    options.mode ??
+    sourceNote.extractionFingerprint?.extractionMode ??
+    requestedModes[0] ??
+    "roleplay";
+  if (!options.extractionMode && !requestedModes.includes(resolvedMode)) {
     throw new LtmServiceError(
       `Long-term memory extraction mode is not enabled for source note: ${resolvedMode}`,
       400,
@@ -395,7 +416,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
     );
   }
 
-  const scope = sourceNote.scope;
+  const scope = sourceNote.destinationScope ?? sourceNote.scope;
   const modes = sourceNote.modes;
   const allowedBuckets = [...DEFAULT_LTM_ALLOWED_STREAMS_BY_MODE[resolvedMode]];
   const extractionConfig = await getLtmExtractionConfig(options.root, resolvedMode);
@@ -507,6 +528,8 @@ async function extractLongTermMemoryFromSourceNoteInner(
   const identityContext = prepareLtmSubjectIdentityContext({
     units: extractionPayload.response.units,
     catalog: options.trustedSubjectCatalog ?? { entries: [], notes: [] },
+    scope,
+    mode: resolvedMode,
     sourceBackedNpcSourceText: sourceText,
     sourceBackedNpcSourceTitle: sourceNote.title,
   });
@@ -570,7 +593,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
     sourceNote,
     existingNotes: compilerExistingNotes,
     scope,
-    modes: [resolvedMode],
+    modes: requestedModes,
     mode: resolvedMode,
     sourceHash,
     allowedBuckets,

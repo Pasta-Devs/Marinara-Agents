@@ -1,8 +1,8 @@
 [
   {
     "id": "slurp",
-    "name": "Slurp",
-    "description": "The standalone successor to NoodleR: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity.",
+    "name": "Slurp Legacy",
+    "description": "Legacy Slurp version. This package is being reworked and is on hold. New development is happening in Slurp Remastered. Bug fixes are not planned for this version.",
     "author": "Pasta Devs",
     "phase": "pre_generation",
     "enabledByDefault": false,

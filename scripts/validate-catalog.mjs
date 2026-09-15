@@ -12,6 +12,7 @@ import {
   createCatalogLanes,
   readCatalogFamily,
 } from "./catalog-lanes.mjs";
+import { buildReleaseNotesDocument, listPackagesWithChangelogs } from "./catalog-release-notes.mjs";
 import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
 import { INCOMPLETE_PACKAGE_IDS, STAGING_ONLY_PACKAGE_IDS } from "./catalog-incomplete.mjs";
 import { assertPackagePrivateImportBoundary } from "./package-engine-boundary.mjs";
@@ -118,6 +119,58 @@ for (const [major, expectedCatalog] of expectedCatalogsByMajor) {
 if (JSON.stringify(legacyCatalog) !== JSON.stringify(catalogsByMajor.get(LEGACY_CATALOG_MAJOR))) {
   throw new Error(`catalog/catalog.json must remain an exact alias of catalog/v${LEGACY_CATALOG_MAJOR}/catalog.json`);
 }
+
+// Release-notes sidecars get the same treatment as the lanes they sit beside: a
+// committed notes.json must be exactly what a rebuild produces, and a lane whose
+// packages publish no notes must carry no sidecar at all. Anything else means a
+// notes.json was hand-edited, or a changelog changed without a rebuild, and the
+// text users read in the update prompt would no longer match the repository.
+async function readCommittedNotes(path) {
+  let raw;
+  try {
+    raw = await readFile(join(repoRoot, path), "utf8");
+  } catch (error) {
+    // Only a missing file counts as "no sidecar". Mapping a parse failure or a
+    // permission error to absent would let a corrupt notes.json pass validation
+    // for any lane that is expected to have none.
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`${path} is not valid JSON`, { cause: error });
+  }
+}
+
+async function assertNotesSidecar(path, entries) {
+  const expected = await buildReleaseNotesDocument(repoRoot, entries);
+  const committed = await readCommittedNotes(path);
+  const wanted = Object.keys(expected.packages).length > 0 ? expected : null;
+  if (JSON.stringify(committed) !== JSON.stringify(wanted)) {
+    throw new Error(`${path} does not match the committed package changelogs — rebuild the catalog`);
+  }
+}
+
+for (const [major, lane] of expectedCatalogsByMajor) {
+  await assertNotesSidecar(`catalog/v${major}/notes.json`, lane.packages);
+}
+await assertNotesSidecar("catalog/notes.json", expectedCatalogsByMajor.get(LEGACY_CATALOG_MAJOR).packages);
+if (previewCatalog.packages.length > 0) {
+  const expectedPreviewLanes = createCatalogLanes(previewCatalog);
+  for (const [major, lane] of expectedPreviewLanes) {
+    await assertNotesSidecar(`catalog/preview/v${major}/notes.json`, lane.packages);
+  }
+  await assertNotesSidecar("catalog/preview/notes.json", expectedPreviewLanes.get(LEGACY_CATALOG_MAJOR).packages);
+} else if ((await readCommittedNotes("catalog/preview/notes.json")) !== null) {
+  // The overlay directory is removed when nothing is staging-only, so a surviving
+  // sidecar means a stale generated payload that no rebuild would produce.
+  throw new Error("catalog/preview/notes.json exists with no staging-only packages — rebuild the catalog to remove it");
+}
+const packagesWithChangelogs = await listPackagesWithChangelogs(repoRoot);
+console.log(
+  `Release notes: ${packagesWithChangelogs.length}/${publishedCatalog.packages.length} published packages ship a CHANGELOG.md.`,
+);
 const hierarchicalMapsBoundary = await assertHierarchicalMapsPrivateImportBoundary();
 
 const hierarchicalMapsOwnedSourcePaths = [
@@ -149,10 +202,35 @@ const slurpOwnedSourcePaths = [
   "packages/server/src/services/slurp",
   "packages/server/src/services/storage/slurp.storage.ts",
 ];
-for (const relativePath of slurpOwnedSourcePaths) {
-  const packageOwnedPath = join(repoRoot, "packages/slurp/src/engine", relativePath);
-  if (!existsSync(packageOwnedPath)) {
-    throw new Error(`Slurp package source is missing: ${relativePath}`);
+// The remaster owns strictly more of the tree than the frozen legacy package does.
+const slurp2OwnedSourcePaths = [
+  ...slurpOwnedSourcePaths,
+  "packages/server/src/routes/slurp-messages.routes.ts",
+  "packages/server/src/services/storage/slurp-financial-queue.ts",
+  "packages/server/src/services/storage/slurp-file-errors.ts",
+  "packages/server/src/services/storage/slurp-host-tables.ts",
+  "packages/server/src/services/storage/slurp-messages.storage.ts",
+  "packages/server/src/services/storage/slurp-reply-queue.storage.ts",
+];
+for (const [packageId, ownedSourcePaths] of [
+  ["slurp", slurpOwnedSourcePaths],
+  ["slurp2", slurp2OwnedSourcePaths],
+]) {
+  for (const relativePath of ownedSourcePaths) {
+    const packageOwnedPath = join(repoRoot, `packages/${packageId}/src/engine`, relativePath);
+    if (!existsSync(packageOwnedPath)) {
+      throw new Error(`${packageId} package source is missing: ${relativePath}`);
+    }
+  }
+}
+
+// Hierarchical Maps and Long-Term Memory have always asserted this; Slurp never did, which is how
+// ten stale copies of package-owned files survived in sources/engine long after the split. A
+// captured copy is worse than dead weight now: the remaster's slurp2_* table names would become
+// build input for Noodle, and tests that read the snapshot would check the wrong tree.
+for (const relativePath of ["packages/server/src/db/schema/slurp.ts", ...slurp2OwnedSourcePaths]) {
+  if (existsSync(join(repoRoot, "sources/engine", relativePath))) {
+    throw new Error(`Slurp source must not be captured as generic Engine material: ${relativePath}`);
   }
 }
 
@@ -180,7 +258,7 @@ const pixelforgeBoundary = await assertPackagePrivateImportBoundary({
   sourceRoot: join(repoRoot, "packages/pixelforge/src"),
   boundaryPath: join(repoRoot, "packages/pixelforge/engine-boundary.json"),
   displayName: "Pixelforge",
-  capabilityApi: { major: 1, minor: 10 },
+  capabilityApi: { major: 1, minor: 18 },
 });
 
 const hierarchicalMapsClientSourceRoot = join(repoRoot, "packages/hierarchical-maps/src/engine/packages/client/src");
@@ -416,7 +494,7 @@ for (const entry of catalog.packages) {
       }
     }
   }
-  if (manifest.id === "slurp") {
+  if (manifest.id === "slurp" || manifest.id === "slurp2") {
     const expectedLocales = ["de", "ko", "pl"];
     const actualLocales = Object.keys(manifest.localizations ?? {}).sort();
     if (JSON.stringify(actualLocales) !== JSON.stringify(expectedLocales)) {
@@ -791,8 +869,8 @@ if (JSON.stringify(guidanceIds) !== JSON.stringify([...ids].sort())) {
 // Staging-only packages live in the preview overlay and are counted separately.
 const agentOnly = publishedCatalog.packages.filter((entry) => !entry.manifest.entrypoints.server).length;
 const features = publishedCatalog.packages.length - agentOnly;
-if (publishedCatalog.packages.length !== 36 || agentOnly !== 24 || features !== 12) {
-  throw new Error(`Expected 24 agents and 12 features, found ${agentOnly} and ${features}`);
+if (publishedCatalog.packages.length !== 38 || agentOnly !== 24 || features !== 14) {
+  throw new Error(`Expected 24 agents and 14 features, found ${agentOnly} and ${features}`);
 }
 console.log(`Catalog valid: ${publishedCatalog.packages.length} packages (${agentOnly} agents, ${features} features).`);
 if (uncataloguedIntegrity.checked.length > 0) {

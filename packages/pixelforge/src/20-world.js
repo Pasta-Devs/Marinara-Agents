@@ -3,8 +3,6 @@
 // object, overhead), a solidity map, portals, and NPCs. No host GameMap types
 // are used — the world model is wholly package-owned (exploration R09/R10).
 PF.world = (() => {
-  const T = PF.TILE;
-
   /** The spatialLocationId → zoneId table, NULL-PROTOTYPE (#567).
    *
    *  Every key in it belongs to the HOST — a World Maps location id, authored by
@@ -501,6 +499,35 @@ PF.world = (() => {
       stream: "The Conduit Bridge",
     },
   };
+  // ── The quest board (0.13 §2.1) ────────────────────────────────────────────
+  // THE ONE REGISTER ROW NO BRIEF WROTE. Every settlement gets a board, in both
+  // the compiled path and the legacy layout, and it gets one UNCONDITIONALLY —
+  // on a world with no content pack behind it as much as on a world full of
+  // work. Two reasons, and neither is decoration. The board is the surface that
+  // says "no work posted here" out loud, which is a truthful answer a missing
+  // fixture cannot give; and it is the surface a later release's opt-in ("write
+  // work for this world?") would live on, so a board that appeared only where
+  // there was already work would be a door that opens once you are through it.
+  //
+  // ITS ID IS FIXED AND RESERVED, on the legacy:pond precedent, and it is pushed
+  // onto zone.features OUTSIDE the `_ids` ordinal walk: the ordinals belong to
+  // the features the BRIEF wrote, and spending one here would renumber promises
+  // a sealed brief has already made. Its TAG is deliberately not one of
+  // 18-brief's FEATURE_TAGS either — no brief may author a board, and the
+  // consumer (30-sim `nearBoard`) resolves it by this id rather than by tag.
+  //
+  // The name is word-book data, ZONE_NAMES' own pattern one table up: the
+  // fixture has no brief to name it, so the theme does.
+  const BOARD_FEATURE_ID = "board:settlement";
+  const BOARD_FEATURE_TAG = "notice-board";
+  const BOARD_NAMES = {
+    "cozy-village": "The Notice Board",
+    "sci-fi-colony": "The Job Terminal",
+  };
+  /** Through PF.own so a theme named after a prototype key cannot answer with a
+   *  function — the same door every other book in this file reads through. */
+  const boardName = (theme) => PF.own(BOARD_NAMES, theme) ?? BOARD_NAMES["cozy-village"];
+
   // …AND WHAT THE FOUR OF THEM DO. The same duplication one table along, and it
   // was the one nobody themed: the four legacy residents' roles were hardcoded
   // in buildLegacy — "innkeeper", "farmer", "village guard", "forager" — right
@@ -623,6 +650,21 @@ PF.world = (() => {
           err,
           folded?._folds ?? [],
         );
+        // THE DEGRADE IS STILL THIS BRIEF'S WORLD. It is not a legacy chat — it
+        // is a sealed brief that failed to compile — so the climate is re-minted
+        // from the SAME brief through the SAME pure function the compile stamp
+        // uses. A brief that pinned `polar` still plays polar, and the digest,
+        // the header and the world can never split one brief into two climates.
+        // Only the true no-brief path below keeps the fixed defaults.
+        //
+        // The RAW sealed brief, not `folded`: the fold may itself have thrown,
+        // and axesFor's own membership test drops a hostile band exactly as the
+        // load door would have, so the two readings agree.
+        const degraded = buildLegacy(seed, theme);
+        const axes = PF.weather.axesFor(sealedBrief, seed, degraded.theme);
+        degraded.latitude = axes.latitude;
+        degraded.precipitation = axes.precipitation;
+        return degraded;
       }
     }
     return buildLegacy(seed, theme);
@@ -670,6 +712,21 @@ PF.world = (() => {
     const doors = [inn, farm, cottage].map((b) => ({ x: b.doorX, y: b.doorY }));
     scatterTrees(v, rnd, 26, doors.concat(doors.map((d) => ({ x: d.x, y: d.y + 1 }))));
     v.spawn = { x: 21, y: 17 };
+    // THE QUEST BOARD, hand-laid: this layout has no brief and no anchor ladder
+    // to run, so the ladder's FIRST rung is written out as a literal — the apron
+    // one step west of the inn's door, which is this world's gathering place.
+    // West and not east because `doorX` itself is where the interior portal puts
+    // the player down (linkInterior), and the tile beside a door is reserved from
+    // the tree scatter above, so this ground is free by construction rather than
+    // by luck. Rect = the literal directly below, so the two move together or not
+    // at all — the pond's own discipline eighty lines up.
+    put(v, inn.doorX - 1, inn.doorY + 1, "object", "board", true);
+    v.features.push({
+      id: BOARD_FEATURE_ID,
+      tag: BOARD_FEATURE_TAG,
+      name: boardName(activeTheme),
+      rect: { x: inn.doorX - 1, y: inn.doorY + 1, w: 1, h: 1 },
+    });
 
     // ── Inn interior ──
     const n = makeZone("inn", names.inn, 16, 12, "floor");
@@ -793,9 +850,23 @@ PF.world = (() => {
     v.mapKind = "settlement";
     n.mapKind = "building";
     f.mapKind = "place";
+    // The location handles, marked the same way compile() marks them and for the
+    // same consumer (0.13 §2.2c): this layout has no brief and so no place
+    // ordinals to read, and the three zones it stands up have always been the
+    // settlement, its gathering place and the wood outside it.
+    v.place = "settlement";
+    n.place = "gathering";
+    f.place = "wilds";
     return {
       seed,
       theme: activeTheme,
+      // The legacy layout is a HAND world, not a roll: three zones written out
+      // by literal, with no brief behind them to say what the place is. So it
+      // takes the fixed middle of both axes rather than a mint. (The degrade arm
+      // in build() re-stamps this world from its brief afterwards — that path
+      // has a brief and this one does not.)
+      latitude: "temperate",
+      precipitation: "moderate",
       zones: { village: v, inn: n, forest: f },
       startZone: "village",
       // The exterior binds to the campaign's starting World Maps location once known.
@@ -1682,8 +1753,10 @@ PF.world = (() => {
   //
   //   - The GATHERING always. Guest rooms upstairs is the shape an inn has had
   //     for as long as there have been inns, its berth budget is the largest band
-  //     the compiler lays (four to ten), and it is where a travelling group or a
-  //     player party goes.
+  //     the compiler lays (three to twelve, the table plus prosperity: see
+  //     GUEST_BERTHS, where the table stops at eleven so a thriving city lands
+  //     on twelve, the ceiling a thirteenth berth would fall through), and it is
+  //     where a travelling group or a player party goes.
   //   - The SANCTUARY always, but a BELL TOWER rather than a storey.
   //   - A HOUSE only when it is LARGE OR MERGED: four or more sleeping under one
   //     roof, or a block the over-subscription merge put more than one household
@@ -1990,6 +2063,443 @@ PF.world = (() => {
     shop: (w, h) => ({ x0: 3, y0: h - 4, x1: w - 5, y1: h - 4 }),
   };
 
+  // ── THE SETTLEMENT'S OWN TUNABLES (0.16 §2.6) ───────────────────────────────
+  /** PROVISIONAL — maintainer ruling 2026-09-05: playtest values, expected to
+   *  change; one edit here changes code and lanes together.
+   *
+   *  Every number the town's LAYOUT VARIETY invents lives here, because the town
+   *  is what gets playtested and "most if not all of that is likely to be changed
+   *  later on". A literal shape, density or stream label in the four levers is a
+   *  defect by that ruling. The lanes read these values rather than restating
+   *  them, so a retune is one edit and a green suite.
+   *
+   *  THREE OF THE FOUR LEVERS HAVE KNOBS, and the fourth having none is worth
+   *  saying out loud rather than inventing one for symmetry: the BAND PHASES take
+   *  no tuning at all. Their range is the slack `runOf` was already spending on
+   *  centring, halved so it is spent toward the crossroad and never toward the
+   *  trees, and that is a consequence of the two margins rather than a
+   *  preference. Most of the junction search is the same kind of thing — its
+   *  legal set is `runOf`'s own emptiness arithmetic and its yield filter is
+   *  today's centred yield — and `MARGIN_KEEP` is the one judgment call in it. */
+  const TOWN_TUNE = {
+    // The one side stream all four levers draw from, in the order the plan lays
+    // them out: junction, plaza, the four band phases, then the ground idiom.
+    // Named like the mint's ("residents"), keyed on seed and settlement name.
+    STREET_STREAM_LABEL: "streets",
+    // ── Lever 3: the plaza's shape set ────────────────────────────────────────
+    /** THE PATH-COUNT INVARIANT, and the reason the set is a set at all.
+     *
+     *  The `struggling` scuffing loop draws the MAIN tile stream once per painted
+     *  path tile, three lines after the plaza lands, so a shape that paints a
+     *  different number of tiles shifts every downstream main-stream consumer —
+     *  and unlike a lattice terminal a plaza cannot be punched late, because the
+     *  scuff is what makes a poor town's square look poor. A plaza that fully
+     *  contains both junction rows and both junction columns overlaps the two
+     *  arteries on exactly `2w + 2h - 4` tiles, so its NET contribution is
+     *  `(w - 2)(h - 2)` — pin that product and every shape draws the same count.
+     *  Every shape here is `(w-2)(h-2) === PLAZA_INTERIOR`. */
+    PLAZA_INTERIOR: 36,
+    PLAZA_SHAPES: [
+      { w: 8, h: 8 }, // the shipped square
+      { w: 11, h: 6 }, // a market street running east-west
+      { w: 6, h: 11 }, // and the same square turned on its side
+    ],
+    // The paved middle a `thriving` settlement lays, centred on the junction. It
+    // is what pins the shape set's offsets: every candidate must contain it, so
+    // the stone always lands on paving and its own -16 path tiles are constant
+    // too. Even, because it straddles the two-tile arteries.
+    PLAZA_INSET: 4,
+    // ── Lever 1: the open ground a junction may not close ─────────────────────
+    /** How much of the settlement's outer margin a junction must leave on the
+     *  EAST and WEST, wherever the centred junction leaves that much. The north
+     *  and south margins are held at their full centred depth and have no knob,
+     *  and the asymmetry is the map's, not a preference:
+     *
+     *  THE HORIZONTAL ARTERY SPANS THE WHOLE WIDTH. Between it, the border ring
+     *  and the two lot bands, a settlement's rows are completely spoken for —
+     *  every open row is above the north band or below the south one, and a
+     *  junction that moves either band outward closes the only ground a tall
+     *  feature could ever stand on. The vertical artery divides COLUMNS the same
+     *  way, but the lot columns are laid on a nine-tile pitch for eight-tile
+     *  buildings, so the gaps between them are open ground the rows have no
+     *  equivalent of.
+     *
+     *  SHIPPED AT ZERO, which switches the column half OFF, and the two halves
+     *  were separated by mutation rather than by argument. Take the ROW floor
+     *  away and the shipped feature-placement lane reds — an outpost places NONE
+     *  of the two features it sealed, because a southern band one row lower ends
+     *  flush with the last usable row. Take the column floor away — which is what
+     *  this value does — and nothing in this file reds, at any rank, on any seed
+     *  it drives. The rows are the whole of the protection, and they have no knob
+     *  because they are not a judgment call.
+     *
+     *  WHAT THE COLUMN FLOOR COSTS, counted off `junctionCandidates` itself
+     *  rather than quoted from a sweep nobody can re-run: a floor of one takes
+     *  the search from 4 crossroads to 3 at outpost, 18 to 9 at hamlet, 108 to 84
+     *  at village, 1,268 to 746 at town and 504 to 315 at city. A quarter to a
+     *  half of the variety this release exists for, against a fault nothing has
+     *  found. Set it back to 1 to restore the floor: the lanes read the search
+     *  rather than these numbers, so a retune is one edit and a green suite. */
+    MARGIN_KEEP: 0,
+    // ── Lever 4: what the surround does to the ground the town left over ───────
+    /** Two idioms, from the SHIPPED tile vocabulary and no new art (§2.6 lever 4).
+     *
+     *  `verge` strews stone along the arteries — a hard shoulder, which is what a
+     *  road through rock gets. `meadow` thickens the grass mottle in a band
+     *  inside the border ring, which is the wet ground a settlement on water
+     *  stands in. `kind` picks which of the two BANDS is measured — the arteries
+     *  or the ring — and `tile` is what lands in it, held apart on purpose: "make
+     *  the verge gravel instead" is then this row and not the painter, which is
+     *  the whole of the tunables discipline. `depth` is how far the band reaches,
+     *  `density` how much of it the idiom takes.
+     *
+     *  READ HONESTLY UNDER SNOW: `SUBS.snow` substitutes grass/grass2/crop/canopy
+     *  and nothing else, so a meadow keeps its two-tone mottle in a white town
+     *  (grassSnow beside grassSnow2) while a stone verge stays bare rock — the
+     *  same accepted class as `scree` and `oldwall`. Woods, fields and barren get
+     *  no idiom deliberately: three surrounds already spend their variety on the
+     *  ground mix and the tree count, and a fifth idiom would be a fifth thing to
+     *  retune before anybody has played one. */
+    GROUND_IDIOM: {
+      rocky: { kind: "verge", tile: "stone", depth: 2, density: 0.34 },
+      water: { kind: "meadow", tile: "grass2", depth: 5, density: 0.55 },
+    },
+  };
+
+  // ── THE LOT GRID'S ARITHMETIC ───────────────────────────────────────────────
+  // Hoisted out of compile() so the junction search can ASK the grid what a
+  // candidate would yield without laying a tile. The search's whole claim —
+  // "this junction mints the same roster as the centred one" — is `runOf`'s
+  // count, and a search running its own copy of that arithmetic would be a
+  // second source of truth for the number the mint's stability rests on.
+  const BUILDING_H = 5; // the tallest a lot is ever painted (a named place)
+  const LOT_PITCH_Y = BUILDING_H + 3; // overhang above, apron below, one to breathe
+  const LOT_PITCH_X = 9;
+  const MAX_LOT_W = 8; // the widest building() ever draws
+  /** A run of lot origins inside [lo, hi], CENTRED on that span — or, given a
+   *  `phase`, shifted within the slack the centring was spending (lever 2).
+   *
+   *  A fixed pitch marching from one end leaves whatever does not divide
+   *  evenly in one lump at the other end, and the lump is always on the same
+   *  side, so a town came out with its lots hard against the western trees and
+   *  eleven empty columns down the east. Splitting the remainder puts the same
+   *  number of lots on the same pitch with a margin at both ends, which is
+   *  what a laid-out settlement looks like instead of a shunted one.
+   *
+   *  `lo` and `hi` are the first and last tile the lot may OCCUPY, so a lot at
+   *  `start` ends at `start + size - 1` and that must not pass `hi`.
+   *
+   *  THE PHASE IS YIELD-NEUTRAL BY CONSTRUCTION, which is the whole reason this
+   *  lever is free: `count` is decided before the phase is read, and the slack is
+   *  by definition the ground that could not hold another lot. Shifting inside it
+   *  moves the rhythm and never the roster. Out of range clamps rather than
+   *  throwing — a phase is a seeded index, and a world is not a thing to lose
+   *  over one. */
+  const runOf = (lo, hi, size, pitch, phase) => {
+    const span = hi - lo + 1;
+    if (span < size) return [];
+    const count = 1 + (((span - size) / pitch) | 0);
+    const used = size + (count - 1) * pitch;
+    const slack = span - used;
+    const offset = phase === undefined ? (slack / 2) | 0 : PF.clamp(phase | 0, 0, slack);
+    const start = lo + offset;
+    return Array.from({ length: count }, (_, index) => start + index * pitch);
+  };
+  /** How many lots a run offers, and how much room it has to shuffle them in —
+   *  `runOf`'s own two numbers, without the array. */
+  const runCount = (lo, hi, size, pitch) => {
+    const span = hi - lo + 1;
+    return span < size ? 0 : 1 + (((span - size) / pitch) | 0);
+  };
+  const runSlack = (lo, hi, size, pitch) => {
+    const count = runCount(lo, hi, size, pitch);
+    return count ? hi - lo + 1 - (size + (count - 1) * pitch) : 0;
+  };
+
+  // ── THE FOUR BANDS A JUNCTION MAKES ─────────────────────────────────────────
+  // Row 4, not 3: a sanctuary lifts its facade by up to two rows above the lot,
+  // so the top band needs headroom for the eave above THAT or it paints into
+  // the border ring.
+  //
+  // The band's last usable row is midY - 2: a body starting at y ends at
+  // y + BUILDING_H - 1, and it clears a road at midY - 1.
+  //
+  // The band below starts one row under the road, not three: a building's SOLID
+  // body must clear the street, but its overhang is an overhead tile and may
+  // hang over it exactly as a real eave does.
+  //
+  // West stops before the road; east starts after it. The east band may reach
+  // w - 4: the border ring is the last column and the two inside it are verge.
+  const SIDES = ["north", "south", "west", "east"];
+  const BANDS = {
+    north: (w, h, mx, my) => [4, my - 2, BUILDING_H, LOT_PITCH_Y],
+    south: (w, h, mx, my) => [my + 1, h - 4, BUILDING_H, LOT_PITCH_Y],
+    west: (w, h, mx, my) => [4, mx - 2, MAX_LOT_W, LOT_PITCH_X],
+    east: (w, h, mx, my) => [mx + 1, w - 4, MAX_LOT_W, LOT_PITCH_X],
+  };
+  const bandCounts = (w, h, mx, my) => ({
+    north: runCount(...BANDS.north(w, h, mx, my)),
+    south: runCount(...BANDS.south(w, h, mx, my)),
+    west: runCount(...BANDS.west(w, h, mx, my)),
+    east: runCount(...BANDS.east(w, h, mx, my)),
+  });
+  /** The lots a junction offers before the budget caps them: rows times columns,
+   *  which is exactly what compile() pushes into `slots`. */
+  const gridYield = (w, h, mx, my) => {
+    const b = bandCounts(w, h, mx, my);
+    return (b.north + b.south) * (b.west + b.east);
+  };
+  /** THE SETTLEMENT'S OPEN GROUND, on each of the four sides: the gap between the
+   *  outermost lot a band lays and the last row or column inside the border ring.
+   *
+   *  This is where a settlement keeps everything that is not a building — the
+   *  features the brief named, the greens, the crop plots, the scan the feature
+   *  placer falls back on when the corners are claimed. A settlement is not just
+   *  its lot count, and a junction that kept the lot count while paving over the
+   *  last free row would be yield-neutral and still cost the brief its ruin.
+   *
+   *  Read off `runOf`'s actual output rather than off the slack formula, because
+   *  the run is the thing that lays the lots and a second derivation of it is a
+   *  second thing to keep true. */
+  const outerMargins = (w, h, mx, my) => {
+    const north = runOf(...BANDS.north(w, h, mx, my));
+    const south = runOf(...BANDS.south(w, h, mx, my));
+    const west = runOf(...BANDS.west(w, h, mx, my));
+    const east = runOf(...BANDS.east(w, h, mx, my));
+    return {
+      north: north.length ? north[0] - 4 : 0,
+      south: south.length ? h - 4 - (south[south.length - 1] + BUILDING_H - 1) : 0,
+      west: west.length ? west[0] - 4 : 0,
+      east: east.length ? w - 4 - (east[east.length - 1] + MAX_LOT_W - 1) : 0,
+    };
+  };
+  /** The phases a band may take WITHOUT spending that margin (lever 2).
+   *
+   *  The slack a band centres in has two ends and they are not worth the same:
+   *  the inner end abuts the crossroad, where the arteries already forbid a
+   *  feature, and the outer end is the settlement's open ground. So a phase
+   *  spends its slack TOWARD the road and never toward the trees — half the
+   *  range, all of the rhythm, and the margins exactly where centring left them.
+   *
+   *  It is also what lets the lever work at EVERY rank, an outpost included, with
+   *  no floor on how many lots a band has to hold. A band with one lot has no
+   *  spacing to vary, only a building to slide — but sliding it INWARD is always
+   *  at least as safe as centring it, so there is no case to exclude and no knob
+   *  to write for excluding it. Measured: the 1,200-settlement feature sweep
+   *  places identically whether one-lot bands are phased or left centred. */
+  const phaseRange = (band, w, h, mx, my) => {
+    const slack = runSlack(...BANDS[band](w, h, mx, my));
+    const centred = (slack / 2) | 0;
+    // north and west measure their margin from the LOW end, so their phase may
+    // only grow; south and east measure it from the high end, so theirs may only
+    // shrink. Both ranges contain the centred value, which is why "no phase" and
+    // "phase at the centre" are the same lot grid.
+    return band === "north" || band === "west" ? { lo: centred, hi: slack } : { lo: 0, hi: centred };
+  };
+
+  /** Every plaza a junction could stand in: each shape in the set, at every
+   *  offset that keeps the paved inset inside the rect AND the whole rect inside
+   *  the arteries' own extent.
+   *
+   *  BOTH HALVES ARE THE PATH-COUNT INVARIANT, not tidiness. Containing the inset
+   *  is what pins the overlap term at `2w + 2h - 4` (it is strictly stronger than
+   *  containing the two junction rows and columns, and it also keeps a thriving
+   *  town's stone on its own square). Staying inside `[2, w-3] x [2, h-3]` is
+   *  what stops `fillRect` clipping the rect silently — a clipped plaza paints
+   *  fewer tiles than its shape claims, which is the same main-stream shift by a
+   *  quieter route.
+   *
+   *  THE TWO CLAMPS ARE NOT A MATCHED PAIR TODAY, and the sentence above reads as
+   *  if they were. `yHi` is LIVE: take it away and a square clips off the bottom
+   *  of a short map — lane 3(7) reds on it first, as a wander box that no longer
+   *  holds the square it is for. `xHi` is DEFENSIVE and currently
+   *  inert at every shipped scale — the junction's legal band stops at
+   *  `mx <= w - 13` and the widest shape is 11, so `mx + 8 <= w - 5` and the min
+   *  never reaches for its right-hand term. It stays because it is the half a
+   *  wider shape or a wider band would need, not because it is doing work now. */
+  const plazaCandidates = (w, h, mx, my) => {
+    const half = TOWN_TUNE.PLAZA_INSET >> 1;
+    const out = [];
+    for (const shape of TOWN_TUNE.PLAZA_SHAPES) {
+      const xLo = Math.max(2, mx + half - shape.w);
+      const xHi = Math.min(mx - half, w - 3 - (shape.w - 1));
+      const yLo = Math.max(2, my + half - shape.h);
+      const yHi = Math.min(my - half, h - 3 - (shape.h - 1));
+      for (let x = xLo; x <= xHi; x++) for (let y = yLo; y <= yHi; y++) out.push({ x, y, w: shape.w, h: shape.h });
+    }
+    return out;
+  };
+
+  /** THE JUNCTION SEARCH (§2.6 lever 1): enumerated, then filtered, then picked.
+   *
+   *  ENUMERATED rather than banded off a fraction, because the binding constraint
+   *  is absolute pitch-and-size arithmetic and not a proportion of the map: an
+   *  outpost has exactly EIGHT legal junctions (a 4-wide by 2-tall window), and a
+   *  fraction band that looked reasonable at city scale would either shrink that
+   *  to nothing or hand back junctions with no northern band at all.
+   *
+   *  FILTERED TO YIELD-NEUTRALITY, which is what makes this lever free. `slots
+   *  .length` is `min(rows * cols, budget)`, and every downstream allocator is
+   *  COUNT-driven — places slice on a count, specials gate on a count, households
+   *  round-robin on a count — so a junction that keeps `slots.length` keeps
+   *  `lotsForHouses`, `householdTarget`, the minted roster, `mintStamp` AND the
+   *  whole dwelling/place/workplace zone-id set. A save that reloads onto a
+   *  re-laid town keeps every `rel` row and every quest handle it had.
+   *
+   *  The yield filter alone is nearly free, because the budget bites from
+   *  village up: outpost 8 of 8 (it removes nothing — legality is what binds),
+   *  hamlet 204 of 240, village 648 of 792, town 1,528 of 1,768, city 3,024 of
+   *  4,320. The margin term below is what actually costs candidates, and with
+   *  its column half switched off (see `MARGIN_KEEP`) that cost is the row floor
+   *  alone: outpost 4, hamlet 18, village 108, town 1,268, city 504. The lanes
+   *  read those numbers off this function rather than off a comment, and the
+   *  layouts multiply through anyway — 67 to 73 squares per junction and a phase
+   *  per band gives 737 plans at outpost and 3.9 million at town, which the
+   *  variety lane prints per rank on every run. */
+  /** MEMOIZED, because the answer is a pure function of three numbers and the
+   *  search walks every tile on the map. Unmemoized it took a city compile from
+   *  2.6 ms to 8.1 ms — not a number anybody would feel, and not a reason to
+   *  spend it either: the shipped scale table has five rows, so this cache fills
+   *  once per process and never grows. The array it hands back is shared and is
+   *  READ-ONLY by contract; every caller here and in the lanes indexes it. */
+  const junctionCache = new Map();
+  const junctionCandidates = (w, h, budget) => {
+    const key = `${w}|${h}|${budget}`;
+    const hit = junctionCache.get(key);
+    if (hit) return hit;
+    const cx = (w / 2) | 0;
+    const cy = (h / 2) | 0;
+    const centred = Math.min(gridYield(w, h, cx, cy), budget);
+    const floors = outerMargins(w, h, cx, cy);
+    const out = [];
+    for (let y = 2; y < h - 2; y++) {
+      for (let x = 2; x < w - 2; x++) {
+        const b = bandCounts(w, h, x, y);
+        if (!b.north || !b.south || !b.west || !b.east) continue;
+        if (Math.min((b.north + b.south) * (b.west + b.east), budget) !== centred) continue;
+        // AND IT MAY NOT CLOSE THE OPEN GROUND. A junction pushed toward one edge
+        // keeps its lot count by moving a band's slack to the other side, and the
+        // ground it spends is the strip the feature placer falls back on when the
+        // corners are claimed. A southern band one row lower ends flush with the
+        // last usable row and there is then no free row on the map, which is how
+        // an outpost comes to place none of the two features it sealed — the
+        // failure the shipped feature-placement lane reds on if this next line
+        // goes. The ROWS carry that; the columns are `MARGIN_KEEP`, and it ships
+        // at zero because they carried nothing. See the knob.
+        const margins = outerMargins(w, h, x, y);
+        if (margins.north < floors.north || margins.south < floors.south) continue;
+        if (
+          margins.west < Math.min(floors.west, TOWN_TUNE.MARGIN_KEEP) ||
+          margins.east < Math.min(floors.east, TOWN_TUNE.MARGIN_KEEP)
+        )
+          continue;
+        // A junction with nowhere to stand a square is not a junction. ALSO
+        // DEFENSIVE and also inert: the band arithmetic above already implies the
+        // room, so the candidate counts are identical with this line and without
+        // it at every shipped rank. It is kept for the reason the `xHi` clamp is
+        // — the next shape set is the one that makes it bite, and a `townPlan`
+        // falling back to a centred 8x8 it never offered is a clipped square.
+        if (!plazaCandidates(w, h, x, y).length) continue;
+        out.push({ x, y });
+      }
+    }
+    junctionCache.set(key, out);
+    return out;
+  };
+
+  /** The whole of a settlement's seeded exterior geometry, drawn in ONE fixed
+   *  order from ONE side stream so the order is a thing a lane can read: the
+   *  junction, then its plaza, then the four band phases. The idiom pass draws
+   *  from the same stream afterwards and must stay last.
+   *
+   *  Falls back to the centred junction if the search comes back empty, which no
+   *  shipped scale does — but a future scale table is one edit away from a map
+   *  too small to hold four bands, and a settlement is not a thing to lose to an
+   *  empty array inside build()'s silent degrade.
+   *
+   *  AND THE PLAZA FALLBACK IS DERIVED RATHER THAN TRANSCRIBED. It used to spell
+   *  the first shape and its offset as `w: 8, h: 8` at `spine - 4`, which is the
+   *  shipped tunables written out as literals: a retune of `PLAZA_SHAPES` would
+   *  move every square on every map EXCEPT this one, and leave the degrade
+   *  drawing a rect the shape set no longer offers — the clipped square the
+   *  junction search's own comment warns about, arrived at from the other side.
+   *
+   *  The offset is the MIDPOINT of the band `plazaCandidates` would have handed
+   *  back for that shape, which is why it is the shape's half-extent and not the
+   *  inset: the legal x runs `[mx + half - shape.w, mx - half]` for
+   *  `half = PLAZA_INSET >> 1`, and its middle is `mx - shape.w / 2` for any
+   *  inset at all. So the inset moves that band's ends and not its centre, and
+   *  the fallback stays exactly as legal as the shape set is — it contains the
+   *  paved inset whenever the shape is at least as big as one, which is the same
+   *  condition that makes the shape offerable in the first place. */
+  const townPlan = (w, h, budget, rnd) => {
+    const legal = junctionCandidates(w, h, budget);
+    const spine = legal.length ? legal[(rnd() * legal.length) | 0] : { x: (w / 2) | 0, y: (h / 2) | 0 };
+    const plazas = plazaCandidates(w, h, spine.x, spine.y);
+    const first = TOWN_TUNE.PLAZA_SHAPES[0];
+    const plaza = plazas.length
+      ? plazas[(rnd() * plazas.length) | 0]
+      : { x: spine.x - (first.w >> 1), y: spine.y - (first.h >> 1), w: first.w, h: first.h };
+    // ONE DRAW PER BAND, in a fixed order, so the stream position after the plan
+    // is a function of the plan's shape alone — which is what lets the ground
+    // idiom draw from the same stream five hundred lines further down.
+    const phases = {};
+    for (const band of SIDES) {
+      const range = phaseRange(band, w, h, spine.x, spine.y);
+      phases[band] = range.lo + ((rnd() * (range.hi - range.lo + 1)) | 0);
+    }
+    return { spine, plaza, phases, legal: legal.length, plazas: plazas.length };
+  };
+
+  /** LEVER 4: the surround's own ground, laid on what the town left over.
+   *
+   *  Runs LATE — after the buildings, the features, the greens and the stalls,
+   *  before the lattice seam paints its aprons — and touches only bare grass, so
+   *  it can perturb nothing that has already been decided. It draws no main
+   *  stream at all (the side stream above), it paints no road tile (both idioms
+   *  refuse anything that is not `grass`/`grass2`), and it changes no solidity,
+   *  so the path count, the scuff loop, the tree scatter and the pocket seal all
+   *  see exactly what they saw before it existed.
+   *
+   *  What it DOES change is what the ground looks like from the first frame, and
+   *  that is the lever's whole job: two towns with the same brief and different
+   *  surrounds read differently before the player has walked anywhere. */
+  const paintGroundIdiom = (v, surround, rnd) => {
+    const idiom = PF.own(TOWN_TUNE.GROUND_IDIOM, surround) ? TOWN_TUNE.GROUND_IDIOM[surround] : null;
+    if (!idiom) return 0;
+    const spine = v.spine;
+    let painted = 0;
+    for (let y = 1; y < v.h - 1; y++) {
+      for (let x = 1; x < v.w - 1; x++) {
+        // THE BAND FIRST, AND THE DRAW BEFORE THE REFUSAL. The band is pure
+        // geometry — the spine and the map's own edges — so the number of values
+        // this pass takes off the side stream is a function of the plan and
+        // nothing else. Deciding first and drawing after would key the draw
+        // COUNT to the object layer, and the object layer is what a tree scatter
+        // and a gate reservation move: one trunk in a different place would
+        // re-roll every idiom tile after it, which is the same shifted-stream
+        // class the seam is punched late to avoid. Found by mutation-testing
+        // this slice, not by reading it.
+        const near =
+          idiom.kind === "verge"
+            ? Math.min(Math.abs(y - (spine.y - 1)), Math.abs(y - spine.y)) <= idiom.depth ||
+              Math.min(Math.abs(x - (spine.x - 1)), Math.abs(x - spine.x)) <= idiom.depth
+            : Math.min(x - 1, y - 1, v.w - 2 - x, v.h - 2 - y) < idiom.depth;
+        if (!near) continue;
+        const roll = rnd();
+        const at = idx(v, x, y);
+        // Bare ground only, and bare means bare: no wall, no trunk, no eave, no
+        // paving. A tile the town is using is a tile the idiom has no opinion on.
+        if (v.ground[at] !== "grass" && v.ground[at] !== "grass2") continue;
+        if (v.solid[at] || v.object[at] || v.overhead[at]) continue;
+        if (roll >= idiom.density) continue;
+        v.ground[at] = idiom.tile;
+        painted++;
+      }
+    }
+    return painted;
+  };
+
   function compile(brief, seed) {
     const activeTheme = PF.art.setTheme ? PF.art.setTheme(brief.theme) : brief.theme;
     const rnd = PF.rng(seed);
@@ -2039,13 +2549,37 @@ PF.world = (() => {
     const groundMix = { woods: 0.3, fields: 0.22, rocky: 0.2, water: 0.25, barren: 0.35 }[brief.surround] ?? 0.25;
     for (let i = 0; i < v.ground.length; i++) if (rnd() < groundMix) v.ground[i] = "grass2";
     borderTrees(v);
-    // Paths: a crossroad through a central plaza, scaled to the grid.
-    const midY = (v.h / 2) | 0;
-    const midX = (v.w / 2) | 0;
+    // Paths: a crossroad through a plaza, and from 0.16 BOTH ARE SEEDED (§2.6).
+    //
+    // A side stream, keyed like the mint's, for the reason the mint's exists: the
+    // ground cover above has already drawn from the main stream and the scuffing
+    // below is about to, so a layout drawing from the main stream would move the
+    // grass under every world that laid one. Four levers come off this stream in
+    // ONE fixed order — junction, plaza, the four band phases, and last of all
+    // the ground idiom, five hundred lines down — and nothing else ever draws
+    // from it.
+    //
+    // WHAT THE JUNCTION MAY NOT DO is shrink the town: `slots.length` is the
+    // supply cap the whole roster hangs off, so the search only ever offers
+    // junctions that yield exactly what the centred one does (junctionCandidates,
+    // above). A re-laid town mints the same people into the same zone ids.
+    const streetRnd = PF.rng(PF.hashStr(`${seed >>> 0}|${TOWN_TUNE.STREET_STREAM_LABEL}|${brief.name}`));
+    const plan = townPlan(v.w, v.h, scale.buildings, streetRnd);
+    const midY = plan.spine.y;
+    const midX = plan.spine.x;
+    // Stamped, exactly like the climate axes and the lattice cell: runtime-only,
+    // no save row, re-derived on every compile. Every consumer that used to
+    // recompute the crossroad from `w/2` reads this instead — including the
+    // harness, which is why it is a property and not a local.
+    v.spine = { x: midX, y: midY };
+    const plaza = plan.plaza;
     fillRect(v, 2, midY - 1, v.w - 4, 2, "ground", "path");
     fillRect(v, midX - 1, 2, 2, v.h - 4, "ground", "path");
-    fillRect(v, midX - 4, midY - 4, 8, 8, "ground", "path");
-    if (brief.prosperity === "thriving") fillRect(v, midX - 2, midY - 2, 4, 4, "ground", "stone");
+    fillRect(v, plaza.x, plaza.y, plaza.w, plaza.h, "ground", "path");
+    if (brief.prosperity === "thriving") {
+      const inset = TOWN_TUNE.PLAZA_INSET;
+      fillRect(v, midX - (inset >> 1), midY - (inset >> 1), inset, inset, "ground", "stone");
+    }
     if (brief.prosperity === "struggling") {
       for (let i = 0; i < v.ground.length; i++) if (v.ground[i] === "path" && rnd() < 0.18) v.ground[i] = "dirt";
     }
@@ -2056,7 +2590,7 @@ PF.world = (() => {
     v.publicGround = [
       { x: 2, y: midY - 1, w: v.w - 4, h: 2 },
       { x: midX - 1, y: 2, w: 2, h: v.h - 4 },
-      { x: midX - 4, y: midY - 4, w: 8, h: 8 },
+      { x: plaza.x, y: plaza.y, w: plaza.w, h: plaza.h },
     ];
     v.spawn = { x: midX, y: midY + 2 };
     // Injection-discipline prose (§7) rides the world so the runtime never
@@ -2142,54 +2676,23 @@ PF.world = (() => {
     // The two rows were the other half: every door in a 96x72 city landed in
     // rows 25-43, leaving 65% of the map as lawn nobody had a reason to cross.
     // Rows now come from the height the map actually has.
-    const BUILDING_H = 5; // the tallest a lot is ever painted (a named place)
-    const LOT_PITCH_Y = BUILDING_H + 3; // overhang above, apron below, one to breathe // overhang above, apron below, one to breathe
-    const LOT_PITCH_X = 9;
-    const MAX_LOT_W = 8; // the widest building() ever draws
-    // A row must clear the border and its own overhang above, and the horizontal
-    // road plus its apron below. Bands are computed from those, not guessed.
-    /** A run of lot origins inside [lo, hi], CENTRED on that span.
-     *
-     *  A fixed pitch marching from one end leaves whatever does not divide
-     *  evenly in one lump at the other end, and the lump is always on the same
-     *  side, so a town came out with its lots hard against the western trees and
-     *  eleven empty columns down the east. Splitting the remainder puts the same
-     *  number of lots on the same pitch with a margin at both ends, which is
-     *  what a laid-out settlement looks like instead of a shunted one.
-     *
-     *  `lo` and `hi` are the first and last tile the lot may OCCUPY, so a lot at
-     *  `start` ends at `start + size - 1` and that must not pass `hi`. */
-    const runOf = (lo, hi, size, pitch) => {
-      const span = hi - lo + 1;
-      if (span < size) return [];
-      const count = 1 + (((span - size) / pitch) | 0);
-      const used = size + (count - 1) * pitch;
-      const start = lo + (((span - used) / 2) | 0);
-      return Array.from({ length: count }, (_, index) => start + index * pitch);
-    };
-    // Row 4, not 3: a sanctuary lifts its facade by up to two rows above the lot,
-    // so the top band needs headroom for the eave above THAT or it paints into
-    // the border ring. The old two-row allocator carried the same floor as a
-    // Math.max, and it was load-bearing rather than decorative.
+    // The lot constants and `runOf` itself are module-level now (see BANDS
+    // above), because the junction search has to ask the grid what a candidate
+    // would yield BEFORE this line runs — and asking it with a second copy of the
+    // arithmetic would put the mint's stability on two sources of truth.
     //
-    // The band's last usable row is midY - 2: a body starting at y ends at
-    // y + BUILDING_H - 1, and it clears a road at midY - 1. One too strict and an
-    // outpost loses its whole northern band — which is most of what "an outpost
-    // is two buildings" turned out to be.
-    //
-    // The band below starts one row under the road, not three: a building's SOLID
-    // body must clear the street, but its overhang is an overhead tile and may
-    // hang over it exactly as a real eave does. Requiring three cost the outpost
-    // its entire southern row.
+    // LEVER 2 lands here and costs nothing: each band is laid at its own seeded
+    // PHASE inside the slack `runOf` was already spending on centring. The count
+    // is decided before the phase is read, so the rhythm of the street moves and
+    // the roster does not.
     const rowYs = [
-      ...runOf(4, midY - 2, BUILDING_H, LOT_PITCH_Y),
-      ...runOf(midY + 1, v.h - 4, BUILDING_H, LOT_PITCH_Y),
+      ...runOf(...BANDS.north(v.w, v.h, midX, midY), plan.phases.north),
+      ...runOf(...BANDS.south(v.w, v.h, midX, midY), plan.phases.south),
     ];
-    // Columns, per side. West stops before the road; east starts after it. The
-    // road is never tested against a lot because a lot is never laid across it.
-    // The east band may reach v.w - 4: the border ring is the last column and the
-    // two inside it are verge.
-    const colXs = [...runOf(4, midX - 2, MAX_LOT_W, LOT_PITCH_X), ...runOf(midX + 1, v.w - 4, MAX_LOT_W, LOT_PITCH_X)];
+    const colXs = [
+      ...runOf(...BANDS.west(v.w, v.h, midX, midY), plan.phases.west),
+      ...runOf(...BANDS.east(v.w, v.h, midX, midY), plan.phases.east),
+    ];
     for (const rowY of rowYs) for (const x of colXs) slots.push({ x, y: rowY });
     // ── Claim order: OUTWARD FROM THE PLAZA ───────────────────────────────────
     // Row-major order filled the northernmost row first, which put a small
@@ -2674,6 +3177,23 @@ PF.world = (() => {
     const wildsArrivals = wildsPlaces.flatMap((_, index) =>
       [midY - 1, midY].map((y) => ({ x: index === 0 ? v.w - 2 : 1, y })),
     );
+    // THE LATTICE SEAM, PHASE ONE (21-lattice). Every spine terminal a brief
+    // wilds did not already take becomes a gate onto the open country, and its
+    // apron is reserved HERE — before the scatter — for the same reason the
+    // wilds arrivals above are: nothing is allowed to stand in a doorway, and
+    // the shipped reserve test keeps the tiles either side of one clear too, so
+    // the way out is not hemmed in by the trees beside it. The paint itself
+    // waits until after everything else (phase two, below the wilds loop).
+    //
+    // THE SPINE IS READ OFF THE ZONE from 0.16 slice 4: a terminal is where the
+    // road MEETS the edge, and the road no longer runs down the middle of the
+    // map. `v.spine` is stamped six hundred lines above this call, so the lattice
+    // finds it for itself; on a centred junction it computes the same four gate
+    // tiles it always did, which is why this is an addition and not a change.
+    const seamGates = PF.lattice.settlementGates(v, {
+      east: wildsPlaces.length > 0,
+      west: wildsPlaces.length > 1,
+    });
     scatterTrees(
       v,
       rnd,
@@ -2683,6 +3203,7 @@ PF.world = (() => {
         stallReserved,
         shopFrontReserved,
         wildsArrivals,
+        PF.lattice.reservationsFor(v, seamGates),
       ),
     );
     // ── Open ground ────────────────────────────────────────────────────────────
@@ -2762,11 +3283,15 @@ PF.world = (() => {
       for (let i = leftoverLots.length - 1; i >= 0; i--) if (taken.has(i)) leftoverLots.splice(i, 1);
     }
 
-    let greens = 0;
-    for (let i = 0; i < leftoverLots.length && greens < 6; i += 3) {
+    // The lots the greens took, kept rather than merely counted: the board's
+    // anchor ladder reads them one block down (a park is public ground and a
+    // fenced kitchen garden is not, so only the dense rank's greens are offered
+    // as an anchor), and a counter cannot say WHERE anything was laid.
+    const greenLots = [];
+    for (let i = 0; i < leftoverLots.length && greenLots.length < 6; i += 3) {
       const lot = leftoverLots[i];
       PLACERS[denseRank ? "park" : "crop-plots"](v, lot.x, lot.y);
-      greens++;
+      greenLots.push(lot);
     }
     // ── THE SQUARE ─────────────────────────────────────────────────────────────
     // A plaza was eight by eight tiles of paving and nothing else — the one place
@@ -2792,11 +3317,24 @@ PF.world = (() => {
     // somebody's front room, and one refusal used to leave the smallest
     // settlements — the ones that can least afford a bare square — with no well
     // at all.
+    // Read off the PLAZA rather than off the crossroad from 0.16: the square is a
+    // seeded rect now and may sit offset around its junction, so the four corners
+    // a well or a market board wants are the square's own, not a fixed radius
+    // from the middle of the road. Clamped INTO the rect on both axes and held
+    // OFF both arteries by construction — the plaza always contains the paved
+    // inset, so `midX - 2`/`midX + 1` are inside it and every column outside the
+    // two road columns. On the shipped centred 8x8 this is the same four tiles in
+    // the same order it always was.
+    const half = TOWN_TUNE.PLAZA_INSET >> 1;
+    const qWest = Math.max(plaza.x, midX - half - 1);
+    const qEast = Math.min(plaza.x + plaza.w - 1, midX + half);
+    const qNorth = Math.max(plaza.y, midY - half - 1);
+    const qSouth = Math.min(plaza.y + plaza.h - 1, midY + half);
     const QUADRANTS = [
-      [midX + 2, midY - 3],
-      [midX - 3, midY - 3],
-      [midX + 2, midY + 2],
-      [midX - 3, midY + 2],
+      [qEast, qNorth],
+      [qWest, qNorth],
+      [qEast, qSouth],
+      [qWest, qSouth],
     ];
     const well = QUADRANTS.find(([x, y]) => squareTile(x, y, "well"));
     if (well) v.lights.push({ x: well[0], y: well[1] });
@@ -2808,10 +3346,146 @@ PF.world = (() => {
         if (squareTile(x, y, "table")) boards++;
       }
     }
-    // Last thing done to the settlement's tiles, so it sees the trees, the
-    // buildings, the stalls, the features and the greens together — a pocket is
-    // usually made by two of them meeting, not by either alone.
-    sealPockets(v, v.spawn);
+    // ── THE QUEST BOARD (0.13 §2.1) ────────────────────────────────────────────
+    // The fixture every settlement gets, laid AFTER everything else it could
+    // stand on top of and BEFORE the pocket seal, so a board that walls something
+    // off is a board whose pocket gets closed like any other.
+    //
+    // NO RNG IS DRAWN HERE, and that is load-bearing rather than tidy: the anchor
+    // is read off geometry the passes above already laid, so the fixture is
+    // deterministic per (seed, theme, brief) and the tile stream feeding the
+    // ground cover, the trees and the mint does not move under it.
+    // THE DOORSTEPS ARE SPOKEN FOR, and this is the invariant said out loud
+    // rather than a bug being closed. `linkInterior` puts a player coming out of
+    // a building down on `(doorX, doorY + 1)` — the rung-1 comment below names
+    // the same tile from the other side — and a door sits in a wall, so that
+    // apron is the ONLY ground the doorway can be approached from.
+    //
+    // A board is solid and is laid BEFORE the pocket seal, so a board on a
+    // doorstep is an exit softlock either way round: the interior portal
+    // delivers the player onto a solid tile, or `sealPockets` closes the
+    // now-unreachable doorway behind it and the building is gone for good.
+    //
+    // THE TREE SCATTER ALREADY RESERVES THESE TILES (`doorRects` and the
+    // `wildsArrivals` note above it) and the board was the one solid-placing
+    // pass that did not — the same omission that comment records for a trunk
+    // landing on a wilds arrival.
+    //
+    // HONESTLY: no ladder rung offers a doorstep today (measured — 0 collisions
+    // across 4,000 worlds, and 0 across 3,000 more with five places and a
+    // fourteen-strong cast, because lot geometry never puts two doors within two
+    // columns of one row). So this changes no placement in any world that can be
+    // generated now. It is here for the SCAN rung, which walks every tile in the
+    // zone with no ladder to keep it honest, and for whoever edits the ladder or
+    // reuses `boardFree` next — W8's tight platform geometry is the scheduled
+    // trigger. Like the two defensive lines in 70-hud's `toggleJournal`, a
+    // mutation test will never red on it; it stays because a placer that assumed
+    // clear doorsteps would be resting on a guarantee written in another pass.
+    const doorSteps = new Set(buildings.map((b) => `${b.door.doorX},${b.door.doorY + 1}`));
+    /** Can a board stand on this tile? */
+    const boardFree = (x, y) => {
+      if (x < 2 || y < 2 || x >= v.w - 2 || y >= v.h - 2) return false;
+      if (doorSteps.has(`${x},${y}`)) return false;
+      // The spawn tile, never: sealPockets throws on a solid spawn, and a world
+      // that refuses to build is a legacy world in the player's hands.
+      if (x === v.spawn.x && y === v.spawn.y) return false;
+      const at = idx(v, x, y);
+      // Water is laid solid, so the test below already excludes it. This says the
+      // rule out loud because it IS the rule a lane pins: A BOARD RECT HOLDS NO
+      // WATER TILE, so nearFeature's two-sided test — and the fishing verb behind
+      // it — can never claim the board as a spot.
+      if (v.ground[at] === "water") return false;
+      if (v.solid[at] || v.object[at] || v.overhead[at]) return false;
+      // …and it is not a plug in a one-tile gap. The board is solid, so a tile
+      // with a single walkable neighbour is a doorway, and standing a board in it
+      // would hand sealPockets a room to close.
+      let open = 0;
+      for (const [nx, ny] of [
+        [x, y - 1],
+        [x, y + 1],
+        [x - 1, y],
+        [x + 1, y],
+      ]) {
+        if (nx < 0 || ny < 0 || nx >= v.w || ny >= v.h) continue;
+        if (!v.solid[idx(v, nx, ny)]) open++;
+      }
+      return open >= 2;
+    };
+    // THE ANCHOR LADDER (§2.1), in order, and every rung is a place people are
+    // already standing rather than a corner with room in it.
+    const boardAnchors = [];
+    //  (1) THE GATHERING PLACE — work is posted where people gather. The apron
+    //      row beside its door, never the door's own step: `doorX` is where the
+    //      interior portal puts the player down (linkInterior).
+    const gatheringFacade = buildings.find((b) => b.boundPlace?.kind === "gathering");
+    if (gatheringFacade)
+      for (const dx of [-1, 1, -2, 2])
+        boardAnchors.push({ x: gatheringFacade.door.doorX + dx, y: gatheringFacade.door.doorY + 1 });
+    //  (2) THE GREEN OR THE MARKET — a sealed brief may name no gathering place
+    //      at all (§2.1's own caveat), and the next most public ground is the
+    //      ground people cross. A park's path rows, then the gap between two
+    //      market tables. A loose rank's green is a FENCED kitchen garden and is
+    //      deliberately not offered: it is private ground wearing a lot.
+    if (denseRank)
+      for (const lot of greenLots) boardAnchors.push({ x: lot.x + 2, y: lot.y + 2 }, { x: lot.x + 4, y: lot.y + 2 });
+    for (const stall of stalls) boardAnchors.push({ x: stall.x + 1, y: stall.y }, { x: stall.x + 3, y: stall.y });
+    //  (3) THE SPINE ROAD NEAR SPAWN — the floor under the ladder, and the one
+    //      rung every settlement has. Flanking the vertical artery rather than in
+    //      it (a solid board in a two-tile road is half a road), walking outward
+    //      from the row the player spawns on.
+    for (const dy of [0, 1, -1, 2, -2, 3, -3, 4, -4])
+      boardAnchors.push({ x: midX + 1, y: v.spawn.y + dy }, { x: midX - 2, y: v.spawn.y + dy });
+    let boardAt = boardAnchors.find((candidate) => boardFree(candidate.x, candidate.y)) ?? null;
+    if (!boardAt) {
+      // A SCAN, not a shrug. An unanchorable FEATURE is dropped ("a plainer
+      // settlement, never a sealed one") because the brief that named it can
+      // survive it; the board cannot be dropped, because a missing board is a
+      // world that cannot say it has no work. A settlement with no tile at all to
+      // hang one on is a settlement with nowhere to walk, and the harness sweeps
+      // every rank, theme and surround to keep that a statement rather than a
+      // hope.
+      for (let y = 2; y < v.h - 2 && !boardAt; y++) {
+        for (let x = 2; x < v.w - 2; x++) {
+          if (!boardFree(x, y)) continue;
+          boardAt = { x, y };
+          break;
+        }
+      }
+    }
+    if (!boardAt) {
+      // AND IF THE SCAN COMES BACK EMPTY, IT SAYS SO. The arm above is a
+      // statement — "a settlement with no tile at all to hang one on is a
+      // settlement with nowhere to walk" — and it stayed true only because
+      // nothing had ever narrowed the scan. The doorstep guard narrows it, by a
+      // handful of tiles and provably not enough to matter today, but the honest
+      // shape of a new refusal is a new way to come back with nothing.
+      //
+      // So the miss is RECORDED rather than skipped in silence: a world that
+      // arrives without a board is a world whose board button never appears, and
+      // the difference between "this brief sealed no work" and "the compiler
+      // could not place the fixture" is exactly the difference between a design
+      // and a bug. The brief's own repair log is the channel — where the seal
+      // already writes what it had to drop — and the push is guarded because a
+      // brief object can be compiled more than once in a session and a log that
+      // doubles its entries is a log nobody trusts.
+      const note = "world: no free tile for the quest board; settlement built without one";
+      if (Array.isArray(brief._repairs) && !brief._repairs.includes(note)) brief._repairs.push(note);
+    }
+    if (boardAt) {
+      put(v, boardAt.x, boardAt.y, "object", "board", true);
+      v.features.push({
+        id: BOARD_FEATURE_ID,
+        tag: BOARD_FEATURE_TAG,
+        name: boardName(activeTheme),
+        // One tile, and the rect is exactly it. Every other rect on this register
+        // is the placer's extent plus a margin, and the consumer's own two-sided
+        // test is what excludes the tiles the feature never painted; nearBoard has
+        // no second test to lean on, so the board's rect is the board.
+        rect: { x: boardAt.x, y: boardAt.y, w: 1, h: 1 },
+      });
+    }
+    // (the settlement's pocket seal used to run HERE, and now runs after the
+    // seam is punched, below the wilds loop — see the comment on it)
     zones.z1 = v;
 
     // ── Interior zones ──
@@ -2869,8 +3543,13 @@ PF.world = (() => {
       // the door apron of the building they run for the whole of daylight, with
       // the lit common room and the counter behind them; a sanctuary's keeper did
       // the same on the church step, and the keeper schedule tier holds them
-      // there dawn to dusk. Both default briefs home their host at the root, so
-      // this was every default world.
+      // there dawn to dusk. Both worked-example briefs home their host at the
+      // gathering itself, so neither of them is the case this covers: a host
+      // homed IN the inn takes the named-building branch instead and gets the
+      // room's walkable middle. What reaches this is a brief that homes its host
+      // or its keeper at the settlement root, which is what the validator writes
+      // whenever a cast member arrives without a `home` of their own, and what
+      // the synthesized cast does for every one of its four.
       //
       // The station comes off the ZONE because the furnisher is what knows it.
       // Same handle shape the minted loop builds, so the promotion needs no
@@ -2893,6 +3572,12 @@ PF.world = (() => {
     }
 
     // ── Wilds zones, hung off alternating map edges ──
+    // WHICH LATTICE CELLS ARE ALREADY SPOKEN FOR. The settlement is (0,0) and a
+    // brief wilds takes (1,0) east or (-1,0) west, so those cells resolve to the
+    // zone the brief already named rather than to a compiled cell — the walk out
+    // of town and the walk back are the SAME ids they always were. Runtime-only,
+    // like the climate stamp: no save row, re-derived on every load.
+    const latticeAnchors = {};
     wildsPlaces.forEach((place, index) => {
       const id = zoneIdForPlace(place);
       if (!id) return;
@@ -2980,27 +3665,39 @@ PF.world = (() => {
           break;
         }
       }
+      // THE LATTICE SEAM, PHASE ONE (21-lattice). A brief wilds keeps its portal
+      // pair home and gains gates on its other three edges, so the country does
+      // not stop at the edge of the brief's own wood. Aprons reserved beside the
+      // arrival tiles below, for the same reason and against the same scatter;
+      // the N/S gate columns sit two clear of the `water-crossing` stream this
+      // builder lays at x = 20-21, so no apron is ever asked to stand in water.
+      const wildsGates = PF.lattice.wildsGates(zone, east);
       // Reserve BOTH sides' arrival tiles and spawns — the west-hung wilds'
       // arrival used to land inside scattered trunks on some seeds.
-      scatterTrees(zone, rnd, tags.has("dense-growth") ? 70 : 45, [
-        { x: 1, y: wMidY },
-        { x: 1, y: wMidY + 1 },
-        { x: 2, y: wMidY },
-        { x: 3, y: wMidY },
-        { x: 20, y: wMidY },
-        { x: 21, y: wMidY + 1 },
-        { x: zone.w - 2, y: wMidY },
-        { x: zone.w - 2, y: wMidY + 1 },
-        { x: zone.w - 3, y: wMidY },
-        { x: zone.w - 4, y: wMidY },
-      ]);
+      scatterTrees(
+        zone,
+        rnd,
+        tags.has("dense-growth") ? 70 : 45,
+        [
+          { x: 1, y: wMidY },
+          { x: 1, y: wMidY + 1 },
+          { x: 2, y: wMidY },
+          { x: 3, y: wMidY },
+          { x: 20, y: wMidY },
+          { x: 21, y: wMidY + 1 },
+          { x: zone.w - 2, y: wMidY },
+          { x: zone.w - 2, y: wMidY + 1 },
+          { x: zone.w - 3, y: wMidY },
+          { x: zone.w - 4, y: wMidY },
+        ].concat(PF.lattice.reservationsFor(zone, wildsGates)),
+      );
       // Set BEFORE the pockets are closed, not after. The west wilds moves its
       // spawn to the far side further down, and sealing from the east side first
       // would mark the west half — the future spawn and the tile the portal
       // actually delivers the player onto — solid whenever the scatter happens to
       // separate the two.
       zone.spawn = east ? { x: 3, y: wMidY } : { x: zone.w - 4, y: wMidY };
-      sealPockets(zone, zone.spawn);
+      // (the seal used to run HERE, and now runs after the punches below)
       // Two-tile edge portals: east edge of the settlement for the first wilds,
       // west edge for the second.
       const vx = east ? v.w - 1 : 0;
@@ -3028,11 +3725,44 @@ PF.world = (() => {
           label: `Back to ${brief.name}`,
         });
       }
+      // THE LATTICE SEAM, PHASE TWO. Punched here, beside the portal punch above
+      // and after every pass that draws on the main tile stream, because the
+      // `struggling` scuffing loop draws that stream once per painted path tile —
+      // a seam laid with the road block shifts every downstream consumer of it,
+      // measured at 73 changed settlement tiles and a re-rolled wilds against 8
+      // when the punch waits.
+      PF.lattice.punchGates(zone, wildsGates);
+      zone.gates = wildsGates;
+      zone.cell = { cx: east ? 1 : -1, cy: 0 };
+      latticeAnchors[`${zone.cell.cx},0`] = id;
+      // AND ONLY NOW THE SEAL, which used to run before both punches. The punch
+      // opens ring tiles that were solid when the sweep passed them, so a sweep
+      // running first leaves newly-cleared ground walkable-but-unswept and any
+      // pocket behind a gate unsealed — the measured softlock class this builder
+      // already carries a paragraph about. The sweep draws no RNG, so moving it
+      // moves no stream.
+      sealPockets(zone, zone.spawn);
       // (the west spawn is set above, before sealPockets reads it)
       zone.flavor = place.flavor;
       zone.mapKind = "place"; // World Maps export kind (spec §8)
       zones[id] = zone;
     });
+
+    // The settlement's own seam, punched after the wilds loop for the same
+    // reason and in the same phase — and the settlement's pocket seal after
+    // that, which is where it moved from its old home two hundred lines up. It
+    // now sees the trees, the buildings, the stalls, the features, the greens
+    // AND every hole punched in the border ring together; a pocket is usually
+    // made by two of them meeting, not by either alone.
+    // LEVER 4, laid on the ground the town left over and nothing else — after
+    // every pass that could still claim a tile, before the seam paints its
+    // aprons over whatever it likes. Side stream, bare grass only, no solidity
+    // touched: the pocket seal below sees exactly the map it saw before.
+    paintGroundIdiom(v, brief.surround, streetRnd);
+    PF.lattice.punchGates(v, seamGates);
+    v.gates = seamGates;
+    v.cell = { cx: 0, cy: 0 };
+    sealPockets(v, v.spawn);
 
     // ── Dwelling and workplace interiors ──
     // Until now a dwelling was a facade with nothing behind it, so a resident the
@@ -3107,7 +3837,34 @@ PF.world = (() => {
     const gatheringPlace = interiorPlaces.find((p) => p.kind === "gathering");
     const gatheringZoneId = gatheringPlace ? zoneIdForPlace(gatheringPlace) : null;
     const wildsZoneId = wildsPlaces.length ? zoneIdForPlace(wildsPlaces[0]) : null;
-    const plazaBox = () => ({ x0: midX - 6, y0: midY - 5, x1: midX + 6, y1: midY + 5 });
+    // ON THE SQUARE, NOT ON THE CROSSROAD — and clamped, exactly as its sibling
+    // `streetBox` below already is. Lever 3 lets the square sit OFFSET around the
+    // junction: an 11x6 may span `midX - 9` to `midX + 1`, so a box centred on
+    // `midX/midY` tracked the road and not the paving — columns of the square
+    // fell outside it while it reached the same distance the other way onto lots
+    // and roofs. Centred on the rect the plaza actually took, it contains every
+    // square the shape set can offer at every rank, and lane 3(7) walks the whole
+    // candidate set to say so rather than sampling it. The clamp bites on no
+    // shipped scale — asserted there too, not assumed — and is here because the
+    // NEXT tuning of the shape set or the search is the one that would find the
+    // edge, and a wander box outside the map is an NPC walked into the ring.
+    //
+    // WHAT RE-CENTRING DOES NOT FIX, because it was never the box's doing: there
+    // is more building inside the box than there used to be. That is lever 2.
+    // Band phases spend their slack TOWARD the crossroad by design, so the lots
+    // crowd the paving; centre the phases and this box comes back to the open
+    // ground the 0.15 one had. A look to be judged by eye, and it is on the
+    // deferred-verification list rather than tuned from here.
+    const plazaBox = () => {
+      const cx = plaza.x + ((plaza.w - 1) >> 1);
+      const cy = plaza.y + ((plaza.h - 1) >> 1);
+      return {
+        x0: Math.max(2, cx - 6),
+        y0: Math.max(2, cy - 5),
+        x1: Math.min(v.w - 3, cx + 6),
+        y1: Math.min(v.h - 3, cy + 5),
+      };
+    };
     /** The stretch of street outside one door. The plaza is thirteen tiles by
      *  eleven; a thriving city now holds a hundred people, and sending all of
      *  them to the same square at noon builds a crush in the middle of an empty
@@ -3504,9 +4261,14 @@ PF.world = (() => {
       // WHO LETS THE ROOMS: the cast member the specials pass bound to the
       // gathering's building — the `host` kind, the innkeeper — and only if the
       // brief named nobody, whoever the brief homed there. Deliberately NOT the
-      // `_sched.keeper` tier: that tier is PLACE_BOUND_SPECIALS, which is the
-      // sanctuary alone, so a gathering's owner never carries it and reading it
-      // here would leave every inn in the game with nobody behind the counter.
+      // `_sched.keeper` tier, which answers a different question in both
+      // directions. It is set for the HEAD RESIDENT of any named building (see
+      // headOfBuilding) as well as for the owner of a PLACE_BOUND_SPECIALS one,
+      // so a healer living at her infirmary and an elder at the moot house carry
+      // it too and it never picked the inn out; and it is NOT set for a host the
+      // brief homed at the settlement root instead of at the inn, so reading it
+      // here would leave exactly those inns with nobody behind the counter.
+      // Owning the gathering's facade is the fact this block actually wants.
       const facade = buildings.find((b) => b.boundPlace === gatheringPlace);
       const host = facade?.owner ?? headOfBuilding.get(gatheringZoneId) ?? null;
       // BOTH MARKS OR NEITHER. A brief can name a gathering and home nobody in it
@@ -3536,9 +4298,59 @@ PF.world = (() => {
       }
     }
 
+    // ── THE LOCATION HANDLE EACH ZONE ANSWERS TO (0.13 §2.2c) ────────────────
+    // A pack indexes its content by PLACE-KIND — "the gathering place", "the
+    // wilds" — because zone ids mean nothing outside the brief that minted them
+    // and zone NAMES mean nothing after a demotion, while every compiled world
+    // and the legacy layout both have a gathering place. Resolving one to a zone
+    // is a LOOKUP and never a guess, and this is the lookup: the only site that
+    // knows which ordinal id a place got is the compiler that assigned it.
+    //
+    // Runtime-only, exactly like `lodging` above and the schedule handles below
+    // it — worlds are derived per load, so this costs zero save fields and the
+    // stamp cannot go stale against the brief it was read from.
+    //
+    // THE GROUND FLOOR ONLY. A place that grew a storey or a cellar has those as
+    // zones of their own and they carry no handle: the handle names the PLACE,
+    // and the room the door opens onto is the place you have arrived at. A
+    // visitor bound for the bell tower walks through it either way.
+    //
+    // TWO PLACES OF THE SAME KIND BOTH CARRY IT, deliberately — a brief may name
+    // two wilds — because a handle is a kind and not an address. Work that says
+    // "go to the wilds" is answered by either of them, which is what the word
+    // means.
+    zones.z1.place = "settlement";
+    for (const place of brief.places) {
+      const zone = zones[zoneIdForPlace(place)];
+      if (zone) zone.place = place.kind;
+    }
+
+    // THE CLIMATE STAMP. Runtime-only, like every other derived field here: no
+    // save row, no briefVersion bump, re-minted on every load from (brief, seed,
+    // theme). It goes through 17-weather's axesFor and NOT through a local roll,
+    // because the pack's digest door runs the very same call on the very same
+    // inputs — the two describe the same sky BY CONSTRUCTION rather than by
+    // whichever world happens to be standing when the pack is solicited.
+    //
+    // `activeTheme` rather than `brief.theme` reads the theme the world actually
+    // got; the two agree in every case, since setTheme and axesFor both fall back
+    // to cozy-village for a word neither table knows.
+    const axes = PF.weather.axesFor(brief, seed, activeTheme);
+
     return {
       seed,
       theme: activeTheme,
+      latitude: axes.latitude,
+      precipitation: axes.precipitation,
+      // THE SURROUND, STAMPED BESIDE THE AXES and for exactly the same reason.
+      // `brief.surround` is read once, up at the ground-cover roll, and was never
+      // kept — so the wilderness, which is a function of the country a settlement
+      // stands in, had no way to read the country from the world it hangs off.
+      // Runtime-only, zero save bytes, re-minted on every load; the legacy and
+      // degraded paths leave it undefined and the weight table's neutral fallback
+      // covers them.
+      surround: brief.surround,
+      latticeAnchors,
       brieved: true, // marks a compiled world (saves still carry only seed/theme/zone)
       situation: brief.situation,
       zones,
@@ -3562,5 +4374,44 @@ PF.world = (() => {
     return null;
   }
 
-  return { build, idx };
+  /** THE ZONE PRIMITIVES, handed out to the wilderness lattice (21-lattice).
+   *
+   *  A wilderness cell is a zone like any other — the same three layers, the same
+   *  solidity map, the same reachability sweep, the same feature register — and
+   *  the bake concatenates every module into one scope with no imports, so the
+   *  only way a second module builds one is for this one to hand its own tools
+   *  over. Every entry here is already used by the builders above: the lattice
+   *  adds no zone shape, no painter and no sweep of its own, which is what keeps
+   *  "a chunk is a zone" true rather than aspirational. Handed out DELIBERATELY
+   *  narrow — the placement passes, the arithmetic and the tables stay private,
+   *  because a second builder reaching into those is the drift this export
+   *  exists to prevent. */
+  const prims = { makeZone, put, fillRect, borderTrees, sealPockets, PLACERS };
+
+  // The board's reserved key and tag ride out with the builder because they are
+  // the JOIN between the compiler and its consumers: 30-sim finds the register
+  // row by this id, and the harness holds the tag to the promise that no brief
+  // vocabulary contains it.
+  // THE TOWN PLANNER, handed out PURE (0.16 slice 4). The variety levers make
+  // claims about arithmetic — "every legal junction yields what the centred one
+  // does", "every plaza shape paints the same number of tiles" — and a lane that
+  // could only sample compiled worlds would be checking a consequence rather than
+  // the design. These are the functions the compiler itself calls, so a lane
+  // asserting on them is asserting on the shipped decision.
+  const town = {
+    TUNE: TOWN_TUNE,
+    runOf,
+    runCount,
+    runSlack,
+    BANDS,
+    bandCounts,
+    gridYield,
+    outerMargins,
+    phaseRange,
+    plazaCandidates,
+    junctionCandidates,
+    plan: townPlan,
+  };
+
+  return { build, idx, BOARD_FEATURE_ID, BOARD_FEATURE_TAG, prims, town };
 })();

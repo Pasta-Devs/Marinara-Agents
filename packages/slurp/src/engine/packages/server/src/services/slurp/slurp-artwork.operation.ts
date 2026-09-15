@@ -10,6 +10,7 @@ import { noodlerAvatarUrl, noodlerBannerUrl, unlinkNoodlerAvatar, unlinkNoodlerB
 import { resolveNoodlerImageConnectionId } from "./slurp-image-connections.js";
 import { resolveNoodlerCreatorArtwork } from "./slurp-public-profiles.service.js";
 import { tryNoodlerAccountOperation } from "./slurp-account-operation-lock.js";
+import { isConnectionAdmissionFailure } from "../generation/connection-admission.js";
 
 export type NoodlerArtworkOutcome = "idle" | "inherited" | "avatar" | "banner" | "unavailable";
 
@@ -162,6 +163,9 @@ export async function backfillNextNoodlerCreatorArtwork(db: DB): Promise<Noodler
       db,
       debugMode: false,
       previewOnly: false,
+      // Unattended work: yield the image connection to anything the user started, and never
+      // queue behind another background run.
+      admissionMode: { kind: "background" },
       width: kind === "banner" ? 1536 : 1024,
       height: kind === "banner" ? 512 : 1024,
       compositionGuard: artworkCompositionGuard(kind),
@@ -199,6 +203,8 @@ export async function tryBackfillNextNoodlerCreatorArtwork(db: DB): Promise<Nood
   try {
     return await backfillNextNoodlerCreatorArtwork(db);
   } catch (error) {
+    // A busy connection is not a failure: nothing was sent, so the next poll may simply try again.
+    if (isConnectionAdmissionFailure(error)) return "idle";
     logger.warn(error, "[noodler] Creator artwork backfill failed");
     return "unavailable";
   }

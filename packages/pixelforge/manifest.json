@@ -2,18 +2,18 @@
   "schemaVersion": 2,
   "capabilityApi": {
     "major": 1,
-    "minor": 10
+    "minor": 18
   },
   "builtAgainst": {
-    "engineVersion": "2.4.3",
-    "engineCommit": "bb551bf921c006922edac7be06dbea8fe4c999b9"
+    "engineVersion": "2.4.5",
+    "engineCommit": "19bcb60e4a5776448b5e6bc056b86e3e7d35b7af"
   },
   "id": "pixelforge",
   "name": "Pixelforge",
-  "version": "0.12.0",
+  "version": "0.16.8",
   "description": "A walkable pixel-art RPG Experience for Game Mode: your setup preferences generate the world — a cozy village or a sci-fi colony — then explore it, talk to NPCs to drive the story, and let the GM narrate, with World Maps integration and the engine's own combat. Install it, then choose Pixelforge as the Experience when creating a Game Mode chat.",
   "engine": {
-    "min": "2.4.3",
+    "min": "2.4.5",
     "maxExclusive": "4.0.0"
   },
   "kind": [
@@ -28,7 +28,20 @@
       "game-surface"
     ],
     "gameSurface": {
-      "surfaceClass": "pixelforge-surface"
+      "surfaceClass": "pixelforge-surface",
+      "prepareBeforeStart": true,
+      "setup": {
+        "seed": {
+          "key": "seed"
+        },
+        "config": {
+          "generate": true,
+          "packWanted": true
+        },
+        "requires": {
+          "enableCustomWidgets": false
+        }
+      }
     },
     "assets": {
       "paths": [
@@ -40,7 +53,8 @@
         "sprites/mira.png",
         "sprites/tam.png",
         "sprites/rook.png",
-        "sprites/fen.png"
+        "sprites/fen.png",
+        "gm-verbs.json"
       ]
     }
   },
@@ -52,23 +66,23 @@
     },
     {
       "path": "client.js",
-      "sha256": "c28bbb45012118b4f2cd7bd85ec8bf021ca0e1b282922519041f25ea38144957",
-      "bytes": 783187
+      "sha256": "31b4d27deeae31600b41b5b4711bc83fc604a207535ddb40e0d595d5ba45d9a1",
+      "bytes": 1447084
     },
     {
       "path": "tiles.png",
-      "sha256": "fa43cc6bed271ab2fad23103c0d334b3bb2e2bc29e8bb892e972939dbe85d8c0",
-      "bytes": 1749
+      "sha256": "5de85c28500b374553a41d93ebd1a0eac50b6d1242db175bd1970c4e435fcf0b",
+      "bytes": 1903
     },
     {
       "path": "tiles-sci-fi-colony.png",
-      "sha256": "026aa1323d029ce2c830bac17f86c45fa0cbf66a765237a43e8c598647ff0f17",
-      "bytes": 1723
+      "sha256": "a7b2ac362097a90c8176f0408863763bed4c244365c1dbe1821d5d92b3c3c87c",
+      "bytes": 1874
     },
     {
       "path": "atlas.json",
-      "sha256": "b65d92ce09639e9a59f3c344637b5f39e915240e3c546d6ccb2277b44c8b4fd0",
-      "bytes": 544
+      "sha256": "733d8078229f7e7a543f8073a62eb85b3fad77ec9334b1a70f0dc2d342bd5d7e",
+      "bytes": 629
     },
     {
       "path": "sprites.json",
@@ -99,6 +113,11 @@
       "path": "sprites/fen.png",
       "sha256": "5c27a49f7942c46a55e0c162112fdf9d6563a513e3c125df5c1fddf637676bf4",
       "bytes": 423
+    },
+    {
+      "path": "gm-verbs.json",
+      "sha256": "4fcc82a8d1342c3f8bd4101db17314f8659316825427bcb5e85dedea79b89a12",
+      "bytes": 1338
     }
   ],
   "permissions": [

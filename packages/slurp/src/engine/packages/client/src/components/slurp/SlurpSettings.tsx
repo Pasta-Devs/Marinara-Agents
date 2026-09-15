@@ -1,4 +1,15 @@
-import { CalendarClock, FileText, Loader2, Pencil, RefreshCw, RotateCcw, Save, Trash2, UsersRound } from "lucide-react";
+import {
+  CalendarClock,
+  Download,
+  FileText,
+  Loader2,
+  Pencil,
+  RefreshCw,
+  RotateCcw,
+  Save,
+  Trash2,
+  UsersRound,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -7,6 +18,9 @@ import {
   useDeleteNoodlerStageProfile,
   useDeleteAllSlurpData,
   useDeleteUnusedSlurpData,
+  getSlurpBackupJob,
+  startSlurpBackup,
+  downloadSlurpBackup,
   useAdoptNoodlerSourceIdentity,
   useDismissNoodlerSourceChanges,
   useNoodlerAccounts,
@@ -59,6 +73,8 @@ const DEFAULT_SLURP_GENERATION_GUIDANCE =
   "All Slurp creators and viewers are adults (18+). This is an adult creator page: flirty, suggestive, teasing, and sensual posts are common, and explicit posts appear regularly when they suit the creator — but they are not required and need not be the majority. Tease the locked posts and answer flirty comments in kind. Keep each creator's personality intact: a shy creator flirts shyly, a blunt one bluntly, a funny one filthily. Ordinary posts — updates, humor, behind the scenes, project news — matter just as much and keep both the page and the character human. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood.";
 const DEFAULT_SLURP_IMAGE_GENERATION_PROMPT =
   "Create a polished social-media image for an adult Creator post. Match the creator's identity, personality, body, clothing, and established visual details. Follow the post's mood and subject. Describe the pose, expression, setting, lighting, camera angle, composition, and visible details clearly. Flirty, suggestive, sensual, or explicit imagery is allowed when it fits the post and creator, but do not force sexual content into ordinary updates. Keep the image coherent, intentional, and suitable for a public or locked Creator feed.";
+const DEFAULT_SLURP_IMAGE_PROMPT_INTERPRETATION =
+  "Edit this image prompt into a provider-ready image prompt. Preserve the original subject, action, setting, composition, and visual style. Preserve any explicit style in the original prompt, character context, image instructions, or style guidance. Do not add realistic, photorealistic, photographic, camera, lens, or natural-lighting language unless the supplied context clearly requests that style. Do not convert an anime, cartoon, game, manga, comic, illustration, painterly, fantasy, or stylized character into a realistic image. When no style is specified, keep the prompt style-neutral. Do not invent an art style. Treat image instructions as guidance, not text to copy into the result. Return only the provider-ready image prompt.";
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Could not update settings.";
@@ -136,16 +152,20 @@ export function SlurpSettings({
   const [generationGuidanceEditorOpen, setGenerationGuidanceEditorOpen] = useState(false);
   const [imagePromptDraft, setImagePromptDraft] = useState("");
   const [imagePromptEditorOpen, setImagePromptEditorOpen] = useState(false);
+  const [imagePromptInterpretationDraft, setImagePromptInterpretationDraft] = useState("");
+  const [imagePromptInterpretationEditorOpen, setImagePromptInterpretationEditorOpen] = useState(false);
   const [refreshModalOpen, setRefreshModalOpen] = useState(false);
   const [refreshAccountIds, setRefreshAccountIds] = useState<Set<string>>(new Set());
+  const [refreshRemaining, setRefreshRemaining] = useState(0);
   const [refreshAccess, setRefreshAccess] = useState<"public" | "locked">("locked");
   const [scheduleCreatorId, setScheduleCreatorId] = useState<string | null>(null);
   useEffect(() => {
     if (settings) {
       if (!generationGuidanceEditorOpen) setGenerationGuidanceDraft(settings.generationGuidance);
       if (!imagePromptEditorOpen) setImagePromptDraft(settings.imageGenerationPrompt);
+      if (!imagePromptInterpretationEditorOpen) setImagePromptInterpretationDraft(settings.imagePromptInterpretation);
     }
-  }, [generationGuidanceEditorOpen, imagePromptEditorOpen, settings]);
+  }, [generationGuidanceEditorOpen, imagePromptEditorOpen, imagePromptInterpretationEditorOpen, settings]);
   const section = navigation.section ?? "general";
   const save = async (patch: Partial<SlurpSettings>) => {
     try {
@@ -164,11 +184,31 @@ export function SlurpSettings({
   const updateAuto = useUpdateNoodlerAutoPosting();
   const updateScheduleSlot = useUpdateNoodlerScheduleSlot();
   const refreshFans = useRefreshNoodlerFanActivityNow();
-  const refreshCreators = useRefreshTargetedNoodlerCreatorsNow();
+  const refreshCreators = useRefreshTargetedNoodlerCreatorsNow(setRefreshRemaining);
   const updateImages = useUpdateSlurpImageConnections();
   const deleteCreator = useDeleteNoodlerStageProfile();
   const deleteAllData = useDeleteAllSlurpData();
   const deleteUnusedData = useDeleteUnusedSlurpData();
+  const [backupJob, setBackupJob] = useState<Awaited<ReturnType<typeof getSlurpBackupJob>> | null>(null);
+  const [backupPending, setBackupPending] = useState(false);
+  useEffect(() => {
+    if (!backupJob || backupJob.state === "completed" || backupJob.state === "consumed" || backupJob.state === "error")
+      return;
+    const timer = window.setInterval(() => {
+      void getSlurpBackupJob(backupJob.id)
+        .then(setBackupJob)
+        .catch((error) =>
+          setBackupJob({
+            ...backupJob,
+            state: "error",
+            stage: "error",
+            detail: errorMessage(error),
+            error: errorMessage(error),
+          }),
+        );
+    }, 750);
+    return () => window.clearInterval(timer);
+  }, [backupJob]);
   const adoptSourceIdentity = useAdoptNoodlerSourceIdentity();
   const dismissSourceChanges = useDismissNoodlerSourceChanges();
   const connectionsQuery = useSlurpConnections(section === "general" || section === "images" || section === "creators");
@@ -334,6 +374,24 @@ export function SlurpSettings({
                   <option value="on_demand">{t("ui.slurp.settings.generationModeOnDemand")}</option>
                 </select>
               </Field>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label={t("ui.slurp.settings.images.width")} detail={t("ui.slurp.settings.images.widthDetail")}>
+                  <NumberSetting
+                    value={settings.imageWidth}
+                    min={64}
+                    max={4096}
+                    onSave={(value) => update("imageWidth", value)}
+                  />
+                </Field>
+                <Field label={t("ui.slurp.settings.images.height")} detail={t("ui.slurp.settings.images.heightDetail")}>
+                  <NumberSetting
+                    value={settings.imageHeight}
+                    min={64}
+                    max={4096}
+                    onSave={(value) => update("imageHeight", value)}
+                  />
+                </Field>
+              </div>
               <PromptCard
                 title="Generation guidance"
                 value={settings.generationGuidance}
@@ -388,6 +446,21 @@ export function SlurpSettings({
           {section === "images" && (
             <div className="space-y-6">
               <SectionTitle title={t("ui.slurp.settings.images.title")} detail={t("ui.slurp.settings.images.detail")} />
+              <Field
+                label={t("ui.slurp.settings.images.contextMode")}
+                detail={t("ui.slurp.settings.images.contextModeDetail")}
+              >
+                <select
+                  value={settings.imageContextMode}
+                  disabled={updateSettings.isPending}
+                  onChange={(event) => void update("imageContextMode", event.target.value)}
+                  className="h-10 w-full rounded-md border border-[var(--border)] bg-transparent px-3 text-sm disabled:opacity-50"
+                >
+                  <option value="auto">{t("ui.slurp.settings.images.contextAuto")}</option>
+                  <option value="imagePrompt">{t("ui.slurp.settings.images.contextPrompt")}</option>
+                  <option value="vision">{t("ui.slurp.settings.images.contextVision")}</option>
+                </select>
+              </Field>
               <GuidanceBox
                 title={t("ui.slurp.settings.images.howTitle")}
                 detail={t("ui.slurp.settings.images.howDetail")}
@@ -453,6 +526,18 @@ export function SlurpSettings({
                   onChange={(value) => update("autoPostingImagesEnabled", value)}
                 />
               </div>
+              {settings.enableImageInterpretation && (
+                <PromptCard
+                  title={t("ui.slurp.settings.images.interpretationInstructions")}
+                  value={settings.imagePromptInterpretation}
+                  isDefault={settings.imagePromptInterpretation === DEFAULT_SLURP_IMAGE_PROMPT_INTERPRETATION}
+                  onEdit={() => {
+                    setImagePromptInterpretationDraft(settings.imagePromptInterpretation);
+                    setImagePromptInterpretationEditorOpen(true);
+                  }}
+                  onRestore={() => void save({ imagePromptInterpretation: DEFAULT_SLURP_IMAGE_PROMPT_INTERPRETATION })}
+                />
+              )}
               <PromptCard
                 title={t("ui.slurp.settings.images.instructions")}
                 value={settings.imageGenerationPrompt}
@@ -694,6 +779,53 @@ export function SlurpSettings({
                 detail={t("ui.slurp.settings.advanced.detail")}
               />
               <div className="rounded-md border border-[var(--border)] p-4">
+                <h2 className="text-sm font-semibold">{t("ui.slurp.settings.advanced.backupTitle")}</h2>
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
+                  {t("ui.slurp.settings.advanced.backupDetail")}
+                </p>
+                <button
+                  type="button"
+                  disabled={backupPending}
+                  onClick={() => {
+                    setBackupPending(true);
+                    void startSlurpBackup()
+                      .then(async (job) => {
+                        setBackupJob(job);
+                        let current = job;
+                        while (current.state !== "completed" && current.state !== "error") {
+                          await new Promise((resolve) => window.setTimeout(resolve, 750));
+                          current = await getSlurpBackupJob(job.id);
+                          setBackupJob(current);
+                        }
+                        if (current.state === "error") throw new Error(current.error ?? current.detail);
+                        await downloadSlurpBackup(job.id);
+                        toast.success(t("ui.slurp.settings.advanced.backupSuccess"));
+                      })
+                      .catch((error) => toast.error(errorMessage(error)))
+                      .finally(() => setBackupPending(false));
+                  }}
+                  className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+                >
+                  {backupPending ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                  {t("ui.slurp.settings.advanced.backupButton")}
+                </button>
+                {backupJob && (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="mt-3 rounded-md bg-[var(--accent)] px-3 py-2 text-xs leading-5 text-[var(--muted-foreground)]"
+                  >
+                    <p className="font-semibold">{backupJob.stage}</p>
+                    <p>{backupJob.detail}</p>
+                    <p className="mt-1">
+                      {backupJob.creators} creators · {backupJob.posts} posts · {backupJob.interactions} interactions ·{" "}
+                      {backupJob.mediaCompleted}/{backupJob.mediaFiles} media files · {backupJob.mediaBytes} bytes
+                    </p>
+                    {backupJob.error && <p className="mt-1 text-red-300">{backupJob.error}</p>}
+                  </div>
+                )}
+              </div>
+              <div className="rounded-md border border-[var(--border)] p-4">
                 <h2 className="text-sm font-semibold">{t("ui.slurp.settings.advanced.setupAgain")}</h2>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
                   {t("ui.slurp.settings.advanced.setupAgainDetail")}
@@ -911,6 +1043,7 @@ export function SlurpSettings({
                 <button
                   type="button"
                   onClick={() => setRefreshAccountIds(new Set(automationCreators.map((creator) => creator.id)))}
+                  disabled={refreshCreators.isPending}
                   className="text-[var(--noodle-accent)] hover:underline"
                 >
                   {t("ui.slurp.settings.refresh.selectAll")}
@@ -918,6 +1051,7 @@ export function SlurpSettings({
                 <button
                   type="button"
                   onClick={() => setRefreshAccountIds(new Set())}
+                  disabled={refreshCreators.isPending}
                   className="text-[var(--muted-foreground)] hover:underline"
                 >
                   {t("ui.slurp.settings.refresh.clear")}
@@ -933,6 +1067,7 @@ export function SlurpSettings({
                   <input
                     type="checkbox"
                     checked={refreshAccountIds.has(creator.id)}
+                    disabled={refreshCreators.isPending}
                     onChange={(event) =>
                       setRefreshAccountIds((current) => {
                         const next = new Set(current);
@@ -963,6 +1098,7 @@ export function SlurpSettings({
                   key={access}
                   type="button"
                   aria-pressed={refreshAccess === access}
+                  disabled={refreshCreators.isPending}
                   onClick={() => setRefreshAccess(access)}
                   className={`min-h-10 rounded-md text-sm font-semibold capitalize ${refreshAccess === access ? "bg-[var(--noodle-accent)] text-zinc-950" : "text-[var(--muted-foreground)] hover:bg-[var(--accent)]"}`}
                 >
@@ -1006,7 +1142,11 @@ export function SlurpSettings({
               className="inline-flex min-h-10 items-center gap-2 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-50"
             >
               {refreshCreators.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-              {t("ui.slurp.settings.refresh.generate", { count: refreshAccountIds.size || "" })}
+              <span role={refreshCreators.isPending ? "status" : undefined}>
+                {refreshCreators.isPending
+                  ? t("ui.slurp.settings.refresh.remaining", { count: refreshRemaining })
+                  : t("ui.slurp.settings.refresh.generate", { count: refreshAccountIds.size || "" })}
+              </span>
             </button>
           </div>
         </div>
@@ -1075,6 +1215,23 @@ export function SlurpSettings({
           if (await saveGenerationGuidance()) setGenerationGuidanceEditorOpen(false);
         }}
         onRestore={() => setGenerationGuidanceDraft(DEFAULT_SLURP_GENERATION_GUIDANCE)}
+        pending={updateSettings.isPending}
+      />
+      <PromptEditor
+        open={imagePromptInterpretationEditorOpen}
+        title={t("ui.slurp.settings.images.interpretationInstructions")}
+        value={imagePromptInterpretationDraft}
+        onChange={setImagePromptInterpretationDraft}
+        onClose={() => {
+          setImagePromptInterpretationDraft(settings.imagePromptInterpretation);
+          setImagePromptInterpretationEditorOpen(false);
+        }}
+        onSave={async () => {
+          if (await save({ imagePromptInterpretation: imagePromptInterpretationDraft })) {
+            setImagePromptInterpretationEditorOpen(false);
+          }
+        }}
+        onRestore={() => setImagePromptInterpretationDraft(DEFAULT_SLURP_IMAGE_PROMPT_INTERPRETATION)}
         pending={updateSettings.isPending}
       />
       <PromptEditor

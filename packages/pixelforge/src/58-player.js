@@ -230,8 +230,74 @@ const evictNotices = (rows) => {
   return out;
 };
 
+// ── The disposition ladder's promotion line (P2, plan §13) ────────────────────
+// The ladder has been in the block since 0.11 — d 0..3, stored, capped, merged,
+// evicted — and for four releases nothing in the game ever moved it: every bump
+// wrote `t` and `s`, every resident stayed d 0, and the journal counted a town
+// of permanent strangers. 0.15 is where it moves, and the WHOLE heuristic is
+// this table: a rung is EARNED when the encounter count crosses its line.
+//
+// Encounters are already weighted at the verb sites — an accepted talk turn, a
+// purchase and a night's berth each count one, and a finished job counts three
+// (61-pack settle(); the reward ruling's "money and the giver's rapport" finally
+// cashing out as movement rather than a tally). So the lines below read in
+// those units: acquainted after a few real exchanges, friendly after sustained
+// business or a couple of jobs, close after the kind of history a player builds
+// on purpose. Numbers are alpha tuning, one edit each, and deliberately high
+// enough that one conversation's presses cannot vault a rung (§12.3's four-bump
+// question is absorbed here: four sends in one window is four points, short of
+// friendly from any distance).
+//
+// PROMOTION IS A CROSSING, NOT A CEILING. bump() promotes only when the count
+// moves from below a line to at-or-past it, and never demotes — so a `d` set
+// PRECISELY (the standing command's arm) stays where it was put unless a NEW
+// line is crossed. A max() over the table would have quietly
+// re-promoted anybody a future demotion verb tried to lower, and fighting the
+// GM is the one thing the heuristic must never do. Hostility is not on this
+// ladder at all: `h` is a flag beside it, set and cleared by the storyteller's
+// standing command (62-gm, shipped in 0.16.0) rather than by any of bump's
+// heuristic callers.
+const PROMOTION = [3, 10, 25]; // t at which d 1, 2, 3 are earned
+
+// ── THE VERB CLASSES (0.15, the maintainer's ruling) ──────────────────────────
+// Saying good morning and asking after the rumors should not, over enough
+// mornings, make you somebody's best friend. Small interactions raise standing
+// only to a point; doing jobs, running quests, being business partners are what
+// carry it past acquaintance. So every bump has a CLASS, carried by the call and
+// stored nowhere:
+//
+//   CASUAL (the default, and the talk press — plus any ask-menu read that ever
+//   grows one) builds `t` forever and can never leave a row above ACQUAINTED.
+//   Past that ceiling its encounters accumulate and nothing else happens.
+//
+//   MEANINGFUL (`patch.meaningful`) is the job settle and the two commerce sites
+//   — a berth let and a rod sold, which is what "business partner" means in a
+//   package with two shops. It may cross any line, one rung per press.
+//
+// THE PADDING CONSEQUENCE, stated rather than discovered: casual encounters DO
+// count toward the higher thresholds, so a hundred greetings leave a row that
+// one job lifts straight to friendly. What small talk cannot be is the press
+// that CROSSES — and the crossing press still buys one rung and no more.
+//
+// The class is a field of the PATCH, read here and never written to a row: the
+// wire is 0.11's, to the byte, and `meaningful` never reaches it.
+const CASUAL_CEILING = 1; // the highest rung small talk alone can leave a row on
+
+/** The rung the encounter count has EARNED, 0..3. */
+function rungOf(t) {
+  let rung = 0;
+  for (let step = 0; step < PROMOTION.length; step++) if (t >= PROMOTION[step]) rung = step + 1;
+  return rung;
+}
+
 PF.player = {
   CAPS,
+  // The ladder's words, one authority for every surface that says them — the
+  // window title, the promotion toast, the turn header and the journal all read
+  // from here, because two spellings of "acquainted" is a bug report waiting.
+  // Theme-BLIND on purpose (plan §2.8): a stranger is a stranger in any world.
+  RUNGS: ["stranger", "acquainted", "friendly", "close friend"],
+  PROMOTION,
   QUALITY,
   TOOL_TYPES,
   MIGRATIONS: PLAYER_MIGRATIONS,
@@ -682,14 +748,9 @@ PF.player = {
         if (Object.keys(keep).length) player.rel[zoneId] = keep;
         else delete player.rel[zoneId];
       }
-      const giverName = (g) => {
-        const text = str(g);
-        const bar = text.indexOf("|");
-        return bar >= 0 ? text.slice(bar + 1) : text;
-      };
-      const severedQuests = player.quests.active.filter((q) => minted.has(giverName(q.g)));
+      const severedQuests = player.quests.active.filter((q) => minted.has(this.giverOf(q.g)));
       if (severedQuests.length) {
-        player.quests.active = player.quests.active.filter((q) => !minted.has(giverName(q.g)));
+        player.quests.active = player.quests.active.filter((q) => !minted.has(this.giverOf(q.g)));
         touched = true;
       }
       if (!touched) {
@@ -790,18 +851,13 @@ PF.player = {
       for (const npc of world.zones[zoneId].npcs ?? []) if (npc && npc.name) known.add(npc.name);
     }
     if (!known.size) return { dropped: [], notices };
-    const giverName = (g) => {
-      const text = str(g);
-      const bar = text.indexOf("|");
-      return bar >= 0 ? text.slice(bar + 1) : text;
-    };
-    const dangling = active.filter((q) => !known.has(giverName(q.g)));
+    const dangling = active.filter((q) => !known.has(this.giverOf(q.g)));
     if (!dangling.length) return { dropped: [], notices };
     if (dangling.length === active.length) {
       // ALL of them. That is a statement about the world, not the quests.
       return { dropped: [], notices };
     }
-    player.quests.active = active.filter((q) => known.has(giverName(q.g)));
+    player.quests.active = active.filter((q) => known.has(this.giverOf(q.g)));
     // A LOSS, and the sentence has to say so. The rows above are PARKED — set
     // aside, recoverable, and their copy says as much — while this quest is
     // dropped and nothing brings it back. "No one left to hand it back to" is
@@ -889,20 +945,42 @@ PF.player = {
 
   /** Dedupe active quests by id. `liveCount` is how many of the leading rows
    *  came from the LIVE block: the row the player is playing wins outright, and
-   *  two parked copies of one quest fall back to whichever got further. */
+   *  two parked copies of one quest fall back to whichever got further.
+   *
+   *  BOARD INSTANCES DEDUPE AT TEMPLATE GRAIN, which is wider than the id and has
+   *  to be (0.13). A board instance id carries the day it was offered on
+   *  (`b1.d37.<template>` — 61-pack `instanceId`), so two instances of ONE template
+   *  taken on different days never collide by id, and the "at most one live
+   *  instance per template" invariant the offer layer enforces has NO owner below
+   *  it. The restore paths are exactly where that bites: a mint severance parks a
+   *  row, the player takes the same work again tomorrow, and the mint restore
+   *  CONCATs the parked copy back onto the live list — two live rows for one job,
+   *  both of which the progress site would advance.
+   *
+   *  The preference order does not move: live first, then furthest along. Only what
+   *  counts as "the same quest" widens.
+   *
+   *  Read through `PF.pack` rather than re-deriving the id shape here, in 20-world's
+   *  `PF.art?.setTheme` idiom: this file owns the ROW and the pack layer owns the
+   *  convention for the ids it mints, and a second copy of that shape is how the
+   *  dedupe comes to disagree with the counter about which template a row belongs
+   *  to. Absent pack layer, absent convention — the key falls back to the id, which
+   *  is the behaviour this function had before the board existed and the right one
+   *  for any world with no board in it. */
   _dedupeActive(active, liveCount) {
     const held = new Map();
     active.forEach((q, index) => {
       const id = str(q?.id);
       if (!id) return;
+      const key = PF.pack?.templateOf?.(id) ?? id;
       const live = index < liveCount;
-      const prior = held.get(id);
+      const prior = held.get(key);
       if (!prior) {
-        held.set(id, { q, live });
+        held.set(key, { q, live });
         return;
       }
       if (prior.live) return;
-      if (live || posInt(q?.have, 0) > posInt(prior.q?.have, 0)) held.set(id, { q, live });
+      if (live || posInt(q?.have, 0) > posInt(prior.q?.have, 0)) held.set(key, { q, live });
     });
     return [...held.values()].map((row) => row.q);
   },
@@ -1257,10 +1335,27 @@ PF.player = {
   },
 
   /** Move a relationship. `patch` is { d, t, h, s }: d is the 0-3 ladder, t
-   *  counts encounters, h flags hostility, s is the last line worth remembering.
+   *  counts encounters (weighted at the verb sites — a finished job is three),
+   *  h flags hostility, s is the last line worth remembering.
    *  Two caps bite here and they bite DIFFERENTLY (plan §4): the row cap evicts
    *  whole STRANGER rows, and the line cap evicts the oldest LINE and leaves the
-   *  row standing. */
+   *  row standing.
+   *
+   *  THE LADDER MOVES HERE AND NOWHERE ELSE (0.15, plan §13). When the patch
+   *  carries no explicit `d`, an encounter that crosses a PROMOTION line lifts
+   *  the rung — a crossing, never a max(), so a precisely-set d is not fought
+   *  (the header note above bump's table says why). An explicit `d` stays the
+   *  SETTER it has always been: the storyteller's standing command (62-gm) writes
+   *  through that arm, and the crossing below is gated on its absence.
+   *
+   *  `patch.meaningful` is the VERB CLASS, not a stored field: without it the
+   *  bump is small talk and can never leave the row above acquainted; with it
+   *  the press may cross any line. Either way a single call moves the row AT
+   *  MOST ONE RUNG. The header note above CASUAL_CEILING has the ruling.
+   *
+   *  Returns `{ row, rose }` — `rose` is the new rung when THIS call earned one
+   *  and 0 otherwise, so a caller with a toast to show knows without diffing.
+   *  Refusal is still `null`, exactly as documented at the cap. */
   bump(core, zoneId, name, patch, gen) {
     const p = this._live(core, gen);
     if (!p) return null;
@@ -1281,6 +1376,8 @@ PF.player = {
       row = { d: 0, t: 0 };
       rows[who] = row;
     }
+    let rose = 0;
+    const tBefore = posInt(row.t, 0);
     if (patch && typeof patch === "object") {
       if (patch.d !== undefined) row.d = PF.clamp(posInt(patch.d, 0), 0, 3);
       row.t = posInt(row.t, 0) + Math.max(0, posInt(patch.t, patch.t === undefined ? 1 : 0));
@@ -1306,8 +1403,50 @@ PF.player = {
     } else {
       row.t = posInt(row.t, 0) + 1;
     }
+    // The crossing. Gated on the ABSENCE of an explicit d — a patch that set the
+    // ladder said exactly where it wanted the row, and the heuristic yields.
+    //
+    // TWO RULES, and between them they are the ruling in the header note above:
+    //   1. THE CEILING is the verb class's. Casual tops out at acquainted; only
+    //      a meaningful press reaches the rungs above it.
+    //   2. ONE RUNG PER PRESS, whatever the count has earned. Without it
+    //      `row.d = earned` was a max() in disguise — a row a demotion put on
+    //      the floor at `t` 9 was handed TWO rungs by one good morning, because
+    //      the count was still high and there was still a line under it to cross.
+    //
+    // The crossing is measured on the TRUE count, not on the capped landing: a
+    // casual hello that carries `t` over the friendly line HAS crossed a line,
+    // and lands on the casual ceiling. Casual promotion still requires one,
+    // which is what keeps the heuristic from re-fighting a precise demotion on
+    // every subsequent hello. A meaningful press does not require one, because
+    // a padded row is already past every line it could cross — and freezing the
+    // player out of the ladder for having been friendly is not the ruling.
+    if (!(patch && typeof patch === "object" && patch.d !== undefined)) {
+      const meaningful = !!(patch && typeof patch === "object" && patch.meaningful);
+      const count = rungOf(posInt(row.t, 0));
+      const held = posInt(row.d, 0);
+      const earned = Math.min(count, meaningful ? PROMOTION.length : CASUAL_CEILING);
+      if ((meaningful || count > rungOf(tBefore)) && earned > held) {
+        row.d = Math.min(earned, held + 1);
+        rose = row.d;
+      }
+    }
     this._touch(core);
-    return row;
+    return { row, rose };
+  },
+
+  /** Where the player stands with one person: `{ d, h }`, zeros for a stranger
+   *  and for anybody the block has never met — the ladder read the window, the
+   *  header and the pack all share (0.15, plan §13). Read-only and cheap on
+   *  purpose: it is called from a per-turn composer and from a window that
+   *  rebuilds on every press, so it allocates one small literal and touches
+   *  nothing. */
+  rung(core, zoneId, name) {
+    const p = this.get(core);
+    const rows = p ? this._ownRead(p.rel, str(zoneId)) : undefined;
+    const row = rows && typeof rows === "object" ? this._ownRead(rows, str(name)) : undefined;
+    if (!row || typeof row !== "object") return { d: 0, h: false };
+    return { d: PF.clamp(posInt(row.d, 0), 0, 3), h: !!row.h };
   },
 
   _relRowCount(p) {
@@ -1405,6 +1544,21 @@ PF.player = {
     }
   },
 
+  /** WHO IS OWED THIS QUEST: the half of a row's `g` after the bar.
+   *
+   *  `g` is `"zoneId|Name"` and every reader of it wants the name — severance
+   *  asks whether a mint took the giver away, the repair pass asks whether the
+   *  world still stands them up, and 61-pack's completion asks whether there is
+   *  anybody left to thank. This was written out three times in two files before
+   *  the third caller existed to make the point; one door means a `g` that ever
+   *  changes shape changes it in one place. A bar-less value is the whole name,
+   *  which is what a row written before the zone half existed carries. */
+  giverOf(g) {
+    const text = str(g);
+    const bar = text.indexOf("|");
+    return bar >= 0 ? text.slice(bar + 1) : text;
+  },
+
   /** Quest state. `action` is accept | progress | complete | abandon. Board
    *  completions ("b:") are world-FREE (the board is a generated template); pack
    *  completions ("p:") are world-bound and live under quests. */
@@ -1444,8 +1598,10 @@ PF.player = {
     if (action !== "complete") return false;
     active.splice(index, 1);
     // The completion counter is keyed by the quest's TEMPLATE, not its instance:
-    // "b1.d37.2" is the third delivery this world generated, and what the board
-    // needs to know is how many deliveries the player has run.
+    // `b1.d<day>.<templateId>` says which board posted the work, which DAY it was
+    // posted on and which template it came from, and what the board needs to know
+    // is how many times the player has run THAT piece of work — so two carp
+    // orders a week apart are one counter at two, never two counters at one.
     const template = str(payload?.template ?? row.id);
     const board = template.startsWith("p:") ? p.quests.done_pack : p.quests_done_board;
     const cap = board === p.quests.done_pack ? CAPS.packDone : CAPS.boardDone;
@@ -1460,7 +1616,23 @@ PF.player = {
       this._trimCounters(board, cap - 1);
     }
     if (template && template !== "__proto__") board[template] = posInt(standing, 0) + 1;
-    this.award(core, { money: row.r?.money, xp: row.r?.xp, verb: row.verb }, gen);
+    // NO VERB, AND NO FALLBACK TO THE ROW'S (the maintainer's reward ruling,
+    // plan §2.6). Quests never grant SKILL experience. A quest's task may raise a
+    // skill — catching fish for a catch order levels fishing, because the
+    // CATCHING does, through fish()'s own award — but the reward itself is money
+    // and the giver's rapport and nothing else.
+    //
+    // `r.xp` still rides the payload rather than being dropped here, and that is
+    // the point of the line: 61-pack's derivation writes xp = 0 by construction,
+    // so an honest row has nothing to pay, and this is what answers a row that
+    // never came from the derivation — a hand-edited chatMeta, a save from
+    // another build, a forward client's row. `accept` above copies `r` as given
+    // (the row is a closed literal and this mutator trusts its caller), so a
+    // planted xp reaches here intact; award() applies the money and drops the
+    // experience on the floor precisely because there is no verb to key a ladder
+    // off. Passing `row.verb` instead — which is what this line used to do —
+    // minted {"catch":{"l":1,"x":5}} into a block that had never fished.
+    this.award(core, { money: row.r?.money, xp: row.r?.xp, verb: null }, gen);
     this._touch(core);
     return true;
   },

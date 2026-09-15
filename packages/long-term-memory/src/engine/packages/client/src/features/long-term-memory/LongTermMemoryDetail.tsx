@@ -141,6 +141,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const [requestedSource, setRequestedSource] = useState<{
     key: number;
     source: SourceTab;
+    sourceNoteId?: string;
   } | null>(null);
   const [selectedSource, setSelectedSource] = useState<SourceTab>("chats");
   const [openActivityRequest, setOpenActivityRequest] = useState(0);
@@ -310,12 +311,12 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     setDestinationDirty(false);
     setDestination("vault");
   };
-  const openSources = async (source?: SourceTab) => {
+  const openSources = async (source?: SourceTab, sourceNoteId?: string) => {
     if (!(await confirmDestinationChange(destinationLabel("sources")))) return false;
     setDestinationDirty(false);
     setAddOpen(false);
     if (source) {
-      setRequestedSource({ key: Date.now(), source });
+      setRequestedSource({ key: Date.now(), source, sourceNoteId });
       setSelectedSource(source);
     }
     setDestination("sources");

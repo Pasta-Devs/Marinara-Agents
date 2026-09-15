@@ -10,6 +10,27 @@
 // session disagreeing about when the evening starts.
 PF.DAYPART_STARTS = { dawn: 5 * 60, day: 7 * 60, dusk: 18 * 60, night: 21 * 60 };
 
+/** THE FOUR TILES A PLAYER IS "AT" — the shared half of the two proximity reads
+ *  below, and only that half. Standing corner-on to a pond is standing NEAR the
+ *  bank rather than at it, and both reads had that decision written out as their
+ *  own four-element literal: one edit to reach eight neighbours, two places to
+ *  make it, and a package where the board and the water disagreed about what
+ *  "at" means.
+ *
+ *  WHAT IS DELIBERATELY NOT SHARED is everything each read does with these
+ *  tiles. `nearFeature` keeps its TWO-SIDED test — the tile is water AND lies in
+ *  a registry rect — and its bounds check; `nearBoard` keeps its reserved-id
+ *  lookup and no water term at all. Merging those would be the bug: the water
+ *  term is what says which pond a bank belongs to, and a board rect holds no
+ *  water tile by construction. The lanes that stand at one and not the other are
+ *  what hold that line. */
+const ORTHOGONAL_NEIGHBOURS = (tx, ty) => [
+  [tx, ty - 1],
+  [tx, ty + 1],
+  [tx - 1, ty],
+  [tx + 1, ty],
+];
+
 PF.Sim = class {
   constructor(world) {
     this.world = world;
@@ -26,10 +47,39 @@ PF.Sim = class {
     this._clockAcc = 0;
     this.nearNpc = null;
     this.nearPortal = null;
+    // The lattice edge within reach, or null (see step()) — a FIFTH proximity
+    // read, on the same terms as the four beside it and derived from the zone's
+    // own `gates` list, which only a lattice-participating zone carries.
+    this.nearGate = null;
     // The named feature the player is standing at, or null (see step()). Derived
     // per frame from the zone's own register (20-world makeZone.features), which
     // is itself derived — nothing here is ever saved.
     this.nearFeature = null;
+    // The quest board within reach, or null (see step()) — the FOURTH proximity
+    // read, off the same register and on the same terms as the third.
+    this.nearBoard = null;
+    // THE DAY'S QUEST RECEIPTS: {day, templates:Set} once anything has been
+    // filled today, and rebuilt by its owner on the first read of a new day
+    // (61-pack `filledToday`, which is the only writer and says why the set is
+    // keyed by template). Declared here rather than sprung into existence,
+    // exactly as `_envelopeExtra` is: a field the sim carries is a field the sim
+    // names. NEVER SERIALIZED and never restored — a reload starts the day's
+    // receipts empty, which is the recorded cost of the rule.
+    this._filled = null;
+    // THE CONVERSATION LATCH (plan §2.5): the id of the person a conversation is
+    // live with, or null. ONE FIELD WITH ONE MEANING, and four readers spend it —
+    // the clock gate below (an open talk window stops time), the partner freeze in
+    // `stepNpcs`, the window's mounted predicate (70-hud) and the paid press's
+    // prologue (90-element). Set only by the window opening; cleared by every leave
+    // condition, by `setMode`'s walk entry, by the two clock movers, and by the
+    // teardown seams.
+    //
+    // DECLARED HERE rather than sprung into existence, on `_filled`'s own rule one
+    // line up — and load-bearing rather than tidy: a leaked latch is a world where
+    // time never passes, so a fresh sim must be born with the clock running, and
+    // the gate must read the same shape on a sim that has never seen a window.
+    // RUNTIME-ONLY: never serialized, never restored.
+    this.talkAnchorId = null;
     this._npcTimers = new Map();
     this._rnd = PF.rng((world.seed ^ 0x9e3779b9) >>> 0);
     this.dirty = false; // save-worthy change happened
@@ -50,6 +100,30 @@ PF.Sim = class {
     // fold its narration box away so the world has the screen to itself.
     this.cutscene = null;
     this._vistaArmed = true;
+    // THE GM'S SKY, when one has been set. Hydrated from chat metadata by
+    // simFromSaved and re-read on every rebuild; NEVER serialized — it is not an
+    // envelope key and it never will be. DECLARED HERE, above the
+    // resolveSchedules() below, and that placement is load-bearing: the schedule
+    // bias reads the weather, so a field appended after that call would be
+    // `undefined` at the first read on every world at load time. (weather() and
+    // 17-weather's at() both tolerate a nullish override regardless.)
+    this.weatherOverride = null;
+    // The serialized last-APPLIED metadata fold. The mid-session reconciler
+    // compares chat metadata against THIS and never against `weatherOverride`
+    // itself — so a console-written runtime sky is invisible to it, and the
+    // reconciler cannot mistake "the metadata key is still absent" for "the
+    // player's override was just cleared".
+    this._weatherMetaApplied = "";
+    // Day-keyed cache for weather(): the render pass reads the sky every frame
+    // for its tint and particles, and the raw derivation is a template literal, a
+    // string hash and an rng construction. A perf cache and NOT a transition
+    // detector — the ledger park derives both sides of a crossing itself.
+    this._weatherMemo = null;
+    // Notable-sky lines the clock movers parked, waiting for a frame to file
+    // them. `{text, day}` rows, because the day is the day it HAPPENED: a
+    // multi-day fishing session files day 12's snow under day 12 and not under
+    // the day the drain ran. Runtime-only, capped, never saved.
+    this._weatherNotes = [];
     // Place everyone for the starting clock. A restore overwrites clockMin
     // AFTER construction and calls this again (see 60-save simFromSaved).
     this.resolveSchedules();
@@ -96,6 +170,37 @@ PF.Sim = class {
     this.dirty = true;
   }
 
+  /** WALK THROUGH A LATTICE EDGE (0.16 §2.3) — materialize what is over there,
+   *  land on its facing doorway, and report what actually happened.
+   *
+   *  MATERIALIZE FIRST, ALWAYS. `ensure` is idempotent and hands a resident zone
+   *  straight back, so the walk home through the settlement's own gate is the
+   *  same call as the first step into country nobody has compiled — and a gate
+   *  into an evicted neighbour cannot be a dead doorway by construction rather
+   *  than by policy.
+   *
+   *  IT COMPUTES ITS OWN TRUTH, which the record loop above does not: that loop
+   *  returns `zoneChanged: true` whether or not its guarded teleport was
+   *  refused, so a record naming a zone this world does not own fires an arrival
+   *  for a zone the player never left. Nothing here can: the answer is whether
+   *  the player is standing in the zone we were asked to move them to.
+   *
+   *  Null means "not a crossing" — a refusal from a builder that threw, a cell
+   *  the lattice does not speak for, or a destination with no doorway facing
+   *  back. The caller falls through and finishes the frame normally, so the tile
+   *  is INERT rather than a hole: the other proximity reads still run, the step
+   *  still returns `zoneChanged: false`, and the player walks away from it. */
+  _crossGate(z, gate) {
+    const id = PF.lattice.gateTargetId(this.world, z, gate);
+    if (!id) return null;
+    const dest = PF.lattice.ensure(this.world, id);
+    if (!dest) return null;
+    const arrival = PF.lattice.arrivalFor(dest, gate.dir);
+    if (!arrival) return null;
+    this.teleport(id, arrival.x, arrival.y);
+    return { zoneChanged: this.zoneId === id };
+  }
+
   step(dt, input) {
     const z = this.zone();
     // A beat is WALK-ONLY and never survives the screen changing hands. Dialogue,
@@ -137,6 +242,32 @@ PF.Sim = class {
         }
         if (Math.abs(p.x - tx) + Math.abs(p.y - ty) <= 1) this.nearPortal = p;
       }
+      // THE LATTICE EDGE — AFTER the record loop and never instead of it (0.16
+      // §2.3). Records keep priority, so shipped traversal is untouched: where a
+      // portal and a gate could both answer for one tile the compiler writes no
+      // gate at all, and this loop only ever sees edges nothing else owns.
+      //
+      // A gate is a border tile with a direction, and where it LEADS is
+      // arithmetic on the cell the zone stands in — resolved here, at step time,
+      // off no record whatsoever. That is what makes eviction safe: there is
+      // nothing to dangle when a neighbour goes and nothing to duplicate when it
+      // comes back, and re-entering an evicted cell is this same branch.
+      //
+      // The shape mirrors the record loop above it deliberately, INCLUDING the
+      // adjacency arm's Manhattan reach: the frame the player is standing ON the
+      // gate is the frame they leave, so a label computed only under their feet
+      // would compute and never render. Standing beside it is when the signpost
+      // is worth reading.
+      this.nearGate = null;
+      if (z.gates) {
+        for (const g of z.gates) {
+          if (g.x === tx && g.y === ty) {
+            const crossed = this._crossGate(z, g);
+            if (crossed) return crossed;
+          }
+          if (Math.abs(g.x - tx) + Math.abs(g.y - ty) <= 1) this.nearGate = g;
+        }
+      }
       // nearest interactable NPC within reach
       this.nearNpc = null;
       let best = 26; // px
@@ -158,17 +289,12 @@ PF.Sim = class {
       // those by design (the wilds ford lays path straight across its stream,
       // and a compiled pool's well stands inside the anchor rect beside it).
       //
-      // Four neighbours, not eight: standing corner-on to a pond is standing
-      // near the bank, not at it. Skipped whole on a zone with no register,
-      // which is most of them.
+      // Four neighbours, not eight (ORTHOGONAL_NEIGHBOURS, one file up): standing
+      // corner-on to a pond is standing near the bank, not at it. Skipped whole on
+      // a zone with no register, which is most of them.
       this.nearFeature = null;
       if (z.features.length) {
-        for (const [nx, ny] of [
-          [tx, ty - 1],
-          [tx, ty + 1],
-          [tx - 1, ty],
-          [tx + 1, ty],
-        ]) {
+        for (const [nx, ny] of ORTHOGONAL_NEIGHBOURS(tx, ty)) {
           if (nx < 0 || ny < 0 || nx >= z.w || ny >= z.h) continue;
           if (z.ground[ny * z.w + nx] !== "water") continue;
           const row = z.features.find(
@@ -180,15 +306,62 @@ PF.Sim = class {
           }
         }
       }
+      // THE BOARD WITHIN REACH, the fourth read beside the three above and
+      // recomputed on the same terms: every walking frame, off the feet tile,
+      // null the moment they step away.
+      //
+      // The same four neighbours, and NO WATER TERM. The two-sided test one block up
+      // cannot serve here: it is water that says which pond a bank belongs to, and
+      // a board rect holds no water tile by construction (20-world refuses one).
+      // What is left is the rect alone — which is safe here for the reason it is
+      // not safe up there: this rect is a single tile and IS the fixture, rather
+      // than a placer's extent with margin around it.
+      //
+      // Found by the RESERVED ID rather than by tag or by position: there is
+      // exactly one board per settlement and its key is the one fixed key on the
+      // register, so a brief that named a feature after it still cannot be one.
+      this.nearBoard = null;
+      const board = z.features.length ? z.features.find((f) => f.id === PF.world.BOARD_FEATURE_ID) : null;
+      if (board) {
+        for (const [nx, ny] of ORTHOGONAL_NEIGHBOURS(tx, ty)) {
+          if (
+            nx >= board.rect.x &&
+            nx < board.rect.x + board.rect.w &&
+            ny >= board.rect.y &&
+            ny < board.rect.y + board.rect.h
+          ) {
+            this.nearBoard = board;
+            break;
+          }
+        }
+      }
     }
     // NPCs keep wandering in walk AND dialogue (the world stays alive while you
-    // read), but the CLOCK only advances while walking: a conversation should
-    // never burn the afternoon, and a daypart boundary crossing mid-dialogue
-    // would relocate the very NPC you are talking to. Package-local clock only —
-    // never the host time endpoints (issue #5076).
+    // read), but the CLOCK only advances while walking WITH NO TALK WINDOW OPEN: a
+    // conversation should never burn the afternoon, and a daypart boundary crossing
+    // mid-dialogue would relocate the very NPC you are talking to. Package-local
+    // clock only — never the host time endpoints (issue #5076).
+    //
+    // THE LATCH IS THE SECOND HALF OF THAT SENTENCE (plan §2.5, ruling B2-3b). The
+    // talk window keeps the player in WALK mode on purpose — they stay mobile — so
+    // the mode test alone stops nothing, and the freeze the 0.12 precedent above
+    // describes is extended one latch over. `_clockAcc` is inside the gate and not
+    // beside it: an accumulator that kept filling would bank the minutes and dump
+    // them the instant the window closed, which is the same afternoon burnt with
+    // one frame of delay.
+    //
+    // `stepCutscene` rides the same gate. A beat takes its seconds from `dt` rather
+    // than from the clock, and the vista corner is about two tiles from anywhere a
+    // window can open — so without this a seven-second beat could start over an
+    // open window, ask the host to fold its narration away, and burn `_vistaArmed`
+    // on a beat nobody was looking at. It can only ever block a beat from STARTING:
+    // opening the window clears any beat already running (90-element `openTalk`, on
+    // `setMode`'s own idiom), so no live beat is ever stranded behind this.
     if (this.mode === "walk" || this.mode === "dialogue") {
-      if (this.mode === "walk") {
+      const timePasses = this.mode === "walk" && this.talkAnchorId == null;
+      if (timePasses) {
         let advanced = false;
+        const dayBefore = this.day;
         this._clockAcc += dt;
         while (this._clockAcc >= PF.CLOCK_SECONDS_PER_GAME_MINUTE) {
           this._clockAcc -= PF.CLOCK_SECONDS_PER_GAME_MINUTE;
@@ -202,8 +375,13 @@ PF.Sim = class {
         // A fixed 1/60s step advances at most one game minute per ~300 frames,
         // so a boundary can never be skipped between checks.
         if (advanced && this.daypart() !== this._daypart) this.resolveSchedules();
+        // The first of the three movers. Midnight is NOT a daypart boundary, so
+        // this is the only thing that notices a walked-through day change — and
+        // it costs a single integer compare on every other advanced minute,
+        // which is why no per-minute weather() read is spent here.
+        if (advanced) this._parkWeather(dayBefore, this.day);
       }
-      if (this.mode === "walk") this.stepCutscene(dt, z);
+      if (timePasses) this.stepCutscene(dt, z);
       this.stepNpcs(dt, z);
     }
     return { zoneChanged: false };
@@ -245,19 +423,97 @@ PF.Sim = class {
     return "night";
   }
 
+  /** THE DAY'S SKY: `{word, intensity}`, memoised per (day, override).
+   *
+   *  The render pass reads this EVERY FRAME — for the tint, the composite class
+   *  and the particles — and the raw derivation underneath is a template
+   *  literal, a string hash and an rng construction, so the uncached version is
+   *  that work sixty times a second. One comparison serves every consumer.
+   *
+   *  The key is the SERIALIZED WHOLE of the override, not its word: a
+   *  storyteller who says rain and then heavy rain writes the same word with a
+   *  new intensity, and a word-only key would sit on that until the day rolled.
+   *
+   *  A PERF CACHE, NOT A TRANSITION DETECTOR. There is no `_weather` field
+   *  anywhere: the ledger park derives both sides of a crossing itself, which is
+   *  what keeps the sky a pure function of the saved clock. */
+  weather() {
+    const overrideKey = PF.weather.overrideKey(this.weatherOverride);
+    const memo = this._weatherMemo;
+    if (memo && memo.day === this.day && memo.overrideKey === overrideKey)
+      return { word: memo.word, intensity: memo.intensity };
+    const sky = PF.weather.at(this.world, this.day, this.weatherOverride);
+    this._weatherMemo = { day: this.day, overrideKey, word: sky.word, intensity: sky.intensity };
+    return sky;
+  }
+
+  /** The season word for the live day, on this world's own 365-day calendar. */
+  season() {
+    return PF.weather.season(this.world, this.day);
+  }
+
+  /** Park a ledger line when a LIVE day-crossing brings a notable sky in.
+   *
+   *  Called by the three clock MOVERS and by nothing else — never by
+   *  resolveSchedules, never by the constructor, never by simFromSaved. That is
+   *  what keeps a restore silent: a rebuild re-derives the same sky it always
+   *  had, and a world reopened on a snowy day has not just had it start snowing.
+   *
+   *  BOTH SIDES ARE DERIVED HERE, so the park needs no state of its own and is
+   *  rewind-exact. The compare reads `.word`: at() returns a fresh object every
+   *  call, so a reference compare would file a line on every midnight of a
+   *  six-day snowy stretch. Intensity never reaches the ledger either — the
+   *  ledger says snow, the header says how hard.
+   *
+   *  "FIRST" MEANS FIRST OF THE DAYS THE WORLD HAS LIVED. The scan walks back to
+   *  seasonStartDay(), which floors at day 1, so a world whose calendar opens
+   *  mid-winter still gets a true "First snow." for its genuine first snowfall
+   *  instead of losing it to months of phantom pre-world time. The bound is that
+   *  function's and never a hand-derived season length — under a 365-day year a
+   *  hand bound is wrong by up to 182 days. */
+  _parkWeather(dayBefore, dayAfter) {
+    if (dayBefore === dayAfter) return;
+    const after = PF.weather.at(this.world, dayAfter, this.weatherOverride).word;
+    if (!PF.weather.TUNING.notable.includes(after)) return;
+    if (PF.weather.at(this.world, dayBefore, this.weatherOverride).word === after) return;
+    let text = "A storm came in.";
+    if (after === "snow") {
+      // Storms claim no first — a season's first storm is not a calendar fact
+      // the way the first snow is.
+      let seen = false;
+      for (let day = PF.weather.seasonStartDay(this.world, dayAfter); day < dayAfter && !seen; day++)
+        seen = PF.weather.at(this.world, day, this.weatherOverride).word === "snow";
+      text = seen ? "Snow came in." : "First snow.";
+    }
+    // Queued without overwrite: a full queue drops the NEW line rather than
+    // losing one a frame has not filed yet.
+    if (this._weatherNotes.length < 4) this._weatherNotes.push({ text, day: dayAfter });
+  }
+
   /** Jump the clock to the next occurrence of a daypart's start (the "wait
    *  until dusk" rest action). A JUMP, not an advance: NPCs re-place in one
-   *  shot. Walk mode only, so it can never collide with the dialogue freeze. */
+   *  shot. Walk mode only, so it can never collide with the dialogue freeze —
+   *  and it ENDS a conversation rather than colliding with the talk window's
+   *  freeze either (plan §2.5): waiting for dusk while standing in front of
+   *  somebody is spending time, and spending time is leaving the conversation.
+   *  The clear is the FIRST thing a wait that is going to happen does; the HUD
+   *  reconciles the window away on the next frame, off the same latch. */
   waitUntil(target) {
     // Own-property, now that the table is shared and reachable from more than one
     // button: `starts["constructor"]` answered with a FUNCTION, which is not
     // undefined, and the guard below would have waved it through onto clockMin.
     const at = Object.prototype.hasOwnProperty.call(PF.DAYPART_STARTS, target) ? PF.DAYPART_STARTS[target] : undefined;
     if (at === undefined || this.mode !== "walk") return false;
+    // AFTER the refusal above and before anything moves: a wait that refuses has
+    // spent no time, and a silent close on a call that did nothing would be the
+    // stuck-clock class inverted — a window that vanished for no visible reason.
+    this.talkAnchorId = null;
+    const dayBefore = this.day;
     if (at <= this.clockMin) this.day++;
     this.clockMin = at;
     this._clockAcc = 0;
     this.resolveSchedules();
+    this._parkWeather(dayBefore, this.day); // the second of the three movers
     return true;
   }
 
@@ -307,6 +563,18 @@ PF.Sim = class {
    *  among them, and a second silent gate here would turn one of them into a
    *  no-op nobody could tell from a cast that caught nothing.
    *
+   *  IT DOES CLEAR THE CONVERSATION LATCH, and that paragraph is why the sentence
+   *  above needs this one beside it (plan §2.5). The argument up there is against
+   *  a silent SECOND REFUSAL — a gate that turns a real call into a no-op nobody
+   *  can tell from a cast that caught nothing. This is not that: the call still
+   *  does everything it was asked to do, and the clear is a documented side effect
+   *  of the thing it was asked to do. Time cannot pass under an open talk window,
+   *  so a mover either ends the conversation or breaks the freeze; this ends it,
+   *  after the same guard the refusal above uses, and the HUD unmounts the window
+   *  off the same latch on the next frame. Fishing is the caller that makes this
+   *  safe to state so flatly: `fish()` is synchronous end to end, so no window can
+   *  open between its entry reads and its last advance.
+   *
    *  `_clockAcc` is deliberately left alone. waitUntil clears it because it
    *  JUMPS to a target and a leftover fraction would tick that target's minute
    *  early; an advance lays whole minutes on top of a fraction the player has
@@ -316,19 +584,39 @@ PF.Sim = class {
    *  count, so a caller can tell a clock that moved from one that did not. */
   advanceMinutes(n) {
     if (!Number.isInteger(n) || n <= 0) return 0;
+    // The clock's other callable door, and the same first act for the same
+    // reason — after the refusal, before the clock moves (see the docstring).
+    this.talkAnchorId = null;
+    const dayBefore = this.day;
     this.clockMin += n;
     while (this.clockMin >= 24 * 60) {
       this.clockMin -= 24 * 60;
       this.day++;
     }
     this.resolveSchedules();
+    this._parkWeather(dayBefore, this.day); // the third of the three movers
     return n;
   }
 
   /** Re-place every scheduled NPC for the current daypart. Idempotent, O(cast),
-   *  and fires only on a boundary crossing (~4x/day) plus once per rebuild. */
+   *  and fires only on a boundary crossing (~4x/day) plus once per rebuild.
+   *
+   *  THE WEATHER'S BIAS IS ASSEMBLED HERE and the policy that spends it lives in
+   *  25-schedule, which is the same split the rest of this method keeps: the sim
+   *  owns zones, the table owns who-is-where-when. One `weather()` read for the
+   *  whole pass — the memo makes it a field compare on all but the first — and
+   *  the closure is the ONE place "indoors" is defined: INTERIOR-ZONE MEMBERSHIP,
+   *  the compiler's own `mapKind`, and not roofedness. A wilds is a `place` and
+   *  stands in the rain like the street does. */
   resolveSchedules() {
     this._daypart = this.daypart();
+    // Null on a fair or overcast day, so resolve() runs exactly as it always has
+    // and a legacy world (whose NPCs carry no `_sched` at all) is untouched
+    // either way. Rain, storm and snow raise it — the word alone, never the
+    // intensity: light rain still empties the street.
+    const bias = PF.weather.WORD_META[this.weather().word]?.indoors
+      ? { indoor: (zoneId) => this.world.zones[zoneId]?.mapKind === "building" }
+      : null;
     // Flatten first: splicing between zone arrays while iterating them would
     // skip or double-process an NPC.
     const all = [];
@@ -353,7 +641,7 @@ PF.Sim = class {
     const unplaced = new Set();
     for (const [fromId, npc] of all) {
       if (!npc._sched || npc._hold) continue; // _hold reserves a GM override seam
-      const handle = PF.schedule.resolve(npc._sched, this._daypart);
+      const handle = PF.schedule.resolve(npc._sched, this._daypart, bias);
       if (!handle) continue;
       const target = this.world.zones[handle.zoneId];
       if (!target) continue;
@@ -427,10 +715,22 @@ PF.Sim = class {
 
   stepNpcs(dt, z) {
     for (const npc of z.npcs) {
-      // The person you are talking TO stands still. nearNpc stops updating the
-      // moment dialogue starts, so it still points at whoever was greeted —
-      // drifting away mid-sentence read as if they had stopped listening.
-      if (this.mode === "dialogue" && this.nearNpc && npc.id === this.nearNpc.id) {
+      // THE PERSON YOU ARE TALKING TO STANDS STILL, and the LATCH is what says
+      // who that is — read FIRST, and by IDENTITY (plan §2.5). `nearNpc` is a
+      // nearest-within-26px proximity read, which is the wrong question in a
+      // crowd: it freezes whoever has wandered closest while the person actually
+      // being addressed keeps walking, and between 26 and 32px — where the talk
+      // window is still open — it is null and freezes nobody at all.
+      if (npc.id === this.talkAnchorId) {
+        npc.stepPhase = 0;
+        continue;
+      }
+      // The classic fence, kept for dialogue entered WITHOUT a window (the
+      // Keyboard button, and any future path that does the same). Guarded on the
+      // latch being absent so exactly ONE freeze authority reads at a time: with
+      // a conversation live, the line above has already answered, and this one
+      // must never pick a second, nearer bystander to freeze beside it.
+      if (this.talkAnchorId == null && this.mode === "dialogue" && this.nearNpc && npc.id === this.nearNpc.id) {
         npc.stepPhase = 0;
         continue;
       }
@@ -517,10 +817,32 @@ PF.Sim = class {
   /** Compact world header prefixed onto turns so the GM narrates the world we show. */
   header() {
     const z = this.zone();
-    const near = this.nearNpc ? `; near: ${this.nearNpc.name} (${this.nearNpc.role})` : "";
-    // The daypart word is one token and keeps the GM's light and "who is about"
-    // narration consistent with what we render and where NPCs actually are.
-    return `[World: ${z.name}; ${this.clockLabel()} (${this.daypart()})${near}]`;
+    // THE RUNG WORD RIDES THE NEAR CLAUSE (0.15, plan §13.4), and only past
+    // stranger — the GM should greet a friend as a friend without burning a
+    // persona injection to learn it, and a stranger costs the header nothing
+    // because the word for "no standing" is no word. Hostility outranks the rung
+    // here as it does on the window title, and the storyteller's standing command
+    // (62-gm) is what sets and clears the flag.
+    // Read off the block the sim already carries for the ledger tell; the
+    // header stays free of core lookups, and the words stay the ladder's own
+    // (58-player RUNGS — index 0 blanked because the floor goes unsaid).
+    const rel = this.player?.rel?.[this.world?.startZone];
+    const row =
+      this.nearNpc && rel && typeof rel === "object" && Object.prototype.hasOwnProperty.call(rel, this.nearNpc.name)
+        ? rel[this.nearNpc.name]
+        : null;
+    const rung = row ? PF.clamp(Number(row.d) || 0, 0, 3) : 0;
+    const stand = row && row.h ? "hostile" : rung > 0 ? PF.player.RUNGS[rung] : "";
+    const near = this.nearNpc ? `; near: ${this.nearNpc.name} (${this.nearNpc.role}${stand ? `, ${stand}` : ""})` : "";
+    // THREE WORDS IN THE PAREN GROUP, and each earns its permanent per-turn cost.
+    // The daypart keeps the GM's light and "who is about" narration consistent
+    // with what we render and where NPCs actually are. The weather word is the
+    // whole channel the sky reaches the narrator through — live, every turn, at
+    // the same tier. And the SEASON is the word that lets the GM make a judgment
+    // the daypart cannot: it should not snow in summer, unless the world it is
+    // snowing in is one where that means something.
+    const sky = this.weather();
+    return `[World: ${z.name}; ${this.clockLabel()} (${this.daypart()}, ${PF.weather.labelFor(sky.word, sky.intensity)}, ${this.season()})${near}]`;
   }
 
   /** The metered turn prefix (docs/brief-schema.md §7): name+role ride the
@@ -551,9 +873,29 @@ PF.Sim = class {
     }
     // THE WRAP-UP TELL, LAST IN THE JOIN — which puts it after the persona part
     // and before the sender's own action text, where the plan asks for it (§2.6).
-    // It is also the ONLY part of any turn a fishing word can reach the GM
-    // through (M10 as amended): the verb narrates nothing, files ledger lines,
-    // and those lines are told here or not at all.
+    // It is also the ONLY part of any turn a fishing OR A QUEST word can reach
+    // the GM through (M10 as amended, extended by 0.13 §2.5): neither verb family
+    // narrates anything, both file ledger lines, and those lines are told here or
+    // not at all.
+    //
+    // THE QUEST FAMILY WIDENS THE GM-INVISIBLE VERB GAP, and that is worth
+    // stating rather than leaving to be noticed (P7's roadmap enumeration is
+    // where it is tracked). The GM can neither MINT a quest nor PAY one out: the
+    // board is a package fixture reading a sealed pack, the completion pays from
+    // a table this package owns, and nothing in a turn asks the narrator's
+    // permission for either. What the narrator gets is the same day-grain
+    // history the fishing verb gives it — past tense, after the fact, at the
+    // wrap-up boundary Ruling 1 set — and that is deliberately the whole
+    // channel. The one exception is the exception that proves it: a `deliver`
+    // errand finishes on a turn the player was sending anyway, and even then
+    // what the GM sees is a greeting, not a handover.
+    //
+    // 0.14 MOVES WHERE THAT TURN IS PRESSED AND NOT WHAT THE GM SEES. The talk
+    // window labels the press ("Hand over: <title>") so the PLAYER knows which
+    // errand they are settling; what rides to the narrator is still this prefix
+    // and a sentence about walking up to somebody. And the window's free reads —
+    // the record answers, the pack lines — reach the GM not at all: they compose
+    // nothing, send nothing, and write no ledger line.
     const ledger = this._composeLedger();
     if (ledger) parts.push(ledger.text);
     // The ephemeral half of the flush, handed to the sender rather than stored:

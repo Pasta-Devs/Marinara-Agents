@@ -19,6 +19,7 @@ import { mergeKeywords } from "./keyword-extract.js";
 import { noteIdForEvidenceUnit, riskForEvidenceUnit } from "./evidence-unit-validation.js";
 import { uniqueStrings } from "./ltm-utils.js";
 import { subjectsEqual } from "./subject-identity.js";
+import { isLocalCharacterSubject } from "./chat-scope.js";
 
 export interface CompileLtmEvidenceUnitsOptions {
   units: LtmEvidenceUnit[];
@@ -95,6 +96,7 @@ export function compileLtmEvidenceUnits(options: CompileLtmEvidenceUnitsOptions)
           units,
           confidence,
           note,
+          existingNotes: options.existingNotes,
           creating: true,
         }),
         confidence,
@@ -553,12 +555,14 @@ function riskForCompiledMutation({
   units,
   confidence,
   note,
+  existingNotes,
   sourceBacked = true,
   creating = false,
 }: {
   units: LtmEvidenceUnit[];
   confidence: number;
   note: Pick<LtmNote, "type" | "tags" | "conflicts" | "subjects">;
+  existingNotes?: LtmNote[];
   sourceBacked?: boolean;
   creating?: boolean;
 }): LtmDraftRisk {
@@ -566,8 +570,13 @@ function riskForCompiledMutation({
   if (baseRisk !== "low") return baseRisk;
   if (
     creating &&
-    note.type === "character" &&
-    note.subjects?.some((subject) => subject.key.startsWith("npc:") && !subject.ref)
+    note.subjects?.some(
+      (subject) =>
+        isLocalCharacterSubject(subject) &&
+        !(existingNotes ?? []).some((existing) =>
+          existing.subjects?.some((candidate) => candidate.key === subject.key),
+        ),
+    )
   ) {
     return "medium";
   }

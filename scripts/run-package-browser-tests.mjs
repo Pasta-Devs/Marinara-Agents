@@ -27,6 +27,7 @@ const environment = {
   ...process.env,
   MARINARA_ENGINE_ROOT: engineRoot,
   MARINARA_PACKAGE_ID: packageId,
+  MARINARA_CATALOG_INCLUDE_INCOMPLETE: "1",
 };
 if (environment.NO_COLOR !== undefined) {
   delete environment.NO_COLOR;

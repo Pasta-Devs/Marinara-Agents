@@ -94,7 +94,6 @@ export function useStartTicTacToe(chatId: string) {
 }
 
 export function useTicTacToeMove(chatId: string) {
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: (vars: { move: TicTacToeMove }) => api.post<OutcomeResponse>(`/turn-games/${chatId}/move`, vars),
     onSuccess: (res) => {

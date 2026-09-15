@@ -10,6 +10,20 @@ const workspace = readFileSync(
   ),
   "utf8",
 );
+const navigation = readFileSync(
+  new URL(
+    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/LongTermMemoryNavigation.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const interop = readFileSync(
+  new URL(
+    "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/interop.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const detail = readFileSync(
   new URL(
     "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/LongTermMemoryDetail.tsx",
@@ -103,6 +117,22 @@ assert.match(workspace, /retry-cancelled/u);
 assert.match(workspace, /cancelledImport\.sourceIds[\s\S]*"import"[\s\S]*cancelledImport/u);
 assert.match(workspace, /retry-failed/u);
 assert.match(workspace, /retryableIds[\s\S]*"import"[\s\S]*importResultContract/u);
+assert.match(navigation, /latestSourceTask\.status === "cancelled"[\s\S]*\? 0/u);
+assert.match(navigation, /sourceTaskCancelled/u);
+assert.match(navigation, /selectLtmPluralForm\(locale, failureCount\)/u);
+assert.match(navigation, /sourceTaskFailedCountOne[\s\S]*sourceTaskFailedCountOther/u);
+assert.match(navigation, /className=\{item\.id === "sources" && activeSourceTask \? "animate-spin"/u);
+assert.match(workspace, /restoredImportResult\.writeFailures\?\.filter\(\(item\) => item\.retryable\)/u);
+assert.match(workspace, /restoredImportResult\.writeFailures\?\.map\(\(failure\) =>/u);
+assert.match(
+  workspace,
+  /<div\s+id="ltm-destination-scope-control"[^>]*className="mari-editor-panel flex min-h-0 flex-col gap-3 p-3"[^>]*style=\{\{ maxHeight: "calc\(100vh - 12rem\)" \}\}[^>]*>/u,
+);
+assert.match(
+  workspace,
+  /<div\s+id="ltm-bulk-destination-list"[^>]*className="min-h-0 flex-1 overflow-y-auto overscroll-contain"[^>]*>/u,
+);
+assert.match(interop, /content: row\.sourceText\.slice\(0, 500_000\)/u);
 assert.match(workspace, /readyForReviewWithRejectedSuggestions/u);
 assert.match(workspace, /extractionDidNotFinish/u);
 assert.match(activity, /completionReasoningTokens/u);
@@ -159,7 +189,7 @@ assert.match(vault, /loadingMemoryScope/u);
 assert.match(vault, /memoryScopeCouldNotLoad/u);
 assert.match(vault, /retryMemoryScope/u);
 const vaultFeedbackIndex = vault.indexOf("data-ltm-vault-feedback");
-const workspaceIndex = vault.indexOf("<LtmWorkspace", vault.indexOf("</style>"));
+const workspaceIndex = vault.lastIndexOf("<LtmWorkspace");
 const navigatorContentStart = vault.indexOf("content: (", workspaceIndex);
 const navigatorContentEnd = vault.indexOf("workbench={{", navigatorContentStart);
 assert.ok(vaultFeedbackIndex >= 0 && vaultFeedbackIndex < workspaceIndex);
@@ -168,26 +198,36 @@ assert.doesNotMatch(vault.slice(navigatorContentStart, navigatorContentEnd), /da
 assert.match(vault, /sourceFilter/u);
 assert.doesNotMatch(vault, /availableEverywhereFilter|setAvailableEverywhereFilter/u);
 assert.match(vault, /data-ltm-source-readonly/u);
+assert.match(
+  vault,
+  /draft\.tags\.includes\("imported_character"\)[\s\S]*draft\.tags\.includes\("imported_lorebook"\)/u,
+);
 assert.match(vault, /data-ltm-memory-options/u);
 assert.match(vault, /data-ltm-memory-scope/u);
 assert.match(vault, /currentlyViewingMemoriesIn/u);
-assert.match(vault, /mari-editor-panel mari-editor-panel--soft group col-span-2 rounded-md/u);
+assert.match(vault, /data-ltm-vault-scope-control/u);
 assert.match(vault, /text-\[var\(--marinara-editor-muted\)\].*focus-visible:outline/u);
 assert.match(vault, /mari-editor-action flex min-h-11/u);
-assert.match(vault, /data-ltm-memory-scope-chevron/u);
-assert.match(vault, /details\[open\] > summary \[data-ltm-memory-scope-chevron\]/u);
 assert.match(vault, /ScopeTargetPicker/u);
-assert.match(vault, /data-ltm-memory-scope-picker/u);
-assert.match(vault, /max-h-40 overflow-y-auto border-y border-\[var\(--marinara-editor-divider\)\]/u);
-assert.doesNotMatch(vault, /max-h-40 overflow-y-auto rounded-md border/u);
-assert.match(vault, /scopeModes/u);
+assert.match(vault, /data-ltm-vault-scope-search/u);
+assert.match(vault, /role="checkbox"/u);
+assert.doesNotMatch(vault, /data-ltm-vault-selected-scope/u);
+assert.doesNotMatch(vault, /mari-editor-panel min-w-0 max-w-full space-y-3 p-3/u);
+assert.doesNotMatch(vault, /<details\s+data-ltm-memory-scope\s+className="[^"]*mari-editor-panel/u);
+assert.match(vault, /data-ltm-vault-scope-tablist/u);
+assert.match(vault, /@container \(min-width: 16rem\)[\s\S]*repeat\(5, minmax\(0, 1fr\)\)/u);
+assert.match(vault, /border-y border-\[var\(--border\)\]/u);
+assert.match(vault, /data-ltm-mode-filter/u);
+assert.match(vault, /filterModes/u);
+assert.match(vault, /toggleFilterMode/u);
+assert.doesNotMatch(vault, /scopeModes/u);
 assert.match(vault, /scopeChats/u);
-assert.match(vault, /toggleScopeMode/u);
+assert.doesNotMatch(vault, /toggleScopeMode/u);
 assert.match(vault, /chatModes/u);
-assert.match(vault, /scopeModes\.includes\(mode\)/u);
+assert.doesNotMatch(vault, /scopeModes\.includes\(mode\)/u);
 assert.doesNotMatch(vault, /kind="mode"/u);
-assert.match(vault, /kind="status"/u);
-assert.match(vault, /kind="sort"/u);
+assert.match(vault, /statusFilter/u);
+assert.match(vault, /sortScopeTargets/u);
 assert.match(vault, /showMemories/u);
 assert.match(vault, /sortBy/u);
 assert.match(targetPicker, /AvailabilityTabRail/u);
@@ -214,22 +254,22 @@ assert.match(targetPicker, /ArrowRight/u);
 assert.match(targetPicker, /ArrowLeft/u);
 assert.doesNotMatch(targetPicker, /aria-expanded/u);
 assert.doesNotMatch(targetPicker, /group-open:rotate-90/u);
-assert.match(vault, /sectionCopy=\{\{[\s\S]*character:[\s\S]*persona:[\s\S]*chat:[\s\S]*branch:/u);
-assert.match(vault, /fieldset className="space-y-2 border-b[\s\S]*chatModes/u);
-assert.doesNotMatch(vault, /groupLabels=\{\{[\s\S]*group:/u);
-assert.match(vault, /searchCharacters/u);
-assert.match(vault, /searchPersonas/u);
-assert.match(vault, /searchChats/u);
-assert.match(vault, /searchBranches/u);
+assert.match(vault, /currentIds=\{\{/u);
+assert.match(vault, /filterModes/u);
+assert.doesNotMatch(vault, /scopeModes/u);
 assert.match(vault, /scope-targets\?includeAllChats=true/u);
+assert.doesNotMatch(workspace, /id: `branch:\$\{chat\.id\}`/u);
+assert.match(workspace, /destinationScopeLimitReached/u);
+assert.match(workspace, /hasDestinationScopeCapacity\(target\.destinationScope\)/u);
+assert.match(workspace, /data-ltm-availability-target/u);
+assert.match(workspace, /data-ltm-scope-picker-popup/u);
 assert.doesNotMatch(vault, /matchesFilters/u);
-assert.match(vault, /data-ltm-memory-scope-target/u);
+assert.match(vault, /data-ltm-vault-scope-target/u);
 assert.match(vault, /characterScopeTargets/u);
 assert.match(vault, /conversationScopeTargets/u);
 assert.match(vault, /branchScopeTargets/u);
-assert.match(vault, /data-ltm-memory-scope-picker=\{kind\}[\s\S]*className="group"/u);
-assert.match(vault, /data-ltm-memory-scope-target[\s\S]*mari-editor-action--compact/u);
-assert.match(vault, /selectedTargets/u);
+assert.match(vault, /data-ltm-vault-scope-tab/u);
+assert.match(vault, /data-selected=/u);
 assert.match(vault, /bulkAvailabilityScope/u);
 assert.match(vault, /chooseAvailabilityPlaces/u);
 assert.match(vault, /chat:all/u);
@@ -255,8 +295,7 @@ assert.match(vault, /renameDetails/u);
 assert.match(vault, /renameDialogRef/u);
 assert.match(vault, /place-items-center bg-black\/50/u);
 assert.match(vault, /mari-editor-panel w-full max-w-72 space-y-3 p-3 shadow-xl/u);
-assert.match(vault, /details\[open\] > summary \[data-ltm-memory-scope-chevron\]/u);
-assert.match(vault, /ChevronRight aria-hidden="true" size="0\.875rem"/u);
+assert.match(vault, /details\[open\] > summary/u);
 assert.match(vault, /localizeUi\("ui\.longTermMemory\.memoryvault\.memoryOptions"\)/u);
 assert.doesNotMatch(vault, /<Braces aria-hidden="true" size="1rem" className="shrink-0" \/>/u);
 assert.doesNotMatch(vault, /<Check aria-hidden="true" size="1rem" className="shrink-0" \/>\n\s*\{saveState/u);
@@ -304,24 +343,6 @@ assert.match(vault, /data-ltm-note-actions-desktop[\s\S]*md:flex/u);
 assert.doesNotMatch(vault, /data-ltm-note-actions-desktop[\s\S]*opacity-0/u);
 assert.doesNotMatch(vault, /data-ltm-note-actions-desktop[\s\S]*pointer-events-none/u);
 assert.match(vault, /data-ltm-note-actions-open/u);
-assert.match(vault, /type ArchiveUndoState/u);
-assert.match(vault, /const \[archiveUndo, setArchiveUndo\]/u);
-assert.match(vault, /async function undoArchive/u);
-assert.match(vault, /previousArchiveStatuses/u);
-assert.match(vault, /setArchiveUndo\(\{ notes: archiveUndoNotes \}\)/u);
-assert.match(vault, /archiveUndoFailed/u);
-assert.match(vault, /Promise\.allSettled/u);
-assert.match(vault, /successfulRestores[\s\S]*status: "archived"/u);
-assert.match(
-  vault,
-  /const archiveCompleted\s*=\s*[\s\S]*result\.status === "complete"[\s\S]*ids\.every\(\(id\) => updatedNoteIds\.has\(id\)\)/u,
-);
-assert.match(vault, /if \(archiveCompleted && archiveUndoNotes\.length === ids\.length\) setArchiveUndo/u);
-assert.match(
-  vault,
-  /const allRestored\s*=\s*results\.every[\s\S]*result\.value\.status === "complete"[\s\S]*result\.value\.skippedNoteIds\.length === 0[\s\S]*result\.value\.failedNoteIds\.length === 0[\s\S]*actualIds\.length === expectedIds\.size[\s\S]*new Set\(actualIds\)\.size === expectedIds\.size[\s\S]*actualIds\.every\(\(id\) => expectedIds\.has\(id\)\)[\s\S]*if \(!allRestored\)/u,
-);
-assert.match(vault, /if \(!allRestored\)[\s\S]*Promise\.allSettled[\s\S]*await invalidate\(\);[\s\S]*throw new Error/u);
 assert.equal(locale["ui.longTermMemory.memoryvault.undo"], "Undo");
 assert.equal(locale["ui.longTermMemory.memoryvault.archiveSuccessOne"], "{{count}} memory archived.");
 assert.equal(locale["ui.longTermMemory.memoryvault.archiveSuccessOther"], "{{count}} memories archived.");
@@ -360,10 +381,9 @@ assert.match(vault, /data-ltm-memory-group=\{type\}[\s\S]*min-h-11[\s\S]*focus-v
 assert.match(vault, /min-h-11 w-full[\s\S]*focus-visible:outline[\s\S]*moreLinkTypes/u);
 assert.match(vault, /inline-flex min-h-11 max-w-full[\s\S]*h-11 w-11/u);
 assert.match(vault, /clearMemorySearch[\s\S]*h-11 w-11/u);
-assert.match(vault, /scopeModes[\s\S]*min-h-11/u);
+assert.match(vault, /data-ltm-mode-filter[\s\S]*min-h-11/u);
 assert.match(vault, /bulkModes[\s\S]*min-h-11/u);
-assert.match(vault, /detailsRef[\s\S]*summaryRef[\s\S]*requestAnimationFrame/u);
-assert.match(vault, /details\.open = false/u);
+assert.match(vault, /data-ltm-vault-scope-control/u);
 assert.match(vault, /data-ltm-note-inspector/u);
 assert.match(vault, /mari-editor-panel min-w-0 space-y-4 p-3/u);
 assert.match(vault, /copyDiagnostics/u);
@@ -377,6 +397,7 @@ assert.match(vault, /maxHeight: "16rem"/u);
 assert.match(vault, /onInput=\{\(event\) =>/u);
 assert.match(sharedControls, /aria-live="polite"/u);
 assert.match(targetPicker, /<button[\s\S]*type="button"/u);
+assert.match(workspace, /aria-controls=\{listId\}/u);
 assert.doesNotMatch(targetPicker, /role="listbox"|role="option"|aria-activedescendant|ArrowDown|ArrowUp/u);
 assert.doesNotMatch(targetPicker, /className="mari-editor-tab-rail grid w-full grid-cols-4"/u);
 assert.match(targetPicker, /id=\{listId\}\s+role="list"/u);
@@ -422,9 +443,9 @@ const vaultLocaleValues = Object.entries(locale)
 assert.doesNotMatch(vaultLocaleValues, /\b(?:Metadata|Scope|Derived memories|Connections)\b/u);
 assert.match(workspace, /function SourceOperationWorkbench/u);
 assert.match(workspace, /!previewed \|\| busy \|\| result/u);
-assert.match(workspace, /disabled=\{\s*Boolean\(result\)/u);
+assert.match(workspace, /disabled=\{\s*disabled \|\|\s*Boolean\(result\)/u);
 assert.match(workspace, /confirmAction=\{props\.confirmAction\}/u);
-assert.match(workspace, /key=\{sourceOperation\.id\}/u);
+assert.match(workspace, /key=\{`\$\{sourceOperation\.id\}:\$\{sourceOperation\.operation/u);
 assert.match(workspace, /data-ltm-linked-memory-selection/u);
 assert.match(workspace, /derivedNoteIds: selectedLinkedIds/u);
 assert.match(workspace, /archive: "notes_only"/u);
@@ -432,7 +453,7 @@ assert.match(workspace, /excludedNoteIds: excludedMemories/u);
 assert.match(workspace, /data-ltm-source-operation-preview/u);
 assert.match(workspace, /data-ltm-source-operation-excluded/u);
 assert.match(workspace, /data-ltm-source-operation-result/u);
-assert.match(workspace, /data-ltm-source-import-mode/u);
+assert.match(workspace, /data-ltm-source-mode/u);
 assert.match(workspace, /const sourceCheckboxClass = "size-6 shrink-0 accent-/u);
 assert.match(workspace, /linked\.isError[\s\S]*linkedMemoriesCouldNotLoad/u);
 assert.match(workspace, /!linked\.data \|\| linked\.isError \|\| !previewed/u);
@@ -443,6 +464,22 @@ assert.match(workspace, /className="space-y-2 border-t border-\[var\(--border\)\
 assert.match(workspace, /\[changeSource, onRequestedSourceHandled, requestedSource\]/u);
 assert.match(workspace, /importsAsMode/u);
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.importsAsMode"], "Imports as {{mode}}");
+assert.match(
+  workspace,
+  /const availabilityReady = settingsQuery\.isSuccess && effectiveAvailabilityModes\.length > 0/u,
+);
+assert.match(workspace, /availabilitySavingRef\.current/u);
+assert.match(workspace, /availabilityDisabled=\{availabilitySaving \|\| !availabilityReady\}/u);
+assert.match(workspace, /disabled=\{importDisabled\}/u);
+assert.match(workspace, /settingsQuery\.refetch\(\)/u);
+assert.equal(
+  locale["ui.longTermMemory.sourcesworkspace.availabilitySettingsCouldNotLoad"],
+  "Availability settings could not load.",
+);
+assert.equal(
+  locale["ui.longTermMemory.sourcesworkspace.loadingAvailabilitySettings"],
+  "Loading availability settings...",
+);
 assert.equal(locale["ui.longTermMemory.sourceoperation.clearAll"], "Clear all");
 assert.match(locale["ui.longTermMemory.sourceoperation.linkedMemoriesCouldNotLoad"], /could not be loaded/u);
 assert.equal(
@@ -453,14 +490,14 @@ assert.equal(
   locale["ui.longTermMemory.sourceoperation.confirmDelete"],
   "Permanently delete the source and {{count}} selected linked memories?",
 );
-assert.match(types, /onOpenSources\?: \(source\?: SourceTab\) => boolean \| Promise<boolean>/u);
+assert.match(types, /onOpenSources\?: \(source\?: SourceTab, sourceNoteId\?: string\) => boolean \| Promise<boolean>/u);
 assert.match(api, /export async function requestNotesByIds/u);
 assert.match(api, /if \(!requestedIds\.length\) return \[\] as T\[\]/u);
 assert.match(api, /new URLSearchParams/u);
 assert.match(api, /undefined, signal/u);
 assert.match(api, /const missingIds = requestedIds\.filter/u);
 assert.doesNotMatch(reviewQueue, /requestAllNotes/u);
-assert.match(reviewQueue, /requestNotesByIds<LtmNote>\(contextNoteIds, signal\)/u);
+assert.match(reviewQueue, /requestNotesByIds<LtmNote>\(contextNoteIds, signal, true\)/u);
 assert.match(reviewQueue, /"review-context", contextNoteIds/u);
 assert.match(reviewQueue, /row\.disposition !== "new"/u);
 assert.match(reviewQueue, /reviewContextReady/u);

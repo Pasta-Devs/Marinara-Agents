@@ -73,5 +73,12 @@
   "memoryNag.toolbar.emptyWord": "head empty no thoughts",
   "memoryNag.toolbar.none": "No nags this time.",
   "memoryNag.tracker.title": "Memory Nags",
-  "memoryNag.tracker.none": "No nags recalled for this turn."
+  "memoryNag.tracker.none": "No nags recalled for this turn.",
+  "memoryNag.settings.scanScope": "Messages to process",
+  "memoryNag.settings.scanAll": "All unprocessed messages",
+  "memoryNag.settings.scanRange": "Message range",
+  "memoryNag.settings.rangeStart": "First message",
+  "memoryNag.settings.rangeEnd": "Last message",
+  "memoryNag.settings.rangeHelp": "Count user and character messages from 1, including both ends. Earlier messages are skipped; future automatic scans continue after the furthest processed message. Existing memories are kept.",
+  "memoryNag.settings.rangeInvalid": "Choose whole message numbers from 1 to {{count}}, with the last message at or after the first."
 }

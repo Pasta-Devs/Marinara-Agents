@@ -1,6 +1,8 @@
 import type { NoodleRefreshSchedulerStatus } from "@marinara-engine/shared";
 
 export const NOODLE_REFRESH_SCHEDULE_VERSION = 1 as const;
+const NOODLE_REFRESH_FAILURE_BASE_RETRY_MS = 5 * 60_000;
+const NOODLE_REFRESH_FAILURE_MAX_RETRY_MS = 60 * 60_000;
 
 export interface PersistedNoodleRefreshSchedule {
   version: typeof NOODLE_REFRESH_SCHEDULE_VERSION;
@@ -121,12 +123,13 @@ export function reconcileNoodleRefreshSchedule(
     current.refreshesPerDay === count &&
     current.scheduledTimes.length === count
   ) {
-    return current;
+    return count === 0 ? clearNoodleRefreshFailure(current) : current;
   }
 
   const sameLocalDay = current?.scheduleDate === scheduleDate && current.timezone === timezone;
   const scheduledTimes = generateNoodleRefreshTimes(at, count, random);
   const preservedCompletedCount = sameLocalDay ? Math.min(current?.completedTimes.length ?? 0, count) : 0;
+  const failure = count === 0 ? null : current;
   return {
     version: NOODLE_REFRESH_SCHEDULE_VERSION,
     scheduleDate,
@@ -135,11 +138,11 @@ export function reconcileNoodleRefreshSchedule(
     scheduledTimes,
     completedTimes: scheduledTimes.slice(0, preservedCompletedCount),
     successfulRefreshes: sameLocalDay ? Math.min(current?.successfulRefreshes ?? 0, preservedCompletedCount) : 0,
-    failureAttempts: 0,
-    nextAttemptAt: null,
+    failureAttempts: failure?.failureAttempts ?? 0,
+    nextAttemptAt: failure?.nextAttemptAt ?? null,
     lastAutomaticRefreshAt: current?.lastAutomaticRefreshAt ?? null,
-    lastAttemptAt: sameLocalDay ? (current?.lastAttemptAt ?? null) : null,
-    lastError: null,
+    lastAttemptAt: failure?.lastAttemptAt ?? null,
+    lastError: failure?.lastError ?? null,
   };
 }
 
@@ -209,10 +212,14 @@ export function rescheduleNoodleRefreshTime(
     scheduledTimes: schedule.scheduledTimes
       .map((candidate) => (candidate === scheduledTime ? replacement.toISOString() : candidate))
       .sort(),
-    failureAttempts: 0,
-    nextAttemptAt: null,
-    lastError: null,
   };
+}
+
+export function exponentialNoodleRefreshRetryDelayMs(failureAttempts: number): number {
+  return Math.min(
+    NOODLE_REFRESH_FAILURE_MAX_RETRY_MS,
+    NOODLE_REFRESH_FAILURE_BASE_RETRY_MS * 2 ** Math.max(0, failureAttempts),
+  );
 }
 
 export function markNoodleRefreshAttempt(

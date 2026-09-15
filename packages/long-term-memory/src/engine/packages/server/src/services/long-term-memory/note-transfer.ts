@@ -17,7 +17,7 @@ import {
   matchesLtmScope,
   withMergedLtmScopeLinks,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
-import { resolveChatLtmScope } from "./chat-scope.js";
+import { isLocalCharacterSubject, localCharacterScopeError, resolveChatLtmWriteScope } from "./chat-scope.js";
 import { uniqueStrings } from "./ltm-utils.js";
 import { logger } from "./package-runtime.js";
 import { LongTermMemoryStorage } from "./storage.js";
@@ -157,6 +157,7 @@ function scopesEqual(left: LtmScope | null | undefined, right: LtmScope | null |
 }
 
 function scopeForCopy(note: LtmNote, destinationScope: LtmScope) {
+  if (note.subjects?.some(isLocalCharacterSubject)) return destinationScope;
   return withMergedLtmScopeLinks(note.scope, {
     chatIds: getLtmScopeChatIds(destinationScope),
     groupIds: getLtmScopeGroupIds(destinationScope),
@@ -313,7 +314,14 @@ async function buildTransferPlan(
     throw new LtmNoteTransferError("Transfer includes an invalid derived note.", 400);
   const transferNoteIds = uniqueStrings([...requestedNoteIds, ...derivedNoteIds]);
   const selectedSet = new Set(transferNoteIds);
-  const destinationScope = resolveChatLtmScope(destinationChat);
+  const destinationScope = resolveChatLtmWriteScope(destinationChat);
+
+  for (const noteId of transferNoteIds) {
+    const note = noteLookup.get(noteId)!;
+    const nextScope = request.mode === "copy" ? scopeForCopy(note, destinationScope) : destinationScope;
+    const localError = localCharacterScopeError(note.subjects, nextScope);
+    if (localError) throw new LtmNoteTransferError(localError, 400);
+  }
   const destinationCandidates = notes.filter(
     (note) => !selectedSet.has(note.id) && matchesLtmScope(note, { scope: destinationScope }),
   );

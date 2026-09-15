@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { runWithSafeCleanup } from "./regression-helpers.ts";
+import { runRegressionToCompletion, runWithSafeCleanup } from "./regression-helpers.ts";
 
 async function main() {
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
-  const { requestAllNotes } =
+  const { requestAllNotes, requestNotesByIds } =
     await import("../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/api.ts");
   const originalFetch = globalThis.fetch;
   const originalWindow = globalThis.window;
@@ -35,6 +35,13 @@ async function main() {
     globalThis.fetch = originalFetch;
     if (originalWindow === undefined) delete (globalThis as { window?: Window }).window;
     else globalThis.window = originalWindow;
+  }
+  try {
+    globalThis.fetch = (async () => new Response(JSON.stringify([]))) as typeof fetch;
+    await assert.rejects(requestNotesByIds<{ id: string }>(["source_missing"]), /context unavailable for 1 note/u);
+    assert.deepEqual(await requestNotesByIds<{ id: string }>(["target_missing"], undefined, true), []);
+  } finally {
+    globalThis.fetch = originalFetch;
   }
   requestedOffsets.length = 0;
   requestedHeaders.length = 0;
@@ -69,7 +76,9 @@ async function main() {
   const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
   const { LongTermMemoryDraftStore } = await import(`${source}/draft-store.ts`);
   const { applyLongTermMemoryDraft, preflightLongTermMemoryDraft } = await import(`${source}/reconciliation.ts`);
-  const { compileEvidenceUnitExtraction } = await import(`${source}/evidence-unit-extraction.ts`);
+  const { compileEvidenceUnitExtraction, sourceMetadataForEvidenceUnitDraft } = await import(
+    `${source}/evidence-unit-extraction.ts`
+  );
   const { extractionFingerprintForLtmSourceNote, isLtmSourceExtractionFingerprintCurrent, sourceHashForLtmSourceNote } =
     await import(`${source}/source-hash.ts`);
   const { projectLongTermMemoryDraftReview } = await import(`${source}/draft-review.ts`);
@@ -95,12 +104,23 @@ async function main() {
     resetLongTermMemorySettings,
     parseLongTermMemoryBackup,
   } = await import(`${source}/backup-restore.ts`);
-  const { addRejectedSuggestions, deleteRejectedSuggestion, listRejectedSuggestions } = await import(
-    `${source}/rejected-suggestions.ts`
-  );
+  const {
+    addRejectedSuggestions,
+    deleteRejectedSuggestion,
+    deleteRejectedSuggestionsForSource,
+    listRejectedSuggestions,
+  } = await import(`${source}/rejected-suggestions.ts`);
 
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-storage-"));
-  const logger = { debug() {}, info() {}, warn() {}, error() {} };
+  const warnings: unknown[][] = [];
+  const logger = {
+    debug() {},
+    info() {},
+    warn(...args: unknown[]) {
+      warnings.push(args);
+    },
+    error() {},
+  };
   const releaseHost = configurePackageRuntime({ dataDir, logger });
   const root = join(dataDir, "long-term-memory");
   const freshRoot = join(dataDir, "fresh-long-term-memory");
@@ -309,6 +329,32 @@ async function main() {
         `malformed event\n${JSON.stringify({ ts: "2026-07-17T00:00:00.000Z", type: "new.event" })}\n`,
       );
 
+      const activityBackup = `${dirs.activityIndex}.retention-proof`;
+      await rename(dirs.activityIndex, activityBackup);
+      await writeFile(dirs.activityIndex, "unavailable derived index");
+      try {
+        const previousWarnings = warnings.length;
+        const recoverable = await runLongTermMemoryRetention({
+          root,
+          now: new Date("2026-07-18T00:00:00Z"),
+          force: true,
+        });
+        assert.equal(recoverable.eventsRemoved, 0);
+        assert.ok(
+          warnings
+            .slice(previousWarnings)
+            .some(
+              (args) =>
+                args[1] instanceof Error && args[0] === "[ltm] Deferred activity index pruning during retention",
+            ),
+          "a failed derived-index prune logs a recoverable warning rather than a missing-logger exception",
+        );
+        assert.equal((await new LongTermMemoryStorage(root).getNote(noteInput.id))?.id, noteInput.id);
+      } finally {
+        await rm(dirs.activityIndex, { force: true });
+        await rename(activityBackup, dirs.activityIndex);
+      }
+
       const exported = await exportLongTermMemoryData(root);
       assert.equal(exported.format, "marinara-long-term-memory");
       assert.equal(
@@ -353,9 +399,161 @@ async function main() {
       assert.equal(secondRejections.length, 1);
       assert.equal((await listRejectedSuggestions({ chatId: "chat-a" }, root)).length, 2);
       assert.equal((await exportLongTermMemoryData(root)).rejectedSuggestions.length, 2);
-      await addRejectedSuggestions(rejectionDraft, root);
-      await addRejectedSuggestions(rejectionDraft, root);
+
+      const completeSource = {
+        id: "source_valid_import",
+        title: "Valid imported summary",
+        type: "source",
+        status: "active",
+        modes: ["roleplay"],
+        scope: {},
+        tags: ["imported_chat"],
+        keywords: [],
+        links: [],
+        provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "summary-a" },
+        sections: {
+          source: { text: "Valid summary.", updatedAt: timestamp, evidence: ["chat:chat-a"] },
+        },
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        version: 1,
+      } as any;
+      const completeRecoveryCandidate = {
+        id: randomUUID(),
+        bucket: "timeline_event",
+        subjectId: "argument_strained_trust",
+        sectionKey: "facts",
+        text: "A complete recovered candidate whose original text is longer than the display preview. ".repeat(5),
+        claimKind: "static",
+        importance: "major",
+        keywords: ["recovery", "complete"],
+        evidence: [`source_note:${completeSource.id}`, "summary_entry:summary-a"],
+        confidence: 0.91,
+        salience: 0.84,
+        status: "active",
+        links: [{ target: completeSource.id, relation: "extracted_from" }],
+        sourceHash: sourceHashForLtmSourceNote(completeSource),
+      };
+      const completeRecoverySource = sourceMetadataForEvidenceUnitDraft(completeSource, {
+        scope: completeSource.scope,
+        modes: completeSource.modes,
+        extractionMode: "roleplay",
+      });
+      const completeRecovery = await addRejectedSuggestions(
+        {
+          ...rejectionDraft,
+          source: completeRecoverySource,
+          extractionOutcome: {
+            ...rejectionDraft.extractionOutcome,
+            droppedCandidates: [
+              {
+                index: 0,
+                reason: "invalid_format",
+                message: "Rejected candidate.",
+                snippet: "candidate",
+                recoveryCandidate: completeRecoveryCandidate,
+              },
+            ],
+          },
+        } as any,
+        root,
+      );
+      assert.equal(completeRecovery[0]?.candidate.recoveryCandidate?.text, completeRecoveryCandidate.text);
+      assert.equal(completeRecovery[0]?.candidate.recoveryCandidate?.confidence, 0.91);
+      assert.deepEqual(completeRecovery[0]?.candidate.recoveryCandidate?.evidence, completeRecoveryCandidate.evidence);
+      const completeRecoveryBackup = await exportLongTermMemoryData(root);
+      const completeRecoveryBackupRoot = join(dataDir, "complete-recovery-backup");
+      await replaceLongTermMemoryData(completeRecoveryBackup, completeRecoveryBackupRoot);
+      const restoredCompleteRecovery = (
+        await exportLongTermMemoryData(completeRecoveryBackupRoot)
+      ).rejectedSuggestions.find((suggestion) => suggestion.id === completeRecovery[0]?.id);
+      assert.equal(restoredCompleteRecovery?.candidate.recoveryCandidate?.text, completeRecoveryCandidate.text);
+      assert.equal(
+        restoredCompleteRecovery?.candidate.recoveryCandidate?.text.length,
+        completeRecoveryCandidate.text.length,
+      );
+      assert.equal(restoredCompleteRecovery?.source.sourceHash, completeRecoverySource.sourceHash);
+      assert.deepEqual(
+        restoredCompleteRecovery?.source.extractionFingerprint,
+        completeRecoverySource.extractionFingerprint,
+      );
+      const previewOnlyRepeat = await addRejectedSuggestions(
+        {
+          ...rejectionDraft,
+          source: completeRecoverySource,
+          extractionOutcome: {
+            ...rejectionDraft.extractionOutcome,
+            droppedCandidates: [
+              {
+                index: 0,
+                reason: "invalid_format",
+                message: "Rejected candidate.",
+                snippet: "candidate",
+              },
+            ],
+          },
+        } as any,
+        root,
+      );
+      assert.equal(previewOnlyRepeat[0]?.id, completeRecovery[0]?.id);
+      assert.equal(previewOnlyRepeat[0]?.candidate.recoveryCandidate?.text, completeRecoveryCandidate.text);
       assert.equal((await listRejectedSuggestions({ chatId: "chat-a" }, root)).length, 2);
+      const legacyFingerprintRejection = await addRejectedSuggestions(
+        {
+          ...rejectionDraft,
+          extractionOutcome: {
+            ...rejectionDraft.extractionOutcome,
+            droppedCandidates: [
+              {
+                index: 0,
+                reason: "invalid_format",
+                message: "Rejected candidate.",
+                snippet: "candidate",
+                validatorCode: "invalid_evidence_unit_format",
+              },
+            ],
+          },
+        } as any,
+        root,
+      );
+      assert.equal(legacyFingerprintRejection[0]?.id, firstRejections[0]?.id);
+      assert.equal(legacyFingerprintRejection[0]?.candidate.validatorCode, "invalid_evidence_unit_format");
+      assert.equal(legacyFingerprintRejection[0]?.candidate.recoveryCandidate?.text, completeRecoveryCandidate.text);
+      const exportedWithValidatorCode = await exportLongTermMemoryData(root);
+      assert.equal(
+        exportedWithValidatorCode.rejectedSuggestions.find((suggestion) => suggestion.id === firstRejections[0]?.id)
+          ?.candidate.validatorCode,
+        "invalid_evidence_unit_format",
+      );
+      const validatorBackupRoot = join(dataDir, "validator-code-backup");
+      await replaceLongTermMemoryData(exportedWithValidatorCode, validatorBackupRoot);
+      assert.equal(
+        (await exportLongTermMemoryData(validatorBackupRoot)).rejectedSuggestions.find(
+          (suggestion) => suggestion.id === firstRejections[0]?.id,
+        )?.candidate.validatorCode,
+        "invalid_evidence_unit_format",
+      );
+      assert.deepEqual(await deleteRejectedSuggestionsForSource("source_second_import", root), {
+        deletedCount: 1,
+        sourceNoteId: "source_second_import",
+      });
+      assert.deepEqual(await deleteRejectedSuggestionsForSource("source_second_import", root), {
+        deletedCount: 0,
+        sourceNoteId: "source_second_import",
+      });
+      assert.equal((await listRejectedSuggestions({ chatId: "chat-a" }, root)).length, 1);
+      const rejectedPath = ltmRejectedSuggestionsPath(root);
+      const rejectedDirectory = dirname(rejectedPath);
+      await chmod(rejectedDirectory, 0o500);
+      try {
+        await assert.rejects(
+          () => deleteRejectedSuggestionsForSource("source_valid_import", root),
+          /EACCES|permission|read-only/i,
+        );
+      } finally {
+        await chmod(rejectedDirectory, 0o700);
+      }
+      assert.equal((await listRejectedSuggestions({ chatId: "chat-a" }, root)).length, 1);
       const rejectionId = firstRejections[0]!.id;
       assert.deepEqual(await deleteRejectedSuggestion(rejectionId, root), { deleted: true, id: rejectionId });
       assert.deepEqual(await deleteRejectedSuggestion(rejectionId, root), { deleted: false, id: rejectionId });
@@ -508,18 +706,17 @@ async function main() {
         }),
         /same scope/u,
       );
-      await assert.rejects(
-        storage.createNote({ ...noteInput, id: "world_empty_storage", sections: {} }),
-        (error: any) => error.code === "ltm_empty_sections",
-      );
-      await assert.rejects(
-        storage.projectNote("world_empty_project", "world", () => ({
-          ...noteInput,
-          id: "world_empty_project",
-          sections: {},
-        })),
-        (error: any) => error.code === "ltm_empty_sections",
-      );
+      for (const createEmpty of [
+        () => storage.createNote({ ...noteInput, id: "world_empty_storage", sections: {} }),
+        () =>
+          storage.projectNote("world_empty_project", "world", () => ({
+            ...noteInput,
+            id: "world_empty_project",
+            sections: {},
+          })),
+      ]) {
+        await assert.rejects(createEmpty, (error: any) => error.code === "ltm_empty_sections");
+      }
       assert.equal(await storage.getNote("world_empty_project"), null);
       const keywordIntent = await storage.createNote({
         ...noteInput,
@@ -817,11 +1014,22 @@ async function main() {
       assert.equal(rewrittenDraft?.source.sourceNoteId, canonicalSourceId);
       assert.equal(rewrittenDraft?.source.extractionFingerprint?.sourceHash, rewrittenDraft?.source.sourceHash);
       assert.equal((rewrittenDraft?.mutations[0] as any).note.links[0].target, canonicalSourceId);
-      const review = await projectLongTermMemoryDraftReview({
-        root,
-        sourceNoteId: canonicalSourceId,
-      });
-      assert.equal(review.counts.drafts, 1);
+      const originalGetNotesByIds = LongTermMemoryStorage.prototype.getNotesByIds;
+      const reviewLookupIds: string[][] = [];
+      LongTermMemoryStorage.prototype.getNotesByIds = async function (ids) {
+        reviewLookupIds.push([...ids]);
+        return originalGetNotesByIds.call(this, ids);
+      };
+      try {
+        const review = await projectLongTermMemoryDraftReview({
+          root,
+          sourceNoteId: canonicalSourceId,
+        });
+        assert.equal(review.counts.drafts, 1);
+      } finally {
+        LongTermMemoryStorage.prototype.getNotesByIds = originalGetNotesByIds;
+      }
+      assert.deepEqual(reviewLookupIds, [[canonicalSourceId, "timeline_legacy_evidence", "world_legacy_target"]]);
       const rewrittenEventMutation = rewrittenDraft?.mutations.find((mutation) => mutation.id === eventMutationId);
       assert.equal(rewrittenEventMutation?.kind, "create_note");
       assert.equal(rewrittenEventMutation?.claimKind, "change");
@@ -1051,6 +1259,40 @@ async function main() {
         rebuildIndexes: false,
       });
       assert.deepEqual(staticApplied.appliedMutationIds, [staticMutationId]);
+
+      const ghostTarget = await storage.getNote("world_static_evidence");
+      assert.equal(
+        ghostTarget?.sections.facts?.contributions?.[0]?.owner,
+        "source",
+        "ghost regression fixture must start source-backed",
+      );
+      assert.deepEqual(ghostTarget?.sections.facts?.evidence, [`source_note:${canonicalSourceId}`]);
+      const ghostEdit = await storage.updateNote("world_static_evidence", {
+        sections: {
+          facts: {
+            text: "Rewritten fact without the original line.",
+            updatedAt: timestamp,
+            evidence: ghostTarget?.sections.facts?.evidence,
+          },
+        },
+      });
+      assert.equal(
+        ghostEdit.sections.facts?.text,
+        "Rewritten fact without the original line.",
+        "a manual section edit must supersede accumulated source contributions, not stack them",
+      );
+      assert.deepEqual(
+        ghostEdit.sections.facts?.contributions?.map((contribution) => contribution.owner),
+        ["manual"],
+      );
+      assert.deepEqual(ghostEdit.sections.facts?.contributions?.[0]?.evidence, []);
+      const ghostReload = await new LongTermMemoryStorage(root).getNote("world_static_evidence");
+      assert.equal(ghostReload?.sections.facts?.text, "Rewritten fact without the original line.");
+      assert.deepEqual(
+        ghostReload?.sections.facts?.contributions?.map((contribution) => contribution.owner),
+        ["manual"],
+      );
+      assert.deepEqual(ghostReload?.sections.facts?.contributions?.[0]?.evidence, []);
 
       const destructiveTarget = await storage.createNote({
         ...noteInput,
@@ -1751,10 +1993,11 @@ async function main() {
       });
       assert.deepEqual(
         manual.sections.facts.contributions?.map((item) => item.owner),
-        ["source", "manual"],
+        ["manual"],
+        "a manual edit must supersede accumulated source contributions, not stack them",
       );
-      assert.equal(manual.sections.facts.text, "Extracted fact.\n\nManually preserved fact.");
-      assert.deepEqual(manual.sections.facts.evidence, [`source_note:${retractSourceA.id}`]);
+      assert.equal(manual.sections.facts.text, "Manually preserved fact.");
+      assert.equal(manual.sections.facts.evidence, undefined);
 
       await storage.projectNote("rel_retract_fallback", "relationship", () => ({
         ...noteInput,
@@ -1991,15 +2234,57 @@ async function main() {
         "invalidated proposals must remain visible with their explicit blocking reason",
       );
       assert.equal(invalidatedReview.counts.mutations, 0, "invalidated drafts must not contribute pending mutations");
-      await assert.rejects(
-        storage.updateNote(deletionTarget.id, { removedSectionKeys: ["history"] }),
-        (error: any) => error.code === "ltm_last_section",
-      );
-      await assert.rejects(
-        storage.updateNote(deletionTarget.id, { sections: {} }),
-        (error: any) => error.code === "ltm_empty_sections",
-      );
+      for (const [patch, expectedCode] of [
+        [{ removedSectionKeys: ["history"] }, "ltm_last_section"],
+        [{ sections: {} }, "ltm_empty_sections"],
+      ] as const) {
+        await assert.rejects(storage.updateNote(deletionTarget.id, patch), (error: any) => error.code === expectedCode);
+      }
       assert.deepEqual(Object.keys((await storage.getNote(deletionTarget.id))!.sections), ["history"]);
+
+      const permanentlyDeletedTarget = await storage.createNote({
+        ...noteInput,
+        id: "world_permanent_delete_draft_target",
+        title: "Permanently deleted draft target",
+        sections: { facts: { text: "This target will be deleted.", updatedAt: timestamp } },
+      });
+      const permanentlyDeletedDraft = await draftStore.createDraft({
+        source: { sourceNoteId: canonicalSourceId, chatId: "chat-a" },
+        scope: permanentlyDeletedTarget.scope,
+        modes: permanentlyDeletedTarget.modes,
+        response: {
+          summary: "Update a target that is deleted.",
+          mutations: [
+            {
+              id: randomUUID(),
+              kind: "update_section",
+              risk: "low",
+              confidence: 0.9,
+              summary: "Update the deleted target.",
+              evidence: [`source_note:${canonicalSourceId}`],
+              noteId: permanentlyDeletedTarget.id,
+              sectionKey: "facts",
+              section: { text: "This update must be blocked.", updatedAt: timestamp },
+            },
+          ],
+        },
+      });
+      await storage.deleteNotesPermanently([permanentlyDeletedTarget.id]);
+      assert.equal(await storage.getNote(permanentlyDeletedTarget.id), null);
+      const permanentlyDeletedReview = await projectLongTermMemoryDraftReview({
+        root,
+        includeInvalidated: true,
+      });
+      const permanentlyDeletedReviewDraft = permanentlyDeletedReview.sources
+        .flatMap((source) => source.drafts)
+        .find((item) => item.draft.id === permanentlyDeletedDraft.id);
+      assert.equal(permanentlyDeletedReviewDraft?.draft.status, "invalidated");
+      assert.equal(permanentlyDeletedReviewDraft?.freshness, "invalidated");
+      assert.equal(
+        permanentlyDeletedReviewDraft?.blockReasons.some((reason) => reason.code === "draft_invalidated"),
+        true,
+        "permanently deleted targets must retain an explicit blocking reason",
+      );
 
       const activityRoot = join(dataDir, "activity-index");
       const activityDirectories = getLongTermMemoryDirectories(activityRoot);
@@ -2042,7 +2327,7 @@ async function main() {
   );
 }
 
-void main().catch((error) => {
+void runRegressionToCompletion("long-term-memory-storage", main).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

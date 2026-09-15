@@ -12,7 +12,8 @@ const PF = {
   WALK_SPEED: 70, // px/s
   // Package-local clock (never /game/time/advance — issue #5076). 5s per game
   // minute = 2 real hours of WALKING per in-game day; the clock also freezes
-  // during dialogue, so a played day stretches well past that. Tune here.
+  // during dialogue AND while a talk window is open, so a played day stretches
+  // well past that. Tune here.
   CLOCK_SECONDS_PER_GAME_MINUTE: 5,
 };
 

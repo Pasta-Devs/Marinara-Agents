@@ -13,24 +13,24 @@ function sourceFiles(directory: string): string[] {
 }
 
 const files = [
-  ...sourceFiles("packages/slurp/src/engine/packages/client"),
-  ...sourceFiles("packages/slurp/src/engine/packages/server"),
+  ...sourceFiles("packages/slurp2/src/engine/packages/client"),
+  ...sourceFiles("packages/slurp2/src/engine/packages/server"),
 ];
 
 const slurpRoutes = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts"),
   "utf8",
 );
 const slurpEntry = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/client/src/slurp-package-entry.tsx"),
+  join(root, "packages/slurp2/src/engine/packages/client/src/slurp-package-entry.tsx"),
   "utf8",
 );
 const slurpFanActivity = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-fan-activity.service.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-fan-activity.service.ts"),
   "utf8",
 );
 const slurpServerEntry = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/server-entry.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/server-entry.ts"),
   "utf8",
 );
 assert.match(
@@ -50,7 +50,7 @@ assert.match(
 );
 assert.match(
   slurpServerEntry,
-  /startNoodleRefreshScheduler\(app, addTeardown\)/u,
+  /startNoodleRefreshScheduler\(app, addTeardown[,)]/u,
   "Slurp must start the automatic timeline refresh scheduler",
 );
 assert.match(
@@ -70,16 +70,26 @@ assert.match(
 );
 
 const slurpImages = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-images.service.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-images.service.ts"),
   "utf8",
 );
 const slurpStorage = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
   "utf8",
+);
+const slurpReplyQueue = readFileSync(
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-reply-queue.storage.ts"),
+  "utf8",
+);
+assert.match(slurpReplyQueue, /removeForThread/u, "Slurp delayed replies must have a package-owned cancellation path");
+assert.match(
+  slurpReplyQueue,
+  /isSlurpFileUniqueConstraintError/u,
+  "Slurp delayed reply enqueue must tolerate duplicate rows",
 );
 assert.match(
   slurpStorage,
-  /slurp\.viewer\.\$\{personaId\}\.settings/u,
+  /slurp2\.viewer\.\$\{personaId\}\.settings/u,
   "Slurp viewer settings must use the Engine-supported app settings table",
 );
 assert.doesNotMatch(
@@ -87,8 +97,12 @@ assert.doesNotMatch(
   /slurpViewers|slurp_viewers/u,
   "Slurp must not access an Engine-unregistered viewer table",
 );
+const promptSafety = readFileSync(
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-prompt-safety.ts",
+  "utf8",
+);
 const stageProfileDraft = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-stage-profile-draft.service.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-stage-profile-draft.service.ts"),
   "utf8",
 );
 assert.match(
@@ -116,28 +130,70 @@ assert.match(
   /Create the same person behind a different stage name and handle[\s\S]*species[\s\S]*unusual anatomy/u,
   "hinted Slurp profile creation must preserve recognizable physical traits without the public identity",
 );
+// Hinted profiles keep the person's appearance, personality, and interests while withholding the
+// lookupable source canon.
 assert.match(
-  stageProfileDraft,
-  /Create a careful hidden identity[\s\S]*Preserve only broad temperament[\s\S]*Do not reveal or preserve the face/u,
-  "secret Slurp profile creation must preserve broad traits without identifying appearance",
+  promptSafety,
+  /function noodlerConcealedSourceText[\s\S]*Description: \$\{[\s\S]*Personality: \$\{[\s\S]*Appearance: \$\{/u,
+  "concealed Slurp profile prompts must seed from the source description, personality, and appearance",
 );
-assert.match(
-  stageProfileDraft,
-  /function noodlerSecretSourceText[\s\S]*reviewedNoodlerTemperamentThemes/u,
-  "secret Slurp profile prompts must use reviewed temperament themes",
-);
+// Name, scenario, and backstory are the googleable canon, so they stay out of the concealed seed.
 assert.doesNotMatch(
-  stageProfileDraft.slice(
-    stageProfileDraft.indexOf("function noodlerSecretSourceText"),
-    stageProfileDraft.indexOf("export function noodlerSourceText"),
+  promptSafety.slice(
+    promptSafety.indexOf("export function noodlerConcealedSourceText"),
+    promptSafety.indexOf("/** Character canon is private behavioral context"),
   ),
-  /reviewedNoodlerPhysicalFacts/u,
-  "secret Slurp profile prompts must not include identifying physical facts",
+  /scenario|backstory|source\.name/u,
+  "concealed Slurp profile prompts must withhold the lookupable canon",
 );
+const slurpHomeSource = readFileSync(
+  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
+  "utf8",
+);
+// A character card says nothing about how its Creator treats an audience, so without a nudge every
+// Creator lands in the same register. The presets seed the existing free-text stage voice: the
+// privacy settings shape is defined in the Engine's shared schema and cannot gain a field here.
+assert.match(
+  slurpHomeSource,
+  /const AUDIENCE_STANCE_PRESETS = \[[\s\S]*stance\.brattyTease[\s\S]*stance\.inCharge[\s\S]*\] as const;/u,
+  "Slurp creator setup must offer audience-stance presets",
+);
+assert.match(
+  slurpHomeSource,
+  /onApply=\{\(sentence\) =>\s*onChange\(\{\s*stagePersonality:/u,
+  "audience-stance presets must write into the existing stage voice field",
+);
+
+const slurpGeneration = readFileSync(
+  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
+  "utf8",
+);
+// Bio and stage voice are written once at Creator setup, so on their own they freeze every Creator
+// into whatever a model invented that day. The card is read at post time so the person is present
+// and existing Creators improve without a migration.
+assert.match(
+  slurpGeneration,
+  /const sourceCharacterContext = await resolveNoodlerCharacterCanon\(db, linkedPublicAccount, disclosureMode\)/u,
+  "Slurp posts must read the source card at post time, not only the stage profile frozen at setup",
+);
+assert.match(
+  slurpGeneration,
+  /"# Source character",\s*protect\(input\.sourceCharacterContext\)/u,
+  "the source card must reach the post prompt through the identity scrubber",
+);
+// Disclosure limits what may be said, not who this is, so a concealed Creator still gets the card
+// with only the lookupable canon withheld.
+assert.match(
+  slurpGeneration,
+  /resolveNoodlerCharacterCanon\(db, linkedPublicAccount, disclosureMode\)/u,
+  "concealed Slurp Creators must still receive the source card, minus the lookupable canon",
+);
+
+// A hinted creator still posts their body — it is the page — so every mode sends the same appearance.
 assert.match(
   slurpImages,
-  /sourceAppearance[\s\S]*imageGenerationIncludeDescriptions[\s\S]*reviewedNoodlerPhysicalFacts\(sourceAppearance\)/u,
-  "hidden Slurp image prompts must use reviewed physical tokens",
+  /imageGenerationIncludeDescriptions\) \{\s*characterDescription = sourceAppearance;/u,
+  "Slurp image prompts must describe the same body in every disclosure mode",
 );
 assert.match(
   slurpImages,
@@ -151,7 +207,7 @@ assert.match(
 );
 assert.match(slurpImages, /enableImageInterpretation !== false/u);
 const slurpPublicImages = readFileSync(
-  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-public-images.service.ts"),
+  join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-public-images.service.ts"),
   "utf8",
 );
 assert.match(
@@ -160,11 +216,8 @@ assert.match(
   "public Slurp image prompts must interpret character context without connection instructions",
 );
 assert.match(slurpPublicImages, /enableImageInterpretation !== false/u);
-assert.match(
-  slurpImages,
-  /input\.disclosureMode !== "secret"[\s\S]*referenceImages/u,
-  "secret Slurp identities must not receive avatar reference images",
-);
+// Slurp offers only Open and Hinted, and both keep avatar reference images.
+assert.doesNotMatch(slurpImages, /"secret"/u, "Slurp images must not branch on the removed Secret tier");
 
 const noodleHome = readFileSync(
   join(root, "packages/noodle/src/engine/packages/client/src/components/noodle/NoodleHome.tsx"),

@@ -27,6 +27,9 @@ const BASE_PAL = {
   stone: "#8d8d94", stoneDark: "#73737a", stoneHi: "#a5a5ac",
   fence: "#7d6142", fenceHi: "#97794f", door: "#5d4530", doorKnob: "#d9c07a",
   well: "#6f6f78", counter: "#725539",
+  // Snow: warm white, because the cozy palette override is EMPTY — what is
+  // written here IS the village's snow.
+  snow1: "#eceadf", snow2: "#d5d2c3", snowHi: "#fbfaf2",
   ink: "#22261f", white: "#f3efe2",
 };
 const PAL = { ...BASE_PAL };
@@ -51,6 +54,8 @@ const THEME_ART = {
       stone: "#767e88", stoneDark: "#5a626c", stoneHi: "#939ba6",
       fence: "#5d6672", fenceHi: "#7d8894", door: "#3f4854", doorKnob: "#8ff0e8",
       well: "#4d545e", counter: "#3f4854",
+      // Blue-white where the village is warm-white: the colony's light is cold.
+      snow1: "#dde6ef", snow2: "#b9c6d4", snowHi: "#f4f9ff",
     },
     painters: {
       // Hab panel: smooth plating, one vertical seam, corner rivets.
@@ -90,9 +95,9 @@ const THEME_ART = {
         THEME_ART["sci-fi-colony"].painters.roof(g, rnd);
         g.rect(0, T - 3, T, 3, PAL.beam); g.rect(0, T - 3, T, 1, PAL.trunkHi);
       },
-      // Comms mast on regolith.
+      // Comms mast, standing on whatever the ground under it is — unfilled, so
+      // a snow day shows snow under the pylon and not a patch of regolith.
       trunk(g) {
-        g.rect(0, 0, T, T, PAL.grass1);
         g.rect(7, 2, 2, 14, PAL.trunk); g.rect(7, 2, 1, 14, PAL.trunkHi);
         g.rect(5, 4, 6, 1, PAL.trunk);
         g.rect(6, 12, 4, 2, PAL.wallDark);
@@ -114,20 +119,39 @@ const THEME_ART = {
         for (let c = 3; c < T - 2; c += 3) { g.px(c, 4, PAL.crop); g.px(c + 1, 4 + ((rnd() * 2) | 0), PAL.cropRipe); g.px(c, 11, PAL.crop); }
         g.rect(1, 2, T - 2, 1, PAL.leafHi);
       },
-      // Atmosphere recycler where the village well stood.
+      // Atmosphere recycler where the village well stood — unfilled, like the
+      // recycler's Tier-0 twin and the well it replaces.
       well(g) {
-        g.rect(0, 0, T, T, PAL.grass1);
         g.rect(3, 3, 10, 11, PAL.well); g.rect(3, 3, 10, 1, PAL.stoneHi);
         g.rect(4, 4, 8, 2, PAL.leafHi);
         for (const y of [7, 9, 11]) g.rect(4, y, 8, 1, PAL.wallDark);
       },
-      // Guard rail instead of a wooden fence.
+      // Guard rail instead of a wooden fence — unfilled, for the mast's reason.
       fence(g) {
-        g.rect(0, 0, T, T, PAL.grass1);
         g.rect(2, 4, 2, 10, PAL.fence); g.px(2, 4, PAL.fenceHi);
         g.rect(12, 4, 2, 10, PAL.fence); g.px(12, 4, PAL.fenceHi);
         g.rect(0, 6, T, 1, PAL.trunk); g.rect(0, 9, T, 1, PAL.trunk);
         g.px(0, 6, PAL.trunkHi);
+      },
+      // ── THE SNOW TWINS OF THE TWO IDS THIS THEME ALREADY OVERRIDES ─────────
+      // `crop` and `canopy` are a hydroponics tray and a comms-mast head here,
+      // so their snow twins need overrides too — or a colony snow day falls
+      // through to the BASE snow painters and swaps tile SHAPES: masts become
+      // leafy blobs, trays become cozy furrows, on the theme where snow shows
+      // most. `grass`/`grass2` are overridden by neither theme, so the palette
+      // above is the whole difference for their twins.
+      cropSnow(g) {
+        g.rect(0, 0, T, T, PAL.floor2);
+        g.rect(1, 2, T - 2, 5, PAL.beam); g.rect(1, 9, T - 2, 5, PAL.beam);
+        g.rect(2, 3, T - 4, 3, PAL.snow1); g.rect(2, 10, T - 4, 3, PAL.snow1);
+        g.rect(1, 2, T - 2, 1, PAL.snowHi); g.rect(1, 9, T - 2, 1, PAL.snowHi);
+      },
+      canopySnow(g) {
+        g.rect(5, 0, 6, 2, PAL.snowHi);
+        g.rect(7, 2, 2, 3, PAL.trunk);
+        g.rect(3, 4, 10, 2, PAL.trunk);
+        g.rect(3, 3, 10, 1, PAL.snow1);
+        g.rect(2, 5, 2, 1, PAL.snow2); g.rect(12, 5, 2, 1, PAL.snow2);
       },
     },
   },
@@ -233,20 +257,23 @@ const PAINTERS = {
     g.rect(0, 0, T, T, PAL.counter);
     g.rect(0, 0, T, 3, PAL.path1); g.rect(0, 0, T, 1, PAL.pathFleck); g.rect(0, 3, T, 1, PAL.beam);
   },
+  // NO GROUND FILL, on the runtime well's own argument: the renderer draws an
+  // object tile straight over the ground tile, so a painter that fills its own
+  // background is declaring what it stands on — and on a snow day these three
+  // were declaring green (regolith brown, on the colony) in the middle of a
+  // snowfield. Left transparent, the ground shows through and the same sprite
+  // works on grass, paving and snow alike.
   fence(g) {
-    g.rect(0, 0, T, T, PAL.grass1);
     g.rect(2, 4, 2, 10, PAL.fence); g.px(2, 4, PAL.fenceHi);
     g.rect(12, 4, 2, 10, PAL.fence); g.px(12, 4, PAL.fenceHi);
     g.rect(0, 6, T, 2, PAL.fence); g.rect(0, 6, T, 1, PAL.fenceHi);
   },
   well(g) {
-    g.rect(0, 0, T, T, PAL.grass1);
     g.rect(2, 4, 12, 10, PAL.well); g.rect(2, 4, 12, 1, PAL.stoneHi);
     g.rect(4, 6, 8, 6, PAL.ink);
     g.rect(2, 2, 12, 2, PAL.beam); g.px(7, 1, PAL.beam); g.px(8, 1, PAL.beam);
   },
   trunk(g) {
-    g.rect(0, 0, T, T, PAL.grass1);
     g.rect(6, 2, 4, 14, PAL.trunk); g.rect(6, 2, 1, 14, PAL.trunkHi);
     g.rect(5, 12, 6, 2, PAL.leaf);
   },
@@ -354,6 +381,75 @@ const PAINTERS = {
     g.rect(2, 2, T - 4, 1, PAL.pathFleck);
     for (let plank = 4; plank < T - 3; plank += 4) { g.rect(2, plank, T - 4, 1, PAL.pathEdge); g.rect(2, plank + 1, T - 4, 1, PAL.path2); }
     g.rect(2, T - 3, T - 4, 1, PAL.pathEdge);
+  },
+  // ── SNOW GROUND (0.14) ──────────────────────────────────────────────────────
+  // The four ids 17-weather's SUBS table swaps in on a snow day, twinned with
+  // the Tier-0 painters in src/10-art.js. APPENDED, NEVER INSERTED — the rule
+  // above, and the reason the sheet grows a fifth row (33 ids over 8 columns)
+  // instead of anything moving under it. Dither-free for the runtime layer's
+  // reason: snow reads flat, and a fixed shape is what tells a themed snow tile
+  // from a base one that only got recoloured.
+  grassSnow(g) {
+    g.rect(0, 0, T, T, PAL.snow1);
+    g.rect(0, 0, T, 1, PAL.snowHi);
+    g.rect(3, 5, 4, 1, PAL.snow2); g.rect(10, 9, 4, 1, PAL.snow2); g.rect(6, 12, 3, 1, PAL.snow2);
+    g.rect(12, 2, 2, 1, PAL.snowHi); g.rect(1, 10, 2, 1, PAL.snowHi);
+    g.rect(0, T - 1, T, 1, PAL.snow2);
+  },
+  grassSnow2(g) {
+    g.rect(0, 0, T, T, PAL.snow2);
+    g.rect(0, 0, T, 1, PAL.snow1);
+    g.rect(2, 4, 5, 1, PAL.snow1); g.rect(9, 7, 5, 1, PAL.snow1); g.rect(4, 11, 6, 1, PAL.snow1);
+    g.rect(11, 13, 3, 1, PAL.snowHi);
+  },
+  // A field under snow: the furrows still read as ridges, so a crop tile stays
+  // a crop tile all winter instead of going to lawn.
+  cropSnow(g) {
+    g.rect(0, 0, T, T, PAL.snow1);
+    for (let r = 2; r < T; r += 5) { g.rect(1, r - 1, T - 2, 1, PAL.snowHi); g.rect(1, r, T - 2, 1, PAL.snow2); }
+  },
+  // The overhead layer: a treetop carrying snow, transparent corners kept.
+  canopySnow(g) {
+    g.rect(2, 2, 12, 12, PAL.snow2);
+    g.rect(1, 4, 14, 8, PAL.snow2);
+    g.rect(4, 1, 8, 14, PAL.snow2);
+    g.rect(3, 2, 10, 4, PAL.snow1);
+    g.rect(4, 1, 8, 2, PAL.snowHi);
+    g.rect(2, 5, 3, 1, PAL.snowHi); g.rect(11, 5, 3, 1, PAL.snowHi);
+  },
+};
+
+// ── The painters, addressable from outside ───────────────────────────────────
+// Tier-1 art was testable only as SOURCE TEXT — a regex for a painter's name —
+// which can say a painter EXISTS and nothing about what it draws. A tile added
+// to this table and left as a plain square, or a themed override that quietly
+// stopped being a different shape from the base one, both read as green under a
+// name check. The painters take a tiny {rect, px} context and touch nothing
+// else, so any shim that answers those two calls rasterizes them exactly as
+// `Raster` does, and the shape comparisons the runtime Tier-0 layer gets can be
+// run here too.
+//
+// Emission still goes through `buildArt()` and this changes no baked byte: the
+// palette swap below is the same in-place one the emission loop performs, and
+// it restores the base palette on the way out for the same reason the emission
+// loop does.
+export const TIER1 = {
+  T,
+  themes: () => Object.keys(THEME_ART),
+  ids: () => Object.keys(PAINTERS),
+  /** Paint one tile of one theme into `g` ({rect, px}). The rng is the same
+   *  per-(theme, id) stream an emission hands the painter unless one is passed,
+   *  which is how a caller asks whether a painter reads it at all. */
+  paint(themeId, id, g, rnd = rng(hash(`tier1:${themeId}:${id}`))) {
+    const themeArt = THEME_ART[themeId];
+    for (const key of Object.keys(PAL)) delete PAL[key];
+    Object.assign(PAL, BASE_PAL, themeArt.palette);
+    try {
+      (themeArt.painters[id] || PAINTERS[id])(g, rnd);
+    } finally {
+      for (const key of Object.keys(PAL)) delete PAL[key];
+      Object.assign(PAL, BASE_PAL);
+    }
   },
 };
 

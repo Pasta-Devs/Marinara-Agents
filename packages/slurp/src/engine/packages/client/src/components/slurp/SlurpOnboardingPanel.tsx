@@ -530,6 +530,19 @@ export function SlurpOnboardingWizard({
                   title={t("ui.noodle.noodlerwizard.intro.welcome.title")}
                   help={t("ui.noodle.noodlerwizard.intro.welcome.help")}
                 />
+                <div className="rounded-xl border-2 border-amber-300/70 bg-amber-300/15 p-4 text-amber-50 shadow-lg shadow-amber-950/20 max-sm:p-3">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle size={24} className="mt-0.5 shrink-0 text-amber-300" aria-hidden="true" />
+                    <div className="min-w-0 space-y-1.5">
+                      <h2 className="text-base font-black uppercase tracking-wide text-amber-200">
+                        {t("ui.noodle.noodlerwizard.legacyNotice.title")}
+                      </h2>
+                      <p className="text-sm font-semibold leading-6">
+                        {t("ui.noodle.noodlerwizard.legacyNotice.detail")}
+                      </p>
+                    </div>
+                  </div>
+                </div>
                 <div className="flex items-center gap-4 rounded-xl border border-[#ff7ec1]/25 bg-[#ff7ec1]/10 p-4 max-sm:items-start max-sm:gap-3 max-sm:p-3">
                   <img
                     src="/sprites/mari/Mari_wave.png"

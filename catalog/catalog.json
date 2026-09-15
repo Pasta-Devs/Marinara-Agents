@@ -7,7 +7,7 @@
         "schemaVersion": 1,
         "id": "eightball",
         "name": "8-Ball Pool",
-        "version": "1.0.4",
+        "version": "1.0.5",
         "description": "Play 8-Ball Pool with a Conversation character. Install to use /8ball manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
         "engine": {
           "min": "2.3.0",
@@ -46,13 +46,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "8ad4ad32d97cfb7ae2df9134f3447b5f84969e2fca323b49a34087b513670fc1",
-            "bytes": 90109
+            "sha256": "82c5cc0160807583f4855e737106ee4e9bb4d268a1a1908d3fee9314316ef8d5",
+            "bytes": 90105
           },
           {
             "path": "client.js",
-            "sha256": "d7bade1c032f020dceda61208db2bafdaa938fdbb55a303f35c0e73b92efeb52",
-            "bytes": 625583
+            "sha256": "fb6a19eee5c5ac4327848f4f459d1f3f70b71ee2933f7ffad445c5543090e0c8",
+            "bytes": 572846
           }
         ],
         "permissions": [
@@ -67,9 +67,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/eightball.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/eightball-1.0.4.zip",
-        "sha256": "8fc4d46daf5bba51e39bb3abad8ed54a9a1ff5dc5aba51e07db61557e725f9a6",
-        "bytes": 200312
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/eightball-1.0.5.zip",
+        "sha256": "b5b5923af21aefc348668a53dd187a7d7011f6cbfb0dcb7f4b19fab67d81df7a",
+        "bytes": 665344
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#eightball"
     },
@@ -110,7 +110,7 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/background.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/background-1.0.3.zip",
-        "sha256": "379d9f255044cd4bb882b909e4bad8fd5533465cf055fea5b8cfeae3b5ed894b",
+        "sha256": "c81a75a054570afb6fa6abf3da0b1c9570737afafbecb1172e4f0cb2b23f9fe4",
         "bytes": 1433
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#background"
@@ -120,7 +120,7 @@
         "schemaVersion": 1,
         "id": "beholder",
         "name": "Beholder",
-        "version": "1.3.6",
+        "version": "1.3.11",
         "description": "Tracks each roleplay character's clothing by body slot, held items, wounds, missing parts, bare slots, and species, then keeps that physical state available to the next response, and shows it on a paper doll you can open from the roleplay toolbar. Pick the prompt template for your model: one prompt for a SOTA model (GPT-5.5+, Opus 4.8+, Kimi K3+), or five passes for the local Beholder model (GetBeholder/Beholder-GGUF) — free, offline, and private. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.4.4",
@@ -147,8 +147,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "710ce38158e9621fcd3a234606c26111a1133afa9a1e7f1b907c4c921677d8ad",
-            "bytes": 263789
+            "sha256": "27cbb272155fff308377a6fb737312a6defb7fc245911b7aa9b954f15002b01b",
+            "bytes": 449376
           }
         ],
         "permissions": [
@@ -163,9 +163,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/beholder.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/beholder-1.3.6.zip",
-        "sha256": "1f434c890bb8c35097bc4c1587f06a0a22daae45cbcf2d5922999f633f5202d5",
-        "bytes": 275735
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/beholder-1.3.11.zip",
+        "sha256": "8bb5a75dd11991399fcdf164c11cc3a91981de2971237055d5d983d693ea03a1",
+        "bytes": 461323
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#beholder"
     },
@@ -174,7 +174,7 @@
         "schemaVersion": 1,
         "id": "conversation-calls",
         "name": "Calls",
-        "version": "1.0.13",
+        "version": "1.0.16",
         "description": "Adds live audio and video calls with Conversation characters. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Calls for Conversation mode.",
         "engine": {
           "min": "2.4.1",
@@ -204,13 +204,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "9cb6cff19811100dce2fcc5f5fbb073d0f1dfb7ded2fb9d74aa46df1c5f49d29",
-            "bytes": 2382436
+            "sha256": "21398667750241e50f18b015030e75163bff819f353475e6b969f8178213e216",
+            "bytes": 2311268
           },
           {
             "path": "client.js",
-            "sha256": "34f8369debed4f6fcd8a9fb323c2062a44feda44980d6f624777c54aef6f3a27",
-            "bytes": 850335
+            "sha256": "4695156d68475de1711d1ff4b47b5ba4d1dd48811af0609566d109d028143f1d",
+            "bytes": 851175
           }
         ],
         "permissions": [
@@ -227,9 +227,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/conversation-calls.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.0.13.zip",
-        "sha256": "ac1abcbf18b1c12a2eb831af4c102d08e07d5c2fc2f621c4b3c368bffb7703cf",
-        "bytes": 3234895
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.0.16.zip",
+        "sha256": "9489b6ed9fc7308482f77742e9d09b9421e4ab389aface1a08a86d5c4c628444",
+        "bytes": 3164567
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#conversation-calls"
     },
@@ -280,7 +280,7 @@
         "schemaVersion": 1,
         "id": "character-tracker",
         "name": "Character Tracker",
-        "version": "1.0.2",
+        "version": "1.1.0",
         "description": "Tracks which characters are present in the scene, their mood, actions, appearance, outfit, thoughts, and per-character stats (HP, etc.). Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
@@ -295,8 +295,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "8517d76056388156a1ab25aa49021d201f7df169e030750d95186bf33da6daf9",
-            "bytes": 2526
+            "sha256": "504ac24e4092f1e847717103398c88f67b0598b92a726721df72ed71860481c5",
+            "bytes": 3341
           }
         ],
         "permissions": [
@@ -311,9 +311,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/character-tracker.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/character-tracker-1.0.2.zip",
-        "sha256": "4e6dfef855b5a4f51869bbe0e9ffe7e17b634406b45b5b92b20d694130b8fb7a",
-        "bytes": 1841
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/character-tracker-1.1.0.zip",
+        "sha256": "16f255450688654df0f7462350427a9e881b91e58c8c9d8daa0caa00da162420",
+        "bytes": 2214
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#character-tracker"
     },
@@ -322,7 +322,7 @@
         "schemaVersion": 1,
         "id": "chess",
         "name": "Chess",
-        "version": "1.0.4",
+        "version": "1.0.5",
         "description": "Play Chess with a Conversation character. Install to use /chess manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
         "engine": {
           "min": "2.3.0",
@@ -357,13 +357,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "a6716f9b70ee9c9ae7210d2b66089b2f55fe0aa6e261cae9f3aed1dbba1eec07",
-            "bytes": 108043
+            "sha256": "0473cb2ef2446c512a8194b4de265cc3db141c4ef0390b7d1b12c41fe5df23f9",
+            "bytes": 108076
           },
           {
             "path": "client.js",
-            "sha256": "0cac462057b8421b5ef538339ac1c9785c42b2088cf4433493552cfc04504422",
-            "bytes": 619495
+            "sha256": "440a0c52a2e34b071858db7d89fd3ca0c68ae84fd93a16264ab1d49dd7940fce",
+            "bytes": 566758
           }
         ],
         "permissions": [
@@ -378,9 +378,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/chess.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/chess-1.0.4.zip",
-        "sha256": "8da4f9773ffe48c446dd047cd6c3c1c6a7ca3cacbd4471102a47a4b3b041a36c",
-        "bytes": 204109
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/chess-1.0.5.zip",
+        "sha256": "5a57afb19f65d5942e4746017a3411641c7a3fffb5d3991d419df1c1edb245c5",
+        "bytes": 677116
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#chess"
     },
@@ -421,7 +421,7 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/combat.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/combat-1.0.3.zip",
-        "sha256": "a34d0c456679ba8651d0411b29bc4117630416d4d4476ffd9240d510a1a2f4d3",
+        "sha256": "9da6690edaa65f3f54e3a16489ef9780085c630008482e33592c7b6c748f2e82",
         "bytes": 1603
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#combat"
@@ -473,7 +473,7 @@
         "schemaVersion": 1,
         "id": "custom-tracker",
         "name": "Custom Tracker",
-        "version": "1.0.2",
+        "version": "1.1.0",
         "description": "Tracks user-defined fields (currencies, counters, flags, or any custom data). Add any fields you want the model to keep track of during the roleplay. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
@@ -488,8 +488,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "e59a4d4ebda0364cced40f4aa056ed49fa44221253a85a140ece86732a028b1b",
-            "bytes": 1490
+            "sha256": "40acf7260fb727a9ac1e61f3a1227cb0945ac3596cab0ce7bc984abae4e3261f",
+            "bytes": 2196
           }
         ],
         "permissions": [
@@ -504,9 +504,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/custom-tracker.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/custom-tracker-1.0.2.zip",
-        "sha256": "8c035a4788a53bbae6be2b8cd5190fcf336bad007fa073c8c011fc8d1091b445",
-        "bytes": 1462
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/custom-tracker-1.1.0.zip",
+        "sha256": "3d54d8b50fdc57da092a9f5d7b3f14d04e5f2c63f5291e9f7d339b0488a9f178",
+        "bytes": 1791
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#custom-tracker"
     },
@@ -547,7 +547,7 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/cyoa.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/cyoa-1.0.3.zip",
-        "sha256": "dc54e3bb3eef178d030c41fd9a78682dd08927af8d3185a1f5a5371d082992d5",
+        "sha256": "dd279408cd81692571cc3ed8d788ff731145722fc1e81b6eef9682b8b993c22b",
         "bytes": 1466
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#cyoa-choices"
@@ -589,7 +589,7 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/echo-chamber.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/echo-chamber-1.0.2.zip",
-        "sha256": "5b570c2b3a7377de1a396fa94f6c460650f1f575cfc8082945634b814e413fb0",
+        "sha256": "e78f4d13e6da36deae79dd6d0f6f4396e1bad8c75935b4cb41ffee4189a93520",
         "bytes": 2429
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#echo-chamber"
@@ -631,10 +631,1551 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/expression.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/expression-1.0.4.zip",
-        "sha256": "3e1921c3b33f7367efcbf32630e68634008dab058432ee8cbda0fc5cfeeec357",
+        "sha256": "e038bdc5693a619445846aebe17a815ec85e17c6659e5d41d39fe3be7d4b6e13",
         "bytes": 1578
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#expression-engine"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 2,
+        "capabilityApi": {
+          "major": 1,
+          "minor": 10
+        },
+        "builtAgainst": {
+          "engineVersion": "2.4.5",
+          "engineCommit": "066f4a0fda92048a18e5c64f82d700ff1e851880"
+        },
+        "id": "gacha-forge",
+        "name": "Gacha Forge",
+        "version": "1.8.0",
+        "description": "A complete gacha game mode. Describe a world and Gacha Forge builds the rest: banners to pull on, a cast the model writes and paints for you, story chapters told by a visual-novel narrator, and the battles, gear and events that grow around them. Install it, restart Marinara Engine when prompted, then open Home → Gacha Forge.",
+        "engine": {
+          "min": "2.4.4",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "client": "client.js",
+          "server": "server.mjs"
+        },
+        "contributions": {
+          "slots": [
+            "home-browser-tab"
+          ],
+          "homeBrowserTab": {
+            "label": "Gacha Forge",
+            "ariaLabel": "Open Gacha Forge",
+            "iconPaths": [
+              "gacha-forge-icon.png"
+            ]
+          },
+          "assets": {
+            "paths": [
+              "gacha-forge-icon.png",
+              "item-aether.webp",
+              "item-coin-event.webp",
+              "item-doctrine-assassin-1.webp",
+              "item-doctrine-assassin-2.webp",
+              "item-doctrine-assassin-3.webp",
+              "item-doctrine-mage-1.webp",
+              "item-doctrine-mage-2.webp",
+              "item-doctrine-mage-3.webp",
+              "item-doctrine-support-1.webp",
+              "item-doctrine-support-2.webp",
+              "item-doctrine-support-3.webp",
+              "item-doctrine-tank-1.webp",
+              "item-doctrine-tank-2.webp",
+              "item-doctrine-tank-3.webp",
+              "item-doctrine-warrior-1.webp",
+              "item-doctrine-warrior-2.webp",
+              "item-doctrine-warrior-3.webp",
+              "item-funds.webp",
+              "item-glimmer.webp",
+              "item-insight-core.webp",
+              "item-insight-prism.webp",
+              "item-insight-shard.webp",
+              "item-mandate-any-1.webp",
+              "item-rank.webp",
+              "item-relic-core.webp",
+              "item-relic-crest.webp",
+              "item-relic-edge.webp",
+              "item-relic-flow.webp",
+              "item-relic.webp",
+              "item-sigil-dark-1.webp",
+              "item-sigil-dark-2.webp",
+              "item-sigil-dark-3.webp",
+              "item-sigil-earth-1.webp",
+              "item-sigil-earth-2.webp",
+              "item-sigil-earth-3.webp",
+              "item-sigil-fire-1.webp",
+              "item-sigil-fire-2.webp",
+              "item-sigil-fire-3.webp",
+              "item-sigil-light-1.webp",
+              "item-sigil-light-2.webp",
+              "item-sigil-light-3.webp",
+              "item-sigil-water-1.webp",
+              "item-sigil-water-2.webp",
+              "item-sigil-water-3.webp",
+              "item-sigil-wind-1.webp",
+              "item-sigil-wind-2.webp",
+              "item-sigil-wind-3.webp",
+              "item-tenet-dark-1.webp",
+              "item-tenet-dark-2.webp",
+              "item-tenet-dark-3.webp",
+              "item-tenet-earth-1.webp",
+              "item-tenet-earth-2.webp",
+              "item-tenet-earth-3.webp",
+              "item-tenet-fire-1.webp",
+              "item-tenet-fire-2.webp",
+              "item-tenet-fire-3.webp",
+              "item-tenet-light-1.webp",
+              "item-tenet-light-2.webp",
+              "item-tenet-light-3.webp",
+              "item-tenet-water-1.webp",
+              "item-tenet-water-2.webp",
+              "item-tenet-water-3.webp",
+              "item-tenet-wind-1.webp",
+              "item-tenet-wind-2.webp",
+              "item-tenet-wind-3.webp",
+              "item-unit.webp",
+              "tower-bg.webp",
+              "modes-story.webp",
+              "modes-materials.webp",
+              "farm-funds.webp",
+              "farm-xp.webp",
+              "farm-relic.webp",
+              "farm-form.webp",
+              "farm-asc.webp",
+              "rot-sigil-fire.webp",
+              "rot-sigil-water.webp",
+              "rot-sigil-wind.webp",
+              "rot-sigil-earth.webp",
+              "rot-sigil-light.webp",
+              "rot-sigil-dark.webp",
+              "rot-doctrine-tank.webp",
+              "rot-doctrine-warrior.webp",
+              "rot-doctrine-mage.webp",
+              "rot-doctrine-support.webp",
+              "rot-doctrine-assassin.webp",
+              "rot-tenet-fire.webp",
+              "rot-tenet-water.webp",
+              "rot-tenet-wind.webp",
+              "rot-tenet-earth.webp",
+              "rot-tenet-light.webp",
+              "rot-tenet-dark.webp",
+              "item-vigor-l.webp",
+              "item-vigor-m.webp",
+              "item-vigor-s.webp",
+              "skill-aoe_damage-dark.webp",
+              "skill-aoe_damage-earth.webp",
+              "skill-aoe_damage-fire.webp",
+              "skill-aoe_damage-light.webp",
+              "skill-aoe_damage-water.webp",
+              "skill-aoe_damage-wind.webp",
+              "skill-attack.webp",
+              "skill-buff-dark-many.webp",
+              "skill-buff-dark-one.webp",
+              "skill-buff-earth-many.webp",
+              "skill-buff-earth-one.webp",
+              "skill-buff-fire-many.webp",
+              "skill-buff-fire-one.webp",
+              "skill-buff-light-many.webp",
+              "skill-buff-light-one.webp",
+              "skill-buff-water-many.webp",
+              "skill-buff-water-one.webp",
+              "skill-buff-wind-many.webp",
+              "skill-buff-wind-one.webp",
+              "skill-cleanse-dark-many.webp",
+              "skill-cleanse-dark-one.webp",
+              "skill-cleanse-earth-many.webp",
+              "skill-cleanse-earth-one.webp",
+              "skill-cleanse-fire-many.webp",
+              "skill-cleanse-fire-one.webp",
+              "skill-cleanse-light-many.webp",
+              "skill-cleanse-light-one.webp",
+              "skill-cleanse-water-many.webp",
+              "skill-cleanse-water-one.webp",
+              "skill-cleanse-wind-many.webp",
+              "skill-cleanse-wind-one.webp",
+              "skill-damage-dark-many.webp",
+              "skill-damage-dark-one.webp",
+              "skill-damage-earth-many.webp",
+              "skill-damage-earth-one.webp",
+              "skill-damage-fire-many.webp",
+              "skill-damage-fire-one.webp",
+              "skill-damage-light-many.webp",
+              "skill-damage-light-one.webp",
+              "skill-damage-water-many.webp",
+              "skill-damage-water-one.webp",
+              "skill-damage-wind-many.webp",
+              "skill-damage-wind-one.webp",
+              "skill-debuff-dark-many.webp",
+              "skill-debuff-dark-one.webp",
+              "skill-debuff-earth-many.webp",
+              "skill-debuff-earth-one.webp",
+              "skill-debuff-fire-many.webp",
+              "skill-debuff-fire-one.webp",
+              "skill-debuff-light-many.webp",
+              "skill-debuff-light-one.webp",
+              "skill-debuff-water-many.webp",
+              "skill-debuff-water-one.webp",
+              "skill-debuff-wind-many.webp",
+              "skill-debuff-wind-one.webp",
+              "skill-defend.webp",
+              "skill-dot-dark-many.webp",
+              "skill-dot-dark-one.webp",
+              "skill-dot-earth-many.webp",
+              "skill-dot-earth-one.webp",
+              "skill-dot-fire-many.webp",
+              "skill-dot-fire-one.webp",
+              "skill-dot-light-many.webp",
+              "skill-dot-light-one.webp",
+              "skill-dot-water-many.webp",
+              "skill-dot-water-one.webp",
+              "skill-dot-wind-many.webp",
+              "skill-dot-wind-one.webp",
+              "skill-drain-dark-many.webp",
+              "skill-drain-dark-one.webp",
+              "skill-drain-earth-many.webp",
+              "skill-drain-earth-one.webp",
+              "skill-drain-fire-many.webp",
+              "skill-drain-fire-one.webp",
+              "skill-drain-light-many.webp",
+              "skill-drain-light-one.webp",
+              "skill-drain-water-many.webp",
+              "skill-drain-water-one.webp",
+              "skill-drain-wind-many.webp",
+              "skill-drain-wind-one.webp",
+              "skill-empty.webp",
+              "skill-energy-dark-many.webp",
+              "skill-energy-dark-one.webp",
+              "skill-energy-earth-many.webp",
+              "skill-energy-earth-one.webp",
+              "skill-energy-fire-many.webp",
+              "skill-energy-fire-one.webp",
+              "skill-energy-light-many.webp",
+              "skill-energy-light-one.webp",
+              "skill-energy-water-many.webp",
+              "skill-energy-water-one.webp",
+              "skill-energy-wind-many.webp",
+              "skill-energy-wind-one.webp",
+              "skill-execute-dark-many.webp",
+              "skill-execute-dark-one.webp",
+              "skill-execute-earth-many.webp",
+              "skill-execute-earth-one.webp",
+              "skill-execute-fire-many.webp",
+              "skill-execute-fire-one.webp",
+              "skill-execute-light-many.webp",
+              "skill-execute-light-one.webp",
+              "skill-execute-water-many.webp",
+              "skill-execute-water-one.webp",
+              "skill-execute-wind-many.webp",
+              "skill-execute-wind-one.webp",
+              "skill-heal-dark-many.webp",
+              "skill-heal-dark-one.webp",
+              "skill-heal-earth-many.webp",
+              "skill-heal-earth-one.webp",
+              "skill-heal-fire-many.webp",
+              "skill-heal-fire-one.webp",
+              "skill-heal-light-many.webp",
+              "skill-heal-light-one.webp",
+              "skill-heal-water-many.webp",
+              "skill-heal-water-one.webp",
+              "skill-heal-wind-many.webp",
+              "skill-heal-wind-one.webp",
+              "skill-item.webp",
+              "skill-revive-dark.webp",
+              "skill-revive-earth.webp",
+              "skill-revive-fire.webp",
+              "skill-revive-light.webp",
+              "skill-revive-water.webp",
+              "skill-revive-wind.webp",
+              "skill-row.webp",
+              "skill-shield-dark-many.webp",
+              "skill-shield-dark-one.webp",
+              "skill-shield-earth-many.webp",
+              "skill-shield-earth-one.webp",
+              "skill-shield-fire-many.webp",
+              "skill-shield-fire-one.webp",
+              "skill-shield-light-many.webp",
+              "skill-shield-light-one.webp",
+              "skill-shield-water-many.webp",
+              "skill-shield-water-one.webp",
+              "skill-shield-wind-many.webp",
+              "skill-shield-wind-one.webp",
+              "skill-stun-dark-many.webp",
+              "skill-stun-dark-one.webp",
+              "skill-stun-earth-many.webp",
+              "skill-stun-earth-one.webp",
+              "skill-stun-fire-many.webp",
+              "skill-stun-fire-one.webp",
+              "skill-stun-light-many.webp",
+              "skill-stun-light-one.webp",
+              "skill-stun-water-many.webp",
+              "skill-stun-water-one.webp",
+              "skill-stun-wind-many.webp",
+              "skill-stun-wind-one.webp"
+            ]
+          }
+        },
+        "permissions": [
+          "network",
+          "routes",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true,
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "d7d6dbd7529523956209497412c8d8db06274b17d78e1bc9f63598f6bddc4b75",
+            "bytes": 777
+          },
+          {
+            "path": "client.js",
+            "sha256": "a6787c9bc6e7d75fb720f408b0023396fb599034c398468844259ae63555400e",
+            "bytes": 1401939
+          },
+          {
+            "path": "farm-asc.webp",
+            "sha256": "261bbddf41407fc820a7cf504e46824e78c19056ef7686271d1ac78ee9772cd5",
+            "bytes": 31484
+          },
+          {
+            "path": "farm-form.webp",
+            "sha256": "ad753da8302cd65a3d9a53cc4431868ca6378103cfecebb954b100bc2b07c1ea",
+            "bytes": 92344
+          },
+          {
+            "path": "farm-funds.webp",
+            "sha256": "b16bd8aa634d16591de85a4a2fdc71152860bf99afefc6233bf44fdd405d47ea",
+            "bytes": 153118
+          },
+          {
+            "path": "farm-relic.webp",
+            "sha256": "b1eec406633e558a577af16dd159b9e72024053b0363b8096180a4cf6f201c15",
+            "bytes": 45720
+          },
+          {
+            "path": "farm-xp.webp",
+            "sha256": "f29aeed98c00b3e47e8967284874af24a615609ce4949320f8d665793f07a9a8",
+            "bytes": 50094
+          },
+          {
+            "path": "gacha-forge-icon.png",
+            "sha256": "1352f478b6b7ae2e9eeb127b6e7b31183e0a2a8ca892999c2f0404aafbdbead4",
+            "bytes": 5352
+          },
+          {
+            "path": "item-aether.webp",
+            "sha256": "5e6e339a8ba8adef8e2eabafd6a744ba3e1786dbc87e57da8284e4ea53ae9cf0",
+            "bytes": 8200
+          },
+          {
+            "path": "item-coin-event.webp",
+            "sha256": "0a20ba6b7579fb8e0fa2d24d10ffa541cdda55aebbdd800c83828335f3a8079a",
+            "bytes": 11496
+          },
+          {
+            "path": "item-doctrine-assassin-1.webp",
+            "sha256": "bc9e3efb7116143ef1c5a3a4f7a5f79debe1c8a36f0184b1a2799703ab26401f",
+            "bytes": 22388
+          },
+          {
+            "path": "item-doctrine-assassin-2.webp",
+            "sha256": "5039bd14089a9e0f70c2f6bd0d9afe65298a17ac0ab45c1a822e345115109ebb",
+            "bytes": 18530
+          },
+          {
+            "path": "item-doctrine-assassin-3.webp",
+            "sha256": "729e3b66325fb6baad96fff12fc7e7303113a5b9c069052445654def5ee0a51a",
+            "bytes": 26844
+          },
+          {
+            "path": "item-doctrine-mage-1.webp",
+            "sha256": "e58d9ebab685dbaaea484b18820f383e936a9b4461295cc5f96a2c3ba40d0ab5",
+            "bytes": 15414
+          },
+          {
+            "path": "item-doctrine-mage-2.webp",
+            "sha256": "996b816c4f2b91913bf4c3d6362ba79b96ac21786bcf867d7d3c1122fa393e28",
+            "bytes": 17262
+          },
+          {
+            "path": "item-doctrine-mage-3.webp",
+            "sha256": "d852e858fa936bcc828e5287d572b69a155a434bbdc5f2bcff66a93626ad5c62",
+            "bytes": 20440
+          },
+          {
+            "path": "item-doctrine-support-1.webp",
+            "sha256": "4b1b901e2914a7c73e1e52c0397bbc3eb9e33cef04b34b8ab1c891d9aea4f730",
+            "bytes": 17888
+          },
+          {
+            "path": "item-doctrine-support-2.webp",
+            "sha256": "ef895efa0ca7200037efb28dc244d52ee91553f7fdca56e294e030808e5d19b7",
+            "bytes": 17822
+          },
+          {
+            "path": "item-doctrine-support-3.webp",
+            "sha256": "ad2b2e8eab95763a726d68b0e87e5a6f1012d85faee7df120db83383da6f76dc",
+            "bytes": 13214
+          },
+          {
+            "path": "item-doctrine-tank-1.webp",
+            "sha256": "79ec783965fa5178d0d8efd3d459eb461a5e29a12b68772da0915c5384924b36",
+            "bytes": 10898
+          },
+          {
+            "path": "item-doctrine-tank-2.webp",
+            "sha256": "2e3b1e8c7fab90a3b66e2525ccdf5e5fdb4c829ab7f0f5e5fde83d0f00ea8a31",
+            "bytes": 13460
+          },
+          {
+            "path": "item-doctrine-tank-3.webp",
+            "sha256": "c49cf188d8927fa281702e3613f74e7fa0129a56f9a3cae3db95371ad5476947",
+            "bytes": 16212
+          },
+          {
+            "path": "item-doctrine-warrior-1.webp",
+            "sha256": "385efd2fd90ec040c237f3f96a5836a95f8ae1225a5115a788eddc27271ba007",
+            "bytes": 26522
+          },
+          {
+            "path": "item-doctrine-warrior-2.webp",
+            "sha256": "11c91bcc6735be85b8369373d31762528ecfc5cd8094580678511130513f064b",
+            "bytes": 13684
+          },
+          {
+            "path": "item-doctrine-warrior-3.webp",
+            "sha256": "d3e7ebbc68fd3c11f7cd33daaad1fa8b009628dac2fbfa71bf45187bc2b83f0c",
+            "bytes": 16190
+          },
+          {
+            "path": "item-funds.webp",
+            "sha256": "5851989c0ffe05e76beff55c1794da6f8b35d2808ab5494b1473b40b4b5afc59",
+            "bytes": 19856
+          },
+          {
+            "path": "item-glimmer.webp",
+            "sha256": "de0260398301d67fc3f268fd05544f96f120fa1ed884c38230a9dd5d5d2b635f",
+            "bytes": 11804
+          },
+          {
+            "path": "item-insight-core.webp",
+            "sha256": "e903771e43883ee22beb2946afc4ca63977e07a57680c8e0355297698819dfa8",
+            "bytes": 24690
+          },
+          {
+            "path": "item-insight-prism.webp",
+            "sha256": "6b16945858eb6e4f30c6e5c7bbfb4e7328765274a556160b5d918bcf2fef9630",
+            "bytes": 13490
+          },
+          {
+            "path": "item-insight-shard.webp",
+            "sha256": "fc4c20f77425d7c97946d6fa2f122f0ef42784ff040e81a152d523574bfe3a58",
+            "bytes": 7652
+          },
+          {
+            "path": "item-mandate-any-1.webp",
+            "sha256": "d1c90347a0a35aabbea696a06e08b3f73113f4ae04f10ae7ee5239591cf81032",
+            "bytes": 12530
+          },
+          {
+            "path": "item-rank.webp",
+            "sha256": "0e3b5c3f7c4a1ba23216e5e4a6b0f35390409e36863825ef00dbf061f468d018",
+            "bytes": 23338
+          },
+          {
+            "path": "item-relic-core.webp",
+            "sha256": "4e2bf1f96ab16d758b70aae41f2802385ef0e544e03383d7214c58ff5c13fc79",
+            "bytes": 19052
+          },
+          {
+            "path": "item-relic-crest.webp",
+            "sha256": "dbb2122654a1ce67dd94c639fa9eaec06b87f7efe81239b672102095c86a6132",
+            "bytes": 10892
+          },
+          {
+            "path": "item-relic-edge.webp",
+            "sha256": "2f2ea9ba7483c115a8f2b4c0cf2c90fb6fd4ebb3a7a843074045dea763618353",
+            "bytes": 7690
+          },
+          {
+            "path": "item-relic-flow.webp",
+            "sha256": "62dc6e8a510c187a8d706066f2c717dfac939d2ad907cd515f198f3c41424235",
+            "bytes": 9528
+          },
+          {
+            "path": "item-relic.webp",
+            "sha256": "b629a4cc5692abf99567bf7a1a2cbdcc20ffae5d4a6c68948b7cfa1880d495eb",
+            "bytes": 14382
+          },
+          {
+            "path": "item-sigil-dark-1.webp",
+            "sha256": "530358a3de09f5108d49255a2713bb56751da21f0a77097e20a9e1cd74a1495c",
+            "bytes": 19998
+          },
+          {
+            "path": "item-sigil-dark-2.webp",
+            "sha256": "b83ceb55b0fb5a8ceea9cae12121749eaa70b5bcecf1352be0def11f283c7439",
+            "bytes": 22722
+          },
+          {
+            "path": "item-sigil-dark-3.webp",
+            "sha256": "acb10403b3c47114b04225155b546668e18cd3d3ba51b8b216eb0442294f4c21",
+            "bytes": 24392
+          },
+          {
+            "path": "item-sigil-earth-1.webp",
+            "sha256": "ffb6e8016a1d61585dd5247e690a2dbe87ebf45427f4c3c8319926b964109cb4",
+            "bytes": 19950
+          },
+          {
+            "path": "item-sigil-earth-2.webp",
+            "sha256": "6075a8c05404574cb73b7671949b4c6c00e0503636a0564c0fdcc19743c3de8b",
+            "bytes": 21112
+          },
+          {
+            "path": "item-sigil-earth-3.webp",
+            "sha256": "9f4ec12db45e17ae21067c4902270d8651ae02d724ac33a245c14e571d458e3d",
+            "bytes": 19544
+          },
+          {
+            "path": "item-sigil-fire-1.webp",
+            "sha256": "c9c1a8f87371b4dcc9d0315689f8418731b9d2494d51878c6882814f4827ea7a",
+            "bytes": 17828
+          },
+          {
+            "path": "item-sigil-fire-2.webp",
+            "sha256": "0ed422e2a814aafc01f2788e1e4f1b703a2c1c8ffc6cde79b4e6c8ece39f0afa",
+            "bytes": 19924
+          },
+          {
+            "path": "item-sigil-fire-3.webp",
+            "sha256": "d2c09f5e397aeeac1a9d1a7ed949f2a1f68f2d3e8c139f35dcf9147dcedcf7f7",
+            "bytes": 22840
+          },
+          {
+            "path": "item-sigil-light-1.webp",
+            "sha256": "482d5c8c47ed69260a7cde7af92ea2bf68cb7ea23b1cb5eea2588f1c67daaec1",
+            "bytes": 22872
+          },
+          {
+            "path": "item-sigil-light-2.webp",
+            "sha256": "3aef7a4d5c4b1ff76d8ce3f74db1bcdb282bfe4a354d055b1427b4982b36ae24",
+            "bytes": 23126
+          },
+          {
+            "path": "item-sigil-light-3.webp",
+            "sha256": "fbe25a37bd656ecb5d2329155dd0dfa582a14899a132134c85afa2e6209bfcef",
+            "bytes": 20012
+          },
+          {
+            "path": "item-sigil-water-1.webp",
+            "sha256": "52193acb1bb0cda59e02e3e314aeabd647a5d411e3dad96db18ac65db4809d87",
+            "bytes": 21034
+          },
+          {
+            "path": "item-sigil-water-2.webp",
+            "sha256": "633b96573e412aab5d10e38c302cf3c2c348bdc08b3f567618c307dc9e43fa31",
+            "bytes": 22490
+          },
+          {
+            "path": "item-sigil-water-3.webp",
+            "sha256": "629a856388f225393deee3bf98c15973b81b3d9661d59d75695c102746375634",
+            "bytes": 16964
+          },
+          {
+            "path": "item-sigil-wind-1.webp",
+            "sha256": "8843685f72ad2af6f304b0501f39227ccde69d10e80ddf0d76fd27ffe68675ea",
+            "bytes": 18136
+          },
+          {
+            "path": "item-sigil-wind-2.webp",
+            "sha256": "27bba734e123d75d9e2de5a76b5cac055ebacf34b4b2f9dc62efa4a0a2e4c3ed",
+            "bytes": 21674
+          },
+          {
+            "path": "item-sigil-wind-3.webp",
+            "sha256": "fa1eeebdfdeca1de7974504d76ee888d562459c0804d248972a82b45f54b96ba",
+            "bytes": 23270
+          },
+          {
+            "path": "item-tenet-dark-1.webp",
+            "sha256": "2395028e44604b6dfaa3fbf000f274e8044f1e75f28fdb7072f78b070d59f250",
+            "bytes": 15038
+          },
+          {
+            "path": "item-tenet-dark-2.webp",
+            "sha256": "8975e742e83ed8cfcbc86f4d92c57d3ad88b2865e49f1d56920b1db386701c7f",
+            "bytes": 18204
+          },
+          {
+            "path": "item-tenet-dark-3.webp",
+            "sha256": "03a099fa00baf1d07582b984e35843725be056ff15656fa7a60dcc20a35f9de8",
+            "bytes": 19830
+          },
+          {
+            "path": "item-tenet-earth-1.webp",
+            "sha256": "1271f4b2e027df29607adaaed0bea4978b227d910133c17166b249e3e562a9ab",
+            "bytes": 17136
+          },
+          {
+            "path": "item-tenet-earth-2.webp",
+            "sha256": "8f4328aae8f882722df888613c5d8248fe9f5ce544fb6e95ff82151f81b97a7f",
+            "bytes": 21318
+          },
+          {
+            "path": "item-tenet-earth-3.webp",
+            "sha256": "5cf638081af7094ac028e42850b651f79274fa39824dcb2936a2d490cd24aaa6",
+            "bytes": 20382
+          },
+          {
+            "path": "item-tenet-fire-1.webp",
+            "sha256": "17167f451aab0e8fd12e038c58fede57ae7c8a3f15e807029b74f4b35cd54f5f",
+            "bytes": 10138
+          },
+          {
+            "path": "item-tenet-fire-2.webp",
+            "sha256": "49f5cdd41d77d03350e99f56ae309e20da396b7512081d72533ce5495540c002",
+            "bytes": 14416
+          },
+          {
+            "path": "item-tenet-fire-3.webp",
+            "sha256": "310849b8c167144b4e15f859639b4da3d5171d430dfdc5bc198f5745dd39abb2",
+            "bytes": 22458
+          },
+          {
+            "path": "item-tenet-light-1.webp",
+            "sha256": "dde745723adcd3b7c31b4a8c4f511c6efa1d708bea09a73a5ff89836bcdfeed8",
+            "bytes": 11214
+          },
+          {
+            "path": "item-tenet-light-2.webp",
+            "sha256": "89cb524b2dac9f0d6a5d96892b67c8a27d89643f4820fbd42f5e78db365c9655",
+            "bytes": 9916
+          },
+          {
+            "path": "item-tenet-light-3.webp",
+            "sha256": "cbedbd0f70e2f334bac0caf3f069a45ad48a9c490c212c2582b7fa0c7d39c7dd",
+            "bytes": 26316
+          },
+          {
+            "path": "item-tenet-water-1.webp",
+            "sha256": "bf4b592db57bdbf08e04025858c2d969d4f0e680b5005d1fad7c2f0ee0b75543",
+            "bytes": 9742
+          },
+          {
+            "path": "item-tenet-water-2.webp",
+            "sha256": "27a76d64a35b7f4f989a1791834cffc642a1fb7b96a8d3c267545dd488bafdc8",
+            "bytes": 18216
+          },
+          {
+            "path": "item-tenet-water-3.webp",
+            "sha256": "e04af37939df9310642572ae41e2ab842022d1d5ff6c3a403c9aaac15c08a7a8",
+            "bytes": 24686
+          },
+          {
+            "path": "item-tenet-wind-1.webp",
+            "sha256": "f10e30b33ee69178e23f9ea0248e551398ef1b8d0f5c58f3297a093186882493",
+            "bytes": 14724
+          },
+          {
+            "path": "item-tenet-wind-2.webp",
+            "sha256": "b2dba122265a7c0985df75f8f9ebf4023f82764a78560089271d9fa3430c93a0",
+            "bytes": 12864
+          },
+          {
+            "path": "item-tenet-wind-3.webp",
+            "sha256": "1cf50c7d3fe720f236311b2bc1764ca27d348fcf3ac91a649939995758a8debc",
+            "bytes": 27522
+          },
+          {
+            "path": "item-unit.webp",
+            "sha256": "706cd7c4e68d3bf829d95622db8a499fdf9b4667cb2ab9b21a94846941c2fcf2",
+            "bytes": 13190
+          },
+          {
+            "path": "item-vigor-l.webp",
+            "sha256": "26288972cb866f150b56d58b056168444a211c9f5954898806f102687d1eaf31",
+            "bytes": 9618
+          },
+          {
+            "path": "item-vigor-m.webp",
+            "sha256": "cdd1b178aa61309c8469ea70f20cc9a2f09e3df1de56d119b08e9956d5522049",
+            "bytes": 11462
+          },
+          {
+            "path": "item-vigor-s.webp",
+            "sha256": "09bb4a2c456938f0c1817580f13414c3888099c84862272ed7e5b6d381b3dda3",
+            "bytes": 6488
+          },
+          {
+            "path": "modes-materials.webp",
+            "sha256": "d65184fabaaa6a52ecb55b97c71f8c4c6c4be2455fafd5561748112135581043",
+            "bytes": 98434
+          },
+          {
+            "path": "modes-story.webp",
+            "sha256": "e33fd293140f389ad1ca9ced1114d7cd6eb41ed5dadd70d9439dc3c8bc2f35da",
+            "bytes": 37624
+          },
+          {
+            "path": "rot-doctrine-assassin.webp",
+            "sha256": "b711651ae3ba95f78d214f31df6a68ea4d5a0627a3cd47646648749a11a23e26",
+            "bytes": 46962
+          },
+          {
+            "path": "rot-doctrine-mage.webp",
+            "sha256": "f0d0f24ef9ae9f81e353ddd75208ef37b1c83b71afaf4c9cf3dc3bccc712ce39",
+            "bytes": 57104
+          },
+          {
+            "path": "rot-doctrine-support.webp",
+            "sha256": "fb5e1709623b280b16a1b34123d8e97385b991ea1c37c9a0b07442e4216a22d5",
+            "bytes": 43148
+          },
+          {
+            "path": "rot-doctrine-tank.webp",
+            "sha256": "4f895f6308664302950c299cb5acc151656e637d6aa5c595e848d101fa483de5",
+            "bytes": 68526
+          },
+          {
+            "path": "rot-doctrine-warrior.webp",
+            "sha256": "c9d82c6ce1bf86768ba27ecbf27111f1534fe007d36f0ae6d3b15dc819b97c77",
+            "bytes": 30846
+          },
+          {
+            "path": "rot-sigil-dark.webp",
+            "sha256": "a049fa9960b40d0a17cffab0bdf49cb168d36b47d4b4ba50ae857d58879e95c8",
+            "bytes": 41620
+          },
+          {
+            "path": "rot-sigil-earth.webp",
+            "sha256": "dff65809caca1c9cfd155fd02b8277c44b71dde523776100e9499858b9efaaac",
+            "bytes": 41424
+          },
+          {
+            "path": "rot-sigil-fire.webp",
+            "sha256": "e6d4683133ad1e47b6865d36f6d0e8bae159ae7187895c6de6b63d66c3c4e8c7",
+            "bytes": 41666
+          },
+          {
+            "path": "rot-sigil-light.webp",
+            "sha256": "ebd3df14ce414da5e011d9e25a422c52197afb0c675f57fc071c3437ed6559fa",
+            "bytes": 66912
+          },
+          {
+            "path": "rot-sigil-water.webp",
+            "sha256": "267c916935ea82285dd7c662bc15aa3f550705c572a1b7bf32b12b002730fb5e",
+            "bytes": 37166
+          },
+          {
+            "path": "rot-sigil-wind.webp",
+            "sha256": "08799a0670b5c30c2056de77dd3caee66a32e30c219e31b1f5db2fddd8f8f0f1",
+            "bytes": 36550
+          },
+          {
+            "path": "rot-tenet-dark.webp",
+            "sha256": "467ff506934302f516eba6ba2a242ea7c4f02b35474445f5a29390963b0af693",
+            "bytes": 28528
+          },
+          {
+            "path": "rot-tenet-earth.webp",
+            "sha256": "697e0d3f9fc38af3329bc98368a072a8a258bc9c16c173997b56c193d0c35a26",
+            "bytes": 69376
+          },
+          {
+            "path": "rot-tenet-fire.webp",
+            "sha256": "55c3b2b0ab26370d087422c2f5a238c1026ecc7c7df39bc613400f9207c25210",
+            "bytes": 53978
+          },
+          {
+            "path": "rot-tenet-light.webp",
+            "sha256": "363c6b549b45c98a8749d67dbcc95d0295500b0764bdf4f4bd24287508cf48b9",
+            "bytes": 67410
+          },
+          {
+            "path": "rot-tenet-water.webp",
+            "sha256": "69950bec1387a8522b1b11c5afce2bfbd3f2b041f5cdd5b51d620d5b70e7fb37",
+            "bytes": 40846
+          },
+          {
+            "path": "rot-tenet-wind.webp",
+            "sha256": "1a8deec7bc74b310e3c899e67e5a27cdce758bb7c12f496a169af9a54def19e6",
+            "bytes": 67484
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "49b1719985fba58f00254ae93c1a99bb58cc5f814573e7a8c8f00d8b949d06fb",
+            "bytes": 476270
+          },
+          {
+            "path": "skill-aoe_damage-dark.webp",
+            "sha256": "01d183600992cffd46caa3e92217d23b2b1cf61daa3dbd914a9ff7a8b418d1af",
+            "bytes": 15126
+          },
+          {
+            "path": "skill-aoe_damage-earth.webp",
+            "sha256": "37a27535f023c4f553cea8ca532b54615635e46692c72335076426356a7d3e75",
+            "bytes": 18456
+          },
+          {
+            "path": "skill-aoe_damage-fire.webp",
+            "sha256": "62029b53311e472b6714b452940031ca931017f4022c4d3ffc59718ff07a3764",
+            "bytes": 18888
+          },
+          {
+            "path": "skill-aoe_damage-light.webp",
+            "sha256": "d5ff36203ea1d01fef9dff6a99fc041e747fac5d5a7a79d59a285cae3e8f04f9",
+            "bytes": 24092
+          },
+          {
+            "path": "skill-aoe_damage-water.webp",
+            "sha256": "2e430df6f0da94124c5a3fc42833a767146bcc2fab86f6942b3abe758a937f71",
+            "bytes": 16318
+          },
+          {
+            "path": "skill-aoe_damage-wind.webp",
+            "sha256": "d082e7c4932909d8858e2a757e0d41ca95b3d0cc19827addfa0527989d28ecb3",
+            "bytes": 21688
+          },
+          {
+            "path": "skill-attack.webp",
+            "sha256": "16d43e09896fc84a933cbf0fb8e5620966c0b75e98bdec1595b45a4c9a6a5404",
+            "bytes": 15192
+          },
+          {
+            "path": "skill-buff-dark-many.webp",
+            "sha256": "d20ac7a0d6dc101eaefca19b61657c91febc815eda71656f747f3e30e6cabd10",
+            "bytes": 20562
+          },
+          {
+            "path": "skill-buff-dark-one.webp",
+            "sha256": "622a6cea24df9c0834680835d8ebf56cf7374a7122e14491e39f2664d5786197",
+            "bytes": 15852
+          },
+          {
+            "path": "skill-buff-earth-many.webp",
+            "sha256": "e8efbe2cc577848962b51e2f9a3585cd9dcfc26ce6645b61792dac7798e4e598",
+            "bytes": 30096
+          },
+          {
+            "path": "skill-buff-earth-one.webp",
+            "sha256": "95616033d9898a7667fc94c445fd4d8943dd0bb7d9c0ffdf3b9668b4ac1c27ec",
+            "bytes": 16648
+          },
+          {
+            "path": "skill-buff-fire-many.webp",
+            "sha256": "f3d509b078e9f162aa0c09b7a232f41f056df1ad958ce535930c64bd39f2c227",
+            "bytes": 29494
+          },
+          {
+            "path": "skill-buff-fire-one.webp",
+            "sha256": "83228f4c9d100c4b49ba0d57927b3d7b95b0f05fbda8f09019862ee5bf79985a",
+            "bytes": 21964
+          },
+          {
+            "path": "skill-buff-light-many.webp",
+            "sha256": "d35ab82a92453ef6262e80689fd13344203c7706a2f8915e80abc2afe4c7aa87",
+            "bytes": 21674
+          },
+          {
+            "path": "skill-buff-light-one.webp",
+            "sha256": "89678fb534a0bde483b92208113a34bdf3b082662dd5c21e0c65167ce80ed175",
+            "bytes": 17294
+          },
+          {
+            "path": "skill-buff-water-many.webp",
+            "sha256": "46ec969b6c4ff9edd7a3cb5dcfe7189491e24f628951d46110b3295cfdba7da0",
+            "bytes": 25726
+          },
+          {
+            "path": "skill-buff-water-one.webp",
+            "sha256": "685287f82b353c7d5632f7e953c9b3277a47a7888c714c4f64115f1e81491d4a",
+            "bytes": 16184
+          },
+          {
+            "path": "skill-buff-wind-many.webp",
+            "sha256": "a8510358befe60ac7e1d81bcdec4ba2855fd890cb790387be9d4d9b07c80257f",
+            "bytes": 25998
+          },
+          {
+            "path": "skill-buff-wind-one.webp",
+            "sha256": "d7c109d1845fa45ba7adb27d7dd79782e0bb05f5d68d269bc4794e6a55ae6900",
+            "bytes": 24930
+          },
+          {
+            "path": "skill-cleanse-dark-many.webp",
+            "sha256": "f5b595c55e0ff1f9c71e2167cd65aefe23bc2663ea3d3756b7985e25d7380815",
+            "bytes": 19944
+          },
+          {
+            "path": "skill-cleanse-dark-one.webp",
+            "sha256": "4294ee396143d0e2ccca374425ee532d3368c5c0df9d6609edf85e886e2585b7",
+            "bytes": 17458
+          },
+          {
+            "path": "skill-cleanse-earth-many.webp",
+            "sha256": "734dc6bc19974749ae23a5b60f61d951fe57281ebc5d6488bc04596871152c61",
+            "bytes": 23940
+          },
+          {
+            "path": "skill-cleanse-earth-one.webp",
+            "sha256": "0a10f245ad875960a9187cbd3bd1870caf31683781100885b3320f4a53ce5808",
+            "bytes": 26720
+          },
+          {
+            "path": "skill-cleanse-fire-many.webp",
+            "sha256": "a921baeeeebade8508d1f21317c84184f1896f2139043813a2717f2bea46507b",
+            "bytes": 24526
+          },
+          {
+            "path": "skill-cleanse-fire-one.webp",
+            "sha256": "b4fb52d03527fd216581b08152c504326180e73942aa9ab6e1d28fa4c03d3f88",
+            "bytes": 38448
+          },
+          {
+            "path": "skill-cleanse-light-many.webp",
+            "sha256": "bf7b6487251e956ae126f21d4775223861c7c3455da6f80707a166d29a9ebee3",
+            "bytes": 25536
+          },
+          {
+            "path": "skill-cleanse-light-one.webp",
+            "sha256": "24d6dcf2bcb4c2bbe77fbe8ba3b6f2bbd4f6757829766e0d3adeda838b514327",
+            "bytes": 29570
+          },
+          {
+            "path": "skill-cleanse-water-many.webp",
+            "sha256": "d7eacbf67c8b19a8b2daa7350f06a4c611a16d51e5ad1d400fd7624900b2a8ca",
+            "bytes": 28632
+          },
+          {
+            "path": "skill-cleanse-water-one.webp",
+            "sha256": "e983fbd40c234bf0ae4c1c1d6571103226f3283e2b666dc7703b5f011adfbc8a",
+            "bytes": 19614
+          },
+          {
+            "path": "skill-cleanse-wind-many.webp",
+            "sha256": "94f026f82cb7d1b233a719fe6a1b3e6f52df905ca4d46de8914ebec3afce93cb",
+            "bytes": 22346
+          },
+          {
+            "path": "skill-cleanse-wind-one.webp",
+            "sha256": "d455f4be90a8efd1538e81cbb9da4a8630d96861154c9f223685331492defe53",
+            "bytes": 23600
+          },
+          {
+            "path": "skill-damage-dark-many.webp",
+            "sha256": "b8f19c6cdbf3c6090e2df2b7f8eab5cead8bc19a0aa297d1ec35c0e14dc471d8",
+            "bytes": 20096
+          },
+          {
+            "path": "skill-damage-dark-one.webp",
+            "sha256": "18019fb60bf29c9eaac03cc97038faf0aefd8b85494b6b6ba2b88782e547625a",
+            "bytes": 15190
+          },
+          {
+            "path": "skill-damage-earth-many.webp",
+            "sha256": "8a2ede254f66c9ae160242628710a9571eb1f4570c4fa8021bebfafa714a5618",
+            "bytes": 19046
+          },
+          {
+            "path": "skill-damage-earth-one.webp",
+            "sha256": "be6462cfb632192a520a12748229fe0a0854f4fa5bd085fb7fe229a03b864f02",
+            "bytes": 14808
+          },
+          {
+            "path": "skill-damage-fire-many.webp",
+            "sha256": "51352050bf1715f0e7290398afbc5b324ea4e35d0252217d11204900783692a2",
+            "bytes": 22742
+          },
+          {
+            "path": "skill-damage-fire-one.webp",
+            "sha256": "2140945125c78212fe31d0a131ca4b77518e16cb0db6c30f3cef0c2ec580598a",
+            "bytes": 21568
+          },
+          {
+            "path": "skill-damage-light-many.webp",
+            "sha256": "a8d07cf1ac2b9b2e24b6a49b9ecfcda801155b3e495de7ec2ed6d0407a79667a",
+            "bytes": 28512
+          },
+          {
+            "path": "skill-damage-light-one.webp",
+            "sha256": "0cd057f72e064f05d8d9674193ce475eec4c00f4637fa645eadeddb612595ca7",
+            "bytes": 12566
+          },
+          {
+            "path": "skill-damage-water-many.webp",
+            "sha256": "4de386c23a7e1fd3623f6b08d0c872c6f73e444fae9fbec604ef7e649470b445",
+            "bytes": 18994
+          },
+          {
+            "path": "skill-damage-water-one.webp",
+            "sha256": "7e25047093e74075cb531739b4d5e40ae8a20d49e8490e59e13a49c26186d8c5",
+            "bytes": 14272
+          },
+          {
+            "path": "skill-damage-wind-many.webp",
+            "sha256": "0623e8317c813a4f7ddfd14c01ade980d0941746182f56daf17c747dbf923f48",
+            "bytes": 19250
+          },
+          {
+            "path": "skill-damage-wind-one.webp",
+            "sha256": "0e7c023faca468ba710416a2354d054fffc9e1c5691f049a0630a57c96073591",
+            "bytes": 23192
+          },
+          {
+            "path": "skill-debuff-dark-many.webp",
+            "sha256": "c2576c123198382eb564ac9c5a350d5eef9dc8e68d69212f3cc9de391f249767",
+            "bytes": 17130
+          },
+          {
+            "path": "skill-debuff-dark-one.webp",
+            "sha256": "1a1995677c9b14abc790877a8bcbcd8ecf6f3e8fdd7e7f44bf824cd074e00f01",
+            "bytes": 18184
+          },
+          {
+            "path": "skill-debuff-earth-many.webp",
+            "sha256": "a27f90a07009fb23c82103bb5bcc1d212ee821e849bead77d596356b0f84f7b8",
+            "bytes": 24724
+          },
+          {
+            "path": "skill-debuff-earth-one.webp",
+            "sha256": "5bb1c6839bfff9ffa354cc091b2ab99976384a47e0603192a2a362f302f3a345",
+            "bytes": 13924
+          },
+          {
+            "path": "skill-debuff-fire-many.webp",
+            "sha256": "d4c102749d5bac3251d9b05a9d0689a0a8665a06b292b81e5fa5e30e75327b90",
+            "bytes": 25028
+          },
+          {
+            "path": "skill-debuff-fire-one.webp",
+            "sha256": "84f021470af7b509a633c759303c2c6533de75540b8b1836421427af8906284a",
+            "bytes": 19046
+          },
+          {
+            "path": "skill-debuff-light-many.webp",
+            "sha256": "fd4183385bb2791682c7c8222dcf486f83e448c0292fbdad7679b3b4ec04fa3a",
+            "bytes": 23476
+          },
+          {
+            "path": "skill-debuff-light-one.webp",
+            "sha256": "04fb49bf4cdbd655f9f574cc694e15a70040f544df764a1f4d81cf167419db52",
+            "bytes": 19028
+          },
+          {
+            "path": "skill-debuff-water-many.webp",
+            "sha256": "bf0999f9a5eeed1c0dffc587c3ee22bd0d49da444aff98e00910d0e7ed684ed5",
+            "bytes": 21060
+          },
+          {
+            "path": "skill-debuff-water-one.webp",
+            "sha256": "4d33545014d23f762bdda927c259dd5bb6dd08df3f8f84dd648b7cdf5e6c07c2",
+            "bytes": 17200
+          },
+          {
+            "path": "skill-debuff-wind-many.webp",
+            "sha256": "b5c8c029587c2c620a0cbbcc29a99d110bb0d65b7cabf8e693ddb3d4c98f5df0",
+            "bytes": 25250
+          },
+          {
+            "path": "skill-debuff-wind-one.webp",
+            "sha256": "db0a3433fa702b2c5c9cd311eeebff746316228221613239dd90fe269f89661e",
+            "bytes": 22312
+          },
+          {
+            "path": "skill-defend.webp",
+            "sha256": "afddf66468ce5ea4780405358dc45b3a0bfadf211afdd84b678b91a42d2a9b93",
+            "bytes": 20220
+          },
+          {
+            "path": "skill-dot-dark-many.webp",
+            "sha256": "009d015fbcd8d75d08dcb6fbc216c8951b81ae802efdca7012cc53c8ad93e049",
+            "bytes": 19154
+          },
+          {
+            "path": "skill-dot-dark-one.webp",
+            "sha256": "a942f47a44b783a6f6324dfa41d1bbb8057a9f7f490848e33af5ebca7a505a32",
+            "bytes": 15728
+          },
+          {
+            "path": "skill-dot-earth-many.webp",
+            "sha256": "7ba6f8a8d03c9bb1bfc0abcf44eeed93fd15699cd9dfdc6b3a1739a705f6c8c1",
+            "bytes": 23930
+          },
+          {
+            "path": "skill-dot-earth-one.webp",
+            "sha256": "812084eecec2a6a6d19de2a9326c77638da59a6a59cb5cacc3e1d74a83571f4e",
+            "bytes": 19842
+          },
+          {
+            "path": "skill-dot-fire-many.webp",
+            "sha256": "4362df3ba246e3e9b98033d25a402b8f3877704634af23f7e8fa2da6bdd96901",
+            "bytes": 29448
+          },
+          {
+            "path": "skill-dot-fire-one.webp",
+            "sha256": "f9049f10bd1393198cf2441f97cb88a0842269995cf2d782d20db28696033b8b",
+            "bytes": 19994
+          },
+          {
+            "path": "skill-dot-light-many.webp",
+            "sha256": "ec979c5f3f70c309f8a8b8751dc858219cd5f55484f9023d9e7f0798f117415a",
+            "bytes": 26064
+          },
+          {
+            "path": "skill-dot-light-one.webp",
+            "sha256": "6f8fa0a2d2512d2311c6bea2d0381fa2e8daeb0e8d5afff210f11d8a21aba353",
+            "bytes": 19746
+          },
+          {
+            "path": "skill-dot-water-many.webp",
+            "sha256": "fb6830f8c157a03a84a91d963a5f8e6464d6586ed8f9fd360f958ab557e777f9",
+            "bytes": 22382
+          },
+          {
+            "path": "skill-dot-water-one.webp",
+            "sha256": "4224c04e53f628b714be71f85282f8fb25f971db64eb4d08da1effb0b7c8bfb4",
+            "bytes": 19060
+          },
+          {
+            "path": "skill-dot-wind-many.webp",
+            "sha256": "0d726e2086c6ba3ebbb366ba1d7faa0f7a96c54fb8ae55a155fda1a7badf8a9b",
+            "bytes": 22954
+          },
+          {
+            "path": "skill-dot-wind-one.webp",
+            "sha256": "aed9d4d415670ca9a0cc53b6725552698df99732eb3c7859b337a9b5c01cbfac",
+            "bytes": 21788
+          },
+          {
+            "path": "skill-drain-dark-many.webp",
+            "sha256": "ce7ad985bb1dacfe82c21c969d2fc5de891982d5950a44996610d6a12a613021",
+            "bytes": 18996
+          },
+          {
+            "path": "skill-drain-dark-one.webp",
+            "sha256": "3f58a88db3d886e4e2dbf02b50c47dd02488d061b65fe9c20bfac9aa2d7be86d",
+            "bytes": 25436
+          },
+          {
+            "path": "skill-drain-earth-many.webp",
+            "sha256": "90a7252dba7301229842d6074904c34c9fa4eec3162841bb3ff8e57426d61694",
+            "bytes": 22138
+          },
+          {
+            "path": "skill-drain-earth-one.webp",
+            "sha256": "95152958b9805a126abc05bc3a5158cb29ba8986b520fc976f3809fb45308fd0",
+            "bytes": 17352
+          },
+          {
+            "path": "skill-drain-fire-many.webp",
+            "sha256": "f38ed105781cb5721f5917fd6dbb81c2f2a514510d4de6695260e5c066fa7c9f",
+            "bytes": 24540
+          },
+          {
+            "path": "skill-drain-fire-one.webp",
+            "sha256": "8d9d1f7f2dc1f24f98156f0309379b60b2b7be12ef59e15276db232ce9f31e21",
+            "bytes": 26366
+          },
+          {
+            "path": "skill-drain-light-many.webp",
+            "sha256": "4eb6f3db156a5b9579444a324de7d910c0226c6218cfd34a32dc52ed17fcb1d3",
+            "bytes": 26022
+          },
+          {
+            "path": "skill-drain-light-one.webp",
+            "sha256": "51ea9442d8e325a102079260f8ded7dfd1671a5db638e5233450c13b866cd2fc",
+            "bytes": 26136
+          },
+          {
+            "path": "skill-drain-water-many.webp",
+            "sha256": "016c5181d20a04f90c8e2b7a04efb89d4262b3a5fa638ee7e0846e721d5025ec",
+            "bytes": 24128
+          },
+          {
+            "path": "skill-drain-water-one.webp",
+            "sha256": "9672fd0040168b27f31c2f620819c814906cbdc72145613c12d6b29c84df86c1",
+            "bytes": 19724
+          },
+          {
+            "path": "skill-drain-wind-many.webp",
+            "sha256": "08ef85391ede88987cd82e4d66a6d7720292b34d042eb2a047cd6d16c6bc763a",
+            "bytes": 23522
+          },
+          {
+            "path": "skill-drain-wind-one.webp",
+            "sha256": "56a5b99cc854e76e4df524fe586ec1798e8472f3acd0b8a2cae92cd218727483",
+            "bytes": 22182
+          },
+          {
+            "path": "skill-empty.webp",
+            "sha256": "dcb6a4bf8603a62ca778d3566f3ffc3d07e795568b62bcfd93fa4f685151c0df",
+            "bytes": 17658
+          },
+          {
+            "path": "skill-energy-dark-many.webp",
+            "sha256": "de1aac068fe96a641bb726a43581b8e9b4da5da2c2f12a92236469e0828cf4c6",
+            "bytes": 19360
+          },
+          {
+            "path": "skill-energy-dark-one.webp",
+            "sha256": "e11748817bee479e2ee45b0d6105db984cb927425b1136ba4942992a1435d73b",
+            "bytes": 18052
+          },
+          {
+            "path": "skill-energy-earth-many.webp",
+            "sha256": "f7cfce6ad59db075ace3d6ee57a351e8acc094164d280f26af2e0ed3c18dabb2",
+            "bytes": 24514
+          },
+          {
+            "path": "skill-energy-earth-one.webp",
+            "sha256": "f6cb43b4fd5055f3f5b48b7aa95c776a0cdd703bf67a693a2e7b69ffbe16fcec",
+            "bytes": 25746
+          },
+          {
+            "path": "skill-energy-fire-many.webp",
+            "sha256": "76eed89ee5f5ec8203393be4e1af84d847717ed180969bb5fa30d11f50f83ba1",
+            "bytes": 28384
+          },
+          {
+            "path": "skill-energy-fire-one.webp",
+            "sha256": "69f048af6610119e6026c4795d503a12a2711e008479787ce39490d3105addf8",
+            "bytes": 20004
+          },
+          {
+            "path": "skill-energy-light-many.webp",
+            "sha256": "b3caa7eda12d61ed1fc2ac9e5a3f8b59551932784ab9d7bb1dd29291b8e48efd",
+            "bytes": 25380
+          },
+          {
+            "path": "skill-energy-light-one.webp",
+            "sha256": "d33511d6f95d31d043b50a7a9ff8274efcc465051ca4d95f07b70c96f8678d7d",
+            "bytes": 24042
+          },
+          {
+            "path": "skill-energy-water-many.webp",
+            "sha256": "79e33819d46f6d5a1e2b7187a8f0bf6d449af3022b39e6aa02fead477720e4e4",
+            "bytes": 28086
+          },
+          {
+            "path": "skill-energy-water-one.webp",
+            "sha256": "ee452723159335c9ece5cd1d2330581183ca3c3b38ed1dc4943699e256fa60c9",
+            "bytes": 25948
+          },
+          {
+            "path": "skill-energy-wind-many.webp",
+            "sha256": "4b266b02b41598a8a972ceb5f64a1575074146c72a04ad3475a6d97afc431efd",
+            "bytes": 21222
+          },
+          {
+            "path": "skill-energy-wind-one.webp",
+            "sha256": "297eb8b877a4c280609ebeefddb612daf5d72ebaec9813a5ca3393bf7aa7eb0d",
+            "bytes": 23868
+          },
+          {
+            "path": "skill-execute-dark-many.webp",
+            "sha256": "e5d901b7fce094f08d73445367bb4276c6f545b7deeb9f37217db259ea0e51e4",
+            "bytes": 24224
+          },
+          {
+            "path": "skill-execute-dark-one.webp",
+            "sha256": "c171ba0b95b9123a8eda8adea39d1591c0f8a582f8f8a11b95750d8a3d531dfb",
+            "bytes": 20294
+          },
+          {
+            "path": "skill-execute-earth-many.webp",
+            "sha256": "9ef95df160e1180337568b3f67b55601f82d661d501debc5c0c9a8d6ff32f2a0",
+            "bytes": 18524
+          },
+          {
+            "path": "skill-execute-earth-one.webp",
+            "sha256": "2e67ed2ed172f60e6a896bdd8a14d859ee9bbd93090ce225472a50d9ad0595a9",
+            "bytes": 14412
+          },
+          {
+            "path": "skill-execute-fire-many.webp",
+            "sha256": "3d42d692b04b8e437fbee7570de118f215fe05b5a326e3b63942dd6762b440c6",
+            "bytes": 25916
+          },
+          {
+            "path": "skill-execute-fire-one.webp",
+            "sha256": "e7697877c572a18e018690e24fb7854cf520673044e9cdf92be8e1589e57a932",
+            "bytes": 25196
+          },
+          {
+            "path": "skill-execute-light-many.webp",
+            "sha256": "a4dabbdcf8912a7307dac47177eebae3f628c8d35624e2253d56f0076504d1ea",
+            "bytes": 27672
+          },
+          {
+            "path": "skill-execute-light-one.webp",
+            "sha256": "2e8f07733073929fbc518258331f1d7451830fbaaf766229e50eca1e2f2e3fac",
+            "bytes": 20188
+          },
+          {
+            "path": "skill-execute-water-many.webp",
+            "sha256": "b4ab8a7e2532e9c79c5a4601459368f1529968cb9dfac3e7532c2f985ac3b5f4",
+            "bytes": 25576
+          },
+          {
+            "path": "skill-execute-water-one.webp",
+            "sha256": "2daab63ed28874331a082eab2e19482674b4b60fbc01f3d3520263fe35fde0ef",
+            "bytes": 21434
+          },
+          {
+            "path": "skill-execute-wind-many.webp",
+            "sha256": "75c43fc9f4588fdcb0ef06f7d62e2c92de9e36a9fba3ee577196b353385164c2",
+            "bytes": 21788
+          },
+          {
+            "path": "skill-execute-wind-one.webp",
+            "sha256": "04ea6b6284a6a791aea4f66c12054387f47f33f2c2c558feeb42c629efe3b0a1",
+            "bytes": 24548
+          },
+          {
+            "path": "skill-heal-dark-many.webp",
+            "sha256": "d74e7c129aab60d0345dfaef115c1c2a9dc62468549b9e70448370117ca15122",
+            "bytes": 20812
+          },
+          {
+            "path": "skill-heal-dark-one.webp",
+            "sha256": "2aa953cf598f516a5bfb2ebff3c79378de6d972d70a7d99600b64d2b3d126cd8",
+            "bytes": 22184
+          },
+          {
+            "path": "skill-heal-earth-many.webp",
+            "sha256": "1ed2e5dda6b89eb23531717b8e381de2d53afb2a1d2afb1eb3646406cb558b32",
+            "bytes": 21880
+          },
+          {
+            "path": "skill-heal-earth-one.webp",
+            "sha256": "9d44619d1612afc27a796a029aab2d365b5bc4ab32eb08a949d03d701061066d",
+            "bytes": 26884
+          },
+          {
+            "path": "skill-heal-fire-many.webp",
+            "sha256": "919673e38f4f39b51744d6d9e5fde66df2bdd863158d17fac3aaa402851198a8",
+            "bytes": 21812
+          },
+          {
+            "path": "skill-heal-fire-one.webp",
+            "sha256": "ef13844190e3ac2007d54e22c672a17d6f27c2c87177865e905863f6308d812d",
+            "bytes": 19880
+          },
+          {
+            "path": "skill-heal-light-many.webp",
+            "sha256": "463a292ff261f7cedf6b2a01e348ed7fab05653ec5ea69758740817c53c9d34a",
+            "bytes": 19980
+          },
+          {
+            "path": "skill-heal-light-one.webp",
+            "sha256": "3eae340ed53d419b03af79d96762369d25244451cf1a4c539911533e7f7c43fd",
+            "bytes": 15750
+          },
+          {
+            "path": "skill-heal-water-many.webp",
+            "sha256": "fa62389478ae0518895ee955defdb2718802277ff14988723bd7cf6fe2ea4805",
+            "bytes": 20856
+          },
+          {
+            "path": "skill-heal-water-one.webp",
+            "sha256": "e1e2fc29e96198b9779444602a623fb01cdd769da35502a77665a8ec450e2041",
+            "bytes": 22036
+          },
+          {
+            "path": "skill-heal-wind-many.webp",
+            "sha256": "8ee17d0d39a4384d615f2628e9a09f7ed3ca383908decf3ac4e732b434efe416",
+            "bytes": 18140
+          },
+          {
+            "path": "skill-heal-wind-one.webp",
+            "sha256": "f0bd91a87b2bdbd6a94b6bf5894e575054acb4ee2ed344320dd521d788a7e8ec",
+            "bytes": 14566
+          },
+          {
+            "path": "skill-item.webp",
+            "sha256": "b069091dcd40626abccd46cbaadbef5bb0cbe8171d988098cbde04c1687ce0df",
+            "bytes": 12564
+          },
+          {
+            "path": "skill-revive-dark.webp",
+            "sha256": "21b20ceeef6eeda5dc94fcd05ee040bff30116754d89911ea3beef3e20bbb12c",
+            "bytes": 23408
+          },
+          {
+            "path": "skill-revive-earth.webp",
+            "sha256": "2654c63c73c35288fd4aec6739a0fdf42df788498bef37bbe8efcd1317a37200",
+            "bytes": 19394
+          },
+          {
+            "path": "skill-revive-fire.webp",
+            "sha256": "4ec0e795142bc45b94a5fcea674de0e72222583c4d75ae0e421ec28862f05df8",
+            "bytes": 26700
+          },
+          {
+            "path": "skill-revive-light.webp",
+            "sha256": "0c4bbbc20b4bb7735ba7ee1269d2ccca7fc9714f1cb7155f6035775ae8f063e9",
+            "bytes": 17986
+          },
+          {
+            "path": "skill-revive-water.webp",
+            "sha256": "0e97dca91b86019e5ae04c7945708886bf38836c71eefc41aefd52709d60251d",
+            "bytes": 24918
+          },
+          {
+            "path": "skill-revive-wind.webp",
+            "sha256": "35bd4408f4ea70c830bb0604a5f0e570bbab9045837700174452d98d4c461938",
+            "bytes": 25328
+          },
+          {
+            "path": "skill-row.webp",
+            "sha256": "303a0582671c88d85eb6c1a3866608c3b6e40df4ad16d0322a8f31f6cbb8bf0f",
+            "bytes": 20744
+          },
+          {
+            "path": "skill-shield-dark-many.webp",
+            "sha256": "1fed544318e7958b55d5fe771bef254aca85829687cec8afe8919be15fee0bbd",
+            "bytes": 24774
+          },
+          {
+            "path": "skill-shield-dark-one.webp",
+            "sha256": "4a32f5be0d5ffe832ea69271390d50e9325a4187a0eef262afdb5aea5dc3294c",
+            "bytes": 14834
+          },
+          {
+            "path": "skill-shield-earth-many.webp",
+            "sha256": "1cccd00f050c58676b7c5b2556b4badde027135ebd07842a726f486bd56d065b",
+            "bytes": 20880
+          },
+          {
+            "path": "skill-shield-earth-one.webp",
+            "sha256": "de6148f167dbfd5490112ee4ad642fc49fdb32a6c409a34355e3702ea0ca3d0c",
+            "bytes": 15220
+          },
+          {
+            "path": "skill-shield-fire-many.webp",
+            "sha256": "c2fdee41d8f0c10518c8a7ba2356e07229f9b9e876e79607ba5f4e65f5376d67",
+            "bytes": 26452
+          },
+          {
+            "path": "skill-shield-fire-one.webp",
+            "sha256": "d5a0006616dc202761e99b7224d117a4212d26d7d64f6f0179ac4fcea245d6a6",
+            "bytes": 26764
+          },
+          {
+            "path": "skill-shield-light-many.webp",
+            "sha256": "01f8d5d3369426f23cf8dda55b0eed667662b518572e449ddd272b2485925e6b",
+            "bytes": 20008
+          },
+          {
+            "path": "skill-shield-light-one.webp",
+            "sha256": "cac9b8df69ac6b47ac7af83e7250fe9a595f87d65d6fbd4c9e354db61c4556f4",
+            "bytes": 22940
+          },
+          {
+            "path": "skill-shield-water-many.webp",
+            "sha256": "5c1a980fb32f7f5c4ee8025abab627e73a6cde3fe632cfa11e5599009c82ad6a",
+            "bytes": 21552
+          },
+          {
+            "path": "skill-shield-water-one.webp",
+            "sha256": "0aab894018b591b0c763c5ea3a5e5bf52d92dcabe313796e7d3afec42069599a",
+            "bytes": 14660
+          },
+          {
+            "path": "skill-shield-wind-many.webp",
+            "sha256": "3bca444d7fba43890b3cc4f52b47d8bc635ae95e8fa00a11799682c68cd2474b",
+            "bytes": 20016
+          },
+          {
+            "path": "skill-shield-wind-one.webp",
+            "sha256": "bccafe659f9960db8b984c13a9e4c5a3780ac5da3d361cdb1800c80c40c835f5",
+            "bytes": 20386
+          },
+          {
+            "path": "skill-stun-dark-many.webp",
+            "sha256": "a8f35e67a29c75820c419bd9049c8f37e9e4a208c791cb7a16ce44b8728949d9",
+            "bytes": 22766
+          },
+          {
+            "path": "skill-stun-dark-one.webp",
+            "sha256": "a381e583daee5ca5b319e0afeac43c8b694d9480483b2ebd5a695192151166fb",
+            "bytes": 22518
+          },
+          {
+            "path": "skill-stun-earth-many.webp",
+            "sha256": "6338b3499af30e9caed2ed86761053d5cdc02da538c12eb0230ffd70b4f2d671",
+            "bytes": 28780
+          },
+          {
+            "path": "skill-stun-earth-one.webp",
+            "sha256": "786c828e783389937029a76ffafbc746aef2e2fe0574c118cea3b0a53e2270f1",
+            "bytes": 24010
+          },
+          {
+            "path": "skill-stun-fire-many.webp",
+            "sha256": "d8c50562d67f262f9f35b1c620b22042ad5e6e26a293788b047e8af781aae720",
+            "bytes": 19392
+          },
+          {
+            "path": "skill-stun-fire-one.webp",
+            "sha256": "9e0380290406532bb856fff01cddd76638d5b829057c54cd7c42391620a56214",
+            "bytes": 25714
+          },
+          {
+            "path": "skill-stun-light-many.webp",
+            "sha256": "7b810a9141d84512e4bd10f445d02af7e0231c9b349b4ab46df178e672111269",
+            "bytes": 27812
+          },
+          {
+            "path": "skill-stun-light-one.webp",
+            "sha256": "7f5e391bfaa15de6aa0cb77505d826c309697b31694ad4312f5d8e7d70ff48e1",
+            "bytes": 18798
+          },
+          {
+            "path": "skill-stun-water-many.webp",
+            "sha256": "cd8349c9788ca90cce28ffcd644bcf2bf5f65ed86c5a763eee614b4f4baf476f",
+            "bytes": 26436
+          },
+          {
+            "path": "skill-stun-water-one.webp",
+            "sha256": "214ac40c3a46be19c17509b3f9e81fb73236c75995dddba7a3a6445736ef7609",
+            "bytes": 24652
+          },
+          {
+            "path": "skill-stun-wind-many.webp",
+            "sha256": "fc6495edcf6aa91f8c778580678ebd3da3c7bc80dcecf67d86423be15028db04",
+            "bytes": 23126
+          },
+          {
+            "path": "skill-stun-wind-one.webp",
+            "sha256": "449936deded932ef814dca2bd40e0618ef17eea0554004bc01f83493d7260706",
+            "bytes": 25674
+          },
+          {
+            "path": "tower-bg.webp",
+            "sha256": "22c28eb34c91b72ee9da276561e054745b828db21c55b4b647cbefb825e5bf8c",
+            "bytes": 15292
+          }
+        ]
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/gacha-forge.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.8.0.zip",
+        "sha256": "bf3ffe2ed148d6cfcb3f34a255244b38d03c7d4b4eb2177bf516e736e854f07f",
+        "bytes": 7778366
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/gacha-forge/README.md"
     },
     {
       "manifest": {
@@ -715,7 +2256,7 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/illustrator.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/illustrator-1.0.4.zip",
-        "sha256": "d616832a9a79c05410f65bba012355e81bffc1ac210bab9a2317b9854e1d8325",
+        "sha256": "d9d11c5edc32fb31206b2b43514aaa2c888697f205f1a4a33d19a2facbf3d529",
         "bytes": 3173
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#illustrator"
@@ -767,7 +2308,7 @@
         "schemaVersion": 1,
         "id": "inventory-tracker",
         "name": "Inventory Tracker",
-        "version": "1.0.0",
+        "version": "1.2.0",
         "description": "Tracks currencies, equipped gear, and carried items as separate structured lists with compact quantities. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.4.3",
@@ -782,8 +2323,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "1ba0380f1d01e66f0ba3ca01a4b57bff57d4016f2c479b3c49fec8d4a9fd0a80",
-            "bytes": 1616
+            "sha256": "bbb14a375cfac0f3418f8c8a9cf58d8c7dd2ecf176bd091a6211257b228801d9",
+            "bytes": 2866
           }
         ],
         "permissions": [
@@ -798,9 +2339,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/inventory-tracker.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/inventory-tracker-1.0.0.zip",
-        "sha256": "bd2b5ef5677b8e0c53c62f4b4d6b7e9940afadc54d4df6f36121e15db2dab3c8",
-        "bytes": 1464
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/inventory-tracker-1.2.0.zip",
+        "sha256": "f06193a933817f1342c80a80ba48b639cd71d8b0c2032cf0463648671ee0e28f",
+        "bytes": 2009
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#inventory-tracker"
     },
@@ -901,7 +2442,7 @@
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.2.14",
+        "version": "1.3.0",
         "description": "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
         "engine": {
           "min": "2.4.1",
@@ -933,13 +2474,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "2d0e823f8e9047ec208339dd5f0b6c45556bab398944cc787d1bd0dd60039f5c",
-            "bytes": 380626
+            "sha256": "dc831ec03b239496b5eafc4f3e056ad1db79129428c1ed9abaf41f5dff1d2795",
+            "bytes": 397500
           },
           {
             "path": "client.js",
-            "sha256": "0660ee8f855d7924d710e8cf2a515bfcd042edb389f7103b5aec9041de66a106",
-            "bytes": 833827
+            "sha256": "a7d127a1b41ce59de1dcb1572fb4595e45387f032da4a8ca99262508daa4b069",
+            "bytes": 912095
           }
         ],
         "permissions": [
@@ -955,9 +2496,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.2.14.zip",
-        "sha256": "4671797947741ba5625cada56e2c667ee51a9ac42b7a5980791d9fe5fb047b2b",
-        "bytes": 1216992
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.3.0.zip",
+        "sha256": "623206ddf595c6cb81626d4d7677b8f52f89fac38f987f23084429140808c303",
+        "bytes": 1312133
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },
@@ -1016,7 +2557,7 @@
         },
         "id": "memory-nag",
         "name": "Memory Nag",
-        "version": "1.0.17",
+        "version": "1.1.2",
         "description": "Keeps a short per-chat vault of roleplay memories and recalls only the unresolved details that matter to the current turn. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode. Once active, configure it in its standalone Memory Nag section.",
         "engine": {
           "min": "2.4.4",
@@ -1045,13 +2586,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "ddce4eb713d42206a6cff06ea097087131b8ee769c5e272e4d38eb9e47d2a6d6",
-            "bytes": 21611
+            "sha256": "c640f5855a0bd534de7e85ddbf4eaf86e3fef956d4772e2d80cb7d404460db25",
+            "bytes": 23750
           },
           {
             "path": "client.js",
-            "sha256": "91b07a52f827db8ab74c7a6ed196232193b1e1a4d92fd2637dd8e69150dedf1d",
-            "bytes": 371264
+            "sha256": "ce877df770be3aba885a50da68811fbc22b20265f3ba0878c897c5a0aaad2cca",
+            "bytes": 374650
           }
         ],
         "permissions": [
@@ -1067,9 +2608,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/memory-nag.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/memory-nag-1.0.17.zip",
-        "sha256": "4da625bc08cdb24b0ede684fc17845aac6858bd900be88a7b248fd0c20fcc3be",
-        "bytes": 396443
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/memory-nag-1.1.2.zip",
+        "sha256": "8a575b8c002520efeca7e50b9c5cff791c72598cd36bb4a769f64281c21e2d46",
+        "bytes": 401967
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#memory-nag"
     },
@@ -1110,7 +2651,7 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/spotify.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/spotify-1.0.2.zip",
-        "sha256": "21679b713bcffda6ac34c08faec40df37a01b01e447bbe4fba740efbca0cf631",
+        "sha256": "ea71353c1fd41249c969bb38f72b9cad634b666200b8ad1523ddd245b34e61f1",
         "bytes": 2621
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#music-dj"
@@ -1152,7 +2693,7 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/director.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/director-1.0.2.zip",
-        "sha256": "5df277cfeea05fec99467ca513a92d2d1d09c1738c70300985bb77fe0539b572",
+        "sha256": "2dbca3f5471d06e85da1b3edf2961cee34824d940493d0f5954dba5f320bf9e7",
         "bytes": 1440
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#narrative-director"
@@ -1162,7 +2703,7 @@
         "schemaVersion": 1,
         "id": "noodle",
         "name": "Noodle",
-        "version": "1.2.14",
+        "version": "1.2.24",
         "description": "Explore the Noodle public timeline as an optional local social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
         "localizations": {
           "de": {
@@ -1222,13 +2763,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "44c936cf55b1033f7fdcd4730c14c00a8e2a36b5e3032c88a1e82a8477e162c6",
-            "bytes": 2739546
+            "sha256": "9a8c9371d2f8799251a28b90cd5fed6b855ad1eeef8123fe77c37b672e574360",
+            "bytes": 2218589
           },
           {
             "path": "client.js",
-            "sha256": "532c1b37b38d49135ffe65b1452019b74108fe2bc56d4792ea9f88d9b3cb39e7",
-            "bytes": 2331969
+            "sha256": "621bd3fb265860feb6cb15d7b2f98f5462af2f2b7f5dbc7e7ad3441ea03aee1e",
+            "bytes": 2329165
           },
           {
             "path": "noodle-klusek.png",
@@ -1249,9 +2790,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.2.14.zip",
-        "sha256": "68e25150f3534a92e0ee07cc54d16c81fa99bc5603f7affdc2a27b878323ddf7",
-        "bytes": 5103427
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.2.24.zip",
+        "sha256": "fc34f67225c422ed754c7cede1a8961854677d730376f0b0b328e6c30006bab3",
+        "bytes": 4579666
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },
@@ -1302,7 +2843,7 @@
         "schemaVersion": 1,
         "id": "poker",
         "name": "Poker",
-        "version": "1.0.4",
+        "version": "1.0.5",
         "description": "Play Texas Hold’em Poker with Conversation characters. Install to use /poker manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
         "engine": {
           "min": "2.3.0",
@@ -1344,8 +2885,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "37a62943af3832766ce3339939cbece882201a0d786da8fec94fd5fe5f839e6e",
-            "bytes": 622112
+            "sha256": "515835c986e9369ac28c8769d552a1a24224f10bceed6c2068a4b08b7936cf5b",
+            "bytes": 569375
           }
         ],
         "permissions": [
@@ -1360,9 +2901,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/poker.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/poker-1.0.4.zip",
-        "sha256": "cc5dd20cda833bc4800cbffb95d7cd9472e27ab0219cde65d4aed0a2ffa13afb",
-        "bytes": 195656
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/poker-1.0.5.zip",
+        "sha256": "6c0a3ed32fb423a30ae8c80cefec2b7f165ecb0966e88b0bd5d121ac0b0c6ff8",
+        "bytes": 655358
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#poker"
     },
@@ -1445,7 +2986,7 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/quest.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/quest-1.0.4.zip",
-        "sha256": "83b8a1f5e55be9851dd665009fc50a9bf35d9fbaf1fe427509737aa541ff37f9",
+        "sha256": "8399f39bc548bd16087d05e2d2893ce91be495375a7da19d8c4edf30bc6c642a",
         "bytes": 2990
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#quest-tracker"
@@ -1455,7 +2996,7 @@
         "schemaVersion": 1,
         "id": "rock-paper-scissors",
         "name": "Rock-Paper-Scissors",
-        "version": "1.0.4",
+        "version": "1.0.5",
         "description": "Play Rock-Paper-Scissors with a Conversation character. Install to use /rps manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
         "engine": {
           "min": "2.3.0",
@@ -1497,8 +3038,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "797c2cf2eab58a45bb43953cb4444f2acf42d8a5f35f65e3863e92528557b946",
-            "bytes": 618250
+            "sha256": "99399e5d4678994419297a6b1fe79d3887c58f0a7fbfa43e3989b460694249cf",
+            "bytes": 565511
           }
         ],
         "permissions": [
@@ -1513,9 +3054,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/rock-paper-scissors.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/rock-paper-scissors-1.0.4.zip",
-        "sha256": "285e0592b4c1abbe173b22fc193a7a4be37cd89f0d044391751f9e6bbbbe6e94",
-        "bytes": 189017
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/rock-paper-scissors-1.0.5.zip",
+        "sha256": "c941f85435ca13de2f4013d079a7071b106230d472aff09ae10ab559bfd6d93d",
+        "bytes": 634622
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#rock-paper-scissors"
     },
@@ -1523,29 +3064,29 @@
       "manifest": {
         "schemaVersion": 1,
         "id": "slurp",
-        "name": "Slurp",
-        "version": "1.0.19",
-        "description": "The standalone successor to NoodleR: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
+        "name": "Slurp Legacy",
+        "version": "1.51.0",
+        "description": "Legacy Slurp version. This package is being reworked and is on hold. New development is happening in Slurp Remastered. Bug fixes are not planned for this version. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
         "localizations": {
           "de": {
-            "name": "Slurp",
-            "description": "Erstelle ein lokales Creator-Profil aus einem Engine-Charakter oder einer Engine-Persona, veröffentliche öffentliche oder gesperrte Beiträge und simuliere Abonnements und Publikumsaktivität. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Slurp.",
+            "name": "Slurp Legacy",
+            "description": "Legacy-Version von Slurp. Dieses Paket wird überarbeitet und ist pausiert. Die neue Entwicklung erfolgt in Slurp Remastered. Fehlerbehebungen sind für diese Version nicht geplant.",
             "homeBrowserTab": {
               "label": "Slurp",
               "ariaLabel": "Slurp öffnen"
             }
           },
           "ko": {
-            "name": "Slurp",
-            "description": "Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 Slurp 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Slurp를 여세요.",
+            "name": "Slurp Legacy",
+            "description": "Slurp 레거시 버전입니다. 이 패키지는 재작업 중이며 보류 상태입니다. 새로운 개발은 Slurp Remastered에서 진행됩니다. 이 버전의 버그 수정은 계획되어 있지 않습니다.",
             "homeBrowserTab": {
               "label": "Slurp",
               "ariaLabel": "Slurp 열기"
             }
           },
           "pl": {
-            "name": "Slurp",
-            "description": "Utwórz lokalne profile twórców z postaci silnika lub person silnika, publikuj publiczne lub zablokowane posty Slurp i symuluj subskrypcje oraz aktywność publiczności. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Slurp na stronie głównej.",
+            "name": "Slurp Legacy",
+            "description": "Starsza wersja Slurp. Ten pakiet jest przebudowywany i wstrzymany. Nowy rozwój odbywa się w Slurp Remastered. Poprawki błędów dla tej wersji nie są planowane.",
             "homeBrowserTab": {
               "label": "Slurp",
               "ariaLabel": "Otwórz Slurp"
@@ -1579,18 +3120,18 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "05408a5f537cef354c9f4ef9340825c9427e1774d3cdd1f29435c3b1cf39a6c4",
-            "bytes": 625
+            "sha256": "c696709be778d9ab2e7257b49b59e3c0562227c17cd6aea8da3d094acf37ee8a",
+            "bytes": 608
           },
           {
             "path": "server.mjs",
-            "sha256": "b267955494c5e68301397ad7e59ea5e2a0c654f31368c1950be68edccdbec7d9",
-            "bytes": 2730606
+            "sha256": "a5cb558e8d8fd1e589b8164704dcf662fa9e8bd53b1b8d95611b6c0505dceb66",
+            "bytes": 2170157
           },
           {
             "path": "client.js",
-            "sha256": "d0ef89906c504b4baf1c959cb4a13464af451f99fe81cc6699149113c4b943d3",
-            "bytes": 2427720
+            "sha256": "d1e7e2757ce633497bcbffd37efe1e72c3d5d9711fdc347e00c1798965d165a7",
+            "bytes": 2471443
           },
           {
             "path": "slurp-logo.png",
@@ -1598,9 +3139,9 @@
             "bytes": 31677
           },
           {
-            "path": "slurpagent.png",
-            "sha256": "47805313b5ec8dbc608fec82c4d51f1f82020afe4f286a04919b59cc8ef06f37",
-            "bytes": 120424
+            "path": "slurplegacy.png",
+            "sha256": "faa892c48a14f7df1b8e1409ef12334061c1d94241124a9ff528d0796ba39734",
+            "bytes": 106482
           }
         ],
         "permissions": [
@@ -1615,11 +3156,114 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp-1.0.19.zip",
-        "sha256": "5ad5963ab256398768361beeceb74f61d9b67fbb972b4fd259d21a86a58a744c",
-        "bytes": 5314776
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp-1.51.0.zip",
+        "sha256": "c03e5e223aa146cf2f0f9eafe7a748ef0d38bc4b83c2714141cd417fcd022926",
+        "bytes": 4783737
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp/README.md"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "slurp2",
+        "name": "Slurp Remastered",
+        "version": "0.0.15",
+        "description": "The Slurp remaster. It installs beside Slurp Legacy and keeps its own separate data: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp Remastered.",
+        "localizations": {
+          "de": {
+            "name": "Slurp Remastered",
+            "description": "Die Neufassung von Slurp. Sie wird neben Slurp Legacy installiert und behaelt eigene, getrennte Daten: Erstelle ein lokales Creator-Profil aus einem Engine-Charakter oder einer Engine-Persona, veroeffentliche oeffentliche oder gesperrte Beitraege und simuliere Abonnements und Publikumsaktivitaet.",
+            "homeBrowserTab": {
+              "label": "Slurp.",
+              "ariaLabel": "Slurp. oeffnen"
+            }
+          },
+          "ko": {
+            "name": "Slurp Remastered",
+            "description": "Slurp의 리메이스터입니다. Slurp Legacy와 함께 설치되며 데이터를 따로 보관합니다. Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다.",
+            "homeBrowserTab": {
+              "label": "Slurp.",
+              "ariaLabel": "Slurp. 열기"
+            }
+          },
+          "pl": {
+            "name": "Slurp Remastered",
+            "description": "Odnowiona wersja Slurp. Instaluje sie obok Slurp Legacy i przechowuje wlasne, oddzielne dane: utworz lokalny profil tworcy z postaci silnika lub persony silnika, publikuj publiczne lub zablokowane posty i symuluj subskrypcje oraz aktywnosc publicznosci.",
+            "homeBrowserTab": {
+              "label": "Slurp.",
+              "ariaLabel": "Otworz Slurp."
+            }
+          }
+        },
+        "engine": {
+          "min": "2.4.5",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "home-browser-tab"
+          ],
+          "homeBrowserTab": {
+            "label": "Slurp.",
+            "ariaLabel": "Open Slurp.",
+            "iconPaths": [
+              "slurp2-logo.png"
+            ]
+          }
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "8f6dffb7ebb68257303c3906fd283d4fad8d558c79a272c83eadda0d8328cca3",
+            "bytes": 685
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "f78bff8fc083df44012bee98b9baabd8c008463b9cb008be5faee78f77faef49",
+            "bytes": 2675294
+          },
+          {
+            "path": "client.js",
+            "sha256": "494c1c4bd3cd2f9ef3973794ff2466a639148d83836b716ef05dded941389397",
+            "bytes": 3272505
+          },
+          {
+            "path": "slurp2-logo.png",
+            "sha256": "722def3c01846167c9979b0408f380f923c520e7515aed1584de0d879131a75b",
+            "bytes": 31677
+          },
+          {
+            "path": "slurp2agent.png",
+            "sha256": "47805313b5ec8dbc608fec82c4d51f1f82020afe4f286a04919b59cc8ef06f37",
+            "bytes": 120424
+          }
+        ],
+        "permissions": [
+          "chat-read",
+          "network",
+          "prompt-context",
+          "routes",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp2.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.0.15.zip",
+        "sha256": "5ef12147420fd07cb9aa9285cd7776581c709395a51982c7fc5fc07c73e39411",
+        "bytes": 6104374
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp2/README.md"
     },
     {
       "manifest": {
@@ -1668,7 +3312,7 @@
         "schemaVersion": 1,
         "id": "tic-tac-toe",
         "name": "Tic-Tac-Toe",
-        "version": "1.0.4",
+        "version": "1.0.5",
         "description": "Play Tic-Tac-Toe with a Conversation character. Install to use /tictactoe manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
         "engine": {
           "min": "2.3.0",
@@ -1711,8 +3355,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "317d735b4615d4fa9a90193977cbc4c605ce8736ccb17b955378124d8958f24b",
-            "bytes": 613889
+            "sha256": "96c569b83a6a63b22ad394bd0b28b253a02be29ca987250809b2efc916130ccd",
+            "bytes": 561148
           }
         ],
         "permissions": [
@@ -1727,9 +3371,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/tic-tac-toe.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/tic-tac-toe-1.0.4.zip",
-        "sha256": "f404050a89e3d3bd52054f08650796e1f70b352630c6575106086eb89e6ccef0",
-        "bytes": 188186
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/tic-tac-toe-1.0.5.zip",
+        "sha256": "0f102c617777c5656555aec0411ca51fc5892c5788fcbad620d01d291bc642f9",
+        "bytes": 630150
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#tic-tac-toe"
     },
@@ -1738,7 +3382,7 @@
         "schemaVersion": 1,
         "id": "uno",
         "name": "UNO",
-        "version": "1.0.4",
+        "version": "1.0.5",
         "description": "Play UNO with Conversation characters. Install to use /uno manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
         "engine": {
           "min": "2.3.0",
@@ -1778,8 +3422,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "67a6510cc970b9fc8901d2b878ff59fa20770c898d6e2999d34036d0e643d875",
-            "bytes": 620420
+            "sha256": "2b72becff805d85f2b965d04b39888118628fc5099a79ff05db5e5ed670c4bd7",
+            "bytes": 567681
           }
         ],
         "permissions": [
@@ -1794,9 +3438,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/uno.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/uno-1.0.4.zip",
-        "sha256": "74e595320746d75f6c89f6752f7be633ac45292bee9deab21a7370484b9f52e0",
-        "bytes": 195154
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/uno-1.0.5.zip",
+        "sha256": "eb697351c7a56a37a4c6a15f8ab3476c7f7eb6fd32949b2a41c8e828e631a1e7",
+        "bytes": 653675
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#uno"
     },
@@ -1884,7 +3528,7 @@
         "schemaVersion": 1,
         "id": "world-state",
         "name": "World State",
-        "version": "1.0.4",
+        "version": "1.1.0",
         "description": "Tracks date, time, weather, location, temperature, and custom world details automatically. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
@@ -1899,8 +3543,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "1a492846367d34c4fc55c193f4dfe1df9f70ad0402d1b56bf084c60d7cec5a13",
-            "bytes": 2168
+            "sha256": "45e832101a2f1573e00f8b4f0619a67e798e5ff1503a4d1c3356af83f13ed0bb",
+            "bytes": 2866
           }
         ],
         "permissions": [
@@ -1915,9 +3559,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/world-state.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/world-state-1.0.4.zip",
-        "sha256": "110df266b87d7c273dd3854b64fac1e2debf6c862807085998ef4dc4ccb0e6cf",
-        "bytes": 1694
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/world-state-1.1.0.zip",
+        "sha256": "bedf93879675900da43eedf85320898788fd54920342070ba8dba6b24e339f49",
+        "bytes": 2004
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#world-state"
     }

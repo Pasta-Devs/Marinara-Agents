@@ -21,7 +21,8 @@ This file is a thin maintainer note for contributors using coding agents. Canoni
 - Start from `staging` and open an issue before implementation.
 - Open a draft PR when issue work begins so ownership is visible, then mark it ready only after validation and self-review are complete.
 - Run `npm run check` for the maintained-source Prettier and ESLint gates.
-- Run `node scripts/test-catalog-lanes.mjs`, `node scripts/validate-package-locales.mjs`, and `node scripts/validate-catalog.mjs` as the baseline validation commands.
+- Run `node scripts/test-catalog-lanes.mjs`, `node scripts/validate-package-locales.mjs`, `node scripts/validate-catalog.mjs`, and `node scripts/tests/catalog-release-notes.regression.mjs` as the baseline validation commands.
+- A minor or major package version bump needs a `packages/<id>/CHANGELOG.md` entry for the new version; the build rejects one without it. See `CONTRIBUTING.md` § Release notes.
 - Rebuild the affected package and catalog entry whenever source payloads, manifests, Engine snapshots, or generated bundles change.
 - Treat each manifest's `engine.min` / `engine.maxExclusive` range as the catalog-lane source of truth. The builders route packages into `catalog/v*/catalog.json`; do not hand-place or copy entries between lanes.
 

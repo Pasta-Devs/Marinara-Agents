@@ -97,13 +97,17 @@ import {
 import { resolveNoodlerSourceSnapshot } from "../slurp/slurp-source-resolve.js";
 import { createAppSettingsStorage } from "./app-settings.storage.js";
 import {
-  clearNoodleRefreshFailure,
   noodleRefreshSchedulerStatus,
   parsePersistedNoodleRefreshSchedule,
   reconcileNoodleRefreshSchedule,
   type PersistedNoodleRefreshSchedule,
 } from "../slurp/slurp-refresh-schedule.js";
 import { pruneNoodleRefreshRuns } from "./slurp-refresh-run-retention.js";
+import { noodlerPostImageRetryAttempts, NOODLER_POST_IMAGE_RETRY_LIMIT } from "../slurp/slurp-image-retry.js";
+import { getNoodlerImageConnections } from "../slurp/slurp-image-connections.js";
+
+/** Newest candidates the image-retry poll inspects per pass. */
+const IMAGE_RETRY_SCAN_LIMIT = 200;
 import { normalizeNoodlerSeenAt } from "../slurp/slurp-viewer-unseen.js";
 import { createCharactersStorage } from "./characters.storage.js";
 import {
@@ -119,7 +123,6 @@ const slurpViewerSettingsKey = (personaId: string) => `slurp.viewer.${personaId}
 const NOODLER_RESERVE_STATE_ID = "noodler-reserve";
 let slurpSettingsUpdateQueue: Promise<unknown> = Promise.resolve();
 const ROLLING_DAY_MS = 24 * 60 * 60 * 1000;
-const MANUAL_POST_INVALIDATION_MS = 60 * 60 * 1000;
 /**
  * The reserve poll runs every minute, so a slot this far past its publish time means the server
  * was down or paused. Publishing it now would backdate it, and a long outage would release the
@@ -128,6 +131,11 @@ const MANUAL_POST_INVALIDATION_MS = 60 * 60 * 1000;
 const ELAPSED_PREPARED_SLOT_MS = 60 * 60 * 1000;
 /** How long published/discarded prepared rows are kept for crash recovery before pruning. */
 const TERMINAL_PREPARED_POST_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+import {
+  hasSlurpCreatorPostingIntervalConflict,
+  slurpCreatorPostingIntervalMs,
+} from "../slurp/slurp-posting-interval.js";
 
 export type NoodlerPostPageCursor = NoodlerPostSortKey;
 
@@ -150,11 +158,15 @@ const noodlerFanArchetypeWeightsSchema = z
  * must not become an implicit dependency of Creator scheduling or generation.
  */
 export const slurpSettingsSchema = z.object({
+  imageWidth: z.number().int().min(64).max(4096),
+  imageHeight: z.number().int().min(64).max(4096),
   refreshesPerDay: z.number().int().min(0).max(24),
   generationGuidance: z.string().max(20_000),
   generationConnectionId: z.string().nullable(),
+  imageContextMode: z.enum(["auto", "imagePrompt", "vision"]),
   imageGenerationConnectionId: z.string().nullable(),
   imageGenerationPrompt: z.string(),
+  imagePromptInterpretation: z.string().max(20_000),
   enableImageInterpretation: z.boolean(),
   imageGenerationUseAvatarReferences: z.boolean(),
   imageGenerationIncludeDescriptions: z.boolean(),
@@ -277,6 +289,7 @@ export function noodlerReservePolicyFingerprint(
   settings?: Pick<
     SlurpSettings,
     | "imageGenerationPrompt"
+    | "imagePromptInterpretation"
     | "imageGenerationUseAvatarReferences"
     | "imageGenerationIncludeDescriptions"
     | "enableImageInterpretation"
@@ -290,6 +303,7 @@ export function noodlerReservePolicyFingerprint(
   const mediaPolicy = settings
     ? {
         imageGenerationPrompt: settings.imageGenerationPrompt,
+        imagePromptInterpretation: settings.imagePromptInterpretation,
         imageGenerationUseAvatarReferences: settings.imageGenerationUseAvatarReferences,
         imageGenerationIncludeDescriptions: settings.imageGenerationIncludeDescriptions,
         enableImageInterpretation: settings.enableImageInterpretation,
@@ -656,6 +670,8 @@ export const NOODLER_DEFAULT_GENERATION_GUIDANCE =
   "All Slurp creators and viewers are adults (18+). This is an adult creator page: flirty, suggestive, teasing, and sensual posts are common, and explicit posts appear regularly when they suit the creator — but they are not required and need not be the majority. Tease the locked posts and answer flirty comments in kind. Keep each creator's personality intact: a shy creator flirts shyly, a blunt one bluntly, a funny one filthily. Ordinary posts — updates, humor, behind the scenes, project news — matter just as much and keep both the page and the character human. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood.";
 export const NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT =
   "Create a polished social-media image for an adult Creator post. Match the creator's identity, personality, body, clothing, and established visual details. Follow the post's mood and subject. Describe the pose, expression, setting, lighting, camera angle, composition, and visible details clearly. Flirty, suggestive, sensual, or explicit imagery is allowed when it fits the post and creator, but do not force sexual content into ordinary updates. Keep the image coherent, intentional, and suitable for a public or locked Creator feed.";
+export const NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION =
+  "Edit this image prompt into a provider-ready image prompt. Preserve the original subject, action, setting, composition, and visual style. Preserve any explicit style in the original prompt, character context, image instructions, or style guidance. Do not add realistic, photorealistic, photographic, camera, lens, or natural-lighting language unless the supplied context clearly requests that style. Do not convert an anime, cartoon, game, manga, comic, illustration, painterly, fantasy, or stylized character into a realistic image. When no style is specified, keep the prompt style-neutral. Do not invent an art style. Treat image instructions as guidance, not text to copy into the result. Return only the provider-ready image prompt.";
 
 /**
  * Every previously shipped default, newest first. An install that never edited the guidance
@@ -665,11 +681,15 @@ export const NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT =
  */
 
 export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
+  imageWidth: 1024,
+  imageHeight: 1536,
   refreshesPerDay: 0,
   generationGuidance: NOODLER_DEFAULT_GENERATION_GUIDANCE,
   generationConnectionId: null,
+  imageContextMode: "auto",
   imageGenerationConnectionId: null,
   imageGenerationPrompt: NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT,
+  imagePromptInterpretation: NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION,
   enableImageInterpretation: true,
   imageGenerationUseAvatarReferences: false,
   imageGenerationIncludeDescriptions: false,
@@ -726,6 +746,10 @@ export function normalizeSlurpSettings(raw: unknown): SlurpSettings {
     rawRecord.imageGenerationPrompt === undefined || rawRecord.imageGenerationPrompt === ""
       ? NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT
       : rawRecord.imageGenerationPrompt;
+  candidate.imagePromptInterpretation =
+    rawRecord.imagePromptInterpretation === undefined || rawRecord.imagePromptInterpretation === ""
+      ? NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION
+      : rawRecord.imagePromptInterpretation;
   candidate.nightQuiet = rawRecord.nightQuiet ?? DEFAULT_SLURP_SETTINGS.nightQuiet;
   candidate.onboarding = rawRecord.onboarding ?? DEFAULT_SLURP_SETTINGS.onboarding;
   candidate.fanArchetypeWeights = {
@@ -1432,6 +1456,104 @@ export function createSlurpStorage(db: DB) {
       return this.getSettings();
     },
 
+    async exportSlurpBackup() {
+      const accounts = await db.select().from(noodleAccounts).where(eq(noodleAccounts.platform, "slurp"));
+      const accountIds = accounts.map((account) => account.id);
+      const personas = await characters.listPersonas();
+      const personaIds = personas.map((persona) => persona.id);
+      const posts = accountIds.length
+        ? await db.select().from(noodlePosts).where(inArray(noodlePosts.authorAccountId, accountIds))
+        : [];
+      const postIds = posts.map((post) => post.id);
+      const [
+        subscriptions,
+        unlocks,
+        interactions,
+        replyClaims,
+        preparedPosts,
+        attempts,
+        reserveState,
+        fanState,
+        digests,
+        refreshRuns,
+      ] = await Promise.all([
+        accountIds.length
+          ? db
+              .select()
+              .from(noodleAccountSubscriptions)
+              .where(
+                or(
+                  inArray(noodleAccountSubscriptions.viewerAccountId, accountIds),
+                  inArray(noodleAccountSubscriptions.creatorAccountId, accountIds),
+                  inArray(noodleAccountSubscriptions.viewerAccountId, personaIds),
+                ),
+              )
+          : [],
+        postIds.length
+          ? db
+              .select()
+              .from(noodlePostUnlocks)
+              .where(
+                and(
+                  inArray(noodlePostUnlocks.postId, postIds),
+                  or(
+                    inArray(noodlePostUnlocks.viewerAccountId, accountIds),
+                    inArray(noodlePostUnlocks.viewerAccountId, personaIds),
+                  ),
+                ),
+              )
+          : [],
+        accountIds.length || personaIds.length
+          ? db
+              .select()
+              .from(noodleInteractions)
+              .where(
+                or(
+                  ...(postIds.length ? [inArray(noodleInteractions.postId, postIds)] : []),
+                  ...(accountIds.length || personaIds.length
+                    ? [inArray(noodleInteractions.actorAccountId, [...accountIds, ...personaIds])]
+                    : []),
+                ),
+              )
+          : [],
+        postIds.length
+          ? db.select().from(noodlerCreatorReplyClaims).where(inArray(noodlerCreatorReplyClaims.postId, postIds))
+          : [],
+        db.select().from(noodlerPreparedPosts),
+        db.select().from(noodlerAutomaticAttempts),
+        db.select().from(noodlerReserveState),
+        db.select().from(noodlerFanActivityState),
+        db.select().from(noodleActivityDigests),
+        db.select().from(noodleRefreshRuns),
+      ]);
+      const viewerSettings: Record<string, string> = {};
+      for (const persona of personas) {
+        const raw = await settingsStore.get(slurpViewerSettingsKey(persona.id));
+        if (raw !== null) viewerSettings[persona.id] = raw;
+      }
+      return {
+        settings: await settingsStore.get(SLURP_SETTINGS_KEY),
+        imageConnections: await getNoodlerImageConnections(db),
+        refreshSchedule: await settingsStore.get(NOODLE_REFRESH_SCHEDULE_KEY),
+        sourceSnapshotMigration: await settingsStore.get(NOODLER_SOURCE_SNAPSHOT_MIGRATION_KEY),
+        viewerSettings,
+        tables: {
+          accounts,
+          posts,
+          subscriptions,
+          unlocks,
+          interactions,
+          replyClaims,
+          preparedPosts,
+          attempts,
+          reserveState,
+          fanState,
+          digests,
+          refreshRuns,
+        },
+      };
+    },
+
     async updateSlurpSettings(input: SlurpSettingsUpdateInput) {
       return this.updateSettings(input);
     },
@@ -1574,11 +1696,7 @@ export function createSlurpStorage(db: DB) {
       await settingsStore.set(NOODLE_REFRESH_SCHEDULE_KEY, JSON.stringify(schedule));
     },
 
-    async ensureRefreshSchedule(
-      at = new Date(),
-      settingsOverride?: SlurpSettings,
-    ): Promise<PersistedNoodleRefreshSchedule> {
-      const settings = settingsOverride ?? (await this.getSettings());
+    async ensureRefreshSchedule(at = new Date()): Promise<PersistedNoodleRefreshSchedule> {
       const current = await this.getRefreshSchedule();
       const reconciled = reconcileNoodleRefreshSchedule(current, 0, at);
       if (!current || JSON.stringify(current) !== JSON.stringify(reconciled)) {
@@ -2549,10 +2667,27 @@ export function createSlurpStorage(db: DB) {
       publishAt: string;
       policyFingerprint: string;
       createdAt: string;
-    }): Promise<string> {
+    }): Promise<string | null> {
       const id = newId();
-      await db.transaction(async (tx) =>
-        tx.insert(noodlerPreparedPosts).values({
+      return db.transaction(async (tx) => {
+        const settings = await this.getSettings();
+        const publishMs = Date.parse(input.publishAt);
+        const posts = await tx
+          .select()
+          .from(noodlePosts)
+          .where(eq(noodlePosts.authorAccountId, input.creatorAccountId));
+        const prepared = await tx
+          .select()
+          .from(noodlerPreparedPosts)
+          .where(eq(noodlerPreparedPosts.creatorAccountId, input.creatorAccountId));
+        const activityTimes = [
+          ...posts.map((post) => Date.parse(post.createdAt)),
+          ...prepared
+            .filter((item) => item.state === "scheduled" || item.state === "prepared")
+            .map((item) => Date.parse(item.publishAt)),
+        ];
+        if (hasSlurpCreatorPostingIntervalConflict(activityTimes, publishMs, settings.postsPerDay)) return null;
+        await tx.insert(noodlerPreparedPosts).values({
           id,
           creatorAccountId: input.creatorAccountId,
           generatedAt: input.createdAt,
@@ -2565,9 +2700,9 @@ export function createSlurpStorage(db: DB) {
           imageClaimToken: null,
           imageClaimLeaseUntil: null,
           updatedAt: input.createdAt,
-        }),
-      );
-      return id;
+        });
+        return id;
+      });
     },
 
     async fillNoodlerScheduledPost(
@@ -2603,7 +2738,7 @@ export function createSlurpStorage(db: DB) {
       id: string,
       publishAt: string,
       at = new Date(),
-    ): Promise<"updated" | "not_found" | "not_future" | "not_editable"> {
+    ): Promise<"updated" | "not_found" | "not_future" | "not_editable" | "conflict"> {
       const publishMs = Date.parse(publishAt);
       if (Number.isNaN(publishMs) || publishMs <= at.getTime()) return "not_future";
       const settings = await this.getSettings();
@@ -2612,6 +2747,22 @@ export function createSlurpStorage(db: DB) {
         const current = (await tx.select().from(noodlerPreparedPosts).where(eq(noodlerPreparedPosts.id, id)))[0];
         if (!current) return "not_found" as const;
         if (current.state !== "scheduled" && current.state !== "prepared") return "not_editable" as const;
+        const [posts, activeSlots] = await Promise.all([
+          tx.select().from(noodlePosts).where(eq(noodlePosts.authorAccountId, current.creatorAccountId)),
+          tx
+            .select()
+            .from(noodlerPreparedPosts)
+            .where(eq(noodlerPreparedPosts.creatorAccountId, current.creatorAccountId)),
+        ]);
+        const activityTimes = [
+          ...posts.map((post) => Date.parse(post.createdAt)),
+          ...activeSlots
+            .filter((item) => item.id !== current.id && (item.state === "scheduled" || item.state === "prepared"))
+            .map((item) => Date.parse(item.publishAt)),
+        ];
+        if (hasSlurpCreatorPostingIntervalConflict(activityTimes, publishMs, settings.postsPerDay)) {
+          return "conflict" as const;
+        }
         if (current.state === "prepared") {
           mediaPath = String(parseRecord(parseRecord(current.payload).metadata).noodlerMediaPath ?? "") || null;
         }
@@ -2701,7 +2852,8 @@ export function createSlurpStorage(db: DB) {
 
     async discardPreparedPostsAfterManualPost(creatorAccountId: string, manualCreatedAt: string): Promise<number> {
       const start = Date.parse(manualCreatedAt);
-      const end = start + MANUAL_POST_INVALIDATION_MS;
+      const settings = await this.getSettings();
+      const end = start + slurpCreatorPostingIntervalMs(settings.postsPerDay);
       const rows = await db
         .select()
         .from(noodlerPreparedPosts)
@@ -2786,6 +2938,26 @@ export function createSlurpStorage(db: DB) {
             !sourceSnapshot ||
             current.policyFingerprint !== noodlerReservePolicyFingerprint(account, settings, source.updatedAt)
           ) {
+            await tx
+              .update(noodlerPreparedPosts)
+              .set({ state: "discarded", updatedAt: at.toISOString() })
+              .where(eq(noodlerPreparedPosts.id, current.id));
+            return false;
+          }
+          const latestCreatorPost = (
+            await tx
+              .select()
+              .from(noodlePosts)
+              .where(eq(noodlePosts.authorAccountId, account.id))
+              .orderBy(desc(noodlePosts.createdAt))
+          )[0];
+          if (
+            latestCreatorPost &&
+            Date.parse(latestCreatorPost.createdAt) + slurpCreatorPostingIntervalMs(settings.postsPerDay) > at.getTime()
+          ) {
+            discardedMediaPaths.push(
+              String(parseRecord(parseRecord(current.payload).metadata).noodlerMediaPath ?? "") || null,
+            );
             await tx
               .update(noodlerPreparedPosts)
               .set({ state: "discarded", updatedAt: at.toISOString() })
@@ -3135,6 +3307,35 @@ export function createSlurpStorage(db: DB) {
         .orderBy(desc(noodlePosts.createdAt))
         .limit(Math.max(1, Math.min(50, Math.floor(limit))));
       return rows.map(mapManagedPost);
+    },
+
+    /**
+     * Slurp creator posts that published without their picture and still have a prompt to draw
+     * from. The pending-review marker is excluded: those wait for the user, not for a retry.
+     */
+    async listNoodlerPostsAwaitingImageRetry(limit = 1, at = now()): Promise<NoodlerManagedPost[]> {
+      const accountIds = new Set((await this.listNoodlerAccounts()).map((account) => account.id));
+      if (accountIds.size === 0) return [];
+      // Bounded: the metadata filters below live in a JSON column, so they cannot be pushed into
+      // the query, and posts awaiting the user's prompt review keep a null imageUrl indefinitely —
+      // an unbounded scan would grow without limit on a once-a-minute poll.
+      // ponytail: newest page only; page through older rows if a long-idle post must self-heal.
+      const rows = await db
+        .select()
+        .from(noodlePosts)
+        .where(and(isNull(noodlePosts.imageUrl), isNotNull(noodlePosts.imagePrompt)))
+        .orderBy(desc(noodlePosts.createdAt))
+        .limit(IMAGE_RETRY_SCAN_LIMIT);
+      const eligible: NoodlerManagedPost[] = [];
+      for (const row of rows) {
+        if (!accountIds.has(row.authorAccountId) || !imageClaimIsAvailable(row, at)) continue;
+        const metadata = parseRecord(row.metadata);
+        if (metadata.imagePendingReview === true || metadata.imageGenerationFailed !== true) continue;
+        if (noodlerPostImageRetryAttempts(metadata) >= NOODLER_POST_IMAGE_RETRY_LIMIT) continue;
+        eligible.push(mapManagedPost(row));
+        if (eligible.length >= Math.max(1, Math.floor(limit))) break;
+      }
+      return eligible;
     },
 
     // Unbounded — used by the disclosure-downgrade review, which must inspect every

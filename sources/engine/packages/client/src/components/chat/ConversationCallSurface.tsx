@@ -1945,7 +1945,6 @@ export function ConversationCallSurface({
                   .filter((chunk) => chunk.text.length > 0);
               });
               if (sequenceItems.length === 0) {
-                pauseSourceTurn = turns[batchEndIndex] ?? turn;
                 index = batchEndIndex;
                 continue;
               }

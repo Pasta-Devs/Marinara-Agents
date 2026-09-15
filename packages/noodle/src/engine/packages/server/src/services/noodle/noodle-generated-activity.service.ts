@@ -15,6 +15,7 @@ import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createGalleryStorage } from "../storage/gallery.storage.js";
 import { createNoodleStorage } from "../storage/noodle.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
+import { isAmbientNoodleAccount } from "./noodle-ambient-profiles.js";
 import { canCreateGeneratedNoodleInteraction } from "./noodle-interaction-policy.js";
 import { isConnectionAdmissionFailure, type ConnectionAdmissionMode } from "../generation/connection-admission.js";
 import { createNoodleHandleResolver } from "./noodle-handle.js";
@@ -114,7 +115,11 @@ export async function prepareGeneratedNoodleMedia(input: {
   for (const generatedPost of input.generated.posts.slice(0, input.settings.maxGeneratedPostsPerRefresh)) {
     const account = resolveAccount(generatedPost.authorHandle);
     if (!account || !canGenerateNoodleActivityForAccountKind(account.kind)) continue;
-    const imagePrompt = remainingImagePrompts > 0 ? normalizeNoodleImagePrompt(generatedPost.imagePrompt) : null;
+    // The ambient roster is background texture, not a cast member: it never earns an image slot.
+    const imagePrompt =
+      remainingImagePrompts > 0 && !isAmbientNoodleAccount(account)
+        ? normalizeNoodleImagePrompt(generatedPost.imagePrompt)
+        : null;
     if (imagePrompt) remainingImagePrompts -= 1;
     const prepared: PreparedPostMedia = {
       imagePrompt,

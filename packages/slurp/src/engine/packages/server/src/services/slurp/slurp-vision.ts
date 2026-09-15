@@ -6,6 +6,7 @@ import { getSharp } from "../../utils/sharp.js";
 import { logger } from "../../lib/logger.js";
 import { decodeSafePathSegment, resolveOwnedGalleryPath } from "../image/gallery-file-lifecycle.js";
 import type { NoodlePromptImageCandidate } from "./slurp-prompt.js";
+import { resolveNoodlerMediaAbsolutePath } from "./slurp-media.js";
 
 export const NOODLE_VISION_MAX_IMAGES = 8;
 const NOODLE_VISION_MAX_SOURCE_BYTES = 20 * 1024 * 1024;
@@ -91,11 +92,11 @@ async function optimizeNoodleVisionImage(buffer: Buffer, expectedExt?: string): 
   }
 }
 
-async function readNoodleVisionImage(imageUrl: string): Promise<string | null> {
+async function readNoodleVisionImage(imageUrl: string, mediaPath?: string): Promise<string | null> {
   const dataUrlImage = decodeImageDataUrl(imageUrl);
   if (dataUrlImage) return optimizeNoodleVisionImage(dataUrlImage.buffer, dataUrlImage.expectedExt);
 
-  const filePath = resolveNoodleImagePath(imageUrl);
+  const filePath = mediaPath ? resolveNoodlerMediaAbsolutePath(mediaPath) : resolveNoodleImagePath(imageUrl);
   if (!filePath) return null;
   const fileStat = await stat(filePath);
   if (!fileStat.isFile() || fileStat.size > NOODLE_VISION_MAX_SOURCE_BYTES) return null;
@@ -103,7 +104,7 @@ async function readNoodleVisionImage(imageUrl: string): Promise<string | null> {
 }
 
 export async function prepareNoodleVisionAttachments(
-  candidates: NoodlePromptImageCandidate[],
+  candidates: Array<NoodlePromptImageCandidate & { mediaPath?: string }>,
 ): Promise<NoodleVisionAttachment[]> {
   const ordered = candidates.slice().sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
   const attachments: NoodleVisionAttachment[] = [];
@@ -114,7 +115,7 @@ export async function prepareNoodleVisionAttachments(
     if (seenKeys.has(candidate.key)) continue;
     seenKeys.add(candidate.key);
     try {
-      const dataUrl = await readNoodleVisionImage(candidate.imageUrl);
+      const dataUrl = await readNoodleVisionImage(candidate.imageUrl, candidate.mediaPath);
       if (dataUrl) attachments.push({ ...candidate, dataUrl });
     } catch (error) {
       logger.warn(error, "[noodle/vision] Could not attach timeline image %s", candidate.key);

@@ -1,5 +1,6 @@
 // React Query: Noodle hooks
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { InfiniteData, QueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api-client";
 import { useUIStore } from "../stores/noodle-package.store";
 import type {
@@ -21,10 +22,10 @@ import type {
   NoodleRescheduleRefreshInput,
   NoodleRefreshSchedulerStatus,
   NoodleSettings,
-  NoodleSettingsUpdateInput,
 } from "@marinara-engine/shared";
 import { countNoodlePostsSince, mergeNoodlePollVoteInteractions } from "@marinara-engine/shared";
 import type { ImagePromptOverride, ImagePromptReviewItem } from "../components/ui/ImagePromptReviewModal";
+import type { PackageNoodleSettingsUpdateInput } from "../components/noodle/noodle-settings-defaults";
 
 export type NoodleRefreshResult = {
   bootstrap: NoodleBootstrap;
@@ -44,12 +45,29 @@ export type NoodleDataDeletionCounts = {
 export const noodleKeys = {
   all: ["noodle"] as const,
   bootstrap: () => [...noodleKeys.all, "bootstrap"] as const,
+  feed: () => [...noodleKeys.all, "feed"] as const,
 };
+
+export type NoodlePostPage = {
+  items: NoodlePost[];
+  interactions: NoodleInteraction[];
+  nextCursor: { createdAt: string; id: string } | null;
+};
+
+export type NoodleNotificationData = Pick<NoodleBootstrap, "posts" | "interactions">;
 
 function preservePollVotes(current: NoodleBootstrap | undefined, next: NoodleBootstrap): NoodleBootstrap {
   if (!current) return next;
   const interactions = mergeNoodlePollVoteInteractions(current.interactions, next.posts, next.interactions);
   return interactions === next.interactions ? next : { ...next, interactions };
+}
+
+function updateFeedInteractions(qc: QueryClient, updater: (interactions: NoodleInteraction[]) => NoodleInteraction[]) {
+  qc.setQueryData<InfiniteData<NoodlePostPage>>(noodleKeys.feed(), (current) =>
+    current
+      ? { ...current, pages: current.pages.map((page) => ({ ...page, interactions: updater(page.interactions) })) }
+      : current,
+  );
 }
 
 export function useNoodle(enabled = true) {
@@ -62,6 +80,35 @@ export function useNoodle(enabled = true) {
     refetchIntervalInBackground: false,
     structuralSharing: (current, next) =>
       preservePollVotes(current as NoodleBootstrap | undefined, next as NoodleBootstrap),
+  });
+}
+
+export function useNoodleFeed(enabled = true) {
+  return useInfiniteQuery({
+    queryKey: noodleKeys.feed(),
+    queryFn: ({ pageParam }) => {
+      const cursor = pageParam
+        ? `&cursorAt=${encodeURIComponent(pageParam.createdAt)}&cursorId=${encodeURIComponent(pageParam.id)}`
+        : "";
+      return api.get<NoodlePostPage>(`/noodle/feed?limit=20${cursor}`);
+    },
+    initialPageParam: null as NoodlePostPage["nextCursor"],
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
+    maxPages: 20,
+    enabled,
+    staleTime: 10_000,
+    refetchOnMount: "always",
+    refetchInterval: enabled ? 30_000 : false,
+    refetchIntervalInBackground: false,
+  });
+}
+
+export function useNoodleNotificationData(enabled = true) {
+  return useQuery({
+    queryKey: [...noodleKeys.all, "notifications"],
+    queryFn: () => api.get<NoodleNotificationData>("/noodle/notifications"),
+    enabled,
+    staleTime: 10_000,
   });
 }
 
@@ -101,7 +148,7 @@ export function useUpdateNoodleSettings() {
   const qc = useQueryClient();
   return useMutation({
     scope: { id: "noodle-settings" },
-    mutationFn: (settings: NoodleSettingsUpdateInput) => api.put<NoodleSettings>("/noodle/settings", settings),
+    mutationFn: (settings: PackageNoodleSettingsUpdateInput) => api.put<NoodleSettings>("/noodle/settings", settings),
     onMutate: async (patch) => {
       await qc.cancelQueries({ queryKey: noodleKeys.bootstrap() });
       const previous = qc.getQueryData<NoodleBootstrap>(noodleKeys.bootstrap());
@@ -236,7 +283,10 @@ export function useCreateNoodlePost() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: NoodleCreatePostInput) => api.post<NoodlePost>("/noodle/posts", input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() });
+      qc.invalidateQueries({ queryKey: noodleKeys.feed() });
+    },
   });
 }
 
@@ -250,6 +300,7 @@ export function useUpdateNoodlePost() {
         current ? { ...current, posts: current.posts.map((item) => (item.id === post.id ? post : item)) } : current,
       );
       qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() });
+      qc.invalidateQueries({ queryKey: noodleKeys.feed() });
     },
   });
 }
@@ -270,6 +321,7 @@ export function useDeleteNoodlePost() {
           : current,
       );
       qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() });
+      qc.invalidateQueries({ queryKey: noodleKeys.feed() });
     },
   });
 }
@@ -308,16 +360,14 @@ export function useCreateNoodleInteraction() {
     }: NoodleCreateInteractionInput & { postId: string; actorKind: NoodleAccountKind; actorEntityId: string }) =>
       api.post<NoodleInteraction>(`/noodle/posts/${encodeURIComponent(postId)}/interactions`, input),
     onSuccess: (interaction) => {
+      const merge = (interactions: NoodleInteraction[]) =>
+        interactions.some((item) => item.id === interaction.id)
+          ? interactions.map((item) => (item.id === interaction.id ? interaction : item))
+          : [...interactions, interaction];
       qc.setQueryData<NoodleBootstrap | undefined>(noodleKeys.bootstrap(), (current) =>
-        current
-          ? {
-              ...current,
-              interactions: current.interactions.some((item) => item.id === interaction.id)
-                ? current.interactions.map((item) => (item.id === interaction.id ? interaction : item))
-                : [...current.interactions, interaction],
-            }
-          : current,
+        current ? { ...current, interactions: merge(current.interactions) } : current,
       );
+      updateFeedInteractions(qc, merge);
     },
   });
 }
@@ -338,11 +388,11 @@ export function useRemoveNoodleInteraction() {
       return api.delete<NoodleInteraction>(`/noodle/posts/${encodeURIComponent(postId)}/interactions?${params}`);
     },
     onSuccess: (interaction) => {
+      const remove = (interactions: NoodleInteraction[]) => interactions.filter((item) => item.id !== interaction.id);
       qc.setQueryData<NoodleBootstrap | undefined>(noodleKeys.bootstrap(), (current) =>
-        current
-          ? { ...current, interactions: current.interactions.filter((item) => item.id !== interaction.id) }
-          : current,
+        current ? { ...current, interactions: remove(current.interactions) } : current,
       );
+      updateFeedInteractions(qc, remove);
     },
   });
 }
@@ -360,14 +410,12 @@ export function useUpdateNoodleInteraction() {
         input,
       ),
     onSuccess: (interaction) => {
+      const patch = (interactions: NoodleInteraction[]) =>
+        interactions.map((item) => (item.id === interaction.id ? interaction : item));
       qc.setQueryData<NoodleBootstrap | undefined>(noodleKeys.bootstrap(), (current) =>
-        current
-          ? {
-              ...current,
-              interactions: current.interactions.map((item) => (item.id === interaction.id ? interaction : item)),
-            }
-          : current,
+        current ? { ...current, interactions: patch(current.interactions) } : current,
       );
+      updateFeedInteractions(qc, patch);
     },
   });
 }
@@ -381,11 +429,11 @@ export function useDeleteNoodleInteraction() {
       ),
     onSuccess: (interactions) => {
       const deletedIds = new Set(interactions.map((interaction) => interaction.id));
+      const remove = (current: NoodleInteraction[]) => current.filter((item) => !deletedIds.has(item.id));
       qc.setQueryData<NoodleBootstrap | undefined>(noodleKeys.bootstrap(), (current) =>
-        current
-          ? { ...current, interactions: current.interactions.filter((item) => !deletedIds.has(item.id)) }
-          : current,
+        current ? { ...current, interactions: remove(current.interactions) } : current,
       );
+      updateFeedInteractions(qc, remove);
     },
   });
 }

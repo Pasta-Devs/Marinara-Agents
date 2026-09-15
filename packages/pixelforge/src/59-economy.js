@@ -2,9 +2,11 @@
 // The player block has held a pouch, a purse and a `home` field since S5 slice 3
 // and nothing has ever put anything in them. This is the layer that does: the
 // item VOCABULARY (what a `{t,k}` row is called and how it reads in this theme),
-// the fixed PRICE list, and the one live transaction 0.11 ships — renting a berth
-// at the settlement's inn, which is simultaneously S3's first money sink and the
-// bed P5's day-ledger boundary will need (plan §2, Decisions #2).
+// the fixed PRICE list, and the transactions the build ships. The FIRST of them
+// is renting a berth at the settlement's inn, which is simultaneously S3's first
+// money sink and the bed P5's day-ledger boundary will need (plan §2, Decisions
+// #2). Buying a rod charges the purse as well, and sleeping and fishing spend
+// the clock against the same content.
 //
 // WHY A BERTH AND NOT A HOUSE. Maintainer ruling #2: there is NO automatic home.
 // A modern setting probably houses its protagonist and a fantasy adventurer
@@ -14,12 +16,13 @@
 // the plan and deliberately not here.
 //
 // Everything below is CONTENT plus the game-facing entry points: the OFFERS
-// (berthOffer, rodOffer) describe and never charge, so the HUD can call them
-// every frame; the VERBS (rentBerth, buyRod, grantStartingPurse) mutate. The
-// rest — _skin, currency, money, describe, price, the catch tables — is the
-// vocabulary those read through. It holds no state of its own: what persists
-// goes through the shipped mutators (award/grant/setHome/log/bump) and lives in
-// the player block, which is what makes it rewind-safe.
+// (berthOffer, sleepOffer, rodOffer, fishOffer) describe and never charge, so
+// the HUD can call them every frame; the VERBS (rentBerth, sleep, buyRod, fish,
+// grantStartingPurse) mutate. The rest — _skin, currency, money, describe,
+// price, the catch tables — is the vocabulary those read through. It holds no
+// state of its own: what persists goes through the shipped mutators
+// (award/grant/setHome/log/bump) and lives in the player block, which is what
+// makes it rewind-safe.
 
 // The catch table's TYPE vocabulary — the fixed shared roles a table entry can
 // be, and the one non-catch yield water gives up. A table row carries a role and
@@ -64,9 +67,64 @@ const DAYPARTS = ["dawn", "day", "dusk", "night"];
 // is (theme × kind) and both halves are asserted complete at boot.
 const SPOT_TAGS = ["water-feature", "water-crossing"];
 
+// ── How the sky moves the water (plan §2.3) ─────────────────────────────────
+// The weather column, indexed by (weather WORD × entry RARITY) and stamped onto
+// every entry by `withSky` below. Rarity, because "rain brings the ordinary fish
+// up" is a fact about the MIX and not about carp in particular — and one row per
+// rarity is a retune a maintainer can hold in their head, where twenty-two
+// copies is one a retune half-lands on. `fair` is absent from every row on
+// purpose: a clear day IS the baseline, and `?? 1` reads it that way.
+//
+// THE WORD ONLY, never the intensity. The catch tables stay five-valued, exactly
+// as the pack's weather axis and the schedule bias do; blizzard fishing is a
+// playtest-driven retune if it is ever wanted, not a sixth column.
+//
+// STORM IS THE ONLY COLUMN, and the reason is a ruling (B3-1, 2026-08-28). The
+// slice that built this table shipped four columns and its own doc block proved
+// two of them silent: `_draw` normalizes by the sum it just added up, so a row
+// that multiplies EVERY rarity by the same number cancels exactly, and overcast
+// (×1.1 across the board) and snow (×0.7) left the draw bit-identical to a fair
+// day. That finding went to the maintainer rather than into a quiet retune, and
+// the answer was that the grey and wet skies should not be moving the MIX at
+// all: fish under them bite MORE OFTEN, not differently. So the honest fix is
+// REMOVAL and not decoration — overcast, snow AND rain are gone from every row,
+// rain's live ×1.3/×1.4 included, because the ruling unmade its job and not
+// only the two that were already inert. Where they went is `TUNING.biteRate`:
+// the sky now rewrites how often a cast lands anything, and the two levers never
+// share a job.
+//
+// The five per-rarity rows STAY as rows, each carrying only its storm entry, so
+// the both-ways boot assert below keeps its shape and a rarity-mix retune still
+// lands in the one place it always did.
+//
+// STORM CHANGES THE MIX rather than scaling it — rare ×1.5 against ×0.6 on
+// everything else — which is why it is the row that survived: it is the one that
+// ever moved the draw (measured, 4.5% → 10.5% rare share) and the release's only
+// authored "fish the storm" hook. It gains the faster bite too, and the two do
+// not double-count: the lean is a relative-share fact the normalization
+// preserves at any bite count, per-catch QUALITY with no frequency term in it.
+// Where that content CANNOT be reached is worth writing down: 17-weather's
+// warmth gate makes a storm arithmetically impossible at polar latitude, in
+// every season and at every precipitation, so a polar world never sees this
+// column at all — and the arid four-season worlds meet it about once a year.
+// Recorded rather than designed around; a column that never fires is exactly
+// what the `?? 1` default is for, and under the bite lever those worlds now have
+// a sky that moves the water even so.
+const WEATHER_MIX = {
+  [BAIT_TYPE]: { storm: 0.6 },
+  "catch-common": { storm: 0.6 },
+  "catch-uncommon": { storm: 0.6 },
+  "catch-rare": { storm: 1.5 },
+  "catch-prize": { storm: 0.6 },
+};
+/** Stamp each row's rarity column onto it. SPREAD FIRST, so an entry that ever
+ *  wants its own weather row writes a literal and wins — the shared row is a
+ *  default, not a ceiling. */
+const withSky = (rows) => rows.map((row) => ({ weather: WEATHER_MIX[row.role ?? BAIT_TYPE], ...row }));
+
 // ── What comes out of the water (plan §2.2) ──────────────────────────────────
 // One table per (theme, spot kind). An ENTRY is `{role, variant, weight,
-// minLevel, daypart}`:
+// minLevel, daypart, weather}`:
 //   • `role`   — the shared TYPE, one of CATCH_ROLES. ABSENT means bait, which is
 //                a yield in its own right and the only one that is also an input.
 //   • `variant`— the entry's slug, and the pouch row's `k`. Row identity is
@@ -76,9 +134,11 @@ const SPOT_TAGS = ["water-feature", "water-crossing"];
 //   • `minLevel` — the level the entry becomes REACHABLE at; below it the entry
 //                is not in the draw at all, which is what makes the ladder feel
 //                like it opens water up rather than merely raising a percentage.
-//   • `daypart`— per-daypart multipliers over `weight`, absent meaning 1. This is
-//                0.12's ONLY live modifier (weather is L2, M9) and it is where a
-//                night spot stops being the same spot as a noon one.
+//   • `daypart`— per-daypart multipliers over `weight`, absent meaning 1. Where
+//                a night spot stops being the same spot as a noon one.
+//   • `weather`— the same shape for the SKY, one multiplier per weather WORD.
+//                Stamped by rarity from WEATHER_MIX above rather than written
+//                per row, so the tables below still read as weights and hours.
 // NO PER-ENTRY XP: TUNING.catchXp is the single authority, keyed by TYPE, so a
 // rebalance happens in one place and cannot half-happen.
 //
@@ -88,38 +148,38 @@ const SPOT_TAGS = ["water-feature", "water-crossing"];
 // entries and not consolation prizes.
 const CATCH_TABLES = {
   "cozy-village": {
-    "water-feature": [
+    "water-feature": withSky([
       { variant: "worms", weight: 24, minLevel: 1, daypart: { dawn: 1.2, night: 0.7 } },
       { role: "catch-common", variant: "carp", weight: 34, minLevel: 1, daypart: { night: 0.7 } },
       { role: "catch-uncommon", variant: "bream", weight: 18, minLevel: 3, daypart: { dusk: 1.3 } },
       { role: "catch-rare", variant: "mirror-pike", weight: 6, minLevel: 7, daypart: { day: 0.6, night: 1.6 } },
       { role: "catch-prize", variant: "old-tench", weight: 2, minLevel: 12, daypart: { dawn: 2, day: 0.5 } },
-    ],
-    "water-crossing": [
+    ]),
+    "water-crossing": withSky([
       { variant: "grubs", weight: 22, minLevel: 1 },
       { role: "catch-common", variant: "minnow", weight: 32, minLevel: 1 },
       { role: "catch-uncommon", variant: "trout", weight: 17, minLevel: 4, daypart: { dawn: 1.4, dusk: 1.3 } },
       { role: "catch-rare", variant: "silver-eel", weight: 6, minLevel: 8, daypart: { day: 0.5, night: 1.8 } },
       { role: "catch-prize", variant: "crown-salmon", weight: 2, minLevel: 13, daypart: { dawn: 1.6 } },
-    ],
+    ]),
   },
   "sci-fi-colony": {
-    "water-feature": [
+    "water-feature": withSky([
       { variant: "chum", weight: 24, minLevel: 1 },
       { role: "catch-common", variant: "carp", weight: 28, minLevel: 1, daypart: { night: 0.7 } },
       { role: "catch-common", variant: "culture-kelp", weight: 14, minLevel: 1 },
       { role: "catch-uncommon", variant: "vat-strain", weight: 16, minLevel: 3, daypart: { dusk: 1.3 } },
       { role: "catch-rare", variant: "pressure-eel", weight: 6, minLevel: 7, daypart: { night: 1.6 } },
       { role: "catch-prize", variant: "heritage-koi", weight: 2, minLevel: 12, daypart: { dawn: 1.8, day: 0.5 } },
-    ],
-    "water-crossing": [
+    ]),
+    "water-crossing": withSky([
       { variant: "larvae", weight: 22, minLevel: 1 },
       { role: "catch-common", variant: "minnow", weight: 30, minLevel: 1 },
       { role: "catch-uncommon", variant: "filter-salvage", weight: 12, minLevel: 2 },
       { role: "catch-uncommon", variant: "trout", weight: 16, minLevel: 4, daypart: { dawn: 1.4 } },
       { role: "catch-rare", variant: "deepline-eel", weight: 6, minLevel: 8, daypart: { night: 1.8 } },
       { role: "catch-prize", variant: "ice-run-char", weight: 2, minLevel: 13, daypart: { dawn: 1.6 } },
-    ],
+    ]),
   },
 };
 
@@ -269,11 +329,13 @@ const PRICES = {
 };
 
 // What a new game starts with. It exists because a sink with no source is not a
-// feature: the real income is the quest layer (P4, roadmap 0.13), so without this
-// the one transaction 0.11 ships would be unreachable in a shipped game and only
-// ever exercised by a test that minted its own money. Granted ONCE, on the first
-// sealed world to come up on a block nothing has touched — see grantStartingPurse
-// for why that condition and not a default value.
+// feature: the real income is the quest layer (P4), which the settlement job
+// board now ships, and without this the first transaction would have been
+// unreachable in a shipped game before that landed and only ever exercised by a
+// test that minted its own money. It stays because a new game still opens before
+// any board work is done. Granted ONCE, on the first sealed world to come up on
+// a block nothing has touched — see grantStartingPurse for why that condition
+// and not a default value.
 const STARTING_PURSE = 40;
 
 // "Line and tackle included" — the stack of bait that rides the FIRST rod
@@ -301,6 +363,14 @@ const STARTER_BAIT = 8;
 // throughout is the same chain times `baitMult`: p ≈ 0.69, ≈ 50 xp, ≈ 38 days —
 // which is the honest range, since no real session stays on one side of it.
 //
+// THAT 38-TO-48 IS THE FAIR-DAY, MODERATE-WATER BOUND and not the ladder. The
+// bite rows below compose a second factor onto every one of those p values, so a
+// real ladder runs shorter or longer by the sky the day rolled and the water the
+// world did: a wet world fishing a rainy week climbs noticeably faster, an arid
+// world's fair fortnight noticeably slower. Nothing above is wrong; it is the
+// arithmetic at the calibration anchor, which is where a retune should be
+// checked and not where a player stands.
+//
 // THE CATCH TABLE MOVES THAT AS MUCH AS THIS OBJECT DOES, and the BAIT SHARE is
 // the sharpest lever in it: bait pays `catchXp[BAIT_TYPE]`, the floor, and it
 // also refills the stack the bait multiplier rides on — so a high bait weight is
@@ -310,15 +380,18 @@ const STARTER_BAIT = 8;
 //
 // PRICE INTERPLAY — A NOTE FOR TUNERS, NOT AN INVARIANT (maintainer override,
 // 2026-08-24). Nothing in this build asserts that a starting purse can afford a
-// rod, a berth, or both, and that is deliberate: 0.12 ships no income mechanic,
-// nobody is required to sleep in a rented berth, and income arrives in later
-// releases. The rod-against-berth fork is a PLAYER's choice and the build
+// rod, a berth, or both, and that is deliberate: nobody is required to sleep in
+// a rented berth, and the settlement job board is the income the fork is decided
+// against. The rod-against-berth fork is a PLAYER's choice and the build
 // declines to have an opinion about it. What a tuner should know while moving
 // numbers: STARTING_PURSE 40 against a 12-coin berth and the 6-coin fantasy
 // entry rod leaves room for both several times over, while the 24-credit sci-fi
-// rod turns the same purse into a real decision — and a player who spends the
-// purse down before buying is priced out of fishing until income lands, which is
-// an accepted limitation and not a bug.
+// rod turns the same purse into a real decision. A player who spends the purse
+// down before buying is not stranded: the board's smallest errand pays 6
+// (61-pack TUNING.reward, `visit`), which is exactly the fantasy entry rod, so
+// one walk buys the thing that starts fishing, while the sci-fi rod at 24 is
+// four of them. What still holds is that nothing GUARANTEES the opening purse
+// covers a rod or a berth, which is an accepted looseness and not a bug.
 const TUNING = {
   // THE SUCCESS CURVE, one family for every cast:
   //     p = base(level) * toolMult[toolTier] * modMult[modTier]
@@ -340,6 +413,53 @@ const TUNING = {
   // what a grade of bait is worth (graded mods are L2 content).
   baitMult: 1.25,
   castMinutes: 15, // one cast = one window = this many minutes of clock, and 1440 divides by it
+  // THE BITE, keyed by the sky's WORD (ruling B3-1). A bad sky does not change
+  // what is in the water, it changes how often something takes the hook: the
+  // maintainer's own sentence is a fish biting every ten in-game minutes on a
+  // fair day and every five under overcast, rain or snow. These are CHANCES,
+  // composed onto the success roll as a hazard exponent and not as a straight
+  // multiply — see the roll in fish() for why the literal ×2 cannot be used and
+  // what the ×2 buys instead. `fair` is absent, because a clear day IS the
+  // baseline and `?? 1` reads it that way, exactly as the mix rows do.
+  //
+  // STORM TAKES THE SAME 2 as the other three. It keeps its rarity lean as well,
+  // and the two levers stay orthogonal by construction: the lean is a
+  // relative-share fact the draw's normalization preserves at any bite count, so
+  // there is no frequency term in it to double-count. A storm is also not calmer
+  // water than rain. If the playtest finds storms overrewarding, the retune is
+  // this one number.
+  //
+  // INTENSITY-BLIND like every other catch consumer: heavy rain bites like light
+  // rain, and a blizzard rate would be a playtest retune in this same row rather
+  // than a sixth key.
+  //
+  // GM-TWEAKABILITY, HONESTLY, in three tiers. TODAY this row is the tuner's
+  // handle and the only one. The `pixelforgeWeather` override already tweaks
+  // bites implicitly — summoning rain IS summoning the ×2, with no new machinery
+  // — so a GM who wants faster bites has one. The direct knob, a
+  // `fishBite:<word>:<multiplier>` write over these keys validated against the
+  // closed weather-word enum, would be a third verb on the GM write-back
+  // channel. That channel SHIPS: the package declares its verb table in
+  // `gm-verbs.json` and the engine validates every call against it (62-gm), and
+  // two verbs ride it today, `weather` and `standing`. What is missing is a
+  // bite-rate verb on the table, and this file builds NO read slot for one. The
+  // row exists to tune the multiplier itself, not to get faster bites at all.
+  biteRate: { overcast: 2, rain: 2, snow: 2, storm: 2 },
+  // THE REGION'S WATER (ruling B3-2): the bite's base is DERIVED from the axes
+  // the world already mints, never a hardcoded interval. `abundPerWet` is how
+  // much one point of 17-weather's `wetness` is worth as bite chances, measured
+  // from MODERATE — so the reference world sits at ×1 by construction and a
+  // wetness retune in 17-weather moves the anchor with it rather than stranding
+  // this number. At these starters the three bands land arid ×0.7, moderate
+  // ×1.0, wet ×1.3. `abundFloor` is the guard: a hostile stamp or a future
+  // wetness cannot zero the water out of a world.
+  abundPerWet: 0.2,
+  abundFloor: 0.25,
+  // The second live input to the same derivation, because the tables already
+  // distinguish the kinds. Both 1.0 on purpose: still versus running water is a
+  // CONTENT difference today, and becomes a rate difference in one row the day
+  // the playtest asks for one.
+  spotBite: { "water-feature": 1, "water-crossing": 1 },
   // XP per successful window, keyed by the yield's TYPE — the four roles and
   // bait — and this table is the single xp authority: table entries carry no xp
   // of their own, so a rebalance happens in one place. Asserted complete at boot.
@@ -615,23 +735,37 @@ PF.economy = {
    *    5. `log()` — the day-ledger line P5 will summarise;
    *    6. `bump()` — the keeper remembers. SETTLEMENT-scoped (plan §2: rel keys
    *       are per settlement, not per room), so renting twice does not create two
-   *       people with one name.
-   *  Returns { ok, reason, price, zoneId }. */
+   *       people with one name. MEANINGFUL (0.15's ruling): taking a room off
+   *       somebody is business between you, and business is what moves the ladder
+   *       past acquaintance, where small talk never does.
+   *  Returns { ok, reason, price, zoneId, keeper, rose } — `rose` is the rung the
+   *  night EARNED (0 when it crossed nothing) and `keeper` is who it was taken
+   *  from, both on every return: the receipt this feeds names neither by itself,
+   *  and a caller that had to diff the block to find a rise would say it in a
+   *  second toast, which is a toast that eats the first (70-hud `_said`). */
   rentBerth(core, gen) {
     const offer = this.berthOffer(core);
-    if (!offer.available) return { ok: false, reason: offer.reason, price: offer.price, zoneId: offer.zoneId };
+    const keeper = offer.keeper?.name ?? null;
+    if (!offer.available)
+      return { ok: false, reason: offer.reason, price: offer.price, zoneId: offer.zoneId, keeper, rose: 0 };
     const sim = core.sim;
     const world = sim.world;
     const paid = PF.player.award(core, { money: -offer.price }, gen);
     // The fence, the gate, or a chat switch under us: award() is the first verb
     // that could refuse, and nothing after it has run.
-    if (!paid) return { ok: false, reason: "refused", price: offer.price, zoneId: offer.zoneId };
+    if (!paid) return { ok: false, reason: "refused", price: offer.price, zoneId: offer.zoneId, keeper, rose: 0 };
     PF.player.setHome(core, offer.zoneId, gen);
     PF.player.grant(core, { t: "lodging-key", k: "" }, 1, gen);
     const place = world.zones[offer.zoneId]?.name ?? "the inn";
     PF.player.log(core, `Took a berth at ${place} for ${this.money(world, offer.price)}.`, sim.day, gen);
-    PF.player.bump(core, world.startZone, offer.keeper.name, { t: 1, s: `Let you a berth at ${place}.` }, gen);
-    return { ok: true, reason: null, price: offer.price, zoneId: offer.zoneId };
+    const bumped = PF.player.bump(
+      core,
+      world.startZone,
+      offer.keeper.name,
+      { t: 1, s: `Let you a berth at ${place}.`, meaningful: true },
+      gen,
+    );
+    return { ok: true, reason: null, price: offer.price, zoneId: offer.zoneId, keeper, rose: bumped?.rose ?? 0 };
   },
 
   // ── Sleep (what the berth is FOR) ──────────────────────────────────────────
@@ -807,7 +941,9 @@ PF.economy = {
    *       merges with what the player then fishes up;
    *    4. auto-equip, scoped to tools;
    *    5. `log()` — the day-ledger line the wrap-up will tell;
-   *    6. `bump()` — the keeper remembers, settlement-scoped like every other.
+   *    6. `bump()` — the keeper remembers, settlement-scoped like every
+   *       other, and MEANINGFUL for the berth's reason: buying from somebody is
+   *       business, and business is what carries a row past acquaintance.
    *  Nothing is written to `bought`: that map is world-bound shop DEPLETION and
    *  0.12 ships no shop stock, exactly as rentBerth writes none.
    *
@@ -816,18 +952,23 @@ PF.economy = {
    *  the first settlement's offer costs nothing: the ladder is a stateless
    *  derived read, so any keeper anywhere sells the same next rung later.
    *
-   *  Returns { ok, reason, price, tier, bait }. */
+   *  Returns { ok, reason, price, tier, bait, keeper, rose } — the berth's shape
+   *  again, and for the berth's reason: the sale can be the encounter that
+   *  crosses a line, and the receipt does not name the keeper on its own. */
   buyRod(core, gen) {
     const offer = this.rodOffer(core);
     // ONE SHAPE ON EVERY RETURN, `bait` included: this branch and the refusal
     // after award() below are the same verb refusing the same purchase, and a
     // caller asking what came with the rod should not get `undefined` from one
     // of them and `null` from the other.
-    if (!offer.available) return { ok: false, reason: offer.reason, price: offer.price, tier: offer.tier, bait: null };
+    const keeper = offer.keeper?.name ?? null;
+    if (!offer.available)
+      return { ok: false, reason: offer.reason, price: offer.price, tier: offer.tier, bait: null, keeper, rose: 0 };
     const sim = core.sim;
     const world = sim.world;
     const paid = PF.player.award(core, { money: -offer.price }, gen);
-    if (!paid) return { ok: false, reason: "refused", price: offer.price, tier: offer.tier, bait: null };
+    if (!paid)
+      return { ok: false, reason: "refused", price: offer.price, tier: offer.tier, bait: null, keeper, rose: 0 };
     PF.player.grant(core, { t: "rod", k: offer.tier }, 1, gen);
     let bait = null;
     if (offer.tier === ROD_TIERS[0]) {
@@ -842,8 +983,14 @@ PF.economy = {
       sim.day,
       gen,
     );
-    PF.player.bump(core, world.startZone, offer.keeper.name, { t: 1, s: `Sold you a ${named}.` }, gen);
-    return { ok: true, reason: null, price: offer.price, tier: offer.tier, bait };
+    const bumped = PF.player.bump(
+      core,
+      world.startZone,
+      offer.keeper.name,
+      { t: 1, s: `Sold you a ${named}.`, meaningful: true },
+      gen,
+    );
+    return { ok: true, reason: null, price: offer.price, tier: offer.tier, bait, keeper, rose: bumped?.rose ?? 0 };
   },
 
   // ── Fishing (plan §2.1) ────────────────────────────────────────────────────
@@ -977,21 +1124,67 @@ PF.economy = {
     return row;
   },
 
-  /** Draw one entry: weight × this daypart's multiplier, over the entries the
-   *  player's level has opened up. Null when the level has opened nothing, which
-   *  a shipped table never does (every one of them holds a level-1 entry) and a
-   *  hostile one might. */
-  _draw(rnd, table, level, part) {
+  /** How much water this region has, as bite CHANCES (ruling B3-2). The bite's
+   *  base is derived and never a hardcoded interval: "some places have more
+   *  fish, other places don't have many fish to catch" is a fact about the world
+   *  the compiler already minted, so it is read off the axes rather than typed
+   *  in.
+   *
+   *  PRECIPITATION FIRST, anchored to MODERATE, which is what makes the
+   *  reference world exactly ×1 by construction — `1 + abundPerWet × (wetness −
+   *  moderate.wetness)` is 1 when the two agree, and a wetness retune in
+   *  17-weather moves the anchor along with the bands. `abundFloor` keeps a
+   *  hostile stamp or a future wetness from zeroing the water. Spot kind is the
+   *  second live input, both starters 1.0.
+   *
+   *  THE EXTENSION SEAM, NAMED WHERE IT LIVES: future regional traits —
+   *  harvesting and gathering prosperity, crop fertility, the farming territory
+   *  the roadmap's procedural-worldgen direction points at — MULTIPLY IN here,
+   *  one factor each, without reshaping this derivation or the roll that spends
+   *  it.
+   *
+   *  PURE RESOLVED READS, ZERO STREAM CONTACT. The axes go through
+   *  `PF.weather.axesOf`, the guarded read that folds a hostile or absent stamp
+   *  to temperate/moderate — never a raw `world.precipitation` — and nothing
+   *  here touches `rnd()`. A session computes this ONCE, before its loop.
+   *
+   *  The felt outcome, one sentence for the playtest: an arid world fishes
+   *  SPARSE — fewer bites, never fewer species, because abundance touches the
+   *  rate and the table stays whole — its rare rain is a relief you can feel at
+   *  the waterline, and a wet world's drizzle teems. */
+  _regionBite(world, tag) {
+    const { precipitation } = PF.weather.axesOf(world);
+    const wetness = PF.weather.PRECIP_META[precipitation].wetness;
+    const abundance = Math.max(
+      TUNING.abundFloor,
+      1 + TUNING.abundPerWet * (wetness - PF.weather.PRECIP_META.moderate.wetness),
+    );
+    return abundance * (TUNING.spotBite[tag] ?? 1);
+  },
+
+  /** Draw one entry: weight × this daypart's multiplier × this sky's, over the
+   *  entries the player's level has opened up. Null when the level has opened
+   *  nothing, which a shipped table never does (every one of them holds a
+   *  level-1 entry) and a hostile one might.
+   *
+   *  `w` IS A WEATHER WORD and never a `{word, intensity}` row: the tables are
+   *  five-valued and a light shower fishes like a heavy one.
+   *
+   *  REWIND-EXACT WHATEVER THE FACTORS ARE, which is the property the whole
+   *  ladder rests on: exactly one `rnd()` is consumed per draw, before either
+   *  multiplier is looked at. Adding a column moves WHICH entry a roll lands on
+   *  and never where the stream stands afterwards. */
+  _draw(rnd, table, level, part, w) {
     let total = 0;
     for (const entry of table) {
       if (level < entry.minLevel) continue;
-      total += entry.weight * (entry.daypart?.[part] ?? 1);
+      total += entry.weight * (entry.daypart?.[part] ?? 1) * (entry.weather?.[w] ?? 1);
     }
     if (!(total > 0)) return null;
     let roll = rnd() * total;
     for (const entry of table) {
       if (level < entry.minLevel) continue;
-      roll -= entry.weight * (entry.daypart?.[part] ?? 1);
+      roll -= entry.weight * (entry.daypart?.[part] ?? 1) * (entry.weather?.[w] ?? 1);
       if (roll < 0) return entry;
     }
     return null;
@@ -1038,9 +1231,18 @@ PF.economy = {
    *  `hash(seed, day, castWindow, spotId, level, toolTier, modTier)` — every one
    *  of them RESOLVED (58-player's resolvers), never a raw string off the save,
    *  so two clients that disagree about what "legendary" means still pull the
-   *  same fish out of the same water on the same minute. A failed window is a
-   *  fixed point escaped only by spending different time, which IS the
-   *  anti-save-scum property and is stated rather than discovered.
+   *  same fish out of the same water on the same minute.
+   *
+   *  A FAILED WINDOW IS A FIXED POINT OF ITS SKY OVER ITS WATER. Under the same
+   *  weather it is escaped only by spending different time, which IS the whole
+   *  anti-save-scum property — and it survives the bite lever intact, because
+   *  neither factor is a thing a reload re-rolls: `regionBite` is world-constant,
+   *  and the sky derives from the axes and the day plus chat-scoped override
+   *  state that does not rewind with the story. The same window under a
+   *  DIFFERENT sky may land differently — a fair-day failure can be a rainy-day
+   *  catch at the identical seed — and that is the design (more windows bite in
+   *  the rain), not a violation of it. The sky rewrites the THRESHOLD; it never
+   *  touches the seed, the draw count or the stream position.
    *
    *  BAIT PRESENCE IS READ BEFORE IT IS SPENT. The window a bait was consumed on
    *  rolls BAITED; the slot-clear that follows the last one affects the NEXT
@@ -1049,9 +1251,11 @@ PF.economy = {
    *
    *  MID-LOOP GRANT REFUSAL. grant() refuses only a NEW `(t,k)` row at the pouch
    *  cap — merges never refuse — so a session can meet the cap on a variant it
-   *  has not caught before. That window's grant AND its award are skipped and it
-   *  logs nothing; the loop continues, because the cap bounds species DIVERSITY
-   *  and not the session.
+   *  has not caught before. That window's grant, its award AND ITS QUEST PROGRESS
+   *  are skipped and it logs nothing; the loop continues, because the cap bounds
+   *  species DIVERSITY and not the session. All three are one decision: a fish
+   *  that never entered the bag is not a fish you caught, so it pays no
+   *  experience and it fills nobody's order either.
    *
    *  Returns { ok, reason, hint, windows, caught, leveled, days }. */
   fish(core, target, gen) {
@@ -1064,6 +1268,11 @@ PF.economy = {
     const table = this.catchTable(world, spot.tag) ?? [];
     const W = TUNING.castMinutes;
     const modMult = [1, TUNING.baitMult];
+    // ONCE PER SESSION, BEFORE THE LOOP. The region's water does not change
+    // between two windows of the same session — it is a pure read off the axes
+    // and the spot — so it is resolved here and spent, rather than re-derived
+    // forty times inside the loop.
+    const regionBite = this._regionBite(world, spot.tag);
 
     let windows = 1;
     if (target != null) {
@@ -1112,6 +1321,11 @@ PF.economy = {
       const day = sim.day;
       const castWindow = Math.floor(sim.clockMin / W);
       const part = sim.daypart();
+      // READ BESIDE `part` AND BEFORE THE ADVANCE, on exactly its terms: each
+      // window is fished under the sky it BEGAN under, so a session that crosses
+      // midnight picks up the new day's weather on the next window rather than
+      // on the crossing one. The word alone — the tables never see an intensity.
+      const wthr = sim.weather().word;
 
       sim.advanceMinutes(W);
       spent += W;
@@ -1132,8 +1346,45 @@ PF.economy = {
       // fully-equipped ladder is supposed to feel like, and is unreachable in
       // 0.12 anyway (fine and masterwork are not sold).
       const p = base * TUNING.toolMult[toolTier] * modMult[modTier];
-      if (rnd() >= p) continue;
-      const entry = this._draw(rnd, table, level, part);
+      // THE SKY AND THE WATER REWRITE THE THRESHOLD, and nothing else about the
+      // roll (ruling B3-1/B3-2). `chances` is how many times this window's water
+      // offers, against the fair-day moderate-water one; read the exponent as a
+      // HAZARD, which is exactly the quantity the "a fish bites every N minutes"
+      // sentence describes — it scales the window's continuous-time bite rate.
+      // At the low rungs, where a bite genuinely is an every-so-often event,
+      // `pw ≈ p × chances` and the ruling's multiplicative structure holds
+      // literally; near the top it compresses asymptotically toward certainty
+      // without ever reaching it.
+      //
+      // WHY NOT THE LITERAL `p × 2` the ten-minutes-to-five example suggests:
+      // this curve crosses 1 from mid-ladder up (baited mid-curve p ≈ 0.69, so
+      // 1.38 doubled), and a straight multiply would make every rainy mid-ladder
+      // cast a guaranteed catch — flatly against the ruling's own "ultimately is
+      // still RNG determined". The hazard form honours that at every rung, never
+      // fishes worse than fair under a wet word (`pw ≥ p` wherever
+      // `chances ≥ 1`), and tapers exactly where more frequency has no room
+      // left. The catches-per-window ratio at `chances` 2 is `2 − p` exactly, so
+      // the honest number at the curve floor is ≈1.7× and not a folk 2× no
+      // reachable p delivers. Ten-to-five is the CALIBRATION EXAMPLE at the
+      // temperate/moderate anchor, never a constant this code carries.
+      //
+      // The `min(p, 1)` clamp keeps `pow` off a negative base and preserves the
+      // one promise above: a p at or over 1 still ALWAYS lands, whatever the
+      // sky. Equipment can promise a cast; weather and water neither manufacture
+      // that promise nor break it.
+      //
+      // The `chances === 1` branch keeps the anchor's fair day the LITERAL
+      // shipped expression — bit-identical rolls, no float dust from a round
+      // trip through `1 − (1 − p)` — and doubles as the compat pin: a
+      // moderate-water world's fair-day fishing is untouched by the whole
+      // amendment.
+      //
+      // ZERO ADDED DRAWS, ZERO SEED MOVEMENT: this is the same single `rnd()`
+      // the roll always spent, compared against a different number.
+      const chances = regionBite * (TUNING.biteRate[wthr] ?? 1);
+      const pw = chances === 1 ? p : 1 - Math.pow(1 - Math.min(p, 1), chances);
+      if (rnd() >= pw) continue;
+      const entry = this._draw(rnd, table, level, part, wthr);
       if (!entry) continue;
       const type = this.entryType(entry);
       // The PRIOR level, read before the award, because award() returns the new
@@ -1142,6 +1393,28 @@ PF.economy = {
       if (!PF.player.grant(core, { t: type, k: entry.variant }, 1, gen)) continue;
       const paid = PF.player.award(core, { xp: TUNING.catchXp[type] ?? 0, verb: "fishing" }, gen);
       if (paid?.level > before) leveled = paid.level;
+      // THE CATCH VERB'S QUEST PROGRESS (0.13 §2.3), and it is here rather than
+      // inside grant() on purpose: the pouch is world-free and knows nothing
+      // about quests, and a hook on the item verb would count a fish somebody
+      // handed you. This is the moment a catch HAPPENED, and it is inside the
+      // granted region so a cap-refused one takes the `continue` above with its
+      // award — see the mid-loop paragraph in this function's header.
+      //
+      // A FILTER AND NEVER A FIND: two live orders for the same fish both count
+      // the one that landed. The predicate is 61-pack's SHARED matcher, which the
+      // seal and the default-pack lane call too — role grain matches any yield of
+      // that role, variant grain the exact pair — because three readings of that
+      // is how a role order comes to count a variant catch in one place and not
+      // another. The verb test is this SITE's scope and not a second matcher: an
+      // errand or a walk is not advanced by pulling a fish out of the water, and
+      // a row carrying a verb no site advances (a hostile save's, a forward
+      // build's) is left exactly where 61-pack's renderer says it is.
+      //
+      // Off the per-window live re-read, and `gen` is the one this function was
+      // threaded with — the same fence every other mutator call in the loop uses.
+      for (const quest of live.quests?.active ?? [])
+        if (quest.verb === "catch" && PF.pack.matches(quest.target, { t: type, k: entry.variant }))
+          PF.player.quest(core, "progress", { id: quest.id, by: 1 }, gen);
       tally.caught.push(entry);
       caught.push({ t: type, k: entry.variant });
     }
@@ -1225,6 +1498,16 @@ PF.economy = {
   for (const byTag of Object.values(CATCH_TABLES))
     for (const table of Object.values(byTag)) for (const entry of table) shippedVariants.add(entry.variant);
 
+  // THE WEATHER MIX PAIRS AGAINST THE RARITIES, both ways. A rarity with no row
+  // stamps `undefined` onto every entry of it — a whole tier that quietly stops
+  // caring about the sky — and a row keyed on a rarity nothing has is a tuning
+  // that never applies. Neither shows up anywhere else.
+  for (const rarity of [...CATCH_ROLES, BAIT_TYPE])
+    if (!PF.own(WEATHER_MIX, rarity)) throw new Error(`pixelforge: the weather mix has no row for "${rarity}"`);
+  for (const rarity of Object.keys(WEATHER_MIX))
+    if (!CATCH_ROLES.includes(rarity) && rarity !== BAIT_TYPE)
+      throw new Error(`pixelforge: the weather mix names a rarity "${rarity}" the catch roles do not`);
+
   for (const theme of PF.art?.themeIds?.() ?? []) {
     const skin = ITEM_SKINS[theme];
     if (!skin) throw new Error(`pixelforge: theme "${theme}" ships no item vocabulary`);
@@ -1255,9 +1538,14 @@ PF.economy = {
     // THE 2×2, both halves. A theme with no table for a spot kind is water the
     // player can stand at and the verb cannot answer for; an EMPTY table is the
     // same hole with a shape, and it would divide by a zero weight rather than
-    // refuse. The wilds `water-feature` never places today (slice-1 verify F1)
-    // and its tables are still required — settlements and the legacy world reach
-    // that kind, and the drop is a placement fact, not a vocabulary one.
+    // refuse. Every one of these tables is live content: settlements and the
+    // legacy world hold a `water-feature`, the wilds hold a `water-crossing`,
+    // and a wilds `water-feature` now places when a brief asks for one, because
+    // the bridge ruling gave that tag a second placement pass with the road band
+    // off the busy set, which is what stopped the wilds pool being refused on
+    // every anchor that touched the road (20-world, the wilds feature loop). So
+    // none of these tables is vocabulary kept against a placement that cannot
+    // happen.
     const byTag = CATCH_TABLES[theme];
     if (!byTag) throw new Error(`pixelforge: theme "${theme}" ships no catch tables`);
     for (const tag of SPOT_TAGS) {
@@ -1300,6 +1588,17 @@ PF.economy = {
           if (!(typeof mult === "number" && Number.isFinite(mult) && mult >= 0))
             throw new Error(`pixelforge: ${theme}/${tag}'s "${entry.variant}" has a ${part} multiplier of ${mult}`);
         }
+        // THE SAME WALK FOR THE SKY, against 17-weather's own list rather than a
+        // local mirror — the weather module is the enum authority and it loads
+        // first, so this reads it the way 61-pack reads DAYPARTS from here. A
+        // "rainy" or a "heavy rain" column would otherwise be a tuning nobody
+        // could ever see apply.
+        for (const [word, mult] of Object.entries(entry.weather ?? {})) {
+          if (!PF.weather.WORDS.includes(word))
+            throw new Error(`pixelforge: ${theme}/${tag}'s "${entry.variant}" is tuned for a weather "${word}"`);
+          if (!(typeof mult === "number" && Number.isFinite(mult) && mult >= 0))
+            throw new Error(`pixelforge: ${theme}/${tag}'s "${entry.variant}" has a ${word} multiplier of ${mult}`);
+        }
       }
     }
     // …AND A BAIT ENTRY SOMEWHERE IN THE THEME, because the crude rod's purchase
@@ -1314,9 +1613,10 @@ PF.economy = {
     // answers null for "not for sale here", and a rod the build means to sell
     // and forgot to price is indistinguishable from one it deliberately does
     // not stock. KEY EXISTENCE ONLY: no assertion couples these numbers to the
-    // purse or to the berth (maintainer override, 2026-08-24 — income arrives
-    // in later releases and berth-sleeping is optional), so what the build
-    // insists on is that a quotable rung is quotable, never that it is cheap.
+    // purse or to the berth (maintainer override, 2026-08-24: berth-sleeping is
+    // optional and nothing couples the opening purse to a price), and since 0.15
+    // the board is what an empty purse earns, so what the build insists on is
+    // that a quotable rung is quotable, never that it is cheap.
     for (const tier of ROD_TIERS) {
       // …and a rung has to be a rung. A tier that is not on the QUALITY ladder
       // resolves to crude at every read, so the ladder would quote a rod nobody

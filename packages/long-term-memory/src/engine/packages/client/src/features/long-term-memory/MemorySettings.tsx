@@ -31,6 +31,7 @@ type GlobalForm = {
   longTermMemoryIncludeResolved: boolean;
   longTermMemoryRecallPreamble: string;
   longTermMemoryDebug: boolean;
+  sourcesAvailabilityModes?: ("conversation" | "roleplay" | "game")[];
 };
 type ExtractionForm = Required<LtmExtractionSettingsPatch> & {
   systemPrompt?: string;
@@ -129,6 +130,7 @@ function settingsForm(settings: LtmGlobalSettings): GlobalForm {
     longTermMemoryIncludeResolved: settings.longTermMemoryIncludeResolved ?? false,
     longTermMemoryRecallPreamble: settings.longTermMemoryRecallPreamble ?? "",
     longTermMemoryDebug: settings.longTermMemoryDebug ?? false,
+    ...(settings.sourcesAvailabilityModes ? { sourcesAvailabilityModes: settings.sourcesAvailabilityModes } : {}),
   };
 }
 
@@ -396,6 +398,8 @@ export default function MemorySettings({
         queryKeys.status,
         queryKeys.notes,
         queryKeys.activity,
+        queryKeys.localCharactersRoot,
+        queryKeys.scopeTargetsRoot,
         ...(props.chatId ? [queryKeys.lastInjection(props.chatId)] : []),
       ]);
     } catch (error) {
@@ -564,6 +568,8 @@ export default function MemorySettings({
         queryKeys.pendingDrafts,
         queryKeys.rejectedSuggestions,
         queryKeys.activity,
+        queryKeys.localCharactersRoot,
+        queryKeys.scopeTargetsRoot,
         ...(props.chatId ? [queryKeys.lastInjection(props.chatId)] : []),
       ]);
     } catch (error) {
@@ -859,6 +865,7 @@ export default function MemorySettings({
         role="tablist"
         aria-label={localizeUi("ui.longTermMemory.memorysettings.memorySettingsSections")}
         className="mari-editor-tab-rail grid grid-cols-2 gap-1 rounded-lg border p-1 sm:grid-cols-4"
+        style={{ display: "grid" }}
       >
         {settingsTabs.map((tab, index) => (
           <button

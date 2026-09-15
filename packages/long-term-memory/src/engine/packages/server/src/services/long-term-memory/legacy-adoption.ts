@@ -2,20 +2,10 @@ import { ltmAgentSettingsSchema } from "../../../../shared/src/features/agents/l
 import { readJsonFile, writeJsonAtomic } from "./atomic-json.js";
 import { getLongTermMemoryDirectories, safeJoin } from "./paths.js";
 import { getPackagePersistence, getPackageRuntime, logger } from "./package-runtime.js";
+import { parseLtmChatMetadata } from "./chat-scope.js";
 
 const LTM_AGENT_ID = "long-term-memory";
 const LTM_ADOPTION_MARKER = "longTermMemoryPackageAdopted";
-
-function metadataRecord(value: unknown): Record<string, unknown> {
-  if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
-  if (typeof value !== "string") return {};
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
-  } catch {
-    return {};
-  }
-}
 
 export async function adoptLegacyLongTermMemoryChats() {
   const persistence = getPackagePersistence();
@@ -27,7 +17,7 @@ export async function adoptLegacyLongTermMemoryChats() {
     return;
   }
   for (const chat of chats) {
-    const metadata = metadataRecord(chat.metadata);
+    const metadata = parseLtmChatMetadata(chat.metadata);
     if (metadata[LTM_ADOPTION_MARKER] === true) continue;
     const activeAgentIds = Array.isArray(metadata.activeAgentIds)
       ? metadata.activeAgentIds.filter((id): id is string => typeof id === "string")

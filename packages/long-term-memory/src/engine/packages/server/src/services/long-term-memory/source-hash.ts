@@ -98,7 +98,7 @@ export function extractionFingerprintForLtmSourceNote(
     sourceText: section?.text ?? "",
     evidence: section?.evidence,
     provenance: options.provenance ?? note.provenance ?? null,
-    scope: options.scope ?? note.scope,
+    scope: options.scope ?? note.destinationScope ?? note.scope,
     modes: options.modes ?? note.modes,
     extractionMode: options.extractionMode,
   });
@@ -112,7 +112,6 @@ export function extractionFingerprintsEqual(
 }
 
 export function isLtmSourceExtractionFingerprintCurrent(note: LtmNote, fingerprint: LtmExtractionFingerprint) {
-  if (!note.modes.includes(fingerprint.extractionMode)) return false;
   return extractionFingerprintsEqual(
     extractionFingerprintForLtmSourceNote(note, { extractionMode: fingerprint.extractionMode }),
     fingerprint,

@@ -22,11 +22,13 @@ import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { parseGameJsonish } from "../game/jsonish.js";
 import { requireModelAnswer } from "./slurp-model-answer.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
+import { withConnectionAdmissionProvider } from "../generation/connection-admission.js";
 import { isConnectionAdmissionFailure, type ConnectionAdmissionMode } from "../generation/connection-admission.js";
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { resolveNoodlerImageConnectionId } from "./slurp-image-connections.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
+import { noodlerConcealedSourceText, noodlerSourceText } from "./slurp-prompt-safety.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createSlurpStorage, type SlurpAccount } from "../storage/slurp.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
@@ -41,7 +43,6 @@ import { getErrorMessage } from "./slurp-public-support.js";
 import { noodleResponseFormat } from "./slurp-response-format.js";
 import { buildSlurpPostTimingContext } from "./slurp-post-timing.js";
 import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js";
-import { createChatsStorage } from "../storage/chats.storage.js";
 
 export type GeneratedNoodlerPostResult = {
   post: NoodlerManagedPost;
@@ -289,15 +290,50 @@ function formatNoodlerPostHistory(posts: NoodlerManagedPost[], protect: (value: 
     .join("\n");
 }
 
+/**
+ * The card behind a Creator, reduced for concealed modes. Name, scenario, and backstory are the
+ * lookupable canon, so `noodlerConcealedSourceText` withholds them; an OPEN Creator uses the source
+ * identity publicly and gets the whole card.
+ */
+async function resolveSlurpSourceCardContext(
+  db: DB,
+  linkedPublicAccount: NoodleAccount | null,
+  disclosureMode: NoodleIdentityDisclosure,
+): Promise<string> {
+  if (!linkedPublicAccount) return "";
+  const characters = createCharactersStorage(db);
+  const data =
+    linkedPublicAccount.kind === "character"
+      ? ((await characters.getById(linkedPublicAccount.entityId))?.data ?? null)
+      : linkedPublicAccount.kind === "persona"
+        ? await characters.getPersona(linkedPublicAccount.entityId).then((persona) =>
+            persona
+              ? {
+                  name: persona.name,
+                  description: persona.description,
+                  personality: persona.personality,
+                  scenario: persona.scenario,
+                  appearance: persona.appearance,
+                  backstory: persona.backstory,
+                }
+              : null,
+          )
+        : null;
+  if (!data) return "";
+  return disclosureMode === "open" ? noodlerSourceText(data) : noodlerConcealedSourceText(data);
+}
+
 export function buildNoodlerPostMessages(input: {
   account: Pick<NoodleAccount, "displayName" | "handle" | "bio">;
   stagePersonality: string;
+  sourceCharacterContext: string;
   disclosureMode: NoodleIdentityDisclosure;
   publicIdentity: PublicIdentity | null;
   recentPosts: NoodlerManagedPost[];
   request: Pick<FormattedNoodlerGenerationRequest, "noodlerPostGuide" | "noodlerProjectWork" | "format">;
   allowImagePrompt: boolean;
   generationGuidance: string;
+  imageGenerationPrompt: string;
   scheduleContext?: string;
   generatedAt?: Date;
   publicationTime?: Date;
@@ -305,12 +341,17 @@ export function buildNoodlerPostMessages(input: {
   const protect = (value: string) =>
     protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
   const guidance = input.generationGuidance.trim();
+  const imageGenerationPrompt = input.imageGenerationPrompt.trim();
   const format = input.request.format ?? "caption";
   const system = [
     "You write exactly one post for one Slurp creator page in Marinara Engine.",
     "Write only as the supplied Slurp account. Do not create other accounts, interactions, follows, or public timeline activity.",
     NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
     "Use the Slurp stage profile as supplied.",
+    // Bio and stage voice are written once when the Creator is set up. On their own they flatten
+    // every Creator into the same register, so the source card is supplied as the person and the
+    // stage voice sits on top of it as the performance.
+    "The source character is who this Creator actually is: take their temperament, register, humour, and interests from it. The stage voice describes how they perform on Slurp and how they treat the people reading, layered over that person, not a replacement for them.",
     ...(guidance ? [guidance] : []),
     noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
     NOODLER_FORMAT_PROMPTS[format],
@@ -319,7 +360,14 @@ export function buildNoodlerPostMessages(input: {
     "Recent posts provide continuity. Do not reuse their exact wording.",
     "Every post needs a title: a short specific headline of at most 80 characters, never a repeat of the body text.",
     input.allowImagePrompt
-      ? "Return one JSON object with title, content, and imagePrompt. imagePrompt is required and must be a concrete visual description of one photo or image the creator would post now (subject, pose, setting, lighting, framing). Never return null or an empty imagePrompt, and never put the post text or field names in it. Do not create a poll."
+      ? [
+          "Return one JSON object with title, content, and imagePrompt. imagePrompt is required and must be a concrete visual description of one photo or image the creator would post now (subject, pose, setting, lighting, framing). Never return null or an empty imagePrompt, and never put the post text or field names in it. Do not create a poll.",
+          ...(imageGenerationPrompt
+            ? [
+                `Apply these image directions when writing imagePrompt. They are instructions to you, not text to copy into imagePrompt: ${imageGenerationPrompt}`,
+              ]
+            : []),
+        ].join("\n")
       : "Return one JSON object with title and content only. Do not create a poll or image prompt.",
     "Return JSON only. No prose outside the JSON object.",
   ].join("\n");
@@ -329,6 +377,9 @@ export function buildNoodlerPostMessages(input: {
     `Handle: @${protect(input.account.handle)}`,
     `Bio: ${protect(input.account.bio) || "No bio provided."}`,
     `Stage voice: ${protect(input.stagePersonality) || "No additional stage voice provided."}`,
+    "",
+    "# Source character",
+    protect(input.sourceCharacterContext) || "No source character is linked to this Creator.",
     input.scheduleContext ?? "No active Conversation Schedule is available for this Creator today.",
     `Content format: ${format}`,
     "",
@@ -393,7 +444,7 @@ export async function generateNoodlerPost(
 
   const connections = createConnectionsStorage(db);
   const fallbackConnection = await connections.getFallbackForMain();
-  const provider = withConnectionFallbackProvider({
+  const fallbackProvider = withConnectionFallbackProvider({
     primary: createLLMProvider(
       input.connection.provider,
       resolveBaseUrl(input.connection),
@@ -409,8 +460,16 @@ export async function generateNoodlerPost(
     fallbackConnection,
     fallbackBaseUrl: fallbackConnection ? resolveBaseUrl(fallbackConnection) : "",
     category: "main",
-    admissionMode: input.admissionMode,
   });
+  // The fallback wrapper takes no admission mode — passing one silently dropped it, which left
+  // every automatic post unadmitted and, worse, never ran `beforeAttempt`, so the daily budget
+  // was never claimed and the reserve poll regenerated a post on every pass. Admission goes on
+  // the outside, where the composed provider's calls actually pass through it.
+  const provider = withConnectionAdmissionProvider(
+    fallbackProvider,
+    input.connection.id,
+    input.admissionMode ?? { kind: "foreground" },
+  );
   const recentPosts = await noodle.listNoodlerPostsByAccount(account.id, 8);
   const disclosureMode = account.settings.privacy.identityDisclosure ?? "secret";
   const linkedPublicAccount = await noodle.resolveAccountSource(account as SlurpAccount);
@@ -424,8 +483,14 @@ export async function generateNoodlerPost(
     : undefined;
   // Derive the identity from the row already in hand; resolving it again would re-read it.
   const publicIdentity = await noodlerPublicIdentityFor(db, linkedPublicAccount);
+  // Read the card at post time rather than relying on the bio and stage voice frozen at setup, so
+  // sharpening a character sharpens its Creator and existing Creators improve without a migration.
+  // Concealed modes get the same seed the stage profile draft uses; disclosure limits what may be
+  // said, not who this is.
+  const sourceCharacterContext = await resolveSlurpSourceCardContext(db, linkedPublicAccount, disclosureMode);
   const messages = buildNoodlerPostMessages({
     account,
+    sourceCharacterContext,
     stagePersonality: account.settings.privacy.stagePersonality ?? "",
     disclosureMode,
     publicIdentity,
@@ -433,6 +498,7 @@ export async function generateNoodlerPost(
     request: input.request,
     allowImagePrompt: imagesEnabled,
     generationGuidance: settings.generationGuidance,
+    imageGenerationPrompt: settings.imageGenerationPrompt,
     scheduleContext,
     generatedAt: input.generatedAt ?? new Date(),
     publicationTime: input.publicationTime,
@@ -619,7 +685,10 @@ export async function generateNoodlerPost(
     (noodlerImageConnectionId ? await connections.getWithKey(noodlerImageConnectionId) : null) ??
     (await connections.getDefaultForImageGeneration());
   if (!imageConnection) {
+    // Keep the prompt: the post publishes without its picture, and the retry pass (or the
+    // user) draws it once a connection exists.
     const post = await persist({
+      imagePrompt: draftImagePrompt,
       metadata: {
         imageGenerationFailed: true,
         imageGenerationError: "No image generation connection is configured.",
@@ -657,8 +726,10 @@ export async function generateNoodlerPost(
       logger.warn(err, "[noodler] Failed to prepare image prompt review for %s", account.displayName);
       return {
         post: await persist({
+          imagePrompt: draftImagePrompt,
           metadata: {
             imageGenerationFailed: true,
+            imageRetryAttempts: 1,
             imageGenerationError: getErrorMessage(err).slice(0, 500),
           },
         }),
@@ -690,8 +761,10 @@ export async function generateNoodlerPost(
     logger.warn(err, "[noodler] Failed to generate image for %s", account.displayName);
     return {
       post: await persist({
+        imagePrompt: draftImagePrompt,
         metadata: {
           imageGenerationFailed: true,
+          imageRetryAttempts: 1,
           imageGenerationError: getErrorMessage(err).slice(0, 500),
         },
       }),

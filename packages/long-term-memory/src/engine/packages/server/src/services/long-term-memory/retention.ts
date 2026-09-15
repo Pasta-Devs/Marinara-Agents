@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { logger } from "./package-runtime.js";
 import { createReadStream } from "node:fs";
 import { open, readdir, readFile, rm, stat, unlink } from "node:fs/promises";
 import { createInterface } from "node:readline";

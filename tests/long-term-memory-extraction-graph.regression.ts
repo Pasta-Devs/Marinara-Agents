@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
+import { runRegressionToCompletion } from "./regression-helpers.ts";
 
 async function main() {
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
@@ -10,6 +11,7 @@ async function main() {
   const {
     analyzeTrustedLtmNoteSubjects,
     buildTrustedLtmSubjectCatalog,
+    resolveLtmSubjectIdentities,
     subjectsEqual,
     trustedLtmIdentityNotesForSource,
   } = await import(`${source}/subject-identity.ts`);
@@ -130,6 +132,10 @@ async function main() {
     ),
     true,
   );
+  assert.equal(
+    relationshipWithoutCause.outcome.droppedCandidates[0]?.validatorCode,
+    "relationship_state_missing_caused_by",
+  );
 
   const relationshipWithMissingCause = compile(chat, [
     unit(chat, {
@@ -145,11 +151,86 @@ async function main() {
   ]);
   assert.equal(relationshipWithMissingCause.accounting.keptUnits, 0);
   assert.equal(
-    relationshipWithMissingCause.outcome.droppedCandidates.some((candidate) =>
-      candidate.message.includes("does not exist"),
+    relationshipWithMissingCause.outcome.droppedCandidates.some(
+      (candidate) =>
+        candidate.message.includes("missing a caused_by link") &&
+        !candidate.message.includes("timeline_missing_argument"),
     ),
     true,
   );
+  assert.equal(
+    relationshipWithMissingCause.outcome.droppedCandidates[0]?.validatorCode,
+    "relationship_state_missing_caused_by",
+  );
+  const unknownLinkTarget = compile(chat, [
+    unit(chat, {
+      bucket: "world_fact",
+      subjectId: "missing_link_fact",
+      sectionKey: "facts",
+      text: "A fact linked to a missing memory.",
+      links: [{ target: "missing_memory", relation: "evidenced_by" }],
+    }),
+  ]);
+  assert.equal(unknownLinkTarget.outcome.droppedCandidates[0]?.validatorCode, "unknown_link_target");
+  assert.doesNotMatch(unknownLinkTarget.outcome.droppedCandidates[0]?.message ?? "", /missing_memory/u);
+  const closureAfterInitialDrop = compile(chat, [
+    unit(chat, {
+      bucket: "relationship_state",
+      subjectId: "removed_relationship",
+      sectionKey: "state",
+      text: "Alice and Rowan's trust changed after the argument.",
+      claimKind: "change",
+      subjectNames: ["Alice", "Rowan"],
+      dimensionChanges: { trust: -12 },
+    }),
+    unit(chat, {
+      bucket: "world_fact",
+      subjectId: "dependent_fact",
+      sectionKey: "facts",
+      text: "The observatory kept a record of Alice and Rowan's trust.",
+      links: [{ target: "rel_removed_relationship", relation: "evidenced_by" }],
+    }),
+  ]);
+  const closureDrop = closureAfterInitialDrop.outcome.droppedCandidates.find(
+    (candidate) => candidate.validatorCode === "unknown_link_target",
+  );
+  assert.ok(closureDrop);
+  assert.doesNotMatch(closureDrop.message, /rel_removed_relationship/u);
+  assert.equal(
+    closureAfterInitialDrop.diagnostics.find(
+      (diagnostic) => diagnostic.details?.validatorCode === "unknown_link_target",
+    )?.details?.validationStage,
+    "closure",
+  );
+  const sourceHashMismatch = compile(chat, [
+    {
+      ...unit(chat, {
+        bucket: "world_fact",
+        subjectId: "stale_source_fact",
+        sectionKey: "facts",
+        text: "A fact extracted from a stale source version.",
+      }),
+      sourceHash: "stale-source-hash",
+    },
+  ]);
+  assert.equal(sourceHashMismatch.outcome.droppedCandidates[0]?.validatorCode, "source_hash_mismatch");
+
+  const invalidTimelineSection = unit(chat, {
+    bucket: "timeline_event",
+    subjectId: "argument_strained_trust",
+    sectionKey: "facts",
+    text: "Alice and Rowan argued, straining their trust.",
+    links: [{ target: chat.id, relation: "extracted_from" }],
+  });
+  const invalidTimelineResult = compile(chat, [invalidTimelineSection]);
+  const invalidTimelineDrop = invalidTimelineResult.outcome.droppedCandidates[0];
+  assert.equal(invalidTimelineDrop?.validatorCode, "invalid_timeline_section");
+  assert.equal(invalidTimelineDrop?.recoveryCandidate?.text, invalidTimelineSection.text);
+  assert.equal(invalidTimelineDrop?.recoveryCandidate?.sourceHash, invalidTimelineSection.sourceHash);
+  assert.deepEqual(invalidTimelineDrop?.recoveryCandidate?.evidence, invalidTimelineSection.evidence);
+  const repairedTimelineResult = compile(chat, [{ ...invalidTimelineDrop!.recoveryCandidate!, sectionKey: "event" }]);
+  assert.equal(repairedTimelineResult.outcome.droppedCandidates.length, 0);
+  assert.equal(repairedTimelineResult.accounting.keptUnits, 1);
 
   const relationshipWithEvent = compile(chat, [
     unit(chat, {
@@ -399,6 +480,7 @@ async function main() {
     ),
     true,
   );
+  assert.doesNotMatch(oversizedDerivedNoteId.outcome.droppedCandidates[0]?.message ?? "", /a{120}/u);
   assert.equal(
     oversizedDerivedNoteId.diagnostics.some(
       (diagnostic) => diagnostic.details?.validatorCode === "overlong_target_note_id",
@@ -412,9 +494,15 @@ async function main() {
     undefined,
   );
   assert.equal(oversizedDerivedNoteId.outcome.droppedCandidates[0]?.recovery?.noteId, undefined);
+  assert.equal(oversizedDerivedNoteId.outcome.droppedCandidates[0]?.validatorCode, "overlong_target_note_id");
 
   const strictStorageIds: string[][] = [];
-  const legacyScope = { chatId: "chat-a", chatIds: ["chat-a"] };
+  const legacyScope = {
+    chatId: "chat-a",
+    chatIds: ["chat-a"],
+    characterIds: ["character-a"],
+    personaIds: ["persona-a"],
+  };
   const legacyHash = createHash("sha256").update("ltm_scope_v1:chat:chat-a").digest("hex").slice(0, 10);
   const legacyNoteId = `world_legacy_scope_fact_${legacyHash}`;
   const conflictingNote = {
@@ -459,6 +547,17 @@ async function main() {
     true,
   );
   assert.notEqual(scopedVariantNoteId("world_legacy_scope", legacyScope), legacyNoteId);
+  const destinationScopeVariants = [
+    { groupIds: ["group-a"], chatIds: ["chat-a"] },
+    { groupIds: ["group-a"], chatIds: ["chat-b"] },
+    { groupIds: ["group-a"], characterIds: ["character-a"] },
+    { groupIds: ["group-a"], personaIds: ["persona-a"] },
+  ];
+  assert.equal(
+    new Set(destinationScopeVariants.map((scope) => scopedVariantNoteId("world_destination_union", scope))).size,
+    destinationScopeVariants.length,
+    "destination scope unions receive distinct scoped identities",
+  );
 
   const targetResolution = await resolveScopedEvidenceUnitTargets({
     units: [
@@ -494,6 +593,8 @@ async function main() {
   const malformedPayload = parseEvidenceUnitPayload({ units: Array.from({ length: 100 }, () => null) }, sourceHash);
   assert.equal(malformedPayload.parserRejections, 100);
   assert.equal(malformedPayload.droppedCandidates.length, 80);
+  assert.equal(malformedPayload.droppedCandidates[0]?.validatorCode, "invalid_evidence_unit_format");
+  assert.ok(malformedPayload.droppedCandidates[0]?.issues?.length);
   const countedMalformedCompilation = compileEvidenceUnitExtraction({
     unitResponse: malformedPayload.response,
     providerCandidates: malformedPayload.totalCandidates,
@@ -880,6 +981,22 @@ async function main() {
     ],
     notes: [],
   });
+  const subjectIdentityRejection = resolveLtmSubjectIdentities({
+    units: [
+      unit(chat, {
+        bucket: "character_fact",
+        subjectId: "unknown_person",
+        sectionKey: "facts",
+        text: "An unknown person has a durable fact.",
+        subjectNames: ["Unknown Person"],
+      }),
+    ],
+    catalog: identityCatalog,
+    existingNotes: [],
+    scope: {},
+    mode: "roleplay",
+  });
+  assert.equal(subjectIdentityRejection.droppedCandidates[0]?.validatorCode, "untrusted_subject_identity");
   const canonicalIdentityNote = identityNote("char_seraphina", "Seraphina Duvall", [
     identityCatalog.entries.find((entry: any) => entry.name === "Seraphina Duvall")!.subject,
   ]);
@@ -971,7 +1088,7 @@ async function main() {
   );
 }
 
-void main().catch((error) => {
+void runRegressionToCompletion("long-term-memory-extraction-graph", main).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

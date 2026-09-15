@@ -6,7 +6,6 @@
   "trackerPanelLabel": "Open Beholder",
   "dockTitle": "Beholder",
   "dockClose": "Close Beholder",
-  "dockPopOut": "Open Beholder in a new tab",
   "resizeWindow": "Resize Beholder",
   "layerColor": "Color",
   "layerColorHint": "Color word annotation on chips",
@@ -14,5 +13,15 @@
   "layerDamageHint": "Damage-tier visuals + damage word",
   "layerWounds": "Wounds",
   "layerWoundsHint": "Wounds, bleeding, severity",
-  "layerBarLabel": "Detail layers"
+  "layerBarLabel": "Detail layers",
+  "backfill": "Build state from history",
+  "backfillHint": "Build state from this chat's messages",
+  "backfillGroup": "Build state from the chat",
+  "backfillMore": "More build options",
+  "backfillMoreHint": "More build options",
+  "viewInspector": "Inspector",
+  "viewInspectorHint": "Inspector — the full round trip for a turn",
+  "viewCharacters": "Characters",
+  "viewCharactersHint": "Characters — hide, reorder, merge duplicates",
+  "toolsMore": "Beholder tools"
 }

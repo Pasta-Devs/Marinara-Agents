@@ -7,9 +7,9 @@ import type { SlurpSettings } from "../storage/slurp.storage.js";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { newId } from "../../utils/id-generator.js";
 import { resolveImageConnectionFallback } from "../generation/media-connection-fallback.js";
+import { loadImageGenerationUserSettings } from "../image/image-generation-settings.js";
 import { generateImage, stageImageToDisk, type StagedGalleryImage } from "../image/image-generation.js";
 import { resolveConnectionImageDefaults } from "../image/image-generation-defaults.js";
-import { loadImageGenerationUserSettings } from "../image/image-generation-settings.js";
 import { compileImagePrompt, resolveImageStyleGuidanceText } from "../image/image-prompt-compiler.js";
 import { resolveImagePromptReviewSize } from "../image/image-prompt-review.js";
 import {
@@ -25,6 +25,7 @@ import { createPromptOverridesStorage } from "../storage/prompt-overrides.storag
 import { loadPrompt, NOODLE_IMAGE_POST } from "../prompt-overrides/index.js";
 import { generateNoodleImageWithRetry } from "./slurp-image-retry.js";
 import { rewriteNoodleImagePrompt } from "./slurp-image-prompt-rewrite.js";
+import { prepareNoodleImageProviderPrompt } from "./slurp-image-prompt.js";
 import { resolveNoodlerImageConnectionId } from "./slurp-image-connections.js";
 import type { ConnectionAdmissionMode } from "../generation/connection-admission.js";
 import {
@@ -203,11 +204,40 @@ export async function generateNoodlePostImage(input: {
     imageDefaults,
   });
   const styleGuidance = resolveImageStyleGuidanceText(imageSettings.styleProfiles, compiledPrompt.profile.id);
-  const rawFinalPrompt = input.promptOverride?.prompt.trim() || compiledPrompt.prompt;
-  const imagePromptInstructions = input.imageConnection.imagePromptInstructions?.trim();
-  const instructionLine = imagePromptInstructions
-    ? `User image instructions: ${imagePromptInstructions.replace(/\s+/g, " ").slice(0, 5000)}`
-    : "";
+  // A reviewed prompt replaces the generated wording, but the style profile is composition rather
+  // than wording, so recompile the approved text instead of sending it bare. The compiler omits
+  // style values the prompt already carries, so an approved prompt is never double-styled.
+  const overridePrompt = input.promptOverride?.prompt.trim();
+  const compiledOverride = overridePrompt
+    ? compileImagePrompt({
+        kind: "illustration",
+        prompt: overridePrompt,
+        styleProfiles: imageSettings.styleProfiles,
+        imageDefaults,
+      })
+    : null;
+  // The rewrite is skipped when interpretation is off and discarded when it leaks, and both land on
+  // this fallback. Sending the bare draft there dropped the style profile exactly like the review
+  // path did, so the draft is compiled too.
+  const draftPrompt = input.draftPrompt.trim();
+  const compiledDraft = draftPrompt
+    ? compileImagePrompt({
+        kind: "illustration",
+        prompt: draftPrompt,
+        styleProfiles: imageSettings.styleProfiles,
+        imageDefaults,
+      })
+    : null;
+  const rawFinalPrompt = compiledOverride?.prompt || compiledPrompt.prompt;
+  const rawProviderPrompt = compiledOverride?.prompt || compiledDraft?.prompt || draftPrompt;
+  const configuredImageInstructions = input.settings.imageGenerationPrompt.trim();
+  const connectionImageInstructions = input.imageConnection.imagePromptInstructions?.trim() ?? "";
+  const imagePromptInstructions = [
+    configuredImageInstructions && !postPrompt.includes(configuredImageInstructions) ? configuredImageInstructions : "",
+    connectionImageInstructions,
+  ]
+    .filter(Boolean)
+    .join("\n");
   const characterContext = [
     characterDescription ? `Appearance:\n${characterDescription}` : "",
     characterPersonality ? `Personality:\n${characterPersonality}` : "",
@@ -222,18 +252,32 @@ export async function generateNoodlePostImage(input: {
       ? await rewriteNoodleImagePrompt({
           db: input.db,
           prompt: rawFinalPrompt,
+          interpretationInstruction: input.settings.imagePromptInterpretation,
           instructions: imagePromptInstructions,
           characterContext,
           styleGuidance,
         })
       : null;
-  const finalPrompt =
-    rewrittenPrompt ??
-    (instructionLine && !input.promptOverride && !rawFinalPrompt.includes(instructionLine)
-      ? `${rawFinalPrompt}\n${instructionLine}`
-      : rawFinalPrompt);
+  const finalPrompt = prepareNoodleImageProviderPrompt({
+    rewrittenPrompt,
+    rawPrompt: rawProviderPrompt,
+    compilePrompt: (prompt) =>
+      compileImagePrompt({
+        kind: "illustration",
+        prompt,
+        styleProfiles: imageSettings.styleProfiles,
+        imageDefaults,
+      }).prompt,
+    // Art style and the character's image habits are meant to reach the provider, so a rewrite
+    // that applies them is doing its job. Personality never belongs in a visual prompt at any
+    // length; the instruction fields are guidance and only leak as a copied block.
+    privateContext: [characterPersonality],
+    guidanceContext: [configuredImageInstructions, connectionImageInstructions],
+  });
+  // A reviewer who cleared the negative prompt still gets the style profile's own negatives back,
+  // for the same reason the positive prompt is recompiled above.
   const finalNegativePrompt = input.promptOverride
-    ? input.promptOverride.negativePrompt?.trim() || undefined
+    ? input.promptOverride.negativePrompt?.trim() || compiledOverride?.negativePrompt || undefined
     : compiledPrompt.negativePrompt || undefined;
   logDebugOverride(
     input.debugMode,
@@ -249,8 +293,8 @@ export async function generateNoodlePostImage(input: {
     const previewSize = resolveImagePromptReviewSize({
       connection: input.imageConnection,
       prompt: finalPrompt,
-      width: imageSettings.noodle.width,
-      height: imageSettings.noodle.height,
+      width: input.settings.imageWidth,
+      height: input.settings.imageHeight,
       imageDefaults,
     });
     return {
@@ -274,8 +318,8 @@ export async function generateNoodlePostImage(input: {
         prompt: finalPrompt,
         negativePrompt: finalNegativePrompt,
         model: imageModel,
-        width: imageSettings.noodle.width,
-        height: imageSettings.noodle.height,
+        width: input.settings.imageWidth,
+        height: input.settings.imageHeight,
         imageEndpointId: input.imageConnection.imageEndpointId || undefined,
         comfyWorkflow: input.imageConnection.comfyuiWorkflow || undefined,
         imageDefaults,
@@ -318,8 +362,8 @@ export async function generateNoodlePostImage(input: {
           prompt: finalPrompt,
           provider,
           model: imageModel || "unknown",
-          width: imageSettings.noodle.width,
-          height: imageSettings.noodle.height,
+          width: input.settings.imageWidth,
+          height: input.settings.imageHeight,
         },
       } satisfies StagedNoodlePostMedia,
     };

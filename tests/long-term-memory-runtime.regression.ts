@@ -3,11 +3,18 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { Module } from "node:module";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
-import { runWithSafeCleanup } from "./regression-helpers.ts";
+import { runRegressionToCompletion, runWithSafeCleanup } from "./regression-helpers.ts";
 
 async function main() {
   const repoRoot = resolve(dirname(process.argv[1] ?? process.cwd()), "..");
   const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || join(repoRoot, "../Marinara-Engine"));
+  const packageManifest = JSON.parse(await readFile(join(repoRoot, "packages/long-term-memory/manifest.json"), "utf8"));
+  assert.deepEqual(
+    packageManifest.capabilityApi,
+    { major: 1, minor: 6 },
+    "Long-Term Memory must remain installable on the API 1.7 Engine host",
+  );
+  assert.equal(packageManifest.engine.min, "2.4.1", "Long-Term Memory must support the API 1.7 Engine release");
   process.env.NODE_PATH = [
     join(engineRoot, "packages/server/node_modules"),
     join(engineRoot, "packages/shared/node_modules"),
@@ -51,7 +58,9 @@ async function main() {
     ),
     true,
   );
-  const { configurePackageRuntime, getPackageEmbeddingAdapter } = await import(`${source}/package-runtime.ts`);
+  const { configurePackageRuntime, getPackageEmbeddingAdapter, resolvePackageEmbeddingAdapter } = await import(
+    `${source}/package-runtime.ts`
+  );
   const { embedLongTermMemoryTexts } = await import(`${source}/embedding-adapter.ts`);
   const timestamp = "2026-07-17T00:00:00.000Z";
   const makeChunk = (
@@ -86,6 +95,13 @@ async function main() {
   const services = new Map<string, any>();
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-runtime-"));
   const logger = { debug() {}, info() {}, warn() {}, error() {} };
+  let resolvedAdapter = {
+    spaceId: "resolved-space-a",
+    label: "resolved A",
+    async embed(texts: string[]) {
+      return texts.map(() => [1]);
+    },
+  };
   const chats = [
     {
       id: "chat-a",
@@ -174,6 +190,10 @@ async function main() {
   const api = {
     runtime: {
       logger,
+      embeddings: resolvedAdapter,
+      async resolveEmbeddings() {
+        return resolvedAdapter;
+      },
       async getAgentConfig() {
         agentConfigReads += 1;
         return legacyAgentConfig;
@@ -225,110 +245,127 @@ async function main() {
     "LTM runtime",
     async () => {
       cleanup = await activate({ dataDir, api });
+      assert.equal((await resolvePackageEmbeddingAdapter()).label, "resolved A");
+      resolvedAdapter = {
+        spaceId: "resolved-space-b",
+        label: "resolved B",
+        async embed(texts: string[]) {
+          return texts.map(() => [2]);
+        },
+      };
+      assert.equal(
+        (await resolvePackageEmbeddingAdapter()).spaceId,
+        "resolved-space-b",
+        "LTM must resolve the current package embedding adapter after activation",
+      );
+      const explicitAdapter = {
+        spaceId: "explicit-space",
+        label: "explicit adapter",
+        async embed(texts: string[]) {
+          return texts.map(() => [3]);
+        },
+      };
+      assert.equal(
+        (await resolvePackageEmbeddingAdapter(explicitAdapter)).label,
+        "explicit adapter",
+        "explicit test adapters must bypass the runtime resolver",
+      );
       storage = services.get("long-term-memory:storage").storage;
       runtime = services.get("long-term-memory:runtime");
-      assert.deepEqual(
-        resolveLongTermMemoryRecallSettings({
-          chatMode: "conversation",
-          chatMetadata: {},
-          globalSettings: {
-            ...DEFAULT_LTM_GLOBAL_SETTINGS,
-            longTermMemoryRecallStyle: "balanced",
-          },
-        }).weights,
-        LTM_RECALL_STYLE_WEIGHTS.balanced,
-      );
-      assert.deepEqual(
-        resolveLongTermMemoryRecallSettings({
-          chatMode: "conversation",
-          chatMetadata: {},
-          globalSettings: {
-            ...DEFAULT_LTM_GLOBAL_SETTINGS,
-            longTermMemoryRecallStyle: "exact",
-          },
-        }).weights,
-        LTM_RECALL_STYLE_WEIGHTS.exact,
-      );
-      assert.deepEqual(
-        resolveLongTermMemoryRecallSettings({
-          chatMode: "conversation",
-          chatMetadata: {},
-          globalSettings: {
-            ...DEFAULT_LTM_GLOBAL_SETTINGS,
-            longTermMemoryRecallStyle: "broad",
-          },
-        }).weights,
-        LTM_RECALL_STYLE_WEIGHTS.broad,
-      );
-      assert.deepEqual(
-        resolveLongTermMemoryRecallSettings({
-          chatMode: "conversation",
-          chatMetadata: {},
-          globalSettings: {
-            ...DEFAULT_LTM_GLOBAL_SETTINGS,
-            longTermMemoryRecallStyle: "story",
-          },
-        }).weights,
-        LTM_RECALL_STYLE_WEIGHTS.story,
-      );
-      assert.deepEqual(
-        resolveLongTermMemoryRecallSettings({
-          chatMode: "conversation",
-          chatMetadata: {},
-          globalSettings: {
-            ...DEFAULT_LTM_GLOBAL_SETTINGS,
-            longTermMemoryRecallStyle: "custom",
-            longTermMemorySemanticWeight: 0.91,
-            longTermMemoryLexicalWeight: 0.23,
-            longTermMemoryGraphWeight: 0.44,
-            longTermMemoryKeywordWeight: 0.67,
-          },
-        }).weights,
+      for (const testCase of [
         {
-          semanticWeight: 0.91,
-          lexicalWeight: 0.23,
-          graphWeight: 0.44,
-          keywordWeight: 0.67,
+          input: {
+            chatMode: "conversation" as const,
+            chatMetadata: {},
+            globalSettings: { ...DEFAULT_LTM_GLOBAL_SETTINGS, longTermMemoryRecallStyle: "balanced" as const },
+          },
+          expected: LTM_RECALL_STYLE_WEIGHTS.balanced,
         },
-      );
-      assert.deepEqual(
-        resolveLongTermMemoryRecallSettings({
-          chatMode: "conversation",
-          chatMetadata: { longTermMemoryRecallStyle: "exact" },
-          globalSettings: {
-            ...DEFAULT_LTM_GLOBAL_SETTINGS,
-            longTermMemoryRecallStyle: "custom",
-            longTermMemorySemanticWeight: 0.91,
-            longTermMemoryLexicalWeight: 0.23,
-            longTermMemoryGraphWeight: 0.44,
-            longTermMemoryKeywordWeight: 0.67,
-          },
-        }).weights,
-        LTM_RECALL_STYLE_WEIGHTS.exact,
-      );
-      assert.deepEqual(
-        resolveLongTermMemoryRecallSettings({
-          chatMode: "conversation",
-          chatMetadata: {
-            longTermMemoryRecallStyle: "custom",
-            longTermMemorySemanticWeight: 0.8,
-          },
-          globalSettings: {
-            ...DEFAULT_LTM_GLOBAL_SETTINGS,
-            longTermMemoryRecallStyle: "custom",
-            longTermMemorySemanticWeight: 0.91,
-            longTermMemoryLexicalWeight: 0.23,
-            longTermMemoryGraphWeight: 0.44,
-            longTermMemoryKeywordWeight: 0.67,
-          },
-        }).weights,
         {
-          semanticWeight: 0.8,
-          lexicalWeight: 0.23,
-          graphWeight: 0.44,
-          keywordWeight: 0.67,
+          input: {
+            chatMode: "conversation" as const,
+            chatMetadata: {},
+            globalSettings: { ...DEFAULT_LTM_GLOBAL_SETTINGS, longTermMemoryRecallStyle: "exact" as const },
+          },
+          expected: LTM_RECALL_STYLE_WEIGHTS.exact,
         },
-      );
+        {
+          input: {
+            chatMode: "conversation" as const,
+            chatMetadata: {},
+            globalSettings: { ...DEFAULT_LTM_GLOBAL_SETTINGS, longTermMemoryRecallStyle: "broad" as const },
+          },
+          expected: LTM_RECALL_STYLE_WEIGHTS.broad,
+        },
+        {
+          input: {
+            chatMode: "conversation" as const,
+            chatMetadata: {},
+            globalSettings: { ...DEFAULT_LTM_GLOBAL_SETTINGS, longTermMemoryRecallStyle: "story" as const },
+          },
+          expected: LTM_RECALL_STYLE_WEIGHTS.story,
+        },
+        {
+          input: {
+            chatMode: "conversation" as const,
+            chatMetadata: {},
+            globalSettings: {
+              ...DEFAULT_LTM_GLOBAL_SETTINGS,
+              longTermMemoryRecallStyle: "custom" as const,
+              longTermMemorySemanticWeight: 0.91,
+              longTermMemoryLexicalWeight: 0.23,
+              longTermMemoryGraphWeight: 0.44,
+              longTermMemoryKeywordWeight: 0.67,
+            },
+          },
+          expected: {
+            semanticWeight: 0.91,
+            lexicalWeight: 0.23,
+            graphWeight: 0.44,
+            keywordWeight: 0.67,
+          },
+        },
+        {
+          input: {
+            chatMode: "conversation" as const,
+            chatMetadata: { longTermMemoryRecallStyle: "exact" as const },
+            globalSettings: {
+              ...DEFAULT_LTM_GLOBAL_SETTINGS,
+              longTermMemoryRecallStyle: "custom" as const,
+              longTermMemorySemanticWeight: 0.91,
+              longTermMemoryLexicalWeight: 0.23,
+              longTermMemoryGraphWeight: 0.44,
+              longTermMemoryKeywordWeight: 0.67,
+            },
+          },
+          expected: LTM_RECALL_STYLE_WEIGHTS.exact,
+        },
+        {
+          input: {
+            chatMode: "conversation" as const,
+            chatMetadata: {
+              longTermMemoryRecallStyle: "custom" as const,
+              longTermMemorySemanticWeight: 0.8,
+            },
+            globalSettings: {
+              ...DEFAULT_LTM_GLOBAL_SETTINGS,
+              longTermMemoryRecallStyle: "custom" as const,
+              longTermMemorySemanticWeight: 0.91,
+              longTermMemoryLexicalWeight: 0.23,
+              longTermMemoryGraphWeight: 0.44,
+              longTermMemoryKeywordWeight: 0.67,
+            },
+          },
+          expected: {
+            semanticWeight: 0.8,
+            lexicalWeight: 0.23,
+            graphWeight: 0.44,
+            keywordWeight: 0.67,
+          },
+        },
+      ]) {
+        assert.deepEqual(resolveLongTermMemoryRecallSettings(testCase.input).weights, testCase.expected);
+      }
 
       const serialized = serializeLongTermMemoryPrompt(
         [
@@ -460,35 +497,42 @@ async function main() {
         }),
       );
       await storage.createNote(
+        note("world_resolved", "chat-a", "The resolved cobalt archive world memory is closed.", {
+          status: "resolved",
+        }),
+      );
+      await storage.createNote(
         note("world_game_only", "chat-a", "The game-only cobalt archive is elsewhere.", { modes: ["game"] }),
       );
       await storage.createNote(
         note("world_tagged", "chat-a", "The brass warding marker is recorded here.", { tags: ["cobalt_tag"] }),
       );
       const embedCalls: string[] = [];
+      const testEmbeddingAdapter = {
+        spaceId: "test-space",
+        label: "test embeddings",
+        async embed(texts: string[]) {
+          embedCalls.push(...texts);
+          return texts.map((text) =>
+            text.includes("beneath the observatory")
+              ? [1, 0]
+              : text.includes("brass warding seal")
+                ? [0, 1]
+                : text.includes("Silent nebula resonance under glass")
+                  ? [0, 0.75]
+                  : text.includes("nebula")
+                    ? [0, 0.75]
+                    : text.includes("observatory")
+                      ? [1, 0]
+                      : [0, 0],
+          );
+        },
+      };
       releaseRestoredRuntime = configurePackageRuntime({
         ...api.runtime,
         dataDir,
-        embeddings: {
-          spaceId: "test-space",
-          label: "test embeddings",
-          async embed(texts: string[]) {
-            embedCalls.push(...texts);
-            return texts.map((text) =>
-              text.includes("beneath the observatory")
-                ? [1, 0]
-                : text.includes("brass warding seal")
-                  ? [0, 1]
-                  : text.includes("Silent nebula resonance under glass")
-                    ? [0, 0.75]
-                    : text.includes("nebula")
-                      ? [0, 0.75]
-                      : text.includes("observatory")
-                        ? [1, 0]
-                        : [0, 0],
-            );
-          },
-        },
+        resolveEmbeddings: undefined,
+        embeddings: testEmbeddingAdapter,
       });
       const embeddingBatchCalls: string[][] = [];
       const embeddingBatchAdapter = {
@@ -500,31 +544,32 @@ async function main() {
           return texts.map((text) => [Number(text.match(/^chunk-(\d+)/)?.[1] ?? -1)]);
         },
       };
-      const countBatchedVectors = await embedLongTermMemoryTexts(
-        Array.from({ length: 129 }, (_, index) => `chunk-${index}`),
-        { embeddingAdapter: embeddingBatchAdapter },
-      );
-      assert.equal(countBatchedVectors?.length, 129);
-      assert.deepEqual(
-        countBatchedVectors?.map((vector) => vector[0]),
-        Array.from({ length: 129 }, (_, index) => index),
-        "embedding batches must preserve vector order",
-      );
-      assert.ok(embeddingBatchCalls.every((texts) => texts.length <= 128));
-      assert.equal(embeddingBatchCalls.length, 2);
-      embeddingBatchCalls.length = 0;
-      const characterBatchedVectors = await embedLongTermMemoryTexts(
-        Array.from({ length: 9 }, (_, index) => `chunk-${index}-${"x".repeat(23_990)}`),
-        { embeddingAdapter: embeddingBatchAdapter },
-      );
-      assert.equal(characterBatchedVectors?.length, 9);
-      assert.deepEqual(
-        characterBatchedVectors?.map((vector) => vector[0]),
-        Array.from({ length: 9 }, (_, index) => index),
-        "character-limited embedding batches must preserve vector order",
-      );
-      assert.ok(embeddingBatchCalls.every((texts) => texts.reduce((total, text) => total + text.length, 0) <= 200_000));
-      assert.equal(embeddingBatchCalls.length, 2);
+      for (const scenario of [
+        {
+          texts: Array.from({ length: 129 }, (_, index) => `chunk-${index}`),
+          expectedLength: 129,
+          batchCheck: (calls: string[][]) => calls.every((texts) => texts.length <= 128),
+          orderMessage: "embedding batches must preserve vector order",
+        },
+        {
+          texts: Array.from({ length: 9 }, (_, index) => `chunk-${index}-${"x".repeat(23_990)}`),
+          expectedLength: 9,
+          batchCheck: (calls: string[][]) =>
+            calls.every((texts) => texts.reduce((total, text) => total + text.length, 0) <= 200_000),
+          orderMessage: "character-limited embedding batches must preserve vector order",
+        },
+      ]) {
+        embeddingBatchCalls.length = 0;
+        const vectors = await embedLongTermMemoryTexts(scenario.texts, { embeddingAdapter: embeddingBatchAdapter });
+        assert.equal(vectors?.length, scenario.expectedLength);
+        assert.deepEqual(
+          vectors?.map((vector) => vector[0]),
+          Array.from({ length: scenario.expectedLength }, (_, index) => index),
+          scenario.orderMessage,
+        );
+        assert.equal(embeddingBatchCalls.length, 2);
+        assert.ok(scenario.batchCheck(embeddingBatchCalls));
+      }
       await rebuildLongTermMemoryIndexes({ root: storage.root });
       const semantic = await retrieveLongTermMemory({
         root: storage.root,
@@ -832,17 +877,24 @@ async function main() {
         resolvedExcluded.chunks.some((chunk: any) => chunk.chunk.noteId === "thread_resolved"),
         false,
       );
+      assert.equal(
+        resolvedExcluded.chunks.some((chunk: any) => chunk.chunk.noteId === "world_resolved"),
+        false,
+        "resolved non-thread memories must be excluded by default",
+      );
       const archivedExcluded = await retrieveLongTermMemory({
         root: storage.root,
         queryText: "archived cobalt archive",
         scope: { chatId: "chat-a", chatIds: ["chat-a"] },
         mode: "roleplay",
+        includeResolved: true,
         maxChunks: 10,
         maxTokens: 4096,
       });
       assert.equal(
         archivedExcluded.chunks.some((chunk: any) => chunk.chunk.noteId === "world_archived"),
         false,
+        "archived memories must stay excluded when resolved memories are included",
       );
       const modeMismatchExcluded = await retrieveLongTermMemory({
         root: storage.root,
@@ -868,6 +920,11 @@ async function main() {
       assert.equal(
         resolvedIncluded.chunks.some((chunk: any) => chunk.chunk.noteId === "thread_resolved"),
         true,
+      );
+      assert.equal(
+        resolvedIncluded.chunks.some((chunk: any) => chunk.chunk.noteId === "world_resolved"),
+        true,
+        "includeResolved must allow resolved non-thread memories",
       );
       const tagRecall = await retrieveLongTermMemory({
         root: storage.root,
@@ -935,77 +992,55 @@ async function main() {
         }),
       );
       await rebuildLongTermMemoryIndexes({ root: storage.root });
-      const newCharacterRecall = await runtime.recall({
-        chatId: "chat-new",
-        chatMode: "roleplay",
-        characterIds: ["character-a"],
-        messages: [{ role: "user", content: scopedRecallText }],
-        debugMode: false,
-      });
-      assert.match(newCharacterRecall?.text ?? "", /belongs to character A/);
-      assert.match(newCharacterRecall?.text ?? "", /every character A chat/);
-      assert.doesNotMatch(newCharacterRecall?.text ?? "", /belongs to persona A|belongs to group A/);
-      assert.doesNotMatch(newCharacterRecall?.text ?? "", /old-chat-only|belongs to character B/);
-      assert.doesNotMatch(
-        (
-          await runtime.recall({
-            chatId: "chat-other-character",
-            chatMode: "roleplay",
-            characterIds: ["character-b"],
-            messages: [{ role: "user", content: scopedRecallText }],
-            debugMode: false,
-          })
-        )?.text ?? "",
-        /belongs to character A/,
-      );
-      const personaCharacterRecall =
-        (
-          await runtime.recall({
-            chatId: "chat-persona-a",
-            chatMode: "roleplay",
-            characterIds: [],
-            messages: [{ role: "user", content: scopedRecallText }],
-            debugMode: false,
-          })
-        )?.text ?? "";
-      assert.match(personaCharacterRecall, /belongs to persona A/);
-      assert.match(personaCharacterRecall, /every persona A chat/);
-      assert.doesNotMatch(
-        (
-          await runtime.recall({
-            chatId: "chat-other-persona",
-            chatMode: "roleplay",
-            characterIds: [],
-            messages: [{ role: "user", content: scopedRecallText }],
-            debugMode: false,
-          })
-        )?.text ?? "",
-        /every persona A chat/,
-      );
-      assert.match(
-        (
-          await runtime.recall({
-            chatId: "chat-a",
-            chatMode: "roleplay",
-            characterIds: [],
-            messages: [{ role: "user", content: scopedRecallText }],
-            debugMode: false,
-          })
-        )?.text ?? "",
-        /belongs to group A/,
-      );
-      assert.doesNotMatch(
-        (
-          await runtime.recall({
-            chatId: "chat-other-group",
-            chatMode: "roleplay",
-            characterIds: [],
-            messages: [{ role: "user", content: scopedRecallText }],
-            debugMode: false,
-          })
-        )?.text ?? "",
-        /belongs to group A/,
-      );
+      for (const testCase of [
+        {
+          chatId: "chat-new",
+          characterIds: ["character-a"],
+          matches: [/belongs to character A/, /every character A chat/],
+          doesNotMatch: [/belongs to persona A|belongs to group A/, /old-chat-only|belongs to character B/],
+        },
+        {
+          chatId: "chat-other-character",
+          characterIds: ["character-b"],
+          matches: [],
+          doesNotMatch: [/belongs to character A/],
+        },
+        {
+          chatId: "chat-persona-a",
+          characterIds: [],
+          matches: [/belongs to persona A/, /every persona A chat/],
+          doesNotMatch: [],
+        },
+        {
+          chatId: "chat-other-persona",
+          characterIds: [],
+          matches: [],
+          doesNotMatch: [/every persona A chat/],
+        },
+        {
+          chatId: "chat-a",
+          characterIds: [],
+          matches: [/belongs to group A/],
+          doesNotMatch: [],
+        },
+        {
+          chatId: "chat-other-group",
+          characterIds: [],
+          matches: [],
+          doesNotMatch: [/belongs to group A/],
+        },
+      ]) {
+        const recallResult = await runtime.recall({
+          chatId: testCase.chatId,
+          chatMode: "roleplay",
+          characterIds: testCase.characterIds,
+          messages: [{ role: "user", content: scopedRecallText }],
+          debugMode: false,
+        });
+        const text = recallResult?.text ?? "";
+        for (const pattern of testCase.matches) assert.match(text, pattern);
+        for (const pattern of testCase.doesNotMatch) assert.doesNotMatch(text, pattern);
+      }
       const legacyReadable = await runtime.recall(input);
       assert.match(legacyReadable.text, /beneath the observatory/);
       const first = await runtime.recall(input);
@@ -1119,7 +1154,12 @@ async function main() {
       assert.equal(getPackageEmbeddingAdapter()?.spaceId, "newer-space");
       releaseNewer();
       releaseRestoredRuntime?.();
-      releaseRestoredRuntime = configurePackageRuntime({ ...api.runtime, dataDir });
+      releaseRestoredRuntime = configurePackageRuntime({
+        ...api.runtime,
+        dataDir,
+        resolveEmbeddings: undefined,
+        embeddings: testEmbeddingAdapter,
+      });
 
       await storage.createNote({
         id: "source_chat_summary_runtime",
@@ -1140,6 +1180,38 @@ async function main() {
         null,
         "source notes must not participate in recall",
       );
+      releaseRestoredRuntime?.();
+      releaseRestoredRuntime = configurePackageRuntime({
+        ...api.runtime,
+        dataDir,
+        embeddings: undefined,
+        resolveEmbeddings: undefined,
+      });
+      const unavailableEmbeddingsLexicalRecall = await retrieveLongTermMemory({
+        root: storage.root,
+        queryText: "brass warding seal",
+        scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+        mode: "roleplay",
+        semanticWeight: 1,
+        lexicalWeight: 1,
+        graphWeight: 0,
+        keywordWeight: 0,
+        maxChunks: 5,
+        maxTokens: 4096,
+      });
+      assert.equal(unavailableEmbeddingsLexicalRecall.embeddingsAvailable, false);
+      assert.equal(
+        unavailableEmbeddingsLexicalRecall.chunks[0]?.chunk.noteId,
+        "world_visible_second",
+        "lexical recall must remain functional without any embedding source",
+      );
+      releaseRestoredRuntime?.();
+      releaseRestoredRuntime = configurePackageRuntime({
+        ...api.runtime,
+        dataDir,
+        embeddings: testEmbeddingAdapter,
+        resolveEmbeddings: undefined,
+      });
 
       const vaultBeforeUninstall = await readFile(
         join(dataDir, "long-term-memory", "vault", "world", "world_visible.json"),
@@ -1184,7 +1256,7 @@ async function main() {
   );
 }
 
-void main().catch((error) => {
+void runRegressionToCompletion("long-term-memory-runtime", main).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, InjectOptions } from "fastify";
 import { logger } from "../../lib/logger.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
 import { AUTOMATIC_GENERATION_HEADER } from "../generation/connection-admission.js";
@@ -22,6 +22,19 @@ const NOODLE_SCHEDULER_RATE_LIMIT_RETRY_MS = 5 * 60_000;
 const NOODLE_SCHEDULER_FAILURE_BASE_RETRY_MS = 5 * 60_000;
 const NOODLE_SCHEDULER_FAILURE_MAX_RETRY_MS = 60 * 60_000;
 const NOODLE_SCHEDULER_CONFIGURATION_STATUS_CODES = new Set([400, 401, 403, 404, 405, 410, 422]);
+let refreshPauseDepth = 0;
+let activeRefreshPoll: Promise<void> | null = null;
+
+export async function pauseNoodleRefreshScheduler(): Promise<() => void> {
+  refreshPauseDepth += 1;
+  await activeRefreshPoll?.catch(() => {});
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    refreshPauseDepth -= 1;
+  };
+}
 
 function responseError(payload: string): string {
   try {
@@ -57,7 +70,11 @@ export function nextNoodleSchedulerPollDelayMs(schedule: PersistedNoodleRefreshS
   return Math.max(1_000, Math.min(NOODLE_SCHEDULER_MAX_POLL_MS, Date.parse(nextRefreshAt) - now));
 }
 
-export function startNoodleRefreshScheduler(app: FastifyInstance, registerStop?: (stop: () => Promise<void>) => void) {
+export function startNoodleRefreshScheduler(
+  app: FastifyInstance,
+  registerStop?: (stop: () => Promise<void>) => void,
+  runInternalRoute?: (options: InjectOptions | string) => ReturnType<FastifyInstance["inject"]>,
+) {
   const noodle = createSlurpStorage(app.db);
   let stopped = false;
   let polling = false;
@@ -71,7 +88,9 @@ export function startNoodleRefreshScheduler(app: FastifyInstance, registerStop?:
       () => {
         active = poll().finally(() => {
           active = null;
+          activeRefreshPoll = null;
         });
+        activeRefreshPoll = active;
       },
       Math.max(1_000, delayMs),
     );
@@ -106,12 +125,16 @@ export function startNoodleRefreshScheduler(app: FastifyInstance, registerStop?:
 
   const poll = async () => {
     if (stopped || polling) return;
+    if (refreshPauseDepth > 0) {
+      scheduleNext(NOODLE_SCHEDULER_BUSY_RETRY_MS);
+      return;
+    }
     polling = true;
     let nextDelay = NOODLE_SCHEDULER_MAX_POLL_MS;
     try {
       const now = new Date();
       const settings = await noodle.getSettings();
-      let schedule = await noodle.ensureRefreshSchedule(now, settings);
+      let schedule = await noodle.ensureRefreshSchedule(now);
       const retryAt = schedule.nextAttemptAt ? Date.parse(schedule.nextAttemptAt) : Number.NaN;
       if (Number.isFinite(retryAt) && retryAt > now.getTime()) {
         nextDelay = nextNoodleSchedulerPollDelayMs(schedule, now);
@@ -127,12 +150,13 @@ export function startNoodleRefreshScheduler(app: FastifyInstance, registerStop?:
       schedule = markNoodleRefreshAttempt(schedule, now);
       await noodle.saveRefreshSchedule(schedule);
 
-      const response = await app.inject({
+      const request = {
         method: "POST",
         url: "/api/slurp/refresh",
         headers: { [AUTOMATIC_GENERATION_HEADER]: "1" },
         payload: { mode: "noodler" },
-      });
+      } satisfies InjectOptions;
+      const response = await (runInternalRoute ? runInternalRoute(request) : app.inject(request));
       const completedAt = new Date();
       const latest = await noodle.ensureRefreshSchedule(completedAt);
       if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -179,13 +203,6 @@ export function startNoodleRefreshScheduler(app: FastifyInstance, registerStop?:
   };
   registerStop?.(stop);
   scheduleNext(NOODLE_SCHEDULER_INITIAL_DELAY_MS);
-  app.addHook("onClose", async () => {
-    stopped = true;
-    if (timer) clearTimeout(timer);
-    timer = null;
-    await active?.catch(() => {});
-  });
-
   logger.info("[noodle-scheduler] Automatic timeline refresh scheduler started");
   return { stop };
 }

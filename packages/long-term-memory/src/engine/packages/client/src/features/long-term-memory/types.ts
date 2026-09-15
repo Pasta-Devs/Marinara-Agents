@@ -66,7 +66,7 @@ export type LtmRecoveryHandoff = {
 
 export type LongTermMemoryDestinationProps = {
   props: CapabilityProps;
-  requestedSource?: { key: number; source: SourceTab } | null;
+  requestedSource?: { key: number; source: SourceTab; sourceNoteId?: string } | null;
   onRequestedSourceHandled?: () => void;
   selectedSource?: SourceTab;
   onSourceChange?: (source: SourceTab) => void;
@@ -74,7 +74,7 @@ export type LongTermMemoryDestinationProps = {
   onSaveRequest?: (save: (() => Promise<boolean>) | null) => void;
   onOpenMemory?: (noteId: string) => void;
   onOpenVault?: () => void;
-  onOpenSources?: (source?: SourceTab) => boolean | Promise<boolean>;
+  onOpenSources?: (source?: SourceTab, sourceNoteId?: string) => boolean | Promise<boolean>;
   onOpenReview?: (sourceNoteId?: string) => void;
   onOpenActivity?: () => void;
   openActivityRequest?: number;

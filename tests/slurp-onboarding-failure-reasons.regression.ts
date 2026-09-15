@@ -1,26 +1,33 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { requireModelAnswer } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-model-answer";
+import { requireModelAnswer } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-model-answer";
 
 const root = join(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
-const slurpServices = "packages/slurp/src/engine/packages/server/src/services/slurp/";
+const slurpServices = "packages/slurp2/src/engine/packages/server/src/services/slurp/";
 const draft = read(`${slurpServices}slurp-stage-profile-draft.service.ts`);
 const parsers = Object.fromEntries(
   [
     "slurp-stage-profile-draft.service.ts",
+    "slurp-arc-generation.service.ts",
     "slurp-generation.service.ts",
     "slurp-reply-generation.service.ts",
     "slurp-fan-activity.service.ts",
     "slurp-ambient-profile-generation.service.ts",
     "slurp-invited-post-draft.service.ts",
     "slurp-public-profiles.service.ts",
+    "slurp-garnish-generation.service.ts",
+    "slurp-message-generation.service.ts",
+    "slurp-pending-text.service.ts",
+    "slurp-reaction-bank.operation.ts",
   ].map((file) => [file, read(`${slurpServices}${file}`)] as const),
 );
-const routes = read("packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts");
-const panel = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx");
-const en = JSON.parse(read("packages/slurp/src/engine/packages/client/src/localization/locales/en.json")) as Record<
+const routes = read("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
+const queue = read("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-first-post-queue.service.ts");
+const schema = read("packages/slurp2/src/engine/packages/server/src/db/schema/slurp.ts");
+const panel = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx");
+const en = JSON.parse(read("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json")) as Record<
   string,
   string
 >;
@@ -47,6 +54,19 @@ assert.deepEqual(
   "A Slurp service parses a model answer without being covered here",
 );
 for (const [file, source] of Object.entries(parsers)) {
+  if (file === "slurp-stage-profile-draft.service.ts") {
+    // Draft repair deliberately treats an empty answer as unusable, retries it,
+    // then reports the same actionable empty-answer error after the bounded retry.
+    assert.match(
+      source,
+      /const answer = content\.trim\(\);\s*if \(!answer\) return null;[\s\S]*?parseGameJsonish\(answer\)/u,
+    );
+    assert.match(
+      source,
+      /repaired = parseNoodlerStageProfileDraft\(retry\.content \?\? "", allowedTags\);\s*lastAnswer = retry\.content \?\? "";\s*\}\s*if \(!repaired\) \{[\s\S]*?requireModelAnswer\(lastAnswer, "a creator profile"\)/u,
+    );
+    continue;
+  }
   for (const call of source.match(/parseGameJsonish\([^)]*/gu) ?? []) {
     assert.match(call, /requireModelAnswer\(/u, `Unguarded parseGameJsonish call in ${file}`);
   }
@@ -115,6 +135,11 @@ assert.match(
   "Nothing created must not report the wizard as complete",
 );
 assert.match(panel, /\(creationFailed \|\| completion === "creationFailed"\)/u, "A setup failure must offer a retry");
+assert.match(routes, /first-posts\/enqueue/u, "Onboarding must enqueue first-post work");
+assert.match(routes, /first-posts\/status/u, "Onboarding must expose first-post status polling");
+assert.match(queue, /const MAX_ATTEMPTS = 3/u, "First-post jobs must have bounded retries");
+assert.match(queue, /status: retry \? "queued" : "failed"/u, "Temporary first-post failures must return to the queue");
+assert.match(schema, /slurp2_first_post_jobs/u, "First-post jobs must survive the request that created them");
 for (const key of [
   "ui.noodle.noodlerwizard.completion.creationFailed.title",
   "ui.noodle.noodlerwizard.completion.creationFailed.detail",

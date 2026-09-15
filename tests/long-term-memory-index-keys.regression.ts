@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runRegressionToCompletion } from "./regression-helpers.ts";
 import type { LtmBudgetedChunk } from "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/budget.ts";
 import type { LtmMemoryChunk } from "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts";
 
@@ -170,7 +171,7 @@ async function main() {
   console.info("Long-Term Memory reserved-key regressions passed.");
 }
 
-main().catch((error) => {
+runRegressionToCompletion("long-term-memory-index-keys", main).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

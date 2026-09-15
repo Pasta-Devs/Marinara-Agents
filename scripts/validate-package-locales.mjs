@@ -7,6 +7,7 @@ import {
   readPackageAgentDefinitions,
   readPackageManifest,
   serializePackageLocale,
+  validateShippedUiTranslations,
 } from "./package-locales.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -137,9 +138,32 @@ const exactSharedKeys = new Set([
   "settings.notifications.customSound.status.custom",
   "settings.sections.imageGeneration.title",
   "settings.sections.notifications.title",
+  "ui.agents.customagentrepositoriesmodal.prompt",
+  "ui.characters.characterclipcard.generate",
   "ui.characters.charactercliptrimmodal.reset",
+  "ui.chat.chatgallery.copyPrompt",
+  "ui.chat.chatgallery.couldNotCopyPrompt",
+  "ui.chat.chatgallery.downloadImage",
+  "ui.chat.chatgallery.pinImageToChat",
+  "ui.chat.chatgallery.pinToChat",
+  "ui.chat.chatgallery.promptCopied",
+  "ui.chat.chatimagelightbox.closeImage",
+  "ui.chat.chatimagelightbox.imagePreview",
   "ui.chat.dependencyworkspaceapprovalcard.notNow",
   "ui.chat.homeprofessormarichat.deleteValue1",
+  "ui.chat.summarypopover.every",
+  "ui.panels.manualupdatecommand.copied",
+  "ui.panels.promptoverrideseditorbody.chars",
+  "ui.ui.imagepromptreviewmodal.belowBeforeMarinaraSendsThe",
+  "ui.ui.imagepromptreviewmodal.editThePrompt",
+  "ui.ui.imagepromptreviewmodal.ready",
+  "ui.ui.imagepromptreviewmodal.request",
+  "ui.ui.imagepromptreviewmodal.requestNeedsAPrompt",
+  "ui.ui.imagepromptreviewmodal.reviewValue1Prompt",
+  "ui.ui.imagepromptreviewmodal.reviewValue1Prompts",
+  "ui.ui.imagepromptreviewmodal.toYourProvider",
+  "ui.ui.imagepromptreviewmodal.value1",
+  "ui.ui.imagepromptreviewmodal.value1_1d0dfc9",
 ]);
 const sharedPrefixes = ["capabilities.actions.", "ui.agents.agenteditor.", "ui.noodle."];
 
@@ -202,6 +226,25 @@ if (missingNoodleKeys.length > 0) {
   throw new Error(`Noodle English localization is missing: ${missingNoodleKeys.join(", ")}`);
 }
 
+// Slurp ships its own copy of the Noodle UI catalog. Without this the Slurp client could
+// reference a key that only exists in the Noodle package and render the raw key id instead.
+const slurpClientRoot = join(repoRoot, "packages/slurp2/src/engine/packages/client/src");
+const slurpEnglish = JSON.parse(await readFile(join(slurpClientRoot, "localization/locales/en.json"), "utf8"));
+assertRecord(slurpEnglish, "Slurp en UI localization");
+const referencedSlurpKeys = new Set();
+for (const file of await collectSourceFiles(slurpClientRoot)) {
+  const source = await readFile(file, "utf8");
+  for (const match of source.matchAll(/["'](ui\.(?:noodle|slurp)\.[A-Za-z0-9_.-]+)["']/gu)) {
+    referencedSlurpKeys.add(match[1]);
+  }
+}
+const missingSlurpKeys = [...referencedSlurpKeys]
+  .filter((key) => !(key in slurpEnglish) && !(`${key}_one` in slurpEnglish && `${key}_other` in slurpEnglish))
+  .sort();
+if (missingSlurpKeys.length > 0) {
+  throw new Error(`Slurp English localization is missing: ${missingSlurpKeys.join(", ")}`);
+}
+
 console.log(
   `Noodle UI locales valid: en=${noodleEnglishKeys.length}, de=${Object.keys(noodleCatalogs.get("de")).length}, ko=${Object.keys(noodleCatalogs.get("ko")).length}, pl=${Object.keys(noodleCatalogs.get("pl")).length}.`,
 );
@@ -231,6 +274,7 @@ if (JSON.stringify(memoryNagUiLocaleFiles) !== JSON.stringify(expectedMemoryNagU
 
 const memoryNagEnglish = JSON.parse(await readFile(join(memoryNagUiLocaleRoot, "en.json"), "utf8"));
 const memoryNagEnglishKeys = Object.keys(memoryNagEnglish).filter((key) => key !== "_meta");
+const memoryNagLocaleCounts = [];
 for (const localeFile of memoryNagUiLocaleFiles) {
   const locale = localeFile.slice(0, -".json".length);
   const catalog = JSON.parse(await readFile(join(memoryNagUiLocaleRoot, localeFile), "utf8"));
@@ -243,10 +287,12 @@ for (const localeFile of memoryNagUiLocaleFiles) {
     throw new Error(`Memory Nag ${locale} UI localization direction must be ${expectedDirection}`);
   }
   const keys = Object.keys(catalog).filter((key) => key !== "_meta");
-  if (JSON.stringify(keys) !== JSON.stringify(memoryNagEnglishKeys)) {
-    throw new Error(`Memory Nag ${locale} UI localization keys must match English`);
+  memoryNagLocaleCounts.push(`${locale}=${keys.length}`);
+  if (keys.some((key) => !memoryNagEnglishKeys.includes(key))) {
+    throw new Error(`Memory Nag ${locale} UI localization contains an unknown English key`);
   }
-  for (const key of memoryNagEnglishKeys) {
+  // UI translations use the same English fallback as package metadata catalogs.
+  for (const key of keys) {
     if (typeof catalog[key] !== "string" || !catalog[key].trim()) {
       throw new Error(`Memory Nag ${locale} UI localization key ${key} is empty`);
     }
@@ -258,4 +304,5 @@ for (const localeFile of memoryNagUiLocaleFiles) {
   }
 }
 
-console.log(`Memory Nag UI locales valid: ${memoryNagUiLocaleFiles.length} catalogs.`);
+await validateShippedUiTranslations(repoRoot);
+console.log(`Memory Nag UI locales valid: ${memoryNagLocaleCounts.join(", ")}.`);

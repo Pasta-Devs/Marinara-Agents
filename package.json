@@ -11,13 +11,13 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
-    "@playwright/test": "1.61.0",
-    "eslint": "10.8.1",
+    "@playwright/test": "1.63.0",
+    "eslint": "10.10.0",
     "eslint-plugin-react-hooks": "7.1.1",
-    "globals": "17.11.0",
+    "globals": "17.12.0",
     "prettier": "3.9.6",
-    "tsx": "4.23.12",
-    "typescript-eslint": "8.67.0",
+    "tsx": "4.23.13",
+    "typescript-eslint": "8.69.0",
     "zod": "3.25.76"
   },
   "scripts": {
@@ -27,8 +27,10 @@
     "lint": "eslint \"packages/**/src/**/*.{js,mjs,ts,tsx}\" \"scripts/**/*.{js,mjs}\" \"tests/**/*.{js,mjs,ts,tsx}\" eslint.config.mjs",
     "test:browser:noodle": "node scripts/run-package-browser-tests.mjs noodle tests/package-noodle.e2e.ts",
     "test:browser:slurp": "node scripts/run-package-browser-tests.mjs slurp tests/package-slurp.e2e.ts",
-    "test:noodle:regressions": "sh -c 'for test in tests/noodle*.regression.ts tests/noodler-*.regression.ts tests/slurp-*.regression.ts; do tsx \"$test\" || exit 1; done'",
+    "test:browser:slurp2": "node scripts/run-package-browser-tests.mjs slurp2 tests/package-slurp2.e2e.ts",
+    "test:noodle:regressions": "sh -c 'for test in tests/noodle*.regression.ts tests/noodler-*.regression.ts tests/slurp-*.regression.ts tests/slurp2-*.regression.ts; do if [ \"$test\" = tests/slurp-phase1-durability.regression.ts ]; then tsx \"$test\"; else tsx --tsconfig tests/tsconfig.regressions.json \"$test\"; fi || exit 1; done'",
     "test:noodle:quality": "node scripts/evaluate-noodle-generation.mjs tests/fixtures/noodle-generation-quality.samples.json",
-    "test:security": "node scripts/tests/catalog-path-safety.regression.mjs && tsx tests/long-term-memory-index-keys.regression.ts"
+    "test:security": "node scripts/tests/catalog-path-safety.regression.mjs && tsx tests/long-term-memory-index-keys.regression.ts",
+    "typecheck:packages": "node scripts/typecheck-packages.mjs noodle slurp slurp2 long-term-memory memory-nag"
   }
 }
