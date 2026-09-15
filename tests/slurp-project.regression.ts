@@ -297,6 +297,24 @@ for (const route of [
 ]) {
   assert.ok(routes.includes(route), `missing route ${route}`);
 }
+function routeBlock(route: string) {
+  const start = routes.indexOf(route);
+  assert.notEqual(start, -1, `missing route ${route}`);
+  const end = routes.indexOf("\n  app.", start + 1);
+  return routes.slice(start, end === -1 ? undefined : end);
+}
+for (const route of [
+  'app.get("/noodler/accounts/:id/projects"',
+  'app.post("/noodler/accounts/:id/projects"',
+  'app.patch("/noodler/accounts/:id/projects/:projectId"',
+  'app.delete("/noodler/accounts/:id/projects/:projectId"',
+]) {
+  assert.doesNotMatch(
+    routeBlock(route),
+    /creatorBelongsToViewer|ownsWholeArc|Only the (?:Creator's owner|owner of every Creator)/u,
+    `${route} must remain manageable from a different viewer persona`,
+  );
+}
 // A project is production notes, not a tip goal: it must never be readable by the audience.
 assert.equal(
   routes.split("accounts/:id/projects").length - 1,

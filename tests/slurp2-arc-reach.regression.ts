@@ -125,8 +125,11 @@ const back = slurpProjectDirect(moved, "back", at)!;
 assert.deepEqual(back.history.at(-1)?.effects, { growth: 30, earnings: -8 });
 // Single-player, so not owner-gated, and not gated by Director mode.
 const routes = source("routes/slurp.routes.ts");
-const route = routes.slice(routes.indexOf('"/noodler/accounts/:id/projects/:projectId/profile"'));
-assert.doesNotMatch(route.slice(0, 900), /creatorBelongsToViewer/);
-assert.doesNotMatch(route.slice(0, 900), /arcDirectorMode/);
+const routeStart = routes.indexOf('"/noodler/accounts/:id/projects/:projectId/profile"');
+assert.notEqual(routeStart, -1, "profile route must exist");
+const routeEnd = routes.indexOf("\n  app.", routeStart + 1);
+const route = routes.slice(routeStart, routeEnd === -1 ? undefined : routeEnd);
+assert.doesNotMatch(route, /creatorBelongsToViewer/);
+assert.doesNotMatch(route, /arcDirectorMode/);
 
 console.log("slurp2 arc reach regression passed");

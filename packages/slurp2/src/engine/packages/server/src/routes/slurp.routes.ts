@@ -1446,14 +1446,6 @@ export async function slurpRoutes(app: FastifyInstance) {
     return Boolean(account && account.sourceKind === "persona" && account.sourceEntityId === viewer.entityId);
   }
 
-  /**
-   * Single-player: the one player runs every Creator, so a crossover is always theirs to change.
-   * `viewer` stays unused here so callers don't need special-casing.
-   */
-  async function ownsWholeArc(_creatorAccountId: string, _projectId: string, _viewer: NoodleAccount) {
-    return true;
-  }
-
   async function buildViewerContext(viewer: NonNullable<Awaited<ReturnType<typeof resolveViewerPersona>>>) {
     const [accounts, profiles, subscriptions, unlocks] = await Promise.all([
       noodle.listNoodlerAccounts(),
@@ -1702,7 +1694,7 @@ export async function slurpRoutes(app: FastifyInstance) {
   /**
    * A Creator's projects.
    *
-   * Owner-only, all of them. A project is production notes — what this thread is about, what is
+   * Player-managed, all of them. A project is production notes — what this thread is about, what is
    * coming next — and the opposite of a tip goal, which exists to be shown. Nothing here reaches
    * the audience except the posts it produces.
    */
@@ -1805,9 +1797,6 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!creator) return reply.code(404).send({ error: "Creator account not found" });
     const existing = await noodle.getProject(creator.id, projectId);
     if (!existing) return reply.code(404).send({ error: "Project not found" });
-    if (!(await ownsWholeArc(creator.id, projectId, viewer))) {
-      return reply.code(403).send({ error: "Only the owner of every Creator in this crossover can change it." });
-    }
     const project = await noodle.updateProject(creator.id, projectId, {
       title: parsed.data.title,
       direction: parsed.data.direction,
@@ -1850,9 +1839,6 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!(await noodle.getProject(creator.id, projectId))) {
       return reply.code(404).send({ error: "Project not found" });
     }
-    if (!(await ownsWholeArc(creator.id, projectId, viewer))) {
-      return reply.code(403).send({ error: "Only the owner of every Creator in this crossover can direct it." });
-    }
     const project = await noodle.directProject(creator.id, projectId, parsed.data.action, parsed.data.value);
     if (!project) return reply.code(409).send({ error: "That action does not apply to this arc right now." });
     return { project };
@@ -1870,9 +1856,6 @@ export async function slurpRoutes(app: FastifyInstance) {
     const { id, projectId } = req.params as { id: string; projectId: string };
     const creator = await noodle.getNoodlerAccountById(id);
     if (!creator) return reply.code(404).send({ error: "Creator account not found" });
-    if (!(await ownsWholeArc(creator.id, projectId, viewer))) {
-      return reply.code(403).send({ error: "Only the owner of every Creator in this crossover can change it." });
-    }
     const project = await noodle.resolveArcProfile(creator.id, projectId, parsed.data.apply);
     if (!project) return reply.code(409).send({ error: "This arc has no profile change waiting." });
     return { project };
@@ -1990,9 +1973,6 @@ export async function slurpRoutes(app: FastifyInstance) {
     const { id, projectId } = req.params as { id: string; projectId: string };
     const creator = await noodle.getNoodlerAccountById(id);
     if (!creator) return reply.code(404).send({ error: "Creator account not found" });
-    if (!(await ownsWholeArc(creator.id, projectId, viewer))) {
-      return reply.code(403).send({ error: "Only the owner of every Creator in this crossover can delete it." });
-    }
     if (!(await noodle.deleteProject(creator.id, projectId))) {
       return reply.code(404).send({ error: "Project not found" });
     }
