@@ -1,5 +1,13 @@
 # Quartermaster changelog
 
+## 0.1.14 — 2026-09-15
+- Actually fixed Recent Agent Update's collapsed-box leak (0.1.13 only got it partway): a flex
+  container's default min-height is "auto," driven by its own children's content size, and per
+  spec that wins over a smaller max-height -- the collapsed box was still being forced open
+  enough to show a sliver of Restore Inventory. Explicit min-height:0 fixes it for real.
+- Fixed tooltip text overflowing its own box: a long unbroken token (the {{getvar::...}} macro
+  name in the Feed Appearance tooltip) wasn't wrapping, so it spilled past the fixed-width edge.
+
 ## 0.1.13 — 2026-09-14
 - Fixed Recent Agent Update's collapsed box showing a sliver of Restore Inventory underneath —
   its vertical padding wasn't included in the collapsed max-height. Also shrank its header text.

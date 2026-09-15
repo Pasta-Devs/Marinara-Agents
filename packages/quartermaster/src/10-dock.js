@@ -1568,6 +1568,7 @@ QM.dock = {
       left: "0",
       zIndex: "30",
       width: "220px",
+      boxSizing: "border-box",
       padding: "8px",
       borderRadius: "var(--radius, 4px)",
       border: "1px solid var(--border, rgba(128,128,128,0.4))",
@@ -1576,6 +1577,11 @@ QM.dock = {
       fontSize: "11px",
       lineHeight: "1.4",
       boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
+      // A long unbroken token (the {{getvar::...}} macro name in the Feed
+      // Appearance tooltip has no spaces to wrap at) would otherwise overflow
+      // this fixed width instead of breaking mid-token to stay inside it.
+      overflowWrap: "break-word",
+      wordBreak: "break-word",
     });
 
     // Defaults it may get flipped away from -- see qmClampPopoverToContainer.
@@ -1911,11 +1917,15 @@ QM.dock = {
     // Same max-height + overflow:hidden transition technique as the old
     // Settings accordion (display can't be transitioned) — 700px comfortably
     // covers Restore Inventory's one row plus MAX_TRACKER_OPERATIONS_PER_TURN
-    // rows of Recent Agent Update on a busy turn. boxSizing:"border-box" is
-    // load-bearing here, not decorative: without it, "maxHeight:0" only caps
-    // the CONTENT height, and this element's own vertical padding still
-    // renders at full size collapsed, visibly peeking a sliver of Restore
-    // Inventory's button/text through underneath the collapsed header.
+    // rows of Recent Agent Update on a busy turn. boxSizing:"border-box" folds
+    // this element's own vertical padding into that 0px, rather than adding
+    // it on top. minHeight:"0" is the other half of this, and the one that
+    // actually mattered in practice: a flex CONTAINER's default min-height
+    // is "auto" (driven by its own children's content size, here Restore
+    // Inventory's row), and per spec a larger min-height always wins over a
+    // smaller max-height — without overriding it to 0, the collapsed height
+    // was still being forced open enough to peek a sliver of that row
+    // through, no matter how the padding/box-sizing math was fixed.
     const content = document.createElement("div");
     Object.assign(content.style, {
       padding: "8px",
@@ -1923,6 +1933,7 @@ QM.dock = {
       display: "flex",
       flexDirection: "column",
       gap: "8px",
+      minHeight: "0",
       maxHeight: this.recentUpdateExpanded ? "700px" : "0px",
       overflow: "hidden",
       transition: "max-height 0.2s ease",
