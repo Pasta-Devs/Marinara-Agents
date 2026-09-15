@@ -1048,7 +1048,9 @@ export function NoodleShell({
 
             <main
               className={cn(
-                "flex min-h-0 w-full flex-1 flex-col @min-[1024px]:pb-0",
+                // `min-w-0`: a flex item defaults to `min-width: auto`, so one wide post or story
+                // grew this column and shoved both sidebars out of the viewport.
+                "flex min-h-0 w-full min-w-0 flex-1 flex-col @min-[1024px]:pb-0",
                 slurpActive
                   ? cn(
                       "pb-[calc(48px+var(--slurp-bottom-safe-inset))] @min-[1024px]:pb-0",

@@ -3,7 +3,8 @@ import {
   ArrowDown,
   ArrowRight,
   Bell,
-  Bookmark,
+  BookmarkCheck,
+  BookmarkPlus,
   BriefcaseBusiness,
   Check,
   ChevronDown,
@@ -4169,7 +4170,7 @@ function StageProfileView({
                       : localizeUi("ui.slurp.profile.follow")
                   }
                 >
-                  <Bookmark size={19} />
+                  {viewerCreator.followed ? <BookmarkCheck size={19} /> : <BookmarkPlus size={19} />}
                 </button>
               )}
               <button
