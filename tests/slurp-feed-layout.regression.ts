@@ -191,7 +191,11 @@ assert.match(
   /<motion\.div\s+key=\{activeView\}[\s\S]*?animate=\{prefersReducedMotion \? \{ opacity: 1 \} : \{ opacity: 1, y: 0 \}\}/u,
   "View changes must remount with the destination fade and reduced-motion alternative",
 );
-assert.doesNotMatch(shell, /<AnimatePresence mode="wait"/u, "An unfinished exit must not block the next page");
+assert.doesNotMatch(
+  shell,
+  /<AnimatePresence\b[^>]*\bmode\s*=\s*["']wait["']/u,
+  "An unfinished exit must not block the next page",
+);
 
 // The media wall opens the post, not a bare lightbox, and the dialog shows one copy of the image.
 assert.match(home, /onOpenPost=\{setOpenPostId\}/u, "Wall tiles must open the post dialog");
