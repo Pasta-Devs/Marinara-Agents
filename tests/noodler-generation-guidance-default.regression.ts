@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { slurp2BackstageSource } from "./slurp2-backstage-source";
 
 // The shipped NoodleR generation guidance is the whole tone contract: it is the only place the
 // adult-first balance is stated, it is duplicated in the client so settings can show "Default",
@@ -13,10 +14,7 @@ const storage = readFileSync(
   "utf8",
 );
 const home = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
-const settings = readFileSync(
-  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx",
-  "utf8",
-);
+const settings = slurp2BackstageSource();
 const readme = readFileSync("packages/slurp/README.md", "utf8");
 const enLocale = readFileSync("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json", "utf8");
 const generation = readFileSync(

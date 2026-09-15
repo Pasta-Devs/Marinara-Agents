@@ -8,12 +8,13 @@ import {
   normalizeSlurpDiscoveryTags,
   SLURP_DISCOVERY_TAG_LIMIT,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-discovery-profile.js";
+import { slurp2BackstageSource } from "./slurp2-backstage-source";
 
 const root = "packages/slurp2/src/engine/packages/";
 const read = (path: string) => readFileSync(root + path, "utf8");
 const routes = read("server/src/routes/slurp.routes.ts");
 const storage = read("server/src/services/storage/slurp.storage.ts");
-const settings = read("client/src/components/slurp/SlurpSettings.tsx");
+const settings = slurp2BackstageSource();
 const tagsPage = read("client/src/components/slurp/SlurpTagsSettings.tsx");
 const bulkEdit = read("client/src/components/slurp/SlurpCreatorBulkEdit.tsx");
 const en = JSON.parse(read("client/src/localization/locales/en.json")) as Record<string, string>;

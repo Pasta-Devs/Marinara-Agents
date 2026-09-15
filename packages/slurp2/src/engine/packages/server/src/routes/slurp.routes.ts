@@ -2,14 +2,14 @@
 // Routes: Noodle Fake Social Media
 // ──────────────────────────────────────────────
 import { createReadStream, createWriteStream, existsSync, readFileSync } from "fs";
-import { readFile, readdir, stat, unlink } from "node:fs/promises";
+import { readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import { finished } from "node:stream/promises";
 import { randomUUID } from "node:crypto";
 import { basename, dirname, join } from "path";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { extname } from "node:path";
 import { z } from "zod";
-import { and, eq } from "../db/file-query.js";
+import { and, eq, inArray } from "../db/file-query.js";
 import {
   createNoodlePoll,
   noodleBulkNoodlerAccountCreateSchema,
@@ -52,7 +52,14 @@ type SlurpSubscriberRow = NoodlerSubscriber & {
   stage?: string;
   spent?: number;
 };
-import { noodleInteractions } from "../db/schema/slurp.js";
+import {
+  noodleAccounts,
+  noodleInteractions,
+  noodlePosts,
+  slurpImprovementJobs,
+  slurpImprovementProposals,
+  slurpMessages,
+} from "../db/schema/slurp.js";
 import { createCharactersStorage } from "../services/storage/characters.storage.js";
 import { createCharacterGalleryStorage } from "../services/storage/character-gallery.storage.js";
 import { resolveNoodlerCreatorArtwork } from "../services/slurp/slurp-public-profiles.service.js";
@@ -93,19 +100,43 @@ import {
   updateNoodlerPostWithMedia,
 } from "../services/slurp/slurp-post.operation.js";
 import { tryNoodlerAccountOperation } from "../services/slurp/slurp-account-operation-lock.js";
-import { runSlurpAutopurge } from "../services/slurp/slurp-autopurge.js";
+import { previewSlurpAutopurge, runSlurpAutopurge } from "../services/slurp/slurp-autopurge.js";
 import { createSlurpFirstPostQueue } from "../services/slurp/slurp-first-post-queue.service.js";
-import { trySlurpDataDeletion, trySlurpWrite } from "../services/slurp/slurp-operation-lock.js";
+import {
+  getSlurpOperationStatus,
+  trySlurpDataDeletion,
+  trySlurpWrite,
+} from "../services/slurp/slurp-operation-lock.js";
 import {
   listNoodlerMediaFiles,
   removeAllNoodlerMedia,
   restoreNoodlerMediaFile,
+  summarizeNoodlerMedia,
 } from "../services/slurp/slurp-media.js";
 import { DATA_DIR } from "../utils/data-dir.js";
 import { claimSlurpBackup } from "../services/slurp/slurp-operation-lock.js";
 import { pauseNoodleAutoPost } from "../services/slurp/slurp-autopost-scheduler.service.js";
 import { pauseNoodleRefreshScheduler } from "../services/slurp/slurp-refresh-scheduler.service.js";
-import { jsonEntry, readStoredZip, writeStoredZip, type StoredZipEntry } from "../services/slurp/slurp-backup.js";
+import {
+  isRestoreInspectionExpired,
+  jsonEntry,
+  readStoredZip,
+  restoreImportSettingsRequested,
+  writeStoredZip,
+  type StoredZipEntry,
+} from "../services/slurp/slurp-backup.js";
+import {
+  planSlurpImprovementApply,
+  planSlurpImprovementRetry,
+  SLURP_AVAILABLE_IMPROVEMENT_MODULES,
+  SLURP_IMPROVEMENT_MODULES,
+  slurpCreatorReadiness,
+  slurpImprovementDraftFields,
+  slurpImprovementDraftProposals,
+  slurpImprovementModelCalls,
+  slurpImprovementSnapshot,
+  slurpStageProfileInput,
+} from "../services/slurp/slurp-improvement.js";
 import { clearNoodlerImageConnections } from "../services/slurp/slurp-image-connections.js";
 import { generateAndApplyNoodlerCreatorReply } from "../services/slurp/slurp-creator-reply.operation.js";
 import { getNoodlerFanActivityStatus, runNoodlerFanActivity } from "../services/slurp/slurp-fan-activity.operation.js";
@@ -578,6 +609,39 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
     return noodle.updateSlurpSettings(body.data);
   });
+  const autopurgePreviewSchema = z.object({
+    autopurgeRetentionValue: z.number().int().min(1).max(3650),
+    autopurgeRetentionUnit: z.enum(["days", "weeks", "months"]),
+    autopurgeKeepPosts: z.boolean(),
+    autopurgeIncludeMessageMedia: z.boolean(),
+  });
+  app.post("/autopurge/preview", async (req, reply) => {
+    const body = autopurgePreviewSchema.safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    const settings = await noodle.getSlurpSettings();
+    return previewSlurpAutopurge(app.db, { ...settings, ...body.data });
+  });
+  app.get("/maintenance/summary", async () => {
+    const [accounts, posts, interactions, messages, unused] = await Promise.all([
+      app.db.select().from(noodleAccounts),
+      app.db.select().from(noodlePosts),
+      app.db.select().from(noodleInteractions),
+      app.db.select().from(slurpMessages),
+      noodle.previewUnusedSlurpData(),
+    ]);
+    return {
+      generatedAt: now(),
+      operations: getSlurpOperationStatus(),
+      content: {
+        creators: accounts.length,
+        posts: posts.length,
+        interactions: interactions.length,
+        messages: messages.length,
+      },
+      media: summarizeNoodlerMedia(),
+      unused,
+    };
+  });
   app.post("/autopurge/run", async (_req, reply) => {
     const outcome = await runSlurpAutopurge(app.db, { reschedule: false });
     if (outcome.status === "busy") {
@@ -644,6 +708,403 @@ export async function slurpRoutes(app: FastifyInstance) {
     return noodle.bulkUpdateCreatorProfiles([...new Set(body.data.ids)], body.data.patch);
   });
 
+  // ── Backstage Creator improvement workshop ──────────────────────────────
+  const improvementJobSchema = z.object({
+    accountIds: z.array(z.string().trim().min(1)).min(1).max(50),
+    mode: z.enum(["missing", "refresh", "prefill"]).default("missing"),
+    rebrand: z.boolean().default(false),
+    modules: z.array(z.enum(SLURP_IMPROVEMENT_MODULES)).min(1).default(["profile", "tags"]),
+    connectionId: z.string().trim().min(1).optional(),
+  });
+  const proposalIdsSchema = z.object({ proposalIds: z.array(z.string().trim().min(1)).min(1).max(250) });
+  const activeImprovementJobs = new Set<string>();
+  const readStringArray = (value: string): string[] => {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+    } catch {
+      return [];
+    }
+  };
+  const readImprovementJob = async (id: string) =>
+    (await app.db.select().from(slurpImprovementJobs).where(eq(slurpImprovementJobs.id, id)))[0];
+  const readJobProposals = async (id: string) =>
+    (await app.db.select().from(slurpImprovementProposals)).filter((row) => row.jobId === id);
+  const setProposalStatus = async (ids: readonly string[], status: string, error: string | null = null) => {
+    for (const proposalId of ids) {
+      await app.db
+        .update(slurpImprovementProposals)
+        .set({ status, error, updatedAt: now() })
+        .where(eq(slurpImprovementProposals.id, proposalId));
+    }
+  };
+  const publicImprovementJob = async (id: string) => {
+    const job = await readImprovementJob(id);
+    if (!job) return null;
+    const proposals = await readJobProposals(id);
+    const modules = readStringArray(job.modules);
+    return {
+      id: job.id,
+      status: job.status,
+      mode: job.mode,
+      rebrand: job.rebrand === "true",
+      accountIds: readStringArray(job.accountIds),
+      modules,
+      completed: Number(job.completed) || 0,
+      total: Number(job.total) || 0,
+      expectedModelCalls: slurpImprovementModelCalls(Number(job.total) || 0, modules),
+      error: job.error,
+      createdAt: job.createdAt,
+      updatedAt: job.updatedAt,
+      proposals: proposals.map((proposal) => ({
+        id: proposal.id,
+        accountId: proposal.accountId,
+        field: proposal.field,
+        before: JSON.parse(proposal.beforeValue) as unknown,
+        after: JSON.parse(proposal.afterValue) as unknown,
+        status: proposal.status,
+        error: proposal.error,
+      })),
+    };
+  };
+  const insertProposal = (values: {
+    jobId: string;
+    accountId: string;
+    field: string;
+    before: unknown;
+    after: unknown;
+    sourceFingerprint: string;
+    status: "pending" | "error";
+    error?: string | null;
+  }) =>
+    app.db.insert(slurpImprovementProposals).values({
+      id: newId(),
+      jobId: values.jobId,
+      accountId: values.accountId,
+      field: values.field,
+      beforeValue: JSON.stringify(values.before ?? null),
+      afterValue: JSON.stringify(values.after ?? null),
+      sourceFingerprint: values.sourceFingerprint,
+      status: values.status,
+      error: values.error ?? null,
+      createdAt: now(),
+      updatedAt: now(),
+    });
+  const processImprovementJob = async (id: string) => {
+    if (activeImprovementJobs.has(id)) return;
+    activeImprovementJobs.add(id);
+    try {
+      const job = await readImprovementJob(id);
+      if (!job || !["queued", "running"].includes(job.status)) return;
+      const accountIds = readStringArray(job.accountIds);
+      const modules = readStringArray(job.modules);
+      const rebrand = job.rebrand === "true";
+      const needsModel = slurpImprovementDraftFields(modules, rebrand).length > 0;
+      const settings = await noodle.getSlurpSettings();
+      const connection = needsModel
+        ? await resolveSlurpTextConnection(connections, job.connectionId ?? settings.generationConnectionId)
+        : null;
+      if (needsModel && !connection) {
+        await app.db
+          .update(slurpImprovementJobs)
+          .set({ status: "failed", error: "Select a Slurp text generation connection first.", updatedAt: now() })
+          .where(eq(slurpImprovementJobs.id, id));
+        return;
+      }
+      await app.db
+        .update(slurpImprovementJobs)
+        .set({ status: "running", error: null, total: String(accountIds.length), updatedAt: now() })
+        .where(eq(slurpImprovementJobs.id, id));
+      let completed = Number(job.completed) || 0;
+      let processed = 0;
+      let failures = 0;
+      for (const accountId of accountIds.slice(completed)) {
+        const currentJob = await readImprovementJob(id);
+        if (!currentJob || currentJob.status === "cancelled") return;
+        processed += 1;
+        const profile = (await noodle.listNoodlerStageProfiles()).find((item) => item.id === accountId);
+        const snapshot = profile ? slurpImprovementSnapshot(profile) : "missing";
+        try {
+          if (!profile) throw new Error("Creator no longer exists.");
+          const guidance = [
+            job.mode === "missing"
+              ? "Fill only weak or missing public Creator profile fields. Keep strong existing work unchanged."
+              : job.mode === "prefill"
+                ? "Create a complete, usable starting profile for this Slurp Creator."
+                : "Refresh this Slurp Creator profile while preserving its recognizable voice.",
+            modules.includes("tags") ? "Review and improve the discovery tags." : "Keep the current tags unchanged.",
+            rebrand
+              ? "A rebrand was explicitly requested, so a better display name or handle may be proposed."
+              : "Do not change the display name or handle.",
+            "Never change disclosure, pricing, ownership, or the Engine source identity.",
+          ].join(" ");
+          // Reuses the existing stage-profile generator; only allowed fields become proposals.
+          const draft =
+            needsModel && connection
+              ? await generateNoodlerStageProfileDraft(app.db, {
+                  request: {
+                    noodlerAccountId: profile.id,
+                    disclosureMode: profile.disclosureMode ?? "hinted",
+                    guidance,
+                    currentDraft: slurpStageProfileInput(profile),
+                    connectionId: job.connectionId ?? undefined,
+                  },
+                  connection,
+                })
+              : slurpStageProfileInput(profile);
+          for (const proposal of slurpImprovementDraftProposals(profile, draft, modules, rebrand)) {
+            await insertProposal({ jobId: id, accountId, ...proposal, sourceFingerprint: snapshot, status: "pending" });
+          }
+        } catch (error) {
+          failures += 1;
+          await insertProposal({
+            jobId: id,
+            accountId,
+            field: "_creator",
+            before: null,
+            after: null,
+            sourceFingerprint: snapshot,
+            status: "error",
+            error: getErrorMessage(error),
+          });
+        }
+        completed += 1;
+        await app.db
+          .update(slurpImprovementJobs)
+          .set({ completed: String(completed), updatedAt: now() })
+          .where(eq(slurpImprovementJobs.id, id));
+      }
+      const finalJob = await readImprovementJob(id);
+      if (!finalJob || finalJob.status === "cancelled") return;
+      await app.db
+        .update(slurpImprovementJobs)
+        .set({
+          status: processed > 0 && failures === processed ? "failed" : "completed",
+          error: failures ? `${failures} Creator${failures === 1 ? "" : "s"} could not be drafted. Retry them.` : null,
+          updatedAt: now(),
+        })
+        .where(eq(slurpImprovementJobs.id, id));
+    } finally {
+      activeImprovementJobs.delete(id);
+    }
+  };
+
+  // Deterministic checkup: reads stored profiles and settings only, never a model.
+  app.get("/backstage/readiness", async () => {
+    const [profiles, settings] = await Promise.all([noodle.listNoodlerStageProfiles(), noodle.getSlurpSettings()]);
+    return {
+      modelCalls: 0,
+      availableModules: SLURP_AVAILABLE_IMPROVEMENT_MODULES,
+      creators: profiles.map((profile) => ({ accountId: profile.id, issues: slurpCreatorReadiness(profile) })),
+      global: {
+        generationConnection: Boolean(settings.generationConnectionId),
+        imageConnection: Boolean(settings.imageGenerationConnectionId),
+        discoveryTags: settings.discoveryTags.length,
+        fanTypes: settings.fanTypes.length,
+        arcs: settings.arcLibrary.length,
+      },
+    };
+  });
+
+  app.get("/backstage/improvement-jobs", async () => {
+    const rows = (await app.db.select().from(slurpImprovementJobs)).slice(-20).reverse();
+    return { items: await Promise.all(rows.map((row) => publicImprovementJob(row.id))) };
+  });
+  app.get("/backstage/improvement-jobs/:id", async (req, reply) => {
+    const job = await publicImprovementJob((req.params as { id: string }).id);
+    return job ?? reply.code(404).send({ error: "Improvement job not found." });
+  });
+  app.post("/backstage/improvement-jobs", async (req, reply) => {
+    const body = improvementJobSchema.safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    const modules = [...new Set(body.data.modules)].filter((module) =>
+      SLURP_AVAILABLE_IMPROVEMENT_MODULES.includes(module),
+    );
+    if (!modules.length) return reply.code(400).send({ error: "Those proposal lanes are not available yet." });
+    const profiles = await noodle.listNoodlerStageProfiles();
+    const available = new Set(profiles.map((profile) => profile.id));
+    const accountIds = [...new Set(body.data.accountIds)].filter((id) => available.has(id));
+    if (!accountIds.length) return reply.code(404).send({ error: "None of those Slurp Creators exist." });
+    const timestamp = now();
+    const id = newId();
+    await app.db.insert(slurpImprovementJobs).values({
+      id,
+      status: "queued",
+      mode: body.data.mode,
+      rebrand: String(body.data.rebrand),
+      accountIds: JSON.stringify(accountIds),
+      modules: JSON.stringify(modules),
+      connectionId: body.data.connectionId ?? null,
+      completed: "0",
+      total: String(accountIds.length),
+      error: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    void processImprovementJob(id).catch((error) => logger.error(error, "[slurp] Improvement job failed"));
+    return reply.code(202).send(await publicImprovementJob(id));
+  });
+  app.post("/backstage/improvement-jobs/:id/cancel", async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    const job = await readImprovementJob(id);
+    if (!job) return reply.code(404).send({ error: "Improvement job not found." });
+    if (!["queued", "running"].includes(job.status)) return reply.code(409).send({ error: "This job is not running." });
+    await app.db
+      .update(slurpImprovementJobs)
+      .set({ status: "cancelled", updatedAt: now() })
+      .where(eq(slurpImprovementJobs.id, id));
+    return publicImprovementJob(id);
+  });
+  app.post("/backstage/improvement-jobs/:id/resume", async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    const job = await readImprovementJob(id);
+    if (!job) return reply.code(404).send({ error: "Improvement job not found." });
+    if (!["failed", "cancelled"].includes(job.status))
+      return reply.code(409).send({ error: "This job is not paused." });
+    await app.db
+      .update(slurpImprovementJobs)
+      .set({ status: "queued", error: null, updatedAt: now() })
+      .where(eq(slurpImprovementJobs.id, id));
+    void processImprovementJob(id).catch((error) => logger.error(error, "[slurp] Improvement job resume failed"));
+    return reply.code(202).send(await publicImprovementJob(id));
+  });
+  // Per-Creator failures retry alone; successful proposals stay reviewable.
+  app.post("/backstage/improvement-jobs/:id/retry", async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    const job = await readImprovementJob(id);
+    if (!job) return reply.code(404).send({ error: "Improvement job not found." });
+    if (["queued", "running"].includes(job.status))
+      return reply.code(409).send({ error: "This job is still running." });
+    const failed = (await readJobProposals(id)).filter((row) => row.status === "error" && row.field === "_creator");
+    if (!failed.length) return reply.code(409).send({ error: "This job has no failed Creators." });
+    const retry = planSlurpImprovementRetry(
+      readStringArray(job.accountIds),
+      failed.map((row) => row.accountId),
+    );
+    await app.db.delete(slurpImprovementProposals).where(
+      inArray(
+        slurpImprovementProposals.id,
+        failed.map((row) => row.id),
+      ),
+    );
+    await app.db
+      .update(slurpImprovementJobs)
+      .set({
+        status: "queued",
+        error: null,
+        accountIds: JSON.stringify(retry.accountIds),
+        completed: String(retry.completed),
+        updatedAt: now(),
+      })
+      .where(eq(slurpImprovementJobs.id, id));
+    void processImprovementJob(id).catch((error) => logger.error(error, "[slurp] Improvement job retry failed"));
+    return reply.code(202).send(await publicImprovementJob(id));
+  });
+  app.post("/backstage/improvement-jobs/:id/dismiss", async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    const body = proposalIdsSchema.safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    const requested = new Set(body.data.proposalIds);
+    const rows = (await readJobProposals(id)).filter((row) => requested.has(row.id) && row.status === "pending");
+    await setProposalStatus(
+      rows.map((row) => row.id),
+      "dismissed",
+    );
+    return { dismissed: rows.length };
+  });
+
+  app.post("/backstage/improvement-jobs/:id/apply", async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    const body = proposalIdsSchema.safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    const job = await readImprovementJob(id);
+    if (!job) return reply.code(404).send({ error: "Improvement job not found." });
+    const requested = new Set(body.data.proposalIds);
+    const outcome = await trySlurpWrite(async () => {
+      // Recomputed under the write lock so a concurrent edit cannot slip between check and write.
+      const proposals = (await readJobProposals(id)).filter(
+        (proposal) => requested.has(proposal.id) && proposal.status === "pending",
+      );
+      if (!proposals.length) return { status: 404 as const, error: "No pending proposals were selected." };
+      const [profiles, settings] = await Promise.all([noodle.listNoodlerStageProfiles(), noodle.getSlurpSettings()]);
+      const plan = planSlurpImprovementApply({
+        profiles,
+        proposals,
+        rebrand: job.rebrand === "true",
+        discoveryTags: settings.discoveryTags,
+      });
+      if (plan.stale.length) {
+        await setProposalStatus(plan.stale, "stale");
+        return {
+          status: 409 as const,
+          error: "A Creator changed after these proposals were generated. Regenerate before applying.",
+        };
+      }
+      const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
+      const touched: typeof plan.updates = [];
+      try {
+        if (plan.createdTags.length) await noodle.updateSlurpSettings({ discoveryTags: plan.discoveryTags });
+        for (const update of plan.updates) {
+          touched.push(update);
+          await noodle.updateNoodlerStageProfile(update.accountId, update.stageProfile);
+          if (update.autoPosting !== undefined) {
+            await noodle.bulkUpdateCreatorProfiles([update.accountId], { autoPosting: update.autoPosting });
+          }
+        }
+      } catch (error) {
+        // ponytail: compensating rollback across separate storage transactions; one shared tx if storage grows one.
+        for (const update of touched) {
+          const before = profileById.get(update.accountId)!;
+          await noodle.updateNoodlerStageProfile(update.accountId, slurpStageProfileInput(before)).catch(() => null);
+          if (update.autoPosting !== undefined) {
+            await noodle
+              .bulkUpdateCreatorProfiles([update.accountId], { autoPosting: before.autoPosting.enabled })
+              .catch(() => null);
+          }
+        }
+        if (plan.createdTags.length) {
+          await noodle.updateSlurpSettings({ discoveryTags: settings.discoveryTags }).catch(() => null);
+        }
+        throw error;
+      }
+      const rejected = new Set(plan.rejected);
+      await setProposalStatus(plan.rejected, "error", "This field is protected and was not applied.");
+      await setProposalStatus(
+        proposals.filter((proposal) => !rejected.has(proposal.id)).map((proposal) => proposal.id),
+        "applied",
+      );
+      return {
+        status: 200 as const,
+        applied: proposals.length - rejected.size,
+        rejected: rejected.size,
+        creators: plan.updates.length,
+        createdTags: plan.createdTags,
+      };
+    });
+    if (!outcome.acquired) return reply.code(409).send({ error: "Another Slurp operation is running." });
+    const { status, ...result } = outcome.value;
+    return status === 200 ? result : reply.code(status).send(result);
+  });
+
+  // A process restart turns interrupted work back into a resumable queue. Completed proposals
+  // remain reviewable and are never applied automatically.
+  void app.db
+    .select()
+    .from(slurpImprovementJobs)
+    .then(async (jobs) => {
+      for (const job of jobs.filter((item) => ["queued", "running"].includes(item.status))) {
+        if (job.status === "running") {
+          await app.db
+            .update(slurpImprovementJobs)
+            .set({ status: "queued", updatedAt: now() })
+            .where(eq(slurpImprovementJobs.id, job.id));
+        }
+        void processImprovementJob(job.id).catch((error) =>
+          logger.error(error, "[slurp] Recovered improvement job failed"),
+        );
+      }
+    });
+
   // ── Backup: export and restore ────────────────────────────────────────────
   //
   // Both directions run as jobs rather than one long request: a real install carries thousands of
@@ -674,9 +1135,18 @@ export async function slurpRoutes(app: FastifyInstance) {
   };
 
   const backupJobs = new Map<string, BackupJob>();
+  type RestoreInspection = {
+    id: string;
+    filePath: string;
+    expiresAt: number;
+    summary: ReturnType<typeof inspectRestoreArchive>["summary"];
+  };
+  const restoreInspections = new Map<string, RestoreInspection>();
   const BACKUP_RETENTION_MS = 24 * 60 * 60 * 1000;
+  const RESTORE_INSPECTION_RETENTION_MS = 15 * 60 * 1000;
   const BACKUP_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
   const BACKUP_FILE_PREFIX = "slurp2-backup-";
+  const RESTORE_INSPECTION_PREFIX = "slurp2-restore-inspection-";
 
   async function sweepBackupArchives() {
     const liveFilePaths = new Set<string>();
@@ -687,8 +1157,20 @@ export async function slurpRoutes(app: FastifyInstance) {
       if (job.filePath) await unlink(job.filePath).catch(() => {});
       backupJobs.delete(id);
     }
+    for (const [id, inspection] of restoreInspections) {
+      if (now < inspection.expiresAt) {
+        liveFilePaths.add(inspection.filePath);
+        continue;
+      }
+      await unlink(inspection.filePath).catch(() => {});
+      restoreInspections.delete(id);
+    }
     for (const name of await readdir(DATA_DIR)) {
-      if (!name.startsWith(BACKUP_FILE_PREFIX) || !name.endsWith(".zip")) continue;
+      if (
+        (!name.startsWith(BACKUP_FILE_PREFIX) && !name.startsWith(RESTORE_INSPECTION_PREFIX)) ||
+        !name.endsWith(".zip")
+      )
+        continue;
       const stalePath = join(DATA_DIR, name);
       if (liveFilePaths.has(stalePath)) continue;
       await unlink(stalePath).catch(() => {});
@@ -808,6 +1290,65 @@ export async function slurpRoutes(app: FastifyInstance) {
     return job;
   };
 
+  function inspectRestoreArchive(archive: Buffer) {
+    const entries = readStoredZip(archive);
+    const byName = new Map(entries.map((entry) => [entry.name, entry.data]));
+    const manifestRaw = byName.get("manifest.json");
+    if (!manifestRaw) throw new Error("This archive has no manifest.json and is not a Slurp backup.");
+    const manifest = JSON.parse(manifestRaw.toString("utf8")) as {
+      format?: string;
+      formatVersion?: number;
+      sourcePackage?: string;
+      exportedAt?: string;
+    };
+    if (manifest.format !== "marinara-slurp-backup") throw new Error("This file is not a Slurp backup.");
+    if (manifest.formatVersion !== 1) {
+      throw new Error(`This backup uses format version ${manifest.formatVersion}, which this build cannot read.`);
+    }
+    if (manifest.sourcePackage !== "slurp" && manifest.sourcePackage !== "slurp2") {
+      throw new Error(`This backup came from ${manifest.sourcePackage ?? "an unknown package"}.`);
+    }
+    const readJson = (name: string): unknown => {
+      const raw = byName.get(name);
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw.toString("utf8"));
+      } catch {
+        throw new Error(`Archive entry ${name} is not valid JSON.`);
+      }
+    };
+    const tables: Record<string, unknown[]> = {};
+    for (const name of byName.keys()) {
+      if (!name.startsWith("data/") || !name.endsWith(".json")) continue;
+      const logicalName = name.slice("data/".length, -".json".length);
+      if (logicalName === "app-settings") continue;
+      const rows = readJson(name);
+      if (Array.isArray(rows)) tables[logicalName] = rows;
+    }
+    const settingsBlob = readJson("data/app-settings.json");
+    const settings =
+      settingsBlob && typeof settingsBlob === "object" && !Array.isArray(settingsBlob)
+        ? (settingsBlob as Record<string, string>)
+        : {};
+    const mediaEntries = [...byName.entries()].filter(([name]) => name.startsWith("media/"));
+    return {
+      manifest,
+      tables,
+      settings,
+      mediaEntries,
+      summary: {
+        sourcePackage: manifest.sourcePackage,
+        exportedAt: manifest.exportedAt ?? null,
+        creators: tables.accounts?.length ?? 0,
+        posts: tables.posts?.length ?? 0,
+        interactions: tables.interactions?.length ?? 0,
+        mediaFiles: mediaEntries.length,
+        mediaBytes: mediaEntries.reduce((total, [, data]) => total + data.length, 0),
+        hasSlurp2Settings: Object.keys(settings).some((key) => key.startsWith("slurp2.")),
+      },
+    };
+  }
+
   const createRestoreJob = (archive: Buffer, importSettings: boolean) => {
     const job = newBackupJob("restore", "Waiting for the restore worker.");
     backupJobs.set(job.id, job);
@@ -815,53 +1356,8 @@ export async function slurpRoutes(app: FastifyInstance) {
       job.state = "preparing";
       job.stage = "reading-archive";
       job.detail = "Reading the backup archive.";
-      const entries = readStoredZip(archive);
-      const byName = new Map(entries.map((entry) => [entry.name, entry.data]));
-
-      const manifestRaw = byName.get("manifest.json");
-      if (!manifestRaw) throw new Error("This archive has no manifest.json and is not a Slurp backup.");
-      const manifest = JSON.parse(manifestRaw.toString("utf8")) as {
-        format?: string;
-        formatVersion?: number;
-        sourcePackage?: string;
-      };
-      if (manifest.format !== "marinara-slurp-backup") throw new Error("This file is not a Slurp backup.");
-      if (manifest.formatVersion !== 1) {
-        throw new Error(`This backup uses format version ${manifest.formatVersion}, which this build cannot read.`);
-      }
-      // A legacy Slurp export is the migration path onto this package, so both are accepted.
-      if (manifest.sourcePackage !== "slurp" && manifest.sourcePackage !== "slurp2") {
-        throw new Error(`This backup came from ${manifest.sourcePackage ?? "an unknown package"}.`);
-      }
-
-      const readJson = (name: string): unknown => {
-        const raw = byName.get(name);
-        if (!raw) return null;
-        try {
-          return JSON.parse(raw.toString("utf8"));
-        } catch {
-          throw new Error(`Archive entry ${name} is not valid JSON.`);
-        }
-      };
-
-      const tables: Record<string, unknown[]> = {};
-      for (const name of byName.keys()) {
-        if (!name.startsWith("data/") || !name.endsWith(".json")) continue;
-        const logicalName = name.slice("data/".length, -".json".length);
-        if (logicalName === "app-settings") continue;
-        const rows = readJson(name);
-        if (Array.isArray(rows)) tables[logicalName] = rows;
-      }
-
-      // slurp2 exports carry the whole `slurp2.` namespace in one file. A legacy export instead
-      // wrote separate settings files under legacy key names, which belong to the legacy package
-      // and are deliberately not adopted: the remaster's settings shape has moved on, and a fresh
-      // default is safer than a half-understood import.
-      const settingsBlob = readJson("data/app-settings.json");
-      const settings =
-        settingsBlob && typeof settingsBlob === "object" && !Array.isArray(settingsBlob)
-          ? (settingsBlob as Record<string, string>)
-          : {};
+      const inspection = inspectRestoreArchive(archive);
+      const { tables, settings, mediaEntries } = inspection;
 
       job.creators = tables.accounts?.length ?? 0;
       job.posts = tables.posts?.length ?? 0;
@@ -874,7 +1370,6 @@ export async function slurpRoutes(app: FastifyInstance) {
 
       job.stage = "writing-media";
       job.detail = "Restoring media files.";
-      const mediaEntries = [...byName.entries()].filter(([name]) => name.startsWith("media/"));
       job.mediaFiles = mediaEntries.length;
       // Media is replaced wholesale alongside the rows it belongs to, so a restore cannot leave
       // images from the previous data set attached to posts that no longer exist.
@@ -927,13 +1422,66 @@ export async function slurpRoutes(app: FastifyInstance) {
     done(null, body),
   );
 
+  app.post("/restore/inspections", { bodyLimit: MAX_RESTORE_BYTES }, async (req, reply) => {
+    const body = req.body;
+    if (!Buffer.isBuffer(body) || body.length === 0) {
+      return reply.code(400).send({ error: "Upload a Slurp backup archive." });
+    }
+    try {
+      const parsed = inspectRestoreArchive(body);
+      const id = randomUUID();
+      const filePath = join(DATA_DIR, `${RESTORE_INSPECTION_PREFIX}${id}.zip`);
+      await writeFile(filePath, body, { mode: 0o600 });
+      const inspection: RestoreInspection = {
+        id,
+        filePath,
+        expiresAt: Date.now() + RESTORE_INSPECTION_RETENTION_MS,
+        summary: parsed.summary,
+      };
+      restoreInspections.set(id, inspection);
+      return reply.code(201).send({
+        id,
+        expiresAt: new Date(inspection.expiresAt).toISOString(),
+        ...inspection.summary,
+      });
+    } catch (error) {
+      return reply.code(400).send({ error: getErrorMessage(error) });
+    }
+  });
+
+  app.delete("/restore/inspections/:id", async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    const inspection = restoreInspections.get(id);
+    if (!inspection) return reply.code(204).send();
+    restoreInspections.delete(id);
+    await unlink(inspection.filePath).catch(() => {});
+    return reply.code(204).send();
+  });
+
+  app.post("/restore/inspections/:id/apply", async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    const inspection = restoreInspections.get(id);
+    if (!inspection || isRestoreInspectionExpired(inspection.expiresAt)) {
+      if (inspection) {
+        restoreInspections.delete(id);
+        await unlink(inspection.filePath).catch(() => {});
+      }
+      return reply.code(410).send({ error: "This restore preview expired. Upload the archive again." });
+    }
+    const archive = await readFile(inspection.filePath);
+    restoreInspections.delete(id);
+    await unlink(inspection.filePath).catch(() => {});
+    const importSettings = restoreImportSettingsRequested(req.query);
+    return reply.code(202).send(createRestoreJob(archive, importSettings));
+  });
+
   app.post("/restore/jobs", { bodyLimit: MAX_RESTORE_BYTES }, async (req, reply) => {
     const body = req.body;
     if (!Buffer.isBuffer(body) || body.length === 0) {
       return reply.code(400).send({ error: "Upload a Slurp backup archive." });
     }
     // Settings stay untouched unless the user ticked "also import settings" in the restore dialog.
-    const importSettings = (req.query as { importSettings?: string } | undefined)?.importSettings === "1";
+    const importSettings = restoreImportSettingsRequested(req.query);
     return reply.code(202).send(createRestoreJob(body, importSettings));
   });
 

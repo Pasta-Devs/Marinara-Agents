@@ -67,6 +67,7 @@ import {
   normalizeSlurpDiscoveryTag,
   normalizeSlurpDiscoveryTags,
 } from "../slurp/slurp-discovery-profile.js";
+import { selectUnusedSlurpImprovementRows } from "../slurp/slurp-improvement.js";
 import {
   applyStipend,
   credit,
@@ -221,6 +222,8 @@ import {
   slurpFollowUps,
   slurpPaymentCompensations,
   slurpWorldClaims,
+  slurpImprovementJobs,
+  slurpImprovementProposals,
 } from "../../db/schema/slurp.js";
 import { appSettings } from "../../db/schema/app-settings.js";
 import {
@@ -309,6 +312,8 @@ const SLURP_BACKUP_TABLES = {
   paymentCompensations: slurpPaymentCompensations,
   pendingText: slurpPendingText,
   worldClaims: slurpWorldClaims,
+  improvementJobs: slurpImprovementJobs,
+  improvementProposals: slurpImprovementProposals,
 } as const;
 
 type SlurpBackupTableName = keyof typeof SLURP_BACKUP_TABLES;
@@ -320,6 +325,27 @@ const SLURP_SETTINGS_NAMESPACE = "slurp2.";
 const NOODLER_RESERVE_STATE_ID = "noodler-reserve";
 let slurpSettingsUpdateQueue: Promise<unknown> = Promise.resolve();
 const ROLLING_DAY_MS = 24 * 60 * 60 * 1000;
+
+async function planUnusedSlurpData(db: DB) {
+  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const [currentPrepared, currentAttempts, currentRuns, improvementJobs, improvementProposals] = await Promise.all([
+    db.select().from(noodlerPreparedPosts),
+    db.select().from(noodlerAutomaticAttempts),
+    db.select().from(noodleRefreshRuns),
+    db.select().from(slurpImprovementJobs),
+    db.select().from(slurpImprovementProposals),
+  ]);
+  return {
+    ...selectUnusedSlurpImprovementRows(improvementJobs, improvementProposals, cutoff),
+    preparedIds: currentPrepared
+      .filter((row) => ["published", "discarded"].includes(row.state) && Date.parse(row.updatedAt) < cutoff)
+      .map((row) => row.id),
+    attemptIds: currentAttempts.filter((row) => Date.parse(row.claimedAt) < cutoff).map((row) => row.id),
+    runIds: currentRuns
+      .filter((row) => ["completed", "failed", "abandoned"].includes(row.status) && Date.parse(row.updatedAt) < cutoff)
+      .map((row) => row.id),
+  };
+}
 /**
  * How long a slot stays publishable after its time.
  *
@@ -2601,6 +2627,8 @@ export function createSlurpStorage(db: DB) {
           slurpAudienceTies,
           slurpPopulation,
           slurpPendingText,
+          slurpImprovementProposals,
+          slurpImprovementJobs,
         ]) {
           await tx.delete(table);
         }
@@ -2637,39 +2665,58 @@ export function createSlurpStorage(db: DB) {
       return { deletedCreators: accounts.length, deletedPosts: posts.length };
     },
 
+    async previewUnusedSlurpData(): Promise<{
+      preparedPosts: number;
+      attempts: number;
+      runs: number;
+      improvementJobs: number;
+      improvementProposals: number;
+    }> {
+      const plan = await planUnusedSlurpData(db);
+      return {
+        preparedPosts: plan.preparedIds.length,
+        attempts: plan.attemptIds.length,
+        runs: plan.runIds.length,
+        improvementJobs: plan.improvementJobIds.length,
+        improvementProposals: plan.improvementProposalIds.length,
+      };
+    },
+
     async deleteUnusedSlurpData(): Promise<{
       deletedPreparedPosts: number;
       deletedAttempts: number;
       deletedRuns: number;
+      deletedImprovementJobs: number;
+      deletedImprovementProposals: number;
     }> {
-      const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
       let deletedPreparedPosts = 0;
       let deletedAttempts = 0;
       let deletedRuns = 0;
+      let deletedImprovementJobs = 0;
+      let deletedImprovementProposals = 0;
+      const plan = await planUnusedSlurpData(db);
       await db.transaction(async (tx) => {
-        const currentPrepared = await tx.select().from(noodlerPreparedPosts);
-        const currentAttempts = await tx.select().from(noodlerAutomaticAttempts);
-        const currentRuns = await tx.select().from(noodleRefreshRuns);
-        const preparedIds = currentPrepared
-          .filter((row) => ["published", "discarded"].includes(row.state) && Date.parse(row.updatedAt) < cutoff)
-          .map((row) => row.id);
-        const attemptIds = currentAttempts.filter((row) => Date.parse(row.claimedAt) < cutoff).map((row) => row.id);
-        const runIds = currentRuns
-          .filter(
-            (row) => ["completed", "failed", "abandoned"].includes(row.status) && Date.parse(row.updatedAt) < cutoff,
-          )
-          .map((row) => row.id);
-        if (preparedIds.length) {
-          await tx.delete(noodlerPreparedPosts).where(inArray(noodlerPreparedPosts.id, preparedIds));
-          deletedPreparedPosts = preparedIds.length;
+        if (plan.preparedIds.length) {
+          await tx.delete(noodlerPreparedPosts).where(inArray(noodlerPreparedPosts.id, plan.preparedIds));
+          deletedPreparedPosts = plan.preparedIds.length;
         }
-        if (attemptIds.length) {
-          await tx.delete(noodlerAutomaticAttempts).where(inArray(noodlerAutomaticAttempts.id, attemptIds));
-          deletedAttempts = attemptIds.length;
+        if (plan.attemptIds.length) {
+          await tx.delete(noodlerAutomaticAttempts).where(inArray(noodlerAutomaticAttempts.id, plan.attemptIds));
+          deletedAttempts = plan.attemptIds.length;
         }
-        if (runIds.length) {
-          await tx.delete(noodleRefreshRuns).where(inArray(noodleRefreshRuns.id, runIds));
-          deletedRuns = runIds.length;
+        if (plan.runIds.length) {
+          await tx.delete(noodleRefreshRuns).where(inArray(noodleRefreshRuns.id, plan.runIds));
+          deletedRuns = plan.runIds.length;
+        }
+        if (plan.improvementProposalIds.length) {
+          await tx
+            .delete(slurpImprovementProposals)
+            .where(inArray(slurpImprovementProposals.id, plan.improvementProposalIds));
+          deletedImprovementProposals = plan.improvementProposalIds.length;
+        }
+        if (plan.improvementJobIds.length) {
+          await tx.delete(slurpImprovementJobs).where(inArray(slurpImprovementJobs.id, plan.improvementJobIds));
+          deletedImprovementJobs = plan.improvementJobIds.length;
         }
         await tx._fileStore.flush();
       });
@@ -2677,6 +2724,8 @@ export function createSlurpStorage(db: DB) {
         deletedPreparedPosts,
         deletedAttempts,
         deletedRuns,
+        deletedImprovementJobs,
+        deletedImprovementProposals,
       };
     },
 
@@ -2868,6 +2917,7 @@ export function createSlurpStorage(db: DB) {
         await tx.delete(slurpPendingText).where(eq(slurpPendingText.creatorAccountId, existing.id));
         await tx.delete(slurpEvents).where(eq(slurpEvents.creatorAccountId, existing.id));
         await tx.delete(noodlerFirstPostJobs).where(eq(noodlerFirstPostJobs.creatorAccountId, existing.id));
+        await tx.delete(slurpImprovementProposals).where(eq(slurpImprovementProposals.accountId, existing.id));
         await tx.delete(noodlePosts).where(inArray(noodlePosts.id, postIds));
         await tx.delete(noodleAccounts).where(eq(noodleAccounts.id, existing.id));
         await tx._fileStore.flush();
@@ -3064,6 +3114,7 @@ export function createSlurpStorage(db: DB) {
         await tx.delete(slurpPendingText).where(eq(slurpPendingText.creatorAccountId, id));
         await tx.delete(slurpEvents).where(eq(slurpEvents.creatorAccountId, id));
         await tx.delete(noodlerFirstPostJobs).where(eq(noodlerFirstPostJobs.creatorAccountId, id));
+        await tx.delete(slurpImprovementProposals).where(eq(slurpImprovementProposals.accountId, id));
         await tx.delete(noodleAccounts).where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.platform, "slurp")));
         await tx._fileStore.flush();
       });

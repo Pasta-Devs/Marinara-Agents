@@ -4,6 +4,7 @@ import {
   slurpActivityPresetForSettings,
   slurpActivityPresetPatch,
 } from "../packages/slurp2/src/engine/packages/client/src/components/slurp/slurp-activity-presets";
+import { slurp2BackstageSource } from "./slurp2-backstage-source";
 
 assert.equal(slurpActivityPresetForSettings({ autoPostingScheduleEnabled: false, postsPerDay: 7 }), "manual");
 assert.equal(slurpActivityPresetForSettings({ autoPostingScheduleEnabled: true, postsPerDay: 4 }), "lively");
@@ -16,7 +17,7 @@ assert.deepEqual(slurpActivityPresetPatch("veryActive"), {
 
 async function main() {
   const [settings, navigation, store, home, shell, english] = await Promise.all([
-    readFile("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx", "utf8"),
+    slurp2BackstageSource(),
     readFile("packages/slurp2/src/engine/packages/client/src/components/slurp/slurp-navigation.types.ts", "utf8"),
     readFile("packages/slurp2/src/engine/packages/client/src/stores/slurp-package.store.ts", "utf8"),
     readFile("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8"),
@@ -24,18 +25,25 @@ async function main() {
     readFile("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
   ]);
 
-  assert.match(navigation, /section\?: SlurpSettingsSection;/u);
-  // One shared list now, so the store cannot drift out of step with the sections that exist.
-  assert.match(store, /SLURP_SETTINGS_SECTIONS\.includes/u);
+  assert.match(navigation, /section\?: SlurpBackstageSection;/u);
+  assert.match(navigation, /target\?: SlurpBackstageTarget;/u);
+  // The store validates both halves of a deep link and migrates every persisted legacy section.
+  assert.match(store, /isSlurpBackstageSection\(value\.section\)/u);
+  assert.match(store, /targetBelongsToSection\(value\.section, value\.target\)/u);
+  assert.match(store, /SLURP_LEGACY_SETTINGS_DESTINATION/u);
   assert.match(home, /section: "overview"/u);
   assert.match(settings, /const settingsSections = SLURP_SETTINGS_SECTIONS;/u);
-  assert.match(navigation, /"ads",\n  "wallet",/u, "the wallet section must be reachable");
+  assert.match(
+    navigation,
+    /SLURP_BACKSTAGE_SECTIONS as SLURP_SETTINGS_SECTIONS/u,
+    "the five Backstage destinations must remain the shared navigation source",
+  );
   assert.match(settings, /section === "overview"/u);
   assert.match(settings, /const imagesReady = imageConnections\.length > 0 && imageEnabledCreators\.length > 0/u);
   assert.match(settings, /save\(\{ autoPostingScheduleEnabled: true, postsPerDay: value \}\)/u);
   assert.match(settings, /slurpAudiencePresetFor\(settings\)/u);
   assert.match(settings, /<OverviewActivity/u);
-  assert.match(settings, /section === "overview" \|\| section === "audience"/u);
+  assert.match(settings, /section === "overview" \|\| target === "audience"/u);
   assert.match(english, /"ui\.slurp\.settings\.overview\.activity\.title": "Activity"/u);
   assert.match(settings, /<ChoiceRow/u);
   assert.match(shell, /"--slurp-hero"/u);
@@ -45,7 +53,7 @@ async function main() {
   assert.match(home, /if \(!inlineAdsEnabled \|\| searchTerm \|\| tab !== "all" \|\| !ad\) return null;/u);
   assert.match(home, /onCompose: openPostComposer/u);
   assert.match(settings, /value=\{settings\.inlineAdsEnabled\}/u);
-  assert.match(settings, /section === "ads"/u);
+  assert.match(settings, /target === "ads"/u);
   assert.match(settings, /inlineAdsFrequency/u);
   assert.match(settings, /inlineAdsSteering/u);
   // Deleting everything cannot be undone, so it needs the typed word, not a default button.

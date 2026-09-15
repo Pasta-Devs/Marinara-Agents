@@ -1,59 +1,18 @@
-import {
-  Activity,
-  AlertTriangle,
-  ArrowLeft,
-  CalendarClock,
-  CheckCircle2,
-  ChevronRight,
-  CircleHelp,
-  Download,
-  FileText,
-  Image,
-  ListChecks,
-  Loader2,
-  Megaphone,
-  Pencil,
-  Play,
-  Plus,
-  RefreshCw,
-  RotateCcw,
-  Save,
-  Sparkles,
-  Trash2,
-  Upload,
-  UsersRound,
-} from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { nextSlurpAutopurgeRunAt } from "../../../../shared/src/slurp-autopurge-time.js";
-import { Field, GuidanceBox, NumberSetting, SectionTitle, SettingsGroup, Toggle } from "./SlurpSettingsControls";
-import { SlurpSimulationSettings } from "./SlurpSimulationSettings";
-import { SlurpFanTypesSettings } from "./SlurpFanTypesSettings";
-import { SlurpAudienceConfigSettings } from "./SlurpAudienceConfigSettings";
-import { SlurpCreatorBulkEdit } from "./SlurpCreatorBulkEdit";
-import { SlurpDiscoveryProfileEditor } from "./SlurpDiscoveryProfileEditor";
-import { SlurpTagsSettings } from "./SlurpTagsSettings";
-import type { ChangeEvent, ReactNode } from "react";
-import { api } from "../../lib/api-client";
-import { cn } from "../../lib/utils";
-import { useEffect, useRef, useState } from "react";
+import { type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { formatClockTime, formatDateTime } from "./SlurpDateTime";
 import {
-  useSlurpAmbientProfiles,
-  useRerollAmbientProfiles,
-  useUpdateAmbientProfile,
   useDeleteNoodlerStageProfile,
   useSetSlurpCreatorMessaging,
   useSetSlurpCreatorPrice,
-  useSlurpCreatorMessagingSettings,
-  type SlurpCreatorMessaging,
   useDeleteAllSlurpData,
   useDeleteUnusedSlurpData,
   getSlurpBackupJob,
-  startSlurpBackup,
-  startSlurpRestore,
-  downloadSlurpBackup,
   type SlurpBackupJob,
+  type SlurpRestoreInspection,
   useAdoptNoodlerSourceIdentity,
   useDismissNoodlerSourceChanges,
   useNoodlerAccounts,
@@ -77,6 +36,8 @@ import {
   useSlurpConnections,
   useSlurpSettings,
   useSlurpSettingsDefaults,
+  useSlurpMaintenanceSummary,
+  useSlurpAutopurgePreview,
   useRunSlurpAutopurge,
   useUpdateNoodlerAutoPosting,
   useUpdateNoodlerScheduleSlot,
@@ -84,17 +45,12 @@ import {
   useUpdateSlurpImageConnections,
   useUpdateSlurpSettings,
   useBulkUpdateSlurpCreators,
-  useResetSlurpArcType,
-  useGenerateSlurpArcType,
-  type SlurpArcType,
   type SlurpSettings,
   type SlurpContentRating,
-  type SlurpReserveStatus,
-  type SlurpScheduleSlot,
 } from "../../hooks/use-slurp";
 import { showConfirmDialog, showPromptDialog } from "../../lib/app-dialogs";
 import { Modal } from "../ui/Modal";
-import { SLURP_SETTINGS_SECTIONS, type SlurpNavigationState } from "./slurp-navigation.types";
+import { type SlurpNavigationState } from "./slurp-navigation.types";
 import {
   exportSlurpPromptPresets,
   importSlurpPromptPresets,
@@ -102,27 +58,40 @@ import {
   SLURP_PROMPT_PRESET_NAME_LIMIT,
 } from "./slurp-prompt-presets";
 import { changedSlurpSettingKeys, isSlurpResettableSection, slurpSettingsResetPatch } from "./slurp-settings-defaults";
-import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
+import { type NoodlerManagedStageProfile } from "@marinara-engine/shared";
+import { Avatar, getNoodleAccentStyle, NOODLE_PINK } from "./SlurpShell";
+import { slurpActivityPresetForSettings } from "./slurp-activity-presets";
+import { slurpAudiencePresetFor } from "../../../../server/src/services/slurp/slurp-tuning.js";
 import {
-  Avatar,
-  getNoodleAccentStyle,
-  NOODLE_PINK,
-  SLURP_ROW_ACTIVE_CLASS,
-  SLURP_ROW_CLASS,
-  SLURP_TOGGLE_ACTIVE_CLASS,
-  SlurpMediaImg,
-} from "./SlurpShell";
+  SLURP_BACKSTAGE_DEFAULT_TARGET,
+  SLURP_BACKSTAGE_SECTION_LABELS,
+  SLURP_BACKSTAGE_TARGETS_BY_SECTION,
+} from "./slurp-backstage";
 import {
-  SLURP_ACTIVITY_PRESETS,
-  slurpActivityPresetForSettings,
-  slurpActivityPresetPatch,
-  slurpPostsPerDayForPreset,
-} from "./slurp-activity-presets";
+  confirmLeaveSlurpBackstage,
+  SlurpBackstageApplyBar,
+  SlurpBackstagePreview,
+  useSlurpBackstageDraftGuard,
+  SlurpBackstageSearch,
+  SlurpBackstageSubnav,
+} from "./SlurpBackstageChrome";
 import {
-  SLURP_AUDIENCE_PRESETS,
-  slurpAudiencePresetFor,
-  slurpAudiencePresetPatch,
-} from "../../../../server/src/services/slurp/slurp-tuning.js";
+  settingsSections,
+  SLURP_GUIDANCE_PRESETS,
+  SLURP_GUIDANCE_LEVELS,
+  DEFAULT_SLURP_GENERATION_GUIDANCE,
+  DEFAULT_SLURP_IMAGE_GENERATION_PROMPT,
+  errorMessage,
+  sectionTabClass,
+  localDateTimeValue,
+  ScheduleSlotEditor,
+  PromptEditor,
+} from "./SlurpBackstageWorkflow";
+import { SlurpBackstageOverview } from "./SlurpBackstageOverview";
+import { SlurpBackstageCreators } from "./SlurpBackstageCreators";
+import { SlurpBackstageWorld } from "./SlurpBackstageWorld";
+import { SlurpBackstageAutomation } from "./SlurpBackstageAutomation";
+import { SlurpBackstageMaintenance } from "./SlurpBackstageMaintenance";
 
 type SlurpSettingsProps = {
   navigation: Extract<SlurpNavigationState, { mode: "creator-settings" }>;
@@ -134,29 +103,6 @@ type SlurpSettingsProps = {
   onRestartOnboarding: () => void;
   viewerPersonaId: string | null;
 };
-
-const settingsSections = SLURP_SETTINGS_SECTIONS;
-// Three shipped spice levels. Kept byte-identical to the server presets so the settings surface
-// can tell which level is active and restore one exactly.
-const SLURP_GUIDANCE_PRESETS = {
-  mild: "All Slurp creators and viewers are adults (18+). This is an adult creator page, but a restrained one: posts are flirty, teasing, and suggestive rather than graphic. Innuendo, charm, and anticipation do the work, and locked posts are teased instead of described. Do not write explicit sexual detail. Keep each creator's personality intact: a shy creator flirts shyly, a blunt one flirts bluntly. Ordinary posts about their day, work, and mood stay just as important as the flirty ones.",
-  steamy:
-    "All Slurp creators and viewers are adults (18+). This is an adult creator page. Posts are normally sexually suggestive to outright NSFW. Creators will use Slurp to often excite their readers with their posts. The level of NSFW of a post is dependent on the creator's personality, a shy, innocent person will be suggestive, but still overall tame. On the other end of the spectrum, an outgoing personality who has no problems with sex, will often post very explicit material. When a post is explicit or shows nudity, always use thorough, graphic, horny descriptions. Name the body in dirty everyday words, not clinical ones: tits, nipples, ass, pussy, clit, cock, balls, cum, wet, dripping, hard, leaking. Describe how it looks, feels, and moves. Keep each creator's personality intact.",
-  explicit:
-    "All Slurp creators and viewers are adults (18+). This is an explicit adult creator page. Sexual content is the norm here rather than the exception, and creators describe it directly and in detail when it suits them. Tease the locked posts hard and answer flirty comments in kind. Always use thorough, graphic, horny descriptions for nudity and sex. Name the body in dirty everyday words, not clinical ones: tits, nipples, ass, pussy, clit, cock, balls, cum, wet, dripping, hard, leaking. Describe how it looks, feels, and moves. Keep each creator's personality intact: a shy creator is explicit shyly, a blunt one is explicit bluntly. Ordinary posts about their day, work, and mood still appear and keep the feed believable.",
-} as const;
-const SLURP_GUIDANCE_LEVELS = ["mild", "steamy", "explicit"] as const;
-const DEFAULT_SLURP_GENERATION_GUIDANCE: string = SLURP_GUIDANCE_PRESETS.steamy;
-const DEFAULT_SLURP_IMAGE_GENERATION_PROMPT =
-  "Create a polished social-media image for an adult Creator post. Match the creator's identity, personality, body, clothing, and established visual details. Follow the post's mood and subject. Describe the pose, expression, setting, lighting, camera angle, composition, and visible details clearly. Flirty, suggestive, sensual, or explicit imagery is allowed when it fits the post and creator, but do not force sexual content into ordinary updates. When the image shows nudity or sex, always use thorough, graphic descriptions. Name the body in dirty everyday words, not clinical ones: tits, nipples, ass, pussy, clit, cock, balls, cum, wet, dripping, hard, leaking. Describe how it looks, how it sits, how it catches the light. Keep the image coherent, intentional, and suitable for a public or locked Creator feed.";
-
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Could not update settings.";
-}
-
-// Same row, same highlight as every other Slurp destination.
-const sectionTabClass = (active: boolean) =>
-  cn(SLURP_ROW_CLASS, active ? SLURP_ROW_ACTIVE_CLASS : "text-[var(--slurp-muted)]");
 
 /**
  * Settings takes the whole desktop nav column over: the app menu would only compete with the
@@ -194,10 +140,12 @@ export function SlurpSettingsSidebar({
             key={item}
             type="button"
             aria-current={section === item ? "page" : undefined}
-            onClick={() => onNavigate({ ...navigation, section: item })}
+            onClick={() => onNavigate({ ...navigation, section: item, target: SLURP_BACKSTAGE_DEFAULT_TARGET[item] })}
             className={sectionTabClass(section === item)}
           >
-            {t(`ui.slurp.settings.tabs.${item === "general" ? "publishing" : item}`)}
+            {t(`ui.slurp.settings.backstage.sections.${item}`, {
+              defaultValue: SLURP_BACKSTAGE_SECTION_LABELS[item],
+            })}
           </button>
         ))}
       </nav>
@@ -218,52 +166,32 @@ function SlurpSettingsSectionRow({
 }) {
   const { t } = useTranslation();
   const section = navigation.section ?? "overview";
-  const rowRef = useRef<HTMLElement | null>(null);
-  const [edges, setEdges] = useState({ start: false, end: false });
-  useEffect(() => {
-    const row = rowRef.current;
-    if (!row) return;
-    const update = () =>
-      setEdges({
-        start: row.scrollLeft > 4,
-        end: Math.ceil(row.scrollLeft + row.clientWidth) < row.scrollWidth - 4,
-      });
-    update();
-    row.addEventListener("scroll", update, { passive: true });
-    const resize = new ResizeObserver(update);
-    resize.observe(row);
-    return () => {
-      row.removeEventListener("scroll", update);
-      resize.disconnect();
-    };
-  }, []);
-  useEffect(() => {
-    rowRef.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "center" });
-  }, [section]);
-  const fade = `linear-gradient(to right, ${edges.start ? "transparent" : "#000"}, #000 2rem, #000 calc(100% - 2rem), ${edges.end ? "transparent" : "#000"})`;
   return (
-    <nav
-      ref={rowRef}
-      style={{ maskImage: fade, WebkitMaskImage: fade }}
-      className="-mb-4 flex snap-x gap-2 overflow-x-auto rounded-t-xl bg-[var(--slurp-surface)] px-3 py-3 ring-1 ring-inset ring-[var(--slurp-outline)] [scrollbar-width:none] @min-[1024px]:hidden md:hidden [&::-webkit-scrollbar]:hidden"
-      aria-label={t("ui.slurp.settings.sectionsLabel")}
-    >
-      {settingsSections.map((item) => (
-        <button
-          key={item}
-          type="button"
-          aria-current={section === item ? "page" : undefined}
-          onClick={() => onNavigate({ ...navigation, section: item })}
-          className={`min-h-11 flex-none snap-center rounded-xl px-4 text-sm font-semibold transition-[background-color,color,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100 ${section === item ? SLURP_TOGGLE_ACTIVE_CLASS : "text-[var(--slurp-muted)] hover:bg-[var(--slurp-surface-raised)]"}`}
-        >
-          {t(`ui.slurp.settings.tabs.${item === "general" ? "publishing" : item}`)}
-        </button>
-      ))}
-    </nav>
+    <label className="sticky top-0 z-20 -mb-4 flex min-h-14 items-center gap-3 rounded-t-xl bg-[var(--slurp-surface)] px-3 py-2 ring-1 ring-inset ring-[var(--slurp-outline)] md:hidden">
+      <span className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--slurp-muted)]">
+        {t("ui.slurp.settings.backstage.destination", { defaultValue: "Destination" })}
+      </span>
+      <select
+        value={section}
+        onChange={(event) => {
+          const next = event.target.value as (typeof settingsSections)[number];
+          onNavigate({ ...navigation, section: next, target: SLURP_BACKSTAGE_DEFAULT_TARGET[next] });
+        }}
+        className="ms-auto min-h-11 min-w-0 flex-1 rounded-lg bg-[var(--slurp-surface-raised)] px-3 text-base font-semibold text-[var(--slurp-text)] ring-1 ring-inset ring-[var(--slurp-outline)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+      >
+        {settingsSections.map((item) => (
+          <option key={item} value={item}>
+            {t(`ui.slurp.settings.backstage.sections.${item}`, {
+              defaultValue: SLURP_BACKSTAGE_SECTION_LABELS[item],
+            })}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
-export function SlurpSettings({
+function useSlurpBackstageController({
   navigation,
   onNavigate,
   onAddCreators,
@@ -279,6 +207,10 @@ export function SlurpSettings({
   const updateSettings = useUpdateSlurpSettings();
   const runAutopurge = useRunSlurpAutopurge();
   const section = navigation.section ?? "overview";
+  const target =
+    navigation.target && SLURP_BACKSTAGE_TARGETS_BY_SECTION[section].includes(navigation.target)
+      ? navigation.target
+      : SLURP_BACKSTAGE_DEFAULT_TARGET[section];
   const resetAds = useResetSlurpAds();
   const adPool = useSlurpAdPool();
   const generateAds = useGenerateSlurpAds();
@@ -292,7 +224,7 @@ export function SlurpSettings({
     contentRating: SlurpContentRating;
   }>({ brand: "", product: "", copy: "", contentRating: "tame" });
   const adsImportRef = useRef<HTMLInputElement>(null);
-  const adState = useSlurpAdState(section === "ads" ? viewerPersonaId : null);
+  const adState = useSlurpAdState(target === "ads" ? viewerPersonaId : null);
   const unhideBrand = useUnhideSlurpAdBrand();
   const deleteAd = useDeleteSlurpAd();
   const updateAd = useUpdateSlurpAd();
@@ -304,9 +236,16 @@ export function SlurpSettings({
     contentRating: SlurpContentRating;
   } | null>(null);
   const generateAdImage = useGenerateSlurpAdImage();
-  const adLorebooks = useSlurpAdLorebooks(section === "ads");
+  const adLorebooks = useSlurpAdLorebooks(target === "ads");
   const syncAdLorebook = useSyncSlurpAdLorebook();
-  const settings = settingsQuery.data;
+  const savedSettings = settingsQuery.data;
+  const [draftPatch, setDraftPatch] = useState<Partial<SlurpSettings>>({});
+  const settings = useMemo(
+    () => (savedSettings ? ({ ...savedSettings, ...draftPatch } as SlurpSettings) : undefined),
+    [draftPatch, savedSettings],
+  );
+  const maintenanceSummary = useSlurpMaintenanceSummary(section === "maintenance");
+  const autopurgePreview = useSlurpAutopurgePreview(settings, target === "autopurge");
   const [generationGuidanceDraft, setGenerationGuidanceDraft] = useState("");
   const [generationGuidanceEditorOpen, setGenerationGuidanceEditorOpen] = useState(false);
   const [imagePromptDraft, setImagePromptDraft] = useState("");
@@ -346,7 +285,24 @@ export function SlurpSettings({
       return false;
     }
   };
-  const update = (key: keyof SlurpSettings, value: unknown) => save({ [key]: value } as Partial<SlurpSettings>);
+  const update = async (key: keyof SlurpSettings, value: unknown) => {
+    const patch = { [key]: value } as Partial<SlurpSettings>;
+    if (section !== "overview") {
+      setDraftPatch((current) => ({ ...current, ...patch }));
+      return true;
+    }
+    const previous = savedSettings?.[key];
+    const changed = await save(patch);
+    if (changed && previous !== undefined) {
+      toast.success(t("ui.slurp.settings.backstage.quickSaved", { defaultValue: "Quick setting updated." }), {
+        action: {
+          label: t("ui.slurp.settings.backstage.undo", { defaultValue: "Undo" }),
+          onClick: () => void save({ [key]: previous } as Partial<SlurpSettings>),
+        },
+      });
+    }
+    return changed;
+  };
   // A new retention period restarts the schedule from now, so a shorter period takes effect right away.
   const saveRetention = (patch: Partial<Pick<SlurpSettings, "autopurgeRetentionValue" | "autopurgeRetentionUnit">>) =>
     save(
@@ -354,11 +310,11 @@ export function SlurpSettings({
         ? { ...patch, autopurgeNextRunAt: nextSlurpAutopurgeRunAt({ ...settings, ...patch }) }
         : patch,
     );
-  const accountsQuery = useNoodlerAccounts(section === "overview" || section === "creators" || section === "general");
+  const accountsQuery = useNoodlerAccounts(section === "overview" || section === "creators" || target === "general");
   const imageSettingsQuery = useSlurpImageConnections(
-    section === "overview" || section === "images" || section === "creators",
+    section === "overview" || target === "images" || section === "creators",
   );
-  const fanStatusQuery = useNoodlerFanActivityStatus(section === "overview" || section === "audience");
+  const fanStatusQuery = useNoodlerFanActivityStatus(section === "overview" || target === "audience");
   const reserveStatusQuery = useNoodlerReserveStatus(section === "overview" || section === "creators");
   const updateAuto = useUpdateNoodlerAutoPosting();
   const updateScheduleSlot = useUpdateNoodlerScheduleSlot();
@@ -375,6 +331,8 @@ export function SlurpSettings({
   const [backupPending, setBackupPending] = useState(false);
   const [restorePending, setRestorePending] = useState(false);
   const [restoreImportSettings, setRestoreImportSettings] = useState(false);
+  const [restoreInspection, setRestoreInspection] = useState<SlurpRestoreInspection | null>(null);
+  const [restoreFileName, setRestoreFileName] = useState("");
   const restoreInputRef = useRef<HTMLInputElement | null>(null);
 
   /** Poll a job to a terminal state, surfacing each step so a long run does not look stuck. */
@@ -393,10 +351,10 @@ export function SlurpSettings({
   const dismissSourceChanges = useDismissNoodlerSourceChanges();
   const connectionsQuery = useSlurpConnections(
     section === "overview" ||
-      section === "general" ||
-      section === "images" ||
+      target === "general" ||
+      target === "images" ||
       section === "creators" ||
-      section === "audience",
+      target === "audience",
   );
   const imageConnections = (connectionsQuery.data ?? []).filter(
     (connection) => connection.provider === "image_generation",
@@ -615,6 +573,324 @@ export function SlurpSettings({
       toast.error(errorMessage(error));
     }
   };
+  return {
+    navigation,
+    onNavigate,
+    onAddCreators,
+    personaSourceIds,
+    onEditCreator,
+    onRedraftCreator,
+    onRestartOnboarding,
+    viewerPersonaId,
+    t,
+    i18n,
+    settingsQuery,
+    settingsDefaultsQuery,
+    updateSettings,
+    runAutopurge,
+    section,
+    target,
+    resetAds,
+    adPool,
+    generateAds,
+    importAds,
+    createAd,
+    customAdOpen,
+    setCustomAdOpen,
+    customAd,
+    setCustomAd,
+    adsImportRef,
+    adState,
+    unhideBrand,
+    deleteAd,
+    updateAd,
+    editingAd,
+    setEditingAd,
+    generateAdImage,
+    adLorebooks,
+    syncAdLorebook,
+    savedSettings,
+    draftPatch,
+    setDraftPatch,
+    settings,
+    maintenanceSummary,
+    autopurgePreview,
+    generationGuidanceDraft,
+    setGenerationGuidanceDraft,
+    generationGuidanceEditorOpen,
+    setGenerationGuidanceEditorOpen,
+    imagePromptDraft,
+    setImagePromptDraft,
+    imagePromptEditorOpen,
+    setImagePromptEditorOpen,
+    refreshModalOpen,
+    setRefreshModalOpen,
+    refreshAccountIds,
+    setRefreshAccountIds,
+    refreshRemaining,
+    setRefreshRemaining,
+    refreshAccess,
+    setRefreshAccess,
+    scheduleCreatorId,
+    setScheduleCreatorId,
+    selectedCreatorId,
+    setSelectedCreatorId,
+    bulkCreatorIds,
+    setBulkCreatorIds,
+    bulkUpdateCreators,
+    customPaceOpen,
+    setCustomPaceOpen,
+    adsWorldDraft,
+    setAdsWorldDraft,
+    reactionBankDraft,
+    setReactionBankDraft,
+    saveState,
+    setSaveState,
+    autopurgeNextDraft,
+    setAutopurgeNextDraft,
+    save,
+    update,
+    saveRetention,
+    accountsQuery,
+    imageSettingsQuery,
+    fanStatusQuery,
+    reserveStatusQuery,
+    updateAuto,
+    updateScheduleSlot,
+    refreshConversationSchedule,
+    refreshFans,
+    refreshCreators,
+    updateImages,
+    deleteCreator,
+    setCreatorMessaging,
+    setCreatorPrice,
+    deleteAllData,
+    deleteUnusedData,
+    backupJob,
+    setBackupJob,
+    backupPending,
+    setBackupPending,
+    restorePending,
+    setRestorePending,
+    restoreImportSettings,
+    setRestoreImportSettings,
+    restoreInspection,
+    setRestoreInspection,
+    restoreFileName,
+    setRestoreFileName,
+    restoreInputRef,
+    followBackupJob,
+    adoptSourceIdentity,
+    dismissSourceChanges,
+    connectionsQuery,
+    imageConnections,
+    imageSettings,
+    personaCreator,
+    automationCreators,
+    scheduleCreator,
+    selectedCreator,
+    scheduleSlots,
+    generationGuidanceIsDefault,
+    guidanceLevel,
+    imagePromptIsDefault,
+    activityPreset,
+    autopurgeNextTime,
+    creators,
+    autoPostingCreators,
+    automaticPublishingActive,
+    imageEnabledCreators,
+    imagesReady,
+    selectedImageConnection,
+    imageConnectionLabel,
+    paceLabel,
+    openRefresh,
+    selectedPresetName,
+    setSelectedPresetName,
+    presetImportRef,
+    selectedPreset,
+    savePromptPreset,
+    applyPromptPreset,
+    deletePromptPreset,
+    exportPromptPresets,
+    importPromptPresets,
+    restore,
+    restoreDefaultImagePrompt,
+    saveImagePrompt,
+    saveGenerationGuidance,
+    confirmDeleteCreator,
+    runAutopurgeNow,
+  };
+}
+
+export type SlurpBackstagePageProps = ReturnType<typeof useSlurpBackstageController> & {
+  settings: SlurpSettings;
+  audiencePreset: ReturnType<typeof slurpAudiencePresetFor>;
+};
+
+export function SlurpSettings({
+  navigation,
+  onNavigate,
+  onAddCreators,
+  personaSourceIds,
+  onEditCreator,
+  onRedraftCreator,
+  onRestartOnboarding,
+  viewerPersonaId,
+}: SlurpSettingsProps) {
+  const { t: translate } = useTranslation();
+  // Opening a Creator's profile leaves Backstage, so staged changes ask stay or discard first.
+  const controller = useSlurpBackstageController({
+    navigation,
+    onNavigate,
+    onAddCreators,
+    personaSourceIds,
+    onEditCreator: (creator) =>
+      void confirmLeaveSlurpBackstage(translate).then((leave) => leave && onEditCreator(creator)),
+    onRedraftCreator: (creator) =>
+      void confirmLeaveSlurpBackstage(translate).then((leave) => leave && onRedraftCreator(creator)),
+    onRestartOnboarding,
+    viewerPersonaId,
+  });
+  const {
+    t,
+    i18n,
+    settingsQuery,
+    settingsDefaultsQuery,
+    updateSettings,
+    runAutopurge,
+    section,
+    target,
+    resetAds,
+    adPool,
+    generateAds,
+    importAds,
+    createAd,
+    customAdOpen,
+    setCustomAdOpen,
+    customAd,
+    setCustomAd,
+    adsImportRef,
+    adState,
+    unhideBrand,
+    deleteAd,
+    updateAd,
+    editingAd,
+    setEditingAd,
+    generateAdImage,
+    adLorebooks,
+    syncAdLorebook,
+    savedSettings,
+    draftPatch,
+    setDraftPatch,
+    settings,
+    maintenanceSummary,
+    autopurgePreview,
+    generationGuidanceDraft,
+    setGenerationGuidanceDraft,
+    generationGuidanceEditorOpen,
+    setGenerationGuidanceEditorOpen,
+    imagePromptDraft,
+    setImagePromptDraft,
+    imagePromptEditorOpen,
+    setImagePromptEditorOpen,
+    refreshModalOpen,
+    setRefreshModalOpen,
+    refreshAccountIds,
+    setRefreshAccountIds,
+    refreshRemaining,
+    setRefreshRemaining,
+    refreshAccess,
+    setRefreshAccess,
+    scheduleCreatorId,
+    setScheduleCreatorId,
+    selectedCreatorId,
+    setSelectedCreatorId,
+    bulkCreatorIds,
+    setBulkCreatorIds,
+    bulkUpdateCreators,
+    customPaceOpen,
+    setCustomPaceOpen,
+    adsWorldDraft,
+    setAdsWorldDraft,
+    reactionBankDraft,
+    setReactionBankDraft,
+    saveState,
+    setSaveState,
+    autopurgeNextDraft,
+    setAutopurgeNextDraft,
+    save,
+    update,
+    saveRetention,
+    accountsQuery,
+    imageSettingsQuery,
+    fanStatusQuery,
+    reserveStatusQuery,
+    updateAuto,
+    updateScheduleSlot,
+    refreshConversationSchedule,
+    refreshFans,
+    refreshCreators,
+    updateImages,
+    deleteCreator,
+    setCreatorMessaging,
+    setCreatorPrice,
+    deleteAllData,
+    deleteUnusedData,
+    backupJob,
+    setBackupJob,
+    backupPending,
+    setBackupPending,
+    restorePending,
+    setRestorePending,
+    restoreImportSettings,
+    setRestoreImportSettings,
+    restoreInspection,
+    setRestoreInspection,
+    restoreFileName,
+    setRestoreFileName,
+    restoreInputRef,
+    followBackupJob,
+    adoptSourceIdentity,
+    dismissSourceChanges,
+    connectionsQuery,
+    imageConnections,
+    imageSettings,
+    personaCreator,
+    automationCreators,
+    scheduleCreator,
+    selectedCreator,
+    scheduleSlots,
+    generationGuidanceIsDefault,
+    guidanceLevel,
+    imagePromptIsDefault,
+    activityPreset,
+    autopurgeNextTime,
+    creators,
+    autoPostingCreators,
+    automaticPublishingActive,
+    imageEnabledCreators,
+    imagesReady,
+    selectedImageConnection,
+    imageConnectionLabel,
+    paceLabel,
+    openRefresh,
+    selectedPresetName,
+    setSelectedPresetName,
+    presetImportRef,
+    selectedPreset,
+    savePromptPreset,
+    applyPromptPreset,
+    deletePromptPreset,
+    exportPromptPresets,
+    importPromptPresets,
+    restore,
+    restoreDefaultImagePrompt,
+    saveImagePrompt,
+    saveGenerationGuidance,
+    confirmDeleteCreator,
+    runAutopurgeNow,
+  } = controller;
+  useSlurpBackstageDraftGuard(Object.keys(draftPatch).length);
 
   if (settingsQuery.isError)
     return (
@@ -638,6 +914,7 @@ export function SlurpSettings({
       </main>
     );
   const audiencePreset = slurpAudiencePresetFor(settings);
+  const page: SlurpBackstagePageProps = { ...controller, settings, audiencePreset };
 
   return (
     <>
@@ -649,7 +926,7 @@ export function SlurpSettings({
                 {t("ui.slurp.settings.backstage")}
               </p>
               <h1 className="text-xl font-black tracking-tight text-balance sm:mt-1 sm:text-2xl">
-                {t("ui.slurp.settings.title")}
+                {t("ui.slurp.settings.backstage", { defaultValue: "Backstage" })}
               </h1>
               <p className="mt-1 hidden max-w-2xl text-xs leading-5 text-[var(--slurp-muted)] text-pretty sm:block">
                 {t("ui.slurp.settings.detail")}
@@ -688,2917 +965,92 @@ export function SlurpSettings({
                   key={item}
                   type="button"
                   aria-current={section === item ? "page" : undefined}
-                  onClick={() => onNavigate({ ...navigation, section: item })}
+                  onClick={() =>
+                    onNavigate({ ...navigation, section: item, target: SLURP_BACKSTAGE_DEFAULT_TARGET[item] })
+                  }
                   className={sectionTabClass(section === item)}
                 >
-                  {t(`ui.slurp.settings.tabs.${item === "general" ? "publishing" : item}`)}
+                  {t(`ui.slurp.settings.backstage.sections.${item}`, {
+                    defaultValue: SLURP_BACKSTAGE_SECTION_LABELS[item],
+                  })}
                 </button>
               ))}
             </nav>
 
             <div className="mt-4 min-w-0 rounded-xl rounded-t-none bg-[linear-gradient(145deg,var(--slurp-surface),color-mix(in_srgb,var(--slurp-violet)_4%,var(--slurp-surface)))] p-3 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] md:mt-0 md:rounded-t-xl md:p-5 lg:p-6">
-              {settings &&
-                settingsDefaultsQuery.data &&
-                isSlurpResettableSection(section) &&
-                (() => {
-                  const defaults = settingsDefaultsQuery.data;
-                  const changed = changedSlurpSettingKeys(settings, defaults, section);
-                  if (changed.length === 0) return null;
-                  return (
-                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--border)] px-3 py-2">
-                      <p className="text-xs text-[var(--muted-foreground)]">
-                        {t("ui.slurp.settings.reset.changed", { count: changed.length })}
-                      </p>
-                      <button
-                        type="button"
-                        disabled={updateSettings.isPending}
-                        onClick={() =>
-                          void showConfirmDialog({
-                            title: t("ui.slurp.settings.reset.confirmTitle"),
-                            message: t("ui.slurp.settings.reset.confirmDetail"),
-                            confirmLabel: t("ui.slurp.settings.reset.button"),
-                          })
-                            .then((confirmed) => {
-                              if (confirmed) void save(slurpSettingsResetPatch(settings, defaults, section));
-                            })
-                            .catch((error) => toast.error(errorMessage(error)))
-                        }
-                        className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
-                      >
-                        <RefreshCw size={14} />
-                        {t("ui.slurp.settings.reset.button")}
-                      </button>
-                    </div>
-                  );
-                })()}
-              {section === "overview" && (
-                <div className="space-y-4">
-                  <section className="relative isolate overflow-hidden rounded-xl bg-[var(--slurp-hero)] p-4 text-white shadow-[0_30px_70px_-38px_rgba(184,28,102,0.9)] sm:p-5">
-                    <span
-                      className="pointer-events-none absolute -end-12 -top-20 -z-10 h-64 w-64 rounded-full border-[2rem] border-white/10"
-                      aria-hidden="true"
-                    />
-                    <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/75">
-                          {t("ui.slurp.settings.overview.eyebrow")}
-                        </p>
-                        <h2 className="mt-1 text-xl font-black tracking-tight text-balance sm:text-2xl">
-                          {automaticPublishingActive
-                            ? t("ui.slurp.settings.overview.live")
-                            : t("ui.slurp.settings.overview.paused")}
-                        </h2>
-                        <p className="mt-1 max-w-xl text-xs leading-5 text-white/85 text-pretty">
-                          {automaticPublishingActive
-                            ? t("ui.slurp.settings.overview.liveDetail", {
-                                posts: settings.postsPerDay,
-                                count: autoPostingCreators.length,
-                              })
-                            : t("ui.slurp.settings.overview.pausedDetail")}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        disabled={accountsQuery.isLoading || accountsQuery.isError || automationCreators.length === 0}
-                        onClick={openRefresh}
-                        className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-white px-5 text-sm font-black text-[#791444] shadow-lg transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#9f1f5c] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:opacity-50"
-                      >
-                        <Play size={15} fill="currentColor" aria-hidden="true" />
-                        {t("ui.slurp.settings.overview.runNow")}
-                      </button>
-                    </div>
-                  </section>
-
-                  <OverviewActivity
-                    reserveStatus={reserveStatusQuery.data}
-                    reserveLoading={reserveStatusQuery.isLoading}
-                    reserveError={reserveStatusQuery.isError}
-                    fanStatus={fanStatusQuery.data}
-                    refreshPending={refreshCreators.isPending || refreshFans.isPending}
-                    onRetry={() => {
-                      void reserveStatusQuery.refetch();
-                      void fanStatusQuery.refetch();
-                    }}
-                  />
-
-                  <div className="grid gap-3 lg:grid-cols-2">
-                    <OverviewCard
-                      icon={<Activity size={21} aria-hidden="true" />}
-                      title={t("ui.slurp.settings.tabs.publishing")}
-                      status={paceLabel}
-                      details={[
-                        settings.autoPostingScheduleEnabled
-                          ? t("ui.slurp.settings.overview.postsPerDay", { count: settings.postsPerDay })
-                          : t("ui.slurp.settings.overview.manualOnly"),
-                        settings.nightQuiet
-                          ? t("ui.slurp.settings.overview.quietHoursOn")
-                          : t("ui.slurp.settings.overview.quietHoursOff"),
-                      ]}
-                      onClick={() => onNavigate({ ...navigation, section: "general" })}
-                      tone="pink"
-                    />
-                    <OverviewCard
-                      icon={<UsersRound size={21} aria-hidden="true" />}
-                      title={t("ui.slurp.settings.tabs.creators")}
-                      status={t("ui.slurp.settings.overview.autoPostingCreators", {
-                        count: autoPostingCreators.length,
-                      })}
-                      details={[t("ui.slurp.settings.overview.totalCreators", { count: creators.length })]}
-                      avatars={creators.slice(0, 4)}
-                      onClick={() => onNavigate({ ...navigation, section: "creators" })}
-                      tone="violet"
-                    />
-                    <OverviewCard
-                      icon={<Image size={21} aria-hidden="true" />}
-                      title={t("ui.slurp.settings.tabs.images")}
-                      status={
-                        imagesReady ? t("ui.slurp.settings.overview.ready") : t("ui.slurp.settings.overview.needsSetup")
-                      }
-                      details={[
-                        t("ui.slurp.settings.overview.imageCreators", { count: imageEnabledCreators.length }),
-                        imageConnections.length > 0
-                          ? imageConnectionLabel
-                          : t("ui.slurp.settings.overview.noImageConnection"),
-                      ]}
-                      onClick={() => onNavigate({ ...navigation, section: "images" })}
-                      tone="blue"
-                      healthy={imagesReady}
-                    />
-                    <OverviewCard
-                      icon={<Megaphone size={21} aria-hidden="true" />}
-                      title={t("ui.slurp.settings.tabs.audience")}
-                      status={
-                        settings.fanActivityEnabled
-                          ? t("ui.slurp.settings.overview.on")
-                          : t("ui.slurp.settings.overview.off")
-                      }
-                      details={[
-                        t(`ui.slurp.settings.simulation.presets.${slurpAudiencePresetFor(settings)}`),
-                        t("ui.slurp.settings.overview.audienceActions"),
-                      ]}
-                      onClick={() => onNavigate({ ...navigation, section: "audience" })}
-                      tone="coral"
-                      healthy={settings.fanActivityEnabled}
-                    />
-                  </div>
-
-                  <Toggle
-                    label={t("ui.slurp.settings.inlinePromotions")}
-                    detail={t("ui.slurp.settings.inlinePromotionsDetail")}
-                    value={settings.inlineAdsEnabled}
-                    onChange={(value) => update("inlineAdsEnabled", value)}
-                  />
-
-                  <button
-                    type="button"
-                    onClick={() => onNavigate({ ...navigation, section: "general" })}
-                    className="flex min-h-14 w-full items-center gap-3 rounded-xl bg-[var(--slurp-surface-raised)] px-4 text-start ring-1 ring-inset ring-[var(--slurp-outline)] transition-[background-color,transform] hover:bg-[color-mix(in_srgb,var(--noodle-accent)_8%,var(--slurp-surface-raised))] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
-                  >
-                    <FileText size={18} className="shrink-0 text-[var(--slurp-violet)]" aria-hidden="true" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-bold">{t("ui.slurp.settings.overview.generation")}</span>
-                      <span className="block text-xs text-[var(--slurp-muted)]">
-                        {t("ui.slurp.settings.overview.generationDetail")}
-                      </span>
-                    </span>
-                    <ChevronRight size={18} className="shrink-0 rtl:rotate-180" aria-hidden="true" />
-                  </button>
-                </div>
-              )}
-
-              {section === "general" && (
-                <div className="space-y-4">
-                  <SectionTitle
-                    title={t("ui.slurp.settings.publishing.title")}
-                    detail={t("ui.slurp.settings.publishing.detail")}
-                  />
-                  <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-[var(--slurp-surface-raised,var(--background))] p-4 shadow-sm ring-1 ring-inset ring-[var(--border)] sm:p-5">
-                    <div>
-                      <h2 className="text-sm font-semibold">{t("ui.slurp.settings.refresh.title")}</h2>
-                      <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                        {t("ui.slurp.settings.refresh.detail")}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={accountsQuery.isLoading || accountsQuery.isError}
-                      onClick={openRefresh}
-                      className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 shadow-sm transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:opacity-50"
-                    >
-                      <Sparkles size={14} />
-                      {t("ui.slurp.settings.refresh.title")}
-                    </button>
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-bold">{t("ui.slurp.settings.publishing.pace")}</h2>
-                    <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted)]">
-                      {t("ui.slurp.settings.publishing.howDetail")}
-                    </p>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                    {SLURP_ACTIVITY_PRESETS.map((preset) => (
-                      <button
-                        key={preset}
-                        type="button"
-                        aria-pressed={activityPreset === preset}
-                        disabled={updateSettings.isPending}
-                        onClick={() => {
-                          setCustomPaceOpen(false);
-                          void save(slurpActivityPresetPatch(preset));
-                        }}
-                        className={`min-h-20 rounded-xl p-4 text-start ring-1 ring-inset transition-[background-color,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:opacity-50 ${!customPaceOpen && activityPreset === preset ? "bg-[var(--slurp-nav-active)] ring-[var(--noodle-accent)]/45" : "bg-[var(--slurp-surface-raised)] ring-[var(--slurp-outline)] hover:bg-[color-mix(in_srgb,var(--noodle-accent)_7%,var(--slurp-surface-raised))]"}`}
-                      >
-                        <span className="block text-sm font-semibold">{t(`ui.slurp.settings.presets.${preset}`)}</span>
-                        <span className="mt-1 block text-xs text-[var(--muted-foreground)]">
-                          {preset === "manual"
-                            ? t("ui.slurp.settings.presets.manualDetail")
-                            : t("ui.slurp.settings.presets.postsDetail", {
-                                count: slurpPostsPerDayForPreset(preset),
-                              })}
-                        </span>
-                      </button>
-                    ))}
-                    <button
-                      type="button"
-                      aria-pressed={customPaceOpen || activityPreset === null}
-                      disabled={updateSettings.isPending}
-                      onClick={() => setCustomPaceOpen(true)}
-                      className={`min-h-20 rounded-xl p-4 text-start ring-1 ring-inset transition-[background-color,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:opacity-50 ${customPaceOpen || activityPreset === null ? "bg-[var(--slurp-nav-active)] ring-[var(--noodle-accent)]/45" : "bg-[var(--slurp-surface-raised)] ring-[var(--slurp-outline)] hover:bg-[color-mix(in_srgb,var(--noodle-accent)_7%,var(--slurp-surface-raised))]"}`}
-                    >
-                      <span className="block text-sm font-semibold">{t("ui.slurp.settings.presets.custom")}</span>
-                      <span className="mt-1 block text-xs text-[var(--slurp-muted)]">
-                        {t("ui.slurp.settings.presets.customDetail")}
-                      </span>
-                    </button>
-                  </div>
-                  {(customPaceOpen || activityPreset === null) && (
-                    <Field label={t("ui.slurp.settings.postsPerDay")} detail={t("ui.slurp.settings.postsPerDayDetail")}>
-                      <NumberSetting
-                        value={settings.postsPerDay}
-                        min={1}
-                        max={96}
-                        onSave={(value) => save({ autoPostingScheduleEnabled: true, postsPerDay: value })}
-                      />
-                    </Field>
-                  )}
-                  {settings.autoPostingScheduleEnabled && (
-                    <Field label={t("ui.slurp.settings.storyRate")} detail={t("ui.slurp.settings.storyRateDetail")}>
-                      <select
-                        value={settings.storyRate}
-                        disabled={updateSettings.isPending}
-                        onChange={(event) => void update("storyRate", event.target.value as SlurpSettings["storyRate"])}
-                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                      >
-                        <option value="off">{t("ui.slurp.settings.storyRateOff")}</option>
-                        <option value="rare">{t("ui.slurp.settings.storyRateRare")}</option>
-                        <option value="regular">{t("ui.slurp.settings.storyRateRegular")}</option>
-                        <option value="often">{t("ui.slurp.settings.storyRateOften")}</option>
-                      </select>
-                    </Field>
-                  )}
-                  {settings.autoPostingScheduleEnabled ? (
-                    <Toggle
-                      label={t("ui.slurp.settings.quietHours")}
-                      detail={t("ui.slurp.settings.quietHoursDetail")}
-                      value={settings.nightQuiet}
-                      onChange={(value) => update("nightQuiet", value)}
-                    />
-                  ) : (
-                    <GuidanceBox
-                      title={t("ui.slurp.settings.publishing.manualTitle")}
-                      detail={t("ui.slurp.settings.publishing.manualDetail")}
-                    />
-                  )}
-                  <div className="space-y-3">
-                    <SectionTitle
-                      title={t("ui.slurp.settings.carryover.title")}
-                      detail={t("ui.slurp.settings.carryover.detail")}
-                    />
-                    {(["conversation", "roleplay", "game"] as const).map((mode) => (
-                      <Toggle
-                        key={mode}
-                        compact
-                        label={t(`ui.slurp.settings.carryover.${mode}`)}
-                        value={settings.carryoverModes.includes(mode)}
-                        onChange={(value) =>
-                          update(
-                            "carryoverModes",
-                            value
-                              ? [...settings.carryoverModes.filter((entry) => entry !== mode), mode]
-                              : settings.carryoverModes.filter((entry) => entry !== mode),
-                          )
-                        }
-                      />
-                    ))}
-                    {settings.carryoverModes.length > 0 && (
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <Field
-                          label={t("ui.slurp.settings.carryover.hours")}
-                          detail={t("ui.slurp.settings.carryover.hoursDetail")}
-                        >
-                          <NumberSetting
-                            value={settings.carryoverHours}
-                            min={1}
-                            max={24 * 365}
-                            onSave={(value) => save({ carryoverHours: value })}
-                          />
-                        </Field>
-                        <Field
-                          label={t("ui.slurp.settings.carryover.maxItems")}
-                          detail={t("ui.slurp.settings.carryover.maxItemsDetail")}
-                        >
-                          <NumberSetting
-                            value={settings.carryoverMaxItems}
-                            min={1}
-                            max={100}
-                            onSave={(value) => save({ carryoverMaxItems: value })}
-                          />
-                        </Field>
-                      </div>
-                    )}
-                  </div>
-                  <details className="group rounded-xl bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
-                    <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 text-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] [&::-webkit-details-marker]:hidden">
-                      <FileText size={17} className="text-[var(--slurp-violet)]" aria-hidden="true" />
-                      <span className="flex-1">{t("ui.slurp.settings.publishing.generationDetails")}</span>
-                      <ChevronRight
-                        size={17}
-                        className="transition-transform group-open:rotate-90 rtl:rotate-180"
-                        aria-hidden="true"
-                      />
-                    </summary>
-                    <div className="space-y-5 border-t border-[var(--slurp-outline)] p-4 sm:p-5">
-                      {settings.autoPostingScheduleEnabled && (
-                        <Field
-                          label={t("ui.slurp.settings.generationMode")}
-                          detail={t("ui.slurp.settings.generationModeDetail")}
-                        >
-                          <select
-                            value={settings.autoPostGenerationMode}
-                            disabled={updateSettings.isPending}
-                            onChange={(event) =>
-                              void update(
-                                "autoPostGenerationMode",
-                                event.target.value as SlurpSettings["autoPostGenerationMode"],
-                              )
-                            }
-                            className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                          >
-                            <option value="pre_generate">{t("ui.slurp.settings.generationModePreGenerate")}</option>
-                            <option value="on_demand">{t("ui.slurp.settings.generationModeOnDemand")}</option>
-                          </select>
-                        </Field>
-                      )}
-                      <Field
-                        label={t("ui.slurp.settings.connections.creatorText")}
-                        detail={t("ui.slurp.settings.connections.creatorTextDetail")}
-                      >
-                        <select
-                          value={settings.generationConnectionId ?? ""}
-                          disabled={connectionsQuery.isLoading || connectionsQuery.isError || updateSettings.isPending}
-                          onChange={(event) => void update("generationConnectionId", event.target.value || null)}
-                          className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                        >
-                          <option value="">{t("ui.slurp.settings.connections.engineDefault")}</option>
-                          {(connectionsQuery.data ?? [])
-                            .filter((connection) => connection.provider !== "image_generation")
-                            .map((connection) => (
-                              <option key={connection.id} value={connection.id}>
-                                {connection.name ?? connection.model ?? connection.id}
-                              </option>
-                            ))}
-                        </select>
-                      </Field>
-                      <Toggle
-                        label={t("ui.slurp.settings.prompts.lorebookContext")}
-                        detail={t("ui.slurp.settings.prompts.lorebookContextDetail")}
-                        value={settings.enableLorebookContext}
-                        onChange={(value) => update("enableLorebookContext", value)}
-                      />
-                      <Toggle
-                        label={t("ui.slurp.settings.prompts.professorMari")}
-                        detail={t("ui.slurp.settings.prompts.professorMariDetail")}
-                        value={settings.professorMariCreatorSource}
-                        onChange={(value) => update("professorMariCreatorSource", value)}
-                      />
-                      <Field
-                        label={t("ui.slurp.settings.prompts.spice")}
-                        detail={
-                          guidanceLevel
-                            ? t("ui.slurp.settings.prompts.spiceDetail")
-                            : t("ui.slurp.settings.prompts.spiceCustom")
-                        }
-                      >
-                        <div className="flex flex-wrap gap-2">
-                          {SLURP_GUIDANCE_LEVELS.map((level) => (
-                            <button
-                              key={level}
-                              type="button"
-                              aria-pressed={guidanceLevel === level}
-                              disabled={updateSettings.isPending}
-                              onClick={() =>
-                                void restore(
-                                  { generationGuidance: SLURP_GUIDANCE_PRESETS[level] },
-                                  t("ui.slurp.settings.prompts.spiceApplied", {
-                                    level: t(`ui.slurp.settings.prompts.spice.${level}`),
-                                  }),
-                                )
-                              }
-                              className={`min-h-10 rounded-full px-4 text-sm font-semibold ring-1 ring-inset transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 ${guidanceLevel === level ? "bg-[var(--slurp-nav-active)] text-[var(--slurp-text)] ring-[var(--noodle-accent)]/45" : "bg-[var(--slurp-surface-raised)] text-[var(--slurp-muted)] ring-[var(--slurp-outline)] hover:text-[var(--slurp-text)]"}`}
-                            >
-                              {t(`ui.slurp.settings.prompts.spice.${level}`)}
-                            </button>
-                          ))}
-                        </div>
-                      </Field>
-                      <PromptCard
-                        title={t("ui.slurp.settings.prompts.generationGuidance")}
-                        value={settings.generationGuidance}
-                        isDefault={generationGuidanceIsDefault}
-                        onEdit={() => {
-                          setGenerationGuidanceDraft(settings.generationGuidance);
-                          setGenerationGuidanceEditorOpen(true);
-                        }}
-                        onRestore={() =>
-                          void restore(
-                            { generationGuidance: DEFAULT_SLURP_GENERATION_GUIDANCE },
-                            t("ui.slurp.settings.prompts.guidanceRestored"),
-                          )
-                        }
-                      />
-                      <Field
-                        label={t("ui.slurp.settings.presets.title")}
-                        detail={t("ui.slurp.settings.presets.detail")}
-                      >
-                        <div className="flex flex-wrap items-center gap-2">
-                          <select
-                            value={selectedPreset ? selectedPresetName : ""}
-                            disabled={settings.promptPresets.length === 0}
-                            onChange={(event) => setSelectedPresetName(event.target.value)}
-                            aria-label={t("ui.slurp.settings.presets.choose")}
-                            className="min-h-11 min-w-0 flex-1 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                          >
-                            <option value="">
-                              {settings.promptPresets.length > 0
-                                ? t("ui.slurp.settings.presets.choose")
-                                : t("ui.slurp.settings.presets.empty")}
-                            </option>
-                            {settings.promptPresets.map((preset) => (
-                              <option key={preset.name} value={preset.name}>
-                                {preset.name}
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            type="button"
-                            disabled={!selectedPreset || updateSettings.isPending}
-                            onClick={() => void applyPromptPreset()}
-                            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
-                          >
-                            {t("ui.slurp.settings.presets.apply")}
-                          </button>
-                          <button
-                            type="button"
-                            disabled={!selectedPreset || updateSettings.isPending}
-                            onClick={() => void deletePromptPreset()}
-                            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
-                          >
-                            {t("ui.slurp.settings.presets.delete")}
-                          </button>
-                          <button
-                            type="button"
-                            disabled={updateSettings.isPending}
-                            onClick={() => void savePromptPreset()}
-                            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
-                          >
-                            {t("ui.slurp.settings.presets.save")}
-                          </button>
-                          <button
-                            type="button"
-                            disabled={settings.promptPresets.length === 0}
-                            onClick={exportPromptPresets}
-                            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
-                          >
-                            {t("ui.slurp.settings.presets.export")}
-                          </button>
-                          <button
-                            type="button"
-                            disabled={updateSettings.isPending}
-                            onClick={() => presetImportRef.current?.click()}
-                            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
-                          >
-                            {t("ui.slurp.settings.presets.import")}
-                          </button>
-                          <input
-                            ref={presetImportRef}
-                            type="file"
-                            accept="application/json,.json"
-                            className="hidden"
-                            onChange={(event) => void importPromptPresets(event)}
-                          />
-                        </div>
-                      </Field>
-                    </div>
-                  </details>
-                </div>
-              )}
-
-              {section === "images" && (
-                <div className="space-y-4">
-                  <SectionTitle
-                    title={t("ui.slurp.settings.images.title")}
-                    detail={t("ui.slurp.settings.images.detail")}
-                  />
-                  <Field
-                    label={t("ui.slurp.settings.images.contextMode")}
-                    detail={t("ui.slurp.settings.images.contextModeDetail")}
-                  >
-                    <select
-                      value={settings.imageContextMode}
-                      disabled={updateSettings.isPending}
-                      onChange={(event) =>
-                        void update("imageContextMode", event.target.value as SlurpSettings["imageContextMode"])
-                      }
-                      className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                    >
-                      <option value="auto">{t("ui.slurp.settings.images.contextAuto")}</option>
-                      <option value="imagePrompt">{t("ui.slurp.settings.images.contextPrompt")}</option>
-                      <option value="vision">{t("ui.slurp.settings.images.contextVision")}</option>
-                    </select>
-                  </Field>
-                  {settings.imageContextMode !== "imagePrompt" && (
-                    <Field
-                      label={t("ui.slurp.settings.images.contextConnection")}
-                      detail={t("ui.slurp.settings.images.contextConnectionDetail")}
-                    >
-                      <select
-                        value={settings.imageContextConnectionId ?? ""}
-                        disabled={connectionsQuery.isLoading || connectionsQuery.isError || updateSettings.isPending}
-                        onChange={(event) => void update("imageContextConnectionId", event.target.value || null)}
-                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                      >
-                        <option value="">{t("ui.slurp.settings.images.contextConnectionText")}</option>
-                        {(connectionsQuery.data ?? [])
-                          .filter((connection) => connection.provider !== "image_generation")
-                          .map((connection) => (
-                            <option key={connection.id} value={connection.id}>
-                              {connection.name ?? connection.model ?? connection.id}
-                            </option>
-                          ))}
-                      </select>
-                    </Field>
-                  )}
-                  <Toggle
-                    label={t("ui.slurp.settings.images.galleryFallback")}
-                    detail={t("ui.slurp.settings.images.galleryFallbackDetail")}
-                    value={settings.allowGalleryImageAttachments}
-                    onChange={(value) => update("allowGalleryImageAttachments", value)}
-                  />
-                  <div
-                    className={`flex items-start gap-3 rounded-xl p-4 ring-1 ring-inset ${imagesReady ? "bg-[color-mix(in_srgb,var(--slurp-success)_8%,var(--slurp-surface-raised))] ring-[var(--slurp-success)]/25" : "bg-[color-mix(in_srgb,var(--slurp-warning)_8%,var(--slurp-surface-raised))] ring-[var(--slurp-warning)]/25"}`}
-                  >
-                    {imagesReady ? (
-                      <CheckCircle2
-                        size={19}
-                        className="mt-0.5 shrink-0 text-[var(--slurp-success)]"
-                        aria-hidden="true"
-                      />
-                    ) : (
-                      <AlertTriangle
-                        size={19}
-                        className="mt-0.5 shrink-0 text-[var(--slurp-warning)]"
-                        aria-hidden="true"
-                      />
-                    )}
-                    <div>
-                      <h2 className="text-sm font-bold">
-                        {imagesReady
-                          ? t("ui.slurp.settings.images.readyTitle")
-                          : t("ui.slurp.settings.images.needsSetupTitle")}
-                      </h2>
-                      <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted)]">
-                        {t("ui.slurp.settings.images.howDetail")}
-                      </p>
-                    </div>
-                  </div>
-                  <Field
-                    label={t("ui.slurp.settings.images.globalConnection")}
-                    detail={t("ui.slurp.settings.images.globalConnectionDetail")}
-                  >
-                    <select
-                      value={imageSettings?.defaultConnectionId ?? ""}
-                      disabled={
-                        imageSettingsQuery.isLoading ||
-                        imageSettingsQuery.isError ||
-                        connectionsQuery.isLoading ||
-                        connectionsQuery.isError ||
-                        updateImages.isPending
-                      }
-                      onChange={(event) =>
-                        updateImages.mutate(
-                          { defaultConnectionId: event.target.value || null },
-                          { onError: (error) => toast.error(errorMessage(error)) },
-                        )
-                      }
-                      className="min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50 sm:text-sm"
-                    >
-                      <option value="">{t("ui.slurp.settings.images.engineDefault")}</option>
-                      {imageConnections.map((connection) => (
-                        <option key={connection.id} value={connection.id}>
-                          {connection.name ?? connection.model ?? connection.id}
-                        </option>
-                      ))}
-                    </select>
-                    {(imageSettingsQuery.isLoading || connectionsQuery.isLoading) && (
-                      <p className="text-xs font-normal text-[var(--muted-foreground)]">
-                        {t("ui.slurp.settings.images.loading")}
-                      </p>
-                    )}
-                    {(imageSettingsQuery.isError || connectionsQuery.isError) && (
-                      <p className="text-xs font-normal text-red-400">{t("ui.slurp.settings.images.loadError")}</p>
-                    )}
-                  </Field>
-                  <Toggle
-                    label={t("ui.slurp.settings.images.enableForNew")}
-                    detail={t("ui.slurp.settings.images.enableForNewDetail")}
-                    value={settings.autoPostingImagesEnabled}
-                    onChange={(value) => update("autoPostingImagesEnabled", value)}
-                  />
-                  {/* Output size, from staging's package image settings. */}
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field
-                      label={t("ui.slurp.settings.images.width")}
-                      detail={t("ui.slurp.settings.images.widthDetail")}
-                    >
-                      <NumberSetting
-                        value={settings.imageWidth}
-                        min={64}
-                        max={4096}
-                        onSave={(value) => update("imageWidth", value)}
-                      />
-                    </Field>
-                    <Field
-                      label={t("ui.slurp.settings.images.height")}
-                      detail={t("ui.slurp.settings.images.heightDetail")}
-                    >
-                      <NumberSetting
-                        value={settings.imageHeight}
-                        min={64}
-                        max={4096}
-                        onSave={(value) => update("imageHeight", value)}
-                      />
-                    </Field>
-                  </div>
-                  {/* A Story is shown in its own tall frame, so it carries its own size. The
-                      composer crops an uploaded Story to this ratio too. */}
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field
-                      label={t("ui.slurp.settings.images.storyWidth")}
-                      detail={t("ui.slurp.settings.images.storyWidthDetail")}
-                    >
-                      <NumberSetting
-                        value={settings.storyImageWidth}
-                        min={64}
-                        max={4096}
-                        onSave={(value) => update("storyImageWidth", value)}
-                      />
-                    </Field>
-                    <Field
-                      label={t("ui.slurp.settings.images.storyHeight")}
-                      detail={t("ui.slurp.settings.images.storyHeightDetail")}
-                    >
-                      <NumberSetting
-                        value={settings.storyImageHeight}
-                        min={64}
-                        max={4096}
-                        onSave={(value) => update("storyImageHeight", value)}
-                      />
-                    </Field>
-                  </div>
-                  <details className="group rounded-xl bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
-                    <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 text-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] [&::-webkit-details-marker]:hidden">
-                      <Image size={17} className="text-[var(--slurp-violet)]" aria-hidden="true" />
-                      <span className="flex-1">{t("ui.slurp.settings.images.detailsTitle")}</span>
-                      <ChevronRight
-                        size={17}
-                        className="transition-transform group-open:rotate-90 rtl:rotate-180"
-                        aria-hidden="true"
-                      />
-                    </summary>
-                    <div className="space-y-5 border-t border-[var(--slurp-outline)] p-4 sm:p-5">
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <Toggle
-                          label={t("ui.slurp.settings.images.interpretPrompts")}
-                          detail={t("ui.slurp.settings.images.interpretPromptsDetail")}
-                          value={settings.enableImageInterpretation}
-                          onChange={(value) => update("enableImageInterpretation", value)}
-                        />
-                        <Toggle
-                          label={t("ui.slurp.settings.images.useAvatarReferences")}
-                          detail={t("ui.slurp.settings.images.useAvatarReferencesDetail")}
-                          value={settings.imageGenerationUseAvatarReferences}
-                          onChange={(value) => update("imageGenerationUseAvatarReferences", value)}
-                        />
-                        <Toggle
-                          label={t("ui.slurp.settings.images.includeDescriptions")}
-                          detail={t("ui.slurp.settings.images.includeDescriptionsDetail")}
-                          value={settings.imageGenerationIncludeDescriptions}
-                          onChange={(value) => update("imageGenerationIncludeDescriptions", value)}
-                        />
-                      </div>
-                      <PromptCard
-                        title={t("ui.slurp.settings.images.instructions")}
-                        value={settings.imageGenerationPrompt}
-                        isDefault={imagePromptIsDefault}
-                        onEdit={() => {
-                          setImagePromptDraft(settings.imageGenerationPrompt);
-                          setImagePromptEditorOpen(true);
-                        }}
-                        onRestore={() => void restoreDefaultImagePrompt()}
-                      />
-                    </div>
-                  </details>
-                </div>
-              )}
-
-              {section === "tags" && (
-                <SlurpTagsSettings
-                  tags={settings.discoveryTags}
-                  saving={updateSettings.isPending}
-                  onSave={(tags) => update("discoveryTags", tags)}
+              <div className="mb-5 space-y-3">
+                <SlurpBackstageSearch
+                  onSelect={(nextSection, nextTarget) =>
+                    onNavigate({ ...navigation, section: nextSection, target: nextTarget })
+                  }
                 />
-              )}
-
-              {section === "arcs" && (
-                <div className="space-y-6">
-                  <SectionTitle title={t("ui.slurp.settings.arcs.title")} detail={t("ui.slurp.settings.arcs.detail")} />
-                  <GuidanceBox
-                    title={t("ui.slurp.settings.arcs.guideTitle", { defaultValue: "Set the story rules once" })}
-                    detail={t("ui.slurp.settings.arcs.guideDetail", {
-                      defaultValue:
-                        "These settings apply to every Creator. Use the Creator arc settings to make one profile different.",
-                    })}
-                  />
-                  <SettingsGroup title={t("ui.slurp.settings.arcs.behaviorGroup", { defaultValue: "Story behavior" })}>
-                    <Field label={t("ui.slurp.settings.projectRate")} detail={t("ui.slurp.settings.projectRateDetail")}>
-                      <select
-                        value={settings.projectRate}
-                        disabled={updateSettings.isPending}
-                        onChange={(event) =>
-                          void update("projectRate", event.target.value as SlurpSettings["projectRate"])
-                        }
-                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                      >
-                        <option value="off">{t("ui.slurp.settings.projectRateOff")}</option>
-                        <option value="rare">{t("ui.slurp.settings.projectRateRare")}</option>
-                        <option value="regular">{t("ui.slurp.settings.projectRateRegular")}</option>
-                        <option value="often">{t("ui.slurp.settings.projectRateOften")}</option>
-                      </select>
-                    </Field>
-                    <Field label={t("ui.slurp.settings.arcPace")} detail={t("ui.slurp.settings.arcPaceDetail")}>
-                      <select
-                        value={settings.arcPace}
-                        disabled={updateSettings.isPending}
-                        onChange={(event) => void update("arcPace", event.target.value as SlurpSettings["arcPace"])}
-                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                      >
-                        <option value="slow">{t("ui.slurp.settings.arcPaceSlow")}</option>
-                        <option value="normal">{t("ui.slurp.settings.arcPaceNormal")}</option>
-                        <option value="fast">{t("ui.slurp.settings.arcPaceFast")}</option>
-                      </select>
-                    </Field>
-                    <Field
-                      label={t("ui.slurp.settings.arcPollHours")}
-                      detail={t("ui.slurp.settings.arcPollHoursDetail")}
-                    >
-                      <NumberSetting
-                        value={settings.arcPollHours}
-                        min={1}
-                        max={168}
-                        onSave={(value) => save({ arcPollHours: value })}
-                      />
-                    </Field>
-                    <Field
-                      label={t("ui.slurp.settings.arcStatEffects")}
-                      detail={t("ui.slurp.settings.arcStatEffectsDetail")}
-                    >
-                      <select
-                        value={settings.arcStatEffects}
-                        disabled={updateSettings.isPending}
-                        onChange={(event) =>
-                          void update("arcStatEffects", event.target.value as SlurpSettings["arcStatEffects"])
-                        }
-                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                      >
-                        <option value="off">{t("ui.slurp.settings.arcStatEffectsOff")}</option>
-                        <option value="small">{t("ui.slurp.settings.arcStatEffectsSmall")}</option>
-                        <option value="big">{t("ui.slurp.settings.arcStatEffectsBig")}</option>
-                      </select>
-                    </Field>
-                    <Toggle
-                      label={t("ui.slurp.settings.arcAffectsMood")}
-                      detail={t("ui.slurp.settings.arcAffectsMoodDetail")}
-                      value={settings.arcAffectsMood}
-                      onChange={(value) => update("arcAffectsMood", value)}
-                    />
-                    <Toggle
-                      label={t("ui.slurp.settings.arcDirectorMode")}
-                      detail={t("ui.slurp.settings.arcDirectorModeDetail")}
-                      value={settings.arcDirectorMode}
-                      onChange={(value) => update("arcDirectorMode", value)}
-                    />
-                    <Toggle
-                      label={t("ui.slurp.settings.arcFanReactions")}
-                      detail={t("ui.slurp.settings.arcFanReactionsDetail")}
-                      value={settings.arcFanReactions}
-                      onChange={(value) => update("arcFanReactions", value)}
-                    />
-                    <Toggle
-                      label={t("ui.slurp.settings.arcCrossovers")}
-                      detail={t("ui.slurp.settings.arcCrossoversDetail")}
-                      value={settings.arcCrossovers}
-                      onChange={(value) => update("arcCrossovers", value)}
-                    />
-                  </SettingsGroup>
-                  <SettingsGroup title={t("ui.slurp.settings.arcs.automaticGroup", { defaultValue: "Automatic arcs" })}>
-                    <Field label={t("ui.slurp.settings.arcAutoMode")} detail={t("ui.slurp.settings.arcAutoModeDetail")}>
-                      <select
-                        value={settings.arcAutoMode}
-                        disabled={updateSettings.isPending}
-                        onChange={(event) =>
-                          void update("arcAutoMode", event.target.value as SlurpSettings["arcAutoMode"])
-                        }
-                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                      >
-                        <option value="off">{t("ui.slurp.settings.arcAutoModeOff")}</option>
-                        <option value="suggest">{t("ui.slurp.settings.arcAutoModeSuggest")}</option>
-                        <option value="auto">{t("ui.slurp.settings.arcAutoModeAuto")}</option>
-                      </select>
-                    </Field>
-                    {settings.arcAutoMode !== "off" && (
-                      <>
-                        <Field label={t("ui.slurp.settings.arcSource")} detail={t("ui.slurp.settings.arcSourceDetail")}>
-                          <select
-                            value={settings.arcSource}
-                            disabled={updateSettings.isPending}
-                            onChange={(event) =>
-                              void update("arcSource", event.target.value as SlurpSettings["arcSource"])
-                            }
-                            className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                          >
-                            <option value="library">{t("ui.slurp.projects.config.sourceLibrary")}</option>
-                            <option value="generated">{t("ui.slurp.projects.config.sourceGenerated")}</option>
-                            <option value="mixed">{t("ui.slurp.projects.config.sourceMixed")}</option>
-                          </select>
-                        </Field>
-                        <Field
-                          label={t("ui.slurp.settings.arcCooldownWeeks")}
-                          detail={t("ui.slurp.settings.arcCooldownWeeksDetail")}
-                        >
-                          <NumberSetting
-                            value={settings.arcCooldownWeeks}
-                            min={1}
-                            max={8}
-                            onSave={(value) => save({ arcCooldownWeeks: value })}
-                          />
-                        </Field>
-                        <Field
-                          label={t("ui.slurp.settings.arcMaxConcurrentAuto")}
-                          detail={t("ui.slurp.settings.arcMaxConcurrentAutoDetail")}
-                        >
-                          <NumberSetting
-                            value={settings.arcMaxConcurrentAuto}
-                            min={1}
-                            max={20}
-                            onSave={(value) => save({ arcMaxConcurrentAuto: value })}
-                          />
-                        </Field>
-                      </>
-                    )}
-                  </SettingsGroup>
-                  <div className="space-y-4 border-t border-[var(--slurp-outline)] pt-5">
-                    <div>
-                      <h3 className="text-base font-black">
-                        {t("ui.slurp.settings.arcLibrary", { defaultValue: "Arc library" })}
-                      </h3>
-                      <p className="mt-1 max-w-2xl text-xs leading-5 text-[var(--muted-foreground)]">
-                        {t("ui.slurp.settings.arcLibraryDetail", {
-                          defaultValue: "Reusable story patterns for new arcs. Running arcs keep their current plan.",
-                        })}
-                      </p>
-                    </div>
-                    <ArcLibraryEditor
-                      library={settings.arcLibrary}
-                      tags={settings.discoveryTags.map((entry) => entry.tag)}
-                      busy={updateSettings.isPending}
-                      creatorAccountId={selectedCreatorId}
-                      personaId={viewerPersonaId}
-                      onChange={(arcLibrary) => update("arcLibrary", arcLibrary)}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {section === "messaging" && (
-                <div className="space-y-5">
-                  <SectionTitle
-                    title={t("ui.slurp.settings.messaging.title")}
-                    detail={t("ui.slurp.settings.messaging.detail")}
-                  />
-                  <SettingsGroup title={t("ui.slurp.settings.messaging.repliesTitle")}>
-                    <Toggle
-                      label={t("ui.slurp.settings.messaging.awayReplies")}
-                      detail={t("ui.slurp.settings.messaging.awayRepliesDetail")}
-                      value={settings.messagesAwayRepliesEnabled}
-                      onChange={(value) => update("messagesAwayRepliesEnabled", value)}
-                    />
-                    <Field
-                      label={t("ui.slurp.settings.messaging.bubbleLimit")}
-                      detail={t("ui.slurp.settings.messaging.bubbleLimitDetail")}
-                    >
-                      <NumberSetting
-                        value={settings.messagesReplyBubbleLimit}
-                        min={1}
-                        max={4}
-                        onSave={(value) => update("messagesReplyBubbleLimit", value)}
-                      />
-                    </Field>
-                  </SettingsGroup>
-                  <SettingsGroup title={t("ui.slurp.settings.messaging.delaysTitle")}>
-                    <p className="text-xs leading-5 text-[var(--muted-foreground)]">
-                      {t("ui.slurp.settings.messaging.delaysDetail")}
-                    </p>
-                    <Toggle
-                      label={t("ui.slurp.settings.messaging.unscheduledAlwaysReachable")}
-                      detail={t("ui.slurp.settings.messaging.unscheduledAlwaysReachableDetail")}
-                      value={settings.messagesUnscheduledAlwaysReachable}
-                      onChange={(value) => update("messagesUnscheduledAlwaysReachable", value)}
-                    />
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <Field
-                        label={t("ui.slurp.settings.messaging.unknownReturnDelay")}
-                        detail={t("ui.slurp.settings.messaging.unknownReturnDelayDetail")}
-                      >
-                        <NumberSetting
-                          value={settings.messagesUnknownReturnDelayMinutes}
-                          min={0}
-                          max={1440}
-                          onSave={(value) => update("messagesUnknownReturnDelayMinutes", value)}
-                        />
-                      </Field>
-                      <Field
-                        label={t("ui.slurp.settings.messaging.maxReplyDelay")}
-                        detail={t("ui.slurp.settings.messaging.maxReplyDelayDetail")}
-                      >
-                        <NumberSetting
-                          value={settings.messagesMaxReplyDelayMinutes}
-                          min={0}
-                          max={1440}
-                          onSave={(value) => update("messagesMaxReplyDelayMinutes", value)}
-                        />
-                      </Field>
-                      <Field
-                        label={t("ui.slurp.settings.messaging.highRapportDelayMin")}
-                        detail={t("ui.slurp.settings.messaging.highRapportDelayMinDetail")}
-                      >
-                        <NumberSetting
-                          value={settings.messagesHighRapportDelayMinMinutes}
-                          min={0}
-                          max={1440}
-                          onSave={(value) => update("messagesHighRapportDelayMinMinutes", value)}
-                        />
-                      </Field>
-                      <Field
-                        label={t("ui.slurp.settings.messaging.highRapportDelayMax")}
-                        detail={t("ui.slurp.settings.messaging.highRapportDelayMaxDetail")}
-                      >
-                        <NumberSetting
-                          value={settings.messagesHighRapportDelayMaxMinutes}
-                          min={0}
-                          max={1440}
-                          onSave={(value) => update("messagesHighRapportDelayMaxMinutes", value)}
-                        />
-                      </Field>
-                      <Field
-                        label={t("ui.slurp.settings.messaging.mediumRapportDelayMin")}
-                        detail={t("ui.slurp.settings.messaging.mediumRapportDelayMinDetail")}
-                      >
-                        <NumberSetting
-                          value={settings.messagesMediumRapportDelayMinMinutes}
-                          min={0}
-                          max={1440}
-                          onSave={(value) => update("messagesMediumRapportDelayMinMinutes", value)}
-                        />
-                      </Field>
-                      <Field
-                        label={t("ui.slurp.settings.messaging.mediumRapportDelayMax")}
-                        detail={t("ui.slurp.settings.messaging.mediumRapportDelayMaxDetail")}
-                      >
-                        <NumberSetting
-                          value={settings.messagesMediumRapportDelayMaxMinutes}
-                          min={0}
-                          max={1440}
-                          onSave={(value) => update("messagesMediumRapportDelayMaxMinutes", value)}
-                        />
-                      </Field>
-                      <Field
-                        label={t("ui.slurp.settings.messaging.recentPostAwayMin")}
-                        detail={t("ui.slurp.settings.messaging.recentPostAwayMinDetail")}
-                      >
-                        <NumberSetting
-                          value={settings.messagesRecentPostAwayMinMinutes}
-                          min={0}
-                          max={1440}
-                          onSave={(value) => update("messagesRecentPostAwayMinMinutes", value)}
-                        />
-                      </Field>
-                      <Field
-                        label={t("ui.slurp.settings.messaging.recentPostAwayMax")}
-                        detail={t("ui.slurp.settings.messaging.recentPostAwayMaxDetail")}
-                      >
-                        <NumberSetting
-                          value={settings.messagesRecentPostAwayMaxMinutes}
-                          min={0}
-                          max={1440}
-                          onSave={(value) => update("messagesRecentPostAwayMaxMinutes", value)}
-                        />
-                      </Field>
-                      <Field
-                        label={t("ui.slurp.settings.messaging.stalePostAwayMin")}
-                        detail={t("ui.slurp.settings.messaging.stalePostAwayMinDetail")}
-                      >
-                        <NumberSetting
-                          value={settings.messagesStalePostAwayMinMinutes}
-                          min={0}
-                          max={1440}
-                          onSave={(value) => update("messagesStalePostAwayMinMinutes", value)}
-                        />
-                      </Field>
-                      <Field
-                        label={t("ui.slurp.settings.messaging.stalePostAwayMax")}
-                        detail={t("ui.slurp.settings.messaging.stalePostAwayMaxDetail")}
-                      >
-                        <NumberSetting
-                          value={settings.messagesStalePostAwayMaxMinutes}
-                          min={0}
-                          max={1440}
-                          onSave={(value) => update("messagesStalePostAwayMaxMinutes", value)}
-                        />
-                      </Field>
-                    </div>
-                  </SettingsGroup>
-                  <SettingsGroup title={t("ui.slurp.settings.messaging.defaultsTitle")}>
-                    <p className="text-xs leading-5 text-[var(--muted-foreground)]">
-                      {t("ui.slurp.settings.messaging.defaultsDetail")}
-                    </p>
-                    <Field
-                      label={t("ui.slurp.settings.messaging.dmPolicy")}
-                      detail={t("ui.slurp.settings.messaging.dmPolicyDetail")}
-                    >
-                      <select
-                        value={settings.messagesDefaultDmPolicy}
-                        disabled={updateSettings.isPending}
-                        onChange={(event) =>
-                          void update(
-                            "messagesDefaultDmPolicy",
-                            event.target.value as SlurpSettings["messagesDefaultDmPolicy"],
-                          )
-                        }
-                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                      >
-                        <option value="open">{t("ui.slurp.settings.messaging.dmPolicyOpen")}</option>
-                        <option value="subscribers">{t("ui.slurp.settings.messaging.dmPolicySubscribers")}</option>
-                        <option value="paid">{t("ui.slurp.settings.messaging.dmPolicyPaid")}</option>
-                        <option value="closed">{t("ui.slurp.settings.messaging.dmPolicyClosed")}</option>
-                      </select>
-                    </Field>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <Field
-                        label={t("ui.slurp.settings.messaging.requestFee")}
-                        detail={t("ui.slurp.settings.messaging.requestFeeDetail")}
-                      >
-                        <NumberSetting
-                          value={settings.messagesDefaultRequestFee}
-                          min={0}
-                          max={9999}
-                          onSave={(value) => update("messagesDefaultRequestFee", value)}
-                        />
-                      </Field>
-                      <Field
-                        label={t("ui.slurp.settings.messaging.ppvPrice")}
-                        detail={t("ui.slurp.settings.messaging.ppvPriceDetail")}
-                      >
-                        <NumberSetting
-                          value={settings.messagesDefaultPpvPrice}
-                          min={0}
-                          max={9999}
-                          onSave={(value) => update("messagesDefaultPpvPrice", value)}
-                        />
-                      </Field>
-                    </div>
-                  </SettingsGroup>
-                  <p className="text-xs leading-5 text-[var(--muted-foreground)]">
-                    {t("ui.slurp.settings.messaging.clearHint")}
-                  </p>
-                </div>
-              )}
-
-              {section === "creators" && (
-                <div className="space-y-5">
-                  <div className="flex flex-wrap items-end justify-between gap-3">
-                    <SectionTitle
-                      title={t("ui.slurp.settings.creators.title")}
-                      detail={t("ui.slurp.settings.creators.detail")}
-                    />
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        aria-pressed={bulkCreatorIds !== null}
-                        onClick={() => setBulkCreatorIds((ids) => (ids ? null : new Set()))}
-                        className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)]"
-                      >
-                        <ListChecks size={14} aria-hidden="true" />
-                        {t(
-                          bulkCreatorIds
-                            ? "ui.slurp.settings.creators.selectDone"
-                            : "ui.slurp.settings.creators.select",
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={onAddCreators}
-                        className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--noodle-accent)]/40 px-3 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10"
-                      >
-                        <UsersRound size={14} />
-                        {t("ui.slurp.settings.creators.add")}
-                      </button>
-                    </div>
-                  </div>
-                  {bulkCreatorIds && accountsQuery.data?.length ? (
-                    <div className="space-y-3">
-                      <div
-                        className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] p-3 text-xs"
-                        aria-live="polite"
-                      >
-                        <span className="me-auto font-semibold">
-                          {t("ui.slurp.settings.creators.selectedCount", { count: bulkCreatorIds.size })}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setBulkCreatorIds(new Set(accountsQuery.data.map((creator) => creator.id)))}
-                          className="min-h-10 rounded-lg border border-[var(--border)] px-3 font-semibold hover:bg-[var(--accent)]"
-                        >
-                          {t("ui.slurp.settings.creators.selectAll")}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={bulkCreatorIds.size === 0}
-                          onClick={() => setBulkCreatorIds(new Set())}
-                          className="min-h-10 rounded-lg border border-[var(--border)] px-3 font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
-                        >
-                          {t("ui.slurp.settings.creators.bulk.clear")}
-                        </button>
-                      </div>
-                      {bulkCreatorIds.size > 0 && (
-                        <SlurpCreatorBulkEdit
-                          creators={accountsQuery.data.filter((creator) => bulkCreatorIds.has(creator.id))}
-                          tagOptions={settings.discoveryTags.map((entry) => entry.tag)}
-                        />
-                      )}
-                    </div>
-                  ) : null}
-                  {accountsQuery.isLoading ? (
-                    <div className="flex justify-center py-10 text-[var(--muted-foreground)]" role="status">
-                      <Loader2 size={20} className="animate-spin" />
-                    </div>
-                  ) : accountsQuery.isError ? (
-                    <div className="rounded-lg border border-red-400/30 p-5 text-sm">
-                      <p>{t("ui.slurp.settings.creators.loadError")}</p>
-                      <button
-                        type="button"
-                        onClick={() => void accountsQuery.refetch()}
-                        className="mt-3 min-h-11 rounded-lg border border-[var(--border)] px-3 font-semibold"
-                      >
-                        {t("capabilities.actions.tryAgain")}
-                      </button>
-                    </div>
-                  ) : accountsQuery.data?.length && selectedCreator ? (
-                    <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(13rem,0.78fr)_minmax(0,1.7fr)]">
-                      <div
-                        className="grid snap-x grid-flow-col auto-cols-[minmax(13rem,1fr)] gap-2 overflow-x-auto rounded-xl pb-2 pe-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden xl:sticky xl:top-4 xl:block xl:max-h-[calc(100dvh-8rem)] xl:overflow-y-auto xl:rounded-xl xl:bg-[var(--slurp-surface-raised,var(--background))] xl:pb-0 xl:pe-0 xl:ring-1 xl:ring-inset xl:ring-[var(--border)]"
-                        aria-label={t("ui.slurp.settings.creators.listLabel")}
-                      >
-                        {accountsQuery.data.map((creator) => {
-                          const status = reserveStatusQuery.data?.creators.find(
-                            (entry) => entry.accountId === creator.id,
-                          );
-                          const selected = bulkCreatorIds
-                            ? bulkCreatorIds.has(creator.id)
-                            : creator.id === selectedCreator.id;
-                          return (
-                            <button
-                              key={creator.id}
-                              type="button"
-                              aria-pressed={selected}
-                              onClick={() =>
-                                bulkCreatorIds
-                                  ? setBulkCreatorIds((ids) => {
-                                      const next = new Set(ids ?? []);
-                                      if (next.has(creator.id)) next.delete(creator.id);
-                                      else next.add(creator.id);
-                                      return next;
-                                    })
-                                  : setSelectedCreatorId(creator.id)
-                              }
-                              className={`flex min-h-20 w-full snap-start items-center gap-3 rounded-xl bg-[var(--slurp-surface-raised,var(--background))] px-3 py-3 text-left shadow-sm ring-1 ring-inset transition-[background-color,box-shadow,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 xl:rounded-none xl:border-b xl:border-[var(--border)] xl:shadow-none xl:last:border-b-0 ${selected ? "ring-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10 xl:ring-0" : "ring-[var(--border)] hover:bg-[var(--accent)] xl:ring-0"}`}
-                            >
-                              {bulkCreatorIds && (
-                                <CheckCircle2
-                                  size={18}
-                                  aria-hidden="true"
-                                  className={
-                                    selected ? "text-[var(--noodle-accent)]" : "text-[var(--muted-foreground)]/40"
-                                  }
-                                />
-                              )}
-                              <Avatar account={creator} size="sm" />
-                              <span className="min-w-0 flex-1">
-                                <span className="block truncate text-sm font-bold">{creator.displayName}</span>
-                                <span className="block truncate text-xs text-[var(--muted-foreground)]">
-                                  @{creator.handle}
-                                </span>
-                                <span className="mt-1 block truncate text-[0.68rem] text-[var(--muted-foreground)]">
-                                  {status?.nextPreparedAt
-                                    ? t("ui.slurp.settings.creators.nextPost", {
-                                        date: formatDateTime(status.nextPreparedAt, i18n.language),
-                                      })
-                                    : t(`ui.slurp.settings.creators.sourceStatus.${creator.sourceStatus.state}`)}
-                                </span>
-                                {/* A stale schedule stops applying silently: the Creator loses their
-                                    daily rhythm and their message pacing, and it just looks like the
-                                    writing got worse. Say so where the Creator is managed. */}
-                                {creator.scheduleStatus?.state === "stale" && (
-                                  <span className="mt-1 block truncate text-[0.68rem] font-semibold text-amber-600 dark:text-amber-400">
-                                    {t("ui.slurp.settings.creators.scheduleStale")}
-                                  </span>
-                                )}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      <section
-                        className="min-w-0 overflow-hidden rounded-xl bg-[var(--slurp-canvas,var(--background))] shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--border)]"
-                        aria-labelledby="slurp-selected-creator-title"
-                      >
-                        <div className="relative isolate flex flex-col gap-4 overflow-hidden border-b border-[var(--border)] bg-[linear-gradient(135deg,var(--slurp-surface-raised,var(--background)),color-mix(in_srgb,var(--noodle-accent)_9%,var(--slurp-surface-raised)))] p-4 sm:flex-row sm:items-center sm:p-5">
-                          <span
-                            className="pointer-events-none absolute -end-8 -top-14 -z-10 h-36 w-36 rounded-full bg-[var(--noodle-accent)]/10 blur-2xl"
-                            aria-hidden="true"
-                          />
-                          <div className="flex min-w-0 items-center gap-3">
-                            <Avatar account={selectedCreator} />
-                            <div className="min-w-0 flex-1">
-                              <h2 id="slurp-selected-creator-title" className="truncate text-base font-bold">
-                                {selectedCreator.displayName}
-                              </h2>
-                              <p className="truncate text-xs text-[var(--muted-foreground)]">
-                                @{selectedCreator.handle}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2 sm:ml-auto sm:flex">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                onNavigate({
-                                  mode: "creator",
-                                  view: "profile",
-                                  accountId: selectedCreator.id,
-                                  returnToSettings: navigation,
-                                })
-                              }
-                              className="min-h-11 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
-                            >
-                              {t("ui.slurp.settings.creators.viewProfile")}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => onEditCreator(selectedCreator)}
-                              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
-                            >
-                              <Pencil size={14} />
-                              {t("ui.slurp.settings.creators.edit")}
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="space-y-5 p-4 sm:p-5">
-                          {/* Quick edit: each change saves at once through the same route as bulk edit. */}
-                          <SlurpDiscoveryProfileEditor
-                            key={selectedCreator.id}
-                            gender={selectedCreator.gender ?? null}
-                            tags={selectedCreator.tags ?? []}
-                            disabled={bulkUpdateCreators.isPending}
-                            onChange={(patch) =>
-                              bulkUpdateCreators.mutate(
-                                {
-                                  ids: [selectedCreator.id],
-                                  patch: patch.tags ? { tags: patch.tags } : { gender: patch.gender ?? null },
-                                },
-                                { onError: (error) => toast.error(errorMessage(error)) },
-                              )
-                            }
-                          />
-                          <SettingsGroup title={t("ui.slurp.settings.creators.postingGroup")}>
-                            {!personaCreator(selectedCreator) ? (
-                              <Toggle
-                                label={t("ui.slurp.settings.creators.autoPost")}
-                                value={selectedCreator.autoPosting.enabled}
-                                onChange={(value) =>
-                                  updateAuto.mutate(
-                                    { accountId: selectedCreator.id, enabled: value },
-                                    { onError: (error) => toast.error(errorMessage(error)) },
-                                  )
-                                }
-                              />
-                            ) : (
-                              <p className="rounded-lg border border-[var(--border)] p-3 text-xs leading-5 text-[var(--muted-foreground)]">
-                                {t("ui.slurp.settings.creators.personaAutomationDetail")}
-                              </p>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => setScheduleCreatorId(selectedCreator.id)}
-                              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)]"
-                            >
-                              <CalendarClock size={15} />
-                              {t("ui.slurp.settings.creators.postingSchedule")}
-                            </button>
-                          </SettingsGroup>
-
-                          <SettingsGroup title={t("ui.slurp.settings.creators.imagesGroup")}>
-                            <Toggle
-                              label={t("ui.slurp.settings.creators.images")}
-                              value={selectedCreator.autoPosting.imagesEnabled}
-                              onChange={(value) =>
-                                updateAuto.mutate(
-                                  { accountId: selectedCreator.id, imagesEnabled: value },
-                                  { onError: (error) => toast.error(errorMessage(error)) },
-                                )
-                              }
-                            />
-                            <Field
-                              label={t("ui.slurp.settings.creators.imageConnection")}
-                              detail={t("ui.slurp.settings.creators.imageConnectionDetail")}
-                            >
-                              <select
-                                disabled={
-                                  imageSettingsQuery.isLoading ||
-                                  imageSettingsQuery.isError ||
-                                  connectionsQuery.isLoading ||
-                                  connectionsQuery.isError ||
-                                  updateImages.isPending
-                                }
-                                value={imageSettings?.creatorConnectionIds[selectedCreator.id] ?? ""}
-                                onChange={(event) =>
-                                  updateImages.mutate(
-                                    { creatorId: selectedCreator.id, connectionId: event.target.value || null },
-                                    { onError: (error) => toast.error(errorMessage(error)) },
-                                  )
-                                }
-                                className="min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50 sm:text-sm"
-                              >
-                                <option value="">{t("ui.slurp.settings.creators.inheritImageConnection")}</option>
-                                {imageConnections.map((connection) => (
-                                  <option key={connection.id} value={connection.id}>
-                                    {connection.name ?? connection.model ?? connection.id}
-                                  </option>
-                                ))}
-                              </select>
-                            </Field>
-                            {selectedCreator.sourceAccountId && !personaCreator(selectedCreator) && (
-                              <Field
-                                label={t("ui.slurp.settings.creators.imageInstructions")}
-                                detail={t("ui.slurp.settings.creators.imageInstructionsDetail")}
-                              >
-                                <select
-                                  disabled={updateSettings.isPending}
-                                  value={String(
-                                    settings.characterImageInstructions[selectedCreator.sourceAccountId] ?? "engine",
-                                  )}
-                                  onChange={(event) => {
-                                    const characterId = selectedCreator.sourceAccountId!;
-                                    const { [characterId]: _previous, ...rest } = settings.characterImageInstructions;
-                                    void update(
-                                      "characterImageInstructions",
-                                      event.target.value === "engine"
-                                        ? rest
-                                        : { ...rest, [characterId]: event.target.value === "true" },
-                                    );
-                                  }}
-                                  className="min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50 sm:text-sm"
-                                >
-                                  <option value="engine">
-                                    {t("ui.slurp.settings.creators.imageInstructionsEngine")}
-                                  </option>
-                                  <option value="true">{t("ui.slurp.settings.creators.imageInstructionsOn")}</option>
-                                  <option value="false">{t("ui.slurp.settings.creators.imageInstructionsOff")}</option>
-                                </select>
-                              </Field>
-                            )}
-                          </SettingsGroup>
-
-                          {/* The message policy and prices had working, ownership-gated endpoints
-                              and no UI at all, so every Creator was stuck on the shipped defaults
-                              and the paid DM policy could never be chosen. Only the persona that
-                              operates a Creator may set them, which is what the routes enforce. */}
-                          {personaCreator(selectedCreator) && selectedCreator.sourceAccountId && (
-                            <CreatorMessagingGroup
-                              creatorId={selectedCreator.id}
-                              personaId={selectedCreator.sourceAccountId}
-                              setMessaging={setCreatorMessaging}
-                              setPrice={setCreatorPrice}
-                            />
-                          )}
-
-                          {selectedCreator.scheduleStatus &&
-                            selectedCreator.scheduleStatus.state !== "not-applicable" && (
-                              <div className="space-y-2 rounded-lg border border-[var(--border)] p-3">
-                                <p className="text-xs leading-5 text-[var(--slurp-muted)]">
-                                  <span className="font-semibold text-[var(--foreground)]">
-                                    {t("ui.slurp.settings.creators.conversationSchedule")}
-                                  </span>{" "}
-                                  {t(`ui.slurp.settings.creators.schedule.${selectedCreator.scheduleStatus.state}`)}
-                                </p>
-                                {(selectedCreator.scheduleStatus.state === "stale" ||
-                                  selectedCreator.scheduleStatus.state === "missing") && (
-                                  <button
-                                    type="button"
-                                    disabled={refreshConversationSchedule.isPending}
-                                    onClick={() => {
-                                      void showConfirmDialog({
-                                        title: t("ui.slurp.settings.creators.refreshConversationSchedule"),
-                                        message: t("ui.slurp.settings.creators.refreshConversationScheduleConfirm"),
-                                        confirmLabel: t("ui.slurp.settings.creators.refreshConversationSchedule"),
-                                        cancelLabel: t("ui.slurp.actions.cancel"),
-                                      }).then((confirmed) => {
-                                        if (!confirmed) return;
-                                        refreshConversationSchedule.mutate(selectedCreator.id);
-                                      });
-                                    }}
-                                    className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
-                                  >
-                                    {refreshConversationSchedule.isPending ? (
-                                      <Loader2 size={14} className="animate-spin" />
-                                    ) : (
-                                      <CalendarClock size={14} />
-                                    )}
-                                    {t("ui.slurp.settings.creators.refreshConversationSchedule")}
-                                  </button>
-                                )}
-                              </div>
-                            )}
-                          {selectedCreator.sourceStatus.state === "missing" && (
-                            <p className="rounded-lg border border-red-400/30 bg-red-400/5 p-3 text-xs text-red-300">
-                              {t("ui.slurp.settings.creators.sourceMissing")}
-                            </p>
-                          )}
-                          {selectedCreator.sourceStatus.state === "changed" && (
-                            <div className="rounded-lg border border-[var(--border)] bg-[var(--accent)]/30 p-3">
-                              <p className="text-xs font-semibold">{t("ui.slurp.settings.creators.sourceChanged")}</p>
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                {selectedCreator.disclosureMode === "open" && (
-                                  <button
-                                    type="button"
-                                    disabled={adoptSourceIdentity.isPending}
-                                    onClick={() =>
-                                      adoptSourceIdentity.mutate(selectedCreator.id, {
-                                        onError: (error) => toast.error(errorMessage(error)),
-                                      })
-                                    }
-                                    className="min-h-11 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
-                                  >
-                                    {t("ui.slurp.settings.creators.acceptIdentity")}
-                                  </button>
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={() => onRedraftCreator(selectedCreator)}
-                                  className="min-h-11 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold"
-                                >
-                                  {t("ui.slurp.settings.creators.reviewRedraft")}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={dismissSourceChanges.isPending}
-                                  onClick={() =>
-                                    dismissSourceChanges.mutate(selectedCreator.id, {
-                                      onSuccess: () => toast.success(t("ui.slurp.settings.creators.acceptedChanges")),
-                                      onError: (error) => toast.error(errorMessage(error)),
-                                    })
-                                  }
-                                  className="min-h-11 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold disabled:opacity-50"
-                                >
-                                  {t("ui.slurp.settings.creators.acceptChanges")}
-                                </button>
-                              </div>
-                            </div>
-                          )}
-
-                          <details className="rounded-lg border border-red-400/25">
-                            <summary className="flex min-h-11 cursor-pointer list-none items-center px-3 text-xs font-semibold text-red-300 [&::-webkit-details-marker]:hidden">
-                              {t("ui.slurp.settings.creators.moreActions")}
-                            </summary>
-                            <div className="border-t border-red-400/20 p-3">
-                              <button
-                                type="button"
-                                disabled={deleteCreator.isPending}
-                                onClick={() => void confirmDeleteCreator(selectedCreator)}
-                                className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-red-400/50 px-3 text-xs font-semibold text-red-300 hover:bg-red-400/10 disabled:opacity-50"
-                              >
-                                <Trash2 size={14} />
-                                {t("ui.slurp.settings.creators.delete")}
-                              </button>
-                            </div>
-                          </details>
-                        </div>
-                      </section>
-                    </div>
-                  ) : (
-                    <div className="rounded-lg border border-dashed border-[var(--border)] p-8 text-center text-sm text-[var(--muted-foreground)]">
-                      {t("ui.slurp.settings.creators.none")}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {section === "wallet" && (
-                <div className="space-y-5">
-                  <SectionTitle
-                    title={t("ui.slurp.settings.wallet.title", { defaultValue: "SlurpCoins" })}
-                    detail={t("ui.slurp.settings.wallet.detail", {
-                      defaultValue: "Prices, earning, and the daily stipend.",
-                    })}
-                  />
-                  <div className="rounded-xl bg-[var(--slurp-surface-raised)] p-4 text-xs leading-5 text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)]">
-                    <p>
-                      {t("ui.slurp.settings.wallet.explainer", {
-                        defaultValue:
-                          "With SlurpCoins off, prices are decoration and nothing is ever charged. With them on, unlocking a post and subscribing to a creator both cost SlurpCoins, and running out has consequences: a subscription you cannot pay for lapses.",
-                      })}
-                    </p>
-                    <p className="mt-2">
-                      {t("ui.slurp.settings.wallet.explainerEarning", {
-                        defaultValue:
-                          "The daily stipend tops your balance up to a floor rather than adding to it, so a spender is never stranded and a hoarder is never paid to hoard. Ad and posting rewards are capped per day, so nothing here can be farmed.",
-                      })}
-                    </p>
-                  </div>
-                  <Toggle
-                    label={t("ui.slurp.settings.wallet.enabled", {
-                      defaultValue: "SlurpCoins actually cost something",
-                    })}
-                    detail={t("ui.slurp.settings.wallet.enabledDetail", {
-                      defaultValue: "Off keeps prices as decoration, which is how Slurp has always behaved.",
-                    })}
-                    value={settings.walletEnabled}
-                    onChange={(value) => update("walletEnabled", value)}
-                  />
-                  <Field
-                    label={t("ui.slurp.settings.wallet.unlockCost", { defaultValue: "Unlock a post" })}
-                    detail={t("ui.slurp.settings.wallet.unlockCostDetail", {
-                      defaultValue: "Default price for a locked post. A post keeps the price it was created with.",
-                    })}
-                  >
-                    <NumberSetting
-                      value={settings.walletUnlockCost}
-                      min={0}
-                      max={9999}
-                      onSave={(value) => update("walletUnlockCost", value)}
-                    />
-                  </Field>
-                  <Field
-                    label={t("ui.slurp.settings.wallet.subscriptionCost", { defaultValue: "Subscribe, per week" })}
-                    detail={t("ui.slurp.settings.wallet.subscriptionCostDetail", {
-                      defaultValue:
-                        "Default weekly price. A creator with its own price uses that instead. Subscriptions renew every seven days.",
-                    })}
-                  >
-                    <NumberSetting
-                      value={settings.walletSubscriptionCost}
-                      min={0}
-                      max={9999}
-                      onSave={(value) => update("walletSubscriptionCost", value)}
-                    />
-                  </Field>
-                  <Toggle
-                    label={t("ui.slurp.settings.wallet.pricingDynamicCharacters", {
-                      defaultValue: "Character Creators set their own prices",
-                    })}
-                    detail={t("ui.slurp.settings.wallet.pricingDynamicCharactersDetail", {
-                      defaultValue:
-                        "Once a week, each character Creator moves its subscription, locked post, and commission prices with its popularity. Current subscribers keep their price.",
-                    })}
-                    value={settings.pricingDynamicCharacters}
-                    onChange={(value) => update("pricingDynamicCharacters", value)}
-                  />
-                  {settings.pricingDynamicCharacters && (
-                    <Field
-                      label={t("ui.slurp.settings.wallet.pricingMaxWeeklyChange", {
-                        defaultValue: "Largest weekly price change, %",
-                      })}
-                      detail={t("ui.slurp.settings.wallet.pricingMaxWeeklyChangeDetail", {
-                        defaultValue: "How far one weekly adjustment may move a price. Zero freezes prices.",
-                      })}
-                    >
-                      <NumberSetting
-                        value={settings.pricingMaxWeeklyChangePercent}
-                        min={0}
-                        max={100}
-                        onSave={(value) => update("pricingMaxWeeklyChangePercent", value)}
-                      />
-                    </Field>
-                  )}
-                  <Field
-                    label={t("ui.slurp.settings.wallet.stipendFloor", { defaultValue: "Daily top-up floor" })}
-                    detail={t("ui.slurp.settings.wallet.stipendFloorDetail", {
-                      defaultValue:
-                        "Once a day, a balance below this is topped up to it. Zero turns the stipend off entirely.",
-                    })}
-                  >
-                    <NumberSetting
-                      value={settings.walletStipendFloor}
-                      min={0}
-                      max={99_999}
-                      onSave={(value) => update("walletStipendFloor", value)}
-                    />
-                  </Field>
-                  <Field
-                    label={t("ui.slurp.settings.wallet.dayStartHour")}
-                    detail={t("ui.slurp.settings.wallet.dayStartHourDetail")}
-                  >
-                    <NumberSetting
-                      value={settings.walletDayStartHour}
-                      min={0}
-                      max={23}
-                      onSave={(value) => update("walletDayStartHour", value)}
-                    />
-                  </Field>
-                  <Field
-                    label={t("ui.slurp.settings.wallet.adReward", { defaultValue: "Paid per ad you act on" })}
-                    detail={t("ui.slurp.settings.wallet.adRewardDetail", {
-                      defaultValue: "Zero turns ad rewards off.",
-                    })}
-                  >
-                    <NumberSetting
-                      value={settings.walletAdReward}
-                      min={0}
-                      max={999}
-                      onSave={(value) => update("walletAdReward", value)}
-                    />
-                  </Field>
-                  <Field
-                    label={t("ui.slurp.settings.wallet.adDailyCap", { defaultValue: "Most ad SlurpCoins per day" })}
-                    detail={t("ui.slurp.settings.wallet.adDailyCapDetail", {
-                      defaultValue: "The cap is what stops ad clicking from becoming a job.",
-                    })}
-                  >
-                    <NumberSetting
-                      value={settings.walletAdDailyCap}
-                      min={0}
-                      max={9999}
-                      onSave={(value) => update("walletAdDailyCap", value)}
-                    />
-                  </Field>
-                  <Field
-                    label={t("ui.slurp.settings.wallet.engagementReward", { defaultValue: "Paid per post or comment" })}
-                    detail={t("ui.slurp.settings.wallet.engagementRewardDetail", {
-                      defaultValue: "Zero turns posting rewards off.",
-                    })}
-                  >
-                    <NumberSetting
-                      value={settings.walletEngagementReward}
-                      min={0}
-                      max={999}
-                      onSave={(value) => update("walletEngagementReward", value)}
-                    />
-                  </Field>
-                  <Field
-                    label={t("ui.slurp.settings.wallet.engagementDailyCap", {
-                      defaultValue: "Most posting SlurpCoins per day",
-                    })}
-                    detail={t("ui.slurp.settings.wallet.engagementDailyCapDetail", {
-                      defaultValue: "The cap is what stops posting from becoming a grind.",
-                    })}
-                  >
-                    <NumberSetting
-                      value={settings.walletEngagementDailyCap}
-                      min={0}
-                      max={9999}
-                      onSave={(value) => update("walletEngagementDailyCap", value)}
-                    />
-                  </Field>
-                  <Field
-                    label={t("ui.slurp.settings.wallet.creatorShare", { defaultValue: "Creator keeps, in percent" })}
-                    detail={t("ui.slurp.settings.wallet.creatorShareDetail", {
-                      defaultValue:
-                        "When a fan pays one of your own creators, this share reaches your wallet. Zero means your creators earn nothing.",
-                    })}
-                  >
-                    <NumberSetting
-                      value={settings.walletCreatorRevenueSharePercent}
-                      min={0}
-                      max={100}
-                      onSave={(value) => update("walletCreatorRevenueSharePercent", value)}
-                    />
-                  </Field>
-                </div>
-              )}
-
-              {section === "ads" && (
-                <div className="space-y-5">
-                  <SectionTitle title={t("ui.slurp.settings.ads.title")} detail={t("ui.slurp.settings.ads.detail")} />
-                  <div className="rounded-xl bg-[var(--slurp-surface-raised)] p-4 text-xs leading-5 text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)]">
-                    <p>{t("ui.slurp.settings.ads.explainer")}</p>
-                    <p className="mt-2">{t("ui.slurp.settings.ads.explainerPool")}</p>
-                    {settings.walletEnabled && settings.walletAdReward > 0 && (
-                      <p className="mt-2">
-                        {t("ui.slurp.settings.ads.explainerEarning", {
-                          defaultValue:
-                            "Acting on an ad pays {{reward}} SlurpCoins, up to {{cap}} a day. Change either in SlurpCoins.",
-                          reward: settings.walletAdReward,
-                          cap: settings.walletAdDailyCap,
-                        })}
-                      </p>
-                    )}
-                  </div>
-                  <SettingsGroup title={t("ui.slurp.settings.ads.feedGroup", { defaultValue: "In your feed" })}>
-                    <Toggle
-                      label={t("ui.slurp.settings.inlinePromotions")}
-                      detail={t("ui.slurp.settings.inlinePromotionsDetail")}
-                      value={settings.inlineAdsEnabled}
-                      onChange={(value) => update("inlineAdsEnabled", value)}
-                    />
-                    <Field
-                      label={t("ui.slurp.settings.ads.frequency")}
-                      detail={t("ui.slurp.settings.ads.frequencyDetail")}
-                    >
-                      <select
-                        value={settings.inlineAdsFrequency}
-                        disabled={updateSettings.isPending}
-                        onChange={(event) =>
-                          void update("inlineAdsFrequency", event.target.value as SlurpSettings["inlineAdsFrequency"])
-                        }
-                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                      >
-                        <option value="light">{t("ui.slurp.settings.ads.frequencyLight")}</option>
-                        <option value="standard">{t("ui.slurp.settings.ads.frequencyStandard")}</option>
-                        <option value="frequent">{t("ui.slurp.settings.ads.frequencyFrequent")}</option>
-                      </select>
-                    </Field>
-                    <Field
-                      label={t("ui.slurp.settings.ads.steering")}
-                      detail={t("ui.slurp.settings.ads.steeringDetail")}
-                    >
-                      <select
-                        value={settings.inlineAdsSteering}
-                        disabled={updateSettings.isPending}
-                        onChange={(event) =>
-                          void update("inlineAdsSteering", event.target.value as SlurpSettings["inlineAdsSteering"])
-                        }
-                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                      >
-                        <option value="personalized">{t("ui.slurp.settings.ads.steeringPersonalized")}</option>
-                        <option value="balanced">{t("ui.slurp.settings.ads.steeringBalanced")}</option>
-                        <option value="random">{t("ui.slurp.settings.ads.steeringRandom")}</option>
-                      </select>
-                    </Field>
-                    <Field label={t("ui.slurp.settings.ads.ceiling")} detail={t("ui.slurp.settings.ads.ceilingDetail")}>
-                      <select
-                        value={settings.inlineAdsContentCeiling}
-                        disabled={updateSettings.isPending}
-                        onChange={(event) =>
-                          void update(
-                            "inlineAdsContentCeiling",
-                            event.target.value as SlurpSettings["inlineAdsContentCeiling"],
-                          )
-                        }
-                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                      >
-                        <option value="tame">{t("ui.slurp.settings.ads.ceilingTame")}</option>
-                        <option value="suggestive">{t("ui.slurp.settings.ads.ceilingSuggestive")}</option>
-                        <option value="explicit">{t("ui.slurp.settings.ads.ceilingExplicit")}</option>
-                      </select>
-                    </Field>
-                  </SettingsGroup>
-                  <SettingsGroup title={t("ui.slurp.settings.ads.voiceGroup", { defaultValue: "How ads read" })}>
-                    <Field label={t("ui.slurp.settings.ads.tone")} detail={t("ui.slurp.settings.ads.toneDetail")}>
-                      <select
-                        value={settings.inlineAdsTone}
-                        disabled={updateSettings.isPending}
-                        onChange={(event) =>
-                          void update("inlineAdsTone", event.target.value as SlurpSettings["inlineAdsTone"])
-                        }
-                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                      >
-                        <option value="corporate">{t("ui.slurp.settings.ads.toneCorporate")}</option>
-                        <option value="scammy">{t("ui.slurp.settings.ads.toneScammy")}</option>
-                        <option value="local">{t("ui.slurp.settings.ads.toneLocal")}</option>
-                        <option value="luxury">{t("ui.slurp.settings.ads.toneLuxury")}</option>
-                        <option value="unhinged">{t("ui.slurp.settings.ads.toneUnhinged")}</option>
-                      </select>
-                    </Field>
-                    <Field label={t("ui.slurp.settings.ads.era")} detail={t("ui.slurp.settings.ads.eraDetail")}>
-                      <select
-                        value={settings.inlineAdsEra}
-                        disabled={updateSettings.isPending}
-                        onChange={(event) =>
-                          void update("inlineAdsEra", event.target.value as SlurpSettings["inlineAdsEra"])
-                        }
-                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                      >
-                        <option value="present">{t("ui.slurp.settings.ads.eraPresent")}</option>
-                        <option value="nineties">{t("ui.slurp.settings.ads.eraNineties")}</option>
-                        <option value="cyberpunk">{t("ui.slurp.settings.ads.eraCyberpunk")}</option>
-                        <option value="retrofuture">{t("ui.slurp.settings.ads.eraRetrofuture")}</option>
-                      </select>
-                    </Field>
-                    <Field label={t("ui.slurp.settings.ads.world")} detail={t("ui.slurp.settings.ads.worldDetail")}>
-                      <textarea
-                        rows={3}
-                        value={adsWorldDraft ?? settings.inlineAdsWorldContext}
-                        maxLength={1200}
-                        onChange={(event) => setAdsWorldDraft(event.target.value)}
-                        onBlur={() => {
-                          const next = adsWorldDraft;
-                          setAdsWorldDraft(null);
-                          if (next !== null && next !== settings.inlineAdsWorldContext)
-                            void update("inlineAdsWorldContext", next);
-                        }}
-                        className="w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] p-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                      />
-                    </Field>
-                    <Toggle
-                      label={t("ui.slurp.settings.ads.images")}
-                      detail={t("ui.slurp.settings.ads.imagesDetail")}
-                      value={settings.inlineAdsImagesEnabled}
-                      onChange={(value) => update("inlineAdsImagesEnabled", value)}
-                    />
-                    <Field
-                      label={t("ui.slurp.settings.ads.lorebook")}
-                      detail={t("ui.slurp.settings.ads.lorebookDetail")}
-                    >
-                      <div className="flex flex-wrap gap-2">
-                        <select
-                          value={settings.inlineAdsLorebookId ?? ""}
-                          disabled={updateSettings.isPending || adLorebooks.isLoading}
-                          onChange={(event) =>
-                            void save({
-                              inlineAdsLorebookId: event.target.value || null,
-                              // Clearing the fingerprint makes the next sync regenerate against
-                              // the newly chosen book instead of treating it as already applied.
-                              inlineAdsLorebookRevision: null,
-                            })
-                          }
-                          className="min-h-11 min-w-0 flex-1 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                        >
-                          <option value="">{t("ui.slurp.settings.ads.lorebookNone")}</option>
-                          {(adLorebooks.data?.items ?? []).map((book) => (
-                            <option key={book.id} value={book.id}>
-                              {book.name}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          disabled={!settings.inlineAdsLorebookId || syncAdLorebook.isPending}
-                          onClick={() =>
-                            syncAdLorebook.mutate(true, {
-                              onSuccess: (result) =>
-                                toast.success(t(`ui.slurp.settings.ads.lorebookSync.${result.outcome}`)),
-                              onError: (error) => toast.error(errorMessage(error)),
-                            })
-                          }
-                          className="min-h-11 rounded-lg border border-[var(--slurp-outline)] px-4 text-sm font-bold hover:bg-[var(--accent)] disabled:opacity-50"
-                        >
-                          {syncAdLorebook.isPending
-                            ? t("ui.slurp.settings.ads.lorebookSyncing")
-                            : t("ui.slurp.settings.ads.lorebookSyncNow")}
-                        </button>
-                      </div>
-                    </Field>
-                  </SettingsGroup>
-                  <div className="rounded-xl border border-[var(--slurp-outline)] p-4">
-                    <h2 className="text-sm font-bold">{t("ui.slurp.settings.ads.pool")}</h2>
-                    <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted)]">
-                      {t("ui.slurp.settings.ads.poolDetail", { count: adPool.data?.items.length ?? 0 })}
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={generateAds.isPending}
-                        onClick={() =>
-                          generateAds.mutate(undefined, {
-                            onSuccess: (result) =>
-                              toast.success(
-                                t("ui.slurp.settings.ads.generated", {
-                                  count: result.items.length,
-                                  retired: result.retired.length,
-                                  images: result.images,
-                                }),
-                              ),
-                            onError: (error) => toast.error(errorMessage(error)),
-                          })
-                        }
-                        className="min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 hover:opacity-90 disabled:opacity-50"
-                      >
-                        {generateAds.isPending
-                          ? t("ui.slurp.settings.ads.generating")
-                          : t("ui.slurp.settings.ads.generate")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void api
-                            .download("/slurp2/noodler/ads/export", "slurp-ads.json")
-                            .catch((error: unknown) => toast.error(errorMessage(error)))
-                        }
-                        className="min-h-9 rounded-lg border border-[var(--slurp-outline)] px-3 text-xs font-bold hover:bg-[var(--accent)]"
-                      >
-                        {t("ui.slurp.settings.ads.export")}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={importAds.isPending}
-                        onClick={() => adsImportRef.current?.click()}
-                        className="min-h-9 rounded-lg border border-[var(--slurp-outline)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:opacity-50"
-                      >
-                        {importAds.isPending ? t("ui.slurp.settings.ads.importing") : t("ui.slurp.settings.ads.import")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCustomAdOpen((open) => !open)}
-                        aria-expanded={customAdOpen}
-                        className="flex min-h-9 items-center gap-1 rounded-lg border border-[var(--slurp-outline)] px-3 text-xs font-bold hover:bg-[var(--accent)]"
-                      >
-                        <Plus size={13} aria-hidden="true" />
-                        {t("ui.slurp.settings.ads.createOwn")}
-                      </button>
-                      <input
-                        ref={adsImportRef}
-                        type="file"
-                        accept="application/json,.json"
-                        className="hidden"
-                        onChange={(event) => {
-                          const file = event.target.files?.[0];
-                          event.target.value = "";
-                          if (!file) return;
-                          void file
-                            .text()
-                            .then((text) => importAds.mutateAsync(JSON.parse(text)))
-                            .then((result) =>
-                              toast.success(t("ui.slurp.settings.ads.imported", { count: result.imported })),
-                            )
-                            .catch((error) => toast.error(errorMessage(error)));
-                        }}
-                      />
-                    </div>
-                    {customAdOpen && (
-                      <form
-                        className="mt-3 space-y-2 rounded-lg border border-[var(--slurp-outline)] p-3"
-                        onSubmit={(event) => {
-                          event.preventDefault();
-                          createAd.mutate(customAd, {
-                            onSuccess: () => {
-                              toast.success(t("ui.slurp.settings.ads.created", { brand: customAd.brand }));
-                              setCustomAd({ brand: "", product: "", copy: "", contentRating: "tame" });
-                              setCustomAdOpen(false);
-                            },
-                            onError: (error) => toast.error(errorMessage(error)),
-                          });
-                        }}
-                      >
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          <input
-                            required
-                            maxLength={80}
-                            value={customAd.brand}
-                            onChange={(event) => setCustomAd((prev) => ({ ...prev, brand: event.target.value }))}
-                            placeholder={t("ui.slurp.settings.ads.createBrandPlaceholder")}
-                            aria-label={t("ui.slurp.settings.ads.createBrandPlaceholder")}
-                            className="min-h-9 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
-                          />
-                          <input
-                            required
-                            maxLength={120}
-                            value={customAd.product}
-                            onChange={(event) => setCustomAd((prev) => ({ ...prev, product: event.target.value }))}
-                            placeholder={t("ui.slurp.settings.ads.createProductPlaceholder")}
-                            aria-label={t("ui.slurp.settings.ads.createProductPlaceholder")}
-                            className="min-h-9 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
-                          />
-                        </div>
-                        <textarea
-                          required
-                          maxLength={600}
-                          rows={2}
-                          value={customAd.copy}
-                          onChange={(event) => setCustomAd((prev) => ({ ...prev, copy: event.target.value }))}
-                          placeholder={t("ui.slurp.settings.ads.createCopyPlaceholder")}
-                          aria-label={t("ui.slurp.settings.ads.createCopyPlaceholder")}
-                          className="w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
-                        />
-                        <div className="flex flex-wrap items-center gap-2">
-                          <select
-                            value={customAd.contentRating}
-                            onChange={(event) =>
-                              setCustomAd((prev) => ({
-                                ...prev,
-                                contentRating: event.target.value as SlurpContentRating,
-                              }))
-                            }
-                            aria-label={t("ui.slurp.settings.ads.ceiling")}
-                            className="min-h-9 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
-                          >
-                            <option value="tame">{t("ui.slurp.settings.ads.ceilingTame")}</option>
-                            <option value="suggestive">{t("ui.slurp.settings.ads.ceilingSuggestive")}</option>
-                            <option value="explicit">{t("ui.slurp.settings.ads.ceilingExplicit")}</option>
-                          </select>
-                          <button
-                            type="submit"
-                            disabled={createAd.isPending}
-                            className="min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 hover:opacity-90 disabled:opacity-50"
-                          >
-                            {createAd.isPending
-                              ? t("ui.slurp.settings.ads.creating")
-                              : t("ui.slurp.settings.ads.createSubmit")}
-                          </button>
-                        </div>
-                      </form>
-                    )}
-                    {/* The pool used to be a bare count, so a bad generated ad could only be
-                        removed by resetting everything. */}
-                    <ul className="mt-4 space-y-2">
-                      {(adPool.data?.items ?? []).map((ad) => {
-                        const builtin = ad.origin === "builtin";
-                        return (
-                          <li
-                            key={ad.id}
-                            className="flex items-start gap-3 rounded-lg bg-[var(--slurp-surface-raised)] p-3 ring-1 ring-inset ring-[var(--slurp-outline)]"
-                          >
-                            {ad.imageUrl ? (
-                              <SlurpMediaImg
-                                src={ad.imageUrl}
-                                alt=""
-                                loading="lazy"
-                                className="h-14 w-20 shrink-0 rounded-lg object-cover"
-                              />
-                            ) : (
-                              <span
-                                aria-hidden="true"
-                                className="flex h-14 w-20 shrink-0 items-center justify-center rounded-lg bg-[var(--slurp-canvas)] text-[var(--slurp-muted)]"
-                              >
-                                <Image size={16} />
-                              </span>
-                            )}
-                            {editingAd?.id === ad.id ? (
-                              <form
-                                className="min-w-0 flex-1 space-y-2"
-                                onSubmit={(event) => {
-                                  event.preventDefault();
-                                  updateAd.mutate(editingAd, {
-                                    onSuccess: () => {
-                                      toast.success(t("ui.slurp.settings.ads.edited", { brand: editingAd.brand }));
-                                      setEditingAd(null);
-                                    },
-                                    onError: (error) => toast.error(errorMessage(error)),
-                                  });
-                                }}
-                              >
-                                <div className="grid gap-2 sm:grid-cols-2">
-                                  <input
-                                    required
-                                    maxLength={80}
-                                    value={editingAd.brand}
-                                    onChange={(event) => setEditingAd({ ...editingAd, brand: event.target.value })}
-                                    placeholder={t("ui.slurp.settings.ads.createBrandPlaceholder")}
-                                    aria-label={t("ui.slurp.settings.ads.createBrandPlaceholder")}
-                                    className="min-h-9 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
-                                  />
-                                  <input
-                                    required
-                                    maxLength={120}
-                                    value={editingAd.product}
-                                    onChange={(event) => setEditingAd({ ...editingAd, product: event.target.value })}
-                                    placeholder={t("ui.slurp.settings.ads.createProductPlaceholder")}
-                                    aria-label={t("ui.slurp.settings.ads.createProductPlaceholder")}
-                                    className="min-h-9 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
-                                  />
-                                </div>
-                                <textarea
-                                  required
-                                  maxLength={600}
-                                  rows={2}
-                                  value={editingAd.copy}
-                                  onChange={(event) => setEditingAd({ ...editingAd, copy: event.target.value })}
-                                  placeholder={t("ui.slurp.settings.ads.createCopyPlaceholder")}
-                                  aria-label={t("ui.slurp.settings.ads.createCopyPlaceholder")}
-                                  className="w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
-                                />
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <select
-                                    value={editingAd.contentRating}
-                                    onChange={(event) =>
-                                      setEditingAd({
-                                        ...editingAd,
-                                        contentRating: event.target.value as SlurpContentRating,
-                                      })
-                                    }
-                                    aria-label={t("ui.slurp.settings.ads.ceiling")}
-                                    className="min-h-9 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
-                                  >
-                                    <option value="tame">{t("ui.slurp.settings.ads.ceilingTame")}</option>
-                                    <option value="suggestive">{t("ui.slurp.settings.ads.ceilingSuggestive")}</option>
-                                    <option value="explicit">{t("ui.slurp.settings.ads.ceilingExplicit")}</option>
-                                  </select>
-                                  <button
-                                    type="submit"
-                                    disabled={updateAd.isPending}
-                                    className="min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 hover:opacity-90 disabled:opacity-50"
-                                  >
-                                    {t("ui.slurp.settings.ads.editSubmit")}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setEditingAd(null)}
-                                    className="min-h-9 rounded-lg px-3 text-xs font-bold text-[var(--slurp-muted)] hover:bg-[var(--accent)]"
-                                  >
-                                    {t("ui.slurp.settings.ads.editCancel")}
-                                  </button>
-                                </div>
-                              </form>
-                            ) : (
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-sm font-bold">{ad.brand}</p>
-                                <p className="truncate text-xs font-semibold text-[var(--slurp-muted)]">{ad.product}</p>
-                                <p className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--slurp-muted)]">
-                                  {ad.copy}
-                                </p>
-                                <p className="mt-1 text-[0.65rem] font-bold uppercase tracking-[0.12em] text-[var(--slurp-muted)]">
-                                  {t(
-                                    `ui.slurp.settings.ads.ceiling${ad.contentRating === "suggestive" ? "Suggestive" : ad.contentRating === "explicit" ? "Explicit" : "Tame"}`,
-                                  )}
-                                  {ad.retiredAt ? ` · ${t("ui.slurp.settings.ads.retired")}` : ""}
-                                </p>
-                              </div>
-                            )}
-                            <div className="flex shrink-0 flex-col gap-1">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setEditingAd({
-                                    id: ad.id,
-                                    brand: ad.brand,
-                                    product: ad.product,
-                                    copy: ad.copy,
-                                    contentRating: ad.contentRating ?? "tame",
-                                  })
-                                }
-                                aria-label={t("ui.slurp.settings.ads.editAd", { brand: ad.brand })}
-                                title={t("ui.slurp.settings.ads.editAd", { brand: ad.brand })}
-                                className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--slurp-muted)] hover:bg-[var(--accent)] hover:text-[var(--slurp-text)]"
-                              >
-                                <Pencil size={15} aria-hidden="true" />
-                              </button>
-                              <button
-                                type="button"
-                                disabled={generateAdImage.isPending}
-                                onClick={() =>
-                                  generateAdImage.mutate(ad.id, {
-                                    onSuccess: () => toast.success(t("ui.slurp.settings.ads.imageGenerated")),
-                                    onError: (error) => toast.error(errorMessage(error)),
-                                  })
-                                }
-                                aria-label={t("ui.slurp.settings.ads.regenerateImage", { brand: ad.brand })}
-                                title={t("ui.slurp.settings.ads.regenerateImage", { brand: ad.brand })}
-                                className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--slurp-muted)] hover:bg-[var(--accent)] hover:text-[var(--slurp-text)] disabled:opacity-50"
-                              >
-                                <Image size={15} aria-hidden="true" />
-                              </button>
-                              {ad.retiredAt ? (
-                                <button
-                                  type="button"
-                                  disabled={updateAd.isPending}
-                                  onClick={() =>
-                                    updateAd.mutate(
-                                      { id: ad.id, retiredAt: null },
-                                      {
-                                        onSuccess: () =>
-                                          toast.success(t("ui.slurp.settings.ads.restored", { brand: ad.brand })),
-                                        onError: (error) => toast.error(errorMessage(error)),
-                                      },
-                                    )
-                                  }
-                                  aria-label={t("ui.slurp.settings.ads.restoreAd", { brand: ad.brand })}
-                                  title={t("ui.slurp.settings.ads.restoreAd", { brand: ad.brand })}
-                                  className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--slurp-muted)] hover:bg-[var(--accent)] hover:text-[var(--slurp-text)] disabled:opacity-50"
-                                >
-                                  <RotateCcw size={15} aria-hidden="true" />
-                                </button>
-                              ) : null}
-                              {!(builtin && ad.retiredAt) && (
-                                <button
-                                  type="button"
-                                  disabled={deleteAd.isPending}
-                                  onClick={() =>
-                                    deleteAd.mutate(ad.id, {
-                                      onSuccess: () =>
-                                        toast.success(
-                                          t(`ui.slurp.settings.ads.${builtin ? "hiddenBuiltin" : "deleted"}`, {
-                                            brand: ad.brand,
-                                          }),
-                                        ),
-                                      onError: (error) => toast.error(errorMessage(error)),
-                                    })
-                                  }
-                                  aria-label={t(`ui.slurp.settings.ads.${builtin ? "hideAd" : "deleteAd"}`, {
-                                    brand: ad.brand,
-                                  })}
-                                  title={t(`ui.slurp.settings.ads.${builtin ? "hideAd" : "deleteAd"}`, {
-                                    brand: ad.brand,
-                                  })}
-                                  className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--slurp-muted)] hover:bg-[var(--accent)] hover:text-red-300 disabled:opacity-50"
-                                >
-                                  <Trash2 size={15} aria-hidden="true" />
-                                </button>
-                              )}
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                    {(adPool.data?.items.length ?? 0) === 0 && (
-                      <p className="mt-4 text-xs leading-5 text-[var(--slurp-muted)]">
-                        {t("ui.slurp.settings.ads.poolEmpty")}
-                      </p>
-                    )}
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-bold">{t("ui.slurp.settings.ads.themes")}</h2>
-                    <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted)]">
-                      {t("ui.slurp.settings.ads.themesDetail")}
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {["coffee", "beauty", "luxury", "nightlife", "fashion"].map((tag) => {
-                        const selected = settings.inlineAdsPreferredTags.includes(tag);
-                        return (
-                          <button
-                            key={tag}
-                            type="button"
-                            aria-pressed={selected}
-                            disabled={updateSettings.isPending}
-                            onClick={() =>
-                              void update(
-                                "inlineAdsPreferredTags",
-                                selected
-                                  ? settings.inlineAdsPreferredTags.filter((value) => value !== tag)
-                                  : [...settings.inlineAdsPreferredTags, tag],
-                              )
-                            }
-                            className={`min-h-10 rounded-full px-4 text-sm font-semibold ring-1 ring-inset transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 ${selected ? "bg-[var(--slurp-nav-active)] text-[var(--slurp-text)] ring-[var(--noodle-accent)]/45" : "bg-[var(--slurp-surface-raised)] text-[var(--slurp-muted)] ring-[var(--slurp-outline)] hover:text-[var(--slurp-text)]"}`}
-                          >
-                            {t(`ui.slurp.settings.ads.theme.${tag}`)}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  {viewerPersonaId && (adState.data?.hiddenBrands.length ?? 0) > 0 && (
-                    <div>
-                      <h2 className="text-sm font-bold">{t("ui.slurp.settings.ads.hiddenBrands")}</h2>
-                      <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted)]">
-                        {t("ui.slurp.settings.ads.hiddenBrandsDetail")}
-                      </p>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {adState.data?.hiddenBrands.map((brand) => (
-                          <button
-                            key={brand}
-                            type="button"
-                            disabled={unhideBrand.isPending}
-                            onClick={() =>
-                              unhideBrand.mutate(
-                                { personaId: viewerPersonaId, brand },
-                                {
-                                  onSuccess: () => toast.success(t("ui.slurp.settings.ads.brandUnhidden", { brand })),
-                                  onError: (error) => toast.error(errorMessage(error)),
-                                },
-                              )
-                            }
-                            className="inline-flex min-h-10 items-center gap-2 rounded-full bg-[var(--slurp-surface-raised)] px-4 text-sm font-semibold text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)] transition-colors hover:text-[var(--slurp-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50"
-                          >
-                            <RotateCcw size={13} aria-hidden="true" />
-                            {t("ui.slurp.settings.ads.unhideBrand", { brand })}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-[var(--slurp-surface-raised)] p-4 ring-1 ring-inset ring-[var(--slurp-outline)]">
-                    <div>
-                      <h2 className="text-sm font-bold">{t("ui.slurp.settings.ads.reset")}</h2>
-                      <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted)]">
-                        {t("ui.slurp.settings.ads.resetDetail")}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={!viewerPersonaId || resetAds.isPending}
-                      onClick={() =>
-                        viewerPersonaId &&
-                        resetAds.mutate(viewerPersonaId, {
-                          onSuccess: () => toast.success(t("ui.slurp.settings.ads.resetDone")),
-                          onError: (error) => toast.error(errorMessage(error)),
-                        })
-                      }
-                      className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--slurp-outline)] px-4 text-sm font-bold text-[var(--slurp-text)] transition-colors hover:bg-[var(--accent)] disabled:opacity-50"
-                    >
-                      <RotateCcw size={15} aria-hidden="true" />
-                      {t("ui.slurp.settings.ads.resetAction")}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {section === "autopurge" && (
-                <div className="space-y-5">
-                  <SectionTitle
-                    title={t("ui.slurp.settings.autopurge.title")}
-                    detail={t("ui.slurp.settings.autopurge.detail")}
-                  />
-                  <GuidanceBox
-                    title={t("ui.slurp.settings.autopurge.localOnly")}
-                    detail={t("ui.slurp.settings.autopurge.localOnlyDetail")}
-                  />
-
-                  <SettingsGroup title={t("ui.slurp.settings.autopurge.retentionGroup")}>
-                    <Field
-                      label={t("ui.slurp.settings.autopurge.olderThan")}
-                      detail={t("ui.slurp.settings.autopurge.olderThanDetail")}
-                    >
-                      <div className="grid gap-2 sm:grid-cols-[minmax(8rem,1fr)_minmax(9rem,1fr)]">
-                        <NumberSetting
-                          value={settings.autopurgeRetentionValue}
-                          min={1}
-                          max={365}
-                          onSave={(value) => saveRetention({ autopurgeRetentionValue: value })}
-                        />
-                        <select
-                          aria-label={t("ui.slurp.settings.autopurge.unit")}
-                          value={settings.autopurgeRetentionUnit}
-                          disabled={updateSettings.isPending}
-                          onChange={(event) =>
-                            void saveRetention({
-                              autopurgeRetentionUnit: event.target.value as SlurpSettings["autopurgeRetentionUnit"],
-                            })
-                          }
-                          className="h-11 min-w-0 rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                        >
-                          {(["days", "weeks", "months"] as const).map((unit) => (
-                            <option key={unit} value={unit}>
-                              {t(`ui.slurp.settings.autopurge.units.${unit}`)}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </Field>
-                    <Toggle
-                      label={t("ui.slurp.settings.autopurge.keepPosts")}
-                      detail={t("ui.slurp.settings.autopurge.keepPostsDetail")}
-                      value={settings.autopurgeKeepPosts}
-                      onChange={(value) => void update("autopurgeKeepPosts", value)}
-                    />
-                    <Toggle
-                      label={t("ui.slurp.settings.autopurge.includeMessageMedia")}
-                      detail={t("ui.slurp.settings.autopurge.includeMessageMediaDetail")}
-                      value={settings.autopurgeIncludeMessageMedia}
-                      onChange={(value) => void update("autopurgeIncludeMessageMedia", value)}
-                    />
-                  </SettingsGroup>
-
-                  <SettingsGroup title={t("ui.slurp.settings.autopurge.scheduleGroup")}>
-                    <Toggle
-                      label={t("ui.slurp.settings.autopurge.schedule")}
-                      detail={t("ui.slurp.settings.autopurge.scheduleDetail")}
-                      value={settings.autopurgeEnabled}
-                      onChange={(enabled) => {
-                        const existing = settings.autopurgeNextRunAt;
-                        const nextRunAt =
-                          enabled && (!existing || Date.parse(existing) <= Date.now())
-                            ? nextSlurpAutopurgeRunAt(settings)
-                            : existing;
-                        void save({ autopurgeEnabled: enabled, autopurgeNextRunAt: enabled ? nextRunAt : null });
-                      }}
-                    />
-                    {settings.autopurgeEnabled && (
-                      <Field
-                        label={t("ui.slurp.settings.autopurge.nextRun")}
-                        detail={t("ui.slurp.settings.autopurge.nextRunDetail")}
-                      >
-                        <div className="flex flex-col gap-2 sm:flex-row">
-                          <input
-                            type="datetime-local"
-                            value={autopurgeNextDraft}
-                            min={localDateTimeValue(new Date(Date.now() + 60_000).toISOString())}
-                            onChange={(event) => setAutopurgeNextDraft(event.target.value)}
-                            className="min-h-11 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] sm:text-sm"
-                          />
-                          <button
-                            type="button"
-                            disabled={
-                              updateSettings.isPending ||
-                              !autopurgeNextDraft ||
-                              !Number.isFinite(autopurgeNextTime) ||
-                              autopurgeNextTime <= Date.now()
-                            }
-                            onClick={() => void save({ autopurgeNextRunAt: new Date(autopurgeNextTime).toISOString() })}
-                            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--slurp-outline)] px-4 text-sm font-bold transition-[background-color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:opacity-50"
-                          >
-                            <Save size={15} aria-hidden="true" />
-                            {t("ui.slurp.settings.autopurge.saveNextRun")}
-                          </button>
-                        </div>
-                      </Field>
-                    )}
-                  </SettingsGroup>
-
-                  <section className="flex flex-col gap-4 rounded-xl bg-[var(--slurp-surface-raised)] p-4 ring-1 ring-inset ring-[var(--slurp-warning)]/35 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-                    <div>
-                      <h3 className="text-sm font-bold">{t("ui.slurp.settings.autopurge.runNowTitle")}</h3>
-                      <p className="mt-1 max-w-2xl text-xs leading-5 text-[var(--slurp-muted)]">
-                        {t("ui.slurp.settings.autopurge.runNowDetail")}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={runAutopurge.isPending}
-                      onClick={() => void runAutopurgeNow()}
-                      className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-[var(--noodle-accent-foreground)] transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:opacity-50"
-                    >
-                      {runAutopurge.isPending ? (
-                        <Loader2 size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                      ) : (
-                        <Trash2 size={15} aria-hidden="true" />
-                      )}
-                      {t("ui.slurp.settings.autopurge.runNow")}
-                    </button>
-                  </section>
-                </div>
-              )}
-
-              {section === "advanced" && (
-                <div className="space-y-5">
-                  <SectionTitle
-                    title={t("ui.slurp.settings.advanced.title")}
-                    detail={t("ui.slurp.settings.advanced.detail")}
-                  />
-                  <div className="rounded-lg border border-[var(--border)] p-4">
-                    <h2 className="text-sm font-semibold">{t("ui.slurp.settings.advanced.backupTitle")}</h2>
-                    <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
-                      {t("ui.slurp.settings.advanced.backupDetail")}
-                    </p>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={backupPending || restorePending}
-                        onClick={() => {
-                          setBackupPending(true);
-                          void startSlurpBackup()
-                            .then(async (job) => {
-                              await followBackupJob(job);
-                              await downloadSlurpBackup(job.id);
-                              toast.success(t("ui.slurp.settings.advanced.backupSuccess"));
-                            })
-                            .catch((error) => toast.error(errorMessage(error)))
-                            .finally(() => setBackupPending(false));
-                        }}
-                        className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
-                      >
-                        {backupPending ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-                        {t("ui.slurp.settings.advanced.backupButton")}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={backupPending || restorePending}
-                        onClick={() => restoreInputRef.current?.click()}
-                        className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
-                      >
-                        {restorePending ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-                        {t("ui.slurp.settings.advanced.restoreButton")}
-                      </button>
-                    </div>
-                    <p className="mt-2 max-w-2xl text-xs leading-5 text-[var(--muted-foreground)]">
-                      {t("ui.slurp.settings.advanced.restoreDetail")}
-                    </p>
-                    <label className="mt-2 flex max-w-2xl items-start gap-2 text-xs leading-5">
-                      <input
-                        type="checkbox"
-                        className="mt-1"
-                        checked={restoreImportSettings}
-                        disabled={restorePending}
-                        onChange={(event) => setRestoreImportSettings(event.target.checked)}
-                      />
-                      <span>
-                        <span className="font-semibold">{t("ui.slurp.settings.advanced.restoreImportSettings")}</span>
-                        {restoreImportSettings && (
-                          <span className="block text-[var(--muted-foreground)]">
-                            {t("ui.slurp.settings.advanced.restoreImportSettingsWarning")}
-                          </span>
-                        )}
-                      </span>
-                    </label>
-                    <input
-                      ref={restoreInputRef}
-                      type="file"
-                      accept=".zip,application/zip"
-                      className="hidden"
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        event.target.value = "";
-                        if (!file) return;
-                        if (!window.confirm(t("ui.slurp.settings.advanced.restoreConfirm"))) return;
-                        setRestorePending(true);
-                        void startSlurpRestore(file, restoreImportSettings)
-                          .then(async (job) => {
-                            const done = await followBackupJob(job);
-                            toast.success(
-                              t("ui.slurp.settings.advanced.restoreSuccess", {
-                                creators: done.creators,
-                                posts: done.posts,
-                              }),
-                            );
-                          })
-                          .catch((error) => toast.error(errorMessage(error)))
-                          .finally(() => setRestorePending(false));
-                      }}
-                    />
-                    {backupJob && (
-                      <div
-                        role="status"
-                        aria-live="polite"
-                        className="mt-3 rounded-md bg-[var(--accent)] px-3 py-2 text-xs leading-5 text-[var(--muted-foreground)]"
-                      >
-                        <p className="font-semibold">{backupJob.stage}</p>
-                        <p>{backupJob.detail}</p>
-                        <p className="mt-1">
-                          {backupJob.creators} creators · {backupJob.posts} posts · {backupJob.interactions}{" "}
-                          interactions · {backupJob.mediaCompleted}/{backupJob.mediaFiles} media files ·{" "}
-                          {backupJob.mediaBytes} bytes
-                        </p>
-                        {backupJob.skipped.length > 0 && (
-                          <p className="mt-1">
-                            {t("ui.slurp.settings.advanced.restoreSkipped", { count: backupJob.skipped.length })}
+                <SlurpBackstageSubnav
+                  section={section}
+                  target={target}
+                  onSelect={(nextTarget) => onNavigate({ ...navigation, target: nextTarget })}
+                />
+              </div>
+              <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(17rem,0.72fr)]">
+                <div className="min-w-0" data-backstage-target={target}>
+                  {settings &&
+                    settingsDefaultsQuery.data &&
+                    isSlurpResettableSection(target) &&
+                    (() => {
+                      const defaults = settingsDefaultsQuery.data;
+                      const changed = changedSlurpSettingKeys(settings, defaults, target);
+                      if (changed.length === 0) return null;
+                      return (
+                        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--border)] px-3 py-2">
+                          <p className="text-xs text-[var(--muted-foreground)]">
+                            {t("ui.slurp.settings.reset.changed", { count: changed.length })}
                           </p>
-                        )}
-                        {backupJob.error && <p className="mt-1 text-red-300">{backupJob.error}</p>}
-                      </div>
-                    )}
-                  </div>
-                  <div className="rounded-lg border border-[var(--border)] p-4">
-                    <h2 className="text-sm font-semibold">{t("ui.slurp.settings.advanced.setupAgain")}</h2>
-                    <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
-                      {t("ui.slurp.settings.advanced.setupAgainDetail")}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={onRestartOnboarding}
-                      className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)]"
-                    >
-                      <RefreshCw size={14} />
-                      {t("ui.slurp.settings.advanced.restartSetup")}
-                    </button>
-                  </div>
-                  <div className="rounded-lg border border-red-400/30 p-4">
-                    <h2 className="text-sm font-semibold">{t("ui.slurp.settings.advanced.deleteAllTitle")}</h2>
-                    <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
-                      {t("ui.slurp.settings.advanced.deleteAllDetail")}
-                    </p>
-                    <button
-                      type="button"
-                      disabled={deleteAllData.isPending}
-                      onClick={() =>
-                        // Nothing here can be undone, so a stray click on a default button is not enough.
-                        void showPromptDialog({
-                          title: t("ui.slurp.settings.advanced.deleteAllConfirmTitle"),
-                          message: `${t("ui.slurp.settings.advanced.deleteAllConfirmDetail")}\n\n${t("ui.slurp.settings.advanced.deleteAllTypeToConfirm")}`,
-                          placeholder: "DELETE",
-                          confirmLabel: t("ui.slurp.settings.advanced.deleteAllButton"),
-                        })
-                          .then((typed) => {
-                            if (typed?.trim() !== "DELETE") return;
-                            deleteAllData.mutate(undefined, {
-                              onSuccess: () => toast.success(t("ui.slurp.settings.advanced.deleteAllSuccess")),
-                              onError: (error) => toast.error(errorMessage(error)),
-                            });
-                          })
-                          .catch((error) => toast.error(errorMessage(error)))
-                      }
-                      className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-lg border border-red-400/50 px-3 text-xs font-semibold text-red-300 hover:bg-red-400/10 disabled:opacity-50"
-                    >
-                      <Trash2 size={14} />
-                      {t("ui.slurp.settings.advanced.deleteAllButton")}
-                    </button>
-                  </div>
-                  <div className="rounded-lg border border-[var(--border)] p-4">
-                    <h2 className="text-sm font-semibold">{t("ui.slurp.settings.advanced.deleteUnusedTitle")}</h2>
-                    <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
-                      {t("ui.slurp.settings.advanced.deleteUnusedDetail")}
-                    </p>
-                    <button
-                      type="button"
-                      disabled={deleteUnusedData.isPending || deleteAllData.isPending}
-                      onClick={() =>
-                        void showConfirmDialog({
-                          title: t("ui.slurp.settings.advanced.deleteUnusedConfirmTitle"),
-                          message: t("ui.slurp.settings.advanced.deleteUnusedConfirmDetail"),
-                          confirmLabel: t("ui.slurp.settings.advanced.deleteUnusedButton"),
-                        })
-                          .then((confirmed) => {
-                            if (!confirmed) return;
-                            deleteUnusedData.mutate(undefined, {
-                              onSuccess: () => toast.success(t("ui.slurp.settings.advanced.deleteUnusedSuccess")),
-                              onError: (error) => toast.error(errorMessage(error)),
-                            });
-                          })
-                          .catch((error) => toast.error(errorMessage(error)))
-                      }
-                      className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
-                    >
-                      <Trash2 size={14} />
-                      {t("ui.slurp.settings.advanced.deleteUnusedButton")}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {section === "audience" && (
-                <div className="space-y-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <SectionTitle
-                      title={t("ui.slurp.settings.audience.title")}
-                      detail={t("ui.slurp.settings.audience.detail")}
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        refreshFans.mutate(undefined, {
-                          onSuccess: (result) =>
-                            toast.success(
-                              result.created > 0
-                                ? t("ui.slurp.settings.audience.created", { count: result.created })
-                                : t("ui.slurp.settings.audience.createdNone"),
-                            ),
-                          onError: (error) => toast.error(errorMessage(error)),
-                        })
-                      }
-                      disabled={refreshFans.isPending || !settings.fanActivityEnabled}
-                      className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
-                    >
-                      <RefreshCw size={14} className={refreshFans.isPending ? "animate-spin" : ""} />
-                      {t("ui.slurp.settings.audience.refresh")}
-                    </button>
-                  </div>
-                  <p className="text-xs text-[var(--muted-foreground)]" aria-live="polite">
-                    {fanStatusQuery.isError
-                      ? t("ui.slurp.settings.audience.statusError")
-                      : fanStatusQuery.data
-                        ? t("ui.slurp.settings.audience.statusUsed", {
-                            used: fanStatusQuery.data.usedRuns,
-                            limit: fanStatusQuery.data.runLimit,
-                          })
-                        : t("ui.slurp.settings.audience.statusLoading")}
-                  </p>
-                  <ChoiceRow
-                    title={t("ui.slurp.settings.audience.presetTitle")}
-                    detail={
-                      audiencePreset === "custom"
-                        ? t("ui.slurp.settings.audience.presetCustom")
-                        : t(`ui.slurp.settings.simulation.presetDetail.${audiencePreset}`)
-                    }
-                    options={SLURP_AUDIENCE_PRESETS.map((preset) => ({
-                      value: preset,
-                      label: t(`ui.slurp.settings.simulation.presets.${preset}`),
-                    }))}
-                    value={audiencePreset}
-                    onChange={(preset) => void save(slurpAudiencePresetPatch(preset, settings))}
-                    extra={
-                      audiencePreset === "custom" ? (
-                        <span className="min-h-10 inline-flex items-center rounded-lg border border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10 px-3 text-xs font-semibold text-[var(--noodle-accent)]">
-                          {t("ui.slurp.settings.simulation.presets.custom")}
-                        </span>
-                      ) : null
-                    }
-                  />
-                  <ChoiceRow
-                    title={t("ui.slurp.settings.audience.scaleTitle")}
-                    detail={t("ui.slurp.settings.audience.scaleDetail")}
-                    options={(["intimate", "normal", "large"] as const).map((level) => ({
-                      value: level,
-                      label: t(`ui.slurp.settings.audience.scale.${level}`),
-                    }))}
-                    value={settings.platformScale}
-                    onChange={(level) => update("platformScale", level)}
-                  />
-                  <ChoiceRow
-                    title={t("ui.slurp.settings.audience.toneTitle")}
-                    detail={t("ui.slurp.settings.audience.toneDetail")}
-                    options={(["warm", "mixed", "unfiltered"] as const).map((tone) => ({
-                      value: tone,
-                      label: t(`ui.slurp.settings.audience.tone.${tone}`),
-                    }))}
-                    value={settings.audienceTone}
-                    onChange={(tone) => update("audienceTone", tone)}
-                  />
-
-                  <details className="group rounded-xl bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
-                    <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 px-4 py-2 text-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] [&::-webkit-details-marker]:hidden">
-                      <span className="min-w-0 flex-1">
-                        <span className="block">{t("ui.slurp.settings.audience.fanTypesTitle")}</span>
-                        <span className="block text-xs font-normal text-[var(--muted-foreground)]">
-                          {t("ui.slurp.settings.audience.fanTypesSummary", {
-                            enabled: settings.fanTypes.filter((type) => type.enabled).length,
-                            count: settings.fanTypes.length,
-                          })}
-                        </span>
-                      </span>
-                      <ChevronRight
-                        size={17}
-                        className="transition-transform group-open:rotate-90 rtl:rotate-180"
-                        aria-hidden="true"
-                      />
-                    </summary>
-                    <div className="space-y-5 border-t border-[var(--slurp-outline)] p-4 sm:p-5">
-                      <AmbientProfilesPanel
-                        allowRandomUsers={settings.allowRandomUsers}
-                        onAllowRandomUsersChange={(value) => update("allowRandomUsers", value)}
-                      />
-                      <Field
-                        label={t("ui.slurp.settings.audience.reactionBank")}
-                        detail={t("ui.slurp.settings.audience.reactionBankDetail", {
-                          count: settings.audienceReactionBank.shared.length,
-                        })}
-                      >
-                        <textarea
-                          rows={6}
-                          value={reactionBankDraft ?? settings.audienceReactionBank.shared.join("\n")}
-                          onChange={(event) => setReactionBankDraft(event.target.value)}
-                          onBlur={() => {
-                            const draft = reactionBankDraft;
-                            setReactionBankDraft(null);
-                            if (draft === null) return;
-                            // Same rules the server applies, so what the box shows after a save is
-                            // what was actually stored rather than a list that silently lost rows.
-                            const seen = new Set<string>();
-                            const next: string[] = [];
-                            for (const line of draft.split("\n")) {
-                              const body = line.trim().slice(0, 120);
-                              const key = body.toLowerCase();
-                              if (!body || seen.has(key) || next.length >= 400) continue;
-                              seen.add(key);
-                              next.push(body);
-                            }
-                            // The box edits the shared bank only; per-type banks have their own
-                            // editor in the Fan Types panel.
-                            if (next.join("\n") !== settings.audienceReactionBank.shared.join("\n"))
-                              void update("audienceReactionBank", { ...settings.audienceReactionBank, shared: next });
-                          }}
-                          className="w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] p-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                        />
-                      </Field>
-                      <SlurpFanTypesSettings
-                        fanTypes={settings.fanTypes}
-                        bankCounts={settings.audienceReactionBank.byType}
-                        crowdTone={settings.audienceTone}
-                        onSave={(fanTypes) => update("fanTypes", fanTypes)}
-                      />
-                    </div>
-                  </details>
-
-                  <details className="group rounded-xl bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
-                    <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 px-4 py-2 text-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] [&::-webkit-details-marker]:hidden">
-                      <span className="min-w-0 flex-1">
-                        <span className="block">{t("ui.slurp.settings.audience.aiTitle")}</span>
-                        <span className="block text-xs font-normal text-[var(--muted-foreground)]">
-                          {t("ui.slurp.settings.audience.aiSummary")}
-                        </span>
-                      </span>
-                      <ChevronRight
-                        size={17}
-                        className="transition-transform group-open:rotate-90 rtl:rotate-180"
-                        aria-hidden="true"
-                      />
-                    </summary>
-                    <div className="space-y-5 border-t border-[var(--slurp-outline)] p-4 sm:p-5">
-                      <SlurpAudienceConfigSettings
-                        tuning={settings.simulationTuning}
-                        fanTypes={settings.fanTypes}
-                        budget={settings.modelBudget}
-                        connections={connectionsQuery.data ?? []}
-                        onSave={(patch) => save(patch)}
-                      />
-                    </div>
-                  </details>
-
-                  <details className="group rounded-xl bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
-                    <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 px-4 py-2 text-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] [&::-webkit-details-marker]:hidden">
-                      <span className="min-w-0 flex-1">
-                        <span className="block">{t("ui.slurp.settings.audience.advancedTitle")}</span>
-                        <span className="block text-xs font-normal text-[var(--muted-foreground)]">
-                          {t("ui.slurp.settings.audience.advancedDetail")}
-                        </span>
-                      </span>
-                      <ChevronRight
-                        size={17}
-                        className="transition-transform group-open:rotate-90 rtl:rotate-180"
-                        aria-hidden="true"
-                      />
-                    </summary>
-                    <div className="space-y-5 border-t border-[var(--slurp-outline)] p-4 sm:p-5">
-                      <Toggle
-                        label={t("ui.slurp.settings.audience.enabled")}
-                        detail={t("ui.slurp.settings.audience.enabledDetail")}
-                        value={settings.fanActivityEnabled}
-                        onChange={(value) => update("fanActivityEnabled", value)}
-                      />
-                      <div className="grid gap-4 sm:grid-cols-3">
-                        <Field
-                          label={t("ui.slurp.settings.audience.runsPerDay")}
-                          detail={t("ui.slurp.settings.audience.runsPerDayDetail")}
-                        >
-                          <NumberSetting
-                            value={settings.fanActivityRunsPerDay}
-                            min={1}
-                            max={96}
-                            onSave={(value) => update("fanActivityRunsPerDay", value)}
-                          />
-                        </Field>
-                        <Field label={t("ui.slurp.settings.audience.likes")}>
-                          <NumberSetting
-                            value={settings.fanLikesPerRefresh}
-                            min={0}
-                            max={24}
-                            onSave={(value) => update("fanLikesPerRefresh", value)}
-                          />
-                        </Field>
-                        <Field label={t("ui.slurp.settings.audience.replies")}>
-                          <NumberSetting
-                            value={settings.fanRepliesPerRefresh}
-                            min={0}
-                            max={12}
-                            onSave={(value) => update("fanRepliesPerRefresh", value)}
-                          />
-                        </Field>
-                      </div>
-                      <ChoiceRow
-                        title={t("ui.slurp.settings.audience.activityTitle")}
-                        detail={t("ui.slurp.settings.audience.activityDetail")}
-                        options={(["off", "quiet", "normal", "busy"] as const).map((level) => ({
-                          value: level,
-                          label: t(`ui.slurp.settings.audience.activity.${level}`),
-                        }))}
-                        value={settings.worldActivity}
-                        onChange={(level) => update("worldActivity", level)}
-                      />
-                      {/* ponytail: the global archetype mix stays a hidden stored field that the server still
-                          reads; drop it together with the per-Creator archetype UI. */}
-                      {Object.values(settings.fanArchetypeWeights).some((weight) => weight !== 1) && (
-                        <div className="rounded-lg border border-[var(--border)] p-3 text-xs text-[var(--muted-foreground)]">
-                          <p>{t("ui.slurp.settings.audience.legacyMix")}</p>
                           <button
                             type="button"
+                            disabled={updateSettings.isPending}
                             onClick={() =>
-                              void update(
-                                "fanArchetypeWeights",
-                                Object.fromEntries(Object.keys(settings.fanArchetypeWeights).map((key) => [key, 1])),
-                              )
+                              void showConfirmDialog({
+                                title: t("ui.slurp.settings.reset.confirmTitle"),
+                                message: t("ui.slurp.settings.reset.confirmDetail"),
+                                confirmLabel: t("ui.slurp.settings.reset.button"),
+                              })
+                                .then((confirmed) => {
+                                  if (confirmed) void save(slurpSettingsResetPatch(settings, defaults, target));
+                                })
+                                .catch((error) => toast.error(errorMessage(error)))
                             }
-                            className="mt-2 inline-flex min-h-10 items-center rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)]"
+                            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
                           >
-                            {t("ui.slurp.settings.audience.legacyMixReset")}
+                            <RefreshCw size={14} />
+                            {t("ui.slurp.settings.reset.button")}
                           </button>
                         </div>
-                      )}
-                      {/* Every number the simulation runs on, in its own file. Keyed on the preset so an Activity click resets the local draft instead of saving stale tuning back. */}
-                      <SlurpSimulationSettings
-                        key={settings.simulationTuning.preset}
-                        tuning={settings.simulationTuning}
-                        onSave={(next) => void update("simulationTuning", next)}
-                      />
-                    </div>
-                  </details>
+                      );
+                    })()}
+                  <SlurpBackstageOverview {...page} />
+                  <SlurpBackstageCreators {...page} />
+                  <SlurpBackstageWorld {...page} />
+                  <SlurpBackstageAutomation {...page} />
+                  <SlurpBackstageMaintenance {...page} />
+                  <SlurpBackstageApplyBar
+                    count={Object.keys(draftPatch).length}
+                    pending={updateSettings.isPending}
+                    onDiscard={() => setDraftPatch({})}
+                    onApply={() =>
+                      void save(draftPatch).then((saved) => {
+                        if (saved) setDraftPatch({});
+                      })
+                    }
+                  />
                 </div>
-              )}
+                <SlurpBackstagePreview
+                  target={target}
+                  current={savedSettings ?? settings}
+                  proposed={settings}
+                  pending={draftPatch}
+                  creatorCount={creators.length}
+                  creatorName={target === "creators" || target === "improve" ? selectedCreator?.displayName : null}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -3818,1526 +1270,5 @@ export function SlurpSettings({
         pending={updateSettings.isPending}
       />
     </>
-  );
-}
-
-/** One labelled row of mutually exclusive buttons, the shape every Audience choice shares. */
-function ChoiceRow<T extends string>({
-  title,
-  detail,
-  options,
-  value,
-  onChange,
-  extra,
-}: {
-  title: string;
-  detail: string;
-  options: ReadonlyArray<{ value: T; label: string }>;
-  value: string;
-  onChange: (value: T) => void;
-  extra?: ReactNode;
-}) {
-  return (
-    <fieldset className="space-y-3 pt-2">
-      <legend className="text-sm font-bold">{title}</legend>
-      <p className="text-xs leading-5 text-[var(--slurp-muted)]">{detail}</p>
-      <div className="flex flex-wrap gap-2">
-        {options.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => onChange(option.value)}
-            aria-pressed={value === option.value}
-            className={cn(
-              "min-h-10 rounded-lg border px-3 text-xs font-semibold transition-colors",
-              value === option.value
-                ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]"
-                : "border-[var(--border)] hover:bg-[var(--accent)]",
-            )}
-          >
-            {option.label}
-          </button>
-        ))}
-        {extra}
-      </div>
-    </fieldset>
-  );
-}
-
-function localDateTimeValue(value: string): string {
-  const date = new Date(value);
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
-}
-
-function ScheduleSlotEditor({
-  slot,
-  pending,
-  onSave,
-}: {
-  slot: SlurpScheduleSlot;
-  pending: boolean;
-  onSave: (publishAt: string) => Promise<void>;
-}) {
-  const { t, i18n } = useTranslation();
-  const [draft, setDraft] = useState(() => localDateTimeValue(slot.publishAt));
-  const parsed = Date.parse(draft);
-  const unchanged = !Number.isNaN(parsed) && new Date(parsed).toISOString() === slot.publishAt;
-  const valid = !Number.isNaN(parsed) && parsed > Date.now();
-  return (
-    <div className="rounded-lg border border-[var(--border)] p-3">
-      <div className="mb-2 flex items-center justify-between gap-2 text-xs text-[var(--muted-foreground)]">
-        <span>
-          {slot.state === "prepared"
-            ? t("ui.slurp.settings.creators.prepared")
-            : t("ui.slurp.settings.creators.scheduled")}
-        </span>
-        <span>{formatDateTime(slot.publishAt, i18n.language)}</span>
-      </div>
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <input
-          type="datetime-local"
-          aria-label={t("ui.slurp.settings.creators.publicationTime")}
-          value={draft}
-          min={localDateTimeValue(new Date(Date.now() + 60_000).toISOString())}
-          disabled={pending}
-          onChange={(event) => setDraft(event.target.value)}
-          className="min-h-11 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50 sm:text-sm"
-        />
-        <button
-          type="button"
-          disabled={pending || unchanged || !valid}
-          onClick={() => void onSave(new Date(parsed).toISOString())}
-          className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-bold text-[var(--noodle-accent-foreground)] disabled:opacity-45"
-        >
-          {pending ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-          {t("ui.slurp.settings.creators.saveTime")}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function OverviewCard({
-  icon,
-  title,
-  status,
-  details,
-  avatars,
-  onClick,
-  tone,
-  healthy,
-}: {
-  icon: ReactNode;
-  title: string;
-  status: string;
-  details: string[];
-  avatars?: NoodlerManagedStageProfile[];
-  onClick: () => void;
-  tone: "pink" | "violet" | "blue" | "coral";
-  healthy?: boolean;
-}) {
-  const toneClass =
-    tone === "pink"
-      ? "from-[var(--noodle-accent)] to-[#a51d61]"
-      : tone === "violet"
-        ? "from-[var(--slurp-violet)] to-[#7441a0]"
-        : tone === "blue"
-          ? "from-[#7777ef] to-[#5145bb]"
-          : "from-[var(--slurp-coral)] to-[#b83f45]";
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group min-h-36 rounded-xl bg-[var(--slurp-surface-raised)] p-4 text-start shadow-[0_20px_48px_-38px_rgba(71,16,52,0.9)] ring-1 ring-inset ring-[var(--slurp-outline)] transition-[background-color,transform] hover:bg-[color-mix(in_srgb,var(--noodle-accent)_6%,var(--slurp-surface-raised))] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
-    >
-      <span className="flex items-start gap-4">
-        <span
-          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${toneClass} text-white shadow-lg [&_svg]:!text-white`}
-        >
-          {icon}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2">
-            <span className="text-sm font-black">{title}</span>
-            {healthy !== undefined &&
-              (healthy ? (
-                <CheckCircle2 size={15} className="shrink-0 text-[var(--slurp-success)]" aria-hidden="true" />
-              ) : (
-                <AlertTriangle size={15} className="shrink-0 text-[var(--slurp-warning)]" aria-hidden="true" />
-              ))}
-          </span>
-          <span className="mt-2 block text-sm font-bold text-[var(--noodle-accent-foreground)]">{status}</span>
-          {avatars && avatars.length > 0 && (
-            <span className="mt-3 flex -space-x-2 rtl:space-x-reverse">
-              {avatars.map((creator) => (
-                <span key={creator.id} className="rounded-full bg-[var(--slurp-surface-raised)] p-0.5">
-                  <Avatar account={creator} size="sm" />
-                </span>
-              ))}
-            </span>
-          )}
-          <span className="mt-2 block space-y-0.5">
-            {details.map((detail) => (
-              <span key={detail} className="block text-xs leading-4 text-[var(--slurp-muted)]">
-                {detail}
-              </span>
-            ))}
-          </span>
-        </span>
-        <ChevronRight
-          size={18}
-          className="mt-1 shrink-0 text-[var(--slurp-muted)] transition-transform group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5 motion-reduce:transition-none"
-          aria-hidden="true"
-        />
-      </span>
-    </button>
-  );
-}
-
-function OverviewActivity({
-  reserveStatus,
-  reserveLoading,
-  reserveError,
-  fanStatus,
-  refreshPending,
-  onRetry,
-}: {
-  reserveStatus?: SlurpReserveStatus;
-  reserveLoading: boolean;
-  reserveError: boolean;
-  fanStatus?: { usedRuns: number; runLimit: number; lastRun: { status: string; finishedAt: string | null } | null };
-  refreshPending: boolean;
-  onRetry: () => void;
-}) {
-  const { t, i18n } = useTranslation();
-  const formatTime = (value: string | null | undefined) =>
-    value ? formatClockTime(value, i18n.language) : t("ui.slurp.settings.overview.activity.notAvailable");
-  const usage = reserveStatus ? `${reserveStatus.textAttemptsUsed} / ${reserveStatus.postsPerDay}` : "--";
-  const fanUsage = fanStatus ? `${fanStatus.usedRuns} / ${fanStatus.runLimit}` : "--";
-
-  return (
-    <section
-      className="rounded-xl bg-[var(--slurp-surface-raised)] p-4 ring-1 ring-inset ring-[var(--slurp-outline)]"
-      aria-labelledby="slurp-activity-title"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <Activity size={17} className="shrink-0 text-[var(--noodle-accent)]" aria-hidden="true" />
-          <h2 id="slurp-activity-title" className="text-sm font-black">
-            {t("ui.slurp.settings.overview.activity.title")}
-          </h2>
-        </div>
-        {(reserveError || fanStatus === undefined) && (
-          <button
-            type="button"
-            onClick={onRetry}
-            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
-          >
-            <RefreshCw size={13} aria-hidden="true" />
-            {t("capabilities.actions.tryAgain")}
-          </button>
-        )}
-      </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        <ActivityRow
-          icon={
-            refreshPending ? (
-              <Loader2 size={15} className="animate-spin motion-reduce:animate-none" />
-            ) : (
-              <CheckCircle2 size={15} />
-            )
-          }
-          label={t("ui.slurp.settings.overview.activity.current")}
-          value={
-            refreshPending
-              ? t("ui.slurp.settings.overview.activity.generating")
-              : t("ui.slurp.settings.overview.activity.idle")
-          }
-          tone={refreshPending ? "active" : "ready"}
-        />
-        <ActivityRow
-          icon={<CalendarClock size={15} />}
-          label={t("ui.slurp.settings.overview.activity.prepared")}
-          value={reserveLoading ? "..." : reserveStatus ? `${reserveStatus.preparedCount}` : "--"}
-          detail={
-            reserveStatus?.preparedThrough
-              ? t("ui.slurp.settings.overview.activity.through", { time: formatTime(reserveStatus.preparedThrough) })
-              : undefined
-          }
-          tone="waiting"
-        />
-        <ActivityRow
-          icon={<Sparkles size={15} />}
-          label={t("ui.slurp.settings.overview.activity.textUsage")}
-          value={usage}
-          detail={t("ui.slurp.settings.overview.activity.today")}
-          tone="active"
-        />
-        <ActivityRow
-          icon={<Megaphone size={15} />}
-          label={t("ui.slurp.settings.overview.activity.audience")}
-          value={fanUsage}
-          detail={
-            fanStatus?.lastRun
-              ? t("ui.slurp.settings.overview.activity.lastRun", { time: formatTime(fanStatus.lastRun.finishedAt) })
-              : undefined
-          }
-          tone="ready"
-        />
-      </div>
-    </section>
-  );
-}
-
-function ActivityRow({
-  icon,
-  label,
-  value,
-  detail,
-  tone,
-}: {
-  icon: ReactNode;
-  label: string;
-  value: string;
-  detail?: string;
-  tone: "active" | "ready" | "waiting";
-}) {
-  const toneClass =
-    tone === "active"
-      ? "text-[var(--noodle-accent)]"
-      : tone === "waiting"
-        ? "text-[var(--slurp-warning)]"
-        : "text-[var(--slurp-success)]";
-  return (
-    <div className="flex min-h-14 items-center gap-3 rounded-lg bg-[var(--slurp-canvas)] px-3 py-2 ring-1 ring-inset ring-[var(--slurp-outline)]">
-      <span className={`shrink-0 ${toneClass}`} aria-hidden="true">
-        {icon}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-xs font-semibold text-[var(--slurp-muted)]">{label}</span>
-        {detail && <span className="block truncate text-[0.68rem] text-[var(--slurp-muted)]">{detail}</span>}
-      </span>
-      <span className={`shrink-0 text-sm font-black ${toneClass}`}>{value}</span>
-    </div>
-  );
-}
-
-/**
- * Settings → Arcs library list. Deleting a built-in only hides it, so Reset can bring it back; a
- * custom type is removed. Running arcs hold their own copy and never see these edits.
- */
-/** Mirrors `SLURP_MODIFIER_KINDS` on the server: the moods a chapter may start. */
-const ARC_MOODS = [
-  "just_posted",
-  "post_landed",
-  "post_flopped",
-  "afterglow",
-  "overexposed",
-  "paid_well",
-  "goal_hit",
-  "lapse_sting",
-  "tipsy",
-  "tired",
-  "rattled",
-] as const;
-
-function ArcLibraryEditor({
-  library,
-  tags,
-  busy,
-  creatorAccountId,
-  personaId,
-  onChange,
-}: {
-  library: SlurpArcType[];
-  tags: string[];
-  busy: boolean;
-  creatorAccountId: string | null;
-  personaId: string | null;
-  onChange: (library: SlurpArcType[]) => void;
-}) {
-  const { t } = useTranslation();
-  const reset = useResetSlurpArcType();
-  const generate = useGenerateSlurpArcType();
-  const [draft, setDraft] = useState<SlurpArcType | null>(null);
-  const [brief, setBrief] = useState("");
-  const [selectedChapters, setSelectedChapters] = useState<Set<number>>(new Set());
-  const [reviewingGeneratedDraft, setReviewingGeneratedDraft] = useState(false);
-  const input =
-    "min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base sm:text-sm";
-  const button =
-    "min-h-11 rounded-lg px-3 text-sm font-semibold hover:bg-[var(--slurp-surface-raised)] disabled:opacity-50";
-  const replace = (type: SlurpArcType) =>
-    onChange(
-      library.some((entry) => entry.id === type.id)
-        ? library.map((entry) => (entry.id === type.id ? type : entry))
-        : [...library, type],
-    );
-  const setChapter = (index: number, patch: Partial<SlurpArcType["chapters"][number]>) =>
-    draft &&
-    setDraft({
-      ...draft,
-      chapters: draft.chapters.map((chapter, at) => (at === index ? { ...chapter, ...patch } : chapter)),
-    });
-  const days = (value: string) => Math.min(90, Math.max(0, Math.floor(Number(value)) || 0));
-  const setOption = (
-    index: number,
-    optionIndex: number,
-    patch: Partial<NonNullable<SlurpArcType["chapters"][number]["choice"]>["options"][number]>,
-  ) => {
-    const choice = draft?.chapters[index]?.choice;
-    if (choice)
-      setChapter(index, {
-        choice: {
-          ...choice,
-          options: choice.options.map((option, at) => (at === optionIndex ? { ...option, ...patch } : option)),
-        },
-      });
-  };
-  /** A choice without a question or two named options is dropped on save rather than refused. */
-  const cleanChoice = (choice: NonNullable<SlurpArcType["chapters"][number]["choice"]>) => {
-    const question = choice.question.trim();
-    const options = choice.options
-      .map((option) => ({
-        label: option.label.trim(),
-        chapters: option.chapters
-          .filter((chapter) => chapter.label.trim())
-          .map((chapter) => ({ ...chapter, label: chapter.label.trim() })),
-      }))
-      .filter((option) => option.label);
-    return question && options.length >= 2 ? { question, options } : undefined;
-  };
-
-  const generateDraft = async () => {
-    if (!creatorAccountId || !personaId || !brief.trim()) return;
-    const result = await generate.mutateAsync({ creatorAccountId, personaId, brief: brief.trim() }).catch(() => null);
-    if (!result) return;
-    setDraft(result.type);
-    setSelectedChapters(new Set(result.type.chapters.map((_, index) => index)));
-    setReviewingGeneratedDraft(true);
-    setBrief("");
-  };
-
-  if (draft) {
-    return (
-      <form
-        className="space-y-5"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!draft.name.trim()) return;
-          replace({
-            ...draft,
-            name: draft.name.trim(),
-            description: draft.description.trim(),
-            tone: draft.tone.trim(),
-            chapters: (reviewingGeneratedDraft
-              ? draft.chapters.filter((_, index) => selectedChapters.has(index))
-              : draft.chapters
-            )
-              .filter((chapter) => chapter.label.trim())
-              .map((chapter) => {
-                const choice = chapter.choice && cleanChoice(chapter.choice);
-                const effects = Object.fromEntries(
-                  Object.entries(chapter.effects ?? {}).filter(([, pct]) => Number.isInteger(pct) && pct !== 0),
-                );
-                const bio = chapter.profile?.bio?.trim();
-                const location = chapter.profile?.location?.trim();
-                return {
-                  label: chapter.label.trim(),
-                  minDays: chapter.minDays,
-                  maxDays: Math.max(chapter.minDays, chapter.maxDays),
-                  ...(choice ? { choice } : {}),
-                  ...(chapter.mood ? { mood: chapter.mood } : {}),
-                  ...(Object.keys(effects).length ? { effects } : {}),
-                  ...(bio || location
-                    ? { profile: { ...(bio ? { bio } : {}), ...(location ? { location } : {}) } }
-                    : {}),
-                };
-              }),
-          });
-          setDraft(null);
-          setSelectedChapters(new Set());
-          setReviewingGeneratedDraft(false);
-        }}
-      >
-        <GuidanceBox
-          title={t("ui.slurp.settings.arcLibrary.editorTitle", { defaultValue: "Build the arc in layers" })}
-          detail={t("ui.slurp.settings.arcLibrary.editorDetail", {
-            defaultValue:
-              "Start with the story idea. Add chapters only when you want precise pacing, effects, profile changes, or fan choices.",
-          })}
-        />
-        {draft.chapters.length > 0 && (
-          <div className="rounded-xl border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] p-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-bold">
-                  {t("ui.slurp.settings.arcLibrary.chapterSelection", { defaultValue: "Choose the chapters to keep" })}
-                </p>
-                <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
-                  {t("ui.slurp.settings.arcLibrary.chapterSelectionDetail", {
-                    defaultValue: "AI suggestions are editable. Uncheck any chapter you do not want in this arc.",
-                  })}
-                </p>
-              </div>
-              <span className="text-xs tabular-nums text-[var(--muted-foreground)]">
-                {selectedChapters.size}/{draft.chapters.length}
-              </span>
-            </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              {draft.chapters.map((chapter, index) => (
-                <label
-                  key={`${chapter.label}-${index}`}
-                  className="flex min-h-11 items-center gap-2 rounded-lg border border-[var(--slurp-outline)] px-3 text-xs font-semibold"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedChapters.has(index)}
-                    onChange={(event) =>
-                      setSelectedChapters((current) => {
-                        const next = new Set(current);
-                        if (event.target.checked) next.add(index);
-                        else next.delete(index);
-                        return next;
-                      })
-                    }
-                  />
-                  <span className="min-w-0 truncate">{chapter.label}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-        )}
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field
-            label={t("ui.slurp.settings.arcLibrary.name")}
-            detail={t("ui.slurp.settings.arcLibrary.nameDetail", {
-              defaultValue: "A short name shown in the Arc Library.",
-            })}
-          >
-            <input
-              value={draft.name}
-              maxLength={80}
-              onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-              className={input}
-            />
-          </Field>
-          <Field
-            label={t("ui.slurp.settings.arcLibrary.tone")}
-            detail={t("ui.slurp.settings.arcLibrary.toneDetail", {
-              defaultValue: "The feeling the Creator should bring to posts.",
-            })}
-          >
-            <input
-              value={draft.tone}
-              maxLength={80}
-              onChange={(event) => setDraft({ ...draft, tone: event.target.value })}
-              className={input}
-            />
-          </Field>
-        </div>
-        <Field
-          label={t("ui.slurp.settings.arcLibrary.description")}
-          detail={t("ui.slurp.settings.arcLibrary.descriptionDetail", {
-            defaultValue: "Give the model enough direction to make the arc feel specific.",
-          })}
-        >
-          <textarea
-            value={draft.description}
-            maxLength={2000}
-            rows={3}
-            onChange={(event) => setDraft({ ...draft, description: event.target.value })}
-            className={`${input} py-2`}
-          />
-        </Field>
-        <div className="flex items-end justify-between gap-3 border-t border-[var(--slurp-outline)] pt-4">
-          <div>
-            <h3 className="text-sm font-bold">{t("ui.slurp.settings.arcLibrary.chapters")}</h3>
-            <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
-              {t("ui.slurp.settings.arcLibrary.chapterDetail", {
-                defaultValue: "Each chapter can change the pace, mood, stats, profile, and fan choices.",
-              })}
-            </p>
-          </div>
-          <span className="shrink-0 text-xs tabular-nums text-[var(--muted-foreground)]">
-            {draft.chapters.length}/12
-          </span>
-        </div>
-        {draft.chapters.map((chapter, index) => (
-          <fieldset
-            key={index}
-            className="space-y-4 rounded-xl border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] p-4"
-          >
-            <legend className="px-1 text-xs font-bold uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
-              {t("ui.slurp.settings.arcLibrary.chapterNumber", {
-                defaultValue: "Chapter {{number}}",
-                number: index + 1,
-              })}
-            </legend>
-            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7rem_7rem_auto] sm:items-end">
-              <Field label={t("ui.slurp.settings.arcLibrary.chapterLabel")}>
-                <input
-                  value={chapter.label}
-                  maxLength={200}
-                  onChange={(event) => setChapter(index, { label: event.target.value })}
-                  className={input}
-                />
-              </Field>
-              <Field label={t("ui.slurp.settings.arcLibrary.minDays")}>
-                <input
-                  type="number"
-                  min={0}
-                  max={90}
-                  value={chapter.minDays}
-                  onChange={(event) => setChapter(index, { minDays: days(event.target.value) })}
-                  className={input}
-                />
-              </Field>
-              <Field label={t("ui.slurp.settings.arcLibrary.maxDays")}>
-                <input
-                  type="number"
-                  min={0}
-                  max={90}
-                  value={chapter.maxDays}
-                  onChange={(event) => setChapter(index, { maxDays: days(event.target.value) })}
-                  className={input}
-                />
-              </Field>
-              <button
-                type="button"
-                className={`${button} text-red-600`}
-                onClick={() => {
-                  setDraft({ ...draft, chapters: draft.chapters.filter((_, at) => at !== index) });
-                  setSelectedChapters((current) => {
-                    const next = new Set<number>();
-                    for (const at of current) {
-                      if (at < index) next.add(at);
-                      else if (at > index) next.add(at - 1);
-                    }
-                    return next;
-                  });
-                }}
-              >
-                {t("ui.slurp.settings.arcLibrary.removeChapter")}
-              </button>
-            </div>
-            <details className="group rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-surface-raised,var(--background))]">
-              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-3 text-xs font-bold text-[var(--muted-foreground)] [&::-webkit-details-marker]:hidden">
-                <span>{t("ui.slurp.settings.arcLibrary.advanced", { defaultValue: "Advanced chapter options" })}</span>
-                <ChevronRight size={15} className="transition-transform group-open:rotate-90" aria-hidden="true" />
-              </summary>
-              <div className="space-y-4 border-t border-[var(--slurp-outline)] p-3">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field
-                    label={t("ui.slurp.settings.arcLibrary.mood")}
-                    detail={t("ui.slurp.settings.arcLibrary.moodDetail", {
-                      defaultValue: "Set the mood when this chapter starts.",
-                    })}
-                  >
-                    <select
-                      value={chapter.mood ?? ""}
-                      onChange={(event) => setChapter(index, { mood: event.target.value || undefined })}
-                      className={input}
-                    >
-                      <option value="">{t("ui.slurp.settings.arcLibrary.noMood")}</option>
-                      {ARC_MOODS.map((mood) => (
-                        <option key={mood} value={mood}>
-                          {mood.replace(/_/g, " ")}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field
-                    label={t("ui.slurp.settings.arcLibrary.effects", { defaultValue: "Audience effects" })}
-                    detail={t("ui.slurp.settings.arcLibrary.effectsDetail", {
-                      defaultValue: "Optional changes to growth, earnings, and loyalty.",
-                    })}
-                  >
-                    <div className="grid grid-cols-3 gap-2">
-                      {(["growth", "earnings", "loyalty"] as const).map((stat) => (
-                        <input
-                          key={stat}
-                          type="number"
-                          aria-label={t(`ui.slurp.settings.arcLibrary.effect.${stat}`)}
-                          min={-50}
-                          max={50}
-                          value={chapter.effects?.[stat] ?? ""}
-                          onChange={(event) =>
-                            setChapter(index, {
-                              effects: {
-                                ...chapter.effects,
-                                [stat]:
-                                  event.target.value === ""
-                                    ? undefined
-                                    : Math.max(-50, Math.min(50, Math.round(Number(event.target.value)) || 0)),
-                              },
-                            })
-                          }
-                          className={input}
-                          placeholder={stat.slice(0, 3).toUpperCase()}
-                        />
-                      ))}
-                    </div>
-                  </Field>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field
-                    label={t("ui.slurp.settings.arcLibrary.profileBio")}
-                    detail={t("ui.slurp.settings.arcLibrary.profileBioDetail", {
-                      defaultValue: "Optional bio change. Slurp asks before applying it.",
-                    })}
-                  >
-                    <input
-                      value={chapter.profile?.bio ?? ""}
-                      maxLength={500}
-                      onChange={(event) =>
-                        setChapter(index, { profile: { ...chapter.profile, bio: event.target.value } })
-                      }
-                      className={input}
-                    />
-                  </Field>
-                  <Field
-                    label={t("ui.slurp.settings.arcLibrary.profileLocation")}
-                    detail={t("ui.slurp.settings.arcLibrary.profileLocationDetail", {
-                      defaultValue: "Optional location change. Slurp asks before applying it.",
-                    })}
-                  >
-                    <input
-                      value={chapter.profile?.location ?? ""}
-                      maxLength={120}
-                      onChange={(event) =>
-                        setChapter(index, { profile: { ...chapter.profile, location: event.target.value } })
-                      }
-                      className={input}
-                    />
-                  </Field>
-                </div>
-                {chapter.choice ? (
-                  <div className="basis-full space-y-2 border-l-2 border-[var(--slurp-outline)] pl-3">
-                    <input
-                      aria-label={t("ui.slurp.settings.arcLibrary.choiceQuestion")}
-                      placeholder={t("ui.slurp.settings.arcLibrary.choiceQuestion")}
-                      value={chapter.choice.question}
-                      maxLength={240}
-                      onChange={(event) =>
-                        setChapter(index, { choice: { ...chapter.choice!, question: event.target.value } })
-                      }
-                      className={input}
-                    />
-                    {chapter.choice.options.map((option, optionIndex) => (
-                      <div key={optionIndex} className="flex flex-wrap items-start gap-2">
-                        <input
-                          aria-label={t("ui.slurp.settings.arcLibrary.choiceOption")}
-                          placeholder={t("ui.slurp.settings.arcLibrary.choiceOption")}
-                          value={option.label}
-                          maxLength={120}
-                          onChange={(event) => setOption(index, optionIndex, { label: event.target.value })}
-                          className={`${input} min-w-0 flex-1`}
-                        />
-                        {/* One branch chapter per line; a line keeps its days while its label is unchanged. */}
-                        <textarea
-                          aria-label={t("ui.slurp.settings.arcLibrary.choiceBranch")}
-                          placeholder={t("ui.slurp.settings.arcLibrary.choiceBranch")}
-                          value={option.chapters.map((entry) => entry.label).join("\n")}
-                          rows={2}
-                          onChange={(event) =>
-                            setOption(index, optionIndex, {
-                              chapters: event.target.value
-                                .split("\n")
-                                .slice(0, 4)
-                                .map((label) => {
-                                  const known = option.chapters.find((entry) => entry.label === label);
-                                  return { label, minDays: known?.minDays ?? 1, maxDays: known?.maxDays ?? 3 };
-                                }),
-                            })
-                          }
-                          className={`${input} min-w-0 flex-1 py-2`}
-                        />
-                        {chapter.choice!.options.length > 2 && (
-                          <button
-                            type="button"
-                            className={button}
-                            onClick={() =>
-                              setChapter(index, {
-                                choice: {
-                                  ...chapter.choice!,
-                                  options: chapter.choice!.options.filter((_, at) => at !== optionIndex),
-                                },
-                              })
-                            }
-                          >
-                            {t("ui.slurp.settings.arcLibrary.removeOption")}
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                    <div className="flex flex-wrap gap-2">
-                      {chapter.choice.options.length < 4 && (
-                        <button
-                          type="button"
-                          className={button}
-                          onClick={() =>
-                            setChapter(index, {
-                              choice: {
-                                ...chapter.choice!,
-                                options: [...chapter.choice!.options, { label: "", chapters: [] }],
-                              },
-                            })
-                          }
-                        >
-                          {t("ui.slurp.settings.arcLibrary.addOption")}
-                        </button>
-                      )}
-                      <button type="button" className={button} onClick={() => setChapter(index, { choice: undefined })}>
-                        {t("ui.slurp.settings.arcLibrary.removeChoice")}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    className={button}
-                    onClick={() =>
-                      setChapter(index, {
-                        choice: {
-                          question: "",
-                          options: [
-                            { label: "", chapters: [] },
-                            { label: "", chapters: [] },
-                          ],
-                        },
-                      })
-                    }
-                  >
-                    {t("ui.slurp.settings.arcLibrary.addChoice")}
-                  </button>
-                )}
-              </div>
-            </details>
-          </fieldset>
-        ))}
-        {draft.chapters.length < 12 && (
-          <button
-            type="button"
-            className={button}
-            onClick={() => setDraft({ ...draft, chapters: [...draft.chapters, { label: "", minDays: 1, maxDays: 3 }] })}
-          >
-            {t("ui.slurp.settings.arcLibrary.addChapter")}
-          </button>
-        )}
-        {draft.chapters.length > 0 && (
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={draft.revertProfileAtEnd === true}
-              onChange={(event) => setDraft({ ...draft, revertProfileAtEnd: event.target.checked })}
-            />
-            {t("ui.slurp.settings.arcLibrary.revertProfileAtEnd")}
-          </label>
-        )}
-        {draft.chapters.length === 0 && (
-          <label className="flex items-center gap-2 text-sm">
-            {t("ui.slurp.settings.arcLibrary.durationDays")}
-            <input
-              type="number"
-              min={1}
-              max={365}
-              value={draft.durationDays}
-              onChange={(event) =>
-                setDraft({
-                  ...draft,
-                  durationDays: Math.min(365, Math.max(1, Math.floor(Number(event.target.value)) || 1)),
-                })
-              }
-              className={`${input} w-24`}
-            />
-          </label>
-        )}
-        <p className="text-sm font-semibold">{t("ui.slurp.settings.arcLibrary.tags")}</p>
-        <div className="flex flex-wrap gap-x-4">
-          {[...new Set([...tags, ...draft.tags])].map((tag) => (
-            <label key={tag} className="inline-flex min-h-11 items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={draft.tags.includes(tag)}
-                onChange={(event) =>
-                  setDraft({
-                    ...draft,
-                    tags: event.target.checked ? [...draft.tags, tag] : draft.tags.filter((entry) => entry !== tag),
-                  })
-                }
-              />
-              {tag}
-            </label>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          <button
-            type="submit"
-            disabled={busy || !draft.name.trim()}
-            className="min-h-11 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-white disabled:opacity-50"
-          >
-            {t("ui.slurp.settings.arcLibrary.save")}
-          </button>
-          <button type="button" className={button} onClick={() => setDraft(null)}>
-            {t("ui.slurp.settings.arcLibrary.cancel")}
-          </button>
-        </div>
-      </form>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      <ul className="space-y-2">
-        {library
-          .filter((type) => !type.hidden || type.builtin)
-          .map((type) => (
-            <li
-              key={type.id}
-              className="rounded-xl border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] p-3 text-sm shadow-sm sm:p-4"
-            >
-              <div className="flex flex-wrap items-start gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={`font-bold ${type.hidden ? "text-[var(--slurp-muted)] line-through" : ""}`}>
-                      {type.name}
-                    </span>
-                    {type.builtin && (
-                      <span className="rounded-full bg-[var(--noodle-accent)]/10 px-2 py-0.5 text-[0.65rem] font-bold text-[var(--noodle-accent)]">
-                        {t("ui.slurp.settings.arcLibrary.builtIn", { defaultValue: "Built in" })}
-                      </span>
-                    )}
-                    {type.hidden && (
-                      <span className="rounded-full bg-[var(--muted-foreground)]/10 px-2 py-0.5 text-[0.65rem] font-bold text-[var(--muted-foreground)]">
-                        {t("ui.slurp.settings.arcLibrary.hidden")}
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--muted-foreground)]">
-                    {type.description ||
-                      t("ui.slurp.settings.arcLibrary.noDescription", { defaultValue: "No direction added." })}
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[0.68rem] text-[var(--muted-foreground)]">
-                    <span>
-                      {t("ui.slurp.settings.arcLibrary.chapterCount", {
-                        defaultValue: "{{count}} chapters",
-                        count: type.chapters.length,
-                      })}
-                    </span>
-                    {type.tone && <span>{type.tone}</span>}
-                    {type.tags.length > 0 && <span>{type.tags.join(", ")}</span>}
-                  </div>
-                </div>
-                {!type.hidden && (
-                  <label className="inline-flex min-h-10 shrink-0 items-center gap-2 text-xs font-semibold">
-                    <input
-                      type="checkbox"
-                      checked={type.enabled}
-                      disabled={busy}
-                      onChange={(event) => replace({ ...type, enabled: event.target.checked })}
-                    />
-                    {t("ui.slurp.settings.arcLibrary.enabled")}
-                  </label>
-                )}
-              </div>
-              {!type.hidden && (
-                <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-[var(--slurp-outline)] pt-3">
-                  <button
-                    type="button"
-                    className={button}
-                    disabled={busy}
-                    onClick={() => {
-                      setReviewingGeneratedDraft(false);
-                      setDraft(structuredClone(type));
-                    }}
-                  >
-                    {t("ui.slurp.settings.arcLibrary.edit")}
-                  </button>
-                  <button
-                    type="button"
-                    className={`${button} text-red-600`}
-                    disabled={busy}
-                    onClick={() => {
-                      if (!window.confirm(t("ui.slurp.settings.arcLibrary.deleteConfirm", { name: type.name }))) return;
-                      onChange(
-                        type.builtin
-                          ? library.map((entry) =>
-                              entry.id === type.id ? { ...entry, enabled: false, hidden: true } : entry,
-                            )
-                          : library.filter((entry) => entry.id !== type.id),
-                      );
-                    }}
-                  >
-                    {t("ui.slurp.settings.arcLibrary.delete")}
-                  </button>
-                </div>
-              )}
-              {type.hidden && type.builtin && (
-                <button
-                  type="button"
-                  className={button}
-                  disabled={busy || reset.isPending}
-                  onClick={() => reset.mutate(type.id)}
-                >
-                  {t("ui.slurp.settings.arcLibrary.reset")}
-                </button>
-              )}
-            </li>
-          ))}
-      </ul>
-      <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-        <label className="block space-y-2 text-sm font-semibold">
-          <span className="flex items-center gap-1.5">
-            {t("ui.slurp.settings.arcLibrary.aiBrief", { defaultValue: "Describe the arc to AI" })}
-            <span
-              title={t("ui.slurp.settings.arcLibrary.aiBriefDetail", {
-                defaultValue: "AI creates an editable arc draft. Nothing is saved until you save it.",
-              })}
-              className="text-[var(--muted-foreground)]"
-            >
-              <CircleHelp size={14} aria-hidden="true" />
-            </span>
-          </span>
-          <textarea
-            value={brief}
-            onChange={(event) => setBrief(event.target.value)}
-            maxLength={2000}
-            rows={2}
-            placeholder={t("ui.slurp.settings.arcLibrary.aiBriefPlaceholder", {
-              defaultValue: "For example: a summer road trip that starts badly and ends with a surprise collaboration.",
-            })}
-            className={`${input} py-2`}
-          />
-        </label>
-        <button
-          type="button"
-          className="min-h-11 self-end rounded-lg border border-[var(--noodle-accent)] px-4 text-sm font-bold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 disabled:opacity-50"
-          disabled={busy || generate.isPending || !brief.trim() || !creatorAccountId || !personaId}
-          onClick={() => void generateDraft()}
-        >
-          {generate.isPending
-            ? t("ui.slurp.settings.arcLibrary.generating", { defaultValue: "Building draft..." })
-            : t("ui.slurp.settings.arcLibrary.buildWithAi", { defaultValue: "Build with AI" })}
-        </button>
-      </div>
-      {generate.error && (
-        <p role="alert" className="text-xs text-[var(--destructive)]">
-          {generate.error.message}
-        </p>
-      )}
-      <button
-        type="button"
-        className={button}
-        disabled={busy}
-        onClick={() => {
-          setReviewingGeneratedDraft(false);
-          setDraft({
-            id: `custom-${Date.now().toString(36)}`,
-            name: "",
-            description: "",
-            chapters: [],
-            tags: [],
-            tone: "",
-            durationDays: 14,
-            enabled: true,
-            builtin: false,
-            hidden: false,
-          });
-        }}
-      >
-        <Plus size={15} aria-hidden="true" />
-        {t("ui.slurp.settings.arcLibrary.add")}
-      </button>
-    </div>
-  );
-}
-
-function PromptCard({
-  title,
-  value,
-  isDefault,
-  onEdit,
-  onRestore,
-}: {
-  title: string;
-  value: string;
-  isDefault: boolean;
-  onEdit: () => void;
-  onRestore: () => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <div className="space-y-3 rounded-lg border border-[var(--border)] p-4">
-      <div className="flex items-start gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]">
-          <FileText size={16} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-semibold">{title}</p>
-            <span className="rounded-full border border-[var(--noodle-accent)]/30 bg-[var(--noodle-accent)]/10 px-2 py-0.5 text-[0.625rem] font-semibold text-[var(--noodle-accent)]">
-              {isDefault ? t("ui.slurp.settings.prompts.default") : t("ui.slurp.settings.prompts.custom")}
-            </span>
-          </div>
-          <p className="mt-2 line-clamp-3 whitespace-pre-line text-xs leading-5 text-[var(--muted-foreground)]">
-            {value}
-          </p>
-        </div>
-      </div>
-      <div className="flex flex-wrap justify-end gap-2">
-        <button
-          type="button"
-          onClick={onRestore}
-          disabled={isDefault}
-          className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-[var(--noodle-accent)]/35 px-3 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 disabled:opacity-45"
-        >
-          <RotateCcw size={13} />
-          {t("ui.slurp.settings.prompts.restoreDefault")}
-        </button>
-        <button
-          type="button"
-          onClick={onEdit}
-          className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)]"
-        >
-          <Pencil size={14} className="text-[var(--noodle-accent)]" />
-          {t("ui.slurp.settings.prompts.edit")}
-        </button>
-      </div>
-    </div>
-  );
-}
-function PromptEditor({
-  open,
-  title,
-  value,
-  onChange,
-  onClose,
-  onSave,
-  onRestore,
-  pending,
-}: {
-  open: boolean;
-  title: string;
-  value: string;
-  onChange: (value: string) => void;
-  onClose: () => void;
-  onSave: () => Promise<void>;
-  onRestore: () => void;
-  pending: boolean;
-}) {
-  const { t } = useTranslation();
-  return (
-    <Modal open={open} onClose={onClose} title={title} width="max-w-3xl" closeDisabled={pending}>
-      <div className="space-y-4">
-        <label className="block text-sm font-semibold">
-          <span className="sr-only">{title}</span>
-          <textarea
-            aria-label={title}
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-            className="min-h-[22rem] w-full resize-y rounded-lg border border-[var(--border)] bg-transparent p-3 text-sm leading-6"
-          />
-        </label>
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <button
-            type="button"
-            onClick={onRestore}
-            disabled={pending}
-            className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-[var(--noodle-accent)]/35 px-3 text-xs font-semibold text-[var(--noodle-accent)] disabled:opacity-45"
-          >
-            <RotateCcw size={13} />
-            {t("ui.slurp.settings.prompts.restoreDefault")}
-          </button>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={pending}
-              className="min-h-10 flex-1 rounded-lg border border-[var(--border)] px-4 text-xs font-semibold sm:flex-none"
-            >
-              {t("ui.slurp.actions.cancel")}
-            </button>
-            <button
-              type="button"
-              onClick={() => void onSave()}
-              disabled={!value.trim() || pending}
-              className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-45"
-            >
-              {pending ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-              {t("ui.slurp.settings.prompts.save")}
-            </button>
-          </div>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
-/**
- * The managed ambient crowd: the background profiles that fill a feed out so a Creator is not
- * talking into an empty room.
- *
- * Listing them is what seeds them, so opening this panel is also what creates the roster. Reroll
- * regenerates an identity in place; the account, and anything already attached to it, survives.
- */
-function AmbientProfilesPanel({
-  allowRandomUsers,
-  onAllowRandomUsersChange,
-}: {
-  allowRandomUsers: boolean;
-  onAllowRandomUsersChange: (value: boolean) => void;
-}) {
-  const { t } = useTranslation();
-  const profilesQuery = useSlurpAmbientProfiles();
-  const reroll = useRerollAmbientProfiles();
-  const update = useUpdateAmbientProfile();
-  const remove = useDeleteNoodlerStageProfile();
-  const profiles = profilesQuery.data?.items ?? [];
-  const [selected, setSelected] = useState<string | null>(null);
-  const [editing, setEditing] = useState<{ id: string; displayName: string; handle: string; bio: string } | null>(null);
-
-  const rerollIds = (accountIds: string[], id: string | null) => {
-    if (accountIds.length === 0) return;
-    setSelected(id);
-    reroll.mutate(accountIds, {
-      onSuccess: () => toast.success(t("ui.slurp.settings.ambient.rerolled", { count: accountIds.length })),
-      onError: (error) => toast.error(errorMessage(error)),
-      onSettled: () => setSelected(null),
-    });
-  };
-
-  return (
-    <div className="space-y-3 pt-2">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-bold">{t("ui.slurp.settings.ambient.title")}</h2>
-          <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted)]">{t("ui.slurp.settings.ambient.detail")}</p>
-        </div>
-        <button
-          type="button"
-          disabled={reroll.isPending || profiles.length === 0}
-          onClick={() =>
-            rerollIds(
-              profiles.map((profile) => profile.id),
-              null,
-            )
-          }
-          className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
-        >
-          <RefreshCw size={14} className={reroll.isPending && selected === null ? "animate-spin" : ""} />
-          {t("ui.slurp.settings.ambient.rerollAll")}
-        </button>
-      </div>
-      <Toggle
-        label={t("ui.slurp.settings.ambient.enabled")}
-        detail={t("ui.slurp.settings.ambient.enabledDetail")}
-        value={allowRandomUsers}
-        onChange={onAllowRandomUsersChange}
-      />
-      {profiles.length > 0 && (
-        <ul className="space-y-2">
-          {profiles.map((profile) =>
-            editing?.id === profile.id ? (
-              <li key={profile.id} className="space-y-2 rounded-lg border border-[var(--border)] p-3">
-                {(["displayName", "handle", "bio"] as const).map((field) => (
-                  <label key={field} className="block text-[0.7rem] font-semibold">
-                    {t(`ui.slurp.settings.ambient.fields.${field}`)}
-                    <input
-                      value={editing[field]}
-                      onChange={(event) => setEditing({ ...editing, [field]: event.target.value })}
-                      className="mt-1 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
-                    />
-                  </label>
-                ))}
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setEditing(null)}
-                    className="inline-flex min-h-9 items-center rounded-lg border border-[var(--border)] px-2.5 text-[0.7rem] font-semibold hover:bg-[var(--accent)]"
-                  >
-                    {t("ui.slurp.settings.ambient.cancel")}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={update.isPending || !editing.displayName.trim() || !editing.handle.trim()}
-                    onClick={() =>
-                      update.mutate(editing, {
-                        onSuccess: () => setEditing(null),
-                        onError: (error) => toast.error(errorMessage(error)),
-                      })
-                    }
-                    className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[var(--noodle-accent)] px-2.5 text-[0.7rem] font-bold text-zinc-950 disabled:opacity-50"
-                  >
-                    <Save size={12} />
-                    {t("ui.slurp.settings.ambient.save")}
-                  </button>
-                </div>
-              </li>
-            ) : (
-              <li
-                key={profile.id}
-                className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] p-3"
-              >
-                <span className="flex min-w-0 flex-col">
-                  <span className="truncate text-xs font-semibold">
-                    {profile.displayName} <span className="text-[var(--slurp-muted)]">@{profile.handle}</span>
-                  </span>
-                  <span className="truncate text-[0.7rem] text-[var(--slurp-muted)]">{profile.bio}</span>
-                </span>
-                <span className="flex shrink-0 gap-1.5">
-                  <button
-                    type="button"
-                    disabled={reroll.isPending}
-                    onClick={() => rerollIds([profile.id], profile.id)}
-                    className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[var(--border)] px-2.5 text-[0.7rem] font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
-                  >
-                    <RefreshCw size={12} className={selected === profile.id ? "animate-spin" : ""} />
-                    {t("ui.slurp.settings.ambient.reroll")}
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={t("ui.slurp.settings.ambient.edit")}
-                    title={t("ui.slurp.settings.ambient.edit")}
-                    onClick={() =>
-                      setEditing({
-                        id: profile.id,
-                        displayName: profile.displayName,
-                        handle: profile.handle,
-                        bio: profile.bio,
-                      })
-                    }
-                    className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg border border-[var(--border)] hover:bg-[var(--accent)]"
-                  >
-                    <Pencil size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={t("ui.slurp.settings.ambient.delete")}
-                    title={t("ui.slurp.settings.ambient.delete")}
-                    disabled={remove.isPending}
-                    onClick={() => {
-                      if (!window.confirm(t("ui.slurp.settings.ambient.deleteConfirm", { name: profile.displayName })))
-                        return;
-                      remove.mutate(profile.id, {
-                        onSuccess: () => void profilesQuery.refetch(),
-                        onError: (error) => toast.error(errorMessage(error)),
-                      });
-                    }}
-                    className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg border border-[var(--border)] hover:bg-[var(--accent)] disabled:opacity-50"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </span>
-              </li>
-            ),
-          )}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-/**
- * A Creator's own message policy and prices.
- *
- * Only rendered for a persona-owned Creator: the routes require the operating persona, and a
- * character-sourced Creator has no owner to authorise the change.
- */
-function CreatorMessagingGroup({
-  creatorId,
-  personaId,
-  setMessaging,
-  setPrice,
-}: {
-  creatorId: string;
-  personaId: string;
-  setMessaging: ReturnType<typeof useSetSlurpCreatorMessaging>;
-  setPrice: ReturnType<typeof useSetSlurpCreatorPrice>;
-}) {
-  const { t } = useTranslation();
-  const query = useSlurpCreatorMessagingSettings(creatorId, personaId);
-  const messaging = query.data?.messaging;
-  const busy = setMessaging.isPending || setPrice.isPending;
-  if (query.isLoading) {
-    return (
-      <div className="flex justify-center py-6 text-[var(--muted-foreground)]" role="status">
-        <Loader2 size={18} className="animate-spin" />
-      </div>
-    );
-  }
-  if (query.isError || !messaging) {
-    return (
-      <p role="alert" className="rounded-lg border border-red-400/30 p-3 text-xs">
-        {t("ui.slurp.settings.creators.messagingLoadError")}
-      </p>
-    );
-  }
-  const patch = (input: Parameters<typeof setMessaging.mutate>[0]) =>
-    setMessaging.mutate(input, { onError: (error) => toast.error(errorMessage(error)) });
-  return (
-    <SettingsGroup title={t("ui.slurp.settings.creators.messagingTitle")}>
-      <Field label={t("ui.slurp.settings.creators.dmPolicy")} detail={t("ui.slurp.settings.creators.dmPolicyDetail")}>
-        <select
-          value={messaging.dmPolicy}
-          disabled={busy}
-          onChange={(event) =>
-            patch({
-              creatorAccountId: creatorId,
-              personaId,
-              dmPolicy: event.target.value as SlurpCreatorMessaging["dmPolicy"],
-            })
-          }
-          className="min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50 sm:text-sm"
-        >
-          <option value="open">{t("ui.slurp.settings.creators.dmPolicyOpen")}</option>
-          <option value="subscribers">{t("ui.slurp.settings.creators.dmPolicySubscribers")}</option>
-          <option value="paid">{t("ui.slurp.settings.creators.dmPolicyPaid")}</option>
-          <option value="closed">{t("ui.slurp.settings.creators.dmPolicyClosed")}</option>
-        </select>
-      </Field>
-      {messaging.dmPolicy === "paid" && (
-        <Field
-          label={t("ui.slurp.settings.creators.requestFee")}
-          detail={t("ui.slurp.settings.creators.requestFeeDetail")}
-        >
-          <NumberSetting
-            value={messaging.requestFee}
-            min={0}
-            max={9999}
-            onSave={(value) => patch({ creatorAccountId: creatorId, personaId, requestFee: value })}
-          />
-        </Field>
-      )}
-      <Toggle
-        label={t("ui.slurp.settings.creators.proactiveMessages", { defaultValue: "Writes first" })}
-        detail={t("ui.slurp.settings.creators.proactiveMessagesDetail", {
-          defaultValue: "Off: this Creator only answers. No follow-ups and no unprompted direct messages.",
-        })}
-        value={messaging.proactiveMessages}
-        onChange={(value) => patch({ creatorAccountId: creatorId, personaId, proactiveMessages: value })}
-      />
-      <Field label={t("ui.slurp.settings.creators.ppvPrice")} detail={t("ui.slurp.settings.creators.ppvPriceDetail")}>
-        <NumberSetting
-          value={messaging.ppvPrice}
-          min={0}
-          max={9999}
-          onSave={(value) => patch({ creatorAccountId: creatorId, personaId, ppvPrice: value })}
-        />
-      </Field>
-      <Field
-        label={t("ui.slurp.settings.creators.subscriptionPrice")}
-        detail={t("ui.slurp.settings.creators.subscriptionPriceDetail")}
-      >
-        <NumberSetting
-          value={query.data?.subscriptionPrice ?? 0}
-          min={0}
-          max={9999}
-          onSave={(value) =>
-            setPrice.mutate(
-              { accountId: creatorId, personaId, price: value },
-              { onError: (error) => toast.error(errorMessage(error)) },
-            )
-          }
-        />
-      </Field>
-      <Field
-        label={t("ui.slurp.settings.creators.unlockPrice", { defaultValue: "Locked post price" })}
-        detail={t("ui.slurp.settings.creators.unlockPriceDetail", {
-          defaultValue: "Default price for this Creator's locked posts. Zero uses the Wallet default.",
-        })}
-      >
-        <NumberSetting
-          value={messaging.unlockPrice ?? 0}
-          min={0}
-          max={9999}
-          onSave={(value) => patch({ creatorAccountId: creatorId, personaId, unlockPrice: value || null })}
-        />
-      </Field>
-      <Field
-        label={t("ui.slurp.settings.creators.commissionBase", { defaultValue: "Commission base price" })}
-        detail={t("ui.slurp.settings.creators.commissionBaseDetail", {
-          defaultValue:
-            "Price for an average brief. A quick sketch quotes lower, a detailed scene or a set quotes higher.",
-        })}
-      >
-        <NumberSetting
-          value={messaging.commissionBase}
-          min={1}
-          max={99999}
-          onSave={(value) => patch({ creatorAccountId: creatorId, personaId, commissionBase: value })}
-        />
-      </Field>
-      <Field
-        label={t("ui.slurp.settings.creators.commissionMin", { defaultValue: "Lowest commission price" })}
-        detail={t("ui.slurp.settings.creators.commissionMinDetail", {
-          defaultValue: "No quote goes below this, and haggling never meets a fan under it.",
-        })}
-      >
-        <NumberSetting
-          value={messaging.commissionMin}
-          min={1}
-          max={99999}
-          onSave={(value) => patch({ creatorAccountId: creatorId, personaId, commissionMin: value })}
-        />
-      </Field>
-      <Field
-        label={t("ui.slurp.settings.creators.commissionMax", { defaultValue: "Highest commission price" })}
-        detail={t("ui.slurp.settings.creators.commissionMaxDetail", {
-          defaultValue: "No quote goes above this, however large the brief.",
-        })}
-      >
-        <NumberSetting
-          value={messaging.commissionMax}
-          min={1}
-          max={99999}
-          onSave={(value) => patch({ creatorAccountId: creatorId, personaId, commissionMax: value })}
-        />
-      </Field>
-      <Toggle
-        label={t("ui.slurp.settings.creators.autoQuote", { defaultValue: "Quote audience commissions automatically" })}
-        detail={t("ui.slurp.settings.creators.autoQuoteDetail", {
-          defaultValue:
-            "Audience briefs get a quote from the prices above. You still answer offers and your own fans by hand.",
-        })}
-        value={messaging.autoQuote}
-        onChange={(value) => patch({ creatorAccountId: creatorId, personaId, autoQuote: value })}
-      />
-      {query.data?.suggested && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--accent)] p-3 text-xs">
-          <span>
-            {t("ui.slurp.settings.creators.suggestedPrices", {
-              defaultValue:
-                "Suggested for your audience: {{subscription}}/week · {{unlock}} per locked post · {{commission}} commission base",
-              subscription: query.data.suggested.subscriptionPrice,
-              unlock: query.data.suggested.unlockPrice,
-              commission: query.data.suggested.commissionBase,
-            })}
-          </span>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => {
-              const suggested = query.data?.suggested;
-              if (!suggested) return;
-              patch({
-                creatorAccountId: creatorId,
-                personaId,
-                unlockPrice: suggested.unlockPrice || null,
-                commissionBase: suggested.commissionBase,
-              });
-              setPrice.mutate(
-                { accountId: creatorId, personaId, price: suggested.subscriptionPrice },
-                { onError: (error) => toast.error(errorMessage(error)) },
-              );
-            }}
-            className="min-h-9 rounded-lg px-3 font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)] focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
-          >
-            {t("ui.slurp.settings.creators.useSuggestedPrices", { defaultValue: "Use suggestions" })}
-          </button>
-        </div>
-      )}
-    </SettingsGroup>
   );
 }

@@ -2,6 +2,7 @@
 // that does nothing — which is how the Advanced toggle in the conversation overview ended up.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { slurp2BackstageSource } from "./slurp2-backstage-source";
 
 const root = "packages/slurp2/src/engine/packages";
 const settingsStorage = readFileSync(`${root}/server/src/services/storage/slurp.storage.ts`, "utf8");
@@ -9,8 +10,8 @@ const messagesStorage = readFileSync(`${root}/server/src/services/storage/slurp-
 const scheduler = readFileSync(`${root}/server/src/services/slurp/slurp-message-scheduler.service.ts`, "utf8");
 const operation = readFileSync(`${root}/server/src/services/slurp/slurp-message.operation.ts`, "utf8");
 const messaging = readFileSync(`${root}/server/src/services/slurp/slurp-messaging.ts`, "utf8");
-const view = readFileSync(`${root}/client/src/components/slurp/SlurpSettings.tsx`, "utf8");
-const sections = readFileSync(`${root}/client/src/components/slurp/slurp-navigation.types.ts`, "utf8");
+const view = slurp2BackstageSource();
+const sections = readFileSync(`${root}/client/src/components/slurp/slurp-backstage.ts`, "utf8");
 const locales = JSON.parse(readFileSync(`${root}/client/src/localization/locales/en.json`, "utf8")) as Record<
   string,
   string

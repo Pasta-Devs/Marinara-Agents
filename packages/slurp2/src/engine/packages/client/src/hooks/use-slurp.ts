@@ -449,6 +449,55 @@ export type SlurpAutopurgeResult = {
   nextRunAt: string | null;
 };
 
+export type SlurpAutopurgePreview = {
+  cutoff: string;
+  affectedPosts: number;
+  postsToDelete: number;
+  postMediaFiles: number;
+  messageMediaFiles: number;
+  estimatedReclaimableBytes: number;
+};
+
+export type SlurpMaintenanceSummary = {
+  generatedAt: string;
+  operations: { backup: boolean; deletion: boolean; account: boolean; mutation: boolean };
+  content: { creators: number; posts: number; interactions: number; messages: number };
+  media: { files: number; bytes: number };
+  unused: {
+    preparedPosts: number;
+    attempts: number;
+    runs: number;
+    improvementJobs: number;
+    improvementProposals: number;
+  };
+};
+
+export type SlurpImprovementProposal = {
+  id: string;
+  accountId: string;
+  field: string;
+  before: unknown;
+  after: unknown;
+  status: "pending" | "applied" | "dismissed" | "stale" | "error";
+  error: string | null;
+};
+
+export type SlurpImprovementJob = {
+  id: string;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  mode: "missing" | "refresh" | "prefill";
+  rebrand: boolean;
+  accountIds: string[];
+  modules: string[];
+  completed: number;
+  total: number;
+  expectedModelCalls: number;
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
+  proposals: SlurpImprovementProposal[];
+};
+
 export type SlurpScheduleSlot = {
   id: string;
   publishAt: string;
@@ -503,6 +552,19 @@ export type SlurpBackupJob = {
   error: string | null;
 };
 
+export type SlurpRestoreInspection = {
+  id: string;
+  expiresAt: string;
+  sourcePackage: "slurp" | "slurp2";
+  exportedAt: string | null;
+  creators: number;
+  posts: number;
+  interactions: number;
+  mediaFiles: number;
+  mediaBytes: number;
+  hasSlurp2Settings: boolean;
+};
+
 const backupError = async (response: Response, fallback: string): Promise<never> => {
   const body = (await response.json().catch(() => null)) as { error?: string } | null;
   throw new Error(body?.error ?? fallback);
@@ -543,6 +605,32 @@ export async function startSlurpRestore(archive: File | Blob, importSettings = f
   return response.json() as Promise<SlurpBackupJob>;
 }
 
+export async function inspectSlurpRestore(archive: File | Blob): Promise<SlurpRestoreInspection> {
+  const response = await api.raw("/slurp2/restore/inspections", {
+    method: "POST",
+    headers: { "Content-Type": "application/zip" },
+    body: archive,
+  });
+  if (!response.ok) return backupError(response, "Could not inspect the Slurp restore.");
+  return response.json() as Promise<SlurpRestoreInspection>;
+}
+
+export async function applySlurpRestoreInspection(
+  inspectionId: string,
+  importSettings = false,
+): Promise<SlurpBackupJob> {
+  const response = await api.raw(
+    `/slurp2/restore/inspections/${encodeURIComponent(inspectionId)}/apply${importSettings ? "?importSettings=1" : ""}`,
+    { method: "POST" },
+  );
+  if (!response.ok) return backupError(response, "Could not start the inspected Slurp restore.");
+  return response.json() as Promise<SlurpBackupJob>;
+}
+
+export async function discardSlurpRestoreInspection(inspectionId: string): Promise<void> {
+  await api.raw(`/slurp2/restore/inspections/${encodeURIComponent(inspectionId)}`, { method: "DELETE" });
+}
+
 export function useUpdateSlurpSettings() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -563,6 +651,93 @@ export function useRunSlurpAutopurge() {
       void queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() });
       return result;
     },
+  });
+}
+
+export function useSlurpMaintenanceSummary(enabled: boolean) {
+  return useQuery({
+    queryKey: [...noodleKeys.settings(), "maintenance-summary"] as const,
+    queryFn: () => api.get<SlurpMaintenanceSummary>("/slurp2/maintenance/summary"),
+    enabled,
+    staleTime: 15_000,
+  });
+}
+
+export function useSlurpAutopurgePreview(settings: SlurpSettings | undefined, enabled: boolean) {
+  const input = settings
+    ? {
+        autopurgeRetentionValue: settings.autopurgeRetentionValue,
+        autopurgeRetentionUnit: settings.autopurgeRetentionUnit,
+        autopurgeKeepPosts: settings.autopurgeKeepPosts,
+        autopurgeIncludeMessageMedia: settings.autopurgeIncludeMessageMedia,
+      }
+    : null;
+  return useQuery({
+    queryKey: [...noodleKeys.settings(), "autopurge-preview", input] as const,
+    queryFn: () => api.post<SlurpAutopurgePreview>("/slurp2/autopurge/preview", input!),
+    enabled: enabled && Boolean(input),
+    staleTime: 10_000,
+  });
+}
+
+export function useSlurpImprovementJobs(enabled: boolean) {
+  return useQuery({
+    queryKey: [...noodleKeys.settings(), "improvement-jobs"] as const,
+    queryFn: () => api.get<{ items: SlurpImprovementJob[] }>("/slurp2/backstage/improvement-jobs"),
+    enabled,
+    refetchInterval: (query) =>
+      query.state.data?.items.some((job) => job.status === "queued" || job.status === "running") ? 1000 : false,
+  });
+}
+
+export function useCreateSlurpImprovementJob() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      accountIds: string[];
+      mode: "missing" | "refresh" | "prefill";
+      rebrand: boolean;
+      modules: string[];
+      connectionId?: string;
+    }) => api.post<SlurpImprovementJob>("/slurp2/backstage/improvement-jobs", input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...noodleKeys.settings(), "improvement-jobs"] }),
+  });
+}
+
+export function useApplySlurpImprovementProposals() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ jobId, proposalIds }: { jobId: string; proposalIds: string[] }) =>
+      api.post<{ applied: number; rejected: number; creators: number; createdTags: string[] }>(
+        `/slurp2/backstage/improvement-jobs/${encodeURIComponent(jobId)}/apply`,
+        { proposalIds },
+      ),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: [...noodleKeys.settings(), "improvement-jobs"] }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.settings() }),
+      ]),
+  });
+}
+
+export function useSetSlurpImprovementJobState() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ jobId, action }: { jobId: string; action: "cancel" | "resume" | "retry" }) =>
+      api.post<SlurpImprovementJob>(`/slurp2/backstage/improvement-jobs/${encodeURIComponent(jobId)}/${action}`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...noodleKeys.settings(), "improvement-jobs"] }),
+  });
+}
+
+export function useDismissSlurpImprovementProposals() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ jobId, proposalIds }: { jobId: string; proposalIds: string[] }) =>
+      api.post<{ dismissed: number }>(`/slurp2/backstage/improvement-jobs/${encodeURIComponent(jobId)}/dismiss`, {
+        proposalIds,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...noodleKeys.settings(), "improvement-jobs"] }),
   });
 }
 

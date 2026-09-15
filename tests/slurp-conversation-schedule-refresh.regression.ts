@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { resolveSlurpCreatorAvailability } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-creator-schedule-context";
 import { SLURP_DEFAULT_REPLY_DELAYS } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-messaging";
+import { slurp2BackstageSource } from "./slurp2-backstage-source";
 
 const root = "packages/slurp2/src/engine/packages";
 async function main() {
   const [settings, hooks, routes, generator] = await Promise.all([
-    readFile(`${root}/client/src/components/slurp/SlurpSettings.tsx`, "utf8"),
+    slurp2BackstageSource(),
     readFile(`${root}/client/src/hooks/use-slurp.ts`, "utf8"),
     readFile(`${root}/server/src/routes/slurp.routes.ts`, "utf8"),
     readFile(`${root}/server/src/services/slurp/slurp-conversation-schedule-generation.ts`, "utf8"),

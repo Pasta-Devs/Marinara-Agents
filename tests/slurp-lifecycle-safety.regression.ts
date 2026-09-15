@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { slurp2BackstageSource } from "./slurp2-backstage-source";
 
 const root = join(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
@@ -14,7 +15,7 @@ const imageConnections = read(
 );
 const home = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
 const storage = read("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
-const settings = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx");
+const settings = slurp2BackstageSource();
 const settingsControls = read(
   "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpSettingsControls.tsx",
 );
@@ -33,7 +34,7 @@ const shell = read("packages/slurp2/src/engine/packages/client/src/components/sl
 const serverEntry = read("packages/slurp2/src/engine/packages/server/src/services/slurp/server-entry.ts");
 assert.match(
   settings,
-  /const section = navigation\.section \?\? "overview";[\s\S]*?useSlurpAdState\(section/u,
+  /const section = navigation\.section \?\? "overview";[\s\S]*?const target =[\s\S]*?useSlurpAdState\(target/u,
   "settings must define its section before dependent hooks run",
 );
 
@@ -279,8 +280,8 @@ assert.match(
 );
 assert.match(
   settings,
-  /snap-x[\s\S]*?settingsSections\.map/u,
-  "narrow settings must expose a horizontally scrollable section navigation",
+  /sticky top-0[\s\S]*?md:hidden[\s\S]*?<select[\s\S]*?settingsSections\.map/u,
+  "narrow settings must expose a compact sticky destination picker",
 );
 assert.match(settings, /aria-live="polite"/u, "settings saves must announce their state");
 assert.match(settings, /selectedCreatorId/u, "creator settings must keep an explicit master-detail selection");

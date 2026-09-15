@@ -221,6 +221,36 @@ export const noodlerFirstPostJobs = fileTable(
   { uniqueBy: [{ keys: ["executionId", "creatorAccountId"] }] },
 );
 
+/** Resumable, proposal-only work created from Backstage's Creator workshop. */
+export const slurpImprovementJobs = fileTable("slurp2_improvement_jobs", {
+  id: text("id").primaryKey(),
+  status: text("status").notNull().default("queued"),
+  mode: text("mode").notNull().default("missing"),
+  rebrand: text("rebrand").notNull().default("false"),
+  accountIds: text("account_ids").notNull().default("[]"),
+  modules: text("modules").notNull().default("[]"),
+  connectionId: text("connection_id"),
+  completed: text("completed").notNull().default("0"),
+  total: text("total").notNull().default("0"),
+  error: text("error"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const slurpImprovementProposals = fileTable("slurp2_improvement_proposals", {
+  id: text("id").primaryKey(),
+  jobId: text("job_id").notNull(),
+  accountId: text("account_id").notNull(),
+  field: text("field").notNull(),
+  beforeValue: text("before_value").notNull(),
+  afterValue: text("after_value").notNull(),
+  sourceFingerprint: text("source_fingerprint").notNull(),
+  status: text("status").notNull().default("pending"),
+  error: text("error"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
 // ──────────────────────────────────────────────
 // Direct messages
 // ──────────────────────────────────────────────

@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { slurp2BackstageSource } from "./slurp2-backstage-source";
 
 const root = join(import.meta.dirname, "..", "packages", "slurp2", "src", "engine", "packages");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 const component = read("client/src/components/slurp/SlurpFanTypesSettings.tsx");
-const settings = read("client/src/components/slurp/SlurpSettings.tsx");
+const settings = slurp2BackstageSource();
 const routes = read("server/src/routes/slurp.routes.ts");
 
 assert.match(settings, /<SlurpFanTypesSettings/u, "the audience settings surface mounts the editor");

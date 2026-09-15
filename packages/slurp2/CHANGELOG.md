@@ -1,5 +1,13 @@
 # Slurp Remastered release notes
 
+## 0.0.17 — 2026-09-15
+
+- Settings is now Backstage, with five pages: Overview, Creators, Slurp world, Automation, and Maintenance. Every setting is still there, and Find a setting takes you straight to it.
+- Changes show a live preview of the current and new result before you apply them. Quick switches on Overview save at once and can be undone.
+- Maintenance shows storage and backup health, and previews what a cleanup or purge will remove before it runs.
+- Restoring a backup now shows what the file contains before anything changes.
+- Creators -> Improve with AI checks Creators for missing profile and tag details for free, then suggests changes you approve one by one.
+
 ## 0.0.16 — 2026-09-15
 
 - Settings -> Audience is simpler: one Activity choice (Off, Quiet, Realistic, Lively, Generous), crowd size and tone up front, and fan types, AI writing and advanced numbers in folded sections. Off also stops commissions, DMs and the activity pulse.

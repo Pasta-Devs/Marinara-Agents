@@ -187,6 +187,7 @@ import {
 import { SlurpProfileSurface } from "./SlurpProfileSurface";
 import { BroadcastPanel, SlurpMessagesView } from "./SlurpMessages";
 import { SlurpSettings, SlurpSettingsSidebar } from "./SlurpSettings";
+import { confirmLeaveSlurpBackstage } from "./SlurpBackstageChrome";
 import { NoodleImageComposer } from "./SlurpImageComposer";
 import { NoodlePollComposer } from "./SlurpPollComposer";
 import { PostImageCropEditor, PostImageFrame } from "./PostImageCropEditor";
@@ -628,6 +629,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
       tone: "destructive",
     });
   const exitToCreatorHub = async () => {
+    if (navigation.mode === "creator-settings" && !(await confirmLeaveSlurpBackstage(localizeUi))) return;
     if (!(await confirmDiscardProfileDraft())) return;
     if (!(await confirmDiscardNoodlerPostDrafts())) return;
     clearProfileEditorState();

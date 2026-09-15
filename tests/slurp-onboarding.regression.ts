@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { slurp2BackstageSource } from "./slurp2-backstage-source";
 
 const root = join(import.meta.dirname, "..");
 const panel = readFileSync(
@@ -11,10 +12,7 @@ const home = readFileSync(
   join(root, "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx"),
   "utf8",
 );
-const settings = readFileSync(
-  join(root, "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx"),
-  "utf8",
-);
+const settings = slurp2BackstageSource();
 const storage = readFileSync(
   join(root, "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
   "utf8",
