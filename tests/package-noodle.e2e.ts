@@ -173,9 +173,26 @@ test.describe("package-owned Noodle interface", () => {
     try {
       await page.goto("/");
       await openNoodle(page);
+      await page.evaluate(async () => {
+        const { useUIStore } = await import("/src/stores/ui.store.ts" as string);
+        useUIStore.setState({ appAccentPulseMode: true, appAccentRgbMode: false });
+      });
+      await expect(page.locator("html")).toHaveAttribute("data-marinara-accent-animation", /.+/);
       const article = page.locator(`[data-noodle-post-id="${post.id}"]`);
       await expect(article).toContainText(originalContent);
-      await article.getByRole("button", { name: "Post actions", exact: true }).click();
+      const postActions = article.getByRole("button", { name: "Post actions", exact: true });
+      await expect(postActions.locator("svg")).toHaveCSS("color", NOODLE_BLUE_RGB);
+      await postActions.click();
+      const articleColor = await article.evaluate((element) => getComputedStyle(element).color);
+      for (const name of ["Edit", "Delete"]) {
+        const action = article.getByRole("button", { name, exact: true });
+        await expect(action.locator("svg")).toHaveCSS("color", NOODLE_BLUE_RGB);
+        await expect(action).toHaveCSS("color", articleColor);
+        if (!testInfo.project.name.includes("mobile")) {
+          await action.hover();
+          await expect(action).toHaveCSS("background-color", "oklab(0.735633 -0.0133562 -0.135208 / 0.1)");
+        }
+      }
       await article.getByRole("button", { name: "Edit", exact: true }).click();
       const editor = article.getByPlaceholder("What's simmering?");
       await expect(editor).toHaveValue(originalContent);
@@ -206,6 +223,10 @@ test.describe("package-owned Noodle interface", () => {
       }>;
       expect(posts.find((entry) => entry.id === post.id)?.content).toBe(editedContent);
       expect(updates).toBe(1);
+      const noodle = page.locator('[data-component="NoodleView"]');
+      await noodle.getByRole("button", { name: "Search", exact: true }).click();
+      const search = noodle.locator("label").filter({ has: page.getByPlaceholder("Search posts or @users") });
+      await expect(search.locator("svg:visible").first()).toHaveCSS("color", NOODLE_BLUE_RGB);
       expect(errors).toEqual([]);
     } finally {
       await page.request.delete(`/api/noodle/posts/${post.id}`, { timeout: 5_000 }).catch(() => undefined);

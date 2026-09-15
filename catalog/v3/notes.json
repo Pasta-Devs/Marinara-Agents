@@ -168,6 +168,12 @@
     "noodle": {
       "versions": [
         {
+          "version": "1.2.24",
+          "date": "2026-09-15",
+          "notes": "- Search icons and post menus keep Noodle's selected accent when Engine Chroma animates.",
+          "highlight": false
+        },
+        {
           "version": "1.2.23",
           "date": "2026-09-13",
           "notes": "- Applying a saved prompt asks before replacing the current prompt, including edits already saved as the active prompt.\n- Cancel works immediately in Delete All Noodle Data; only deletion requires typing DELETE.\n- A running timeline refresh blocks duplicate refresh requests instead of queuing extra generations.\n- GLM 5.3 on NanoGPT and Z.AI keeps its required reasoning enabled when the selected effort is None.",
