@@ -603,6 +603,34 @@ export function useReplaceSlurpDiscoveryTag() {
   });
 }
 
+export type SlurpCreatorBulkPatch = {
+  gender?: SlurpDiscoveryGender | null;
+  tags?: string[];
+  addTags?: string[];
+  removeTags?: string[];
+  autoPosting?: boolean;
+  imagesEnabled?: boolean;
+};
+
+/** One edit applied to many Creators at once; a single Creator's quick edit uses it too. */
+export function useBulkUpdateSlurpCreators() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { ids: string[]; patch: SlurpCreatorBulkPatch }) =>
+      api.post<{ updated: number; skipped: number; tagLimitReached: number }>(
+        "/slurp2/noodler/accounts/bulk-update",
+        input,
+      ),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
+        queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerReserveStatus() }),
+        queryClient.invalidateQueries({ queryKey: [...noodleKeys.settings(), "discovery-tag-usage"] }),
+        queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+      ]),
+  });
+}
+
 export function useDeleteAllSlurpData() {
   const queryClient = useQueryClient();
   return useMutation({

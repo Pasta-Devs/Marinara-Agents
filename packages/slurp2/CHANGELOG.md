@@ -4,6 +4,8 @@
 
 - Settings -> Audience is simpler: one Activity choice (Off, Quiet, Realistic, Lively, Generous), crowd size and tone up front, and fan types, AI writing and advanced numbers in folded sections. Off also stops commissions, DMs and the activity pulse.
 - A fan type's tone override now changes how those fans write their comments.
+- Settings -> Tags is rebuilt: tags show as chips in their groups, with usage counts and a filter. Click a tag to rename it, merge it into another tag, move it to another group, or delete it.
+- Settings -> Creators: select many Creators and change gender, add or remove tags, or turn auto-post and images on or off in one step. The selected Creator also has a quick gender and tag editor.
 - Fix: toggles in Settings no longer black out the screen in Firefox.
 
 ## 0.0.15 — 2026-09-15

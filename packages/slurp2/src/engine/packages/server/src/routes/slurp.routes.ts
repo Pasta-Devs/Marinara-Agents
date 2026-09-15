@@ -132,6 +132,8 @@ import {
   SLURP_DISCOVERY_TAG_MAX_LENGTH,
   slurpDiscoveryProfileComplete,
   slurpDiscoveryProfileSchema,
+  SLURP_DISCOVERY_GENDERS,
+  SLURP_DISCOVERY_TAG_LIMIT,
 } from "../services/slurp/slurp-discovery-profile.js";
 import {
   getNoodlerImageConnections,
@@ -618,6 +620,28 @@ export async function slurpRoutes(app: FastifyInstance) {
     const body = z.object({ tag: slurpDiscoveryTagNameSchema }).safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
     return noodle.replaceDiscoveryTag(body.data.tag, null);
+  });
+  // One edit for many Creators, also used for a single Creator's quick edit. Capped so one request stays bounded.
+  app.post("/noodler/accounts/bulk-update", async (req, reply) => {
+    const tagList = z.array(slurpDiscoveryTagNameSchema).max(SLURP_DISCOVERY_TAG_LIMIT);
+    const body = z
+      .object({
+        ids: z.array(z.string().trim().min(1)).min(1).max(500),
+        patch: z
+          .object({
+            gender: z.enum(SLURP_DISCOVERY_GENDERS).nullable().optional(),
+            tags: tagList.optional(),
+            addTags: tagList.optional(),
+            removeTags: z.array(slurpDiscoveryTagNameSchema).max(100).optional(),
+            autoPosting: z.boolean().optional(),
+            imagesEnabled: z.boolean().optional(),
+          })
+          .strict()
+          .refine((patch) => Object.values(patch).some((value) => value !== undefined), "Nothing to change."),
+      })
+      .safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    return noodle.bulkUpdateCreatorProfiles([...new Set(body.data.ids)], body.data.patch);
   });
 
   // ── Backup: export and restore ────────────────────────────────────────────

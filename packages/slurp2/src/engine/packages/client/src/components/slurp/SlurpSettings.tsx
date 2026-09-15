@@ -9,6 +9,7 @@ import {
   Download,
   FileText,
   Image,
+  ListChecks,
   Loader2,
   Megaphone,
   Pencil,
@@ -27,6 +28,9 @@ import { Field, GuidanceBox, NumberSetting, SectionTitle, SettingsGroup, Toggle 
 import { SlurpSimulationSettings } from "./SlurpSimulationSettings";
 import { SlurpFanTypesSettings } from "./SlurpFanTypesSettings";
 import { SlurpAudienceConfigSettings } from "./SlurpAudienceConfigSettings";
+import { SlurpCreatorBulkEdit } from "./SlurpCreatorBulkEdit";
+import { SlurpDiscoveryProfileEditor } from "./SlurpDiscoveryProfileEditor";
+import { SlurpTagsSettings } from "./SlurpTagsSettings";
 import type { ChangeEvent, ReactNode } from "react";
 import { api } from "../../lib/api-client";
 import { cn } from "../../lib/utils";
@@ -79,10 +83,9 @@ import {
   useRefreshNoodlerConversationSchedule,
   useUpdateSlurpImageConnections,
   useUpdateSlurpSettings,
-  useReplaceSlurpDiscoveryTag,
+  useBulkUpdateSlurpCreators,
   useResetSlurpArcType,
   useGenerateSlurpArcType,
-  useSlurpDiscoveryTagUsage,
   type SlurpArcType,
   type SlurpSettings,
   type SlurpContentRating,
@@ -276,9 +279,6 @@ export function SlurpSettings({
   const updateSettings = useUpdateSlurpSettings();
   const runAutopurge = useRunSlurpAutopurge();
   const section = navigation.section ?? "overview";
-  const tagUsage = useSlurpDiscoveryTagUsage(section === "tags");
-  const replaceTag = useReplaceSlurpDiscoveryTag();
-  const [newTag, setNewTag] = useState({ tag: "", group: "" });
   const resetAds = useResetSlurpAds();
   const adPool = useSlurpAdPool();
   const generateAds = useGenerateSlurpAds();
@@ -317,6 +317,9 @@ export function SlurpSettings({
   const [refreshAccess, setRefreshAccess] = useState<"public" | "locked">("locked");
   const [scheduleCreatorId, setScheduleCreatorId] = useState<string | null>(null);
   const [selectedCreatorId, setSelectedCreatorId] = useState<string | null>(null);
+  // null while select mode is off.
+  const [bulkCreatorIds, setBulkCreatorIds] = useState<Set<string> | null>(null);
+  const bulkUpdateCreators = useBulkUpdateSlurpCreators();
   const [customPaceOpen, setCustomPaceOpen] = useState(false);
   const [adsWorldDraft, setAdsWorldDraft] = useState<string | null>(null);
   const [reactionBankDraft, setReactionBankDraft] = useState<string | null>(null);
@@ -1419,115 +1422,11 @@ export function SlurpSettings({
               )}
 
               {section === "tags" && (
-                <div className="space-y-5">
-                  <SectionTitle title={t("ui.slurp.settings.tags.title")} detail={t("ui.slurp.settings.tags.detail")} />
-                  <ul className="divide-y divide-[var(--slurp-outline)] rounded-lg border border-[var(--slurp-outline)]">
-                    {settings.discoveryTags.map((entry) => {
-                      const count = tagUsage.data?.creators[entry.tag.toLocaleLowerCase()] ?? 0;
-                      const arcTypes = tagUsage.data?.arcTypes[entry.tag.toLocaleLowerCase()] ?? 0;
-                      return (
-                        <li key={entry.tag} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
-                          <span className="min-w-0 flex-1 font-semibold">{entry.tag}</span>
-                          <span className="text-xs tabular-nums text-[var(--slurp-muted)]">
-                            {t("ui.slurp.settings.tags.usage", { count })}
-                          </span>
-                          <input
-                            aria-label={t("ui.slurp.settings.tags.group")}
-                            defaultValue={entry.group}
-                            maxLength={40}
-                            disabled={updateSettings.isPending}
-                            onBlur={(event) => {
-                              const group = event.target.value.trim();
-                              if (!group || group === entry.group) return;
-                              void update(
-                                "discoveryTags",
-                                settings.discoveryTags.map((item) =>
-                                  item.tag === entry.tag ? { ...item, group } : item,
-                                ),
-                              );
-                            }}
-                            className="min-h-11 w-32 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base sm:text-sm"
-                          />
-                          <button
-                            type="button"
-                            disabled={replaceTag.isPending}
-                            onClick={() => {
-                              const to = window
-                                .prompt(t("ui.slurp.settings.tags.renamePrompt", { tag: entry.tag }), entry.tag)
-                                ?.trim();
-                              if (to && to !== entry.tag) replaceTag.mutate({ from: entry.tag, to });
-                            }}
-                            className="min-h-11 rounded-lg px-3 text-sm font-semibold hover:bg-[var(--slurp-surface-raised)] disabled:opacity-50"
-                          >
-                            {t("ui.slurp.settings.tags.rename")}
-                          </button>
-                          <button
-                            type="button"
-                            disabled={replaceTag.isPending}
-                            onClick={() => {
-                              if (
-                                window.confirm(
-                                  t("ui.slurp.settings.tags.deleteConfirm", { tag: entry.tag, count, arcTypes }),
-                                )
-                              )
-                                replaceTag.mutate({ from: entry.tag, to: null });
-                            }}
-                            className="min-h-11 rounded-lg px-3 text-sm font-semibold text-red-600 hover:bg-[var(--slurp-surface-raised)] disabled:opacity-50"
-                          >
-                            {t("ui.slurp.settings.tags.delete")}
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  <form
-                    className="flex flex-wrap gap-2"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      const tag = newTag.tag.trim();
-                      const group = newTag.group.trim() || "themes";
-                      if (
-                        !tag ||
-                        settings.discoveryTags.some(
-                          (entry) => entry.tag.toLocaleLowerCase() === tag.toLocaleLowerCase(),
-                        )
-                      )
-                        return;
-                      void update("discoveryTags", [...settings.discoveryTags, { tag, group }]);
-                      setNewTag({ tag: "", group: "" });
-                    }}
-                  >
-                    <input
-                      aria-label={t("ui.slurp.settings.tags.newTag")}
-                      placeholder={t("ui.slurp.settings.tags.newTag")}
-                      value={newTag.tag}
-                      maxLength={24}
-                      onChange={(event) => setNewTag({ ...newTag, tag: event.target.value })}
-                      className="min-h-11 min-w-0 flex-1 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base sm:text-sm"
-                    />
-                    <input
-                      aria-label={t("ui.slurp.settings.tags.group")}
-                      placeholder={t("ui.slurp.settings.tags.group")}
-                      value={newTag.group}
-                      maxLength={40}
-                      list="slurp-discovery-tag-groups"
-                      onChange={(event) => setNewTag({ ...newTag, group: event.target.value })}
-                      className="min-h-11 w-32 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base sm:text-sm"
-                    />
-                    <datalist id="slurp-discovery-tag-groups">
-                      {[...new Set(settings.discoveryTags.map((entry) => entry.group))].map((group) => (
-                        <option key={group} value={group} />
-                      ))}
-                    </datalist>
-                    <button
-                      type="submit"
-                      disabled={updateSettings.isPending || !newTag.tag.trim()}
-                      className="min-h-11 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-white disabled:opacity-50"
-                    >
-                      {t("ui.slurp.settings.tags.add")}
-                    </button>
-                  </form>
-                </div>
+                <SlurpTagsSettings
+                  tags={settings.discoveryTags}
+                  saving={updateSettings.isPending}
+                  onSave={(tags) => update("discoveryTags", tags)}
+                />
               )}
 
               {section === "arcs" && (
@@ -1911,15 +1810,63 @@ export function SlurpSettings({
                       title={t("ui.slurp.settings.creators.title")}
                       detail={t("ui.slurp.settings.creators.detail")}
                     />
-                    <button
-                      type="button"
-                      onClick={onAddCreators}
-                      className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--noodle-accent)]/40 px-3 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10"
-                    >
-                      <UsersRound size={14} />
-                      {t("ui.slurp.settings.creators.add")}
-                    </button>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        aria-pressed={bulkCreatorIds !== null}
+                        onClick={() => setBulkCreatorIds((ids) => (ids ? null : new Set()))}
+                        className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)]"
+                      >
+                        <ListChecks size={14} aria-hidden="true" />
+                        {t(
+                          bulkCreatorIds
+                            ? "ui.slurp.settings.creators.selectDone"
+                            : "ui.slurp.settings.creators.select",
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onAddCreators}
+                        className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--noodle-accent)]/40 px-3 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10"
+                      >
+                        <UsersRound size={14} />
+                        {t("ui.slurp.settings.creators.add")}
+                      </button>
+                    </div>
                   </div>
+                  {bulkCreatorIds && accountsQuery.data?.length ? (
+                    <div className="space-y-3">
+                      <div
+                        className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] p-3 text-xs"
+                        aria-live="polite"
+                      >
+                        <span className="me-auto font-semibold">
+                          {t("ui.slurp.settings.creators.selectedCount", { count: bulkCreatorIds.size })}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setBulkCreatorIds(new Set(accountsQuery.data.map((creator) => creator.id)))}
+                          className="min-h-10 rounded-lg border border-[var(--border)] px-3 font-semibold hover:bg-[var(--accent)]"
+                        >
+                          {t("ui.slurp.settings.creators.selectAll")}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={bulkCreatorIds.size === 0}
+                          onClick={() => setBulkCreatorIds(new Set())}
+                          className="min-h-10 rounded-lg border border-[var(--border)] px-3 font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+                        >
+                          {t("ui.slurp.settings.creators.bulk.clear")}
+                        </button>
+                      </div>
+                      {bulkCreatorIds.size > 0 && (
+                        <SlurpCreatorBulkEdit
+                          creators={accountsQuery.data.filter((creator) => bulkCreatorIds.has(creator.id))}
+                          tagOptions={settings.discoveryTags.map((entry) => entry.tag)}
+                        />
+                      )}
+                    </div>
+                  ) : null}
                   {accountsQuery.isLoading ? (
                     <div className="flex justify-center py-10 text-[var(--muted-foreground)]" role="status">
                       <Loader2 size={20} className="animate-spin" />
@@ -1945,15 +1892,35 @@ export function SlurpSettings({
                           const status = reserveStatusQuery.data?.creators.find(
                             (entry) => entry.accountId === creator.id,
                           );
-                          const selected = creator.id === selectedCreator.id;
+                          const selected = bulkCreatorIds
+                            ? bulkCreatorIds.has(creator.id)
+                            : creator.id === selectedCreator.id;
                           return (
                             <button
                               key={creator.id}
                               type="button"
                               aria-pressed={selected}
-                              onClick={() => setSelectedCreatorId(creator.id)}
+                              onClick={() =>
+                                bulkCreatorIds
+                                  ? setBulkCreatorIds((ids) => {
+                                      const next = new Set(ids ?? []);
+                                      if (next.has(creator.id)) next.delete(creator.id);
+                                      else next.add(creator.id);
+                                      return next;
+                                    })
+                                  : setSelectedCreatorId(creator.id)
+                              }
                               className={`flex min-h-20 w-full snap-start items-center gap-3 rounded-xl bg-[var(--slurp-surface-raised,var(--background))] px-3 py-3 text-left shadow-sm ring-1 ring-inset transition-[background-color,box-shadow,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 xl:rounded-none xl:border-b xl:border-[var(--border)] xl:shadow-none xl:last:border-b-0 ${selected ? "ring-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10 xl:ring-0" : "ring-[var(--border)] hover:bg-[var(--accent)] xl:ring-0"}`}
                             >
+                              {bulkCreatorIds && (
+                                <CheckCircle2
+                                  size={18}
+                                  aria-hidden="true"
+                                  className={
+                                    selected ? "text-[var(--noodle-accent)]" : "text-[var(--muted-foreground)]/40"
+                                  }
+                                />
+                              )}
                               <Avatar account={creator} size="sm" />
                               <span className="min-w-0 flex-1">
                                 <span className="block truncate text-sm font-bold">{creator.displayName}</span>
@@ -2028,6 +1995,22 @@ export function SlurpSettings({
                         </div>
 
                         <div className="space-y-5 p-4 sm:p-5">
+                          {/* Quick edit: each change saves at once through the same route as bulk edit. */}
+                          <SlurpDiscoveryProfileEditor
+                            key={selectedCreator.id}
+                            gender={selectedCreator.gender ?? null}
+                            tags={selectedCreator.tags ?? []}
+                            disabled={bulkUpdateCreators.isPending}
+                            onChange={(patch) =>
+                              bulkUpdateCreators.mutate(
+                                {
+                                  ids: [selectedCreator.id],
+                                  patch: patch.tags ? { tags: patch.tags } : { gender: patch.gender ?? null },
+                                },
+                                { onError: (error) => toast.error(errorMessage(error)) },
+                              )
+                            }
+                          />
                           <SettingsGroup title={t("ui.slurp.settings.creators.postingGroup")}>
                             {!personaCreator(selectedCreator) ? (
                               <Toggle
