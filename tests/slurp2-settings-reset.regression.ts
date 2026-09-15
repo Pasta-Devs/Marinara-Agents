@@ -11,15 +11,15 @@ import {
   slurpSettingsResetPatch,
 } from "../packages/slurp2/src/engine/packages/client/src/components/slurp/slurp-settings-defaults";
 
-const storage = readFileSync(
-  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
-  "utf8",
-);
-const start = storage.indexOf("export const DEFAULT_SLURP_SETTINGS");
-const shippedKeys = [...storage.slice(start, storage.indexOf("\n};", start)).matchAll(/^ {2}([a-zA-Z0-9]+):/gmu)].map(
+// The client type lists every setting by name. The server defaults spread some in (the reply
+// delays), so a line scan of them misses keys; the type does not.
+const hooks = readFileSync("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");
+const start = hooks.indexOf("export type SlurpSettings = {");
+const shippedKeys = [...hooks.slice(start, hooks.indexOf("\n};", start)).matchAll(/^ {2}([a-zA-Z0-9]+)\??:/gmu)].map(
   (match) => match[1],
 );
-assert.ok(shippedKeys.length > 50, "the default settings block must be found");
+assert.ok(shippedKeys.length > 50, "the client settings type must be found");
+assert.ok(shippedKeys.includes("messagesMaxReplyDelayMinutes"), "spread-in reply delay settings must be checked");
 
 const owners = new Map<string, string[]>();
 for (const [section, keys] of Object.entries(SLURP_SETTINGS_SECTION_KEYS)) {

@@ -143,15 +143,19 @@ export function formatNoodleVisionManifest(attachments: NoodleVisionAttachment[]
 // ponytail: in-memory, so each server start pays for one refusal. Persist it if that is still too many.
 const modelsRejectingVision = new Set<string>();
 
-function slurpVisionModelKey(connection: { provider: string; model: string }): string {
-  return JSON.stringify([connection.provider, connection.model]);
+type SlurpVisionConnection = { id?: string; provider: string; model: string };
+
+// Two connections can share a provider and model but point at different endpoints, so the
+// connection is part of the key: one connection's answer must not decide another's.
+function slurpVisionModelKey(connection: SlurpVisionConnection): string {
+  return JSON.stringify([connection.id ?? "", connection.provider, connection.model]);
 }
 
-export function slurpModelRejectsVisionInput(connection: { provider: string; model: string }): boolean {
+export function slurpModelRejectsVisionInput(connection: SlurpVisionConnection): boolean {
   return modelsRejectingVision.has(slurpVisionModelKey(connection));
 }
 
-export function rememberSlurpVisionRejection(connection: { provider: string; model: string }): void {
+export function rememberSlurpVisionRejection(connection: SlurpVisionConnection): void {
   modelsRejectingVision.add(slurpVisionModelKey(connection));
 }
 
@@ -179,7 +183,7 @@ const visionSupportByModel = new Map<string, boolean | null>();
  * list says so. Checked before a description is requested, so a text-only model is never sent one.
  */
 export async function slurpModelLacksVision(
-  connection: { provider: string; model: string; apiKey?: string | null },
+  connection: SlurpVisionConnection & { apiKey?: string | null },
   baseUrl: string,
 ): Promise<boolean> {
   if (slurpModelRejectsVisionInput(connection)) return true;

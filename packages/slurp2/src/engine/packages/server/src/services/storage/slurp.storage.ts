@@ -4407,14 +4407,23 @@ export function createSlurpStorage(db: DB) {
       return rows[0] ? mapManagedPost(rows[0]) : null;
     },
 
-    async listNoodlerPostsByAccounts(accountIds: string[], limit = 8): Promise<Map<string, NoodlerManagedPost[]>> {
+    async listNoodlerPostsByAccounts(
+      accountIds: string[],
+      limit = 8,
+      /** Only posts created after this ISO time, filtered in the query rather than after it. */
+      options: { since?: string } = {},
+    ): Promise<Map<string, NoodlerManagedPost[]>> {
       const boundedLimit = Math.max(1, Math.min(50, Math.floor(limit)));
       const result = new Map<string, NoodlerManagedPost[]>();
       if (accountIds.length === 0) return result;
       const rows = await db
         .select()
         .from(noodlePosts)
-        .where(inArray(noodlePosts.authorAccountId, accountIds))
+        .where(
+          options.since
+            ? and(inArray(noodlePosts.authorAccountId, accountIds), gt(noodlePosts.createdAt, options.since))
+            : inArray(noodlePosts.authorAccountId, accountIds),
+        )
         .orderBy(desc(noodlePosts.createdAt));
       for (const row of rows) {
         if (row.access === "draft") continue;

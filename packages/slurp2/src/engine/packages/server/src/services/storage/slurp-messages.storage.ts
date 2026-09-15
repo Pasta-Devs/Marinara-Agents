@@ -1523,11 +1523,16 @@ export function createSlurpMessagesStorage(db: DB) {
     },
 
     /** Every commission in one thread, oldest first, so the chat can render them beside the messages. */
-    async listCommissionsForThread(threadId: string): Promise<SlurpCommission[]> {
+    /** `since` keeps only commissions updated after that ISO time, filtered in the query. */
+    async listCommissionsForThread(threadId: string, since?: string): Promise<SlurpCommission[]> {
       const rows = await db
         .select()
         .from(slurpCommissions)
-        .where(eq(slurpCommissions.threadId, threadId))
+        .where(
+          since
+            ? and(eq(slurpCommissions.threadId, threadId), gt(slurpCommissions.updatedAt, since))
+            : eq(slurpCommissions.threadId, threadId),
+        )
         .orderBy(asc(slurpCommissions.createdAt));
       return rows.map(mapCommission);
     },
