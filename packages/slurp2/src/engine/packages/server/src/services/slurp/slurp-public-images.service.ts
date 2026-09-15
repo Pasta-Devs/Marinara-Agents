@@ -94,13 +94,17 @@ export function characterAppearanceFromRow(row: { data: unknown }) {
   return readIllustratorAppearance(data) ?? normalizeIllustratorAppearance(data.description) ?? "";
 }
 
-export function characterNoodleImageContextFromRow(row: { data: unknown }) {
+/**
+ * `applyInstructions` is Slurp's own per-character choice. Until a character has one, the Engine's
+ * Noodle-named checkbox still decides, so an upgrade changes nothing for anybody.
+ */
+export function characterNoodleImageContextFromRow(row: { data: unknown }, applyInstructions?: boolean) {
   const data = parseRecord(row.data);
   const extensions = parseRecord(data.extensions);
   return {
     personality: typeof data.personality === "string" ? data.personality.trim() : "",
     imageInstructions:
-      extensions.applyConversationImageInstructionsToNoodle === true &&
+      (applyInstructions ?? extensions.applyConversationImageInstructionsToNoodle === true) &&
       typeof extensions.conversationImageInstructions === "string"
         ? extensions.conversationImageInstructions.trim()
         : "",
@@ -141,7 +145,10 @@ export async function generateNoodlePostImage(input: {
   if (input.account.kind === "character") {
     const character = await input.characters.getById(input.account.entityId);
     if (character) {
-      const imageContext = characterNoodleImageContextFromRow(character);
+      const imageContext = characterNoodleImageContextFromRow(
+        character,
+        input.settings.characterImageInstructions[character.id],
+      );
       characterPersonality = imageContext.personality;
       characterImageInstructions = imageContext.imageInstructions;
 

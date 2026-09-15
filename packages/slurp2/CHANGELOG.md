@@ -1,5 +1,19 @@
 # Slurp Remastered release notes
 
+## 0.0.15 — 2026-09-15
+
+- Fixed a wide post or story pushing the left and right sidebars off the screen.
+- The follow button on a Creator profile now shows whether you follow that Creator.
+
+## 0.0.14 — 2026-09-15
+
+- Fixed commissions drawing a new picture on every retry when the fan could not pay.
+- Fixed locked pay-per-view messages sending what their picture shows before the fan paid.
+- Pictures in messages, commissions and your recent posts now reach the AI as stored prompts or descriptions, with an optional image description model. Each picture is described once, and models that cannot read images are skipped.
+- Characters can remember their Slurp posts, messages, commissions, subscriptions and tips in Engine chats: turn on Carryover to chats in Settings and Include Slurp activity in the chat's settings.
+- Added lorebook context for Creator posts, prompt presets with import and export, a changed count and Reset section for each settings section, gallery images when no picture is generated, a Professor Mari Creator switch, and a per-character choice for chat image instructions.
+- Deleting all Slurp data now asks you to type DELETE, and the mobile bottom bar is smaller.
+
 ## 0.0.13 — 2026-09-15
 
 - Fixed Creator management (profile, goal, subscription price, projects, arcs, payout, and Story viewers) rejecting edits with "Only the Creator's owner can..." — Slurp is single-player, so any Creator is now always yours to manage.

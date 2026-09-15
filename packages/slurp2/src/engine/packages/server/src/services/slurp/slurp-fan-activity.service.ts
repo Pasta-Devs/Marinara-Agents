@@ -13,7 +13,11 @@ import { resolveStoredChatOptions } from "../generation/generation-parameters.js
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { parseGameJsonish } from "../game/jsonish.js";
 import { requireModelAnswer } from "./slurp-model-answer.js";
-import { prepareSlurpPostImageContexts, type SlurpImageContextPost } from "./slurp-post-image-context.js";
+import {
+  prepareSlurpPostImageContexts,
+  slurpImageCaptioning,
+  type SlurpImageContextPost,
+} from "./slurp-post-image-context.js";
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
@@ -261,7 +265,10 @@ function buildFanActivityMessages(input: {
 async function generateFanActivity(input: {
   db: DB;
   connection: GenerationConnection;
-  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone" | "imageContextMode">;
+  settings: Pick<
+    SlurpSettings,
+    "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone" | "imageContextMode" | "imageContextConnectionId"
+  >;
   creators: NoodlerFanCreatorCandidate[];
   debugMode: boolean;
 }): Promise<NoodleGeneratedFanRefresh> {
@@ -279,7 +286,9 @@ async function generateFanActivity(input: {
   const imageContexts = await prepareSlurpPostImageContexts({
     posts: input.creators.flatMap((candidate) => candidate.posts),
     mode: input.settings.imageContextMode,
-    captioning: { enabled: true, connectionId: input.connection.id, connection: input.connection, provider },
+    captioning: await slurpImageCaptioning(input.db, input.settings.imageContextConnectionId, input.connection),
+    onDescribed: (post, description, source) =>
+      createSlurpStorage(input.db).setNoodlerPostImageDescription(post.id, description, source),
     debugMode: input.debugMode,
   });
   for (const candidate of input.creators) {
@@ -464,7 +473,10 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
 
 export async function generateNoodlerFanActivityBatch(input: {
   db: DB;
-  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone" | "imageContextMode">;
+  settings: Pick<
+    SlurpSettings,
+    "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone" | "imageContextMode" | "imageContextConnectionId"
+  >;
   connection: GenerationConnection;
   creators: NoodlerFanCreatorCandidate[];
   debugMode?: boolean;

@@ -23,6 +23,9 @@ async function main() {
   const prepare = compile(`${read("slurp-post-image-context.ts")}\nprepareSlurpPostImageContexts;`, {
     normalizeNoodleImagePrompt,
     noodlerPostMediaUrl: (id: string) => `/api/slurp2/noodler/posts/${id}/media`,
+    slurpMessageMediaUrl: (id: string) => `/api/slurp2/messages/${id}/media`,
+    slurpModelLacksVision: async (connection: { model: string }) => connection.model === "text-only",
+    resolveBaseUrl: () => "https://example.test/v1",
     prepareNoodleVisionAttachments: async (candidates: Array<{ key: string }>) => {
       seenImages.push(Array.from(candidates, ({ key }) => key));
       return candidates.map((candidate) => ({ ...candidate, dataUrl: "data:image/png;base64,fixture" }));
@@ -59,6 +62,44 @@ async function main() {
   const allowed = await prepare({ ...input, posts: [locked], mode: "imagePrompt", allowLocked: true });
   assert.match(allowed.get("locked"), /PRIVATE IMAGE CONTENT/, "an authorized creator reply may see its unlocked post");
 
+  // A picture is described once, and only for the picture it described.
+  const source = `${upload.imageUrl}\n`;
+  const callsBefore = captionCalls;
+  const reused = await prepare({
+    ...input,
+    posts: [{ ...upload, metadata: { imageDescription: "a saved green coat", imageDescriptionSource: source } }],
+  });
+  assert.match(reused.get("upload"), /saved green coat/);
+  assert.equal(captionCalls, callsBefore, "a saved description must not call vision again");
+  const saved: string[] = [];
+  const stale = await prepare({
+    ...input,
+    posts: [{ ...upload, metadata: { imageDescription: "an old picture", imageDescriptionSource: "replaced" } }],
+    onDescribed: async (described: { id: string }, description: string, describedSource: string) => {
+      saved.push(`${described.id}|${description}|${describedSource}`);
+    },
+  });
+  assert.match(stale.get("upload"), /red coat/, "a description of a replaced picture must not be reused");
+  assert.deepEqual(saved, [`upload|Mari Vale in a red coat|${source}`]);
+
+  // A model that already refused image input is not asked again.
+  const callsBeforeRefusal = captionCalls;
+  const refused = await prepare({ ...input, captioning: { connection: { provider: "p", model: "text-only" } } });
+  assert.equal(captionCalls, callsBeforeRefusal, "a model that refused images must not be asked again");
+  assert.match(refused.get("public"), /blue coat/, "stored prompts still work for a text-only model");
+
+  // A locked PPV message withholds what its picture shows, not only the picture.
+  const messageRoutes = readFileSync(
+    new URL("../packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts", import.meta.url),
+    "utf8",
+  );
+  const lockedRedactions =
+    messageRoutes.match(/kind === "ppv" && !message\.unlockedAt\s*\?[^:]*?\{[\s\S]{0,300}?\}\s*:/gu) ?? [];
+  assert.equal(lockedRedactions.length, 3, "every locked PPV redaction must be checked");
+  for (const redaction of lockedRedactions) {
+    assert.match(redaction, /imagePrompt: undefined,\s*imageDescription: undefined/u);
+  }
+
   const fan = read("slurp-fan-activity.service.ts");
   let sent = "";
   const generateFan = compile(
@@ -73,6 +114,7 @@ async function main() {
       }),
       resolveBaseUrl: () => "http://fixture",
       prepareSlurpPostImageContexts: prepare,
+      slurpImageCaptioning: async (_db: unknown, _id: unknown, connection: unknown) => ({ enabled: true, connection }),
       resolveNoodlerPublicIdentity: async () => ({ displayName: "Mari Vale", handle: "marivale" }),
       protectNoodlerGeneratedIdentity: protect,
       logDebugOverride: () => undefined,
@@ -152,6 +194,7 @@ async function main() {
       describeCommenterRelationship: async () => "regular subscriber",
       describeSlurpPostCondition: async () => "well rested",
       prepareSlurpPostImageContexts: prepare,
+      slurpImageCaptioning: async (_db: unknown, _id: unknown, connection: unknown) => ({ enabled: true, connection }),
       buildNoodlerCreatorReplyMessages: buildReply,
       isDebugAgentsEnabled: () => false,
       noodleSamplingOptions: () => ({}),

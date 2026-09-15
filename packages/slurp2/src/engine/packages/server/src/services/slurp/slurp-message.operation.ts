@@ -322,7 +322,11 @@ export async function replyToSlurpMessage(
             content: reply.image.caption,
             price,
             unlockedAt: price > 0 ? null : new Date().toISOString(),
-            metadata: { noodlerMediaPath: drawn.mediaPath, generatedContext: reply.imageMode },
+            metadata: {
+              noodlerMediaPath: drawn.mediaPath,
+              generatedContext: reply.imageMode,
+              imagePrompt: reply.image.prompt,
+            },
           });
           if (!imageMessage) {
             drawn.compensate();

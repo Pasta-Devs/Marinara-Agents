@@ -41,6 +41,7 @@ export async function deliverAutomaticSlurpCommission(
       delivered.deliveryMessageId,
       slurpMessageMediaUrl(delivered.deliveryMessageId),
       mediaPath,
+      commission.brief,
     );
   }
   // The note is deliberately vague, like the briefs the world writes. This is where that is paid

@@ -25,7 +25,7 @@ assert.match(
 // The picture is masked with the text: a locked message is usually sold on its image.
 assert.match(
   routes,
-  /message\.kind === "ppv" && !message\.unlockedAt\s*\? \{ \.\.\.message, content: "", imageUrl: null \}/u,
+  /message\.kind === "ppv" && !message\.unlockedAt\s*\?\s*\{\s*\.\.\.message,\s*content: "",\s*imageUrl: null,/u,
 );
 
 // Paginated responses apply the same policy to their page instead of reading the whole thread.

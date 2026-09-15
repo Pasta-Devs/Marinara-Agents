@@ -51,6 +51,7 @@ import type {
 } from "@marinara-engine/shared";
 import { mergeNoodlePollVoteInteractions } from "@marinara-engine/shared";
 import type { ImagePromptOverride, ImagePromptReviewItem } from "../components/ui/ImagePromptReviewModal";
+import type { SlurpPromptPreset } from "../components/slurp/slurp-prompt-presets";
 
 export type SlurpDiscoveryGender = "male" | "female" | "other";
 export type SlurpStageProfileInput = NoodleStageProfileInput & {
@@ -370,6 +371,7 @@ export type SlurpSettings = {
   fanActivityEnabled: boolean;
   generationConnectionId: string | null;
   imageContextMode: "auto" | "imagePrompt" | "vision";
+  imageContextConnectionId: string | null;
   imageGenerationConnectionId: string | null;
   imageGenerationPrompt: string;
   imagePromptInterpretation: string;
@@ -386,6 +388,9 @@ export type SlurpSettings = {
   carryoverModes: Array<"conversation" | "roleplay" | "game">;
   carryoverHours: number;
   carryoverMaxItems: number;
+  characterImageInstructions: Record<string, boolean>;
+  promptPresets: SlurpPromptPreset[];
+  professorMariCreatorSource: boolean;
   enableEnhancedTimelineWriting: boolean;
   includeCharacterSchedules: boolean;
   enableLorebookContext: boolean;
@@ -470,6 +475,14 @@ export function useSlurpSettings() {
     queryKey: noodleKeys.settings(),
     queryFn: () => api.get<SlurpSettings>("/slurp2/settings"),
     staleTime: 10_000,
+  });
+}
+
+export function useSlurpSettingsDefaults() {
+  return useQuery({
+    queryKey: [...noodleKeys.settings(), "defaults"] as const,
+    queryFn: () => api.get<SlurpSettings>("/slurp2/settings/defaults"),
+    staleTime: Infinity,
   });
 }
 

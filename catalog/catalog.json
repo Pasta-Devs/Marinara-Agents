@@ -3167,7 +3167,7 @@
         "schemaVersion": 1,
         "id": "slurp2",
         "name": "Slurp Remastered",
-        "version": "0.0.13",
+        "version": "0.0.15",
         "description": "The Slurp remaster. It installs beside Slurp Legacy and keeps its own separate data: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp Remastered.",
         "localizations": {
           "de": {
@@ -3227,13 +3227,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "76aa441bd7e9f25f8554da668ed1bb52d5cfa4ae30e234368925863f6fba19ca",
-            "bytes": 2612832
+            "sha256": "f78bff8fc083df44012bee98b9baabd8c008463b9cb008be5faee78f77faef49",
+            "bytes": 2675294
           },
           {
             "path": "client.js",
-            "sha256": "299318a16d3e0089f2ad4daf04b791c25ccbbd7f7d32e26c2ec0caa837fe4099",
-            "bytes": 3253544
+            "sha256": "494c1c4bd3cd2f9ef3973794ff2466a639148d83836b716ef05dded941389397",
+            "bytes": 3272505
           },
           {
             "path": "slurp2-logo.png",
@@ -3249,6 +3249,7 @@
         "permissions": [
           "chat-read",
           "network",
+          "prompt-context",
           "routes",
           "storage",
           "ui"
@@ -3258,9 +3259,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp2.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.0.13.zip",
-        "sha256": "60f429bf73c19b0299a1b6ec706bb96c2794e31d20413eecbefb09991f6f6622",
-        "bytes": 6022929
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.0.15.zip",
+        "sha256": "5ef12147420fd07cb9aa9285cd7776581c709395a51982c7fc5fc07c73e39411",
+        "bytes": 6104374
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp2/README.md"
     },

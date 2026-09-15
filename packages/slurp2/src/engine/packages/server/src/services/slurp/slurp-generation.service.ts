@@ -52,7 +52,11 @@ import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js"
 import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
 import { createChatsStorage } from "../storage/chats.storage.js";
 import { NOODLER_FORMAT_MAX_LENGTH, type NoodlerContentFormat } from "./slurp-content-format.js";
-import { SLURP_PLATFORM_CONTEXT } from "./slurp-prompt.js";
+import { noodleLorebookTokenBudget, SLURP_PLATFORM_CONTEXT } from "./slurp-prompt.js";
+import { processLorebooks } from "../lorebook/index.js";
+import { createCharacterGalleryStorage } from "../storage/character-gallery.storage.js";
+import { createGalleryStorage } from "../storage/gallery.storage.js";
+import { pickGalleryAttachmentForAccount } from "./slurp-generated-activity.service.js";
 export { NOODLER_FORMAT_MAX_LENGTH, type NoodlerContentFormat } from "./slurp-content-format.js";
 // The disclosure privacy core lives in a leaf module so tests can execute it instead of grepping
 // this file, which cannot be imported without a database and an LLM provider.
@@ -244,6 +248,8 @@ export function buildNoodlerPostMessages(input: {
   project?: { project: SlurpProject; posts: NoodlerManagedPost[] };
   generatedAt?: Date;
   publicationTime?: Date;
+  /** Matching lorebook entries for this Creator. Absent when lorebook context is off or nothing matched. */
+  loreContext?: string;
 }): ChatMessage[] {
   const protect = (value: string) =>
     protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
@@ -293,6 +299,7 @@ export function buildNoodlerPostMessages(input: {
     "# Source character",
     protect(input.sourceCharacterContext) || "No source character is linked to this Creator.",
     "",
+    ...(input.loreContext && protect(input.loreContext) ? ["# World lore", protect(input.loreContext), ""] : []),
     // The schedule used to sit unlabelled inside the source card, with the one instruction that
     // refers to it ("that hour and weekday") two sections below. It is a generation input, not a
     // property of the character, so it gets its own header directly above the timing block it
@@ -448,6 +455,34 @@ export async function generateNoodlerPost(
   // Concealed modes get the same seed the stage profile draft uses; disclosure limits what may be
   // said, not who this is.
   const sourceCharacterContext = await resolveNoodlerCharacterCanon(db, linkedPublicAccount, disclosureMode);
+  // The Engine's own lorebook scan, as Noodle uses it: off until the player opts in, scoped to this
+  // Creator's source, and read-only. Recent posts and the card give keyword entries something to match.
+  // Lore is a nicety, so a failed scan costs the post its lore, never the post.
+  const loreContext = settings.enableLorebookContext
+    ? await processLorebooks(
+        db,
+        [
+          ...recentPosts
+            .slice()
+            .reverse()
+            .map((post) => ({ role: "user", content: post.content })),
+          ...(sourceCharacterContext ? [{ role: "user", content: sourceCharacterContext }] : []),
+        ],
+        null,
+        {
+          characterIds: linkedPublicAccount?.kind === "character" ? [linkedPublicAccount.entityId] : [],
+          personaId: linkedPublicAccount?.kind === "persona" ? linkedPublicAccount.entityId : null,
+          tokenBudget: noodleLorebookTokenBudget(1),
+          generationTriggers: ["slurp"],
+          previewOnly: true,
+        },
+      )
+        .then((result) => [result.worldInfoBefore, result.worldInfoAfter].filter(Boolean).join("\n"))
+        .catch((error: unknown) => {
+          logger.warn(error, "[slurp] Lorebook context failed; generating the post without it");
+          return "";
+        })
+    : "";
   // The rotating angle for this post. Skipped when the player has directed the post themselves —
   // their direction is the angle, and a second one would fight it.
   // One sequence for both rotations, so the project and the variation cannot drift out of step.
@@ -499,6 +534,7 @@ export async function generateNoodlerPost(
     imageGenerationPrompt: settings.imageGenerationPrompt,
     generationGuidance: settings.generationGuidance,
     scheduleContext,
+    loreContext,
     generatedAt: input.generatedAt ?? new Date(),
     publicationTime: input.publicationTime,
   });
@@ -693,7 +729,23 @@ export async function generateNoodlerPost(
     return { post, imagePromptReview: null };
   }
 
-  if (!draftImagePrompt) return { post: await persist(), imagePromptReview: null };
+  // A post that ends without a generated picture can still show one from the source character's own
+  // gallery, when the player allows it. Best effort: no gallery image is the same as none attached.
+  const galleryFallback = async (): Promise<{ imageUrl?: string; metadata?: Record<string, unknown> }> => {
+    if (!settings.allowGalleryImageAttachments || linkedPublicAccount?.kind !== "character") return {};
+    const attachment = await pickGalleryAttachmentForAccount({
+      account: linkedPublicAccount,
+      chats: createChatsStorage(db),
+      gallery: createGalleryStorage(db),
+      characterGallery: createCharacterGalleryStorage(db),
+    }).catch((error: unknown) => {
+      logger.warn(error, "[slurp] Could not attach a gallery image for %s", account.displayName);
+      return null;
+    });
+    return attachment ?? {};
+  };
+
+  if (!draftImagePrompt) return { post: await persist(await galleryFallback()), imagePromptReview: null };
 
   const noodlerImageConnectionId = await resolveNoodlerImageConnectionId(db, account.id);
   // Fall back to the default image connection when a creator's mapped override
@@ -702,6 +754,9 @@ export async function generateNoodlerPost(
     (noodlerImageConnectionId ? await connections.getWithKey(noodlerImageConnectionId) : null) ??
     (await connections.getDefaultForImageGeneration());
   if (!imageConnection) {
+    // A gallery image is a finished picture, so the post is not marked for the retry pass.
+    const fallback = await galleryFallback();
+    if (fallback.imageUrl) return { post: await persist(fallback), imagePromptReview: null };
     // Keep the prompt: the post publishes without its picture, and the retry pass (or the
     // user) draws it once a connection exists.
     const post = await persist({
@@ -744,6 +799,8 @@ export async function generateNoodlerPost(
     } catch (err) {
       if (isConnectionAdmissionFailure(err)) throw err;
       logger.warn(err, "[slurp] Failed to prepare image prompt review for %s", account.displayName);
+      const fallback = await galleryFallback();
+      if (fallback.imageUrl) return { post: await persist(fallback), imagePromptReview: null };
       return {
         post: await persist({
           imagePrompt: draftImagePrompt,
@@ -779,6 +836,8 @@ export async function generateNoodlerPost(
     // scheduler instead of persisting a post permanently marked as image-failed.
     if (isConnectionAdmissionFailure(err)) throw err;
     logger.warn(err, "[slurp] Failed to generate image for %s", account.displayName);
+    const fallback = await galleryFallback();
+    if (fallback.imageUrl) return { post: await persist(fallback), imagePromptReview: null };
     return {
       post: await persist({
         imagePrompt: draftImagePrompt,
