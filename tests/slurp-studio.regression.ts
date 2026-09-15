@@ -132,7 +132,11 @@ assert.match(routes, /recordCreatorEvent\(creator\.id, "milestone", \{ amount: t
 // audience profile projection is a strict allowlist and must stay one.
 assert.match(routes, /goal: context\.goalByAccountId\.get\(account\.id\) \?\? null/u);
 assert.match(home, /function noodlerGoalOf/u);
-assert.match(home, /goalForViewer && !editing \?/u);
+assert.match(
+  home,
+  /goalForViewer && !editing && \(/u,
+  "The audience goal must render without taking the composer's slot",
+);
 const disclosure = readFileSync(join(root, "server/src/services/slurp/slurp-disclosure.ts"), "utf8");
 assert.match(disclosure, /AUDIENCE_FIELDS\.map/u, "the audience projection must stay an allowlist");
 

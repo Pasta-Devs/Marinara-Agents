@@ -124,6 +124,8 @@ const operation = readFileSync(
 assert.match(operation, /status: "cooling"/u);
 assert.match(operation, /thread\.coolUntil && thread\.coolUntil > new Date\(\)\.toISOString\(\)/u);
 // The words the creator left them with are written before the door closes.
-assert.match(operation, /recordReplyOutcome[\s\S]{0,1200}?applyBoundary/u);
+const recorded = operation.indexOf(".recordReplyOutcome(thread.id,");
+const boundary = operation.indexOf("await applyBoundary(messagesStore, thread.id, reply.latitude)");
+assert.ok(recorded >= 0 && boundary > recorded, "The stored reply outcome must precede the boundary");
 
 console.log("slurp stance regression passed");

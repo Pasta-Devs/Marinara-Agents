@@ -27,10 +27,10 @@ const catalog = JSON.parse(readFileSync("catalog/catalog.json", "utf8")) as {
 };
 
 assert.equal(manifest.id, "slurp");
-assert.equal(manifest.name, "Slurp");
+assert.equal(manifest.name, "Slurp Legacy");
 assert.equal(manifest.engine?.min, "2.4.3");
-assert.match(manifest.description, /standalone successor to NoodleR/i);
-assert.match(manifest.description, /Creator profile/i);
+assert.match(manifest.description, /Legacy Slurp version/i);
+assert.match(manifest.description, /New development is happening in Slurp Remastered/i);
 assert.deepEqual(manifest.contributions?.homeBrowserTab, {
   label: "Slurp",
   ariaLabel: "Open Slurp",
@@ -39,7 +39,8 @@ assert.deepEqual(manifest.contributions?.homeBrowserTab, {
 
 const agent = agents.find((entry) => entry.id === "slurp");
 assert.ok(agent, "Slurp must be present in its package Agents list");
-assert.match(agent.description, /standalone successor to NoodleR/i);
+assert.equal(agent.name, "Slurp Legacy");
+assert.match(agent.description, /New development is happening in Slurp Remastered/i);
 
 const catalogEntry = catalog.packages.find((entry) => entry.manifest.id === "slurp");
 assert.ok(catalogEntry, "Slurp must be present in the downloadable catalog");

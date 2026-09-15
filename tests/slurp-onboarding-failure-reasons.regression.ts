@@ -10,6 +10,7 @@ const draft = read(`${slurpServices}slurp-stage-profile-draft.service.ts`);
 const parsers = Object.fromEntries(
   [
     "slurp-stage-profile-draft.service.ts",
+    "slurp-arc-generation.service.ts",
     "slurp-generation.service.ts",
     "slurp-reply-generation.service.ts",
     "slurp-fan-activity.service.ts",
@@ -53,6 +54,19 @@ assert.deepEqual(
   "A Slurp service parses a model answer without being covered here",
 );
 for (const [file, source] of Object.entries(parsers)) {
+  if (file === "slurp-stage-profile-draft.service.ts") {
+    // Draft repair deliberately treats an empty answer as unusable, retries it,
+    // then reports the same actionable empty-answer error after the bounded retry.
+    assert.match(
+      source,
+      /const answer = content\.trim\(\);\s*if \(!answer\) return null;[\s\S]*?parseGameJsonish\(answer\)/u,
+    );
+    assert.match(
+      source,
+      /repaired = parseNoodlerStageProfileDraft\(retry\.content \?\? "", allowedTags\);\s*lastAnswer = retry\.content \?\? "";\s*\}\s*if \(!repaired\) \{[\s\S]*?requireModelAnswer\(lastAnswer, "a creator profile"\)/u,
+    );
+    continue;
+  }
   for (const call of source.match(/parseGameJsonish\([^)]*/gu) ?? []) {
     assert.match(call, /requireModelAnswer\(/u, `Unguarded parseGameJsonish call in ${file}`);
   }
