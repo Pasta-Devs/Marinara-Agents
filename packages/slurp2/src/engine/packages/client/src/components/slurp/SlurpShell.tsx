@@ -1051,10 +1051,10 @@ export function NoodleShell({
                 "flex min-h-0 w-full flex-1 flex-col @min-[1024px]:pb-0",
                 slurpActive
                   ? cn(
-                      "pb-[calc(64px+var(--slurp-bottom-safe-inset))] @min-[1024px]:pb-0",
+                      "pb-[calc(48px+var(--slurp-bottom-safe-inset))] @min-[1024px]:pb-0",
                       reserveContextualRail && "@min-[1280px]:border-r @min-[1280px]:border-[var(--noodle-divider)]",
                     )
-                  : "pb-[calc(64px+var(--slurp-bottom-safe-inset))] @min-[1024px]:max-w-[680px] @min-[1024px]:border-r @min-[1024px]:border-[var(--noodle-divider)]",
+                  : "pb-[calc(48px+var(--slurp-bottom-safe-inset))] @min-[1024px]:max-w-[680px] @min-[1024px]:border-r @min-[1024px]:border-[var(--noodle-divider)]",
               )}
             >
               {/* A page swap with no motion reads as a glitch. One short fade, keyed by the
@@ -1093,7 +1093,7 @@ export function NoodleShell({
           }
           data-component="NoodleView.MobileBottomNav"
         >
-          <div className="relative grid h-16 grid-flow-col auto-cols-fr">
+          <div className="relative grid h-12 grid-flow-col auto-cols-fr">
             <button
               type="button"
               onClick={onMobileHomeTap}
@@ -1106,10 +1106,10 @@ export function NoodleShell({
                 homeActive ? "bg-[var(--noodle-accent)]/[0.07]" : undefined,
               )}
             >
-              <Home size={21} strokeWidth={homeActive ? 2.6 : 2} className="!text-[var(--noodle-accent)]" />
+              <Home size={20} strokeWidth={homeActive ? 2.6 : 2} className="!text-[var(--noodle-accent)]" />
               {/* The drawer used to carry this badge; the bottom bar is the only Home entry now. */}
               {noodlerUnseenCount > 0 && (
-                <span className="absolute end-[22%] top-1.5 min-w-4 rounded-full bg-[var(--noodle-accent)] px-1 text-center text-[0.6rem] font-black leading-4 text-zinc-950">
+                <span className="absolute end-[22%] top-1 min-w-4 rounded-full bg-[var(--noodle-accent)] px-1 text-center text-[0.6rem] font-black leading-4 text-zinc-950">
                   {noodlerUnseenCount > 99 ? "99+" : noodlerUnseenCount}
                 </span>
               )}
@@ -1128,7 +1128,7 @@ export function NoodleShell({
                 )}
               >
                 <User
-                  size={21}
+                  size={20}
                   strokeWidth={activeView === "profile" ? 2.6 : 2}
                   className={"!text-[var(--noodle-accent)]"}
                 />
@@ -1146,12 +1146,12 @@ export function NoodleShell({
                 )}
               >
                 <MessageCircle
-                  size={21}
+                  size={20}
                   strokeWidth={activeView === "messages" ? 2.6 : 2}
                   className={"!text-[var(--noodle-accent)]"}
                 />
                 {notificationCount > 0 && (
-                  <span className="absolute end-[22%] top-1.5 min-w-4 rounded-full bg-[var(--noodle-accent)] px-1 text-center text-[0.6rem] font-black leading-4 text-zinc-950">
+                  <span className="absolute end-[22%] top-1 min-w-4 rounded-full bg-[var(--noodle-accent)] px-1 text-center text-[0.6rem] font-black leading-4 text-zinc-950">
                     {notificationCount > 99 ? "99+" : notificationCount}
                   </span>
                 )}
@@ -1175,7 +1175,7 @@ export function NoodleShell({
                 )}
               >
                 <Search
-                  size={21}
+                  size={20}
                   strokeWidth={activeView === "search" ? 2.6 : 2}
                   className={"!text-[var(--noodle-accent)]"}
                 />
@@ -1200,7 +1200,7 @@ export function NoodleShell({
               {personaAccount ? (
                 <Avatar account={personaAccount} size="sm" />
               ) : (
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 ring-1 ring-[var(--noodle-accent)]/25">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 ring-1 ring-[var(--noodle-accent)]/25">
                   <AtSign size={18} className="!text-[var(--noodle-accent)]" />
                 </span>
               )}

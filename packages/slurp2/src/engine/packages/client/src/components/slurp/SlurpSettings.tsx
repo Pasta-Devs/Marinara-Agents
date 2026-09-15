@@ -27,7 +27,7 @@ import { Field, GuidanceBox, NumberSetting, SectionTitle, SettingsGroup, Toggle 
 import { SlurpSimulationSettings } from "./SlurpSimulationSettings";
 import { SlurpFanTypesSettings } from "./SlurpFanTypesSettings";
 import { SlurpAudienceConfigSettings } from "./SlurpAudienceConfigSettings";
-import type { ReactNode } from "react";
+import type { ChangeEvent, ReactNode } from "react";
 import { api } from "../../lib/api-client";
 import { cn } from "../../lib/utils";
 import { useEffect, useRef, useState } from "react";
@@ -72,6 +72,7 @@ import {
   useImportSlurpAds,
   useSlurpConnections,
   useSlurpSettings,
+  useSlurpSettingsDefaults,
   useRunSlurpAutopurge,
   useUpdateNoodlerAutoPosting,
   useUpdateNoodlerScheduleSlot,
@@ -88,9 +89,16 @@ import {
   type SlurpReserveStatus,
   type SlurpScheduleSlot,
 } from "../../hooks/use-slurp";
-import { showConfirmDialog } from "../../lib/app-dialogs";
+import { showConfirmDialog, showPromptDialog } from "../../lib/app-dialogs";
 import { Modal } from "../ui/Modal";
 import { SLURP_SETTINGS_SECTIONS, type SlurpNavigationState } from "./slurp-navigation.types";
+import {
+  exportSlurpPromptPresets,
+  importSlurpPromptPresets,
+  mergeSlurpPromptPreset,
+  SLURP_PROMPT_PRESET_NAME_LIMIT,
+} from "./slurp-prompt-presets";
+import { changedSlurpSettingKeys, isSlurpResettableSection, slurpSettingsResetPatch } from "./slurp-settings-defaults";
 import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
 import {
   Avatar,
@@ -260,6 +268,7 @@ export function SlurpSettings({
 }: SlurpSettingsProps) {
   const { t, i18n } = useTranslation();
   const settingsQuery = useSlurpSettings();
+  const settingsDefaultsQuery = useSlurpSettingsDefaults();
   const updateSettings = useUpdateSlurpSettings();
   const runAutopurge = useRunSlurpAutopurge();
   const section = navigation.section ?? "overview";
@@ -420,6 +429,104 @@ export function SlurpSettings({
     );
     setRefreshAccess("locked");
     setRefreshModalOpen(true);
+  };
+  const [selectedPresetName, setSelectedPresetName] = useState("");
+  const presetImportRef = useRef<HTMLInputElement>(null);
+  const selectedPreset = settings?.promptPresets.find((preset) => preset.name === selectedPresetName) ?? null;
+  const savePromptPreset = async () => {
+    if (!settings) return;
+    const name = (
+      await showPromptDialog({
+        title: t("ui.slurp.settings.presets.nameTitle"),
+        message: t("ui.slurp.settings.presets.nameDetail"),
+        placeholder: selectedPresetName,
+        confirmLabel: t("ui.slurp.settings.presets.save"),
+      })
+    )
+      ?.trim()
+      .slice(0, SLURP_PROMPT_PRESET_NAME_LIMIT);
+    if (!name) return;
+    const saved = await restore(
+      {
+        promptPresets: mergeSlurpPromptPreset(settings.promptPresets, {
+          name,
+          generationGuidance: settings.generationGuidance,
+          imageGenerationPrompt: settings.imageGenerationPrompt,
+        }),
+      },
+      t("ui.slurp.settings.presets.saved"),
+    );
+    if (saved) setSelectedPresetName(name);
+  };
+  const applyPromptPreset = async () => {
+    if (!settings || !selectedPreset) return;
+    const differs =
+      settings.generationGuidance !== selectedPreset.generationGuidance ||
+      settings.imageGenerationPrompt !== selectedPreset.imageGenerationPrompt;
+    // Applying replaces prompts that may have been edited by hand, so ask first when it would change them.
+    if (
+      differs &&
+      !(await showConfirmDialog({
+        title: t("ui.slurp.settings.presets.applyTitle"),
+        message: t("ui.slurp.settings.presets.applyDetail", { name: selectedPreset.name }),
+        confirmLabel: t("ui.slurp.settings.presets.apply"),
+      }))
+    )
+      return;
+    await restore(
+      {
+        generationGuidance: selectedPreset.generationGuidance,
+        imageGenerationPrompt: selectedPreset.imageGenerationPrompt,
+      },
+      t("ui.slurp.settings.presets.applied"),
+    );
+  };
+  const deletePromptPreset = async () => {
+    if (!settings || !selectedPreset) return;
+    const confirmed = await showConfirmDialog({
+      title: t("ui.slurp.settings.presets.deleteTitle"),
+      message: t("ui.slurp.settings.presets.deleteDetail", { name: selectedPreset.name }),
+      confirmLabel: t("ui.slurp.settings.presets.delete"),
+    });
+    if (!confirmed) return;
+    if (await save({ promptPresets: settings.promptPresets.filter((preset) => preset.name !== selectedPreset.name) })) {
+      setSelectedPresetName("");
+    }
+  };
+  const exportPromptPresets = () => {
+    if (!settings) return;
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(exportSlurpPromptPresets(settings.promptPresets), null, 2)], {
+        type: "application/json",
+      }),
+    );
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "marinara-slurp-prompts.json";
+    document.body.append(anchor);
+    anchor.click();
+    window.setTimeout(() => {
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    }, 0);
+  };
+  const importPromptPresets = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !settings) return;
+    try {
+      const result = importSlurpPromptPresets(settings.promptPresets, JSON.parse(await file.text()));
+      if (result.imported === 0) {
+        toast.error(t("ui.slurp.settings.presets.importInvalid"));
+        return;
+      }
+      await restore(
+        { promptPresets: result.presets },
+        t("ui.slurp.settings.presets.imported", { count: result.imported }),
+      );
+    } catch {
+      toast.error(t("ui.slurp.settings.presets.importInvalid"));
+    }
   };
   const restore = async (patch: Partial<SlurpSettings>, message = "Settings saved.") => {
     setSaveState("saving");
@@ -582,6 +689,40 @@ export function SlurpSettings({
             </nav>
 
             <div className="mt-4 min-w-0 rounded-xl rounded-t-none bg-[linear-gradient(145deg,var(--slurp-surface),color-mix(in_srgb,var(--slurp-violet)_4%,var(--slurp-surface)))] p-3 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] md:mt-0 md:rounded-t-xl md:p-5 lg:p-6">
+              {settings &&
+                settingsDefaultsQuery.data &&
+                isSlurpResettableSection(section) &&
+                (() => {
+                  const defaults = settingsDefaultsQuery.data;
+                  const changed = changedSlurpSettingKeys(settings, defaults, section);
+                  if (changed.length === 0) return null;
+                  return (
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--border)] px-3 py-2">
+                      <p className="text-xs text-[var(--muted-foreground)]">
+                        {t("ui.slurp.settings.reset.changed", { count: changed.length })}
+                      </p>
+                      <button
+                        type="button"
+                        disabled={updateSettings.isPending}
+                        onClick={() =>
+                          void showConfirmDialog({
+                            title: t("ui.slurp.settings.reset.confirmTitle"),
+                            message: t("ui.slurp.settings.reset.confirmDetail"),
+                            confirmLabel: t("ui.slurp.settings.reset.button"),
+                          })
+                            .then((confirmed) => {
+                              if (confirmed) void save(slurpSettingsResetPatch(settings, defaults, section));
+                            })
+                            .catch((error) => toast.error(errorMessage(error)))
+                        }
+                        className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+                      >
+                        <RefreshCw size={14} />
+                        {t("ui.slurp.settings.reset.button")}
+                      </button>
+                    </div>
+                  );
+                })()}
               {section === "overview" && (
                 <div className="space-y-4">
                   <section className="relative isolate overflow-hidden rounded-xl bg-[var(--slurp-hero)] p-4 text-white shadow-[0_30px_70px_-38px_rgba(184,28,102,0.9)] sm:p-5">
@@ -820,6 +961,54 @@ export function SlurpSettings({
                       detail={t("ui.slurp.settings.publishing.manualDetail")}
                     />
                   )}
+                  <div className="space-y-3">
+                    <SectionTitle
+                      title={t("ui.slurp.settings.carryover.title")}
+                      detail={t("ui.slurp.settings.carryover.detail")}
+                    />
+                    {(["conversation", "roleplay", "game"] as const).map((mode) => (
+                      <Toggle
+                        key={mode}
+                        compact
+                        label={t(`ui.slurp.settings.carryover.${mode}`)}
+                        value={settings.carryoverModes.includes(mode)}
+                        onChange={(value) =>
+                          update(
+                            "carryoverModes",
+                            value
+                              ? [...settings.carryoverModes.filter((entry) => entry !== mode), mode]
+                              : settings.carryoverModes.filter((entry) => entry !== mode),
+                          )
+                        }
+                      />
+                    ))}
+                    {settings.carryoverModes.length > 0 && (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Field
+                          label={t("ui.slurp.settings.carryover.hours")}
+                          detail={t("ui.slurp.settings.carryover.hoursDetail")}
+                        >
+                          <NumberSetting
+                            value={settings.carryoverHours}
+                            min={1}
+                            max={24 * 365}
+                            onSave={(value) => save({ carryoverHours: value })}
+                          />
+                        </Field>
+                        <Field
+                          label={t("ui.slurp.settings.carryover.maxItems")}
+                          detail={t("ui.slurp.settings.carryover.maxItemsDetail")}
+                        >
+                          <NumberSetting
+                            value={settings.carryoverMaxItems}
+                            min={1}
+                            max={100}
+                            onSave={(value) => save({ carryoverMaxItems: value })}
+                          />
+                        </Field>
+                      </div>
+                    )}
+                  </div>
                   <details className="group rounded-xl bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
                     <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 text-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] [&::-webkit-details-marker]:hidden">
                       <FileText size={17} className="text-[var(--slurp-violet)]" aria-hidden="true" />
@@ -872,6 +1061,18 @@ export function SlurpSettings({
                             ))}
                         </select>
                       </Field>
+                      <Toggle
+                        label={t("ui.slurp.settings.prompts.lorebookContext")}
+                        detail={t("ui.slurp.settings.prompts.lorebookContextDetail")}
+                        value={settings.enableLorebookContext}
+                        onChange={(value) => update("enableLorebookContext", value)}
+                      />
+                      <Toggle
+                        label={t("ui.slurp.settings.prompts.professorMari")}
+                        detail={t("ui.slurp.settings.prompts.professorMariDetail")}
+                        value={settings.professorMariCreatorSource}
+                        onChange={(value) => update("professorMariCreatorSource", value)}
+                      />
                       <Field
                         label={t("ui.slurp.settings.prompts.spice")}
                         detail={
@@ -917,6 +1118,78 @@ export function SlurpSettings({
                           )
                         }
                       />
+                      <Field
+                        label={t("ui.slurp.settings.presets.title")}
+                        detail={t("ui.slurp.settings.presets.detail")}
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <select
+                            value={selectedPreset ? selectedPresetName : ""}
+                            disabled={settings.promptPresets.length === 0}
+                            onChange={(event) => setSelectedPresetName(event.target.value)}
+                            aria-label={t("ui.slurp.settings.presets.choose")}
+                            className="min-h-11 min-w-0 flex-1 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                          >
+                            <option value="">
+                              {settings.promptPresets.length > 0
+                                ? t("ui.slurp.settings.presets.choose")
+                                : t("ui.slurp.settings.presets.empty")}
+                            </option>
+                            {settings.promptPresets.map((preset) => (
+                              <option key={preset.name} value={preset.name}>
+                                {preset.name}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            disabled={!selectedPreset || updateSettings.isPending}
+                            onClick={() => void applyPromptPreset()}
+                            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+                          >
+                            {t("ui.slurp.settings.presets.apply")}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!selectedPreset || updateSettings.isPending}
+                            onClick={() => void deletePromptPreset()}
+                            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+                          >
+                            {t("ui.slurp.settings.presets.delete")}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={updateSettings.isPending}
+                            onClick={() => void savePromptPreset()}
+                            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+                          >
+                            {t("ui.slurp.settings.presets.save")}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={settings.promptPresets.length === 0}
+                            onClick={exportPromptPresets}
+                            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+                          >
+                            {t("ui.slurp.settings.presets.export")}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={updateSettings.isPending}
+                            onClick={() => presetImportRef.current?.click()}
+                            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+                          >
+                            {t("ui.slurp.settings.presets.import")}
+                          </button>
+                          <input
+                            ref={presetImportRef}
+                            type="file"
+                            accept="application/json,.json"
+                            className="hidden"
+                            onChange={(event) => void importPromptPresets(event)}
+                          />
+                        </div>
+                      </Field>
                     </div>
                   </details>
                 </div>
@@ -945,6 +1218,34 @@ export function SlurpSettings({
                       <option value="vision">{t("ui.slurp.settings.images.contextVision")}</option>
                     </select>
                   </Field>
+                  {settings.imageContextMode !== "imagePrompt" && (
+                    <Field
+                      label={t("ui.slurp.settings.images.contextConnection")}
+                      detail={t("ui.slurp.settings.images.contextConnectionDetail")}
+                    >
+                      <select
+                        value={settings.imageContextConnectionId ?? ""}
+                        disabled={connectionsQuery.isLoading || connectionsQuery.isError || updateSettings.isPending}
+                        onChange={(event) => void update("imageContextConnectionId", event.target.value || null)}
+                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                      >
+                        <option value="">{t("ui.slurp.settings.images.contextConnectionText")}</option>
+                        {(connectionsQuery.data ?? [])
+                          .filter((connection) => connection.provider !== "image_generation")
+                          .map((connection) => (
+                            <option key={connection.id} value={connection.id}>
+                              {connection.name ?? connection.model ?? connection.id}
+                            </option>
+                          ))}
+                      </select>
+                    </Field>
+                  )}
+                  <Toggle
+                    label={t("ui.slurp.settings.images.galleryFallback")}
+                    detail={t("ui.slurp.settings.images.galleryFallbackDetail")}
+                    value={settings.allowGalleryImageAttachments}
+                    onChange={(value) => update("allowGalleryImageAttachments", value)}
+                  />
                   <div
                     className={`flex items-start gap-3 rounded-xl p-4 ring-1 ring-inset ${imagesReady ? "bg-[color-mix(in_srgb,var(--slurp-success)_8%,var(--slurp-surface-raised))] ring-[var(--slurp-success)]/25" : "bg-[color-mix(in_srgb,var(--slurp-warning)_8%,var(--slurp-surface-raised))] ring-[var(--slurp-warning)]/25"}`}
                   >
@@ -1789,6 +2090,36 @@ export function SlurpSettings({
                                 ))}
                               </select>
                             </Field>
+                            {selectedCreator.sourceAccountId && !personaCreator(selectedCreator) && (
+                              <Field
+                                label={t("ui.slurp.settings.creators.imageInstructions")}
+                                detail={t("ui.slurp.settings.creators.imageInstructionsDetail")}
+                              >
+                                <select
+                                  disabled={updateSettings.isPending}
+                                  value={String(
+                                    settings.characterImageInstructions[selectedCreator.sourceAccountId] ?? "engine",
+                                  )}
+                                  onChange={(event) => {
+                                    const characterId = selectedCreator.sourceAccountId!;
+                                    const { [characterId]: _previous, ...rest } = settings.characterImageInstructions;
+                                    void update(
+                                      "characterImageInstructions",
+                                      event.target.value === "engine"
+                                        ? rest
+                                        : { ...rest, [characterId]: event.target.value === "true" },
+                                    );
+                                  }}
+                                  className="min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50 sm:text-sm"
+                                >
+                                  <option value="engine">
+                                    {t("ui.slurp.settings.creators.imageInstructionsEngine")}
+                                  </option>
+                                  <option value="true">{t("ui.slurp.settings.creators.imageInstructionsOn")}</option>
+                                  <option value="false">{t("ui.slurp.settings.creators.imageInstructionsOff")}</option>
+                                </select>
+                              </Field>
+                            )}
                           </SettingsGroup>
 
                           {/* The message policy and prices had working, ownership-gated endpoints
@@ -2969,13 +3300,15 @@ export function SlurpSettings({
                       type="button"
                       disabled={deleteAllData.isPending}
                       onClick={() =>
-                        void showConfirmDialog({
+                        // Nothing here can be undone, so a stray click on a default button is not enough.
+                        void showPromptDialog({
                           title: t("ui.slurp.settings.advanced.deleteAllConfirmTitle"),
-                          message: t("ui.slurp.settings.advanced.deleteAllConfirmDetail"),
+                          message: `${t("ui.slurp.settings.advanced.deleteAllConfirmDetail")}\n\n${t("ui.slurp.settings.advanced.deleteAllTypeToConfirm")}`,
+                          placeholder: "DELETE",
                           confirmLabel: t("ui.slurp.settings.advanced.deleteAllButton"),
                         })
-                          .then((confirmed) => {
-                            if (!confirmed) return;
+                          .then((typed) => {
+                            if (typed?.trim() !== "DELETE") return;
                             deleteAllData.mutate(undefined, {
                               onSuccess: () => toast.success(t("ui.slurp.settings.advanced.deleteAllSuccess")),
                               onError: (error) => toast.error(errorMessage(error)),

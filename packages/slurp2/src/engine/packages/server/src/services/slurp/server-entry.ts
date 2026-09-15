@@ -12,6 +12,7 @@ import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js
 import * as slurpSchema from "../../db/schema/slurp.js";
 import { createSlurpFirstPostQueue } from "./slurp-first-post-queue.service.js";
 import { startSlurpAutopurgeScheduler } from "./slurp-autopurge-scheduler.service.js";
+import { buildSlurpChatContext, type SlurpChatContextRequest } from "./slurp-chat-context.js";
 
 const lifecycle = createSlurpActivationLifecycle();
 
@@ -22,6 +23,9 @@ export async function activate({
   app: FastifyInstance;
   api: {
     registerService<T>(key: string, service: T): () => void | Promise<void>;
+    registerPromptContext?(
+      contributor: (request: SlurpChatContextRequest) => Promise<string | null>,
+    ): () => void | Promise<void>;
     registerPrivilegedRoutes(
       routes: FastifyPluginAsync,
       options: { prefix: string },
@@ -62,6 +66,10 @@ export async function activate({
         pause: async <T>(run: () => Promise<T>) => run(),
       }),
     );
+    // Slurp activity in ordinary chats. Each chat opts in, so registering costs nothing until then.
+    if (api.registerPromptContext) {
+      addTeardown(api.registerPromptContext((request) => buildSlurpChatContext(app.db, request)));
+    }
     const firstPostQueue = createSlurpFirstPostQueue(app.db);
     firstPostQueue.start();
     addTeardown(() => firstPostQueue.stop());

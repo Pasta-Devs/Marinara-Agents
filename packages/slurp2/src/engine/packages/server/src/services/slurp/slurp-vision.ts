@@ -4,6 +4,7 @@ import { DATA_DIR } from "../../utils/data-dir.js";
 import { assertInsideDir, isAllowedImageBuffer } from "../../utils/security.js";
 import { getSharp } from "../../utils/sharp.js";
 import { logger } from "../../lib/logger.js";
+import { llmFetch } from "../llm/base-provider.js";
 import { decodeSafePathSegment, resolveOwnedGalleryPath } from "../image/gallery-file-lifecycle.js";
 import type { NoodlePromptImageCandidate } from "./slurp-prompt.js";
 import { resolveNoodlerMediaAbsolutePath } from "./slurp-media.js";
@@ -135,6 +136,73 @@ export function formatNoodleVisionManifest(attachments: NoodleVisionAttachment[]
         : `- image ${index + 1}: ${attachment.key}, post ${attachment.postId}`,
     ),
   ].join("\n");
+}
+
+// A model that refuses image input refuses it every time, so the first refusal is remembered and
+// later descriptions skip that model instead of paying for another failed call.
+// ponytail: in-memory, so each server start pays for one refusal. Persist it if that is still too many.
+const modelsRejectingVision = new Set<string>();
+
+function slurpVisionModelKey(connection: { provider: string; model: string }): string {
+  return JSON.stringify([connection.provider, connection.model]);
+}
+
+export function slurpModelRejectsVisionInput(connection: { provider: string; model: string }): boolean {
+  return modelsRejectingVision.has(slurpVisionModelKey(connection));
+}
+
+export function rememberSlurpVisionRejection(connection: { provider: string; model: string }): void {
+  modelsRejectingVision.add(slurpVisionModelKey(connection));
+}
+
+function readRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/** A provider model list's `capabilities.vision` for one model, or null when it does not say. */
+export function readSlurpVisionSupport(catalog: unknown, modelId: string): boolean | null {
+  const data = readRecord(catalog)?.data;
+  if (!Array.isArray(data)) return null;
+  const vision = readRecord(
+    readRecord(data.map(readRecord).find((entry) => entry?.id === modelId)?.capabilities),
+  )?.vision;
+  return typeof vision === "boolean" ? vision : null;
+}
+
+// ponytail: cached until restart, and only NanoGPT publishes vision support. Add providers as they do.
+const visionSupportByModel = new Map<string, boolean | null>();
+
+/**
+ * True when this model is known not to read images: it refused one already, or its provider's model
+ * list says so. Checked before a description is requested, so a text-only model is never sent one.
+ */
+export async function slurpModelLacksVision(
+  connection: { provider: string; model: string; apiKey?: string | null },
+  baseUrl: string,
+): Promise<boolean> {
+  if (slurpModelRejectsVisionInput(connection)) return true;
+  if (connection.provider !== "nanogpt" || !baseUrl || !connection.model) return false;
+  const key = slurpVisionModelKey(connection);
+  if (!visionSupportByModel.has(key)) {
+    let support: boolean | null = null;
+    try {
+      const url = new URL(`${baseUrl.replace(/\/+$/u, "")}/models`);
+      if (url.protocol === "https:") {
+        url.searchParams.set("detailed", "true");
+        const response = await llmFetch(url, {
+          headers: connection.apiKey ? { Authorization: `Bearer ${connection.apiKey}` } : undefined,
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (response.ok) support = readSlurpVisionSupport(await response.json(), connection.model);
+      }
+    } catch (error) {
+      logger.debug(error, "[slurp/vision] Could not check the model's vision support");
+    }
+    visionSupportByModel.set(key, support);
+  }
+  return visionSupportByModel.get(key) === false;
 }
 
 export function isUnsupportedNoodleVisionInputError(error: unknown): boolean {

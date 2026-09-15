@@ -151,7 +151,10 @@ export async function generateNoodlerPostImage(input: {
           avatarPath: sourceCharacter.avatarPath ?? null,
           appearance: characterAppearanceFromRow(sourceCharacter),
           name: characterNameFromRow(sourceCharacter),
-          ...characterNoodleImageContextFromRow(sourceCharacter),
+          ...characterNoodleImageContextFromRow(
+            sourceCharacter,
+            input.settings.characterImageInstructions[sourceCharacter.id],
+          ),
         }
       : sourcePersona
         ? {

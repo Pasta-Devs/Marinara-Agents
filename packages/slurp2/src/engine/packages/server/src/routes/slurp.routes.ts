@@ -59,6 +59,7 @@ import { resolveNoodlerCreatorArtwork } from "../services/slurp/slurp-public-pro
 import { createConnectionsStorage } from "../services/storage/connections.storage.js";
 import {
   createSlurpStorage,
+  DEFAULT_SLURP_SETTINGS,
   isSlurpViewerActorAccount,
   slurpSettingsSchema,
 } from "../services/storage/slurp.storage.js";
@@ -568,6 +569,8 @@ export async function slurpRoutes(app: FastifyInstance) {
   }
 
   app.get("/settings", async () => noodle.getSlurpSettings());
+  // The shipped values, so Settings can show what differs and reset one section.
+  app.get("/settings/defaults", async () => DEFAULT_SLURP_SETTINGS);
   app.patch("/settings", async (req, reply) => {
     const body = slurpSettingsSchema.partial().safeParse(req.body ?? {});
     if (!body.success) return reply.code(400).send({ error: body.error.flatten() });

@@ -50,7 +50,8 @@ import { slurpArcLifeLine } from "./slurp-project.js";
 import { SLURP_PLATFORM_CONTEXT } from "./slurp-prompt.js";
 import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
 import { slurpFanMemoryForPrompt, slurpFanVoiceForPrompt, slurpResolveFanType } from "./slurp-fan-types.js";
-import type { SlurpMessage } from "../storage/slurp-messages.storage.js";
+import { prepareSlurpPostImageContexts, slurpImageCaptioning } from "./slurp-post-image-context.js";
+import { createSlurpMessagesStorage, type SlurpMessage } from "../storage/slurp-messages.storage.js";
 import type { SlurpDmPolicy } from "./slurp-messaging.js";
 import { resolveNoodlerCharacterCanon } from "./slurp-source-resolve.js";
 import { claimSlurpModelBudget, slurpModelWorkerAllows, type SlurpModelWorkerContext } from "./slurp-model-worker.js";
@@ -92,6 +93,8 @@ export function buildSlurpMessageChat(input: {
   publicIdentity: Parameters<typeof noodlerIdentityInstruction>[1];
   /** What the creator has posted lately, so "loved your new set" can be answered. */
   recentPosts: Array<{ id: string; title: string | null; content: string; access: string; imageUrl: string | null }>;
+  /** What the pictures in the conversation show, keyed by message id. */
+  imageContexts?: Map<string, string>;
 }): ChatMessage[] {
   const protect = (value: string | null | undefined) =>
     protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
@@ -208,6 +211,8 @@ export function buildSlurpMessageChat(input: {
             title: protect(post.title),
             // A locked body is what the fan is being sold. Quoting it into a free chat gives it away.
             content: post.access === "locked" ? "[paid post, contents not repeated here]" : protect(post.content),
+            // Never set for a locked post: its picture is withheld for the same reason as its text.
+            image: input.imageContexts?.has(post.id) ? protect(input.imageContexts.get(post.id)) : undefined,
             access: post.access,
           })),
         }
@@ -227,6 +232,7 @@ export function buildSlurpMessageChat(input: {
           : message.kind === "ppv"
             ? `[sent locked content for ${message.price} coins${message.unlockedAt ? ", which the fan unlocked" : ", still locked"}]`
             : protect(message.content),
+      image: input.imageContexts?.has(message.id) ? protect(input.imageContexts.get(message.id)) : undefined,
       at: message.createdAt,
     })),
   };
@@ -362,8 +368,46 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
     coolingOff: input.coolingOff ?? false,
     strikes: input.strikes ?? 0,
   });
+  // Pictures reach the model through the one image context setting: the thread's own pictures, and
+  // the Creator's recent posts a fan is likely to mention. The creator is one side of this thread,
+  // so a locked picture in it is theirs to see. Recent posts use stored prompts and saved
+  // descriptions only, so a reply never pays for vision across the whole feed, and a locked post
+  // stays out like its text does. A failed description costs the picture its context, never the reply.
+  const imageContexts = await slurpImageCaptioning(input.db, settings.imageContextConnectionId, input.connection)
+    .then(async (captioning) => {
+      const messageStore = createSlurpMessagesStorage(input.db);
+      const [threadImages, postImages] = await Promise.all([
+        prepareSlurpPostImageContexts({
+          posts: input.history
+            .slice(-HISTORY_TURNS)
+            .filter((message) => message.imageUrl)
+            .map((message) => ({
+              id: message.id,
+              access: "public" as const,
+              imageUrl: message.imageUrl,
+              imagePrompt: typeof message.metadata.imagePrompt === "string" ? message.metadata.imagePrompt : null,
+              metadata: message.metadata,
+              createdAt: message.createdAt,
+            })),
+          mode: settings.imageContextMode,
+          captioning,
+          allowLocked: true,
+          debugMode: input.debugMode,
+          onDescribed: (message, description, source) =>
+            messageStore.setMessageImageDescription(message.id, description, source),
+        }),
+        prepareSlurpPostImageContexts({
+          posts: recentPostRows.filter((post) => post.access !== "draft").slice(0, RECENT_POSTS),
+          mode: "imagePrompt",
+          captioning,
+        }),
+      ]);
+      return new Map([...postImages, ...threadImages]);
+    })
+    .catch(() => new Map<string, string>());
   const messages = buildSlurpMessageChat({
     ...input,
+    imageContexts,
     fanVoice,
     fanMemory,
     stance,

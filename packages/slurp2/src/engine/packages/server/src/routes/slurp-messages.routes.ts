@@ -237,7 +237,12 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
   const visibleMessages = async (threadId: string, side: "viewer" | "creator") =>
     (await messages.listMessages(threadId)).map((message) =>
       side === "viewer" && message.kind === "ppv" && !message.unlockedAt
-        ? { ...message, content: "", imageUrl: null }
+        ? {
+            ...message,
+            content: "",
+            imageUrl: null,
+            metadata: { ...message.metadata, imagePrompt: undefined, imageDescription: undefined },
+          }
         : side === "viewer" && message.kind === "post_preview" && message.metadata.previewLocked === true
           ? {
               ...message,
@@ -359,7 +364,12 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       thread: await freshView(thread.id, side),
       messages: page.messages.map((message) =>
         side === "viewer" && message.kind === "ppv" && !message.unlockedAt
-          ? { ...message, content: "", imageUrl: null }
+          ? {
+              ...message,
+              content: "",
+              imageUrl: null,
+              metadata: { ...message.metadata, imagePrompt: undefined, imageDescription: undefined },
+            }
           : side === "viewer" && message.kind === "post_preview" && message.metadata.previewLocked === true
             ? {
                 ...message,
@@ -483,7 +493,12 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       thread: thread ? await freshView(thread.id) : null,
       messages: page.messages.map((message) =>
         message.kind === "ppv" && !message.unlockedAt
-          ? { ...message, content: "", imageUrl: null }
+          ? {
+              ...message,
+              content: "",
+              imageUrl: null,
+              metadata: { ...message.metadata, imagePrompt: undefined, imageDescription: undefined },
+            }
           : message.kind === "post_preview" && message.metadata.previewLocked === true
             ? {
                 ...message,
@@ -814,6 +829,12 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       // Stage the character Creator's work before taking payment. A missing or failed image
       // connection must leave the quote payable later, not charge the fan for an empty delivery.
       if (automatic) {
+        // Drawing is the expensive part, so a fan who cannot pay must not get one drawn and thrown
+        // away on every retry. acceptCommission still checks again under the lock.
+        if ((await slurp.getSettings()).walletEnabled) {
+          const wallet = await slurp.getWallet(commission.viewerAccountId);
+          if (wallet.coins < commission.price) return reply.code(402).send({ error: "Not enough coins." });
+        }
         try {
           drawn = await generateSlurpCommissionImage(app.db, {
             creatorAccountId: commission.creatorAccountId,
@@ -945,6 +966,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
           delivered.deliveryMessageId,
           slurpMessageMediaUrl(delivered.deliveryMessageId),
           drawn.mediaPath,
+          commission.brief,
         );
       }
       return { commission: delivered };
@@ -1027,6 +1049,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
         metadata: {
           noodlerMediaPath: drawn.mediaPath,
           generatedContext: parsed.data.intent,
+          imagePrompt: parsed.data.prompt,
           mediaReason: offer.reason,
         },
       });
@@ -1126,7 +1149,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
         content: parsed.data.content,
         imageUrl: slurpMessageMediaUrl("pending"),
         unlockedAt: new Date().toISOString(),
-        metadata: { noodlerMediaPath: drawn.mediaPath, generatedContext: "viewer" },
+        metadata: { noodlerMediaPath: drawn.mediaPath, generatedContext: "viewer", imagePrompt: parsed.data.prompt },
       });
       if (!message) return reply.code(404).send({ error: "Thread not found" });
       drawn.promote();

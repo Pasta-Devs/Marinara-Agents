@@ -2,7 +2,7 @@
 // client has no route that serves CHANGELOG.md. So the notes are mirrored here, and
 // `tests/slurp2-release-notes.regression.ts` fails the build if this file drifts from
 // `packages/slurp2/CHANGELOG.md` or from the version in `manifest.json`.
-export const SLURP2_VERSION = "0.0.13";
+export const SLURP2_VERSION = "0.0.14";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -12,6 +12,18 @@ export interface Slurp2ReleaseEntry {
 
 /** Newest first, same order as CHANGELOG.md. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.0.14",
+    date: "2026-09-15",
+    notes: [
+      "Fixed commissions drawing a new picture on every retry when the fan could not pay.",
+      "Fixed locked pay-per-view messages sending what their picture shows before the fan paid.",
+      "Pictures in messages, commissions and your recent posts now reach the AI as stored prompts or descriptions, with an optional image description model. Each picture is described once, and models that cannot read images are skipped.",
+      "Characters can remember their Slurp posts, messages, commissions, subscriptions and tips in Engine chats: turn on Carryover to chats in Settings and Include Slurp activity in the chat's settings.",
+      "Added lorebook context for Creator posts, prompt presets with import and export, a changed count and Reset section for each settings section, gallery images when no picture is generated, a Professor Mari Creator switch, and a per-character choice for chat image instructions.",
+      "Deleting all Slurp data now asks you to type DELETE, and the mobile bottom bar is smaller.",
+    ],
+  },
   {
     version: "0.0.13",
     date: "2026-09-15",
