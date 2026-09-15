@@ -297,16 +297,30 @@ for (const route of [
 ]) {
   assert.ok(routes.includes(route), `missing route ${route}`);
 }
+function routeBlock(route: string) {
+  const start = routes.indexOf(route);
+  assert.notEqual(start, -1, `missing route ${route}`);
+  const end = routes.indexOf("\n  app.", start + 1);
+  return routes.slice(start, end === -1 ? undefined : end);
+}
+for (const route of [
+  'app.get("/noodler/accounts/:id/projects"',
+  'app.post("/noodler/accounts/:id/projects"',
+  'app.patch("/noodler/accounts/:id/projects/:projectId"',
+  'app.delete("/noodler/accounts/:id/projects/:projectId"',
+]) {
+  assert.doesNotMatch(
+    routeBlock(route),
+    /creatorBelongsToViewer|ownsWholeArc|Only the (?:Creator's owner|owner of every Creator)/u,
+    `${route} must remain manageable from a different viewer persona`,
+  );
+}
 // A project is production notes, not a tip goal: it must never be readable by the audience.
 assert.equal(
   routes.split("accounts/:id/projects").length - 1,
   9,
-  "every project route is under the owner-checked creator path",
+  "every project route is under the Creator-scoped path",
 );
-assert.match(routes, /Only the Creator's owner can read their projects\./u);
-assert.match(routes, /Only the Creator's owner can open a project\./u);
-assert.match(routes, /Only the Creator's owner can edit a project\./u);
-assert.match(routes, /Only the Creator's owner can delete a project\./u);
 // Posts are only served once the project has been confirmed to belong to this Creator, so a
 // guessed project id cannot read someone else's thread.
 assert.match(routes, /if \(!\(await noodle\.getProject\(creator\.id, projectId\)\)\) \{\s+return reply\.code\(404\)/u);

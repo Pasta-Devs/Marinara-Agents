@@ -47,7 +47,7 @@ import {
 } from "@marinara-engine/shared";
 import { z } from "zod";
 import type { DB } from "../../db/connection.js";
-import { isFileUniqueConstraintError } from "../../db/file-schema.js";
+import { isSlurpFileUniqueConstraintError } from "./slurp-file-errors.js";
 export {
   NOODLER_SUBSCRIPTION_COST,
   NOODLER_UNLOCK_COST,
@@ -1888,7 +1888,7 @@ export function createSlurpStorage(db: DB) {
       const toggleKeys = ["postId", "actorAccountId", "type", "parentInteractionId"];
       if (
         isToggleInteractionType(input.type) &&
-        isFileUniqueConstraintError(error, "slurp2_interactions", toggleKeys)
+        isSlurpFileUniqueConstraintError(error, "slurp2_interactions", toggleKeys)
       ) {
         const existing = await readExistingToggleInteraction();
         if (existing) return existing;
@@ -1977,14 +1977,11 @@ export function createSlurpStorage(db: DB) {
       const currentActor = actorRows[0] ? mapAccount(actorRows[0]) : actor;
       if (authorPlatform === "noodler") {
         const currentAuthor = mapAccount(authorRows[0]);
-        if (
-          currentActor.kind !== "persona" ||
-          (currentAuthor.sourceKind === "persona" && currentAuthor.sourceEntityId === viewerPersonaId) ||
-          isNoodlerHiddenFromViewer(currentAuthor, viewerPersonaId)
-        ) {
+        if (currentActor.kind !== "persona" || isNoodlerHiddenFromViewer(currentAuthor, viewerPersonaId)) {
           return null;
         }
         const currentPostView = mapPost(currentPost);
+        const ownsAuthor = currentAuthor.sourceKind === "persona" && currentAuthor.sourceEntityId === viewerPersonaId;
         const subscriptionRows =
           currentPostView.access === "public"
             ? []
@@ -2010,6 +2007,7 @@ export function createSlurpStorage(db: DB) {
                 )
             : [];
         if (
+          !ownsAuthor &&
           !canViewNoodlerPost({
             post: currentPostView,
             subscribed: subscriptionRows.length > 0,
@@ -5618,12 +5616,8 @@ export function createSlurpStorage(db: DB) {
         )[0];
         if (!authorRow) return null;
         const author = mapAccount(authorRow);
-        if (
-          actor.kind !== "persona" ||
-          (author.sourceKind === "persona" && author.sourceEntityId === input.viewerPersonaId) ||
-          isNoodlerHiddenFromViewer(author, input.viewerPersonaId)
-        )
-          return null;
+        if (actor.kind !== "persona" || isNoodlerHiddenFromViewer(author, input.viewerPersonaId)) return null;
+        const ownsAuthor = author.sourceKind === "persona" && author.sourceEntityId === input.viewerPersonaId;
         const subscribed =
           (
             await tx
@@ -5643,6 +5637,7 @@ export function createSlurpStorage(db: DB) {
             and(eq(noodlePostUnlocks.viewerAccountId, input.viewerPersonaId), eq(noodlePostUnlocks.postId, postId)),
           );
         if (
+          !ownsAuthor &&
           !canViewNoodlerPost({
             post: mapPost(postRow),
             subscribed,
@@ -5702,7 +5697,7 @@ export function createSlurpStorage(db: DB) {
         } catch (error) {
           if (
             !isToggleInteractionType(input.type) ||
-            !isFileUniqueConstraintError(error, "slurp2_interactions", [
+            !isSlurpFileUniqueConstraintError(error, "slurp2_interactions", [
               "postId",
               "actorAccountId",
               "type",
@@ -5944,7 +5939,7 @@ export function createSlurpStorage(db: DB) {
           });
         } catch (error) {
           if (
-            !isFileUniqueConstraintError(error, "slurp2_interactions", [
+            !isSlurpFileUniqueConstraintError(error, "slurp2_interactions", [
               "postId",
               "actorAccountId",
               "type",
@@ -5998,11 +5993,8 @@ export function createSlurpStorage(db: DB) {
         )[0];
         if (!authorRow) return null;
         const author = mapAccount(authorRow);
-        if (
-          (author.sourceKind === "persona" && author.sourceEntityId === input.viewerPersonaId) ||
-          isNoodlerHiddenFromViewer(author, input.viewerPersonaId)
-        )
-          return null;
+        if (isNoodlerHiddenFromViewer(author, input.viewerPersonaId)) return null;
+        const ownsAuthor = author.sourceKind === "persona" && author.sourceEntityId === input.viewerPersonaId;
         const subscriptions = await tx
           .select()
           .from(noodleAccountSubscriptions)
@@ -6019,6 +6011,7 @@ export function createSlurpStorage(db: DB) {
             and(eq(noodlePostUnlocks.viewerAccountId, input.viewerPersonaId), eq(noodlePostUnlocks.postId, postId)),
           );
         if (
+          !ownsAuthor &&
           !canViewNoodlerPost({
             post: mapPost(postRow),
             subscribed: subscriptions.length > 0,
@@ -6594,7 +6587,7 @@ export function createSlurpStorage(db: DB) {
         await db.insert(noodlePostUnlocks).values({ id: newId(), viewerAccountId, postId, createdAt: now() });
         return true;
       } catch (error) {
-        if (isFileUniqueConstraintError(error, "slurp2_post_unlocks", ["viewerAccountId", "postId"])) return false;
+        if (isSlurpFileUniqueConstraintError(error, "slurp2_post_unlocks", ["viewerAccountId", "postId"])) return false;
         throw error;
       }
     },
@@ -6648,7 +6641,8 @@ export function createSlurpStorage(db: DB) {
             await tx.insert(noodlePostUnlocks).values({ id: newId(), viewerAccountId, postId, createdAt: timestamp });
             created = true;
           } catch (error) {
-            if (!isFileUniqueConstraintError(error, "slurp2_post_unlocks", ["viewerAccountId", "postId"])) throw error;
+            if (!isSlurpFileUniqueConstraintError(error, "slurp2_post_unlocks", ["viewerAccountId", "postId"]))
+              throw error;
             const duplicate = await tx
               .select()
               .from(noodlePostUnlocks)

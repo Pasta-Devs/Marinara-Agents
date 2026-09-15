@@ -1,10 +1,10 @@
 import { and, asc, desc, eq, inArray } from "../../db/file-query.js";
 import type { DB } from "../../db/connection.js";
-import { isFileUniqueConstraintError } from "../../db/file-schema.js";
 import { slurpMessageClaims, slurpMessages, slurpThreads } from "../../db/schema/slurp.js";
 import { newId } from "../../utils/id-generator.js";
 import { createSlurpReplyQueueStorage } from "./slurp-reply-queue.storage.js";
 import { mapThread, now } from "./slurp-messages.helpers.js";
+import { isSlurpFileUniqueConstraintError } from "./slurp-file-errors.js";
 import type { SlurpThread } from "./slurp-messages.types.js";
 
 type ReplyStorage = {
@@ -67,7 +67,7 @@ export function createSlurpReplyMethods(db: DB, storage: () => ReplyStorage) {
         });
         return { status: "claimed", claimId: id };
       } catch (error) {
-        if (!isFileUniqueConstraintError(error, "slurp2_message_claims", ["threadId"])) throw error;
+        if (!isSlurpFileUniqueConstraintError(error, "slurp2_message_claims", ["threadId"])) throw error;
         return { status: "busy" };
       }
     },

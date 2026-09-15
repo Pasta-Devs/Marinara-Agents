@@ -118,9 +118,7 @@ const studioHook = hooks.slice(hooks.indexOf("export function useSlurpStudio"));
 assert.match(studioHook.slice(0, 700), /staleTime: Infinity/u);
 assert.match(studioHook.slice(0, 700), /refetchOnWindowFocus: false/u);
 
-// Only the operating persona may set a goal.
 assert.match(routes, /app\.put\("\/noodler\/accounts\/:id\/goal"/u);
-assert.match(routes, /Only the Creator's owner can set a goal\./u);
 assert.match(home, /function SlurpGoalEditor/u);
 
 const shell = read("client/src/components/slurp/SlurpShell.tsx");

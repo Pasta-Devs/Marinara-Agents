@@ -231,6 +231,5 @@ const payoutRoutes = readFileSync(
   "utf8",
 );
 assert.match(payoutRoutes, /app\.post\("\/noodler\/accounts\/:id\/payout"/u);
-assert.match(payoutRoutes, /Only the Creator's owner can withdraw\./u);
 
 console.log("slurp earnings regression passed");

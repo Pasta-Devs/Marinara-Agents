@@ -3996,7 +3996,7 @@ function StageProfileView({
                   post={item.model}
                   ctx={{
                     ...postCardCtx,
-                    personaAccount: viewingOwnCreator ? null : viewerActorAccount,
+                    personaAccount: viewerActorAccount,
                     postManagement: managedCreator,
                   }}
                 />
@@ -5132,7 +5132,7 @@ function ViewerHub({
           post={toNoodlePostCardModel(post, creator.profile)}
           ctx={{
             ...feedCardCtx,
-            personaAccount: creator.profile.id === authorProfile?.id ? null : postCardCtx.personaAccount,
+            personaAccount: postCardCtx.personaAccount,
           }}
         />
       )}

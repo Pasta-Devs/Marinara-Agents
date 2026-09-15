@@ -27,7 +27,7 @@ assert.match(
 );
 assert.match(
   storage,
-  /isFileUniqueConstraintError\(error, "slurp2_payment_compensations", \["id"\]\)/u,
+  /isSlurpFileUniqueConstraintError\(error, "slurp2_payment_compensations", \["id"\]\)/u,
   "concurrent compensation claims must reuse the durable row",
 );
 assert.match(storage, /refundCoins\([^,]+, [^,]+, [^,]+, `\$\{compensationId\}:refund`\)/u);
