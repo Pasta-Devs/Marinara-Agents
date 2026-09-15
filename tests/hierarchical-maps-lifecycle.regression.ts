@@ -610,7 +610,11 @@ async function main() {
   try {
     const { capabilityPackageManager, findCompatibleCapabilityPackageUpdates } = await importEngine<{
       capabilityPackageManager: {
-        install(id: string): Promise<{
+        install(
+          id: string,
+          expectedVersion: string,
+          expectedArtifactSha256: string,
+        ): Promise<{
           version: string;
           status: string;
           previousVersion?: string;
@@ -706,7 +710,11 @@ async function main() {
     assert.equal(findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.7"), "2.3.3").length, 1);
     assert.equal(findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.7"), "3.0.0").length, 0);
 
-    const installed117 = await capabilityPackageManager.install("hierarchical-maps");
+    const installed117 = await capabilityPackageManager.install(
+      "hierarchical-maps",
+      catalogVersion,
+      catalogFixture(catalogVersion).packages[0]!.artifact.sha256,
+    );
     assert.equal(installed117.version, "1.1.7");
     assert.equal(installed117.previousVersion, "1.0.6");
     assert.ok(existsSync(join(dataDir, "capability-packages", "versions", "hierarchical-maps", "1.1.7")));
@@ -2722,7 +2730,11 @@ async function main() {
 
     catalogVersion = "1.3.6";
     catalogOnline = true;
-    const upgraded136 = await capabilityPackageManager.install("hierarchical-maps");
+    const upgraded136 = await capabilityPackageManager.install(
+      "hierarchical-maps",
+      catalogVersion,
+      catalogFixture(catalogVersion).packages[0]!.artifact.sha256,
+    );
     assert.equal(upgraded136.version, "1.3.6");
     assert.equal(upgraded136.previousVersion, "1.1.7");
     catalogOnline = false;
@@ -3866,7 +3878,11 @@ async function main() {
     app = null;
 
     catalogOnline = true;
-    const reinstalled = await capabilityPackageManager.install("hierarchical-maps");
+    const reinstalled = await capabilityPackageManager.install(
+      "hierarchical-maps",
+      catalogVersion,
+      catalogFixture(catalogVersion).packages[0]!.artifact.sha256,
+    );
     assert.equal(reinstalled.version, "1.3.6");
     assert.equal(reinstalled.status, "restart-required");
     catalogOnline = false;
