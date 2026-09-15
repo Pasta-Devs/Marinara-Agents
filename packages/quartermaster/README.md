@@ -189,6 +189,15 @@ published catalog until it's ready for testers.
 
 ## Changelog
 
+### 0.1.15
+
+- Recent Agent Update's collapsed-box leak, for real this time — the `min-height: 0` fix in
+  0.1.14 still wasn't enough on its own. The animated max-height/overflow-hidden collapse is gone
+  entirely now, in favor of a plain `display: none` toggle: there's no box-model subtlety left to
+  get wrong that way, at the cost of the slide animation the old Settings accordion had.
+- Widened the info tooltip box (220px → 320px) so a long token like the Feed Appearance
+  tooltip's `{{getvar::...}}` macro name reads on one line instead of an awkward mid-token wrap.
+
 ### 0.1.14
 
 - Actually fixed Recent Agent Update's collapsed-box leak — 0.1.13 only got it partway. A flex

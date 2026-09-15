@@ -1,5 +1,13 @@
 # Quartermaster changelog
 
+## 0.1.15 — 2026-09-15
+- Recent Agent Update's collapsed-box leak, for real this time: the min-height:0 fix in 0.1.14
+  still wasn't enough, so the animated max-height/overflow-hidden collapse is gone entirely in
+  favor of a plain display:none toggle -- no more box-model subtlety left to get wrong, at the
+  cost of the slide animation the old Settings accordion had.
+- Widened the info tooltip box (220px -> 320px) so a long token like the Feed Appearance
+  tooltip's {{getvar::...}} macro name reads on one line instead of an awkward mid-token wrap.
+
 ## 0.1.14 — 2026-09-15
 - Actually fixed Recent Agent Update's collapsed-box leak (0.1.13 only got it partway): a flex
   container's default min-height is "auto," driven by its own children's content size, and per

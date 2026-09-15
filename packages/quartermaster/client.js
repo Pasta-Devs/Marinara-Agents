@@ -1,4 +1,4 @@
-// Quartermaster 0.1.14 — Marinara Engine roleplay-tracker capability (single-file client bundle)
+// Quartermaster 0.1.15 — Marinara Engine roleplay-tracker capability (single-file client bundle)
 // Built from packages/quartermaster/src (10 modules) by scripts/build-quartermaster-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -2696,7 +2696,11 @@ QM.dock = {
       top: "18px",
       left: "0",
       zIndex: "30",
-      width: "220px",
+      // Wide enough that the Feed Appearance tooltip's own
+      // {{getvar::quartermaster_appearance_persona}} token (the longest
+      // unbroken run any tooltip currently has) reads on one line instead
+      // of an awkward mid-token break — 220px forced it to wrap there.
+      width: "320px",
       boxSizing: "border-box",
       padding: "8px",
       borderRadius: "var(--radius, 4px)",
@@ -3039,33 +3043,25 @@ QM.dock = {
     header.append(chevron, label, countBadge);
     header.addEventListener("click", () => {
       this.recentUpdateExpanded = !this.recentUpdateExpanded;
-      content.style.maxHeight = this.recentUpdateExpanded ? "700px" : "0px";
+      content.style.display = this.recentUpdateExpanded ? "flex" : "none";
       this.recentUpdateChevron.style.transform = this.recentUpdateExpanded ? "rotate(90deg)" : "rotate(0deg)";
     });
 
-    // Same max-height + overflow:hidden transition technique as the old
-    // Settings accordion (display can't be transitioned) — 700px comfortably
-    // covers Restore Inventory's one row plus MAX_TRACKER_OPERATIONS_PER_TURN
-    // rows of Recent Agent Update on a busy turn. boxSizing:"border-box" folds
-    // this element's own vertical padding into that 0px, rather than adding
-    // it on top. minHeight:"0" is the other half of this, and the one that
-    // actually mattered in practice: a flex CONTAINER's default min-height
-    // is "auto" (driven by its own children's content size, here Restore
-    // Inventory's row), and per spec a larger min-height always wins over a
-    // smaller max-height — without overriding it to 0, the collapsed height
-    // was still being forced open enough to peek a sliver of that row
-    // through, no matter how the padding/box-sizing math was fixed.
+    // Plain display:none/"" toggle, not a max-height+overflow:hidden
+    // transition (what the old Settings accordion used, and what this
+    // section itself tried first) — that approach went through two rounds
+    // of real leaks here (padding not folded into the 0px, then a flex
+    // container's own min-height:"auto" default overriding max-height
+    // per spec) before landing on this instead: display:none removes the
+    // element from layout entirely, so there's no box-model subtlety left
+    // to get wrong. The tradeoff is losing the slide animation the old
+    // accordion had; correctness here matters more than that polish.
     const content = document.createElement("div");
     Object.assign(content.style, {
       padding: "8px",
-      boxSizing: "border-box",
-      display: "flex",
+      display: this.recentUpdateExpanded ? "flex" : "none",
       flexDirection: "column",
       gap: "8px",
-      minHeight: "0",
-      maxHeight: this.recentUpdateExpanded ? "700px" : "0px",
-      overflow: "hidden",
-      transition: "max-height 0.2s ease",
     });
 
     const container = document.createElement("div");
