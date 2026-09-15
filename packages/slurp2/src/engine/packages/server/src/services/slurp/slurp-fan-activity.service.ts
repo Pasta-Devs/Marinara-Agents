@@ -247,7 +247,9 @@ function buildFanActivityMessages(input: {
           ? {
               traits: identity.persona.traits,
               ...(identity.persona.voice ? { voice: identity.persona.voice } : {}),
-              ...(identity.persona.tone ? { tone: identity.persona.tone } : {}),
+              ...(SLURP_AUDIENCE_TONES.includes(identity.persona.tone as SlurpAudienceTone)
+                ? { tone: identity.persona.tone }
+                : {}),
               relationship: describeFanRelationship(identity.persona),
             }
           : {}),

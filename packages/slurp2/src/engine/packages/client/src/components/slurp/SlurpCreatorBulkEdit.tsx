@@ -30,6 +30,7 @@ function TagChoices({
   limit?: number;
   onChange: (picked: string[]) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <fieldset>
       <legend className="mb-2 text-xs font-semibold">{legend}</legend>
@@ -51,7 +52,7 @@ function TagChoices({
               )}
             >
               {on && <Check size={13} aria-hidden="true" />}
-              {tag}
+              {t(`ui.slurp.tags.${tag}`, { defaultValue: tag })}
             </button>
           );
         })}
