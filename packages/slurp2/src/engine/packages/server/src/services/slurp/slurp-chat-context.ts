@@ -83,7 +83,8 @@ export async function buildSlurpChatContext(db: DB, request: SlurpChatContextReq
   const postsByCreator = await slurp.listNoodlerPostsByAccounts(
     creators.map((creator) => creator.id),
     settings.carryoverMaxItems,
-    { since },
+    // The block keeps only the newest carryoverMaxItems entries overall, so reading more is waste.
+    { since, maxRows: settings.carryoverMaxItems },
   );
   for (const creator of creators) {
     for (const post of postsByCreator.get(creator.id) ?? []) {
@@ -116,7 +117,7 @@ export async function buildSlurpChatContext(db: DB, request: SlurpChatContextReq
       if (!thread) continue;
       const [threadMessages, commissions] = await Promise.all([
         messages.listMessages(thread.id, Math.max(settings.carryoverMaxItems, 10)),
-        messages.listCommissionsForThread(thread.id, since),
+        messages.listCommissionsForThread(thread.id, since, settings.carryoverMaxItems),
       ]);
       for (const message of threadMessages) {
         if (message.createdAt <= since) continue;

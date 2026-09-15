@@ -4410,21 +4410,24 @@ export function createSlurpStorage(db: DB) {
     async listNoodlerPostsByAccounts(
       accountIds: string[],
       limit = 8,
-      /** Only posts created after this ISO time, filtered in the query rather than after it. */
-      options: { since?: string } = {},
+      /**
+       * `since` keeps only posts created after that ISO time. `maxRows` caps the newest posts read
+       * across all accounts, in the query rather than after it.
+       */
+      options: { since?: string; maxRows?: number } = {},
     ): Promise<Map<string, NoodlerManagedPost[]>> {
       const boundedLimit = Math.max(1, Math.min(50, Math.floor(limit)));
       const result = new Map<string, NoodlerManagedPost[]>();
       if (accountIds.length === 0) return result;
-      const rows = await db
+      const byAuthor = inArray(noodlePosts.authorAccountId, accountIds);
+      const withSince = options.since ? and(byAuthor, gt(noodlePosts.createdAt, options.since)) : byAuthor;
+      // A capped read skips drafts in the query, so the cap counts only posts that can be returned.
+      const query = db
         .select()
         .from(noodlePosts)
-        .where(
-          options.since
-            ? and(inArray(noodlePosts.authorAccountId, accountIds), gt(noodlePosts.createdAt, options.since))
-            : inArray(noodlePosts.authorAccountId, accountIds),
-        )
+        .where(options.maxRows ? and(withSince, ne(noodlePosts.access, "draft")) : withSince)
         .orderBy(desc(noodlePosts.createdAt));
+      const rows = options.maxRows ? await query.limit(options.maxRows) : await query;
       for (const row of rows) {
         if (row.access === "draft") continue;
         const post = mapManagedPost(row);

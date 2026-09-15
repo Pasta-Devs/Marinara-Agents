@@ -1522,18 +1522,25 @@ export function createSlurpMessagesStorage(db: DB) {
       return mapCommission(row);
     },
 
-    /** Every commission in one thread, oldest first, so the chat can render them beside the messages. */
-    /** `since` keeps only commissions updated after that ISO time, filtered in the query. */
-    async listCommissionsForThread(threadId: string, since?: string): Promise<SlurpCommission[]> {
-      const rows = await db
-        .select()
-        .from(slurpCommissions)
-        .where(
-          since
-            ? and(eq(slurpCommissions.threadId, threadId), gt(slurpCommissions.updatedAt, since))
-            : eq(slurpCommissions.threadId, threadId),
-        )
-        .orderBy(asc(slurpCommissions.createdAt));
+    /**
+     * Every commission in one thread, oldest first, so the chat can render them beside the messages.
+     * `since` keeps only commissions updated after that ISO time; `limit` keeps only the newest that
+     * many. Both are applied in the query.
+     */
+    async listCommissionsForThread(threadId: string, since?: string, limit?: number): Promise<SlurpCommission[]> {
+      const where = since
+        ? and(eq(slurpCommissions.threadId, threadId), gt(slurpCommissions.updatedAt, since))
+        : eq(slurpCommissions.threadId, threadId);
+      if (limit) {
+        const newest = await db
+          .select()
+          .from(slurpCommissions)
+          .where(where)
+          .orderBy(desc(slurpCommissions.updatedAt))
+          .limit(limit);
+        return newest.reverse().map(mapCommission);
+      }
+      const rows = await db.select().from(slurpCommissions).where(where).orderBy(asc(slurpCommissions.createdAt));
       return rows.map(mapCommission);
     },
 
