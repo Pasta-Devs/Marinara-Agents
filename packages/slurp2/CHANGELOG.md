@@ -1,5 +1,11 @@
 # Slurp Remastered release notes
 
+## 0.0.16 — 2026-09-15
+
+- Settings -> Audience is simpler: one Activity choice (Off, Quiet, Realistic, Lively, Generous), crowd size and tone up front, and fan types, AI writing and advanced numbers in folded sections. Off also stops commissions, DMs and the activity pulse.
+- A fan type's tone override now changes how those fans write their comments.
+- Fix: toggles in Settings no longer black out the screen in Firefox.
+
 ## 0.0.15 — 2026-09-15
 
 - Fixed a wide post or story pushing the left and right sidebars off the screen.

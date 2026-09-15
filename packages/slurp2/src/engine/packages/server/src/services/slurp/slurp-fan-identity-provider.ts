@@ -19,6 +19,8 @@ export interface NoodlerFanIdentity {
     spendTier: string;
     /** The Fan Type's voice, truncated. How this person writes, in their own words. */
     voice?: string;
+    /** The Fan Type's tone override, when it has one. */
+    tone?: string;
     /** Funnel stage with this Creator, when there is a tie. */
     stage?: string;
     /** Coins spent with this Creator, ever. */
@@ -93,6 +95,8 @@ export type NoodlerFanCastMember = {
   spendTier: string;
   /** The voice of this member's Fan Type. Optional: a caller that has no types passes nothing. */
   voice?: string;
+  /** The Fan Type's tone override. Absent means the crowd tone. */
+  tone?: string;
 };
 
 /** One member's history with one creator, keyed by creator then by member. */
@@ -119,6 +123,7 @@ export function populationNoodlerFanIdentityProvider(
               traits: member.traits,
               spendTier: member.spendTier,
               ...(slurpFanVoiceForPrompt(member.voice) ? { voice: slurpFanVoiceForPrompt(member.voice) } : {}),
+              ...(member.tone ? { tone: member.tone } : {}),
               ...(tie
                 ? {
                     stage: tie.stage,
