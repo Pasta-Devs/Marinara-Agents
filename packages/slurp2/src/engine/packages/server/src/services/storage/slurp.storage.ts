@@ -11,6 +11,7 @@ import {
   noodleAccountSocialSettingsSchema,
   noodlerFanActivitySettingsSchema,
   normalizeAvatarCrop,
+  PROFESSOR_MARI_ID,
   readNoodlePollFromMetadata,
   type NoodleAccount,
   type NoodleAccountKind,
@@ -494,6 +495,8 @@ export const slurpSettingsSchema = z.object({
   platformScale: z.enum(SLURP_PLATFORM_SCALE),
   generationConnectionId: z.string().nullable(),
   imageContextMode: z.enum(["auto", "imagePrompt", "vision"]),
+  /** Describes pictures for image context. Null uses the Creator text connection. */
+  imageContextConnectionId: z.string().nullable(),
   imageGenerationConnectionId: z.string().nullable(),
   imageGenerationPrompt: z.string(),
   imagePromptInterpretation: z.string().max(20_000),
@@ -516,6 +519,20 @@ export const slurpSettingsSchema = z.object({
     .min(1)
     .max(24 * 365),
   carryoverMaxItems: z.number().int().min(1).max(100),
+  /** Per source character: apply its conversation image instructions to Slurp images. Unset uses the Engine checkbox. */
+  /** Whether Professor Mari, the Engine's built-in character, may be picked as a new Creator source. */
+  professorMariCreatorSource: z.boolean(),
+  characterImageInstructions: z.record(z.string(), z.boolean()),
+  /** Saved sets of generation guidance and image prompt, switched from Settings. */
+  promptPresets: z
+    .array(
+      z.object({
+        name: z.string().trim().min(1).max(60),
+        generationGuidance: z.string().max(20_000),
+        imageGenerationPrompt: z.string().max(20_000),
+      }),
+    )
+    .max(20),
   enableEnhancedTimelineWriting: z.boolean(),
   includeCharacterSchedules: z.boolean(),
   enableLorebookContext: z.boolean(),
@@ -1183,6 +1200,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   platformScale: SLURP_DEFAULT_PLATFORM_SCALE,
   generationConnectionId: null,
   imageContextMode: "auto",
+  imageContextConnectionId: null,
   imageGenerationConnectionId: null,
   imageGenerationPrompt: NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT,
   imagePromptInterpretation: NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION,
@@ -1200,6 +1218,9 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   carryoverModes: [],
   carryoverHours: 24,
   carryoverMaxItems: 20,
+  characterImageInstructions: {},
+  promptPresets: [],
+  professorMariCreatorSource: true,
   enableEnhancedTimelineWriting: false,
   includeCharacterSchedules: false,
   enableLorebookContext: false,
@@ -2178,6 +2199,9 @@ export function createSlurpStorage(db: DB) {
     },
 
     async resolveSourceByEntityId(sourceEntityId: string): Promise<NoodleAccount | null> {
+      // Every new Creator and every stage-profile draft resolves its source here, so this is the one
+      // gate for Professor Mari. An existing Mari Creator resolves through `resolveAccountSource`.
+      if (sourceEntityId === PROFESSOR_MARI_ID && !(await this.getSettings()).professorMariCreatorSource) return null;
       const character = await characters.getById(sourceEntityId);
       const persona = await characters.getPersona(sourceEntityId);
       if (character && persona) return null;
@@ -2190,11 +2214,15 @@ export function createSlurpStorage(db: DB) {
     },
 
     async listEligibleSources(): Promise<NoodleAccount[]> {
-      const [characterRows, personaRows] = await Promise.all([characters.list(), characters.listPersonas()]);
+      const [characterRows, personaRows, settings] = await Promise.all([
+        characters.list(),
+        characters.listPersonas(),
+        this.getSettings(),
+      ]);
       return [
-        ...characterRows.map((row) =>
-          sourceAccountFromEntity("character", row.id, row as unknown as Record<string, unknown>),
-        ),
+        ...characterRows
+          .filter((row) => row.id !== PROFESSOR_MARI_ID || settings.professorMariCreatorSource)
+          .map((row) => sourceAccountFromEntity("character", row.id, row as unknown as Record<string, unknown>)),
         ...personaRows.map((row) =>
           sourceAccountFromEntity("persona", row.id, row as unknown as Record<string, unknown>),
         ),
@@ -3970,6 +3998,11 @@ export function createSlurpStorage(db: DB) {
           const imageState = current.imageState === "attached" ? "attached" : "closed";
           const preparedMetadata = parseRecord(payload.metadata);
           const hasMedia = typeof preparedMetadata.noodlerMediaPath === "string";
+          // A post with no generated picture may carry an existing gallery image instead.
+          const galleryImageUrl =
+            typeof preparedMetadata.galleryAttachmentImageUrl === "string"
+              ? preparedMetadata.galleryAttachmentImageUrl
+              : null;
           // A Story is a picture with a line under it. The prepared payload carries the story
           // intent, but a run whose image never attached publishes as an ordinary post.
           if (!hasMedia) delete preparedMetadata.noodlerPostType;
@@ -3978,7 +4011,7 @@ export function createSlurpStorage(db: DB) {
             authorAccountId: account.id,
             title: typeof payload.title === "string" ? payload.title : null,
             content: payload.content,
-            imageUrl: hasMedia ? noodlerPostMediaUrl(postId) : null,
+            imageUrl: hasMedia ? noodlerPostMediaUrl(postId) : galleryImageUrl,
             imagePrompt: typeof payload.imagePrompt === "string" ? payload.imagePrompt : null,
             parentPostId: null,
             quotePostId: null,
@@ -4374,15 +4407,27 @@ export function createSlurpStorage(db: DB) {
       return rows[0] ? mapManagedPost(rows[0]) : null;
     },
 
-    async listNoodlerPostsByAccounts(accountIds: string[], limit = 8): Promise<Map<string, NoodlerManagedPost[]>> {
+    async listNoodlerPostsByAccounts(
+      accountIds: string[],
+      limit = 8,
+      /**
+       * `since` keeps only posts created after that ISO time. `maxRows` caps the newest posts read
+       * across all accounts, in the query rather than after it.
+       */
+      options: { since?: string; maxRows?: number } = {},
+    ): Promise<Map<string, NoodlerManagedPost[]>> {
       const boundedLimit = Math.max(1, Math.min(50, Math.floor(limit)));
       const result = new Map<string, NoodlerManagedPost[]>();
       if (accountIds.length === 0) return result;
-      const rows = await db
+      const byAuthor = inArray(noodlePosts.authorAccountId, accountIds);
+      const withSince = options.since ? and(byAuthor, gt(noodlePosts.createdAt, options.since)) : byAuthor;
+      // A capped read skips drafts in the query, so the cap counts only posts that can be returned.
+      const query = db
         .select()
         .from(noodlePosts)
-        .where(inArray(noodlePosts.authorAccountId, accountIds))
+        .where(options.maxRows ? and(withSince, ne(noodlePosts.access, "draft")) : withSince)
         .orderBy(desc(noodlePosts.createdAt));
+      const rows = options.maxRows ? await query.limit(options.maxRows) : await query;
       for (const row of rows) {
         if (row.access === "draft") continue;
         const post = mapManagedPost(row);
@@ -4848,6 +4893,23 @@ export function createSlurpStorage(db: DB) {
         await tx.delete(noodlePosts).where(eq(noodlePosts.id, id));
       });
       return existing;
+    },
+
+    /** Keep a vision description of a post picture, tied to the picture it describes. */
+    async setNoodlerPostImageDescription(id: string, description: string, source: string): Promise<void> {
+      await db.transaction(async (tx) => {
+        const row = (await tx.select().from(noodlePosts).where(eq(noodlePosts.id, id)))[0];
+        if (!row) return;
+        const metadata = {
+          ...parseRecord(row.metadata),
+          imageDescription: description,
+          imageDescriptionSource: source,
+        };
+        await tx
+          .update(noodlePosts)
+          .set({ metadata: JSON.stringify(metadata) })
+          .where(eq(noodlePosts.id, id));
+      });
     },
 
     async updateNoodlerPost(

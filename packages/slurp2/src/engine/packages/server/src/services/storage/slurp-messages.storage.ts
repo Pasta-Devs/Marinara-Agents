@@ -1522,13 +1522,25 @@ export function createSlurpMessagesStorage(db: DB) {
       return mapCommission(row);
     },
 
-    /** Every commission in one thread, oldest first, so the chat can render them beside the messages. */
-    async listCommissionsForThread(threadId: string): Promise<SlurpCommission[]> {
-      const rows = await db
-        .select()
-        .from(slurpCommissions)
-        .where(eq(slurpCommissions.threadId, threadId))
-        .orderBy(asc(slurpCommissions.createdAt));
+    /**
+     * Every commission in one thread, oldest first, so the chat can render them beside the messages.
+     * `since` keeps only commissions updated after that ISO time; `limit` keeps only the newest that
+     * many. Both are applied in the query.
+     */
+    async listCommissionsForThread(threadId: string, since?: string, limit?: number): Promise<SlurpCommission[]> {
+      const where = since
+        ? and(eq(slurpCommissions.threadId, threadId), gt(slurpCommissions.updatedAt, since))
+        : eq(slurpCommissions.threadId, threadId);
+      if (limit) {
+        const newest = await db
+          .select()
+          .from(slurpCommissions)
+          .where(where)
+          .orderBy(desc(slurpCommissions.updatedAt))
+          .limit(limit);
+        return newest.reverse().map(mapCommission);
+      }
+      const rows = await db.select().from(slurpCommissions).where(where).orderBy(asc(slurpCommissions.createdAt));
       return rows.map(mapCommission);
     },
 
@@ -1907,14 +1919,34 @@ export function createSlurpMessagesStorage(db: DB) {
      * The serving URL contains the message id, and `appendMessage` mints that id, so the image can
      * only be bound once the row is written.
      */
-    async setMessageMedia(messageId: string, imageUrl: string, mediaPath: string): Promise<void> {
+    async setMessageMedia(messageId: string, imageUrl: string, mediaPath: string, imagePrompt?: string): Promise<void> {
       const rows = await db.select().from(slurpMessages).where(eq(slurpMessages.id, messageId));
       const row = rows[0];
       if (!row) return;
-      const metadata = { ...(json(row.metadata as string) ?? {}), noodlerMediaPath: mediaPath };
+      const metadata = {
+        ...(json(row.metadata as string) ?? {}),
+        noodlerMediaPath: mediaPath,
+        // What the picture was drawn from, so image context can describe it without a vision call.
+        ...(imagePrompt ? { imagePrompt } : {}),
+      };
       await db
         .update(slurpMessages)
         .set({ imageUrl, metadata: JSON.stringify(metadata) })
+        .where(eq(slurpMessages.id, messageId));
+    },
+
+    /** Keep a vision description of a message picture, tied to the picture it describes. */
+    async setMessageImageDescription(messageId: string, description: string, source: string): Promise<void> {
+      const row = (await db.select().from(slurpMessages).where(eq(slurpMessages.id, messageId)))[0];
+      if (!row) return;
+      const metadata = {
+        ...(json(row.metadata as string) ?? {}),
+        imageDescription: description,
+        imageDescriptionSource: source,
+      };
+      await db
+        .update(slurpMessages)
+        .set({ metadata: JSON.stringify(metadata) })
         .where(eq(slurpMessages.id, messageId));
     },
 

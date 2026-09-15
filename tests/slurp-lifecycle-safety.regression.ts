@@ -105,7 +105,7 @@ assert.match(home, /!personaBackedCreator && \([\s\S]*?setAutomationOpen\(true\)
 assert.match(storage, /withoutNoodlerSelfHiddenAccountId\([\s\S]*?row\.sourceEntityId \?\? row\.entityId/u);
 assert.match(shell, /CSS\.supports\?\.\("-webkit-touch-callout", "none"\)/u);
 assert.match(shell, /style=\{\{ paddingBottom: `max\(1rem, \$\{BOTTOM_SAFE_INSET\}\)` \}\}/u);
-assert.match(shell, /pb-\[calc\(64px\+var\(--slurp-bottom-safe-inset\)\)\]/u);
+assert.match(shell, /pb-\[calc\(48px\+var\(--slurp-bottom-safe-inset\)\)\]/u);
 assert.match(shell, /style=\{\{ paddingBottom: BOTTOM_SAFE_INSET \}\}/u);
 assert.doesNotMatch(home, /SlurpMobileHeader/u, "Slurp must not render a duplicate mobile top header");
 assert.match(

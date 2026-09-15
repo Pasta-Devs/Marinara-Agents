@@ -43,7 +43,8 @@ for (const label of [
 ]) {
   assert.match(mobileNavigation, new RegExp(`aria-label=\\{[\\s\\S]*${label.replaceAll(".", "\\.")}`, "u"));
 }
-assert.match(shell, /h-16 grid-flow-col/u, "mobile navigation must keep its touch-target height");
+// 48px: compact, and still above the 44px minimum touch target.
+assert.match(shell, /h-12 grid-flow-col/u, "mobile navigation must keep its touch-target height");
 assert.doesNotMatch(
   mobileNavigation,
   /<span className="max-w-full truncate px-1">/u,

@@ -25,7 +25,7 @@ assert.match(
 // The picture is masked with the text: a locked message is usually sold on its image.
 assert.match(
   routes,
-  /message\.kind === "ppv" && !message\.unlockedAt\s*\? \{ \.\.\.message, content: "", imageUrl: null \}/u,
+  /message\.kind === "ppv" && !message\.unlockedAt\s*\?\s*\{\s*\.\.\.message,\s*content: "",\s*imageUrl: null,/u,
 );
 
 // Every route that returns a thread's messages has to go through it.
