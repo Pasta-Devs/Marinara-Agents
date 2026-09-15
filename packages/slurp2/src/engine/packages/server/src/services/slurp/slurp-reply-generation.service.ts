@@ -12,7 +12,7 @@ import { logDebugOverride } from "../../lib/logger.js";
 import { resolveBaseUrl } from "../generation/connection-base-url.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
 import { resolveStoredChatOptions } from "../generation/generation-parameters.js";
-import { prepareSlurpPostImageContexts } from "./slurp-post-image-context.js";
+import { prepareSlurpPostImageContexts, slurpImageCaptioning } from "./slurp-post-image-context.js";
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { parseGameJsonish } from "../game/jsonish.js";
 import { requireModelAnswer } from "./slurp-model-answer.js";
@@ -169,7 +169,7 @@ export async function generateNoodlerCreatorReply(input: {
     fallbackBaseUrl: fallbackConnection ? resolveBaseUrl(fallbackConnection) : "",
     category: "main",
   });
-  const disclosureMode = input.creator.settings.privacy.identityDisclosure ?? "secret";
+  const disclosureMode = input.creator.settings.privacy.identityDisclosure ?? "open";
   const publicIdentity = await resolveNoodlerPublicIdentity(input.db, input.creator);
   const settings = await createSlurpStorage(input.db).getSettings();
   const source = await createSlurpStorage(input.db).resolveAccountSource(input.creator);
@@ -184,7 +184,9 @@ export async function generateNoodlerCreatorReply(input: {
   const imageContexts = await prepareSlurpPostImageContexts({
     posts: [input.post],
     mode: settings.imageContextMode,
-    captioning: { enabled: true, connectionId: input.connection.id, connection: input.connection, provider },
+    captioning: await slurpImageCaptioning(input.db, settings.imageContextConnectionId, input.connection),
+    onDescribed: (post, description, source) =>
+      createSlurpStorage(input.db).setNoodlerPostImageDescription(post.id, description, source),
     allowLocked: input.allowLockedImageContext === true,
     debugMode: input.debugMode,
   });

@@ -6,9 +6,14 @@ package-owned Canvas2D engine. NPC dialogue flows into the normal GM turn loop, 
 (hierarchical spatial context) is read and written as you move, and combat hands off to the
 engine's own vanilla combat — the package never replaces it.
 
-Requires **Marinara Engine 2.4.5+** (capability API 1.10 and full selected-lore world generation). It is
-client-only: no server entrypoint, no restart after install. The package agent definition is a
-runtime-inert stub that satisfies the catalog loader; all behavior lives in `client.js`.
+Requires **Marinara Engine 2.4.5+ with Capability API 1.18** (the shared Experience setup
+and entry-selection support). The version range remains 2.4.5 until an Engine release carries
+this interface; older hosts reject the new manifest and cannot use this update. Existing installed
+older packages keep their previous setup flow. Pixelforge is client-only: no server entrypoint,
+no restart after install. Its agent definition is a runtime-inert catalog stub; behavior lives in `client.js`.
+
+Pixelforge is in early development. Everything in this document, including numbers, mechanisms and
+planned designs, is subject to change.
 
 ## How to play
 
@@ -19,7 +24,12 @@ resumes where you left off.
 
 ## World generation (0.4.0)
 
-Since 0.4.0 the wizard's preferences drive what the world *is*, under one rule: **the LLM decides
+On Engine hosts supporting Capability API 1.17, Pixelforge prepares and saves its world before the
+opening narration. Start waits for preparation; failures keep the existing retry screen. The first
+GM request receives the actual world context and starting residents, and movement and the clock
+stay paused until Continue. Existing saved worlds are reused without generating them again.
+
+Since 0.4.0 the wizard's preferences drive what the world _is_, under one rule: **the LLM decides
 what exists, the algorithm decides where every tile goes.** After launch the surface makes one
 host-run structured generation call (`POST /api/game/:chatId/experience-generation`, Engine
 2.4.5-staging+) with bounded guidance and a strict schema; the model returns a compact **World
@@ -29,46 +39,29 @@ never 30). The brief is validated, repaired, and floored (`src/18-brief.js`, spe
 then sealed into chat metadata; the compiled zones carry the prose the GM sees, metered so it
 never taxes more than one turn.
 
-**Since 0.16.2 the setup form asks nothing it does not need, and answers nothing on your behalf.**
-The **Setting** box starts empty behind a question — *what the place is made of, what the weather
-does, who lives there* — and what you write there is the authority. **There is no theme dropdown any
-more:** the model picks the visual kit from your own words, as a field of the same generation call
-that was already being paid for, and when a text fits neither kit it takes the one it fights less. A
-chat that declines generation still gets a kit, derived from the same words by a deterministic word
-count rather than by a model, so declining no longer means a cozy village whatever you wrote. The
-**Game name** is a placeholder too. Leave both boxes empty and the game composes *"A cozy pixel
-village called Hearthvale."* — an empty Setting has no words to ask for anything else. Leave only
-the name empty and your text still picks the kit, whose own default name (*Meridian Base*, for the
-colony) fills the loading screen, the generation call and the world itself; a name you do type
-reaches all three. Type your own Setting and it is used exactly as written, to the first **8,000
-characters** — what lies past that stays out of the world call, a bound the launch keeps so an
-oversized nested config cannot fail the launch itself.
+**Since 0.16.8, setup uses the Engine's own Game Mode wizard.** Turn Pixelforge on in
+Experiences, then edit or randomize its inline seed. Choose the party, Setting, tone, difficulty,
+rating and goals in the normal steps. There is no separate Pixelforge form, settlement-name field
+or generation checkbox: enabling the Experience requests world and content preparation (**two
+model calls**). The settlement is named from your Setting, selected lore, or the storyteller.
 
-**Three things the form stopped emitting**, all of them answers it was giving on your behalf: the
-**party list** (Game Mode's own setup owns that question — for this release a Pixelforge game starts
-with an empty party, and moving the picker to its real owner remains planned), the preset **genre and story
-goals**, and the **map-guidance line**, which is deleted outright rather than rewritten: the GM is
-never to be instructed to keep the player bound to a location, and the world need not be compact or
-walkable.
+The visual kit is resolved from your Setting text when preparation starts. The model can choose a
+supported `artTheme` in the existing world call; the final kit is sealed in `pixelforgeBrief.theme`
+with the world, so editing the Setting later does not repaint a saved game. Existing explicit theme
+selections and older saved worlds remain readable. World-writing preferences retain their existing
+**7,800-character** limit; the content call uses the remaining space after its world digest, within
+the Engine's 8,000-character request limit. The full Setting remains in the Engine setup for later turns.
 
-**And it gained a lorebook entry picker** (0.16.2). Your enabled books are listed; expand one and
-tick the entries the world-writing call should read, or take a whole book at once with *Select all*.
-Selection is **per entry, never per book**. Since 0.16.3, the picker shows the selected count and an
-approximate token total, and accepts entries beyond ordinary lorebook budgets and count limits.
-Engine checks the complete, expanded prompt against the model's context before generation. If it
-does not fit, the retry screen recommends fewer entries or a connection with a larger context;
-the world stays unsealed. The picks ride the call itself rather than your Setting text, so the two
-never compete for the same field. The server half lives in Engine 2.4.5: on an Engine that predates it the
-picks are ignored, the world is written from your setting alone, and the package says so in the
-console rather than sealing a claim it cannot support. One interaction worth knowing while the party
-is empty: an entry filtered to *include specific characters* matches nobody and is skipped.
+**Lorebook entries are selected on the Engine's Lorebooks step.** The package reads
+`gameSetupConfig.activeLorebookEntryIds` first, including an explicitly empty selection; older
+`experienceConfig.loreEntryIds` remain a fallback for existing games. These are entry IDs, never
+book IDs. All selected IDs reach the world-generation route, which applies eligibility and checks
+the complete expanded prompt against the model's context. If it does not fit, preparation stays
+blocked with its existing retry guidance. Party-dependent lore filters use the party you selected.
 
-**Pixelforge chats carry no engine HUD widgets** (roadmap S7). Game Mode's setup normally has the
-model design gauges and counters for the chat's genre, keeps feeding them to the GM, and asks you to
-approve them in a "Review Starting Widgets" step on the way in. This surface has never drawn them —
-the day, the purse and the sky are the package's own header — so since 0.16.1 the wizard declines
-them outright: no widgets are generated, the review step does not appear, and the GM is not told to
-maintain a second purse beside the one the game actually keeps.
+**Pixelforge chats carry no Engine HUD widgets** (roadmap S7). Its setup declaration requires
+`enableCustomWidgets: false`, shown in the Engine wizard. No second set of gauges or starting-widget
+review is generated alongside Pixelforge's own day, purse and sky.
 
 **Since 0.11.0 generation is a LOADING GATE, not a background upgrade** (maintainer ruling, S5
 §Q3b). Through 0.10 the chat booted a themed default world instantly and rebuilt in place when the
@@ -83,12 +76,9 @@ true of EVERY failure — 0.11 revised the 0.4.0-era ladder, which still sealed 
 deterministic 400/422; the retry screen says which kind of failure it was instead. Chats that
 never asked for generation — pre-0.4.0 saves, and any chat whose brief was explicitly declined —
 are untouched and play immediately on the themed default world, exactly as they did in 0.3.0.
-**Declining is a checkbox in the setup** ("Generate a unique world with your GM connection"),
-checked by default; unchecking it means no loading gate, no generation call, and no starting
-purse — the themed village or colony, the moment the chat opens. The
-known cost: on an engine whose generation route is missing entirely, every attempt is a transient
-failure and the retry screen is the whole experience — the manifest's `engine.min` is what keeps
-that off a supported install.
+New Pixelforge games always request preparation. Previously declined and legacy worlds continue to
+play immediately; their stored flags and saves are not migrated. A missing generation route still
+leaves preparation blocked, which is why this release requires the compatible Engine host.
 
 Run the validator/compiler regression harness with:
 
@@ -186,10 +176,10 @@ board is the last place you want a mis-press), and it takes two presses.
 
 **Where the work comes from.** A chat that generates its own world now makes a **second** generation
 call after the brief is sealed, writing the jobs its own people would actually post — a miller who
-wants fish, a forager who wants word carried — plus a matrix of things they say, which a later
-release will put behind an Ask key. It happens once, at creation, behind the same loading screen;
-after that the board restocks itself every day with no calls at all. If that second call fails,
-nothing is lost and trying again is free: your world is already written and settled.
+wants fish, a forager who wants word carried — plus a matrix of things they say, which 0.14 put
+behind the talk window's ask rows (below). It happens once, at creation, behind the same loading
+screen; after that the board restocks itself every day with no calls at all. If that second call
+fails, nothing is lost and trying again is free: your world is already written and settled.
 
 **Worlds made before 0.13 have no work written for them**, and their boards say so plainly rather
 than pretending — "No work posted here", never "not yet" and never "check back". Chats that declined
@@ -206,7 +196,11 @@ tropics get a wet half of the year and a dry one; a desert gets rain that hardly
 almost always light when it does. Days are fair, overcast, rainy, stormy or snowy, and rain and snow
 come light or heavy. **The sky is the same every time you load** — it is worked out from the world's
 seed and the day, so it costs nothing, saves nothing, and a rewind puts back the weather that was
-actually there.
+actually there. The storyteller can pin one: the package gives the GM a weather tag, and the Engine
+writes the word it names (plus light or heavy for rain and snow) straight into the chat's own data.
+That row carries no days, so it holds from day one onward and never lapses until the GM sets it
+again, and a rewind keeps it rather than clearing it; only a row written into that data by hand can
+name the days it covers.
 
 **The town notices.** On a wet or snowy morning the people who would have been out in it go home to
 their own firesides instead — the streets empty and the windows light up — while anyone whose work
@@ -344,8 +338,10 @@ Two tiers, resolved at runtime with graceful degradation:
   bundled zlib, so rebuilding on a different Node release may churn them — harmlessly, because the
   build re-stamps every hash from its own output and CI verifies committed bytes without rebuilding. Served through the engine's package-asset route via
   `contributions.assets`.
-- **Tier 0 (fallback)** — procedural Canvas painters inside `client.js`. If assets fail to load
-  (or on engines without asset serving) the game still runs, just plainer.
+- **Tier 0 (fallback)** — procedural Canvas painters inside `client.js`. The game still runs, just
+  plainer, whenever Tier 1 cannot answer: a fetch that fails, a theme with no sheet of its own yet,
+  a shipped sheet too small to hold its own id map, or a host that passes no package id to fetch
+  with.
 
 ## Layout
 

@@ -22,18 +22,22 @@ const home = readFileSync(
 
 assert.match(
   routes,
-  /async function resolveViewerIdentity\(personaId: string\)[\s\S]*?getSlurpAccountForEntity\("persona", personaId\)/u,
+  /async function resolveViewerIdentity\(personaId: string\)[\s\S]*?getSlurpAccountForEntity\("persona", personaId, "viewer"\)/u,
 );
 assert.match(
   routes,
   /resolvedActor\?\.kind === "persona" && resolvedActor\.entityId === personaId \? resolvedActor : null/u,
   "Viewer identity fallback must not authorize a different persona account",
 );
-assert.match(routes, /actorAccountId: identity\.actor\.id,[\s\S]*?viewerPersonaId: identity\.personaId/u);
+assert.match(
+  routes,
+  /const actor = creatorBelongsToViewer\(gated\.creator, identity\.viewer\) \? gated\.creator : identity\.actor;[\s\S]*?actorAccountId: actor\.id,[\s\S]*?viewerPersonaId: identity\.personaId/u,
+);
+assert.match(routes, /account\.sourceKind === "persona" && account\.sourceEntityId === viewer\.entityId/u);
 assert.match(routes, /viewerActorAccountId: identity\.actor\.id/u);
 assert.match(
   routes,
-  /getSlurpAccountForEntity\("persona", subscription\.viewerAccountId\)/u,
+  /getSlurpAccountForEntity\("persona", subscription\.viewerAccountId, "viewer"\)/u,
   "Subscriber rows must display the subscriber's Slurp profile",
 );
 assert.match(storage, /viewerPersonaId: string;/u);

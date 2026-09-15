@@ -1,5 +1,18 @@
 # Pixelforge release notes
 
+## 0.16.8 — 2026-09-14
+
+- Use the Engine setup wizard for party, world, goals, and lore choices, with the world seed beside the Experience toggle.
+
+## 0.16.7 — 2026-09-14
+
+- Prepare and save the world before Engine starts the opening narration, so the GM knows the actual starting place and residents. Preparation failures keep the existing retry screen, and play stays paused until Continue.
+
+## 0.16.6 — 2026-09-13
+
+- The Setting text you type in the setup form is no longer cut at 8,000 characters before it reaches the storyteller. World generation still trims its own copy to fit the Engine's 8,000-character request limit.
+- Docs and source comments corrected to match the shipped code after the September Engine changes (removed lore caps, the storyteller write-back commands, the un-nested setup config, current numbers), and updated to state which designs are still planned.
+
 ## 0.16.5 — 2026-09-13
 
 - World-generation failures show the measured request size and available context, and oversized requests identify the lore selection. World setup omits lorebooks and entries disabled for the chat.

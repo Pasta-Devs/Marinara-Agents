@@ -150,11 +150,20 @@ const imagesPrivacy = readFileSync(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-images.service.ts",
   "utf8",
 );
-// Secret still gets no image references. Open and Hinted do, for personas as well as characters.
+// Open and Hinted both get image references, for personas as well as characters. Slurp has no
+// Secret tier any more, so nothing gates references on disclosure.
 assert.match(
   imagesPrivacy,
-  /!input\.suppressCharacterContext && input\.disclosureMode !== "secret" && input\.linkedPublicAccount/u,
+  /!input\.suppressCharacterContext && input\.linkedPublicAccount \? input\.linkedPublicAccount/u,
 );
+assert.doesNotMatch(imagesPrivacy, /"secret"/u);
+// A stored or submitted Secret Creator becomes Hinted, and a Creator with no mode is Open.
+const storagePrivacy = readFileSync(
+  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
+  "utf8",
+);
+assert.match(storagePrivacy, /rawIdentityDisclosure === "secret" \? "hinted" : rawIdentityDisclosure/u);
+assert.doesNotMatch(storagePrivacy, /\?\? "secret"/u);
 
 const draftPrivacy = readFileSync(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-stage-profile-draft.service.ts",
@@ -162,19 +171,16 @@ const draftPrivacy = readFileSync(
 );
 assert.match(draftPrivacy, /# Open-secret inspiration brief/u);
 assert.match(draftPrivacy, /noodlerConcealedSourceText\(input\.source\?\.data\)/u);
-// Both concealed modes describe the same person and share one seed; only the instructions differ.
-// The seed still withholds the canonical story beats, which are what someone could look up.
+// The concealed seed still withholds the canonical story beats, which are what someone could look up.
 const promptSafety = readFileSync(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-prompt-safety.ts",
   "utf8",
 );
-assert.doesNotMatch(
-  promptSafety.slice(
-    promptSafety.indexOf("export function noodlerConcealedSourceText"),
-    promptSafety.indexOf("export function noodlerSourceText"),
-  ),
-  /scenario|backstory|source\.name/u,
-);
+const concealedStart = promptSafety.indexOf("export function noodlerConcealedSourceText");
+const concealedEnd = promptSafety.indexOf("/** Character canon is private behavioral context");
+assert.ok(concealedStart >= 0 && concealedEnd > concealedStart, "concealed-seed slice markers must exist");
+const concealedPrompt = promptSafety.slice(concealedStart, concealedEnd);
+assert.doesNotMatch(concealedPrompt, /scenario|backstory|source\.name/u);
 
 const artworkPrivacy = readFileSync(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-public-profiles.service.ts",
@@ -195,7 +201,7 @@ const fanActivityPrivacy = readFileSync(
 // A locked post still withholds its body, but its picture is public, so the image line stays.
 // Anchored on the locked branch's opening rather than its closing brace: appending another
 // optional field (comments, most recently) must not read as a privacy regression.
-assert.match(fanActivityPrivacy, /\? \{ id, title, access, \.\.\.\(image && \{ image \}\)/u);
+assert.match(fanActivityPrivacy, /access === "locked"[\s\S]*\? \{ id, title, access/u);
 assert.doesNotMatch(fanActivityPrivacy, /\? \{ id, title, content/u, "a locked body must never reach the prompt");
 assert.match(fanActivityPrivacy, /Posts marked locked are paid posts\. Only subscribers see them/u);
 

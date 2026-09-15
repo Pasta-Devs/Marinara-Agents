@@ -104,7 +104,7 @@ export interface ImageGenRequest {
   imageEndpointId?: string;
   /** Optional ComfyUI workflow JSON. Placeholders like %prompt%, %width%, %height%, %seed% will be replaced. */
   comfyWorkflow?: string;
-  /** Optional connection-scoped defaults for local Stable Diffusion backends. */
+  /** Optional connection-scoped generation defaults and API request parameters. */
   imageDefaults?: ImageGenerationDefaultsProfile | null;
   /** Allow this explicit image-generation connection to call local/private URLs. */
   allowLocalUrls?: boolean;
@@ -1045,6 +1045,36 @@ function openAITextPrompt(request: ImageGenRequest): string {
   return `${prompt}\n\nDo not include: ${negativePrompt}.`;
 }
 
+function withImageCustomParameters(request: ImageGenRequest, body: Record<string, unknown>): Record<string, unknown> {
+  const custom = request.imageDefaults?.customParameters;
+  if (!custom || !Object.keys(custom).length) return body;
+  // Request-body fields only: never spread these into fetch options or headers.
+  const merged = { ...body, ...custom };
+  logDebugOverride(
+    request.debugMode === true,
+    "[debug/image] final custom request payload:\n%s",
+    JSON.stringify(merged, null, 2),
+  );
+  return merged;
+}
+
+function applyImageCustomFormParameters(request: ImageGenRequest, body: FormData): void {
+  const custom = request.imageDefaults?.customParameters;
+  if (!custom || !Object.keys(custom).length) return;
+  for (const [key, value] of Object.entries(custom)) {
+    body.set(key, typeof value === "string" ? value : JSON.stringify(value));
+  }
+  logDebugOverride(
+    request.debugMode === true,
+    "[debug/image] final custom form payload:\n%s",
+    JSON.stringify(
+      [...body.entries()].map(([key, value]) => [key, typeof value === "string" ? value : `[file: ${value.name}]`]),
+      null,
+      2,
+    ),
+  );
+}
+
 async function generateOpenAI(baseUrl: string, apiKey: string, request: ImageGenRequest): Promise<ImageGenResult> {
   const usesGptImageApi = isOpenAIGptImageModel(request.model);
   const references = openAIReferenceImages(request);
@@ -1070,6 +1100,7 @@ async function generateOpenAI(baseUrl: string, apiKey: string, request: ImageGen
       );
     });
 
+    applyImageCustomFormParameters(request, formData);
     const resp = await imageFetch(
       openAIImagesUrl(baseUrl, "edits"),
       {
@@ -1112,7 +1143,7 @@ async function generateOpenAI(baseUrl: string, apiKey: string, request: ImageGen
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(withImageCustomParameters(request, body)),
       signal: imageRequestSignal(request),
     },
     { allowLocal: request.allowLocalUrls },
@@ -1187,7 +1218,7 @@ async function generateXAI(baseUrl: string, apiKey: string, request: ImageGenReq
 }
 
 async function generateVenice(baseUrl: string, apiKey: string, request: ImageGenRequest): Promise<ImageGenResult> {
-  const body = buildVeniceImageRequest(request);
+  const body = withImageCustomParameters(request, buildVeniceImageRequest(request));
   logDebugOverride(
     request.debugMode === true,
     "[debug/image/venice] final request payload:\n%s",
@@ -1201,7 +1232,7 @@ async function generateVenice(baseUrl: string, apiKey: string, request: ImageGen
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(withImageCustomParameters(request, body)),
       signal: imageRequestSignal(request),
     },
     { allowLocal: request.allowLocalUrls },
@@ -1222,7 +1253,7 @@ async function generateVenice(baseUrl: string, apiKey: string, request: ImageGen
 }
 
 async function generateZai(baseUrl: string, apiKey: string, request: ImageGenRequest): Promise<ImageGenResult> {
-  const body = buildZaiImageRequest(request);
+  const body = withImageCustomParameters(request, buildZaiImageRequest(request));
   logDebugOverride(
     request.debugMode === true,
     "[debug/image/zai] final request payload:\n%s",
@@ -1262,13 +1293,16 @@ async function generateAtlasCloudImage(
   request: ImageGenRequest,
 ): Promise<ImageGenResult> {
   const reference = openAIReferenceImages(request)[0];
-  const body = buildAtlasCloudImageRequest({
-    model: request.model ?? "",
-    prompt: request.prompt,
-    width: request.width,
-    height: request.height,
-    referenceImageDataUrl: reference ? imageDataUrlFromReference(reference) : undefined,
-  });
+  const body = withImageCustomParameters(
+    request,
+    buildAtlasCloudImageRequest({
+      model: request.model ?? "",
+      prompt: request.prompt,
+      width: request.width,
+      height: request.height,
+      referenceImageDataUrl: reference ? imageDataUrlFromReference(reference) : undefined,
+    }),
+  );
   logDebugOverride(
     request.debugMode === true,
     "[debug/image/atlas-cloud] final request payload:\n%s",
@@ -1316,7 +1350,7 @@ async function generateNanoGPT(baseUrl: string, apiKey: string, request: ImageGe
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(withImageCustomParameters(request, body)),
       signal: imageRequestSignal(request),
     },
     { allowLocal: request.allowLocalUrls },
@@ -1417,7 +1451,7 @@ async function generateHorde(baseUrl: string, apiKey: string, request: ImageGenR
     {
       method: "POST",
       headers: hordeHeaders(apiKey),
-      body: JSON.stringify(body),
+      body: JSON.stringify(withImageCustomParameters(request, body)),
       signal: imageRequestSignal(request),
     },
     { allowLocal: request.allowLocalUrls },
@@ -1609,6 +1643,7 @@ async function generateStability(baseUrl: string, apiKey: string, request: Image
     formData.append("mode", "image-to-image");
   }
   formData.append("output_format", "png");
+  applyImageCustomFormParameters(request, formData);
 
   const resp = await imageFetch(
     endpoint.url,
@@ -1659,7 +1694,7 @@ async function generateStabilityV1(baseUrl: string, apiKey: string, request: Ima
         Authorization: `Bearer ${apiKey}`,
         Accept: "application/json",
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(withImageCustomParameters(request, body)),
       signal: imageRequestSignal(request),
     },
     { allowLocal: request.allowLocalUrls },
@@ -1697,7 +1732,7 @@ async function generateTogetherAI(baseUrl: string, apiKey: string, request: Imag
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(withImageCustomParameters(request, body)),
       signal: imageRequestSignal(request),
     },
     { allowLocal: request.allowLocalUrls },
@@ -1765,7 +1800,7 @@ export function buildArliImageRequest(request: ImageGenRequest): Record<string, 
 
 async function generateArli(baseUrl: string, apiKey: string, request: ImageGenRequest): Promise<ImageGenResult> {
   if (!apiKey.trim()) throw new Error("Arli.ai image generation requires an API key");
-  const body = buildArliImageRequest(request);
+  const body = withImageCustomParameters(request, buildArliImageRequest(request));
   const useImg2Img = Array.isArray(body.init_images);
   logDebugOverride(
     request.debugMode === true,
@@ -2202,13 +2237,13 @@ async function generateNovelAI(baseUrl: string, apiKey: string, request: ImageGe
     );
   }
 
-  const body: Record<string, unknown> = {
+  const body = withImageCustomParameters(request, {
     input: prompt,
     model,
     action: "generate",
     parameters,
     use_new_shared_trial: true,
-  };
+  });
   const metadataBody = cloneNovelAiRequestForMetadata(body);
 
   const hasReferences = directorReferenceImages.length > 0;
@@ -2558,7 +2593,7 @@ async function generateOpenRouterImageApi(
   apiKey: string,
   request: ImageGenRequest,
 ): Promise<ImageGenResult> {
-  const body = buildOpenRouterImagesRequest(request);
+  const body = withImageCustomParameters(request, buildOpenRouterImagesRequest(request));
   logDebugOverride(
     request.debugMode === true,
     "[debug/image/openrouter-images] final request payload:\n%s",
@@ -2627,7 +2662,7 @@ async function generateOpenRouter(baseUrl: string, apiKey: string, request: Imag
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(withImageCustomParameters(request, body)),
       signal: imageRequestSignal(request),
     },
     { allowLocal: request.allowLocalUrls },
@@ -2726,12 +2761,14 @@ async function generateViaChatCompletions(
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        model: request.model || "nai-diffusion-4-5-full",
-        messages: [{ role: "user", content: messageContent }],
-        stream: false,
-        temperature: 0.7,
-      }),
+      body: JSON.stringify(
+        withImageCustomParameters(request, {
+          model: request.model || "nai-diffusion-4-5-full",
+          messages: [{ role: "user", content: messageContent }],
+          stream: false,
+          temperature: 0.7,
+        }),
+      ),
       signal: imageRequestSignal(request),
     },
     { allowLocal: request.allowLocalUrls },

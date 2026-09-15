@@ -41,6 +41,7 @@ import {
   useCancelSlurpFollowUp,
   useDeliverSlurpCommission,
   useQuoteSlurpCommission,
+  useCounterSlurpCommission,
   useResolveSlurpMessageRequest,
   useResetSlurpThread,
   useSetSlurpThreadNotes,
@@ -932,6 +933,18 @@ function SlurpThreadView({
       setToolTab("commission");
       return;
     }
+    const feeDue = !thread || thread.requestFeePaid <= 0;
+    if (!force && !ownsCreator && feeDue && messaging?.dmPolicy === "paid" && !subscribed && messaging.requestFee > 0) {
+      const confirmed = await showConfirmDialog({
+        title: localizeUi("ui.slurp.messages.sendRequestTitle", { defaultValue: "Send message request?" }),
+        message: localizeUi("ui.slurp.messages.sendRequestDetail", {
+          defaultValue: "This costs {{fee}} coins. It opens the conversation but does not guarantee a reply.",
+          fee: messaging.requestFee,
+        }),
+        confirmLabel: localizeUi("ui.slurp.messages.sendRequestConfirm", { defaultValue: "Send request" }),
+      });
+      if (!confirmed) return;
+    }
     // Cancel any active typing animation when fan interrupts
     if (typing) {
       cancelTyping();
@@ -996,6 +1009,17 @@ function SlurpThreadView({
     setError(null);
     setActiveTipAmount(amount);
     try {
+      const confirmed = await showConfirmDialog({
+        title: localizeUi("ui.slurp.messages.sendTipTitle", {
+          defaultValue: "Send {{amount}} coins as a tip?",
+          amount,
+        }),
+        message: localizeUi("ui.slurp.messages.sendTipDetail", {
+          defaultValue: "A tip is a gift. It does not guarantee a reply.",
+        }),
+        confirmLabel: localizeUi("ui.slurp.messages.sendTipConfirm", { defaultValue: "Send tip" }),
+      });
+      if (!confirmed) return;
       const result = await tip.mutateAsync({
         personaId,
         creatorAccountId: targetCreatorAccountId,
@@ -2584,7 +2608,18 @@ function MessageBubble({
           <button
             type="button"
             disabled={!personaId || unlock.isPending}
-            onClick={() => personaId && unlock.mutate({ personaId, messageId: message.id })}
+            onClick={async () => {
+              if (!personaId) return;
+              const confirmed = await showConfirmDialog({
+                title: localizeUi("ui.slurp.messages.unlockTitle", { defaultValue: "Unlock this photo?" }),
+                message: localizeUi("ui.slurp.messages.unlockDetail", {
+                  defaultValue: "This costs {{amount}} coins.",
+                  amount: message.price,
+                }),
+                confirmLabel: localizeUi("ui.slurp.messages.unlockConfirm", { defaultValue: "Unlock photo" }),
+              });
+              if (confirmed) unlock.mutate({ personaId, messageId: message.id });
+            }}
             className="relative inline-flex min-h-11 items-center gap-1.5 overflow-visible rounded-lg px-1 text-left text-[var(--muted-foreground)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-60"
           >
             <SlurpCoinBurst active={unlock.isPending} />
@@ -3065,10 +3100,14 @@ function CommissionRow({
 }) {
   const { t: localizeUi, i18n } = useUiTranslation();
   const quote = useQuoteSlurpCommission();
+  const counter = useCounterSlurpCommission();
   const accept = useAcceptSlurpCommission();
   const deliver = useDeliverSlurpCommission();
   const decline = useDeclineSlurpCommission();
-  const [price, setPrice] = useState(commission.price > 0 ? commission.price : 25);
+  const [price, setPrice] = useState(commission.price > 0 ? commission.price : (commission.suggestedPrice ?? 25));
+  const [offer, setOffer] = useState(Math.max(1, Math.round(commission.price * 0.8)));
+  const pendingOffer = commission.counterPrice ?? null;
+  const canOffer = pendingOffer === null && (commission.haggleRounds ?? 0) < 3;
   const canEnd =
     commission.state === "brief" ||
     commission.state === "quoted" ||
@@ -3079,7 +3118,7 @@ function CommissionRow({
   const [delivery, setDelivery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const busy = quote.isPending || accept.isPending || deliver.isPending || decline.isPending;
+  const busy = quote.isPending || counter.isPending || accept.isPending || deliver.isPending || decline.isPending;
   const wallet = useSlurpWallet(personaId);
   const steps = ["brief", "quoted", "accepted", "delivered"] as const;
   const currentStep = commission.state === "declined" ? -1 : steps.indexOf(commission.state);
@@ -3187,6 +3226,47 @@ function CommissionRow({
         })}
       </p>
 
+      {ownsCreator && commission.state === "quoted" && pendingOffer !== null && (
+        <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2 rounded-xl bg-[var(--noodle-accent)]/10 p-3">
+          <span className="font-semibold">
+            {localizeUi("ui.slurp.messages.commissionOfferReceived", {
+              defaultValue: "The fan offers {{amount}} coins.",
+              amount: pendingOffer,
+            })}
+          </span>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() =>
+              run(
+                quote.mutateAsync({ commissionId: commission.id, personaId, price: pendingOffer }),
+                localizeUi("ui.slurp.messages.commissionQuoteFailed", { defaultValue: "Could not send that quote." }),
+                localizeUi("ui.slurp.messages.commissionOfferTaken", { defaultValue: "Offer accepted." }),
+              )
+            }
+            className="min-h-11 rounded-xl bg-[var(--noodle-accent)] px-4 font-bold text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
+          >
+            {localizeUi("ui.slurp.messages.commissionTakeOffer", { defaultValue: "Accept offer" })}
+          </button>
+          <span className="text-xs text-[var(--muted-foreground)]">
+            {localizeUi("ui.slurp.messages.commissionCounterHint", {
+              defaultValue: "Or send a new quote below to meet in the middle.",
+            })}
+          </span>
+        </div>
+      )}
+
+      {ownsCreator &&
+        (commission.state === "brief" || commission.state === "quoted") &&
+        (commission.suggestedPrice !== undefined && commission.state === "brief" ? (
+          <p className="mt-3 text-xs text-[var(--muted-foreground)]">
+            {localizeUi("ui.slurp.messages.commissionSuggestedQuote", {
+              defaultValue: "Your pricing suggests {{amount}} coins for this brief.",
+              amount: commission.suggestedPrice,
+            })}
+          </p>
+        ) : null)}
+
       {ownsCreator && (commission.state === "brief" || commission.state === "quoted") && (
         <div className="mt-3 flex min-w-0 flex-wrap items-end gap-2">
           <label htmlFor={`slurp-quote-${commission.id}`} className="flex flex-col gap-1 font-bold">
@@ -3281,6 +3361,51 @@ function CommissionRow({
               })}
             </span>
           )}
+        </div>
+      )}
+
+      {!ownsCreator && commission.state === "quoted" && pendingOffer !== null && (
+        <p className="mt-3 font-semibold text-[var(--muted-foreground)]">
+          {localizeUi("ui.slurp.messages.commissionOfferPending", {
+            defaultValue: "You offered {{amount}} coins. Waiting for the Creator.",
+            amount: pendingOffer,
+          })}
+        </p>
+      )}
+
+      {!ownsCreator && commission.state === "quoted" && canOffer && (
+        <div className="mt-3 flex min-w-0 flex-wrap items-end gap-2">
+          <label htmlFor={`slurp-offer-${commission.id}`} className="flex flex-col gap-1 font-bold">
+            {localizeUi("ui.slurp.messages.commissionOfferLabel", { defaultValue: "Offer a lower price" })}
+            <span className="flex h-11 items-center gap-1.5 rounded-xl bg-[var(--slurp-canvas,var(--background))] px-3 ring-1 ring-inset ring-[var(--noodle-divider)] focus-within:ring-2 focus-within:ring-[var(--noodle-accent)]">
+              <SlurpCoin size={15} />
+              <input
+                id={`slurp-offer-${commission.id}`}
+                type="number"
+                min={1}
+                max={99999}
+                value={offer}
+                onChange={(event) => setOffer(Math.max(1, Math.floor(Number(event.target.value) || 0)))}
+                className="w-20 bg-transparent text-sm tabular-nums outline-none"
+              />
+            </span>
+          </label>
+          <button
+            type="button"
+            disabled={busy || offer >= commission.price}
+            onClick={() =>
+              run(
+                counter.mutateAsync({ commissionId: commission.id, personaId, price: offer }),
+                localizeUi("ui.slurp.messages.commissionOfferFailed", { defaultValue: "Could not send that offer." }),
+                localizeUi("ui.slurp.messages.commissionOfferSent", { defaultValue: "Offer sent." }),
+              )
+            }
+            className="min-h-11 rounded-xl px-4 font-bold ring-1 ring-inset ring-[var(--noodle-accent)] transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
+          >
+            {counter.isPending
+              ? localizeUi("ui.slurp.messages.commissionOfferPendingSend", { defaultValue: "Sending offer…" })
+              : localizeUi("ui.slurp.messages.commissionMakeOffer", { defaultValue: "Make offer" })}
+          </button>
         </div>
       )}
 

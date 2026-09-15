@@ -1,4 +1,5 @@
 import type { NoodleAuthorSnapshot, NoodlerFanArchetype, NoodlerFanArchetypeWeights } from "@marinara-engine/shared";
+import { slurpFanVoiceForPrompt } from "./slurp-fan-types.js";
 
 export const NOODLER_FAN_IDENTITY_PREFIX = "noodler-fan:";
 
@@ -16,6 +17,10 @@ export interface NoodlerFanIdentity {
   persona?: {
     traits: string[];
     spendTier: string;
+    /** The Fan Type's voice, truncated. How this person writes, in their own words. */
+    voice?: string;
+    /** The Fan Type's tone override, when it has one. */
+    tone?: string;
     /** Funnel stage with this Creator, when there is a tie. */
     stage?: string;
     /** Coins spent with this Creator, ever. */
@@ -24,6 +29,8 @@ export interface NoodlerFanIdentity {
     knownForDays?: number;
     /** Where the relationship is heading. */
     audienceArc?: string;
+    /** A few lines of shared history, derived from the tie. Free: no call, no column. */
+    memory?: string;
   };
 }
 
@@ -86,12 +93,16 @@ export type NoodlerFanCastMember = {
   archetype: NoodlerFanArchetype;
   traits: string[];
   spendTier: string;
+  /** The voice of this member's Fan Type. Optional: a caller that has no types passes nothing. */
+  voice?: string;
+  /** The Fan Type's tone override. Absent means the crowd tone. */
+  tone?: string;
 };
 
 /** One member's history with one creator, keyed by creator then by member. */
 export type NoodlerFanTieLookup = ReadonlyMap<
   string,
-  ReadonlyMap<string, { stage: string; spent: number; knownForDays: number; audienceArc: string }>
+  ReadonlyMap<string, { stage: string; spent: number; knownForDays: number; audienceArc: string; memory?: string }>
 >;
 
 export function populationNoodlerFanIdentityProvider(
@@ -111,8 +122,16 @@ export function populationNoodlerFanIdentityProvider(
             persona: {
               traits: member.traits,
               spendTier: member.spendTier,
+              ...(slurpFanVoiceForPrompt(member.voice) ? { voice: slurpFanVoiceForPrompt(member.voice) } : {}),
+              ...(member.tone ? { tone: member.tone } : {}),
               ...(tie
-                ? { stage: tie.stage, spent: tie.spent, knownForDays: tie.knownForDays, audienceArc: tie.audienceArc }
+                ? {
+                    stage: tie.stage,
+                    spent: tie.spent,
+                    knownForDays: tie.knownForDays,
+                    audienceArc: tie.audienceArc,
+                    ...(tie.memory ? { memory: tie.memory } : {}),
+                  }
                 : {}),
             },
             snapshot: {

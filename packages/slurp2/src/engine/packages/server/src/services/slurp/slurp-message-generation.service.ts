@@ -46,11 +46,15 @@ import {
 import { notesForPrompt, type SlurpNoteOperation, type SlurpThreadNote } from "./slurp-thread-notes.js";
 import { slurpIntensityBand, type SlurpCreatorState, type SlurpThreadState } from "./slurp-creator-state.js";
 import { slurpAudienceArcDescription } from "./slurp-audience-arc.js";
+import { slurpArcLifeLine } from "./slurp-project.js";
 import { SLURP_PLATFORM_CONTEXT } from "./slurp-prompt.js";
 import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
-import type { SlurpMessage } from "../storage/slurp-messages.storage.js";
+import { slurpFanMemoryForPrompt, slurpFanVoiceForPrompt, slurpResolveFanType } from "./slurp-fan-types.js";
+import { prepareSlurpPostImageContexts, slurpImageCaptioning } from "./slurp-post-image-context.js";
+import { createSlurpMessagesStorage, type SlurpMessage } from "../storage/slurp-messages.storage.js";
 import type { SlurpDmPolicy } from "./slurp-messaging.js";
 import { resolveNoodlerCharacterCanon } from "./slurp-source-resolve.js";
+import { claimSlurpModelBudget, slurpModelWorkerAllows, type SlurpModelWorkerContext } from "./slurp-model-worker.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -66,6 +70,10 @@ const RECENT_POSTS = 4;
 export function buildSlurpMessageChat(input: {
   creator: NoodleAccount;
   viewer: NoodleAccount;
+  /** How this fan's Fan Type writes, when the fan is a generated audience member. */
+  fanVoice?: string;
+  /** Short shared history derived from the audience tie. */
+  fanMemory?: string;
   history: SlurpMessage[];
   rapport: SlurpRapport;
   availability: SlurpCreatorAvailability;
@@ -74,8 +82,6 @@ export function buildSlurpMessageChat(input: {
   isRequest: boolean;
   /** Everything about how to behave, already resolved. See `slurp-stance.ts`. */
   stance: SlurpStance;
-  /** What the creator has posted lately, so "loved your new set" can be answered. */
-  recentPosts?: { id: string; title: string | null; content: string; access: string; imageUrl: string | null }[];
   /** Facts kept from earlier in this conversation, beyond the history window. */
   notes?: SlurpThreadNote[];
   threadState?: SlurpThreadState;
@@ -85,7 +91,10 @@ export function buildSlurpMessageChat(input: {
   scheduleContext?: string;
   disclosureMode: Parameters<typeof noodlerIdentityInstruction>[0];
   publicIdentity: Parameters<typeof noodlerIdentityInstruction>[1];
+  /** What the creator has posted lately, so "loved your new set" can be answered. */
   recentPosts: Array<{ id: string; title: string | null; content: string; access: string; imageUrl: string | null }>;
+  /** What the pictures in the conversation show, keyed by message id. */
+  imageContexts?: Map<string, string>;
 }): ChatMessage[] {
   const protect = (value: string | null | undefined) =>
     protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
@@ -152,6 +161,10 @@ export function buildSlurpMessageChat(input: {
       displayName: protect(input.viewer.displayName),
       handle: protect(input.viewer.handle),
       subscribed: input.subscribed,
+      // Only for a generated audience member; a player persona writes their own side and needs no
+      // description. Context for the creator's reply, never an instruction to write the fan's part.
+      ...(input.fanVoice ? { voice: input.fanVoice } : {}),
+      ...(input.fanMemory ? { memory: input.fanMemory } : {}),
     },
     relationship: describeSlurpRapport(input.rapport, protect(input.viewer.displayName) || "this fan"),
     ...(known
@@ -198,6 +211,8 @@ export function buildSlurpMessageChat(input: {
             title: protect(post.title),
             // A locked body is what the fan is being sold. Quoting it into a free chat gives it away.
             content: post.access === "locked" ? "[paid post, contents not repeated here]" : protect(post.content),
+            // Never set for a locked post: its picture is withheld for the same reason as its text.
+            image: input.imageContexts?.has(post.id) ? protect(input.imageContexts.get(post.id)) : undefined,
             access: post.access,
           })),
         }
@@ -217,6 +232,7 @@ export function buildSlurpMessageChat(input: {
           : message.kind === "ppv"
             ? `[sent locked content for ${message.price} coins${message.unlockedAt ? ", which the fan unlocked" : ", still locked"}]`
             : protect(message.content),
+      image: input.imageContexts?.has(message.id) ? protect(input.imageContexts.get(message.id)) : undefined,
       at: message.createdAt,
     })),
   };
@@ -253,6 +269,8 @@ export type SlurpMessagePromptInput = {
   debugMode?: boolean;
   /** Extra instruction for scheduled or otherwise specialized replies. */
   generationGuidance?: string;
+  /** Scheduled follow-ups are background; direct replies default to present. */
+  workerContext?: SlurpModelWorkerContext;
 };
 
 /**
@@ -269,7 +287,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
   publicIdentity: Parameters<typeof noodlerIdentityInstruction>[1];
 }> {
   const slurp = createSlurpStorage(input.db);
-  const disclosureMode = input.creator.settings.privacy.identityDisclosure ?? "secret";
+  const disclosureMode = input.creator.settings.privacy.identityDisclosure ?? "open";
   const publicIdentity = await resolveNoodlerPublicIdentity(input.db, input.creator);
   const settings = await slurp.getSettings();
   const source = await slurp.resolveAccountSource(input.creator);
@@ -298,6 +316,15 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
     .listTiesForCreator(input.creator.id)
     .then((ties) => ties.find((entry) => entry.memberId === input.viewer.id))
     .catch(() => undefined);
+  // Only a generated audience member has a Fan Type. A player persona writes their own messages,
+  // so describing how they write would be the model inventing the player.
+  const fanMember = await createSlurpPopulationStorage(input.db)
+    .get(input.viewer.id)
+    .catch(() => null);
+  const fanVoice = fanMember
+    ? slurpFanVoiceForPrompt(slurpResolveFanType(settings.fanTypes, fanMember).voice)
+    : undefined;
+  const fanMemory = fanMember ? slurpFanMemoryForPrompt(tie) : undefined;
   const recentPosts = recentPostRows
     .filter((post) => post.access !== "draft")
     .slice(0, RECENT_POSTS)
@@ -308,6 +335,15 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
       access: post.access,
       imageUrl: post.imageUrl,
     }));
+  // The arc the feed is posting about, so a DM and the feed come from the same life. Protected like
+  // every other supplied value: a Secret Creator's arc title can name a real place.
+  const creatorArc = settings.arcAffectsMood
+    ? (protectNoodlerGeneratedIdentity(
+        slurpArcLifeLine(await slurp.listProjects(input.creator.id).catch(() => [])),
+        disclosureMode,
+        publicIdentity,
+      ) ?? null)
+    : null;
   const stance = resolveSlurpStance({
     rapportTier: input.rapport.tier,
     rapportScore: input.rapport.score,
@@ -320,6 +356,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
       ),
     ),
     audienceArc: tie ? slurpAudienceArcDescription(tie.audienceArc) : null,
+    creatorArc,
     dayVibe: input.dayVibe ?? null,
     availability,
     subscribed: input.subscribed,
@@ -331,8 +368,48 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
     coolingOff: input.coolingOff ?? false,
     strikes: input.strikes ?? 0,
   });
+  // Pictures reach the model through the one image context setting: the thread's own pictures, and
+  // the Creator's recent posts a fan is likely to mention. The creator is one side of this thread,
+  // so a locked picture in it is theirs to see. Recent posts use stored prompts and saved
+  // descriptions only, so a reply never pays for vision across the whole feed, and a locked post
+  // stays out like its text does. A failed description costs the picture its context, never the reply.
+  const imageContexts = await slurpImageCaptioning(input.db, settings.imageContextConnectionId, input.connection)
+    .then(async (captioning) => {
+      const messageStore = createSlurpMessagesStorage(input.db);
+      const [threadImages, postImages] = await Promise.all([
+        prepareSlurpPostImageContexts({
+          posts: input.history
+            .slice(-HISTORY_TURNS)
+            .filter((message) => message.imageUrl)
+            .map((message) => ({
+              id: message.id,
+              access: "public" as const,
+              imageUrl: message.imageUrl,
+              imagePrompt: typeof message.metadata.imagePrompt === "string" ? message.metadata.imagePrompt : null,
+              metadata: message.metadata,
+              createdAt: message.createdAt,
+            })),
+          mode: settings.imageContextMode,
+          captioning,
+          allowLocked: true,
+          debugMode: input.debugMode,
+          onDescribed: (message, description, source) =>
+            messageStore.setMessageImageDescription(message.id, description, source),
+        }),
+        prepareSlurpPostImageContexts({
+          posts: recentPostRows.filter((post) => post.access !== "draft").slice(0, RECENT_POSTS),
+          mode: "imagePrompt",
+          captioning,
+        }),
+      ]);
+      return new Map([...postImages, ...threadImages]);
+    })
+    .catch(() => new Map<string, string>());
   const messages = buildSlurpMessageChat({
     ...input,
+    imageContexts,
+    fanVoice,
+    fanMemory,
     stance,
     recentPosts,
     availability,
@@ -365,6 +442,11 @@ function protectNoteOperation(
 
 export async function generateSlurpMessageReply(input: SlurpMessagePromptInput): Promise<SlurpGeneratedDmReply> {
   const { messages, stance, disclosureMode, publicIdentity, recentPosts } = await buildSlurpMessagePrompt(input);
+  const budget = (await createSlurpStorage(input.db).getSettings()).modelBudget;
+  const context = input.workerContext ?? "present";
+  if (!slurpModelWorkerAllows(budget, context) || !(await claimSlurpModelBudget(input.db, budget, "dm_reply"))) {
+    throw new Error("Slurp AI budget does not allow this reply yet.");
+  }
   const connections = createConnectionsStorage(input.db);
   const fallbackConnection = await connections.getFallbackForMain();
   const provider = withConnectionFallbackProvider({

@@ -7,6 +7,7 @@ import {
   type NoodlePostAccess,
   type NoodlerRefreshNowOutcome,
 } from "@marinara-engine/shared";
+import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
 import type { NoodleImagePromptReviewItem } from "./slurp-public-images.service.js";
 import type { DB } from "../../db/connection.js";
 import { logger } from "../../lib/logger.js";
@@ -88,7 +89,12 @@ export async function generateAndApplyNoodlerPost(
     if (!account) {
       return { status: "noodler_account_not_found" } as const;
     }
-    if (account.kind === "persona" && account.sourceKind === "persona") {
+    // A persona-sourced Creator is the player: nothing writes for it unattended. An explicit
+    // request from its owner — the composer's Guide button — is a different thing and is allowed,
+    // which is what gives these Creators the same drafting tools as character Creators.
+    // Only a foreground request carries an owner behind it. Every unattended caller (the scheduler,
+    // the first-post worker, run-now, bulk refresh) passes background or no mode at all, and stays blocked.
+    if (account.kind === "persona" && account.sourceKind === "persona" && admissionMode?.kind !== "foreground") {
       return { status: "disabled" } as const;
     }
     const publicAccount = await noodle.resolveAccountSource(account);
@@ -228,6 +234,10 @@ export async function createNoodlerPost(
     format?: NoodlerContentFormat;
     postType?: "post" | "story";
     linkedPostId?: string | null;
+    /** This post's own unlock price. Absent uses the Creator's price, then Settings. */
+    unlockPrice?: number | null;
+    /** Image directions kept on a manual post, so its image can be rendered afterwards. */
+    imagePrompt?: string | null;
   },
   media?: NoodlerPostMediaUpload,
 ): Promise<CreateNoodlerPostResult> {
@@ -237,7 +247,10 @@ export async function createNoodlerPost(
     // Settings → Wallet → "Unlock a post" is the default price a locked post is stamped with.
     // Calling the helper with no argument stamped the shipped 1 instead, so the setting did
     // nothing and every locked post cost one coin whatever the player configured.
-    const unlockPrice = (await noodle.getSettings()).walletUnlockCost;
+    const unlockPrice =
+      input.unlockPrice ??
+      (await createSlurpMessagesStorage(db).getCreatorMessaging(input.targetAccountId)).unlockPrice ??
+      (await noodle.getSettings()).walletUnlockCost;
     const persist = (persistedMedia?: { imageUrl: string; noodlerMediaPath: string }) => {
       const create = async () => {
         return noodle.createNoodlerPost({
@@ -247,6 +260,7 @@ export async function createNoodlerPost(
           content: input.content,
           source: "manual",
           access: input.access,
+          imagePrompt: input.imagePrompt?.trim() || null,
           imageUrl: persistedMedia?.imageUrl ?? null,
           metadata: {
             noodlerContentFormat: input.format ?? "caption",

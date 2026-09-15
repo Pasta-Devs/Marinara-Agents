@@ -142,10 +142,13 @@ assert.match(slurpStorage, /advanceAudienceTie\(viewerAccountId, post\.authorAcc
 // It used to read both back out of the wallet ledger, which is capped at 60 entries across every
 // creator — a whale's history aged out of their own score.
 assert.match(slurpStorage, /unlocked: price/u);
-assert.match(slurpStorage, /tipped: amount/u);
-assert.match(slurpStorage, /advanceAudienceTie\(viewerAccountId, creator\.id, \{\s*stage: "regular"/u);
+// Tips record their share once the payment is durable, in the shared tip effects.
+assert.match(
+  read("services/storage/slurp-messages.storage.ts"),
+  /advanceTie\([\s\S]{0,80}?\{\s*stage: "regular",\s*spent: amount,\s*tipped: amount/u,
+);
 // Unsubscribing drops the tie, so a lost subscriber leaves the funnel as well as the feed.
-assert.match(slurpStorage, /\.lapseTie\(viewerAccountId, creatorAccountId\)/u);
+assert.match(slurpStorage, /\.lapseTie\(viewerAccountId, creatorAccountId, stillFollowing \? "follower" : "lapsed"\)/u);
 // A funnel write must never roll back the payment that caused it.
 assert.match(slurpStorage, /\[slurp-population\] Could not advance the tie/u);
 
@@ -169,21 +172,25 @@ assert.match(world, /createSlurpPopulationStorage\(db\)\.get\(actorAccountId\)/u
 // listAll orders by lastActiveAt, so without touch() it keeps ordering by creation time: the same
 // earliest members are redrawn forever and anybody who shows up sinks out of the pool.
 assert.match(world, /population\.touch\(actor\.id\)/u);
-assert.match(world, /const pool = \[\.\.\.returning, \.\.\.newcomers\]/u);
+assert.match(world, /const pool = \[\s*\.\.\.new Map\(\[\.\.\.dailyNewcomers, \.\.\.returning, \.\.\.newcomers\]/u);
 const fanRun = read("services/slurp/slurp-fan-activity.operation.ts");
 assert.match(fanRun, /cast\.map\(\(member\) => population\.touch\(member\.id\)/u);
 
 // Fan activity is the highest-volume thing the audience does, and it fed nothing into the funnel:
 // follower counts barely moved from the very people who were most active.
 assert.match(fanRun, /advanceTie\(activity\.actorId, activity\.creatorId/u);
-assert.match(fanRun, /activity\.type === "repost" \? "follower" : "liker"/u, "a repost carries further than a like");
+// Reposts were removed from Slurp, so a like or a reply is the only fan activity and both make a liker.
+assert.match(fanRun, /advanceTie\(activity\.actorId, activity\.creatorId, \{\s*stage: "liker"/u);
 
 // ── Cross-boundary defects found by an interaction review ───────────────────
 // Three id spaces reach an actor label: a persona, a Slurp account, and a population member. The
 // population was added after the notification name resolver and never wired into it, so every
 // world-driven event rendered as "Someone".
 const slurpRoutes2 = read("routes/slurp.routes.ts");
-assert.match(slurpRoutes2, /\(await population\.get\(id\)\)\?\.displayName/u);
+assert.match(
+  slurpRoutes2,
+  /const member = await population\.get\(id\);\s*const actor = persona \?\? account \?\? member;/u,
+);
 
 // Following and the funnel were two counts of the same person, and reach added both at 25x each.
 // Following now moves the funnel, and the social list is no longer summed on top of it.

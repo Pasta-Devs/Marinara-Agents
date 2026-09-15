@@ -19,8 +19,8 @@ assert.match(storage, /async listAudienceBriefCommissions\(\)/u);
 assert.match(storage, /population\.get\(viewerAccountId\)/u);
 assert.match(storage, /async listAutomatedBriefCommissions\(\)/u);
 assert.match(world, /listAutomatedBriefCommissions\(\)/u);
-assert.match(world, /quoteCommission\(commission\.id, AUDIENCE_COMMISSION_PRICE\)/u);
-assert.match(world, /const AUDIENCE_COMMISSION_PRICE = 40/u);
+// The quote reads the brief through the Creator's own pricing, not one fixed price for every request.
+assert.match(world, /quoteCommission\(commission\.id, slurpCommissionQuote\(commission\.brief, pricing\)\)/u);
 assert.match(world, /listQuotedCommissions\(\)/u);
 assert.match(world, /settleAudienceCommission\(commission\.id/u);
 
@@ -28,6 +28,12 @@ assert.match(world, /settleAudienceCommission\(commission\.id/u);
 assert.doesNotMatch(routes, /messages\.quoteCommission\(commission\.id, automaticPrice\)/u);
 assert.match(routes, /const accepted = await messages\.acceptCommission\(commission\.id\)/u);
 assert.match(routes, /generateSlurpCommissionImage\(app\.db/u);
+// A fan who cannot pay must be turned away before the piece is drawn, or every retry draws again.
+assert.match(
+  routes,
+  /wallet\.coins < commission\.price\) return reply\.code\(402\)[\s\S]{0,400}?drawn = await generateSlurpCommissionImage/u,
+  "commission accept must check the balance before drawing",
+);
 assert.match(routes, /messages\.deliverCommission\(/u);
 assert.match(routes, /commissionAcceptRequests\.has\(commission\.id\)/u);
 assert.match(routes, /commissionDeliveryRequests\.has\(commissionId\)/u);

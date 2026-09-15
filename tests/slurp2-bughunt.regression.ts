@@ -31,7 +31,7 @@ const storage = read(`${server}/services/storage/slurp.storage.ts`);
 assert.match(home, /items\[Math\.floor\(index \/ inlineAdEvery\) % items\.length\]/u);
 assert.match(garnishContext, /contentCeiling: input\.contentCeiling/u);
 assert.match(generation, /z\.enum\(\["tame", "suggestive", "explicit"\]\)\.catch\("tame"\)/u);
-assert.match(shell, /\/api\/capability-packages\/slurp2\/assets\/slurp2-logo\.png/u);
+assert.match(shell, /import \{ SLURP_LOGO_SRC \} from "\.\/slurp-logo"/u);
 
 assert.match(ads, /async canAct[\s\S]*?state\.recentAdIds\.includes\(adId\)[\s\S]*?active\.some/u);
 assert.match(routes, /if \(!\(await ads\.canAct[\s\S]*?return reply\.code\(404\)[\s\S]*?earnCoins/u);

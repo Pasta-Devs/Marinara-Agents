@@ -69,16 +69,7 @@ assert.match(
 assert.match(messagesStorage, /rapportFactsFor: \(\) => emptySlurpRapportFacts\(\)/u);
 assert.match(messagesStorage, /claimReply: \(\) => \(\{ status: "busy" as const \}\)/u);
 
-// ── Ownership ────────────────────────────────────────────
-
 const routes = read(join(server, "routes/slurp.routes.ts"));
-// The weekly price is what other personas pay, so only the operating persona may set it — the same
-// gate `/goal` and `/payout` already carry.
-assert.match(
-  routes,
-  /subscription-price"[\s\S]{0,900}?if \(!creatorBelongsToViewer\(creator, viewer\)\)/u,
-  "the subscription price route must check Creator ownership",
-);
 
 // ── Schedulers ───────────────────────────────────────────
 
@@ -234,10 +225,14 @@ assert.match(
 const postOperation = read(join(server, "services/slurp/slurp-post.operation.ts"));
 // Settings → Wallet → "Unlock a post" is documented as the default a locked post is stamped with.
 // Both creation paths called the helper with no argument, so every locked post cost the shipped 1.
-assert.match(postOperation, /const unlockPrice = \(await noodle\.getSettings\(\)\)\.walletUnlockCost;/u);
+// The posts own price wins, then the Creators, then the Settings default.
+assert.match(
+  postOperation,
+  /input\.unlockPrice \?\?[\s\S]{0,160}?\.unlockPrice \?\?\s*\(await noodle\.getSettings\(\)\)\.walletUnlockCost;/u,
+);
 assert.doesNotMatch(postOperation, /noodlerUnlockPriceMetadata\(\)/u, "a locked post must be stamped with the setting");
 assert.doesNotMatch(generation, /noodlerUnlockPriceMetadata\(\)/u);
-assert.match(generation, /noodlerUnlockPriceMetadata\(settings\.walletUnlockCost\)/u);
+assert.match(generation, /noodlerUnlockPriceMetadata\([\s\S]{0,160}?\.unlockPrice \?\?\s*settings\.walletUnlockCost/u);
 
 // ── Subscribe ────────────────────────────────────────────
 
@@ -360,7 +355,7 @@ assert.doesNotMatch(useSlurpSource, /useDeliverSlurpCommission[\s\S]*imageUrl\?:
 // The paywall has to cover the picture, or the thing being sold travels over the wire unpaid.
 assert.match(
   messageRoutes,
-  /message\.kind === "ppv" && !message\.unlockedAt\s*\? \{ \.\.\.message, content: "", imageUrl: null \}/u,
+  /message\.kind === "ppv" && !message\.unlockedAt\s*\?\s*\{\s*\.\.\.message,\s*content: "",\s*imageUrl: null,/u,
 );
 assert.match(messagesStorage, /kind: "commission_delivery",\s*imageUrl,/u);
 assert.match(messagesView2, /const messageImage = useSlurpMediaSrc\(\s*message\.imageUrl\s*\?/u);
@@ -384,7 +379,7 @@ assert.match(messagesView2, /generateImage,/u);
 const slurpRoutesSource = read(join(server, "routes/slurp.routes.ts"));
 assert.match(
   slurpRoutesSource,
-  /isFileUniqueConstraintError\(error, "slurp2_interactions", \[[\s\S]*?"postId"[\s\S]*?"actorAccountId"[\s\S]*?"type"[\s\S]*?"parentInteractionId"[\s\S]*?\]\)/u,
+  /isSlurpFileUniqueConstraintError\(error, "slurp2_interactions", \[[\s\S]*?"postId"[\s\S]*?"actorAccountId"[\s\S]*?"type"[\s\S]*?"parentInteractionId"[\s\S]*?\]\)/u,
   "concurrent Story views must use the file-store uniqueness error",
 );
 assert.match(

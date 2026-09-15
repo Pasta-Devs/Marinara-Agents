@@ -5,9 +5,11 @@ import {
   CalendarClock,
   CheckCircle2,
   ChevronRight,
+  CircleHelp,
   Download,
   FileText,
   Image,
+  ListChecks,
   Loader2,
   Megaphone,
   Pencil,
@@ -21,7 +23,15 @@ import {
   Upload,
   UsersRound,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { nextSlurpAutopurgeRunAt } from "../../../../shared/src/slurp-autopurge-time.js";
+import { Field, GuidanceBox, NumberSetting, SectionTitle, SettingsGroup, Toggle } from "./SlurpSettingsControls";
+import { SlurpSimulationSettings } from "./SlurpSimulationSettings";
+import { SlurpFanTypesSettings } from "./SlurpFanTypesSettings";
+import { SlurpAudienceConfigSettings } from "./SlurpAudienceConfigSettings";
+import { SlurpCreatorBulkEdit } from "./SlurpCreatorBulkEdit";
+import { SlurpDiscoveryProfileEditor } from "./SlurpDiscoveryProfileEditor";
+import { SlurpTagsSettings } from "./SlurpTagsSettings";
+import type { ChangeEvent, ReactNode } from "react";
 import { api } from "../../lib/api-client";
 import { cn } from "../../lib/utils";
 import { useEffect, useRef, useState } from "react";
@@ -66,19 +76,32 @@ import {
   useImportSlurpAds,
   useSlurpConnections,
   useSlurpSettings,
+  useSlurpSettingsDefaults,
+  useRunSlurpAutopurge,
   useUpdateNoodlerAutoPosting,
   useUpdateNoodlerScheduleSlot,
   useRefreshNoodlerConversationSchedule,
   useUpdateSlurpImageConnections,
   useUpdateSlurpSettings,
+  useBulkUpdateSlurpCreators,
+  useResetSlurpArcType,
+  useGenerateSlurpArcType,
+  type SlurpArcType,
   type SlurpSettings,
   type SlurpContentRating,
   type SlurpReserveStatus,
   type SlurpScheduleSlot,
 } from "../../hooks/use-slurp";
-import { showConfirmDialog } from "../../lib/app-dialogs";
+import { showConfirmDialog, showPromptDialog } from "../../lib/app-dialogs";
 import { Modal } from "../ui/Modal";
 import { SLURP_SETTINGS_SECTIONS, type SlurpNavigationState } from "./slurp-navigation.types";
+import {
+  exportSlurpPromptPresets,
+  importSlurpPromptPresets,
+  mergeSlurpPromptPreset,
+  SLURP_PROMPT_PRESET_NAME_LIMIT,
+} from "./slurp-prompt-presets";
+import { changedSlurpSettingKeys, isSlurpResettableSection, slurpSettingsResetPatch } from "./slurp-settings-defaults";
 import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
 import {
   Avatar,
@@ -87,6 +110,7 @@ import {
   SLURP_ROW_ACTIVE_CLASS,
   SLURP_ROW_CLASS,
   SLURP_TOGGLE_ACTIVE_CLASS,
+  SlurpMediaImg,
 } from "./SlurpShell";
 import {
   SLURP_ACTIVITY_PRESETS,
@@ -94,6 +118,11 @@ import {
   slurpActivityPresetPatch,
   slurpPostsPerDayForPreset,
 } from "./slurp-activity-presets";
+import {
+  SLURP_AUDIENCE_PRESETS,
+  slurpAudiencePresetFor,
+  slurpAudiencePresetPatch,
+} from "../../../../server/src/services/slurp/slurp-tuning.js";
 
 type SlurpSettingsProps = {
   navigation: Extract<SlurpNavigationState, { mode: "creator-settings" }>;
@@ -106,7 +135,6 @@ type SlurpSettingsProps = {
   viewerPersonaId: string | null;
 };
 
-const archetypes = ["ordinary", "eccentric", "crossFandom", "raider", "organicDiscovery", "freeResource"] as const;
 const settingsSections = SLURP_SETTINGS_SECTIONS;
 // Three shipped spice levels. Kept byte-identical to the server presets so the settings surface
 // can tell which level is active and restore one exactly.
@@ -124,61 +152,6 @@ const DEFAULT_SLURP_IMAGE_GENERATION_PROMPT =
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Could not update settings.";
-}
-
-function NumberSetting({
-  value,
-  min,
-  max,
-  onSave,
-}: {
-  value: number;
-  min: number;
-  max: number;
-  onSave: (value: number) => Promise<boolean> | boolean | void;
-}) {
-  const [draft, setDraft] = useState(String(value));
-  useEffect(() => setDraft(String(value)), [value]);
-  const saveQueueRef = useRef(Promise.resolve());
-  const saveGenerationRef = useRef(0);
-  const commit = async (raw = draft, resetInvalid = true) => {
-    const next = Number(raw);
-    if (!raw.trim() || !Number.isInteger(next) || next < min || next > max) {
-      if (resetInvalid) setDraft(String(value));
-      return;
-    }
-    // Serialize saves so a slow older request can't land after a newer one and persist a
-    // stale value; skip a queued save (and its failure recovery) once a later edit has
-    // already superseded it. Compare a generation token, not the value itself — a sequence
-    // like 1 -> 2 -> 1 would otherwise let the first save's failure recovery match the last.
-    // Swallow rejections so one failed save doesn't wedge the queue for every save after it.
-    const saveGeneration = ++saveGenerationRef.current;
-    saveQueueRef.current = saveQueueRef.current.then(async () => {
-      if (saveGenerationRef.current !== saveGeneration) return;
-      try {
-        if ((await onSave(next)) === false && saveGenerationRef.current === saveGeneration) setDraft(String(value));
-      } catch {
-        if (saveGenerationRef.current === saveGeneration) setDraft(String(value));
-      }
-    });
-    await saveQueueRef.current;
-  };
-  return (
-    <input
-      type="number"
-      min={min}
-      max={max}
-      value={draft}
-      onChange={(event) => {
-        const nextDraft = event.target.value;
-        setDraft(nextDraft);
-        void commit(nextDraft, false);
-      }}
-      onBlur={() => void commit()}
-      onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
-      className="h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base outline-none transition-colors focus:border-[var(--noodle-accent)] focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/30 sm:text-sm"
-    />
-  );
 }
 
 // Same row, same highlight as every other Slurp destination.
@@ -302,7 +275,9 @@ export function SlurpSettings({
 }: SlurpSettingsProps) {
   const { t, i18n } = useTranslation();
   const settingsQuery = useSlurpSettings();
+  const settingsDefaultsQuery = useSlurpSettingsDefaults();
   const updateSettings = useUpdateSlurpSettings();
+  const runAutopurge = useRunSlurpAutopurge();
   const section = navigation.section ?? "overview";
   const resetAds = useResetSlurpAds();
   const adPool = useSlurpAdPool();
@@ -342,16 +317,23 @@ export function SlurpSettings({
   const [refreshAccess, setRefreshAccess] = useState<"public" | "locked">("locked");
   const [scheduleCreatorId, setScheduleCreatorId] = useState<string | null>(null);
   const [selectedCreatorId, setSelectedCreatorId] = useState<string | null>(null);
+  // null while select mode is off.
+  const [bulkCreatorIds, setBulkCreatorIds] = useState<Set<string> | null>(null);
+  const bulkUpdateCreators = useBulkUpdateSlurpCreators();
   const [customPaceOpen, setCustomPaceOpen] = useState(false);
   const [adsWorldDraft, setAdsWorldDraft] = useState<string | null>(null);
   const [reactionBankDraft, setReactionBankDraft] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [autopurgeNextDraft, setAutopurgeNextDraft] = useState("");
   useEffect(() => {
     if (settings) {
       if (!generationGuidanceEditorOpen) setGenerationGuidanceDraft(settings.generationGuidance);
       if (!imagePromptEditorOpen) setImagePromptDraft(settings.imageGenerationPrompt);
     }
   }, [generationGuidanceEditorOpen, imagePromptEditorOpen, settings]);
+  useEffect(() => {
+    setAutopurgeNextDraft(settings?.autopurgeNextRunAt ? localDateTimeValue(settings.autopurgeNextRunAt) : "");
+  }, [settings?.autopurgeNextRunAt]);
   const save = async (patch: Partial<SlurpSettings>) => {
     setSaveState("saving");
     try {
@@ -365,6 +347,13 @@ export function SlurpSettings({
     }
   };
   const update = (key: keyof SlurpSettings, value: unknown) => save({ [key]: value } as Partial<SlurpSettings>);
+  // A new retention period restarts the schedule from now, so a shorter period takes effect right away.
+  const saveRetention = (patch: Partial<Pick<SlurpSettings, "autopurgeRetentionValue" | "autopurgeRetentionUnit">>) =>
+    save(
+      settings?.autopurgeEnabled
+        ? { ...patch, autopurgeNextRunAt: nextSlurpAutopurgeRunAt({ ...settings, ...patch }) }
+        : patch,
+    );
   const accountsQuery = useNoodlerAccounts(section === "overview" || section === "creators" || section === "general");
   const imageSettingsQuery = useSlurpImageConnections(
     section === "overview" || section === "images" || section === "creators",
@@ -403,7 +392,11 @@ export function SlurpSettings({
   const adoptSourceIdentity = useAdoptNoodlerSourceIdentity();
   const dismissSourceChanges = useDismissNoodlerSourceChanges();
   const connectionsQuery = useSlurpConnections(
-    section === "overview" || section === "general" || section === "images" || section === "creators",
+    section === "overview" ||
+      section === "general" ||
+      section === "images" ||
+      section === "creators" ||
+      section === "audience",
   );
   const imageConnections = (connectionsQuery.data ?? []).filter(
     (connection) => connection.provider === "image_generation",
@@ -422,6 +415,7 @@ export function SlurpSettings({
     SLURP_GUIDANCE_LEVELS.find((level) => SLURP_GUIDANCE_PRESETS[level] === settings?.generationGuidance) ?? null;
   const imagePromptIsDefault = settings?.imageGenerationPrompt === DEFAULT_SLURP_IMAGE_GENERATION_PROMPT;
   const activityPreset = settings && slurpActivityPresetForSettings(settings);
+  const autopurgeNextTime = Date.parse(autopurgeNextDraft);
   const creators = accountsQuery.data ?? [];
   const autoPostingCreators = automationCreators.filter((creator) => creator.autoPosting.enabled);
   const automaticPublishingActive = settings?.autoPostingScheduleEnabled && autoPostingCreators.length > 0;
@@ -442,6 +436,104 @@ export function SlurpSettings({
     );
     setRefreshAccess("locked");
     setRefreshModalOpen(true);
+  };
+  const [selectedPresetName, setSelectedPresetName] = useState("");
+  const presetImportRef = useRef<HTMLInputElement>(null);
+  const selectedPreset = settings?.promptPresets.find((preset) => preset.name === selectedPresetName) ?? null;
+  const savePromptPreset = async () => {
+    if (!settings) return;
+    const name = (
+      await showPromptDialog({
+        title: t("ui.slurp.settings.presets.nameTitle"),
+        message: t("ui.slurp.settings.presets.nameDetail"),
+        placeholder: selectedPresetName,
+        confirmLabel: t("ui.slurp.settings.presets.save"),
+      })
+    )
+      ?.trim()
+      .slice(0, SLURP_PROMPT_PRESET_NAME_LIMIT);
+    if (!name) return;
+    const saved = await restore(
+      {
+        promptPresets: mergeSlurpPromptPreset(settings.promptPresets, {
+          name,
+          generationGuidance: settings.generationGuidance,
+          imageGenerationPrompt: settings.imageGenerationPrompt,
+        }),
+      },
+      t("ui.slurp.settings.presets.saved"),
+    );
+    if (saved) setSelectedPresetName(name);
+  };
+  const applyPromptPreset = async () => {
+    if (!settings || !selectedPreset) return;
+    const differs =
+      settings.generationGuidance !== selectedPreset.generationGuidance ||
+      settings.imageGenerationPrompt !== selectedPreset.imageGenerationPrompt;
+    // Applying replaces prompts that may have been edited by hand, so ask first when it would change them.
+    if (
+      differs &&
+      !(await showConfirmDialog({
+        title: t("ui.slurp.settings.presets.applyTitle"),
+        message: t("ui.slurp.settings.presets.applyDetail", { name: selectedPreset.name }),
+        confirmLabel: t("ui.slurp.settings.presets.apply"),
+      }))
+    )
+      return;
+    await restore(
+      {
+        generationGuidance: selectedPreset.generationGuidance,
+        imageGenerationPrompt: selectedPreset.imageGenerationPrompt,
+      },
+      t("ui.slurp.settings.presets.applied"),
+    );
+  };
+  const deletePromptPreset = async () => {
+    if (!settings || !selectedPreset) return;
+    const confirmed = await showConfirmDialog({
+      title: t("ui.slurp.settings.presets.deleteTitle"),
+      message: t("ui.slurp.settings.presets.deleteDetail", { name: selectedPreset.name }),
+      confirmLabel: t("ui.slurp.settings.presets.delete"),
+    });
+    if (!confirmed) return;
+    if (await save({ promptPresets: settings.promptPresets.filter((preset) => preset.name !== selectedPreset.name) })) {
+      setSelectedPresetName("");
+    }
+  };
+  const exportPromptPresets = () => {
+    if (!settings) return;
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(exportSlurpPromptPresets(settings.promptPresets), null, 2)], {
+        type: "application/json",
+      }),
+    );
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "marinara-slurp-prompts.json";
+    document.body.append(anchor);
+    anchor.click();
+    window.setTimeout(() => {
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    }, 0);
+  };
+  const importPromptPresets = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !settings) return;
+    try {
+      const result = importSlurpPromptPresets(settings.promptPresets, JSON.parse(await file.text()));
+      if (result.imported === 0) {
+        toast.error(t("ui.slurp.settings.presets.importInvalid"));
+        return;
+      }
+      await restore(
+        { promptPresets: result.presets },
+        t("ui.slurp.settings.presets.imported", { count: result.imported }),
+      );
+    } catch {
+      toast.error(t("ui.slurp.settings.presets.importInvalid"));
+    }
   };
   const restore = async (patch: Partial<SlurpSettings>, message = "Settings saved.") => {
     setSaveState("saving");
@@ -492,6 +584,38 @@ export function SlurpSettings({
     }
   };
 
+  const runAutopurgeNow = async () => {
+    if (!settings) return;
+    try {
+      const confirmed = await showConfirmDialog({
+        title: t("ui.slurp.settings.autopurge.runConfirmTitle"),
+        message: settings.autopurgeKeepPosts
+          ? t(
+              settings.autopurgeIncludeMessageMedia
+                ? "ui.slurp.settings.autopurge.runConfirmMediaOnlyWithMessages"
+                : "ui.slurp.settings.autopurge.runConfirmMediaOnly",
+            )
+          : t(
+              settings.autopurgeIncludeMessageMedia
+                ? "ui.slurp.settings.autopurge.runConfirmPostsWithMessages"
+                : "ui.slurp.settings.autopurge.runConfirmPosts",
+            ),
+        confirmLabel: t("ui.slurp.settings.autopurge.runNow"),
+      });
+      if (!confirmed) return;
+      const result = await runAutopurge.mutateAsync();
+      toast.success(
+        t("ui.slurp.settings.autopurge.runSuccess", {
+          posts: result.deletedPosts,
+          postMedia: result.removedPostMedia,
+          messageMedia: result.removedMessageMedia,
+        }),
+      );
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
+  };
+
   if (settingsQuery.isError)
     return (
       <main className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-sm text-[var(--muted-foreground)]">
@@ -513,6 +637,7 @@ export function SlurpSettings({
         {t("ui.slurp.studio.loading")}
       </main>
     );
+  const audiencePreset = slurpAudiencePresetFor(settings);
 
   return (
     <>
@@ -572,6 +697,40 @@ export function SlurpSettings({
             </nav>
 
             <div className="mt-4 min-w-0 rounded-xl rounded-t-none bg-[linear-gradient(145deg,var(--slurp-surface),color-mix(in_srgb,var(--slurp-violet)_4%,var(--slurp-surface)))] p-3 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] md:mt-0 md:rounded-t-xl md:p-5 lg:p-6">
+              {settings &&
+                settingsDefaultsQuery.data &&
+                isSlurpResettableSection(section) &&
+                (() => {
+                  const defaults = settingsDefaultsQuery.data;
+                  const changed = changedSlurpSettingKeys(settings, defaults, section);
+                  if (changed.length === 0) return null;
+                  return (
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--border)] px-3 py-2">
+                      <p className="text-xs text-[var(--muted-foreground)]">
+                        {t("ui.slurp.settings.reset.changed", { count: changed.length })}
+                      </p>
+                      <button
+                        type="button"
+                        disabled={updateSettings.isPending}
+                        onClick={() =>
+                          void showConfirmDialog({
+                            title: t("ui.slurp.settings.reset.confirmTitle"),
+                            message: t("ui.slurp.settings.reset.confirmDetail"),
+                            confirmLabel: t("ui.slurp.settings.reset.button"),
+                          })
+                            .then((confirmed) => {
+                              if (confirmed) void save(slurpSettingsResetPatch(settings, defaults, section));
+                            })
+                            .catch((error) => toast.error(errorMessage(error)))
+                        }
+                        className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+                      >
+                        <RefreshCw size={14} />
+                        {t("ui.slurp.settings.reset.button")}
+                      </button>
+                    </div>
+                  );
+                })()}
               {section === "overview" && (
                 <div className="space-y-4">
                   <section className="relative isolate overflow-hidden rounded-xl bg-[var(--slurp-hero)] p-4 text-white shadow-[0_30px_70px_-38px_rgba(184,28,102,0.9)] sm:p-5">
@@ -674,7 +833,7 @@ export function SlurpSettings({
                           : t("ui.slurp.settings.overview.off")
                       }
                       details={[
-                        t("ui.slurp.settings.overview.audienceRuns", { count: settings.fanActivityRunsPerDay }),
+                        t(`ui.slurp.settings.simulation.presets.${slurpAudiencePresetFor(settings)}`),
                         t("ui.slurp.settings.overview.audienceActions"),
                       ]}
                       onClick={() => onNavigate({ ...navigation, section: "audience" })}
@@ -797,23 +956,6 @@ export function SlurpSettings({
                       </select>
                     </Field>
                   )}
-                  {settings.autoPostingScheduleEnabled && (
-                    <Field label={t("ui.slurp.settings.projectRate")} detail={t("ui.slurp.settings.projectRateDetail")}>
-                      <select
-                        value={settings.projectRate}
-                        disabled={updateSettings.isPending}
-                        onChange={(event) =>
-                          void update("projectRate", event.target.value as SlurpSettings["projectRate"])
-                        }
-                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
-                      >
-                        <option value="off">{t("ui.slurp.settings.projectRateOff")}</option>
-                        <option value="rare">{t("ui.slurp.settings.projectRateRare")}</option>
-                        <option value="regular">{t("ui.slurp.settings.projectRateRegular")}</option>
-                        <option value="often">{t("ui.slurp.settings.projectRateOften")}</option>
-                      </select>
-                    </Field>
-                  )}
                   {settings.autoPostingScheduleEnabled ? (
                     <Toggle
                       label={t("ui.slurp.settings.quietHours")}
@@ -827,6 +969,54 @@ export function SlurpSettings({
                       detail={t("ui.slurp.settings.publishing.manualDetail")}
                     />
                   )}
+                  <div className="space-y-3">
+                    <SectionTitle
+                      title={t("ui.slurp.settings.carryover.title")}
+                      detail={t("ui.slurp.settings.carryover.detail")}
+                    />
+                    {(["conversation", "roleplay", "game"] as const).map((mode) => (
+                      <Toggle
+                        key={mode}
+                        compact
+                        label={t(`ui.slurp.settings.carryover.${mode}`)}
+                        value={settings.carryoverModes.includes(mode)}
+                        onChange={(value) =>
+                          update(
+                            "carryoverModes",
+                            value
+                              ? [...settings.carryoverModes.filter((entry) => entry !== mode), mode]
+                              : settings.carryoverModes.filter((entry) => entry !== mode),
+                          )
+                        }
+                      />
+                    ))}
+                    {settings.carryoverModes.length > 0 && (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Field
+                          label={t("ui.slurp.settings.carryover.hours")}
+                          detail={t("ui.slurp.settings.carryover.hoursDetail")}
+                        >
+                          <NumberSetting
+                            value={settings.carryoverHours}
+                            min={1}
+                            max={24 * 365}
+                            onSave={(value) => save({ carryoverHours: value })}
+                          />
+                        </Field>
+                        <Field
+                          label={t("ui.slurp.settings.carryover.maxItems")}
+                          detail={t("ui.slurp.settings.carryover.maxItemsDetail")}
+                        >
+                          <NumberSetting
+                            value={settings.carryoverMaxItems}
+                            min={1}
+                            max={100}
+                            onSave={(value) => save({ carryoverMaxItems: value })}
+                          />
+                        </Field>
+                      </div>
+                    )}
+                  </div>
                   <details className="group rounded-xl bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
                     <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 text-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] [&::-webkit-details-marker]:hidden">
                       <FileText size={17} className="text-[var(--slurp-violet)]" aria-hidden="true" />
@@ -879,6 +1069,18 @@ export function SlurpSettings({
                             ))}
                         </select>
                       </Field>
+                      <Toggle
+                        label={t("ui.slurp.settings.prompts.lorebookContext")}
+                        detail={t("ui.slurp.settings.prompts.lorebookContextDetail")}
+                        value={settings.enableLorebookContext}
+                        onChange={(value) => update("enableLorebookContext", value)}
+                      />
+                      <Toggle
+                        label={t("ui.slurp.settings.prompts.professorMari")}
+                        detail={t("ui.slurp.settings.prompts.professorMariDetail")}
+                        value={settings.professorMariCreatorSource}
+                        onChange={(value) => update("professorMariCreatorSource", value)}
+                      />
                       <Field
                         label={t("ui.slurp.settings.prompts.spice")}
                         detail={
@@ -924,6 +1126,78 @@ export function SlurpSettings({
                           )
                         }
                       />
+                      <Field
+                        label={t("ui.slurp.settings.presets.title")}
+                        detail={t("ui.slurp.settings.presets.detail")}
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <select
+                            value={selectedPreset ? selectedPresetName : ""}
+                            disabled={settings.promptPresets.length === 0}
+                            onChange={(event) => setSelectedPresetName(event.target.value)}
+                            aria-label={t("ui.slurp.settings.presets.choose")}
+                            className="min-h-11 min-w-0 flex-1 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                          >
+                            <option value="">
+                              {settings.promptPresets.length > 0
+                                ? t("ui.slurp.settings.presets.choose")
+                                : t("ui.slurp.settings.presets.empty")}
+                            </option>
+                            {settings.promptPresets.map((preset) => (
+                              <option key={preset.name} value={preset.name}>
+                                {preset.name}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            disabled={!selectedPreset || updateSettings.isPending}
+                            onClick={() => void applyPromptPreset()}
+                            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+                          >
+                            {t("ui.slurp.settings.presets.apply")}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!selectedPreset || updateSettings.isPending}
+                            onClick={() => void deletePromptPreset()}
+                            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+                          >
+                            {t("ui.slurp.settings.presets.delete")}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={updateSettings.isPending}
+                            onClick={() => void savePromptPreset()}
+                            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+                          >
+                            {t("ui.slurp.settings.presets.save")}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={settings.promptPresets.length === 0}
+                            onClick={exportPromptPresets}
+                            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+                          >
+                            {t("ui.slurp.settings.presets.export")}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={updateSettings.isPending}
+                            onClick={() => presetImportRef.current?.click()}
+                            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+                          >
+                            {t("ui.slurp.settings.presets.import")}
+                          </button>
+                          <input
+                            ref={presetImportRef}
+                            type="file"
+                            accept="application/json,.json"
+                            className="hidden"
+                            onChange={(event) => void importPromptPresets(event)}
+                          />
+                        </div>
+                      </Field>
                     </div>
                   </details>
                 </div>
@@ -952,6 +1226,34 @@ export function SlurpSettings({
                       <option value="vision">{t("ui.slurp.settings.images.contextVision")}</option>
                     </select>
                   </Field>
+                  {settings.imageContextMode !== "imagePrompt" && (
+                    <Field
+                      label={t("ui.slurp.settings.images.contextConnection")}
+                      detail={t("ui.slurp.settings.images.contextConnectionDetail")}
+                    >
+                      <select
+                        value={settings.imageContextConnectionId ?? ""}
+                        disabled={connectionsQuery.isLoading || connectionsQuery.isError || updateSettings.isPending}
+                        onChange={(event) => void update("imageContextConnectionId", event.target.value || null)}
+                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                      >
+                        <option value="">{t("ui.slurp.settings.images.contextConnectionText")}</option>
+                        {(connectionsQuery.data ?? [])
+                          .filter((connection) => connection.provider !== "image_generation")
+                          .map((connection) => (
+                            <option key={connection.id} value={connection.id}>
+                              {connection.name ?? connection.model ?? connection.id}
+                            </option>
+                          ))}
+                      </select>
+                    </Field>
+                  )}
+                  <Toggle
+                    label={t("ui.slurp.settings.images.galleryFallback")}
+                    detail={t("ui.slurp.settings.images.galleryFallbackDetail")}
+                    value={settings.allowGalleryImageAttachments}
+                    onChange={(value) => update("allowGalleryImageAttachments", value)}
+                  />
                   <div
                     className={`flex items-start gap-3 rounded-xl p-4 ring-1 ring-inset ${imagesReady ? "bg-[color-mix(in_srgb,var(--slurp-success)_8%,var(--slurp-surface-raised))] ring-[var(--slurp-success)]/25" : "bg-[color-mix(in_srgb,var(--slurp-warning)_8%,var(--slurp-surface-raised))] ring-[var(--slurp-warning)]/25"}`}
                   >
@@ -1116,6 +1418,184 @@ export function SlurpSettings({
                       />
                     </div>
                   </details>
+                </div>
+              )}
+
+              {section === "tags" && (
+                <SlurpTagsSettings
+                  tags={settings.discoveryTags}
+                  saving={updateSettings.isPending}
+                  onSave={(tags) => update("discoveryTags", tags)}
+                />
+              )}
+
+              {section === "arcs" && (
+                <div className="space-y-6">
+                  <SectionTitle title={t("ui.slurp.settings.arcs.title")} detail={t("ui.slurp.settings.arcs.detail")} />
+                  <GuidanceBox
+                    title={t("ui.slurp.settings.arcs.guideTitle", { defaultValue: "Set the story rules once" })}
+                    detail={t("ui.slurp.settings.arcs.guideDetail", {
+                      defaultValue:
+                        "These settings apply to every Creator. Use the Creator arc settings to make one profile different.",
+                    })}
+                  />
+                  <SettingsGroup title={t("ui.slurp.settings.arcs.behaviorGroup", { defaultValue: "Story behavior" })}>
+                    <Field label={t("ui.slurp.settings.projectRate")} detail={t("ui.slurp.settings.projectRateDetail")}>
+                      <select
+                        value={settings.projectRate}
+                        disabled={updateSettings.isPending}
+                        onChange={(event) =>
+                          void update("projectRate", event.target.value as SlurpSettings["projectRate"])
+                        }
+                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                      >
+                        <option value="off">{t("ui.slurp.settings.projectRateOff")}</option>
+                        <option value="rare">{t("ui.slurp.settings.projectRateRare")}</option>
+                        <option value="regular">{t("ui.slurp.settings.projectRateRegular")}</option>
+                        <option value="often">{t("ui.slurp.settings.projectRateOften")}</option>
+                      </select>
+                    </Field>
+                    <Field label={t("ui.slurp.settings.arcPace")} detail={t("ui.slurp.settings.arcPaceDetail")}>
+                      <select
+                        value={settings.arcPace}
+                        disabled={updateSettings.isPending}
+                        onChange={(event) => void update("arcPace", event.target.value as SlurpSettings["arcPace"])}
+                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                      >
+                        <option value="slow">{t("ui.slurp.settings.arcPaceSlow")}</option>
+                        <option value="normal">{t("ui.slurp.settings.arcPaceNormal")}</option>
+                        <option value="fast">{t("ui.slurp.settings.arcPaceFast")}</option>
+                      </select>
+                    </Field>
+                    <Field
+                      label={t("ui.slurp.settings.arcPollHours")}
+                      detail={t("ui.slurp.settings.arcPollHoursDetail")}
+                    >
+                      <NumberSetting
+                        value={settings.arcPollHours}
+                        min={1}
+                        max={168}
+                        onSave={(value) => save({ arcPollHours: value })}
+                      />
+                    </Field>
+                    <Field
+                      label={t("ui.slurp.settings.arcStatEffects")}
+                      detail={t("ui.slurp.settings.arcStatEffectsDetail")}
+                    >
+                      <select
+                        value={settings.arcStatEffects}
+                        disabled={updateSettings.isPending}
+                        onChange={(event) =>
+                          void update("arcStatEffects", event.target.value as SlurpSettings["arcStatEffects"])
+                        }
+                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                      >
+                        <option value="off">{t("ui.slurp.settings.arcStatEffectsOff")}</option>
+                        <option value="small">{t("ui.slurp.settings.arcStatEffectsSmall")}</option>
+                        <option value="big">{t("ui.slurp.settings.arcStatEffectsBig")}</option>
+                      </select>
+                    </Field>
+                    <Toggle
+                      label={t("ui.slurp.settings.arcAffectsMood")}
+                      detail={t("ui.slurp.settings.arcAffectsMoodDetail")}
+                      value={settings.arcAffectsMood}
+                      onChange={(value) => update("arcAffectsMood", value)}
+                    />
+                    <Toggle
+                      label={t("ui.slurp.settings.arcDirectorMode")}
+                      detail={t("ui.slurp.settings.arcDirectorModeDetail")}
+                      value={settings.arcDirectorMode}
+                      onChange={(value) => update("arcDirectorMode", value)}
+                    />
+                    <Toggle
+                      label={t("ui.slurp.settings.arcFanReactions")}
+                      detail={t("ui.slurp.settings.arcFanReactionsDetail")}
+                      value={settings.arcFanReactions}
+                      onChange={(value) => update("arcFanReactions", value)}
+                    />
+                    <Toggle
+                      label={t("ui.slurp.settings.arcCrossovers")}
+                      detail={t("ui.slurp.settings.arcCrossoversDetail")}
+                      value={settings.arcCrossovers}
+                      onChange={(value) => update("arcCrossovers", value)}
+                    />
+                  </SettingsGroup>
+                  <SettingsGroup title={t("ui.slurp.settings.arcs.automaticGroup", { defaultValue: "Automatic arcs" })}>
+                    <Field label={t("ui.slurp.settings.arcAutoMode")} detail={t("ui.slurp.settings.arcAutoModeDetail")}>
+                      <select
+                        value={settings.arcAutoMode}
+                        disabled={updateSettings.isPending}
+                        onChange={(event) =>
+                          void update("arcAutoMode", event.target.value as SlurpSettings["arcAutoMode"])
+                        }
+                        className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                      >
+                        <option value="off">{t("ui.slurp.settings.arcAutoModeOff")}</option>
+                        <option value="suggest">{t("ui.slurp.settings.arcAutoModeSuggest")}</option>
+                        <option value="auto">{t("ui.slurp.settings.arcAutoModeAuto")}</option>
+                      </select>
+                    </Field>
+                    {settings.arcAutoMode !== "off" && (
+                      <>
+                        <Field label={t("ui.slurp.settings.arcSource")} detail={t("ui.slurp.settings.arcSourceDetail")}>
+                          <select
+                            value={settings.arcSource}
+                            disabled={updateSettings.isPending}
+                            onChange={(event) =>
+                              void update("arcSource", event.target.value as SlurpSettings["arcSource"])
+                            }
+                            className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                          >
+                            <option value="library">{t("ui.slurp.projects.config.sourceLibrary")}</option>
+                            <option value="generated">{t("ui.slurp.projects.config.sourceGenerated")}</option>
+                            <option value="mixed">{t("ui.slurp.projects.config.sourceMixed")}</option>
+                          </select>
+                        </Field>
+                        <Field
+                          label={t("ui.slurp.settings.arcCooldownWeeks")}
+                          detail={t("ui.slurp.settings.arcCooldownWeeksDetail")}
+                        >
+                          <NumberSetting
+                            value={settings.arcCooldownWeeks}
+                            min={1}
+                            max={8}
+                            onSave={(value) => save({ arcCooldownWeeks: value })}
+                          />
+                        </Field>
+                        <Field
+                          label={t("ui.slurp.settings.arcMaxConcurrentAuto")}
+                          detail={t("ui.slurp.settings.arcMaxConcurrentAutoDetail")}
+                        >
+                          <NumberSetting
+                            value={settings.arcMaxConcurrentAuto}
+                            min={1}
+                            max={20}
+                            onSave={(value) => save({ arcMaxConcurrentAuto: value })}
+                          />
+                        </Field>
+                      </>
+                    )}
+                  </SettingsGroup>
+                  <div className="space-y-4 border-t border-[var(--slurp-outline)] pt-5">
+                    <div>
+                      <h3 className="text-base font-black">
+                        {t("ui.slurp.settings.arcLibrary", { defaultValue: "Arc library" })}
+                      </h3>
+                      <p className="mt-1 max-w-2xl text-xs leading-5 text-[var(--muted-foreground)]">
+                        {t("ui.slurp.settings.arcLibraryDetail", {
+                          defaultValue: "Reusable story patterns for new arcs. Running arcs keep their current plan.",
+                        })}
+                      </p>
+                    </div>
+                    <ArcLibraryEditor
+                      library={settings.arcLibrary}
+                      tags={settings.discoveryTags.map((entry) => entry.tag)}
+                      busy={updateSettings.isPending}
+                      creatorAccountId={selectedCreatorId}
+                      personaId={viewerPersonaId}
+                      onChange={(arcLibrary) => update("arcLibrary", arcLibrary)}
+                    />
+                  </div>
                 </div>
               )}
 
@@ -1330,15 +1810,63 @@ export function SlurpSettings({
                       title={t("ui.slurp.settings.creators.title")}
                       detail={t("ui.slurp.settings.creators.detail")}
                     />
-                    <button
-                      type="button"
-                      onClick={onAddCreators}
-                      className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--noodle-accent)]/40 px-3 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10"
-                    >
-                      <UsersRound size={14} />
-                      {t("ui.slurp.settings.creators.add")}
-                    </button>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        aria-pressed={bulkCreatorIds !== null}
+                        onClick={() => setBulkCreatorIds((ids) => (ids ? null : new Set()))}
+                        className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)]"
+                      >
+                        <ListChecks size={14} aria-hidden="true" />
+                        {t(
+                          bulkCreatorIds
+                            ? "ui.slurp.settings.creators.selectDone"
+                            : "ui.slurp.settings.creators.select",
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onAddCreators}
+                        className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--noodle-accent)]/40 px-3 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10"
+                      >
+                        <UsersRound size={14} />
+                        {t("ui.slurp.settings.creators.add")}
+                      </button>
+                    </div>
                   </div>
+                  {bulkCreatorIds && accountsQuery.data?.length ? (
+                    <div className="space-y-3">
+                      <div
+                        className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] p-3 text-xs"
+                        aria-live="polite"
+                      >
+                        <span className="me-auto font-semibold">
+                          {t("ui.slurp.settings.creators.selectedCount", { count: bulkCreatorIds.size })}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setBulkCreatorIds(new Set(accountsQuery.data.map((creator) => creator.id)))}
+                          className="min-h-10 rounded-lg border border-[var(--border)] px-3 font-semibold hover:bg-[var(--accent)]"
+                        >
+                          {t("ui.slurp.settings.creators.selectAll")}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={bulkCreatorIds.size === 0}
+                          onClick={() => setBulkCreatorIds(new Set())}
+                          className="min-h-10 rounded-lg border border-[var(--border)] px-3 font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+                        >
+                          {t("ui.slurp.settings.creators.bulk.clear")}
+                        </button>
+                      </div>
+                      {bulkCreatorIds.size > 0 && (
+                        <SlurpCreatorBulkEdit
+                          creators={accountsQuery.data.filter((creator) => bulkCreatorIds.has(creator.id))}
+                          tagOptions={settings.discoveryTags.map((entry) => entry.tag)}
+                        />
+                      )}
+                    </div>
+                  ) : null}
                   {accountsQuery.isLoading ? (
                     <div className="flex justify-center py-10 text-[var(--muted-foreground)]" role="status">
                       <Loader2 size={20} className="animate-spin" />
@@ -1364,15 +1892,35 @@ export function SlurpSettings({
                           const status = reserveStatusQuery.data?.creators.find(
                             (entry) => entry.accountId === creator.id,
                           );
-                          const selected = creator.id === selectedCreator.id;
+                          const selected = bulkCreatorIds
+                            ? bulkCreatorIds.has(creator.id)
+                            : creator.id === selectedCreator.id;
                           return (
                             <button
                               key={creator.id}
                               type="button"
                               aria-pressed={selected}
-                              onClick={() => setSelectedCreatorId(creator.id)}
+                              onClick={() =>
+                                bulkCreatorIds
+                                  ? setBulkCreatorIds((ids) => {
+                                      const next = new Set(ids ?? []);
+                                      if (next.has(creator.id)) next.delete(creator.id);
+                                      else next.add(creator.id);
+                                      return next;
+                                    })
+                                  : setSelectedCreatorId(creator.id)
+                              }
                               className={`flex min-h-20 w-full snap-start items-center gap-3 rounded-xl bg-[var(--slurp-surface-raised,var(--background))] px-3 py-3 text-left shadow-sm ring-1 ring-inset transition-[background-color,box-shadow,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 xl:rounded-none xl:border-b xl:border-[var(--border)] xl:shadow-none xl:last:border-b-0 ${selected ? "ring-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10 xl:ring-0" : "ring-[var(--border)] hover:bg-[var(--accent)] xl:ring-0"}`}
                             >
+                              {bulkCreatorIds && (
+                                <CheckCircle2
+                                  size={18}
+                                  aria-hidden="true"
+                                  className={
+                                    selected ? "text-[var(--noodle-accent)]" : "text-[var(--muted-foreground)]/40"
+                                  }
+                                />
+                              )}
                               <Avatar account={creator} size="sm" />
                               <span className="min-w-0 flex-1">
                                 <span className="block truncate text-sm font-bold">{creator.displayName}</span>
@@ -1447,6 +1995,22 @@ export function SlurpSettings({
                         </div>
 
                         <div className="space-y-5 p-4 sm:p-5">
+                          {/* Quick edit: each change saves at once through the same route as bulk edit. */}
+                          <SlurpDiscoveryProfileEditor
+                            key={selectedCreator.id}
+                            gender={selectedCreator.gender ?? null}
+                            tags={selectedCreator.tags ?? []}
+                            disabled={bulkUpdateCreators.isPending}
+                            onChange={(patch) =>
+                              bulkUpdateCreators.mutate(
+                                {
+                                  ids: [selectedCreator.id],
+                                  patch: patch.tags ? { tags: patch.tags } : { gender: patch.gender ?? null },
+                                },
+                                { onError: (error) => toast.error(errorMessage(error)) },
+                              )
+                            }
+                          />
                           <SettingsGroup title={t("ui.slurp.settings.creators.postingGroup")}>
                             {!personaCreator(selectedCreator) ? (
                               <Toggle
@@ -1514,6 +2078,36 @@ export function SlurpSettings({
                                 ))}
                               </select>
                             </Field>
+                            {selectedCreator.sourceAccountId && !personaCreator(selectedCreator) && (
+                              <Field
+                                label={t("ui.slurp.settings.creators.imageInstructions")}
+                                detail={t("ui.slurp.settings.creators.imageInstructionsDetail")}
+                              >
+                                <select
+                                  disabled={updateSettings.isPending}
+                                  value={String(
+                                    settings.characterImageInstructions[selectedCreator.sourceAccountId] ?? "engine",
+                                  )}
+                                  onChange={(event) => {
+                                    const characterId = selectedCreator.sourceAccountId!;
+                                    const { [characterId]: _previous, ...rest } = settings.characterImageInstructions;
+                                    void update(
+                                      "characterImageInstructions",
+                                      event.target.value === "engine"
+                                        ? rest
+                                        : { ...rest, [characterId]: event.target.value === "true" },
+                                    );
+                                  }}
+                                  className="min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50 sm:text-sm"
+                                >
+                                  <option value="engine">
+                                    {t("ui.slurp.settings.creators.imageInstructionsEngine")}
+                                  </option>
+                                  <option value="true">{t("ui.slurp.settings.creators.imageInstructionsOn")}</option>
+                                  <option value="false">{t("ui.slurp.settings.creators.imageInstructionsOff")}</option>
+                                </select>
+                              </Field>
+                            )}
                           </SettingsGroup>
 
                           {/* The message policy and prices had working, ownership-gated endpoints
@@ -1699,6 +2293,34 @@ export function SlurpSettings({
                       onSave={(value) => update("walletSubscriptionCost", value)}
                     />
                   </Field>
+                  <Toggle
+                    label={t("ui.slurp.settings.wallet.pricingDynamicCharacters", {
+                      defaultValue: "Character Creators set their own prices",
+                    })}
+                    detail={t("ui.slurp.settings.wallet.pricingDynamicCharactersDetail", {
+                      defaultValue:
+                        "Once a week, each character Creator moves its subscription, locked post, and commission prices with its popularity. Current subscribers keep their price.",
+                    })}
+                    value={settings.pricingDynamicCharacters}
+                    onChange={(value) => update("pricingDynamicCharacters", value)}
+                  />
+                  {settings.pricingDynamicCharacters && (
+                    <Field
+                      label={t("ui.slurp.settings.wallet.pricingMaxWeeklyChange", {
+                        defaultValue: "Largest weekly price change, %",
+                      })}
+                      detail={t("ui.slurp.settings.wallet.pricingMaxWeeklyChangeDetail", {
+                        defaultValue: "How far one weekly adjustment may move a price. Zero freezes prices.",
+                      })}
+                    >
+                      <NumberSetting
+                        value={settings.pricingMaxWeeklyChangePercent}
+                        min={0}
+                        max={100}
+                        onSave={(value) => update("pricingMaxWeeklyChangePercent", value)}
+                      />
+                    </Field>
+                  )}
                   <Field
                     label={t("ui.slurp.settings.wallet.stipendFloor", { defaultValue: "Daily top-up floor" })}
                     detail={t("ui.slurp.settings.wallet.stipendFloorDetail", {
@@ -2127,7 +2749,7 @@ export function SlurpSettings({
                             className="flex items-start gap-3 rounded-lg bg-[var(--slurp-surface-raised)] p-3 ring-1 ring-inset ring-[var(--slurp-outline)]"
                           >
                             {ad.imageUrl ? (
-                              <img
+                              <SlurpMediaImg
                                 src={ad.imageUrl}
                                 alt=""
                                 loading="lazy"
@@ -2409,6 +3031,132 @@ export function SlurpSettings({
                 </div>
               )}
 
+              {section === "autopurge" && (
+                <div className="space-y-5">
+                  <SectionTitle
+                    title={t("ui.slurp.settings.autopurge.title")}
+                    detail={t("ui.slurp.settings.autopurge.detail")}
+                  />
+                  <GuidanceBox
+                    title={t("ui.slurp.settings.autopurge.localOnly")}
+                    detail={t("ui.slurp.settings.autopurge.localOnlyDetail")}
+                  />
+
+                  <SettingsGroup title={t("ui.slurp.settings.autopurge.retentionGroup")}>
+                    <Field
+                      label={t("ui.slurp.settings.autopurge.olderThan")}
+                      detail={t("ui.slurp.settings.autopurge.olderThanDetail")}
+                    >
+                      <div className="grid gap-2 sm:grid-cols-[minmax(8rem,1fr)_minmax(9rem,1fr)]">
+                        <NumberSetting
+                          value={settings.autopurgeRetentionValue}
+                          min={1}
+                          max={365}
+                          onSave={(value) => saveRetention({ autopurgeRetentionValue: value })}
+                        />
+                        <select
+                          aria-label={t("ui.slurp.settings.autopurge.unit")}
+                          value={settings.autopurgeRetentionUnit}
+                          disabled={updateSettings.isPending}
+                          onChange={(event) =>
+                            void saveRetention({
+                              autopurgeRetentionUnit: event.target.value as SlurpSettings["autopurgeRetentionUnit"],
+                            })
+                          }
+                          className="h-11 min-w-0 rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                        >
+                          {(["days", "weeks", "months"] as const).map((unit) => (
+                            <option key={unit} value={unit}>
+                              {t(`ui.slurp.settings.autopurge.units.${unit}`)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </Field>
+                    <Toggle
+                      label={t("ui.slurp.settings.autopurge.keepPosts")}
+                      detail={t("ui.slurp.settings.autopurge.keepPostsDetail")}
+                      value={settings.autopurgeKeepPosts}
+                      onChange={(value) => void update("autopurgeKeepPosts", value)}
+                    />
+                    <Toggle
+                      label={t("ui.slurp.settings.autopurge.includeMessageMedia")}
+                      detail={t("ui.slurp.settings.autopurge.includeMessageMediaDetail")}
+                      value={settings.autopurgeIncludeMessageMedia}
+                      onChange={(value) => void update("autopurgeIncludeMessageMedia", value)}
+                    />
+                  </SettingsGroup>
+
+                  <SettingsGroup title={t("ui.slurp.settings.autopurge.scheduleGroup")}>
+                    <Toggle
+                      label={t("ui.slurp.settings.autopurge.schedule")}
+                      detail={t("ui.slurp.settings.autopurge.scheduleDetail")}
+                      value={settings.autopurgeEnabled}
+                      onChange={(enabled) => {
+                        const existing = settings.autopurgeNextRunAt;
+                        const nextRunAt =
+                          enabled && (!existing || Date.parse(existing) <= Date.now())
+                            ? nextSlurpAutopurgeRunAt(settings)
+                            : existing;
+                        void save({ autopurgeEnabled: enabled, autopurgeNextRunAt: enabled ? nextRunAt : null });
+                      }}
+                    />
+                    {settings.autopurgeEnabled && (
+                      <Field
+                        label={t("ui.slurp.settings.autopurge.nextRun")}
+                        detail={t("ui.slurp.settings.autopurge.nextRunDetail")}
+                      >
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <input
+                            type="datetime-local"
+                            value={autopurgeNextDraft}
+                            min={localDateTimeValue(new Date(Date.now() + 60_000).toISOString())}
+                            onChange={(event) => setAutopurgeNextDraft(event.target.value)}
+                            className="min-h-11 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--slurp-canvas,var(--background))] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] sm:text-sm"
+                          />
+                          <button
+                            type="button"
+                            disabled={
+                              updateSettings.isPending ||
+                              !autopurgeNextDraft ||
+                              !Number.isFinite(autopurgeNextTime) ||
+                              autopurgeNextTime <= Date.now()
+                            }
+                            onClick={() => void save({ autopurgeNextRunAt: new Date(autopurgeNextTime).toISOString() })}
+                            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--slurp-outline)] px-4 text-sm font-bold transition-[background-color,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:opacity-50"
+                          >
+                            <Save size={15} aria-hidden="true" />
+                            {t("ui.slurp.settings.autopurge.saveNextRun")}
+                          </button>
+                        </div>
+                      </Field>
+                    )}
+                  </SettingsGroup>
+
+                  <section className="flex flex-col gap-4 rounded-xl bg-[var(--slurp-surface-raised)] p-4 ring-1 ring-inset ring-[var(--slurp-warning)]/35 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+                    <div>
+                      <h3 className="text-sm font-bold">{t("ui.slurp.settings.autopurge.runNowTitle")}</h3>
+                      <p className="mt-1 max-w-2xl text-xs leading-5 text-[var(--slurp-muted)]">
+                        {t("ui.slurp.settings.autopurge.runNowDetail")}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={runAutopurge.isPending}
+                      onClick={() => void runAutopurgeNow()}
+                      className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-[var(--noodle-accent-foreground)] transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:opacity-50"
+                    >
+                      {runAutopurge.isPending ? (
+                        <Loader2 size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                      ) : (
+                        <Trash2 size={15} aria-hidden="true" />
+                      )}
+                      {t("ui.slurp.settings.autopurge.runNow")}
+                    </button>
+                  </section>
+                </div>
+              )}
+
               {section === "advanced" && (
                 <div className="space-y-5">
                   <SectionTitle
@@ -2540,13 +3288,15 @@ export function SlurpSettings({
                       type="button"
                       disabled={deleteAllData.isPending}
                       onClick={() =>
-                        void showConfirmDialog({
+                        // Nothing here can be undone, so a stray click on a default button is not enough.
+                        void showPromptDialog({
                           title: t("ui.slurp.settings.advanced.deleteAllConfirmTitle"),
-                          message: t("ui.slurp.settings.advanced.deleteAllConfirmDetail"),
+                          message: `${t("ui.slurp.settings.advanced.deleteAllConfirmDetail")}\n\n${t("ui.slurp.settings.advanced.deleteAllTypeToConfirm")}`,
+                          placeholder: "DELETE",
                           confirmLabel: t("ui.slurp.settings.advanced.deleteAllButton"),
                         })
-                          .then((confirmed) => {
-                            if (!confirmed) return;
+                          .then((typed) => {
+                            if (typed?.trim() !== "DELETE") return;
                             deleteAllData.mutate(undefined, {
                               onSuccess: () => toast.success(t("ui.slurp.settings.advanced.deleteAllSuccess")),
                               onError: (error) => toast.error(errorMessage(error)),
@@ -2619,15 +3369,169 @@ export function SlurpSettings({
                       {t("ui.slurp.settings.audience.refresh")}
                     </button>
                   </div>
-                  <Toggle
-                    label={t("ui.slurp.settings.audience.enabled")}
-                    detail={t("ui.slurp.settings.audience.enabledDetail")}
-                    value={settings.fanActivityEnabled}
-                    onChange={(value) => update("fanActivityEnabled", value)}
+                  <p className="text-xs text-[var(--muted-foreground)]" aria-live="polite">
+                    {fanStatusQuery.isError
+                      ? t("ui.slurp.settings.audience.statusError")
+                      : fanStatusQuery.data
+                        ? t("ui.slurp.settings.audience.statusUsed", {
+                            used: fanStatusQuery.data.usedRuns,
+                            limit: fanStatusQuery.data.runLimit,
+                          })
+                        : t("ui.slurp.settings.audience.statusLoading")}
+                  </p>
+                  <ChoiceRow
+                    title={t("ui.slurp.settings.audience.presetTitle")}
+                    detail={
+                      audiencePreset === "custom"
+                        ? t("ui.slurp.settings.audience.presetCustom")
+                        : t(`ui.slurp.settings.simulation.presetDetail.${audiencePreset}`)
+                    }
+                    options={SLURP_AUDIENCE_PRESETS.map((preset) => ({
+                      value: preset,
+                      label: t(`ui.slurp.settings.simulation.presets.${preset}`),
+                    }))}
+                    value={audiencePreset}
+                    onChange={(preset) => void save(slurpAudiencePresetPatch(preset, settings))}
+                    extra={
+                      audiencePreset === "custom" ? (
+                        <span className="min-h-10 inline-flex items-center rounded-lg border border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10 px-3 text-xs font-semibold text-[var(--noodle-accent)]">
+                          {t("ui.slurp.settings.simulation.presets.custom")}
+                        </span>
+                      ) : null
+                    }
                   />
-                  {settings.fanActivityEnabled ? (
-                    <div className="space-y-4">
-                      <div className="grid gap-4 sm:grid-cols-2">
+                  <ChoiceRow
+                    title={t("ui.slurp.settings.audience.scaleTitle")}
+                    detail={t("ui.slurp.settings.audience.scaleDetail")}
+                    options={(["intimate", "normal", "large"] as const).map((level) => ({
+                      value: level,
+                      label: t(`ui.slurp.settings.audience.scale.${level}`),
+                    }))}
+                    value={settings.platformScale}
+                    onChange={(level) => update("platformScale", level)}
+                  />
+                  <ChoiceRow
+                    title={t("ui.slurp.settings.audience.toneTitle")}
+                    detail={t("ui.slurp.settings.audience.toneDetail")}
+                    options={(["warm", "mixed", "unfiltered"] as const).map((tone) => ({
+                      value: tone,
+                      label: t(`ui.slurp.settings.audience.tone.${tone}`),
+                    }))}
+                    value={settings.audienceTone}
+                    onChange={(tone) => update("audienceTone", tone)}
+                  />
+
+                  <details className="group rounded-xl bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
+                    <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 px-4 py-2 text-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] [&::-webkit-details-marker]:hidden">
+                      <span className="min-w-0 flex-1">
+                        <span className="block">{t("ui.slurp.settings.audience.fanTypesTitle")}</span>
+                        <span className="block text-xs font-normal text-[var(--muted-foreground)]">
+                          {t("ui.slurp.settings.audience.fanTypesSummary", {
+                            enabled: settings.fanTypes.filter((type) => type.enabled).length,
+                            count: settings.fanTypes.length,
+                          })}
+                        </span>
+                      </span>
+                      <ChevronRight
+                        size={17}
+                        className="transition-transform group-open:rotate-90 rtl:rotate-180"
+                        aria-hidden="true"
+                      />
+                    </summary>
+                    <div className="space-y-5 border-t border-[var(--slurp-outline)] p-4 sm:p-5">
+                      <AmbientProfilesPanel
+                        allowRandomUsers={settings.allowRandomUsers}
+                        onAllowRandomUsersChange={(value) => update("allowRandomUsers", value)}
+                      />
+                      <Field
+                        label={t("ui.slurp.settings.audience.reactionBank")}
+                        detail={t("ui.slurp.settings.audience.reactionBankDetail", {
+                          count: settings.audienceReactionBank.shared.length,
+                        })}
+                      >
+                        <textarea
+                          rows={6}
+                          value={reactionBankDraft ?? settings.audienceReactionBank.shared.join("\n")}
+                          onChange={(event) => setReactionBankDraft(event.target.value)}
+                          onBlur={() => {
+                            const draft = reactionBankDraft;
+                            setReactionBankDraft(null);
+                            if (draft === null) return;
+                            // Same rules the server applies, so what the box shows after a save is
+                            // what was actually stored rather than a list that silently lost rows.
+                            const seen = new Set<string>();
+                            const next: string[] = [];
+                            for (const line of draft.split("\n")) {
+                              const body = line.trim().slice(0, 120);
+                              const key = body.toLowerCase();
+                              if (!body || seen.has(key) || next.length >= 400) continue;
+                              seen.add(key);
+                              next.push(body);
+                            }
+                            // The box edits the shared bank only; per-type banks have their own
+                            // editor in the Fan Types panel.
+                            if (next.join("\n") !== settings.audienceReactionBank.shared.join("\n"))
+                              void update("audienceReactionBank", { ...settings.audienceReactionBank, shared: next });
+                          }}
+                          className="w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] p-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                        />
+                      </Field>
+                      <SlurpFanTypesSettings
+                        fanTypes={settings.fanTypes}
+                        bankCounts={settings.audienceReactionBank.byType}
+                        crowdTone={settings.audienceTone}
+                        onSave={(fanTypes) => update("fanTypes", fanTypes)}
+                      />
+                    </div>
+                  </details>
+
+                  <details className="group rounded-xl bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
+                    <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 px-4 py-2 text-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] [&::-webkit-details-marker]:hidden">
+                      <span className="min-w-0 flex-1">
+                        <span className="block">{t("ui.slurp.settings.audience.aiTitle")}</span>
+                        <span className="block text-xs font-normal text-[var(--muted-foreground)]">
+                          {t("ui.slurp.settings.audience.aiSummary")}
+                        </span>
+                      </span>
+                      <ChevronRight
+                        size={17}
+                        className="transition-transform group-open:rotate-90 rtl:rotate-180"
+                        aria-hidden="true"
+                      />
+                    </summary>
+                    <div className="space-y-5 border-t border-[var(--slurp-outline)] p-4 sm:p-5">
+                      <SlurpAudienceConfigSettings
+                        tuning={settings.simulationTuning}
+                        fanTypes={settings.fanTypes}
+                        budget={settings.modelBudget}
+                        connections={connectionsQuery.data ?? []}
+                        onSave={(patch) => save(patch)}
+                      />
+                    </div>
+                  </details>
+
+                  <details className="group rounded-xl bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
+                    <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 px-4 py-2 text-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] [&::-webkit-details-marker]:hidden">
+                      <span className="min-w-0 flex-1">
+                        <span className="block">{t("ui.slurp.settings.audience.advancedTitle")}</span>
+                        <span className="block text-xs font-normal text-[var(--muted-foreground)]">
+                          {t("ui.slurp.settings.audience.advancedDetail")}
+                        </span>
+                      </span>
+                      <ChevronRight
+                        size={17}
+                        className="transition-transform group-open:rotate-90 rtl:rotate-180"
+                        aria-hidden="true"
+                      />
+                    </summary>
+                    <div className="space-y-5 border-t border-[var(--slurp-outline)] p-4 sm:p-5">
+                      <Toggle
+                        label={t("ui.slurp.settings.audience.enabled")}
+                        detail={t("ui.slurp.settings.audience.enabledDetail")}
+                        value={settings.fanActivityEnabled}
+                        onChange={(value) => update("fanActivityEnabled", value)}
+                      />
+                      <div className="grid gap-4 sm:grid-cols-3">
                         <Field
                           label={t("ui.slurp.settings.audience.runsPerDay")}
                           detail={t("ui.slurp.settings.audience.runsPerDayDetail")}
@@ -2639,206 +3543,60 @@ export function SlurpSettings({
                             onSave={(value) => update("fanActivityRunsPerDay", value)}
                           />
                         </Field>
-                        <Field
-                          label={t("ui.slurp.settings.audience.reactionBank")}
-                          detail={t("ui.slurp.settings.audience.reactionBankDetail", {
-                            count: settings.audienceReactionBank.length,
-                          })}
-                        >
-                          <textarea
-                            rows={6}
-                            value={reactionBankDraft ?? settings.audienceReactionBank.join("\n")}
-                            onChange={(event) => setReactionBankDraft(event.target.value)}
-                            onBlur={() => {
-                              const draft = reactionBankDraft;
-                              setReactionBankDraft(null);
-                              if (draft === null) return;
-                              // Same rules the server applies, so what the box shows after a save is
-                              // what was actually stored rather than a list that silently lost rows.
-                              const seen = new Set<string>();
-                              const next: string[] = [];
-                              for (const line of draft.split("\n")) {
-                                const body = line.trim().slice(0, 120);
-                                const key = body.toLowerCase();
-                                if (!body || seen.has(key) || next.length >= 400) continue;
-                                seen.add(key);
-                                next.push(body);
-                              }
-                              if (next.join("\n") !== settings.audienceReactionBank.join("\n"))
-                                void update("audienceReactionBank", next);
-                            }}
-                            className="w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] p-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                        <Field label={t("ui.slurp.settings.audience.likes")}>
+                          <NumberSetting
+                            value={settings.fanLikesPerRefresh}
+                            min={0}
+                            max={24}
+                            onSave={(value) => update("fanLikesPerRefresh", value)}
                           />
                         </Field>
+                        <Field label={t("ui.slurp.settings.audience.replies")}>
+                          <NumberSetting
+                            value={settings.fanRepliesPerRefresh}
+                            min={0}
+                            max={12}
+                            onSave={(value) => update("fanRepliesPerRefresh", value)}
+                          />
+                        </Field>
+                      </div>
+                      <ChoiceRow
+                        title={t("ui.slurp.settings.audience.activityTitle")}
+                        detail={t("ui.slurp.settings.audience.activityDetail")}
+                        options={(["off", "quiet", "normal", "busy"] as const).map((level) => ({
+                          value: level,
+                          label: t(`ui.slurp.settings.audience.activity.${level}`),
+                        }))}
+                        value={settings.worldActivity}
+                        onChange={(level) => update("worldActivity", level)}
+                      />
+                      {/* ponytail: the global archetype mix stays a hidden stored field that the server still
+                          reads; drop it together with the per-Creator archetype UI. */}
+                      {Object.values(settings.fanArchetypeWeights).some((weight) => weight !== 1) && (
                         <div className="rounded-lg border border-[var(--border)] p-3 text-xs text-[var(--muted-foreground)]">
-                          {fanStatusQuery.isError
-                            ? t("ui.slurp.settings.audience.statusError")
-                            : fanStatusQuery.data
-                              ? t("ui.slurp.settings.audience.statusUsed", {
-                                  used: fanStatusQuery.data.usedRuns,
-                                  limit: fanStatusQuery.data.runLimit,
-                                })
-                              : t("ui.slurp.settings.audience.statusLoading")}
+                          <p>{t("ui.slurp.settings.audience.legacyMix")}</p>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void update(
+                                "fanArchetypeWeights",
+                                Object.fromEntries(Object.keys(settings.fanArchetypeWeights).map((key) => [key, 1])),
+                              )
+                            }
+                            className="mt-2 inline-flex min-h-10 items-center rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)]"
+                          >
+                            {t("ui.slurp.settings.audience.legacyMixReset")}
+                          </button>
                         </div>
-                      </div>
-                      <div>
-                        <h2 className="text-sm font-semibold">{t("ui.slurp.settings.audience.perRun")}</h2>
-                        <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                          {t("ui.slurp.settings.audience.perRunDetail")}
-                        </p>
-                        <div className="mt-3 grid gap-4 sm:grid-cols-3">
-                          <Field label={t("ui.slurp.settings.audience.likes")}>
-                            <NumberSetting
-                              value={settings.fanLikesPerRefresh}
-                              min={0}
-                              max={24}
-                              onSave={(value) => update("fanLikesPerRefresh", value)}
-                            />
-                          </Field>
-                          <Field label={t("ui.slurp.settings.audience.replies")}>
-                            <NumberSetting
-                              value={settings.fanRepliesPerRefresh}
-                              min={0}
-                              max={12}
-                              onSave={(value) => update("fanRepliesPerRefresh", value)}
-                            />
-                          </Field>
-                        </div>
-                      </div>
-                      <div>
-                        <h2 className="text-sm font-semibold">{t("ui.slurp.settings.audience.mix")}</h2>
-                        <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                          {t("ui.slurp.settings.audience.mixDetail")}
-                        </p>
-                        <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                          {archetypes.map((key) => (
-                            <Field key={key} label={t(`ui.slurp.settings.audience.archetypes.${key}`)}>
-                              <NumberSetting
-                                value={settings.fanArchetypeWeights[key] ?? 0}
-                                min={0}
-                                max={100}
-                                onSave={(value) => {
-                                  const next = {
-                                    ...settings.fanArchetypeWeights,
-                                    [key]: value,
-                                  };
-                                  if (!Object.values(next).some((weight) => weight > 0)) {
-                                    toast.error(t("ui.slurp.settings.audience.keepOne"));
-                                    return false;
-                                  }
-                                  return update("fanArchetypeWeights", next);
-                                }}
-                              />
-                            </Field>
-                          ))}
-                        </div>
-                      </div>
+                      )}
+                      {/* Every number the simulation runs on, in its own file. Keyed on the preset so an Activity click resets the local draft instead of saving stale tuning back. */}
+                      <SlurpSimulationSettings
+                        key={settings.simulationTuning.preset}
+                        tuning={settings.simulationTuning}
+                        onSave={(next) => void update("simulationTuning", next)}
+                      />
                     </div>
-                  ) : (
-                    <GuidanceBox
-                      title={t("ui.slurp.settings.audience.pausedTitle")}
-                      detail={t("ui.slurp.settings.audience.pausedDetail")}
-                    />
-                  )}
-                  <div className="space-y-3 pt-2">
-                    <div>
-                      <h2 className="text-sm font-bold">{t("ui.slurp.settings.audience.activityTitle")}</h2>
-                      <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted)]">
-                        {t("ui.slurp.settings.audience.activityDetail")}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {(["off", "quiet", "normal", "busy"] as const).map((level) => (
-                        <button
-                          key={level}
-                          type="button"
-                          onClick={() => update("worldActivity", level)}
-                          aria-pressed={settings.worldActivity === level}
-                          className={cn(
-                            "min-h-10 rounded-lg border px-3 text-xs font-semibold transition-colors",
-                            settings.worldActivity === level
-                              ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]"
-                              : "border-[var(--border)] hover:bg-[var(--accent)]",
-                          )}
-                        >
-                          {t(`ui.slurp.settings.audience.activity.${level}`)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="space-y-3 pt-2">
-                    <div>
-                      <h2 className="text-sm font-bold">{t("ui.slurp.settings.audience.scaleTitle")}</h2>
-                      <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted)]">
-                        {t("ui.slurp.settings.audience.scaleDetail")}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {(["intimate", "normal", "large"] as const).map((level) => (
-                        <button
-                          key={level}
-                          type="button"
-                          onClick={() => update("platformScale", level)}
-                          aria-pressed={settings.platformScale === level}
-                          className={cn(
-                            "min-h-10 rounded-lg border px-3 text-xs font-semibold transition-colors",
-                            settings.platformScale === level
-                              ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]"
-                              : "border-[var(--border)] hover:bg-[var(--accent)]",
-                          )}
-                        >
-                          {t(`ui.slurp.settings.audience.scale.${level}`)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="space-y-3 pt-2">
-                    <div>
-                      <h2 className="text-sm font-bold">{t("ui.slurp.settings.audience.toneTitle")}</h2>
-                      <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted)]">
-                        {t("ui.slurp.settings.audience.toneDetail")}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {(["warm", "mixed", "unfiltered"] as const).map((tone) => (
-                        <button
-                          key={tone}
-                          type="button"
-                          onClick={() => update("audienceTone", tone)}
-                          aria-pressed={settings.audienceTone === tone}
-                          className={cn(
-                            "min-h-10 rounded-lg border px-3 text-xs font-semibold transition-colors",
-                            settings.audienceTone === tone
-                              ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]"
-                              : "border-[var(--border)] hover:bg-[var(--accent)]",
-                          )}
-                        >
-                          {t(`ui.slurp.settings.audience.tone.${tone}`)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <AmbientProfilesPanel
-                    allowRandomUsers={settings.allowRandomUsers}
-                    onAllowRandomUsersChange={(value) => update("allowRandomUsers", value)}
-                  />
-                  <div className="space-y-3 pt-2">
-                    <div>
-                      <h2 className="text-sm font-bold">{t("ui.slurp.settings.audience.feedExperience")}</h2>
-                      <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted)]">
-                        {t("ui.slurp.settings.audience.feedExperienceDetail")}
-                      </p>
-                    </div>
-                    <Toggle
-                      label={t("ui.slurp.settings.inlinePromotions")}
-                      detail={t("ui.slurp.settings.inlinePromotionsDetail")}
-                      value={settings.inlineAdsEnabled}
-                      onChange={(value) => update("inlineAdsEnabled", value)}
-                    />
-                  </div>
+                  </details>
                 </div>
               )}
             </div>
@@ -3060,6 +3818,49 @@ export function SlurpSettings({
         pending={updateSettings.isPending}
       />
     </>
+  );
+}
+
+/** One labelled row of mutually exclusive buttons, the shape every Audience choice shares. */
+function ChoiceRow<T extends string>({
+  title,
+  detail,
+  options,
+  value,
+  onChange,
+  extra,
+}: {
+  title: string;
+  detail: string;
+  options: ReadonlyArray<{ value: T; label: string }>;
+  value: string;
+  onChange: (value: T) => void;
+  extra?: ReactNode;
+}) {
+  return (
+    <fieldset className="space-y-3 pt-2">
+      <legend className="text-sm font-bold">{title}</legend>
+      <p className="text-xs leading-5 text-[var(--slurp-muted)]">{detail}</p>
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => onChange(option.value)}
+            aria-pressed={value === option.value}
+            className={cn(
+              "min-h-10 rounded-lg border px-3 text-xs font-semibold transition-colors",
+              value === option.value
+                ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]"
+                : "border-[var(--border)] hover:bg-[var(--accent)]",
+            )}
+          >
+            {option.label}
+          </button>
+        ))}
+        {extra}
+      </div>
+    </fieldset>
   );
 }
 
@@ -3322,82 +4123,737 @@ function ActivityRow({
   );
 }
 
-function SectionTitle({ title, detail }: { title: string; detail: string }) {
-  return (
-    <div>
-      <h2 className="text-lg font-black tracking-tight text-balance">{title}</h2>
-      <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)] text-pretty">{detail}</p>
-    </div>
-  );
-}
-/** A labelled group of related settings. Used by every section that has more than a handful. */
-function SettingsGroup({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section
-      className="space-y-4 rounded-xl bg-[var(--slurp-surface-raised,var(--background))] p-4 shadow-[var(--slurp-shadow-raised)] sm:p-5"
-      aria-label={title}
-    >
-      <h3 className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--noodle-accent-foreground)]">{title}</h3>
-      {children}
-    </section>
-  );
-}
-function GuidanceBox({ title, detail }: { title: string; detail: string }) {
-  return (
-    <div className="relative overflow-hidden rounded-xl bg-[var(--noodle-accent)]/[0.065] p-4 ring-1 ring-inset ring-[var(--noodle-accent)]/20 sm:p-5">
-      <span className="absolute inset-y-3 start-0 w-0.5 rounded-full bg-[var(--noodle-accent)]" aria-hidden="true" />
-      <p className="text-sm font-bold text-[var(--noodle-accent)]">{title}</p>
-      <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)] text-pretty">{detail}</p>
-    </div>
-  );
-}
-function Field({ label, detail, children }: { label: string; detail?: string; children: ReactNode }) {
-  return (
-    <label className="block space-y-2 text-sm font-semibold">
-      <span className="block">{label}</span>
-      {detail && <span className="block text-xs font-normal leading-5 text-[var(--muted-foreground)]">{detail}</span>}
-      {children}
-    </label>
-  );
-}
-function Toggle({
-  label,
-  detail,
-  value,
+/**
+ * Settings → Arcs library list. Deleting a built-in only hides it, so Reset can bring it back; a
+ * custom type is removed. Running arcs hold their own copy and never see these edits.
+ */
+/** Mirrors `SLURP_MODIFIER_KINDS` on the server: the moods a chapter may start. */
+const ARC_MOODS = [
+  "just_posted",
+  "post_landed",
+  "post_flopped",
+  "afterglow",
+  "overexposed",
+  "paid_well",
+  "goal_hit",
+  "lapse_sting",
+  "tipsy",
+  "tired",
+  "rattled",
+] as const;
+
+function ArcLibraryEditor({
+  library,
+  tags,
+  busy,
+  creatorAccountId,
+  personaId,
   onChange,
-  compact = false,
 }: {
-  label: string;
-  detail?: string;
-  value: boolean;
-  onChange: (value: boolean) => void;
-  compact?: boolean;
+  library: SlurpArcType[];
+  tags: string[];
+  busy: boolean;
+  creatorAccountId: string | null;
+  personaId: string | null;
+  onChange: (library: SlurpArcType[]) => void;
 }) {
-  return (
-    <label
-      data-slurp-setting-toggle
-      className={`group flex ${compact ? "min-h-11" : "min-h-16"} cursor-pointer items-center justify-between gap-4 rounded-lg bg-[var(--slurp-surface-raised,var(--background))] px-3 py-2 text-sm shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-transparent transition-[background-color,box-shadow] hover:bg-[var(--accent)]/40 hover:ring-[var(--border)] focus-within:ring-2 focus-within:ring-[var(--noodle-accent)] motion-reduce:transition-none`}
-    >
-      <span className="min-w-0">
-        <span className="block font-semibold">{label}</span>
-        {detail && (
-          <span className="mt-1 block text-xs font-normal leading-5 text-[var(--muted-foreground)]">{detail}</span>
+  const { t } = useTranslation();
+  const reset = useResetSlurpArcType();
+  const generate = useGenerateSlurpArcType();
+  const [draft, setDraft] = useState<SlurpArcType | null>(null);
+  const [brief, setBrief] = useState("");
+  const [selectedChapters, setSelectedChapters] = useState<Set<number>>(new Set());
+  const [reviewingGeneratedDraft, setReviewingGeneratedDraft] = useState(false);
+  const input =
+    "min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base sm:text-sm";
+  const button =
+    "min-h-11 rounded-lg px-3 text-sm font-semibold hover:bg-[var(--slurp-surface-raised)] disabled:opacity-50";
+  const replace = (type: SlurpArcType) =>
+    onChange(
+      library.some((entry) => entry.id === type.id)
+        ? library.map((entry) => (entry.id === type.id ? type : entry))
+        : [...library, type],
+    );
+  const setChapter = (index: number, patch: Partial<SlurpArcType["chapters"][number]>) =>
+    draft &&
+    setDraft({
+      ...draft,
+      chapters: draft.chapters.map((chapter, at) => (at === index ? { ...chapter, ...patch } : chapter)),
+    });
+  const days = (value: string) => Math.min(90, Math.max(0, Math.floor(Number(value)) || 0));
+  const setOption = (
+    index: number,
+    optionIndex: number,
+    patch: Partial<NonNullable<SlurpArcType["chapters"][number]["choice"]>["options"][number]>,
+  ) => {
+    const choice = draft?.chapters[index]?.choice;
+    if (choice)
+      setChapter(index, {
+        choice: {
+          ...choice,
+          options: choice.options.map((option, at) => (at === optionIndex ? { ...option, ...patch } : option)),
+        },
+      });
+  };
+  /** A choice without a question or two named options is dropped on save rather than refused. */
+  const cleanChoice = (choice: NonNullable<SlurpArcType["chapters"][number]["choice"]>) => {
+    const question = choice.question.trim();
+    const options = choice.options
+      .map((option) => ({
+        label: option.label.trim(),
+        chapters: option.chapters
+          .filter((chapter) => chapter.label.trim())
+          .map((chapter) => ({ ...chapter, label: chapter.label.trim() })),
+      }))
+      .filter((option) => option.label);
+    return question && options.length >= 2 ? { question, options } : undefined;
+  };
+
+  const generateDraft = async () => {
+    if (!creatorAccountId || !personaId || !brief.trim()) return;
+    const result = await generate.mutateAsync({ creatorAccountId, personaId, brief: brief.trim() }).catch(() => null);
+    if (!result) return;
+    setDraft(result.type);
+    setSelectedChapters(new Set(result.type.chapters.map((_, index) => index)));
+    setReviewingGeneratedDraft(true);
+    setBrief("");
+  };
+
+  if (draft) {
+    return (
+      <form
+        className="space-y-5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!draft.name.trim()) return;
+          replace({
+            ...draft,
+            name: draft.name.trim(),
+            description: draft.description.trim(),
+            tone: draft.tone.trim(),
+            chapters: (reviewingGeneratedDraft
+              ? draft.chapters.filter((_, index) => selectedChapters.has(index))
+              : draft.chapters
+            )
+              .filter((chapter) => chapter.label.trim())
+              .map((chapter) => {
+                const choice = chapter.choice && cleanChoice(chapter.choice);
+                const effects = Object.fromEntries(
+                  Object.entries(chapter.effects ?? {}).filter(([, pct]) => Number.isInteger(pct) && pct !== 0),
+                );
+                const bio = chapter.profile?.bio?.trim();
+                const location = chapter.profile?.location?.trim();
+                return {
+                  label: chapter.label.trim(),
+                  minDays: chapter.minDays,
+                  maxDays: Math.max(chapter.minDays, chapter.maxDays),
+                  ...(choice ? { choice } : {}),
+                  ...(chapter.mood ? { mood: chapter.mood } : {}),
+                  ...(Object.keys(effects).length ? { effects } : {}),
+                  ...(bio || location
+                    ? { profile: { ...(bio ? { bio } : {}), ...(location ? { location } : {}) } }
+                    : {}),
+                };
+              }),
+          });
+          setDraft(null);
+          setSelectedChapters(new Set());
+          setReviewingGeneratedDraft(false);
+        }}
+      >
+        <GuidanceBox
+          title={t("ui.slurp.settings.arcLibrary.editorTitle", { defaultValue: "Build the arc in layers" })}
+          detail={t("ui.slurp.settings.arcLibrary.editorDetail", {
+            defaultValue:
+              "Start with the story idea. Add chapters only when you want precise pacing, effects, profile changes, or fan choices.",
+          })}
+        />
+        {draft.chapters.length > 0 && (
+          <div className="rounded-xl border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] p-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold">
+                  {t("ui.slurp.settings.arcLibrary.chapterSelection", { defaultValue: "Choose the chapters to keep" })}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
+                  {t("ui.slurp.settings.arcLibrary.chapterSelectionDetail", {
+                    defaultValue: "AI suggestions are editable. Uncheck any chapter you do not want in this arc.",
+                  })}
+                </p>
+              </div>
+              <span className="text-xs tabular-nums text-[var(--muted-foreground)]">
+                {selectedChapters.size}/{draft.chapters.length}
+              </span>
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {draft.chapters.map((chapter, index) => (
+                <label
+                  key={`${chapter.label}-${index}`}
+                  className="flex min-h-11 items-center gap-2 rounded-lg border border-[var(--slurp-outline)] px-3 text-xs font-semibold"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedChapters.has(index)}
+                    onChange={(event) =>
+                      setSelectedChapters((current) => {
+                        const next = new Set(current);
+                        if (event.target.checked) next.add(index);
+                        else next.delete(index);
+                        return next;
+                      })
+                    }
+                  />
+                  <span className="min-w-0 truncate">{chapter.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
         )}
-      </span>
-      <input
-        type="checkbox"
-        role="switch"
-        checked={value}
-        onChange={(event) => onChange(event.target.checked)}
-        className="peer sr-only"
-      />
-      <span
-        aria-hidden="true"
-        className="relative h-7 w-12 shrink-0 rounded-full bg-[var(--muted-foreground)]/25 shadow-inner transition-colors after:absolute after:left-1 after:top-1 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:bg-[var(--noodle-accent)] peer-checked:after:translate-x-5 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:after:transition-none"
-      />
-    </label>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field
+            label={t("ui.slurp.settings.arcLibrary.name")}
+            detail={t("ui.slurp.settings.arcLibrary.nameDetail", {
+              defaultValue: "A short name shown in the Arc Library.",
+            })}
+          >
+            <input
+              value={draft.name}
+              maxLength={80}
+              onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+              className={input}
+            />
+          </Field>
+          <Field
+            label={t("ui.slurp.settings.arcLibrary.tone")}
+            detail={t("ui.slurp.settings.arcLibrary.toneDetail", {
+              defaultValue: "The feeling the Creator should bring to posts.",
+            })}
+          >
+            <input
+              value={draft.tone}
+              maxLength={80}
+              onChange={(event) => setDraft({ ...draft, tone: event.target.value })}
+              className={input}
+            />
+          </Field>
+        </div>
+        <Field
+          label={t("ui.slurp.settings.arcLibrary.description")}
+          detail={t("ui.slurp.settings.arcLibrary.descriptionDetail", {
+            defaultValue: "Give the model enough direction to make the arc feel specific.",
+          })}
+        >
+          <textarea
+            value={draft.description}
+            maxLength={2000}
+            rows={3}
+            onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+            className={`${input} py-2`}
+          />
+        </Field>
+        <div className="flex items-end justify-between gap-3 border-t border-[var(--slurp-outline)] pt-4">
+          <div>
+            <h3 className="text-sm font-bold">{t("ui.slurp.settings.arcLibrary.chapters")}</h3>
+            <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
+              {t("ui.slurp.settings.arcLibrary.chapterDetail", {
+                defaultValue: "Each chapter can change the pace, mood, stats, profile, and fan choices.",
+              })}
+            </p>
+          </div>
+          <span className="shrink-0 text-xs tabular-nums text-[var(--muted-foreground)]">
+            {draft.chapters.length}/12
+          </span>
+        </div>
+        {draft.chapters.map((chapter, index) => (
+          <fieldset
+            key={index}
+            className="space-y-4 rounded-xl border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] p-4"
+          >
+            <legend className="px-1 text-xs font-bold uppercase tracking-[0.12em] text-[var(--muted-foreground)]">
+              {t("ui.slurp.settings.arcLibrary.chapterNumber", {
+                defaultValue: "Chapter {{number}}",
+                number: index + 1,
+              })}
+            </legend>
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7rem_7rem_auto] sm:items-end">
+              <Field label={t("ui.slurp.settings.arcLibrary.chapterLabel")}>
+                <input
+                  value={chapter.label}
+                  maxLength={200}
+                  onChange={(event) => setChapter(index, { label: event.target.value })}
+                  className={input}
+                />
+              </Field>
+              <Field label={t("ui.slurp.settings.arcLibrary.minDays")}>
+                <input
+                  type="number"
+                  min={0}
+                  max={90}
+                  value={chapter.minDays}
+                  onChange={(event) => setChapter(index, { minDays: days(event.target.value) })}
+                  className={input}
+                />
+              </Field>
+              <Field label={t("ui.slurp.settings.arcLibrary.maxDays")}>
+                <input
+                  type="number"
+                  min={0}
+                  max={90}
+                  value={chapter.maxDays}
+                  onChange={(event) => setChapter(index, { maxDays: days(event.target.value) })}
+                  className={input}
+                />
+              </Field>
+              <button
+                type="button"
+                className={`${button} text-red-600`}
+                onClick={() => {
+                  setDraft({ ...draft, chapters: draft.chapters.filter((_, at) => at !== index) });
+                  setSelectedChapters((current) => {
+                    const next = new Set<number>();
+                    for (const at of current) {
+                      if (at < index) next.add(at);
+                      else if (at > index) next.add(at - 1);
+                    }
+                    return next;
+                  });
+                }}
+              >
+                {t("ui.slurp.settings.arcLibrary.removeChapter")}
+              </button>
+            </div>
+            <details className="group rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-surface-raised,var(--background))]">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-3 text-xs font-bold text-[var(--muted-foreground)] [&::-webkit-details-marker]:hidden">
+                <span>{t("ui.slurp.settings.arcLibrary.advanced", { defaultValue: "Advanced chapter options" })}</span>
+                <ChevronRight size={15} className="transition-transform group-open:rotate-90" aria-hidden="true" />
+              </summary>
+              <div className="space-y-4 border-t border-[var(--slurp-outline)] p-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field
+                    label={t("ui.slurp.settings.arcLibrary.mood")}
+                    detail={t("ui.slurp.settings.arcLibrary.moodDetail", {
+                      defaultValue: "Set the mood when this chapter starts.",
+                    })}
+                  >
+                    <select
+                      value={chapter.mood ?? ""}
+                      onChange={(event) => setChapter(index, { mood: event.target.value || undefined })}
+                      className={input}
+                    >
+                      <option value="">{t("ui.slurp.settings.arcLibrary.noMood")}</option>
+                      {ARC_MOODS.map((mood) => (
+                        <option key={mood} value={mood}>
+                          {mood.replace(/_/g, " ")}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field
+                    label={t("ui.slurp.settings.arcLibrary.effects", { defaultValue: "Audience effects" })}
+                    detail={t("ui.slurp.settings.arcLibrary.effectsDetail", {
+                      defaultValue: "Optional changes to growth, earnings, and loyalty.",
+                    })}
+                  >
+                    <div className="grid grid-cols-3 gap-2">
+                      {(["growth", "earnings", "loyalty"] as const).map((stat) => (
+                        <input
+                          key={stat}
+                          type="number"
+                          aria-label={t(`ui.slurp.settings.arcLibrary.effect.${stat}`)}
+                          min={-50}
+                          max={50}
+                          value={chapter.effects?.[stat] ?? ""}
+                          onChange={(event) =>
+                            setChapter(index, {
+                              effects: {
+                                ...chapter.effects,
+                                [stat]:
+                                  event.target.value === ""
+                                    ? undefined
+                                    : Math.max(-50, Math.min(50, Math.round(Number(event.target.value)) || 0)),
+                              },
+                            })
+                          }
+                          className={input}
+                          placeholder={stat.slice(0, 3).toUpperCase()}
+                        />
+                      ))}
+                    </div>
+                  </Field>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field
+                    label={t("ui.slurp.settings.arcLibrary.profileBio")}
+                    detail={t("ui.slurp.settings.arcLibrary.profileBioDetail", {
+                      defaultValue: "Optional bio change. Slurp asks before applying it.",
+                    })}
+                  >
+                    <input
+                      value={chapter.profile?.bio ?? ""}
+                      maxLength={500}
+                      onChange={(event) =>
+                        setChapter(index, { profile: { ...chapter.profile, bio: event.target.value } })
+                      }
+                      className={input}
+                    />
+                  </Field>
+                  <Field
+                    label={t("ui.slurp.settings.arcLibrary.profileLocation")}
+                    detail={t("ui.slurp.settings.arcLibrary.profileLocationDetail", {
+                      defaultValue: "Optional location change. Slurp asks before applying it.",
+                    })}
+                  >
+                    <input
+                      value={chapter.profile?.location ?? ""}
+                      maxLength={120}
+                      onChange={(event) =>
+                        setChapter(index, { profile: { ...chapter.profile, location: event.target.value } })
+                      }
+                      className={input}
+                    />
+                  </Field>
+                </div>
+                {chapter.choice ? (
+                  <div className="basis-full space-y-2 border-l-2 border-[var(--slurp-outline)] pl-3">
+                    <input
+                      aria-label={t("ui.slurp.settings.arcLibrary.choiceQuestion")}
+                      placeholder={t("ui.slurp.settings.arcLibrary.choiceQuestion")}
+                      value={chapter.choice.question}
+                      maxLength={240}
+                      onChange={(event) =>
+                        setChapter(index, { choice: { ...chapter.choice!, question: event.target.value } })
+                      }
+                      className={input}
+                    />
+                    {chapter.choice.options.map((option, optionIndex) => (
+                      <div key={optionIndex} className="flex flex-wrap items-start gap-2">
+                        <input
+                          aria-label={t("ui.slurp.settings.arcLibrary.choiceOption")}
+                          placeholder={t("ui.slurp.settings.arcLibrary.choiceOption")}
+                          value={option.label}
+                          maxLength={120}
+                          onChange={(event) => setOption(index, optionIndex, { label: event.target.value })}
+                          className={`${input} min-w-0 flex-1`}
+                        />
+                        {/* One branch chapter per line; a line keeps its days while its label is unchanged. */}
+                        <textarea
+                          aria-label={t("ui.slurp.settings.arcLibrary.choiceBranch")}
+                          placeholder={t("ui.slurp.settings.arcLibrary.choiceBranch")}
+                          value={option.chapters.map((entry) => entry.label).join("\n")}
+                          rows={2}
+                          onChange={(event) =>
+                            setOption(index, optionIndex, {
+                              chapters: event.target.value
+                                .split("\n")
+                                .slice(0, 4)
+                                .map((label) => {
+                                  const known = option.chapters.find((entry) => entry.label === label);
+                                  return { label, minDays: known?.minDays ?? 1, maxDays: known?.maxDays ?? 3 };
+                                }),
+                            })
+                          }
+                          className={`${input} min-w-0 flex-1 py-2`}
+                        />
+                        {chapter.choice!.options.length > 2 && (
+                          <button
+                            type="button"
+                            className={button}
+                            onClick={() =>
+                              setChapter(index, {
+                                choice: {
+                                  ...chapter.choice!,
+                                  options: chapter.choice!.options.filter((_, at) => at !== optionIndex),
+                                },
+                              })
+                            }
+                          >
+                            {t("ui.slurp.settings.arcLibrary.removeOption")}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <div className="flex flex-wrap gap-2">
+                      {chapter.choice.options.length < 4 && (
+                        <button
+                          type="button"
+                          className={button}
+                          onClick={() =>
+                            setChapter(index, {
+                              choice: {
+                                ...chapter.choice!,
+                                options: [...chapter.choice!.options, { label: "", chapters: [] }],
+                              },
+                            })
+                          }
+                        >
+                          {t("ui.slurp.settings.arcLibrary.addOption")}
+                        </button>
+                      )}
+                      <button type="button" className={button} onClick={() => setChapter(index, { choice: undefined })}>
+                        {t("ui.slurp.settings.arcLibrary.removeChoice")}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className={button}
+                    onClick={() =>
+                      setChapter(index, {
+                        choice: {
+                          question: "",
+                          options: [
+                            { label: "", chapters: [] },
+                            { label: "", chapters: [] },
+                          ],
+                        },
+                      })
+                    }
+                  >
+                    {t("ui.slurp.settings.arcLibrary.addChoice")}
+                  </button>
+                )}
+              </div>
+            </details>
+          </fieldset>
+        ))}
+        {draft.chapters.length < 12 && (
+          <button
+            type="button"
+            className={button}
+            onClick={() => setDraft({ ...draft, chapters: [...draft.chapters, { label: "", minDays: 1, maxDays: 3 }] })}
+          >
+            {t("ui.slurp.settings.arcLibrary.addChapter")}
+          </button>
+        )}
+        {draft.chapters.length > 0 && (
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={draft.revertProfileAtEnd === true}
+              onChange={(event) => setDraft({ ...draft, revertProfileAtEnd: event.target.checked })}
+            />
+            {t("ui.slurp.settings.arcLibrary.revertProfileAtEnd")}
+          </label>
+        )}
+        {draft.chapters.length === 0 && (
+          <label className="flex items-center gap-2 text-sm">
+            {t("ui.slurp.settings.arcLibrary.durationDays")}
+            <input
+              type="number"
+              min={1}
+              max={365}
+              value={draft.durationDays}
+              onChange={(event) =>
+                setDraft({
+                  ...draft,
+                  durationDays: Math.min(365, Math.max(1, Math.floor(Number(event.target.value)) || 1)),
+                })
+              }
+              className={`${input} w-24`}
+            />
+          </label>
+        )}
+        <p className="text-sm font-semibold">{t("ui.slurp.settings.arcLibrary.tags")}</p>
+        <div className="flex flex-wrap gap-x-4">
+          {[...new Set([...tags, ...draft.tags])].map((tag) => (
+            <label key={tag} className="inline-flex min-h-11 items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={draft.tags.includes(tag)}
+                onChange={(event) =>
+                  setDraft({
+                    ...draft,
+                    tags: event.target.checked ? [...draft.tags, tag] : draft.tags.filter((entry) => entry !== tag),
+                  })
+                }
+              />
+              {tag}
+            </label>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            disabled={busy || !draft.name.trim()}
+            className="min-h-11 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-white disabled:opacity-50"
+          >
+            {t("ui.slurp.settings.arcLibrary.save")}
+          </button>
+          <button type="button" className={button} onClick={() => setDraft(null)}>
+            {t("ui.slurp.settings.arcLibrary.cancel")}
+          </button>
+        </div>
+      </form>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <ul className="space-y-2">
+        {library
+          .filter((type) => !type.hidden || type.builtin)
+          .map((type) => (
+            <li
+              key={type.id}
+              className="rounded-xl border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] p-3 text-sm shadow-sm sm:p-4"
+            >
+              <div className="flex flex-wrap items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`font-bold ${type.hidden ? "text-[var(--slurp-muted)] line-through" : ""}`}>
+                      {type.name}
+                    </span>
+                    {type.builtin && (
+                      <span className="rounded-full bg-[var(--noodle-accent)]/10 px-2 py-0.5 text-[0.65rem] font-bold text-[var(--noodle-accent)]">
+                        {t("ui.slurp.settings.arcLibrary.builtIn", { defaultValue: "Built in" })}
+                      </span>
+                    )}
+                    {type.hidden && (
+                      <span className="rounded-full bg-[var(--muted-foreground)]/10 px-2 py-0.5 text-[0.65rem] font-bold text-[var(--muted-foreground)]">
+                        {t("ui.slurp.settings.arcLibrary.hidden")}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--muted-foreground)]">
+                    {type.description ||
+                      t("ui.slurp.settings.arcLibrary.noDescription", { defaultValue: "No direction added." })}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[0.68rem] text-[var(--muted-foreground)]">
+                    <span>
+                      {t("ui.slurp.settings.arcLibrary.chapterCount", {
+                        defaultValue: "{{count}} chapters",
+                        count: type.chapters.length,
+                      })}
+                    </span>
+                    {type.tone && <span>{type.tone}</span>}
+                    {type.tags.length > 0 && <span>{type.tags.join(", ")}</span>}
+                  </div>
+                </div>
+                {!type.hidden && (
+                  <label className="inline-flex min-h-10 shrink-0 items-center gap-2 text-xs font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={type.enabled}
+                      disabled={busy}
+                      onChange={(event) => replace({ ...type, enabled: event.target.checked })}
+                    />
+                    {t("ui.slurp.settings.arcLibrary.enabled")}
+                  </label>
+                )}
+              </div>
+              {!type.hidden && (
+                <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-[var(--slurp-outline)] pt-3">
+                  <button
+                    type="button"
+                    className={button}
+                    disabled={busy}
+                    onClick={() => {
+                      setReviewingGeneratedDraft(false);
+                      setDraft(structuredClone(type));
+                    }}
+                  >
+                    {t("ui.slurp.settings.arcLibrary.edit")}
+                  </button>
+                  <button
+                    type="button"
+                    className={`${button} text-red-600`}
+                    disabled={busy}
+                    onClick={() => {
+                      if (!window.confirm(t("ui.slurp.settings.arcLibrary.deleteConfirm", { name: type.name }))) return;
+                      onChange(
+                        type.builtin
+                          ? library.map((entry) =>
+                              entry.id === type.id ? { ...entry, enabled: false, hidden: true } : entry,
+                            )
+                          : library.filter((entry) => entry.id !== type.id),
+                      );
+                    }}
+                  >
+                    {t("ui.slurp.settings.arcLibrary.delete")}
+                  </button>
+                </div>
+              )}
+              {type.hidden && type.builtin && (
+                <button
+                  type="button"
+                  className={button}
+                  disabled={busy || reset.isPending}
+                  onClick={() => reset.mutate(type.id)}
+                >
+                  {t("ui.slurp.settings.arcLibrary.reset")}
+                </button>
+              )}
+            </li>
+          ))}
+      </ul>
+      <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+        <label className="block space-y-2 text-sm font-semibold">
+          <span className="flex items-center gap-1.5">
+            {t("ui.slurp.settings.arcLibrary.aiBrief", { defaultValue: "Describe the arc to AI" })}
+            <span
+              title={t("ui.slurp.settings.arcLibrary.aiBriefDetail", {
+                defaultValue: "AI creates an editable arc draft. Nothing is saved until you save it.",
+              })}
+              className="text-[var(--muted-foreground)]"
+            >
+              <CircleHelp size={14} aria-hidden="true" />
+            </span>
+          </span>
+          <textarea
+            value={brief}
+            onChange={(event) => setBrief(event.target.value)}
+            maxLength={2000}
+            rows={2}
+            placeholder={t("ui.slurp.settings.arcLibrary.aiBriefPlaceholder", {
+              defaultValue: "For example: a summer road trip that starts badly and ends with a surprise collaboration.",
+            })}
+            className={`${input} py-2`}
+          />
+        </label>
+        <button
+          type="button"
+          className="min-h-11 self-end rounded-lg border border-[var(--noodle-accent)] px-4 text-sm font-bold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 disabled:opacity-50"
+          disabled={busy || generate.isPending || !brief.trim() || !creatorAccountId || !personaId}
+          onClick={() => void generateDraft()}
+        >
+          {generate.isPending
+            ? t("ui.slurp.settings.arcLibrary.generating", { defaultValue: "Building draft..." })
+            : t("ui.slurp.settings.arcLibrary.buildWithAi", { defaultValue: "Build with AI" })}
+        </button>
+      </div>
+      {generate.error && (
+        <p role="alert" className="text-xs text-[var(--destructive)]">
+          {generate.error.message}
+        </p>
+      )}
+      <button
+        type="button"
+        className={button}
+        disabled={busy}
+        onClick={() => {
+          setReviewingGeneratedDraft(false);
+          setDraft({
+            id: `custom-${Date.now().toString(36)}`,
+            name: "",
+            description: "",
+            chapters: [],
+            tags: [],
+            tone: "",
+            durationDays: 14,
+            enabled: true,
+            builtin: false,
+            hidden: false,
+          });
+        }}
+      >
+        <Plus size={15} aria-hidden="true" />
+        {t("ui.slurp.settings.arcLibrary.add")}
+      </button>
+    </div>
   );
 }
+
 function PromptCard({
   title,
   value,
@@ -3786,6 +5242,102 @@ function CreatorMessagingGroup({
           }
         />
       </Field>
+      <Field
+        label={t("ui.slurp.settings.creators.unlockPrice", { defaultValue: "Locked post price" })}
+        detail={t("ui.slurp.settings.creators.unlockPriceDetail", {
+          defaultValue: "Default price for this Creator's locked posts. Zero uses the Wallet default.",
+        })}
+      >
+        <NumberSetting
+          value={messaging.unlockPrice ?? 0}
+          min={0}
+          max={9999}
+          onSave={(value) => patch({ creatorAccountId: creatorId, personaId, unlockPrice: value || null })}
+        />
+      </Field>
+      <Field
+        label={t("ui.slurp.settings.creators.commissionBase", { defaultValue: "Commission base price" })}
+        detail={t("ui.slurp.settings.creators.commissionBaseDetail", {
+          defaultValue:
+            "Price for an average brief. A quick sketch quotes lower, a detailed scene or a set quotes higher.",
+        })}
+      >
+        <NumberSetting
+          value={messaging.commissionBase}
+          min={1}
+          max={99999}
+          onSave={(value) => patch({ creatorAccountId: creatorId, personaId, commissionBase: value })}
+        />
+      </Field>
+      <Field
+        label={t("ui.slurp.settings.creators.commissionMin", { defaultValue: "Lowest commission price" })}
+        detail={t("ui.slurp.settings.creators.commissionMinDetail", {
+          defaultValue: "No quote goes below this, and haggling never meets a fan under it.",
+        })}
+      >
+        <NumberSetting
+          value={messaging.commissionMin}
+          min={1}
+          max={99999}
+          onSave={(value) => patch({ creatorAccountId: creatorId, personaId, commissionMin: value })}
+        />
+      </Field>
+      <Field
+        label={t("ui.slurp.settings.creators.commissionMax", { defaultValue: "Highest commission price" })}
+        detail={t("ui.slurp.settings.creators.commissionMaxDetail", {
+          defaultValue: "No quote goes above this, however large the brief.",
+        })}
+      >
+        <NumberSetting
+          value={messaging.commissionMax}
+          min={1}
+          max={99999}
+          onSave={(value) => patch({ creatorAccountId: creatorId, personaId, commissionMax: value })}
+        />
+      </Field>
+      <Toggle
+        label={t("ui.slurp.settings.creators.autoQuote", { defaultValue: "Quote audience commissions automatically" })}
+        detail={t("ui.slurp.settings.creators.autoQuoteDetail", {
+          defaultValue:
+            "Audience briefs get a quote from the prices above. You still answer offers and your own fans by hand.",
+        })}
+        value={messaging.autoQuote}
+        onChange={(value) => patch({ creatorAccountId: creatorId, personaId, autoQuote: value })}
+      />
+      {query.data?.suggested && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[var(--accent)] p-3 text-xs">
+          <span>
+            {t("ui.slurp.settings.creators.suggestedPrices", {
+              defaultValue:
+                "Suggested for your audience: {{subscription}}/week · {{unlock}} per locked post · {{commission}} commission base",
+              subscription: query.data.suggested.subscriptionPrice,
+              unlock: query.data.suggested.unlockPrice,
+              commission: query.data.suggested.commissionBase,
+            })}
+          </span>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              const suggested = query.data?.suggested;
+              if (!suggested) return;
+              patch({
+                creatorAccountId: creatorId,
+                personaId,
+                unlockPrice: suggested.unlockPrice || null,
+                commissionBase: suggested.commissionBase,
+              });
+              setPrice.mutate(
+                { accountId: creatorId, personaId, price: suggested.subscriptionPrice },
+                { onError: (error) => toast.error(errorMessage(error)) },
+              );
+            }}
+            className="min-h-9 rounded-lg px-3 font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)] focus-visible:outline-none focus-visible:ring-2 disabled:opacity-50"
+          >
+            {t("ui.slurp.settings.creators.useSuggestedPrices", { defaultValue: "Use suggestions" })}
+          </button>
+        </div>
+      )}
     </SettingsGroup>
   );
 }

@@ -207,6 +207,7 @@ const slurp2OwnedSourcePaths = [
   ...slurpOwnedSourcePaths,
   "packages/server/src/routes/slurp-messages.routes.ts",
   "packages/server/src/services/storage/slurp-financial-queue.ts",
+  "packages/server/src/services/storage/slurp-file-errors.ts",
   "packages/server/src/services/storage/slurp-host-tables.ts",
   "packages/server/src/services/storage/slurp-messages.storage.ts",
   "packages/server/src/services/storage/slurp-reply-queue.storage.ts",
@@ -257,7 +258,7 @@ const pixelforgeBoundary = await assertPackagePrivateImportBoundary({
   sourceRoot: join(repoRoot, "packages/pixelforge/src"),
   boundaryPath: join(repoRoot, "packages/pixelforge/engine-boundary.json"),
   displayName: "Pixelforge",
-  capabilityApi: { major: 1, minor: 10 },
+  capabilityApi: { major: 1, minor: 18 },
 });
 
 const hierarchicalMapsClientSourceRoot = join(repoRoot, "packages/hierarchical-maps/src/engine/packages/client/src");
@@ -868,8 +869,8 @@ if (JSON.stringify(guidanceIds) !== JSON.stringify([...ids].sort())) {
 // Staging-only packages live in the preview overlay and are counted separately.
 const agentOnly = publishedCatalog.packages.filter((entry) => !entry.manifest.entrypoints.server).length;
 const features = publishedCatalog.packages.length - agentOnly;
-if (publishedCatalog.packages.length !== 37 || agentOnly !== 24 || features !== 13) {
-  throw new Error(`Expected 24 agents and 13 features, found ${agentOnly} and ${features}`);
+if (publishedCatalog.packages.length !== 38 || agentOnly !== 24 || features !== 14) {
+  throw new Error(`Expected 24 agents and 14 features, found ${agentOnly} and ${features}`);
 }
 console.log(`Catalog valid: ${publishedCatalog.packages.length} packages (${agentOnly} agents, ${features} features).`);
 if (uncataloguedIntegrity.checked.length > 0) {

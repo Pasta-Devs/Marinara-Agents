@@ -51,7 +51,7 @@ export type PreparedGeneratedNoodleMedia = {
   stagedMedia: StagedNoodlePostMedia[];
 };
 
-async function pickGalleryAttachmentForAccount(input: {
+export async function pickGalleryAttachmentForAccount(input: {
   account: NoodleAccount;
   chats: ReturnType<typeof createChatsStorage>;
   gallery: ReturnType<typeof createGalleryStorage>;

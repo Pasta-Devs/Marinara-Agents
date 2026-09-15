@@ -43,7 +43,8 @@ for (const label of [
 ]) {
   assert.match(mobileNavigation, new RegExp(`aria-label=\\{[\\s\\S]*${label.replaceAll(".", "\\.")}`, "u"));
 }
-assert.match(shell, /h-16 grid-flow-col/u, "mobile navigation must keep its touch-target height");
+// 48px: compact, and still above the 44px minimum touch target.
+assert.match(shell, /h-12 grid-flow-col/u, "mobile navigation must keep its touch-target height");
 assert.doesNotMatch(
   mobileNavigation,
   /<span className="max-w-full truncate px-1">/u,
@@ -138,8 +139,8 @@ assert.match(row, /edges\.end \? "transparent"/u, "A scrollable end edge must fa
 
 const card = readFileSync(join(componentsDir, "SlurpCreatorProfileCard.tsx"), "utf8");
 
-// One creator card everywhere: the rail, the inline suggestions, and the discover grid.
-assert.doesNotMatch(card, /variant/u, "The creator card must have a single shape");
+// One creator card everywhere; only Discover opts into its horizontal layout and actions.
+assert.match(card, /layout = "grid"/u, "the shared card must preserve the grid default");
 assert.doesNotMatch(home, /variant="compact"/u, "No surface may fall back to the old row-shaped card");
 const suggestions = home.slice(
   home.indexOf("function SlurpInlineSuggestedCreators("),
@@ -188,8 +189,13 @@ assert.match(home, /profileRail \? "populated" : "spanning"/u);
 assert.match(home, /view === "messages"[\s\S]*?contextualRail="spanning"/u);
 assert.match(
   shell,
-  /<AnimatePresence mode="wait" initial=\{false\}>[\s\S]*?key=\{activeView\}/u,
-  "View changes must animate",
+  /<motion\.div\s+key=\{activeView\}[\s\S]*?animate=\{prefersReducedMotion \? \{ opacity: 1 \} : \{ opacity: 1, y: 0 \}\}/u,
+  "View changes must remount with the destination fade and reduced-motion alternative",
+);
+assert.doesNotMatch(
+  shell,
+  /<AnimatePresence\b[^>]*\bmode\s*=\s*["']wait["']/u,
+  "An unfinished exit must not block the next page",
 );
 
 // The media wall opens the post, not a bare lightbox, and the dialog shows one copy of the image.
@@ -247,7 +253,16 @@ assert.match(
 // Banners are environmental covers. They must not receive character avatar references or context.
 assert.match(artwork, /suppressCharacterContext: input\.kind === "banner"/u);
 assert.match(artwork, /suppressCharacterContext: kind === "banner"/u);
-assert.match(images, /!input\.suppressCharacterContext &&[\s\S]*?input\.disclosureMode/u);
+assert.match(
+  images,
+  /const referenceSubject =\s*!input\.suppressCharacterContext && input\.linkedPublicAccount \? input\.linkedPublicAccount : null/u,
+  "Banner suppression must prevent linked character or persona references",
+);
+assert.match(
+  images,
+  /if \(!input\.suppressCharacterContext && sourceAppearance && input\.settings\.imageGenerationIncludeDescriptions\)/u,
+  "Banner suppression must also prevent appearance text",
+);
 
 // Home order: header, then stories, then the tabs sitting on top of the posts.
 const homeFeed = home.slice(home.indexOf('data-component="SlurpHome.StickyHeader"'), home.indexOf("SlurpFeedSkeleton"));

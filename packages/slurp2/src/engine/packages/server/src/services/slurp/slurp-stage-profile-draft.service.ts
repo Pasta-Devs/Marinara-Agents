@@ -3,7 +3,6 @@ import {
   type APIProvider,
   type NoodleIdentityDisclosure,
   type NoodleStageProfileDraftRequest,
-  type NoodleStageProfileInput,
 } from "@marinara-engine/shared";
 import { isDebugAgentsEnabled } from "../../config/runtime-config.js";
 import type { DB } from "../../db/connection.js";
@@ -27,9 +26,11 @@ import {
   stageProfileContainsPublicIdentity,
 } from "./slurp-generation.service.js";
 import { resolveNoodlerSourceSnapshot } from "./slurp-source-resolve.js";
-import { normalizeNoodlerStageProfileDraft } from "./slurp-stage-profile-normalize.js";
+import { jsonrepair } from "jsonrepair";
+import { repairSlurpStageProfileDraft, SLURP_STAGE_PROFILE_LIMITS } from "./slurp-stage-profile-repair.js";
 import { noodlerConcealedSourceText, noodlerSourceText } from "./slurp-prompt-safety.js";
 import { createNoodlerSourceRevisionToken } from "./slurp-source-revision.js";
+import type { SlurpStageProfileInput } from "./slurp-discovery-profile.js";
 
 /** Used only when a source card carries no usable prose, so the model still gets a starting point. */
 const CONCEALED_SOURCE_FALLBACK_BRIEF = "General temperament and creative interests from the source profile.";
@@ -39,9 +40,7 @@ type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof cre
 function disclosureRules(mode: NoodleIdentityDisclosure, publicIdentity: { displayName: string; handle: string }) {
   if (mode === "open")
     return `This is the same public creator. Use exactly ${publicIdentity.displayName} as displayName and ${publicIdentity.handle} as handle. Write a concise social profile bio that summarizes the linked source. Preserve a direct bio edit from the current draft. Do not invent a stage identity.`;
-  if (mode === "hinted")
-    return "Create the same person behind a different stage name and handle, as an open secret. Preserve species, body, age range, unusual anatomy, scars, missing or unusual features, clothing preferences, voice, interests, and recurring visual traits. Preserve indirect clues that regular followers may recognize. Never use the exact public name or handle, and never copy canonical biography sentences.";
-  return "The same person behind an anonymous alias, taking real care not to be traced. Use a different display name and handle. Keep their body, voice, humour, interests, and everyday life fully intact — this person is specific, not vague. Withhold only the linkable details: the public name and handle, the face and any one-of-a-kind marker such as species traits, unusual anatomy, or a signature scar or outfit, plus named people, employer, city, and any canonical event that could be looked up.";
+  return "Create the same person behind a different stage name and handle, as an open secret. Preserve species, body, age range, unusual anatomy, scars, missing or unusual features, clothing preferences, voice, interests, and recurring visual traits. Preserve indirect clues that regular followers may recognize. Never use the exact public name or handle, and never copy canonical biography sentences.";
 }
 
 export function buildNoodlerStageProfileDraftMessages(input: {
@@ -50,6 +49,8 @@ export function buildNoodlerStageProfileDraftMessages(input: {
   source: {
     data: string | ({ name?: unknown } & Record<string, unknown>);
   } | null;
+  /** The `discoveryTags` setting; the model may only pick from these. */
+  allowedTags: readonly string[];
 }): ChatMessage[] {
   const identity = buildNoodlerPublicIdentity(input.publicAccount, input.source);
   const protectedDraft = input.request.currentDraft
@@ -65,38 +66,27 @@ export function buildNoodlerStageProfileDraftMessages(input: {
   const sourceDetails = input.source
     ? noodlerSourceText(input.source.data)
     : "General temperament and creative interests from the source profile.";
-  const hintedBrief = input.request.disclosureMode === "hinted";
+  // Anything that is not Open is Hinted: Slurp no longer offers a Secret tier.
   const rawSourceContext =
-    input.request.disclosureMode === "secret"
+    input.request.disclosureMode !== "open"
       ? [
-          "# Anonymous alias brief",
-          "This is the same person as the source, running a page they do not want traced back to them. They are not a different person and not a vaguer one.",
-          "Keep them fully themselves: same body, same voice, same humour, same tastes, same everyday life. An anonymous creator is specific and vivid, because their body and personality are the page.",
-          "Withhold only what would link them: the source name and handle, the face and any one-of-a-kind marker, named people, employer, and city, and any canonical event someone could look up.",
-          // Secret is validated against this rule but was never told it, which is why creating a
-          // Secret creator failed more often than the other modes, and opaquely.
-          "Do not reuse four or more of the source's distinctive words in sequence, ignoring short connecting words. Write it all in your own wording.",
+          "# Open-secret inspiration brief",
+          "The stage identity is the same person as the source. Carry over look, vibe, interests, and daily life so a regular follower can recognize them.",
+          // Worded to match the validator, which strips words shorter than four characters before
+          // checking 4-grams. "Four consecutive words" invited a faithful paraphrase that only
+          // swapped the stopwords the validator drops anyway, so the more carefully the model
+          // obeyed, the more likely it tripped and the creation failed.
+          "Never use the source name or handle. Do not reuse four or more of the source's distinctive words in sequence, ignoring short connecting words — change the notable nouns, verbs, and adjectives, not just the words between them. Rewrite everything in the stage voice.",
           noodlerConcealedSourceText(input.source?.data) || CONCEALED_SOURCE_FALLBACK_BRIEF,
         ].join("\n")
-      : hintedBrief
-        ? [
-            "# Open-secret inspiration brief",
-            "The stage identity is the same person as the source. Carry over look, vibe, interests, and daily life so a regular follower can recognize them.",
-            // Worded to match the validator, which strips words shorter than four characters before
-            // checking 4-grams. "Four consecutive words" invited a faithful paraphrase that only
-            // swapped the stopwords the validator drops anyway, so the more carefully the model
-            // obeyed, the more likely it tripped and the creation failed.
-            "Never use the source name or handle. Do not reuse four or more of the source's distinctive words in sequence, ignoring short connecting words — change the notable nouns, verbs, and adjectives, not just the words between them. Rewrite everything in the stage voice.",
-            noodlerConcealedSourceText(input.source?.data) || CONCEALED_SOURCE_FALLBACK_BRIEF,
-          ].join("\n")
-        : [
-            "# Source character or persona",
-            // `Public name:` is dropped: noodlerSourceText already opens with `Name:` from the same
-            // card, so the Open block stated the name twice in consecutive lines.
-            `Public handle: @${input.publicAccount.handle}`,
-            `Public bio: ${input.publicAccount.bio || "No bio provided."}`,
-            sourceDetails,
-          ].join("\n");
+      : [
+          "# Source character or persona",
+          // `Public name:` is dropped: noodlerSourceText already opens with `Name:` from the same
+          // card, so the Open block stated the name twice in consecutive lines.
+          `Public handle: @${input.publicAccount.handle}`,
+          `Public bio: ${input.publicAccount.bio || "No bio provided."}`,
+          sourceDetails,
+        ].join("\n");
   const sourceContext =
     input.request.disclosureMode === "open"
       ? rawSourceContext
@@ -111,7 +101,12 @@ export function buildNoodlerStageProfileDraftMessages(input: {
         "Create one editable Slurp creator profile draft.",
         // disclosureMode is chosen by the caller and stripped by the parser, so asking for it only
         // invites the model to second-guess a decision it does not own.
-        "Return JSON only with displayName, handle, bio, and stagePersonality.",
+        "Return JSON only with displayName, handle, bio, stagePersonality, gender, and tags.",
+        // A new Creator cannot be saved without a gender and three tags, so the draft must supply them.
+        // Asking for null "when unclear" produced drafts that the create step then refused.
+        "gender must be male, female, or other. Choose the one the source supports best; use other when it is unclear. Never leave it out or use null.",
+        `tags must contain three to eight relevant values selected only from: ${input.allowedTags.join(", ")}. Always include at least three.`,
+        `Length limits: displayName at most ${SLURP_STAGE_PROFILE_LIMITS.displayName} characters, handle at most ${SLURP_STAGE_PROFILE_LIMITS.handle} characters without @, bio at most ${SLURP_STAGE_PROFILE_LIMITS.bio} characters, stagePersonality at most ${SLURP_STAGE_PROFILE_LIMITS.stagePersonality} characters (three to six sentences).`,
         // The post prompt states the person-vs-performance contract to the model that *consumes*
         // stagePersonality, but the model that writes it was never told what the field is for. The
         // obvious guess is "restate the personality", which collapses the two layers into one trait
@@ -135,13 +130,28 @@ export function buildNoodlerStageProfileDraftMessages(input: {
   ];
 }
 
-const noodlerStageProfileDraftSchema = noodleStageProfileDraftResponseSchema.omit({ disclosureMode: true }).strip();
-
-export function parseNoodlerStageProfileDraft(content: string) {
-  const normalized = normalizeNoodlerStageProfileDraft(
-    parseGameJsonish(requireModelAnswer(content, "a creator profile")),
-  );
-  return noodlerStageProfileDraftSchema.parse(normalized);
+/**
+ * Read one model answer into a repaired draft, or null when nothing usable came back.
+ *
+ * The tolerant game parser handles fences, prose, and trailing commas. `jsonrepair` is the last
+ * resort for what it cannot read: single-quoted values and unescaped quotes inside a value.
+ */
+export function parseNoodlerStageProfileDraft(content: string, allowedTags?: readonly string[]) {
+  const answer = content.trim();
+  if (!answer) return null;
+  let value: unknown;
+  try {
+    value = parseGameJsonish(answer);
+  } catch {
+    const start = answer.indexOf("{");
+    const end = answer.lastIndexOf("}");
+    try {
+      value = JSON.parse(jsonrepair(start >= 0 && end > start ? answer.slice(start, end + 1) : answer));
+    } catch {
+      return null;
+    }
+  }
+  return repairSlurpStageProfileDraft(value, allowedTags);
 }
 
 export async function generateNoodlerStageProfileDraft(
@@ -151,7 +161,7 @@ export async function generateNoodlerStageProfileDraft(
     connection: GenerationConnection;
   },
 ): Promise<
-  NoodleStageProfileInput & {
+  SlurpStageProfileInput & {
     sourceSnapshot?: Awaited<ReturnType<typeof resolveNoodlerSourceSnapshot>>;
     sourceRevisionToken?: string;
   }
@@ -188,10 +198,12 @@ export async function generateNoodlerStageProfileDraft(
         : null;
   const identity = buildNoodlerPublicIdentity(publicAccount, source);
   const sourceSnapshot = await resolveNoodlerSourceSnapshot(db, publicAccount);
+  const allowedTags = (await noodle.getSettings()).discoveryTags.map((entry) => entry.tag);
   const messages = buildNoodlerStageProfileDraftMessages({
     request: input.request,
     publicAccount,
     source,
+    allowedTags,
   });
   const debugMode = isDebugAgentsEnabled();
   logDebugOverride(
@@ -235,13 +247,11 @@ export async function generateNoodlerStageProfileDraft(
     responseFormat: noodleResponseFormat(input.connection.model, "noodler_profile"),
   } as const;
   const response = await provider.chatComplete(messages, completionOptions);
-  let parsedDraft: ReturnType<typeof parseNoodlerStageProfileDraft>;
-  try {
-    parsedDraft = parseNoodlerStageProfileDraft(response.content ?? "");
-  } catch {
-    // One retry with the field names spelled out, same sampling options as the first attempt.
-    // Without the retry a single malformed answer fails the creator outright, which is what the
-    // wizard reported as "creation failed".
+  let repaired = parseNoodlerStageProfileDraft(response.content ?? "", allowedTags);
+  let lastAnswer = response.content ?? "";
+  // One retry, only when nothing usable came back. A draft with fixable fields is repaired instead,
+  // so a long bio or a missing gender no longer costs a second model call or fails the draft.
+  if (!repaired) {
     const retry = await provider.chatComplete(
       [
         ...messages,
@@ -252,12 +262,34 @@ export async function generateNoodlerStageProfileDraft(
         {
           role: "user",
           content:
-            "That was not a valid stage profile object. Return exactly one JSON object with the keys displayName, handle, bio, and stagePersonality, all strings. No other keys, no prose.",
+            "That was not a valid stage profile object. Return exactly one JSON object with string keys displayName, handle, bio, and stagePersonality; gender as male, female, or other; and tags as an array of three to eight allowed tag strings. Use double quotes. No other keys, no prose.",
         },
       ],
       completionOptions,
     );
-    parsedDraft = parseNoodlerStageProfileDraft(retry.content ?? "");
+    repaired = parseNoodlerStageProfileDraft(retry.content ?? "", allowedTags);
+    lastAnswer = retry.content ?? "";
+  }
+  if (!repaired) {
+    // An empty last answer has its own advice (raise max output tokens); anything else is unusable JSON.
+    requireModelAnswer(lastAnswer, "a creator profile");
+    throw new Error(
+      "The model did not return a usable creator profile. Try again, or pick a model that answers with JSON.",
+    );
+  }
+  const parsedDraft = repaired.draft;
+  const notes = [...repaired.notes];
+  // A hinted draft that names its source in prose is rewritten, not rejected. The name and handle
+  // still have to be the model's own; the check below refuses those.
+  if (input.request.disclosureMode !== "open") {
+    for (const field of ["bio", "stagePersonality"] as const) {
+      const protectedValue =
+        protectNoodlerGeneratedIdentity(parsedDraft[field], input.request.disclosureMode, identity) ?? "";
+      if (protectedValue !== parsedDraft[field].trim()) {
+        parsedDraft[field] = protectedValue;
+        notes.push(`The source name was removed from the ${field === "bio" ? "bio" : "stage personality"}.`);
+      }
+    }
   }
   const draft = {
     ...parsedDraft,
@@ -268,6 +300,8 @@ export async function generateNoodlerStageProfileDraft(
   }
   return {
     ...draft,
+    // What the repair changed or still needs, for the create form. Never saved on the Creator.
+    notes,
     ...(input.request.disclosureMode === "open"
       ? {
           displayName: publicAccount.displayName,

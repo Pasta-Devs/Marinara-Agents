@@ -144,8 +144,8 @@ assert.match(view, /setDrawerMode\(null\);[\s\S]{0,180}setMessageSearchOpen\(fal
 assert.match(view, /Conversation overview/u);
 assert.match(view, /if \(distanceFromBottom <= 96\)/u);
 assert.doesNotMatch(view, /creatorStatus &&/u);
-assert.match(hook, /refetchInterval: threadId && personaId \? 60_000 : false/u);
-assert.match(hook, /refetchInterval: creatorAccountId && personaId \? 60_000 : false/u);
+assert.match(hook, /refetchInterval: threadId && personaId \? 30_000 : false/u);
+assert.match(hook, /refetchInterval: creatorAccountId && personaId \? 30_000 : false/u);
 
 // The mobile conversation must contain its header and commission controls instead of widening the viewport.
 assert.match(view, /min-w-0 min-w-0|max-w-full flex-1 items-center gap-2 overflow-hidden/u);

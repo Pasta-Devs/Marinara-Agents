@@ -192,7 +192,7 @@ export async function replyToSlurpMessage(
       const settings = await slurp.getSettings();
       const connection = await resolveSlurpTextConnection(
         createConnectionsStorage(db),
-        settings.generationConnectionId,
+        settings.modelBudget.connectionId ?? settings.generationConnectionId,
       );
       if (!connection) return { status: "connection_not_found" } as const;
       const messaging = await messagesStore.getCreatorMessaging(thread.creatorAccountId);
@@ -322,7 +322,11 @@ export async function replyToSlurpMessage(
             content: reply.image.caption,
             price,
             unlockedAt: price > 0 ? null : new Date().toISOString(),
-            metadata: { noodlerMediaPath: drawn.mediaPath, generatedContext: reply.imageMode },
+            metadata: {
+              noodlerMediaPath: drawn.mediaPath,
+              generatedContext: reply.imageMode,
+              imagePrompt: reply.image.prompt,
+            },
           });
           if (!imageMessage) {
             drawn.compensate();

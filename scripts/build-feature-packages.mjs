@@ -161,10 +161,15 @@ const slurpOwnedSourcePaths = [
 // The remaster owns strictly more of the tree than the frozen legacy package does.
 const slurp2OwnedSourcePaths = [
   ...slurpOwnedSourcePaths,
+  "packages/shared/src/slurp-autopurge-time.ts",
   "packages/client/src/hooks/use-slurp-media-src.ts",
   "packages/client/src/lib/api-client.ts",
+  "packages/client/src/lib/slurp-custom-emojis.ts",
+  "packages/client/src/lib/slurp-discovery.ts",
+  "packages/client/src/lib/slurp-refresh-batch.ts",
   "packages/server/src/routes/slurp-messages.routes.ts",
   "packages/server/src/services/storage/slurp-financial-queue.ts",
+  "packages/server/src/services/storage/slurp-file-errors.ts",
   "packages/server/src/services/storage/slurp-host-tables.ts",
   "packages/server/src/services/storage/slurp-messages.helpers.ts",
   "packages/server/src/services/storage/slurp-messages.storage.ts",
@@ -286,7 +291,7 @@ async function removeOwnedSourceSnapshots(excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.2.23",
+    version: "1.2.24",
     minEngineVersion: "2.4.4",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
@@ -399,7 +404,7 @@ const features = [
   },
   {
     id: "slurp2",
-    version: "0.0.6",
+    version: "0.0.16",
     minEngineVersion: "2.4.5",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp Remastered",
@@ -437,7 +442,7 @@ const features = [
     category: "misc",
     kind: ["agent"],
     modes: ["conversation", "roleplay", "game"],
-    permissions: ["chat-read", "network", "routes", "storage", "ui"],
+    permissions: ["chat-read", "network", "prompt-context", "routes", "storage", "ui"],
     serverImport: "packages/server/src/services/slurp/server-entry.ts",
     serverEntry: true,
     clientImport: "packages/client/src/slurp-package-entry.tsx",
@@ -556,7 +561,7 @@ const features = [
   {
     id: "conversation-calls",
     name: "Calls",
-    version: "1.0.15",
+    version: "1.0.16",
     minEngineVersion: "2.4.1",
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],

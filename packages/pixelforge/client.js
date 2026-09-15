@@ -1,4 +1,4 @@
-// Pixelforge 0.16.5 — Marinara Engine game-surface Experience (single-file client bundle)
+// Pixelforge 0.16.8 — Marinara Engine game-surface Experience (single-file client bundle)
 // Built from packages/pixelforge/src (20 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -234,7 +234,7 @@ PF.fail = (elOrNull, err) => {
 
 // ===== 10-art.js =====
 // ── Tier-0 procedural art ─────────────────────────────────────────────────────
-// The deterministic bottom rung: a fixed 32-colour ramp and canvas-painted
+// The deterministic bottom rung: a fixed 39-colour ramp and canvas-painted
 // tiles/sprites so the game is playable with zero assets and zero network.
 // Later tiers (authored atlas, AI bake) resolve above this and fall back here.
 //
@@ -296,8 +296,9 @@ PF.art = (() => {
   const T = PF.TILE;
 
   /** One 16×16 tile canvas: Tier-1 (authored atlas) ?? Tier-0 (procedural).
-   *  Tier-1 only serves the theme it was authored for; other themes stay
-   *  procedural until themed atlases ship. */
+   *  Tier-1 serves whichever theme the loaded sheet was authored for, and both
+   *  shipped themes have an authored sheet. A theme with no baked sheet, or one
+   *  whose sheet failed to load, stays procedural. */
   const tileCache = new Map();
   function tile(id) {
     if (activeTheme === PF.assets?.atlasTheme) {
@@ -956,19 +957,187 @@ PF.art = (() => {
   };
 })();
 
+// ===== 12-theme.js =====
+// Resolve the unsealed world's visual kit from the Engine's Setting text.
+// Generated briefs may choose a supported artTheme; their sealed theme remains
+// authoritative afterward. Legacy explicit theme selections keep their reader.
+const KIT_WORDS = {
+  "cozy-village": [
+    "village",
+    "hamlet",
+    "farm",
+    "cottage",
+    "orchard",
+    "meadow",
+    "valley",
+    "forest",
+    "wood",
+    "harvest",
+    "tavern",
+    "innkeep",
+    "barn",
+    "thatch",
+    "hearth",
+    "cozy",
+    "pastoral",
+    "medieval",
+    "blacksmith",
+    "bakery",
+    "goat",
+    "sheep",
+  ],
+  "sci-fi-colony": [
+    "colony",
+    "coloni",
+    "station",
+    "habitat",
+    "hab",
+    "dome",
+    "terraform",
+    "orbit",
+    "spaceport",
+    "starship",
+    "shuttle",
+    "android",
+    "robot",
+    "reactor",
+    "hydroponic",
+    "airlock",
+    "alien",
+    "asteroid",
+    "frontier",
+    "outpost",
+    "cyber",
+    "plasma",
+    "oxygen",
+    "crew",
+    "corridor",
+    "vacuum",
+  ],
+};
+
+/** THE SUFFIXES A LEXICON WORD IS ALLOWED TO GROW, and this list is the whole
+ *  cost of matching on prefixes at all.
+ *
+ *  A bare `startsWith` mis-kits ordinary English, and it does it in the one
+ *  direction that matters: `cozy-village` scores ZERO on most prose that is not
+ *  explicitly about farms and inns, so a single stray token flips the answer.
+ *  Measured against the shipped lexicon — "hab", "dome" and "crew" are all in it
+ *  — "Domestic and slow" reads as a space colony, so does "habitually … a habit
+ *  of centuries", and so does "a crewel-work shop". The first of those is the
+ *  maintainer's own worked example rendered as a hab ring.
+ *
+ *  Exact-token matching fixes those three and breaks more than it fixes:
+ *  "coloni", "hydroponic", "terraform" and "innkeep" are deliberate STEMS, and
+ *  exact matching silently retires all four — "colonies", "terraforming",
+ *  "hydroponics" and "innkeeper" would stop voting. A minimum prefix length is
+ *  no better: it loses "domes", "crews" and "domed", and its passes on the cozy
+ *  side are the default masking a miss rather than a detection.
+ *
+ *  So the prefix stays and the REMAINDER is checked: `dome` + `s` is a dome,
+ *  `dome` + `stic` is not. Four matchers were run against the three
+ *  counterexamples, suffix-only prose and short-word plurals; this is the only
+ *  one that took all three sets. The trade is stated rather than assumed — the
+ *  list is a closed vocabulary, so a real word ending this list does not carry
+ *  ("domelike", say) is a miss, and the answer to a miss is to add the suffix
+ *  here rather than to loosen the match.
+ *
+ *  THE `-ion` FAMILY IS HERE BECAUSE THE FIRST CUT OF THIS LIST LOST THE COLONY
+ *  NOUN, and that is the shape of the mistake worth naming: bounding the
+ *  remainder traded a false-POSITIVE class for a false-NEGATIVE one, and only
+ *  the half it was aiming at got measured. `colonisation`, `colonization` and
+ *  `habitation` are the noun forms of the three most on-theme words in the
+ *  lexicon, and every one of them scored zero — so "Colonization of Mars, one
+ *  habitation module at a time." came out a cozy village. Measured over the
+ *  whole lexicon, this family turns 18 tokens ON and none off. Two spellings of
+ *  each, because the STEM decides the remainder: `coloni` + `sation`, but
+ *  `robot` + `ised`.
+ *
+ *  Two suffixes were measured and DELIBERATELY LEFT OUT. `ary` recovers
+ *  `stationary` and re-opens the exact false-positive class this list exists to
+ *  close — "The cart stood stationary in the rain." reads as a space colony.
+ *  `like` recovers `domelike` and nothing else, and the paragraph above already
+ *  carries that one as the acknowledged miss. The collateral that IS accepted is
+ *  `alienation` and `oxygenation`: both stems already vote colony bare, so
+ *  neither is a new class, only a new inflection of an old one. */
+const SUFFIX =
+  /^(s|es|ed|d|ing|er|ers|ies|y|st|sts|ist|ists|land|lands|house|houses|hand|hands|man|men|folk|side|smith|keeper|keepers|al|ic|ics|ion|ions|ation|ations|sation|sations|zation|zations|sing|zing|sed|zed|ising|izing|ised|ized)$/;
+/** `st`/`sts`/`ist`/`ists` are in the set for `colonist` = `coloni` + `st`,
+ *  which is the multi-line lane's own word; without them that lane passes only
+ *  because `dome` and `airlock` also hit, which is a lane passing for the wrong
+ *  reason. */
+const matches = (token, word) => token === word || (token.startsWith(word) && SUFFIX.test(token.slice(word.length)));
+
+/** Tokens rather than substrings, and then a bounded prefix on top of that. A
+ *  token counts once for a kit however many of that kit's words it matches —
+ *  `hits++` sits outside `words.some(…)` and counts the TOKEN, not the word.
+ *
+ *  THAT RULE IS UNOBSERVABLE TODAY, AND THE COMMENT USED TO CLAIM OTHERWISE.
+ *  It offered "hydroponics domes is two votes and not four" as its worked
+ *  example, which is simply false: `hydroponics` fires `hydroponic` and nothing
+ *  else, `domes` fires `dome` and nothing else, so that phrase is two votes
+ *  under either counting rule. A review round then read the rule as an untested
+ *  claim and set out to pin it, on "a colony village" — also false, because
+ *  `colony` and the stem `coloni` diverge at their sixth letter and no token
+ *  starts with both.
+ *
+ *  The precondition, measured over the whole lexicon: both arms of `matches`
+ *  require the token to START WITH the word, so a token can only fire two words
+ *  of one kit if one of those words is a prefix of the other. Exactly one such
+ *  pair exists — `hab` inside `habitat` — and its remainder, "itat", is not in
+ *  SUFFIX, so nothing fires both. Swept across every word × every suffix, the
+ *  most words of one kit any generated token fires is ONE.
+ *
+ *  So the rule is a guard against a lexicon that does not exist yet, and the
+ *  harness carries no lane for it because every lane would pass with `some` and
+ *  without it. THE EDIT THAT ENDS THAT: adding a word whose own kit already
+ *  carries a prefix of it with a live suffix between them — `colonies` beside
+ *  `coloni`, say, or `habitation` beside `hab` if `itation` ever joined SUFFIX.
+ *  On the day that lands, the rule starts deciding real sentences ("a colonies
+ *  village" would tie under it and go sci-fi without it) and wants a lane. */
+const themeFromWords = (text) => {
+  const tokens = String(text ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .split(" ")
+    .filter(Boolean);
+  let best = "cozy-village";
+  let bestHits = 0;
+  for (const [theme, words] of Object.entries(KIT_WORDS)) {
+    let hits = 0;
+    for (const token of tokens) if (words.some((word) => matches(token, word))) hits++;
+    // STRICTLY greater, so a tie keeps the incumbent and nothing wins by being
+    // first in the table: a tie and zero hits both land on cozy-village.
+    if (hits > bestHits) {
+      best = theme;
+      bestHits = hits;
+    }
+  }
+  return best;
+};
+
+PF.theme = { themeFromWords, kitIds: () => Object.keys(KIT_WORDS) };
+
 // ===== 15-assets.js =====
 // ── Tier-1 asset loader ───────────────────────────────────────────────────────
 // Loads the authored atlas + sprite sheets shipped as package assets
 // (contributions.assets, Capability API 1.10). Every draw resolves
-// Tier1 ?? Tier0, so a missing/failed load (older engine without the assets
-// route, network trouble, corrupted file → 404) leaves the game fully playable
-// on procedural art. Uses the packageId/packageVersion the host injects into
+// Tier1 ?? Tier0, so a missing/failed load leaves the game fully playable on
+// procedural art. An engine that cannot serve assets is not one of those
+// cases: install refuses a package whose engine range or Capability API the
+// host cannot meet, so it never gets far enough to draw. What does fall back
+// is a failed fetch (network trouble, corrupted file → 404), a theme with no
+// baked sheet, a sheet smaller than its own id map, and a host that passes no
+// package id. Uses the packageId/packageVersion the host injects into
 // capabilityProps; ?v= keys the browser cache per version (assets revalidate
 // with ETags — never immutable).
 PF.assets = {
   status: "idle", // idle | loading | ready | failed
-  /** The theme the shipped atlas was authored for: Tier-1 art only serves this
-   *  theme; every other theme renders procedurally until themed atlases ship. */
+  /** The theme the LOADED sheet was authored for: both shipped themes have an
+   *  authored sheet, and load() swaps in whichever one the active theme needs.
+   *  This stays cozy-village before the first load settles, and whenever a
+   *  theme has no baked sheet and the cozy sheet stands in for it, which is
+   *  what keeps that theme procedural. */
   atlasTheme: "cozy-village",
   atlas: null, // {tileSize, columns, tiles: {id: index}}
   sprites: null, // {frameWidth, frameHeight, frames, rows, actors: {name: path}}
@@ -1020,8 +1189,8 @@ PF.assets = {
    *  only for an id the atlas does NOT list. An id the atlas DOES list, against
    *  a sheet too small to hold it, blits an empty in-bounds slot or a no-op
    *  out-of-bounds rect. That is a see-through world rather than procedural art,
-   *  and it is exactly what a release that appends tile ids ships if the sheet
-   *  goes out un-rebaked.
+   *  which is why the mismatch is worth catching even though the bake makes it
+   *  hard to produce.
    *
    *  `naturalHeight`/`naturalWidth`, not `height`/`width`: `_image()` resolves on
    *  the load event without decode(), and the attribute-shadowed pair is not the
@@ -1036,12 +1205,15 @@ PF.assets = {
    *  sheet, so the guard asks both.
    *
    *  THE HONEST SCOPE, because the guard is narrower than it looks: it catches a
-   *  sheet too SMALL for its id map, and that it covers this release at all is
-   *  arithmetic luck of the count — 33 ids into 32 slots. Three appended
-   *  painters instead of four would have landed in bounds and slipped straight
-   *  past it. An aligned-but-stale sheet is busted by the `?v=` cache key
-   *  instead, and ids deliberately absent from the atlas keep the per-tile null
-   *  path they already had. */
+   *  sheet too SMALL for its id map, and on the shipped pairing it is dormant,
+   *  40 slots against 33 ids. It has never fired on a committed pairing, and it
+   *  should not: one build run emits every theme sheet and atlas.json from the
+   *  same id list, so the sheet's row count and the map are sized together and
+   *  cannot drift apart. What is left for the guard is a sheet that reaches an
+   *  install some other way, hand-edited, truncated, or half-copied. An
+   *  aligned-but-stale sheet is busted by the `?v=` cache key instead, and ids
+   *  deliberately absent from the atlas keep the per-tile null path they
+   *  already had. */
   _overCapacity(img) {
     const tiles = this.atlas?.tiles;
     const size = this.atlas?.tileSize;
@@ -1080,14 +1252,17 @@ PF.assets = {
     // distinction every props delivery would re-run a 404-fetch + full zone
     // recomposite storm (review finding).
     if (this.status === "ready" && this._requestedTheme === theme) return;
-    // No packageId (pre-#5092 engine) is the one terminal state; network
-    // failures retry, rate-limited, so a transient outage no longer disables
-    // Tier-1 for the whole session (0.3.0 regression fix).
+    // The FIRST of the loader's two terminal states: no packageId (pre-#5092
+    // engine), which is terminal for the whole session. Network failures are
+    // not terminal, they retry, rate-limited, so a transient outage no longer
+    // disables Tier-1 for the whole session (0.3.0 regression fix).
     if (this._noPackage) return;
     // The SECOND terminal, and it is `_noPackage`-shaped for the same reason:
     // a sheet that cannot hold its own id map is a shipped artifact, identical
     // on every retry. Sending it to "failed" alone would re-fetch the whole
-    // asset set every 30 seconds, forever, on exactly the broken installs.
+    // asset set every 30 seconds, forever, on exactly the broken installs. It
+    // returns before the retry clock is even consulted, and unlike the first it
+    // is terminal only for this theme at this package version.
     if (this._capacityLatch === this._capacityKey(core, theme)) return;
     if (this.status === "failed" && Date.now() - (this._failedAt ?? 0) < 30_000) return;
     if (typeof core.host?.packageId !== "string") {
@@ -1658,12 +1833,20 @@ PF.weather = (() => {
   }
 
   // ── The GM override slot ───────────────────────────────────────────────────
-  // WRITTEN BY NOTHING IN THIS RELEASE except a console, deliberately: the host
-  // dispatches `onHostEvent` on engine-defined type strings only, so there is no
-  // surface for a real writer to sit on yet (that is the feature request's).
-  // What exists is the READ side, whole and verifiable, and the incantation is
-  // TWO lines — the runtime slot is a sim field, and the town only re-places on
-  // a resolve:
+  // WRITTEN BY THE STORYTELLER, in ordinary play: the package declares a
+  // `weather` state verb in `gm-verbs.json`, and the engine writes that verb's
+  // arguments wholesale into the chat's metadata under `pixelforgeWeather`,
+  // where `foldOverride` below picks them up. The verb takes one of the five
+  // words plus an optional `intensity` of light or heavy, declared for every
+  // word: only rain and snow keep it, because `foldOverride` below drops an
+  // intensity from a word whose `takesIntensity` is false. It takes no day
+  // argument, so a sky set that way holds until it is set again; the `sinceDay`
+  // and `untilDay` fields folded below are the read side's own window, honoured
+  // when a row carries them and absent from anything the verb writes.
+  //
+  // A CONSOLE IS THE DEBUGGING SHORTCUT, not the writer. The incantation is TWO
+  // lines, because the runtime slot is a sim field and the town only re-places
+  // on a resolve:
   //
   //     core.sim.weatherOverride = { word: "storm" };
   //     core.sim.resolveSchedules();
@@ -1704,10 +1887,15 @@ PF.weather = (() => {
   }
 
   /** The comparand the mid-session reconciler memoises: the SERIALIZED WHOLE of a
-   *  folded override, never the word alone. A console change from
-   *  `{word:"storm"}` to `{word:"storm", intensity:"heavy"}` is this release's
-   *  documented verification incantation, and a word-only key would sit on it
-   *  until the day rolled. */
+   *  folded override, never the word alone. A storyteller who says rain and then
+   *  heavy rain writes the same word twice with a new intensity, which is an
+   *  ordinary turn-to-turn move; a word-only key would not move at all, so the
+   *  reconciler would never re-apply and `weather()`'s day-keyed memo would hold
+   *  the old intensity until the day rolled. The intensity has to be one a word
+   *  actually takes: `storm` takes none, so a stored `{word:"storm",
+   *  intensity:"heavy"}` is folded to `{word:"storm"}` before it ever reaches
+   *  this key and the metadata path sees no move. A console write assigns the
+   *  runtime slot unfolded, so on that path the extra field does move the key. */
   function overrideKey(override) {
     if (!override || typeof override !== "object") return "";
     return `${override.word ?? ""}|${override.intensity ?? ""}|${override.sinceDay ?? ""}|${override.untilDay ?? ""}`;
@@ -1971,8 +2159,9 @@ PF.brief = (() => {
   // every 8 rows and every 9 columns, and a map only 30 tall has room for two
   // rows of them however wide it is — so a village used to lay six lots on 1320
   // tiles and read as a hamlet with a lot of grass. Lots per rank now run
-  // 4 / 8 / 16 / 36 / 80, which is the first progression where each rank looks
-  // like a bigger VERSION of the one below rather than the same place zoomed.
+  // 4 / 8 / 20 / 36 / 80 before the `buildings` ceiling below clamps them, which
+  // is the first progression where each rank looks like a bigger VERSION of the
+  // one below rather than the same place zoomed.
   //
   // `buildings` is the ceiling on how many of those lots get laid out, and it is
   // deliberately kept ABOVE what the population arithmetic asks for at each rank
@@ -2140,11 +2329,14 @@ PF.brief = (() => {
   }
 
   /** THE ART MODULE'S ID LIST, READ THROUGH ONE DOOR (0.16.2). Four call sites
-   *  in this module now ask 10-art what kits exist, and three of them run BEFORE
-   *  the network request inside generate()'s try — whose catch reports
-   *  `onFailure("network")`. A partial `PF.art` (a `themeIds` that throws) would
-   *  therefore burn a paid call and blame the network for a type error, from
-   *  three new places at once, so the read is done here and the throw stops
+   *  in this module ask 10-art what kits exist, and three of them sit on the
+   *  generation path: guidance() and schema() run inside generate()'s try BEFORE
+   *  the network request, and validate()'s read runs AFTER the response on the
+   *  same path. (defaults() is the fourth and generation never reaches it.) That
+   *  try's catch reports `onFailure("network")`, so a partial `PF.art` (a
+   *  `themeIds` that throws) would blame the network for a type error from any
+   *  of the three, and from the one after the response it would also burn the
+   *  paid call it had just made. So the read is done here and the throw stops
    *  here. The SHAPE check stays at the four sites, spelled out each time
    *  (`Array.isArray(list) && list.length`), because "there is an authority" is
    *  the thing each of them branches on and it should be readable where it is
@@ -3048,7 +3240,7 @@ PF.brief = (() => {
       //
       // WHICH IS WHY THE WIZARD'S RESOLVER KEEPS IT, and that is not a copy that
       // fell behind. This list states what a kit CONTAINS, to a model that has not
-      // seen the art; `KIT_WORDS` in 80-setup reads what a PLAYER MEANT, off
+      // seen the art; `KIT_WORDS` in 12-theme reads what a PLAYER MEANT, off
       // ordinary English connotation. A hearth is genuinely in both kits, and a
       // player who types "hearth" is genuinely describing a village. Both
       // statements are true at once, so the word belongs in exactly one of these
@@ -3105,8 +3297,10 @@ PF.brief = (() => {
       `  standing (optional, default resident): one of ${STANDING.join(" | ")}. transient = passing`,
       "  through; fringe = lives apart at the edges (hermit, outcast, refugee); destitute = no home.",
       "  Keep most people resident; a crossroads or waystation may have many transients.",
-      "- backgroundPopulation: total inhabitants including the cast (0-500). This is narrative",
-      "  texture for the map description — it never creates buildings.",
+      "- backgroundPopulation: how populous the place is, cast included (0-500). It informs the flavor and",
+      "  situation you write, and within what a settlement of this size class can hold it also moves how",
+      "  many homes are built, up or down; the compiled town derives its head count from it rather than",
+      "  matching it exactly. It never changes the size class; 0 means the usual number of homes.",
       "",
       "Only the cast, features, and places you name will exist. Keep names in the player's language.",
       // THE LORE CLAUSE, AND IT SHIPS ONLY WHEN LORE DOES. The entries the player
@@ -5161,8 +5355,10 @@ PF.world = (() => {
   //
   //   - The GATHERING always. Guest rooms upstairs is the shape an inn has had
   //     for as long as there have been inns, its berth budget is the largest band
-  //     the compiler lays (four to ten), and it is where a travelling group or a
-  //     player party goes.
+  //     the compiler lays (three to twelve, the table plus prosperity: see
+  //     GUEST_BERTHS, where the table stops at eleven so a thriving city lands
+  //     on twelve, the ceiling a thirteenth berth would fall through), and it is
+  //     where a travelling group or a player party goes.
   //   - The SANCTUARY always, but a BELL TOWER rather than a storey.
   //   - A HOUSE only when it is LARGE OR MERGED: four or more sleeping under one
   //     roof, or a block the over-subscription merge put more than one household
@@ -6949,8 +7145,13 @@ PF.world = (() => {
       // the door apron of the building they run for the whole of daylight, with
       // the lit common room and the counter behind them; a sanctuary's keeper did
       // the same on the church step, and the keeper schedule tier holds them
-      // there dawn to dusk. Both default briefs home their host at the root, so
-      // this was every default world.
+      // there dawn to dusk. Both worked-example briefs home their host at the
+      // gathering itself, so neither of them is the case this covers: a host
+      // homed IN the inn takes the named-building branch instead and gets the
+      // room's walkable middle. What reaches this is a brief that homes its host
+      // or its keeper at the settlement root, which is what the validator writes
+      // whenever a cast member arrives without a `home` of their own, and what
+      // the synthesized cast does for every one of its four.
       //
       // The station comes off the ZONE because the furnisher is what knows it.
       // Same handle shape the minted loop builds, so the promotion needs no
@@ -7662,9 +7863,14 @@ PF.world = (() => {
       // WHO LETS THE ROOMS: the cast member the specials pass bound to the
       // gathering's building — the `host` kind, the innkeeper — and only if the
       // brief named nobody, whoever the brief homed there. Deliberately NOT the
-      // `_sched.keeper` tier: that tier is PLACE_BOUND_SPECIALS, which is the
-      // sanctuary alone, so a gathering's owner never carries it and reading it
-      // here would leave every inn in the game with nobody behind the counter.
+      // `_sched.keeper` tier, which answers a different question in both
+      // directions. It is set for the HEAD RESIDENT of any named building (see
+      // headOfBuilding) as well as for the owner of a PLACE_BOUND_SPECIALS one,
+      // so a healer living at her infirmary and an elder at the moot house carry
+      // it too and it never picked the inn out; and it is NOT set for a host the
+      // brief homed at the settlement root instead of at the inn, so reading it
+      // here would leave exactly those inns with nobody behind the counter.
+      // Owning the gathering's facade is the fact this block actually wants.
       const facade = buildings.find((b) => b.boundPlace === gatheringPlace);
       const host = facade?.owner ?? headOfBuilding.get(gatheringZoneId) ?? null;
       // BOTH MARKS OR NEITHER. A brief can name a gathering and home nobody in it
@@ -9210,11 +9416,15 @@ PF.schedule = (() => {
     // the tile every zone guarantees walkable, and was standable in all 480
     // compiled zones tried, but the guarantee should live in the code.
     //
-    // Unreachable in practice, and deliberately not escalated to a null return:
-    // the smallest zone measured holds 119 standable tiles, comfortably more
-    // than any one zone's occupants even now that the mint fills a city (see
-    // npcOccupies in 30-sim.js for the measured population numbers), so this is
-    // a floor under a contract, not a live path.
+    // Unreachable in practice, and deliberately not escalated to a null return.
+    // The comparison has to be made PER ZONE, because the smallest zone and the
+    // most crowded one are never the same place: the smallest measured holds 62
+    // standable tiles (a 14x10 dwelling interior, sheltering a household of
+    // three), while the zones that hold a hundred-odd occupants are the city
+    // exteriors, which are two orders of magnitude bigger (see npcOccupies in
+    // 30-sim.js for the measured population numbers). Across every zone, scale,
+    // theme and daypart measured, the tightest case still left 59 standable
+    // tiles spare, so this is a floor under a contract, not a live path.
     if (standable(zone, zone.spawn.x, zone.spawn.y)) return { x: zone.spawn.x, y: zone.spawn.y };
     for (let y = 0; y < zone.h; y++) {
       for (let x = 0; x < zone.w; x++) if (standable(zone, x, y)) return { x, y };
@@ -9658,10 +9868,9 @@ PF.Sim = class {
    *  literal, a string hash and an rng construction, so the uncached version is
    *  that work sixty times a second. One comparison serves every consumer.
    *
-   *  The key is the SERIALIZED WHOLE of the override, not its word: a console
-   *  change from `{word:"storm"}` to `{word:"storm", intensity:"heavy"}` is the
-   *  documented verification incantation, and a word-only key would sit on it
-   *  until the day rolled.
+   *  The key is the SERIALIZED WHOLE of the override, not its word: a
+   *  storyteller who says rain and then heavy rain writes the same word with a
+   *  new intensity, and a word-only key would sit on that until the day rolled.
    *
    *  A PERF CACHE, NOT A TRANSITION DETECTOR. There is no `_weather` field
    *  anywhere: the ledger park derives both sides of a crossing itself, which is
@@ -10049,8 +10258,9 @@ PF.Sim = class {
     // THE RUNG WORD RIDES THE NEAR CLAUSE (0.15, plan §13.4), and only past
     // stranger — the GM should greet a friend as a friend without burning a
     // persona injection to learn it, and a stranger costs the header nothing
-    // because the word for "no standing" is no word. Hostility, when something
-    // someday writes it, outranks the rung here as it does on the window title.
+    // because the word for "no standing" is no word. Hostility outranks the rung
+    // here as it does on the window title, and the storyteller's standing command
+    // (62-gm) is what sets and clears the flag.
     // Read off the block the sim already carries for the ledger tell; the
     // header stays free of core lookups, and the words stay the ladder's own
     // (58-player RUNGS — index 0 blanked because the floor goes unsaid).
@@ -10493,8 +10703,10 @@ PF.Render = class {
    *
    *  A building's eave is painted two rows ABOVE its footprint, and those rows are
    *  ordinary walkable grass — so the player can stand there, and since the overhead
-   *  layer composites after the actors, the roof simply swallows them. Roughly 62
-   *  tiles per settlement are walkable-but-roofed, and tall buildings make it worse.
+   *  layer composites after the actors, the roof simply swallows them. How many tiles
+   *  end up walkable-but-roofed scales with the settlement's rank: roughly 30 in an
+   *  outpost, around 65 in a hamlet, and 520 to 600 in a city. Tall buildings make it
+   *  worse.
    *
    *  The zone composites are cached and player-independent, so the hole cannot live
    *  in them: it is punched into a view-sized scratch each frame instead. Only while
@@ -10550,10 +10762,19 @@ PF.Render = class {
 //
 // Review-hardened: a generation counter guards cross-chat races (a refresh
 // started for chat A must never write into chat B's world). Transition
-// outcomes arrive two ways: engines with capability API 1.12 address the
-// commit/reject events to this package (onHostEvent — immediate), and on
-// older engines `pending` still self-clears after two refreshes with no
-// movement (the stale-count fallback; events simply never arrive there).
+// outcomes normally arrive as host events: the engine addresses the
+// commit/reject events to this package (onHostEvent, immediate). Every engine
+// the package can install on does that: the addressing shipped in Engine 2.4.3
+// (capability API 1.12, a soft seam delivered whatever the package declares),
+// below the 2.4.5 engine floor the manifest declares. The stale-count fallback,
+// `pending` self-clearing after two per-turn refreshes with no movement, covers
+// what the events still miss: the host can only address an event to this
+// package when it can resolve the chat's Experience package id, which comes
+// back empty when the chat's metadata names no Experience or when the dispatch
+// lands after a chat switch with the chat row gone from both caches, and some
+// rejections never reach the client as a reject event at all (a pre-stream
+// commit that fails without a spatial_* code, or an already-applied conflict
+// whose recovery read fails, both reconcile through a plain refresh instead).
 PF.spatial = {
   data: null, // last SpatialContextResponse (or null: unbound / not fetched)
   available: false,
@@ -10598,7 +10819,7 @@ PF.spatial = {
     // a mutator caller (the visit verb completes at an arrival). Read pre-await,
     // like everything else here, and it is the ONE capture this site adds.
     const saveGen = PF.save._gen ?? 0;
-    // Latest-started wins: 1.12 event refreshes overlap the per-turn ones, and
+    // Latest-started wins: event refreshes overlap the per-turn ones, and
     // a slow pre-commit response landing AFTER a post-commit refresh would
     // otherwise roll the world back to the departed zone (review finding).
     const seq = ++this._seq;
@@ -10640,8 +10861,8 @@ PF.spatial = {
         } else if (countStale && ++this.pending.staleCount >= 2) {
           // Two turns with no movement → the transition was rejected somewhere
           // we can't observe. Let go so drift-following resumes. Event-driven
-          // refreshes pass countStale:false so 1.12 engines don't halve this
-          // fallback budget (review finding).
+          // refreshes pass countStale:false so live event delivery doesn't
+          // halve this fallback budget (review finding).
           this.pending = null;
           core.hud?.toast("Travel didn't happen — the story stayed put.");
         }
@@ -11299,11 +11520,13 @@ const evictNotices = (rows) => {
 //
 // PROMOTION IS A CROSSING, NOT A CEILING. bump() promotes only when the count
 // moves from below a line to at-or-past it, and never demotes — so a `d` set
-// PRECISELY (the S1 arm, or a test) stays where it was put unless a NEW line is
-// crossed. A max() over the table would have quietly re-promoted anybody a
-// future demotion verb tried to lower, and fighting the GM is the one thing the
-// heuristic must never do. Hostility is not on this ladder at all: `h` is a
-// flag beside it, written by nothing package-side yet, and waits for S1.
+// PRECISELY (the standing command's arm) stays where it was put unless a NEW
+// line is crossed. A max() over the table would have quietly
+// re-promoted anybody a future demotion verb tried to lower, and fighting the
+// GM is the one thing the heuristic must never do. Hostility is not on this
+// ladder at all: `h` is a flag beside it, set and cleared by the storyteller's
+// standing command (62-gm, shipped in 0.16.0) rather than by any of bump's
+// heuristic callers.
 const PROMOTION = [3, 10, 25]; // t at which d 1, 2, 3 are earned
 
 // ── THE VERB CLASSES (0.15, the maintainer's ruling) ──────────────────────────
@@ -12392,7 +12615,8 @@ PF.player = {
    *  carries no explicit `d`, an encounter that crosses a PROMOTION line lifts
    *  the rung — a crossing, never a max(), so a precisely-set d is not fought
    *  (the header note above bump's table says why). An explicit `d` stays the
-   *  SETTER it has always been: that arm is S1's, and the harness pins it.
+   *  SETTER it has always been: the storyteller's standing command (62-gm) writes
+   *  through that arm, and the crossing below is gated on its absence.
    *
    *  `patch.meaningful` is the VERB CLASS, not a stored field: without it the
    *  bump is small talk and can never leave the row above acquainted; with it
@@ -13437,9 +13661,11 @@ PF.quarantine = {
 // The player block has held a pouch, a purse and a `home` field since S5 slice 3
 // and nothing has ever put anything in them. This is the layer that does: the
 // item VOCABULARY (what a `{t,k}` row is called and how it reads in this theme),
-// the fixed PRICE list, and the one live transaction 0.11 ships — renting a berth
-// at the settlement's inn, which is simultaneously S3's first money sink and the
-// bed P5's day-ledger boundary will need (plan §2, Decisions #2).
+// the fixed PRICE list, and the transactions the build ships. The FIRST of them
+// is renting a berth at the settlement's inn, which is simultaneously S3's first
+// money sink and the bed P5's day-ledger boundary will need (plan §2, Decisions
+// #2). Buying a rod charges the purse as well, and sleeping and fishing spend
+// the clock against the same content.
 //
 // WHY A BERTH AND NOT A HOUSE. Maintainer ruling #2: there is NO automatic home.
 // A modern setting probably houses its protagonist and a fantasy adventurer
@@ -13449,12 +13675,13 @@ PF.quarantine = {
 // the plan and deliberately not here.
 //
 // Everything below is CONTENT plus the game-facing entry points: the OFFERS
-// (berthOffer, rodOffer) describe and never charge, so the HUD can call them
-// every frame; the VERBS (rentBerth, buyRod, grantStartingPurse) mutate. The
-// rest — _skin, currency, money, describe, price, the catch tables — is the
-// vocabulary those read through. It holds no state of its own: what persists
-// goes through the shipped mutators (award/grant/setHome/log/bump) and lives in
-// the player block, which is what makes it rewind-safe.
+// (berthOffer, sleepOffer, rodOffer, fishOffer) describe and never charge, so
+// the HUD can call them every frame; the VERBS (rentBerth, sleep, buyRod, fish,
+// grantStartingPurse) mutate. The rest — _skin, currency, money, describe,
+// price, the catch tables — is the vocabulary those read through. It holds no
+// state of its own: what persists goes through the shipped mutators
+// (award/grant/setHome/log/bump) and lives in the player block, which is what
+// makes it rewind-safe.
 
 // The catch table's TYPE vocabulary — the fixed shared roles a table entry can
 // be, and the one non-catch yield water gives up. A table row carries a role and
@@ -13761,11 +13988,13 @@ const PRICES = {
 };
 
 // What a new game starts with. It exists because a sink with no source is not a
-// feature: the real income is the quest layer (P4, roadmap 0.13), so without this
-// the one transaction 0.11 ships would be unreachable in a shipped game and only
-// ever exercised by a test that minted its own money. Granted ONCE, on the first
-// sealed world to come up on a block nothing has touched — see grantStartingPurse
-// for why that condition and not a default value.
+// feature: the real income is the quest layer (P4), which the settlement job
+// board now ships, and without this the first transaction would have been
+// unreachable in a shipped game before that landed and only ever exercised by a
+// test that minted its own money. It stays because a new game still opens before
+// any board work is done. Granted ONCE, on the first sealed world to come up on
+// a block nothing has touched — see grantStartingPurse for why that condition
+// and not a default value.
 const STARTING_PURSE = 40;
 
 // "Line and tackle included" — the stack of bait that rides the FIRST rod
@@ -13810,15 +14039,18 @@ const STARTER_BAIT = 8;
 //
 // PRICE INTERPLAY — A NOTE FOR TUNERS, NOT AN INVARIANT (maintainer override,
 // 2026-08-24). Nothing in this build asserts that a starting purse can afford a
-// rod, a berth, or both, and that is deliberate: 0.12 ships no income mechanic,
-// nobody is required to sleep in a rented berth, and income arrives in later
-// releases. The rod-against-berth fork is a PLAYER's choice and the build
+// rod, a berth, or both, and that is deliberate: nobody is required to sleep in
+// a rented berth, and the settlement job board is the income the fork is decided
+// against. The rod-against-berth fork is a PLAYER's choice and the build
 // declines to have an opinion about it. What a tuner should know while moving
 // numbers: STARTING_PURSE 40 against a 12-coin berth and the 6-coin fantasy
 // entry rod leaves room for both several times over, while the 24-credit sci-fi
-// rod turns the same purse into a real decision — and a player who spends the
-// purse down before buying is priced out of fishing until income lands, which is
-// an accepted limitation and not a bug.
+// rod turns the same purse into a real decision. A player who spends the purse
+// down before buying is not stranded: the board's smallest errand pays 6
+// (61-pack TUNING.reward, `visit`), which is exactly the fantasy entry rod, so
+// one walk buys the thing that starts fishing, while the sci-fi rod at 24 is
+// four of them. What still holds is that nothing GUARANTEES the opening purse
+// covers a rod or a berth, which is an accepted looseness and not a bug.
 const TUNING = {
   // THE SUCCESS CURVE, one family for every cast:
   //     p = base(level) * toolMult[toolTier] * modMult[modTier]
@@ -13865,8 +14097,11 @@ const TUNING = {
   // bites implicitly — summoning rain IS summoning the ×2, with no new machinery
   // — so a GM who wants faster bites has one. The direct knob, a
   // `fishBite:<word>:<multiplier>` write over these keys validated against the
-  // closed weather-word enum, is a line in the GM write-back channel's FR: that
-  // channel does not exist yet and this release builds NO read slot for it. The
+  // closed weather-word enum, would be a third verb on the GM write-back
+  // channel. That channel SHIPS: the package declares its verb table in
+  // `gm-verbs.json` and the engine validates every call against it (62-gm), and
+  // two verbs ride it today, `weather` and `standing`. What is missing is a
+  // bite-rate verb on the table, and this file builds NO read slot for one. The
   // row exists to tune the multiplier itself, not to get faster bites at all.
   biteRate: { overcast: 2, rain: 2, snow: 2, storm: 2 },
   // THE REGION'S WATER (ruling B3-2): the bite's base is DERIVED from the axes
@@ -14962,9 +15197,14 @@ PF.economy = {
     // THE 2×2, both halves. A theme with no table for a spot kind is water the
     // player can stand at and the verb cannot answer for; an EMPTY table is the
     // same hole with a shape, and it would divide by a zero weight rather than
-    // refuse. The wilds `water-feature` never places today (slice-1 verify F1)
-    // and its tables are still required — settlements and the legacy world reach
-    // that kind, and the drop is a placement fact, not a vocabulary one.
+    // refuse. Every one of these tables is live content: settlements and the
+    // legacy world hold a `water-feature`, the wilds hold a `water-crossing`,
+    // and a wilds `water-feature` now places when a brief asks for one, because
+    // the bridge ruling gave that tag a second placement pass with the road band
+    // off the busy set, which is what stopped the wilds pool being refused on
+    // every anchor that touched the road (20-world, the wilds feature loop). So
+    // none of these tables is vocabulary kept against a placement that cannot
+    // happen.
     const byTag = CATCH_TABLES[theme];
     if (!byTag) throw new Error(`pixelforge: theme "${theme}" ships no catch tables`);
     for (const tag of SPOT_TAGS) {
@@ -15032,9 +15272,10 @@ PF.economy = {
     // answers null for "not for sale here", and a rod the build means to sell
     // and forgot to price is indistinguishable from one it deliberately does
     // not stock. KEY EXISTENCE ONLY: no assertion couples these numbers to the
-    // purse or to the berth (maintainer override, 2026-08-24 — income arrives
-    // in later releases and berth-sleeping is optional), so what the build
-    // insists on is that a quotable rung is quotable, never that it is cheap.
+    // purse or to the berth (maintainer override, 2026-08-24: berth-sleeping is
+    // optional and nothing couples the opening purse to a price), and since 0.15
+    // the board is what an empty purse earns, so what the build insists on is
+    // that a quotable rung is quotable, never that it is cheap.
     for (const tier of ROD_TIERS) {
       // …and a rung has to be a rung. A tier that is not on the QUALITY ladder
       // resolves to crude at every read, so the ladder would quote a rod nobody
@@ -15744,9 +15985,8 @@ PF.save = {
    *  later. */
   _briefResealed: new Set(),
 
-  /** Reads core.sim and core.chatId and NOTHING else: 80-setup calls this with
-   *  a synthetic two-key core, and reaching for core.host/hud/render there
-   *  throws inside the wizard's launch handler.
+  /** Reads core.sim and core.chatId only; minimal callers and the load-time
+   *  assertion provide a synthetic two-key core without host/hud/render.
    *
    *  `dropCarry` is the pre-flight fallback (see _snapshotWithoutCarry): the
    *  same snapshot with a newer build's unreadable block left out. */
@@ -15790,7 +16030,7 @@ PF.save = {
     // deletes a newer build's field. That is the exact slice-1 failure, rebuilt
     // one branch at a time. serialize() takes an absent block and hands back the
     // default one, which is what makes the unconditional emission possible on
-    // the synthetic cores 80-setup and the load-time assertion build.
+    // the synthetic cores the snapshot regression and load-time assertion build.
     // `dropCarry` is threaded DOWN into the block serializer as well: since the
     // block keeps a newer build's unknown player-level keys too (58-player
     // PLAYER_KEYS), a pre-flight that shed only the envelope's carry would leave
@@ -15799,11 +16039,21 @@ PF.save = {
     return snap;
   },
 
-  /** Where /game/create actually stores the wizard config (review finding):
-   *  the chooser wraps our cfg as setupConfig.experienceConfig = cfg, and the
-   *  server persists the whole setupConfig under meta.gameSetupConfig — so our
-   *  own `experienceConfig.seed` lands two levels deep. Read every plausible
-   *  depth so a future un-nesting doesn't strand old games. */
+  /** Where /game/create actually stores the wizard config: the chooser wraps our
+   *  cfg as setupConfig.experienceConfig = cfg.experienceConfig ?? cfg, and the
+   *  server persists the whole setupConfig under meta.gameSetupConfig. Our own
+   *  `experienceConfig.seed` therefore lands ONE level deep on every chat created
+   *  since the host stopped re-wrapping a config that already carries that key.
+   *
+   *  The deeper read is a LEGACY path, not future-proofing. The host used to wrap
+   *  unconditionally, so a chat created before that change keeps its seed two
+   *  levels down. A saved game survives the shallower read on its save row alone,
+   *  since `simFromSaved` takes `saved.seed` first, but the readers with no
+   *  save-side fallback do not: the generate and pack flags, the world name and
+   *  the picked lore ids live only in this config, and a legacy chat that has not
+   *  saved yet has nowhere else to get its seed. Both depths stay, innermost
+   *  first, so an older game keeps rebuilding from its own number. Every other
+   *  reader below covers both depths for exactly this reason. */
   _configSeed(meta) {
     const setup =
       meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
@@ -17255,6 +17505,7 @@ PF.save = {
         setup.tone ? `Tone: ${setup.tone}` : "",
         setup.difficulty ? `Difficulty: ${setup.difficulty}` : "",
         setup.rating ? `Rating: ${setup.rating}` : "",
+        setup.playerGoals ? `Goals: ${setup.playerGoals}` : "",
       ]
         .filter(Boolean)
         .join("\n");
@@ -17489,7 +17740,8 @@ PF.save = {
     }
   },
 
-  /** The wizard's theme, from the same double-nested config home as the seed. */
+  /** Preserve legacy explicit themes; new games derive the fallback from Engine Setting.
+   *  The sealed brief already persists the final theme and outranks this fallback. */
   _configTheme(meta) {
     const setup =
       meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
@@ -17504,11 +17756,11 @@ PF.save = {
     for (const candidate of [inner?.theme, outer?.theme]) {
       if (typeof candidate === "string" && candidate) return candidate;
     }
-    return null;
+    return typeof setup?.setting === "string" ? PF.theme.themeFromWords(setup.setting) : null;
   },
 
   /** THE LOREBOOK ENTRIES THE PLAYER TICKED (0.16.2, R-D6), from the same
-   *  double-nested config home as the seed, the theme and the name.
+   *  config home as the seed, the theme and the name.
    *
    *  ENTRY ids and never book ids: the ruling is that "the player must be able to
    *  select specific lorebook entries rather than the entire lorebook getting
@@ -17531,6 +17783,10 @@ PF.save = {
       outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null
         ? outer.experienceConfig
         : null;
+    // An explicit Engine selection, including [], supersedes legacy package picks.
+    if (Array.isArray(setup?.activeLorebookEntryIds)) {
+      return [...new Set(setup.activeLorebookEntryIds.filter((id) => typeof id === "string" && id))];
+    }
     for (const candidate of [inner?.loreEntryIds, outer?.loreEntryIds]) {
       if (!Array.isArray(candidate)) continue;
       // The same entry belongs in the request only once.
@@ -17541,7 +17797,7 @@ PF.save = {
   },
 
   /** THE NAME THE PLAYER TYPED IN THE WIZARD (0.16.1), from the same
-   *  double-nested config home as the seed and the theme. "Typed" resolves at
+   *  config home as the seed and the theme. "Typed" resolves at
    *  write time: the wizard stores the field's value trimmed, and an emptied
    *  field stores the theme's default name instead — a world needs SOME name,
    *  and an empty string is not one.
@@ -25319,966 +25575,6 @@ PF.Hud.TUNING = {
   },
 };
 
-// ===== 80-setup.js =====
-// ── Setup view (view="setup") ─────────────────────────────────────────────────
-// Replaces the classic wizard body. Must emit the full classic required set
-// (genre/setting/tone/difficulty/gmMode/partyCharacterIds — game.routes.ts
-// gameSetupConfigSchema) plus gmConnectionId, or the host refuses the launch.
-// World Maps: requests hierarchical mode + agents; if the World Maps agent
-// isn't active the host falls back to standard mode and the surface runs
-// unbound — both are handled (verified trap #6).
-// World generation does NOT happen here (spec §5, amended): the wizard only
-// stamps the player's `generate` answer into the experience config; the surface
-// picks it up after launch (PF.save.maybeGenerateBrief) so the whole 90s window
-// runs behind a loading gate instead of a torn-down setup UI. Answering NO is a
-// supported outcome, not a failure — the chat plays the themed default world
-// immediately, with no gate and no generation call ever made for it.
-
-// ── THE PLAYER'S WORDS PICK THE KIT (0.16.2) ─────────────────────────────────
-// The theme dropdown is gone, and it is not replaced by a second question: the
-// ruling is that the theme is "determined by the player in Game Mode setup via
-// freestyle input, not a selector". A GENERATED world gets its kit from the
-// model, which answers `artTheme` inside the brief call that was already being
-// paid for. A DECLINED world never mints a brief, so no model ever answers —
-// and `PF.world.build(seed, theme, null)` still needs a theme. Without a
-// resolver here every declined world would be a cozy village forever, whatever
-// the player wrote, which is the one hole deleting the dropdown opens.
-//
-// So: a small pure function over the player's own Setting text. Fold it, count
-// how many of its words each kit's lexicon claims, higher count wins, and a tie
-// or no hits at all is `cozy-village` — the honest default a player who said
-// nothing already gets, rather than a preset that answered for them.
-// Deterministic: no call, no seed, no model.
-//
-// ITS INPUT IS THE RAW BOX AND NOTHING ELSE, and that is the whole discipline.
-// `settingOf` composes "A cozy pixel village called Hearthvale." for an
-// untouched box, and that sentence ships as the config's `setting` and reaches
-// the brief payload — so a resolver reading the COMPOSED text would be counting
-// the wizard's own preset words as the player's evidence. That is 0.16.1's bug
-// one layer down, and it is why the ordering at launch is theme, then preset,
-// then setting.
-//
-// The lexicons are hand-written per kit, so they are the one thing that can
-// silently fall behind a third theme: an id can reach PF.art and the brief
-// schema while remaining unreachable through here. The harness pins
-// `PF.setup.kitIds()` against `PF.art.themeIds()` for exactly that.
-//
-// THIS LIST AND THE GUIDANCE'S KIT LIST ANSWER DIFFERENT QUESTIONS, and `hearth`
-// is where that stops being a technicality. 18-brief's guidance states what each
-// kit CONTAINS — facts about the art, read off the painter override table — and
-// it names `hearth` as deliberately absent, correctly: a hearth is a BASE painter
-// that both kits draw, so offering it to the model as evidence would be telling
-// the model a falsehood about the pixels. This list is not evidence about the
-// art. It reads PLAYER INTENT off English connotation, and a player who writes
-// "hearth" means a cozy village — nobody reaches for that word to describe a
-// pressure-sealed habitat. So the word stays here and stays out of there, and
-// neither is a stale copy of the other.
-//
-// It is also a VOTE and not a veto, which is what keeps the connotation claim
-// cheap. Measured as a minimal pair, because a hearth on its own proves nothing
-// — a sentence with no other lexicon word lands on `cozy-village` whether the
-// word is in this list or not, and the default would be masking the miss:
-// "A great hearth under a cracked dome." resolves cozy-village (the hearth ties
-// the dome, and a tie keeps the village) while "A cracked dome." resolves
-// sci-fi-colony. That difference IS the vote. And it stays only a vote — "A
-// hearth glowing in the airlock corridor of the dome colony." is still
-// sci-fi-colony, because three colony tokens outcount one. A shared painter
-// costing the colony a single vote in prose already full of colony words changes
-// no answer. The harness pins all three rows.
-const KIT_WORDS = {
-  "cozy-village": [
-    "village",
-    "hamlet",
-    "farm",
-    "cottage",
-    "orchard",
-    "meadow",
-    "valley",
-    "forest",
-    "wood",
-    "harvest",
-    "tavern",
-    "innkeep",
-    "barn",
-    "thatch",
-    "hearth",
-    "cozy",
-    "pastoral",
-    "medieval",
-    "blacksmith",
-    "bakery",
-    "goat",
-    "sheep",
-  ],
-  "sci-fi-colony": [
-    "colony",
-    "coloni",
-    "station",
-    "habitat",
-    "hab",
-    "dome",
-    "terraform",
-    "orbit",
-    "spaceport",
-    "starship",
-    "shuttle",
-    "android",
-    "robot",
-    "reactor",
-    "hydroponic",
-    "airlock",
-    "alien",
-    "asteroid",
-    "frontier",
-    "outpost",
-    "cyber",
-    "plasma",
-    "oxygen",
-    "crew",
-    "corridor",
-    "vacuum",
-  ],
-};
-
-/** THE SUFFIXES A LEXICON WORD IS ALLOWED TO GROW, and this list is the whole
- *  cost of matching on prefixes at all.
- *
- *  A bare `startsWith` mis-kits ordinary English, and it does it in the one
- *  direction that matters: `cozy-village` scores ZERO on most prose that is not
- *  explicitly about farms and inns, so a single stray token flips the answer.
- *  Measured against the shipped lexicon — "hab", "dome" and "crew" are all in it
- *  — "Domestic and slow" reads as a space colony, so does "habitually … a habit
- *  of centuries", and so does "a crewel-work shop". The first of those is the
- *  maintainer's own worked example rendered as a hab ring.
- *
- *  Exact-token matching fixes those three and breaks more than it fixes:
- *  "coloni", "hydroponic", "terraform" and "innkeep" are deliberate STEMS, and
- *  exact matching silently retires all four — "colonies", "terraforming",
- *  "hydroponics" and "innkeeper" would stop voting. A minimum prefix length is
- *  no better: it loses "domes", "crews" and "domed", and its passes on the cozy
- *  side are the default masking a miss rather than a detection.
- *
- *  So the prefix stays and the REMAINDER is checked: `dome` + `s` is a dome,
- *  `dome` + `stic` is not. Four matchers were run against the three
- *  counterexamples, suffix-only prose and short-word plurals; this is the only
- *  one that took all three sets. The trade is stated rather than assumed — the
- *  list is a closed vocabulary, so a real word ending this list does not carry
- *  ("domelike", say) is a miss, and the answer to a miss is to add the suffix
- *  here rather than to loosen the match.
- *
- *  THE `-ion` FAMILY IS HERE BECAUSE THE FIRST CUT OF THIS LIST LOST THE COLONY
- *  NOUN, and that is the shape of the mistake worth naming: bounding the
- *  remainder traded a false-POSITIVE class for a false-NEGATIVE one, and only
- *  the half it was aiming at got measured. `colonisation`, `colonization` and
- *  `habitation` are the noun forms of the three most on-theme words in the
- *  lexicon, and every one of them scored zero — so "Colonization of Mars, one
- *  habitation module at a time." came out a cozy village. Measured over the
- *  whole lexicon, this family turns 18 tokens ON and none off. Two spellings of
- *  each, because the STEM decides the remainder: `coloni` + `sation`, but
- *  `robot` + `ised`.
- *
- *  Two suffixes were measured and DELIBERATELY LEFT OUT. `ary` recovers
- *  `stationary` and re-opens the exact false-positive class this list exists to
- *  close — "The cart stood stationary in the rain." reads as a space colony.
- *  `like` recovers `domelike` and nothing else, and the paragraph above already
- *  carries that one as the acknowledged miss. The collateral that IS accepted is
- *  `alienation` and `oxygenation`: both stems already vote colony bare, so
- *  neither is a new class, only a new inflection of an old one. */
-const SUFFIX =
-  /^(s|es|ed|d|ing|er|ers|ies|y|st|sts|ist|ists|land|lands|house|houses|hand|hands|man|men|folk|side|smith|keeper|keepers|al|ic|ics|ion|ions|ation|ations|sation|sations|zation|zations|sing|zing|sed|zed|ising|izing|ised|ized)$/;
-/** `st`/`sts`/`ist`/`ists` are in the set for `colonist` = `coloni` + `st`,
- *  which is the multi-line lane's own word; without them that lane passes only
- *  because `dome` and `airlock` also hit, which is a lane passing for the wrong
- *  reason. */
-const matches = (token, word) => token === word || (token.startsWith(word) && SUFFIX.test(token.slice(word.length)));
-
-/** Tokens rather than substrings, and then a bounded prefix on top of that. A
- *  token counts once for a kit however many of that kit's words it matches —
- *  `hits++` sits outside `words.some(…)` and counts the TOKEN, not the word.
- *
- *  THAT RULE IS UNOBSERVABLE TODAY, AND THE COMMENT USED TO CLAIM OTHERWISE.
- *  It offered "hydroponics domes is two votes and not four" as its worked
- *  example, which is simply false: `hydroponics` fires `hydroponic` and nothing
- *  else, `domes` fires `dome` and nothing else, so that phrase is two votes
- *  under either counting rule. A review round then read the rule as an untested
- *  claim and set out to pin it, on "a colony village" — also false, because
- *  `colony` and the stem `coloni` diverge at their sixth letter and no token
- *  starts with both.
- *
- *  The precondition, measured over the whole lexicon: both arms of `matches`
- *  require the token to START WITH the word, so a token can only fire two words
- *  of one kit if one of those words is a prefix of the other. Exactly one such
- *  pair exists — `hab` inside `habitat` — and its remainder, "itat", is not in
- *  SUFFIX, so nothing fires both. Swept across every word × every suffix, the
- *  most words of one kit any generated token fires is ONE.
- *
- *  So the rule is a guard against a lexicon that does not exist yet, and the
- *  harness carries no lane for it because every lane would pass with `some` and
- *  without it. THE EDIT THAT ENDS THAT: adding a word whose own kit already
- *  carries a prefix of it with a live suffix between them — `colonies` beside
- *  `coloni`, say, or `habitation` beside `hab` if `itation` ever joined SUFFIX.
- *  On the day that lands, the rule starts deciding real sentences ("a colonies
- *  village" would tie under it and go sci-fi without it) and wants a lane. */
-const themeFromWords = (text) => {
-  const tokens = String(text ?? "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .split(" ")
-    .filter(Boolean);
-  let best = "cozy-village";
-  let bestHits = 0;
-  for (const [theme, words] of Object.entries(KIT_WORDS)) {
-    let hits = 0;
-    for (const token of tokens) if (words.some((word) => matches(token, word))) hits++;
-    // STRICTLY greater, so a tie keeps the incumbent and nothing wins by being
-    // first in the table: a tie and zero hits both land on cozy-village.
-    if (hits > bestHits) {
-      best = theme;
-      bestHits = hits;
-    }
-  }
-  return best;
-};
-
-/** `PF.setup` IS A PUBLISHED SURFACE, DELIBERATELY, AND THIS IS THE CONTRACT.
- *
- *  The design note for this release said the resolver "never crosses a module
- *  boundary", and the implementation published it anyway — which was the right
- *  call badly recorded, so it is recorded here. What the surface guarantees:
- *
- *    - ONE production call site. The launch handler below, and nothing else in
- *      `src/` reads `PF.setup`. No other module writes the key either, so there
- *      is no collision to inherit.
- *    - ONE consumer, and it is the harness. The lane that matters is which INPUT
- *      the resolver was handed — the RAW Setting box, never `settingOf`'s
- *      composed "A cozy pixel village called Hearthvale." — and there is no way
- *      to pin that from the outside except to watch the call. So the wizard calls
- *      through this object rather than through the local binding: replacing
- *      `PF.setup.themeFromWords` with a spy is what makes the laundering bug
- *      testable at all, and a seeded mutant proves the spy catches it.
- *    - `kitIds()` exists for the same reason: the lexicons are hand-written per
- *      kit, so they are the one thing that can silently fall behind a third
- *      theme. The harness pins them against `PF.art.themeIds()`.
- *
- *  Anything else reading this object is out of contract. A future caller that
- *  wants a theme from text should be asking the brief or the config, not
- *  re-running the wizard's own resolver over somebody else's string. */
-PF.setup = {
-  themeFromWords,
-  kitIds: () => Object.keys(KIT_WORDS),
-};
-
-/** The bound on the one unbounded string the package contributes to the config
- *  the host nests inside itself. The arithmetic that produced this number is at
- *  the emit site, beside `setting`, because that is where the next person adding
- *  a field will be standing. */
-const SETTING_MAX = 8_000;
-
-PF.mountSetup = (el, props) => {
-  // The host delivers a FRESH props object on every render, and its onCancel
-  // closes over the current `launching` state — capturing the first one would
-  // let "Back" defeat the host's mid-launch freeze (review finding). Keep the
-  // latest props on the element and read them at click time.
-  el._pfProps = props;
-  if (el._pfSetupMounted) return;
-  el._pfSetupMounted = true;
-  el.style.display = "block";
-
-  const S = {
-    label: "display:block;font:600 11px/1.6 ui-monospace,Consolas,monospace;opacity:0.75;margin:10px 0 3px;",
-    input:
-      "width:100%;box-sizing:border-box;background:var(--background,#1b201b);color:var(--foreground,#e6e8e0);" +
-      "border:1px solid var(--border,#444);border-radius:8px;padding:8px 10px;font:13px/1.4 inherit;",
-    row: "display:flex;gap:10px;",
-    btn: "min-height:44px;border-radius:8px;padding:0 16px;font:700 13px/1 inherit;cursor:pointer;border:1px solid var(--border,#444);",
-  };
-  const field = (labelText, node) => PF.el("div", null, [PF.el("label", { style: S.label, text: labelText }), node]);
-  const input = (value) => PF.el("input", { style: S.input, value });
-  const select = (options) =>
-    PF.el(
-      "select",
-      { style: S.input },
-      options.map(([v, t]) => PF.el("option", { value: v, text: t })),
-    );
-
-  // Per-theme wizard defaults, and 0.16.2 leaves TWO FIELDS of them standing.
-  //
-  // 0.16.1 stopped this table answering for the player: `setting` became a
-  // placeholder instead of the textarea's VALUE, and `goals` and `spatial`
-  // became templates that take the name the player actually typed instead of
-  // constants naming Hearthvale. 0.16.2 deletes the rest of it, because a
-  // template that names no place still asserts a GENRE and a MAP CONSTRAINT the
-  // package has no way to know:
-  //
-  //   `genre`   — the player's genre is whatever their Setting text says. The
-  //               package now sends one honest literal about the renderer.
-  //   `goals`   — nobody asked the player for a goal; the schema defaults it.
-  //   `spatial` — deleted outright, not trimmed, and the ruling is wider than
-  //               the theme sentence it started at: "the GM should never intend
-  //               to keep the player bound to a location and the world need not
-  //               be compact and walkable necessarily". Both halves of that
-  //               string said otherwise, so the package emits no map guidance at
-  //               all.
-  //   `setting` — its last consumer was the Setting box's placeholder, and the
-  //               listener that swapped it per theme died with the dropdown. A
-  //               player describing a space station would have been shown
-  //               village prose permanently, so the placeholder is theme-free
-  //               now and this paragraph has no reader left.
-  //
-  // What survives is what the wizard still genuinely needs: a default world name
-  // for a cleared name field, and the one-line `kind` an empty Setting box
-  // composes with (see `settingOf`).
-  const THEME_PRESETS = {
-    "cozy-village": {
-      name: "Hearthvale",
-      // What the theme IS, in the fewest words that still name a place.
-      kind: "cozy pixel village",
-    },
-    "sci-fi-colony": {
-      name: "Meridian Base",
-      kind: "small frontier colony",
-    },
-  };
-
-  /** The Setting the launch actually ships, and the reason the `||` survives:
-   *  the host declares `setting: z.string().min(1)` (game.routes
-   *  `gameSetupConfigSchema`), so an empty one is a 400 rather than a blank
-   *  field. What changed is WHAT the fallback says. It used to be the theme
-   *  preset — the paragraph naming Hearthvale, Mira, Tam and Rook — which is the
-   *  most specific instruction in the whole config and was reached by doing
-   *  nothing. Now an untouched box composes ONE line out of what the player did
-   *  give us, the typed name and the chosen theme, and invents no cast at all. */
-  const settingOf = (preset, typed, worldName) => typed.trim() || `A ${preset.kind} called ${worldName}.`;
-
-  /** Engine list rows carry TEXT booleans, not booleans. `connections.is_default`
-   *  and `connections.fallback_for_main` are `text().notNull().default("false")`,
-   *  so the literal string `"false"` is what a non-default row holds — and
-   *  `"false"` is truthy. Every `c?.isDefault` test in this file matched the
-   *  FIRST row unconditionally, and `list()` orders by `desc(updatedAt)`, so the
-   *  wizard preselected the most-recently-edited connection and the user's actual
-   *  default was never honoured. The Engine's own `getDefault()` compares
-   *  `eq(apiConnections.isDefault, "true")`; this is that comparison, with the
-   *  real boolean still accepted so a future projection does not re-break it. */
-  const isYes = (value) => value === "true" || value === true;
-
-  // THE NAME IS A PLACEHOLDER AND NEVER A VALUE EITHER (0.16.2), and it is the
-  // same fix as the Setting box's one field over. It shipped pre-filled with
-  // "Hearthvale", and 0.16.1's theme-swap listener re-synced it when the dropdown
-  // moved (`if (nameIn.value === previous.name) nameIn.value = next.name`) — that
-  // listener died with the dropdown, and the theme is now derived from text typed
-  // AFTER mount, so a pre-fill can never follow it. Measured: a hab-ring setting
-  // with the name field untouched gave a world whose own settlement is Meridian
-  // Base, with `worldName`, `_configWorldName`, the launch button and the brief
-  // payload's leading `World name:` all saying Hearthvale — verbatim the shape
-  // 0.16.1 fixed in the other direction.
-  //
-  // As a placeholder it shows the same word in the same place and carries none of
-  // it, and the fallback then resolves itself: `nameIn.value.trim() || preset.name`
-  // already reads the DERIVED preset, so an untouched field on a colony setting
-  // yields Meridian Base for free. Preferred over re-syncing on a `settingIn`
-  // event because there is no "is it still the untouched default" state to get
-  // wrong.
-  const nameIn = input("");
-  nameIn.placeholder = THEME_PRESETS["cozy-village"].name;
-  const seedIn = input(String((Math.random() * 0xffffffff) >>> 0));
-  // THE PRESET IS A PLACEHOLDER AND NEVER A VALUE. It shipped as `settingIn.value`,
-  // which made "leave it alone" the strongest instruction the wizard could send:
-  // the box read as a helpful default and arrived at three generators as the
-  // player's own words. As a placeholder it shows exactly the same prose, in the
-  // same place, and carries none of it — an untouched box submits empty and
-  // `settingOf` composes the honest line instead.
-  const settingIn = PF.el("textarea", { style: `${S.input}min-height:64px;`, rows: "3" });
-  // THE PLACEHOLDER STOPS BEING A THEME (0.16.2), and it has to: it was the cozy
-  // preset's paragraph — the one naming Mira, Tam, Rook and The Amber Hearth —
-  // and the listener that swapped it for the colony's was part of the dropdown
-  // this release deletes. Left alone it would show village prose to a player
-  // describing a space station, permanently and with no control to change it.
-  // What replaces it is not a shorter suggestion but a QUESTION, and it is the
-  // sentence that makes the whole release work: this box is now the only place
-  // the player's freestyle words exist, so it should ask for the words the
-  // resolver reads and the model is about to be shown.
-  settingIn.placeholder = "Describe the place: what it is made of, what the weather does, who lives there.";
-  // Written rather than left to the element's own default, because "this box
-  // starts empty" is the whole change and it should be a line in the source
-  // rather than a property of `<textarea>` a reader has to remember.
-  settingIn.value = "";
-
-  const toneSel = select([
-    ["cozy, warm, gently comedic", "Cozy & warm"],
-    ["wistful, quiet, bittersweet", "Wistful & quiet"],
-    ["adventurous with cozy downtime", "Adventurous"],
-  ]);
-  const diffSel = select([
-    ["easy", "Easy"],
-    ["normal", "Normal"],
-    ["hard", "Hard"],
-  ]);
-  const ratingSel = select([
-    ["sfw", "SFW"],
-    ["nsfw", "NSFW"],
-  ]);
-  // DECLINING IS A CHOICE AGAIN. The wizard stamped `generate: true`
-  // unconditionally, which quietly retired the skip affordance: the themed-default
-  // immediate-play path — no loading gate, no starting purse, walk in and play —
-  // became unreachable for every new chat, even though the save path never stopped
-  // supporting it (`briefExpected` is exactly this flag, and the `{skipped:true}`
-  // marker is a second, post-hoc route it also still reads). Checked by default,
-  // because a generated world IS the package; unchecked is somebody who wants the
-  // village they already know, or does not want to spend the call.
-  const generateIn = PF.el("input", { type: "checkbox" });
-  generateIn.checked = true;
-  const generateRow = PF.el(
-    "label",
-    { style: "display:flex;gap:8px;align-items:center;font:12px/1.5 inherit;cursor:pointer;margin-top:10px;" },
-    // TWO CALLS, and the label says so because the player is the one who pays for
-    // them: the brief that describes the settlement, and the content pack that
-    // gives its people something to say. It has been two since the pack landed.
-    [generateIn, PF.el("span", { text: "Generate a unique world with your GM connection (two calls)" })],
-  );
-  const connSel = select([["", "Loading connections…"]]);
-  // THE PARTY PICKER IS GONE (0.16.2). The party belongs to Game Mode's own
-  // setup, and this Experience carries only parameters that are its own — it
-  // never duplicates or overrides what the GM setup collects. That the chooser
-  // currently swaps the classic wizard out before its Party step ever runs is
-  // the reason this is a COST rather than a tidy-up, and it is stated plainly:
-  // for this one release every Pixelforge game starts with an empty party and
-  // nothing anywhere asks otherwise. It is survivable because the villagers are
-  // NPCs the GM plays and a party is additive rather than load-bearing for a
-  // walkable world; it stops being true the moment the seam lands and the
-  // Engine's own Party step runs again.
-
-  // ── THE PER-ENTRY LOREBOOK PICKER (0.16.2, R-D6) ────────────────────────────
-  // "the player must be able to select specific lorebook entries rather than the
-  // entire lorebook getting sent." So the form lists BOOKS, each book expands to
-  // its ENTRIES, the checkboxes are on the entries, and the only thing that ever
-  // leaves this form is a flat list of ENTRY ids. No book id is ever sent.
-  //
-  // THE PACKAGE SELECTS AND THE SERVER ASSEMBLES, which is what keeps this small.
-  // Macro resolution, scope exclusions, the eligibility gates and the
-  // before/depth/after ordering are the Engine's own (`processLorebooks`), and a
-  // package-side re-implementation of any of it would silently disagree with the
-  // Engine's lore in the same chat.
-  //
-  // World-generation selections use the complete entries. Engine checks the
-  // final macro-expanded prompt against the model context before sending it.
-  const loreTokens = (text) => Math.ceil(String(text ?? "").length / 4);
-
-  const loreBox = PF.el("div", {
-    style: "display:flex;flex-direction:column;gap:4px;max-height:180px;overflow:auto;" + S.input,
-  });
-  loreBox.textContent = "Loading lorebooks…";
-  const loreBudgetEl = PF.el("div", { style: "font:11px/1.5 inherit;opacity:0.75;margin-top:3px;" });
-  /** id → {bookId, tokens} for every entry the player has been offered. */
-  const loreEntries = new Map();
-  /** bookId → {name, noteEl, rows} for every book the picker rendered. */
-  const loreBooks = new Map();
-  /** The picked ids IN PICKING ORDER, which is the order they go on the wire. */
-  const lorePicked = [];
-  const loreUsedAll = () => lorePicked.reduce((sum, id) => sum + (loreEntries.get(id)?.tokens ?? 0), 0);
-  const syncLoreBudget = () => {
-    if (!lorePicked.length) {
-      loreBudgetEl.textContent = "No entries picked — the world is written from your setting alone.";
-      return;
-    }
-    const noun = lorePicked.length === 1 ? "entry" : "entries";
-    loreBudgetEl.textContent = `${lorePicked.length} ${noun} · about ${loreUsedAll()} tokens for the call. The engine checks the model's context limit before generation.`;
-  };
-  syncLoreBudget();
-  // Individual ticks and select-all preserve the same entry order.
-  const toggleEntry = (id, cb, quiet) => {
-    const entry = loreEntries.get(id);
-    const book = entry ? loreBooks.get(entry.bookId) : null;
-    const refuse = (why) => {
-      cb.checked = false;
-      if (!quiet && book) book.noteEl.textContent = why;
-      return why;
-    };
-    if (!cb.checked) {
-      const at = lorePicked.indexOf(id);
-      if (at >= 0) lorePicked.splice(at, 1);
-      if (book) book.noteEl.textContent = "";
-      syncLoreBudget();
-      return null;
-    }
-    if (!entry || !book) return refuse("That entry is no longer on the form — reopen its book and try again.");
-    if (lorePicked.includes(id)) return null;
-    lorePicked.push(id);
-    book.noteEl.textContent = "";
-    syncLoreBudget();
-    return null;
-  };
-
-  const errEl = PF.el("div", {
-    style: "color:#e0837f;font:600 12px/1.5 inherit;margin-top:10px;white-space:pre-wrap;display:none;",
-  });
-  const launchBtn = PF.el("button", {
-    type: "button",
-    style: `${S.btn}background:var(--primary,#2f6b4f);color:var(--primary-foreground,#fff);border:none;`,
-  });
-  // THE BUTTON ANSWERS TO BOTH FIELDS, and "the name field alone" was the bug
-  // stated as the fix. It names the world you are about to walk into, so it must
-  // say what the launch is actually going to write. It shipped as the constant
-  // "Begin in Hearthvale" with only the RETRY path ever rewriting it, so a colony
-  // called Meridian Base offered to begin in a cozy village that was not in the
-  // game — and with the name field now shipping EMPTY, a label reading only
-  // `nameIn` would re-open exactly that mismatch at the control the player reads
-  // last: colony prose in the box, an untouched name, and a button still offering
-  // Hearthvale.
-  //
-  // So it falls back to the DERIVED preset's name — the same pair the launch
-  // resolves — and re-runs when either field changes. There is no control whose
-  // change could re-skin it mid-form any more; there is a TEXTAREA, and typing in
-  // it is how the kit is chosen now.
-  const resolveKit = () => {
-    const theme = PF.setup.themeFromWords(settingIn.value);
-    return { theme, preset: PF.own(THEME_PRESETS, theme) || THEME_PRESETS["cozy-village"] };
-  };
-  const syncLaunchLabel = () => {
-    launchBtn.textContent = `Begin in ${nameIn.value.trim() || resolveKit().preset.name}`;
-  };
-  syncLaunchLabel();
-  nameIn.addEventListener("input", syncLaunchLabel);
-  settingIn.addEventListener("input", syncLaunchLabel);
-  const cancelBtn = PF.el("button", {
-    type: "button",
-    style: `${S.btn}background:transparent;color:inherit;`,
-    text: "Back",
-    onclick: () => el._pfProps?.onCancel?.(),
-  });
-
-  const root = PF.el("div", { style: "font-family:inherit;color:inherit;" }, [
-    PF.el("p", {
-      style: "font:12px/1.6 inherit;opacity:0.8;margin:0 0 4px;",
-      text:
-        "A walkable pixel village. Talk to villagers to drive the story; the GM narrates in the panel below the world. " +
-        "Uses the engine's own combat, and follows the World Map when its agent is active.",
-    }),
-    field("Game name", nameIn),
-    // The seed stands alone now: this row held it beside the theme dropdown, and
-    // the seed is the one field of the package's own that survives every shape
-    // this form is heading for.
-    field("World seed", seedIn),
-    field("Setting", settingIn),
-    generateRow,
-    PF.el("div", { style: S.row }, [
-      PF.el("div", { style: "flex:1;" }, [field("Tone", toneSel)]),
-      PF.el("div", { style: "flex:1;" }, [field("Difficulty", diffSel)]),
-      PF.el("div", { style: "flex:1;" }, [field("Rating", ratingSel)]),
-    ]),
-    field("GM connection", connSel),
-    // LISTED PER BOOK, IN THE ORDER THE CALL KEEPS THAT BOOK'S OWN ENTRIES — and
-    // the label claims exactly that much and not one word more.
-    //
-    // The label used to read "in the order the call keeps them", which is a
-    // CROSS-BOOK promise this list cannot keep. The server's drop order
-    // (`lorebookSelectionOrder`) sorts every candidate together: constants, then
-    // context matches, then `injectionOrder` across all books at once. This form
-    // renders book by book and sorts inside each one, so it cannot show that
-    // interleave — measured, a book holding an order-9 entry above a book holding
-    // an order-0 one renders `[late, early]` where the call would keep
-    // `[early, late]`. Naming an ordering the UI cannot show is the invisible
-    // budget in a new costume: a claim the player has no way to check.
-    //
-    // The per-book sort stays and is still worth having, because it IS true: it
-    // is the drop rule restricted to one book, and one expanded book is the unit
-    // a player can actually read. Nothing is ever dropped in practice — the four
-    // walls see to that — so this is a fix to the SENTENCE and not to the sort.
-    field("Lorebook entries to read before writing the world (each book in the order the call keeps its own)", loreBox),
-    loreBudgetEl,
-    errEl,
-    PF.el("div", { style: `${S.row}margin-top:14px;justify-content:flex-end;` }, [cancelBtn, launchBtn]),
-  ]);
-  el.replaceChildren(root);
-
-  void (async () => {
-    try {
-      const conns = await PF.api.getJson("/connections");
-      // Text-capable connections only — the host doesn't re-check eligibility,
-      // and an image/video connection here fails at first generation (review finding).
-      //
-      // …AND CONNECTIONS THAT CANNOT RESOLVE A KEY. A row with
-      // `profileImportReviewRequired === "true"` is one an import parked for the
-      // user to look at, and the Engine's `getWithKey()` returns null for exactly
-      // those — so offering one launched a game whose very first GM call had no
-      // credential behind it, with the failure arriving a minute later on the
-      // retry screen instead of here where it is a row not to show.
-      const list = (Array.isArray(conns) ? conns : []).filter(
-        (c) =>
-          c?.provider !== "image_generation" &&
-          c?.provider !== "video_generation" &&
-          !isYes(c?.profileImportReviewRequired),
-      );
-      connSel.replaceChildren(
-        ...list.map((c) => {
-          const label =
-            typeof c?.name === "string" ? c.name : typeof c?.label === "string" ? c.label : String(c?.id ?? "?");
-          // THE MODEL, BESIDE THE NAME, because the name is a label the user chose
-          // and the model is the thing that writes the world. Two connections
-          // called "princess" pointed at two different models are one dropdown row
-          // apart and were indistinguishable. `model` is a top-level column on the
-          // connections table and rides the list route verbatim, so this costs a
-          // read and nothing else — it is what the Engine's own Start Game screen
-          // renders (GameSurface's `{connection.name}{connection.model ? … : ""}`).
-          const model = typeof c?.model === "string" && c.model ? c.model : "";
-          return PF.el("option", {
-            value: typeof c?.id === "string" ? c.id : "",
-            text: model ? `${label} — ${model}` : label,
-          });
-        }),
-      );
-      const preferred = list.find((c) => isYes(c?.isDefault)) ?? list.find((c) => isYes(c?.fallbackForMain));
-      if (preferred && typeof preferred.id === "string") connSel.value = preferred.id;
-      if (!list.length) connSel.replaceChildren(PF.el("option", { value: "", text: "No text connections configured" }));
-    } catch {
-      connSel.replaceChildren(PF.el("option", { value: "", text: "Could not load connections" }));
-    }
-    // `/characters` IS NO LONGER READ HERE. It loaded the party picker, and the
-    // picker is gone — so is the raw-row parse 0.16.1 put in front of it (the
-    // characters table has no `name` column and keeps the V2 card in `data` as a
-    // JSON STRING, which is why the list used to be a column of nanoids). That
-    // parse retires WITH its reader rather than being kept warm for a list
-    // nothing renders; the Engine's own character picker is where it lives now.
-    let chatMeta = {};
-    const chatId = el._pfProps?.chatId;
-    if (typeof chatId === "string" && chatId) {
-      try {
-        const chat = await PF.api.getJson(`/chats/${encodeURIComponent(chatId)}`);
-        const metadata = typeof chat?.metadata === "string" ? JSON.parse(chat.metadata) : chat?.metadata;
-        if (metadata && typeof metadata === "object" && !Array.isArray(metadata)) chatMeta = metadata;
-      } catch {
-        // Older or unavailable hosts keep the shared-library picker usable.
-      }
-    }
-    const excludedBooks = new Set(Array.isArray(chatMeta.excludedLorebookIds) ? chatMeta.excludedLorebookIds : []);
-    const entryOverrides = chatMeta.entryStateOverrides ?? {};
-    try {
-      const books = await PF.api.getJson("/lorebooks");
-      loreBox.replaceChildren();
-      for (const book of Array.isArray(books) ? books : []) {
-        if (typeof book?.id !== "string" || !book.id) continue;
-        // A DISABLED BOOK IS NOT OFFERED. `listEligibleEntriesByIds` refuses every
-        // entry of one however explicitly it was ticked, so rendering it would be
-        // offering a choice the server has already made. `parseLorebookRow` gives
-        // a real boolean here; the string is accepted too, because an unparsed
-        // projection is what every other row read in this file has had to survive.
-        if (book.enabled === false || book.enabled === "false" || excludedBooks.has(book.id)) continue;
-        const name = typeof book.name === "string" && book.name ? book.name : book.id;
-        const noteEl = PF.el("div", { style: "font:11px/1.5 inherit;opacity:0.75;padding-left:16px;" });
-        loreBooks.set(book.id, {
-          name,
-          noteEl,
-          rows: [],
-        });
-        const entriesBox = PF.el("div", { style: "display:none;padding-left:16px;" });
-        // OPENNESS IS A VARIABLE AND NEVER A STYLE READ. `PF.el` writes styles as
-        // `cssText` and the harness's node holds `style` as a bare object, so
-        // `entriesBox.style.display` reads back `undefined` there and an expander
-        // whose state lived in the style would be permanently "open" to every lane
-        // that drives it. The style is still written, for the browser; nothing
-        // reads it back.
-        let open = false;
-        const label = () => `${open ? "▾" : "▸"} ${name}`;
-        const expander = PF.el("button", {
-          type: "button",
-          style: "background:transparent;border:none;color:inherit;font:600 12px/1.6 inherit;cursor:pointer;",
-          text: label(),
-        });
-        const selectAllBtn = PF.el("button", {
-          type: "button",
-          style: "background:transparent;border:none;color:inherit;font:11px/1.6 inherit;opacity:0.75;cursor:pointer;",
-          text: "Select all",
-        });
-        /** Loaded once, on first open or on the first select-all — whichever the
-         *  player reaches for. Entries are rendered in the order the drop rule
-         *  uses: constants first, then the entry's own position in the book.
-         *
-         *  THE SLOT HOLDS THE IN-FLIGHT REQUEST AND NOT A `loaded` FLAG (review
-         *  round). A boolean set before the await is a "yes, done" answered to
-         *  the second caller while the first caller's request is still in the
-         *  air: expand a book and hit *Select all* before the entries land and
-         *  select-all returned instantly against an empty `state.rows` — nothing
-         *  ticked, and a note reporting that nothing as the truth. Memoizing the
-         *  PROMISE makes the second caller wait on the first one's request
-         *  instead of racing past it, and no second request is sent either way.
-         *  On FAILURE the slot goes back to null so the next click can try
-         *  again; the reset rides a `.then` rather than the `catch` itself,
-         *  because a request that throws SYNCHRONOUSLY would run the catch before
-         *  the slot was ever filled and the assignment below would then re-fill
-         *  it with a settled promise nothing can retry through. */
-        let loading = null;
-        const loadEntries = () => {
-          if (loading) return loading;
-          const attempt = (async () => {
-            entriesBox.textContent = "Loading entries…";
-            try {
-              const rows = await PF.api.getJson(`/lorebooks/${encodeURIComponent(book.id)}/entries`);
-              entriesBox.replaceChildren();
-              const offered = (Array.isArray(rows) ? rows : [])
-                .filter((row) => typeof row?.id === "string" && row.id)
-                // A DISABLED ENTRY IS NOT OFFERED EITHER, for the same reason its
-                // book is not: `parseEntryRow` gives a real boolean, the server
-                // refuses one anyway, and not offering it is the honest half.
-                .filter(
-                  (row) =>
-                    row.enabled !== false &&
-                    row.enabled !== "false" &&
-                    entryOverrides[row.id]?.enabled !== false &&
-                    entryOverrides[row.id]?.enabled !== "false",
-                )
-                .sort((a, b) => {
-                  const constant = (row) => (row.constant === true || row.constant === "true" ? 0 : 1);
-                  if (constant(a) !== constant(b)) return constant(a) - constant(b);
-                  // Read straight rather than through either budget reader: both
-                  // treat a non-positive number as something other than itself,
-                  // and `order` has no such reading — it is signed, so 0 and -5
-                  // are ordinary positions in the book.
-                  const at = (row) => (typeof row.order === "number" && Number.isFinite(row.order) ? row.order : 0);
-                  return at(a) - at(b);
-                });
-              const state = loreBooks.get(book.id);
-              for (const row of offered) {
-                loreEntries.set(row.id, { bookId: book.id, tokens: loreTokens(row.content) });
-                const cb = PF.el("input", { type: "checkbox", value: row.id });
-                cb.addEventListener("change", () => toggleEntry(row.id, cb));
-                state.rows.push({ id: row.id, cb });
-                const entryName = typeof row.name === "string" && row.name ? row.name : row.id;
-                const text =
-                  typeof row.description === "string" && row.description
-                    ? `${entryName} — ${row.description}`
-                    : entryName;
-                entriesBox.appendChild(
-                  PF.el("label", { style: "display:flex;gap:8px;align-items:flex-start;font:12px/1.5 inherit;" }, [
-                    cb,
-                    PF.el("span", { text }),
-                  ]),
-                );
-              }
-              if (!offered.length) entriesBox.textContent = "No entries in this lorebook.";
-              return true;
-            } catch {
-              entriesBox.textContent = "Could not load this lorebook's entries.";
-              return false;
-            }
-          })();
-          loading = attempt.then((ok) => {
-            if (!ok) loading = null;
-          });
-          return loading;
-        };
-        const setOpen = (next) => {
-          open = next;
-          entriesBox.style.display = open ? "block" : "none";
-          expander.textContent = label();
-        };
-        expander.addEventListener("click", async () => {
-          setOpen(!open);
-          if (open) await loadEntries();
-        });
-        // Select every eligible row using the same path as an individual tick.
-        selectAllBtn.addEventListener("click", async () => {
-          setOpen(true);
-          await loadEntries();
-          const state = loreBooks.get(book.id);
-          let refusal = null;
-          for (const row of state.rows) {
-            if (row.cb.checked) continue;
-            row.cb.checked = true;
-            const why = toggleEntry(row.id, row.cb, true);
-            if (why && !refusal) refusal = why;
-          }
-          const taken = state.rows.filter((row) => row.cb.checked).length;
-          state.noteEl.textContent = !state.rows.length
-            ? ""
-            : refusal
-              ? `Picked ${taken} of ${state.rows.length} entries in ${name}. ${refusal}`
-              : `Picked all ${taken} ${taken === 1 ? "entry" : "entries"} in ${name}.`;
-        });
-        loreBox.appendChild(
-          PF.el("div", null, [
-            PF.el("div", { style: "display:flex;gap:8px;align-items:center;" }, [expander, selectAllBtn]),
-            noteEl,
-            entriesBox,
-          ]),
-        );
-      }
-      if (!loreBox.children.length)
-        loreBox.textContent = "No lorebooks yet — the world is written from your setting alone.";
-    } catch {
-      loreBox.textContent = "Could not load lorebooks.";
-    }
-  })();
-
-  launchBtn.addEventListener("click", async () => {
-    errEl.style.display = "none";
-    const gmConnectionId = connSel.value || null;
-    if (!gmConnectionId) {
-      errEl.textContent = "Pick a GM connection first — the game cannot run without one.";
-      errEl.style.display = "block";
-      return;
-    }
-    // Strict parse: a purely-numeric entry (including 0) is used verbatim;
-    // anything else — "42abc" included — hashes as a text seed instead of
-    // silently truncating at the first non-digit.
-    const seedText = seedIn.value.trim();
-    const seed = (/^\d+$/.test(seedText) ? Number.parseInt(seedText, 10) : PF.hashStr(seedText || nameIn.value)) >>> 0;
-    // ORDER MATTERS, AND IT IS THE ONE ORDERING BUG THIS SECTION CAN HAVE: the
-    // theme is resolved from the RAW box first, the preset is picked from the
-    // resolved theme, and only then is the setting composed. Composing first and
-    // resolving from the result would feed the resolver `settingOf`'s own
-    // sentence — "A cozy pixel village called Hearthvale." — so the wizard's
-    // preset words would be counted as the player's evidence, which is exactly
-    // the class of bug 0.16.1 removed one layer up. The launch label resolves the
-    // same pair through the same helper, so the button and the config cannot
-    // disagree about which kit the box asked for.
-    const { theme, preset } = resolveKit();
-    // THE NAME, RESOLVED ONCE AND SPENT EVERYWHERE. It used to be resolved at the
-    // `onLaunch` call and nowhere else, which is why it named the chat and reached
-    // no generator: the Engine's blueprint call, the GM's per-turn prompt and this
-    // package's own brief call between them read `setting`, `genre`, `playerGoals`
-    // and `spatialMapInstructions`, and the game name was in none of them.
-    const worldName = nameIn.value.trim() || preset.name;
-    const setupConfig = {
-      // ONE HONEST LITERAL, because the package does not know the player's genre
-      // and never did. This field was the theme preset's paragraph — "Cozy
-      // pixel-art village RPG (Stardew/Harvest-Moon-like)…" — asserted over
-      // whatever the player actually described, and it is `.min(1)` and required
-      // so something has to go here. What is true of every Pixelforge game
-      // regardless of setting is the RENDERER, so that is what it says. The real
-      // genre is in `setting`, which is the player's own words and reaches the
-      // GM's per-turn prompt on the very next line of the same block.
-      genre: "A tile-based pixel-art RPG.",
-      // ── THE ONE UNBOUNDED STRING THIS PACKAGE CONTRIBUTES ──────────────────
-      // `/game/create`'s chooser nests the package's whole returned config inside
-      // itself (`experienceConfig: cfg`) and the route caps THAT nested copy at
-      // 32,000 characters, while `setting` is declared `z.string().min(1)` with
-      // no maximum at all. Everything else here is a scalar or a short literal —
-      // about 1 KB — so the Setting box is the only field that can push the copy
-      // over and turn a launch into a hard 400 on a field the player never sees.
-      // 8,000 is the bound, and it is derived rather than picked: the brief call
-      // clamps its preferences to 7,800 against the route's own 8,000 cap, so
-      // the world-writing call loses nothing it was ever going to read. 8,000
-      // plus ~1 KB of scalars is ~9 KB against 32,000, with ~23 KB spare. The
-      // cost, stated once rather than twice in opposite directions: Setting text
-      // past 8,000 characters stops reaching the GM's per-turn prompt, at a
-      // length no setup box invites. Anyone adding a field here inherits this
-      // budget — the spare is the room, not the cap.
-      setting: settingOf(preset, settingIn.value, worldName).slice(0, SETTING_MAX),
-      tone: toneSel.value,
-      difficulty: diffSel.value,
-      rating: ratingSel.value,
-      gmMode: "standalone",
-      // NOBODY WAS ASKED FOR A GOAL. This was a preset template — "Settle into
-      // ${name}, get to know its people…" — written on the player's behalf and
-      // shipped to the GM as their stated goal. The schema defaults it, and an
-      // empty string is the truthful answer to a question the form never put.
-      playerGoals: "",
-      // The party belongs to Game Mode's own setup; this Experience never
-      // duplicates or overrides what that setup collects.
-      partyCharacterIds: [],
-      gameWorldMapMode: "hierarchical",
-      enableAgents: true,
-      // NO `spatialMapInstructions` KEY AT ALL, and the deletion is the field
-      // rather than the sentence: "the GM should never intend to keep the player
-      // bound to a location and the world need not be compact and walkable
-      // necessarily". What used to ship said "Root location: ${name}. Keep the
-      // world compact and walkable." — both halves of which the ruling strikes,
-      // so there is nothing left to trim to. The package does not know enough
-      // about the player's setting to assert a constraint on its shape.
-      //
-      // Verified safe to omit rather than assumed: the field is
-      // `z.string().max(4000).optional()` with no default, and the one place its
-      // absence could have bitten — the Engine inferring "hierarchical" from
-      // `enableAgents && spatialMapInstructions?.trim()` — is `??`-guarded and
-      // `gameWorldMapMode` is set explicitly two lines above, so the map mode is
-      // unchanged by the deletion.
-      combatStyle: "classic",
-      // THE HOST'S OWN HUD WIDGETS, DECLINED (roadmap S7, the "suppress at setup"
-      // option). This surface has never drawn an engine widget and has no reader
-      // for one — the day, the purse and the sky are the package's own header —
-      // but the key was simply never emitted, and every gate on the engine side is
-      // written `!== false`, so `undefined` read as YES at all five of them: the
-      // setup call was handed the widget catalogue and designed four, chat
-      // metadata recorded them, the GM was told to emit `[widget:]` commands for
-      // them every single turn, and the player was walked through a "Review
-      // Starting Widgets" step for a rail that never appears. Two of the four the
-      // model invented were a second purse and a second relationship ledger beside
-      // the ones this package actually keeps, so the double bookkeeping was real
-      // and diverging. One literal closes all five, with no Engine change, and it
-      // is reversible the day the package wants to seed widgets of its own
-      // (`customHudWidgets` is the hook).
-      enableCustomWidgets: false,
-      // `packWanted` rides the SAME answer rather than asking a second question
-      // (0.13): the offline content pack is written by a second call in the same
-      // creation, and a player who wants a generated world wants its people to
-      // have something to say and something to ask for. Splitting it would put a
-      // cost decision in front of somebody who has already made it. It is read at
-      // exactly one place — the seal PATCH, which copies it beside the sealed
-      // brief — because THIS object is rewritable and that copy is not
-      // (60-save PACK_WANTED_META_KEY).
-      experienceConfig: {
-        seed,
-        // THE ONLY CARRIER OF THE PLAYER'S FREESTYLE ANSWER INTO THE WORLD. It
-        // used to be a dropdown value; it is now derived from the Setting box,
-        // and that changes who reads it and how much it matters. `_configTheme`
-        // hands it to the interim world under the loading gate, to the legacy
-        // world a DECLINED chat plays, and — through the brief call's `theme`
-        // argument — to the rung the model's own `artTheme` answer has to beat.
-        theme,
-        generate: generateIn.checked,
-        packWanted: generateIn.checked,
-        // THE NAME, WHERE THE PACKAGE CAN READ IT BACK. `gameSetupConfigSchema`
-        // has no field for a world name — the chat's `name` is where the host
-        // keeps it, and nothing in the config reaches it — so it rides the one
-        // object on this config the package owns outright. Two readers: the brief
-        // call's payload, so the model is asked to dress THE PLAYER'S name rather
-        // than invent one, and the loading gate, so the screen says which world it
-        // is writing. `_configWorldName` reads it at both nesting depths, exactly
-        // as the seed and the theme are read (60-save).
-        worldName,
-        // THE PICKED ENTRY IDS, IN PICKING ORDER — AND THE KEY IS ABSENT WHEN
-        // NOTHING WAS PICKED. That is not tidiness: an empty array is a config key
-        // no existing chat has, and this release's promise is that a player who
-        // touches this control sends bytes and a player who does not sends exactly
-        // what they sent before it existed. The one spread is what lets the Engine
-        // half land without a regression argument behind it.
-        //
-        // The order is the player's own and never a re-sort. It is NOT the order
-        // the call keeps entries in — that is constants first, then position in
-        // the book, and the list is drawn in it — but re-sorting here would only
-        // invent a third ordering for the same selection.
-        ...(lorePicked.length ? { loreEntryIds: lorePicked.slice() } : {}),
-      },
-    };
-    launchBtn.disabled = true;
-    cancelBtn.disabled = true; // mirror the host's mid-launch freeze
-    launchBtn.textContent = "Setting up…";
-    try {
-      await el._pfProps.onLaunch(setupConfig, worldName, undefined, {
-        gmConnectionId,
-      });
-      // NO WORLD IS SEEDED HERE ANY MORE (plan §Q3b, maintainer ruling #7). The
-      // wizard used to write a default themed snapshot into chat metadata so the
-      // first surface load had something to show while generation ran behind a
-      // toast — and that snapshot WAS the throwaway world the ruling abolished:
-      // the first thing a brand-new chat stored was a save for a world nobody
-      // meant to keep. The surface now holds a loading gate until the brief seals,
-      // so there is nothing to show and nothing to seed, and determinism is
-      // unaffected because simFromSaved re-derives the seed and theme from
-      // `experienceConfig` (PF.save._configSeed/_configTheme) exactly as this
-      // snapshot did. The `generate` flag above is the whole handoff — and when it
-      // is false there is nothing to hand off: no gate arms, no call is made, and
-      // the themed default world is what the player walks into.
-    } catch (err) {
-      errEl.textContent =
-        err && err.message ? String(err.message) : "Launch failed — check the connection and try again.";
-      errEl.style.display = "block";
-      launchBtn.disabled = false;
-      cancelBtn.disabled = false;
-      syncLaunchLabel();
-    }
-  });
-};
-
 // ===== 90-element.js =====
 // ── Core singleton + custom element (double-mount adapter) ────────────────────
 // The host instantiates the SAME element twice with view="surface": an underlay
@@ -26400,6 +25696,7 @@ PF.core = {
     if (!p || typeof p.chatId !== "string") return;
     if (p.chatId !== this.chatId) this._switchChat(p);
     this.host = p;
+    if (p.startup === true) this.input.up = this.input.down = this.input.left = this.input.right = false;
     // Tier-1 art rides the packageId/packageVersion the host injects (engine
     // #5092); load() is idempotent and Tier-0 remains the fallback throughout.
     void PF.assets.load(this);
@@ -26410,9 +25707,10 @@ PF.core = {
     PF.save.ensurePresent(this, meta);
 
     // THE GM'S SKY, RECONCILED. The host hands us the whole metadata blob on
-    // every props delivery, so a future writer patching `pixelforgeWeather`
-    // mid-story is answered here — the town re-places under the new sky the
-    // moment the key lands, without waiting for a boundary.
+    // every props delivery, so the storyteller's `weather` verb patching
+    // `pixelforgeWeather` mid-story is answered here, and the town re-places
+    // under the new sky the moment the key lands, without waiting for a
+    // boundary.
     //
     // COMPARED AGAINST THE APPLIED MEMO, never against `sim.weatherOverride`.
     // The memo tracks METADATA, which a console never touches, so a summoned
@@ -26464,6 +25762,47 @@ PF.core = {
     // changes the package can't see, and it dedupes identical declarations
     // by value itself — a package-side cache only causes lost declarations.
     this._declareChrome();
+    this._declareStartup();
+  },
+
+  _declareStartup() {
+    const host = this.host;
+    const gated = PF.save.gateHolds(this);
+    // Keep the existing preparation/retry controls usable, then freeze the HUD
+    // until Engine hands over play. Internal initialization/state writes still run.
+    if (this._mainEl) this._mainEl.inert = host?.startup === true && !gated;
+    if (host?.startup !== true || typeof host.setStartupReady !== "function") return;
+    const sim = this.sim;
+    if (!sim || sim.world.interim || gated || PF.save.mode === null || PF.save._generating.has(this.chatId)) {
+      host.setStartupReady(null);
+      return;
+    }
+    // composePrefix stages an intro receipt; readiness is not an accepted GM
+    // turn, so preserve that receipt and leave every one-shot flag untouched.
+    const pending = sim._pendingIntro;
+    const intro = sim.intro;
+    let context;
+    try {
+      context = sim.composePrefix(null);
+    } finally {
+      sim._pendingIntro = pending;
+      sim.intro = intro;
+    }
+    const zone = sim.world.zones[sim.world.startZone];
+    const residents = [...new Set((zone?.npcs ?? []).map((npc) => `${npc.name} (${npc.role})`))];
+    const cast = [];
+    let used = context.length + 100;
+    for (const resident of residents) {
+      if (used + resident.length + 2 > 8000) break;
+      cast.push(resident);
+      used += resident.length + 2;
+    }
+    if (cast.length) context += `\n[Characters at the starting location: ${cast.join("; ")}]`;
+    if (cast.length < residents.length)
+      context += `\n[${residents.length - cast.length} additional starting residents.]`;
+    // An unexpectedly oversized prefix reaches the host's visible validation
+    // error instead of silently losing setting/location text to truncation.
+    host.setStartupReady(context);
   },
 
   _switchChat(p) {
@@ -26597,7 +25936,7 @@ PF.core = {
         // The gate takes the input claim with it: while it holds there is nothing
         // to walk in, and leaving the claim up would strand the player with the
         // classic turn chrome hidden behind a loading panel.
-        providesPlayerInput: this.sim.mode === "walk" && !PF.save.gateHolds(this),
+        providesPlayerInput: this.sim.mode === "walk" && !PF.save.gateHolds(this) && this.host?.startup !== true,
         // Transient: asked only while a cutscene beat runs. The host restores
         // the player's own setting the moment we stop asking, and its own
         // safety rules still outrank us, so this can never trap a player.
@@ -26695,7 +26034,7 @@ PF.core = {
    *  is sent, and the GM is not told a conversation started. */
   openTalk(npc) {
     const sim = this.sim;
-    if (!sim || !npc) return;
+    if (!sim || !npc || this.host?.startup === true) return;
     this._talkAnchor = npc;
     sim.talkAnchorId = npc.id;
     // THE CUTSCENE CLEAR AT OPEN, on `setMode`'s own idiom two screens up and for
@@ -26801,7 +26140,7 @@ PF.core = {
       this.hud?.toast("They're not there any more.");
       return;
     }
-    if (PF.save.gateHolds(this)) return;
+    if (PF.save.gateHolds(this) || this.host?.startup === true) return;
     if (typeof this.host?.sendMessage !== "function") return;
     if (this.host.isStreaming) {
       this.hud?.toast("The story is still being written…");
@@ -27084,7 +26423,7 @@ PF.core = {
         this.closeTalk();
         return;
       }
-      if (PF.save.gateHolds(this)) return; // nothing to walk in yet
+      if (PF.save.gateHolds(this) || this.host?.startup === true) return; // nothing to walk in yet
       // Typing goes to whoever is being typed into — the host's message box, or
       // the window's own Say field, which carries its own Escape and Enter.
       if (typing) return;
@@ -27179,9 +26518,10 @@ PF.core = {
       this._raf = requestAnimationFrame(tick);
       const dt = Math.min(0.1, (t - this._lastT) / 1000);
       this._lastT = t;
+      this._declareStartup();
       const sim = this.sim;
       if (!sim) return;
-      if (PF.save.gateHolds(this)) {
+      if (PF.save.gateHolds(this) || this.host?.startup === true) {
         // THE LOADING GATE, ahead of every mode: no step, no clock, no draw. A sim
         // that stepped behind the loading panel would age a world nobody is in,
         // dirty itself against a save path that refuses to write, and burn the
@@ -27258,10 +26598,6 @@ class PixelforgeElement extends HTMLElement {
     try {
       const view = this.getAttribute("view");
       const p = this._props;
-      if (view === "setup") {
-        if (p && typeof p.onLaunch === "function") PF.mountSetup(this, p);
-        return;
-      }
       if (view !== "surface" || !p) return;
       if (p.layer === "underlay") PF.core.attachUnderlay(this, p);
       else if (typeof p.chatId === "string") PF.core.attachMain(this, p);

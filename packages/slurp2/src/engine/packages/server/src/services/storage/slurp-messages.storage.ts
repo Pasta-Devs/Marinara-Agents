@@ -10,7 +10,6 @@ import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, or } from 
 import { newId } from "../../utils/id-generator.js";
 import type { DB } from "../../db/connection.js";
 import { logger } from "../../lib/logger.js";
-import { isFileUniqueConstraintError } from "../../db/file-schema.js";
 import {
   slurpCommissions,
   slurpPaymentCompensations,
@@ -20,6 +19,7 @@ import {
   slurpFollowUps,
   slurpThreads,
 } from "../../db/schema/slurp.js";
+import { isSlurpFileUniqueConstraintError } from "./slurp-file-errors.js";
 import { applySlurpMood, type SlurpMoodShift } from "../slurp/slurp-mood.js";
 import {
   applySlurpThreadNotes,
@@ -38,6 +38,11 @@ import { createSlurpEventsStorage } from "./slurp-events.storage.js";
 import { createSlurpStorage } from "./slurp.storage.js";
 import { createSlurpPopulationStorage } from "./slurp-population.storage.js";
 import {
+  slurpFanTypeCommissionBudget,
+  slurpFanTypeWeeklyBudget,
+  slurpResolveFanType,
+} from "../slurp/slurp-fan-types.js";
+import {
   admitSlurpThread,
   readSlurpCreatorMessaging,
   slurpMessagePreview,
@@ -53,6 +58,7 @@ import {
   type SlurpRapportFacts,
 } from "../slurp/slurp-rapport.js";
 import { createSlurpReplyQueueStorage } from "./slurp-reply-queue.storage.js";
+import { SLURP_COMMISSION_MAX_HAGGLE_ROUNDS, slurpCreatorHaggle } from "../slurp/slurp-creator-pricing.js";
 import { DAY, int, json, mapCommission, mapMessage, mapThread, now } from "./slurp-messages.helpers.js";
 import type {
   SlurpCommission,
@@ -142,7 +148,7 @@ async function compensateSlurpPayment(
         updatedAt: timestamp,
       });
     } catch (error) {
-      if (!isFileUniqueConstraintError(error, "slurp2_payment_compensations", ["id"])) throw error;
+      if (!isSlurpFileUniqueConstraintError(error, "slurp2_payment_compensations", ["id"])) throw error;
     }
   }
   try {
@@ -339,7 +345,7 @@ async function createSlurpPaymentIntentUnlocked(
       updatedAt: timestamp,
     });
   } catch (error) {
-    if (!isFileUniqueConstraintError(error, "slurp2_payment_compensations", ["id"])) throw error;
+    if (!isSlurpFileUniqueConstraintError(error, "slurp2_payment_compensations", ["id"])) throw error;
   }
   const existing = (
     await db.select().from(slurpPaymentCompensations).where(eq(slurpPaymentCompensations.id, compensationId))
@@ -605,6 +611,7 @@ export function createSlurpMessagesStorage(db: DB) {
       dmPolicy: settings.messagesDefaultDmPolicy as SlurpCreatorMessaging["dmPolicy"],
       requestFee: settings.messagesDefaultRequestFee,
       ppvPrice: settings.messagesDefaultPpvPrice,
+      commissionBase: settings.simulationTuning.economy.audienceCommissionPrice,
     };
   };
 
@@ -890,7 +897,9 @@ export function createSlurpMessagesStorage(db: DB) {
       const messaging = await storage.getCreatorMessaging(creatorAccountId);
       const facts = await storage.rapportFactsFor(viewerAccountId, creatorAccountId);
       // Apply subscriber boost: subscribers gain rapport 1.5x faster from conversation and effort
-      return scoreSlurpRapport(facts, messaging.rapportWeights, { subscriberBoost: true });
+      // Arc stat effects on fan loyalty scale here, the one place rapport is scored.
+      const gain = await slurp.arcEffectMultiplier(creatorAccountId, "loyalty");
+      return scoreSlurpRapport(facts, messaging.rapportWeights, { subscriberBoost: true, gain });
     },
 
     /**
@@ -1058,7 +1067,7 @@ export function createSlurpMessagesStorage(db: DB) {
       try {
         await db.insert(slurpThreads).values(row);
       } catch (error) {
-        if (!isFileUniqueConstraintError(error, "slurp2_threads", ["viewerAccountId", "creatorAccountId"])) {
+        if (!isSlurpFileUniqueConstraintError(error, "slurp2_threads", ["viewerAccountId", "creatorAccountId"])) {
           if (feePaid > 0) {
             await compensateSlurpPayment(
               slurp,
@@ -1226,7 +1235,7 @@ export function createSlurpMessagesStorage(db: DB) {
           stored = true;
         });
       } catch (error) {
-        if (input.id && isFileUniqueConstraintError(error, "slurp2_messages", ["id"]))
+        if (input.id && isSlurpFileUniqueConstraintError(error, "slurp2_messages", ["id"]))
           return storage.getMessageById(input.id);
         throw error;
       }
@@ -1491,6 +1500,8 @@ export function createSlurpMessagesStorage(db: DB) {
         brief,
         price: "0",
         deliveryMessageId: null,
+        counterPrice: null,
+        haggleRounds: "0",
         createdAt: timestamp,
         updatedAt: timestamp,
       };
@@ -1511,13 +1522,25 @@ export function createSlurpMessagesStorage(db: DB) {
       return mapCommission(row);
     },
 
-    /** Every commission in one thread, oldest first, so the chat can render them beside the messages. */
-    async listCommissionsForThread(threadId: string): Promise<SlurpCommission[]> {
-      const rows = await db
-        .select()
-        .from(slurpCommissions)
-        .where(eq(slurpCommissions.threadId, threadId))
-        .orderBy(asc(slurpCommissions.createdAt));
+    /**
+     * Every commission in one thread, oldest first, so the chat can render them beside the messages.
+     * `since` keeps only commissions updated after that ISO time; `limit` keeps only the newest that
+     * many. Both are applied in the query.
+     */
+    async listCommissionsForThread(threadId: string, since?: string, limit?: number): Promise<SlurpCommission[]> {
+      const where = since
+        ? and(eq(slurpCommissions.threadId, threadId), gt(slurpCommissions.updatedAt, since))
+        : eq(slurpCommissions.threadId, threadId);
+      if (limit) {
+        const newest = await db
+          .select()
+          .from(slurpCommissions)
+          .where(where)
+          .orderBy(desc(slurpCommissions.updatedAt))
+          .limit(limit);
+        return newest.reverse().map(mapCommission);
+      }
+      const rows = await db.select().from(slurpCommissions).where(where).orderBy(asc(slurpCommissions.createdAt));
       return rows.map(mapCommission);
     },
 
@@ -1649,8 +1672,23 @@ export function createSlurpMessagesStorage(db: DB) {
     ): Promise<SlurpCommission | null> {
       const commission = await storage.getCommission(id);
       if (!commission || commission.state !== "quoted") return commission;
-      if (!(await createSlurpPopulationStorage(db).get(commission.viewerAccountId))) return commission;
+      const population = createSlurpPopulationStorage(db);
+      const member = await population.get(commission.viewerAccountId);
+      if (!member) return commission;
       if (decision === "decline") {
+        await db
+          .update(slurpCommissions)
+          .set({ state: "declined", updatedAt: now() })
+          .where(eq(slurpCommissions.id, id));
+        return storage.getCommission(id);
+      }
+      const fanType = slurpResolveFanType((await slurp.getSettings()).fanTypes, member);
+      const commissionBudget = slurpFanTypeCommissionBudget(fanType, member.id);
+      const weeklyBudget = slurpFanTypeWeeklyBudget(fanType, member.id);
+      if (
+        commission.price > commissionBudget ||
+        !(await population.reserveWeeklySpend(member.id, commission.creatorAccountId, commission.price, weeklyBudget))
+      ) {
         await db
           .update(slurpCommissions)
           .set({ state: "declined", updatedAt: now() })
@@ -1697,7 +1735,7 @@ export function createSlurpMessagesStorage(db: DB) {
       const timestamp = now();
       await db
         .update(slurpCommissions)
-        .set({ state: "quoted", price: String(price), updatedAt: timestamp })
+        .set({ state: "quoted", price: String(price), counterPrice: null, updatedAt: timestamp })
         .where(eq(slurpCommissions.id, id));
       const commission = await storage.getCommission(id);
       if (commission) {
@@ -1711,6 +1749,59 @@ export function createSlurpMessagesStorage(db: DB) {
         });
       }
       return storage.getCommission(id);
+    },
+
+    /** A fan offers less than the quote. Null when the quote is not open to an offer. */
+    async counterCommission(id: string, price: number): Promise<SlurpCommission | null> {
+      return queueCommissionOperation(id, () => storage.counterCommissionUnlocked(id, price));
+    },
+
+    async counterCommissionUnlocked(id: string, price: number): Promise<SlurpCommission | null> {
+      const existing = await storage.getCommission(id);
+      if (!existing || existing.state !== "quoted" || existing.counterPrice !== null) return null;
+      if (existing.haggleRounds >= SLURP_COMMISSION_MAX_HAGGLE_ROUNDS || price < 1 || price >= existing.price)
+        return null;
+      await db
+        .update(slurpCommissions)
+        .set({ counterPrice: String(price), haggleRounds: String(existing.haggleRounds + 1), updatedAt: now() })
+        .where(eq(slurpCommissions.id, id));
+      await storage.appendMessage(existing.threadId, {
+        senderAccountId: existing.viewerAccountId,
+        role: "viewer",
+        kind: "system",
+        content: `Offered ${price} coins instead of ${existing.price}.`,
+        metadata: { commissionId: id },
+      });
+      return storage.getCommission(id);
+    },
+
+    /** An automated Creator answers a pending counter-offer: take it, meet halfway, or hold the price. */
+    async answerCommissionCounter(id: string, floor: number): Promise<SlurpCommission | null> {
+      return queueCommissionOperation(id, async () => {
+        const existing = await storage.getCommission(id);
+        if (!existing || existing.state !== "quoted" || existing.counterPrice === null) return existing;
+        const answer = slurpCreatorHaggle({
+          quote: existing.price,
+          offer: existing.counterPrice,
+          floor,
+          round: existing.haggleRounds,
+        });
+        if (answer.kind === "accept") return storage.quoteCommissionUnlocked(id, existing.counterPrice);
+        if (answer.kind === "meet") return storage.quoteCommissionUnlocked(id, answer.price);
+        await db
+          .update(slurpCommissions)
+          .set({ counterPrice: null, haggleRounds: String(SLURP_COMMISSION_MAX_HAGGLE_ROUNDS), updatedAt: now() })
+          .where(eq(slurpCommissions.id, id));
+        await storage.appendMessage(existing.threadId, {
+          senderAccountId: existing.creatorAccountId,
+          role: "creator",
+          kind: "commission_quote",
+          content: `My price stands at ${existing.price} coins.`,
+          price: existing.price,
+          metadata: { commissionId: id },
+        });
+        return storage.getCommission(id);
+      });
     },
 
     async acceptCommission(id: string): Promise<SlurpCommission | null> {
@@ -1828,14 +1919,34 @@ export function createSlurpMessagesStorage(db: DB) {
      * The serving URL contains the message id, and `appendMessage` mints that id, so the image can
      * only be bound once the row is written.
      */
-    async setMessageMedia(messageId: string, imageUrl: string, mediaPath: string): Promise<void> {
+    async setMessageMedia(messageId: string, imageUrl: string, mediaPath: string, imagePrompt?: string): Promise<void> {
       const rows = await db.select().from(slurpMessages).where(eq(slurpMessages.id, messageId));
       const row = rows[0];
       if (!row) return;
-      const metadata = { ...(json(row.metadata as string) ?? {}), noodlerMediaPath: mediaPath };
+      const metadata = {
+        ...(json(row.metadata as string) ?? {}),
+        noodlerMediaPath: mediaPath,
+        // What the picture was drawn from, so image context can describe it without a vision call.
+        ...(imagePrompt ? { imagePrompt } : {}),
+      };
       await db
         .update(slurpMessages)
         .set({ imageUrl, metadata: JSON.stringify(metadata) })
+        .where(eq(slurpMessages.id, messageId));
+    },
+
+    /** Keep a vision description of a message picture, tied to the picture it describes. */
+    async setMessageImageDescription(messageId: string, description: string, source: string): Promise<void> {
+      const row = (await db.select().from(slurpMessages).where(eq(slurpMessages.id, messageId)))[0];
+      if (!row) return;
+      const metadata = {
+        ...(json(row.metadata as string) ?? {}),
+        imageDescription: description,
+        imageDescriptionSource: source,
+      };
+      await db
+        .update(slurpMessages)
+        .set({ metadata: JSON.stringify(metadata) })
         .where(eq(slurpMessages.id, messageId));
     },
 

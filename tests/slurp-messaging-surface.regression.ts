@@ -31,7 +31,10 @@ for (const hook of [
 
 // A commission is only renderable if the thread carries it, which the thread reads did not do.
 assert.match(messageStorage, /async listCommissionsForThread\(/u);
-assert.match(messageRoutes, /commissions: await messages\.listCommissionsForThread\(thread\.id\)/u);
+assert.match(
+  messageRoutes,
+  /commissions: withSuggestedQuotes\(\s*await messages\.listCommissionsForThread\(thread\.id\)/u,
+);
 assert.match(messageRoutes, /commissions: thread \? await messages\.listCommissionsForThread\(thread\.id\) : \[\]/u);
 assert.match(hooks, /commissions: SlurpCommission\[\]/u);
 

@@ -16,7 +16,6 @@ import {
   noodlerPostCreateWithMediaSchema,
   noodlerGenerationRequestSchema,
   noodlerPostUpdateSchema,
-  noodlerAccountCreateSchema,
   noodlerCreatorReplyRequestSchema,
   noodlerCreateInteractionSchema,
   noodlerRemoveInteractionSchema,
@@ -29,6 +28,7 @@ import {
   noodleAmbientProfileRerollSchema,
   noodleInteractionUpdateSchema,
   noodleStageProfileUpdateSchema,
+  noodleStageProfileSchema,
   noodleStageProfileDraftRequestSchema,
   readNoodlePollFromMetadata,
   type NoodleAccount,
@@ -37,6 +37,7 @@ import {
   type NoodlerPostView,
 } from "@marinara-engine/shared";
 import { SLURP_FUNNEL_STAGES, SLURP_NAMED_CAST_LIMIT } from "../services/slurp/slurp-population.js";
+import { planSlurpFanTypeRebalance } from "../services/slurp/slurp-fan-types.js";
 
 /**
  * A subscriber row, widened for the generated audience.
@@ -58,6 +59,7 @@ import { resolveNoodlerCreatorArtwork } from "../services/slurp/slurp-public-pro
 import { createConnectionsStorage } from "../services/storage/connections.storage.js";
 import {
   createSlurpStorage,
+  DEFAULT_SLURP_SETTINGS,
   isSlurpViewerActorAccount,
   slurpSettingsSchema,
 } from "../services/storage/slurp.storage.js";
@@ -74,7 +76,7 @@ import { NOODLER_SUBSCRIPTION_COST, noodlerUnlockPriceFromMetadata } from "../se
 import { slurpDayKey, SLURP_DEV_CHEAT_MAX_COINS } from "../services/slurp/slurp-wallet.js";
 import { settleAgentJobsWithConcurrencyLimit } from "../services/agents/agent-concurrency.js";
 import { logger } from "../lib/logger.js";
-import { isFileUniqueConstraintError } from "../db/file-schema.js";
+import { isSlurpFileUniqueConstraintError } from "../services/storage/slurp-file-errors.js";
 import { isAllowedImageBuffer, safeFetch } from "../utils/security.js";
 
 import { NOODLER_FAN_IDENTITY_PREFIX } from "../services/slurp/slurp-fan-identity-provider.js";
@@ -91,6 +93,7 @@ import {
   updateNoodlerPostWithMedia,
 } from "../services/slurp/slurp-post.operation.js";
 import { tryNoodlerAccountOperation } from "../services/slurp/slurp-account-operation-lock.js";
+import { runSlurpAutopurge } from "../services/slurp/slurp-autopurge.js";
 import { createSlurpFirstPostQueue } from "../services/slurp/slurp-first-post-queue.service.js";
 import { trySlurpDataDeletion, trySlurpWrite } from "../services/slurp/slurp-operation-lock.js";
 import {
@@ -126,6 +129,13 @@ import { syncGarnishAdsWithLorebook } from "../services/slurp/slurp-garnish-sync
 import { createLorebooksStorage } from "../services/storage/lorebooks.storage.js";
 import { generateNoodlerStageProfileDraft } from "../services/slurp/slurp-stage-profile-draft.service.js";
 import {
+  SLURP_DISCOVERY_TAG_MAX_LENGTH,
+  slurpDiscoveryProfileComplete,
+  slurpDiscoveryProfileSchema,
+  SLURP_DISCOVERY_GENDERS,
+  SLURP_DISCOVERY_TAG_LIMIT,
+} from "../services/slurp/slurp-discovery-profile.js";
+import {
   getNoodlerImageConnections,
   updateNoodlerImageConnections,
 } from "../services/slurp/slurp-image-connections.js";
@@ -134,7 +144,11 @@ import { compareNoodlerSourceSnapshots, minimizeNoodlerSourceSnapshot } from "..
 import { resolveNoodlerSourceSnapshot } from "../services/slurp/slurp-source-resolve.js";
 import { canViewNoodlerPost, isNoodlerHiddenFromViewer } from "../services/slurp/slurp-access.js";
 import { noodlerUnseenCreatorAccountIds } from "../services/slurp/slurp-viewer-unseen.js";
-import { noodlerDisclosureReviewReasons, projectNoodlerAudienceProfile } from "../services/slurp/slurp-disclosure.js";
+import {
+  noodlerDisclosureReviewReasons,
+  projectNoodlerAudienceProfile,
+  slurpDisclosureMode,
+} from "../services/slurp/slurp-disclosure.js";
 import { createNoodlerNoodleImagesService } from "../services/slurp/slurp-images.service.js";
 import {
   NOODLER_MEDIA_URL_PREFIX,
@@ -177,6 +191,8 @@ import { createSlurpEventsStorage } from "../services/storage/slurp-events.stora
 import { advanceSlurpWorld } from "../services/slurp/slurp-world.operation.js";
 import { drainSlurpAudienceReplies } from "../services/slurp/slurp-audience-reply.operation.js";
 import { drainSlurpPendingText } from "../services/slurp/slurp-pending-text.service.js";
+import { topUpSlurpReactionBank } from "../services/slurp/slurp-reaction-bank.operation.js";
+import { getSlurpModelBudgetLedger } from "../services/slurp/slurp-model-worker.js";
 import { createSlurpPopulationStorage } from "../services/storage/slurp-population.storage.js";
 import { groupSlurpEvents } from "../services/slurp/slurp-event-weight.js";
 import {
@@ -186,13 +202,23 @@ import {
   SLURP_GOAL_MIN_TARGET,
 } from "../services/slurp/slurp-goal.js";
 import {
+  SLURP_ARC_AUTO_MODES,
+  SLURP_ARC_DIRECTOR_ACTIONS,
+  SLURP_ARC_TWIST_MAX_LENGTH,
+  SLURP_ARC_INTENSITIES,
+  SLURP_ARC_PACES,
+  SLURP_ARC_SOURCES,
   SLURP_PROJECT_CHAPTER_MAX_LENGTH,
   SLURP_PROJECT_DIRECTION_MAX_LENGTH,
   SLURP_PROJECT_MAX_ACTIVE,
   SLURP_PROJECT_MAX_CHAPTERS,
   SLURP_PROJECT_STATUSES,
   SLURP_PROJECT_TITLE_MAX_LENGTH,
+  slurpCrossoverForViewer,
+  slurpArcTypeFromProject,
+  slurpGeneratedArcProject,
 } from "../services/slurp/slurp-project.js";
+import { generateSlurpArc } from "../services/slurp/slurp-arc-generation.service.js";
 import { readSlurpStudioSnapshot, writeSlurpStudioSnapshot } from "../services/slurp/slurp-studio-snapshot.js";
 import { rerollAmbientNoodleProfiles } from "../services/slurp/slurp-ambient-profile-generation.service.js";
 import {
@@ -217,7 +243,7 @@ const slurpNoodlerGenerationRequestSchema = (
   noodlerGenerationRequestSchema instanceof z.ZodEffects
     ? noodlerGenerationRequestSchema.innerType()
     : noodlerGenerationRequestSchema
-).extend({ postType: slurpPostTypeSchema.default("post") });
+).extend({ postType: slurpPostTypeSchema.default("post"), generateImage: z.boolean().optional() });
 
 const slurpNoodlerPostCreateBaseSchema = (
   noodlerPostCreateWithMediaSchema instanceof z.ZodEffects
@@ -228,13 +254,30 @@ const slurpNoodlerPostCreateWithMediaSchema = slurpNoodlerPostCreateBaseSchema
   .extend({
     postType: slurpPostTypeSchema.default("post"),
     linkedPostId: z.string().trim().min(1).nullable().optional(),
+    imagePrompt: z.string().trim().max(2000).nullable().optional(),
+    // Multipart bodies carry numbers as text, and an empty field means "use the Creator's price".
+    unlockPrice: z.preprocess(
+      (value) => (value === "" || value === null ? undefined : value),
+      z.coerce.number().int().min(0).max(9999).optional(),
+    ),
   })
-  .superRefine(({ postType: _postType, linkedPostId: _linkedPostId, ...rest }, ctx) => {
-    const result = noodlerPostCreateWithMediaSchema.safeParse(rest);
-    if (!result.success) {
-      for (const issue of result.error.issues) ctx.addIssue(issue);
-    }
-  });
+  .superRefine(
+    (
+      {
+        postType: _postType,
+        linkedPostId: _linkedPostId,
+        unlockPrice: _unlockPrice,
+        imagePrompt: _imagePrompt,
+        ...rest
+      },
+      ctx,
+    ) => {
+      const result = noodlerPostCreateWithMediaSchema.safeParse(rest);
+      if (!result.success) {
+        for (const issue of result.error.issues) ctx.addIssue(issue);
+      }
+    },
+  );
 const slurpNoodlerPostCreateSchema = slurpNoodlerPostCreateWithMediaSchema.superRefine((input, ctx) => {
   if (!input.content && !input.poll && !input.uploadedImageUrl) {
     ctx.addIssue({
@@ -266,7 +309,21 @@ const slurpBulkNoodlerAccountCreateSchema = noodleBulkNoodlerAccountCreateSchema
   connectionId: z.string().min(1).nullable().optional(),
 });
 
+const slurpStageProfileSchema = noodleStageProfileSchema.extend(slurpDiscoveryProfileSchema.shape);
+// Older clients could skip gender and tags; a new Creator needs both so Discover can find them.
+const SLURP_NEW_CREATOR_DISCOVERY_MESSAGE = "A new Creator needs a gender and at least 3 tags.";
+const slurpNoodlerAccountCreateSchema = z
+  .object({
+    stageProfile: slurpStageProfileSchema.refine(slurpDiscoveryProfileComplete, {
+      message: SLURP_NEW_CREATOR_DISCOVERY_MESSAGE,
+      path: ["tags"],
+    }),
+  })
+  .strict();
+const slurpDiscoveryTagNameSchema = z.string().trim().min(1).max(SLURP_DISCOVERY_TAG_MAX_LENGTH);
+
 const noodleStageProfileUpdateRequestSchema = noodleStageProfileUpdateSchema.extend({
+  ...slurpDiscoveryProfileSchema.shape,
   location: z.string().trim().max(120).optional(),
   sourceRevisionToken: z
     .string()
@@ -514,10 +571,77 @@ export async function slurpRoutes(app: FastifyInstance) {
   }
 
   app.get("/settings", async () => noodle.getSlurpSettings());
+  // The shipped values, so Settings can show what differs and reset one section.
+  app.get("/settings/defaults", async () => DEFAULT_SLURP_SETTINGS);
   app.patch("/settings", async (req, reply) => {
     const body = slurpSettingsSchema.partial().safeParse(req.body ?? {});
     if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
     return noodle.updateSlurpSettings(body.data);
+  });
+  app.post("/autopurge/run", async (_req, reply) => {
+    const outcome = await runSlurpAutopurge(app.db, { reschedule: false });
+    if (outcome.status === "busy") {
+      return reply.code(409).send({ error: "Another Slurp backup or cleanup is already running." });
+    }
+    return outcome.result;
+  });
+  app.post("/arc-library/:id/reset", async (req, reply) => {
+    const settings = await noodle.resetArcType((req.params as { id: string }).id);
+    return settings ?? reply.code(404).send({ error: "Not a built-in arc type." });
+  });
+  // Shares only ever applied to new members. Preview and apply run the same deterministic plan, so
+  // what the player is shown is what gets written.
+  async function planFanTypeRebalance() {
+    const settings = await noodle.getSlurpSettings();
+    const members = await createSlurpPopulationStorage(app.db).listAll(5000);
+    return planSlurpFanTypeRebalance(members, settings.fanTypes);
+  }
+  app.get("/fan-types/rebalance/preview", async () => {
+    const plan = await planFanTypeRebalance();
+    return { changed: plan.changes.length, counts: plan.counts };
+  });
+  app.get("/model-budget/usage", async () => getSlurpModelBudgetLedger(app.db));
+  app.post("/fan-types/rebalance", async () => {
+    const plan = await planFanTypeRebalance();
+    // All or nothing: a failed write rolls the pass back instead of reporting the planned count.
+    await app.db.transaction(async (tx) => {
+      const population = createSlurpPopulationStorage(tx);
+      for (const change of plan.changes) await population.setFanType(change.memberId, change.to);
+    });
+    return { changed: plan.changes.length, counts: plan.counts };
+  });
+  app.get("/discovery-tags/usage", async () => noodle.countDiscoveryTagUsage());
+  app.post("/discovery-tags/rename", async (req, reply) => {
+    const body = z.object({ from: slurpDiscoveryTagNameSchema, to: slurpDiscoveryTagNameSchema }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    return noodle.replaceDiscoveryTag(body.data.from, body.data.to);
+  });
+  app.post("/discovery-tags/delete", async (req, reply) => {
+    const body = z.object({ tag: slurpDiscoveryTagNameSchema }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    return noodle.replaceDiscoveryTag(body.data.tag, null);
+  });
+  // One edit for many Creators, also used for a single Creator's quick edit. Capped so one request stays bounded.
+  app.post("/noodler/accounts/bulk-update", async (req, reply) => {
+    const tagList = z.array(slurpDiscoveryTagNameSchema).max(SLURP_DISCOVERY_TAG_LIMIT);
+    const body = z
+      .object({
+        ids: z.array(z.string().trim().min(1)).min(1).max(500),
+        patch: z
+          .object({
+            gender: z.enum(SLURP_DISCOVERY_GENDERS).nullable().optional(),
+            tags: tagList.optional(),
+            addTags: tagList.optional(),
+            removeTags: z.array(slurpDiscoveryTagNameSchema).max(100).optional(),
+            autoPosting: z.boolean().optional(),
+            imagesEnabled: z.boolean().optional(),
+          })
+          .strict()
+          .refine((patch) => Object.values(patch).some((value) => value !== undefined), "Nothing to change."),
+      })
+      .safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    return noodle.bulkUpdateCreatorProfiles([...new Set(body.data.ids)], body.data.patch);
   });
 
   // ── Backup: export and restore ────────────────────────────────────────────
@@ -924,9 +1048,6 @@ export async function slurpRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const account = await noodle.getNoodlerAccountById(id);
     if (!account) return reply.code(404).send({ error: "Creator account not found" });
-    if (!creatorBelongsToViewer(account, viewer)) {
-      return reply.code(403).send({ error: "Only the Creator's owner can update the profile." });
-    }
     const updated = await noodle.updateAccountProfile(id, { profile: parsed.data.profile });
     if (!updated) return reply.code(404).send({ error: "Creator account not found" });
     return updated;
@@ -945,10 +1066,8 @@ export async function slurpRoutes(app: FastifyInstance) {
     }
     const character = await characters.getById(source.entityId);
     if (!character) return reply.code(404).send({ error: "Linked Engine character not found." });
-    const connection = await resolveSlurpTextConnection(
-      connections,
-      (await noodle.getSettings()).generationConnectionId,
-    );
+    const scheduleSettings = await noodle.getSettings();
+    const connection = await resolveSlurpTextConnection(connections, scheduleSettings.generationConnectionId);
     if (!connection) return reply.code(409).send({ error: "Select a text generation connection first." });
     const data = (typeof character.data === "string" ? JSON.parse(character.data) : character.data) as Record<
       string,
@@ -958,11 +1077,15 @@ export async function slurpRoutes(app: FastifyInstance) {
       data.extensions && typeof data.extensions === "object" && !Array.isArray(data.extensions)
         ? (data.extensions as Record<string, unknown>)
         : {};
-    const generated = await generateSlurpConversationSchedule(connection, {
-      name: String(data.name ?? source.displayName),
-      description: String(data.description ?? ""),
-      personality: String(data.personality ?? ""),
-    });
+    const generated = await generateSlurpConversationSchedule(
+      connection,
+      {
+        name: String(data.name ?? source.displayName),
+        description: String(data.description ?? ""),
+        personality: String(data.personality ?? ""),
+      },
+      scheduleSettings.simulationTuning.prompts.scheduleExtra,
+    );
     const today = new Date();
     const monday = new Date(today);
     monday.setDate(today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1));
@@ -1112,11 +1235,8 @@ export async function slurpRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const creator = await noodle.getNoodlerAccountById(id);
     if (!creator) return reply.code(404).send({ error: "Stage profile not found" });
-    // The price other personas pay to subscribe. Gated like `/goal` and `/payout`: only the
-    // operating persona may set it.
-    if (!creatorBelongsToViewer(creator, viewer)) {
-      return reply.code(403).send({ error: "Only the Creator's owner can set a subscription price." });
-    }
+    // The price other personas pay to subscribe. Single-player, so no ownership gate: the one
+    // player manages every Creator.
     await noodle.setCreatorSubscriptionPrice(id, parsed.data.price);
     return { price: await noodle.getCreatorSubscriptionPrice(id) };
   });
@@ -1136,7 +1256,8 @@ export async function slurpRoutes(app: FastifyInstance) {
     // Real followers come from the audience funnel, and only from there. Following also moves the
     // funnel now, so adding the social following list on top would count the same person twice —
     // at 25x weight each.
-    const countsScale = slurpPlatformScaleMultiplier((await noodle.getSettings()).platformScale);
+    const countsScaleSettings = await noodle.getSettings();
+    const countsScale = slurpPlatformScaleMultiplier(countsScaleSettings.platformScale);
     const countsPopulation = createSlurpPopulationStorage(app.db);
     const countsFunnel = await countsPopulation.countFollowersForCreators(creators.map((creator) => creator.id));
     const countsSubscribers = await countsPopulation.countSubscribersForCreators(creators.map((creator) => creator.id));
@@ -1159,6 +1280,7 @@ export async function slurpRoutes(app: FastifyInstance) {
               scale: countsScale,
             },
             at,
+            countsScaleSettings.simulationTuning.reach,
           ),
         },
       ]),
@@ -1246,7 +1368,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const locked = await tryNoodlerAccountOperation(id, async () => {
       const account = await noodle.getNoodlerAccountById(id);
-      if (!account || (account.settings.privacy.identityDisclosure ?? "secret") !== "open") return null;
+      if (!account || (account.settings.privacy.identityDisclosure ?? "open") !== "open") return null;
       const source = await noodle.resolveAccountSource(account);
       if (!source?.avatarUrl) return false;
       const oldAvatarUrl = account.avatarUrl;
@@ -1338,7 +1460,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     // absent right after account deletion/cleanup — provision it here so interactions never
     // 404 for a still-live persona (review finding).
     const resolvedActor =
-      (await noodle.getSlurpAccountForEntity("persona", personaId)) ??
+      (await noodle.getSlurpAccountForEntity("persona", personaId, "viewer")) ??
       (await resolvePersonaAccount(noodle, characters, personaId));
     const actor = resolvedActor?.kind === "persona" && resolvedActor.entityId === personaId ? resolvedActor : null;
     return { personaId, viewer, actor };
@@ -1464,7 +1586,8 @@ export async function slurpRoutes(app: FastifyInstance) {
     const projectedAt = new Date();
     const authorIds = [...new Set(posts.map((post) => post.authorAccountId))];
     const projectionFunnel = await createSlurpPopulationStorage(app.db).countFollowersForCreators(authorIds);
-    const projectionScale = slurpPlatformScaleMultiplier((await noodle.getSettings()).platformScale);
+    const projectionScaleSettings = await noodle.getSettings();
+    const projectionScale = slurpPlatformScaleMultiplier(projectionScaleSettings.platformScale);
     const reachByAccountId = new Map(
       authorIds.map((accountId) => {
         const account = context.accountById.get(accountId);
@@ -1479,6 +1602,7 @@ export async function slurpRoutes(app: FastifyInstance) {
                   scale: projectionScale,
                 },
                 projectedAt,
+                projectionScaleSettings.simulationTuning.reach,
               )
             : 0,
         ] as const;
@@ -1585,9 +1709,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const { id } = req.params as { id: string };
     const creator = await noodle.getNoodlerAccountById(id);
-    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
-      return reply.code(403).send({ error: "Only the Creator's owner can set a goal." });
-    }
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
     const goal = await noodle.setGoal(creator.id, parsed.data.label, parsed.data.target);
     if (parsed.data.label !== null && !goal) {
       return reply.code(400).send({ error: "A goal needs a label and a target." });
@@ -1599,7 +1721,7 @@ export async function slurpRoutes(app: FastifyInstance) {
   /**
    * A Creator's projects.
    *
-   * Owner-only, all of them. A project is production notes — what this thread is about, what is
+   * Player-managed, all of them. A project is production notes — what this thread is about, what is
    * coming next — and the opposite of a tip goal, which exists to be shown. Nothing here reaches
    * the audience except the posts it produces.
    */
@@ -1610,9 +1732,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const { id } = req.params as { id: string };
     const creator = await noodle.getNoodlerAccountById(id);
-    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
-      return reply.code(403).send({ error: "Only the Creator's owner can read their projects." });
-    }
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
     return { projects: await noodle.listProjects(creator.id) };
   });
 
@@ -1625,9 +1745,19 @@ export async function slurpRoutes(app: FastifyInstance) {
     const parsed = z
       .object({
         personaId: z.string().trim().min(1),
-        title: z.string().trim().min(1).max(SLURP_PROJECT_TITLE_MAX_LENGTH),
+        // Optional for a library type, which brings its own title.
+        title: z.string().trim().max(SLURP_PROJECT_TITLE_MAX_LENGTH).default(""),
         direction: z.string().trim().max(SLURP_PROJECT_DIRECTION_MAX_LENGTH).default(""),
         chapters: projectChapters.default([]),
+        typeId: z.string().trim().min(1).max(128).nullable().default(null),
+        durationDays: z.number().int().min(1).max(365).nullable().optional(),
+        intensity: z.enum(SLURP_ARC_INTENSITIES).default("background"),
+        // A crossover: up to two more of the player's own Creators.
+        crossoverWith: z.array(z.string().trim().min(1).max(128)).max(2).default([]),
+      })
+      .refine((body) => body.title.length > 0 || body.typeId !== null, {
+        message: "A custom arc needs a title.",
+        path: ["title"],
       })
       .safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
@@ -1635,18 +1765,34 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const { id } = req.params as { id: string };
     const creator = await noodle.getNoodlerAccountById(id);
-    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
-      return reply.code(403).send({ error: "Only the Creator's owner can open a project." });
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
+    if (
+      parsed.data.typeId &&
+      !parsed.data.title &&
+      !(await noodle.getSettings()).arcLibrary.some((type) => type.id === parsed.data.typeId)
+    ) {
+      return reply.code(400).send({ error: "Unknown arc type. Pick a type from the library or give the arc a title." });
+    }
+    for (const partnerId of parsed.data.crossoverWith) {
+      const partner = await noodle.getNoodlerAccountById(partnerId);
+      if (partnerId === creator.id || !partner) {
+        return reply.code(403).send({ error: "A crossover partner must be a different, existing Creator." });
+      }
     }
     const project = await noodle.createProject(creator.id, {
       title: parsed.data.title,
       direction: parsed.data.direction,
       chapters: parsed.data.chapters,
+      typeId: parsed.data.typeId,
+      durationDays: parsed.data.durationDays,
+      intensity: parsed.data.intensity,
+      crossoverWith: parsed.data.crossoverWith,
     });
     if (!project) {
+      const { maxActive } = await noodle.resolveArcConfig(creator.id);
       return reply
         .code(409)
-        .send({ error: `A Creator can run ${SLURP_PROJECT_MAX_ACTIVE} projects at once. Pause or finish one first.` });
+        .send({ error: `This Creator can run ${maxActive} projects at once. Pause or finish one first.` });
     }
     return { project };
   });
@@ -1666,6 +1812,8 @@ export async function slurpRoutes(app: FastifyInstance) {
         chapters: projectChapters.optional(),
         chapter: z.number().int().min(0).optional(),
         status: z.enum(SLURP_PROJECT_STATUSES).optional(),
+        intensity: z.enum(SLURP_ARC_INTENSITIES).optional(),
+        durationDays: z.number().int().min(1).max(365).nullable().optional(),
       })
       .safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
@@ -1673,9 +1821,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const { id, projectId } = req.params as { id: string; projectId: string };
     const creator = await noodle.getNoodlerAccountById(id);
-    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
-      return reply.code(403).send({ error: "Only the Creator's owner can edit a project." });
-    }
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
     const existing = await noodle.getProject(creator.id, projectId);
     if (!existing) return reply.code(404).send({ error: "Project not found" });
     const project = await noodle.updateProject(creator.id, projectId, {
@@ -1684,13 +1830,165 @@ export async function slurpRoutes(app: FastifyInstance) {
       chapters: parsed.data.chapters,
       chapter: parsed.data.chapter,
       status: parsed.data.status,
+      intensity: parsed.data.intensity,
+      durationDays: parsed.data.durationDays,
     });
     if (!project) {
+      const { maxActive } = await noodle.resolveArcConfig(creator.id);
       return reply
         .code(409)
-        .send({ error: `A Creator can run ${SLURP_PROJECT_MAX_ACTIVE} projects at once. Pause or finish one first.` });
+        .send({ error: `This Creator can run ${maxActive} projects at once. Pause or finish one first.` });
     }
     return { project };
+  });
+
+  /**
+   * One Director mode action on an arc. Refused with 403 while `arcDirectorMode` is off, so the
+   * arcs run by themselves unless the player turned directing on.
+   */
+  app.post("/noodler/accounts/:id/projects/:projectId/director", async (req, reply) => {
+    const parsed = z
+      .object({
+        personaId: z.string().trim().min(1),
+        action: z.enum(SLURP_ARC_DIRECTOR_ACTIONS),
+        value: z.string().trim().max(Math.max(SLURP_ARC_TWIST_MAX_LENGTH, SLURP_PROJECT_CHAPTER_MAX_LENGTH)).optional(),
+      })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    if (!(await noodle.getSettings()).arcDirectorMode) {
+      return reply.code(403).send({ error: "Turn on Director mode in Settings → Arcs to direct arcs." });
+    }
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const { id, projectId } = req.params as { id: string; projectId: string };
+    const creator = await noodle.getNoodlerAccountById(id);
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
+    if (!(await noodle.getProject(creator.id, projectId))) {
+      return reply.code(404).send({ error: "Project not found" });
+    }
+    const project = await noodle.directProject(creator.id, projectId, parsed.data.action, parsed.data.value);
+    if (!project) return reply.code(409).send({ error: "That action does not apply to this arc right now." });
+    return { project };
+  });
+
+  /**
+   * Apply or reject an arc's pending profile change. Owner-only, and not a Director action: a
+   * proposal always waits for the player, whether or not Director mode is on.
+   */
+  app.post("/noodler/accounts/:id/projects/:projectId/profile", async (req, reply) => {
+    const parsed = z.object({ personaId: z.string().trim().min(1), apply: z.boolean() }).safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const { id, projectId } = req.params as { id: string; projectId: string };
+    const creator = await noodle.getNoodlerAccountById(id);
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
+    const project = await noodle.resolveArcProfile(creator.id, projectId, parsed.data.apply);
+    if (!project) return reply.code(409).send({ error: "This arc has no profile change waiting." });
+    return { project };
+  });
+
+  /**
+   * The arc timeline for a profile. Unlike `/projects`, any viewer may read it, but only the story
+   * parts: title, tone, chapters, history. Never the direction, the twist, or suggestions. A Creator
+   * hidden from the viewer shows nothing, and a Creator with a protected identity shows arcs to the
+   * owner only, because arc text is typed by the player and is not passed through disclosure.
+   */
+  app.get("/noodler/accounts/:id/arcs", async (req, reply) => {
+    const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.query ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const creator = await noodle.getNoodlerAccountById((req.params as { id: string }).id);
+    if (!creator || isSlurpViewerActorAccount(creator)) return { arcs: [] };
+    const owner = creatorBelongsToViewer(creator, viewer);
+    if (
+      !owner &&
+      (isNoodlerHiddenFromViewer(creator, viewer.id) ||
+        (creator.settings.privacy.identityDisclosure ?? "open") !== "open")
+    )
+      return { arcs: [] };
+    const projects = await noodle.listProjects(creator.id);
+    // Crossover participants go through the same rules one by one: a participant hidden from this
+    // viewer, or with a protected identity, is left out, and so are the posts they published.
+    const participants = new Map<string, NonNullable<typeof creator>>();
+    for (const id of new Set(projects.flatMap((project) => project.creatorIds))) {
+      const account = await noodle.getNoodlerAccountById(id);
+      if (account) participants.set(id, account);
+    }
+    const visible = (id: string) => {
+      const account = participants.get(id);
+      return Boolean(
+        account &&
+        (creatorBelongsToViewer(account, viewer) ||
+          (!isNoodlerHiddenFromViewer(account, viewer.id) &&
+            (account.settings.privacy.identityDisclosure ?? "open") === "open")),
+      );
+    };
+    return {
+      arcs: projects
+        .filter((project) => project.status !== "suggested")
+        .map((project) => {
+          const { id, title, tone, chapters, chapter, status, startedAt, completedAt, choices, pollClosesAt } = project;
+          const crossover = slurpCrossoverForViewer(project, creator.id, visible);
+          return {
+            id,
+            title,
+            tone,
+            chapters,
+            chapter,
+            status,
+            startedAt,
+            completedAt,
+            history: crossover.history,
+            partners: crossover.partnerIds.map((partnerId) => {
+              const account = participants.get(partnerId)!;
+              return {
+                id: account.id,
+                handle: account.handle,
+                displayName: account.displayName,
+                avatarUrl: account.avatarUrl,
+              };
+            }),
+            // Only the open question, not the branches it would add.
+            openChoice: choices[chapter] ? { question: choices[chapter]!.question, closesAt: pollClosesAt } : null,
+          };
+        }),
+    };
+  });
+
+  /** A Creator's arc overrides. Owner-only, like the projects they shape. */
+  app.get("/noodler/accounts/:id/arc-config", async (req, reply) => {
+    const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.query ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const creator = await noodle.getNoodlerAccountById((req.params as { id: string }).id);
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
+    return { config: await noodle.getArcConfig(creator.id) };
+  });
+
+  /** Replace a Creator's arc overrides. A field left out uses the global setting; `{}` resets all. */
+  app.put("/noodler/accounts/:id/arc-config", async (req, reply) => {
+    const parsed = z
+      .object({
+        personaId: z.string().trim().min(1),
+        autoMode: z.enum(SLURP_ARC_AUTO_MODES).optional(),
+        source: z.enum(SLURP_ARC_SOURCES).optional(),
+        cooldownWeeks: z.number().int().min(1).max(8).optional(),
+        pace: z.enum(SLURP_ARC_PACES).optional(),
+        allowedTypeIds: z.array(z.string().trim().min(1).max(128)).max(200).optional(),
+        maxActive: z.number().int().min(1).max(SLURP_PROJECT_MAX_ACTIVE).optional(),
+        crossovers: z.boolean().optional(),
+      })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const creator = await noodle.getNoodlerAccountById((req.params as { id: string }).id);
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
+    const { personaId: _personaId, ...config } = parsed.data;
+    return { config: await noodle.setArcConfig(creator.id, config) };
   });
 
   /** Forget a project. Its posts stay published and keep pointing at it. */
@@ -1701,13 +1999,60 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const { id, projectId } = req.params as { id: string; projectId: string };
     const creator = await noodle.getNoodlerAccountById(id);
-    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
-      return reply.code(403).send({ error: "Only the Creator's owner can delete a project." });
-    }
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
     if (!(await noodle.deleteProject(creator.id, projectId))) {
       return reply.code(404).send({ error: "Project not found" });
     }
     return { deleted: true };
+  });
+
+  /** Ask the model for an arc for this Creator. It is stored as a suggestion for the player to review. */
+  app.post("/noodler/accounts/:id/projects/generate", async (req, reply) => {
+    const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const creator = await noodle.getNoodlerAccountById((req.params as { id: string }).id);
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
+    const project = await noodle.addGeneratedProject(
+      creator.id,
+      await generateSlurpArc(app.db, creator.id, [], "", { kind: "foreground" }),
+    );
+    if (!project) return reply.code(502).send({ error: "The model did not return a usable arc. Try again." });
+    return { project };
+  });
+
+  /** Generate an unsaved Arc Library draft from a player brief. */
+  app.post("/noodler/accounts/:id/arc-library/generate", async (req, reply) => {
+    const parsed = z
+      .object({ personaId: z.string().trim().min(1), brief: z.string().trim().min(1).max(2_000) })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const creator = await noodle.getNoodlerAccountById((req.params as { id: string }).id);
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
+    const raw = await generateSlurpArc(app.db, creator.id, [], parsed.data.brief, { kind: "foreground" });
+    const draftId = `draft-${Date.now().toString(36)}`;
+    const project = raw
+      ? slurpGeneratedArcProject(draftId, raw, new Date(), { origin: "manual", status: "suggested" })
+      : null;
+    if (!project) return reply.code(502).send({ error: "The model did not return a usable arc. Try again." });
+    return { type: slurpArcTypeFromProject(project, draftId) };
+  });
+
+  /** Copy an arc into the arc library as a custom type. */
+  app.post("/noodler/accounts/:id/projects/:projectId/library", async (req, reply) => {
+    const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const { id, projectId } = req.params as { id: string; projectId: string };
+    const creator = await noodle.getNoodlerAccountById(id);
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
+    const type = await noodle.saveProjectToLibrary(creator.id, projectId);
+    if (!type) return reply.code(404).send({ error: "Project not found" });
+    return { type };
   });
 
   /** One project's own posts, so the Studio can show the thread rather than the whole page. */
@@ -1720,9 +2065,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const { id, projectId } = req.params as { id: string; projectId: string };
     const creator = await noodle.getNoodlerAccountById(id);
-    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
-      return reply.code(403).send({ error: "Only the Creator's owner can read a project." });
-    }
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
     if (!(await noodle.getProject(creator.id, projectId))) {
       return reply.code(404).send({ error: "Project not found" });
     }
@@ -1750,6 +2093,11 @@ export async function slurpRoutes(app: FastifyInstance) {
     // is where that debt is paid, with the player present and against text they are about to read.
     await drainSlurpPendingText(app.db).catch((error: unknown) =>
       logger.warn(error, "[slurp-pending] Drain on open failed"),
+    );
+    // Present mode grows reusable banks only while somebody is here. Background mode also reaches
+    // this path, but the durable ledger still makes it one shared budget.
+    await topUpSlurpReactionBank(app.db, "present").catch((error: unknown) =>
+      logger.warn(error, "[slurp-bank] Top-up on open failed"),
     );
     // Tier 2 the other way round: the creator answering the audience rather than the audience
     // being rewritten. Same rule and same reason it lives here — unattended work never calls the
@@ -1839,9 +2187,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const { id } = req.params as { id: string };
     const creator = await noodle.getNoodlerAccountById(id);
-    if (!creator || !creatorBelongsToViewer(creator, viewer)) {
-      return reply.code(403).send({ error: "Only the Creator's owner can withdraw." });
-    }
+    if (!creator) return reply.code(404).send({ error: "Creator account not found" });
     const result = await noodle.payOutEarnings(creator.id, parsed.data.amount);
     if (result.status !== "paid") {
       const earnings = await noodle.getEarnings(creator.id);
@@ -1867,7 +2213,8 @@ export async function slurpRoutes(app: FastifyInstance) {
     const operated = accounts.filter((account) => creatorBelongsToViewer(account, viewer));
     const population = createSlurpPopulationStorage(app.db);
     const studioFunnel = await population.countFollowersForCreators(operated.map((account) => account.id));
-    const studioScale = slurpPlatformScaleMultiplier((await noodle.getSettings()).platformScale);
+    const studioScaleSettings = await noodle.getSettings();
+    const studioScale = slurpPlatformScaleMultiplier(studioScaleSettings.platformScale);
     const at = new Date();
     const snapshot = await readSlurpStudioSnapshot(app.db, viewer.id);
 
@@ -1894,6 +2241,7 @@ export async function slurpRoutes(app: FastifyInstance) {
             scale: studioScale,
           },
           at,
+          studioScaleSettings.simulationTuning.reach,
         );
         const earnings = await noodle.getEarnings(account.id);
         const goal = await noodle.getGoal(account.id);
@@ -2400,6 +2748,11 @@ export async function slurpRoutes(app: FastifyInstance) {
     return readable;
   }
 
+  async function resolveInteractableNoodlerPost(personaId: string, postId: string) {
+    const readable = await resolveReadableNoodlerPost(personaId, postId);
+    return !readable || readable.locked ? null : readable;
+  }
+
   // Access-checked serving for NoodleR-owned media. This entire router is installed
   // through registerPrivilegedRoutes, so the host authenticates the Engine owner before
   // any handler runs. A persona query additionally gates that owner-scoped request as a fan
@@ -2487,8 +2840,9 @@ export async function slurpRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const identity = await resolveViewerIdentity(parsed.data.personaId);
     if (!identity?.actor) return reply.code(404).send({ error: "Slurp viewer profile not found" });
-    const gated = await resolveGatedNoodlerPost(parsed.data.personaId, id);
+    const gated = await resolveInteractableNoodlerPost(parsed.data.personaId, id);
     if (!gated) return reply.code(404).send({ error: "Slurp post not found" });
+    const actor = creatorBelongsToViewer(gated.creator, identity.viewer) ? gated.creator : identity.actor;
     if (parsed.data.type === "vote") {
       const poll = readNoodlePollFromMetadata(gated.post.metadata);
       const optionId = parsed.data.content?.trim() ?? "";
@@ -2497,7 +2851,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       }
     }
     const interaction = await noodle.createNoodlerInteraction(id, {
-      actorAccountId: identity.actor.id,
+      actorAccountId: actor.id,
       viewerPersonaId: identity.personaId,
       type: parsed.data.type,
       content: parsed.data.content ?? null,
@@ -2506,7 +2860,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!interaction) return reply.code(400).send({ error: "Could not add that Slurp interaction." });
     // Taking part pays, capped per day. A like is one tap, so only the interactions that cost the
     // player something to write are rewarded — otherwise the cap is reached by tapping hearts.
-    if (parsed.data.type === "reply" || parsed.data.type === "vote") {
+    if (actor.id !== gated.creator.id && (parsed.data.type === "reply" || parsed.data.type === "vote")) {
       await noodle.earnCoins(identity.personaId, "engagement", parsed.data.type);
     }
     return reply.code(201).send(interaction);
@@ -2552,7 +2906,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       });
     } catch (error) {
       if (
-        !isFileUniqueConstraintError(error, "slurp2_interactions", [
+        !isSlurpFileUniqueConstraintError(error, "slurp2_interactions", [
           "postId",
           "actorAccountId",
           "type",
@@ -2573,8 +2927,8 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!post || post.metadata.noodlerPostType !== "story") return reply.code(404).send({ error: "Story not found" });
     const identity = await resolveViewerIdentity(parsed.data.personaId);
     const creator = await noodle.getNoodlerAccountById(post.authorAccountId);
-    if (!identity?.viewer || !creator || !(await creatorBelongsToViewer(creator, identity.viewer))) {
-      return reply.code(403).send({ error: "Only the Creator owner can view Story viewers." });
+    if (!identity?.viewer || !creator) {
+      return reply.code(404).send({ error: "Slurp persona not found" });
     }
     const rows = await app.db
       .select()
@@ -2648,10 +3002,11 @@ export async function slurpRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const identity = await resolveViewerIdentity(parsed.data.personaId);
     if (!identity?.actor) return reply.code(404).send({ error: "Slurp viewer profile not found" });
-    const gated = await resolveGatedNoodlerPost(parsed.data.personaId, id);
+    const gated = await resolveInteractableNoodlerPost(parsed.data.personaId, id);
     if (!gated) return reply.code(404).send({ error: "Slurp post not found" });
+    const actor = creatorBelongsToViewer(gated.creator, identity.viewer) ? gated.creator : identity.actor;
     const interaction = await noodle.deleteNoodlerInteraction(id, {
-      actorAccountId: identity.actor.id,
+      actorAccountId: actor.id,
       viewerPersonaId: identity.personaId,
       type: parsed.data.type,
       parentInteractionId: parsed.data.parentInteractionId ?? null,
@@ -2673,6 +3028,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     const actor = await noodle.getNoodlerAccountById(interaction.actorAccountId);
     const canManage =
       interaction.actorAccountId === identity.actor.id ||
+      creatorBelongsToViewer(actor, identity.viewer) ||
       (actor?.kind === "character" && actor.sourceKind === "character");
     if (!canManage) return reply.code(403).send({ error: "You can only edit comments owned by this persona." });
     const content = parsed.data.content === undefined ? interaction.content : parsed.data.content?.trim() || null;
@@ -2696,6 +3052,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     const actor = await noodle.getNoodlerAccountById(interaction.actorAccountId);
     const canManage =
       interaction.actorAccountId === identity.actor.id ||
+      creatorBelongsToViewer(actor, identity.viewer) ||
       (actor?.kind === "character" && actor.sourceKind === "character");
     if (!canManage) return reply.code(403).send({ error: "You can only delete comments owned by this persona." });
     const deleted = await noodle.deleteInteractionById(interactionId);
@@ -2929,7 +3286,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       await Promise.all(
         page.items.map(async (subscription): Promise<SlurpSubscriberRow | null> => {
           const account =
-            (await noodle.getSlurpAccountForEntity("persona", subscription.viewerAccountId)) ??
+            (await noodle.getSlurpAccountForEntity("persona", subscription.viewerAccountId, "viewer")) ??
             (await noodle.getViewer(subscription.viewerAccountId));
           // A subscriber with no account row is somebody from the generated audience. Dropping
           // them here is why an audience subscription could never be seen: the row existed and the
@@ -2995,6 +3352,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     const population = createSlurpPopulationStorage(app.db);
     const at = new Date();
     const followerFloor = SLURP_FUNNEL_STAGES.indexOf("follower");
+    const followersSettings = await noodle.getSettings();
     const items = (await population.listNamedCast(id, SLURP_NAMED_CAST_LIMIT * 3))
       .filter(
         (entry) =>
@@ -3020,9 +3378,10 @@ export async function slurpRoutes(app: FastifyInstance) {
           accountId: creator.id,
           createdAt: creator.createdAt,
           realFollowers: (await population.countFollowersForCreators([id])).get(id) ?? 0,
-          scale: slurpPlatformScaleMultiplier((await noodle.getSettings()).platformScale),
+          scale: slurpPlatformScaleMultiplier(followersSettings.platformScale),
         },
         at,
+        followersSettings.simulationTuning.reach,
       ),
     };
   });
@@ -3194,9 +3553,10 @@ export async function slurpRoutes(app: FastifyInstance) {
         "[slurp] Stage profile draft generation failed using %s",
         connection.model || connection.provider,
       );
-      return reply
-        .code(500)
-        .send({ error: "Stage profile draft generation failed. Check the generation connection and try again." });
+      // The reason is written for the user (no JSON, empty answer, leaked identity), so show it.
+      return reply.code(500).send({
+        error: `Stage profile draft generation failed: ${getErrorMessage(error)}`,
+      });
     }
   });
 
@@ -3235,13 +3595,15 @@ export async function slurpRoutes(app: FastifyInstance) {
   });
 
   app.post("/accounts/:id/noodler", async (req, reply) => {
-    const parsed = noodlerAccountCreateSchema.safeParse(req.body ?? {});
+    const parsed = slurpNoodlerAccountCreateSchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
     const publicAccount = await noodle.resolveSourceByEntityId(id);
     if (!publicAccount) {
       return reply.code(404).send({ error: "Noodle account not found" });
     }
+    // The shared schema still accepts Secret; Slurp creates it as Hinted.
+    parsed.data.stageProfile.disclosureMode = slurpDisclosureMode(parsed.data.stageProfile.disclosureMode);
     const sourceSnapshot = publicAccount ? await resolveNoodlerSourceSnapshot(app.db, publicAccount) : null;
     if (
       publicAccount &&
@@ -3252,7 +3614,7 @@ export async function slurpRoutes(app: FastifyInstance) {
         (sourceSnapshot && stageProfileContainsSourceDetails(parsed.data.stageProfile, sourceSnapshot)))
     ) {
       return reply.code(400).send({
-        error: "Hinted and secret stage profiles cannot use identifying source names or details.",
+        error: "Hinted stage profiles cannot use identifying source names or details.",
       });
     }
     try {
@@ -3278,7 +3640,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       if (!profile) throw new Error("Failed to load the created Slurp stage profile.");
       return reply.code(201).send(profile);
     } catch (error) {
-      if (isFileUniqueConstraintError(error, "slurp2_accounts", ["sourceKind", "sourceEntityId"])) {
+      if (isSlurpFileUniqueConstraintError(error, "slurp2_accounts", ["sourceKind", "sourceEntityId"])) {
         return reply.code(409).send({
           error: "A Slurp creator already exists for this Noodle account.",
         });
@@ -3345,7 +3707,7 @@ export async function slurpRoutes(app: FastifyInstance) {
         }
         return;
       }
-      const accountDisclosure = disclosureExceptions[noodleAccountId] ?? disclosureMode;
+      const accountDisclosure = slurpDisclosureMode(disclosureExceptions[noodleAccountId] ?? disclosureMode);
       if (!publicAccount) {
         skipped.push(noodleAccountId);
         noteReason(noodleAccountId, "The source character or persona no longer exists in Noodle.");
@@ -3360,6 +3722,27 @@ export async function slurpRoutes(app: FastifyInstance) {
           },
           connection,
         });
+        // The draft carries form-only keys (notes, source snapshot, revision token) that the strict
+        // create schema refuses. Validating them made every open-mode Creator skip with a wrong reason.
+        const {
+          notes: _notes,
+          sourceSnapshot: _draftSnapshot,
+          sourceRevisionToken: _draftToken,
+          ...generatedProfile
+        } = stageProfile as typeof stageProfile & { sourceSnapshot?: unknown; sourceRevisionToken?: unknown };
+        const validatedProfile = slurpNoodlerAccountCreateSchema.safeParse({ stageProfile: generatedProfile });
+        if (!validatedProfile.success) {
+          skipped.push(noodleAccountId);
+          noteReason(
+            noodleAccountId,
+            validatedProfile.error.issues.every((issue) => issue.message === SLURP_NEW_CREATOR_DISCOVERY_MESSAGE)
+              ? "The generated stage profile did not include a valid gender and at least 3 tags."
+              : `The generated stage profile could not be used: ${validatedProfile.error.issues
+                  .map((issue) => `${issue.path.slice(1).join(".") || "profile"} ${issue.message}`)
+                  .join("; ")}`,
+          );
+          return;
+        }
         const sourceSnapshot = await resolveNoodlerSourceSnapshot(app.db, publicAccount);
         // Belt-and-braces: the generator already enforces leak protection, but keep the guard.
         if (
@@ -3382,7 +3765,7 @@ export async function slurpRoutes(app: FastifyInstance) {
         const account = await noodle.createNoodlerAccount(
           publicAccount.kind as "character" | "persona",
           publicAccount.entityId,
-          stageProfile,
+          validatedProfile.data.stageProfile,
           executionId,
           sourceSnapshot ? minimizeNoodlerSourceSnapshot(sourceSnapshot, accountDisclosure) : undefined,
           artwork.avatarUrl,
@@ -3396,7 +3779,7 @@ export async function slurpRoutes(app: FastifyInstance) {
         await applyAutoPosting(account.id);
         created.push(account.id);
       } catch (error) {
-        if (isFileUniqueConstraintError(error, "slurp2_accounts", ["sourceKind", "sourceEntityId"])) {
+        if (isSlurpFileUniqueConstraintError(error, "slurp2_accounts", ["sourceKind", "sourceEntityId"])) {
           const replayed = await noodle.getNoodlerAccountForSource(
             publicAccount.kind as "character" | "persona",
             publicAccount.entityId,
@@ -3457,6 +3840,8 @@ export async function slurpRoutes(app: FastifyInstance) {
       const noodlerAccount = await noodle.getNoodlerAccountById(id);
       const publicAccount = noodlerAccount ? await noodle.resolveAccountSource(noodlerAccount) : null;
       const currentSourceSnapshot = publicAccount ? await resolveNoodlerSourceSnapshot(app.db, publicAccount) : null;
+      // The shared schema still accepts Secret; Slurp saves it as Hinted.
+      parsed.data.disclosureMode = slurpDisclosureMode(parsed.data.disclosureMode);
       if (
         publicAccount &&
         (stageProfileContainsPublicIdentity(parsed.data, await resolveNoodlerPublicIdentity(publicAccount)) ||
@@ -3478,7 +3863,7 @@ export async function slurpRoutes(app: FastifyInstance) {
         return { status: "source_revision_conflict" } as const;
       }
       if (noodlerAccount) {
-        const currentMode = noodlerAccount.settings.privacy.identityDisclosure ?? "secret";
+        const currentMode = noodlerAccount.settings.privacy.identityDisclosure ?? "open";
         const [publishedPosts, preparedPosts] = await Promise.all([
           noodle.listAllNoodlerPostsByAccount(id),
           noodle.listNoodlerPreparedPosts(),
@@ -3527,7 +3912,7 @@ export async function slurpRoutes(app: FastifyInstance) {
         // The downgrade throws away unreleased reserve posts; say how many.
         discardedPreparedPostCount = preparedForCreator.length;
       }
-      const currentMode = noodlerAccount?.settings.privacy.identityDisclosure ?? "secret";
+      const currentMode = noodlerAccount?.settings.privacy.identityDisclosure ?? "open";
       const sourceSnapshot =
         currentSourceSnapshot &&
         (parsed.data.disclosureMode !== currentMode || (parsed.data.acceptSourceChanges && sourceRevisionIsCurrent))
@@ -3554,7 +3939,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     }
     if (locked.value.status === "identity_conflict") {
       return reply.code(400).send({
-        error: "Hinted and secret stage profiles cannot use identifying source names or details.",
+        error: "Hinted stage profiles cannot use identifying source names or details.",
       });
     }
     if (locked.value.status === "disclosure_review_required") {
@@ -3588,7 +3973,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       if (!account || !sourceSnapshot) return false;
       await noodle.updateNoodlerSourceSnapshot(
         id,
-        minimizeNoodlerSourceSnapshot(sourceSnapshot, account.settings.privacy.identityDisclosure ?? "secret"),
+        minimizeNoodlerSourceSnapshot(sourceSnapshot, account.settings.privacy.identityDisclosure ?? "open"),
       );
       return true;
     });

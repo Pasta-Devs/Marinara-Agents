@@ -157,6 +157,6 @@ const entry = read("services/slurp/server-entry.ts");
 assert.match(entry, /startSlurpWorldScheduler\(app, addTeardown\)/u);
 
 const scheduler = read("services/slurp/slurp-world-scheduler.service.ts");
-assert.match(scheduler, /slurpPollBackoffMs\(POLL_MS, consecutiveFailures\)/u);
+assert.match(scheduler, /slurpPollBackoffMs\(pollMs, consecutiveFailures\)/u);
 
 console.log("slurp world regression passed");

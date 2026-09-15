@@ -4,7 +4,7 @@ Gacha Forge is a standalone gacha game mode: describe a world and it builds the 
 
 Find the package in **Agents → Download Agents**. Installation requires a restart: once installed and Marinara Engine restarts, **Gacha Forge** appears as a second tab in Home's browser shell. Uninstalling the package removes that tab and stops its routes after restart.
 
-Since 1.2.0 the package is **staging only**: Engine `staging` testers are offered it and stable `main` users are not, while the game mode gets exercised. It is listed in the repository README's *In development* table rather than the Misc catalogue for that reason.
+Since 1.8.0 the package is listed in the repository README's Misc catalogue for every Engine channel; from 1.2.0 to 1.7.0 it was **staging only** while the game mode was exercised.
 
 ## What this release contains
 
@@ -81,9 +81,31 @@ This release is not only additive; the reworks it carries to interfaces already 
 - **Home** (shipped in 1.0.0): the scene background survives a banner-art repaint, deleting a world asks first and says what is lost (and deletes its art, its key images and its outfits), and the picker gains the outfit switch, the Story CG category and pagination. Resolving the chosen background is one read rather than three whole catalogues, which used to run on every state refresh and grew with the story.
 - **Settings and the changelog** (shipped in 1.3.0): the key-images slider fills its row and keeps the number the player set, and the changelog opens five versions at a time instead of all of them.
 
-### And two side rails, with a door inside the game
+**1.8.0 is the game played by hand, and what a unit becomes when you keep fighting with it.** It registers 113 routes.
 
-The space left beside the 16:9 frame now carries a collapsible help Q&A on the left and the player-facing changelog on the right. Because those rails are what is left over — they vanish in fullscreen, on a phone, and in a tall window — the same two lists also live inside the stage, as Settings categories reached by the gear that is already on every screen. The rail whose content is on screen steps aside, so neither list is ever drawn twice at once.
+- **Combat is manual.** On each of your units' turns you choose what it does — attack, its Ultimate, its weapon skill, defend, or change row — and who it hits. The unit acting steps out in full size with its actions beside it, the next five turns sit on the right, every unit shows what it is under, and tapping an enemy opens its sheet: its next turn, its Ultimate and passive, a boss's rules and what it carries. Auto still plays the fight exactly as before and can be switched in the middle of a battle.
+- **The Tower** opens at Rank 20: a hundred floors that cost no Vigor. The first seventy are climbed once; from 71 up the Tower is built from the story's own enemies, comes back every month with new bosses, and each floor is two battles with two different teams. Its bosses enrage, wind up warned strikes, carry guard bars, call reinforcements, act twice, shrug off stuns, counter Ultimates or drain energy. Every floor pays Tower Coin, and the Shop has a Tower shelf for it — materials, Insight, Aether, Funds, Glimmer and one 5★ unit a month of your choosing.
+- **Bonds.** Every fight a unit wins raises its bond, on a ladder of ten. The levels pay Aether, open a conversation with that unit (a chat on the Home, named by the world, with pictures where the world can paint them), a story chapter of their own at 4 and 8, a Home background at 6 and an outfit at 10.
+- **Your own cast and your own themes.** Character cards can be the banner cast, each with a rarity, their combat kit and hero art written from what the card says, and their avatar as the portrait from the first moment. Outfit themes are written by you, kept in one library shared by every world, and exported or imported as a set.
+- **Every skill and action has its own painted icon** — 148 of them — and **every screen has a ? that explains it**, opening by itself the first time, with a welcome the first time the game is opened.
+- **The unit sheet is split by what you want to know** — Stats, Skills, Gear, Facets, Outfits and Story — and the Gear tab shows a piece whole: Change and Upgrade are screens of their own that compare stat by stat and CP, and Auto-select picks the cheapest spare relics.
+- **Combat Power measures how a unit really fights**, from the numbers the battle runs on, and every fight asks the CP its enemies are worth. Weapons grow to Lv 90, a relic's SPD is flat, a 5★ relic's main stat starts at half, DEF softens every blow, any blow can crit, and a stun, a poison or a DEF drop is a chance rather than a certainty.
+- **Materials is a row of illustrated cards**, and moving between screens is animated: the screen you leave slides away and the new one comes in, its cards one after another.
+
+Fixes in this line, all measured against the fight: passives now do what they say — react to Ultimates, fire the moment health drops, hit harder with ATK raised, and auras that hit, poison, stun or heal actually fire; skill figures on the sheet are the ones a fight uses, training raises every skill, and Facets quote the unit's own figures; healing, Effect RES and Radiance work as described; the game keeps your place in Units, the Shop, the Battle Pass and the chapter you were reading; and changing banners, opening a unit or entering a menu no longer flashes a loading panel.
+
+The two side rails of 1.6.0 are gone: Help and the changelog live only in Settings, and the game takes the width the rails used to have. And from this release the package is listed in the Misc catalogue for every Engine channel; from 1.2.0 to 1.7.0 it was staging only while the game mode was exercised.
+
+### 1.8.0 also reworks screens that already shipped
+
+- **Combat and pre-battle** (1.1.0): manual by default, with Auto remembered per mode; the enemy sheet before and during a fight; a defeat says what it cost; easier fights no longer slow the enemies down.
+- **The unit sheet** (1.0.0): tabs, the Gear screens, skill training from each skill's own page, and the portrait redo as the Edit button on the Default outfit.
+- **Materials, Ascension Materials and Tenet Trial** (1.1.0): decks of cards with their own pictures, CP and Vigor side by side, the Vault's odds, and the deck stays where you left it after a run.
+- **The Seasonal Event** (1.5.0): pays less — 40, 60 and 80 coin, 250 for the boss — and its boxes are smaller.
+- **Achievements** (1.5.0): a Bonds category with five new ladders, and the summon, Facet, Materials and rank ladders run to thirteen steps.
+- **Shop and Inventory** (1.5.0): item pictures stand on their card instead of a black square, group names look like the ones in Units, and the Glimmer icon is Glimmer's.
+- **World creation and Settings** (1.0.0): a Characters step for the cast, the art size and the outfits per rotation as settings, expandable lists, the changelog in one column as patch notes, and outfit directives are gone.
+- **Modes** (1.3.0): no cards for modes that are not out, and a closed mode says the Rank it needs.
 
 All generation — world text, cast sheets, portraits, banner art — runs through the Engine profile's own configured model and image connections. The package adds no external services and sends nothing anywhere else.
 

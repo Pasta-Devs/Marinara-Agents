@@ -40,6 +40,9 @@ jobs:
       - name: Test package security invariants
         run: npm run test:security
 
+      - name: Test Calls SwarmUI video generation
+        run: node tests/calls-swarmui-video.regression.mjs
+
       - name: Test Memory Nag recall selection
         run: npx tsx tests/memory-nag-selection.regression.ts
 
@@ -47,6 +50,11 @@ jobs:
         run: |
           npx tsx tests/memory-nag-range.regression.ts
           node tests/pixelforge-weather-contract.regression.mjs
+
+      - name: Test Pixelforge world, setup, and startup contracts
+        run: |
+          node packages/pixelforge/test-brief.mjs
+          node tests/pixelforge-startup.regression.mjs
 
       - name: Test Beholder client bundle contract
         run: npx tsx tests/beholder-client-contract.regression.ts

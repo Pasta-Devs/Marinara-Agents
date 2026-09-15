@@ -6,6 +6,9 @@ import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { api } from "../lib/api-client";
+import type { SlurpSimulationTuning } from "../../../server/src/services/slurp/slurp-tuning.js";
+import type { SlurpFanType } from "../../../server/src/services/slurp/slurp-fan-types.js";
+import type { SlurpModelBudget } from "../../../server/src/services/slurp/slurp-model-budget.js";
 import { refreshSlurpCreatorBatch } from "../lib/slurp-refresh-batch";
 import { useSlurpUIStore } from "../stores/slurp-package.store";
 import type {
@@ -48,6 +51,27 @@ import type {
 } from "@marinara-engine/shared";
 import { mergeNoodlePollVoteInteractions } from "@marinara-engine/shared";
 import type { ImagePromptOverride, ImagePromptReviewItem } from "../components/ui/ImagePromptReviewModal";
+import type { SlurpPromptPreset } from "../components/slurp/slurp-prompt-presets";
+
+export type SlurpDiscoveryGender = "male" | "female" | "other";
+export type SlurpStageProfileInput = NoodleStageProfileInput & {
+  gender: SlurpDiscoveryGender | null;
+  tags: string[];
+};
+export type SlurpManagedStageProfile = NoodlerManagedStageProfile & {
+  gender: SlurpDiscoveryGender | null;
+  tags: string[];
+};
+export type SlurpViewerScope = Omit<NoodlerViewerScope, "creators"> & {
+  creators: Array<
+    Omit<NoodlerViewerScope["creators"][number], "profile"> & {
+      profile: NoodlerViewerScope["creators"][number]["profile"] & {
+        gender: SlurpDiscoveryGender | null;
+        tags: string[];
+      };
+    }
+  >;
+};
 
 export type NoodleRefreshResult = {
   bootstrap: NoodleBootstrap;
@@ -308,6 +332,8 @@ export type SlurpSettings = {
   walletEnabled: boolean;
   walletUnlockCost: number;
   walletSubscriptionCost: number;
+  pricingDynamicCharacters: boolean;
+  pricingMaxWeeklyChangePercent: number;
   walletStipendFloor: number;
   walletDayStartHour: number;
   walletAdReward: number;
@@ -319,6 +345,19 @@ export type SlurpSettings = {
   imageHeight: number;
   storyRate: "off" | "rare" | "regular" | "often";
   projectRate: "off" | "rare" | "regular" | "often";
+  arcPace: "slow" | "normal" | "fast";
+  arcAffectsMood: boolean;
+  arcFanReactions: boolean;
+  arcAutoMode: "off" | "suggest" | "auto";
+  arcCooldownWeeks: number;
+  arcSource: "library" | "generated" | "mixed";
+  arcMaxConcurrentAuto: number;
+  arcDirectorMode: boolean;
+  arcPollHours: number;
+  arcStatEffects: "off" | "small" | "big";
+  arcCrossovers: boolean;
+  arcLibrary: SlurpArcType[];
+  discoveryTags: Array<{ tag: string; group: string }>;
   storyImageWidth: number;
   storyImageHeight: number;
   refreshesPerDay: number;
@@ -332,6 +371,7 @@ export type SlurpSettings = {
   fanActivityEnabled: boolean;
   generationConnectionId: string | null;
   imageContextMode: "auto" | "imagePrompt" | "vision";
+  imageContextConnectionId: string | null;
   imageGenerationConnectionId: string | null;
   imageGenerationPrompt: string;
   imagePromptInterpretation: string;
@@ -348,6 +388,9 @@ export type SlurpSettings = {
   carryoverModes: Array<"conversation" | "roleplay" | "game">;
   carryoverHours: number;
   carryoverMaxItems: number;
+  characterImageInstructions: Record<string, boolean>;
+  promptPresets: SlurpPromptPreset[];
+  professorMariCreatorSource: boolean;
   enableEnhancedTimelineWriting: boolean;
   includeCharacterSchedules: boolean;
   enableLorebookContext: boolean;
@@ -358,10 +401,12 @@ export type SlurpSettings = {
   maxRepliesPerRefresh: number;
   allowGalleryImageAttachments: boolean;
   fanActivityRunsPerDay: number;
-  audienceReactionBank: string[];
+  audienceReactionBank: { shared: string[]; byType: Record<string, string[]> };
   fanLikesPerRefresh: number;
   fanRepliesPerRefresh: number;
   fanArchetypeWeights: Record<string, number>;
+  /** Editable audience personas and their numeric behavior. */
+  fanTypes: SlurpFanType[];
   /** Creators answer while you are away. Off leaves the background reply loop asleep. */
   messagesAwayRepliesEnabled: boolean;
   messagesReplyBubbleLimit: number;
@@ -380,11 +425,29 @@ export type SlurpSettings = {
   messagesRecentPostAwayMaxMinutes: number;
   messagesStalePostAwayMinMinutes: number;
   messagesStalePostAwayMaxMinutes: number;
+  autopurgeEnabled: boolean;
+  autopurgeRetentionValue: number;
+  autopurgeRetentionUnit: "days" | "weeks" | "months";
+  autopurgeKeepPosts: boolean;
+  autopurgeIncludeMessageMedia: boolean;
+  autopurgeNextRunAt: string | null;
   nightQuiet: boolean;
+  /** Every number the audience simulation runs on. The server fills anything missing from Realistic. */
+  simulationTuning: SlurpSimulationTuning;
+  /** When model-written audience text may run and how many calls it may spend. */
+  modelBudget: SlurpModelBudget;
   onboarding: "not_started" | "in_progress" | "completed";
 };
 
 export type SlurpSettingsUpdate = Partial<SlurpSettings>;
+
+export type SlurpAutopurgeResult = {
+  cutoff: string;
+  deletedPosts: number;
+  removedPostMedia: number;
+  removedMessageMedia: number;
+  nextRunAt: string | null;
+};
 
 export type SlurpScheduleSlot = {
   id: string;
@@ -412,6 +475,14 @@ export function useSlurpSettings() {
     queryKey: noodleKeys.settings(),
     queryFn: () => api.get<SlurpSettings>("/slurp2/settings"),
     staleTime: 10_000,
+  });
+}
+
+export function useSlurpSettingsDefaults() {
+  return useQuery({
+    queryKey: [...noodleKeys.settings(), "defaults"] as const,
+    queryFn: () => api.get<SlurpSettings>("/slurp2/settings/defaults"),
+    staleTime: Infinity,
   });
 }
 
@@ -480,6 +551,83 @@ export function useUpdateSlurpSettings() {
       queryClient.setQueryData(noodleKeys.settings(), settings);
       return queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerFanStatus() });
     },
+  });
+}
+
+export function useRunSlurpAutopurge() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<SlurpAutopurgeResult>("/slurp2/autopurge/run", {}),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: noodleKeys.settings() });
+      void queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() });
+      return result;
+    },
+  });
+}
+
+/** Put a built-in arc type back to its shipped state. */
+export function useResetSlurpArcType() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post<SlurpSettings>(`/slurp2/arc-library/${encodeURIComponent(id)}/reset`, {}),
+    onSuccess: (settings) => queryClient.setQueryData(noodleKeys.settings(), settings),
+  });
+}
+
+/** Creators and arc types per tag, keyed by lower-cased tag. */
+export function useSlurpDiscoveryTagUsage(enabled: boolean) {
+  return useQuery({
+    queryKey: [...noodleKeys.settings(), "discovery-tag-usage"],
+    queryFn: () =>
+      api.get<{ creators: Record<string, number>; arcTypes: Record<string, number> }>("/slurp2/discovery-tags/usage"),
+    enabled,
+  });
+}
+
+/** Rename (`to` set) or delete (`to` null) a tag everywhere, Creator profiles included. */
+export function useReplaceSlurpDiscoveryTag() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ from, to }: { from: string; to: string | null }) =>
+      to === null
+        ? api.post<SlurpSettings>("/slurp2/discovery-tags/delete", { tag: from })
+        : api.post<SlurpSettings>("/slurp2/discovery-tags/rename", { from, to }),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(noodleKeys.settings(), settings);
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: [...noodleKeys.settings(), "discovery-tag-usage"] }),
+        queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+      ]);
+    },
+  });
+}
+
+export type SlurpCreatorBulkPatch = {
+  gender?: SlurpDiscoveryGender | null;
+  tags?: string[];
+  addTags?: string[];
+  removeTags?: string[];
+  autoPosting?: boolean;
+  imagesEnabled?: boolean;
+};
+
+/** One edit applied to many Creators at once; a single Creator's quick edit uses it too. */
+export function useBulkUpdateSlurpCreators() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { ids: string[]; patch: SlurpCreatorBulkPatch }) =>
+      api.post<{ updated: number; skipped: number; tagLimitReached: number }>(
+        "/slurp2/noodler/accounts/bulk-update",
+        input,
+      ),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
+        queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerReserveStatus() }),
+        queryClient.invalidateQueries({ queryKey: [...noodleKeys.settings(), "discovery-tag-usage"] }),
+        queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+      ]),
   });
 }
 
@@ -572,7 +720,7 @@ export function useNoodlerAccounts(enabled = true) {
     // The server sends `scheduleStatus` alongside the shared type, which has no such field — the
     // same arrangement `subscriptionPrice` and the tip goal already use.
     queryFn: () =>
-      api.get<Array<NoodlerManagedStageProfile & { scheduleStatus?: SlurpScheduleStatus }>>("/slurp2/noodler/accounts"),
+      api.get<Array<SlurpManagedStageProfile & { scheduleStatus?: SlurpScheduleStatus }>>("/slurp2/noodler/accounts"),
     enabled,
     staleTime: 10_000,
     // Autonomous reserve work changes operator state without a client mutation.
@@ -705,7 +853,10 @@ export type SlurpEventKind =
   | "message"
   | "milestone"
   | "audience_arc"
-  | "returned";
+  | "returned"
+  | "arc_phase"
+  | "arc_complete"
+  | "arc_started";
 
 export type SlurpEventItem = {
   id: string;
@@ -714,6 +865,8 @@ export type SlurpEventItem = {
   subjectId: string | null;
   actorLabel: string | null;
   actorAvatarUrl: string | null;
+  /** One readable line about the event, from the free bank. Null for events that need none. */
+  note: string | null;
   amount: number;
   weight: number;
   createdAt: string;
@@ -796,10 +949,198 @@ export type SlurpProject = {
   direction: string;
   chapters: string[];
   chapter: number;
-  status: "active" | "paused" | "complete";
+  status: "active" | "paused" | "complete" | "suggested";
   posts: number;
   startedAt: string;
   updatedAt: string;
+  typeId: string | null;
+  tone: string;
+  durationDays: number | null;
+  phaseDays: ({ min: number; max: number } | null)[];
+  chapterStartedAt: string;
+  intensity: "background" | "focus";
+  origin: "manual" | "auto";
+  generated: boolean;
+  history: SlurpArcHistoryEntry[];
+  completedAt: string | null;
+  twist: string;
+  choices: (SlurpArcChoice | null)[];
+  pollPostId: string | null;
+  pollClosesAt: string | null;
+  reach: (SlurpArcChapterReach | null)[];
+  revertProfileAtEnd: boolean;
+  pendingProfile: { chapter: number; bio?: string; location?: string; proposedAt: string; revert: boolean } | null;
+  previousProfile: { bio?: string; location?: string } | null;
+  /** A crossover's Creators; empty for a single-Creator arc. */
+  creatorIds: string[];
+  /** The other participants' display names. */
+  partnerNames?: string[];
+};
+
+/** Mirrors `SlurpArcChapterReach` on the server: what one chapter changes beyond its posts. */
+export type SlurpArcChapterReach = {
+  mood?: string;
+  effects?: SlurpArcEffects;
+  profile?: { bio?: string; location?: string };
+};
+
+export type SlurpArcEffects = { growth?: number; earnings?: number; loyalty?: number };
+
+/** Mirrors `SlurpArcChoice` on the server: a fan poll at the end of a chapter. */
+export type SlurpArcChoice = {
+  question: string;
+  options: { label: string; chapters: { label: string; minDays: number; maxDays: number }[] }[];
+};
+
+/** Mirrors `SlurpArcHistoryEntry` on the server: one chapter visit. */
+export type SlurpArcHistoryEntry = {
+  chapter: number;
+  label: string;
+  startedAt: string;
+  endedAt: string | null;
+  postIds: string[];
+  poll?: {
+    question: string;
+    winner: string;
+    votes: { label: string; count: number }[];
+    decidedBy: "fans" | "director" | "chance";
+  };
+  /** Before the `arcStatEffects` cap. */
+  effects?: SlurpArcEffects;
+};
+
+/** The viewer-safe part of an arc, for the profile timeline. */
+export type SlurpArcTimeline = Pick<
+  SlurpProject,
+  "id" | "title" | "tone" | "chapters" | "chapter" | "status" | "startedAt" | "completedAt" | "history"
+> & {
+  openChoice: { question: string; closesAt: string | null } | null;
+  /** The other Creators in a crossover this viewer may see. */
+  partners?: { id: string; handle: string; displayName: string; avatarUrl: string | null }[];
+};
+
+/** A Creator's running and past arcs, as any viewer may see them. Empty for a hidden Creator. */
+export function useSlurpArcs(personaId: string | null, creatorAccountId: string | null) {
+  return useQuery({
+    queryKey: [...noodleKeys.noodlerRoot(), "projects", "arcs", creatorAccountId ?? "none", personaId ?? "none"],
+    queryFn: () =>
+      api.get<{ arcs: SlurpArcTimeline[] }>(
+        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId!)}/arcs?personaId=${encodeURIComponent(personaId!)}`,
+      ),
+    enabled: Boolean(personaId) && Boolean(creatorAccountId),
+  });
+}
+
+/** One Director mode action. The server refuses it while Director mode is off. */
+export function useDirectSlurpProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      creatorAccountId,
+      projectId,
+      ...body
+    }: {
+      creatorAccountId: string;
+      projectId: string;
+      personaId: string;
+      action: "pause" | "resume" | "skip" | "back" | "label" | "twist" | "end" | "choose";
+      value?: string;
+    }) =>
+      api.post<{ project: SlurpProject }>(
+        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects/${encodeURIComponent(projectId)}/director`,
+        body,
+      ),
+    onSuccess: () => invalidateSlurpProjects(qc),
+  });
+}
+
+/** Apply or reject an arc's pending profile change. Not a Director action. */
+export function useResolveSlurpArcProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      creatorAccountId,
+      projectId,
+      ...body
+    }: {
+      creatorAccountId: string;
+      projectId: string;
+      personaId: string;
+      apply: boolean;
+    }) =>
+      api.post<{ project: SlurpProject }>(
+        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects/${encodeURIComponent(projectId)}/profile`,
+        body,
+      ),
+    // The profile itself changed too, so every Creator view refetches.
+    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+  });
+}
+
+/** Mirrors `SlurpCreatorArcConfig` on the server. A missing field uses the global setting. */
+export type SlurpCreatorArcConfig = {
+  autoMode?: "off" | "suggest" | "auto";
+  source?: "library" | "generated" | "mixed";
+  cooldownWeeks?: number;
+  pace?: "slow" | "normal" | "fast";
+  allowedTypeIds?: string[];
+  maxActive?: number;
+  crossovers?: boolean;
+};
+
+const slurpArcConfigKey = (creatorAccountId: string | null, personaId: string | null) => [
+  ...noodleKeys.noodlerRoot(),
+  "arc-config",
+  creatorAccountId ?? "none",
+  personaId ?? "none",
+];
+
+export function useSlurpArcConfig(personaId: string | null, creatorAccountId: string | null) {
+  return useQuery({
+    queryKey: slurpArcConfigKey(creatorAccountId, personaId),
+    queryFn: () =>
+      api.get<{ config: SlurpCreatorArcConfig }>(
+        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId!)}/arc-config?personaId=${encodeURIComponent(personaId!)}`,
+      ),
+    enabled: Boolean(personaId) && Boolean(creatorAccountId),
+  });
+}
+
+/** Replaces the whole config: send `{}` to reset every field to global. */
+export function useUpdateSlurpArcConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      creatorAccountId,
+      personaId,
+      config,
+    }: {
+      creatorAccountId: string;
+      personaId: string;
+      config: SlurpCreatorArcConfig;
+    }) =>
+      api.put<{ config: SlurpCreatorArcConfig }>(
+        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/arc-config`,
+        { personaId, ...config },
+      ),
+    onSuccess: (data, { creatorAccountId, personaId }) =>
+      qc.setQueryData(slurpArcConfigKey(creatorAccountId, personaId), data),
+  });
+}
+
+/** Mirrors `SlurpArcType` on the server: one entry of the `arcLibrary` setting. */
+export type SlurpArcType = {
+  id: string;
+  name: string;
+  description: string;
+  chapters: ({ label: string; minDays: number; maxDays: number; choice?: SlurpArcChoice } & SlurpArcChapterReach)[];
+  revertProfileAtEnd?: boolean;
+  tags: string[];
+  tone: string;
+  durationDays: number;
+  enabled: boolean;
+  builtin: boolean;
+  hidden: boolean;
 };
 
 /**
@@ -834,12 +1175,68 @@ export function useCreateSlurpProject() {
       title: string;
       direction: string;
       chapters: string[];
+      typeId: string | null;
+      durationDays?: number | null;
+      crossoverWith?: string[];
     }) =>
       api.post<{ project: SlurpProject }>(
         `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects`,
         body,
       ),
     onSuccess: () => invalidateSlurpProjects(qc),
+  });
+}
+
+/** Ask the model for an arc. It comes back as a suggestion to accept, edit, or dismiss. */
+export function useGenerateSlurpProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ creatorAccountId, personaId }: { creatorAccountId: string; personaId: string }) =>
+      api.post<{ project: SlurpProject }>(
+        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects/generate`,
+        { personaId },
+      ),
+    onSuccess: () => invalidateSlurpProjects(qc),
+  });
+}
+
+/** Generate an unsaved Arc Library draft from a player brief. */
+export function useGenerateSlurpArcType() {
+  return useMutation({
+    mutationFn: ({
+      creatorAccountId,
+      personaId,
+      brief,
+    }: {
+      creatorAccountId: string;
+      personaId: string;
+      brief: string;
+    }) =>
+      api.post<{ type: SlurpArcType }>(
+        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/arc-library/generate`,
+        { personaId, brief },
+      ),
+  });
+}
+
+/** Copy an arc into the arc library as a custom type. */
+export function useSaveSlurpProjectToLibrary() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      creatorAccountId,
+      projectId,
+      personaId,
+    }: {
+      creatorAccountId: string;
+      projectId: string;
+      personaId: string;
+    }) =>
+      api.post<{ type: SlurpArcType }>(
+        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects/${encodeURIComponent(projectId)}/library`,
+        { personaId },
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.settings() }),
   });
 }
 
@@ -859,6 +1256,8 @@ export function useUpdateSlurpProject() {
       chapters?: string[];
       chapter?: number;
       status?: SlurpProject["status"];
+      intensity?: SlurpProject["intensity"];
+      durationDays?: number | null;
     }) =>
       api.patch<{ project: SlurpProject }>(
         `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects/${encodeURIComponent(projectId)}`,
@@ -1134,9 +1533,9 @@ export function useCreateNoodlerStageProfile() {
       stageProfile,
     }: {
       sourceAccountId: string;
-      stageProfile: NoodleStageProfileInput;
+      stageProfile: SlurpStageProfileInput;
     }) =>
-      api.post<NoodlerStageProfile>(`/slurp2/accounts/${encodeURIComponent(sourceAccountId)}/noodler`, {
+      api.post<SlurpManagedStageProfile>(`/slurp2/accounts/${encodeURIComponent(sourceAccountId)}/noodler`, {
         stageProfile,
       }),
     onSuccess: () =>
@@ -1160,7 +1559,7 @@ export function useBulkCreateNoodlerStageProfiles() {
       },
     ) =>
       api.post<{
-        created: NoodlerManagedStageProfile[];
+        created: SlurpManagedStageProfile[];
         skipped: string[];
         failed?: string[];
         reasons?: { accountId: string; reason: string }[];
@@ -1201,8 +1600,8 @@ export function useUpdateNoodlerStageProfile() {
       sourceSnapshot?: NoodlerSourceSnapshot;
       sourceRevisionToken?: string;
       confirmAvatarReview?: boolean;
-    } & NoodleStageProfileInput) =>
-      api.put<NoodlerStageProfile>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/stage-profile`, {
+    } & SlurpStageProfileInput) =>
+      api.put<SlurpManagedStageProfile>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/stage-profile`, {
         ...input,
         ...(sourceSnapshot ? { sourceSnapshot } : {}),
       }),
@@ -1333,9 +1732,11 @@ export function useGenerateNoodlerStageProfileDraft() {
       const timer = setTimeout(() => controller.abort(), 60_000);
       return api
         .post<
-          NoodleStageProfileInput & {
+          SlurpStageProfileInput & {
             sourceSnapshot?: NoodlerSourceSnapshot;
             sourceRevisionToken?: string;
+            /** What the server repaired or still needs. Shown once, never saved. */
+            notes?: string[];
           }
         >("/slurp2/noodler/stage-profile-draft", input, {
           signal: controller.signal,
@@ -1443,6 +1844,10 @@ type NoodlerCreatePostRequest = Omit<NoodlerPostCreateInput, "uploadedImageUrl" 
   image?: NoodlerPostDraftImage | null;
   postType?: "post" | "story";
   linkedPostId?: string | null;
+  /** Price for this locked post. Null uses the Creator's price. */
+  unlockPrice?: number | null;
+  /** Image directions to keep on the post, so its image can be rendered afterwards. */
+  imagePrompt?: string | null;
 } & NoodlerFormatRequest;
 
 type NoodlerGeneratePostRequest = Omit<NoodlerGenerationRequest, "uploadedImageUrl" | "imageCrop"> & {
@@ -1558,7 +1963,7 @@ export function useNoodlerViewer(personaId: string | null, enabled = true) {
     queryKey: noodleKeys.viewer(personaId ?? "none"),
     queryFn: async ({ signal }) => {
       const encodedPersonaId = encodeURIComponent(personaId!);
-      type ViewerPost = NoodlerViewerScope["creators"][number]["posts"][number] & { story?: boolean };
+      type ViewerPost = SlurpViewerScope["creators"][number]["posts"][number] & { story?: boolean };
       type FeedPage = {
         items: Array<{
           creatorAccountId: string;
@@ -1573,7 +1978,7 @@ export function useNoodlerViewer(personaId: string | null, enabled = true) {
         const page: FeedPage = await api.get<{
           items: Array<{
             creatorAccountId: string;
-            post: NoodlerViewerScope["creators"][number]["posts"][number];
+            post: SlurpViewerScope["creators"][number]["posts"][number];
           }>;
           total: number;
           nextCursor: SlurpPageCursor | null;
@@ -1586,10 +1991,10 @@ export function useNoodlerViewer(personaId: string | null, enabled = true) {
       // Read the shell after the feed. A newly-created Creator account and its first post can
       // otherwise be observed from different file-store snapshots when these requests start
       // together, leaving the client with a post whose Creator is absent from the shell.
-      const scope = await api.get<NoodlerViewerScope>(`/slurp2/noodler/viewer?personaId=${encodedPersonaId}`, {
+      const scope = await api.get<SlurpViewerScope>(`/slurp2/noodler/viewer?personaId=${encodedPersonaId}`, {
         signal,
       });
-      const postsByCreator = new Map<string, NoodlerViewerScope["creators"][number]["posts"]>();
+      const postsByCreator = new Map<string, SlurpViewerScope["creators"][number]["posts"]>();
       for (const item of feedItems) {
         const posts = postsByCreator.get(item.creatorAccountId) ?? [];
         posts.push(item.post);
@@ -2190,6 +2595,12 @@ export type SlurpCreatorMessaging = {
   ppvPrice: number;
   rapportWeights: Record<string, number>;
   proactiveMessages: boolean;
+  unlockPrice: number | null;
+  commissionBase: number;
+  commissionMin: number;
+  commissionMax: number;
+  autoQuote: boolean;
+  pricedAt: string | null;
 };
 
 export type SlurpMessage = {
@@ -2254,6 +2665,11 @@ export type SlurpCommission = {
   deliveryMessageId: string | null;
   /** When a character Creator's finished piece is due to arrive. Null when a person delivers it. */
   deliverAt?: string | null;
+  /** A fan's pending counter-offer, waiting for the Creator. */
+  counterPrice?: number | null;
+  haggleRounds?: number;
+  /** What the Creator's own pricing would quote for this brief. */
+  suggestedPrice?: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -2659,6 +3075,19 @@ export function useQuoteSlurpCommission() {
   });
 }
 
+/** Offer the Creator a lower price than its quote. */
+export function useCounterSlurpCommission() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { commissionId: string; personaId: string; price: number }) =>
+      api.post<{ commission: SlurpCommission }>(
+        `/slurp2/messages/commissions/${encodeURIComponent(input.commissionId)}/counter`,
+        input,
+      ),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
+  });
+}
+
 export function useAcceptSlurpCommission() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -2799,7 +3228,11 @@ export function useSlurpCreatorMessagingSettings(creatorAccountId: string | null
       personaId ?? "none",
     ],
     queryFn: () =>
-      api.get<{ messaging: SlurpCreatorMessaging; subscriptionPrice: number }>(
+      api.get<{
+        messaging: SlurpCreatorMessaging;
+        subscriptionPrice: number;
+        suggested?: { subscriptionPrice: number; unlockPrice: number; commissionBase: number };
+      }>(
         `/slurp2/messages/creators/${encodeURIComponent(creatorAccountId!)}/settings?personaId=${encodeURIComponent(personaId!)}`,
       ),
     enabled: Boolean(creatorAccountId && personaId),

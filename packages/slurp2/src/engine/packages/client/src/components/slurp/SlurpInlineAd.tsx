@@ -1,5 +1,6 @@
 import { Ban, ExternalLink, Megaphone, X } from "lucide-react";
 import type { SlurpPromotion } from "../../hooks/use-slurp";
+import { SlurpMediaImg } from "./SlurpShell";
 
 export function SlurpInlineAd({
   promotion,
@@ -19,7 +20,7 @@ export function SlurpInlineAd({
       {/* imageUrl has always been on the promotion; without it an ad never reads
           as feed content, which is the whole point of an inline ad. */}
       {promotion.imageUrl ? (
-        <img
+        <SlurpMediaImg
           src={promotion.imageUrl}
           alt=""
           loading="lazy"

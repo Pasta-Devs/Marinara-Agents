@@ -178,20 +178,25 @@ export function resolveNoodlerMediaAbsolutePath(relativePath: string): string | 
 }
 
 /** Best-effort removal of an owned NoodleR-media file when its post is deleted. */
-export function unlinkNoodlerMedia(relativePath: string | null): void {
-  if (!relativePath) return;
+export function unlinkNoodlerMedia(relativePath: string | null): boolean {
+  if (!relativePath) return true;
   const absolute = resolveNoodlerMediaAbsolutePath(relativePath);
-  if (!absolute) return;
+  if (!absolute) return false;
   try {
     if (existsSync(absolute)) unlinkSync(absolute);
     // The cached teaser is a derivative of the same bytes and must not outlive them.
     if (existsSync(`${absolute}${TEASER_SUFFIX}`)) unlinkSync(`${absolute}${TEASER_SUFFIX}`);
     const fileName = basename(absolute);
-    for (const entry of readdirSync(dirname(absolute))) {
-      if (entry.startsWith(`${fileName}.w`) && entry.endsWith(".webp")) unlinkSync(join(dirname(absolute), entry));
+    const parent = dirname(absolute);
+    if (existsSync(parent)) {
+      for (const entry of readdirSync(parent)) {
+        if (entry.startsWith(`${fileName}.w`) && entry.endsWith(".webp")) unlinkSync(join(parent, entry));
+      }
     }
+    return true;
   } catch (error) {
     logger.warn(error, "[slurp] Failed to remove Slurp media file %s", relativePath);
+    return false;
   }
 }
 

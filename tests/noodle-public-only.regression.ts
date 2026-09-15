@@ -31,7 +31,7 @@ async function main() {
     "",
   );
   assert.doesNotMatch(serverBehavior, /\bNoodleR\b|\bNoodler\b|(?:\/api\/slurp|creatorRoutes|slurpRoutes)/i);
-  assert.match(serverEntry, /startNoodleRefreshScheduler\(app\)/);
+  assert.match(serverEntry, /startNoodleRefreshScheduler\(app, api\.runInternalRoute\)/);
   assert.match(serverEntry, /registerService\("noodle:backup"/);
   assert.doesNotMatch(serverEntry, /AutoPost|FanActivity|auto-post|fan-activity/);
 

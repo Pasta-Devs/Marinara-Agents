@@ -250,11 +250,13 @@ const evictNotices = (rows) => {
 //
 // PROMOTION IS A CROSSING, NOT A CEILING. bump() promotes only when the count
 // moves from below a line to at-or-past it, and never demotes — so a `d` set
-// PRECISELY (the S1 arm, or a test) stays where it was put unless a NEW line is
-// crossed. A max() over the table would have quietly re-promoted anybody a
-// future demotion verb tried to lower, and fighting the GM is the one thing the
-// heuristic must never do. Hostility is not on this ladder at all: `h` is a
-// flag beside it, written by nothing package-side yet, and waits for S1.
+// PRECISELY (the standing command's arm) stays where it was put unless a NEW
+// line is crossed. A max() over the table would have quietly
+// re-promoted anybody a future demotion verb tried to lower, and fighting the
+// GM is the one thing the heuristic must never do. Hostility is not on this
+// ladder at all: `h` is a flag beside it, set and cleared by the storyteller's
+// standing command (62-gm, shipped in 0.16.0) rather than by any of bump's
+// heuristic callers.
 const PROMOTION = [3, 10, 25]; // t at which d 1, 2, 3 are earned
 
 // ── THE VERB CLASSES (0.15, the maintainer's ruling) ──────────────────────────
@@ -1343,7 +1345,8 @@ PF.player = {
    *  carries no explicit `d`, an encounter that crosses a PROMOTION line lifts
    *  the rung — a crossing, never a max(), so a precisely-set d is not fought
    *  (the header note above bump's table says why). An explicit `d` stays the
-   *  SETTER it has always been: that arm is S1's, and the harness pins it.
+   *  SETTER it has always been: the storyteller's standing command (62-gm) writes
+   *  through that arm, and the crossing below is gated on its absence.
    *
    *  `patch.meaningful` is the VERB CLASS, not a stored field: without it the
    *  bump is small talk and can never leave the row above acquainted; with it

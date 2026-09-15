@@ -50,6 +50,8 @@ function parseResponse(content: string): GeneratedSchedule {
 export async function generateSlurpConversationSchedule(
   connection: GenerationConnection,
   character: { name: string; description: string; personality: string },
+  /** `simulationTuning.prompts.scheduleExtra`: the player's own additions to the prompt. */
+  extra = "",
 ): Promise<GeneratedSchedule> {
   // The route hands over the stored connection row; it is not a provider until built here.
   const provider = createLLMProvider(
@@ -77,6 +79,7 @@ export async function generateSlurpConversationSchedule(
           `Character name: ${character.name}`,
           `Description: ${character.description}`,
           `Personality: ${character.personality}`,
+          ...(extra.trim() ? [extra.trim()] : []),
         ].join("\n"),
       },
       { role: "user", content: "Generate the current week's schedule." },

@@ -10,6 +10,9 @@ const repoRoot = resolve(dirname(process.argv[1] ?? process.cwd()), "..");
 const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || join(repoRoot, "../Marinara-Engine"));
 const dataDir = mkdtempSync(join(tmpdir(), "marinara-maps-lifecycle-"));
 const catalogUrl = "https://1.1.1.1/catalog/catalog.json";
+const currentMapsVersion = (
+  JSON.parse(readFileSync(join(repoRoot, "packages/hierarchical-maps/manifest.json"), "utf8")) as { version: string }
+).version;
 const generationProviderBaseUrl = "http://127.0.0.1:9/v1";
 const csrfHeaders = { "x-marinara-csrf": "1" };
 const originalFetch = globalThis.fetch;
@@ -185,6 +188,7 @@ const fixtures = new Map(
     artifactFixture("1.3.4"),
     artifactFixture("1.3.5"),
     artifactFixture("1.3.6"),
+    artifactFixture(currentMapsVersion),
   ].map((fixture) => [fixture.manifest.version, fixture]),
 );
 let catalogVersion = "1.1.7";
@@ -610,7 +614,11 @@ async function main() {
   try {
     const { capabilityPackageManager, findCompatibleCapabilityPackageUpdates } = await importEngine<{
       capabilityPackageManager: {
-        install(id: string): Promise<{
+        install(
+          id: string,
+          expectedVersion: string,
+          expectedArtifactSha256: string,
+        ): Promise<{
           version: string;
           status: string;
           previousVersion?: string;
@@ -706,7 +714,11 @@ async function main() {
     assert.equal(findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.7"), "2.3.3").length, 1);
     assert.equal(findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.7"), "3.0.0").length, 0);
 
-    const installed117 = await capabilityPackageManager.install("hierarchical-maps");
+    const installed117 = await capabilityPackageManager.install(
+      "hierarchical-maps",
+      catalogVersion,
+      catalogFixture(catalogVersion).packages[0]!.artifact.sha256,
+    );
     assert.equal(installed117.version, "1.1.7");
     assert.equal(installed117.previousVersion, "1.0.6");
     assert.ok(existsSync(join(dataDir, "capability-packages", "versions", "hierarchical-maps", "1.1.7")));
@@ -2720,11 +2732,15 @@ async function main() {
     })) as { currentLocationId: string };
     assert.equal(unchangedBranch.currentLocationId, "lifecycle_world");
 
-    catalogVersion = "1.3.6";
+    catalogVersion = currentMapsVersion;
     catalogOnline = true;
-    const upgraded136 = await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(upgraded136.version, "1.3.6");
-    assert.equal(upgraded136.previousVersion, "1.1.7");
+    const upgradedCurrent = await capabilityPackageManager.install(
+      "hierarchical-maps",
+      catalogVersion,
+      catalogFixture(catalogVersion).packages[0]!.artifact.sha256,
+    );
+    assert.equal(upgradedCurrent.version, currentMapsVersion);
+    assert.equal(upgradedCurrent.previousVersion, "1.1.7");
     catalogOnline = false;
     await app.close();
     app = await buildApp();
@@ -3866,8 +3882,12 @@ async function main() {
     app = null;
 
     catalogOnline = true;
-    const reinstalled = await capabilityPackageManager.install("hierarchical-maps");
-    assert.equal(reinstalled.version, "1.3.6");
+    const reinstalled = await capabilityPackageManager.install(
+      "hierarchical-maps",
+      catalogVersion,
+      catalogFixture(catalogVersion).packages[0]!.artifact.sha256,
+    );
+    assert.equal(reinstalled.version, currentMapsVersion);
     assert.equal(reinstalled.status, "restart-required");
     catalogOnline = false;
     app = await buildApp();
@@ -3945,7 +3965,7 @@ async function main() {
           status: entry.status,
           readiness: entry.readiness,
         })),
-      [{ version: "1.3.6", status: "active", readiness: "ready" }],
+      [{ version: currentMapsVersion, status: "active", readiness: "ready" }],
     );
 
     console.info(

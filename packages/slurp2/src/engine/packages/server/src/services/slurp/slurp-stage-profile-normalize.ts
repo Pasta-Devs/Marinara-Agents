@@ -9,6 +9,7 @@ const DRAFT_FIELD_ALIASES: Record<string, readonly string[]> = {
   handle: ["username", "user_name", "stageHandle", "stage_handle", "screenName"],
   bio: ["biography", "description", "about", "tagline", "summary"],
   stagePersonality: ["stage_personality", "personality", "stageVoice", "stage_voice", "voice", "persona", "tone"],
+  gender: ["gender_identity", "genderIdentity", "sex"],
 };
 
 function unwrapDraftCandidate(value: unknown): unknown {
@@ -56,5 +57,13 @@ export function normalizeNoodlerStageProfileDraft(value: unknown): Record<string
   }
   if (!normalized.bio) normalized.bio = "";
   if (!normalized.stagePersonality) normalized.stagePersonality = "";
+  // Only an omitted value is filled in. A malformed one must still fail, so the retry can correct it.
+  if (normalized.tags === undefined || normalized.tags === null) {
+    const tagsAlias = ["categories", "themes", "interests"].find((key) => Array.isArray(normalized[key]));
+    if (tagsAlias) normalized.tags = normalized[tagsAlias];
+  }
+  // Gender and tags are optional on a Creator. A model that leaves them out must not fail the draft.
+  if (normalized.gender === undefined || normalized.gender === "") normalized.gender = null;
+  if (normalized.tags === undefined || normalized.tags === null) normalized.tags = [];
   return normalized;
 }

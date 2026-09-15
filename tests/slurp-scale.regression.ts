@@ -105,7 +105,10 @@ assert.match(storage, /platformScale: z\.enum\(SLURP_PLATFORM_SCALE\)/u);
 const world = read("server/src/services/slurp/slurp-world.operation.ts");
 assert.match(world, /slurpWorldActivityMultiplier\(settings\.worldActivity\)/u);
 assert.match(world, /slurpPlatformScaleMultiplier\(settings\.platformScale\)/u);
-assert.match(world, /planSlurpWorldTick\(\{ since, until, creators, audience, activity \}\)/u);
+assert.match(
+  world,
+  /planSlurpWorldTick\([\s\S]*?since,[\s\S]*?until,[\s\S]*?creators,[\s\S]*?audience,[\s\S]*?activity: activity \* rhythm,[\s\S]*?catchUpHours: tuning\.clock\.catchUpHours,[\s\S]*?tuning\.world,?\s*\)/u,
+);
 assert.match(world, /if \(activity === 0\) \{[\s\S]*writeLastTick/u);
 
 // Every reach call site must be scaled, or one surface would disagree with the others about how

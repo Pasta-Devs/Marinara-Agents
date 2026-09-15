@@ -17,6 +17,15 @@
  */
 
 import type { NoodlerFanArchetype } from "@marinara-engine/shared";
+import {
+  SLURP_BUILTIN_FAN_TYPES,
+  slurpFanTypeActiveHour,
+  slurpFanTypeSpendTier,
+  slurpFanTypeTraits,
+  slurpFanTypeWeeklyBudget,
+  slurpPickFanType,
+  type SlurpFanType,
+} from "./slurp-fan-types.js";
 
 /**
  * Handle stems. Chosen to read as usernames a person picked rather than as generated strings:
@@ -128,39 +137,6 @@ const SECOND = [
 /** Appended when a handle collides, so two people can share a name without sharing a handle. */
 const SUFFIXES = ["", "_", "01", "x", "77", "_ii", "23", "9"] as const;
 
-/**
- * How a member behaves. These are the Engine's existing fan archetypes, so the population plugs
- * into `NoodlerFanIdentityProvider` without touching the Engine.
- */
-const ARCHETYPES: readonly NoodlerFanArchetype[] = [
-  "ordinary",
-  "eccentric",
-  "crossFandom",
-  "raider",
-  "organicDiscovery",
-  "freeResource",
-] as const;
-
-/** Shown on a fan card, and used later to colour what a member says. */
-const TRAITS = [
-  "night owl",
-  "early riser",
-  "lurker",
-  "over-sharer",
-  "collector",
-  "bargain hunter",
-  "completionist",
-  "first to comment",
-  "quiet tipper",
-  "gif replier",
-  "long-form commenter",
-  "emoji only",
-  "asks questions",
-  "never reads captions",
-  "screenshots everything",
-  "recommends you to everyone",
-] as const;
-
 /** Funnel stages, in order. The index is meaningful: a higher index is a closer relationship. */
 export const SLURP_FUNNEL_STAGES = [
   "stranger",
@@ -189,24 +165,19 @@ export const SLURP_NAMED_CAST_LIMIT = 30;
 /** How much a member is willing to spend. Most people spend nothing; a few spend a lot. */
 export type SlurpSpendTier = "none" | "light" | "regular" | "whale";
 
-/**
- * Weighted so the population looks like a real audience: mostly free readers, a thin tail of
- * paying regulars. A crowd where everyone pays is neither believable nor interesting, because the
- * few who do pay stop meaning anything.
- */
-const SPEND_TIERS: readonly { tier: SlurpSpendTier; weight: number }[] = [
-  { tier: "none", weight: 62 },
-  { tier: "light", weight: 25 },
-  { tier: "regular", weight: 11 },
-  { tier: "whale", weight: 2 },
-];
-
 export type SlurpPopulationMember = {
   id: string;
   handle: string;
   displayName: string;
+  /**
+   * Kept in step with the Fan Type's `engineArchetype`, so the Engine fan-identity interface is
+   * unchanged and a row written before Fan Types existed can still resolve back to a type.
+   */
   archetype: NoodlerFanArchetype;
+  /** Which Fan Type this person is. Null on a row written before Fan Types existed. */
+  fanTypeId: string | null;
   traits: string[];
+  /** Derived from the Fan Type's weekly budget. Still the vocabulary of prompts and settlement. */
   spendTier: SlurpSpendTier;
   /** UTC hour this member is usually around. The world clock reads this so a feed has a rhythm. */
   activeHour: number;
@@ -231,20 +202,8 @@ function hash(value: string): number {
 
 const pick = <T>(list: readonly T[], seed: string, salt: string): T => list[hash(`${salt}:${seed}`) % list.length]!;
 
-const unit = (seed: string, salt: string): number => hash(`${salt}:${seed}`) / 0x100000000;
-
 function titleCase(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-function spendTierFor(seed: string): SlurpSpendTier {
-  const total = SPEND_TIERS.reduce((sum, entry) => sum + entry.weight, 0);
-  let roll = unit(seed, "spend") * total;
-  for (const entry of SPEND_TIERS) {
-    roll -= entry.weight;
-    if (roll < 0) return entry.tier;
-  }
-  return "none";
 }
 
 /**
@@ -253,18 +212,20 @@ function spendTierFor(seed: string): SlurpSpendTier {
  * Everything derives from the seed, so the same seed always produces the same person and a member
  * can be regenerated from their id alone rather than needing a row before they are interesting.
  */
-export function generateSlurpPopulationMember(seed: string, joinedAt: Date): SlurpPopulationMember {
+export function generateSlurpPopulationMember(
+  seed: string,
+  joinedAt: Date,
+  fanTypes: readonly SlurpFanType[] = SLURP_BUILTIN_FAN_TYPES,
+): SlurpPopulationMember {
   const first = pick(FIRST, seed, "first");
   const second = pick(SECOND, seed, "second");
   const suffix = pick(SUFFIXES, seed, "suffix");
-  const traitCount = 1 + (hash(`count:${seed}`) % 2);
-  const traits: string[] = [];
-  for (let index = 0; index < traitCount; index += 1) {
-    const trait = pick(TRAITS, `${seed}:${index}`, "trait");
-    if (!traits.includes(trait)) traits.push(trait);
-  }
+  // Who they are comes first: traits, hour, archetype and appetite all hang off the Fan Type now,
+  // rather than being four unrelated hashes of the same seed.
+  const fanType = slurpPickFanType(fanTypes, seed);
+  const id = `slurp-fan:${seed}`;
   return {
-    id: `slurp-fan:${seed}`,
+    id,
     handle: `${first}_${second}${suffix}`,
     // The numeric suffixes carry into the display name, the symbol ones do not. Without this the
     // 18,816 handles collapsed into 2,352 display names, and a named cast of thirty is well inside
@@ -273,10 +234,11 @@ export function generateSlurpPopulationMember(seed: string, joinedAt: Date): Slu
     // ponytail: five name buckets per stem pair, not eight. Add a display-name bank if a cast ever
     // grows past thirty.
     displayName: `${titleCase(first)} ${titleCase(second)}${/^\d+$/.test(suffix) ? ` ${suffix}` : ""}`,
-    archetype: pick(ARCHETYPES, seed, "archetype"),
-    traits,
-    spendTier: spendTierFor(seed),
-    activeHour: hash(`hour:${seed}`) % 24,
+    archetype: fanType.engineArchetype,
+    fanTypeId: fanType.id,
+    traits: slurpFanTypeTraits(fanType, seed),
+    spendTier: slurpFanTypeSpendTier(slurpFanTypeWeeklyBudget(fanType, id)),
+    activeHour: slurpFanTypeActiveHour(fanType, seed),
     joinedAt: joinedAt.toISOString(),
   };
 }

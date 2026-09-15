@@ -1,4 +1,19 @@
 import type { NoodleIdentityDisclosure, NoodlerManagedStageProfile } from "@marinara-engine/shared";
+import type { SlurpDiscoveryGender } from "./slurp-discovery-profile.js";
+
+type SlurpManagedStageProfile = NoodlerManagedStageProfile & {
+  gender: SlurpDiscoveryGender | null;
+  tags: string[];
+};
+
+/**
+ * The disclosure a Creator actually gets. Slurp offers only Open and Hinted; the shared type still
+ * carries `secret`, so a stored or submitted Secret Creator becomes Hinted, the closest tier that
+ * still keeps the source name and handle protected.
+ */
+export function slurpDisclosureMode<T extends NoodleIdentityDisclosure | null | undefined>(mode: T) {
+  return (mode === "secret" ? "hinted" : mode) as T extends "secret" ? "hinted" : T;
+}
 
 const DISCLOSURE_RANK: Record<NoodleIdentityDisclosure, number> = {
   secret: 0,
@@ -16,6 +31,8 @@ const AUDIENCE_FIELDS = [
   "avatarUrl",
   "avatarCrop",
   "bannerUrl",
+  "gender",
+  "tags",
   "disclosureMode",
   "stagePersonality",
   "autoPosting",
@@ -25,7 +42,7 @@ const AUDIENCE_FIELDS = [
 ] as const;
 
 export type NoodlerAudienceProfile = Pick<
-  NoodlerManagedStageProfile,
+  SlurpManagedStageProfile,
   (typeof AUDIENCE_FIELDS)[number] | "slurpSourceAccountId" | "publicIdentity"
 >;
 
@@ -36,11 +53,11 @@ export function isNoodlerDisclosureDowngrade(
   return DISCLOSURE_RANK[next] < DISCLOSURE_RANK[current];
 }
 
-export function projectNoodlerAudienceProfile(profile: NoodlerManagedStageProfile): NoodlerAudienceProfile {
+export function projectNoodlerAudienceProfile(profile: SlurpManagedStageProfile): NoodlerAudienceProfile {
   const open = profile.disclosureMode === "open";
   return {
     ...(Object.fromEntries(AUDIENCE_FIELDS.map((field) => [field, profile[field]])) as Pick<
-      NoodlerManagedStageProfile,
+      SlurpManagedStageProfile,
       (typeof AUDIENCE_FIELDS)[number]
     >),
     slurpSourceAccountId: open ? profile.slurpSourceAccountId : null,

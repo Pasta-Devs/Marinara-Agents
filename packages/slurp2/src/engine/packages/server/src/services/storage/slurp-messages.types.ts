@@ -80,6 +80,8 @@ export type SlurpCommission = {
   deliveryId: string | null;
   deliveryClaimToken: string | null;
   deliveryClaimedAt: string | null;
+  counterPrice: number | null;
+  haggleRounds: number;
   createdAt: string;
   updatedAt: string;
 };

@@ -2,8 +2,8 @@ import { asc, eq, lte } from "../../db/file-query.js";
 import { slurpReplyBubbles } from "../../db/schema/slurp.js";
 import type { DB } from "../../db/connection.js";
 import { newId } from "../../utils/id-generator.js";
-import { isFileUniqueConstraintError } from "../../db/file-schema.js";
 import { tolerateMissingTables } from "./slurp-host-tables.js";
+import { isSlurpFileUniqueConstraintError } from "./slurp-file-errors.js";
 
 export type SlurpReplyBubble = {
   id: string;
@@ -49,7 +49,7 @@ export function createSlurpReplyQueueStorage(db: DB) {
             await tx.insert(slurpReplyBubbles).values(row);
             inserted.push(row);
           } catch (error) {
-            if (!isFileUniqueConstraintError(error, "slurp2_reply_bubbles")) throw error;
+            if (!isSlurpFileUniqueConstraintError(error, "slurp2_reply_bubbles")) throw error;
           }
         }
       });

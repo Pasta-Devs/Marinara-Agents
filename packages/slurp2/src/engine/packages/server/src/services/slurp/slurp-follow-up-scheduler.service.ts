@@ -43,7 +43,7 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
         const settings = await slurp.getSettings();
         const connection = await resolveSlurpTextConnection(
           createConnectionsStorage(app.db),
-          settings.generationConnectionId,
+          settings.modelBudget.connectionId ?? settings.generationConnectionId,
         );
         if (!connection) {
           logger.warn("[slurp-follow-up] No text connection configured, skipping follow-up generation");
@@ -147,6 +147,7 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
               strikes: activeSlurpStrikes(thread.strikes, thread.lastStrikeAt),
               connection,
               generationGuidance: formatFollowUpContext(followUp),
+              workerContext: "background",
             });
 
             // Store the follow-up message

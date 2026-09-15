@@ -35,9 +35,12 @@ const PLACES = [
   "somewhere other than where this creator usually posts from",
   "in the room they spend the least time in",
   "out of the house entirely",
-  "somewhere they had to travel to get to",
+  "somewhere a short trip from home",
   "in their usual place, but from an angle they have never shown before",
-  "somewhere in the middle of a small, ordinary change to their space",
+  // Was "in the middle of a small, ordinary change to their space". Every Creator landed on it once
+  // in six posts, the model read it as moving house, and post-history continuity kept the move
+  // going forever. Life events belong to arcs (`slurp-project.ts`), never to an angle.
+  "in their usual place, with something small out of order",
 ] as const;
 
 /** What they are doing. Deliberately about state rather than subject matter. */
@@ -220,6 +223,7 @@ export function slurpPostVariationInstruction(variation: SlurpPostVariation): st
         ]
       : []),
     "Let their own life supply the specifics. These are directions to vary along, not a scene to copy.",
+    "This angle is for this post only. Do not turn it into an ongoing change in their life.",
   ].join("\n");
 }
 

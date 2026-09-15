@@ -84,12 +84,12 @@ const slurpReplyQueue = readFileSync(
 assert.match(slurpReplyQueue, /removeForThread/u, "Slurp delayed replies must have a package-owned cancellation path");
 assert.match(
   slurpReplyQueue,
-  /isFileUniqueConstraintError/u,
+  /isSlurpFileUniqueConstraintError/u,
   "Slurp delayed reply enqueue must tolerate duplicate rows",
 );
 assert.match(
   slurpStorage,
-  /slurp\.viewer\.\$\{personaId\}\.settings/u,
+  /slurp2\.viewer\.\$\{personaId\}\.settings/u,
   "Slurp viewer settings must use the Engine-supported app settings table",
 );
 assert.doesNotMatch(
@@ -130,13 +130,8 @@ assert.match(
   /Create the same person behind a different stage name and handle[\s\S]*species[\s\S]*unusual anatomy/u,
   "hinted Slurp profile creation must preserve recognizable physical traits without the public identity",
 );
-assert.match(
-  stageProfileDraft,
-  /The same person behind an anonymous alias[\s\S]*Keep their body, voice, humour, interests, and everyday life fully intact[\s\S]*Withhold only the linkable details/u,
-  "secret Slurp creators must stay the same person while withholding what would link them",
-);
-// Both concealed modes describe the same person and share one seed; only the instructions differ.
-// Reducing the seed to a fixed vocabulary made every concealed creator converge on one voice.
+// Hinted profiles keep the person's appearance, personality, and interests while withholding the
+// lookupable source canon.
 assert.match(
   promptSafety,
   /function noodlerConcealedSourceText[\s\S]*Description: \$\{[\s\S]*Personality: \$\{[\s\S]*Appearance: \$\{/u,
@@ -146,7 +141,7 @@ assert.match(
 assert.doesNotMatch(
   promptSafety.slice(
     promptSafety.indexOf("export function noodlerConcealedSourceText"),
-    promptSafety.indexOf("export function noodlerSourceText"),
+    promptSafety.indexOf("/** Character canon is private behavioral context"),
   ),
   /scenario|backstory|source\.name/u,
   "concealed Slurp profile prompts must withhold the lookupable canon",
@@ -178,7 +173,7 @@ const slurpGeneration = readFileSync(
 // and existing Creators improve without a migration.
 assert.match(
   slurpGeneration,
-  /const sourceCharacterContext = await resolveSlurpSourceCardContext\(db, linkedPublicAccount, disclosureMode\)/u,
+  /const sourceCharacterContext = await resolveNoodlerCharacterCanon\(db, linkedPublicAccount, disclosureMode\)/u,
   "Slurp posts must read the source card at post time, not only the stage profile frozen at setup",
 );
 assert.match(
@@ -190,21 +185,15 @@ assert.match(
 // with only the lookupable canon withheld.
 assert.match(
   slurpGeneration,
-  /disclosureMode === "open" \? noodlerSourceText\(data\) : noodlerConcealedSourceText\(data\)/u,
+  /resolveNoodlerCharacterCanon\(db, linkedPublicAccount, disclosureMode\)/u,
   "concealed Slurp Creators must still receive the source card, minus the lookupable canon",
 );
 
-// A concealed creator still posts their body — it is the page. Concealment is framing, not a
-// vaguer description, so every mode sends the same appearance and secret adds a face-avoiding guard.
+// A hinted creator still posts their body — it is the page — so every mode sends the same appearance.
 assert.match(
   slurpImages,
   /imageGenerationIncludeDescriptions\) \{\s*characterDescription = sourceAppearance;/u,
   "Slurp image prompts must describe the same body in every disclosure mode",
-);
-assert.match(
-  slurpImages,
-  /disclosureMode === "secret"\s*\?\s*"Compose so the face cannot be identified/u,
-  "secret Slurp images must hide the face through composition rather than a vaguer body",
 );
 assert.match(
   slurpImages,
@@ -227,11 +216,8 @@ assert.match(
   "public Slurp image prompts must interpret character context without connection instructions",
 );
 assert.match(slurpPublicImages, /enableImageInterpretation !== false/u);
-assert.match(
-  slurpImages,
-  /input\.disclosureMode !== "secret"[\s\S]*referenceImages/u,
-  "secret Slurp identities must not receive avatar reference images",
-);
+// Slurp offers only Open and Hinted, and both keep avatar reference images.
+assert.doesNotMatch(slurpImages, /"secret"/u, "Slurp images must not branch on the removed Secret tier");
 
 const noodleHome = readFileSync(
   join(root, "packages/noodle/src/engine/packages/client/src/components/noodle/NoodleHome.tsx"),

@@ -41,12 +41,22 @@ import { getErrorMessage } from "./slurp-public-support.js";
 import { noodleResponseFormat } from "./slurp-response-format.js";
 import { buildSlurpPostTimingContext } from "./slurp-post-timing.js";
 import { slurpPostProject, slurpPostVariation, slurpPostVariationInstruction } from "./slurp-post-variation.js";
-import { slurpProjectChapter, slurpProjectInstruction, type SlurpProject } from "./slurp-project.js";
+import {
+  slurpArcImageLine,
+  slurpArcRotation,
+  slurpProjectChapter,
+  slurpProjectInstruction,
+  type SlurpProject,
+} from "./slurp-project.js";
 import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js";
 import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
 import { createChatsStorage } from "../storage/chats.storage.js";
 import { NOODLER_FORMAT_MAX_LENGTH, type NoodlerContentFormat } from "./slurp-content-format.js";
-import { SLURP_PLATFORM_CONTEXT } from "./slurp-prompt.js";
+import { noodleLorebookTokenBudget, SLURP_PLATFORM_CONTEXT } from "./slurp-prompt.js";
+import { processLorebooks } from "../lorebook/index.js";
+import { createCharacterGalleryStorage } from "../storage/character-gallery.storage.js";
+import { createGalleryStorage } from "../storage/gallery.storage.js";
+import { pickGalleryAttachmentForAccount } from "./slurp-generated-activity.service.js";
 export { NOODLER_FORMAT_MAX_LENGTH, type NoodlerContentFormat } from "./slurp-content-format.js";
 // The disclosure privacy core lives in a leaf module so tests can execute it instead of grepping
 // this file, which cannot be imported without a database and an LLM provider.
@@ -79,6 +89,8 @@ export type PreparedNoodlerPostResult = {
 };
 
 type FormattedNoodlerGenerationRequest = NoodlerGenerationRequest & {
+  /** The composer asked for an image on this post, whatever the scheduler's image setting is. */
+  generateImage?: boolean;
   format?: NoodlerContentFormat;
   /** The guided path can ask for a Story outright instead of waiting for the rotation. */
   postType?: "post" | "story";
@@ -125,14 +137,12 @@ export function noodlerIdentityInstruction(
   if (mode === "open" && publicIdentity) {
     return `Disclosure is open. This is the same public creator. Use the linked identity ${publicIdentity.displayName} (@${publicIdentity.handle}) directly when relevant.`;
   }
-  if (mode === "hinted") {
-    return [
-      "Disclosure is hinted. The creator's other public life is an open secret.",
-      "Use indirect clues from the same person's public life — appearance, voice, interests, routines, and recurring themes — so regular followers may recognize them.",
-      "Never write the public name or handle. Never confirm a guess and never flatly deny one; deflect, joke, or change the subject.",
-    ].join(" ");
-  }
-  return "Disclosure is secret. Do not mention, imply, or identify any linked public persona.";
+  // Slurp offers only Open and Hinted, so anything that is not a usable Open identity is Hinted.
+  return [
+    "Disclosure is hinted. The creator's other public life is an open secret.",
+    "Use indirect clues from the same person's public life — appearance, voice, interests, routines, and recurring themes — so regular followers may recognize them.",
+    "Never write the public name or handle. Never confirm a guess and never flatly deny one; deflect, joke, or change the subject.",
+  ].join(" ");
 }
 
 export function buildNoodlerPublicIdentity(
@@ -238,6 +248,8 @@ export function buildNoodlerPostMessages(input: {
   project?: { project: SlurpProject; posts: NoodlerManagedPost[] };
   generatedAt?: Date;
   publicationTime?: Date;
+  /** Matching lorebook entries for this Creator. Absent when lorebook context is off or nothing matched. */
+  loreContext?: string;
 }): ChatMessage[] {
   const protect = (value: string) =>
     protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
@@ -287,6 +299,7 @@ export function buildNoodlerPostMessages(input: {
     "# Source character",
     protect(input.sourceCharacterContext) || "No source character is linked to this Creator.",
     "",
+    ...(input.loreContext && protect(input.loreContext) ? ["# World lore", protect(input.loreContext), ""] : []),
     // The schedule used to sit unlabelled inside the source card, with the one instruction that
     // refers to it ("that hour and weekday") two sections below. It is a generation input, not a
     // property of the character, so it gets its own header directly above the timing block it
@@ -311,6 +324,21 @@ export function buildNoodlerPostMessages(input: {
             // Protected like every other supplied value: a Secret Creator who typed their city
             // into a direction field must not have it read back out through the project block.
             chapter: protect(slurpProjectChapter(input.project.project) ?? "") || null,
+            tone: protect(input.project.project.tone),
+            twist: protect(input.project.project.twist),
+            // Only until the poll post publishes; after that the choice waits for its votes.
+            choice: input.project.project.pollPostId
+              ? null
+              : (() => {
+                  const choice = input.project.project.choices[input.project.project.chapter];
+                  return choice
+                    ? {
+                        question: protect(choice.question),
+                        options: choice.options.map((option) => protect(option.label)),
+                      }
+                    : null;
+                })(),
+            partners: input.project.project.partnerNames ?? [],
             history: input.project.posts
               .slice()
               .reverse()
@@ -377,7 +405,9 @@ export async function generateNoodlerPost(
   const { account } = input;
   const settings = await noodle.getSettings();
   const autoPosting = account.settings.scheduler.autoPosting;
-  const imagesEnabled = autoPosting?.imagesEnabled === true && !input.media;
+  // The composer's AI image toggle is a request from the user, so it counts like the scheduler's
+  // own setting. Without this a Creator with scheduled images off could never ask for one.
+  const imagesEnabled = (autoPosting?.imagesEnabled === true || input.request.generateImage === true) && !input.media;
 
   const connections = createConnectionsStorage(db);
   const fallbackConnection = await connections.getFallbackForMain();
@@ -408,7 +438,7 @@ export async function generateNoodlerPost(
     input.admissionMode ?? { kind: "foreground" },
   );
   const recentPosts = await noodle.listNoodlerPostsByAccount(account.id, 8);
-  const disclosureMode = account.settings.privacy.identityDisclosure ?? "secret";
+  const disclosureMode = account.settings.privacy.identityDisclosure ?? "open";
   const linkedPublicAccount = await noodle.resolveAccountSource(account as SlurpAccount);
   const scheduleContext = linkedPublicAccount
     ? await resolveSlurpCreatorScheduleContext(
@@ -425,6 +455,34 @@ export async function generateNoodlerPost(
   // Concealed modes get the same seed the stage profile draft uses; disclosure limits what may be
   // said, not who this is.
   const sourceCharacterContext = await resolveNoodlerCharacterCanon(db, linkedPublicAccount, disclosureMode);
+  // The Engine's own lorebook scan, as Noodle uses it: off until the player opts in, scoped to this
+  // Creator's source, and read-only. Recent posts and the card give keyword entries something to match.
+  // Lore is a nicety, so a failed scan costs the post its lore, never the post.
+  const loreContext = settings.enableLorebookContext
+    ? await processLorebooks(
+        db,
+        [
+          ...recentPosts
+            .slice()
+            .reverse()
+            .map((post) => ({ role: "user", content: post.content })),
+          ...(sourceCharacterContext ? [{ role: "user", content: sourceCharacterContext }] : []),
+        ],
+        null,
+        {
+          characterIds: linkedPublicAccount?.kind === "character" ? [linkedPublicAccount.entityId] : [],
+          personaId: linkedPublicAccount?.kind === "persona" ? linkedPublicAccount.entityId : null,
+          tokenBudget: noodleLorebookTokenBudget(1),
+          generationTriggers: ["slurp"],
+          previewOnly: true,
+        },
+      )
+        .then((result) => [result.worldInfoBefore, result.worldInfoAfter].filter(Boolean).join("\n"))
+        .catch((error: unknown) => {
+          logger.warn(error, "[slurp] Lorebook context failed; generating the post without it");
+          return "";
+        })
+    : "";
   // The rotating angle for this post. Skipped when the player has directed the post themselves —
   // their direction is the angle, and a second one would fight it.
   // One sequence for both rotations, so the project and the variation cannot drift out of step.
@@ -435,7 +493,12 @@ export async function generateNoodlerPost(
   // rotations down for the same reason: their direction is the subject, and a second one fights it.
   const project = directed
     ? null
-    : slurpPostProject(account.id, sequence, await noodle.listActiveProjects(account.id), settings.projectRate);
+    : slurpPostProject(
+        account.id,
+        sequence,
+        slurpArcRotation(await noodle.listActiveProjects(account.id)),
+        settings.projectRate,
+      );
   // The project's own posts, not the page's. The page history is already supplied above and says
   // nothing about where this thread had got to.
   const projectPosts = project ? await noodle.listPostsByProject(project.id, 4) : [];
@@ -471,6 +534,7 @@ export async function generateNoodlerPost(
     imageGenerationPrompt: settings.imageGenerationPrompt,
     generationGuidance: settings.generationGuidance,
     scheduleContext,
+    loreContext,
     generatedAt: input.generatedAt ?? new Date(),
     publicationTime: input.publicationTime,
   });
@@ -565,12 +629,28 @@ export async function generateNoodlerPost(
   // A Story the player asked for outranks the rotation, which never fires on a directed post.
   const storyVariation = (variation?.story === true || input.request.postType === "story") && imagesEnabled;
 
-  // Identity protection applies to the image prompt too, not only post text.
+  // Identity protection applies to the image prompt too, not only post text. The arc's chapter line
+  // joins the prompt before protection, so a chapter naming a real place is redacted the same way.
+  const arcImageLine = slurpArcImageLine(project);
   const draftImagePrompt = imagesEnabled
-    ? protectNoodlerGeneratedIdentity(generated.imagePrompt, disclosureMode, publicIdentity)
+    ? protectNoodlerGeneratedIdentity(
+        generated.imagePrompt && arcImageLine ? `${generated.imagePrompt}\n${arcImageLine}` : generated.imagePrompt,
+        disclosureMode,
+        publicIdentity,
+      )
     : null;
 
   const projectChapter = project ? slurpProjectChapter(project) : null;
+  // An open arc choice is posted as a real poll, attached here rather than parsed from the text.
+  const arcChoice = project && !project.pollPostId ? (project.choices[project.chapter] ?? null) : null;
+  const arcPoll = arcChoice
+    ? createNoodlePoll({
+        question: protectBoundedNoodlerGeneratedText(arcChoice.question, disclosureMode, publicIdentity, 240),
+        options: arcChoice.options.map((option) =>
+          protectBoundedNoodlerGeneratedText(option.label, disclosureMode, publicIdentity, 120),
+        ),
+      })
+    : null;
 
   const baseInput = {
     authorAccountId: account.id,
@@ -586,9 +666,14 @@ export async function generateNoodlerPost(
       noodlerContentFormat: format,
       // Stamped at creation like a manual post, so a generated locked post honours the configured
       // unlock price and keeps it across refreshes and edits instead of falling back to 1.
-      ...(input.request.access === "locked" ? noodlerUnlockPriceMetadata(settings.walletUnlockCost) : {}),
+      ...(input.request.access === "locked"
+        ? noodlerUnlockPriceMetadata(
+            (await createSlurpMessagesStorage(db).getCreatorMessaging(account.id)).unlockPrice ??
+              settings.walletUnlockCost,
+          )
+        : {}),
       ...(input.request.executionId ? { noodlerWizardExecutionId: input.request.executionId } : {}),
-      ...(input.request.poll ? { poll: createNoodlePoll(input.request.poll) } : {}),
+      ...(input.request.poll ? { poll: createNoodlePoll(input.request.poll) } : arcPoll ? { poll: arcPoll } : {}),
       ...(input.request.imageCrop ? { imageCrop: input.request.imageCrop } : {}),
     },
   };
@@ -627,7 +712,7 @@ export async function generateNoodlerPost(
     if (!post) throw new Error("Failed to persist the generated Slurp post.");
     // Advanced here, after the row lands, rather than when the project was chosen: a generation
     // that failed halfway would otherwise skip a chapter and the thread would have a hole in it.
-    if (project) await noodle.advanceProject(account.id, project.id);
+    if (project) await noodle.advanceProject(account.id, project.id, post.id);
     return post;
   };
 
@@ -644,7 +729,23 @@ export async function generateNoodlerPost(
     return { post, imagePromptReview: null };
   }
 
-  if (!draftImagePrompt) return { post: await persist(), imagePromptReview: null };
+  // A post that ends without a generated picture can still show one from the source character's own
+  // gallery, when the player allows it. Best effort: no gallery image is the same as none attached.
+  const galleryFallback = async (): Promise<{ imageUrl?: string; metadata?: Record<string, unknown> }> => {
+    if (!settings.allowGalleryImageAttachments || linkedPublicAccount?.kind !== "character") return {};
+    const attachment = await pickGalleryAttachmentForAccount({
+      account: linkedPublicAccount,
+      chats: createChatsStorage(db),
+      gallery: createGalleryStorage(db),
+      characterGallery: createCharacterGalleryStorage(db),
+    }).catch((error: unknown) => {
+      logger.warn(error, "[slurp] Could not attach a gallery image for %s", account.displayName);
+      return null;
+    });
+    return attachment ?? {};
+  };
+
+  if (!draftImagePrompt) return { post: await persist(await galleryFallback()), imagePromptReview: null };
 
   const noodlerImageConnectionId = await resolveNoodlerImageConnectionId(db, account.id);
   // Fall back to the default image connection when a creator's mapped override
@@ -653,6 +754,9 @@ export async function generateNoodlerPost(
     (noodlerImageConnectionId ? await connections.getWithKey(noodlerImageConnectionId) : null) ??
     (await connections.getDefaultForImageGeneration());
   if (!imageConnection) {
+    // A gallery image is a finished picture, so the post is not marked for the retry pass.
+    const fallback = await galleryFallback();
+    if (fallback.imageUrl) return { post: await persist(fallback), imagePromptReview: null };
     // Keep the prompt: the post publishes without its picture, and the retry pass (or the
     // user) draws it once a connection exists.
     const post = await persist({
@@ -695,6 +799,8 @@ export async function generateNoodlerPost(
     } catch (err) {
       if (isConnectionAdmissionFailure(err)) throw err;
       logger.warn(err, "[slurp] Failed to prepare image prompt review for %s", account.displayName);
+      const fallback = await galleryFallback();
+      if (fallback.imageUrl) return { post: await persist(fallback), imagePromptReview: null };
       return {
         post: await persist({
           imagePrompt: draftImagePrompt,
@@ -730,6 +836,8 @@ export async function generateNoodlerPost(
     // scheduler instead of persisting a post permanently marked as image-failed.
     if (isConnectionAdmissionFailure(err)) throw err;
     logger.warn(err, "[slurp] Failed to generate image for %s", account.displayName);
+    const fallback = await galleryFallback();
+    if (fallback.imageUrl) return { post: await persist(fallback), imagePromptReview: null };
     return {
       post: await persist({
         imagePrompt: draftImagePrompt,

@@ -13,15 +13,21 @@ import { resolveStoredChatOptions } from "../generation/generation-parameters.js
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { parseGameJsonish } from "../game/jsonish.js";
 import { requireModelAnswer } from "./slurp-model-answer.js";
-import { prepareSlurpPostImageContexts, type SlurpImageContextPost } from "./slurp-post-image-context.js";
-import { protectNoodlerGeneratedIdentity, resolveNoodlerPublicIdentity } from "./slurp-generation.service.js";
+import {
+  prepareSlurpPostImageContexts,
+  slurpImageCaptioning,
+  type SlurpImageContextPost,
+} from "./slurp-post-image-context.js";
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { createSlurpStorage, type SlurpSettings } from "../storage/slurp.storage.js";
-import { slurpAudienceToneInstruction } from "./slurp-tone.js";
+import { SLURP_AUDIENCE_TONES, slurpAudienceToneInstruction, type SlurpAudienceTone } from "./slurp-tone.js";
+import { SLURP_REALISTIC_TUNING } from "./slurp-tuning.js";
 import { slurpAudienceArcDescription, type SlurpAudienceArc } from "./slurp-audience-arc.js";
+import { slurpArcLifeLine } from "./slurp-project.js";
+import { protectNoodlerGeneratedIdentity, resolveNoodlerPublicIdentity } from "./slurp-generation.service.js";
 import {
   NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR,
   NOODLE_FAN_ACTIVITY_MAX_CREATORS_PER_RUN,
@@ -80,6 +86,8 @@ export interface NoodlerFanCreatorCandidate {
     }
   >;
   identities: NoodlerFanIdentity[];
+  /** What is going on in the Creator's life, from their running arc. Already protected. */
+  arc?: string | null;
 }
 
 function weightedIdentitySequence(identities: NoodlerFanIdentity[], weights: NoodlerFanArchetypeWeights) {
@@ -162,6 +170,7 @@ function describeFanRelationship(persona: {
   spent?: number;
   knownForDays?: number;
   audienceArc?: string;
+  memory?: string;
 }): string {
   const parts: string[] = [];
   if (persona.stage && persona.stage !== "stranger") parts.push(persona.stage);
@@ -178,28 +187,46 @@ function describeFanRelationship(persona: {
   }
   if (persona.spent) parts.push(`has spent ${persona.spent} coins here`);
   else if (persona.spendTier === "none") parts.push("has never paid for anything");
-  return parts.length > 0 ? parts.join(", ") : "no history with this creator yet";
+  const line = parts.length > 0 ? parts.join(", ") : "no history with this creator yet";
+  // The memory is the same counters said out loud, so a fan can refer to what happened between
+  // them rather than writing as though they arrived this minute.
+  return persona.memory ? `${line}. ${persona.memory}` : line;
 }
 
 function buildFanActivityMessages(input: {
   creators: NoodlerFanCreatorCandidate[];
-  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone">;
+  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone"> &
+    Partial<Pick<SlurpSettings, "simulationTuning">>;
   imageContexts?: ReadonlyMap<string, string>;
 }): ChatMessage[] {
+  const prompts = input.settings.simulationTuning?.prompts ?? SLURP_REALISTIC_TUNING.prompts;
+  // A Fan Type may override the crowd tone. Only the tones somebody in this run actually carries
+  // reach the prompt, so a run with no overrides reads exactly as before.
+  const overrideTones = [
+    ...new Set(
+      input.creators.flatMap((candidate) =>
+        candidate.identities.flatMap((identity) => (identity.persona?.tone ? [identity.persona.tone] : [])),
+      ),
+    ),
+  ].filter((tone): tone is SlurpAudienceTone => SLURP_AUDIENCE_TONES.includes(tone as SlurpAudienceTone));
   const system = [
     "Propose quiet synthetic audience activity for the supplied Slurp posts.",
     "A post's image field describes its attached picture. Treat it as something the actor can see, and never ask to be shown an image that is already described.",
     "Posts marked locked are paid posts. Only subscribers see them, so react to the title and the fact it is paid; never invent or state its hidden contents.",
     "Use only supplied creator IDs, actor handles, and post IDs. Never invent identifiers.",
-    "Likes have null content. Replies are one short sentence, normally under 180 characters, natural, relevant, and not repetitive.",
+    `Likes have null content. Replies are one short sentence, normally under ${prompts.replyMaxChars} characters, natural, relevant, and not repetitive.`,
     "Each post lists the comments already under it. Never repeat a point somebody has already made.",
+    'A creator may list what is "currentlyGoingOn" in their life. Regulars who know them may mention it now and then; most comments should still be about the post itself.',
     'To answer one of those comments instead of the post, set "parentInteractionId" to that comment\'s id. Leave it out to comment on the post itself. Some replies should answer other people; a comment section where nobody talks to anybody is a list, not a conversation.',
     'Return JSON only, shaped as {"activities":[{"creatorAccountId":"...","actorHandle":"...","targetPostId":"...","type":"like"|"reply","content":null|"...","parentInteractionId":"..."}]}. Use exactly these field names; "parentInteractionId" is optional.',
     "Each actor handle has a weight; prefer higher-weight actors more often, proportionally.",
-    slurpAudienceToneInstruction(input.settings.audienceTone),
+    slurpAudienceToneInstruction(input.settings.audienceTone, prompts.tones),
+    ...overrideTones.map((tone) => `Actors whose tone is "${tone}" follow this instead: ${prompts.tones[tone]}`),
+    "An actor's voice is how that kind of person writes. Follow it; it outranks any general style note for that actor's own lines.",
     "Actors carry traits and a relationship to the creator. Write each reply as that specific person: a long-standing paying regular does not sound like somebody who arrived yesterday, and somebody whose trait is 'emoji only' does not write a paragraph.",
     `At most ${input.settings.fanLikesPerRefresh} likes and ${input.settings.fanRepliesPerRefresh} replies total.`,
     `At most ${NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR} activities for any creator.`,
+    ...(prompts.fanActivityExtra.trim() ? [prompts.fanActivityExtra.trim()] : []),
   ].join("\n");
   const creators = input.creators.map((candidate) => ({
     creatorAccountId: candidate.creator.id,
@@ -207,6 +234,7 @@ function buildFanActivityMessages(input: {
       displayName: candidate.creator.displayName,
       handle: candidate.creator.handle,
       bio: candidate.creator.bio,
+      ...(candidate.arc ? { currentlyGoingOn: candidate.arc } : {}),
     },
     // Each actor arrives as a person, not a name. A comment from "a regular who has spent 240
     // coins here over four months and only shows up at night" is a different comment from one by
@@ -218,6 +246,10 @@ function buildFanActivityMessages(input: {
         ...(identity.persona
           ? {
               traits: identity.persona.traits,
+              ...(identity.persona.voice ? { voice: identity.persona.voice } : {}),
+              ...(SLURP_AUDIENCE_TONES.includes(identity.persona.tone as SlurpAudienceTone)
+                ? { tone: identity.persona.tone }
+                : {}),
               relationship: describeFanRelationship(identity.persona),
             }
           : {}),
@@ -246,7 +278,10 @@ function buildFanActivityMessages(input: {
 async function generateFanActivity(input: {
   db: DB;
   connection: GenerationConnection;
-  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone" | "imageContextMode">;
+  settings: Pick<
+    SlurpSettings,
+    "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone" | "imageContextMode" | "imageContextConnectionId"
+  >;
   creators: NoodlerFanCreatorCandidate[];
   debugMode: boolean;
 }): Promise<NoodleGeneratedFanRefresh> {
@@ -264,7 +299,9 @@ async function generateFanActivity(input: {
   const imageContexts = await prepareSlurpPostImageContexts({
     posts: input.creators.flatMap((candidate) => candidate.posts),
     mode: input.settings.imageContextMode,
-    captioning: { enabled: true, connectionId: input.connection.id, connection: input.connection, provider },
+    captioning: await slurpImageCaptioning(input.db, input.settings.imageContextConnectionId, input.connection),
+    onDescribed: (post, description, source) =>
+      createSlurpStorage(input.db).setNoodlerPostImageDescription(post.id, description, source),
     debugMode: input.debugMode,
   });
   for (const candidate of input.creators) {
@@ -355,7 +392,8 @@ export function parseGeneratedFanActivityResponse(
 
 export async function prepareNoodlerFanCreatorCandidates(input: {
   db: DB;
-  settings: Pick<SlurpSettings, "fanActivityEnabled" | "fanArchetypeWeights">;
+  settings: Pick<SlurpSettings, "fanActivityEnabled" | "fanArchetypeWeights"> &
+    Partial<Pick<SlurpSettings, "arcFanReactions">>;
   creatorIds: string[];
   identityProvider?: NoodlerFanIdentityProvider;
 }): Promise<NoodlerFanCreatorCandidate[]> {
@@ -385,6 +423,46 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
     }
     commentsByPost.set(interaction.postId, list);
   }
+  // The running arc, so a regular can ask how the move is going. Protected before it leaves: fan
+  // comments are public, and an arc title can name a Secret Creator's real city.
+  const arcByCreator = new Map<string, string | null>();
+  if (input.settings.arcFanReactions !== false) {
+    const accountsById = new Map((await noodle.listNoodlerAccounts()).map((account) => [account.id, account]));
+    const arcEntries = await Promise.all(
+      creators.map(async (creator): Promise<[string, string | null]> => {
+        const projects = await noodle.listProjects(creator.id).catch(() => []);
+        const filteredProjects = await Promise.all(
+          projects.map(async (project) => {
+            const partnerNames = await Promise.all(
+              project.creatorIds
+                .filter((id) => id !== creator.id)
+                .map((id) => {
+                  const partner = accountsById.get(id) ?? null;
+                  return partner && (partner.settings.privacy.identityDisclosure ?? "open") === "open"
+                    ? partner.displayName
+                    : null;
+                }),
+            );
+            return { ...project, partnerNames: partnerNames.filter((name): name is string => name !== null) };
+          }),
+        );
+        const line = slurpArcLifeLine(filteredProjects);
+        if (!line) return [creator.id, null];
+        const publicIdentity = await resolveNoodlerPublicIdentity(input.db, creator).catch(() => null);
+        return [
+          creator.id,
+          publicIdentity
+            ? protectNoodlerGeneratedIdentity(
+                line,
+                creator.settings.privacy.identityDisclosure ?? "open",
+                publicIdentity,
+              )
+            : null,
+        ];
+      }),
+    );
+    for (const [creatorId, line] of arcEntries) arcByCreator.set(creatorId, line);
+  }
   return creators.flatMap((creator) => {
     const policy = resolveNoodlerFanActivityPolicy(input.settings, creator);
     if (!policy.enabled) return [];
@@ -401,13 +479,17 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
       comments: commentsByPost.get(post.id) ?? [],
     }));
     const identities = provider.resolve(policy.archetypeWeights, creator.id);
-    return posts.length > 0 && identities.length > 0 ? [{ creator, policy, posts, identities }] : [];
+    const arc = arcByCreator.get(creator.id) ?? null;
+    return posts.length > 0 && identities.length > 0 ? [{ creator, policy, posts, identities, arc }] : [];
   });
 }
 
 export async function generateNoodlerFanActivityBatch(input: {
   db: DB;
-  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone" | "imageContextMode">;
+  settings: Pick<
+    SlurpSettings,
+    "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone" | "imageContextMode" | "imageContextConnectionId"
+  >;
   connection: GenerationConnection;
   creators: NoodlerFanCreatorCandidate[];
   debugMode?: boolean;
@@ -430,6 +512,12 @@ export async function generateNoodlerFanActivityBatch(input: {
   });
 }
 
-export async function resolveNoodlerFanConnection(db: DB, settings: Pick<SlurpSettings, "generationConnectionId">) {
-  return resolveSlurpTextConnection(createConnectionsStorage(db), settings.generationConnectionId);
+export async function resolveNoodlerFanConnection(
+  db: DB,
+  settings: Pick<SlurpSettings, "generationConnectionId" | "modelBudget">,
+) {
+  return resolveSlurpTextConnection(
+    createConnectionsStorage(db),
+    settings.modelBudget.connectionId ?? settings.generationConnectionId,
+  );
 }

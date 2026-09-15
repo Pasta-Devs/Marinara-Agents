@@ -130,6 +130,8 @@ export function scoreSlurpRapport(
   options?: {
     /** Apply subscriber rapport boost: conversation and effort gains are 1.5x. */
     subscriberBoost?: boolean;
+    /** Arc stat effect on loyalty: scales every positive contribution, never the penalties. */
+    gain?: number;
   },
 ): SlurpRapport {
   const round = (value: number) => Math.round(value * 10) / 10;
@@ -207,9 +209,14 @@ export function scoreSlurpRapport(
       points: facts.lapsed ? -round(weights.lapsedPenalty) : 0,
     },
   ];
-  const total = contributions.reduce((sum, entry) => sum + entry.points, 0);
+  const gain = Number.isFinite(options?.gain) && options!.gain! > 0 ? options!.gain! : 1;
+  const adjustedContributions = contributions.map((entry) => ({
+    ...entry,
+    points: entry.points > 0 ? round(entry.points * gain) : entry.points,
+  }));
+  const total = adjustedContributions.reduce((sum, entry) => sum + entry.points, 0);
   const score = Math.max(0, Math.min(100, Math.round(total)));
-  return { score, tier: slurpRapportTier(score), contributions };
+  return { score, tier: slurpRapportTier(score), contributions: adjustedContributions };
 }
 
 /**

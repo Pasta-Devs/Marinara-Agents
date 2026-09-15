@@ -44,11 +44,14 @@ export const SLURP_SETTINGS_SECTIONS = [
   "overview",
   "general",
   "creators",
+  "tags",
+  "arcs",
   "messaging",
   "images",
   "audience",
   "ads",
   "wallet",
+  "autopurge",
   "advanced",
 ] as const;
 

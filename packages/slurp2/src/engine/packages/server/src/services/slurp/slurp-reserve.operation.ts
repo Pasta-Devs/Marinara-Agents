@@ -11,6 +11,11 @@ import { createCharactersStorage } from "../storage/characters.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
 import { BackgroundConnectionBusyError, ConnectionAttemptRejectedError } from "../generation/connection-admission.js";
 import { runSlurpAutoPostPollOperations, type SlurpReservePollOutcome } from "./slurp-autopost-poll.js";
+import { logger } from "../../lib/logger.js";
+import { createCharacterGalleryStorage } from "../storage/character-gallery.storage.js";
+import { createChatsStorage } from "../storage/chats.storage.js";
+import { createGalleryStorage } from "../storage/gallery.storage.js";
+import { pickGalleryAttachmentForAccount } from "./slurp-generated-activity.service.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -172,7 +177,7 @@ export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Pr
             const image = await generateNoodlerPostImage({
               account: selectedAccount,
               linkedPublicAccount,
-              disclosureMode: selectedAccount.settings.privacy.identityDisclosure ?? "secret",
+              disclosureMode: selectedAccount.settings.privacy.identityDisclosure ?? "open",
               postContent: payload.content,
               draftPrompt: payload.imagePrompt,
               settings,
@@ -224,6 +229,34 @@ export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Pr
               imageGenerationFailed: true,
               imageGenerationError: "No image generation connection is configured.",
             },
+          };
+        }
+      }
+      // No generated picture, so the source character's gallery may supply one. A deferred image is
+      // still coming and is left alone; a gallery image is finished, so the failure marks go.
+      if (
+        settings.allowGalleryImageAttachments &&
+        typeof payload.metadata.noodlerMediaPath !== "string" &&
+        payload.metadata.imageGenerationDeferred !== true
+      ) {
+        const source = await noodle.resolveAccountSource(selectedAccount);
+        const attachment =
+          source?.kind === "character"
+            ? await pickGalleryAttachmentForAccount({
+                account: source,
+                chats: createChatsStorage(db),
+                gallery: createGalleryStorage(db),
+                characterGallery: createCharacterGalleryStorage(db),
+              }).catch((error: unknown) => {
+                logger.warn(error, "[slurp] Could not attach a gallery image for %s", selectedAccount.displayName);
+                return null;
+              })
+            : null;
+        if (attachment) {
+          const { imageGenerationFailed: _failed, imageGenerationError: _error, ...metadata } = payload.metadata;
+          payload = {
+            ...payload,
+            metadata: { ...metadata, ...attachment.metadata, galleryAttachmentImageUrl: attachment.imageUrl },
           };
         }
       }

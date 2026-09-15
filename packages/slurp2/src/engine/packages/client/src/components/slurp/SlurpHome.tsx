@@ -3,8 +3,8 @@ import {
   ArrowDown,
   ArrowRight,
   Bell,
-  Bookmark,
   BookmarkCheck,
+  BookmarkPlus,
   BriefcaseBusiness,
   Check,
   ChevronDown,
@@ -40,7 +40,16 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 import { toast } from "sonner";
 import {
   NOODLER_POST_CONTENT_MAX_LENGTH,
@@ -54,10 +63,8 @@ import type {
   NoodleInteraction,
   NoodlePostAccess,
   NoodlerPostView,
-  NoodleStageProfileInput,
   NoodlePollInput,
   NoodlePostImageCrop,
-  NoodlerManagedStageProfile,
   NoodlerManagedPost,
   NoodlerStageProfile,
   NoodlerSourceSnapshot,
@@ -117,6 +124,7 @@ import {
   useUpdateNoodlerFanActivity,
   useUpdateNoodlerStageProfile,
   useUpdateNoodlerProfileLocation,
+  useSlurpArcs,
   useSlurpSettings,
   useRecordSlurpStoryView,
   useSlurpStoryViews,
@@ -129,6 +137,8 @@ import {
   type NoodlerContentFormat,
   type SlurpProfilePost,
   type NoodlerPostDraftImage,
+  type SlurpStageProfileInput,
+  type SlurpManagedStageProfile,
 } from "../../hooks/use-slurp";
 import { useActivePersona, usePersonas } from "../../hooks/use-creator-personas";
 import { useConnections } from "../../hooks/use-connections";
@@ -150,11 +160,11 @@ import {
   useNoodlePostCardController,
 } from "./SlurpPostCard";
 import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
-import { SlurpProjectsPanel } from "./SlurpProjectsPanel";
+import { SlurpArcTimelineCard, SlurpProjectsPanel } from "./SlurpProjectsPanel";
 import { SlurpFanCard } from "./SlurpFanCard";
 import { LockedSlurpPostCard, SlurpCreatorPostCard } from "./SlurpCreatorPostCard";
 import { SlurpSparkleVeil } from "./SlurpSparkleVeil";
-import { SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "./SlurpCoin";
+import { DEFAULT_SLURP_SUBSCRIPTION_PRICE, SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "./SlurpCoin";
 import { ChatImageLightbox } from "../chat/ChatImageLightbox";
 import { useNearViewportSlurpMediaSrc, useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
 import { SlurpOnboardingWizard } from "./SlurpOnboardingPanel";
@@ -187,6 +197,16 @@ import type { SlurpNavigationState } from "./slurp-navigation.types";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { SlurpInlineAd } from "./SlurpInlineAd";
 import { SlurpCreatorProfileCard } from "./SlurpCreatorProfileCard";
+import { SlurpDiscoveryProfileEditor } from "./SlurpDiscoveryProfileEditor";
+import { SlurpDiscoverToolbar } from "./SlurpDiscoverToolbar";
+import {
+  filterAndSortSlurpCreators,
+  isSlurpDiscoveryProfileIncomplete,
+  SLURP_DISCOVERY_TAGS,
+  type SlurpDiscoverLayout,
+  type SlurpDiscoverSort,
+  type SlurpDiscoveryGender,
+} from "../../lib/slurp-discovery";
 import { formatTime } from "./SlurpDateTime";
 
 interface SlurpHomeProps {
@@ -273,6 +293,9 @@ interface NoodlerPostSubmission {
   format: NoodlerContentFormat;
   postType: "post" | "story";
   linkedPostId: string | null;
+  unlockPrice: number | null;
+  /** Ask the AI for an image: written by the model on a guided post, from the text on a manual one. */
+  generateImage: boolean;
 }
 
 type SlurpViewerCreator = NonNullable<ReturnType<typeof useNoodlerViewer>["data"]>["creators"][number];
@@ -285,6 +308,9 @@ interface NoodlerPostDraft {
   poll: NoodlePollInput | null;
   postType: "post" | "story";
   linkedPostId: string | null;
+  /** Price for this locked post. Null uses the Creator's price. */
+  unlockPrice: number | null;
+  generateImage: boolean;
 }
 
 interface PendingNoodlerImage {
@@ -299,6 +325,8 @@ const EMPTY_NOODLER_POST_DRAFT: NoodlerPostDraft = {
   poll: null,
   postType: "post",
   linkedPostId: null,
+  unlockPrice: null,
+  generateImage: false,
 };
 
 function isEmptyNoodlerPostDraft(draft: NoodlerPostDraft): boolean {
@@ -309,15 +337,14 @@ function isEmptyNoodlerPostDraft(draft: NoodlerPostDraft): boolean {
     !draft.image &&
     !draft.poll &&
     draft.postType === EMPTY_NOODLER_POST_DRAFT.postType &&
-    draft.linkedPostId === EMPTY_NOODLER_POST_DRAFT.linkedPostId
+    draft.linkedPostId === EMPTY_NOODLER_POST_DRAFT.linkedPostId &&
+    draft.generateImage === EMPTY_NOODLER_POST_DRAFT.generateImage
   );
 }
 
 function isSlurpStory(post: NoodlerPostView | NoodlerManagedPost): boolean {
   return (post as NoodlerPostView & { story?: boolean }).story === true || post.metadata?.noodlerPostType === "story";
 }
-
-const DEFAULT_SLURP_SUBSCRIPTION_PRICE = 5;
 
 function slurpSubscriptionPriceOf(profile: unknown): number {
   const price = (profile as { subscriptionPrice?: unknown } | null)?.subscriptionPrice;
@@ -327,6 +354,12 @@ function slurpSubscriptionPriceOf(profile: unknown): number {
 function linkedPostIdForStory(post: NoodlerPostView): string | null {
   const linkedPostId = (post as NoodlerPostView & { linkedPostId?: unknown }).linkedPostId;
   return typeof linkedPostId === "string" && linkedPostId.length > 0 ? linkedPostId : null;
+}
+
+function parsePrice(value: string): number | null {
+  if (!value.trim()) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
 function NoodlerDraftImageFrame({ image }: { image: NoodlerPostDraftImage }) {
@@ -422,23 +455,17 @@ function disclosureOptions(t: ReturnType<typeof useUiTranslation>["t"]): Disclos
       detail: t("ui.noodle.disclosure.hinted.detail"),
       guidance: t("ui.noodle.disclosure.hinted.guidance"),
     },
-    {
-      value: "secret",
-      label: "Separate persona",
-      shortLabel: "Secret",
-      detail: "Create a genuinely separate identity with no public connection.",
-      guidance:
-        "The AI receives a reduced, non-identifying inspiration brief and avoids distinctive canonical details.",
-    },
   ];
 }
 
-const EMPTY_STAGE_PROFILE: NoodleStageProfileInput = {
+const EMPTY_STAGE_PROFILE: SlurpStageProfileInput = {
   displayName: "",
   handle: "",
   bio: "",
   stagePersonality: "",
-  disclosureMode: "hinted",
+  disclosureMode: "open",
+  gender: null,
+  tags: [],
 };
 
 const fieldClass =
@@ -692,7 +719,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   const generateProfileDraft = useGenerateNoodlerStageProfileDraft();
   const connectionsQuery = useConnections();
   const connections = (connectionsQuery.data ?? []) as Array<{ id: string; name: string; model?: string }>;
-  const [profileDraft, setProfileDraft] = useState<NoodleStageProfileInput | null>(null);
+  const [profileDraft, setProfileDraft] = useState<SlurpStageProfileInput | null>(null);
   const [profileDraftDirty, setProfileDraftDirty] = useState(false);
   const [imagePromptReview, setImagePromptReview] = useState<{
     accountId: string;
@@ -700,10 +727,10 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   } | null>(null);
   const [creationStep, setCreationStep] = useState<"source" | "disclosure" | "draft" | "automatic" | null>(null);
   const [autoPostSetupId, setAutoPostSetupId] = useState<string | null>(null);
-  const [creationDisclosure, setCreationDisclosure] = useState<NoodleIdentityDisclosure>("hinted");
+  const [creationDisclosure, setCreationDisclosure] = useState<NoodleIdentityDisclosure>("open");
   const [draftGuidance, setDraftGuidance] = useState("");
   const [draftConnectionId, setDraftConnectionId] = useState("");
-  const [previousDraft, setPreviousDraft] = useState<NoodleStageProfileInput | null>(null);
+  const [previousDraft, setPreviousDraft] = useState<SlurpStageProfileInput | null>(null);
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
   const profileReturnToSettingsRef = useRef<SlurpNavigationState | null>(null);
   const [acceptSourceChangesForProfileId, setAcceptSourceChangesForProfileId] = useState<string | null>(null);
@@ -1177,7 +1204,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     }
   };
 
-  const beginEdit = (profile: NoodlerStageProfile) => {
+  const beginEdit = (profile: SlurpManagedStageProfile) => {
     invalidateProfileDraftGeneration();
     setAcceptSourceChangesForProfileId(null);
     setDraftSourceSnapshot(null);
@@ -1197,6 +1224,8 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
       bio: profile.bio,
       stagePersonality: profile.stagePersonality,
       disclosureMode: profile.disclosureMode ?? "hinted",
+      gender: profile.gender,
+      tags: profile.tags,
     });
     setProfileDraftDirty(false);
   };
@@ -1215,7 +1244,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     noodlerAccountId?: string;
     disclosureMode?: NoodleIdentityDisclosure;
     guidance?: string;
-    currentDraft?: NoodleStageProfileInput;
+    currentDraft?: SlurpStageProfileInput;
   }) => {
     const noodlerAccountId = options?.noodlerAccountId ?? editingProfileId;
     if (!draftNoodleAccountId && !noodlerAccountId) {
@@ -1244,7 +1273,8 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
           if (generationId !== profileDraftGenerationIdRef.current) return;
           if (draftForGeneration) setPreviousDraft(draftForGeneration);
           if (noodlerAccountId) setAcceptSourceChangesForProfileId(noodlerAccountId);
-          const { sourceSnapshot, sourceRevisionToken, ...stageProfile } = draft;
+          const { sourceSnapshot, sourceRevisionToken, notes, ...stageProfile } = draft;
+          if (notes?.length) toast.info(notes.join(" "));
           setDraftSourceSnapshot(sourceSnapshot ?? null);
           setDraftSourceRevisionToken(sourceRevisionToken ?? null);
           setProfileDraft(stageProfile);
@@ -1259,7 +1289,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     );
   };
 
-  const redraftFromSource = (profile: NoodlerStageProfile) => {
+  const redraftFromSource = (profile: SlurpManagedStageProfile) => {
     beginEdit(profile);
     void generateDraft({
       noodlerAccountId: profile.id,
@@ -1271,6 +1301,8 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
         bio: profile.bio,
         stagePersonality: profile.stagePersonality,
         disclosureMode: profile.disclosureMode ?? "hinted",
+        gender: profile.gender,
+        tags: profile.tags,
       },
     });
   };
@@ -1282,7 +1314,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
       handle: profileDraft.handle.replace(/^@+/u, ""),
       ...(editingProfileId && location !== undefined ? { location } : {}),
     };
-    const onSuccess = (profile: NoodlerStageProfile & { discardedPreparedPostCount?: number }) => {
+    const onSuccess = (profile: SlurpManagedStageProfile & { discardedPreparedPostCount?: number }) => {
       invalidateProfileDraftGeneration();
       setProfileDraft(null);
       setProfileDraftDirty(false);
@@ -1397,8 +1429,15 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     format,
     postType,
     linkedPostId,
+    unlockPrice,
+    generateImage,
   }: NoodlerPostSubmission) => {
-    await createPost.mutateAsync({
+    // A manual post keeps its own text as the image directions, so the same render path a
+    // generated post uses can draw it right after publishing.
+    const wantsImage = generateImage && !image;
+    const created = await createPost.mutateAsync({
+      unlockPrice: access === "locked" ? unlockPrice : null,
+      ...(wantsImage ? { imagePrompt: body.trim() || title.trim() } : {}),
       targetAccountId: profileId,
       title,
       content: body,
@@ -1410,6 +1449,18 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
       linkedPostId: linkedPostId ?? null,
     });
     toast.success(localizeUi("ui.noodle.noodlerhome.noodlerPostPublished"));
+    if (wantsImage && created?.id) {
+      await generatePostImage.mutateAsync({ id: created.id, accountId: profileId }).catch((error: unknown) =>
+        toast.error(
+          errorMessage(
+            error,
+            localizeUi("ui.slurp.composer.aiImageFailed", {
+              defaultValue: "The post was published, but its image could not be created.",
+            }),
+          ),
+        ),
+      );
+    }
   };
 
   const submitGuidedPost = async ({
@@ -1421,6 +1472,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     poll,
     format,
     postType,
+    generateImage,
   }: NoodlerPostSubmission) => {
     if (!(await confirmProviderDisclosure())) return;
     const guide = serializeNoodlerPostGuide(title, body);
@@ -1428,6 +1480,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
       mode: "noodler",
       targetAccountId: profileId,
       ...(guide ? { noodlerPostGuide: guide } : {}),
+      ...(generateImage ? { generateImage: true } : {}),
       access,
       image,
       poll,
@@ -2371,6 +2424,14 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="truncate text-sm font-bold">{profile.displayName}</h3>
                         <DisclosureBadge mode={profile.disclosureMode} />
+                        {isSlurpDiscoveryProfileIncomplete(profile) && (
+                          <span
+                            title={localizeUi("ui.slurp.profile.incompleteDetail")}
+                            className="rounded-full border border-amber-500/50 px-2 py-0.5 text-[0.68rem] font-bold text-amber-600 dark:text-amber-400"
+                          >
+                            {localizeUi("ui.slurp.profile.incomplete")}
+                          </span>
+                        )}
                       </div>
                       <p className="truncate text-xs text-[var(--muted-foreground)]">
                         {profile.disclosureMode
@@ -2468,6 +2529,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
         }
         onToggleSubscription={toggleCreatorSubscription}
         togglePending={toggleSubscription.isPending || toggleFollow.isPending}
+        connectionCounts={connectionCountsQuery.data ?? {}}
         inlineAdsEnabled={slurpSettingsQuery.data?.inlineAdsEnabled !== false}
         inlineAdsFrequency={slurpSettingsQuery.data?.inlineAdsFrequency ?? "standard"}
       />
@@ -2559,7 +2621,7 @@ function StageProfileForm({
   onCancel,
   onSave,
 }: {
-  draft: NoodleStageProfileInput;
+  draft: SlurpStageProfileInput;
   source: { displayName: string; handle: string; avatarUrl?: string | null } | null;
   disclosureMode: NoodleIdentityDisclosure;
   onDisclosureChange: (value: NoodleIdentityDisclosure) => void;
@@ -2570,9 +2632,9 @@ function StageProfileForm({
   onConnectionChange: (value: string) => void;
   onGenerate: () => void;
   isGenerating: boolean;
-  previousDraft: NoodleStageProfileInput | null;
+  previousDraft: SlurpStageProfileInput | null;
   onUndoDraft: () => void;
-  onChange: (patch: Partial<NoodleStageProfileInput>) => void;
+  onChange: (patch: Partial<SlurpStageProfileInput>) => void;
   sourceAccountId: string | null;
   accentId: string;
   isEditing: boolean;
@@ -2601,6 +2663,8 @@ function StageProfileForm({
   const relationshipPickerMenuRef = useRef<HTMLDivElement>(null);
   const canSave =
     Boolean((isEditing || sourceAccountId) && draft.displayName.trim() && draft.handle.trim()) &&
+    // A new Creator needs a gender and at least 3 tags; the server enforces the same rule.
+    (isEditing || !isSlurpDiscoveryProfileIncomplete(draft)) &&
     !isPending &&
     !isGenerating;
   const selectedConnection = connections.find((connection) => connection.id === connectionId) ?? null;
@@ -2871,6 +2935,12 @@ function StageProfileForm({
               />
             </label>
           </div>
+          <SlurpDiscoveryProfileEditor
+            gender={draft.gender}
+            tags={draft.tags}
+            disabled={isGenerating || isPending}
+            onChange={onChange}
+          />
           <details className="group overflow-visible rounded-lg border border-[var(--noodle-divider)]">
             <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 py-3 transition-colors hover:bg-[var(--accent)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] [&::-webkit-details-marker]:hidden">
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 text-[var(--noodle-accent)]">
@@ -3546,9 +3616,9 @@ function StageProfileView({
   accessPending,
   onAccessChange,
 }: {
-  profile: NoodlerManagedStageProfile;
-  profileDraft: NoodleStageProfileInput | null;
-  onProfileChange: (patch: Partial<NoodleStageProfileInput>) => void;
+  profile: SlurpManagedStageProfile;
+  profileDraft: SlurpStageProfileInput | null;
+  onProfileChange: (patch: Partial<SlurpStageProfileInput>) => void;
   onCancelEdit: () => void;
   onSaveEdit: (location?: string) => void;
   profileSavePending: boolean;
@@ -3587,7 +3657,7 @@ function StageProfileView({
   /** Opens Messages in this Creator's chat. No thread is created until something is sent. */
   onOpenMessages: (creatorAccountId: string) => void;
   accessPending: boolean;
-  onAccessChange: (access: NoodlerManagedStageProfile["access"]) => void;
+  onAccessChange: (access: SlurpManagedStageProfile["access"]) => void;
 }) {
   const { t: localizeUi, i18n } = useUiTranslation();
   const bannerSrc = useSlurpMediaSrc(profile.bannerUrl, { width: 1280 });
@@ -3598,19 +3668,17 @@ function StageProfileView({
   const updateFanActivity = useUpdateNoodlerFanActivity();
   const tipCreator = useTipSlurpCreator();
   const [tipOpen, setTipOpen] = useState(false);
-  // What this Creator charges for, in one place, before the fan pays for anything. The compose
-  // query is the viewer-facing source of these prices, so this needs no new server data.
-  // ponytail: reuses the compose query; give it its own light endpoint if the profile gets heavy.
+  // The compose query is the viewer-facing source for action prices and messaging policy.
   const offerMessaging = useSlurpCompose(profile.id, viewerAccount?.entityId ?? null).data?.messaging ?? null;
   const [customTip, setCustomTip] = useState("");
   const [locationDraft, setLocationDraft] = useState(
-    () => (profile as NoodlerManagedStageProfile & { location?: string }).location ?? "",
+    () => (profile as SlurpManagedStageProfile & { location?: string }).location ?? "",
   );
   const locationProfileId = useRef(profile.id);
   useEffect(() => {
     if (locationProfileId.current === profile.id) return;
     locationProfileId.current = profile.id;
-    setLocationDraft((profile as NoodlerManagedStageProfile & { location?: string }).location ?? "");
+    setLocationDraft((profile as SlurpManagedStageProfile & { location?: string }).location ?? "");
   }, [profile.id, profile]);
   const uploadProfileAvatar = useUploadNoodlerAvatar();
   const uploadProfileBanner = useUploadNoodlerBanner();
@@ -3644,7 +3712,7 @@ function StageProfileView({
         lastActiveAt: latestActivityAt || null,
         autoPostingEnabled: profile.autoPosting.enabled,
       });
-  const profileLocation = (profile as NoodlerManagedStageProfile & { location?: string }).location ?? "";
+  const profileLocation = (profile as SlurpManagedStageProfile & { location?: string }).location ?? "";
   const profileBioBody = profile.bio.trim();
   const accent = profileAccent(profile.id);
   const personaBackedCreator = viewerAccounts.some((account) => account.id === profile.sourceAccountId);
@@ -3655,6 +3723,7 @@ function StageProfileView({
   // The goal the audience sees. It rides on the viewer scope beside `subscriptionPrice`, because
   // the audience profile projection is a strict allowlist and must stay that way.
   const goalForViewer = noodlerGoalOf(viewerCreator);
+  const arcsQuery = useSlurpArcs(viewerAccount?.entityId ?? null, profile.id);
   const editing = Boolean(profileDraft);
   const editDraft = profileDraft ?? {
     displayName: profile.displayName,
@@ -3662,6 +3731,8 @@ function StageProfileView({
     bio: profile.bio,
     stagePersonality: profile.stagePersonality,
     disclosureMode: profile.disclosureMode ?? "hinted",
+    gender: profile.gender,
+    tags: profile.tags,
   };
   const viewerPostById = new Map((viewerCreator?.posts ?? []).map((post) => [post.id, post]));
   const projectedPosts = posts.flatMap((entry) => {
@@ -3926,7 +3997,7 @@ function StageProfileView({
                   post={item.model}
                   ctx={{
                     ...postCardCtx,
-                    personaAccount: viewingOwnCreator ? null : viewerActorAccount,
+                    personaAccount: viewerActorAccount,
                     postManagement: managedCreator,
                   }}
                 />
@@ -4048,42 +4119,40 @@ function StageProfileView({
           location: locationDraft,
           onLocationChange: setLocationDraft,
           privateFields: (
-            <div className="space-y-3 rounded-xl border border-[var(--noodle-divider)] bg-[var(--accent)]/35 p-4">
-              <div>
-                <p className="text-sm font-bold">{localizeUi("ui.noodle.stageprofileform.stageVoice")}</p>
-                <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
-                  {localizeUi("ui.noodle.stageprofileform.voiceAttitudeBoundariesAndCreatorPersona")}
-                </p>
-                <textarea
-                  value={editDraft.stagePersonality}
-                  maxLength={1000}
-                  onChange={(event) => onProfileChange({ stagePersonality: event.target.value })}
-                  className="mt-2 min-h-24 w-full resize-y rounded-lg border border-[var(--noodle-divider)] bg-[var(--background)] p-3 text-sm outline-none focus:border-[var(--noodle-accent)]"
+            <div className="space-y-3">
+              <SlurpDiscoveryProfileEditor
+                gender={editDraft.gender}
+                tags={editDraft.tags}
+                disabled={profileSavePending}
+                onChange={onProfileChange}
+              />
+              <div className="space-y-3 rounded-xl border border-[var(--noodle-divider)] bg-[var(--accent)]/35 p-4">
+                <div>
+                  <p className="text-sm font-bold">{localizeUi("ui.noodle.stageprofileform.stageVoice")}</p>
+                  <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
+                    {localizeUi("ui.noodle.stageprofileform.voiceAttitudeBoundariesAndCreatorPersona")}
+                  </p>
+                  <textarea
+                    value={editDraft.stagePersonality}
+                    maxLength={1000}
+                    onChange={(event) => onProfileChange({ stagePersonality: event.target.value })}
+                    className="mt-2 min-h-24 w-full resize-y rounded-lg border border-[var(--noodle-divider)] bg-[var(--background)] p-3 text-sm outline-none focus:border-[var(--noodle-accent)]"
+                  />
+                </div>
+                <AudienceStancePresets
+                  disabled={profileSavePending}
+                  onApply={(sentence) =>
+                    onProfileChange({ stagePersonality: appendAudienceStance(editDraft.stagePersonality, sentence) })
+                  }
                 />
               </div>
-              <AudienceStancePresets
-                disabled={profileSavePending}
-                onApply={(sentence) =>
-                  onProfileChange({ stagePersonality: appendAudienceStance(editDraft.stagePersonality, sentence) })
-                }
-              />
             </div>
           ),
         }}
         leadingActions={
           !editing && !viewingOwnCreator && viewerCreator ? (
             <>
-              {/* A subscription already implies a follow, so subscribers get a static badge instead of a
-                  toggle they cannot actually turn off. */}
-              {viewerCreator.subscribed ? (
-                <span
-                  aria-label={localizeUi("ui.slurp.profile.subscribed")}
-                  title={localizeUi("ui.slurp.profile.subscribed")}
-                  className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--noodle-accent)]/50 bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]"
-                >
-                  <BookmarkCheck size={19} />
-                </span>
-              ) : (
+              {!viewerCreator.subscribed && (
                 <button
                   type="button"
                   disabled={followPending}
@@ -4101,7 +4170,7 @@ function StageProfileView({
                       : localizeUi("ui.slurp.profile.follow")
                   }
                 >
-                  {viewerCreator.followed ? <BookmarkCheck size={19} /> : <Bookmark size={19} />}
+                  {viewerCreator.followed ? <BookmarkCheck size={19} /> : <BookmarkPlus size={19} />}
                 </button>
               )}
               <button
@@ -4150,13 +4219,28 @@ function StageProfileView({
                   </>
                 )}
               </button>
+              {!viewerCreator.subscribed && (
+                <span className="max-w-52 text-[0.68rem] leading-4 text-[var(--muted-foreground)]">
+                  {localizeUi("ui.slurp.profile.subscribeBenefits", {
+                    defaultValue: "Faster replies · Free chat photos · Subscriber-only posts",
+                  })}
+                </span>
+              )}
               <button
                 type="button"
+                disabled={offerMessaging?.dmPolicy === "closed"}
                 onClick={() => onOpenMessages(profile.id)}
                 className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-[var(--noodle-divider)] px-4 text-sm font-bold transition-[background-color,opacity,transform] hover:bg-[var(--accent)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100"
               >
                 <MessageCircle size={16} aria-hidden="true" />
-                {localizeUi("ui.slurp.profile.message", { defaultValue: "Message" })}
+                {offerMessaging?.dmPolicy === "paid" && !viewerCreator.subscribed && offerMessaging.requestFee > 0
+                  ? localizeUi("ui.slurp.profile.requestMessage", {
+                      defaultValue: "Request message · {{count}} coins",
+                      count: offerMessaging.requestFee,
+                    })
+                  : offerMessaging?.dmPolicy === "closed"
+                    ? localizeUi("ui.slurp.profile.messagingUnavailable", { defaultValue: "Messaging unavailable" })
+                    : localizeUi("ui.slurp.profile.message", { defaultValue: "Message" })}
               </button>
               <div className="relative">
                 <button
@@ -4239,56 +4323,7 @@ function StageProfileView({
         status={creatorStatus}
         stats={{ followers: followerTotal, subscribers: subscriberTotal, likes: profileLikeTotal }}
         location={profileLocation}
-        bioContent={
-          profileBioBody || offerMessaging ? (
-            <div className="space-y-3">
-              {profileBioBody ? <p className="whitespace-pre-wrap text-sm leading-6">{profileBioBody}</p> : null}
-              {offerMessaging ? (
-                <div className="rounded-lg border border-[var(--noodle-divider)] p-3 text-sm">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-                    {localizeUi("ui.slurp.profile.offer.title", { defaultValue: "What you can buy here" })}
-                  </p>
-                  <ul className="mt-2 space-y-1 text-[var(--muted-foreground)]">
-                    <li>
-                      {localizeUi(`ui.slurp.profile.offer.dm.${offerMessaging.dmPolicy}`, {
-                        defaultValue: "Direct messages are open.",
-                      })}
-                    </li>
-                    {offerMessaging.requestFee > 0 ? (
-                      <li>
-                        {localizeUi("ui.slurp.profile.offer.requestFee", {
-                          defaultValue:
-                            "A message request costs {{count}} coins. It opens the thread; it does not buy a reply.",
-                          count: offerMessaging.requestFee,
-                        })}
-                      </li>
-                    ) : null}
-                    {offerMessaging.ppvPrice > 0 ? (
-                      <li>
-                        {localizeUi("ui.slurp.profile.offer.ppv", {
-                          defaultValue: "Locked photos in chat cost {{count}} coins each.",
-                          count: offerMessaging.ppvPrice,
-                        })}
-                      </li>
-                    ) : null}
-                    <li>
-                      {localizeUi("ui.slurp.profile.offer.subscribe", {
-                        defaultValue:
-                          "Subscribing at {{count}} / week gets faster replies, free photos in chat, and subscriber-only posts.",
-                        count: slurpSubscriptionPriceOf(profile),
-                      })}
-                    </li>
-                    <li>
-                      {localizeUi("ui.slurp.profile.offer.tip", {
-                        defaultValue: "A tip buys nothing. It is a gift, and she may or may not answer it.",
-                      })}
-                    </li>
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-          ) : null
-        }
+        bioContent={profileBioBody ? <p className="whitespace-pre-wrap text-sm leading-6">{profileBioBody}</p> : null}
         bioCollapsible={profileBioBody.length > 280 || profileBioBody.split("\n").length > 4}
         contentActions={null}
         tabs={[
@@ -4345,6 +4380,13 @@ function StageProfileView({
                   />
                 </div>
               </section>
+            )}
+            {!editing && arcsQuery.data && (
+              <SlurpArcTimelineCard
+                arcs={arcsQuery.data.arcs}
+                onOpenPost={postCardCtx.openPost}
+                onOpenProfile={postCardCtx.openAuthorProfile}
+              />
             )}
             {managedCreator && !editing && (
               <section data-slurp-creator-tools className="min-w-0">
@@ -4821,6 +4863,7 @@ function ViewerHub({
   onOpenAuthorProfile,
   onToggleSubscription,
   togglePending,
+  connectionCounts,
   inlineAdsEnabled,
   inlineAdsFrequency,
   newSinceAt,
@@ -4857,12 +4900,13 @@ function ViewerHub({
   discoveryInputRef: React.RefObject<HTMLInputElement | null>;
   tab: "following" | "all";
   onTabChange: (tab: "following" | "all") => void;
-  authorProfile: NoodlerManagedStageProfile | null;
+  authorProfile: SlurpManagedStageProfile | null;
   onAddStory: () => void;
   /** Open the persona's own Creator profile from the empty feed. */
   onOpenAuthorProfile?: () => void;
   onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
   togglePending: boolean;
+  connectionCounts: Record<string, { fans: number; followers: number }>;
   inlineAdsEnabled: boolean;
   inlineAdsFrequency: "light" | "standard" | "frequent";
 }) {
@@ -4873,8 +4917,21 @@ function ViewerHub({
   const [visibleFeedCount, setVisibleFeedCount] = useState(NOODLER_FEED_WINDOW_SIZE);
   const [activeMomentId, setActiveMomentId] = useState<string | null>(null);
   const [feedLayout, setFeedLayout] = useState<"list" | "wall">("list");
+  const [discoverLayout, setDiscoverLayout] = useState<SlurpDiscoverLayout>(() => {
+    if (typeof window === "undefined") return "grid";
+    return window.localStorage.getItem("slurp2.discover.layout") === "list" ? "list" : "grid";
+  });
+  const [discoverNotSubscribed, setDiscoverNotSubscribed] = useState(false);
+  const [discoverGenders, setDiscoverGenders] = useState<Set<SlurpDiscoveryGender>>(() => new Set());
+  const [discoverTags, setDiscoverTags] = useState<Set<string>>(() => new Set());
+  const [discoverMinimumPrice, setDiscoverMinimumPrice] = useState("");
+  const [discoverMaximumPrice, setDiscoverMaximumPrice] = useState("");
+  const [discoverSort, setDiscoverSort] = useState<SlurpDiscoverSort>("recommended");
   const [openPostId, setOpenPostId] = useState<string | null>(null);
   const [momentCutoff] = useState(() => Date.now() - SLURP_MOMENT_WINDOW_MS);
+  useEffect(() => {
+    window.localStorage.setItem("slurp2.discover.layout", discoverLayout);
+  }, [discoverLayout]);
   const inlineAdsQuery = useSlurpInlineAds(scope?.viewer.entityId ?? null, null, [
     tab === "all" ? "discover" : "following",
     new Date().getHours() >= 18 ? "night" : "day",
@@ -4944,18 +5001,69 @@ function ViewerHub({
         .filter(matchesSearch)
         .sort(newestFirst),
       searchResults: searchTerm ? allPosts.filter(matchesSearch).sort(newestFirst) : [],
-      discoveredCreators: creators.filter(
-        (creator) =>
-          creator.profile.id !== authorProfile?.id &&
-          (!searchTerm ||
-            searchable(creator.profile.handle).includes(searchTerm) ||
-            searchable(creator.profile.displayName).includes(searchTerm)),
-      ),
+      discoveredCreators: creators.filter((creator) => creator.profile.id !== authorProfile?.id),
       suggestedCreators: creators
         .filter((creator) => creator.profile.id !== authorProfile?.id && !creator.followed)
         .slice(0, 3),
     };
   }, [authorProfile?.id, momentCutoff, scope, searchTerm, tab]);
+  const filteredDiscoveredCreators = useMemo(
+    () =>
+      filterAndSortSlurpCreators(
+        discoveredCreators,
+        {
+          search,
+          notSubscribed: discoverNotSubscribed,
+          genders: discoverGenders,
+          tags: discoverTags,
+          minimumPrice: parsePrice(discoverMinimumPrice),
+          maximumPrice: parsePrice(discoverMaximumPrice),
+          sort: discoverSort,
+        },
+        connectionCounts,
+      ),
+    [
+      connectionCounts,
+      discoverGenders,
+      discoverMaximumPrice,
+      discoverMinimumPrice,
+      discoverNotSubscribed,
+      discoverSort,
+      discoverTags,
+      discoveredCreators,
+      search,
+    ],
+  );
+  const discoverFiltersActive = Boolean(
+    searchTerm ||
+    discoverNotSubscribed ||
+    discoverGenders.size ||
+    discoverTags.size ||
+    discoverMinimumPrice ||
+    discoverMaximumPrice,
+  );
+  const discoveryTagSettings = useSlurpSettings().data?.discoveryTags;
+  const customDiscoverTags = useMemo(() => {
+    const curated = new Set<string>(discoveryTagSettings?.map((entry) => entry.tag) ?? SLURP_DISCOVERY_TAGS);
+    return [...new Set(discoveredCreators.flatMap((creator) => creator.profile.tags ?? []))]
+      .filter((tag) => !curated.has(tag))
+      .sort((left, right) => left.localeCompare(right));
+  }, [discoveredCreators, discoveryTagSettings]);
+  const toggleDiscoverSetValue = <T,>(setter: Dispatch<SetStateAction<Set<T>>>, value: T) =>
+    setter((current) => {
+      const next = new Set(current);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
+  const clearDiscoverFilters = () => {
+    onSearchChange("");
+    setDiscoverNotSubscribed(false);
+    setDiscoverGenders(new Set());
+    setDiscoverTags(new Set());
+    setDiscoverMinimumPrice("");
+    setDiscoverMaximumPrice("");
+  };
   // "Create a persona" is a claim about the user's data, so it waits for the personas query to
   // actually succeed instead of speaking for a cold or failed load.
   if (personas.length === 0) {
@@ -5025,7 +5133,7 @@ function ViewerHub({
           post={toNoodlePostCardModel(post, creator.profile)}
           ctx={{
             ...feedCardCtx,
-            personaAccount: creator.profile.id === authorProfile?.id ? null : postCardCtx.personaAccount,
+            personaAccount: postCardCtx.personaAccount,
           }}
         />
       )}
@@ -5084,6 +5192,27 @@ function ViewerHub({
           </header>
         )}
 
+        <SlurpDiscoverToolbar
+          notSubscribed={discoverNotSubscribed}
+          onNotSubscribedChange={setDiscoverNotSubscribed}
+          genders={discoverGenders}
+          onGenderToggle={(gender) => toggleDiscoverSetValue(setDiscoverGenders, gender)}
+          minimumPrice={discoverMinimumPrice}
+          maximumPrice={discoverMaximumPrice}
+          onMinimumPriceChange={setDiscoverMinimumPrice}
+          onMaximumPriceChange={setDiscoverMaximumPrice}
+          tags={discoverTags}
+          customTags={customDiscoverTags}
+          onTagToggle={(tag) => toggleDiscoverSetValue(setDiscoverTags, tag)}
+          sort={discoverSort}
+          onSortChange={setDiscoverSort}
+          layout={discoverLayout}
+          onLayoutChange={setDiscoverLayout}
+          filteredCount={filteredDiscoveredCreators.length}
+          filtersActive={discoverFiltersActive}
+          onClear={clearDiscoverFilters}
+        />
+
         {searchTerm && (
           <section className="px-3 pb-4 sm:px-4" aria-labelledby="noodler-search-results">
             <div className="border-b border-[var(--noodle-divider)] px-4 py-3">
@@ -5122,20 +5251,37 @@ function ViewerHub({
               {localizeUi("ui.noodle.subscriptionsections.discoverCreators")}
             </h2>
           </div>
-          {discoveredCreators.length > 0 ? (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {discoveredCreators.map((creator) => (
+          {filteredDiscoveredCreators.length > 0 ? (
+            <div className={cn(discoverLayout === "grid" ? "grid gap-3 sm:grid-cols-2" : "space-y-3")}>
+              {filteredDiscoveredCreators.map((creator) => (
                 <SlurpCreatorProfileCard
                   key={creator.profile.id}
                   creator={creator}
                   onOpenProfile={postCardCtx.openAuthorProfile}
+                  layout={discoverLayout}
+                  showDiscoveryActions
+                  subscriptionPending={togglePending}
+                  onToggleSubscription={onToggleSubscription}
                 />
               ))}
             </div>
           ) : (
-            <p className="px-4 py-6 text-sm text-[var(--muted-foreground)]">
-              {localizeUi("ui.noodle.subscriptionsections.noCreatorsAreVisibleToThisPersonaYet")}
-            </p>
+            <div className="px-4 py-8 text-center">
+              <p className="text-sm font-bold">
+                {discoverFiltersActive
+                  ? localizeUi("ui.slurp.discover.noMatches", { defaultValue: "No Creators match these filters" })
+                  : localizeUi("ui.noodle.subscriptionsections.noCreatorsAreVisibleToThisPersonaYet")}
+              </p>
+              {discoverFiltersActive && (
+                <button
+                  type="button"
+                  onClick={clearDiscoverFilters}
+                  className="mt-3 min-h-10 rounded-full px-4 text-sm font-bold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+                >
+                  {localizeUi("ui.slurp.discover.clearFilters", { defaultValue: "Clear filters" })}
+                </button>
+              )}
+            </div>
           )}
         </section>
       </div>
@@ -6448,7 +6594,7 @@ function NoodlerPostComposer({
   manualPending,
   guidePending,
 }: {
-  profile: NoodlerManagedStageProfile;
+  profile: SlurpManagedStageProfile;
   availablePosts: SlurpProfilePost[];
   collapsible?: boolean;
   draft: NoodlerPostDraft;
@@ -6484,7 +6630,7 @@ function NoodlerPostComposer({
   const mediaToolRef = useRef<HTMLDivElement | null>(null);
   const accessToolRef = useRef<HTMLDivElement | null>(null);
   const composerBusyRef = useRef(false);
-  const { title, body, access, image, poll, postType, linkedPostId } = draft;
+  const { title, body, access, image, poll, postType, linkedPostId, unlockPrice, generateImage } = draft;
   const linkablePosts = availablePosts
     .map((entry) => ("managed" in entry ? entry.managed : entry.viewerPost))
     .filter((post): post is NoodlerManagedPost | NoodlerPostView => Boolean(post) && !isSlurpStory(post));
@@ -6626,6 +6772,8 @@ function NoodlerPostComposer({
     format: derivedFormat(),
     postType,
     linkedPostId: linkedPostId ?? null,
+    unlockPrice: access === "locked" ? (unlockPrice ?? null) : null,
+    generateImage: generateImage && !image,
   });
 
   const publish = async () => {
@@ -6794,21 +6942,41 @@ function NoodlerPostComposer({
             onClick: () => toggleTool("media"),
           }}
           trailing={
-            <div ref={accessToolRef} className="relative">
+            <>
               <button
                 type="button"
-                onClick={() => toggleTool("access")}
-                disabled={composerBusy}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] disabled:opacity-50"
-                aria-label={localizeUi("ui.noodle.noodlerpostcomposer.postVisibilityValue", {
-                  value: localizeUi(`ui.noodle.postaccess.${access}`),
+                onClick={() => updateDraft({ generateImage: !generateImage })}
+                disabled={composerBusy || Boolean(image)}
+                aria-pressed={generateImage}
+                title={localizeUi("ui.slurp.composer.aiImageHint", {
+                  defaultValue: "Let the AI create an image for this post from your text.",
                 })}
-                title={localizeUi(`ui.noodle.postaccess.${access}.hint`)}
+                className={cn(
+                  "inline-flex h-9 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold disabled:opacity-50",
+                  generateImage
+                    ? "bg-[var(--noodle-accent)]/15 text-[var(--noodle-accent)]"
+                    : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]",
+                )}
               >
-                <Lock size={13} />
-                {localizeUi(`ui.noodle.postaccess.${access}`)}
+                <Sparkles size={13} />
+                {localizeUi("ui.slurp.composer.aiImage", { defaultValue: "AI image" })}
               </button>
-            </div>
+              <div ref={accessToolRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => toggleTool("access")}
+                  disabled={composerBusy}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] disabled:opacity-50"
+                  aria-label={localizeUi("ui.noodle.noodlerpostcomposer.postVisibilityValue", {
+                    value: localizeUi(`ui.noodle.postaccess.${access}`),
+                  })}
+                  title={localizeUi(`ui.noodle.postaccess.${access}.hint`)}
+                >
+                  <Lock size={13} />
+                  {localizeUi(`ui.noodle.postaccess.${access}`)}
+                </button>
+              </div>
+            </>
           }
         />
       }
@@ -6927,6 +7095,29 @@ function NoodlerPostComposer({
                     </button>
                   ))}
                 </div>
+                {access === "locked" && (
+                  <label className="flex items-center justify-between gap-2 text-xs font-semibold">
+                    {localizeUi("ui.noodle.noodlerpostcomposer.unlockPrice", { defaultValue: "Price" })}
+                    <input
+                      type="number"
+                      min={0}
+                      max={9999}
+                      value={unlockPrice ?? ""}
+                      placeholder={localizeUi("ui.noodle.noodlerpostcomposer.unlockPriceDefault", {
+                        defaultValue: "Creator default",
+                      })}
+                      onChange={(event) =>
+                        updateDraft({
+                          unlockPrice:
+                            event.target.value === ""
+                              ? null
+                              : Math.min(9999, Math.max(0, Math.floor(Number(event.target.value) || 0))),
+                        })
+                      }
+                      className="h-9 w-28 rounded-lg bg-[var(--accent)] px-2 text-sm tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+                    />
+                  </label>
+                )}
               </div>
             </NoodleAnchoredPopover>
           )}
@@ -7174,9 +7365,7 @@ function DisclosureBadge({ mode, detail }: { mode: NoodleIdentityDisclosure | nu
       ? localizeUi("ui.slurp.disclosure.openDetail")
       : mode === "hinted"
         ? localizeUi("ui.slurp.disclosure.hintedDetail")
-        : mode === "secret"
-          ? localizeUi("ui.slurp.disclosure.secretDetail")
-          : localizeUi("ui.slurp.disclosure.setupDetail");
+        : localizeUi("ui.slurp.disclosure.setupDetail");
   return (
     <HelpTooltip
       label={label}
@@ -7480,7 +7669,13 @@ function SlurpStudioView({
 
               {/* What this Creator is posting about, above who is reading it: the thread is the
                   thing the player steers, and the audience is the result. */}
-              {personaId && <SlurpProjectsPanel personaId={personaId} creatorAccountId={creator.id} />}
+              {personaId && (
+                <SlurpProjectsPanel
+                  personaId={personaId}
+                  creatorAccountId={creator.id}
+                  otherCreators={creators.filter((other) => other.id !== creator.id)}
+                />
+              )}
 
               {creator.topFans.length > 0 && (
                 <div>
@@ -8103,11 +8298,14 @@ function SlurpNotificationsView({
   const unseenIds = new Set(unseen.flatMap((entry) => (entry.type === "single" ? [entry.event.id] : entry.ids)));
   const describeEvent = (event: SlurpEventItem) => {
     const { kind, amount, actorLabel } = event;
-    return localizeUi(`ui.slurp.events.single.${kind}`, {
+    const line = localizeUi(`ui.slurp.events.single.${kind}`, {
       defaultValue: kind,
       amount,
       who: actorLabel ?? localizeUi("ui.slurp.events.someone", { defaultValue: "Someone" }),
     });
+    // The free bank's line, when the event carries one. A loss that says why it happened is an
+    // event; the same loss without it is a number moving.
+    return event.note ? `${line} “${event.note}”` : line;
   };
 
   const groupTitle = (kind: SlurpEventItem["kind"]) =>
@@ -8141,6 +8339,8 @@ function SlurpNotificationsView({
       return { icon: MessageCircle, tone: "bg-[var(--noodle-accent)]/14 text-[var(--noodle-accent)]" };
     if (kind === "comment" || kind === "returned" || kind === "audience_arc")
       return { icon: Heart, tone: "bg-sky-500/14 text-sky-300" };
+    if (kind === "arc_phase" || kind === "arc_complete" || kind === "arc_started")
+      return { icon: Star, tone: "bg-amber-500/14 text-amber-300" };
     if (kind === "tip") return { icon: Coins, tone: "bg-emerald-500/14 text-emerald-300" };
     if (kind === "unlock" || kind === "ppv_unlock") return { icon: Lock, tone: "bg-violet-500/14 text-violet-300" };
     if (kind === "subscribed") return { icon: Crown, tone: "bg-fuchsia-500/14 text-fuchsia-300" };

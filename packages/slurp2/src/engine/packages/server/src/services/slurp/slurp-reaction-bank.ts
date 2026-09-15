@@ -68,3 +68,92 @@ export function mergeSlurpReactionBank(
   }
   return out;
 }
+
+/**
+ * The stored bank, keyed by Fan Type.
+ *
+ * `shared` is the old flat list — every legacy array normalises straight into it, which is why the
+ * setting kept its name. `byType` holds what a single Fan Type says and nobody else does.
+ */
+export type SlurpReactionBanks = { shared: string[]; byType: Record<string, string[]> };
+
+/** Below this many bodies of its own, a type also draws from the shared bank. */
+export const SLURP_TYPE_BANK_THIN = 12;
+
+const bodies = (value: unknown, limit: number): string[] => {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  for (const entry of value) {
+    if (out.length >= limit) break;
+    if (typeof entry !== "string") continue;
+    const body = entry.trim();
+    if (body && body.length <= SLURP_REACTION_BANK_MAX_BODY_LENGTH) out.push(body);
+  }
+  return out;
+};
+
+/**
+ * Read whatever is stored as banks.
+ *
+ * Takes the legacy array, the object, or rubbish, and always returns a usable pair. Nothing is
+ * dropped on the way: an install that grew 300 shared bodies keeps all of them under `shared`.
+ */
+export function slurpNormalizeReactionBanks(raw: unknown): SlurpReactionBanks {
+  if (Array.isArray(raw)) return { shared: bodies(raw, 400), byType: {} };
+  const record = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const byType: Record<string, string[]> = {};
+  const rawByType =
+    record.byType && typeof record.byType === "object" ? (record.byType as Record<string, unknown>) : {};
+  for (const [id, value] of Object.entries(rawByType)) {
+    const list = bodies(value, 500);
+    if (list.length > 0) byType[id] = list;
+  }
+  return { shared: bodies(record.shared, 400), byType };
+}
+
+/**
+ * The pool one fan draws from.
+ *
+ * Its own bodies first — the three shipped starters plus whatever the growth run added — and the
+ * shared bank underneath only while the type is still thin. A Troll with a full bank never says
+ * what a Lurker says; a brand-new custom type still has something to say on its first tick.
+ */
+export function slurpReactionBodiesForType(
+  banks: SlurpReactionBanks,
+  fanTypeId: string | null | undefined,
+  starters: readonly string[] = [],
+): string[] {
+  const own = fanTypeId ? [...starters, ...(banks.byType[fanTypeId] ?? [])] : [];
+  if (own.length >= SLURP_TYPE_BANK_THIN) return own;
+  return [...own, ...SLURP_SHIPPED_REACTIONS, ...banks.shared];
+}
+
+/**
+ * Fold one batched growth response into the banks.
+ *
+ * The response is a map of bank id to lines: the fan type ids that were under target, plus
+ * `shared`. Anything not asked for is ignored, every bank is clamped to its own target, and a
+ * response that is malformed, refused, or all duplicates returns the banks unchanged — the growth
+ * run is a nicety and must never damage what already works.
+ */
+export function mergeSlurpReactionBankBatch(
+  banks: SlurpReactionBanks,
+  parsed: unknown,
+  targets: Readonly<Record<string, number>>,
+): SlurpReactionBanks {
+  const record =
+    parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+  let changed = false;
+  const next: SlurpReactionBanks = { shared: banks.shared, byType: { ...banks.byType } };
+  for (const [id, target] of Object.entries(targets)) {
+    const incoming = record[id];
+    if (!Array.isArray(incoming)) continue;
+    const stored = id === "shared" ? banks.shared : (banks.byType[id] ?? []);
+    const merged = mergeSlurpReactionBank(stored, incoming, target);
+    if (merged.length === stored.length) continue;
+    changed = true;
+    if (id === "shared") next.shared = merged;
+    else next.byType[id] = merged;
+  }
+  return changed ? next : banks;
+}

@@ -2,15 +2,15 @@
   "schemaVersion": 2,
   "capabilityApi": {
     "major": 1,
-    "minor": 10
+    "minor": 18
   },
   "builtAgainst": {
     "engineVersion": "2.4.5",
-    "engineCommit": "226247c52c082d8c3aa5853c4ebc8fdd2312516a"
+    "engineCommit": "19bcb60e4a5776448b5e6bc056b86e3e7d35b7af"
   },
   "id": "pixelforge",
   "name": "Pixelforge",
-  "version": "0.16.5",
+  "version": "0.16.8",
   "description": "A walkable pixel-art RPG Experience for Game Mode: your setup preferences generate the world — a cozy village or a sci-fi colony — then explore it, talk to NPCs to drive the story, and let the GM narrate, with World Maps integration and the engine's own combat. Install it, then choose Pixelforge as the Experience when creating a Game Mode chat.",
   "engine": {
     "min": "2.4.5",
@@ -28,7 +28,20 @@
       "game-surface"
     ],
     "gameSurface": {
-      "surfaceClass": "pixelforge-surface"
+      "surfaceClass": "pixelforge-surface",
+      "prepareBeforeStart": true,
+      "setup": {
+        "seed": {
+          "key": "seed"
+        },
+        "config": {
+          "generate": true,
+          "packWanted": true
+        },
+        "requires": {
+          "enableCustomWidgets": false
+        }
+      }
     },
     "assets": {
       "paths": [
@@ -53,8 +66,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "41bf3590eefeae71d9873977868fc644bd25e329d53f9a5acddcbf2d102bb68f",
-      "bytes": 1484552
+      "sha256": "31b4d27deeae31600b41b5b4711bc83fc604a207535ddb40e0d595d5ba45d9a1",
+      "bytes": 1447084
     },
     {
       "path": "tiles.png",

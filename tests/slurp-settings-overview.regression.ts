@@ -33,11 +33,11 @@ async function main() {
   assert.match(settings, /section === "overview"/u);
   assert.match(settings, /const imagesReady = imageConnections\.length > 0 && imageEnabledCreators\.length > 0/u);
   assert.match(settings, /save\(\{ autoPostingScheduleEnabled: true, postsPerDay: value \}\)/u);
-  assert.match(settings, /settings\.fanActivityEnabled \? \(/u);
+  assert.match(settings, /slurpAudiencePresetFor\(settings\)/u);
   assert.match(settings, /<OverviewActivity/u);
   assert.match(settings, /section === "overview" \|\| section === "audience"/u);
   assert.match(english, /"ui\.slurp\.settings\.overview\.activity\.title": "Activity"/u);
-  assert.match(settings, /ui\.slurp\.settings\.audience\.feedExperience/u);
+  assert.match(settings, /<ChoiceRow/u);
   assert.match(shell, /"--slurp-hero"/u);
   assert.match(shell, /"--slurp-nav-active"/u);
   assert.match(english, /"ui\.slurp\.settings\.tabs\.overview": "Overview"/u);
@@ -48,6 +48,27 @@ async function main() {
   assert.match(settings, /section === "ads"/u);
   assert.match(settings, /inlineAdsFrequency/u);
   assert.match(settings, /inlineAdsSteering/u);
+  // Deleting everything cannot be undone, so it needs the typed word, not a default button.
+  assert.match(
+    settings,
+    /showPromptDialog\(\{\s*title: t\("ui\.slurp\.settings\.advanced\.deleteAllConfirmTitle"\)[\s\S]{0,500}?if \(typed\?\.trim\(\) !== "DELETE"\) return;\s*deleteAllData\.mutate/u,
+  );
+  // Lorebook context is opt-in, scoped to Slurp, and never costs a post.
+  assert.match(settings, /update\("enableLorebookContext", value\)/u);
+  const generation = await readFile(
+    "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
+    "utf8",
+  );
+  assert.match(generation, /settings\.enableLorebookContext\s*\?\s*await processLorebooks\(/u);
+  assert.match(generation, /generationTriggers: \["slurp"\],\s*previewOnly: true,/u);
+  assert.match(
+    generation,
+    /\.catch\(\(error: unknown\) => \{\s*logger\.warn\(error, "\[slurp\] Lorebook context failed/u,
+  );
+  assert.match(generation, /"# World lore", protect\(input\.loreContext\)/u);
+  // Carryover to chats is controlled from Slurp itself.
+  assert.match(settings, /ui\.slurp\.settings\.carryover\.title/u);
+  assert.match(settings, /update\(\s*"carryoverModes"/u);
   assert.match(
     shell,
     /data-component="NoodleView\.MobileBottomNav"[\s\S]*data-component="NoodleView\.MobileAccountSwitcher"/u,

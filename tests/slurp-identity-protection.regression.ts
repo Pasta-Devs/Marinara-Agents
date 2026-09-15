@@ -72,6 +72,10 @@ assert.ok(
   "Open is allowed to name the source",
 );
 assert.ok(!stageProfileContainsPublicIdentity({ ...leakyProfile, bio: "Quieter than most." }, identity));
+assert.ok(
+  stageProfileContainsPublicIdentity({ ...leakyProfile, bio: "Quieter than most.", tags: ["Mari Vale"] }, identity),
+  "a custom tag naming the source must be rejected",
+);
 
 // --- normalizedDisclosureWords -----------------------------------------------------------------
 
@@ -108,6 +112,13 @@ const copiedProfile = {
   disclosureMode: "hinted" as const,
 };
 assert.ok(stageProfileContainsSourceDetails(copiedProfile, source), "a copied run of content words is rejected");
+assert.ok(
+  stageProfileContainsSourceDetails(
+    { ...copiedProfile, bio: "Reworded.", tags: ["busy coffee shop near river"] },
+    source,
+  ),
+  "custom tags participate in source-detail leak checks",
+);
 
 // Open is never checked against the source.
 assert.ok(!stageProfileContainsSourceDetails({ ...copiedProfile, disclosureMode: "open" }, source));
@@ -136,8 +147,8 @@ const draft = readFileSync(
 const briefRule = /ignoring short connecting words/gu;
 assert.equal(
   [...draft.matchAll(briefRule)].length,
-  2,
-  "both concealed briefs must state the rule in the validator's own terms",
+  1,
+  "the hinted brief must state the rule in the validator's own terms",
 );
 // stagePersonality is generated here, so this is where it has to be defined.
 assert.match(draft, /stagePersonality is the performance, not the person/u);
