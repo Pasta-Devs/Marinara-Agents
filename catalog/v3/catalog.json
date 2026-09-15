@@ -638,6 +638,1547 @@
     },
     {
       "manifest": {
+        "schemaVersion": 2,
+        "capabilityApi": {
+          "major": 1,
+          "minor": 10
+        },
+        "builtAgainst": {
+          "engineVersion": "2.4.5",
+          "engineCommit": "066f4a0fda92048a18e5c64f82d700ff1e851880"
+        },
+        "id": "gacha-forge",
+        "name": "Gacha Forge",
+        "version": "1.8.0",
+        "description": "A complete gacha game mode. Describe a world and Gacha Forge builds the rest: banners to pull on, a cast the model writes and paints for you, story chapters told by a visual-novel narrator, and the battles, gear and events that grow around them. Install it, restart Marinara Engine when prompted, then open Home → Gacha Forge.",
+        "engine": {
+          "min": "2.4.4",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "client": "client.js",
+          "server": "server.mjs"
+        },
+        "contributions": {
+          "slots": [
+            "home-browser-tab"
+          ],
+          "homeBrowserTab": {
+            "label": "Gacha Forge",
+            "ariaLabel": "Open Gacha Forge",
+            "iconPaths": [
+              "gacha-forge-icon.png"
+            ]
+          },
+          "assets": {
+            "paths": [
+              "gacha-forge-icon.png",
+              "item-aether.webp",
+              "item-coin-event.webp",
+              "item-doctrine-assassin-1.webp",
+              "item-doctrine-assassin-2.webp",
+              "item-doctrine-assassin-3.webp",
+              "item-doctrine-mage-1.webp",
+              "item-doctrine-mage-2.webp",
+              "item-doctrine-mage-3.webp",
+              "item-doctrine-support-1.webp",
+              "item-doctrine-support-2.webp",
+              "item-doctrine-support-3.webp",
+              "item-doctrine-tank-1.webp",
+              "item-doctrine-tank-2.webp",
+              "item-doctrine-tank-3.webp",
+              "item-doctrine-warrior-1.webp",
+              "item-doctrine-warrior-2.webp",
+              "item-doctrine-warrior-3.webp",
+              "item-funds.webp",
+              "item-glimmer.webp",
+              "item-insight-core.webp",
+              "item-insight-prism.webp",
+              "item-insight-shard.webp",
+              "item-mandate-any-1.webp",
+              "item-rank.webp",
+              "item-relic-core.webp",
+              "item-relic-crest.webp",
+              "item-relic-edge.webp",
+              "item-relic-flow.webp",
+              "item-relic.webp",
+              "item-sigil-dark-1.webp",
+              "item-sigil-dark-2.webp",
+              "item-sigil-dark-3.webp",
+              "item-sigil-earth-1.webp",
+              "item-sigil-earth-2.webp",
+              "item-sigil-earth-3.webp",
+              "item-sigil-fire-1.webp",
+              "item-sigil-fire-2.webp",
+              "item-sigil-fire-3.webp",
+              "item-sigil-light-1.webp",
+              "item-sigil-light-2.webp",
+              "item-sigil-light-3.webp",
+              "item-sigil-water-1.webp",
+              "item-sigil-water-2.webp",
+              "item-sigil-water-3.webp",
+              "item-sigil-wind-1.webp",
+              "item-sigil-wind-2.webp",
+              "item-sigil-wind-3.webp",
+              "item-tenet-dark-1.webp",
+              "item-tenet-dark-2.webp",
+              "item-tenet-dark-3.webp",
+              "item-tenet-earth-1.webp",
+              "item-tenet-earth-2.webp",
+              "item-tenet-earth-3.webp",
+              "item-tenet-fire-1.webp",
+              "item-tenet-fire-2.webp",
+              "item-tenet-fire-3.webp",
+              "item-tenet-light-1.webp",
+              "item-tenet-light-2.webp",
+              "item-tenet-light-3.webp",
+              "item-tenet-water-1.webp",
+              "item-tenet-water-2.webp",
+              "item-tenet-water-3.webp",
+              "item-tenet-wind-1.webp",
+              "item-tenet-wind-2.webp",
+              "item-tenet-wind-3.webp",
+              "item-unit.webp",
+              "tower-bg.webp",
+              "modes-story.webp",
+              "modes-materials.webp",
+              "farm-funds.webp",
+              "farm-xp.webp",
+              "farm-relic.webp",
+              "farm-form.webp",
+              "farm-asc.webp",
+              "rot-sigil-fire.webp",
+              "rot-sigil-water.webp",
+              "rot-sigil-wind.webp",
+              "rot-sigil-earth.webp",
+              "rot-sigil-light.webp",
+              "rot-sigil-dark.webp",
+              "rot-doctrine-tank.webp",
+              "rot-doctrine-warrior.webp",
+              "rot-doctrine-mage.webp",
+              "rot-doctrine-support.webp",
+              "rot-doctrine-assassin.webp",
+              "rot-tenet-fire.webp",
+              "rot-tenet-water.webp",
+              "rot-tenet-wind.webp",
+              "rot-tenet-earth.webp",
+              "rot-tenet-light.webp",
+              "rot-tenet-dark.webp",
+              "item-vigor-l.webp",
+              "item-vigor-m.webp",
+              "item-vigor-s.webp",
+              "skill-aoe_damage-dark.webp",
+              "skill-aoe_damage-earth.webp",
+              "skill-aoe_damage-fire.webp",
+              "skill-aoe_damage-light.webp",
+              "skill-aoe_damage-water.webp",
+              "skill-aoe_damage-wind.webp",
+              "skill-attack.webp",
+              "skill-buff-dark-many.webp",
+              "skill-buff-dark-one.webp",
+              "skill-buff-earth-many.webp",
+              "skill-buff-earth-one.webp",
+              "skill-buff-fire-many.webp",
+              "skill-buff-fire-one.webp",
+              "skill-buff-light-many.webp",
+              "skill-buff-light-one.webp",
+              "skill-buff-water-many.webp",
+              "skill-buff-water-one.webp",
+              "skill-buff-wind-many.webp",
+              "skill-buff-wind-one.webp",
+              "skill-cleanse-dark-many.webp",
+              "skill-cleanse-dark-one.webp",
+              "skill-cleanse-earth-many.webp",
+              "skill-cleanse-earth-one.webp",
+              "skill-cleanse-fire-many.webp",
+              "skill-cleanse-fire-one.webp",
+              "skill-cleanse-light-many.webp",
+              "skill-cleanse-light-one.webp",
+              "skill-cleanse-water-many.webp",
+              "skill-cleanse-water-one.webp",
+              "skill-cleanse-wind-many.webp",
+              "skill-cleanse-wind-one.webp",
+              "skill-damage-dark-many.webp",
+              "skill-damage-dark-one.webp",
+              "skill-damage-earth-many.webp",
+              "skill-damage-earth-one.webp",
+              "skill-damage-fire-many.webp",
+              "skill-damage-fire-one.webp",
+              "skill-damage-light-many.webp",
+              "skill-damage-light-one.webp",
+              "skill-damage-water-many.webp",
+              "skill-damage-water-one.webp",
+              "skill-damage-wind-many.webp",
+              "skill-damage-wind-one.webp",
+              "skill-debuff-dark-many.webp",
+              "skill-debuff-dark-one.webp",
+              "skill-debuff-earth-many.webp",
+              "skill-debuff-earth-one.webp",
+              "skill-debuff-fire-many.webp",
+              "skill-debuff-fire-one.webp",
+              "skill-debuff-light-many.webp",
+              "skill-debuff-light-one.webp",
+              "skill-debuff-water-many.webp",
+              "skill-debuff-water-one.webp",
+              "skill-debuff-wind-many.webp",
+              "skill-debuff-wind-one.webp",
+              "skill-defend.webp",
+              "skill-dot-dark-many.webp",
+              "skill-dot-dark-one.webp",
+              "skill-dot-earth-many.webp",
+              "skill-dot-earth-one.webp",
+              "skill-dot-fire-many.webp",
+              "skill-dot-fire-one.webp",
+              "skill-dot-light-many.webp",
+              "skill-dot-light-one.webp",
+              "skill-dot-water-many.webp",
+              "skill-dot-water-one.webp",
+              "skill-dot-wind-many.webp",
+              "skill-dot-wind-one.webp",
+              "skill-drain-dark-many.webp",
+              "skill-drain-dark-one.webp",
+              "skill-drain-earth-many.webp",
+              "skill-drain-earth-one.webp",
+              "skill-drain-fire-many.webp",
+              "skill-drain-fire-one.webp",
+              "skill-drain-light-many.webp",
+              "skill-drain-light-one.webp",
+              "skill-drain-water-many.webp",
+              "skill-drain-water-one.webp",
+              "skill-drain-wind-many.webp",
+              "skill-drain-wind-one.webp",
+              "skill-empty.webp",
+              "skill-energy-dark-many.webp",
+              "skill-energy-dark-one.webp",
+              "skill-energy-earth-many.webp",
+              "skill-energy-earth-one.webp",
+              "skill-energy-fire-many.webp",
+              "skill-energy-fire-one.webp",
+              "skill-energy-light-many.webp",
+              "skill-energy-light-one.webp",
+              "skill-energy-water-many.webp",
+              "skill-energy-water-one.webp",
+              "skill-energy-wind-many.webp",
+              "skill-energy-wind-one.webp",
+              "skill-execute-dark-many.webp",
+              "skill-execute-dark-one.webp",
+              "skill-execute-earth-many.webp",
+              "skill-execute-earth-one.webp",
+              "skill-execute-fire-many.webp",
+              "skill-execute-fire-one.webp",
+              "skill-execute-light-many.webp",
+              "skill-execute-light-one.webp",
+              "skill-execute-water-many.webp",
+              "skill-execute-water-one.webp",
+              "skill-execute-wind-many.webp",
+              "skill-execute-wind-one.webp",
+              "skill-heal-dark-many.webp",
+              "skill-heal-dark-one.webp",
+              "skill-heal-earth-many.webp",
+              "skill-heal-earth-one.webp",
+              "skill-heal-fire-many.webp",
+              "skill-heal-fire-one.webp",
+              "skill-heal-light-many.webp",
+              "skill-heal-light-one.webp",
+              "skill-heal-water-many.webp",
+              "skill-heal-water-one.webp",
+              "skill-heal-wind-many.webp",
+              "skill-heal-wind-one.webp",
+              "skill-item.webp",
+              "skill-revive-dark.webp",
+              "skill-revive-earth.webp",
+              "skill-revive-fire.webp",
+              "skill-revive-light.webp",
+              "skill-revive-water.webp",
+              "skill-revive-wind.webp",
+              "skill-row.webp",
+              "skill-shield-dark-many.webp",
+              "skill-shield-dark-one.webp",
+              "skill-shield-earth-many.webp",
+              "skill-shield-earth-one.webp",
+              "skill-shield-fire-many.webp",
+              "skill-shield-fire-one.webp",
+              "skill-shield-light-many.webp",
+              "skill-shield-light-one.webp",
+              "skill-shield-water-many.webp",
+              "skill-shield-water-one.webp",
+              "skill-shield-wind-many.webp",
+              "skill-shield-wind-one.webp",
+              "skill-stun-dark-many.webp",
+              "skill-stun-dark-one.webp",
+              "skill-stun-earth-many.webp",
+              "skill-stun-earth-one.webp",
+              "skill-stun-fire-many.webp",
+              "skill-stun-fire-one.webp",
+              "skill-stun-light-many.webp",
+              "skill-stun-light-one.webp",
+              "skill-stun-water-many.webp",
+              "skill-stun-water-one.webp",
+              "skill-stun-wind-many.webp",
+              "skill-stun-wind-one.webp"
+            ]
+          }
+        },
+        "permissions": [
+          "network",
+          "routes",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true,
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "d7d6dbd7529523956209497412c8d8db06274b17d78e1bc9f63598f6bddc4b75",
+            "bytes": 777
+          },
+          {
+            "path": "client.js",
+            "sha256": "a6787c9bc6e7d75fb720f408b0023396fb599034c398468844259ae63555400e",
+            "bytes": 1401939
+          },
+          {
+            "path": "farm-asc.webp",
+            "sha256": "261bbddf41407fc820a7cf504e46824e78c19056ef7686271d1ac78ee9772cd5",
+            "bytes": 31484
+          },
+          {
+            "path": "farm-form.webp",
+            "sha256": "ad753da8302cd65a3d9a53cc4431868ca6378103cfecebb954b100bc2b07c1ea",
+            "bytes": 92344
+          },
+          {
+            "path": "farm-funds.webp",
+            "sha256": "b16bd8aa634d16591de85a4a2fdc71152860bf99afefc6233bf44fdd405d47ea",
+            "bytes": 153118
+          },
+          {
+            "path": "farm-relic.webp",
+            "sha256": "b1eec406633e558a577af16dd159b9e72024053b0363b8096180a4cf6f201c15",
+            "bytes": 45720
+          },
+          {
+            "path": "farm-xp.webp",
+            "sha256": "f29aeed98c00b3e47e8967284874af24a615609ce4949320f8d665793f07a9a8",
+            "bytes": 50094
+          },
+          {
+            "path": "gacha-forge-icon.png",
+            "sha256": "1352f478b6b7ae2e9eeb127b6e7b31183e0a2a8ca892999c2f0404aafbdbead4",
+            "bytes": 5352
+          },
+          {
+            "path": "item-aether.webp",
+            "sha256": "5e6e339a8ba8adef8e2eabafd6a744ba3e1786dbc87e57da8284e4ea53ae9cf0",
+            "bytes": 8200
+          },
+          {
+            "path": "item-coin-event.webp",
+            "sha256": "0a20ba6b7579fb8e0fa2d24d10ffa541cdda55aebbdd800c83828335f3a8079a",
+            "bytes": 11496
+          },
+          {
+            "path": "item-doctrine-assassin-1.webp",
+            "sha256": "bc9e3efb7116143ef1c5a3a4f7a5f79debe1c8a36f0184b1a2799703ab26401f",
+            "bytes": 22388
+          },
+          {
+            "path": "item-doctrine-assassin-2.webp",
+            "sha256": "5039bd14089a9e0f70c2f6bd0d9afe65298a17ac0ab45c1a822e345115109ebb",
+            "bytes": 18530
+          },
+          {
+            "path": "item-doctrine-assassin-3.webp",
+            "sha256": "729e3b66325fb6baad96fff12fc7e7303113a5b9c069052445654def5ee0a51a",
+            "bytes": 26844
+          },
+          {
+            "path": "item-doctrine-mage-1.webp",
+            "sha256": "e58d9ebab685dbaaea484b18820f383e936a9b4461295cc5f96a2c3ba40d0ab5",
+            "bytes": 15414
+          },
+          {
+            "path": "item-doctrine-mage-2.webp",
+            "sha256": "996b816c4f2b91913bf4c3d6362ba79b96ac21786bcf867d7d3c1122fa393e28",
+            "bytes": 17262
+          },
+          {
+            "path": "item-doctrine-mage-3.webp",
+            "sha256": "d852e858fa936bcc828e5287d572b69a155a434bbdc5f2bcff66a93626ad5c62",
+            "bytes": 20440
+          },
+          {
+            "path": "item-doctrine-support-1.webp",
+            "sha256": "4b1b901e2914a7c73e1e52c0397bbc3eb9e33cef04b34b8ab1c891d9aea4f730",
+            "bytes": 17888
+          },
+          {
+            "path": "item-doctrine-support-2.webp",
+            "sha256": "ef895efa0ca7200037efb28dc244d52ee91553f7fdca56e294e030808e5d19b7",
+            "bytes": 17822
+          },
+          {
+            "path": "item-doctrine-support-3.webp",
+            "sha256": "ad2b2e8eab95763a726d68b0e87e5a6f1012d85faee7df120db83383da6f76dc",
+            "bytes": 13214
+          },
+          {
+            "path": "item-doctrine-tank-1.webp",
+            "sha256": "79ec783965fa5178d0d8efd3d459eb461a5e29a12b68772da0915c5384924b36",
+            "bytes": 10898
+          },
+          {
+            "path": "item-doctrine-tank-2.webp",
+            "sha256": "2e3b1e8c7fab90a3b66e2525ccdf5e5fdb4c829ab7f0f5e5fde83d0f00ea8a31",
+            "bytes": 13460
+          },
+          {
+            "path": "item-doctrine-tank-3.webp",
+            "sha256": "c49cf188d8927fa281702e3613f74e7fa0129a56f9a3cae3db95371ad5476947",
+            "bytes": 16212
+          },
+          {
+            "path": "item-doctrine-warrior-1.webp",
+            "sha256": "385efd2fd90ec040c237f3f96a5836a95f8ae1225a5115a788eddc27271ba007",
+            "bytes": 26522
+          },
+          {
+            "path": "item-doctrine-warrior-2.webp",
+            "sha256": "11c91bcc6735be85b8369373d31762528ecfc5cd8094580678511130513f064b",
+            "bytes": 13684
+          },
+          {
+            "path": "item-doctrine-warrior-3.webp",
+            "sha256": "d3e7ebbc68fd3c11f7cd33daaad1fa8b009628dac2fbfa71bf45187bc2b83f0c",
+            "bytes": 16190
+          },
+          {
+            "path": "item-funds.webp",
+            "sha256": "5851989c0ffe05e76beff55c1794da6f8b35d2808ab5494b1473b40b4b5afc59",
+            "bytes": 19856
+          },
+          {
+            "path": "item-glimmer.webp",
+            "sha256": "de0260398301d67fc3f268fd05544f96f120fa1ed884c38230a9dd5d5d2b635f",
+            "bytes": 11804
+          },
+          {
+            "path": "item-insight-core.webp",
+            "sha256": "e903771e43883ee22beb2946afc4ca63977e07a57680c8e0355297698819dfa8",
+            "bytes": 24690
+          },
+          {
+            "path": "item-insight-prism.webp",
+            "sha256": "6b16945858eb6e4f30c6e5c7bbfb4e7328765274a556160b5d918bcf2fef9630",
+            "bytes": 13490
+          },
+          {
+            "path": "item-insight-shard.webp",
+            "sha256": "fc4c20f77425d7c97946d6fa2f122f0ef42784ff040e81a152d523574bfe3a58",
+            "bytes": 7652
+          },
+          {
+            "path": "item-mandate-any-1.webp",
+            "sha256": "d1c90347a0a35aabbea696a06e08b3f73113f4ae04f10ae7ee5239591cf81032",
+            "bytes": 12530
+          },
+          {
+            "path": "item-rank.webp",
+            "sha256": "0e3b5c3f7c4a1ba23216e5e4a6b0f35390409e36863825ef00dbf061f468d018",
+            "bytes": 23338
+          },
+          {
+            "path": "item-relic-core.webp",
+            "sha256": "4e2bf1f96ab16d758b70aae41f2802385ef0e544e03383d7214c58ff5c13fc79",
+            "bytes": 19052
+          },
+          {
+            "path": "item-relic-crest.webp",
+            "sha256": "dbb2122654a1ce67dd94c639fa9eaec06b87f7efe81239b672102095c86a6132",
+            "bytes": 10892
+          },
+          {
+            "path": "item-relic-edge.webp",
+            "sha256": "2f2ea9ba7483c115a8f2b4c0cf2c90fb6fd4ebb3a7a843074045dea763618353",
+            "bytes": 7690
+          },
+          {
+            "path": "item-relic-flow.webp",
+            "sha256": "62dc6e8a510c187a8d706066f2c717dfac939d2ad907cd515f198f3c41424235",
+            "bytes": 9528
+          },
+          {
+            "path": "item-relic.webp",
+            "sha256": "b629a4cc5692abf99567bf7a1a2cbdcc20ffae5d4a6c68948b7cfa1880d495eb",
+            "bytes": 14382
+          },
+          {
+            "path": "item-sigil-dark-1.webp",
+            "sha256": "530358a3de09f5108d49255a2713bb56751da21f0a77097e20a9e1cd74a1495c",
+            "bytes": 19998
+          },
+          {
+            "path": "item-sigil-dark-2.webp",
+            "sha256": "b83ceb55b0fb5a8ceea9cae12121749eaa70b5bcecf1352be0def11f283c7439",
+            "bytes": 22722
+          },
+          {
+            "path": "item-sigil-dark-3.webp",
+            "sha256": "acb10403b3c47114b04225155b546668e18cd3d3ba51b8b216eb0442294f4c21",
+            "bytes": 24392
+          },
+          {
+            "path": "item-sigil-earth-1.webp",
+            "sha256": "ffb6e8016a1d61585dd5247e690a2dbe87ebf45427f4c3c8319926b964109cb4",
+            "bytes": 19950
+          },
+          {
+            "path": "item-sigil-earth-2.webp",
+            "sha256": "6075a8c05404574cb73b7671949b4c6c00e0503636a0564c0fdcc19743c3de8b",
+            "bytes": 21112
+          },
+          {
+            "path": "item-sigil-earth-3.webp",
+            "sha256": "9f4ec12db45e17ae21067c4902270d8651ae02d724ac33a245c14e571d458e3d",
+            "bytes": 19544
+          },
+          {
+            "path": "item-sigil-fire-1.webp",
+            "sha256": "c9c1a8f87371b4dcc9d0315689f8418731b9d2494d51878c6882814f4827ea7a",
+            "bytes": 17828
+          },
+          {
+            "path": "item-sigil-fire-2.webp",
+            "sha256": "0ed422e2a814aafc01f2788e1e4f1b703a2c1c8ffc6cde79b4e6c8ece39f0afa",
+            "bytes": 19924
+          },
+          {
+            "path": "item-sigil-fire-3.webp",
+            "sha256": "d2c09f5e397aeeac1a9d1a7ed949f2a1f68f2d3e8c139f35dcf9147dcedcf7f7",
+            "bytes": 22840
+          },
+          {
+            "path": "item-sigil-light-1.webp",
+            "sha256": "482d5c8c47ed69260a7cde7af92ea2bf68cb7ea23b1cb5eea2588f1c67daaec1",
+            "bytes": 22872
+          },
+          {
+            "path": "item-sigil-light-2.webp",
+            "sha256": "3aef7a4d5c4b1ff76d8ce3f74db1bcdb282bfe4a354d055b1427b4982b36ae24",
+            "bytes": 23126
+          },
+          {
+            "path": "item-sigil-light-3.webp",
+            "sha256": "fbe25a37bd656ecb5d2329155dd0dfa582a14899a132134c85afa2e6209bfcef",
+            "bytes": 20012
+          },
+          {
+            "path": "item-sigil-water-1.webp",
+            "sha256": "52193acb1bb0cda59e02e3e314aeabd647a5d411e3dad96db18ac65db4809d87",
+            "bytes": 21034
+          },
+          {
+            "path": "item-sigil-water-2.webp",
+            "sha256": "633b96573e412aab5d10e38c302cf3c2c348bdc08b3f567618c307dc9e43fa31",
+            "bytes": 22490
+          },
+          {
+            "path": "item-sigil-water-3.webp",
+            "sha256": "629a856388f225393deee3bf98c15973b81b3d9661d59d75695c102746375634",
+            "bytes": 16964
+          },
+          {
+            "path": "item-sigil-wind-1.webp",
+            "sha256": "8843685f72ad2af6f304b0501f39227ccde69d10e80ddf0d76fd27ffe68675ea",
+            "bytes": 18136
+          },
+          {
+            "path": "item-sigil-wind-2.webp",
+            "sha256": "27bba734e123d75d9e2de5a76b5cac055ebacf34b4b2f9dc62efa4a0a2e4c3ed",
+            "bytes": 21674
+          },
+          {
+            "path": "item-sigil-wind-3.webp",
+            "sha256": "fa1eeebdfdeca1de7974504d76ee888d562459c0804d248972a82b45f54b96ba",
+            "bytes": 23270
+          },
+          {
+            "path": "item-tenet-dark-1.webp",
+            "sha256": "2395028e44604b6dfaa3fbf000f274e8044f1e75f28fdb7072f78b070d59f250",
+            "bytes": 15038
+          },
+          {
+            "path": "item-tenet-dark-2.webp",
+            "sha256": "8975e742e83ed8cfcbc86f4d92c57d3ad88b2865e49f1d56920b1db386701c7f",
+            "bytes": 18204
+          },
+          {
+            "path": "item-tenet-dark-3.webp",
+            "sha256": "03a099fa00baf1d07582b984e35843725be056ff15656fa7a60dcc20a35f9de8",
+            "bytes": 19830
+          },
+          {
+            "path": "item-tenet-earth-1.webp",
+            "sha256": "1271f4b2e027df29607adaaed0bea4978b227d910133c17166b249e3e562a9ab",
+            "bytes": 17136
+          },
+          {
+            "path": "item-tenet-earth-2.webp",
+            "sha256": "8f4328aae8f882722df888613c5d8248fe9f5ce544fb6e95ff82151f81b97a7f",
+            "bytes": 21318
+          },
+          {
+            "path": "item-tenet-earth-3.webp",
+            "sha256": "5cf638081af7094ac028e42850b651f79274fa39824dcb2936a2d490cd24aaa6",
+            "bytes": 20382
+          },
+          {
+            "path": "item-tenet-fire-1.webp",
+            "sha256": "17167f451aab0e8fd12e038c58fede57ae7c8a3f15e807029b74f4b35cd54f5f",
+            "bytes": 10138
+          },
+          {
+            "path": "item-tenet-fire-2.webp",
+            "sha256": "49f5cdd41d77d03350e99f56ae309e20da396b7512081d72533ce5495540c002",
+            "bytes": 14416
+          },
+          {
+            "path": "item-tenet-fire-3.webp",
+            "sha256": "310849b8c167144b4e15f859639b4da3d5171d430dfdc5bc198f5745dd39abb2",
+            "bytes": 22458
+          },
+          {
+            "path": "item-tenet-light-1.webp",
+            "sha256": "dde745723adcd3b7c31b4a8c4f511c6efa1d708bea09a73a5ff89836bcdfeed8",
+            "bytes": 11214
+          },
+          {
+            "path": "item-tenet-light-2.webp",
+            "sha256": "89cb524b2dac9f0d6a5d96892b67c8a27d89643f4820fbd42f5e78db365c9655",
+            "bytes": 9916
+          },
+          {
+            "path": "item-tenet-light-3.webp",
+            "sha256": "cbedbd0f70e2f334bac0caf3f069a45ad48a9c490c212c2582b7fa0c7d39c7dd",
+            "bytes": 26316
+          },
+          {
+            "path": "item-tenet-water-1.webp",
+            "sha256": "bf4b592db57bdbf08e04025858c2d969d4f0e680b5005d1fad7c2f0ee0b75543",
+            "bytes": 9742
+          },
+          {
+            "path": "item-tenet-water-2.webp",
+            "sha256": "27a76d64a35b7f4f989a1791834cffc642a1fb7b96a8d3c267545dd488bafdc8",
+            "bytes": 18216
+          },
+          {
+            "path": "item-tenet-water-3.webp",
+            "sha256": "e04af37939df9310642572ae41e2ab842022d1d5ff6c3a403c9aaac15c08a7a8",
+            "bytes": 24686
+          },
+          {
+            "path": "item-tenet-wind-1.webp",
+            "sha256": "f10e30b33ee69178e23f9ea0248e551398ef1b8d0f5c58f3297a093186882493",
+            "bytes": 14724
+          },
+          {
+            "path": "item-tenet-wind-2.webp",
+            "sha256": "b2dba122265a7c0985df75f8f9ebf4023f82764a78560089271d9fa3430c93a0",
+            "bytes": 12864
+          },
+          {
+            "path": "item-tenet-wind-3.webp",
+            "sha256": "1cf50c7d3fe720f236311b2bc1764ca27d348fcf3ac91a649939995758a8debc",
+            "bytes": 27522
+          },
+          {
+            "path": "item-unit.webp",
+            "sha256": "706cd7c4e68d3bf829d95622db8a499fdf9b4667cb2ab9b21a94846941c2fcf2",
+            "bytes": 13190
+          },
+          {
+            "path": "item-vigor-l.webp",
+            "sha256": "26288972cb866f150b56d58b056168444a211c9f5954898806f102687d1eaf31",
+            "bytes": 9618
+          },
+          {
+            "path": "item-vigor-m.webp",
+            "sha256": "cdd1b178aa61309c8469ea70f20cc9a2f09e3df1de56d119b08e9956d5522049",
+            "bytes": 11462
+          },
+          {
+            "path": "item-vigor-s.webp",
+            "sha256": "09bb4a2c456938f0c1817580f13414c3888099c84862272ed7e5b6d381b3dda3",
+            "bytes": 6488
+          },
+          {
+            "path": "modes-materials.webp",
+            "sha256": "d65184fabaaa6a52ecb55b97c71f8c4c6c4be2455fafd5561748112135581043",
+            "bytes": 98434
+          },
+          {
+            "path": "modes-story.webp",
+            "sha256": "e33fd293140f389ad1ca9ced1114d7cd6eb41ed5dadd70d9439dc3c8bc2f35da",
+            "bytes": 37624
+          },
+          {
+            "path": "rot-doctrine-assassin.webp",
+            "sha256": "b711651ae3ba95f78d214f31df6a68ea4d5a0627a3cd47646648749a11a23e26",
+            "bytes": 46962
+          },
+          {
+            "path": "rot-doctrine-mage.webp",
+            "sha256": "f0d0f24ef9ae9f81e353ddd75208ef37b1c83b71afaf4c9cf3dc3bccc712ce39",
+            "bytes": 57104
+          },
+          {
+            "path": "rot-doctrine-support.webp",
+            "sha256": "fb5e1709623b280b16a1b34123d8e97385b991ea1c37c9a0b07442e4216a22d5",
+            "bytes": 43148
+          },
+          {
+            "path": "rot-doctrine-tank.webp",
+            "sha256": "4f895f6308664302950c299cb5acc151656e637d6aa5c595e848d101fa483de5",
+            "bytes": 68526
+          },
+          {
+            "path": "rot-doctrine-warrior.webp",
+            "sha256": "c9d82c6ce1bf86768ba27ecbf27111f1534fe007d36f0ae6d3b15dc819b97c77",
+            "bytes": 30846
+          },
+          {
+            "path": "rot-sigil-dark.webp",
+            "sha256": "a049fa9960b40d0a17cffab0bdf49cb168d36b47d4b4ba50ae857d58879e95c8",
+            "bytes": 41620
+          },
+          {
+            "path": "rot-sigil-earth.webp",
+            "sha256": "dff65809caca1c9cfd155fd02b8277c44b71dde523776100e9499858b9efaaac",
+            "bytes": 41424
+          },
+          {
+            "path": "rot-sigil-fire.webp",
+            "sha256": "e6d4683133ad1e47b6865d36f6d0e8bae159ae7187895c6de6b63d66c3c4e8c7",
+            "bytes": 41666
+          },
+          {
+            "path": "rot-sigil-light.webp",
+            "sha256": "ebd3df14ce414da5e011d9e25a422c52197afb0c675f57fc071c3437ed6559fa",
+            "bytes": 66912
+          },
+          {
+            "path": "rot-sigil-water.webp",
+            "sha256": "267c916935ea82285dd7c662bc15aa3f550705c572a1b7bf32b12b002730fb5e",
+            "bytes": 37166
+          },
+          {
+            "path": "rot-sigil-wind.webp",
+            "sha256": "08799a0670b5c30c2056de77dd3caee66a32e30c219e31b1f5db2fddd8f8f0f1",
+            "bytes": 36550
+          },
+          {
+            "path": "rot-tenet-dark.webp",
+            "sha256": "467ff506934302f516eba6ba2a242ea7c4f02b35474445f5a29390963b0af693",
+            "bytes": 28528
+          },
+          {
+            "path": "rot-tenet-earth.webp",
+            "sha256": "697e0d3f9fc38af3329bc98368a072a8a258bc9c16c173997b56c193d0c35a26",
+            "bytes": 69376
+          },
+          {
+            "path": "rot-tenet-fire.webp",
+            "sha256": "55c3b2b0ab26370d087422c2f5a238c1026ecc7c7df39bc613400f9207c25210",
+            "bytes": 53978
+          },
+          {
+            "path": "rot-tenet-light.webp",
+            "sha256": "363c6b549b45c98a8749d67dbcc95d0295500b0764bdf4f4bd24287508cf48b9",
+            "bytes": 67410
+          },
+          {
+            "path": "rot-tenet-water.webp",
+            "sha256": "69950bec1387a8522b1b11c5afce2bfbd3f2b041f5cdd5b51d620d5b70e7fb37",
+            "bytes": 40846
+          },
+          {
+            "path": "rot-tenet-wind.webp",
+            "sha256": "1a8deec7bc74b310e3c899e67e5a27cdce758bb7c12f496a169af9a54def19e6",
+            "bytes": 67484
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "49b1719985fba58f00254ae93c1a99bb58cc5f814573e7a8c8f00d8b949d06fb",
+            "bytes": 476270
+          },
+          {
+            "path": "skill-aoe_damage-dark.webp",
+            "sha256": "01d183600992cffd46caa3e92217d23b2b1cf61daa3dbd914a9ff7a8b418d1af",
+            "bytes": 15126
+          },
+          {
+            "path": "skill-aoe_damage-earth.webp",
+            "sha256": "37a27535f023c4f553cea8ca532b54615635e46692c72335076426356a7d3e75",
+            "bytes": 18456
+          },
+          {
+            "path": "skill-aoe_damage-fire.webp",
+            "sha256": "62029b53311e472b6714b452940031ca931017f4022c4d3ffc59718ff07a3764",
+            "bytes": 18888
+          },
+          {
+            "path": "skill-aoe_damage-light.webp",
+            "sha256": "d5ff36203ea1d01fef9dff6a99fc041e747fac5d5a7a79d59a285cae3e8f04f9",
+            "bytes": 24092
+          },
+          {
+            "path": "skill-aoe_damage-water.webp",
+            "sha256": "2e430df6f0da94124c5a3fc42833a767146bcc2fab86f6942b3abe758a937f71",
+            "bytes": 16318
+          },
+          {
+            "path": "skill-aoe_damage-wind.webp",
+            "sha256": "d082e7c4932909d8858e2a757e0d41ca95b3d0cc19827addfa0527989d28ecb3",
+            "bytes": 21688
+          },
+          {
+            "path": "skill-attack.webp",
+            "sha256": "16d43e09896fc84a933cbf0fb8e5620966c0b75e98bdec1595b45a4c9a6a5404",
+            "bytes": 15192
+          },
+          {
+            "path": "skill-buff-dark-many.webp",
+            "sha256": "d20ac7a0d6dc101eaefca19b61657c91febc815eda71656f747f3e30e6cabd10",
+            "bytes": 20562
+          },
+          {
+            "path": "skill-buff-dark-one.webp",
+            "sha256": "622a6cea24df9c0834680835d8ebf56cf7374a7122e14491e39f2664d5786197",
+            "bytes": 15852
+          },
+          {
+            "path": "skill-buff-earth-many.webp",
+            "sha256": "e8efbe2cc577848962b51e2f9a3585cd9dcfc26ce6645b61792dac7798e4e598",
+            "bytes": 30096
+          },
+          {
+            "path": "skill-buff-earth-one.webp",
+            "sha256": "95616033d9898a7667fc94c445fd4d8943dd0bb7d9c0ffdf3b9668b4ac1c27ec",
+            "bytes": 16648
+          },
+          {
+            "path": "skill-buff-fire-many.webp",
+            "sha256": "f3d509b078e9f162aa0c09b7a232f41f056df1ad958ce535930c64bd39f2c227",
+            "bytes": 29494
+          },
+          {
+            "path": "skill-buff-fire-one.webp",
+            "sha256": "83228f4c9d100c4b49ba0d57927b3d7b95b0f05fbda8f09019862ee5bf79985a",
+            "bytes": 21964
+          },
+          {
+            "path": "skill-buff-light-many.webp",
+            "sha256": "d35ab82a92453ef6262e80689fd13344203c7706a2f8915e80abc2afe4c7aa87",
+            "bytes": 21674
+          },
+          {
+            "path": "skill-buff-light-one.webp",
+            "sha256": "89678fb534a0bde483b92208113a34bdf3b082662dd5c21e0c65167ce80ed175",
+            "bytes": 17294
+          },
+          {
+            "path": "skill-buff-water-many.webp",
+            "sha256": "46ec969b6c4ff9edd7a3cb5dcfe7189491e24f628951d46110b3295cfdba7da0",
+            "bytes": 25726
+          },
+          {
+            "path": "skill-buff-water-one.webp",
+            "sha256": "685287f82b353c7d5632f7e953c9b3277a47a7888c714c4f64115f1e81491d4a",
+            "bytes": 16184
+          },
+          {
+            "path": "skill-buff-wind-many.webp",
+            "sha256": "a8510358befe60ac7e1d81bcdec4ba2855fd890cb790387be9d4d9b07c80257f",
+            "bytes": 25998
+          },
+          {
+            "path": "skill-buff-wind-one.webp",
+            "sha256": "d7c109d1845fa45ba7adb27d7dd79782e0bb05f5d68d269bc4794e6a55ae6900",
+            "bytes": 24930
+          },
+          {
+            "path": "skill-cleanse-dark-many.webp",
+            "sha256": "f5b595c55e0ff1f9c71e2167cd65aefe23bc2663ea3d3756b7985e25d7380815",
+            "bytes": 19944
+          },
+          {
+            "path": "skill-cleanse-dark-one.webp",
+            "sha256": "4294ee396143d0e2ccca374425ee532d3368c5c0df9d6609edf85e886e2585b7",
+            "bytes": 17458
+          },
+          {
+            "path": "skill-cleanse-earth-many.webp",
+            "sha256": "734dc6bc19974749ae23a5b60f61d951fe57281ebc5d6488bc04596871152c61",
+            "bytes": 23940
+          },
+          {
+            "path": "skill-cleanse-earth-one.webp",
+            "sha256": "0a10f245ad875960a9187cbd3bd1870caf31683781100885b3320f4a53ce5808",
+            "bytes": 26720
+          },
+          {
+            "path": "skill-cleanse-fire-many.webp",
+            "sha256": "a921baeeeebade8508d1f21317c84184f1896f2139043813a2717f2bea46507b",
+            "bytes": 24526
+          },
+          {
+            "path": "skill-cleanse-fire-one.webp",
+            "sha256": "b4fb52d03527fd216581b08152c504326180e73942aa9ab6e1d28fa4c03d3f88",
+            "bytes": 38448
+          },
+          {
+            "path": "skill-cleanse-light-many.webp",
+            "sha256": "bf7b6487251e956ae126f21d4775223861c7c3455da6f80707a166d29a9ebee3",
+            "bytes": 25536
+          },
+          {
+            "path": "skill-cleanse-light-one.webp",
+            "sha256": "24d6dcf2bcb4c2bbe77fbe8ba3b6f2bbd4f6757829766e0d3adeda838b514327",
+            "bytes": 29570
+          },
+          {
+            "path": "skill-cleanse-water-many.webp",
+            "sha256": "d7eacbf67c8b19a8b2daa7350f06a4c611a16d51e5ad1d400fd7624900b2a8ca",
+            "bytes": 28632
+          },
+          {
+            "path": "skill-cleanse-water-one.webp",
+            "sha256": "e983fbd40c234bf0ae4c1c1d6571103226f3283e2b666dc7703b5f011adfbc8a",
+            "bytes": 19614
+          },
+          {
+            "path": "skill-cleanse-wind-many.webp",
+            "sha256": "94f026f82cb7d1b233a719fe6a1b3e6f52df905ca4d46de8914ebec3afce93cb",
+            "bytes": 22346
+          },
+          {
+            "path": "skill-cleanse-wind-one.webp",
+            "sha256": "d455f4be90a8efd1538e81cbb9da4a8630d96861154c9f223685331492defe53",
+            "bytes": 23600
+          },
+          {
+            "path": "skill-damage-dark-many.webp",
+            "sha256": "b8f19c6cdbf3c6090e2df2b7f8eab5cead8bc19a0aa297d1ec35c0e14dc471d8",
+            "bytes": 20096
+          },
+          {
+            "path": "skill-damage-dark-one.webp",
+            "sha256": "18019fb60bf29c9eaac03cc97038faf0aefd8b85494b6b6ba2b88782e547625a",
+            "bytes": 15190
+          },
+          {
+            "path": "skill-damage-earth-many.webp",
+            "sha256": "8a2ede254f66c9ae160242628710a9571eb1f4570c4fa8021bebfafa714a5618",
+            "bytes": 19046
+          },
+          {
+            "path": "skill-damage-earth-one.webp",
+            "sha256": "be6462cfb632192a520a12748229fe0a0854f4fa5bd085fb7fe229a03b864f02",
+            "bytes": 14808
+          },
+          {
+            "path": "skill-damage-fire-many.webp",
+            "sha256": "51352050bf1715f0e7290398afbc5b324ea4e35d0252217d11204900783692a2",
+            "bytes": 22742
+          },
+          {
+            "path": "skill-damage-fire-one.webp",
+            "sha256": "2140945125c78212fe31d0a131ca4b77518e16cb0db6c30f3cef0c2ec580598a",
+            "bytes": 21568
+          },
+          {
+            "path": "skill-damage-light-many.webp",
+            "sha256": "a8d07cf1ac2b9b2e24b6a49b9ecfcda801155b3e495de7ec2ed6d0407a79667a",
+            "bytes": 28512
+          },
+          {
+            "path": "skill-damage-light-one.webp",
+            "sha256": "0cd057f72e064f05d8d9674193ce475eec4c00f4637fa645eadeddb612595ca7",
+            "bytes": 12566
+          },
+          {
+            "path": "skill-damage-water-many.webp",
+            "sha256": "4de386c23a7e1fd3623f6b08d0c872c6f73e444fae9fbec604ef7e649470b445",
+            "bytes": 18994
+          },
+          {
+            "path": "skill-damage-water-one.webp",
+            "sha256": "7e25047093e74075cb531739b4d5e40ae8a20d49e8490e59e13a49c26186d8c5",
+            "bytes": 14272
+          },
+          {
+            "path": "skill-damage-wind-many.webp",
+            "sha256": "0623e8317c813a4f7ddfd14c01ade980d0941746182f56daf17c747dbf923f48",
+            "bytes": 19250
+          },
+          {
+            "path": "skill-damage-wind-one.webp",
+            "sha256": "0e7c023faca468ba710416a2354d054fffc9e1c5691f049a0630a57c96073591",
+            "bytes": 23192
+          },
+          {
+            "path": "skill-debuff-dark-many.webp",
+            "sha256": "c2576c123198382eb564ac9c5a350d5eef9dc8e68d69212f3cc9de391f249767",
+            "bytes": 17130
+          },
+          {
+            "path": "skill-debuff-dark-one.webp",
+            "sha256": "1a1995677c9b14abc790877a8bcbcd8ecf6f3e8fdd7e7f44bf824cd074e00f01",
+            "bytes": 18184
+          },
+          {
+            "path": "skill-debuff-earth-many.webp",
+            "sha256": "a27f90a07009fb23c82103bb5bcc1d212ee821e849bead77d596356b0f84f7b8",
+            "bytes": 24724
+          },
+          {
+            "path": "skill-debuff-earth-one.webp",
+            "sha256": "5bb1c6839bfff9ffa354cc091b2ab99976384a47e0603192a2a362f302f3a345",
+            "bytes": 13924
+          },
+          {
+            "path": "skill-debuff-fire-many.webp",
+            "sha256": "d4c102749d5bac3251d9b05a9d0689a0a8665a06b292b81e5fa5e30e75327b90",
+            "bytes": 25028
+          },
+          {
+            "path": "skill-debuff-fire-one.webp",
+            "sha256": "84f021470af7b509a633c759303c2c6533de75540b8b1836421427af8906284a",
+            "bytes": 19046
+          },
+          {
+            "path": "skill-debuff-light-many.webp",
+            "sha256": "fd4183385bb2791682c7c8222dcf486f83e448c0292fbdad7679b3b4ec04fa3a",
+            "bytes": 23476
+          },
+          {
+            "path": "skill-debuff-light-one.webp",
+            "sha256": "04fb49bf4cdbd655f9f574cc694e15a70040f544df764a1f4d81cf167419db52",
+            "bytes": 19028
+          },
+          {
+            "path": "skill-debuff-water-many.webp",
+            "sha256": "bf0999f9a5eeed1c0dffc587c3ee22bd0d49da444aff98e00910d0e7ed684ed5",
+            "bytes": 21060
+          },
+          {
+            "path": "skill-debuff-water-one.webp",
+            "sha256": "4d33545014d23f762bdda927c259dd5bb6dd08df3f8f84dd648b7cdf5e6c07c2",
+            "bytes": 17200
+          },
+          {
+            "path": "skill-debuff-wind-many.webp",
+            "sha256": "b5c8c029587c2c620a0cbbcc29a99d110bb0d65b7cabf8e693ddb3d4c98f5df0",
+            "bytes": 25250
+          },
+          {
+            "path": "skill-debuff-wind-one.webp",
+            "sha256": "db0a3433fa702b2c5c9cd311eeebff746316228221613239dd90fe269f89661e",
+            "bytes": 22312
+          },
+          {
+            "path": "skill-defend.webp",
+            "sha256": "afddf66468ce5ea4780405358dc45b3a0bfadf211afdd84b678b91a42d2a9b93",
+            "bytes": 20220
+          },
+          {
+            "path": "skill-dot-dark-many.webp",
+            "sha256": "009d015fbcd8d75d08dcb6fbc216c8951b81ae802efdca7012cc53c8ad93e049",
+            "bytes": 19154
+          },
+          {
+            "path": "skill-dot-dark-one.webp",
+            "sha256": "a942f47a44b783a6f6324dfa41d1bbb8057a9f7f490848e33af5ebca7a505a32",
+            "bytes": 15728
+          },
+          {
+            "path": "skill-dot-earth-many.webp",
+            "sha256": "7ba6f8a8d03c9bb1bfc0abcf44eeed93fd15699cd9dfdc6b3a1739a705f6c8c1",
+            "bytes": 23930
+          },
+          {
+            "path": "skill-dot-earth-one.webp",
+            "sha256": "812084eecec2a6a6d19de2a9326c77638da59a6a59cb5cacc3e1d74a83571f4e",
+            "bytes": 19842
+          },
+          {
+            "path": "skill-dot-fire-many.webp",
+            "sha256": "4362df3ba246e3e9b98033d25a402b8f3877704634af23f7e8fa2da6bdd96901",
+            "bytes": 29448
+          },
+          {
+            "path": "skill-dot-fire-one.webp",
+            "sha256": "f9049f10bd1393198cf2441f97cb88a0842269995cf2d782d20db28696033b8b",
+            "bytes": 19994
+          },
+          {
+            "path": "skill-dot-light-many.webp",
+            "sha256": "ec979c5f3f70c309f8a8b8751dc858219cd5f55484f9023d9e7f0798f117415a",
+            "bytes": 26064
+          },
+          {
+            "path": "skill-dot-light-one.webp",
+            "sha256": "6f8fa0a2d2512d2311c6bea2d0381fa2e8daeb0e8d5afff210f11d8a21aba353",
+            "bytes": 19746
+          },
+          {
+            "path": "skill-dot-water-many.webp",
+            "sha256": "fb6830f8c157a03a84a91d963a5f8e6464d6586ed8f9fd360f958ab557e777f9",
+            "bytes": 22382
+          },
+          {
+            "path": "skill-dot-water-one.webp",
+            "sha256": "4224c04e53f628b714be71f85282f8fb25f971db64eb4d08da1effb0b7c8bfb4",
+            "bytes": 19060
+          },
+          {
+            "path": "skill-dot-wind-many.webp",
+            "sha256": "0d726e2086c6ba3ebbb366ba1d7faa0f7a96c54fb8ae55a155fda1a7badf8a9b",
+            "bytes": 22954
+          },
+          {
+            "path": "skill-dot-wind-one.webp",
+            "sha256": "aed9d4d415670ca9a0cc53b6725552698df99732eb3c7859b337a9b5c01cbfac",
+            "bytes": 21788
+          },
+          {
+            "path": "skill-drain-dark-many.webp",
+            "sha256": "ce7ad985bb1dacfe82c21c969d2fc5de891982d5950a44996610d6a12a613021",
+            "bytes": 18996
+          },
+          {
+            "path": "skill-drain-dark-one.webp",
+            "sha256": "3f58a88db3d886e4e2dbf02b50c47dd02488d061b65fe9c20bfac9aa2d7be86d",
+            "bytes": 25436
+          },
+          {
+            "path": "skill-drain-earth-many.webp",
+            "sha256": "90a7252dba7301229842d6074904c34c9fa4eec3162841bb3ff8e57426d61694",
+            "bytes": 22138
+          },
+          {
+            "path": "skill-drain-earth-one.webp",
+            "sha256": "95152958b9805a126abc05bc3a5158cb29ba8986b520fc976f3809fb45308fd0",
+            "bytes": 17352
+          },
+          {
+            "path": "skill-drain-fire-many.webp",
+            "sha256": "f38ed105781cb5721f5917fd6dbb81c2f2a514510d4de6695260e5c066fa7c9f",
+            "bytes": 24540
+          },
+          {
+            "path": "skill-drain-fire-one.webp",
+            "sha256": "8d9d1f7f2dc1f24f98156f0309379b60b2b7be12ef59e15276db232ce9f31e21",
+            "bytes": 26366
+          },
+          {
+            "path": "skill-drain-light-many.webp",
+            "sha256": "4eb6f3db156a5b9579444a324de7d910c0226c6218cfd34a32dc52ed17fcb1d3",
+            "bytes": 26022
+          },
+          {
+            "path": "skill-drain-light-one.webp",
+            "sha256": "51ea9442d8e325a102079260f8ded7dfd1671a5db638e5233450c13b866cd2fc",
+            "bytes": 26136
+          },
+          {
+            "path": "skill-drain-water-many.webp",
+            "sha256": "016c5181d20a04f90c8e2b7a04efb89d4262b3a5fa638ee7e0846e721d5025ec",
+            "bytes": 24128
+          },
+          {
+            "path": "skill-drain-water-one.webp",
+            "sha256": "9672fd0040168b27f31c2f620819c814906cbdc72145613c12d6b29c84df86c1",
+            "bytes": 19724
+          },
+          {
+            "path": "skill-drain-wind-many.webp",
+            "sha256": "08ef85391ede88987cd82e4d66a6d7720292b34d042eb2a047cd6d16c6bc763a",
+            "bytes": 23522
+          },
+          {
+            "path": "skill-drain-wind-one.webp",
+            "sha256": "56a5b99cc854e76e4df524fe586ec1798e8472f3acd0b8a2cae92cd218727483",
+            "bytes": 22182
+          },
+          {
+            "path": "skill-empty.webp",
+            "sha256": "dcb6a4bf8603a62ca778d3566f3ffc3d07e795568b62bcfd93fa4f685151c0df",
+            "bytes": 17658
+          },
+          {
+            "path": "skill-energy-dark-many.webp",
+            "sha256": "de1aac068fe96a641bb726a43581b8e9b4da5da2c2f12a92236469e0828cf4c6",
+            "bytes": 19360
+          },
+          {
+            "path": "skill-energy-dark-one.webp",
+            "sha256": "e11748817bee479e2ee45b0d6105db984cb927425b1136ba4942992a1435d73b",
+            "bytes": 18052
+          },
+          {
+            "path": "skill-energy-earth-many.webp",
+            "sha256": "f7cfce6ad59db075ace3d6ee57a351e8acc094164d280f26af2e0ed3c18dabb2",
+            "bytes": 24514
+          },
+          {
+            "path": "skill-energy-earth-one.webp",
+            "sha256": "f6cb43b4fd5055f3f5b48b7aa95c776a0cdd703bf67a693a2e7b69ffbe16fcec",
+            "bytes": 25746
+          },
+          {
+            "path": "skill-energy-fire-many.webp",
+            "sha256": "76eed89ee5f5ec8203393be4e1af84d847717ed180969bb5fa30d11f50f83ba1",
+            "bytes": 28384
+          },
+          {
+            "path": "skill-energy-fire-one.webp",
+            "sha256": "69f048af6610119e6026c4795d503a12a2711e008479787ce39490d3105addf8",
+            "bytes": 20004
+          },
+          {
+            "path": "skill-energy-light-many.webp",
+            "sha256": "b3caa7eda12d61ed1fc2ac9e5a3f8b59551932784ab9d7bb1dd29291b8e48efd",
+            "bytes": 25380
+          },
+          {
+            "path": "skill-energy-light-one.webp",
+            "sha256": "d33511d6f95d31d043b50a7a9ff8274efcc465051ca4d95f07b70c96f8678d7d",
+            "bytes": 24042
+          },
+          {
+            "path": "skill-energy-water-many.webp",
+            "sha256": "79e33819d46f6d5a1e2b7187a8f0bf6d449af3022b39e6aa02fead477720e4e4",
+            "bytes": 28086
+          },
+          {
+            "path": "skill-energy-water-one.webp",
+            "sha256": "ee452723159335c9ece5cd1d2330581183ca3c3b38ed1dc4943699e256fa60c9",
+            "bytes": 25948
+          },
+          {
+            "path": "skill-energy-wind-many.webp",
+            "sha256": "4b266b02b41598a8a972ceb5f64a1575074146c72a04ad3475a6d97afc431efd",
+            "bytes": 21222
+          },
+          {
+            "path": "skill-energy-wind-one.webp",
+            "sha256": "297eb8b877a4c280609ebeefddb612daf5d72ebaec9813a5ca3393bf7aa7eb0d",
+            "bytes": 23868
+          },
+          {
+            "path": "skill-execute-dark-many.webp",
+            "sha256": "e5d901b7fce094f08d73445367bb4276c6f545b7deeb9f37217db259ea0e51e4",
+            "bytes": 24224
+          },
+          {
+            "path": "skill-execute-dark-one.webp",
+            "sha256": "c171ba0b95b9123a8eda8adea39d1591c0f8a582f8f8a11b95750d8a3d531dfb",
+            "bytes": 20294
+          },
+          {
+            "path": "skill-execute-earth-many.webp",
+            "sha256": "9ef95df160e1180337568b3f67b55601f82d661d501debc5c0c9a8d6ff32f2a0",
+            "bytes": 18524
+          },
+          {
+            "path": "skill-execute-earth-one.webp",
+            "sha256": "2e67ed2ed172f60e6a896bdd8a14d859ee9bbd93090ce225472a50d9ad0595a9",
+            "bytes": 14412
+          },
+          {
+            "path": "skill-execute-fire-many.webp",
+            "sha256": "3d42d692b04b8e437fbee7570de118f215fe05b5a326e3b63942dd6762b440c6",
+            "bytes": 25916
+          },
+          {
+            "path": "skill-execute-fire-one.webp",
+            "sha256": "e7697877c572a18e018690e24fb7854cf520673044e9cdf92be8e1589e57a932",
+            "bytes": 25196
+          },
+          {
+            "path": "skill-execute-light-many.webp",
+            "sha256": "a4dabbdcf8912a7307dac47177eebae3f628c8d35624e2253d56f0076504d1ea",
+            "bytes": 27672
+          },
+          {
+            "path": "skill-execute-light-one.webp",
+            "sha256": "2e8f07733073929fbc518258331f1d7451830fbaaf766229e50eca1e2f2e3fac",
+            "bytes": 20188
+          },
+          {
+            "path": "skill-execute-water-many.webp",
+            "sha256": "b4ab8a7e2532e9c79c5a4601459368f1529968cb9dfac3e7532c2f985ac3b5f4",
+            "bytes": 25576
+          },
+          {
+            "path": "skill-execute-water-one.webp",
+            "sha256": "2daab63ed28874331a082eab2e19482674b4b60fbc01f3d3520263fe35fde0ef",
+            "bytes": 21434
+          },
+          {
+            "path": "skill-execute-wind-many.webp",
+            "sha256": "75c43fc9f4588fdcb0ef06f7d62e2c92de9e36a9fba3ee577196b353385164c2",
+            "bytes": 21788
+          },
+          {
+            "path": "skill-execute-wind-one.webp",
+            "sha256": "04ea6b6284a6a791aea4f66c12054387f47f33f2c2c558feeb42c629efe3b0a1",
+            "bytes": 24548
+          },
+          {
+            "path": "skill-heal-dark-many.webp",
+            "sha256": "d74e7c129aab60d0345dfaef115c1c2a9dc62468549b9e70448370117ca15122",
+            "bytes": 20812
+          },
+          {
+            "path": "skill-heal-dark-one.webp",
+            "sha256": "2aa953cf598f516a5bfb2ebff3c79378de6d972d70a7d99600b64d2b3d126cd8",
+            "bytes": 22184
+          },
+          {
+            "path": "skill-heal-earth-many.webp",
+            "sha256": "1ed2e5dda6b89eb23531717b8e381de2d53afb2a1d2afb1eb3646406cb558b32",
+            "bytes": 21880
+          },
+          {
+            "path": "skill-heal-earth-one.webp",
+            "sha256": "9d44619d1612afc27a796a029aab2d365b5bc4ab32eb08a949d03d701061066d",
+            "bytes": 26884
+          },
+          {
+            "path": "skill-heal-fire-many.webp",
+            "sha256": "919673e38f4f39b51744d6d9e5fde66df2bdd863158d17fac3aaa402851198a8",
+            "bytes": 21812
+          },
+          {
+            "path": "skill-heal-fire-one.webp",
+            "sha256": "ef13844190e3ac2007d54e22c672a17d6f27c2c87177865e905863f6308d812d",
+            "bytes": 19880
+          },
+          {
+            "path": "skill-heal-light-many.webp",
+            "sha256": "463a292ff261f7cedf6b2a01e348ed7fab05653ec5ea69758740817c53c9d34a",
+            "bytes": 19980
+          },
+          {
+            "path": "skill-heal-light-one.webp",
+            "sha256": "3eae340ed53d419b03af79d96762369d25244451cf1a4c539911533e7f7c43fd",
+            "bytes": 15750
+          },
+          {
+            "path": "skill-heal-water-many.webp",
+            "sha256": "fa62389478ae0518895ee955defdb2718802277ff14988723bd7cf6fe2ea4805",
+            "bytes": 20856
+          },
+          {
+            "path": "skill-heal-water-one.webp",
+            "sha256": "e1e2fc29e96198b9779444602a623fb01cdd769da35502a77665a8ec450e2041",
+            "bytes": 22036
+          },
+          {
+            "path": "skill-heal-wind-many.webp",
+            "sha256": "8ee17d0d39a4384d615f2628e9a09f7ed3ca383908decf3ac4e732b434efe416",
+            "bytes": 18140
+          },
+          {
+            "path": "skill-heal-wind-one.webp",
+            "sha256": "f0bd91a87b2bdbd6a94b6bf5894e575054acb4ee2ed344320dd521d788a7e8ec",
+            "bytes": 14566
+          },
+          {
+            "path": "skill-item.webp",
+            "sha256": "b069091dcd40626abccd46cbaadbef5bb0cbe8171d988098cbde04c1687ce0df",
+            "bytes": 12564
+          },
+          {
+            "path": "skill-revive-dark.webp",
+            "sha256": "21b20ceeef6eeda5dc94fcd05ee040bff30116754d89911ea3beef3e20bbb12c",
+            "bytes": 23408
+          },
+          {
+            "path": "skill-revive-earth.webp",
+            "sha256": "2654c63c73c35288fd4aec6739a0fdf42df788498bef37bbe8efcd1317a37200",
+            "bytes": 19394
+          },
+          {
+            "path": "skill-revive-fire.webp",
+            "sha256": "4ec0e795142bc45b94a5fcea674de0e72222583c4d75ae0e421ec28862f05df8",
+            "bytes": 26700
+          },
+          {
+            "path": "skill-revive-light.webp",
+            "sha256": "0c4bbbc20b4bb7735ba7ee1269d2ccca7fc9714f1cb7155f6035775ae8f063e9",
+            "bytes": 17986
+          },
+          {
+            "path": "skill-revive-water.webp",
+            "sha256": "0e97dca91b86019e5ae04c7945708886bf38836c71eefc41aefd52709d60251d",
+            "bytes": 24918
+          },
+          {
+            "path": "skill-revive-wind.webp",
+            "sha256": "35bd4408f4ea70c830bb0604a5f0e570bbab9045837700174452d98d4c461938",
+            "bytes": 25328
+          },
+          {
+            "path": "skill-row.webp",
+            "sha256": "303a0582671c88d85eb6c1a3866608c3b6e40df4ad16d0322a8f31f6cbb8bf0f",
+            "bytes": 20744
+          },
+          {
+            "path": "skill-shield-dark-many.webp",
+            "sha256": "1fed544318e7958b55d5fe771bef254aca85829687cec8afe8919be15fee0bbd",
+            "bytes": 24774
+          },
+          {
+            "path": "skill-shield-dark-one.webp",
+            "sha256": "4a32f5be0d5ffe832ea69271390d50e9325a4187a0eef262afdb5aea5dc3294c",
+            "bytes": 14834
+          },
+          {
+            "path": "skill-shield-earth-many.webp",
+            "sha256": "1cccd00f050c58676b7c5b2556b4badde027135ebd07842a726f486bd56d065b",
+            "bytes": 20880
+          },
+          {
+            "path": "skill-shield-earth-one.webp",
+            "sha256": "de6148f167dbfd5490112ee4ad642fc49fdb32a6c409a34355e3702ea0ca3d0c",
+            "bytes": 15220
+          },
+          {
+            "path": "skill-shield-fire-many.webp",
+            "sha256": "c2fdee41d8f0c10518c8a7ba2356e07229f9b9e876e79607ba5f4e65f5376d67",
+            "bytes": 26452
+          },
+          {
+            "path": "skill-shield-fire-one.webp",
+            "sha256": "d5a0006616dc202761e99b7224d117a4212d26d7d64f6f0179ac4fcea245d6a6",
+            "bytes": 26764
+          },
+          {
+            "path": "skill-shield-light-many.webp",
+            "sha256": "01f8d5d3369426f23cf8dda55b0eed667662b518572e449ddd272b2485925e6b",
+            "bytes": 20008
+          },
+          {
+            "path": "skill-shield-light-one.webp",
+            "sha256": "cac9b8df69ac6b47ac7af83e7250fe9a595f87d65d6fbd4c9e354db61c4556f4",
+            "bytes": 22940
+          },
+          {
+            "path": "skill-shield-water-many.webp",
+            "sha256": "5c1a980fb32f7f5c4ee8025abab627e73a6cde3fe632cfa11e5599009c82ad6a",
+            "bytes": 21552
+          },
+          {
+            "path": "skill-shield-water-one.webp",
+            "sha256": "0aab894018b591b0c763c5ea3a5e5bf52d92dcabe313796e7d3afec42069599a",
+            "bytes": 14660
+          },
+          {
+            "path": "skill-shield-wind-many.webp",
+            "sha256": "3bca444d7fba43890b3cc4f52b47d8bc635ae95e8fa00a11799682c68cd2474b",
+            "bytes": 20016
+          },
+          {
+            "path": "skill-shield-wind-one.webp",
+            "sha256": "bccafe659f9960db8b984c13a9e4c5a3780ac5da3d361cdb1800c80c40c835f5",
+            "bytes": 20386
+          },
+          {
+            "path": "skill-stun-dark-many.webp",
+            "sha256": "a8f35e67a29c75820c419bd9049c8f37e9e4a208c791cb7a16ce44b8728949d9",
+            "bytes": 22766
+          },
+          {
+            "path": "skill-stun-dark-one.webp",
+            "sha256": "a381e583daee5ca5b319e0afeac43c8b694d9480483b2ebd5a695192151166fb",
+            "bytes": 22518
+          },
+          {
+            "path": "skill-stun-earth-many.webp",
+            "sha256": "6338b3499af30e9caed2ed86761053d5cdc02da538c12eb0230ffd70b4f2d671",
+            "bytes": 28780
+          },
+          {
+            "path": "skill-stun-earth-one.webp",
+            "sha256": "786c828e783389937029a76ffafbc746aef2e2fe0574c118cea3b0a53e2270f1",
+            "bytes": 24010
+          },
+          {
+            "path": "skill-stun-fire-many.webp",
+            "sha256": "d8c50562d67f262f9f35b1c620b22042ad5e6e26a293788b047e8af781aae720",
+            "bytes": 19392
+          },
+          {
+            "path": "skill-stun-fire-one.webp",
+            "sha256": "9e0380290406532bb856fff01cddd76638d5b829057c54cd7c42391620a56214",
+            "bytes": 25714
+          },
+          {
+            "path": "skill-stun-light-many.webp",
+            "sha256": "7b810a9141d84512e4bd10f445d02af7e0231c9b349b4ab46df178e672111269",
+            "bytes": 27812
+          },
+          {
+            "path": "skill-stun-light-one.webp",
+            "sha256": "7f5e391bfaa15de6aa0cb77505d826c309697b31694ad4312f5d8e7d70ff48e1",
+            "bytes": 18798
+          },
+          {
+            "path": "skill-stun-water-many.webp",
+            "sha256": "cd8349c9788ca90cce28ffcd644bcf2bf5f65ed86c5a763eee614b4f4baf476f",
+            "bytes": 26436
+          },
+          {
+            "path": "skill-stun-water-one.webp",
+            "sha256": "214ac40c3a46be19c17509b3f9e81fb73236c75995dddba7a3a6445736ef7609",
+            "bytes": 24652
+          },
+          {
+            "path": "skill-stun-wind-many.webp",
+            "sha256": "fc6495edcf6aa91f8c778580678ebd3da3c7bc80dcecf67d86423be15028db04",
+            "bytes": 23126
+          },
+          {
+            "path": "skill-stun-wind-one.webp",
+            "sha256": "449936deded932ef814dca2bd40e0618ef17eea0554004bc01f83493d7260706",
+            "bytes": 25674
+          },
+          {
+            "path": "tower-bg.webp",
+            "sha256": "22c28eb34c91b72ee9da276561e054745b828db21c55b4b647cbefb825e5bf8c",
+            "bytes": 15292
+          }
+        ]
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/gacha-forge.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.8.0.zip",
+        "sha256": "bf3ffe2ed148d6cfcb3f34a255244b38d03c7d4b4eb2177bf516e736e854f07f",
+        "bytes": 7778366
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/gacha-forge/README.md"
+    },
+    {
+      "manifest": {
         "schemaVersion": 1,
         "id": "haptic",
         "name": "Haptic Feedback",
