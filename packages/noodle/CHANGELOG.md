@@ -1,5 +1,9 @@
 # Noodle release notes
 
+## 1.2.24 — 2026-09-15
+
+- Search icons and post menus keep Noodle's selected accent when Engine Chroma animates.
+
 ## 1.2.23 — 2026-09-13
 
 - Applying a saved prompt asks before replacing the current prompt, including edits already saved as the active prompt.

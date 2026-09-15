@@ -39,7 +39,8 @@ export const BOTTOM_SAFE_INSET =
 // so portaled popovers/modals (which escape the shell's CSS scope) can re-apply it.
 const NoodleAccentContext = createContext<string>(NOODLE_BLUE);
 export const useNoodleAccent = () => useContext(NoodleAccentContext);
-export const NOODLE_ICON_SCOPE_CLASS = "[&_:where(svg)]:text-[var(--noodle-accent)]";
+// Keep package icons on Noodle colors when Engine Chroma animates host icons.
+export const NOODLE_ICON_SCOPE_CLASS = "[&_:where(svg)]:!text-[var(--noodle-accent)]";
 export const NOODLE_LOGO_SRC = "/api/capability-packages/noodle/assets/noodle-klusek.png";
 export const NOODLE_PERSONA_SWITCHER_PAGE_SIZE = 5;
 
