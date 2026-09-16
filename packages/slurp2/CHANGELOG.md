@@ -1,12 +1,15 @@
 # Slurp Remastered release notes
 
-## 0.0.17 — 2026-09-15
+## 0.0.17 — 2026-09-16
 
-- Settings is now Backstage, with five pages: Overview, Creators, Slurp world, Automation, and Maintenance. Every setting is still there, and Find a setting takes you straight to it.
-- Changes show a live preview of the current and new result before you apply them. Quick switches on Overview save at once and can be undone.
-- Maintenance shows storage and backup health, and previews what a cleanup or purge will remove before it runs.
-- Restoring a backup now shows what the file contains before anything changes.
-- Creators -> Improve with AI checks Creators for missing profile and tag details for free, then suggests changes you approve one by one.
+- Settings is now Backstage: Overview, Creators, Features, Automation, and Maintenance, with setting search and live previews.
+- Creators shows metrics and totals for every Creator. Click one to open its settings, content menu, message prices, and collab partners.
+- Features -> Events and holidays: yearly events that Creators mention in posts, replies, and messages.
+- Free teaser posts: some automatic posts go out free to win subscribers.
+- Featured, buried, and viral weeks change post reach, and viral posts bring a rush of followers.
+- Fans who spend a lot and show up constantly can become Too attached.
+- Crossovers prefer collab partners, and commissions get a quote by default.
+- Feed posts have Edit, Delete, and Show image context in the post menu again.
 
 ## 0.0.16 — 2026-09-15
 
