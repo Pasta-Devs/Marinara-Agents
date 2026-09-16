@@ -2586,9 +2586,10 @@ export function useReplaceNoodlerPostImage() {
 export function useGenerateNoodlerPostImage() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, accountId }: { id: string; accountId: string }) =>
+    mutationFn: ({ id, accountId, imagePrompt }: { id: string; accountId: string; imagePrompt?: string }) =>
       api.post<NoodlerManagedPost>(`/slurp2/noodler/posts/${encodeURIComponent(id)}/image/generate`, {
         accountId,
+        ...(imagePrompt ? { imagePrompt } : {}),
         debugMode: useSlurpUIStore.getState().debugMode,
       }),
     onSuccess: (_post, input) =>

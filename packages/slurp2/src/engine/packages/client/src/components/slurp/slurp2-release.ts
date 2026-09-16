@@ -22,6 +22,8 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
       "New Backstage section: Prompts. Writing guidance, spice level, presets and both image prompts sit together.",
       "New image prompt style: Default, or Danbooru tags (experimental) for anime models that read tags.",
       "Image prompts keep the style tags first and put the Creator's appearance right after them.",
+      "When an image fails, you can now edit the image prompt and try again.",
+      "When an image fails, you can now edit the image prompt and try again.",
       "Slurp retries loading after an Engine restart, and Try again reloads the page if that fails.",
     ],
   },

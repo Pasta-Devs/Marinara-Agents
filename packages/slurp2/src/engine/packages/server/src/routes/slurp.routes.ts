@@ -3844,6 +3844,8 @@ export async function slurpRoutes(app: FastifyInstance) {
     const parsed = z
       .object({
         accountId: z.string().min(1),
+        // A failed picture is usually a bad prompt, so the retry may carry a rewritten one.
+        imagePrompt: z.string().trim().min(1).max(2000).optional(),
         debugMode: z.boolean().optional(),
       })
       .safeParse(req.body ?? {});
@@ -3854,13 +3856,14 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (post.imageUrl) return reply.code(409).send({ error: "This post already has an image." });
     const account = await noodle.getNoodlerAccountById(post.authorAccountId);
     const imagePrompt =
+      parsed.data.imagePrompt ||
       post.imagePrompt?.trim() ||
       [post.title, post.content]
         .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
         .join("\n")
         .trim() ||
       `A new social media image for ${account?.displayName || "the creator"}.`;
-    if (!post.imagePrompt) {
+    if (imagePrompt !== post.imagePrompt) {
       await noodle.updatePostMedia(post.id, { imagePrompt });
     }
 

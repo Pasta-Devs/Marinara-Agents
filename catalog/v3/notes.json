@@ -256,7 +256,7 @@
         {
           "version": "0.0.18",
           "date": "2026-09-16",
-          "notes": "- Messages: a queued reply now has a Force reply now button that answers at once.\n- Fixed Creators sometimes never answering a message.\n- Posts are no longer cut off by their format. New settings: Longest post, and Show more after 300 characters.\n- New Backstage section: Prompts. Writing guidance, spice level, presets and both image prompts sit together.\n- New image prompt style: Default, or Danbooru tags (experimental) for anime models that read tags.\n- Image prompts keep the style tags first and put the Creator's appearance right after them.\n- Slurp retries loading after an Engine restart, and Try again reloads the page if that fails.",
+          "notes": "- Messages: a queued reply now has a Force reply now button that answers at once.\n- Fixed Creators sometimes never answering a message.\n- Posts are no longer cut off by their format. New settings: Longest post, and Show more after 300 characters.\n- New Backstage section: Prompts. Writing guidance, spice level, presets and both image prompts sit together.\n- New image prompt style: Default, or Danbooru tags (experimental) for anime models that read tags.\n- Image prompts keep the style tags first and put the Creator's appearance right after them.\n- When an image fails, you can now edit the image prompt and try again.\n- When an image fails, you can now edit the image prompt and try again.\n- Slurp retries loading after an Engine restart, and Try again reloads the page if that fails.",
           "highlight": false
         },
         {

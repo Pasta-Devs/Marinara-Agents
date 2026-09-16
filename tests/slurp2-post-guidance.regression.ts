@@ -166,8 +166,8 @@ assert.doesNotMatch(
 );
 assert.match(
   routes,
-  /if \(!post\.imagePrompt\) \{\s*await noodle\.updatePostMedia\(post\.id, \{ imagePrompt \}\);\s*\}/u,
-  "an image-less post should persist a prompt derived from its title or body before generation",
+  /if \(imagePrompt !== post\.imagePrompt\) \{\s*await noodle\.updatePostMedia\(post\.id, \{ imagePrompt \}\);\s*\}/u,
+  "a missing or rewritten prompt is persisted before generation",
 );
 assert.match(
   routes,

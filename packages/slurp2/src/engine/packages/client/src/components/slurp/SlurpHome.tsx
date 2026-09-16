@@ -1058,10 +1058,10 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   });
   const generatePostImage = useGenerateNoodlerPostImage();
   const [generatingPostImageId, setGeneratingPostImageId] = useState<string | null>(null);
-  const handleGeneratePostImage = (post: Pick<NoodlerManagedPost, "id" | "authorAccountId">) => {
+  const handleGeneratePostImage = (post: Pick<NoodlerManagedPost, "id" | "authorAccountId">, imagePrompt?: string) => {
     setGeneratingPostImageId(post.id);
     generatePostImage.mutate(
-      { id: post.id, accountId: post.authorAccountId },
+      { id: post.id, accountId: post.authorAccountId, imagePrompt },
       {
         onError: (error) => toast.error(errorMessage(error, localizeUi("ui.slurp.image.generateFailed"))),
         onSettled: () => setGeneratingPostImageId(null),

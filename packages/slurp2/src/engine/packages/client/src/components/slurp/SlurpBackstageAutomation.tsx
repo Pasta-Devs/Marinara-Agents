@@ -503,6 +503,13 @@ export function SlurpBackstageAutomation(page: SlurpBackstagePageProps) {
                     ))}
                 </select>
               </Field>
+              <Toggle
+                settingKey="professorMariCreatorSource"
+                label={t("ui.slurp.settings.prompts.professorMari")}
+                detail={t("ui.slurp.settings.prompts.professorMariDetail")}
+                value={settings.professorMariCreatorSource}
+                onChange={(value) => update("professorMariCreatorSource", value)}
+              />
             </div>
           </details>
         </div>

@@ -66,13 +66,6 @@ export function SlurpBackstagePrompts(page: SlurpBackstagePageProps) {
           value={settings.enableLorebookContext}
           onChange={(value) => update("enableLorebookContext", value)}
         />
-        <Toggle
-          settingKey="professorMariCreatorSource"
-          label={t("ui.slurp.settings.prompts.professorMari")}
-          detail={t("ui.slurp.settings.prompts.professorMariDetail")}
-          value={settings.professorMariCreatorSource}
-          onChange={(value) => update("professorMariCreatorSource", value)}
-        />
         <Field
           settingKey="generationGuidance"
           label={t("ui.slurp.settings.prompts.spice")}

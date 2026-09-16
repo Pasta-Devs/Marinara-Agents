@@ -13,6 +13,7 @@ export type SlurpResettableSection =
 export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonly (keyof SlurpSettings)[]> = {
   general: [
     "storyRate",
+    "professorMariCreatorSource",
     "carryoverModes",
     "carryoverHours",
     "carryoverMaxItems",
@@ -34,13 +35,7 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
     "autoPostingImagesEnabled",
     "allowGalleryImageAttachments",
   ],
-  prompts: [
-    "generationGuidance",
-    "enableLorebookContext",
-    "professorMariCreatorSource",
-    "imageGenerationPrompt",
-    "enableImageInterpretation",
-  ],
+  prompts: ["generationGuidance", "enableLorebookContext", "imageGenerationPrompt", "enableImageInterpretation"],
   audience: [
     "audienceTone",
     "worldActivity",

@@ -1423,6 +1423,7 @@
   "ui.slurp.inbox.unread": "{{count}} unread",
   "ui.slurp.inbox.unreadActivity": "{{count}} unread activity items",
   "ui.slurp.inbox.waiting": "Things waiting for you",
+  "ui.slurp.image.editPrompt": "Edit the image prompt",
   "ui.slurp.image.generate": "Generate image",
   "ui.slurp.image.generateFailed": "Could not generate this image.",
   "ui.slurp.locked.blurredPreview": "Blurred preview",
