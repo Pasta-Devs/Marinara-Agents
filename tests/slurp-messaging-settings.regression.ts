@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
+import { readSlurpCreatorMessaging } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-messaging";
 
 const root = "packages/slurp2/src/engine/packages";
 const settingsStorage = readFileSync(`${root}/server/src/services/storage/slurp.storage.ts`, "utf8");
@@ -64,5 +65,16 @@ assert.ok(locales["ui.slurp.settings.tabs.messaging"], "the Messaging tab has no
 for (const key of Object.keys(locales).filter((key) => key.startsWith("ui.slurp.settings.messaging."))) {
   assert.ok(locales[key].trim(), `${key} is empty`);
 }
+
+// Auto-quoting is on unless the player turned it off. Saving any price used to write the whole
+// object, so a stored `false` alone is not a choice and must not keep quoting off.
+assert.equal(readSlurpCreatorMessaging(undefined).autoQuote, true, "auto-quote defaults on");
+assert.equal(readSlurpCreatorMessaging({ autoQuote: false }).autoQuote, true, "an incidental stored false is ignored");
+assert.equal(
+  readSlurpCreatorMessaging({ autoQuote: false, autoQuoteChosen: true }).autoQuote,
+  false,
+  "an explicit off survives",
+);
+assert.match(messagesStorage, /"autoQuote" in patch/u, "toggling auto-quote records that it was a choice");
 
 console.log("slurp messaging settings regression passed");

@@ -635,11 +635,18 @@ export function createSlurpMessagesStorage(db: DB) {
     ): Promise<SlurpCreatorMessaging> {
       const blob = await readMessagingBlob();
       const defaults = await messagingDefaults();
+      const stored = blob[creatorAccountId] as Record<string, unknown> | undefined;
+      // Remember when the player set auto-quote on purpose, so it survives the default changing.
+      const autoQuoteChosen = "autoQuote" in patch || stored?.autoQuoteChosen === true;
+      const marker = autoQuoteChosen ? { autoQuoteChosen: true } : {};
       const next = readSlurpCreatorMessaging(
-        { ...readSlurpCreatorMessaging(blob[creatorAccountId], defaults), ...patch },
+        { ...readSlurpCreatorMessaging(stored, defaults), ...patch, ...marker },
         defaults,
       );
-      await settingsStore.set(SLURP_CREATOR_MESSAGING_KEY, JSON.stringify({ ...blob, [creatorAccountId]: next }));
+      await settingsStore.set(
+        SLURP_CREATOR_MESSAGING_KEY,
+        JSON.stringify({ ...blob, [creatorAccountId]: { ...next, ...marker } }),
+      );
       return next;
     },
 
