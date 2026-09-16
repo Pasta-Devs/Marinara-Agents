@@ -81,13 +81,14 @@ export function SlurpClampedText(props: Parameters<typeof NoodleTextContent>[0])
   const { t: localizeUi } = useUiTranslation();
   const [expanded, setExpanded] = useState(false);
   const limit = useSlurpSettings().data?.postShowMoreLength ?? 300;
-  const long = props.content.length > limit;
-  // Cut at the last word boundary inside the limit, so the preview never ends mid-word.
-  const preview = long ? `${props.content.slice(0, limit).replace(/\s+\S*$/u, "")}…` : props.content;
+  // ponytail: length/line heuristic instead of measuring overflow; measure with a ref if short posts clamp oddly.
+  // The collapsed view is a CSS clamp on the whole text, never a slice: handing the markdown parser
+  // a cut string turned an unclosed fence or link into a grey code box for the rest of the post.
+  const long = props.content.length > limit || props.content.split("\n").length > 7;
   return (
     <>
-      <div>
-        <NoodleTextContent {...props} content={expanded ? props.content : preview} />
+      <div className={cn(long && !expanded && "line-clamp-6")}>
+        <NoodleTextContent {...props} />
       </div>
       {long && (
         <button

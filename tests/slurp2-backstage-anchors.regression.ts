@@ -14,6 +14,7 @@ const pageFile: Record<SlurpBackstageSection, string> = {
   creators: "SlurpBackstageCreators.tsx",
   world: "SlurpBackstageWorld.tsx",
   automation: "SlurpBackstageAutomation.tsx",
+  prompts: "SlurpBackstagePrompts.tsx",
   maintenance: "SlurpBackstageMaintenance.tsx",
 };
 

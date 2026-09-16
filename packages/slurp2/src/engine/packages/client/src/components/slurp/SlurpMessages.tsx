@@ -1424,7 +1424,8 @@ function SlurpThreadView({
                     try {
                       const result = await forceReply.mutateAsync({ personaId, threadId: thread.id });
                       setReplyStatus(result.replyStatus);
-                      holdTyping(result.reply ? (result.typingMs ?? 0) : 0, result.reply?.id);
+                      // "Now" means now: the pacing delay is the thing this button exists to skip.
+                      holdTyping(0, result.reply?.id);
                     } catch (cause) {
                       setTyping(false);
                       setError(getApiErrorMessage(cause, "The reply could not be written."));

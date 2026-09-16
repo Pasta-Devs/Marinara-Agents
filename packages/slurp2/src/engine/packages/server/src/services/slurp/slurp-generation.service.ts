@@ -599,7 +599,8 @@ export async function generateNoodlerPost(
     maxTokens: clampGenerationMaxOutputTokens({
       provider: input.connection.provider as APIProvider,
       model: input.connection.model,
-      maxTokens: NOODLER_POST_MAX_TOKENS,
+      // A long post needs the tokens to finish; a truncated response fails the JSON parse outright.
+      maxTokens: Math.max(NOODLER_POST_MAX_TOKENS, Math.ceil(settings.postMaxLength * 1.2)),
       maxTokensOverride: input.connection.maxTokensOverride,
     }),
     stream: false,

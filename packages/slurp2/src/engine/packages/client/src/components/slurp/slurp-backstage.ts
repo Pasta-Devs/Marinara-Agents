@@ -1,6 +1,13 @@
 import type { SlurpSettings } from "../../hooks/use-slurp";
 
-export const SLURP_BACKSTAGE_SECTIONS = ["overview", "creators", "world", "automation", "maintenance"] as const;
+export const SLURP_BACKSTAGE_SECTIONS = [
+  "overview",
+  "creators",
+  "world",
+  "automation",
+  "prompts",
+  "maintenance",
+] as const;
 export type SlurpBackstageSection = (typeof SLURP_BACKSTAGE_SECTIONS)[number];
 
 export const SLURP_BACKSTAGE_TARGETS = [
@@ -18,6 +25,7 @@ export const SLURP_BACKSTAGE_TARGETS = [
   "automation",
   "general",
   "images",
+  "prompts",
   "autopurge",
   "advanced",
 ] as const;
@@ -28,6 +36,7 @@ export const SLURP_BACKSTAGE_TARGETS_BY_SECTION: Record<SlurpBackstageSection, r
   creators: ["creators", "improve"],
   world: ["world", "tags", "events", "arcs", "audience", "messaging", "ads", "wallet"],
   automation: ["automation", "general", "images"],
+  prompts: ["prompts"],
   maintenance: ["autopurge", "advanced"],
 };
 
@@ -36,6 +45,7 @@ export const SLURP_BACKSTAGE_DEFAULT_TARGET: Record<SlurpBackstageSection, Slurp
   creators: "creators",
   world: "world",
   automation: "automation",
+  prompts: "prompts",
   maintenance: "autopurge",
 };
 
@@ -44,6 +54,7 @@ export const SLURP_BACKSTAGE_SECTION_LABELS: Record<SlurpBackstageSection, strin
   creators: "Creators",
   world: "Features",
   automation: "Automation",
+  prompts: "Prompts",
   maintenance: "Maintenance",
 };
 
@@ -62,6 +73,7 @@ export const SLURP_BACKSTAGE_TARGET_LABELS: Record<SlurpBackstageTarget, string>
   wallet: "Coins and access",
   general: "Publishing",
   images: "Image generation",
+  prompts: "Prompts",
   autopurge: "Storage and cleanup",
   advanced: "Backup and data",
 };
@@ -108,6 +120,7 @@ const world = (target: SlurpBackstageTarget, ...terms: string[]) => place("world
 const automation = (target: SlurpBackstageTarget, ...terms: string[]) =>
   place("automation", target, "all-slurp", ...terms);
 const internal = (placement: SlurpBackstagePlacement): SlurpBackstagePlacement => ({ ...placement, internal: true });
+const prompts = (...terms: string[]) => place("prompts", "prompts", "all-slurp", ...terms);
 const maintenance = (...terms: string[]) => place("maintenance", "autopurge", "all-slurp", ...terms);
 
 /** One searchable, canonical Backstage home for every persisted setting. */
@@ -156,7 +169,7 @@ export const SLURP_BACKSTAGE_SETTING_PLACEMENT: Record<keyof SlurpSettings, Slur
   storyImageWidth: automation("images", "story image width", "resolution"),
   storyImageHeight: automation("images", "story image height", "resolution"),
   refreshesPerDay: internal(automation("general", "refreshes per day", "generation")),
-  generationGuidance: automation("general", "writing guidance", "prompt"),
+  generationGuidance: prompts("writing guidance", "spice", "tone"),
   audienceTone: world("audience", "audience tone", "comments"),
   worldActivity: world("audience", "world activity", "crowd activity"),
   platformScale: world("audience", "platform scale", "audience size"),
@@ -168,9 +181,9 @@ export const SLURP_BACKSTAGE_SETTING_PLACEMENT: Record<keyof SlurpSettings, Slur
   imageContextMode: automation("images", "image context", "vision"),
   imageContextConnectionId: automation("images", "vision connection", "image description"),
   imageGenerationConnectionId: internal(automation("images", "image connection", "image model")),
-  imageGenerationPrompt: automation("images", "image guidance", "image prompt"),
-  imagePromptInterpretation: internal(automation("images", "image prompt interpretation")),
-  enableImageInterpretation: automation("images", "interpret image prompts"),
+  imageGenerationPrompt: prompts("image instructions", "image prompt"),
+  imagePromptInterpretation: prompts("image prompt interpretation", "image prompt style", "Danbooru"),
+  enableImageInterpretation: prompts("interpret image prompts"),
   imageGenerationUseAvatarReferences: automation("images", "avatar references"),
   imageGenerationIncludeDescriptions: automation("images", "image descriptions"),
   autoPostingImagesEnabled: automation("images", "automatic post images"),
@@ -187,11 +200,11 @@ export const SLURP_BACKSTAGE_SETTING_PLACEMENT: Record<keyof SlurpSettings, Slur
   postShowMoreLength: automation("general", "show more", "post preview length"),
   characterImageInstructions: place("creators", "creators", "creator", "character image instructions"),
   creatorCollabs: place("creators", "creators", "creator", "collabs", "collab partners", "crossover"),
-  promptPresets: automation("general", "prompt presets", "writing presets"),
-  professorMariCreatorSource: automation("general", "Professor Mari creator"),
+  promptPresets: prompts("prompt presets", "writing presets"),
+  professorMariCreatorSource: prompts("Professor Mari creator"),
   enableEnhancedTimelineWriting: internal(automation("general", "enhanced timeline writing")),
   includeCharacterSchedules: internal(automation("general", "character schedules")),
-  enableLorebookContext: automation("general", "lorebook context"),
+  enableLorebookContext: prompts("lorebook context"),
   enableImagePrompts: internal(automation("images", "image prompts")),
   maxImagesPerRefresh: internal(automation("images", "images per refresh")),
   maxGeneratedPostsPerRefresh: internal(automation("general", "posts per refresh")),

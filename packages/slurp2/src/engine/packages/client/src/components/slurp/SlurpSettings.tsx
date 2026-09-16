@@ -79,6 +79,8 @@ import {
 import {
   settingsSections,
   SLURP_GUIDANCE_PRESETS,
+  SLURP_IMAGE_INTERPRETATION_PRESETS,
+  SLURP_IMAGE_INTERPRETATION_STYLES,
   SLURP_GUIDANCE_LEVELS,
   DEFAULT_SLURP_GENERATION_GUIDANCE,
   DEFAULT_SLURP_IMAGE_GENERATION_PROMPT,
@@ -93,6 +95,7 @@ import { SlurpBackstageOverview } from "./SlurpBackstageOverview";
 import { SlurpBackstageCreators } from "./SlurpBackstageCreators";
 import { SlurpBackstageWorld } from "./SlurpBackstageWorld";
 import { SlurpBackstageAutomation } from "./SlurpBackstageAutomation";
+import { SlurpBackstagePrompts } from "./SlurpBackstagePrompts";
 import { SlurpBackstageMaintenance } from "./SlurpBackstageMaintenance";
 
 type SlurpSettingsProps = {
@@ -392,6 +395,10 @@ function useSlurpBackstageController({
   const generationGuidanceIsDefault = settings?.generationGuidance === DEFAULT_SLURP_GENERATION_GUIDANCE;
   const guidanceLevel =
     SLURP_GUIDANCE_LEVELS.find((level) => SLURP_GUIDANCE_PRESETS[level] === settings?.generationGuidance) ?? null;
+  const interpretationStyle =
+    SLURP_IMAGE_INTERPRETATION_STYLES.find(
+      (style) => SLURP_IMAGE_INTERPRETATION_PRESETS[style] === settings?.imagePromptInterpretation,
+    ) ?? null;
   const imagePromptIsDefault = settings?.imageGenerationPrompt === DEFAULT_SLURP_IMAGE_GENERATION_PROMPT;
   const activityPreset = settings && slurpActivityPresetForSettings(settings);
   const autopurgeNextTime = Date.parse(autopurgeNextDraft);
@@ -713,6 +720,7 @@ function useSlurpBackstageController({
     scheduleSlots,
     generationGuidanceIsDefault,
     guidanceLevel,
+    interpretationStyle,
     imagePromptIsDefault,
     activityPreset,
     autopurgeNextTime,
@@ -883,6 +891,7 @@ export function SlurpSettings({
     scheduleSlots,
     generationGuidanceIsDefault,
     guidanceLevel,
+    interpretationStyle,
     imagePromptIsDefault,
     activityPreset,
     autopurgeNextTime,
@@ -1048,6 +1057,7 @@ export function SlurpSettings({
                   <SlurpBackstageCreators {...page} />
                   <SlurpBackstageWorld {...page} />
                   <SlurpBackstageAutomation {...page} />
+                  <SlurpBackstagePrompts {...page} />
                   <SlurpBackstageMaintenance {...page} />
                   <SlurpBackstageApplyBar
                     count={Object.keys(draftPatch).length}

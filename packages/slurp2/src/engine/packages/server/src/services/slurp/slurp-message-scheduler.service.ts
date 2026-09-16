@@ -74,11 +74,19 @@ export function startSlurpMessageScheduler(app: FastifyInstance, registerStop?: 
         // The fan's newest message is the one being answered, even when a creator bubble or
         // follow-up was stored after it.
         const triggerMessageId = await storage.latestViewerMessageId(thread.id);
+        // An obligation whose trigger already has a stored reply is finished. Without this the
+        // thread is re-selected every tick and holds one of the twenty oldest-first slots forever.
+        const answered = triggerMessageId ? await storage.getCompletedReply(thread.id, triggerMessageId) : null;
+        if (answered && (await storage.getMessageById(answered))) {
+          await storage.clearReplyObligation(thread.id);
+          continue;
+        }
         if (triggerMessageId) {
           const outcome = await replyToSlurpMessage(app.db, {
             threadId: thread.id,
             triggerMessageId,
             force: true,
+            background: true,
           });
           // `replyToSlurpMessage` reports a provider failure instead of rejecting. Discarding it
           // left `consecutiveFailures` at zero, so a dead connection was retried at full rate.
