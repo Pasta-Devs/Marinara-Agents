@@ -3,7 +3,7 @@ import { logger } from "../../lib/logger.js";
 import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
 import { isFollowUpDue, formatFollowUpContext, type ScheduledFollowUp } from "./slurp-follow-up.js";
-import { generateSlurpMessageReply } from "./slurp-message-generation.service.js";
+import { generateSlurpMessageReply, SlurpMessageBudgetUnavailableError } from "./slurp-message-generation.service.js";
 import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { describeSlurpDayVibe } from "./slurp-day-vibe.service.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
@@ -205,6 +205,16 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
               followUp.sequenceNumber ? ` (${followUp.sequenceNumber}/${followUp.totalInSequence})` : "",
             );
           } catch (error) {
+            if (error instanceof SlurpMessageBudgetUnavailableError) {
+              await messages
+                .postponeScheduledFollowUp(
+                  threadRow.id,
+                  threadRow.dueFollowUp.id,
+                  error.retryAt ?? new Date(Date.now() + 60 * 60_000).toISOString(),
+                )
+                .catch(() => {});
+              continue;
+            }
             await messages.failScheduledFollowUp(threadRow.id, threadRow.dueFollowUp.id).catch(() => {});
             logger.error(error, "[slurp-follow-up] Failed to generate follow-up for thread %s", threadRow.id);
             failed = true;

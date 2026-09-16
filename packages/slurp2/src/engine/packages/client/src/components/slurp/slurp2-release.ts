@@ -2,7 +2,7 @@
 // client has no route that serves CHANGELOG.md. So the notes are mirrored here, and
 // `tests/slurp2-release-notes.regression.ts` fails the build if this file drifts from
 // `packages/slurp2/CHANGELOG.md` or from the version in `manifest.json`.
-export const SLURP2_VERSION = "0.0.16";
+export const SLURP2_VERSION = "0.0.17";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -12,6 +12,20 @@ export interface Slurp2ReleaseEntry {
 
 /** Newest first, same order as CHANGELOG.md. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.0.17",
+    date: "2026-09-16",
+    notes: [
+      "Settings is now Backstage: Overview, Creators, Features, Automation, and Maintenance, with setting search and live previews.",
+      "Creators shows metrics and totals for every Creator. Click one to open its settings, content menu, message prices, and collab partners.",
+      "Features -> Events and holidays: yearly events that Creators mention in posts, replies, and messages.",
+      "Free teaser posts: some automatic posts go out free to win subscribers.",
+      "Featured, buried, and viral weeks change post reach, and viral posts bring a rush of followers.",
+      "Fans who spend a lot and show up constantly can become Too attached.",
+      "Crossovers prefer collab partners, and commissions get a quote by default.",
+      "Feed posts have Edit, Delete, and Show image context in the post menu again.",
+    ],
+  },
   {
     version: "0.0.16",
     date: "2026-09-15",

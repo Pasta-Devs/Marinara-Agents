@@ -139,3 +139,26 @@ assert.match(schema, /audienceArc: text\("audience_arc"\)\.notNull\(\)\.default\
 assert.match(schema, /audienceArcSince: text\("audience_arc_since"\)/u);
 
 console.log("slurp audience arc regression passed");
+
+// ── The parasocial spiral ───────────────────────────────────────────────────
+// Heavy spend plus constant presence is attachment, and it outranks rising. Easing off ends it.
+assert.equal(slurpNextAudienceArc({ ...base, stage: "whale", interactions: 40, spent: 300 }), "overattached");
+assert.equal(
+  slurpNextAudienceArc({
+    ...base,
+    stage: "whale",
+    interactions: 40,
+    spent: 300,
+    daysSinceSeen: 5,
+    audienceArc: "overattached",
+  }),
+  "overattached",
+  "a few quiet days keep the arc until it has run its course",
+);
+assert.equal(
+  slurpNextAudienceArc({ ...base, interactions: 40, spent: 100 }),
+  "rising",
+  "spend alone is not attachment",
+);
+assert.ok(isNotableAudienceArcChange("rising", "overattached"));
+assert.match(slurpAudienceArcDescription("overattached") ?? "", /boundaries/);

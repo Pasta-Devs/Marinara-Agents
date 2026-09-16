@@ -5,11 +5,12 @@
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { slurp2BackstageSource } from "./slurp2-backstage-source";
 
 const read = (path: string) => readFileSync(`packages/slurp2/src/engine/packages/${path}`, "utf8");
 const generation = read("server/src/services/slurp/slurp-generation.service.ts");
 const storage = read("server/src/services/storage/slurp.storage.ts");
-const settingsView = read("client/src/components/slurp/SlurpSettings.tsx");
+const settingsView = slurp2BackstageSource();
 
 // Gallery images are a fallback: gated on the setting and a character source, never an error.
 assert.match(

@@ -196,6 +196,8 @@ async function main() {
       prepareSlurpPostImageContexts: prepare,
       slurpImageCaptioning: async (_db: unknown, _id: unknown, connection: unknown) => ({ enabled: true, connection }),
       buildNoodlerCreatorReplyMessages: buildReply,
+      resolveSlurpCreatorMenu: async () => "",
+      slurpPlatformEventInstruction: () => null,
       isDebugAgentsEnabled: () => false,
       noodleSamplingOptions: () => ({}),
       resolveStoredChatOptions: () => ({}),

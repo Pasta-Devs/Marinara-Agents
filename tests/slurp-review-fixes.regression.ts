@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { slurp2BackstageSource } from "./slurp2-backstage-source";
 
 const root = join(import.meta.dirname, "..");
 const server = join(root, "packages/slurp2/src/engine/packages/server/src");
@@ -124,7 +125,7 @@ const messagesView = read(join(client, "components/slurp/SlurpMessages.tsx"));
 // A failed unlock used to re-enable the button and say nothing at all.
 assert.match(messagesView, /\{unlock\.isError && \(/u);
 
-const settings = read(join(client, "components/slurp/SlurpSettings.tsx"));
+const settings = slurp2BackstageSource();
 assert.match(settings, /\.download\("\/slurp2\/noodler\/ads\/export"[\s\S]{0,120}?\.catch\(/u);
 
 const shell = read(join(client, "components/slurp/SlurpShell.tsx"));
@@ -274,7 +275,7 @@ assert.match(slurpStorage, /storyRate: SLURP_DEFAULT_STORY_RATE/u);
 // The shipped default stays 4:5, so an install that never opens Settings is unchanged.
 assert.match(slurpStorage, /storyImageWidth: 1024,\s*storyImageHeight: 1280,/u);
 
-const settingsUi = read(join(client, "components/slurp/SlurpSettings.tsx"));
+const settingsUi = slurp2BackstageSource();
 for (const key of [
   "ui.slurp.settings.storyRate",
   "ui.slurp.settings.images.storyWidth",

@@ -8,6 +8,7 @@ import {
 import { slurpTuningForPreset } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-tuning.js";
 import * as pulseRules from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world-pulse.js";
 import * as worldRules from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.js";
+import { slurp2BackstageSource } from "./slurp2-backstage-source";
 
 // The estimate must be the simulation, not a model of it. A settings screen that predicts one
 // thing while the tick does another is worse than no estimate at all, so the panel calls the same
@@ -58,10 +59,7 @@ const panel = readFileSync(
 );
 assert.match(panel, /export function SlurpSimulationSettings/u, "the simulation panel must be its own component");
 assert.match(panel, /slurpSimulationTuningSchema/u, "inputs must take their range from the stored schema");
-const settings = readFileSync(
-  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx",
-  "utf8",
-);
+const settings = slurp2BackstageSource();
 assert.match(settings, /<SlurpSimulationSettings\b/u, "settings must mount the simulation panel");
 assert.match(settings, /update\("simulationTuning", next\)/u, "saving must send the whole tuning object");
 

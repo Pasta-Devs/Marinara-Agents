@@ -4,7 +4,7 @@ import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { resolveNoodlerImageConnectionId } from "./slurp-image-connections.js";
 import { createSlurpStorage, noodlerReservePolicyFingerprint } from "../storage/slurp.storage.js";
 import { hasSlurpCreatorPostingIntervalConflict } from "./slurp-posting-interval.js";
-import { generateNoodlerPost } from "./slurp-generation.service.js";
+import { generateNoodlerPost, resolveSlurpAutomaticPostAccess } from "./slurp-generation.service.js";
 import { generateNoodlerPostImage } from "./slurp-images.service.js";
 import { tryNoodlerAccountOperation } from "./slurp-account-operation-lock.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
@@ -157,7 +157,7 @@ export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Pr
           // always `caption`, and the constant guide read as player direction, which makes the
           // generator stand its rotating variation down. The guide also said nothing the system prompt
           // does not already say.
-          access: "locked",
+          access: await resolveSlurpAutomaticPostAccess(noodle, selectedAccount.id),
         },
         publicationTime: new Date(selectedPublishAt),
         generatedAt: at,

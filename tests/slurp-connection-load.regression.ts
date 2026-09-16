@@ -58,7 +58,11 @@ console.log("slurp poll backoff regression passed");
 // by an attempt budget so a broken image connection cannot retry for ever.
 const images = read("slurp-images.service.ts");
 assert.match(images, /imageRetryAttempts: attempts/);
-assert.match(images, /imagePrompt: attempts >= NOODLER_POST_IMAGE_RETRY_LIMIT \? null : undefined/);
+// The prompt is kept even once the automatic budget is spent. Deleting it left a permanently
+// image-less post with no record of what the picture was meant to be, so nobody could redraw it
+// by hand — which is the one thing left to do after three automatic failures. The automatic pass
+// stops on the attempt counter checked below, so the prompt never needed to be the off switch.
+assert.doesNotMatch(images, /imagePrompt: attempts >= NOODLER_POST_IMAGE_RETRY_LIMIT \? null : undefined/);
 assert.match(images, /if \(isConnectionAdmissionFailure\(error\)\) \{\s*await noodle\.releasePostImageClaim/);
 assert.match(images, /retryNextFailedPostImage/);
 assert.match(images, /admissionMode: \{ kind: "background" \}/);

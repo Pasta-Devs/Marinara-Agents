@@ -187,6 +187,7 @@ import {
 import { SlurpProfileSurface } from "./SlurpProfileSurface";
 import { BroadcastPanel, SlurpMessagesView } from "./SlurpMessages";
 import { SlurpSettings, SlurpSettingsSidebar } from "./SlurpSettings";
+import { confirmLeaveSlurpBackstage } from "./SlurpBackstageChrome";
 import { NoodleImageComposer } from "./SlurpImageComposer";
 import { NoodlePollComposer } from "./SlurpPollComposer";
 import { PostImageCropEditor, PostImageFrame } from "./PostImageCropEditor";
@@ -198,6 +199,15 @@ import { useTranslation as useUiTranslation } from "react-i18next";
 import { SlurpInlineAd } from "./SlurpInlineAd";
 import { SlurpCreatorProfileCard } from "./SlurpCreatorProfileCard";
 import { SlurpDiscoveryProfileEditor } from "./SlurpDiscoveryProfileEditor";
+import {
+  appendAudienceStance,
+  confirmSlurpAvatarReview,
+  AudienceStancePresets,
+  disclosureOptions,
+  profileAccent,
+  StageProfileForm,
+  WizardFooter,
+} from "./SlurpStageProfileForm";
 import { SlurpDiscoverToolbar } from "./SlurpDiscoverToolbar";
 import {
   filterAndSortSlurpCreators,
@@ -261,27 +271,6 @@ const SLURP_PLACEHOLDER_BALANCE = 1111;
 // presentation window for the in-memory viewer projection.
 const SLURP_MOMENT_WINDOW_MS = 72 * 60 * 60 * 1000;
 const STAGE_PERSONALITY_MAX_LENGTH = 1000;
-
-const AUDIENCE_STANCE_PRESETS = [
-  {
-    labelKey: "ui.noodle.stageprofileform.stance.girlfriend",
-    textKey: "ui.noodle.stageprofileform.stance.girlfriendText",
-  },
-  {
-    labelKey: "ui.noodle.stageprofileform.stance.brattyTease",
-    textKey: "ui.noodle.stageprofileform.stance.brattyTeaseText",
-  },
-  { labelKey: "ui.noodle.stageprofileform.stance.aloof", textKey: "ui.noodle.stageprofileform.stance.aloofText" },
-  { labelKey: "ui.noodle.stageprofileform.stance.inCharge", textKey: "ui.noodle.stageprofileform.stance.inChargeText" },
-  { labelKey: "ui.noodle.stageprofileform.stance.eager", textKey: "ui.noodle.stageprofileform.stance.eagerText" },
-  { labelKey: "ui.noodle.stageprofileform.stance.shy", textKey: "ui.noodle.stageprofileform.stance.shyText" },
-] as const;
-
-export function appendAudienceStance(current: string, sentence: string): string {
-  const trimmed = current.trim();
-  const next = trimmed ? `${trimmed}\n${sentence}` : sentence;
-  return next.length <= STAGE_PERSONALITY_MAX_LENGTH ? next : trimmed;
-}
 
 interface NoodlerPostSubmission {
   profileId: string;
@@ -429,33 +418,6 @@ function toManagedPostCardModel(post: NoodlerManagedPost, profile: NoodlerStageP
     createdAt: post.createdAt,
     interactions: [],
   };
-}
-
-type DisclosureOption = {
-  value: NoodleIdentityDisclosure;
-  label: string;
-  shortLabel: string;
-  detail: string;
-  guidance: string;
-};
-
-function disclosureOptions(t: ReturnType<typeof useUiTranslation>["t"]): DisclosureOption[] {
-  return [
-    {
-      value: "open",
-      label: "Linked identity",
-      shortLabel: "Open",
-      detail: "This Creator may openly use the source identity.",
-      guidance: "Names, handles, recognizable details, and continuity may carry over.",
-    },
-    {
-      value: "hinted",
-      label: t("ui.noodle.disclosure.hinted.label"),
-      shortLabel: t("ui.noodle.disclosure.hinted.shortLabel"),
-      detail: t("ui.noodle.disclosure.hinted.detail"),
-      guidance: t("ui.noodle.disclosure.hinted.guidance"),
-    },
-  ];
 }
 
 const EMPTY_STAGE_PROFILE: SlurpStageProfileInput = {
@@ -628,6 +590,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
       tone: "destructive",
     });
   const exitToCreatorHub = async () => {
+    if (navigation.mode === "creator-settings" && !(await confirmLeaveSlurpBackstage(localizeUi))) return;
     if (!(await confirmDiscardProfileDraft())) return;
     if (!(await confirmDiscardNoodlerPostDrafts())) return;
     clearProfileEditorState();
@@ -732,6 +695,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   const [draftConnectionId, setDraftConnectionId] = useState("");
   const [previousDraft, setPreviousDraft] = useState<SlurpStageProfileInput | null>(null);
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
+  const [composerOpenSignal, setComposerOpenSignal] = useState(0);
   const profileReturnToSettingsRef = useRef<SlurpNavigationState | null>(null);
   const [acceptSourceChangesForProfileId, setAcceptSourceChangesForProfileId] = useState<string | null>(null);
   const [draftSourceSnapshot, setDraftSourceSnapshot] = useState<NoodlerSourceSnapshot | null>(null);
@@ -1367,26 +1331,14 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     };
     if (editingProfileId) {
       const editing = accountsQuery.data?.find((profile) => profile.id === editingProfileId);
-      const keepsSeparateAvatar = Boolean(
-        editing?.avatarUrl?.startsWith(`/api/slurp2/noodler/accounts/${encodeURIComponent(editing.id)}/avatar/`),
-      );
-      const disclosureRank: Record<NoodleIdentityDisclosure, number> = {
-        secret: 0,
-        hinted: 1,
-        open: 2,
-      };
-      const disclosureDowngrade = Boolean(
-        editing?.disclosureMode && disclosureRank[input.disclosureMode] < disclosureRank[editing.disclosureMode],
-      );
-      let confirmAvatarReview = false;
-      if (disclosureDowngrade && keepsSeparateAvatar) {
-        confirmAvatarReview = await showConfirmDialog({
-          title: localizeUi("ui.noodle.stageprofileform.reviewSeparateAvatar"),
-          message: localizeUi("ui.noodle.stageprofileform.separateAvatarReviewMessage"),
-          confirmLabel: localizeUi("ui.noodle.stageprofileform.keepAvatar"),
-        });
-        if (!confirmAvatarReview) return;
-      }
+      const review = await confirmSlurpAvatarReview({
+        existing: editing ?? null,
+        nextDisclosure: input.disclosureMode,
+        localize: localizeUi,
+        confirm: showConfirmDialog,
+      });
+      if (!review.proceed) return;
+      const confirmAvatarReview = review.confirmAvatarReview;
       updateProfile.mutate(
         {
           accountId: editingProfileId,
@@ -1856,7 +1808,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
                     },
                   )
                 }
-                className="h-10 flex-1 rounded-full border border-transparent bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
+                className="h-10 flex-1 rounded-full border border-transparent bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50"
               >
                 {setupAutoPosting.isPending
                   ? localizeUi("ui.noodle.noodlerhome.enabling_5c258f0")
@@ -1984,12 +1936,18 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
               {
                 label: localizeUi("ui.slurp.profile.createPost", { defaultValue: "Create post" }),
                 icon: Plus,
-                action: openPostComposer,
+                action: () => {
+                  updateNoodlerPostDraft(selectedProfile.id, { postType: "post", poll: null });
+                  setComposerOpenSignal((tick) => tick + 1);
+                },
               },
               {
                 label: localizeUi("ui.slurp.profile.addStory", { defaultValue: "Add story" }),
                 icon: Sparkles,
-                action: openStoryComposer,
+                action: () => {
+                  updateNoodlerPostDraft(selectedProfile.id, { postType: "story", poll: null, title: "" });
+                  setComposerOpenSignal((tick) => tick + 1);
+                },
               },
               {
                 label: localizeUi("ui.slurp.profile.openStudio", { defaultValue: "Open studio" }),
@@ -2043,6 +2001,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
             key={`${selectedProfile.id}:${shellPersonaAccount?.id ?? "no-viewer"}`}
             profile={selectedProfile}
             profileDraft={editingProfileId === selectedProfile.id ? profileDraft : null}
+            composerOpenSignal={composerOpenSignal}
             onProfileChange={(patch) => setProfileDraft((current) => (current ? { ...current, ...patch } : current))}
             onCancelEdit={closeProfileEditor}
             onSaveEdit={(location) => void saveProfile(location)}
@@ -2196,7 +2155,8 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
                     title={label}
                     className={cn(
                       "flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted-foreground)] transition-[background-color,color,transform] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none",
-                      discoverRank === value && "bg-[var(--noodle-accent)] text-zinc-950 shadow-sm",
+                      discoverRank === value &&
+                        "bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950 shadow-sm",
                     )}
                   >
                     <Icon size={14} fill={discoverRank === value ? "currentColor" : "none"} aria-hidden="true" />
@@ -2231,7 +2191,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
                           className={cn(
                             "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[0.68rem] font-black tabular-nums",
                             index === 0
-                              ? "bg-[var(--noodle-accent)] text-zinc-950"
+                              ? "bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950"
                               : "bg-[var(--accent)] text-[var(--muted-foreground)]",
                           )}
                         >
@@ -2566,561 +2526,6 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   );
 }
 
-function AudienceStancePresets({ disabled, onApply }: { disabled: boolean; onApply: (sentence: string) => void }) {
-  const { t: localizeUi } = useUiTranslation();
-  return (
-    <div data-component="SlurpHome.AudienceStancePresets" className="space-y-1 pt-1">
-      <span className="block text-[11px] font-semibold text-[var(--muted-foreground)]">
-        {localizeUi("ui.noodle.stageprofileform.audienceStance")}
-      </span>
-      <div className="flex flex-wrap gap-1.5">
-        {AUDIENCE_STANCE_PRESETS.map((preset) => (
-          <button
-            key={preset.labelKey}
-            type="button"
-            disabled={disabled}
-            onClick={() => onApply(localizeUi(preset.textKey))}
-            className="min-h-8 rounded-full border border-[var(--noodle-divider)] px-3 text-xs font-semibold transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:opacity-50"
-          >
-            {localizeUi(preset.labelKey)}
-          </button>
-        ))}
-      </div>
-      <span className="block text-[11px] text-[var(--muted-foreground)]">
-        {localizeUi("ui.noodle.stageprofileform.audienceStanceHint")}
-      </span>
-    </div>
-  );
-}
-
-function StageProfileForm({
-  draft,
-  source,
-  disclosureMode,
-  onDisclosureChange,
-  guidance,
-  onGuidanceChange,
-  connections,
-  connectionId,
-  onConnectionChange,
-  onGenerate,
-  isGenerating,
-  previousDraft,
-  onUndoDraft,
-  onChange,
-  sourceAccountId,
-  accentId,
-  isEditing,
-  isPending,
-  avatar,
-  sourceAvatarUrl,
-  avatarPending,
-  onUploadAvatar,
-  onUseSourceAvatar,
-  onRemoveAvatar,
-  onCancel,
-  onSave,
-}: {
-  draft: SlurpStageProfileInput;
-  source: { displayName: string; handle: string; avatarUrl?: string | null } | null;
-  disclosureMode: NoodleIdentityDisclosure;
-  onDisclosureChange: (value: NoodleIdentityDisclosure) => void;
-  guidance: string;
-  onGuidanceChange: (value: string) => void;
-  connections: Array<{ id: string; name: string; model?: string }>;
-  connectionId: string;
-  onConnectionChange: (value: string) => void;
-  onGenerate: () => void;
-  isGenerating: boolean;
-  previousDraft: SlurpStageProfileInput | null;
-  onUndoDraft: () => void;
-  onChange: (patch: Partial<SlurpStageProfileInput>) => void;
-  sourceAccountId: string | null;
-  accentId: string;
-  isEditing: boolean;
-  isPending: boolean;
-  avatar: NoodlerStageProfile | null;
-  sourceAvatarUrl: string | null;
-  avatarPending: boolean;
-  onUploadAvatar: (file: File) => void;
-  onUseSourceAvatar: () => void;
-  onRemoveAvatar: () => void;
-  onCancel: () => void;
-  onSave: () => void;
-}) {
-  const { t: localizeUi } = useUiTranslation();
-  const disclosureChoices = disclosureOptions(localizeUi);
-  const accent = profileAccent(accentId);
-  const [connectionPickerOpen, setConnectionPickerOpen] = useState(false);
-  const [relationshipPickerOpen, setRelationshipPickerOpen] = useState(false);
-  const [relationshipPickerPosition, setRelationshipPickerPosition] = useState<{
-    left: number;
-    top: number;
-  } | null>(null);
-  const connectionPickerRef = useRef<HTMLDivElement>(null);
-  const avatarFileRef = useRef<HTMLInputElement>(null);
-  const relationshipPickerRef = useRef<HTMLDivElement>(null);
-  const relationshipPickerMenuRef = useRef<HTMLDivElement>(null);
-  const canSave =
-    Boolean((isEditing || sourceAccountId) && draft.displayName.trim() && draft.handle.trim()) &&
-    // A new Creator needs a gender and at least 3 tags; the server enforces the same rule.
-    (isEditing || !isSlurpDiscoveryProfileIncomplete(draft)) &&
-    !isPending &&
-    !isGenerating;
-  const selectedConnection = connections.find((connection) => connection.id === connectionId) ?? null;
-  const selectedDisclosure =
-    disclosureChoices.find((option) => option.value === disclosureMode) ?? disclosureChoices[0];
-
-  useEffect(() => {
-    if (!connectionPickerOpen) return;
-    const handleOutsidePointer = (event: PointerEvent) => {
-      if (!connectionPickerRef.current?.contains(event.target as Node)) {
-        setConnectionPickerOpen(false);
-      }
-    };
-    document.addEventListener("pointerdown", handleOutsidePointer);
-    return () => document.removeEventListener("pointerdown", handleOutsidePointer);
-  }, [connectionPickerOpen]);
-
-  useEffect(() => {
-    if (!relationshipPickerOpen) return;
-    const handleOutsidePointer = (event: PointerEvent) => {
-      if (
-        !relationshipPickerRef.current?.contains(event.target as Node) &&
-        !relationshipPickerMenuRef.current?.contains(event.target as Node)
-      ) {
-        setRelationshipPickerOpen(false);
-      }
-    };
-    document.addEventListener("pointerdown", handleOutsidePointer);
-    return () => document.removeEventListener("pointerdown", handleOutsidePointer);
-  }, [relationshipPickerOpen]);
-
-  useEffect(() => {
-    if (!relationshipPickerOpen || !relationshipPickerRef.current) return;
-    const frame = window.requestAnimationFrame(() => {
-      const anchor = relationshipPickerRef.current?.getBoundingClientRect();
-      if (!anchor) return;
-      const menuWidth = relationshipPickerMenuRef.current?.offsetWidth ?? 288;
-      const menuHeight = relationshipPickerMenuRef.current?.offsetHeight ?? 224;
-      const left = Math.min(Math.max(8, anchor.left), window.innerWidth - menuWidth - 8);
-      const roomBelow = window.innerHeight - anchor.bottom;
-      const top = roomBelow >= menuHeight + 8 ? anchor.bottom + 4 : Math.max(8, anchor.top - menuHeight - 4);
-      setRelationshipPickerPosition({ left, top });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [relationshipPickerOpen]);
-
-  const relationshipPickerMenu =
-    relationshipPickerOpen && typeof document !== "undefined"
-      ? createPortal(
-          <div
-            ref={relationshipPickerMenuRef}
-            role="listbox"
-            aria-label={localizeUi("ui.noodle.stageprofileform.identityRelationship")}
-            onPointerDown={(event) => event.stopPropagation()}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.stopPropagation();
-                setRelationshipPickerOpen(false);
-                relationshipPickerRef.current?.querySelector("button")?.focus();
-              }
-            }}
-            className="fixed z-[9999] w-72 max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl border border-foreground/10 bg-[var(--card)] p-1 shadow-2xl"
-            style={getNoodleAccentStyle(
-              accent,
-              relationshipPickerPosition
-                ? { left: relationshipPickerPosition.left, top: relationshipPickerPosition.top }
-                : { visibility: "hidden" },
-            )}
-          >
-            {disclosureChoices.map((option) => {
-              const isSelected = option.value === disclosureMode;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="option"
-                  aria-selected={isSelected}
-                  onClick={() => {
-                    onDisclosureChange(option.value);
-                    setRelationshipPickerOpen(false);
-                  }}
-                  className={cn(
-                    "flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-foreground/10",
-                    isSelected && "bg-foreground/5",
-                  )}
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-xs font-semibold text-[var(--foreground)]">{option.label}</span>
-                    <span className="mt-0.5 block text-[0.6875rem] leading-4 text-[var(--muted-foreground)]">
-                      {option.detail}
-                    </span>
-                  </span>
-                  {isSelected && <Check size={14} className="mt-0.5 shrink-0 text-[var(--noodle-accent)]" />}
-                </button>
-              );
-            })}
-          </div>,
-          document.body,
-        )
-      : null;
-
-  return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col">
-      <div className="px-4 py-5 sm:px-6 @min-[1024px]:py-6">
-        <div className="rounded-lg border border-[var(--noodle-divider)] bg-[var(--accent)]/40 p-4">
-          <div className="flex items-start gap-3">
-            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 text-[var(--noodle-accent)]">
-              <Sparkles size={16} />
-            </span>
-            <div className="min-w-0">
-              <p className="text-sm font-bold">
-                {isEditing
-                  ? localizeUi("ui.noodle.stageprofileform.refineThisStageIdentity")
-                  : localizeUi("ui.noodle.stageprofileform.createTheStageIdentity")}
-              </p>
-              <div className="mt-1 flex flex-wrap items-center gap-x-1 text-xs leading-5 text-[var(--muted-foreground)]">
-                <span>
-                  {source
-                    ? localizeUi("ui.noodle.stageprofileform.builtFromValue1Value2", {
-                        value1: source.displayName,
-                        value2: source.handle,
-                      })
-                    : localizeUi("ui.noodle.stageprofileform.yourSourceIdentityIsKeptSeparateFromThisStage")}
-                </span>
-                <span>{localizeUi("ui.noodle.stageprofileform.relationship")}</span>
-                <div ref={relationshipPickerRef} className="relative">
-                  <button
-                    type="button"
-                    disabled={isGenerating || isPending}
-                    onClick={() => setRelationshipPickerOpen((open) => !open)}
-                    aria-haspopup="listbox"
-                    aria-expanded={relationshipPickerOpen}
-                    className="inline-flex items-center gap-1 rounded px-1 py-0.5 font-bold text-[var(--foreground)] transition-colors hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {selectedDisclosure.label}
-                    <ChevronDown
-                      size={13}
-                      className={cn("transition-transform", relationshipPickerOpen && "rotate-180")}
-                    />
-                  </button>
-                  {relationshipPickerMenu}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="mt-5 space-y-4">
-          {isEditing && avatar && (
-            <div className="flex flex-col gap-4 rounded-lg border border-[var(--noodle-divider)] p-4 sm:flex-row sm:items-center">
-              <div className="shrink-0">
-                <ProfileInitial profile={avatar} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-bold">{localizeUi("ui.noodle.stageprofileform.creatorAvatar")}</p>
-                <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
-                  {localizeUi("ui.noodle.stageprofileform.avatarHelp")}
-                </p>
-                {disclosureMode !== "open" && (
-                  <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
-                    {localizeUi("ui.noodle.stageprofileform.sourceAvatarOpenOnly")}
-                  </p>
-                )}
-              </div>
-              <input
-                ref={avatarFileRef}
-                type="file"
-                accept="image/jpeg,image/png,image/gif,image/webp,image/avif"
-                className="sr-only"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  event.target.value = "";
-                  if (file) onUploadAvatar(file);
-                }}
-              />
-              <div className="flex flex-wrap gap-2 sm:justify-end">
-                <button
-                  type="button"
-                  disabled={avatarPending}
-                  onClick={() => avatarFileRef.current?.click()}
-                  title={localizeUi("ui.noodle.stageprofileform.uploadAvatar")}
-                  className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--noodle-divider)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
-                >
-                  <Upload size={15} /> {localizeUi("ui.noodle.stageprofileform.upload")}
-                </button>
-                <button
-                  type="button"
-                  disabled={avatarPending || disclosureMode !== "open" || !sourceAvatarUrl}
-                  onClick={onUseSourceAvatar}
-                  className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--noodle-divider)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
-                >
-                  <UserRound size={15} /> {localizeUi("ui.noodle.stageprofileform.useSource")}
-                </button>
-                {avatar.avatarUrl && (
-                  <button
-                    type="button"
-                    disabled={avatarPending}
-                    onClick={onRemoveAvatar}
-                    title={localizeUi("ui.noodle.stageprofileform.removeAvatar")}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--noodle-divider)] text-[var(--destructive)] hover:bg-[var(--destructive)]/10 disabled:opacity-50"
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block space-y-1">
-              <span className="text-xs font-semibold">{localizeUi("ui.noodle.stageprofileform.stageName")}</span>
-              <input
-                required
-                aria-required="true"
-                disabled={isGenerating || isPending}
-                value={draft.displayName}
-                maxLength={120}
-                onChange={(event) => onChange({ displayName: event.target.value })}
-                className={`${fieldClass} !h-10`}
-              />
-            </label>
-            <label className="block space-y-1">
-              <span className="text-xs font-semibold">{localizeUi("ui.noodle.stageprofileform.stageHandle")}</span>
-              <span className="relative block">
-                <span
-                  aria-hidden="true"
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-semibold text-[var(--noodle-accent)]"
-                >
-                  @
-                </span>
-                <input
-                  required
-                  aria-required="true"
-                  disabled={isGenerating || isPending}
-                  value={draft.handle}
-                  maxLength={40}
-                  onChange={(event) => onChange({ handle: event.target.value })}
-                  placeholder={localizeUi("ui.noodle.stageprofileform.afterhours")}
-                  className={`${fieldClass} !h-10 !pl-7`}
-                />
-              </span>
-            </label>
-            <label className="block space-y-1">
-              <span className="text-xs font-semibold">{localizeUi("ui.noodle.noodleprofilesurface.bio")}</span>
-              <textarea
-                rows={2}
-                disabled={isGenerating || isPending}
-                value={draft.bio}
-                maxLength={500}
-                onChange={(event) => onChange({ bio: event.target.value })}
-                className={`${textareaClass} !min-h-0`}
-              />
-              <AudienceStancePresets
-                disabled={isGenerating || isPending}
-                onApply={(sentence) =>
-                  onChange({ stagePersonality: appendAudienceStance(draft.stagePersonality, sentence) })
-                }
-              />
-            </label>
-            <label className="block space-y-1">
-              <span className="text-xs font-semibold">{localizeUi("ui.noodle.stageprofileform.stageVoice")}</span>
-              <textarea
-                rows={2}
-                disabled={isGenerating || isPending}
-                value={draft.stagePersonality}
-                maxLength={1000}
-                onChange={(event) => onChange({ stagePersonality: event.target.value })}
-                placeholder={localizeUi("ui.noodle.stageprofileform.voiceAttitudeBoundariesAndCreatorPersona")}
-                className={`${textareaClass} !min-h-0`}
-              />
-            </label>
-          </div>
-          <SlurpDiscoveryProfileEditor
-            gender={draft.gender}
-            tags={draft.tags}
-            disabled={isGenerating || isPending}
-            onChange={onChange}
-          />
-          <details className="group overflow-visible rounded-lg border border-[var(--noodle-divider)]">
-            <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 py-3 transition-colors hover:bg-[var(--accent)]/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] [&::-webkit-details-marker]:hidden">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 text-[var(--noodle-accent)]">
-                <Sparkles size={16} />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-bold">{localizeUi("ui.noodle.stageprofileform.aiGuidance")}</span>
-                <span className="block text-xs leading-5 text-[var(--muted-foreground)]">
-                  {localizeUi("ui.noodle.stageprofileform.generateOrRewriteAnEditableProfileDraft")}
-                </span>
-              </span>
-              <ChevronDown
-                size={18}
-                className="shrink-0 text-[var(--muted-foreground)] transition-transform group-open:rotate-180"
-              />
-            </summary>
-            <div className="border-t border-[var(--noodle-divider)] p-4">
-              <label className="block space-y-2">
-                <span className="text-xs font-semibold">
-                  {localizeUi("ui.noodle.stageprofileform.optionalDirectionForAi")}
-                </span>
-                <textarea
-                  value={guidance}
-                  maxLength={2000}
-                  disabled={isGenerating || isPending}
-                  onChange={(event) => onGuidanceChange(event.target.value)}
-                  placeholder={localizeUi("ui.noodle.stageprofileform.aMysteriousLateNightPhotographerWithAWarmBut")}
-                  className={`${textareaClass} min-h-20`}
-                />
-              </label>
-              {connections.length === 0 && (
-                <p className="mt-3 rounded-lg border border-[var(--destructive)]/30 bg-[var(--destructive)]/5 p-3 text-xs leading-5">
-                  {localizeUi("ui.noodle.stageprofileform.noConnectionsConfiguredAddOneInSettingsConnections")}
-                </p>
-              )}
-              <div className="mt-3 flex items-center justify-end gap-2">
-                {connections.length > 0 && (
-                  <div ref={connectionPickerRef} className="relative shrink-0">
-                    <button
-                      type="button"
-                      disabled={isGenerating || isPending}
-                      onClick={() => setConnectionPickerOpen((open) => !open)}
-                      aria-label={localizeUi("ui.noodle.connection.generationLabel", {
-                        name: selectedConnection?.name ?? localizeUi("ui.noodle.connection.default"),
-                      })}
-                      aria-haspopup="listbox"
-                      aria-expanded={connectionPickerOpen}
-                      title={localizeUi("ui.noodle.connection.title", {
-                        name: selectedConnection?.name ?? localizeUi("ui.noodle.connection.default"),
-                      })}
-                      className={cn(
-                        "flex h-11 max-w-[calc(100%-10.5rem)] items-center justify-center gap-2 rounded-lg border border-[var(--noodle-divider)] px-3 transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] sm:max-w-64",
-                        connectionPickerOpen && "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10",
-                        (isGenerating || isPending) && "cursor-not-allowed opacity-50",
-                      )}
-                    >
-                      <Link size={18} className="shrink-0 !text-[var(--noodle-accent)]" />
-                      <span className="truncate text-xs font-semibold">
-                        {selectedConnection?.name ?? "Default connection"}
-                      </span>
-                    </button>
-                    {connectionPickerOpen && (
-                      <div
-                        role="listbox"
-                        aria-label={localizeUi("ui.noodle.stageprofileform.generationConnections")}
-                        onKeyDown={(event) => {
-                          if (event.key === "Escape") {
-                            event.stopPropagation();
-                            setConnectionPickerOpen(false);
-                          }
-                        }}
-                        className="absolute bottom-full left-0 z-50 mb-2 flex w-64 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border border-foreground/10 bg-[var(--card)] shadow-2xl"
-                      >
-                        <div className="border-b border-foreground/10 px-3 py-2 text-[0.6875rem] font-semibold">
-                          {localizeUi("navigation.topbar.connections")}
-                        </div>
-                        <div className="max-h-60 overflow-y-auto p-1">
-                          <button
-                            type="button"
-                            role="option"
-                            aria-selected={!connectionId}
-                            onClick={() => {
-                              onConnectionChange("");
-                              setConnectionPickerOpen(false);
-                            }}
-                            className={cn(
-                              "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs transition-colors hover:bg-foreground/10",
-                              !connectionId && "bg-foreground/5 font-semibold",
-                            )}
-                          >
-                            <span className="flex-1 truncate">{localizeUi("ui.noodle.connection.default")}</span>
-                            {!connectionId && <Check size={14} />}
-                          </button>
-                          {connections.map((connection) => {
-                            const isSelected = connection.id === connectionId;
-                            return (
-                              <button
-                                type="button"
-                                role="option"
-                                aria-selected={isSelected}
-                                key={connection.id}
-                                onClick={() => {
-                                  onConnectionChange(connection.id);
-                                  setConnectionPickerOpen(false);
-                                }}
-                                className={cn(
-                                  "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs transition-colors hover:bg-foreground/10",
-                                  isSelected && "bg-foreground/5 font-semibold",
-                                )}
-                              >
-                                <span className="min-w-0 flex-1">
-                                  <span className="block truncate">{connection.name}</span>
-                                  {connection.model && (
-                                    <span className="block truncate text-[0.6875rem] font-normal text-[var(--muted-foreground)]">
-                                      {connection.model}
-                                    </span>
-                                  )}
-                                </span>
-                                {isSelected && <Check size={14} className="shrink-0" />}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={onGenerate}
-                  disabled={isGenerating || isPending || connections.length === 0}
-                  className="inline-flex min-h-11 w-40 shrink-0 items-center justify-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950 [&_svg]:!text-zinc-950 hover:opacity-90 disabled:opacity-50"
-                >
-                  {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}{" "}
-                  {isGenerating
-                    ? localizeUi("ui.noodle.stageprofileform.generatingDraft")
-                    : previousDraft
-                      ? localizeUi("ui.noodle.stageprofileform.rewriteDraft")
-                      : localizeUi("ui.noodle.stageprofileform.generateDraft")}
-                </button>
-              </div>
-              {previousDraft && !isGenerating && (
-                <button
-                  type="button"
-                  onClick={onUndoDraft}
-                  className="mt-1 flex min-h-11 w-full items-center justify-center text-xs font-semibold text-[var(--noodle-accent)] hover:underline"
-                >
-                  {localizeUi("ui.noodle.stageprofileform.undoAiChanges")}
-                </button>
-              )}
-            </div>
-          </details>
-        </div>
-      </div>
-      <WizardFooter
-        step={2}
-        onBack={onCancel}
-        backLabel={localizeUi("ui.slurp.creatorForm.cancel")}
-        showProgress={!isEditing}
-        disabled={isPending || isGenerating}
-        finalAction={
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={!canSave}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-5 text-sm font-bold text-zinc-950 [&_svg]:!text-zinc-950 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isPending ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-            {isPending
-              ? localizeUi("ui.noodle.stageprofileform.saving")
-              : isEditing
-                ? localizeUi("ui.noodle.stageprofileform.saveChanges")
-                : localizeUi("ui.noodle.noodlehome.createStageProfile")}
-          </button>
-        }
-      />
-    </div>
-  );
-}
-
 function StageProfileSourcePicker({
   accounts,
   search,
@@ -3214,7 +2619,7 @@ function StageProfileSourcePicker({
                 type="button"
                 aria-pressed={kind === option}
                 onClick={() => onKindChange(option)}
-                className={`min-h-11 rounded-lg px-2 text-xs font-semibold capitalize ${kind === option ? "bg-[var(--noodle-accent)] text-zinc-950" : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"}`}
+                className={`min-h-11 rounded-lg px-2 text-xs font-semibold capitalize ${kind === option ? "bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950" : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"}`}
               >
                 {option === "all"
                   ? localizeUi("ui.noodle.stageprofilesourcepicker.all")
@@ -3342,85 +2747,6 @@ function DisclosureStep({
   );
 }
 
-function WizardFooter({
-  step,
-  onBack,
-  onNext,
-  nextDisabled = false,
-  finalAction,
-  disabled = false,
-  backLabel = "Back",
-  showProgress = true,
-}: {
-  step: 0 | 1 | 2;
-  onBack: () => void;
-  onNext?: () => void;
-  nextDisabled?: boolean;
-  finalAction?: ReactNode;
-  disabled?: boolean;
-  backLabel?: string;
-  showProgress?: boolean;
-}) {
-  const { t: localizeUi } = useUiTranslation();
-  const labels = ["Source", "Disclosure", "Profile"];
-  return (
-    <div className="sticky bottom-0 z-[60] shrink-0 border-t border-[var(--noodle-divider)] bg-[var(--background)] px-4 pb-3 pt-3 sm:px-6">
-      {showProgress && (
-        <div
-          className="mb-3 flex items-center justify-center gap-1.5"
-          role="status"
-          aria-label={localizeUi("ui.noodle.wizardfooter.stepValue1OfValue2Value3", {
-            value1: step + 1,
-            value2: labels.length,
-            value3: labels[step],
-          })}
-        >
-          {labels.map((label, index) => (
-            <span key={label} className="flex items-center gap-1.5">
-              <span
-                aria-current={index === step ? "step" : undefined}
-                aria-label={localizeUi("ui.noodle.wizardfooter.stepValue1Value2Value3", {
-                  value1: index + 1,
-                  value2: label,
-                  value3:
-                    index === step
-                      ? localizeUi("ui.noodle.wizardfooter.current")
-                      : index < step
-                        ? localizeUi("ui.noodle.wizardfooter.complete")
-                        : "",
-                })}
-                title={label}
-                className={`h-1.5 rounded-full transition-all ${index === step ? "w-6 bg-[var(--noodle-accent)]" : index < step ? "w-4 bg-[var(--noodle-accent)]/45" : "w-2 bg-[var(--muted-foreground)]/25"}`}
-              />
-              {index < labels.length - 1 && <span className="sr-only">{localizeUi("ui.noodle.wizardfooter.to")}</span>}
-            </span>
-          ))}
-        </div>
-      )}
-      <div className="flex items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={onBack}
-          disabled={disabled}
-          className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--noodle-divider)] px-4 text-sm font-semibold hover:bg-[var(--accent)] disabled:cursor-wait disabled:opacity-50"
-        >
-          <ArrowLeft size={15} /> {backLabel}
-        </button>
-        {finalAction ?? (
-          <button
-            type="button"
-            onClick={onNext}
-            disabled={nextDisabled || disabled}
-            className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-5 text-sm font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {localizeUi("ui.noodle.wizardfooter.continue")} <ArrowRight size={16} />
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 type SlurpProfileImagePost = NoodlePostCardModel & { imageUrl: string };
 
 function SourceAccountAvatar({
@@ -3437,10 +2763,6 @@ function SourceAccountAvatar({
   ) : (
     <ProfileInitial profile={{ ...account, avatarUrl: null }} />
   );
-}
-
-function profileAccent(_profileId: string): string {
-  return NOODLE_PINK;
 }
 
 function SlurpProfileFeaturedImage({
@@ -3615,6 +2937,7 @@ function StageProfileView({
   onOpenMessages,
   accessPending,
   onAccessChange,
+  composerOpenSignal,
 }: {
   profile: SlurpManagedStageProfile;
   profileDraft: SlurpStageProfileInput | null;
@@ -3658,12 +2981,21 @@ function StageProfileView({
   onOpenMessages: (creatorAccountId: string) => void;
   accessPending: boolean;
   onAccessChange: (access: SlurpManagedStageProfile["access"]) => void;
+  /** Increments each time the profile rail asks the composer to open. */
+  composerOpenSignal: number;
 }) {
   const { t: localizeUi, i18n } = useUiTranslation();
   const bannerSrc = useSlurpMediaSrc(profile.bannerUrl, { width: 1280 });
   const [accessSettingsOpen, setAccessSettingsOpen] = useState(false);
   const [automationOpen, setAutomationOpen] = useState(false);
-  const [creatorToolsOpen, setCreatorToolsOpen] = useState(draft.postType === "story");
+  // Open on a Creator this persona operates, where posting is the reason for the visit. On a
+  // world-run Creator the tools are still reachable, but they are not what you came to read.
+  const [creatorToolsOpen, setCreatorToolsOpen] = useState(
+    viewerAccounts.some((account) => account.id === profile.sourceAccountId),
+  );
+  useEffect(() => {
+    if (composerOpenSignal > 0) setCreatorToolsOpen(true);
+  }, [composerOpenSignal]);
   const updateAutoPosting = useUpdateNoodlerAutoPosting();
   const updateFanActivity = useUpdateNoodlerFanActivity();
   const tipCreator = useTipSlurpCreator();
@@ -4205,7 +3537,7 @@ function StageProfileView({
                   "relative inline-flex min-h-11 items-center justify-center overflow-visible rounded-lg px-5 text-sm font-bold transition-[background-color,opacity,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50",
                   viewerCreator.subscribed
                     ? "border border-[var(--noodle-accent)]/50 bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent-foreground)] hover:bg-[var(--noodle-accent)]/15"
-                    : "bg-[var(--noodle-accent)] text-zinc-950 hover:opacity-90",
+                    : "bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950 hover:opacity-90",
                 )}
               >
                 <SlurpCoinBurst active={subscriptionPending && !viewerCreator.subscribed} />
@@ -4309,7 +3641,7 @@ function StageProfileView({
                           setCustomTip("");
                           setTipOpen(false);
                         }}
-                        className="min-h-9 rounded-md bg-[var(--noodle-accent)] px-2 text-xs font-bold text-zinc-950 disabled:opacity-50"
+                        className="min-h-9 rounded-md bg-[var(--noodle-accent)] px-2 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50"
                       >
                         {localizeUi("ui.slurp.profile.sendTip", { defaultValue: "Send" })}
                       </button>
@@ -4390,8 +3722,8 @@ function StageProfileView({
             )}
             {managedCreator && !editing && (
               <section data-slurp-creator-tools className="min-w-0">
-                {/* Collapsed, this is one thin line under the header — the tools are the creator's
-                  own business, not the first thing anyone reads on the profile. */}
+                {/* Open by default: this panel only renders on a creator you own, and posting is
+                  what you came here to do. The line above it still collapses the whole thing. */}
                 <div className="flex h-11 items-stretch">
                   <button
                     type="button"
@@ -4468,6 +3800,7 @@ function StageProfileView({
                   <NoodlerPostComposer
                     key={profile.id}
                     profile={profile}
+                    openSignal={composerOpenSignal}
                     availablePosts={posts}
                     draft={draft}
                     onDraftChange={onDraftChange}
@@ -4573,7 +3906,7 @@ function StageProfileView({
                   },
                 );
               }}
-              className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-50"
+              className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50"
             >
               {generateProfileArtwork.isPending ? (
                 <Loader2 size={14} className="animate-spin" />
@@ -5093,7 +4426,10 @@ function ViewerHub({
   const openPostItem = openPostId ? (feed.find((item) => item.post.id === openPostId) ?? null) : null;
   // One place decides what clicking a post image does, so the wall, the feed, and the profile
   // all open the same dialog.
-  const feedCardCtx = { ...postCardCtx, openPost: setOpenPostId };
+  // Every Creator on the feed is one of the player's own, so the feed offers the same edit and
+  // delete as the Creator profile. The image dialog keeps management off: it draws the card
+  // without its picture, and an edit started there would save the post without it.
+  const feedCardCtx = { ...postCardCtx, postManagement: true, openPost: setOpenPostId };
   const visibleSearchResults = searchResults.slice(0, visibleFeedCount);
   // The feed is newest-first, so the divider goes after the *last* new post — the viewer's own
   // posts sitting in that run are not news themselves but must not cut it short. Shown only
@@ -5813,7 +5149,7 @@ function SlurpWalletView({
                     { onError: (error) => toast.error(errorMessage(error)) },
                   )
                 }
-                className="relative inline-flex min-h-11 items-center justify-center gap-2 overflow-visible rounded-full bg-[var(--noodle-accent)] px-6 text-xs font-black text-zinc-950 shadow-[0_12px_28px_-16px_var(--noodle-accent)] transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--slurp-surface)] disabled:opacity-45 motion-reduce:transition-none motion-reduce:active:scale-100"
+                className="relative inline-flex min-h-11 items-center justify-center gap-2 overflow-visible rounded-full bg-[var(--noodle-accent)] px-6 text-xs font-black text-zinc-950 [&_svg]:!text-zinc-950 shadow-[0_12px_28px_-16px_var(--noodle-accent)] transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--slurp-surface)] disabled:opacity-45 motion-reduce:transition-none motion-reduce:active:scale-100"
               >
                 <SlurpCoinBurst active={payout.isPending} direction="earn" />
                 <ArrowDown size={16} strokeWidth={2.5} aria-hidden="true" />
@@ -6585,6 +5921,7 @@ function NoodlerPostComposer({
   profile,
   availablePosts,
   collapsible = true,
+  openSignal = 0,
   draft,
   onDraftChange,
   onClearDraft,
@@ -6597,6 +5934,8 @@ function NoodlerPostComposer({
   profile: SlurpManagedStageProfile;
   availablePosts: SlurpProfilePost[];
   collapsible?: boolean;
+  /** Increments when something outside asks for the composer, so a collapsed one reopens. */
+  openSignal?: number;
   draft: NoodlerPostDraft;
   onDraftChange: (patch: Partial<NoodlerPostDraft>) => void;
   onClearDraft: () => void;
@@ -6614,7 +5953,11 @@ function NoodlerPostComposer({
     composerSettings && composerSettings.storyImageHeight > 0
       ? composerSettings.storyImageWidth / composerSettings.storyImageHeight
       : 4 / 5;
-  const [expanded, setExpanded] = useState(draft.postType === "story");
+  // Posting is the reason a creator opens their own profile, so the composer starts ready.
+  const [expanded, setExpanded] = useState(true);
+  useEffect(() => {
+    if (openSignal > 0) setExpanded(true);
+  }, [openSignal]);
   const [postError, setPostError] = useState<string | null>(null);
   const [guideError, setGuideError] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<NoodlerComposerTool | null>(null);
@@ -7895,7 +7238,7 @@ function SlurpGoalEditor({ creator, personaId }: { creator: SlurpStudioCreator; 
             type="button"
             disabled={setGoal.isPending || !label.trim()}
             onClick={() => submit(label.trim())}
-            className="min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
+            className="min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50"
           >
             {localizeUi("ui.slurp.studio.goalSave", { defaultValue: "Save goal" })}
           </button>
@@ -8118,7 +7461,7 @@ function SlurpInboxHub({
                         account={{ displayName: thread.creatorDisplayName, avatarUrl: thread.creatorAvatarUrl }}
                         size="md"
                       />
-                      <span className="absolute -bottom-1 -end-1 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--noodle-accent)] text-zinc-950 ring-2 ring-[var(--slurp-surface)]">
+                      <span className="absolute -bottom-1 -end-1 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950 ring-2 ring-[var(--slurp-surface)]">
                         <MessageCircle size={11} strokeWidth={2.5} aria-hidden="true" />
                       </span>
                     </span>
@@ -8152,7 +7495,7 @@ function SlurpInboxHub({
                         {formatTime(thread.lastMessageAt, i18n.language)}
                       </time>
                       {thread.viewerUnread > 0 && (
-                        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--noodle-accent)] px-1.5 text-[0.65rem] font-black tabular-nums text-zinc-950">
+                        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--noodle-accent)] px-1.5 text-[0.65rem] font-black tabular-nums text-zinc-950 [&_svg]:!text-zinc-950">
                           {thread.viewerUnread}
                         </span>
                       )}
@@ -8639,7 +7982,7 @@ function SlurpPayoutRow({ creator, personaId }: { creator: SlurpStudioCreator; p
             { onError: (error) => toast.error(errorMessage(error)) },
           )
         }
-        className="relative min-h-10 shrink-0 overflow-visible rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
+        className="relative min-h-10 shrink-0 overflow-visible rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
       >
         <SlurpCoinBurst active={payout.isPending} direction="earn" />
         {payout.isPending

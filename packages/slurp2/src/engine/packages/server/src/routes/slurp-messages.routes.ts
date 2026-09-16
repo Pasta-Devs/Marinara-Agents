@@ -6,7 +6,6 @@
 // thousand five hundred lines, and nothing here needs the feed helpers it holds.
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { extname } from "node:path";
 import { createSlurpStorage } from "../services/storage/slurp.storage.js";
 import { createSlurpMessagesStorage } from "../services/storage/slurp-messages.storage.js";
 import { createSlurpPopulationStorage } from "../services/storage/slurp-population.storage.js";
@@ -50,7 +49,6 @@ import { selectSlurpAttentionCommissions } from "../services/slurp/slurp-inbox-a
 
 const personaQuerySchema = z.object({ personaId: z.string().trim().min(1) });
 const MESSAGE_MEDIA_MAX_BYTES = 20 * 1024 * 1024;
-const MESSAGE_MEDIA_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
 
 async function readSlurpMessageImage(
   req: FastifyRequest,
@@ -66,14 +64,13 @@ async function readSlurpMessageImage(
       part.file.resume();
       throw new Error("Upload one image in the file field.");
     }
-    const extension = extname(part.filename).toLowerCase();
-    if (!MESSAGE_MEDIA_EXTENSIONS.has(extension)) {
-      part.file.resume();
-      throw new Error("Unsupported image file type.");
-    }
     const buffer = await part.toBuffer();
-    const detected = isAllowedImageBuffer(buffer, extension);
-    if (!detected) throw new Error("Unsupported or invalid image file.");
+    // Same as the post upload path: the filename is not evidence, the header is.
+    const detected = isAllowedImageBuffer(buffer, ".avif");
+    if (!detected)
+      throw new Error(
+        "That file is not a PNG, JPEG, WebP, GIF or AVIF image. Its contents are read to decide, so renaming it does not help.",
+      );
     media = { buffer, extension: detected.ext };
   }
   if (!media) throw new Error("Upload one image in the file field.");
@@ -1197,8 +1194,11 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     const { creatorAccountId } = req.params as { creatorAccountId: string };
     if (!(await slurp.getNoodlerAccountById(creatorAccountId)))
       return reply.code(404).send({ error: "Creator not found" });
-    if (!(await ownsCreator(parsed.data.personaId, creatorAccountId)))
-      return reply.code(403).send({ error: "Only the Creator's owner can read messaging settings." });
+    // No ownership gate, for the same reason the weekly price has none: Slurp is single-player and
+    // Backstage manages every Creator, world-run ones included. The gate is still enforced on the
+    // creator-side conversation routes, where acting *as* a Creator is what must stay restricted.
+    if (!(await requireViewer(parsed.data.personaId)))
+      return reply.code(404).send({ error: "Slurp persona not found" });
     // The weekly price rides along: it is already public on every profile, and the Creator's own
     // settings panel needs it beside the message prices rather than through a second request.
     const settings = await slurp.getSettings();
@@ -1224,8 +1224,9 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     const { creatorAccountId } = req.params as { creatorAccountId: string };
     if (!(await slurp.getNoodlerAccountById(creatorAccountId)))
       return reply.code(404).send({ error: "Creator not found" });
-    if (!(await ownsCreator(parsed.data.personaId, creatorAccountId)))
-      return reply.code(403).send({ error: "Only the Creator's owner can change messaging settings." });
+    // See the GET above: every Creator's prices are the player's to set from Backstage.
+    if (!(await requireViewer(parsed.data.personaId)))
+      return reply.code(404).send({ error: "Slurp persona not found" });
     const { personaId: _personaId, ...patch } = parsed.data;
     return {
       messaging: await messages.setCreatorMessaging(

@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { slurp2BackstageSource } from "./slurp2-backstage-source";
 
 async function main() {
   const [noodleHome, slurpHome, slurpSettings, slurpTypes, slurpStore] = await Promise.all([
     readFile("packages/noodle/src/engine/packages/client/src/components/noodle/NoodleHome.tsx", "utf8"),
     readFile("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8"),
-    readFile("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx", "utf8"),
+    slurp2BackstageSource(),
     readFile("packages/slurp2/src/engine/packages/client/src/components/slurp/slurp-navigation.types.ts", "utf8"),
     readFile("packages/slurp2/src/engine/packages/client/src/stores/slurp-package.store.ts", "utf8"),
   ]);
@@ -13,7 +14,8 @@ async function main() {
   assert.match(slurpSettings, /useSlurpSettings|useUpdateSlurpSettings/u);
   assert.match(slurpHome, /SlurpOnboardingPanel/u);
   assert.match(slurpTypes, /mode: "creator-settings"/u);
-  assert.match(slurpTypes, /section\?: SlurpSettingsSection;/u);
+  assert.match(slurpTypes, /section\?: SlurpBackstageSection;/u);
+  assert.match(slurpTypes, /target\?: SlurpBackstageTarget;/u);
   assert.match(slurpSettings, /section === "overview"/u);
   assert.match(slurpTypes, /sourceAccountId: string/u);
   assert.match(slurpStore, /marinara:slurp2:package-ui/u);

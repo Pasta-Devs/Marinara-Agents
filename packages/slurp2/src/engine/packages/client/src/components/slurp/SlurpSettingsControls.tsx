@@ -8,6 +8,8 @@
 import { CircleHelp } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
+import type { SlurpSettings } from "../../hooks/use-slurp";
+import { SettingAnchor } from "./SlurpBackstageKit";
 
 export function NumberSetting({
   value,
@@ -97,8 +99,19 @@ export function GuidanceBox({ title, detail }: { title: string; detail: string }
     </div>
   );
 }
-export function Field({ label, detail, children }: { label: string; detail?: string; children: ReactNode }) {
-  return (
+export function Field({
+  label,
+  detail,
+  settingKey,
+  children,
+}: {
+  label: string;
+  detail?: string;
+  /** Marks the field as the Backstage search target for this setting. */
+  settingKey?: keyof SlurpSettings;
+  children: ReactNode;
+}) {
+  const field = (
     <label className="block space-y-2 text-sm font-semibold">
       <span className="flex items-center gap-1.5">
         <span>{label}</span>
@@ -112,6 +125,7 @@ export function Field({ label, detail, children }: { label: string; detail?: str
       {children}
     </label>
   );
+  return settingKey ? <SettingAnchor settingKey={settingKey}>{field}</SettingAnchor> : field;
 }
 export function Toggle({
   label,
@@ -119,14 +133,17 @@ export function Toggle({
   value,
   onChange,
   compact = false,
+  settingKey,
 }: {
   label: string;
   detail?: string;
   value: boolean;
   onChange: (value: boolean) => void;
   compact?: boolean;
+  /** Marks the toggle as the Backstage search target for this setting. */
+  settingKey?: keyof SlurpSettings;
 }) {
-  return (
+  const toggle = (
     <label
       data-slurp-setting-toggle
       className={`group relative flex ${compact ? "min-h-11" : "min-h-16"} cursor-pointer items-center justify-between gap-4 rounded-lg bg-[var(--slurp-surface-raised,var(--background))] px-3 py-2 text-sm shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-transparent transition-[background-color,box-shadow] hover:bg-[var(--accent)]/40 hover:ring-[var(--border)] focus-within:ring-2 focus-within:ring-[var(--noodle-accent)] motion-reduce:transition-none`}
@@ -150,4 +167,5 @@ export function Toggle({
       />
     </label>
   );
+  return settingKey ? <SettingAnchor settingKey={settingKey}>{toggle}</SettingAnchor> : toggle;
 }

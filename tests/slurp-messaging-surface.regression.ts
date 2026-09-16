@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { slurp2BackstageSource } from "./slurp2-backstage-source";
 
 const root = join(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(join(root, "packages/slurp2/src/engine/packages", path), "utf8");
 
 const messages = read("client/src/components/slurp/SlurpMessages.tsx");
-const settings = read("client/src/components/slurp/SlurpSettings.tsx");
+const settings = slurp2BackstageSource();
 const home = read("client/src/components/slurp/SlurpHome.tsx");
 const hooks = read("client/src/hooks/use-slurp.ts");
 const messageRoutes = read("server/src/routes/slurp-messages.routes.ts");
@@ -15,6 +16,13 @@ const messageStorage = read("server/src/services/storage/slurp-messages.storage.
 const replyScheduler = read("server/src/services/slurp/slurp-message-scheduler.service.ts");
 const replyMethods = read("server/src/services/storage/slurp-reply-methods.ts");
 const slurpStorage = read("server/src/services/storage/slurp.storage.ts");
+
+assert.match(messages, /Delivered\. A reply from \{\{name\}\} is queued for later\./u);
+assert.doesNotMatch(
+  messages,
+  /has seen this/u,
+  "a queued reply is not an immediate read receipt and must not claim the Creator has seen it",
+);
 
 // The creator-side messaging tools and the commission flow shipped as endpoints and hooks with no
 // UI behind them. Every one of those hooks must be reachable from the Messages tab.

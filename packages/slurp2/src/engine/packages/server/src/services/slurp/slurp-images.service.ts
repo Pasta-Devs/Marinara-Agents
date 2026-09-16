@@ -18,11 +18,7 @@ import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
 import { resolveNoodlerImageConnectionId } from "./slurp-image-connections.js";
 import { loadPrompt, NOODLE_IMAGE_POST } from "../prompt-overrides/index.js";
-import {
-  generateNoodleImageWithRetry,
-  noodlerPostImageRetryAttempts,
-  NOODLER_POST_IMAGE_RETRY_LIMIT,
-} from "./slurp-image-retry.js";
+import { generateNoodleImageWithRetry, noodlerPostImageRetryAttempts } from "./slurp-image-retry.js";
 import { rewriteNoodleImagePrompt } from "./slurp-image-prompt-rewrite.js";
 import { isConnectionAdmissionFailure, type ConnectionAdmissionMode } from "../generation/connection-admission.js";
 import { characterAppearanceFromRow, characterNoodleImageContextFromRow } from "./slurp-public-images.service.js";
@@ -519,9 +515,11 @@ export function createNoodlerNoodleImagesService(db: DB) {
           const attempts = noodlerPostImageRetryAttempts(claimed.metadata) + 1;
           await noodle.finalizePostImageClaim(claimed.id, claimToken, {
             imageUrl: null,
-            // The prompt survives a provider failure: it is what a later retry (automatic or
-            // one the user asks for) regenerates from. Only the attempt budget ends it.
-            imagePrompt: attempts >= NOODLER_POST_IMAGE_RETRY_LIMIT ? null : undefined,
+            // The prompt survives a provider failure *and* a spent budget. Spending the budget
+            // used to delete it, which left the post with no record of what the picture was meant
+            // to be and nothing for the user to redraw from — exactly when they most want it,
+            // after three failures. The automatic pass is already stopped by the attempt counter
+            // in listNoodlerPostsAwaitingImageRetry, so nulling the prompt only destroyed data.
             metadata: {
               imageGenerationFailed: true,
               imageRetryAttempts: attempts,

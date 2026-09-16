@@ -1,4 +1,14 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, unlinkSync, writeFileSync } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "fs";
 import { basename, dirname, join } from "path";
 import type { NoodlerManagedPost } from "@marinara-engine/shared";
 import { logger } from "../../lib/logger.js";
@@ -198,6 +208,56 @@ export function unlinkNoodlerMedia(relativePath: string | null): boolean {
     logger.warn(error, "[slurp] Failed to remove Slurp media file %s", relativePath);
     return false;
   }
+}
+
+/** Bytes that deleting one original will reclaim, including its cached teaser and width variants. */
+export function estimateNoodlerMediaRemovalBytes(relativePath: string): number {
+  const absolute = resolveNoodlerMediaAbsolutePath(relativePath);
+  if (!absolute) return 0;
+  try {
+    let bytes = existsSync(absolute) ? statSync(absolute).size : 0;
+    const teaser = `${absolute}${TEASER_SUFFIX}`;
+    if (existsSync(teaser)) bytes += statSync(teaser).size;
+    const fileName = basename(absolute);
+    const parent = dirname(absolute);
+    if (existsSync(parent)) {
+      for (const entry of readdirSync(parent)) {
+        if (entry.startsWith(`${fileName}.w`) && entry.endsWith(".webp")) {
+          bytes += statSync(join(parent, entry)).size;
+        }
+      }
+    }
+    return bytes;
+  } catch {
+    // A preview is advisory and files can disappear between directory reads. Execution still
+    // resolves and unlinks each path through the guarded helper above.
+    return 0;
+  }
+}
+
+/** Current size of the complete Slurp-owned media namespace, derivatives included. */
+export function summarizeNoodlerMedia(): { files: number; bytes: number } {
+  const marker = resolveNoodlerMediaAbsolutePath(`${NOODLER_MEDIA_PREFIX}__slurp_summary_root__`);
+  const root = marker ? dirname(marker) : null;
+  if (!root || !existsSync(root)) return { files: 0, bytes: 0 };
+  let files = 0;
+  let bytes = 0;
+  const visit = (directory: string): void => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const absolute = join(directory, entry.name);
+      if (entry.isDirectory()) visit(absolute);
+      else if (entry.isFile()) {
+        files += 1;
+        try {
+          bytes += statSync(absolute).size;
+        } catch {
+          // The summary remains useful if a concurrent request removes one cached derivative.
+        }
+      }
+    }
+  };
+  visit(root);
+  return { files, bytes };
 }
 
 /** Best-effort removal of a creator's whole owned NoodleR media namespace on account deletion. */

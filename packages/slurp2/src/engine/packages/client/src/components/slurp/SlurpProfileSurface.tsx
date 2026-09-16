@@ -503,7 +503,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
                   type="button"
                   onClick={() => (editor.isEditing ? editor.onSave() : editor.onStartEditing())}
                   disabled={editor.isEditing ? !editor.canSave || editor.isSaving : false}
-                  className="min-h-11 rounded-e-2xl border-s border-black/10 bg-[var(--noodle-accent)] px-4 text-xs font-black text-zinc-950 transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
+                  className="min-h-11 rounded-e-2xl border-s border-black/10 bg-[var(--noodle-accent)] px-4 text-xs font-black text-zinc-950 [&_svg]:!text-zinc-950 transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
                 >
                   {editor.isEditing
                     ? editor.isSaving
