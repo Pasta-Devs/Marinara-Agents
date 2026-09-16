@@ -13,6 +13,7 @@ import {
 import { slurpCreatorReach } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-reach.js";
 import { planSlurpWorldTick } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.js";
 import { planSlurpWorldPulse } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world-pulse.js";
+import { slurp2BackstageSource } from "./slurp2-backstage-source";
 
 // ── Off is a real off switch ────────────────────────────────────────────────
 // Somebody who wants to write undisturbed should get exactly that, not a quieter version of being
@@ -118,7 +119,7 @@ for (const name of ["countsScale", "projectionScale", "studioScale"]) {
   assert.match(routes, new RegExp(name, "u"), `${name} missing — a reach surface is unscaled`);
 }
 
-const settings = read("client/src/components/slurp/SlurpSettings.tsx");
+const settings = slurp2BackstageSource();
 assert.match(settings, /update\("worldActivity", level\)/u);
 assert.match(settings, /update\("platformScale", level\)/u);
 const studio = read("server/src/routes/slurp.routes.ts");

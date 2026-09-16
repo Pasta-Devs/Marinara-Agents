@@ -107,3 +107,25 @@ export function spendSlurpModelBudget(
     byKindToday: { ...ledger.byKindToday, [kind]: kindCalls + 1 },
   };
 }
+
+/** When a temporary cap opens again. `null` means the job is disabled until settings change. */
+export function slurpModelBudgetRetryAt(
+  budget: SlurpModelBudget,
+  ledger: SlurpModelBudgetLedger,
+  kind: SlurpModelJobKind,
+  at = new Date(),
+): string | null {
+  const policy = budget.jobs[kind];
+  if (!policy.enabled || budget.callsPerHour === 0 || budget.callsPerDay === 0 || policy.maxPerDay === 0) return null;
+  if (ledger.callsToday >= budget.callsPerDay || (ledger.byKindToday[kind] ?? 0) >= policy.maxPerDay) {
+    return new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate() + 1)).toISOString();
+  }
+  if (ledger.callsThisHour >= budget.callsPerHour) {
+    return new Date(
+      Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate(), at.getUTCHours() + 1),
+    ).toISOString();
+  }
+  // Another in-process claim may have won between the read and reservation. Retry soon without
+  // treating ordinary budget contention as a provider failure.
+  return new Date(at.getTime() + 60_000).toISOString();
+}

@@ -1,9 +1,12 @@
 import { create } from "zustand";
+import { type SlurpNavigationState } from "../components/slurp/slurp-navigation.types";
 import {
-  SLURP_SETTINGS_SECTIONS,
-  type SlurpNavigationState,
-  type SlurpSettingsSection,
-} from "../components/slurp/slurp-navigation.types";
+  isSlurpBackstageSection,
+  isSlurpBackstageTarget,
+  SLURP_BACKSTAGE_DEFAULT_TARGET,
+  SLURP_LEGACY_SETTINGS_DESTINATION,
+  targetBelongsToSection,
+} from "../components/slurp/slurp-backstage";
 
 const PACKAGE_STATE_KEY = "marinara:slurp2:package-ui";
 
@@ -36,7 +39,11 @@ function isSlurpNavigation(value: unknown): value is SlurpNavigationState {
   if (value.mode === "creator-settings") {
     return (
       (value.tab === undefined || value.tab === "creator") &&
-      (value.section === undefined || SLURP_SETTINGS_SECTIONS.includes(value.section as SlurpSettingsSection)) &&
+      (value.section === undefined || isSlurpBackstageSection(value.section)) &&
+      (value.target === undefined || isSlurpBackstageTarget(value.target)) &&
+      (value.section === undefined ||
+        value.target === undefined ||
+        targetBelongsToSection(value.section, value.target)) &&
       (value.returnTo === undefined || isSlurpNavigation(value.returnTo))
     );
   }
@@ -74,6 +81,20 @@ function isSlurpNavigation(value: unknown): value is SlurpNavigationState {
   }
 }
 
+function normalizeSettingsNavigation(value: Record<string, unknown>): Record<string, unknown> {
+  if (value.mode !== "creator-settings") return value;
+  const legacy =
+    typeof value.section === "string"
+      ? SLURP_LEGACY_SETTINGS_DESTINATION[value.section as keyof typeof SLURP_LEGACY_SETTINGS_DESTINATION]
+      : undefined;
+  if (legacy) return { ...value, ...legacy };
+  if (!isSlurpBackstageSection(value.section)) return value;
+  const target = isSlurpBackstageTarget(value.target) ? value.target : SLURP_BACKSTAGE_DEFAULT_TARGET[value.section];
+  return targetBelongsToSection(value.section, target)
+    ? { ...value, target }
+    : { ...value, target: SLURP_BACKSTAGE_DEFAULT_TARGET[value.section] };
+}
+
 function readRecord(key: string): Record<string, unknown> | null {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(key) ?? "null") as unknown;
@@ -86,9 +107,10 @@ function readRecord(key: string): Record<string, unknown> | null {
 function validatedPersistedState(state: Record<string, unknown>): PersistedSlurpState {
   const validated: PersistedSlurpState = {};
   if (state.navigation && typeof state.navigation === "object" && !Array.isArray(state.navigation)) {
-    if (state.navigation.mode === "creator" && state.navigation.view === "notifications") {
+    const navigation = normalizeSettingsNavigation(state.navigation as Record<string, unknown>);
+    if (navigation.mode === "creator" && navigation.view === "notifications") {
       validated.navigation = { mode: "creator", view: "notifications" };
-    } else if (isSlurpNavigation(state.navigation)) validated.navigation = state.navigation;
+    } else if (isSlurpNavigation(navigation)) validated.navigation = navigation;
   }
   if (typeof state.viewerPersonaId === "string" || state.viewerPersonaId === null) {
     validated.viewerPersonaId = state.viewerPersonaId;
@@ -111,7 +133,10 @@ function readInitialState(): PersistedSlurpState {
 
 function persistSlurpState(state: Pick<SlurpPackageState, "navigation" | "viewerPersonaId" | "onboardingState">) {
   try {
-    window.localStorage.setItem(PACKAGE_STATE_KEY, JSON.stringify(state));
+    // A search deep link is a one-shot focus request, not a place to reopen after reload.
+    const navigation =
+      state.navigation.mode === "creator-settings" ? { ...state.navigation, settingKey: undefined } : state.navigation;
+    window.localStorage.setItem(PACKAGE_STATE_KEY, JSON.stringify({ ...state, navigation }));
   } catch {
     // Private browsing can refuse storage; the tab remains usable in memory.
   }

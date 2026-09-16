@@ -198,6 +198,27 @@ export async function writeStoredZip(
  */
 export type ReadZipEntry = { name: string; data: Buffer };
 
+/** Archive names must stay relative: no traversal, absolute, drive, backslash, or NUL paths. */
+export function isSafeArchiveEntryName(name: string): boolean {
+  if (!name || name.includes("\0") || name.includes("\\") || name.startsWith("/") || /^[a-z]:/iu.test(name)) {
+    return false;
+  }
+  const segments = name.split("/");
+  return segments.every(
+    (segment, index) => segment !== "." && segment !== ".." && (segment !== "" || index === segments.length - 1),
+  );
+}
+
+/** A staged restore upload is usable only before its expiry. */
+export function isRestoreInspectionExpired(expiresAt: number, at = Date.now()): boolean {
+  return expiresAt <= at;
+}
+
+/** Settings restore is opt-in: only an explicit `importSettings=1` replaces settings. */
+export function restoreImportSettingsRequested(query: unknown): boolean {
+  return (query as { importSettings?: unknown } | undefined)?.importSettings === "1";
+}
+
 const MAX_ENTRY_BYTES = 256 * 1024 * 1024;
 
 export function readStoredZip(archive: Buffer): ReadZipEntry[] {
@@ -228,6 +249,7 @@ export function readStoredZip(archive: Buffer): ReadZipEntry[] {
     const localOffset = archive.readUInt32LE(pointer + 42);
     const name = archive.subarray(pointer + 46, pointer + 46 + nameLength).toString("utf8");
     pointer += 46 + nameLength + extraLength + commentLength;
+    if (!isSafeArchiveEntryName(name)) throw new Error(`Archive entry ${name} has an unsafe path.`);
 
     if (uncompressedSize > MAX_ENTRY_BYTES) throw new Error(`Archive entry ${name} is too large to restore.`);
     if (name.endsWith("/")) continue;

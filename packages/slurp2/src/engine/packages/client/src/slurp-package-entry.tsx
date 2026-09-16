@@ -41,6 +41,15 @@ type CapabilityElement = HTMLElement & {
 
 let slurpPackageStyles = "";
 
+/**
+ * With accent animation on, the Engine repaints every `svg` inside a chrome token scope to the
+ * chrome accent colour. Slurp's shell is such a scope, so an icon on an accent-filled button was
+ * painted accent-on-accent and vanished, leaving the gap its label was spaced for. Icons here
+ * follow their own button's text colour instead.
+ */
+const SLURP_ICON_COLOR_FIX =
+  "[data-marinara-accent-animation] .mari-chrome-token-scope svg:not(.mari-rgb-static-icon){color:inherit;stroke:currentColor;}";
+
 function syncSlurpPackageStyles() {
   const existing = document.getElementById(SLURP_STYLE_ID);
   if (!document.querySelector(SLURP_ELEMENT_TAG) || !slurpPackageStyles) {
@@ -50,7 +59,7 @@ function syncSlurpPackageStyles() {
 
   const style = existing ?? document.createElement("style");
   style.id = SLURP_STYLE_ID;
-  style.textContent = slurpPackageStyles;
+  style.textContent = `${slurpPackageStyles}\n${SLURP_ICON_COLOR_FIX}`;
   if (!existing) document.head.appendChild(style);
 }
 

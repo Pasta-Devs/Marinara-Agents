@@ -16,7 +16,7 @@ import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
 import { noodlerUnlockPriceMetadata } from "./slurp-prices.js";
-import { generateNoodlerPost } from "./slurp-generation.service.js";
+import { generateNoodlerPost, resolveSlurpAutomaticPostAccess } from "./slurp-generation.service.js";
 import type { NoodlerContentFormat } from "./slurp-generation.service.js";
 import type { ConnectionAdmissionMode } from "../generation/connection-admission.js";
 import {
@@ -167,7 +167,7 @@ export async function refreshAllNoodlerCreatorsNow(db: DB): Promise<NoodlerRefre
         mode: "noodler",
         targetAccountId: account.id,
         format: "caption",
-        access: "locked",
+        access: await resolveSlurpAutomaticPostAccess(noodle, account.id),
       });
       // "disabled"/"busy" are no-op refreshes, not failures; surface them as skipped so the
       // client doesn't lump a busy creator in with a real generation/connection failure.

@@ -83,6 +83,15 @@ export function isNoodleOperationActive(key: string): boolean {
   return activeNoodleOperations.has(key);
 }
 
+export function getSlurpOperationStatus() {
+  return {
+    backup: readSlurpBackupActive(),
+    deletion: isSlurpDataDeletionActive(),
+    account: hasActiveNoodlerAccountOperations(),
+    mutation: hasActiveSlurpMutations() || activeNoodleOperations.size > 0,
+  };
+}
+
 export function resetNoodleOperationsForTests() {
   activeNoodleOperations.clear();
 }

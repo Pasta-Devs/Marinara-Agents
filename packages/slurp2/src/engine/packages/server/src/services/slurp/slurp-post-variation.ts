@@ -270,3 +270,32 @@ export function slurpPostProject<T extends { id: string }>(
   }
   return projects[ordinal % projects.length] ?? null;
 }
+
+/** How often an automatic post goes out free, as a teaser to win subscribers. */
+export const SLURP_TEASER_RATE = ["off", "rare", "regular", "often"] as const;
+export type SlurpTeaserRate = (typeof SLURP_TEASER_RATE)[number];
+export const SLURP_DEFAULT_TEASER_RATE: SlurpTeaserRate = "regular";
+
+/** Slots out of ten. Ten, not eight, so teasers drift across formats instead of pinning one. */
+const TEASER_SLOTS: Record<SlurpTeaserRate, readonly number[]> = {
+  off: [],
+  rare: [4],
+  regular: [1, 6],
+  often: [0, 3, 7],
+};
+
+/**
+ * Whether this automatic post is a free teaser. Deterministic on the same post count the variation
+ * rotates on, so the scheduler that picks the access and the generator that writes the post agree.
+ */
+export function slurpTeaserPost(
+  creatorAccountId: string,
+  sequence: number,
+  rate: SlurpTeaserRate = SLURP_DEFAULT_TEASER_RATE,
+): boolean {
+  const step = Number.isFinite(sequence) ? Math.max(0, Math.floor(sequence)) : 0;
+  return (TEASER_SLOTS[rate] ?? []).includes((hash(creatorAccountId) + step) % 10);
+}
+
+export const SLURP_TEASER_INSTRUCTION =
+  "This automatic post goes out free. If it fits who you are, use it to win new subscribers: show enough of what your paid posts offer that a reader wants more, and you may say where the rest is. If fishing for subscribers does not fit you, simply make it a genuine free post.";

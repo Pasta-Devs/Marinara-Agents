@@ -8,6 +8,7 @@ import {
   sanitizeSlurpPromptPresets,
   SLURP_PROMPT_PRESET_LIMIT,
 } from "../packages/slurp2/src/engine/packages/client/src/components/slurp/slurp-prompt-presets";
+import { slurp2BackstageSource } from "./slurp2-backstage-source";
 
 const spicy = { name: "Spicy", generationGuidance: "Be bold.", imageGenerationPrompt: "Warm light." };
 const calm = { name: "Calm", generationGuidance: "Be gentle.", imageGenerationPrompt: "" };
@@ -55,10 +56,7 @@ const defaults = readFileSync(
 assert.match(defaults, /SLURP_SETTINGS_NOT_RESET[\s\S]*?"promptPresets"/u);
 
 // Settings saves through the shared helpers and asks before replacing edited prompts.
-const settingsView = readFileSync(
-  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx",
-  "utf8",
-);
+const settingsView = slurp2BackstageSource();
 assert.match(settingsView, /promptPresets: mergeSlurpPromptPreset\(settings\.promptPresets,/u);
 assert.match(
   settingsView,

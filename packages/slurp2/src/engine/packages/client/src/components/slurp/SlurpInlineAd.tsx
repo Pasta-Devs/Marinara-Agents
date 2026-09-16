@@ -44,7 +44,7 @@ export function SlurpInlineAd({
           <button
             type="button"
             onClick={onAction}
-            className="mt-3 min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 hover:opacity-90"
+            className="mt-3 min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 hover:opacity-90"
           >
             <ExternalLink size={13} aria-hidden="true" />
             {promotion.actionLabel ?? labels.actionFallback}

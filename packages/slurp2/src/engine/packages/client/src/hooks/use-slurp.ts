@@ -8,6 +8,7 @@ import { useTranslation as useUiTranslation } from "react-i18next";
 import { api } from "../lib/api-client";
 import type { SlurpSimulationTuning } from "../../../server/src/services/slurp/slurp-tuning.js";
 import type { SlurpFanType } from "../../../server/src/services/slurp/slurp-fan-types.js";
+import type { SlurpPlatformEvent } from "../../../server/src/services/slurp/slurp-platform-events.js";
 import type { SlurpModelBudget } from "../../../server/src/services/slurp/slurp-model-budget.js";
 import { refreshSlurpCreatorBatch } from "../lib/slurp-refresh-batch";
 import { useSlurpUIStore } from "../stores/slurp-package.store";
@@ -99,6 +100,7 @@ export const noodleKeys = {
   noodlerUnseenCount: (personaId: string) => [...noodleKeys.noodlerViewers(), "unseen-count", personaId] as const,
   noodlerReserveStatus: () => [...noodleKeys.noodlerRoot(), "reserve-status"] as const,
   noodlerImageConnections: () => [...noodleKeys.noodlerRoot(), "image-connections"] as const,
+  noodlerPostGuidance: () => [...noodleKeys.noodlerRoot(), "post-guidance"] as const,
   noodlerFanStatus: () => [...noodleKeys.noodlerRoot(), "fan-status"] as const,
   // contextTags belongs in the key: it is part of the request, so leaving it
   // out meant switching tab or crossing into evening never refetched.
@@ -344,6 +346,7 @@ export type SlurpSettings = {
   imageWidth: number;
   imageHeight: number;
   storyRate: "off" | "rare" | "regular" | "often";
+  teaserRate: "off" | "rare" | "regular" | "often";
   projectRate: "off" | "rare" | "regular" | "often";
   arcPace: "slow" | "normal" | "fast";
   arcAffectsMood: boolean;
@@ -407,6 +410,8 @@ export type SlurpSettings = {
   fanArchetypeWeights: Record<string, number>;
   /** Editable audience personas and their numeric behavior. */
   fanTypes: SlurpFanType[];
+  platformEvents: SlurpPlatformEvent[];
+  creatorCollabs: { creatorIds: [string, string]; content: string }[];
   /** Creators answer while you are away. Off leaves the background reply loop asleep. */
   messagesAwayRepliesEnabled: boolean;
   messagesReplyBubbleLimit: number;
@@ -447,6 +452,55 @@ export type SlurpAutopurgeResult = {
   removedPostMedia: number;
   removedMessageMedia: number;
   nextRunAt: string | null;
+};
+
+export type SlurpAutopurgePreview = {
+  cutoff: string;
+  affectedPosts: number;
+  postsToDelete: number;
+  postMediaFiles: number;
+  messageMediaFiles: number;
+  estimatedReclaimableBytes: number;
+};
+
+export type SlurpMaintenanceSummary = {
+  generatedAt: string;
+  operations: { backup: boolean; deletion: boolean; account: boolean; mutation: boolean };
+  content: { creators: number; posts: number; interactions: number; messages: number };
+  media: { files: number; bytes: number };
+  unused: {
+    preparedPosts: number;
+    attempts: number;
+    runs: number;
+    improvementJobs: number;
+    improvementProposals: number;
+  };
+};
+
+export type SlurpImprovementProposal = {
+  id: string;
+  accountId: string;
+  field: string;
+  before: unknown;
+  after: unknown;
+  status: "pending" | "applied" | "dismissed" | "stale" | "error";
+  error: string | null;
+};
+
+export type SlurpImprovementJob = {
+  id: string;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  mode: "missing" | "refresh" | "prefill";
+  rebrand: boolean;
+  accountIds: string[];
+  modules: string[];
+  completed: number;
+  total: number;
+  expectedModelCalls: number;
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
+  proposals: SlurpImprovementProposal[];
 };
 
 export type SlurpScheduleSlot = {
@@ -503,6 +557,19 @@ export type SlurpBackupJob = {
   error: string | null;
 };
 
+export type SlurpRestoreInspection = {
+  id: string;
+  expiresAt: string;
+  sourcePackage: "slurp" | "slurp2";
+  exportedAt: string | null;
+  creators: number;
+  posts: number;
+  interactions: number;
+  mediaFiles: number;
+  mediaBytes: number;
+  hasSlurp2Settings: boolean;
+};
+
 const backupError = async (response: Response, fallback: string): Promise<never> => {
   const body = (await response.json().catch(() => null)) as { error?: string } | null;
   throw new Error(body?.error ?? fallback);
@@ -543,6 +610,32 @@ export async function startSlurpRestore(archive: File | Blob, importSettings = f
   return response.json() as Promise<SlurpBackupJob>;
 }
 
+export async function inspectSlurpRestore(archive: File | Blob): Promise<SlurpRestoreInspection> {
+  const response = await api.raw("/slurp2/restore/inspections", {
+    method: "POST",
+    headers: { "Content-Type": "application/zip" },
+    body: archive,
+  });
+  if (!response.ok) return backupError(response, "Could not inspect the Slurp restore.");
+  return response.json() as Promise<SlurpRestoreInspection>;
+}
+
+export async function applySlurpRestoreInspection(
+  inspectionId: string,
+  importSettings = false,
+): Promise<SlurpBackupJob> {
+  const response = await api.raw(
+    `/slurp2/restore/inspections/${encodeURIComponent(inspectionId)}/apply${importSettings ? "?importSettings=1" : ""}`,
+    { method: "POST" },
+  );
+  if (!response.ok) return backupError(response, "Could not start the inspected Slurp restore.");
+  return response.json() as Promise<SlurpBackupJob>;
+}
+
+export async function discardSlurpRestoreInspection(inspectionId: string): Promise<void> {
+  await api.raw(`/slurp2/restore/inspections/${encodeURIComponent(inspectionId)}`, { method: "DELETE" });
+}
+
 export function useUpdateSlurpSettings() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -563,6 +656,93 @@ export function useRunSlurpAutopurge() {
       void queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() });
       return result;
     },
+  });
+}
+
+export function useSlurpMaintenanceSummary(enabled: boolean) {
+  return useQuery({
+    queryKey: [...noodleKeys.settings(), "maintenance-summary"] as const,
+    queryFn: () => api.get<SlurpMaintenanceSummary>("/slurp2/maintenance/summary"),
+    enabled,
+    staleTime: 15_000,
+  });
+}
+
+export function useSlurpAutopurgePreview(settings: SlurpSettings | undefined, enabled: boolean) {
+  const input = settings
+    ? {
+        autopurgeRetentionValue: settings.autopurgeRetentionValue,
+        autopurgeRetentionUnit: settings.autopurgeRetentionUnit,
+        autopurgeKeepPosts: settings.autopurgeKeepPosts,
+        autopurgeIncludeMessageMedia: settings.autopurgeIncludeMessageMedia,
+      }
+    : null;
+  return useQuery({
+    queryKey: [...noodleKeys.settings(), "autopurge-preview", input] as const,
+    queryFn: () => api.post<SlurpAutopurgePreview>("/slurp2/autopurge/preview", input!),
+    enabled: enabled && Boolean(input),
+    staleTime: 10_000,
+  });
+}
+
+export function useSlurpImprovementJobs(enabled: boolean) {
+  return useQuery({
+    queryKey: [...noodleKeys.settings(), "improvement-jobs"] as const,
+    queryFn: () => api.get<{ items: SlurpImprovementJob[] }>("/slurp2/backstage/improvement-jobs"),
+    enabled,
+    refetchInterval: (query) =>
+      query.state.data?.items.some((job) => job.status === "queued" || job.status === "running") ? 1000 : false,
+  });
+}
+
+export function useCreateSlurpImprovementJob() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      accountIds: string[];
+      mode: "missing" | "refresh" | "prefill";
+      rebrand: boolean;
+      modules: string[];
+      connectionId?: string;
+    }) => api.post<SlurpImprovementJob>("/slurp2/backstage/improvement-jobs", input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...noodleKeys.settings(), "improvement-jobs"] }),
+  });
+}
+
+export function useApplySlurpImprovementProposals() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ jobId, proposalIds }: { jobId: string; proposalIds: string[] }) =>
+      api.post<{ applied: number; rejected: number; creators: number; createdTags: string[] }>(
+        `/slurp2/backstage/improvement-jobs/${encodeURIComponent(jobId)}/apply`,
+        { proposalIds },
+      ),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: [...noodleKeys.settings(), "improvement-jobs"] }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.settings() }),
+      ]),
+  });
+}
+
+export function useSetSlurpImprovementJobState() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ jobId, action }: { jobId: string; action: "cancel" | "resume" | "retry" }) =>
+      api.post<SlurpImprovementJob>(`/slurp2/backstage/improvement-jobs/${encodeURIComponent(jobId)}/${action}`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...noodleKeys.settings(), "improvement-jobs"] }),
+  });
+}
+
+export function useDismissSlurpImprovementProposals() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ jobId, proposalIds }: { jobId: string; proposalIds: string[] }) =>
+      api.post<{ dismissed: number }>(`/slurp2/backstage/improvement-jobs/${encodeURIComponent(jobId)}/dismiss`, {
+        proposalIds,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...noodleKeys.settings(), "improvement-jobs"] }),
   });
 }
 
@@ -600,6 +780,34 @@ export function useReplaceSlurpDiscoveryTag() {
         queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
       ]);
     },
+  });
+}
+
+export type SlurpCreatorBulkPatch = {
+  gender?: SlurpDiscoveryGender | null;
+  tags?: string[];
+  addTags?: string[];
+  removeTags?: string[];
+  autoPosting?: boolean;
+  imagesEnabled?: boolean;
+};
+
+/** One edit applied to many Creators at once; a single Creator's quick edit uses it too. */
+export function useBulkUpdateSlurpCreators() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { ids: string[]; patch: SlurpCreatorBulkPatch }) =>
+      api.post<{ updated: number; skipped: number; tagLimitReached: number }>(
+        "/slurp2/noodler/accounts/bulk-update",
+        input,
+      ),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
+        queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerReserveStatus() }),
+        queryClient.invalidateQueries({ queryKey: [...noodleKeys.settings(), "discovery-tag-usage"] }),
+        queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+      ]),
   });
 }
 
@@ -671,12 +879,82 @@ export function useSlurpImageConnections(enabled = true) {
   });
 }
 
+/**
+ * What public posts and locked posts are each for, globally and per Creator.
+ *
+ * An empty string means "inherit": a Creator falls back to the global field, and the global field
+ * falls back to the built-in text on the server. Nothing here is resolved on the client, so the
+ * fields show what was actually written rather than the value in force.
+ */
+export type SlurpPostGuidanceEntry = { public: string; locked: string; menu: string };
+export type SlurpPostGuidance = {
+  defaults: SlurpPostGuidanceEntry;
+  creators: Record<string, SlurpPostGuidanceEntry>;
+  /** The shipped wording, sent by the server so the client never keeps a second copy of it. */
+  builtIn: SlurpPostGuidanceEntry;
+};
+export type SlurpPostAccess = "public" | "locked";
+
+export function useSlurpPostGuidance(enabled = true) {
+  return useQuery({
+    queryKey: noodleKeys.noodlerPostGuidance(),
+    queryFn: () => api.get<SlurpPostGuidance>("/slurp2/noodler/post-guidance"),
+    enabled,
+    staleTime: 10_000,
+  });
+}
+
+export function useUpdateSlurpPostGuidance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: { creatorId?: string | null; public?: string; locked?: string; menu?: string }) =>
+      api.patch<SlurpPostGuidance>("/slurp2/noodler/post-guidance", patch),
+    onSuccess: (value) => qc.setQueryData(noodleKeys.noodlerPostGuidance(), value),
+  });
+}
+
+export function useGenerateSlurpPostGuidance() {
+  return useMutation({
+    mutationFn: (input: {
+      access: SlurpPostAccess;
+      creatorId?: string | null;
+      currentDraft?: string;
+      guidance?: string;
+    }) => api.post<{ guidance: string }>("/slurp2/noodler/post-guidance-draft", input),
+  });
+}
+
 export function useUpdateSlurpImageConnections() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (patch: { defaultConnectionId?: string | null; creatorId?: string; connectionId?: string | null }) =>
       api.patch<SlurpImageConnections>("/slurp2/noodler/image-connections", patch),
     onSuccess: (value) => qc.setQueryData(noodleKeys.noodlerImageConnections(), value),
+  });
+}
+
+/**
+ * Point several new Creators at one image connection.
+ *
+ * The PATCH route maps one Creator at a time and the server serializes the blob write, so these
+ * run in sequence; the wizard only ever creates a handful at once.
+ */
+export function useUpdateSlurpConnectionsForCreators() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { creatorIds: string[]; connectionId: string }) => {
+      let latest: SlurpImageConnections | undefined;
+      for (const creatorId of input.creatorIds) {
+        latest = await api.patch<SlurpImageConnections>("/slurp2/noodler/image-connections", {
+          creatorId,
+          connectionId: input.connectionId,
+        });
+      }
+      return latest;
+    },
+    onSuccess: (value) => {
+      if (value) qc.setQueryData(noodleKeys.noodlerImageConnections(), value);
+    },
   });
 }
 
@@ -1255,6 +1533,28 @@ export function useDeleteSlurpProject() {
         `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects/${encodeURIComponent(projectId)}?personaId=${encodeURIComponent(personaId)}`,
       ),
     onSuccess: () => invalidateSlurpProjects(qc),
+  });
+}
+
+export type SlurpCreatorMetrics = {
+  id: string;
+  posts: number;
+  followers: number;
+  subscribers: number;
+  likes: number;
+  replies: number;
+  earnings: number;
+  unread: number;
+  arcs: number;
+};
+
+/** Read-only metrics for every Creator. Unlike the studio, reading this changes nothing. */
+export function useSlurpCreatorMetrics(enabled = true) {
+  return useQuery({
+    queryKey: [...noodleKeys.noodlerRoot(), "creator-metrics"],
+    queryFn: () => api.get<{ creators: SlurpCreatorMetrics[] }>("/slurp2/noodler/creator-metrics"),
+    enabled,
+    staleTime: 30_000,
   });
 }
 

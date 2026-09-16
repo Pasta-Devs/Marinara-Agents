@@ -2,14 +2,13 @@
 // Routes: Noodle Fake Social Media
 // ──────────────────────────────────────────────
 import { createReadStream, createWriteStream, existsSync, readFileSync } from "fs";
-import { readFile, readdir, stat, unlink } from "node:fs/promises";
+import { readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import { finished } from "node:stream/promises";
 import { randomUUID } from "node:crypto";
-import { basename, dirname, join } from "path";
+import { basename, dirname, extname, join } from "path";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { extname } from "node:path";
 import { z } from "zod";
-import { and, eq } from "../db/file-query.js";
+import { and, eq, inArray } from "../db/file-query.js";
 import {
   createNoodlePoll,
   noodleBulkNoodlerAccountCreateSchema,
@@ -52,7 +51,14 @@ type SlurpSubscriberRow = NoodlerSubscriber & {
   stage?: string;
   spent?: number;
 };
-import { noodleInteractions } from "../db/schema/slurp.js";
+import {
+  noodleAccounts,
+  noodleInteractions,
+  noodlePosts,
+  slurpImprovementJobs,
+  slurpImprovementProposals,
+  slurpMessages,
+} from "../db/schema/slurp.js";
 import { createCharactersStorage } from "../services/storage/characters.storage.js";
 import { createCharacterGalleryStorage } from "../services/storage/character-gallery.storage.js";
 import { resolveNoodlerCreatorArtwork } from "../services/slurp/slurp-public-profiles.service.js";
@@ -84,6 +90,7 @@ import {
   buildNoodlerPublicIdentity,
   stageProfileContainsPublicIdentity,
   stageProfileContainsSourceDetails,
+  resolveSlurpAutomaticPostAccess,
 } from "../services/slurp/slurp-generation.service.js";
 import {
   createNoodlerPost,
@@ -93,19 +100,43 @@ import {
   updateNoodlerPostWithMedia,
 } from "../services/slurp/slurp-post.operation.js";
 import { tryNoodlerAccountOperation } from "../services/slurp/slurp-account-operation-lock.js";
-import { runSlurpAutopurge } from "../services/slurp/slurp-autopurge.js";
+import { previewSlurpAutopurge, runSlurpAutopurge } from "../services/slurp/slurp-autopurge.js";
 import { createSlurpFirstPostQueue } from "../services/slurp/slurp-first-post-queue.service.js";
-import { trySlurpDataDeletion, trySlurpWrite } from "../services/slurp/slurp-operation-lock.js";
+import {
+  getSlurpOperationStatus,
+  trySlurpDataDeletion,
+  trySlurpWrite,
+} from "../services/slurp/slurp-operation-lock.js";
 import {
   listNoodlerMediaFiles,
   removeAllNoodlerMedia,
   restoreNoodlerMediaFile,
+  summarizeNoodlerMedia,
 } from "../services/slurp/slurp-media.js";
 import { DATA_DIR } from "../utils/data-dir.js";
 import { claimSlurpBackup } from "../services/slurp/slurp-operation-lock.js";
 import { pauseNoodleAutoPost } from "../services/slurp/slurp-autopost-scheduler.service.js";
 import { pauseNoodleRefreshScheduler } from "../services/slurp/slurp-refresh-scheduler.service.js";
-import { jsonEntry, readStoredZip, writeStoredZip, type StoredZipEntry } from "../services/slurp/slurp-backup.js";
+import {
+  isRestoreInspectionExpired,
+  jsonEntry,
+  readStoredZip,
+  restoreImportSettingsRequested,
+  writeStoredZip,
+  type StoredZipEntry,
+} from "../services/slurp/slurp-backup.js";
+import {
+  planSlurpImprovementApply,
+  planSlurpImprovementRetry,
+  SLURP_AVAILABLE_IMPROVEMENT_MODULES,
+  SLURP_IMPROVEMENT_MODULES,
+  slurpCreatorReadiness,
+  slurpImprovementDraftFields,
+  slurpImprovementDraftProposals,
+  slurpImprovementModelCalls,
+  slurpImprovementSnapshot,
+  slurpStageProfileInput,
+} from "../services/slurp/slurp-improvement.js";
 import { clearNoodlerImageConnections } from "../services/slurp/slurp-image-connections.js";
 import { generateAndApplyNoodlerCreatorReply } from "../services/slurp/slurp-creator-reply.operation.js";
 import { getNoodlerFanActivityStatus, runNoodlerFanActivity } from "../services/slurp/slurp-fan-activity.operation.js";
@@ -128,10 +159,15 @@ import { readGarnishLorebookContext } from "../services/slurp/slurp-garnish-lore
 import { syncGarnishAdsWithLorebook } from "../services/slurp/slurp-garnish-sync.service.js";
 import { createLorebooksStorage } from "../services/storage/lorebooks.storage.js";
 import { generateNoodlerStageProfileDraft } from "../services/slurp/slurp-stage-profile-draft.service.js";
+import { generateSlurpPostGuidanceDraft } from "../services/slurp/slurp-post-guidance-draft.service.js";
+import { SLURP_BUILT_IN_POST_GUIDANCE, SLURP_POST_GUIDANCE_MAX_LENGTH } from "../services/slurp/slurp-post-guidance.js";
+import { getSlurpPostGuidance, updateSlurpPostGuidance } from "../services/slurp/slurp-post-guidance.storage.js";
 import {
   SLURP_DISCOVERY_TAG_MAX_LENGTH,
   slurpDiscoveryProfileComplete,
   slurpDiscoveryProfileSchema,
+  SLURP_DISCOVERY_GENDERS,
+  SLURP_DISCOVERY_TAG_LIMIT,
 } from "../services/slurp/slurp-discovery-profile.js";
 import {
   getNoodlerImageConnections,
@@ -216,7 +252,7 @@ import {
   slurpArcTypeFromProject,
   slurpGeneratedArcProject,
 } from "../services/slurp/slurp-project.js";
-import { generateSlurpArc } from "../services/slurp/slurp-arc-generation.service.js";
+import { generateSlurpArc, SlurpArcGenerationFailure } from "../services/slurp/slurp-arc-generation.service.js";
 import { readSlurpStudioSnapshot, writeSlurpStudioSnapshot } from "../services/slurp/slurp-studio-snapshot.js";
 import { rerollAmbientNoodleProfiles } from "../services/slurp/slurp-ambient-profile-generation.service.js";
 import {
@@ -334,7 +370,6 @@ const noodleStageProfileUpdateRequestSchema = noodleStageProfileUpdateSchema.ext
 const NOODLE_IDENTITY_LOCK_BUSY = "Another Slurp identity operation is already running. Wait for it to finish.";
 const NOODLER_MEDIA_MAX_BYTES = 20 * 1024 * 1024;
 const NOODLER_FEED_PAGE_SIZE = 20;
-const NOODLER_MEDIA_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
 
 const noodlerPageCursorSchema = z
   .object({
@@ -417,11 +452,6 @@ async function readNoodlerMultipart(req: FastifyRequest): Promise<{ payload: unk
       part.file.resume();
       throw new NoodlerMediaRequestError("Upload one image in the file field.", 400);
     }
-    const extension = extname(part.filename).toLowerCase();
-    if (!NOODLER_MEDIA_EXTENSIONS.has(extension)) {
-      part.file.resume();
-      throw new NoodlerMediaRequestError("Unsupported image file type.", 400);
-    }
     const write = await trySlurpWrite(async () => {
       try {
         return await part.toBuffer();
@@ -439,9 +469,16 @@ async function readNoodlerMultipart(req: FastifyRequest): Promise<{ payload: unk
       throw new NoodlerMediaRequestError("Slurp data cleanup is in progress.", 409);
     }
     const buffer = write.value;
-    const detected = isAllowedImageBuffer(buffer, extension);
-    if (!detected || (extension === ".jpeg" ? "jpg" : extension.slice(1)) !== detected.ext) {
-      throw new NoodlerMediaRequestError("Unsupported or invalid image file.", 400);
+    // The magic bytes decide the type, not the filename. An image saved straight from a post
+    // (/noodler/posts/:id/media) has no extension at all, and browsers rename a JPEG to .jfif, so
+    // gating on the name rejected valid images. The ".avif" hint only enables AVIF brand sniffing,
+    // which has no signature of its own; every other format is detected from its own header.
+    const detected = isAllowedImageBuffer(buffer, ".avif");
+    if (!detected) {
+      throw new NoodlerMediaRequestError(
+        "That file is not a PNG, JPEG, WebP, GIF or AVIF image. Its contents are read to decide, so renaming it does not help.",
+        400,
+      );
     }
     media = { buffer, extension: detected.ext };
   }
@@ -576,6 +613,39 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
     return noodle.updateSlurpSettings(body.data);
   });
+  const autopurgePreviewSchema = z.object({
+    autopurgeRetentionValue: z.number().int().min(1).max(3650),
+    autopurgeRetentionUnit: z.enum(["days", "weeks", "months"]),
+    autopurgeKeepPosts: z.boolean(),
+    autopurgeIncludeMessageMedia: z.boolean(),
+  });
+  app.post("/autopurge/preview", async (req, reply) => {
+    const body = autopurgePreviewSchema.safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    const settings = await noodle.getSlurpSettings();
+    return previewSlurpAutopurge(app.db, { ...settings, ...body.data });
+  });
+  app.get("/maintenance/summary", async () => {
+    const [accounts, posts, interactions, messages, unused] = await Promise.all([
+      app.db.select().from(noodleAccounts),
+      app.db.select().from(noodlePosts),
+      app.db.select().from(noodleInteractions),
+      app.db.select().from(slurpMessages),
+      noodle.previewUnusedSlurpData(),
+    ]);
+    return {
+      generatedAt: now(),
+      operations: getSlurpOperationStatus(),
+      content: {
+        creators: accounts.length,
+        posts: posts.length,
+        interactions: interactions.length,
+        messages: messages.length,
+      },
+      media: summarizeNoodlerMedia(),
+      unused,
+    };
+  });
   app.post("/autopurge/run", async (_req, reply) => {
     const outcome = await runSlurpAutopurge(app.db, { reschedule: false });
     if (outcome.status === "busy") {
@@ -619,6 +689,425 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
     return noodle.replaceDiscoveryTag(body.data.tag, null);
   });
+  // One edit for many Creators, also used for a single Creator's quick edit. Capped so one request stays bounded.
+  app.post("/noodler/accounts/bulk-update", async (req, reply) => {
+    const tagList = z.array(slurpDiscoveryTagNameSchema).max(SLURP_DISCOVERY_TAG_LIMIT);
+    const body = z
+      .object({
+        ids: z.array(z.string().trim().min(1)).min(1).max(500),
+        patch: z
+          .object({
+            gender: z.enum(SLURP_DISCOVERY_GENDERS).nullable().optional(),
+            tags: tagList.optional(),
+            addTags: tagList.optional(),
+            removeTags: z.array(slurpDiscoveryTagNameSchema).max(100).optional(),
+            autoPosting: z.boolean().optional(),
+            imagesEnabled: z.boolean().optional(),
+          })
+          .strict()
+          .refine((patch) => Object.values(patch).some((value) => value !== undefined), "Nothing to change."),
+      })
+      .safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    return noodle.bulkUpdateCreatorProfiles([...new Set(body.data.ids)], body.data.patch);
+  });
+
+  // ── Backstage Creator improvement workshop ──────────────────────────────
+  const improvementJobSchema = z.object({
+    accountIds: z.array(z.string().trim().min(1)).min(1).max(50),
+    mode: z.enum(["missing", "refresh", "prefill"]).default("missing"),
+    rebrand: z.boolean().default(false),
+    modules: z.array(z.enum(SLURP_IMPROVEMENT_MODULES)).min(1).default(["profile", "tags"]),
+    connectionId: z.string().trim().min(1).optional(),
+  });
+  const proposalIdsSchema = z.object({ proposalIds: z.array(z.string().trim().min(1)).min(1).max(250) });
+  const activeImprovementJobs = new Set<string>();
+  const readStringArray = (value: string): string[] => {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+    } catch {
+      return [];
+    }
+  };
+  const readImprovementJob = async (id: string) =>
+    (await app.db.select().from(slurpImprovementJobs).where(eq(slurpImprovementJobs.id, id)))[0];
+  const readJobProposals = async (id: string) =>
+    (await app.db.select().from(slurpImprovementProposals)).filter((row) => row.jobId === id);
+  const setProposalStatus = async (ids: readonly string[], status: string, error: string | null = null) => {
+    for (const proposalId of ids) {
+      await app.db
+        .update(slurpImprovementProposals)
+        .set({ status, error, updatedAt: now() })
+        .where(eq(slurpImprovementProposals.id, proposalId));
+    }
+  };
+  const publicImprovementJob = async (id: string) => {
+    const job = await readImprovementJob(id);
+    if (!job) return null;
+    const proposals = await readJobProposals(id);
+    const modules = readStringArray(job.modules);
+    return {
+      id: job.id,
+      status: job.status,
+      mode: job.mode,
+      rebrand: job.rebrand === "true",
+      accountIds: readStringArray(job.accountIds),
+      modules,
+      completed: Number(job.completed) || 0,
+      total: Number(job.total) || 0,
+      expectedModelCalls: slurpImprovementModelCalls(Number(job.total) || 0, modules),
+      error: job.error,
+      createdAt: job.createdAt,
+      updatedAt: job.updatedAt,
+      proposals: proposals.map((proposal) => ({
+        id: proposal.id,
+        accountId: proposal.accountId,
+        field: proposal.field,
+        before: JSON.parse(proposal.beforeValue) as unknown,
+        after: JSON.parse(proposal.afterValue) as unknown,
+        status: proposal.status,
+        error: proposal.error,
+      })),
+    };
+  };
+  const insertProposal = (values: {
+    jobId: string;
+    accountId: string;
+    field: string;
+    before: unknown;
+    after: unknown;
+    sourceFingerprint: string;
+    status: "pending" | "error";
+    error?: string | null;
+  }) =>
+    app.db.insert(slurpImprovementProposals).values({
+      id: newId(),
+      jobId: values.jobId,
+      accountId: values.accountId,
+      field: values.field,
+      beforeValue: JSON.stringify(values.before ?? null),
+      afterValue: JSON.stringify(values.after ?? null),
+      sourceFingerprint: values.sourceFingerprint,
+      status: values.status,
+      error: values.error ?? null,
+      createdAt: now(),
+      updatedAt: now(),
+    });
+  const processImprovementJob = async (id: string) => {
+    if (activeImprovementJobs.has(id)) return;
+    activeImprovementJobs.add(id);
+    try {
+      const job = await readImprovementJob(id);
+      if (!job || !["queued", "running"].includes(job.status)) return;
+      const accountIds = readStringArray(job.accountIds);
+      const modules = readStringArray(job.modules);
+      const rebrand = job.rebrand === "true";
+      const needsModel = slurpImprovementDraftFields(modules, rebrand).length > 0;
+      const settings = await noodle.getSlurpSettings();
+      const connection = needsModel
+        ? await resolveSlurpTextConnection(connections, job.connectionId ?? settings.generationConnectionId)
+        : null;
+      if (needsModel && !connection) {
+        await app.db
+          .update(slurpImprovementJobs)
+          .set({ status: "failed", error: "Select a Slurp text generation connection first.", updatedAt: now() })
+          .where(eq(slurpImprovementJobs.id, id));
+        return;
+      }
+      await app.db
+        .update(slurpImprovementJobs)
+        .set({ status: "running", error: null, total: String(accountIds.length), updatedAt: now() })
+        .where(eq(slurpImprovementJobs.id, id));
+      let completed = Number(job.completed) || 0;
+      let processed = 0;
+      let failures = 0;
+      for (const accountId of accountIds.slice(completed)) {
+        const currentJob = await readImprovementJob(id);
+        if (!currentJob || currentJob.status === "cancelled") return;
+        processed += 1;
+        const profile = (await noodle.listNoodlerStageProfiles()).find((item) => item.id === accountId);
+        const snapshot = profile ? slurpImprovementSnapshot(profile) : "missing";
+        try {
+          if (!profile) throw new Error("Creator no longer exists.");
+          const guidance = [
+            job.mode === "missing"
+              ? "Fill only weak or missing public Creator profile fields. Keep strong existing work unchanged."
+              : job.mode === "prefill"
+                ? "Create a complete, usable starting profile for this Slurp Creator."
+                : "Refresh this Slurp Creator profile while preserving its recognizable voice.",
+            modules.includes("tags") ? "Review and improve the discovery tags." : "Keep the current tags unchanged.",
+            rebrand
+              ? "A rebrand was explicitly requested, so a better display name or handle may be proposed."
+              : "Do not change the display name or handle.",
+            "Never change disclosure, pricing, ownership, or the Engine source identity.",
+          ].join(" ");
+          // Reuses the existing stage-profile generator; only allowed fields become proposals.
+          const draft =
+            needsModel && connection
+              ? await generateNoodlerStageProfileDraft(app.db, {
+                  request: {
+                    noodlerAccountId: profile.id,
+                    disclosureMode: profile.disclosureMode ?? "hinted",
+                    guidance,
+                    currentDraft: slurpStageProfileInput(profile),
+                    connectionId: job.connectionId ?? undefined,
+                  },
+                  connection,
+                })
+              : slurpStageProfileInput(profile);
+          for (const proposal of slurpImprovementDraftProposals(profile, draft, modules, rebrand)) {
+            await insertProposal({ jobId: id, accountId, ...proposal, sourceFingerprint: snapshot, status: "pending" });
+          }
+        } catch (error) {
+          failures += 1;
+          await insertProposal({
+            jobId: id,
+            accountId,
+            field: "_creator",
+            before: null,
+            after: null,
+            sourceFingerprint: snapshot,
+            status: "error",
+            error: getErrorMessage(error),
+          });
+        }
+        completed += 1;
+        await app.db
+          .update(slurpImprovementJobs)
+          .set({ completed: String(completed), updatedAt: now() })
+          .where(eq(slurpImprovementJobs.id, id));
+      }
+      const finalJob = await readImprovementJob(id);
+      if (!finalJob || finalJob.status === "cancelled") return;
+      await app.db
+        .update(slurpImprovementJobs)
+        .set({
+          status: processed > 0 && failures === processed ? "failed" : "completed",
+          error: failures ? `${failures} Creator${failures === 1 ? "" : "s"} could not be drafted. Retry them.` : null,
+          updatedAt: now(),
+        })
+        .where(eq(slurpImprovementJobs.id, id));
+    } finally {
+      activeImprovementJobs.delete(id);
+    }
+  };
+
+  // Deterministic checkup: reads stored profiles and settings only, never a model.
+  app.get("/backstage/readiness", async () => {
+    const [profiles, settings] = await Promise.all([noodle.listNoodlerStageProfiles(), noodle.getSlurpSettings()]);
+    return {
+      modelCalls: 0,
+      availableModules: SLURP_AVAILABLE_IMPROVEMENT_MODULES,
+      creators: profiles.map((profile) => ({ accountId: profile.id, issues: slurpCreatorReadiness(profile) })),
+      global: {
+        generationConnection: Boolean(settings.generationConnectionId),
+        imageConnection: Boolean(settings.imageGenerationConnectionId),
+        discoveryTags: settings.discoveryTags.length,
+        fanTypes: settings.fanTypes.length,
+        arcs: settings.arcLibrary.length,
+      },
+    };
+  });
+
+  app.get("/backstage/improvement-jobs", async () => {
+    const rows = (await app.db.select().from(slurpImprovementJobs)).slice(-20).reverse();
+    return { items: await Promise.all(rows.map((row) => publicImprovementJob(row.id))) };
+  });
+  app.get("/backstage/improvement-jobs/:id", async (req, reply) => {
+    const job = await publicImprovementJob((req.params as { id: string }).id);
+    return job ?? reply.code(404).send({ error: "Improvement job not found." });
+  });
+  app.post("/backstage/improvement-jobs", async (req, reply) => {
+    const body = improvementJobSchema.safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    const modules = [...new Set(body.data.modules)].filter((module) =>
+      SLURP_AVAILABLE_IMPROVEMENT_MODULES.includes(module),
+    );
+    if (!modules.length) return reply.code(400).send({ error: "Those proposal lanes are not available yet." });
+    const profiles = await noodle.listNoodlerStageProfiles();
+    const available = new Set(profiles.map((profile) => profile.id));
+    const accountIds = [...new Set(body.data.accountIds)].filter((id) => available.has(id));
+    if (!accountIds.length) return reply.code(404).send({ error: "None of those Slurp Creators exist." });
+    const timestamp = now();
+    const id = newId();
+    await app.db.insert(slurpImprovementJobs).values({
+      id,
+      status: "queued",
+      mode: body.data.mode,
+      rebrand: String(body.data.rebrand),
+      accountIds: JSON.stringify(accountIds),
+      modules: JSON.stringify(modules),
+      connectionId: body.data.connectionId ?? null,
+      completed: "0",
+      total: String(accountIds.length),
+      error: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    void processImprovementJob(id).catch((error) => logger.error(error, "[slurp] Improvement job failed"));
+    return reply.code(202).send(await publicImprovementJob(id));
+  });
+  app.post("/backstage/improvement-jobs/:id/cancel", async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    const job = await readImprovementJob(id);
+    if (!job) return reply.code(404).send({ error: "Improvement job not found." });
+    if (!["queued", "running"].includes(job.status)) return reply.code(409).send({ error: "This job is not running." });
+    await app.db
+      .update(slurpImprovementJobs)
+      .set({ status: "cancelled", updatedAt: now() })
+      .where(eq(slurpImprovementJobs.id, id));
+    return publicImprovementJob(id);
+  });
+  app.post("/backstage/improvement-jobs/:id/resume", async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    const job = await readImprovementJob(id);
+    if (!job) return reply.code(404).send({ error: "Improvement job not found." });
+    if (!["failed", "cancelled"].includes(job.status))
+      return reply.code(409).send({ error: "This job is not paused." });
+    await app.db
+      .update(slurpImprovementJobs)
+      .set({ status: "queued", error: null, updatedAt: now() })
+      .where(eq(slurpImprovementJobs.id, id));
+    void processImprovementJob(id).catch((error) => logger.error(error, "[slurp] Improvement job resume failed"));
+    return reply.code(202).send(await publicImprovementJob(id));
+  });
+  // Per-Creator failures retry alone; successful proposals stay reviewable.
+  app.post("/backstage/improvement-jobs/:id/retry", async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    const job = await readImprovementJob(id);
+    if (!job) return reply.code(404).send({ error: "Improvement job not found." });
+    if (["queued", "running"].includes(job.status))
+      return reply.code(409).send({ error: "This job is still running." });
+    const failed = (await readJobProposals(id)).filter((row) => row.status === "error" && row.field === "_creator");
+    if (!failed.length) return reply.code(409).send({ error: "This job has no failed Creators." });
+    const retry = planSlurpImprovementRetry(
+      readStringArray(job.accountIds),
+      failed.map((row) => row.accountId),
+    );
+    await app.db.delete(slurpImprovementProposals).where(
+      inArray(
+        slurpImprovementProposals.id,
+        failed.map((row) => row.id),
+      ),
+    );
+    await app.db
+      .update(slurpImprovementJobs)
+      .set({
+        status: "queued",
+        error: null,
+        accountIds: JSON.stringify(retry.accountIds),
+        completed: String(retry.completed),
+        updatedAt: now(),
+      })
+      .where(eq(slurpImprovementJobs.id, id));
+    void processImprovementJob(id).catch((error) => logger.error(error, "[slurp] Improvement job retry failed"));
+    return reply.code(202).send(await publicImprovementJob(id));
+  });
+  app.post("/backstage/improvement-jobs/:id/dismiss", async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    const body = proposalIdsSchema.safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    const requested = new Set(body.data.proposalIds);
+    const rows = (await readJobProposals(id)).filter((row) => requested.has(row.id) && row.status === "pending");
+    await setProposalStatus(
+      rows.map((row) => row.id),
+      "dismissed",
+    );
+    return { dismissed: rows.length };
+  });
+
+  app.post("/backstage/improvement-jobs/:id/apply", async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    const body = proposalIdsSchema.safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    const job = await readImprovementJob(id);
+    if (!job) return reply.code(404).send({ error: "Improvement job not found." });
+    const requested = new Set(body.data.proposalIds);
+    const outcome = await trySlurpWrite(async () => {
+      // Recomputed under the write lock so a concurrent edit cannot slip between check and write.
+      const proposals = (await readJobProposals(id)).filter(
+        (proposal) => requested.has(proposal.id) && proposal.status === "pending",
+      );
+      if (!proposals.length) return { status: 404 as const, error: "No pending proposals were selected." };
+      const [profiles, settings] = await Promise.all([noodle.listNoodlerStageProfiles(), noodle.getSlurpSettings()]);
+      const plan = planSlurpImprovementApply({
+        profiles,
+        proposals,
+        rebrand: job.rebrand === "true",
+        discoveryTags: settings.discoveryTags,
+      });
+      if (plan.stale.length) {
+        await setProposalStatus(plan.stale, "stale");
+        return {
+          status: 409 as const,
+          error: "A Creator changed after these proposals were generated. Regenerate before applying.",
+        };
+      }
+      const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
+      const touched: typeof plan.updates = [];
+      try {
+        if (plan.createdTags.length) await noodle.updateSlurpSettings({ discoveryTags: plan.discoveryTags });
+        for (const update of plan.updates) {
+          touched.push(update);
+          await noodle.updateNoodlerStageProfile(update.accountId, update.stageProfile);
+          if (update.autoPosting !== undefined) {
+            await noodle.bulkUpdateCreatorProfiles([update.accountId], { autoPosting: update.autoPosting });
+          }
+        }
+      } catch (error) {
+        // ponytail: compensating rollback across separate storage transactions; one shared tx if storage grows one.
+        for (const update of touched) {
+          const before = profileById.get(update.accountId)!;
+          await noodle.updateNoodlerStageProfile(update.accountId, slurpStageProfileInput(before)).catch(() => null);
+          if (update.autoPosting !== undefined) {
+            await noodle
+              .bulkUpdateCreatorProfiles([update.accountId], { autoPosting: before.autoPosting.enabled })
+              .catch(() => null);
+          }
+        }
+        if (plan.createdTags.length) {
+          await noodle.updateSlurpSettings({ discoveryTags: settings.discoveryTags }).catch(() => null);
+        }
+        throw error;
+      }
+      const rejected = new Set(plan.rejected);
+      await setProposalStatus(plan.rejected, "error", "This field is protected and was not applied.");
+      await setProposalStatus(
+        proposals.filter((proposal) => !rejected.has(proposal.id)).map((proposal) => proposal.id),
+        "applied",
+      );
+      return {
+        status: 200 as const,
+        applied: proposals.length - rejected.size,
+        rejected: rejected.size,
+        creators: plan.updates.length,
+        createdTags: plan.createdTags,
+      };
+    });
+    if (!outcome.acquired) return reply.code(409).send({ error: "Another Slurp operation is running." });
+    const { status, ...result } = outcome.value;
+    return status === 200 ? result : reply.code(status).send(result);
+  });
+
+  // A process restart turns interrupted work back into a resumable queue. Completed proposals
+  // remain reviewable and are never applied automatically.
+  void app.db
+    .select()
+    .from(slurpImprovementJobs)
+    .then(async (jobs) => {
+      for (const job of jobs.filter((item) => ["queued", "running"].includes(item.status))) {
+        if (job.status === "running") {
+          await app.db
+            .update(slurpImprovementJobs)
+            .set({ status: "queued", updatedAt: now() })
+            .where(eq(slurpImprovementJobs.id, job.id));
+        }
+        void processImprovementJob(job.id).catch((error) =>
+          logger.error(error, "[slurp] Recovered improvement job failed"),
+        );
+      }
+    });
 
   // ── Backup: export and restore ────────────────────────────────────────────
   //
@@ -650,9 +1139,18 @@ export async function slurpRoutes(app: FastifyInstance) {
   };
 
   const backupJobs = new Map<string, BackupJob>();
+  type RestoreInspection = {
+    id: string;
+    filePath: string;
+    expiresAt: number;
+    summary: ReturnType<typeof inspectRestoreArchive>["summary"];
+  };
+  const restoreInspections = new Map<string, RestoreInspection>();
   const BACKUP_RETENTION_MS = 24 * 60 * 60 * 1000;
+  const RESTORE_INSPECTION_RETENTION_MS = 15 * 60 * 1000;
   const BACKUP_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
   const BACKUP_FILE_PREFIX = "slurp2-backup-";
+  const RESTORE_INSPECTION_PREFIX = "slurp2-restore-inspection-";
 
   async function sweepBackupArchives() {
     const liveFilePaths = new Set<string>();
@@ -663,8 +1161,20 @@ export async function slurpRoutes(app: FastifyInstance) {
       if (job.filePath) await unlink(job.filePath).catch(() => {});
       backupJobs.delete(id);
     }
+    for (const [id, inspection] of restoreInspections) {
+      if (now < inspection.expiresAt) {
+        liveFilePaths.add(inspection.filePath);
+        continue;
+      }
+      await unlink(inspection.filePath).catch(() => {});
+      restoreInspections.delete(id);
+    }
     for (const name of await readdir(DATA_DIR)) {
-      if (!name.startsWith(BACKUP_FILE_PREFIX) || !name.endsWith(".zip")) continue;
+      if (
+        (!name.startsWith(BACKUP_FILE_PREFIX) && !name.startsWith(RESTORE_INSPECTION_PREFIX)) ||
+        !name.endsWith(".zip")
+      )
+        continue;
       const stalePath = join(DATA_DIR, name);
       if (liveFilePaths.has(stalePath)) continue;
       await unlink(stalePath).catch(() => {});
@@ -784,6 +1294,65 @@ export async function slurpRoutes(app: FastifyInstance) {
     return job;
   };
 
+  function inspectRestoreArchive(archive: Buffer) {
+    const entries = readStoredZip(archive);
+    const byName = new Map(entries.map((entry) => [entry.name, entry.data]));
+    const manifestRaw = byName.get("manifest.json");
+    if (!manifestRaw) throw new Error("This archive has no manifest.json and is not a Slurp backup.");
+    const manifest = JSON.parse(manifestRaw.toString("utf8")) as {
+      format?: string;
+      formatVersion?: number;
+      sourcePackage?: string;
+      exportedAt?: string;
+    };
+    if (manifest.format !== "marinara-slurp-backup") throw new Error("This file is not a Slurp backup.");
+    if (manifest.formatVersion !== 1) {
+      throw new Error(`This backup uses format version ${manifest.formatVersion}, which this build cannot read.`);
+    }
+    if (manifest.sourcePackage !== "slurp" && manifest.sourcePackage !== "slurp2") {
+      throw new Error(`This backup came from ${manifest.sourcePackage ?? "an unknown package"}.`);
+    }
+    const readJson = (name: string): unknown => {
+      const raw = byName.get(name);
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw.toString("utf8"));
+      } catch {
+        throw new Error(`Archive entry ${name} is not valid JSON.`);
+      }
+    };
+    const tables: Record<string, unknown[]> = {};
+    for (const name of byName.keys()) {
+      if (!name.startsWith("data/") || !name.endsWith(".json")) continue;
+      const logicalName = name.slice("data/".length, -".json".length);
+      if (logicalName === "app-settings") continue;
+      const rows = readJson(name);
+      if (Array.isArray(rows)) tables[logicalName] = rows;
+    }
+    const settingsBlob = readJson("data/app-settings.json");
+    const settings =
+      settingsBlob && typeof settingsBlob === "object" && !Array.isArray(settingsBlob)
+        ? (settingsBlob as Record<string, string>)
+        : {};
+    const mediaEntries = [...byName.entries()].filter(([name]) => name.startsWith("media/"));
+    return {
+      manifest,
+      tables,
+      settings,
+      mediaEntries,
+      summary: {
+        sourcePackage: manifest.sourcePackage,
+        exportedAt: manifest.exportedAt ?? null,
+        creators: tables.accounts?.length ?? 0,
+        posts: tables.posts?.length ?? 0,
+        interactions: tables.interactions?.length ?? 0,
+        mediaFiles: mediaEntries.length,
+        mediaBytes: mediaEntries.reduce((total, [, data]) => total + data.length, 0),
+        hasSlurp2Settings: Object.keys(settings).some((key) => key.startsWith("slurp2.")),
+      },
+    };
+  }
+
   const createRestoreJob = (archive: Buffer, importSettings: boolean) => {
     const job = newBackupJob("restore", "Waiting for the restore worker.");
     backupJobs.set(job.id, job);
@@ -791,53 +1360,8 @@ export async function slurpRoutes(app: FastifyInstance) {
       job.state = "preparing";
       job.stage = "reading-archive";
       job.detail = "Reading the backup archive.";
-      const entries = readStoredZip(archive);
-      const byName = new Map(entries.map((entry) => [entry.name, entry.data]));
-
-      const manifestRaw = byName.get("manifest.json");
-      if (!manifestRaw) throw new Error("This archive has no manifest.json and is not a Slurp backup.");
-      const manifest = JSON.parse(manifestRaw.toString("utf8")) as {
-        format?: string;
-        formatVersion?: number;
-        sourcePackage?: string;
-      };
-      if (manifest.format !== "marinara-slurp-backup") throw new Error("This file is not a Slurp backup.");
-      if (manifest.formatVersion !== 1) {
-        throw new Error(`This backup uses format version ${manifest.formatVersion}, which this build cannot read.`);
-      }
-      // A legacy Slurp export is the migration path onto this package, so both are accepted.
-      if (manifest.sourcePackage !== "slurp" && manifest.sourcePackage !== "slurp2") {
-        throw new Error(`This backup came from ${manifest.sourcePackage ?? "an unknown package"}.`);
-      }
-
-      const readJson = (name: string): unknown => {
-        const raw = byName.get(name);
-        if (!raw) return null;
-        try {
-          return JSON.parse(raw.toString("utf8"));
-        } catch {
-          throw new Error(`Archive entry ${name} is not valid JSON.`);
-        }
-      };
-
-      const tables: Record<string, unknown[]> = {};
-      for (const name of byName.keys()) {
-        if (!name.startsWith("data/") || !name.endsWith(".json")) continue;
-        const logicalName = name.slice("data/".length, -".json".length);
-        if (logicalName === "app-settings") continue;
-        const rows = readJson(name);
-        if (Array.isArray(rows)) tables[logicalName] = rows;
-      }
-
-      // slurp2 exports carry the whole `slurp2.` namespace in one file. A legacy export instead
-      // wrote separate settings files under legacy key names, which belong to the legacy package
-      // and are deliberately not adopted: the remaster's settings shape has moved on, and a fresh
-      // default is safer than a half-understood import.
-      const settingsBlob = readJson("data/app-settings.json");
-      const settings =
-        settingsBlob && typeof settingsBlob === "object" && !Array.isArray(settingsBlob)
-          ? (settingsBlob as Record<string, string>)
-          : {};
+      const inspection = inspectRestoreArchive(archive);
+      const { tables, settings, mediaEntries } = inspection;
 
       job.creators = tables.accounts?.length ?? 0;
       job.posts = tables.posts?.length ?? 0;
@@ -850,7 +1374,6 @@ export async function slurpRoutes(app: FastifyInstance) {
 
       job.stage = "writing-media";
       job.detail = "Restoring media files.";
-      const mediaEntries = [...byName.entries()].filter(([name]) => name.startsWith("media/"));
       job.mediaFiles = mediaEntries.length;
       // Media is replaced wholesale alongside the rows it belongs to, so a restore cannot leave
       // images from the previous data set attached to posts that no longer exist.
@@ -903,13 +1426,66 @@ export async function slurpRoutes(app: FastifyInstance) {
     done(null, body),
   );
 
+  app.post("/restore/inspections", { bodyLimit: MAX_RESTORE_BYTES }, async (req, reply) => {
+    const body = req.body;
+    if (!Buffer.isBuffer(body) || body.length === 0) {
+      return reply.code(400).send({ error: "Upload a Slurp backup archive." });
+    }
+    try {
+      const parsed = inspectRestoreArchive(body);
+      const id = randomUUID();
+      const filePath = join(DATA_DIR, `${RESTORE_INSPECTION_PREFIX}${id}.zip`);
+      await writeFile(filePath, body, { mode: 0o600 });
+      const inspection: RestoreInspection = {
+        id,
+        filePath,
+        expiresAt: Date.now() + RESTORE_INSPECTION_RETENTION_MS,
+        summary: parsed.summary,
+      };
+      restoreInspections.set(id, inspection);
+      return reply.code(201).send({
+        id,
+        expiresAt: new Date(inspection.expiresAt).toISOString(),
+        ...inspection.summary,
+      });
+    } catch (error) {
+      return reply.code(400).send({ error: getErrorMessage(error) });
+    }
+  });
+
+  app.delete("/restore/inspections/:id", async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    const inspection = restoreInspections.get(id);
+    if (!inspection) return reply.code(204).send();
+    restoreInspections.delete(id);
+    await unlink(inspection.filePath).catch(() => {});
+    return reply.code(204).send();
+  });
+
+  app.post("/restore/inspections/:id/apply", async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    const inspection = restoreInspections.get(id);
+    if (!inspection || isRestoreInspectionExpired(inspection.expiresAt)) {
+      if (inspection) {
+        restoreInspections.delete(id);
+        await unlink(inspection.filePath).catch(() => {});
+      }
+      return reply.code(410).send({ error: "This restore preview expired. Upload the archive again." });
+    }
+    const archive = await readFile(inspection.filePath);
+    restoreInspections.delete(id);
+    await unlink(inspection.filePath).catch(() => {});
+    const importSettings = restoreImportSettingsRequested(req.query);
+    return reply.code(202).send(createRestoreJob(archive, importSettings));
+  });
+
   app.post("/restore/jobs", { bodyLimit: MAX_RESTORE_BYTES }, async (req, reply) => {
     const body = req.body;
     if (!Buffer.isBuffer(body) || body.length === 0) {
       return reply.code(400).send({ error: "Upload a Slurp backup archive." });
     }
     // Settings stay untouched unless the user ticked "also import settings" in the restore dialog.
-    const importSettings = (req.query as { importSettings?: string } | undefined)?.importSettings === "1";
+    const importSettings = restoreImportSettingsRequested(req.query);
     return reply.code(202).send(createRestoreJob(body, importSettings));
   });
 
@@ -1053,15 +1629,26 @@ export async function slurpRoutes(app: FastifyInstance) {
       data.extensions && typeof data.extensions === "object" && !Array.isArray(data.extensions)
         ? (data.extensions as Record<string, unknown>)
         : {};
-    const generated = await generateSlurpConversationSchedule(
-      connection,
-      {
-        name: String(data.name ?? source.displayName),
-        description: String(data.description ?? ""),
-        personality: String(data.personality ?? ""),
-      },
-      scheduleSettings.simulationTuning.prompts.scheduleExtra,
-    );
+    let generated: Awaited<ReturnType<typeof generateSlurpConversationSchedule>>;
+    try {
+      generated = await generateSlurpConversationSchedule(
+        connection,
+        {
+          name: String(data.name ?? source.displayName),
+          description: String(data.description ?? ""),
+          personality: String(data.personality ?? ""),
+        },
+        scheduleSettings.simulationTuning.prompts.scheduleExtra,
+      );
+    } catch (error) {
+      req.log.warn({ err: error }, "Conversation schedule generation returned invalid output");
+      // The model's own words go back to the panel: without them every failure looks identical and
+      // there is nothing to act on but "try again".
+      return reply.code(502).send({
+        error:
+          `The generation connection did not return a complete schedule. ${error instanceof Error ? error.message : ""}`.trim(),
+      });
+    }
     const today = new Date();
     const monday = new Date(today);
     monday.setDate(today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1));
@@ -1626,6 +2213,7 @@ export async function slurpRoutes(app: FastifyInstance) {
                 postId: post.id,
                 createdAt: post.createdAt,
                 creatorReach: reachByAccountId.get(post.authorAccountId) ?? 0,
+                accountId: post.authorAccountId,
                 realLikes: allInteractions.filter((item) => item.type === "like").length,
               },
               projectedAt,
@@ -1635,6 +2223,7 @@ export async function slurpRoutes(app: FastifyInstance) {
                 postId: post.id,
                 createdAt: post.createdAt,
                 creatorReach: reachByAccountId.get(post.authorAccountId) ?? 0,
+                accountId: post.authorAccountId,
                 realReplies: allInteractions.filter((item) => item.type === "reply").length,
               },
               projectedAt,
@@ -1645,6 +2234,7 @@ export async function slurpRoutes(app: FastifyInstance) {
                     postId: post.id,
                     createdAt: post.createdAt,
                     creatorReach: reachByAccountId.get(post.authorAccountId) ?? 0,
+                    accountId: post.authorAccountId,
                   },
                   projectedAt,
                 )
@@ -1990,10 +2580,16 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const creator = await noodle.getNoodlerAccountById((req.params as { id: string }).id);
     if (!creator) return reply.code(404).send({ error: "Creator account not found" });
-    const project = await noodle.addGeneratedProject(
-      creator.id,
-      await generateSlurpArc(app.db, creator.id, [], "", { kind: "foreground" }),
-    );
+    let raw: Record<string, unknown> | null;
+    try {
+      raw = await generateSlurpArc(app.db, creator.id, [], "", { kind: "foreground" });
+    } catch (error) {
+      if (isConnectionAdmissionFailure(error)) return reply.code(409).send({ error: "Generation already in progress" });
+      if (error instanceof SlurpArcGenerationFailure)
+        return reply.code(502).send({ error: error.message, debug: { rawResponse: error.rawResponse } });
+      throw error;
+    }
+    const project = await noodle.addGeneratedProject(creator.id, raw);
     if (!project) return reply.code(502).send({ error: "The model did not return a usable arc. Try again." });
     return { project };
   });
@@ -2008,7 +2604,15 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const creator = await noodle.getNoodlerAccountById((req.params as { id: string }).id);
     if (!creator) return reply.code(404).send({ error: "Creator account not found" });
-    const raw = await generateSlurpArc(app.db, creator.id, [], parsed.data.brief, { kind: "foreground" });
+    let raw: Record<string, unknown> | null;
+    try {
+      raw = await generateSlurpArc(app.db, creator.id, [], parsed.data.brief, { kind: "foreground" });
+    } catch (error) {
+      if (isConnectionAdmissionFailure(error)) return reply.code(409).send({ error: "Generation already in progress" });
+      if (error instanceof SlurpArcGenerationFailure)
+        return reply.code(502).send({ error: error.message, debug: { rawResponse: error.rawResponse } });
+      throw error;
+    }
     const draftId = `draft-${Date.now().toString(36)}`;
     const project = raw
       ? slurpGeneratedArcProject(draftId, raw, new Date(), { origin: "manual", status: "suggested" })
@@ -2224,7 +2828,7 @@ export async function slurpRoutes(app: FastifyInstance) {
         const previous = snapshot?.creators[account.id] ?? null;
         const posts = (postsByAccount.get(account.id) ?? []).map((post) => {
           const postInteractions = interactionsByPostId.get(post.id) ?? [];
-          const input = { postId: post.id, createdAt: post.createdAt, creatorReach: followers };
+          const input = { postId: post.id, createdAt: post.createdAt, creatorReach: followers, accountId: account.id };
           return {
             id: post.id,
             title: post.title,
@@ -2312,6 +2916,82 @@ export async function slurpRoutes(app: FastifyInstance) {
     });
 
     return { since: snapshot?.at ?? null, creators };
+  });
+
+  /**
+   * Metrics for every Creator, for the Backstage Creators list.
+   *
+   * Read-only on purpose. `/noodler/studio` rewrites its snapshot on every read, so the Creator
+   * home deltas would reset whenever Settings was opened. Likes and replies are the displayed
+   * counts over the newest posts, the same numbers a post card shows.
+   */
+  app.get("/noodler/creator-metrics", async () => {
+    const accounts = (await noodle.listNoodlerAccounts()).filter((account) => !isSlurpViewerActorAccount(account));
+    const ids = accounts.map((account) => account.id);
+    const settings = await noodle.getSettings();
+    const scale = slurpPlatformScaleMultiplier(settings.platformScale);
+    const population = createSlurpPopulationStorage(app.db);
+    const [funnel, fanSubscribers, threads, postsByAccount] = await Promise.all([
+      population.countFollowersForCreators(ids),
+      population.countSubscribersForCreators(ids),
+      createSlurpMessagesStorage(app.db)
+        .listThreadsForCreators(ids)
+        .catch(() => []),
+      // ponytail: newest 100 posts per Creator; add a count query if totals past that matter.
+      noodle.listNoodlerPostsByAccounts(ids, 100),
+    ]);
+    const postIds = [...postsByAccount.values()].flat().map((post) => post.id);
+    const interactions = postIds.length > 0 ? await noodle.listNoodlerInteractions(postIds) : [];
+    const realCounts = new Map<string, { likes: number; replies: number }>();
+    for (const interaction of interactions) {
+      const entry = realCounts.get(interaction.postId) ?? { likes: 0, replies: 0 };
+      if (interaction.type === "like") entry.likes += 1;
+      if (interaction.type === "reply") entry.replies += 1;
+      realCounts.set(interaction.postId, entry);
+    }
+    const at = new Date();
+    const creators = await Promise.all(
+      accounts.map(async (account) => {
+        const followers = slurpCreatorReach(
+          {
+            accountId: account.id,
+            createdAt: account.createdAt,
+            realFollowers: funnel.get(account.id) ?? 0,
+            scale,
+          },
+          at,
+          settings.simulationTuning.reach,
+        );
+        let likes = 0;
+        let replies = 0;
+        for (const post of postsByAccount.get(account.id) ?? []) {
+          const input = { postId: post.id, createdAt: post.createdAt, creatorReach: followers, accountId: account.id };
+          const real = realCounts.get(post.id) ?? { likes: 0, replies: 0 };
+          likes += slurpPostLikeCount({ ...input, realLikes: real.likes }, at);
+          replies += slurpPostReplyCount({ ...input, realReplies: real.replies }, at);
+        }
+        const [postCount, subscriptions, earnings, arcs] = await Promise.all([
+          noodle.countNoodlerPostsByAccount(account.id),
+          noodle.listSubscriptionsForCreator(account.id),
+          noodle.getEarnings(account.id),
+          noodle.listActiveProjects(account.id).catch(() => []),
+        ]);
+        return {
+          id: account.id,
+          posts: postCount,
+          followers,
+          likes,
+          replies,
+          subscribers: subscriptions.length + (fanSubscribers.get(account.id) ?? 0),
+          earnings: earnings.lifetime,
+          unread: threads
+            .filter((thread) => thread.creatorAccountId === account.id)
+            .reduce((sum, thread) => sum + thread.creatorUnread, 0),
+          arcs: arcs.length,
+        };
+      }),
+    );
+    return { creators };
   });
 
   app.get("/noodler/viewer/unseen-count", async (req, reply) => {
@@ -2750,7 +3430,11 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (readable?.locked) {
       const teaser = await readNoodlerLockedTeaser(absolute);
       if (!teaser) return reply.code(404).send({ error: "Not Found" });
-      return reply.header("Cache-Control", "private, max-age=300").type("image/jpeg").send(teaser);
+      return reply
+        .header("Cache-Control", "private, max-age=300")
+        .header("Content-Disposition", `inline; filename="slurp-${id}.jpg"`)
+        .type("image/jpeg")
+        .send(teaser);
     }
     const width = z.coerce
       .number()
@@ -2764,6 +3448,10 @@ export async function slurpRoutes(app: FastifyInstance) {
         // its bytes in place. Audience URLs include distinct locked/original variants, so an
         // unlock changes the browser cache key instead of retaining a cached teaser.
         .header("Cache-Control", "private, max-age=300")
+        // This URL ends in `/media`, so saving a post image produced a file with no extension, or
+        // one the browser guessed. `inline` keeps it displaying in the feed and only names it on
+        // the way to disk, with the extension the bytes actually have.
+        .header("Content-Disposition", `inline; filename="slurp-${id}${extname(basename(served)).toLowerCase()}"`)
         .sendFile(basename(served), dirname(served))
     );
   });
@@ -3164,10 +3852,20 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!post) return reply.code(404).send({ error: "Slurp post not found" });
     if (post.authorAccountId !== parsed.data.accountId) return reply.code(403).send({ error: "Forbidden" });
     if (post.imageUrl) return reply.code(409).send({ error: "This post already has an image." });
-    if (!post.imagePrompt) return reply.code(400).send({ error: "This post does not have an image prompt." });
+    const account = await noodle.getNoodlerAccountById(post.authorAccountId);
+    const imagePrompt =
+      post.imagePrompt?.trim() ||
+      [post.title, post.content]
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        .join("\n")
+        .trim() ||
+      `A new social media image for ${account?.displayName || "the creator"}.`;
+    if (!post.imagePrompt) {
+      await noodle.updatePostMedia(post.id, { imagePrompt });
+    }
 
     const result = await noodlerImages.generateReviewedImages({
-      prompts: [{ id: post.id, prompt: post.imagePrompt }],
+      prompts: [{ id: post.id, prompt: imagePrompt }],
       debugMode: parsed.data.debugMode === true,
       retryStoredPrompt: true,
     });
@@ -3989,6 +4687,14 @@ export async function slurpRoutes(app: FastifyInstance) {
         delete creatorConnectionIds[id];
         return { ...current, creatorConnectionIds };
       });
+      // Same treatment for the post-guidance override, or a deleted Creator's direction would sit
+      // in the blob forever and travel in every backup.
+      const removedGuidance = (await getSlurpPostGuidance(app.db)).creators[id];
+      await updateSlurpPostGuidance(app.db, (current) => {
+        const creators = { ...current.creators };
+        delete creators[id];
+        return { ...current, creators };
+      });
       try {
         const target = await noodle.getNoodlerAccountById(id, { includeHidden: true });
         const deleted = await noodle.deleteNoodlerAccount(id);
@@ -4006,6 +4712,12 @@ export async function slurpRoutes(app: FastifyInstance) {
               ...current.creatorConnectionIds,
               [id]: removedConnectionId,
             },
+          }));
+        }
+        if (removedGuidance) {
+          await updateSlurpPostGuidance(app.db, (current) => ({
+            ...current,
+            creators: { ...current.creators, [id]: removedGuidance },
           }));
         }
         throw error;
@@ -4108,6 +4820,92 @@ export async function slurpRoutes(app: FastifyInstance) {
     return noodle.getNoodlerReserveStatus();
   });
 
+  // `builtIn` travels with the value so the client can show what applies while a field is empty
+  // without keeping its own copy of the wording.
+  app.get("/noodler/post-guidance", async () => ({
+    ...(await getSlurpPostGuidance(app.db)),
+    builtIn: SLURP_BUILT_IN_POST_GUIDANCE,
+  }));
+
+  /**
+   * Set the global direction for public or locked posts, or one Creator's override of it.
+   *
+   * Sent the same way as the image-connection map: `creatorId` selects the override, its absence
+   * means the global field. An empty string clears the level being written and lets the level
+   * below it apply again.
+   */
+  app.patch("/noodler/post-guidance", async (req, reply) => {
+    const body = z
+      .object({
+        creatorId: z.string().min(1).nullable().optional(),
+        public: z.string().max(SLURP_POST_GUIDANCE_MAX_LENGTH).optional(),
+        locked: z.string().max(SLURP_POST_GUIDANCE_MAX_LENGTH).optional(),
+        /** A Creator's private content menu. Only valid with `creatorId`: it has no global level. */
+        menu: z.string().max(SLURP_POST_GUIDANCE_MAX_LENGTH).optional(),
+      })
+      .safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    const { creatorId } = body.data;
+    if (body.data.public === undefined && body.data.locked === undefined && body.data.menu === undefined) {
+      return reply.code(400).send({ error: "Send public, locked, or menu." });
+    }
+    if (body.data.menu !== undefined && !creatorId) {
+      return reply.code(400).send({ error: "A content menu belongs to one Creator; send creatorId." });
+    }
+    if (creatorId && !(await noodle.getNoodlerAccountById(creatorId))) {
+      return reply.code(404).send({ error: "Slurp stage profile not found" });
+    }
+    const next = await updateSlurpPostGuidance(app.db, (current) => {
+      const patch = (entry: { public: string; locked: string; menu: string }) => ({
+        public: body.data.public ?? entry.public,
+        locked: body.data.locked ?? entry.locked,
+        menu: body.data.menu ?? entry.menu,
+      });
+      if (!creatorId) return { ...current, defaults: patch(current.defaults) };
+      return {
+        ...current,
+        creators: {
+          ...current.creators,
+          [creatorId]: patch(current.creators[creatorId] ?? { public: "", locked: "", menu: "" }),
+        },
+      };
+    });
+    return { ...next, builtIn: SLURP_BUILT_IN_POST_GUIDANCE };
+  });
+
+  /** Draft one access direction with the model. Returns the text; saving it stays the client's call. */
+  app.post("/noodler/post-guidance-draft", async (req, reply) => {
+    const body = z
+      .object({
+        access: z.enum(["public", "locked"]),
+        creatorId: z.string().min(1).nullable().optional(),
+        currentDraft: z.string().max(SLURP_POST_GUIDANCE_MAX_LENGTH).optional(),
+        guidance: z.string().max(2000).optional(),
+        connectionId: z.string().min(1).nullable().optional(),
+      })
+      .safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    const settings = await noodle.getSettings();
+    const connection = await resolveSlurpTextConnection(
+      connections,
+      body.data.connectionId ?? settings.generationConnectionId,
+    );
+    if (!connection) return reply.code(404).send({ error: "Slurp generation connection not found" });
+    try {
+      return await generateSlurpPostGuidanceDraft(app.db, {
+        access: body.data.access,
+        creatorId: body.data.creatorId ?? null,
+        currentDraft: body.data.currentDraft ?? "",
+        guidance: body.data.guidance ?? "",
+        connection,
+      });
+    } catch (error) {
+      logger.error(error, "[slurp] Post guidance draft failed using %s", connection.model || connection.provider);
+      // Written for the user (no answer, empty answer, leaked identity), so show the reason.
+      return reply.code(500).send({ error: `Post guidance draft failed: ${getErrorMessage(error)}` });
+    }
+  });
+
   app.get("/noodler/image-connections", async () => getNoodlerImageConnections(app.db));
 
   app.patch("/noodler/image-connections", async (req, reply) => {
@@ -4158,7 +4956,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       const result = await generateAndApplyNoodlerPost(app.db, {
         mode: "noodler",
         targetAccountId: id,
-        access: "locked",
+        access: await resolveSlurpAutomaticPostAccess(noodle, id),
       });
       // Run-now never sets reviewImagePromptsBeforeSend, so the generator can only return a
       // plain post here — no image-prompt review is ever produced on this path.

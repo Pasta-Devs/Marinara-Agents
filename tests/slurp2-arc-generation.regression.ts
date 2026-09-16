@@ -32,6 +32,20 @@ assert.match(
   /slurpArcTypeFromProject\(project, draftId\)/u,
   "the draft route returns a library type without storing a project",
 );
+assert.match(routesSource, /Generation already in progress/u, "busy generation has a clear response");
+assert.match(routesSource, /rawResponse: error\.rawResponse/u, "foreground failures expose bounded model output");
+assert.match(generationSource, /SlurpArcGenerationFailure/u, "unusable model output keeps a diagnostic reason");
+assert.match(
+  readFileSync(
+    new URL(
+      "../packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpBackstageWorkflow.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+  /Export.*Import Arc|importArc[\s\S]*exportArc/u,
+  "the Arc Library supports sharing individual arcs",
+);
 
 // arcSource: global default reaches the resolved config, a Creator override wins.
 const global = { arcAutoMode: "auto", arcCooldownWeeks: 1, arcPace: "normal", arcSource: "mixed" } as const;

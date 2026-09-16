@@ -223,7 +223,7 @@ This document describes Slurp only. It does not describe internal helpers unless
 
 | ID | User action | Expected result | Current implementation result | Status | Result |
 | --- | --- | --- | --- | --- | --- |
-| AUD-01 | Open Settings -> Audience. | The user sees audience automation state and run frequency. | Settings load fan activity status and expose audience controls. | `Partial` | |
+| AUD-01 | Open Settings -> Audience. | The user sees runs used today, one Activity preset choice, crowd size and crowd tone, with Fan types, AI writing and Advanced folded below. | Settings load fan activity status; a preset click saves the preset patch and the selected preset is detected back from stored settings. | `Partial` | |
 | AUD-02 | Enable synthetic audience activity. | Slurp creates local fan likes and replies for eligible posts. | Fan activity has its own scheduler, state, and operation. | `Partial` | |
 | AUD-03 | Run audience activity now. | The user sees a result or a clear provider error. | Settings expose a refresh-now action. | `Partial` | |
 | AUD-04 | Disable synthetic audience activity. | No new synthetic audience actions are created. | The setting controls the fan activity scheduler. | `Partial` | |

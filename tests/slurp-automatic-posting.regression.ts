@@ -5,6 +5,7 @@ import { buildSlurpPostTimingContext } from "../packages/slurp2/src/engine/packa
 import { runSlurpAutoPostPollOperations } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-autopost-poll.ts";
 import { normalizeSlurpFanActivityRows } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-fan-activity-response.ts";
 import { hasSlurpCreatorPostingIntervalConflict } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-posting-interval.ts";
+import { slurp2BackstageSource } from "./slurp2-backstage-source";
 
 const storage = readFileSync(
   "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
@@ -16,10 +17,7 @@ const refreshScheduler = readFileSync(
 );
 const hooks = readFileSync("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");
 const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
-const settingsUi = readFileSync(
-  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx",
-  "utf8",
-);
+const settingsUi = slurp2BackstageSource();
 const homeUi = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
 const onboardingUi = readFileSync(
   "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx",

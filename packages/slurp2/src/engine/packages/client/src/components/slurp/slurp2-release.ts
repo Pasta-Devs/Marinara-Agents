@@ -2,7 +2,7 @@
 // client has no route that serves CHANGELOG.md. So the notes are mirrored here, and
 // `tests/slurp2-release-notes.regression.ts` fails the build if this file drifts from
 // `packages/slurp2/CHANGELOG.md` or from the version in `manifest.json`.
-export const SLURP2_VERSION = "0.0.15";
+export const SLURP2_VERSION = "0.0.17";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -12,6 +12,31 @@ export interface Slurp2ReleaseEntry {
 
 /** Newest first, same order as CHANGELOG.md. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.0.17",
+    date: "2026-09-16",
+    notes: [
+      "Settings is now Backstage: Overview, Creators, Features, Automation, and Maintenance, with setting search and live previews.",
+      "Creators shows metrics and totals for every Creator. Click one to open its settings, content menu, message prices, and collab partners.",
+      "Features -> Events and holidays: yearly events that Creators mention in posts, replies, and messages.",
+      "Free teaser posts: some automatic posts go out free to win subscribers.",
+      "Featured, buried, and viral weeks change post reach, and viral posts bring a rush of followers.",
+      "Fans who spend a lot and show up constantly can become Too attached.",
+      "Crossovers prefer collab partners, and commissions get a quote by default.",
+      "Feed posts have Edit, Delete, and Show image context in the post menu again.",
+    ],
+  },
+  {
+    version: "0.0.16",
+    date: "2026-09-15",
+    notes: [
+      "Settings -> Audience is simpler: one Activity choice (Off, Quiet, Realistic, Lively, Generous), crowd size and tone up front, and fan types, AI writing and advanced numbers in folded sections. Off also stops commissions, DMs and the activity pulse.",
+      "A fan type's tone override now changes how those fans write their comments.",
+      "Settings -> Tags is rebuilt: tags show as chips in their groups, with usage counts and a filter. Click a tag to rename it, merge it into another tag, move it to another group, or delete it.",
+      "Settings -> Creators: select many Creators and change gender, add or remove tags, or turn auto-post and images on or off in one step. The selected Creator also has a quick gender and tag editor.",
+      "Fix: toggles in Settings no longer black out the screen in Firefox.",
+    ],
+  },
   {
     version: "0.0.15",
     date: "2026-09-15",

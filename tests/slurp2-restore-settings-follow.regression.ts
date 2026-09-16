@@ -8,6 +8,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { slurp2BackstageSource } from "./slurp2-backstage-source";
 
 const pkg = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages");
 const read = (path: string) => readFileSync(join(pkg, path), "utf8");
@@ -28,7 +29,12 @@ assert.ok(
 
 const routes = read("server/src/routes/slurp.routes.ts");
 assert.match(routes, /importSlurpBackup\(\{ settings, tables, importSettings \}\)/u);
-assert.match(routes, /importSettings === "1"/u, "the route reads the opt-in flag, default off");
+assert.match(routes, /restoreImportSettingsRequested\(req\.query\)/u, "the route reads the opt-in flag");
+assert.match(
+  read("server/src/services/slurp/slurp-backup.ts"),
+  /importSettings === "1"/u,
+  "the opt-in flag defaults off",
+);
 assert.match(
   routes,
   /const followedIds = new Set\(\[\.\.\.\(viewer\.settings\.social\.followingAccountIds \?\? \[\]\), \.\.\.subscribedIds\]\)/u,
@@ -37,9 +43,14 @@ assert.match(
 
 const client = read("client/src/hooks/use-slurp.ts");
 assert.match(client, /startSlurpRestore\(archive: File \| Blob, importSettings = false\)/u);
-const settingsUi = read("client/src/components/slurp/SlurpSettings.tsx");
+assert.match(client, /inspectSlurpRestore\(archive: File \| Blob\)/u);
+assert.match(client, /applySlurpRestoreInspection\(/u);
+const settingsUi = slurp2BackstageSource();
 assert.match(settingsUi, /useState\(false\);\n\s*const \[restoreImportSettings/u);
-assert.match(settingsUi, /startSlurpRestore\(file, restoreImportSettings\)/u);
+assert.match(settingsUi, /inspectSlurpRestore\(file\)/u);
+assert.match(settingsUi, /const inspection = restoreInspection;[\s\S]*?showConfirmDialog\(/u);
+assert.match(settingsUi, /applySlurpRestoreInspection\(inspection\.id, restoreImportSettings\)/u);
+assert.match(settingsUi, /restoreInspection\.hasSlurp2Settings/u);
 
 const home = read("client/src/components/slurp/SlurpHome.tsx");
 assert.doesNotMatch(

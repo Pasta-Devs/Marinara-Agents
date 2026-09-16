@@ -899,7 +899,7 @@ export function NoodleShell({
                           {localizeUi("ui.slurp.navigation.messages", { defaultValue: "Inbox" })}
                         </span>
                         {notificationCount > 0 && (
-                          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--noodle-accent)] px-1.5 text-[0.65rem] font-black tabular-nums text-zinc-950">
+                          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--noodle-accent)] px-1.5 text-[0.65rem] font-black tabular-nums text-zinc-950 [&_svg]:!text-zinc-950">
                             {notificationCount}
                           </span>
                         )}
@@ -1111,7 +1111,7 @@ export function NoodleShell({
               <Home size={20} strokeWidth={homeActive ? 2.6 : 2} className="!text-[var(--noodle-accent)]" />
               {/* The drawer used to carry this badge; the bottom bar is the only Home entry now. */}
               {noodlerUnseenCount > 0 && (
-                <span className="absolute end-[22%] top-1 min-w-4 rounded-full bg-[var(--noodle-accent)] px-1 text-center text-[0.6rem] font-black leading-4 text-zinc-950">
+                <span className="absolute end-[22%] top-1 min-w-4 rounded-full bg-[var(--noodle-accent)] px-1 text-center text-[0.6rem] font-black leading-4 text-zinc-950 [&_svg]:!text-zinc-950">
                   {noodlerUnseenCount > 99 ? "99+" : noodlerUnseenCount}
                 </span>
               )}
@@ -1153,7 +1153,7 @@ export function NoodleShell({
                   className={"!text-[var(--noodle-accent)]"}
                 />
                 {notificationCount > 0 && (
-                  <span className="absolute end-[22%] top-1 min-w-4 rounded-full bg-[var(--noodle-accent)] px-1 text-center text-[0.6rem] font-black leading-4 text-zinc-950">
+                  <span className="absolute end-[22%] top-1 min-w-4 rounded-full bg-[var(--noodle-accent)] px-1 text-center text-[0.6rem] font-black leading-4 text-zinc-950 [&_svg]:!text-zinc-950">
                     {notificationCount > 99 ? "99+" : notificationCount}
                   </span>
                 )}

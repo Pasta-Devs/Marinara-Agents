@@ -635,11 +635,18 @@ export function createSlurpMessagesStorage(db: DB) {
     ): Promise<SlurpCreatorMessaging> {
       const blob = await readMessagingBlob();
       const defaults = await messagingDefaults();
+      const stored = blob[creatorAccountId] as Record<string, unknown> | undefined;
+      // Remember when the player set auto-quote on purpose, so it survives the default changing.
+      const autoQuoteChosen = "autoQuote" in patch || stored?.autoQuoteChosen === true;
+      const marker = autoQuoteChosen ? { autoQuoteChosen: true } : {};
       const next = readSlurpCreatorMessaging(
-        { ...readSlurpCreatorMessaging(blob[creatorAccountId], defaults), ...patch },
+        { ...readSlurpCreatorMessaging(stored, defaults), ...patch, ...marker },
         defaults,
       );
-      await settingsStore.set(SLURP_CREATOR_MESSAGING_KEY, JSON.stringify({ ...blob, [creatorAccountId]: next }));
+      await settingsStore.set(
+        SLURP_CREATOR_MESSAGING_KEY,
+        JSON.stringify({ ...blob, [creatorAccountId]: { ...next, ...marker } }),
+      );
       return next;
     },
 
@@ -2855,7 +2862,7 @@ export function createSlurpMessagesStorage(db: DB) {
     async resetThread(threadId: string): Promise<void> {
       const timestamp = now();
       await db.transaction(async (tx) => {
-        const thread = await tx.select().from(slurpThreads).where(eq(slurpThreads.id, threadId)).get();
+        const [thread] = await tx.select().from(slurpThreads).where(eq(slurpThreads.id, threadId)).limit(1);
         if (!thread) return;
         await tx.delete(slurpReplyBubbles).where(eq(slurpReplyBubbles.threadId, threadId));
         await tx.delete(slurpMessageClaims).where(eq(slurpMessageClaims.threadId, threadId));

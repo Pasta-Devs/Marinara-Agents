@@ -8,6 +8,7 @@ import {
   SLURP_AUDIENCE_TONES,
   SLURP_DEFAULT_AUDIENCE_TONE,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-tone.js";
+import { slurp2BackstageSource } from "./slurp2-backstage-source";
 
 // ── Tone is not spice ───────────────────────────────────────────────────────
 // `generationGuidance` and its three presets govern how explicit a Creator's own posts are. None of
@@ -53,7 +54,7 @@ assert.match(storage, /audienceTone: SLURP_DEFAULT_AUDIENCE_TONE/u);
 assert.match(storage, /isSyntheticWalletHolder\(viewerAccountId\)/u);
 assert.match(storage, /getWalletNow\(viewerAccountId\)/u);
 
-const settings = read("client/src/components/slurp/SlurpSettings.tsx");
+const settings = slurp2BackstageSource();
 assert.match(settings, /update\("audienceTone", tone\)/u);
 
 console.log("slurp tone regression passed");

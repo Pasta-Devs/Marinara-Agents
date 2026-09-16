@@ -21,6 +21,7 @@ import {
   slurpProjectsKey,
   slurpProjectTick,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-project.js";
+import { slurp2BackstageSource } from "./slurp2-backstage-source";
 
 const at = new Date("2026-09-09T10:00:00.000Z");
 const daysLater = (days: number) => new Date(at.getTime() + days * 86_400_000);
@@ -338,7 +339,7 @@ assert.match(panel, /ui\.slurp\.projects\.endEarly/u);
 assert.match(panel, /ui\.slurp\.projects\.deleteNote/u);
 assert.match(readClient("components/slurp/SlurpHome.tsx"), /<SlurpProjectsPanel\s+personaId=\{personaId\}/u);
 // The pace is one familiar control beside the Story rate, not a second settings screen.
-assert.match(readClient("components/slurp/SlurpSettings.tsx"), /ui\.slurp\.settings\.projectRate/u);
+assert.match(slurp2BackstageSource(), /ui\.slurp\.settings\.projectRate/u);
 
 const locales = JSON.parse(readClient("localization/locales/en.json")) as Record<string, string>;
 for (const key of ["ui.slurp.projects.heading", "ui.slurp.settings.projectRate", "ui.slurp.projects.status.active"]) {

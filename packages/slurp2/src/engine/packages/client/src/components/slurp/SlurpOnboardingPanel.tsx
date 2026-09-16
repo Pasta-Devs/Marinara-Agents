@@ -38,6 +38,7 @@ import {
   useRefreshTargetedNoodlerCreatorsNow,
   useSlurpConnections,
   useSlurpSettings,
+  useUpdateSlurpConnectionsForCreators,
   useUpdateSlurpSettings,
 } from "../../hooks/use-slurp";
 import { cn, generateClientId } from "../../lib/utils";
@@ -124,6 +125,7 @@ export function SlurpOnboardingWizard({
   const bulkCreate = useBulkCreateNoodlerStageProfiles();
   const refreshTargeted = useRefreshTargetedNoodlerCreatorsNow();
   const enqueueFirstPosts = useEnqueueNoodlerFirstPosts();
+  const assignImageConnections = useUpdateSlurpConnectionsForCreators();
   const updateSlurpSettings = useUpdateSlurpSettings();
   const connectionsQuery = useSlurpConnections(open);
   const settingsQuery = useSlurpSettings();
@@ -144,6 +146,9 @@ export function SlurpOnboardingWizard({
   const [postsPerDayDraft, setPostsPerDayDraft] = useState(String(DEFAULT_POSTS_PER_DAY));
   const [nightQuiet, setNightQuiet] = useState(true);
   const [imagesEnabled, setImagesEnabled] = useState(false);
+  // Empty means the Slurp-wide default image connection. Chosen here because the first post is
+  // written during this run: setting it afterwards in Backstage would already be too late.
+  const [imageConnectionId, setImageConnectionId] = useState("");
   const [generateNow, setGenerateNow] = useState(true);
   const [createdIds, setCreatedIds] = useState<string[]>([]);
   const [creationFailures, setCreationFailures] = useState(0);
@@ -403,6 +408,15 @@ export function SlurpOnboardingWizard({
       setStep(5);
       if (settingsSaved && newIds.length > 0) onComplete?.();
       return;
+    }
+    // Before the first posts, never after: these are the connections those posts must use.
+    // A failure here costs the chosen workflow, not the run, so the creators still get their posts.
+    if (imageConnectionId) {
+      try {
+        await assignImageConnections.mutateAsync({ creatorIds: newIds, connectionId: imageConnectionId });
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : t("ui.slurp.onboarding.imageConnectionFailed"));
+      }
     }
     try {
       await enqueueFirstPosts.mutateAsync({ accountIds: newIds, executionId });
@@ -919,7 +933,7 @@ export function SlurpOnboardingWizard({
                           className={cn(
                             "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border",
                             selected.has(account.id)
-                              ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)] text-zinc-950"
+                              ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950"
                               : "border-[var(--slurp-outline)]",
                           )}
                         >
@@ -1130,6 +1144,31 @@ export function SlurpOnboardingWizard({
                       ))}
                   </select>
                 </label>
+                {imagesEnabled && (
+                  <label className="flex min-h-14 items-center justify-between gap-4 rounded-lg border border-[var(--slurp-outline)] px-3 py-2">
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold">{t("ui.slurp.onboarding.imageConnection")}</span>
+                      <span className="block text-xs leading-5 text-[var(--slurp-muted)]">
+                        {t("ui.slurp.onboarding.imageConnectionHelp")}
+                      </span>
+                    </span>
+                    <select
+                      value={imageConnectionId}
+                      onChange={(event) => setImageConnectionId(event.target.value)}
+                      className="h-9 max-w-[55%] rounded-lg border border-[var(--noodle-accent)]/45 bg-[var(--slurp-surface)] px-2 text-sm text-[var(--slurp-text)]"
+                      disabled={connectionsQuery.isLoading}
+                    >
+                      <option value="">{t("ui.slurp.onboarding.imageConnectionDefault")}</option>
+                      {(connectionsQuery.data ?? [])
+                        .filter((connection) => connection.provider === "image_generation")
+                        .map((connection) => (
+                          <option key={connection.id} value={connection.id}>
+                            {connection.name ?? connection.model ?? connection.id}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                )}
                 {setupLane === "easy" ? (
                   <div className="divide-y divide-[var(--noodle-accent)]/20 rounded-lg border border-[var(--noodle-accent)]/30 bg-[var(--noodle-accent)]/[0.06]">
                     <div className="flex min-h-14 items-center justify-between gap-4 px-3 py-2.5">
@@ -1455,7 +1494,7 @@ export function SlurpOnboardingWizard({
                   type="button"
                   disabled={intro === 2 && !postExplored}
                   onClick={() => setIntro(intro < LAST_INTRO ? ((intro + 1) as Intro) : null)}
-                  className="flex min-h-10 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950 disabled:opacity-50 max-sm:px-3"
+                  className="flex min-h-10 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50 max-sm:px-3"
                 >
                   {intro < LAST_INTRO ? t("ui.noodle.noodlerwizard.continue") : t("ui.noodle.noodlerwizard.introDone")}
                   <ChevronRight size={15} />
@@ -1470,7 +1509,7 @@ export function SlurpOnboardingWizard({
                       else if (setupLane === "easy" && step === 1) setStep(4);
                       else setStep((step + 1) as Step);
                     }}
-                    className="flex min-h-10 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950 disabled:opacity-50 max-sm:px-3 max-sm:text-xs"
+                    className="flex min-h-10 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50 max-sm:px-3 max-sm:text-xs"
                   >
                     {pending && <Loader2 size={15} className="animate-spin" />}
                     {step === 4
@@ -1494,7 +1533,7 @@ export function SlurpOnboardingWizard({
                     onSeeFeed?.();
                     if (!onSeeFeed) onClose();
                   }}
-                  className="min-h-10 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950"
+                  className="min-h-10 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950 [&_svg]:!text-zinc-950"
                 >
                   {t("ui.noodle.noodlerwizard.openAllCreators")}
                 </button>

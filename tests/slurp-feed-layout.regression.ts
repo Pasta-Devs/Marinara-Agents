@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { slurp2BackstageSource } from "./slurp2-backstage-source";
 
 const root = join(import.meta.dirname, "..");
 const componentsDir = join(root, "packages/slurp2/src/engine/packages/client/src/components/slurp");
 const home = readFileSync(join(componentsDir, "SlurpHome.tsx"), "utf8");
-const settings = readFileSync(join(componentsDir, "SlurpSettings.tsx"), "utf8");
+const settings = slurp2BackstageSource();
 const shell = readFileSync(join(componentsDir, "SlurpShell.tsx"), "utf8");
 const coin = readFileSync(join(componentsDir, "SlurpCoin.tsx"), "utf8");
 const creatorPostCard = readFileSync(join(componentsDir, "SlurpCreatorPostCard.tsx"), "utf8");
@@ -124,18 +125,16 @@ assert.match(
   "The in-page desktop nav must yield to the shell",
 );
 
-// The mobile section row must show where you are and that there is more of it.
+// Mobile uses one compact destination picker instead of a long horizontal tab strip.
 const row = settings.slice(
   settings.indexOf("function SlurpSettingsSectionRow("),
   settings.indexOf("export function SlurpSettings("),
 );
-assert.match(
-  row,
-  /scrollIntoView\(\{ block: "nearest", inline: "center" \}\)/u,
-  "The active section must scroll into view",
-);
-assert.match(row, /edges\.start \? "transparent"/u, "A scrollable start edge must fade");
-assert.match(row, /edges\.end \? "transparent"/u, "A scrollable end edge must fade");
+assert.match(row, /<select/u, "The active destination must be exposed as a native picker");
+assert.match(row, /value=\{`\$\{section\}:/u, "The picker must show the current destination");
+assert.match(row, /<optgroup/u, "The picker must reach a page, not only its section");
+assert.match(row, /min-h-11/u, "The destination picker must retain a 44px touch target");
+assert.doesNotMatch(row, /overflow-x-auto/u, "Mobile must not restore the long horizontal tab strip");
 
 const card = readFileSync(join(componentsDir, "SlurpCreatorProfileCard.tsx"), "utf8");
 

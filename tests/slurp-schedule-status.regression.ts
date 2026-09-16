@@ -9,6 +9,7 @@ import {
   reconcileNoodleRefreshSchedule,
   type PersistedNoodleRefreshSchedule,
 } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-refresh-schedule.js";
+import { slurp2BackstageSource } from "./slurp2-backstage-source";
 
 async function main() {
   // A Tuesday, so "this week" starts on the Monday before it.
@@ -147,7 +148,7 @@ const root = join(import.meta.dirname, "..", "packages/slurp2/src/engine/package
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 assert.match(read("server/src/services/storage/slurp.storage.ts"), /scheduleStatus: publicAccount/u);
-const settings = read("client/src/components/slurp/SlurpSettings.tsx");
+const settings = slurp2BackstageSource();
 // Only the stale case earns a warning in the list. The others are stated on the Creator itself,
 // where somebody is already deciding what to do about them.
 assert.match(settings, /creator\.scheduleStatus\?\.state === "stale"/u);
