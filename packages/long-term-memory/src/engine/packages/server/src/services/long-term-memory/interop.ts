@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import {
   type LtmImportSourceNotesRequest,
   type LtmImportSourceNotesResponse,
@@ -323,6 +324,22 @@ function matchesScope(candidate: Candidate, scope?: LtmScope) {
 
 function candidateVisibleInScope(candidate: Candidate, scope: LtmScope | undefined) {
   return matchesScope(candidate, scope);
+}
+
+function resolveImportCandidates(rows: Candidate[]) {
+  const resolved = new Map<string, Candidate>();
+  const conflicts = new Map<string, Candidate>();
+  for (const row of rows) {
+    if (conflicts.has(row.sourceId)) continue;
+    const previous = resolved.get(row.sourceId);
+    if (!previous) {
+      resolved.set(row.sourceId, row);
+    } else if (!isDeepStrictEqual(previous, row)) {
+      conflicts.set(row.sourceId, previous);
+      resolved.delete(row.sourceId);
+    }
+  }
+  return { rows: [...resolved.values()], conflicts: [...conflicts.values()] };
 }
 
 function matchesChatSummaryScope(candidateScope: LtmScope, scope?: LtmScope) {
@@ -841,9 +858,23 @@ export async function importPackageInterop(
       { ...request, sourceScope, includeOutOfScope: sourceScope !== undefined },
       selected,
     ),
-    rows = candidateRows.filter((row) => candidateVisibleInScope(row, sourceScope)),
-    resolvedIds = new Set(rows.map((item) => item.sourceId)),
-    missingSourceIds = request.sourceIds.filter((id) => !resolvedIds.has(id));
+    visibleRows = candidateRows.filter((row) => candidateVisibleInScope(row, sourceScope)),
+    resolvedIds = new Set(visibleRows.map((item) => item.sourceId)),
+    missingSourceIds = request.sourceIds.filter((id) => !resolvedIds.has(id)),
+    candidateResolution = resolveImportCandidates(visibleRows),
+    rows = candidateResolution.rows,
+    writeFailures: LtmImportSourceNotesResponse["writeFailures"] = candidateResolution.conflicts.map((row) => ({
+      sourceId: row.sourceId,
+      title: row.title,
+      sourceWriteStatus: "failed" as const,
+      extractionStatus: "not_started" as const,
+      retryable: false,
+      error: {
+        code: "ltm_source_identity_conflict" as const,
+        message: `Source ${row.title} has multiple records with different content for the same source ID.`,
+      },
+    })),
+    conflictingSourceIds = new Set<string>();
   throwIfAborted(signal);
   if (!destinationScope && !chat && !legacyScopeRequest && rows.some((row) => !isGlobalLtmScope(row.scope)))
     throw new LtmServiceError(
@@ -859,10 +890,10 @@ export async function importPackageInterop(
       !row.sourceId.includes(":game-session-") ||
       extractionConfig.useExtractionAgentOnGameMode,
   );
-  let resolved = null;
+  let languageModel = null;
   if (request.extract && useExtractionAgent) {
     try {
-      resolved = await getPackageLanguageModels().resolveForRequest({
+      languageModel = await getPackageLanguageModels().resolveForRequest({
         connectionId: request.connectionId ?? extractionConfig.connectionId,
         chatConnectionId: chat?.connectionId ?? null,
         model: request.model,
@@ -876,9 +907,7 @@ export async function importPackageInterop(
     }
   }
   throwIfAborted(signal);
-  const written: ImportedSourceItem[] = [],
-    writeFailures: LtmImportSourceNotesResponse["writeFailures"] = [];
-  const conflictingSourceIds = new Set<string>();
+  const written: ImportedSourceItem[] = [];
   if (destinationScope) {
     for (const row of rows) {
       const existing = matchExisting(row);
@@ -968,7 +997,7 @@ export async function importPackageInterop(
   const results = request.extract
       ? await processLongTermMemorySourceBatch({
           items: written,
-          languageModel: resolved,
+          languageModel,
           mode: request.mode,
           modes: request.modes,
           instruction: request.instruction,

@@ -2746,18 +2746,18 @@ export const ltmImportSourceWriteFailureSchema = z
     retryable: z.boolean(),
     error: z
       .object({
-        code: z.enum(["source_write_failed", "ltm_source_destination_conflict"]),
+        code: z.enum(["source_write_failed", "ltm_source_destination_conflict", "ltm_source_identity_conflict"]),
         message: z.string().min(1).max(2_000),
       })
       .strict(),
   })
   .strict()
   .superRefine((failure, ctx) => {
-    if (failure.retryable === (failure.error.code === "ltm_source_destination_conflict"))
+    if (failure.retryable !== (failure.error.code === "source_write_failed"))
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["retryable"],
-        message: "Destination conflicts are not retryable; source write failures are retryable.",
+        message: "Source identity and destination conflicts are not retryable; source write failures are retryable.",
       });
   });
 

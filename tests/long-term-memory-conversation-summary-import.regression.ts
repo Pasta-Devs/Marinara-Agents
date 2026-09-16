@@ -46,13 +46,39 @@ const gameChat = {
     gamePreviousSessionSummaries: [{ sessionNumber: 1, summary: "The party reached the Moon Vault." }],
   },
 };
+const duplicateSourceChat = {
+  ...roleplayChat,
+  id: "chat-duplicate-source",
+  metadata: {
+    summaryEntries: [
+      { id: "same-id", content: "The same imported summary." },
+      { id: "same-id", content: "The same imported summary." },
+    ],
+  },
+};
+const conflictingSourceChat = {
+  ...roleplayChat,
+  id: "chat-conflicting-source",
+  metadata: {
+    summaryEntries: [
+      { id: "same-id", content: "The first imported summary." },
+      { id: "same-id", content: "A different imported summary." },
+      { id: "same-id", content: "The first imported summary." },
+    ],
+  },
+};
 
 async function main() {
   const [
     { configurePackageRuntime },
     { previewPackageInterop, previewPackageLorebooks, sourcePackageDetails, importPackageInterop },
     { LongTermMemoryStorage },
-    { ltmInteropPreviewRequestSchema, ltmLorebookPreviewResponseSchema, ltmSourceDetailsRequestSchema },
+    {
+      ltmImportSourceNotesResponseSchema,
+      ltmInteropPreviewRequestSchema,
+      ltmLorebookPreviewResponseSchema,
+      ltmSourceDetailsRequestSchema,
+    },
   ] = await Promise.all([
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/package-runtime.ts"),
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/interop.ts"),
@@ -67,7 +93,7 @@ async function main() {
   await runWithSafeCleanup(
     "Long-Term Memory Conversation summary import",
     async () => {
-      const chats = [conversationChat, roleplayChat, gameChat];
+      const chats = [conversationChat, roleplayChat, gameChat, duplicateSourceChat, conflictingSourceChat];
       releaseRuntime = configurePackageRuntime({
         dataDir,
         logger: { debug() {}, info() {}, warn() {}, error() {} },
@@ -507,6 +533,85 @@ async function main() {
       assert.equal(importedAgain.counts.sourceNotesWritten, 3);
       assert.ok(importedAgain.imported.every((item) => !item.created));
       assert.equal((await storage.listNotes({ type: "source" })).length, 7);
+
+      const duplicateImport = ltmImportSourceNotesResponseSchema.parse(
+        await importPackageInterop(
+          {
+            source: "chats",
+            chatId: duplicateSourceChat.id,
+            sourceIds: [`${duplicateSourceChat.id}:same-id`],
+            extract: false,
+            limit: 100,
+          },
+          join(dataDir, "long-term-memory"),
+          new AbortController().signal,
+        ),
+      );
+      assert.equal(duplicateImport.batchStatus, "success");
+      assert.equal(duplicateImport.imported.length, 1);
+      assert.equal(duplicateImport.writeFailures.length, 0);
+      assert.deepEqual(duplicateImport.counts, {
+        requested: 1,
+        sourceNotesWritten: 1,
+        succeeded: 0,
+        failed: 0,
+        cancelled: 0,
+        missing: 0,
+        sourceWriteFailed: 0,
+      });
+      assert.equal(
+        (await storage.listNotes({ type: "source" })).filter(
+          (note) => note.provenance?.sourceId === duplicateSourceChat.id,
+        ).length,
+        1,
+      );
+
+      const conflictingImport = ltmImportSourceNotesResponseSchema.parse(
+        await importPackageInterop(
+          {
+            source: "chats",
+            chatId: conflictingSourceChat.id,
+            sourceIds: [`${conflictingSourceChat.id}:same-id`],
+            extract: false,
+            limit: 100,
+          },
+          join(dataDir, "long-term-memory"),
+          new AbortController().signal,
+        ),
+      );
+      assert.equal(conflictingImport.batchStatus, "failed");
+      assert.equal(conflictingImport.imported.length, 0);
+      assert.equal(conflictingImport.writeFailures[0]?.error.code, "ltm_source_identity_conflict");
+      assert.equal(conflictingImport.counts.sourceNotesWritten, 0);
+      assert.equal(conflictingImport.writeFailures.length, 1);
+      assert.equal(conflictingImport.writeFailures[0]?.retryable, false);
+      assert.equal(
+        (await storage.listNotes({ type: "source" })).some(
+          (note) => note.provenance?.sourceId === conflictingSourceChat.id,
+        ),
+        false,
+      );
+
+      const duplicateRequest = {
+        source: "chats" as const,
+        chatId: duplicateSourceChat.id,
+        sourceIds: [`${duplicateSourceChat.id}:same-id`],
+        extract: false,
+        limit: 100,
+      };
+      const refreshedDuplicate = ltmImportSourceNotesResponseSchema.parse(
+        await importPackageInterop(duplicateRequest, join(dataDir, "long-term-memory"), new AbortController().signal),
+      );
+      assert.equal(refreshedDuplicate.imported.length, 1);
+      assert.equal(refreshedDuplicate.imported[0]?.created, false);
+      const beforeConflict = refreshedDuplicate.imported[0]!.note;
+      duplicateSourceChat.metadata.summaryEntries[1]!.content = "Conflicting replacement must not refresh the note.";
+      const rejectedRefresh = ltmImportSourceNotesResponseSchema.parse(
+        await importPackageInterop(duplicateRequest, join(dataDir, "long-term-memory"), new AbortController().signal),
+      );
+      assert.equal(rejectedRefresh.counts.sourceNotesWritten, 0);
+      assert.equal(rejectedRefresh.writeFailures[0]?.error.code, "ltm_source_identity_conflict");
+      assert.deepEqual(await storage.getNote(beforeConflict.id), beforeConflict);
 
       const multiModeChatImport = await importPackageInterop(
         {
