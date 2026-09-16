@@ -101,6 +101,7 @@ import {
 } from "../services/slurp/slurp-post.operation.js";
 import { tryNoodlerAccountOperation } from "../services/slurp/slurp-account-operation-lock.js";
 import { previewSlurpAutopurge, runSlurpAutopurge } from "../services/slurp/slurp-autopurge.js";
+import { SLURP_PROMPT_DESCRIPTIONS, SLURP_PROMPT_EDITABLE_DEFAULTS } from "../services/slurp/slurp-prompt-blocks.js";
 import { createSlurpFirstPostQueue } from "../services/slurp/slurp-first-post-queue.service.js";
 import {
   getSlurpOperationStatus,
@@ -606,6 +607,16 @@ export async function slurpRoutes(app: FastifyInstance) {
   }
 
   app.get("/settings", async () => noodle.getSlurpSettings());
+
+  app.get("/settings/prompt-blocks", async () => ({
+    prompts: SLURP_PROMPT_DESCRIPTIONS.map((prompt) => ({
+      ...prompt,
+      blocks: prompt.blocks.map((block) => ({
+        ...block,
+        defaultText: SLURP_PROMPT_EDITABLE_DEFAULTS[prompt.id]?.[block.id] ?? "",
+      })),
+    })),
+  }));
   // The shipped values, so Settings can show what differs and reset one section.
   app.get("/settings/defaults", async () => DEFAULT_SLURP_SETTINGS);
   app.patch("/settings", async (req, reply) => {
@@ -1561,6 +1572,7 @@ export async function slurpRoutes(app: FastifyInstance) {
           accounts,
           connection,
           debugMode: parsed.data.debugMode ?? false,
+          promptBlocks: settings.promptBlocks,
         }),
       };
     });
@@ -1639,6 +1651,7 @@ export async function slurpRoutes(app: FastifyInstance) {
           personality: String(data.personality ?? ""),
         },
         scheduleSettings.simulationTuning.prompts.scheduleExtra,
+        scheduleSettings.promptBlocks,
       );
     } catch (error) {
       req.log.warn({ err: error }, "Conversation schedule generation returned invalid output");
@@ -3336,6 +3349,7 @@ export async function slurpRoutes(app: FastifyInstance) {
         era: settings.inlineAdsEra,
         contentCeiling: settings.inlineAdsContentCeiling,
         worldContext: [lorebook?.text, settings.inlineAdsWorldContext].filter((part) => part?.trim()).join("\n\n"),
+        promptBlocks: settings.promptBlocks,
       });
       let images = 0;
       if (settings.inlineAdsImagesEnabled) {
@@ -4223,6 +4237,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       return await generateNoodlerStageProfileDraft(app.db, {
         request: parsed.data,
         connection,
+        promptBlocks: settings.promptBlocks,
       });
     } catch (error) {
       logger.error(
@@ -4263,7 +4278,10 @@ export async function slurpRoutes(app: FastifyInstance) {
     );
     if (!connection) return reply.code(400).send({ error: "Select a Slurp generation connection first." });
     try {
-      return await generateInvitedNoodlePostDraft(app.db, account!, connection, body.data);
+      return await generateInvitedNoodlePostDraft(app.db, account!, connection, {
+        ...body.data,
+        promptBlocks: settings.promptBlocks,
+      });
     } catch (error) {
       if (isConnectionAdmissionFailure(error)) return reply.code(409).send({ error: getErrorMessage(error) });
       logger.error(error, "[slurp] Invited post draft generation failed");
@@ -4901,6 +4919,7 @@ export async function slurpRoutes(app: FastifyInstance) {
         currentDraft: body.data.currentDraft ?? "",
         guidance: body.data.guidance ?? "",
         connection,
+        promptBlocks: settings.promptBlocks,
       });
     } catch (error) {
       logger.error(error, "[slurp] Post guidance draft failed using %s", connection.model || connection.provider);

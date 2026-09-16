@@ -54,6 +54,12 @@ import { mergeNoodlePollVoteInteractions } from "@marinara-engine/shared";
 import type { ImagePromptOverride, ImagePromptReviewItem } from "../components/ui/ImagePromptReviewModal";
 import type { SlurpPromptPreset } from "../components/slurp/slurp-prompt-presets";
 
+export type SlurpPromptBlockOverride = {
+  id: string;
+  enabled?: boolean;
+  text?: string;
+};
+
 export type SlurpDiscoveryGender = "male" | "female" | "other";
 export type SlurpStageProfileInput = NoodleStageProfileInput & {
   gender: SlurpDiscoveryGender | null;
@@ -395,6 +401,7 @@ export type SlurpSettings = {
   postShowMoreLength: number;
   characterImageInstructions: Record<string, boolean>;
   promptPresets: SlurpPromptPreset[];
+  promptBlocks: Record<string, SlurpPromptBlockOverride[]>;
   professorMariCreatorSource: boolean;
   enableEnhancedTimelineWriting: boolean;
   includeCharacterSchedules: boolean;
@@ -538,6 +545,27 @@ export function useSlurpSettingsDefaults() {
   return useQuery({
     queryKey: [...noodleKeys.settings(), "defaults"] as const,
     queryFn: () => api.get<SlurpSettings>("/slurp2/settings/defaults"),
+    staleTime: Infinity,
+  });
+}
+
+export type SlurpPromptBlockDefinition = {
+  id: string;
+  kind: "editable" | "required" | "context";
+  optional: boolean;
+  defaultText: string;
+};
+
+export type SlurpPromptDefinition = {
+  id: string;
+  group: "writing" | "messages" | "images" | "profiles" | "world" | "audience";
+  blocks: SlurpPromptBlockDefinition[];
+};
+
+export function useSlurpPromptBlocks() {
+  return useQuery({
+    queryKey: [...noodleKeys.settings(), "prompt-blocks"] as const,
+    queryFn: () => api.get<{ prompts: SlurpPromptDefinition[] }>("/slurp2/settings/prompt-blocks"),
     staleTime: Infinity,
   });
 }

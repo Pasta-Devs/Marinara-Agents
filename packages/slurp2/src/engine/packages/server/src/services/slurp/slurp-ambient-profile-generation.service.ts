@@ -15,7 +15,8 @@ import { withConnectionFallbackProvider } from "../llm/connection-fallback-provi
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpStorage, type SlurpPromptBlockOverrides } from "../storage/slurp.storage.js";
+import { composeSlurpPromptBlocks } from "./slurp-prompt-blocks.js";
 import type { DB } from "../../db/connection.js";
 import { parseNoodleGeneratedProfiles } from "./slurp-generated-profiles.js";
 import { normalizeNoodleHandle } from "./slurp-handle.js";
@@ -81,6 +82,7 @@ export async function rerollAmbientNoodleProfiles(input: {
   accounts: NoodleAccount[];
   connection: GenerationConnection;
   debugMode: boolean;
+  promptBlocks?: SlurpPromptBlockOverrides;
 }): Promise<{ accounts: NoodleAccount[]; outcomes: AmbientProfileRerollOutcome[] }> {
   const connections = createConnectionsStorage(input.db);
   const fallbackConnection = await connections.getFallbackForMain();
@@ -110,13 +112,31 @@ export async function rerollAmbientNoodleProfiles(input: {
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: [
-        "Create replacement identities for fake ambient users on a fictional creator platform called Slurp.",
-        "Make every profile distinct from its current identity and from the other generated profiles.",
-        "Profiles should feel like plausible recurring background users with varied personalities, interests, and posting styles.",
-        "Create concise profile metadata only. Do not write posts or interactions.",
-        "Return JSON only with one profile for every exact entityId supplied.",
-      ].join("\n"),
+      content: composeSlurpPromptBlocks(
+        "ambientProfile",
+        [
+          {
+            id: "task",
+            kind: "editable",
+            text: "Create replacement identities for fake ambient users on a fictional creator platform called Slurp.",
+          },
+          {
+            id: "profileRules",
+            kind: "editable",
+            text: [
+              "Make every profile distinct from its current identity and from the other generated profiles.",
+              "Profiles should feel like plausible recurring background users with varied personalities, interests, and posting styles.",
+              "Create concise profile metadata only. Do not write posts or interactions.",
+            ].join("\n"),
+          },
+          {
+            id: "output",
+            kind: "required",
+            text: "Return JSON only with one profile for every exact entityId supplied.",
+          },
+        ],
+        input.promptBlocks,
+      ),
     },
     {
       role: "user",

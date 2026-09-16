@@ -40,6 +40,7 @@ import {
 import type { NoodleImagePromptReviewItem } from "./slurp-public-images.service.js";
 import { getErrorMessage } from "./slurp-public-support.js";
 import { noodleResponseFormat } from "./slurp-response-format.js";
+import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "./slurp-prompt-blocks.js";
 import { buildSlurpPostTimingContext } from "./slurp-post-timing.js";
 import {
   SLURP_TEASER_INSTRUCTION,
@@ -268,51 +269,89 @@ export function buildNoodlerPostMessages(input: {
   publicationTime?: Date;
   /** Matching lorebook entries for this Creator. Absent when lorebook context is off or nothing matched. */
   loreContext?: string;
+  promptBlocks?: SlurpPromptBlockOverrides;
 }): ChatMessage[] {
   const protect = (value: string) =>
     protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
   const guidance = input.generationGuidance.trim();
   const format = input.request.format ?? "caption";
-  const system = [
-    "You write exactly one post for one Slurp creator page in Marinara Engine.",
-    SLURP_PLATFORM_CONTEXT,
-    "Write only as the supplied Slurp account. Do not create other accounts, interactions, follows, or public timeline activity.",
-    NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
-    "Use the Slurp stage profile as supplied.",
+  const systemBlocks = [
+    {
+      id: "task",
+      kind: "editable" as const,
+      text: "You write exactly one post for one Slurp creator page in Marinara Engine.",
+    },
+    { id: "platform", kind: "required" as const, text: SLURP_PLATFORM_CONTEXT },
+    {
+      id: "safety",
+      kind: "required" as const,
+      text: `${NOODLER_UNTRUSTED_CONTENT_INSTRUCTION}\nUse the Slurp stage profile as supplied.`,
+    },
     // Bio and stage voice are written once when the Creator is set up. On their own they flatten
     // every Creator into the same register, so the source card is supplied as the person and the
     // stage voice sits on top of it as the performance.
-    "The source character is who this Creator actually is: take their temperament, register, humour, and interests from it. The stage voice describes how they perform on Slurp and how they treat the people reading, layered over that person, not a replacement for them.",
+    {
+      id: "character",
+      kind: "context" as const,
+      text: "The source character is who this Creator actually is: take their temperament, register, humour, and interests from it. The stage voice describes how they perform on Slurp and how they treat the people reading, layered over that person, not a replacement for them.",
+    },
     // Up to 20,000 characters of free-text user guidance spliced in bare, between two hard rules,
     // with nothing marking where it ends. Long guidance blurred into the disclosure instruction
     // that follows it. The untrusted-content rule above already establishes labelled blocks for
     // user-supplied values; the system message should not be the one place that is abandoned.
-    ...(guidance ? ["## Creative direction", guidance, "## End creative direction"] : []),
-    noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
-    `${NOODLER_FORMAT_PROMPTS[format]} Never exceed ${input.postMaxLength ?? NOODLER_CONTENT_HARD_MAX_LENGTH} characters.`,
+    {
+      id: "creativeDirection",
+      kind: "context" as const,
+      optional: true,
+      text: guidance ? `## Creative direction\n${guidance}\n## End creative direction` : "",
+    },
+    {
+      id: "identity",
+      kind: "required" as const,
+      text: noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
+    },
+    {
+      id: "format",
+      kind: "required" as const,
+      text: `${NOODLER_FORMAT_PROMPTS[format]} Never exceed ${input.postMaxLength ?? NOODLER_CONTENT_HARD_MAX_LENGTH} characters.`,
+    },
     // A public post and a paid post do different jobs, and writing both from one set of
     // instructions made the free feed give away the payoff and the paid feed sell what the reader
     // had already bought. Fenced like the creative direction above, because the text is editable.
-    ...(input.accessInstruction?.trim()
-      ? ["## Who can read this post", input.accessInstruction.trim(), "## End who can read this post"]
-      : []),
+    {
+      id: "access",
+      kind: "context" as const,
+      optional: true,
+      text: input.accessInstruction?.trim()
+        ? `## Who can read this post\n${input.accessInstruction.trim()}\n## End who can read this post`
+        : "",
+    },
     // Tone, mood balance, and the adult flirty lean are supplied by the editable
     // generation guidance (see input.generationGuidance above), not hardcoded here.
     // "Do not reuse their exact wording" was the only anti-repetition rule, and eight different
     // captions about the same desk satisfy it completely. Repetition of situation is what reads as
     // a broken feed, so that is what this constrains.
-    "Recent posts provide continuity. Do not repeat a recent post's setting, activity, framing, or wardrobe, and do not reuse its wording. If the last few posts happened in one place, this one happens somewhere else.",
-    "Every post needs a title: a short specific headline of at most 80 characters, never a repeat of the body text.",
-    input.allowImagePrompt
-      ? "Return one JSON object with title, content, and imagePrompt. imagePrompt is required and must be a concrete visual description of one photo or image the creator would post now (subject, pose, setting, lighting, framing). Never return null or an empty imagePrompt, and never put the post text or field names in it. Do not create a poll."
-      : "Return one JSON object with title and content only. Do not create a poll or image prompt.",
-    ...(input.allowImagePrompt && input.imageGenerationPrompt.trim()
-      ? [
-          `Apply these image directions when writing imagePrompt. They are instructions to you, not text to copy into imagePrompt: ${input.imageGenerationPrompt.trim()}`,
-        ]
-      : []),
-    "Return JSON only. No prose outside the JSON object.",
-  ].join("\n");
+    {
+      id: "continuity",
+      kind: "editable" as const,
+      text: "Recent posts provide continuity. Do not repeat a recent post's setting, activity, framing, or wardrobe, and do not reuse its wording. If the last few posts happened in one place, this one happens somewhere else.\nEvery post needs a title: a short specific headline of at most 80 characters, never a repeat of the body text.",
+    },
+    {
+      id: "imageDirection",
+      kind: "context" as const,
+      optional: true,
+      text:
+        input.allowImagePrompt && input.imageGenerationPrompt.trim()
+          ? `Apply these image directions when writing imagePrompt. They are instructions to you, not text to copy into imagePrompt: ${input.imageGenerationPrompt.trim()}`
+          : "",
+    },
+    {
+      id: "output",
+      kind: "required" as const,
+      text: `${input.allowImagePrompt ? "Return one JSON object with title, content, and imagePrompt. imagePrompt is required and must be a concrete visual description of one photo or image the creator would post now (subject, pose, setting, lighting, framing). Never return null or an empty imagePrompt, and never put the post text or field names in it. Do not create a poll." : "Return one JSON object with title and content only. Do not create a poll or image prompt."}\nReturn JSON only. No prose outside the JSON object.`,
+    },
+  ];
+  const system = composeSlurpPromptBlocks("post", systemBlocks, input.promptBlocks);
   const user = [
     "# Slurp account",
     `Display name: ${protect(input.account.displayName)}`,
@@ -581,6 +620,7 @@ export async function generateNoodlerPost(
     postMaxLength: settings.postMaxLength,
     scheduleContext,
     loreContext,
+    promptBlocks: settings.promptBlocks,
     generatedAt: input.generatedAt ?? new Date(),
     publicationTime: input.publicationTime,
   });

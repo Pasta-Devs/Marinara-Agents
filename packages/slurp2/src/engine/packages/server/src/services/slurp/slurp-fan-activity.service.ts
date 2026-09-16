@@ -40,6 +40,7 @@ import {
 } from "./slurp-fan-identity-provider.js";
 import { noodleResponseFormat } from "./slurp-response-format.js";
 import { normalizeSlurpFanActivityRows } from "./slurp-fan-activity-response.js";
+import { composeSlurpPromptBlocks } from "./slurp-prompt-blocks.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -209,25 +210,53 @@ function buildFanActivityMessages(input: {
       ),
     ),
   ].filter((tone): tone is SlurpAudienceTone => SLURP_AUDIENCE_TONES.includes(tone as SlurpAudienceTone));
-  const system = [
-    "Propose quiet synthetic audience activity for the supplied Slurp posts.",
-    "A post's image field describes its attached picture. Treat it as something the actor can see, and never ask to be shown an image that is already described.",
-    "Posts marked locked are paid posts. Only subscribers see them, so react to the title and the fact it is paid; never invent or state its hidden contents.",
-    "Use only supplied creator IDs, actor handles, and post IDs. Never invent identifiers.",
-    `Likes have null content. Replies are one short sentence, normally under ${prompts.replyMaxChars} characters, natural, relevant, and not repetitive.`,
-    "Each post lists the comments already under it. Never repeat a point somebody has already made.",
-    'A creator may list what is "currentlyGoingOn" in their life. Regulars who know them may mention it now and then; most comments should still be about the post itself.',
-    'To answer one of those comments instead of the post, set "parentInteractionId" to that comment\'s id. Leave it out to comment on the post itself. Some replies should answer other people; a comment section where nobody talks to anybody is a list, not a conversation.',
-    'Return JSON only, shaped as {"activities":[{"creatorAccountId":"...","actorHandle":"...","targetPostId":"...","type":"like"|"reply","content":null|"...","parentInteractionId":"..."}]}. Use exactly these field names; "parentInteractionId" is optional.',
-    "Each actor handle has a weight; prefer higher-weight actors more often, proportionally.",
-    slurpAudienceToneInstruction(input.settings.audienceTone, prompts.tones),
-    ...overrideTones.map((tone) => `Actors whose tone is "${tone}" follow this instead: ${prompts.tones[tone]}`),
-    "An actor's voice is how that kind of person writes. Follow it; it outranks any general style note for that actor's own lines.",
-    "Actors carry traits and a relationship to the creator. Write each reply as that specific person: a long-standing paying regular does not sound like somebody who arrived yesterday, and somebody whose trait is 'emoji only' does not write a paragraph.",
-    `At most ${input.settings.fanLikesPerRefresh} likes and ${input.settings.fanRepliesPerRefresh} replies total.`,
-    `At most ${NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR} activities for any creator.`,
-    ...(prompts.fanActivityExtra.trim() ? [prompts.fanActivityExtra.trim()] : []),
-  ].join("\n");
+  const system = composeSlurpPromptBlocks(
+    "fanActivity",
+    [
+      { id: "task", kind: "editable", text: "Propose quiet synthetic audience activity for the supplied Slurp posts." },
+      {
+        id: "contentRules",
+        kind: "required",
+        text: [
+          "Propose quiet synthetic audience activity for the supplied Slurp posts.",
+          "A post's image field describes its attached picture. Treat it as something the actor can see, and never ask to be shown an image that is already described.",
+          "Posts marked locked are paid posts. Only subscribers see them, so react to the title and the fact it is paid; never invent or state its hidden contents.",
+          "Use only supplied creator IDs, actor handles, and post IDs. Never invent identifiers.",
+          `Likes have null content. Replies are one short sentence, normally under ${prompts.replyMaxChars} characters, natural, relevant, and not repetitive.`,
+          "Each post lists the comments already under it. Never repeat a point somebody has already made.",
+          'A creator may list what is "currentlyGoingOn" in their life. Regulars who know them may mention it now and then; most comments should still be about the post itself.',
+          'To answer one of those comments instead of the post, set "parentInteractionId" to that comment\'s id. Leave it out to comment on the post itself. Some replies should answer other people; a comment section where nobody talks to anybody is a list, not a conversation.',
+          "Each actor handle has a weight; prefer higher-weight actors more often, proportionally.",
+          "An actor's voice is how that kind of person writes. Follow it; it outranks any general style note for that actor's own lines.",
+          "Actors carry traits and a relationship to the creator. Write each reply as that specific person: a long-standing paying regular does not sound like somebody who arrived yesterday, and somebody whose trait is 'emoji only' does not write a paragraph.",
+        ].join("\n"),
+      },
+      {
+        id: "voices",
+        kind: "editable",
+        text: [
+          slurpAudienceToneInstruction(input.settings.audienceTone, prompts.tones),
+          ...overrideTones.map((tone) => `Actors whose tone is "${tone}" follow this instead: ${prompts.tones[tone]}`),
+        ].join("\n"),
+      },
+      {
+        id: "limits",
+        kind: "required",
+        text: [
+          `At most ${input.settings.fanLikesPerRefresh} likes and ${input.settings.fanRepliesPerRefresh} replies total.`,
+          `At most ${NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR} activities for any creator.`,
+          ...(prompts.fanActivityExtra.trim() ? [prompts.fanActivityExtra.trim()] : []),
+        ].join("\n"),
+      },
+      {
+        id: "output",
+        kind: "required",
+        text: 'Return JSON only, shaped as {"activities":[{"creatorAccountId":"...","actorHandle":"...","targetPostId":"...","type":"like"|"reply","content":null|"...","parentInteractionId":"..."}]}. Use exactly these field names; "parentInteractionId" is optional.',
+      },
+      { id: "audience", kind: "context", text: "The supplied audience data follows." },
+    ],
+    input.settings.promptBlocks,
+  );
   const creators = input.creators.map((candidate) => ({
     creatorAccountId: candidate.creator.id,
     creator: {
@@ -280,7 +309,12 @@ async function generateFanActivity(input: {
   connection: GenerationConnection;
   settings: Pick<
     SlurpSettings,
-    "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone" | "imageContextMode" | "imageContextConnectionId"
+    | "fanLikesPerRefresh"
+    | "fanRepliesPerRefresh"
+    | "audienceTone"
+    | "imageContextMode"
+    | "imageContextConnectionId"
+    | "promptBlocks"
   >;
   creators: NoodlerFanCreatorCandidate[];
   debugMode: boolean;

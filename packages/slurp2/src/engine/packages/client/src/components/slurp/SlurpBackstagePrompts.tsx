@@ -3,6 +3,7 @@ import { BackstagePageHeader, SettingAnchor } from "./SlurpBackstageKit";
 import { useSlurpPostGuidance } from "../../hooks/use-slurp";
 import { SlurpPostGuidanceField } from "./SlurpPostGuidanceField";
 import type { SlurpBackstagePageProps } from "./SlurpSettings";
+import { SlurpPromptBlockBuilder } from "./SlurpPromptBlockBuilder";
 import {
   SLURP_GUIDANCE_PRESETS,
   SLURP_GUIDANCE_LEVELS,
@@ -199,6 +200,19 @@ export function SlurpBackstagePrompts(page: SlurpBackstagePageProps) {
             />
           </div>
         </Field>
+      </div>
+      <div className="space-y-5 rounded-xl bg-[var(--slurp-surface-raised)] p-4 ring-1 ring-inset ring-[var(--slurp-outline)] sm:p-5">
+        <SectionTitle
+          title="Prompt block builders"
+          detail="Change the instructions, order, and optional context for every prompt Slurp sends to a model."
+        />
+        <SettingAnchor settingKey="promptBlocks">
+          <SlurpPromptBlockBuilder
+            value={settings.promptBlocks}
+            pending={updateSettings.isPending}
+            onSave={(promptBlocks) => update("promptBlocks", promptBlocks)}
+          />
+        </SettingAnchor>
       </div>
       <div className="space-y-5 rounded-xl bg-[var(--slurp-surface-raised)] p-4 ring-1 ring-inset ring-[var(--slurp-outline)] sm:p-5">
         <SectionTitle

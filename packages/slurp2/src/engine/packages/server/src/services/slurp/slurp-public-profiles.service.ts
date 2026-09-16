@@ -22,6 +22,7 @@ import {
   generatedProfileSettings,
   parseRecord,
 } from "./slurp-public-support.js";
+import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "./slurp-prompt-blocks.js";
 
 function shuffle<T>(items: T[]): T[] {
   const next = [...items];
@@ -95,6 +96,7 @@ export async function generateMissingNoodleProfiles(input: {
     defaultParameters?: unknown;
   };
   debugMode: boolean;
+  promptBlocks?: SlurpPromptBlockOverrides;
 }) {
   const targets: Array<{
     account: NoodleAccount;
@@ -131,13 +133,28 @@ export async function generateMissingNoodleProfiles(input: {
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: [
-        "You set up fake Slurp social media profiles for existing Marinara Engine characters.",
-        NOODLE_ADULT_PLATFORM_POLICY,
-        "Create concise profile metadata only. Do not write posts, replies, likes, or timeline content.",
-        "Use each character's personality, setting, and appearance to make the profile feel natural and in character.",
-        "Return JSON only. No prose outside the JSON object.",
-      ].join("\n"),
+      content: composeSlurpPromptBlocks(
+        "ambientProfile",
+        [
+          {
+            id: "task",
+            kind: "editable",
+            text: "You set up fake Slurp social media profiles for existing Marinara Engine characters.",
+          },
+          {
+            id: "profileRules",
+            kind: "editable",
+            text: "Create concise profile metadata only. Do not write posts, replies, likes, or timeline content.",
+          },
+          { id: "output", kind: "required", text: "Return JSON only. No prose outside the JSON object." },
+          {
+            id: "profiles",
+            kind: "context",
+            text: `${NOODLE_ADULT_PLATFORM_POLICY}\nUse each character's personality, setting, and appearance to make the profile feel natural and in character.`,
+          },
+        ],
+        input.promptBlocks,
+      ),
     },
     {
       role: "user",

@@ -68,6 +68,7 @@ import {
   normalizeSlurpDiscoveryTags,
 } from "../slurp/slurp-discovery-profile.js";
 import { selectUnusedSlurpImprovementRows } from "../slurp/slurp-improvement.js";
+import { normalizeSlurpPromptBlockOverrides, type SlurpPromptBlockOverrides } from "../slurp/slurp-prompt-blocks.js";
 import {
   applyStipend,
   credit,
@@ -576,6 +577,8 @@ export const slurpSettingsSchema = z.object({
       }),
     )
     .max(20),
+  /** User changes to the shared prompt block layouts. Defaults stay in source. */
+  promptBlocks: z.unknown().transform(normalizeSlurpPromptBlockOverrides),
   enableEnhancedTimelineWriting: z.boolean(),
   includeCharacterSchedules: z.boolean(),
   enableLorebookContext: z.boolean(),
@@ -665,6 +668,7 @@ export const slurpSettingsSchema = z.object({
 });
 
 export type SlurpSettings = z.infer<typeof slurpSettingsSchema>;
+export type { SlurpPromptBlockOverrides };
 export type SlurpSettingsUpdateInput = Partial<SlurpSettings>;
 export type SlurpBootstrap = Omit<NoodleBootstrap, "settings"> & { settings: SlurpSettings };
 
@@ -1270,6 +1274,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   postShowMoreLength: 300,
   characterImageInstructions: {},
   promptPresets: [],
+  promptBlocks: {} satisfies SlurpPromptBlockOverrides,
   professorMariCreatorSource: true,
   enableEnhancedTimelineWriting: false,
   includeCharacterSchedules: false,

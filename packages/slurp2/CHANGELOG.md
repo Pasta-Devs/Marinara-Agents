@@ -9,7 +9,7 @@
 - New image prompt style: Default, or Danbooru tags (experimental) for anime models that read tags.
 - Image prompts keep the style tags first and put the Creator's appearance right after them.
 - When an image fails, you can now edit the image prompt and try again.
-- When an image fails, you can now edit the image prompt and try again.
+- Prompts now have a reusable block builder. Edit safe instruction blocks, reorder prompt parts, enable optional context, reset changes, and keep required output and privacy rules intact.
 - Slurp retries loading after an Engine restart, and Try again reloads the page if that fails.
 
 ## 0.0.17 — 2026-09-16

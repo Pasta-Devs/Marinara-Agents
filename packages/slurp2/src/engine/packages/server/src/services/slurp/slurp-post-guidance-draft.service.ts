@@ -27,6 +27,7 @@ import {
 } from "./slurp-post-guidance.js";
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { resolveNoodlerCharacterCanon } from "./slurp-source-resolve.js";
+import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "./slurp-prompt-blocks.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -45,22 +46,41 @@ export function buildSlurpPostGuidanceDraftMessages(input: {
   currentDraft: string;
   /** Free-text steer from the player. */
   guidance: string;
+  promptBlocks?: SlurpPromptBlockOverrides;
 }): ChatMessage[] {
   return [
     {
       role: "system",
-      content: [
-        "You write one short instruction block for another AI. That AI writes posts for a creator page on Slurp, an adult subscription platform in Marinara Engine.",
-        `Write the direction for ${input.access === "public" ? "PUBLIC" : "LOCKED"} posts only.`,
-        ACCESS_BRIEF[input.access],
-        'Address the post-writing AI as the creator, in the second person: "you". State what this kind of post is for, what it should do to the reader, and what it must not do.',
-        "Write 2 to 5 sentences of plain prose. No headings, no lists, no preamble, no quotes around the answer, no commentary about the task.",
-        "Never name a specific post, product, price, or platform feature that may not exist. Write direction, not an example post.",
-        input.characterContext
-          ? "The source character is supplied. Make the direction fit that person's register and what they would plausibly offer, rather than describing a generic creator."
-          : "No specific creator is supplied. Write direction that suits any creator on the platform.",
-        "Return the direction text and nothing else.",
-      ].join("\n"),
+      content: composeSlurpPromptBlocks(
+        "postGuidance",
+        [
+          {
+            id: "task",
+            kind: "editable",
+            text: "You write one short instruction block for another AI. That AI writes posts for a creator page on Slurp, an adult subscription platform in Marinara Engine.",
+          },
+          {
+            id: "accessRules",
+            kind: "context",
+            text: [
+              `Write the direction for ${input.access === "public" ? "PUBLIC" : "LOCKED"} posts only.`,
+              ACCESS_BRIEF[input.access],
+            ].join("\n"),
+          },
+          {
+            id: "style",
+            kind: "editable",
+            text: [
+              'Address the post-writing AI as the creator, in the second person: "you". State what this kind of post is for, what it should do to the reader, and what it must not do.',
+              "Write 2 to 5 sentences of plain prose. No headings, no lists, no preamble, no quotes around the answer, no commentary about the task.",
+              "Never name a specific post, product, price, or platform feature that may not exist. Write direction, not an example post.",
+              "Return the direction text and nothing else.",
+            ].join("\n"),
+          },
+          { id: "output", kind: "required", text: "Return the direction text and nothing else." },
+        ],
+        input.promptBlocks,
+      ),
     },
     {
       role: "user",
@@ -83,6 +103,7 @@ export async function generateSlurpPostGuidanceDraft(
     currentDraft: string;
     guidance: string;
     connection: GenerationConnection;
+    promptBlocks?: SlurpPromptBlockOverrides;
   },
 ): Promise<{ guidance: string }> {
   const noodle = createSlurpStorage(db);
@@ -99,6 +120,7 @@ export async function generateSlurpPostGuidanceDraft(
     characterContext,
     currentDraft: input.currentDraft,
     guidance: input.guidance,
+    promptBlocks: input.promptBlocks,
   });
   const debugMode = isDebugAgentsEnabled();
   logDebugOverride(
