@@ -441,6 +441,7 @@ function applyOutfitEquip(state, outfit) {
         quantity: 1,
         location: "bag",
         defaultSlot: null,
+        favorite: false,
       };
       state.items.push(item);
     }
@@ -471,6 +472,7 @@ function applyGeneratedWardrobe(state, proposal) {
       quantity: entry.quantity,
       location: "bag",
       defaultSlot: entry.defaultSlot,
+      favorite: false,
     });
     createdItemNames.push(entry.name);
   }
@@ -1088,7 +1090,15 @@ async function reconcileTrackerOutput(documents, persistState, chatId, ownerId, 
     // separate items.
     let item = state.items.find((candidate) => qmNormalizeMatchKey(candidate.name) === key);
     if (!item) {
-      item = { id: randomUUID(), name, description: "", quantity: 1, location: "bag", defaultSlot: null };
+      item = {
+        id: randomUUID(),
+        name,
+        description: "",
+        quantity: 1,
+        location: "bag",
+        defaultSlot: null,
+        favorite: false,
+      };
       state.items.push(item);
     }
 
@@ -1630,6 +1640,7 @@ export async function activate(context) {
           quantity: normalizeQuantity(body.quantity),
           location: "bag",
           defaultSlot,
+          favorite: false,
         };
         applyLocation(state.items, item, location);
         state.items.push(item);
@@ -1672,6 +1683,7 @@ export async function activate(context) {
           if (defaultSlot === undefined) return reply.status(400).send({ error: "Invalid defaultSlot" });
           item.defaultSlot = defaultSlot;
         }
+        if (body.favorite !== undefined) item.favorite = Boolean(body.favorite);
 
         await persistState(chatId, ownerId, state);
         return { items: state.items, outfits: state.outfits };
@@ -1772,6 +1784,7 @@ export async function activate(context) {
             quantity: entry.before.quantity,
             location: "bag",
             defaultSlot: null,
+            favorite: false,
           };
           const location = normalizeLocation(entry.before.location, state);
           if (location !== null) applyLocation(state.items, item, location);
@@ -2356,6 +2369,7 @@ export async function activate(context) {
             quantity: normalizeQuantity(raw.quantity),
             location: "bag",
             defaultSlot: normalizeDefaultSlot(raw.defaultSlot) || null,
+            favorite: Boolean(raw.favorite),
           };
           applyLocation(nextItems, item, location);
           nextItems.push(item);

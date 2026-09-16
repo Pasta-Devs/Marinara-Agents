@@ -1,5 +1,10 @@
 # Quartermaster changelog
 
+## 0.1.16 — 2026-09-16
+- Brief toast notifications now appear when the tracker agent adds, updates, equips, or removes
+  an item -- visible even with the dock closed.
+- Items can now be favorited with a star, which sorts them to the top of the Bag.
+
 ## 0.1.15 — 2026-09-15
 - Fixed the Recent Agent Update box leak for real this time — 0.1.13 and 0.1.14 were both
   attempted fixes that didn't fully resolve it.

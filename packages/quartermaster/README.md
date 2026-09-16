@@ -74,6 +74,8 @@ The Bag is split into three tabs so a busy inventory stays easy to scan:
 Other conveniences:
 - **Quantity** adjusts right on the item's card — no need to open the full editor for the one
   field you're touching constantly.
+- **Favorite** an item with the star next to its name — favorited items always sort to the top of
+  whichever Bag tab they're in, so frequently-used items don't get buried as the list grows.
 - **Search** works two ways: by name, or by which slot an item's set to fill by default.
 - Click an **empty equip slot** on the portrait ring and the Bag auto-filters to whatever could
   actually fill it — including stashed items, not just what's sitting loose in the bag.
@@ -117,6 +119,11 @@ large your inventory gets.
   has changed again since, so it can't clobber something newer. The agent's own stated reasoning
   shows underneath, even on a turn that changed nothing. Collapsed, the header still shows a
   compact `+N ↑N −N` count so you can tell at a glance whether there's anything worth expanding for.
+- **Turn notifications**: a brief toast for each thing the agent just did ("Blue Hat added to
+  inventory," "Blue Hat equipped to Head") — appears in the corner of the screen for a few seconds
+  and fades away on its own, so you can tell what changed during ordinary roleplay without opening
+  the dock at all. A turn touching a lot at once collapses the rest into one "+N more changes" toast
+  instead of flooding the screen.
 - **Restore Inventory**: a whole-state safety net right beside it, for when a turn goes wrong in a
   bigger way than a single item. Revert to the inventory state from right before the agent's last
   automatic update, in one click — even with no export file to fall back on. (This only rewinds
@@ -161,6 +168,10 @@ persona's *real* avatar elsewhere in Marinara.
   (+2 STR, +5 HP, etc.); not yet built.
 - **Deeper integration with other agents** — beyond the appearance macro Illustrator already
   reads, exposing equip/inventory state for other packages to build on.
+- **A paperdoll alternative to the portrait ring** — equipped item art layered directly onto the
+  persona's portrait instead of icons around its edge; a bigger visual lift than the current ring.
+- **Drag-and-drop equip** — drag an item card straight onto a portrait slot instead of using the
+  Equip button.
 
 ## Contributing
 
@@ -188,6 +199,23 @@ overwrite an already-released version's artifact file if you forget to bump `VER
 published catalog until it's ready for testers.
 
 ## Changelog
+
+### 0.1.16
+
+- Added brief "Item Acquired!"-style toast notifications for tracker-agent turns — one per
+  add/update/equip/remove, phrased in plain language ("Blue Hat added to inventory," "Blue Hat
+  equipped to Head"), each fading away on its own after a few seconds. Checked first whether this
+  could reuse the Engine's own native toast system (`sonner`, used by real React feature packages
+  like Hierarchical Maps) — it can't, since Quartermaster is a plain-JS agent bundle with no access
+  to that module graph, and the Capability API (checked through 1.18) has no notify/toast bridge
+  for a package like this. Built as a small self-contained overlay instead. Deliberately independent
+  of the dock's own DOM: it renders even with the dock fully closed, which is the normal case during
+  roleplay — it rides the same `marinara:generation-complete` mechanism the dock/tracker panel
+  already use to catch up, triggered by whichever of them (usually just the Tracker Panel) is
+  mounted. A turn touching more than 5 things at once collapses the rest into one "+N more changes"
+  toast instead of flooding the corner of the screen.
+- Items can now be favorited with a star next to their name (outline vs. filled) — favorited items
+  always sort to the top of whichever Bag tab they're in. Survives Export/Import.
 
 ### 0.1.15
 

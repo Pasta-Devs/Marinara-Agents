@@ -140,6 +140,7 @@ export default tseslint.config(
         QM_OVERLAY_SLOT_PAIRS: "readonly",
         QM_OVERLAY_SLOT_LABELS: "readonly",
         QM_OVERLAY_SLOT_LABEL_LINES: "readonly",
+        qmLocationLabel: "readonly",
       },
     },
   },

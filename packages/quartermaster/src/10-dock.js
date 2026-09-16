@@ -389,17 +389,6 @@ function qmItemMatchesBagTab(item, tab) {
   return tab === "wearables" ? Boolean(item.defaultSlot) : !item.defaultSlot;
 }
 
-// A raw location string ("bag", "equipped:head", "stored:closet") into
-// something readable for the Recent Changes list -- used nowhere else that
-// needs this exact phrasing, so kept local rather than folded into an
-// existing per-call-site formatter.
-function qmLocationLabel(location) {
-  if (location === "bag") return "Bag";
-  if (location.startsWith("equipped:")) return QM_SLOT_LABELS[location.slice("equipped:".length)] || location;
-  if (location.startsWith("stored:")) return location.slice("stored:".length);
-  return location;
-}
-
 // Tracks whichever "tap-opened" popover (an info tooltip, a card's overflow
 // menu) is currently open -- at most one at a time, whatever kind -- so one
 // document-level click listener can close it when the next click lands
@@ -3667,7 +3656,18 @@ QM.dock = {
     quantityInput.style.width = "32px";
     quantityInput.addEventListener("change", () => QM.state.updateItem(item.id, { quantity: quantityInput.value }));
 
-    nameLine.append(nameLabel, quantityInput);
+    // Favorited items sort to the top of the Bag (QM.state.bagItems' own
+    // sort) -- this is just the toggle. Outline vs filled star, same "⋯"
+    // icon-button idiom used elsewhere on the card.
+    const favoriteButton = QM.button(item.favorite ? "★" : "☆", {
+      bg: "transparent",
+      fg: item.favorite ? "#eab308" : "inherit",
+    });
+    Object.assign(favoriteButton.style, { width: "20px", padding: "0", flexShrink: "0", fontSize: "14px" });
+    favoriteButton.title = item.favorite ? "Remove from favorites" : "Add to favorites";
+    favoriteButton.addEventListener("click", () => QM.state.updateItem(item.id, { favorite: !item.favorite }));
+
+    nameLine.append(favoriteButton, nameLabel, quantityInput);
 
     // [⋯] [Equip] -- Edit/Delete collapsed into the overflow menu, Equip
     // promoted up here so the description below (no more actionColumn

@@ -63,6 +63,16 @@ const QM_SLOT_LABELS = {
   feet: "Feet",
   belt: "Belt",
 };
+
+// A raw location string ("bag", "equipped:head", "stored:closet") into
+// something readable -- used by both the Recent Changes list (10-dock.js)
+// and the tracker-change toast phrasing below.
+function qmLocationLabel(location) {
+  if (location === "bag") return "Bag";
+  if (location.startsWith("equipped:")) return QM_SLOT_LABELS[location.slice("equipped:".length)] || location;
+  if (location.startsWith("stored:")) return location.slice("stored:".length);
+  return location;
+}
 // The dock's equipment overlay. Head/Eyes/Ears/Neck sit in a row above the
 // portrait, Belt/Feet below it; the remaining 5 pairs sit in columns beside
 // it, stretched to the portrait's own real rendered height and spread
@@ -144,6 +154,114 @@ const QM_COLOR_WARNING = "#ca8a04";
 
 function qmSortByName(list) {
   return list.slice().sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// "Item Acquired!"-style toast notifications for a completed tracker-agent
+// turn. Deliberately independent of QM.dock/QM.panel and appended straight to
+// document.body: the primary case is normal roleplay with the floating dock
+// closed, so this can't depend on the dock ever having been opened, and it
+// has to keep working when only the Tracker Panel is mounted. There is no
+// capability API bridge to the Engine's own native (sonner) toast system --
+// checked docs/development/optional-agent-packages.md on Marinara-Engine's
+// staging branch through capability API 1.18, and the only client mount
+// points a Roleplay agent package gets are roleplay-tracker (the toolbar
+// launcher button) and tracker-panel, neither with a notify/toast operation
+// -- so this is a small self-contained overlay, not a shortcut around a real
+// one. See _reload()'s own comment for why the detection that triggers this
+// lives there instead of in either view's paint method.
+const QM_TOAST_STYLE_ID = "qm-toast-style";
+const QM_TOAST_MAX_INDIVIDUAL = 5;
+const QM_TOAST_DURATION_MS = 4000;
+
+function qmEnsureToastStyleInjected() {
+  if (typeof document === "undefined" || document.getElementById(QM_TOAST_STYLE_ID)) return;
+  const style = document.createElement("style");
+  style.id = QM_TOAST_STYLE_ID;
+  style.textContent = `
+.qm-toast-stack{position:fixed;right:12px;bottom:12px;z-index:2147483000;display:flex;flex-direction:column-reverse;gap:6px;pointer-events:none;max-width:320px;}
+.qm-toast{pointer-events:auto;padding:8px 12px;border-radius:6px;border-left:3px solid currentColor;background:var(--popover,var(--card,#1a1a1a));color:var(--popover-foreground,var(--foreground,#f5f5f5));box-shadow:0 4px 16px rgba(0,0,0,0.35);font-size:12px;line-height:1.4;opacity:0;transform:translateY(8px);transition:opacity 200ms ease,transform 200ms ease;}
+.qm-toast.qm-toast-visible{opacity:1;transform:translateY(0);}
+.qm-toast.qm-toast-leaving{opacity:0;transform:translateY(8px);}
+`;
+  (document.head || document.body).appendChild(style);
+}
+
+let qmToastStack = null;
+function qmEnsureToastStack() {
+  if (qmToastStack && document.body.contains(qmToastStack)) return qmToastStack;
+  qmEnsureToastStyleInjected();
+  qmToastStack = document.createElement("div");
+  qmToastStack.className = "qm-toast-stack";
+  document.body.appendChild(qmToastStack);
+  return qmToastStack;
+}
+
+function qmShowToast(text, color) {
+  if (typeof document === "undefined") return;
+  const stack = qmEnsureToastStack();
+  const toast = document.createElement("div");
+  toast.className = "qm-toast";
+  toast.style.color = color || "inherit";
+  toast.textContent = text;
+  stack.appendChild(toast);
+  // Next frame, so the initial (opacity:0) state actually paints before
+  // adding the visible class -- applying both on the same frame would just
+  // skip straight to the end state with no fade-in.
+  requestAnimationFrame(() => toast.classList.add("qm-toast-visible"));
+  setTimeout(() => {
+    toast.classList.remove("qm-toast-visible");
+    toast.classList.add("qm-toast-leaving");
+    setTimeout(() => toast.remove(), 220);
+  }, QM_TOAST_DURATION_MS);
+}
+
+// Narrated, plain-sentence phrasing for a toast -- deliberately separate from
+// _buildRecentChangesList's "+ Added  Blue Hat" row style (10-dock.js), which
+// stays untouched (already shipped and tested). Reuses qmLocationLabel
+// (10-dock.js) for slot/stash names -- safe even though it's defined in a
+// later-concatenated file, since this only runs later, in response to a
+// network event, by which point every concatenated file's top-level
+// declarations already exist.
+function qmDescribeTrackerChangeForToast(change) {
+  const lines = [];
+  for (const entry of change.addedItems) {
+    lines.push({ text: `${entry.name} added to inventory`, color: QM_COLOR_SUCCESS });
+  }
+  for (const entry of change.updatedItems) {
+    const { before, after } = entry;
+    let text;
+    if (after.location.startsWith("equipped:") && before.location !== after.location) {
+      text = `${entry.name} equipped to ${qmLocationLabel(after.location)}`;
+    } else if (before.location.startsWith("equipped:") && after.location === "bag") {
+      text = `${entry.name} unequipped`;
+    } else if (after.location.startsWith("stored:") && before.location !== after.location) {
+      text = `${entry.name} stored at ${qmLocationLabel(after.location)}`;
+    } else if (after.location === "bag" && before.location !== after.location) {
+      text = `${entry.name} moved to Bag`;
+    } else if (before.quantity !== after.quantity) {
+      text = `${entry.name} quantity: ${before.quantity}→${after.quantity}`;
+    } else {
+      text = `${entry.name} updated`;
+    }
+    lines.push({ text, color: QM_COLOR_WARNING });
+  }
+  for (const entry of change.removedItems) {
+    lines.push({ text: `${entry.name} removed from inventory`, color: QM_COLOR_DANGER });
+  }
+  if (change.equippedOutfitName) {
+    lines.push({ text: `Outfit "${change.equippedOutfitName}" equipped`, color: "inherit" });
+  }
+  return lines;
+}
+
+// Capped so a single big turn (the tracker agent can touch up to ~20 items)
+// can't flood the corner of the screen with individual toasts.
+function qmEnqueueChangeToasts(change) {
+  const lines = qmDescribeTrackerChangeForToast(change);
+  const shown = lines.slice(0, QM_TOAST_MAX_INDIVIDUAL);
+  const extra = lines.length - shown.length;
+  for (const { text, color } of shown) qmShowToast(text, color);
+  if (extra > 0) qmShowToast(`+${extra} more changes`, "inherit");
 }
 
 // True while the user is mid-interaction with a live input/select inside
@@ -386,6 +504,26 @@ QM.state = {
         itemImagePromptTemplate: this.itemImagePromptTemplate,
         outfitPortraitPromptTemplate: this.outfitPortraitPromptTemplate,
       };
+      // "Item Acquired!" toasts: only for a genuinely NEW tracker turn, not the
+      // first load of a chat that already has history (previousChange starts
+      // null on setChat) and not a poll tick that reloaded the same
+      // lastTrackerChange again. Lives here, not in either view's paint
+      // method, since this is the one place a fresh turn is ever detected
+      // regardless of which view (dock, tracker panel, both) is subscribed.
+      const previousChange = current.lastTrackerChange;
+      const incomingChange = next.lastTrackerChange;
+      if (
+        previousChange &&
+        incomingChange &&
+        JSON.stringify(previousChange) !== JSON.stringify(incomingChange) &&
+        (incomingChange.addedItems.length > 0 ||
+          incomingChange.updatedItems.length > 0 ||
+          incomingChange.removedItems.length > 0 ||
+          incomingChange.equippedOutfitName)
+      ) {
+        qmEnqueueChangeToasts(incomingChange);
+      }
+
       const changed = this.error !== null || JSON.stringify(next) !== JSON.stringify(current);
       Object.assign(this, next);
       this.error = null;
@@ -535,8 +673,14 @@ QM.state = {
 
   // ── Derived, sorted views. Every list-producing getter sorts A-Z here so
   // no render path can accidentally show raw insertion order again. ──
+  // Favorited items sort first (then A-Z within each group) -- itemsByLocationCategory below
+  // just buckets whatever order this produces, so the favorite-first sort flows through to the
+  // tracker panel's per-stash grouping too without that consumer doing anything differently.
   bagItems() {
-    return qmSortByName((this.items ?? []).filter((item) => !item.location.startsWith("equipped:")));
+    return (this.items ?? [])
+      .filter((item) => !item.location.startsWith("equipped:"))
+      .slice()
+      .sort((a, b) => (a.favorite !== b.favorite ? (a.favorite ? -1 : 1) : a.name.localeCompare(b.name)));
   },
 
   // [{ label, items }], Bag first then each "stored:<name>" category A-Z by
