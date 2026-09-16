@@ -25,6 +25,11 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
       "When an image fails, you can now edit the image prompt and try again.",
       "Prompts now have a reusable block builder. Edit safe instruction blocks, reorder prompt parts, enable optional context, reset changes, and keep required output and privacy rules intact.",
       "Slurp retries loading after an Engine restart, and Try again reloads the page if that fails.",
+      "Backstage -> Automation has a Manual actions card: create posts, run audience activity, refresh schedules, and open image runs yourself.",
+      "You can like, comment, vote, and subscribe as your persona without a Creator profile.",
+      "On mobile, Backstage hides the section tabs and search uses the full row.",
+      "The Professor Mari Creator switch is back in Automation -> Publishing.",
+      "Fixed: Reset in Prompts now also resets presets, the image prompt style, and prompt blocks; turned-off prompt blocks now stay off for ads and audience activity; a Force reply result no longer shows in a different conversation after you switch.",
     ],
   },
   {
