@@ -89,4 +89,36 @@ assert.equal(
   "the locked teaser is served from its own branch and needs the same name",
 );
 
+// --- a failed image keeps its prompt, so it can be redrawn by hand later ------------------
+const images = readFileSync(join(pkg, "server/src/services/slurp/slurp-images.service.ts"), "utf8");
+assert.doesNotMatch(
+  images,
+  /imagePrompt: attempts >= NOODLER_POST_IMAGE_RETRY_LIMIT \? null : undefined/u,
+  "spending the automatic retry budget must not delete the prompt the user redraws from",
+);
+const storage = readFileSync(join(pkg, "server/src/services/storage/slurp.storage.ts"), "utf8");
+assert.match(
+  storage,
+  /noodlerPostImageRetryAttempts\(metadata\) >= NOODLER_POST_IMAGE_RETRY_LIMIT\) continue;/u,
+  "the automatic pass must stop on the attempt counter, which is what makes deleting the prompt unnecessary",
+);
+
+// --- image-less posts can generate even when they did not start with an image prompt ----------
+const creatorPostCard = readFileSync(join(pkg, "client/src/components/slurp/SlurpCreatorPostCard.tsx"), "utf8");
+assert.match(
+  creatorPostCard,
+  /ctx\.generatePostImage && !post\.imageUrl/u,
+  "the post menu should offer generation only when the post has no image",
+);
+assert.doesNotMatch(
+  creatorPostCard,
+  /ctx\.generatePostImage && \(post\.imagePrompt \|\| post\.imageUrl\)/u,
+  "an existing image must not expose a generate action that the server rejects",
+);
+assert.match(
+  routes,
+  /if \(!post\.imagePrompt\) \{\s*await noodle\.updatePostMedia\(post\.id, \{ imagePrompt \}\);\s*\}/u,
+  "an image-less post should persist a prompt derived from its title or body before generation",
+);
+
 console.log("slurp2 post guidance regression passed");

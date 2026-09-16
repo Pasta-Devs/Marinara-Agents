@@ -3747,10 +3747,19 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!post) return reply.code(404).send({ error: "Slurp post not found" });
     if (post.authorAccountId !== parsed.data.accountId) return reply.code(403).send({ error: "Forbidden" });
     if (post.imageUrl) return reply.code(409).send({ error: "This post already has an image." });
-    if (!post.imagePrompt) return reply.code(400).send({ error: "This post does not have an image prompt." });
+    const imagePrompt =
+      post.imagePrompt?.trim() ||
+      [post.title, post.content]
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        .join("\n")
+        .trim();
+    if (!imagePrompt) return reply.code(400).send({ error: "This post has no text to create an image from." });
+    if (!post.imagePrompt) {
+      await noodle.updatePostMedia(post.id, { imagePrompt });
+    }
 
     const result = await noodlerImages.generateReviewedImages({
-      prompts: [{ id: post.id, prompt: post.imagePrompt }],
+      prompts: [{ id: post.id, prompt: imagePrompt }],
       debugMode: parsed.data.debugMode === true,
       retryStoredPrompt: true,
     });

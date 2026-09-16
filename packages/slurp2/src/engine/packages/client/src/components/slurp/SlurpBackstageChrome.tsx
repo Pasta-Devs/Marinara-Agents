@@ -3,6 +3,7 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode 
 import { useTranslation } from "react-i18next";
 import type { SlurpPromotion, SlurpSettings } from "../../hooks/use-slurp";
 import { SlurpInlineAd } from "./SlurpInlineAd";
+import { ProfileInitial } from "./SlurpShell";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { cn } from "../../lib/utils";
 import { estimateSlurpSimulation } from "./slurp-simulation-estimate";
@@ -537,6 +538,7 @@ export function SlurpBackstagePreview({
   pending,
   creatorCount,
   creatorName,
+  creatorProfile,
 }: {
   target: SlurpBackstageTarget;
   current: SlurpSettings;
@@ -544,6 +546,12 @@ export function SlurpBackstagePreview({
   pending: Partial<SlurpSettings>;
   creatorCount: number;
   creatorName?: string | null;
+  creatorProfile?: {
+    displayName: string;
+    handle: string;
+    bio?: string | null;
+    avatarUrl?: string | null;
+  } | null;
 }) {
   const { t } = useTranslation();
   const changed = Object.keys(pending) as Array<keyof SlurpSettings>;
@@ -557,6 +565,58 @@ export function SlurpBackstagePreview({
       <AdCadence current={current} proposed={proposed} />
     ) : target === "audience" ? (
       <AudienceWeek current={current} proposed={proposed} />
+    ) : null;
+  const sampleCreator = creatorProfile ?? {
+    displayName: t("ui.slurp.settings.backstage.preview.sampleCreator", { defaultValue: "Sample Creator" }),
+    handle: "sample",
+    bio: t("ui.slurp.settings.backstage.preview.sampleBio", {
+      defaultValue: "A preview using sample data. Your saved Creator stays unchanged.",
+    }),
+    avatarUrl: null,
+  };
+  const visual =
+    target === "creators" || target === "improve" ? (
+      <article className="mt-3 rounded-xl bg-[var(--slurp-surface-raised)] p-4 ring-1 ring-inset ring-[var(--slurp-outline)]">
+        <div className="flex items-center gap-3">
+          <ProfileInitial profile={sampleCreator} />
+          <div className="min-w-0">
+            <h3 className="truncate text-sm font-black">{sampleCreator.displayName}</h3>
+            <p className="truncate text-xs text-[var(--slurp-muted)]">@{sampleCreator.handle}</p>
+          </div>
+        </div>
+        <p className="mt-3 text-xs leading-5 text-[var(--slurp-muted)]">{sampleCreator.bio}</p>
+      </article>
+    ) : target === "general" ? (
+      <article className="mt-3 overflow-hidden rounded-xl bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
+        <div className="flex items-center gap-2 p-3">
+          <ProfileInitial profile={sampleCreator} />
+          <div className="min-w-0">
+            <h3 className="truncate text-sm font-bold">{sampleCreator.displayName}</h3>
+            <p className="text-xs text-[var(--slurp-muted)]">@{sampleCreator.handle}</p>
+          </div>
+        </div>
+        <div
+          className="aspect-[16/9] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--noodle-accent)_28%,var(--slurp-canvas)),color-mix(in_srgb,var(--slurp-violet)_24%,var(--slurp-canvas)))]"
+          aria-hidden="true"
+        />
+        <p className="p-3 text-xs leading-5">
+          {t("ui.slurp.settings.backstage.preview.samplePost", {
+            defaultValue: "A representative feed post appears here before the schedule is applied.",
+          })}
+        </p>
+      </article>
+    ) : target === "images" ? (
+      <figure className="mt-3 rounded-xl bg-[var(--slurp-surface-raised)] p-3 ring-1 ring-inset ring-[var(--slurp-outline)]">
+        <div
+          className="mx-auto max-h-56 w-full rounded-lg bg-[radial-gradient(circle_at_30%_25%,color-mix(in_srgb,var(--noodle-accent)_55%,transparent),transparent_38%),linear-gradient(145deg,var(--slurp-violet),var(--slurp-canvas))] outline outline-1 -outline-offset-1 outline-white/10"
+          style={{ aspectRatio: `${proposed.imageWidth} / ${proposed.imageHeight}` }}
+          role="img"
+          aria-label={t("ui.slurp.settings.backstage.preview.imageShape", { defaultValue: "Proposed image shape" })}
+        />
+        <figcaption className="mt-2 text-center text-xs text-[var(--slurp-muted)] tabular-nums">
+          {proposed.imageWidth} × {proposed.imageHeight}
+        </figcaption>
+      </figure>
     ) : null;
   return (
     <aside
@@ -619,6 +679,7 @@ export function SlurpBackstagePreview({
               {behavior}
             </div>
           )}
+          {visual}
           {changed.length > 0 && (
             <details className="mt-3 rounded-lg bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
               <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3 text-xs font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]">

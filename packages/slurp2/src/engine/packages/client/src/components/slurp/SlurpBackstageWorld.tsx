@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   BookOpen,
   ChevronRight,
@@ -14,7 +14,7 @@ import {
   Trash2,
   UsersRound,
 } from "lucide-react";
-import { BackstagePageHeader, FineTune, SummaryRow, type SummaryTone } from "./SlurpBackstageKit";
+import { BackstagePageHeader, BackstageWizard, FineTune, SummaryRow, type SummaryTone } from "./SlurpBackstageKit";
 import { outcomeSummary } from "./SlurpBackstageChrome";
 import type { SlurpBackstageTarget } from "./slurp-backstage";
 import { Field, GuidanceBox, NumberSetting, SettingsGroup, Toggle } from "./SlurpSettingsControls";
@@ -74,6 +74,20 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
     creators,
     audiencePreset,
   } = page;
+  const [audienceWizardOpen, setAudienceWizardOpen] = useState(false);
+  const [audienceDraft, setAudienceDraft] = useState<{
+    preset: (typeof SLURP_AUDIENCE_PRESETS)[number];
+    platformScale: SlurpSettings["platformScale"];
+    audienceTone: SlurpSettings["audienceTone"];
+  } | null>(null);
+  const [messagingWizardOpen, setMessagingWizardOpen] = useState(false);
+  const [messagingDraft, setMessagingDraft] = useState<Pick<
+    SlurpSettings,
+    | "messagesAwayRepliesEnabled"
+    | "messagesDefaultDmPolicy"
+    | "messagesReplyBubbleLimit"
+    | "messagesMaxReplyDelayMinutes"
+  > | null>(null);
   const go = (next: SlurpBackstageTarget) => page.onNavigate({ ...page.navigation, section: "world", target: next });
   const onOff = (value: boolean) => (value ? t("ui.slurp.settings.overview.on") : t("ui.slurp.settings.overview.off"));
   const worldRows: Array<{
@@ -405,10 +419,111 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
 
       {target === "messaging" && (
         <div className="space-y-5">
-          <BackstagePageHeader
-            title={t("ui.slurp.settings.messaging.title")}
-            detail={t("ui.slurp.settings.messaging.detail")}
-          />
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <BackstagePageHeader
+              title={t("ui.slurp.settings.messaging.title")}
+              detail={t("ui.slurp.settings.messaging.detail")}
+            />
+            <button
+              type="button"
+              aria-expanded={messagingWizardOpen}
+              onClick={() => {
+                setMessagingDraft({
+                  messagesAwayRepliesEnabled: settings.messagesAwayRepliesEnabled,
+                  messagesDefaultDmPolicy: settings.messagesDefaultDmPolicy,
+                  messagesReplyBubbleLimit: settings.messagesReplyBubbleLimit,
+                  messagesMaxReplyDelayMinutes: settings.messagesMaxReplyDelayMinutes,
+                });
+                setMessagingWizardOpen((open) => !open);
+              }}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-xs font-semibold ring-1 ring-inset ring-[var(--slurp-outline)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+            >
+              <MessageCircle size={14} aria-hidden="true" />
+              {t("ui.slurp.settings.backstage.wizard.messagingTitle", { defaultValue: "Set up messages" })}
+            </button>
+          </div>
+          {messagingWizardOpen && messagingDraft && (
+            <BackstageWizard
+              title={t("ui.slurp.settings.backstage.wizard.messagingTitle", { defaultValue: "Set up messages" })}
+              preset={null}
+              current={settings}
+              proposed={{ ...settings, ...messagingDraft }}
+              patch={messagingDraft}
+              pending={updateSettings.isPending}
+              onCancel={() => setMessagingWizardOpen(false)}
+              onApply={(patch) => {
+                void updatePatch(patch);
+                setMessagingWizardOpen(false);
+              }}
+              steps={[
+                {
+                  id: "access",
+                  title: t("ui.slurp.settings.backstage.wizard.messagingAccess", {
+                    defaultValue: "Choose who can message",
+                  }),
+                  content: (
+                    <Field label={t("ui.slurp.settings.messaging.dmPolicy")}>
+                      <select
+                        value={messagingDraft.messagesDefaultDmPolicy}
+                        onChange={(event) =>
+                          setMessagingDraft({
+                            ...messagingDraft,
+                            messagesDefaultDmPolicy: event.target.value as SlurpSettings["messagesDefaultDmPolicy"],
+                          })
+                        }
+                        className="min-h-11 w-full rounded-lg bg-[var(--slurp-canvas)] px-3 text-base ring-1 ring-inset ring-[var(--slurp-outline)] sm:text-sm"
+                      >
+                        <option value="open">{t("ui.slurp.settings.messaging.dmPolicyOpen")}</option>
+                        <option value="subscribers">{t("ui.slurp.settings.messaging.dmPolicySubscribers")}</option>
+                        <option value="paid">{t("ui.slurp.settings.messaging.dmPolicyPaid")}</option>
+                        <option value="closed">{t("ui.slurp.settings.messaging.dmPolicyClosed")}</option>
+                      </select>
+                    </Field>
+                  ),
+                },
+                {
+                  id: "replies",
+                  title: t("ui.slurp.settings.backstage.wizard.messagingReplies", {
+                    defaultValue: "Choose reply behavior",
+                  }),
+                  content: (
+                    <div className="space-y-3">
+                      <Toggle
+                        label={t("ui.slurp.settings.messaging.awayReplies")}
+                        detail={t("ui.slurp.settings.messaging.awayRepliesDetail")}
+                        value={messagingDraft.messagesAwayRepliesEnabled}
+                        onChange={(value) =>
+                          setMessagingDraft({ ...messagingDraft, messagesAwayRepliesEnabled: value })
+                        }
+                      />
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Field label={t("ui.slurp.settings.messaging.bubbleLimit")}>
+                          <NumberSetting
+                            value={messagingDraft.messagesReplyBubbleLimit}
+                            min={1}
+                            max={4}
+                            onSave={(value) =>
+                              setMessagingDraft({ ...messagingDraft, messagesReplyBubbleLimit: value })
+                            }
+                          />
+                        </Field>
+                        <Field label={t("ui.slurp.settings.messaging.maxReplyDelay")}>
+                          <NumberSetting
+                            value={messagingDraft.messagesMaxReplyDelayMinutes}
+                            min={0}
+                            max={1440}
+                            onSave={(value) =>
+                              setMessagingDraft({ ...messagingDraft, messagesMaxReplyDelayMinutes: value })
+                            }
+                          />
+                        </Field>
+                      </div>
+                    </div>
+                  ),
+                },
+              ]}
+            />
+          )}
           <SettingsGroup title={t("ui.slurp.settings.messaging.repliesTitle")}>
             <Toggle
               settingKey="messagesAwayRepliesEnabled"
@@ -1476,7 +1591,101 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
               <RefreshCw size={14} className={refreshFans.isPending ? "animate-spin" : ""} />
               {t("ui.slurp.settings.audience.refresh")}
             </button>
+            <button
+              type="button"
+              aria-expanded={audienceWizardOpen}
+              onClick={() => {
+                setAudienceDraft({
+                  preset: audiencePreset === "custom" ? "realistic" : audiencePreset,
+                  platformScale: settings.platformScale,
+                  audienceTone: settings.audienceTone,
+                });
+                setAudienceWizardOpen((open) => !open);
+              }}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-xs font-semibold ring-1 ring-inset ring-[var(--slurp-outline)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+            >
+              <UsersRound size={14} aria-hidden="true" />
+              {t("ui.slurp.settings.backstage.wizard.audienceTitle", { defaultValue: "Set up audience" })}
+            </button>
           </div>
+          {audienceWizardOpen &&
+            audienceDraft &&
+            (() => {
+              const patch = {
+                ...slurpAudiencePresetPatch(audienceDraft.preset, settings),
+                platformScale: audienceDraft.platformScale,
+                audienceTone: audienceDraft.audienceTone,
+              } as Partial<SlurpSettings>;
+              return (
+                <BackstageWizard
+                  title={t("ui.slurp.settings.backstage.wizard.audienceTitle", { defaultValue: "Set up audience" })}
+                  preset={audienceDraft.preset}
+                  presetLabel={(preset) => t(`ui.slurp.settings.simulation.presets.${preset}`)}
+                  current={settings}
+                  proposed={{ ...settings, ...patch }}
+                  patch={patch}
+                  pending={updateSettings.isPending}
+                  onCancel={() => setAudienceWizardOpen(false)}
+                  onApply={(next) => {
+                    void updatePatch(next);
+                    setAudienceWizardOpen(false);
+                  }}
+                  steps={[
+                    {
+                      id: "energy",
+                      title: t("ui.slurp.settings.backstage.wizard.audienceEnergy", {
+                        defaultValue: "Choose audience energy",
+                      }),
+                      content: (
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {SLURP_AUDIENCE_PRESETS.map((preset) => (
+                            <button
+                              key={preset}
+                              type="button"
+                              aria-pressed={audienceDraft.preset === preset}
+                              onClick={() => setAudienceDraft({ ...audienceDraft, preset })}
+                              className={`min-h-14 rounded-lg p-3 text-start text-sm font-semibold ring-1 ring-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] ${audienceDraft.preset === preset ? "bg-[var(--slurp-nav-active)] ring-[var(--noodle-accent)]/45" : "bg-[var(--slurp-surface-raised)] ring-[var(--slurp-outline)]"}`}
+                            >
+                              {t(`ui.slurp.settings.simulation.presets.${preset}`)}
+                            </button>
+                          ))}
+                        </div>
+                      ),
+                    },
+                    {
+                      id: "feel",
+                      title: t("ui.slurp.settings.backstage.wizard.audienceFeel", {
+                        defaultValue: "Choose size and tone",
+                      }),
+                      content: (
+                        <div className="space-y-3">
+                          <ChoiceRow
+                            title={t("ui.slurp.settings.audience.scaleTitle")}
+                            detail={t("ui.slurp.settings.audience.scaleDetail")}
+                            options={(["intimate", "normal", "large"] as const).map((value) => ({
+                              value,
+                              label: t(`ui.slurp.settings.audience.scale.${value}`),
+                            }))}
+                            value={audienceDraft.platformScale}
+                            onChange={(platformScale) => setAudienceDraft({ ...audienceDraft, platformScale })}
+                          />
+                          <ChoiceRow
+                            title={t("ui.slurp.settings.audience.toneTitle")}
+                            detail={t("ui.slurp.settings.audience.toneDetail")}
+                            options={(["warm", "mixed", "unfiltered"] as const).map((value) => ({
+                              value,
+                              label: t(`ui.slurp.settings.audience.tone.${value}`),
+                            }))}
+                            value={audienceDraft.audienceTone}
+                            onChange={(audienceTone) => setAudienceDraft({ ...audienceDraft, audienceTone })}
+                          />
+                        </div>
+                      ),
+                    },
+                  ]}
+                />
+              );
+            })()}
           <p className="text-xs text-[var(--muted-foreground)]" aria-live="polite">
             {fanStatusQuery.isError
               ? t("ui.slurp.settings.audience.statusError")

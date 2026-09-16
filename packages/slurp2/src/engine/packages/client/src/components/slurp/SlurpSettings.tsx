@@ -991,28 +991,7 @@ export function SlurpSettings({
           </header>
           <SlurpSettingsSectionRow navigation={navigation} onNavigate={onNavigate} />
 
-          <div className="md:grid md:grid-cols-[12rem_minmax(0,1fr)] md:items-start md:gap-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-8 @min-[1024px]:block">
-            <nav
-              className="sticky top-4 hidden rounded-xl bg-[linear-gradient(180deg,color-mix(in_srgb,var(--noodle-accent)_7%,var(--slurp-surface)),var(--slurp-surface))] p-2 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] md:flex md:flex-col @min-[1024px]:hidden"
-              aria-label={t("ui.slurp.settings.sectionsLabel")}
-            >
-              {settingsSections.map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  aria-current={section === item ? "page" : undefined}
-                  onClick={() =>
-                    onNavigate({ ...navigation, section: item, target: SLURP_BACKSTAGE_DEFAULT_TARGET[item] })
-                  }
-                  className={sectionTabClass(section === item)}
-                >
-                  {t(`ui.slurp.settings.backstage.sections.${item}`, {
-                    defaultValue: SLURP_BACKSTAGE_SECTION_LABELS[item],
-                  })}
-                </button>
-              ))}
-            </nav>
-
+          <div>
             <div className="mt-4 min-w-0 rounded-xl rounded-t-none bg-[linear-gradient(145deg,var(--slurp-surface),color-mix(in_srgb,var(--slurp-violet)_4%,var(--slurp-surface)))] p-3 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] md:mt-0 md:rounded-t-xl md:p-5 lg:p-6">
               <div className="mb-5 space-y-3">
                 <SlurpBackstageSearch
@@ -1085,6 +1064,7 @@ export function SlurpSettings({
                   pending={draftPatch}
                   creatorCount={creators.length}
                   creatorName={target === "creators" || target === "improve" ? selectedCreator?.displayName : null}
+                  creatorProfile={selectedCreator}
                 />
               </div>
             </div>

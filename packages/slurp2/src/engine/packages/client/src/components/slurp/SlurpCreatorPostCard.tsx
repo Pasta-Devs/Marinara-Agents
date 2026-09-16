@@ -1253,7 +1253,7 @@ export function SlurpCreatorPostCard({
                       <Pencil size={14} />
                       {localizeUi("ui.noodle.noodlepostcard.edit")}
                     </button>
-                    {ctx.generatePostImage && (post.imagePrompt || post.imageUrl) && (
+                    {ctx.generatePostImage && !post.imageUrl && (
                       <button
                         type="button"
                         onClick={() => {

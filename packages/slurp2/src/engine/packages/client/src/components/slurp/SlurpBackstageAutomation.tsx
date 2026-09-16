@@ -69,6 +69,11 @@ export function SlurpBackstageAutomation(page: SlurpBackstagePageProps) {
   } = page;
   const postGuidanceQuery = useSlurpPostGuidance(target === "general");
   const [paceWizardOpen, setPaceWizardOpen] = useState(false);
+  const [imageWizardOpen, setImageWizardOpen] = useState(false);
+  const [imageDraft, setImageDraft] = useState<Pick<
+    SlurpSettings,
+    "imageContextMode" | "autoPostingImagesEnabled" | "allowGalleryImageAttachments" | "imageWidth" | "imageHeight"
+  > | null>(null);
   const [paceDraft, setPaceDraft] = useState<{
     preset: (typeof SLURP_ACTIVITY_PRESETS)[number] | null;
     postsPerDay: number;
@@ -653,11 +658,121 @@ export function SlurpBackstageAutomation(page: SlurpBackstagePageProps) {
 
       {target === "images" && (
         <div className="space-y-4">
-          <BackstagePageHeader
-            title={t("ui.slurp.settings.images.title")}
-            detail={t("ui.slurp.settings.images.detail")}
-            scope="all-slurp"
-          />
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <BackstagePageHeader
+              title={t("ui.slurp.settings.images.title")}
+              detail={t("ui.slurp.settings.images.detail")}
+              scope="all-slurp"
+            />
+            <button
+              type="button"
+              aria-expanded={imageWizardOpen}
+              onClick={() => {
+                setImageDraft({
+                  imageContextMode: settings.imageContextMode,
+                  autoPostingImagesEnabled: settings.autoPostingImagesEnabled,
+                  allowGalleryImageAttachments: settings.allowGalleryImageAttachments,
+                  imageWidth: settings.imageWidth,
+                  imageHeight: settings.imageHeight,
+                });
+                setImageWizardOpen((open) => !open);
+              }}
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-xs font-semibold ring-1 ring-inset ring-[var(--slurp-outline)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+            >
+              <Sparkles size={14} aria-hidden="true" />
+              {t("ui.slurp.settings.backstage.wizard.imagesTitle", { defaultValue: "Set up images" })}
+            </button>
+          </div>
+          {imageWizardOpen && imageDraft && (
+            <BackstageWizard
+              title={t("ui.slurp.settings.backstage.wizard.imagesTitle", { defaultValue: "Set up images" })}
+              preset={null}
+              current={settings}
+              proposed={{ ...settings, ...imageDraft }}
+              patch={imageDraft}
+              pending={updateSettings.isPending}
+              onCancel={() => setImageWizardOpen(false)}
+              onApply={(patch) => {
+                void updatePatch(patch);
+                setImageWizardOpen(false);
+              }}
+              steps={[
+                {
+                  id: "source",
+                  title: t("ui.slurp.settings.backstage.wizard.imagesSource", { defaultValue: "Choose image context" }),
+                  content: (
+                    <Field
+                      label={t("ui.slurp.settings.images.contextMode")}
+                      detail={t("ui.slurp.settings.images.contextModeDetail")}
+                    >
+                      <select
+                        value={imageDraft.imageContextMode}
+                        onChange={(event) =>
+                          setImageDraft({
+                            ...imageDraft,
+                            imageContextMode: event.target.value as SlurpSettings["imageContextMode"],
+                          })
+                        }
+                        className="min-h-11 w-full rounded-lg bg-[var(--slurp-canvas)] px-3 text-base ring-1 ring-inset ring-[var(--slurp-outline)] sm:text-sm"
+                      >
+                        <option value="auto">{t("ui.slurp.settings.images.contextAuto")}</option>
+                        <option value="imagePrompt">{t("ui.slurp.settings.images.contextPrompt")}</option>
+                        <option value="vision">{t("ui.slurp.settings.images.contextVision")}</option>
+                      </select>
+                    </Field>
+                  ),
+                },
+                {
+                  id: "delivery",
+                  title: t("ui.slurp.settings.backstage.wizard.imagesDelivery", {
+                    defaultValue: "Choose when images appear",
+                  }),
+                  content: (
+                    <div className="space-y-3">
+                      <Toggle
+                        label={t("ui.slurp.settings.images.enableForNew")}
+                        detail={t("ui.slurp.settings.images.enableForNewDetail")}
+                        value={imageDraft.autoPostingImagesEnabled}
+                        onChange={(value) => setImageDraft({ ...imageDraft, autoPostingImagesEnabled: value })}
+                      />
+                      <Toggle
+                        label={t("ui.slurp.settings.images.galleryFallback")}
+                        detail={t("ui.slurp.settings.images.galleryFallbackDetail")}
+                        value={imageDraft.allowGalleryImageAttachments}
+                        onChange={(value) => setImageDraft({ ...imageDraft, allowGalleryImageAttachments: value })}
+                      />
+                    </div>
+                  ),
+                },
+                {
+                  id: "shape",
+                  title: t("ui.slurp.settings.backstage.wizard.imagesShape", {
+                    defaultValue: "Choose the image shape",
+                  }),
+                  content: (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Field label={t("ui.slurp.settings.images.width")}>
+                        <NumberSetting
+                          value={imageDraft.imageWidth}
+                          min={64}
+                          max={4096}
+                          onSave={(value) => setImageDraft({ ...imageDraft, imageWidth: value })}
+                        />
+                      </Field>
+                      <Field label={t("ui.slurp.settings.images.height")}>
+                        <NumberSetting
+                          value={imageDraft.imageHeight}
+                          min={64}
+                          max={4096}
+                          onSave={(value) => setImageDraft({ ...imageDraft, imageHeight: value })}
+                        />
+                      </Field>
+                    </div>
+                  ),
+                },
+              ]}
+            />
+          )}
           <Field
             settingKey="imageContextMode"
             label={t("ui.slurp.settings.images.contextMode")}
