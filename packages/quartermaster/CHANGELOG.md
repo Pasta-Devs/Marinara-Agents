@@ -1,142 +1,93 @@
 # Quartermaster changelog
 
 ## 0.1.15 — 2026-09-15
-- Recent Agent Update's collapsed-box leak, for real this time: the min-height:0 fix in 0.1.14
-  still wasn't enough, so the animated max-height/overflow-hidden collapse is gone entirely in
-  favor of a plain display:none toggle -- no more box-model subtlety left to get wrong, at the
-  cost of the slide animation the old Settings accordion had.
-- Widened the info tooltip box (220px -> 320px) so a long token like the Feed Appearance
-  tooltip's {{getvar::...}} macro name reads on one line instead of an awkward mid-token wrap.
+- Fixed the Recent Agent Update box leak for real this time — 0.1.13 and 0.1.14 were both
+  attempted fixes that didn't fully resolve it.
+- Widened the info tooltip box so long macro tokens read on one line.
 
 ## 0.1.14 — 2026-09-15
-- Actually fixed Recent Agent Update's collapsed-box leak (0.1.13 only got it partway): a flex
-  container's default min-height is "auto," driven by its own children's content size, and per
-  spec that wins over a smaller max-height -- the collapsed box was still being forced open
-  enough to show a sliver of Restore Inventory. Explicit min-height:0 fixes it for real.
-- Fixed tooltip text overflowing its own box: a long unbroken token (the {{getvar::...}} macro
-  name in the Feed Appearance tooltip) wasn't wrapping, so it spilled past the fixed-width edge.
+- Attempted fix for the Recent Agent Update collapsed-box leak (0.1.13's attempt didn't fully
+  resolve it either).
+- Fixed tooltip text overflowing outside its own box.
 
 ## 0.1.13 — 2026-09-14
-- Fixed Recent Agent Update's collapsed box showing a sliver of Restore Inventory underneath —
-  its vertical padding wasn't included in the collapsed max-height. Also shrank its header text.
-- Info tooltips and card overflow menus no longer clip against the dock's own edge; they now flip
-  to whichever side actually has room.
+- Attempted fix for Recent Agent Update's collapsed box showing a sliver of Restore Inventory
+  underneath.
+- Info tooltips and card overflow menus no longer clip against the dock's edge.
 - Shrank the item card's quantity field to match the "⋯" button beside it.
 - "+ Add Item" is now green, matching Save Current Outfit.
 
 ## 0.1.12 — 2026-09-14 [highlight]
-- Dock layout overhaul: Settings moved to its own top-level tab (Inventory/Settings) instead of an
-  accordion, grouped under Appearance/Display/Image Generation/Data, with hover-and-tap info
-  tooltips replacing permanent explanatory paragraphs.
-- Recent Automatic Update (renamed Recent Agent Update) moved into Settings' old spot next to
-  Restore Inventory: collapsed header shows a +N/↑N/−N count, rows are colored, Revert sits on the
-  left, and it now shows the agent's reasoning even on a quiet turn.
-- Item/outfit cards collapse Edit/Update/Delete into a "⋯" menu and promote Equip to the name row,
-  giving descriptions the reclaimed width. Delete still confirms; the item-image and outfit-portrait
-  remove buttons now confirm too (they didn't before).
-- "Stored at: Bag" and "Default Slot" no longer render when they carry no information.
-- Add Item is now a modal instead of an always-open inline form.
+- Settings moved to its own tab instead of an accordion pushing inventory below the fold.
+- Settings regrouped into Appearance/Display/Image Generation/Data, with hover-and-tap tooltips
+  replacing permanent explanation text.
+- Recent Automatic Update (renamed Recent Agent Update) moved next to Restore Inventory, with a
+  colored +N/↑N/−N count summary and visible reasoning even on quiet turns.
+- Item and outfit cards collapse Edit/Update/Delete into a "⋯" menu, giving descriptions more
+  room.
+- Delete confirmations now also cover the item-image and outfit-portrait remove buttons.
+- Add Item is now a modal instead of an always-open form.
 
 ## 0.1.11 — 2026-09-13 [highlight]
-- The tracking agent now targets specific changes (add/update/remove an item, equip an outfit)
-  instead of re-listing the whole inventory every turn, using a short tag for existing items
-  instead of retyping names. An item the model doesn't mention is never dropped, and a large
-  inventory can't have the model's own output cut off mid-listing and lose whatever didn't fit.
-  An implausibly large turn is rejected outright rather than applied.
-- Added a "Recent Automatic Update" view in Settings: what the last turn added, changed, or
-  removed, with the tracker's reasoning and a per-item Revert button for fixing one mistake
-  without reverting everything else. A revert refuses rather than overwriting if that item has
-  changed again since.
+- The tracking agent now targets specific changes instead of re-listing the whole inventory every
+  turn, so nothing gets dropped or cut off.
+- Added a "Recent Automatic Update" view showing what the last turn changed, with a per-item
+  Revert button.
 
 ## 0.1.10 — 2026-09-13
-- Rewrote the README's Features section for readability and completeness: organized by what you
-  actually interact with (the Dock, Equip Slots & Outfits, Inventory, Item Images, the tracking
-  agent, the Appearance Macro, the Tracker Panel) instead of a flat bullet list, and documented
-  several real features that were previously undocumented -- the Bag's Items/Wearables/Stored
-  tabs, outfit resnapshotting, the "stays equipped through extras" behavior, the Tracker Panel's
-  per-stash grouping, the Refresh Images setting, and Build Wardrobe sharing its LLM connection
-  with the tracking agent.
-- Updated the in-app description (shown in Download Agents) to mention saved outfits, AI-generated
-  art, and the tracker agent's own automation -- it hadn't been touched since before those
-  features shipped.
+- Rewrote the README's Features section for readability and documented several
+  previously-undocumented features.
+- Updated the in-app description to mention saved outfits, AI-generated art, and the tracker
+  agent.
 
 ## 0.1.9 — 2026-09-11
-- Fixed a regression from 0.1.8's new Bag tabs: clicking an empty equip slot's quick-fill
-  shortcut only searched the Wearables tab, so a wearable item currently stashed (Stored tab)
-  couldn't be found or equipped from there at all. The slot-driven search now reaches every
-  wearable regardless of tab, matching how it worked before tabs existed.
+- Fixed equip-slot quick-fill only searching the Wearables tab, missing stashed wearable items.
 
 ## 0.1.8 — 2026-09-11
-- Confirmed fix: the 0.1.7 persona-leak fix for Generate Image resolved the reported issue --
-  item images no longer show a person.
-- The Bag column now splits into three tabs -- Items, Wearables (anything with a default slot
-  set), and Stored (anything in a named stash) -- instead of one flat list, so a chat with a lot
-  of stuff is easier to scan. Clicking an empty equip slot's quick-fill shortcut now also jumps
-  the Bag to the Wearables tab, since only a wearable item can ever fill a slot that way.
+- Confirmed fix: Generate Image no longer shows a person in item images.
+- Bag column now splits into Items, Wearables, and Stored tabs.
 
 ## 0.1.7 — 2026-09-09
-- Attempted fix for Generate Image (0.1.6) sending the persona's appearance into item/outfit image
-  requests instead of a clean product shot -- the request now matches the exact shape confirmed
-  working against this same Engine, rather than an unverified one copied from another package.
-  Reported by a real user; pending final confirmation it fully resolves it.
-- A build-script safety check now refuses to silently overwrite an already-released version's
-  artifact file under the same filename.
+- Attempted fix for Generate Image sending the persona's appearance into item/outfit image
+  requests instead of a clean product shot.
+- Build script now refuses to silently overwrite an already-released version's artifact.
 
 ## 0.1.6 — 2026-09-08 [highlight]
-- Added Generate Image: an AI-generated alternative to uploading, for both item images and outfit
-  portraits. Review (and optionally edit) the filled-in prompt before generating.
-- New Settings section picks which image connection to use and lets you edit the two prompt
-  templates, pre-filled with sensible defaults to edit from rather than write from scratch.
-- The portrait prompt no longer leaks a raw {{getvar::...}} appearance-macro token into the image
-  request when the persona's Appearance field uses it.
-- Export/import now carry the two prompt templates along with everything else.
+- Added Generate Image: an AI-generated alternative to uploading, for both item images and
+  outfit portraits.
+- New Settings section to pick the image connection and edit the two prompt templates.
+- Fixed the portrait prompt leaking a raw appearance-macro token into the image request.
+- Export/import now carry the two prompt templates.
 
 ## 0.1.5 — 2026-09-08
-- Fixed Build Wardrobe producing no debug-log output even with Debug Mode enabled -- the
-  request/response now log correctly.
-- Replaced the dock/tracker panel's 5-second inventory poll with an event-driven refresh right
-  after a turn completes, cutting needless network requests.
+- Fixed Build Wardrobe producing no debug-log output.
+- Replaced the dock's 5-second inventory poll with an event-driven refresh.
 
 ## 0.1.4 — 2026-09-08 [highlight]
-- Added Build Wardrobe: describe a style direction and get a proposed set of new items and
-  outfits to review before adding them to inventory.
-- Outfits it builds can reuse your existing wearable items instead of always creating new ones.
-- Generation uses the tracker agent's own configured connection, so switching that in the Agents
-  menu also moves this.
-- Fixed non-wearable items (a phone, a wallet) sometimes turning up in a generated outfit.
+- Added Build Wardrobe: describe a style and get a proposed set of items and outfits to review
+  before adding.
+- Outfits it builds can reuse existing wearable items instead of always creating new ones.
+- Fixed non-wearable items sometimes turning up in a generated outfit.
 
 ## 0.1.3 — 2026-09-07 [highlight]
-- Fixed inventory silently wiping every turn: the tracker agent's resultType was misconfigured as
-  a text-only result, so its JSON response never actually got parsed.
-- Outfits now stay equipped when extra items get added alongside them — only swapping one of the
-  outfit's own items unequips it — and the appearance macro reflects that.
-- Added a "Restore Inventory" safety net and a "Refresh Images" button, both under Settings.
-- Fixed a rendering bug that hid an equip slot's name/item labels behind its fallback icon.
-- Stopped repeatedly re-requesting (and console-flooding) images already confirmed missing.
+- Fixed inventory silently wiping every turn due to a misconfigured result type.
+- Outfits now stay equipped when extra items are added alongside them.
+- Added a "Restore Inventory" safety net and a "Refresh Images" button.
+- Fixed a rendering bug hiding an equip slot's labels behind its fallback icon.
 
 ## 0.1.2 — 2026-09-05 [highlight]
-- Added a decorated portrait frame with connector lines to each equip slot.
-- Added bundled artwork for every equip slot.
-- Redesigned item/outfit cards to size themselves to their own content instead of clipping or
-  growing unbounded.
-- Equip slots now show the item's full image.
+- Added a decorated portrait frame and bundled artwork for every equip slot.
+- Redesigned item/outfit cards to size themselves to their own content.
 - Outfits got a reworked save/edit flow.
-- Columns can collapse to genuinely narrow the dock.
+- Columns can collapse to narrow the dock.
 - Added delete confirmations and Escape-to-close.
 
 ## 0.1.1 — 2026-08-30
-- Theme-aware dropdowns.
+- Theme-aware dropdowns and real button hover/press states.
 - Fixed a portrait-ring shift with the underwear toggle.
-- Real button hover/press states.
-- Consistent styling.
-- Added an animated Settings section.
-- Added click-outside-to-close.
+- Added an animated Settings section and click-outside-to-close.
 
 ## 0.1.0 — 2026-08-28 [highlight]
-- Equip slots around a portrait.
-- Item locations.
-- Saved outfits.
-- Export/import.
-- The appearance macro.
-- The narrator context feed.
+- Equip slots around a portrait, item locations, and saved outfits.
+- Export/import, the appearance macro, and the narrator context feed.
 - An agent that keeps inventory in sync automatically from the story.
