@@ -1,19 +1,8 @@
 import { useState } from "react";
-import {
-  CalendarClock,
-  CheckCircle2,
-  ListChecks,
-  Loader2,
-  Pencil,
-  Search,
-  Sparkles,
-  Trash2,
-  UsersRound,
-} from "lucide-react";
+import { CalendarClock, CheckCircle2, ListChecks, Loader2, Search, Sparkles, Trash2, UsersRound } from "lucide-react";
 import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
 import { Field, SettingsGroup, Toggle } from "./SlurpSettingsControls";
 import { SlurpCreatorBulkEdit } from "./SlurpCreatorBulkEdit";
-import { SlurpDiscoveryProfileEditor } from "./SlurpDiscoveryProfileEditor";
 import { toast } from "sonner";
 import { formatDateTime } from "./SlurpDateTime";
 import { showConfirmDialog } from "../../lib/app-dialogs";
@@ -23,6 +12,7 @@ import type { SlurpBackstagePageProps } from "./SlurpSettings";
 import { errorMessage, CreatorMessagingGroup } from "./SlurpBackstageWorkflow";
 import { BackstagePageHeader } from "./SlurpBackstageKit";
 import { SlurpPostGuidanceField } from "./SlurpPostGuidanceField";
+import { SlurpCreatorProfileEditor } from "./SlurpCreatorProfileEditor";
 import { useSlurpPostGuidance } from "../../hooks/use-slurp";
 
 type CreatorFilter = "all" | "active" | "paused" | "attention";
@@ -52,7 +42,6 @@ export function SlurpBackstageCreators(page: SlurpBackstagePageProps) {
     navigation,
     onNavigate,
     onAddCreators,
-    onEditCreator,
     onRedraftCreator,
     t,
     i18n,
@@ -63,7 +52,6 @@ export function SlurpBackstageCreators(page: SlurpBackstagePageProps) {
     setSelectedCreatorId,
     bulkCreatorIds,
     setBulkCreatorIds,
-    bulkUpdateCreators,
     update,
     accountsQuery,
     imageSettingsQuery,
@@ -80,6 +68,7 @@ export function SlurpBackstageCreators(page: SlurpBackstagePageProps) {
     imageConnections,
     imageSettings,
     personaCreator,
+    viewerPersonaId,
     selectedCreator,
     creators,
     confirmDeleteCreator,
@@ -327,10 +316,6 @@ export function SlurpBackstageCreators(page: SlurpBackstagePageProps) {
                 >
                   {t("ui.slurp.settings.creators.viewProfile")}
                 </button>
-                <button type="button" onClick={() => onEditCreator(selectedCreator)} className={accentButton}>
-                  <Pencil size={14} aria-hidden="true" />
-                  {t("ui.slurp.settings.creators.edit")}
-                </button>
               </div>
             </div>
 
@@ -363,21 +348,12 @@ export function SlurpBackstageCreators(page: SlurpBackstagePageProps) {
             >
               {tab === "profile" && (
                 <>
-                  {/* Quick edit: each change saves at once through the same route as bulk edit. */}
-                  <SlurpDiscoveryProfileEditor
+                  {/* The whole profile lives here. A settings tab that could only reach half the
+                      fields sent people to a second page for the other half. */}
+                  <SlurpCreatorProfileEditor
                     key={selectedCreator.id}
-                    gender={selectedCreator.gender ?? null}
-                    tags={selectedCreator.tags ?? []}
-                    disabled={bulkUpdateCreators.isPending}
-                    onChange={(patch) =>
-                      bulkUpdateCreators.mutate(
-                        {
-                          ids: [selectedCreator.id],
-                          patch: patch.tags ? { tags: patch.tags } : { gender: patch.gender ?? null },
-                        },
-                        { onError: (error) => toast.error(errorMessage(error)) },
-                      )
-                    }
+                    creator={selectedCreator}
+                    onRedraft={() => onRedraftCreator(selectedCreator)}
                   />
                   {selectedCreator.sourceStatus.state === "missing" && (
                     <p className="rounded-lg bg-[var(--slurp-danger)]/10 p-3 text-xs text-[var(--slurp-danger)] ring-1 ring-inset ring-[var(--slurp-danger)]/25">
@@ -603,52 +579,28 @@ export function SlurpBackstageCreators(page: SlurpBackstagePageProps) {
               )}
 
               {tab === "messages" &&
-                /* The message policy and prices had working, ownership-gated endpoints
-                   and no UI at all, so every Creator was stuck on the shipped defaults
-                   and the paid DM policy could never be chosen. Only the persona that
-                   operates a Creator may set them, which is what the routes enforce. */
-                ((personaCreator(selectedCreator) && selectedCreator.sourceAccountId && (
+                /* Every Creator's policy and prices are the player's to set, world-run ones
+                   included: Slurp is single-player and this panel is where Creators are managed.
+                   An unset value still falls back to the world default. The persona only
+                   identifies the viewer to the route. */
+                (viewerPersonaId ? (
                   <CreatorMessagingGroup
                     creatorId={selectedCreator.id}
-                    personaId={selectedCreator.sourceAccountId}
+                    personaId={selectedCreator.sourceAccountId ?? viewerPersonaId}
                     setMessaging={setCreatorMessaging}
                     setPrice={setCreatorPrice}
+                    worldRulesAction={
+                      <button
+                        type="button"
+                        onClick={() => onNavigate({ ...navigation, section: "world", target: "messaging" })}
+                        className={quietButton}
+                      >
+                        {t("ui.slurp.settings.creators.openWorldMessaging")}
+                      </button>
+                    }
                   />
-                )) || (
-                  /* Only the persona that operates a Creator may set its own policy and prices,
-                     which is what the routes enforce. A world-run Creator still has rules, so the
-                     tab shows the ones in force and the way to change them, instead of dead-ending. */
-                  <SettingsGroup title={t("ui.slurp.settings.creators.messagingTitle")}>
-                    <p className={noteClass}>{t("ui.slurp.settings.creators.messagesWorldRules")}</p>
-                    <dl className="grid gap-3 sm:grid-cols-3">
-                      {(
-                        [
-                          [
-                            t("ui.slurp.settings.messaging.dmPolicy"),
-                            t(
-                              `ui.slurp.settings.messaging.dmPolicy${settings.messagesDefaultDmPolicy.charAt(0).toUpperCase()}${settings.messagesDefaultDmPolicy.slice(1)}`,
-                            ),
-                          ],
-                          [t("ui.slurp.settings.messaging.requestFee"), String(settings.messagesDefaultRequestFee)],
-                          [t("ui.slurp.settings.messaging.ppvPrice"), String(settings.messagesDefaultPpvPrice)],
-                        ] as const
-                      ).map(([label, value]) => (
-                        <div key={label} className={noteClass}>
-                          <dt className="font-semibold text-[var(--slurp-text)]">{label}</dt>
-                          <dd className="mt-1">{value}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                    <button
-                      type="button"
-                      onClick={() => onNavigate({ ...navigation, section: "world", target: "messaging" })}
-                      className={quietButton}
-                    >
-                      {t("ui.slurp.settings.creators.openWorldMessaging", {
-                        defaultValue: "Open messaging rules",
-                      })}
-                    </button>
-                  </SettingsGroup>
+                ) : (
+                  <p className={noteClass}>{t("ui.slurp.settings.creators.messagesWorldRules")}</p>
                 ))}
 
               {tab === "danger" && (

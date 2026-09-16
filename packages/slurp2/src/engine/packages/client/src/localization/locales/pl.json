@@ -462,5 +462,6 @@
   "ui.slurp.settings.backstage.preview.ads.sampleCopy.luxury": "Single origin, parzona ręcznie, po cichu doskonała. Na zaproszenie.",
   "ui.slurp.settings.backstage.preview.ads.sampleCopy.unhinged": "Wypiłem jedenaście filiżanek i słyszę kolory. Kup ziarna.",
   "ui.slurp.settings.creators.refreshingConversationSchedule": "Tworzenie nowego harmonogramu…",
-  "ui.slurp.settings.creators.openWorldMessaging": "Otwórz zasady wiadomości"
+  "ui.slurp.settings.creators.openWorldMessaging": "Otwórz zasady wiadomości",
+  "ui.slurp.settings.creators.messagingInheritsWorld": "Każda wartość zaczyna się od domyślnej wartości świata Slurp i pozostaje nią, dopóki jej tu nie zmienisz."
 }

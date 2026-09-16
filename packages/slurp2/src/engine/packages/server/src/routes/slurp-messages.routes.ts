@@ -1194,8 +1194,11 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     const { creatorAccountId } = req.params as { creatorAccountId: string };
     if (!(await slurp.getNoodlerAccountById(creatorAccountId)))
       return reply.code(404).send({ error: "Creator not found" });
-    if (!(await ownsCreator(parsed.data.personaId, creatorAccountId)))
-      return reply.code(403).send({ error: "Only the Creator's owner can read messaging settings." });
+    // No ownership gate, for the same reason the weekly price has none: Slurp is single-player and
+    // Backstage manages every Creator, world-run ones included. The gate is still enforced on the
+    // creator-side conversation routes, where acting *as* a Creator is what must stay restricted.
+    if (!(await requireViewer(parsed.data.personaId)))
+      return reply.code(404).send({ error: "Slurp persona not found" });
     // The weekly price rides along: it is already public on every profile, and the Creator's own
     // settings panel needs it beside the message prices rather than through a second request.
     const settings = await slurp.getSettings();
@@ -1221,8 +1224,9 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     const { creatorAccountId } = req.params as { creatorAccountId: string };
     if (!(await slurp.getNoodlerAccountById(creatorAccountId)))
       return reply.code(404).send({ error: "Creator not found" });
-    if (!(await ownsCreator(parsed.data.personaId, creatorAccountId)))
-      return reply.code(403).send({ error: "Only the Creator's owner can change messaging settings." });
+    // See the GET above: every Creator's prices are the player's to set from Backstage.
+    if (!(await requireViewer(parsed.data.personaId)))
+      return reply.code(404).send({ error: "Slurp persona not found" });
     const { personaId: _personaId, ...patch } = parsed.data;
     return {
       messaging: await messages.setCreatorMessaging(

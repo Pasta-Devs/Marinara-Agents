@@ -3126,5 +3126,6 @@
   "ui.slurp.settings.arcLibrary.export": "Export",
   "ui.slurp.settings.arcLibrary.import": "Import Arc",
   "ui.slurp.settings.creators.refreshingConversationSchedule": "Rebuilding the schedule…",
-  "ui.slurp.settings.creators.openWorldMessaging": "Open messaging rules"
+  "ui.slurp.settings.creators.openWorldMessaging": "Open messaging rules",
+  "ui.slurp.settings.creators.messagingInheritsWorld": "Each value starts from the Slurp world default and stays there until you change it here."
 }

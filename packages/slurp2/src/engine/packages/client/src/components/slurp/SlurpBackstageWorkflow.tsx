@@ -1491,11 +1491,14 @@ export function CreatorMessagingGroup({
   personaId,
   setMessaging,
   setPrice,
+  worldRulesAction,
 }: {
   creatorId: string;
   personaId: string;
   setMessaging: ReturnType<typeof useSetSlurpCreatorMessaging>;
   setPrice: ReturnType<typeof useSetSlurpCreatorPrice>;
+  /** Optional way back to the world defaults these values start from. */
+  worldRulesAction?: ReactNode;
 }) {
   const { t } = useTranslation();
   const query = useSlurpCreatorMessagingSettings(creatorId, personaId);
@@ -1519,6 +1522,16 @@ export function CreatorMessagingGroup({
     setMessaging.mutate(input, { onError: (error) => toast.error(errorMessage(error)) });
   return (
     <SettingsGroup title={t("ui.slurp.settings.creators.messagingTitle")}>
+      {worldRulesAction && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[var(--slurp-canvas)] p-3 text-xs leading-5 text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)]">
+          <p className="min-w-0 flex-1">
+            {t("ui.slurp.settings.creators.messagingInheritsWorld", {
+              defaultValue: "Each value starts from the Slurp world default and stays there until you change it here.",
+            })}
+          </p>
+          {worldRulesAction}
+        </div>
+      )}
       <Field label={t("ui.slurp.settings.creators.dmPolicy")} detail={t("ui.slurp.settings.creators.dmPolicyDetail")}>
         <select
           value={messaging.dmPolicy}

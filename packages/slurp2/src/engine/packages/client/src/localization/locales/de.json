@@ -450,5 +450,6 @@
   "ui.slurp.settings.backstage.preview.ads.sampleCopy.luxury": "Single Origin, von Hand aufgegossen, still perfekt. Nur auf Einladung.",
   "ui.slurp.settings.backstage.preview.ads.sampleCopy.unhinged": "Ich trank elf Tassen und höre jetzt Farben. Kauf die Bohnen.",
   "ui.slurp.settings.creators.refreshingConversationSchedule": "Zeitplan wird neu erstellt…",
-  "ui.slurp.settings.creators.openWorldMessaging": "Nachrichtenregeln öffnen"
+  "ui.slurp.settings.creators.openWorldMessaging": "Nachrichtenregeln öffnen",
+  "ui.slurp.settings.creators.messagingInheritsWorld": "Jeder Wert beginnt beim Standard der Slurp-Welt und bleibt dort, bis Sie ihn hier ändern."
 }

@@ -13,6 +13,7 @@ const overview = component("SlurpBackstageOverview.tsx");
 const workflow = component("SlurpBackstageWorkflow.tsx");
 const creators = component("SlurpBackstageCreators.tsx");
 const home = component("SlurpHome.tsx");
+const profileForm = component("SlurpStageProfileForm.tsx");
 
 for (const wizard of ["imageWizardOpen", "audienceWizardOpen", "messagingWizardOpen"]) {
   assert.match(`${automation}\n${world}`, new RegExp(`\\b${wizard}\\b`), `${wizard} must remain reachable`);
@@ -62,13 +63,31 @@ assert.match(
   "Add story must preselect the story type and open the composer",
 );
 
-// A world-run Creator has no own policy, but the tab must still say which rules apply.
+// Every Creator's messaging is editable, and the tab still points at the world defaults it starts from.
 assert.match(creators, /refreshingConversationSchedule/u, "the schedule refresh reports that it is working");
 assert.match(
   creators,
   /section: "world", target: "messaging"/u,
   "the Messages tab must lead to the rules that govern a world-run Creator",
 );
-assert.match(creators, /settings\.messagesDefaultDmPolicy/u, "the Messages tab shows the policy in force");
+assert.match(
+  creators,
+  /personaId=\{selectedCreator\.sourceAccountId \?\? viewerPersonaId\}/u,
+  "every Creator, world-run ones included, can have its own policy and prices",
+);
+
+// One profile form, rendered by both the full-page editor and the Creators tab.
+assert.match(profileForm, /export function StageProfileForm/u, "the profile form is shared, not duplicated");
+assert.match(
+  home,
+  /StageProfileForm,\n\} from ".\/SlurpStageProfileForm"|StageProfileForm/u,
+  "the page editor uses it",
+);
+assert.match(creators, /<SlurpCreatorProfileEditor/u, "the Creators Profile tab holds the whole profile");
+assert.match(
+  profileForm,
+  /export async function confirmSlurpAvatarReview/u,
+  "the privacy-downgrade avatar review has one implementation",
+);
 
 console.log("Slurp2 Backstage completion regression passed");
