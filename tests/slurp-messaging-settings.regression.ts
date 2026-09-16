@@ -36,6 +36,16 @@ assert.ok(
   scheduler.indexOf("deliverDueSlurpCommissions") < scheduler.indexOf("messagesAwayRepliesEnabled"),
   "commission delivery must not sit behind the away-replies switch",
 );
+assert.match(
+  operation,
+  /workerContext: "present"/u,
+  "the away-replies switch must be sufficient permission for queued Creator replies",
+);
+assert.doesNotMatch(
+  operation,
+  /workerContext: input\.force \? "background" : "present"/u,
+  "queued replies must not require a second hidden background-worker switch",
+);
 
 // The burst limit reaches the splitter, and one means one message.
 assert.match(operation, /const burstLimit = Math\.min\(settings\.messagesReplyBubbleLimit/u);

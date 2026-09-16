@@ -734,6 +734,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   const [draftConnectionId, setDraftConnectionId] = useState("");
   const [previousDraft, setPreviousDraft] = useState<SlurpStageProfileInput | null>(null);
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
+  const [composerOpenSignal, setComposerOpenSignal] = useState(0);
   const profileReturnToSettingsRef = useRef<SlurpNavigationState | null>(null);
   const [acceptSourceChangesForProfileId, setAcceptSourceChangesForProfileId] = useState<string | null>(null);
   const [draftSourceSnapshot, setDraftSourceSnapshot] = useState<NoodlerSourceSnapshot | null>(null);
@@ -1986,12 +1987,18 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
               {
                 label: localizeUi("ui.slurp.profile.createPost", { defaultValue: "Create post" }),
                 icon: Plus,
-                action: openPostComposer,
+                action: () => {
+                  updateNoodlerPostDraft(selectedProfile.id, { postType: "post", poll: null });
+                  setComposerOpenSignal((tick) => tick + 1);
+                },
               },
               {
                 label: localizeUi("ui.slurp.profile.addStory", { defaultValue: "Add story" }),
                 icon: Sparkles,
-                action: openStoryComposer,
+                action: () => {
+                  updateNoodlerPostDraft(selectedProfile.id, { postType: "story", poll: null, title: "" });
+                  setComposerOpenSignal((tick) => tick + 1);
+                },
               },
               {
                 label: localizeUi("ui.slurp.profile.openStudio", { defaultValue: "Open studio" }),
@@ -2045,6 +2052,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
             key={`${selectedProfile.id}:${shellPersonaAccount?.id ?? "no-viewer"}`}
             profile={selectedProfile}
             profileDraft={editingProfileId === selectedProfile.id ? profileDraft : null}
+            composerOpenSignal={composerOpenSignal}
             onProfileChange={(patch) => setProfileDraft((current) => (current ? { ...current, ...patch } : current))}
             onCancelEdit={closeProfileEditor}
             onSaveEdit={(location) => void saveProfile(location)}
@@ -3617,6 +3625,7 @@ function StageProfileView({
   onOpenMessages,
   accessPending,
   onAccessChange,
+  composerOpenSignal,
 }: {
   profile: SlurpManagedStageProfile;
   profileDraft: SlurpStageProfileInput | null;
@@ -3660,12 +3669,17 @@ function StageProfileView({
   onOpenMessages: (creatorAccountId: string) => void;
   accessPending: boolean;
   onAccessChange: (access: SlurpManagedStageProfile["access"]) => void;
+  /** Increments each time the profile rail asks the composer to open. */
+  composerOpenSignal: number;
 }) {
   const { t: localizeUi, i18n } = useUiTranslation();
   const bannerSrc = useSlurpMediaSrc(profile.bannerUrl, { width: 1280 });
   const [accessSettingsOpen, setAccessSettingsOpen] = useState(false);
   const [automationOpen, setAutomationOpen] = useState(false);
   const [creatorToolsOpen, setCreatorToolsOpen] = useState(draft.postType === "story");
+  useEffect(() => {
+    if (composerOpenSignal > 0) setCreatorToolsOpen(true);
+  }, [composerOpenSignal]);
   const updateAutoPosting = useUpdateNoodlerAutoPosting();
   const updateFanActivity = useUpdateNoodlerFanActivity();
   const tipCreator = useTipSlurpCreator();

@@ -17,6 +17,13 @@ const replyScheduler = read("server/src/services/slurp/slurp-message-scheduler.s
 const replyMethods = read("server/src/services/storage/slurp-reply-methods.ts");
 const slurpStorage = read("server/src/services/storage/slurp.storage.ts");
 
+assert.match(messages, /Delivered\. A reply from \{\{name\}\} is queued for later\./u);
+assert.doesNotMatch(
+  messages,
+  /has seen this/u,
+  "a queued reply is not an immediate read receipt and must not claim the Creator has seen it",
+);
+
 // The creator-side messaging tools and the commission flow shipped as endpoints and hooks with no
 // UI behind them. Every one of those hooks must be reachable from the Messages tab.
 for (const hook of [

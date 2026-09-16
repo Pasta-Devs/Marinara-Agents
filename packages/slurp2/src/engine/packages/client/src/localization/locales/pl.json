@@ -94,7 +94,7 @@
   "ui.slurp.settings.backstage.sections.creators": "Twórcy",
   "ui.slurp.settings.backstage.sections.maintenance": "Konserwacja",
   "ui.slurp.settings.backstage.sections.overview": "Przegląd",
-  "ui.slurp.settings.backstage.sections.world": "Świat Slurp",
+  "ui.slurp.settings.backstage.sections.world": "Funkcje",
   "ui.slurp.settings.backstage.undo": "Cofnij",
   "ui.slurp.home.latestDrops": "Najnowsze publikacje",
   "ui.slurp.home.latestDropsDetail": "Nowe posty z Twojej sieci twórców.",
@@ -196,9 +196,9 @@
   "ui.slurp.settings.prompts.edit": "Edytuj prompt",
   "ui.slurp.settings.prompts.save": "Zapisz prompt",
   "ui.slurp.settings.prompts.publicGuidance": "Wytyczne dla postów publicznych",
-  "ui.slurp.settings.prompts.publicGuidanceDetail": "Do czego służy darmowy post. Każdy może go przeczytać, więc to on zdobywa nowych subskrybentów. Puste pole używa wbudowanych wytycznych.",
+  "ui.slurp.settings.prompts.publicGuidanceDetail": "Określa zadanie darmowego posta: dać każdemu czytelnikowi coś wartościowego i wzbudzić uczciwą ciekawość treści premium.",
   "ui.slurp.settings.prompts.lockedGuidance": "Wytyczne dla postów płatnych",
-  "ui.slurp.settings.prompts.lockedGuidanceDetail": "Do czego służy płatny post. Czytają go tylko subskrybenci, więc to nagroda. Puste pole używa wbudowanych wytycznych.",
+  "ui.slurp.settings.prompts.lockedGuidanceDetail": "Określa zadanie płatnego posta: dostarczyć dodatkową bliskość, szczerość, szczegóły lub dostęp, za które czytelnik już zapłacił.",
   "ui.slurp.settings.prompts.guidanceGenerate": "Napisz z AI",
   "ui.slurp.settings.prompts.guidanceUseBuiltIn": "Użyj wbudowanych",
   "ui.slurp.settings.prompts.guidanceSavedAccess": "Zapisano wytyczne postów.",
@@ -460,5 +460,6 @@
   "ui.slurp.settings.backstage.preview.ads.sampleCopy.scammy": "SEKRET KAWY, którego nie chcą ci pokazać. Kliknij, zanim zniknie!!",
   "ui.slurp.settings.backstage.preview.ads.sampleCopy.local": "Palona tuż obok. Przywitaj się z Martą, pamięta twoje zamówienie.",
   "ui.slurp.settings.backstage.preview.ads.sampleCopy.luxury": "Single origin, parzona ręcznie, po cichu doskonała. Na zaproszenie.",
-  "ui.slurp.settings.backstage.preview.ads.sampleCopy.unhinged": "Wypiłem jedenaście filiżanek i słyszę kolory. Kup ziarna."
+  "ui.slurp.settings.backstage.preview.ads.sampleCopy.unhinged": "Wypiłem jedenaście filiżanek i słyszę kolory. Kup ziarna.",
+  "ui.slurp.settings.eyebrow": "Ustawienia Slurp"
 }

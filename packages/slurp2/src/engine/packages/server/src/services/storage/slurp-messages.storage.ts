@@ -2855,7 +2855,7 @@ export function createSlurpMessagesStorage(db: DB) {
     async resetThread(threadId: string): Promise<void> {
       const timestamp = now();
       await db.transaction(async (tx) => {
-        const thread = await tx.select().from(slurpThreads).where(eq(slurpThreads.id, threadId)).get();
+        const [thread] = await tx.select().from(slurpThreads).where(eq(slurpThreads.id, threadId)).limit(1);
         if (!thread) return;
         await tx.delete(slurpReplyBubbles).where(eq(slurpReplyBubbles.threadId, threadId));
         await tx.delete(slurpMessageClaims).where(eq(slurpMessageClaims.threadId, threadId));

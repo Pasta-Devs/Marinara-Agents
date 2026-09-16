@@ -957,7 +957,7 @@ export function SlurpSettings({
           <header className="relative isolate flex flex-wrap items-start justify-between gap-3 overflow-hidden rounded-xl bg-[linear-gradient(120deg,color-mix(in_srgb,var(--slurp-surface-raised)_94%,transparent),color-mix(in_srgb,var(--noodle-accent)_17%,var(--slurp-surface-raised))_58%,color-mix(in_srgb,var(--slurp-violet)_13%,var(--slurp-surface-raised)))] p-4 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] sm:gap-4 sm:p-5">
             <div className="min-w-0">
               <p className="hidden text-xs font-bold uppercase tracking-[0.18em] text-[var(--noodle-accent)] sm:block">
-                {t("ui.slurp.settings.backstage")}
+                {t("ui.slurp.settings.eyebrow", { defaultValue: "Slurp settings" })}
               </p>
               <h1 className="text-xl font-black tracking-tight text-balance sm:mt-1 sm:text-2xl">
                 {t("ui.slurp.settings.backstage", { defaultValue: "Backstage" })}

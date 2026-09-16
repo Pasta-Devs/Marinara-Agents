@@ -251,7 +251,7 @@ import {
   slurpArcTypeFromProject,
   slurpGeneratedArcProject,
 } from "../services/slurp/slurp-project.js";
-import { generateSlurpArc } from "../services/slurp/slurp-arc-generation.service.js";
+import { generateSlurpArc, SlurpArcGenerationFailure } from "../services/slurp/slurp-arc-generation.service.js";
 import { readSlurpStudioSnapshot, writeSlurpStudioSnapshot } from "../services/slurp/slurp-studio-snapshot.js";
 import { rerollAmbientNoodleProfiles } from "../services/slurp/slurp-ambient-profile-generation.service.js";
 import {
@@ -2573,10 +2573,16 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const creator = await noodle.getNoodlerAccountById((req.params as { id: string }).id);
     if (!creator) return reply.code(404).send({ error: "Creator account not found" });
-    const project = await noodle.addGeneratedProject(
-      creator.id,
-      await generateSlurpArc(app.db, creator.id, [], "", { kind: "foreground" }),
-    );
+    let raw: Record<string, unknown> | null;
+    try {
+      raw = await generateSlurpArc(app.db, creator.id, [], "", { kind: "foreground" });
+    } catch (error) {
+      if (isConnectionAdmissionFailure(error)) return reply.code(409).send({ error: "Generation already in progress" });
+      if (error instanceof SlurpArcGenerationFailure)
+        return reply.code(502).send({ error: error.message, debug: { rawResponse: error.rawResponse } });
+      throw error;
+    }
+    const project = await noodle.addGeneratedProject(creator.id, raw);
     if (!project) return reply.code(502).send({ error: "The model did not return a usable arc. Try again." });
     return { project };
   });
@@ -2591,7 +2597,15 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const creator = await noodle.getNoodlerAccountById((req.params as { id: string }).id);
     if (!creator) return reply.code(404).send({ error: "Creator account not found" });
-    const raw = await generateSlurpArc(app.db, creator.id, [], parsed.data.brief, { kind: "foreground" });
+    let raw: Record<string, unknown> | null;
+    try {
+      raw = await generateSlurpArc(app.db, creator.id, [], parsed.data.brief, { kind: "foreground" });
+    } catch (error) {
+      if (isConnectionAdmissionFailure(error)) return reply.code(409).send({ error: "Generation already in progress" });
+      if (error instanceof SlurpArcGenerationFailure)
+        return reply.code(502).send({ error: error.message, debug: { rawResponse: error.rawResponse } });
+      throw error;
+    }
     const draftId = `draft-${Date.now().toString(36)}`;
     const project = raw
       ? slurpGeneratedArcProject(draftId, raw, new Date(), { origin: "manual", status: "suggested" })

@@ -424,6 +424,7 @@ export function ArcLibraryEditor({
   const [brief, setBrief] = useState("");
   const [selectedChapters, setSelectedChapters] = useState<Set<number>>(new Set());
   const [reviewingGeneratedDraft, setReviewingGeneratedDraft] = useState(false);
+  const importInputId = "slurp-arc-library-import";
   const input =
     "min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base sm:text-sm";
   const button =
@@ -469,10 +470,64 @@ export function ArcLibraryEditor({
     return question && options.length >= 2 ? { question, options } : undefined;
   };
 
+  const exportArc = (type: SlurpArcType) => {
+    const href = URL.createObjectURL(
+      new Blob([JSON.stringify({ ...type, id: undefined, builtin: false, hidden: false }, null, 2)], {
+        type: "application/json",
+      }),
+    );
+    const anchor = document.createElement("a");
+    anchor.href = href;
+    anchor.download = `${
+      type.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "") || "slurp-arc"
+    }.json`;
+    anchor.click();
+    URL.revokeObjectURL(href);
+  };
+
+  const importArc = async (file: File) => {
+    try {
+      const parsed: unknown = JSON.parse(await file.text());
+      if (
+        !parsed ||
+        typeof parsed !== "object" ||
+        Array.isArray(parsed) ||
+        typeof (parsed as { name?: unknown }).name !== "string" ||
+        typeof (parsed as { description?: unknown }).description !== "string" ||
+        !Array.isArray((parsed as { chapters?: unknown }).chapters) ||
+        !Array.isArray((parsed as { tags?: unknown }).tags)
+      )
+        throw new Error("This file is not a valid Slurp Arc.");
+      const value = parsed as SlurpArcType;
+      const imported: SlurpArcType = {
+        ...value,
+        id: `custom-${Date.now().toString(36)}`,
+        name: value.name.trim().slice(0, 80),
+        description: value.description.trim().slice(0, 2_000),
+        tone: typeof value.tone === "string" ? value.tone.trim().slice(0, 80) : "",
+        tags: value.tags
+          .filter((tag): tag is string => typeof tag === "string")
+          .map((tag) => tag.trim())
+          .filter(Boolean)
+          .slice(0, 30),
+        chapters: value.chapters.slice(0, 12),
+        enabled: true,
+        builtin: false,
+        hidden: false,
+      };
+      if (!imported.name) throw new Error("The imported Arc needs a name.");
+      replace(imported);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not import that Arc.");
+    }
+  };
+
   const generateDraft = async () => {
     if (!creatorAccountId || !personaId || !brief.trim()) return;
-    const result = await generate.mutateAsync({ creatorAccountId, personaId, brief: brief.trim() }).catch(() => null);
-    if (!result) return;
+    const result = await generate.mutateAsync({ creatorAccountId, personaId, brief: brief.trim() });
     setDraft(result.type);
     setSelectedChapters(new Set(result.type.chapters.map((_, index) => index)));
     setReviewingGeneratedDraft(true);
@@ -1015,6 +1070,9 @@ export function ArcLibraryEditor({
                   >
                     {t("ui.slurp.settings.arcLibrary.edit")}
                   </button>
+                  <button type="button" className={button} disabled={busy} onClick={() => exportArc(type)}>
+                    {t("ui.slurp.settings.arcLibrary.export", { defaultValue: "Export" })}
+                  </button>
                   <button
                     type="button"
                     className={`${button} text-red-600`}
@@ -1047,6 +1105,22 @@ export function ArcLibraryEditor({
             </li>
           ))}
       </ul>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <input
+          id={importInputId}
+          type="file"
+          accept="application/json,.json"
+          className="sr-only"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (file) void importArc(file);
+          }}
+        />
+        <label htmlFor={importInputId} className={`${button} cursor-pointer border border-[var(--slurp-outline)]`}>
+          {t("ui.slurp.settings.arcLibrary.import", { defaultValue: "Import Arc" })}
+        </label>
+      </div>
       <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
         <label className="block space-y-2 text-sm font-semibold">
           <span className="flex items-center gap-1.5">
@@ -1120,12 +1194,16 @@ export function PromptCard({
   isDefault,
   onEdit,
   onRestore,
+  restoreLabel,
+  disabled = false,
 }: {
   title: string;
   value: string;
   isDefault: boolean;
   onEdit: () => void;
   onRestore: () => void;
+  restoreLabel?: string;
+  disabled?: boolean;
 }) {
   const { t } = useTranslation();
   return (
@@ -1150,16 +1228,17 @@ export function PromptCard({
         <button
           type="button"
           onClick={onRestore}
-          disabled={isDefault}
+          disabled={disabled || isDefault}
           className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-[var(--noodle-accent)]/35 px-3 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 disabled:opacity-45"
         >
           <RotateCcw size={13} />
-          {t("ui.slurp.settings.prompts.restoreDefault")}
+          {restoreLabel ?? t("ui.slurp.settings.prompts.restoreDefault")}
         </button>
         <button
           type="button"
           onClick={onEdit}
-          className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)]"
+          disabled={disabled}
+          className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-45"
         >
           <Pencil size={14} className="text-[var(--noodle-accent)]" />
           {t("ui.slurp.settings.prompts.edit")}

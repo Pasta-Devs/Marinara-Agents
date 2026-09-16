@@ -38,6 +38,42 @@ assert.equal(
 // An override made entirely of whitespace is dropped rather than stored forever.
 assert.deepEqual(sanitizeSlurpPostGuidance({ creators: { ghost: { public: " ", locked: "" } } }).creators, {});
 assert.notEqual(SLURP_BUILT_IN_POST_GUIDANCE.public, SLURP_BUILT_IN_POST_GUIDANCE.locked);
+assert.match(
+  SLURP_BUILT_IN_POST_GUIDANCE.public,
+  /complete and worthwhile on its own/u,
+  "public posts must offer real standalone value rather than being empty ads",
+);
+assert.match(
+  SLURP_BUILT_IN_POST_GUIDANCE.public,
+  /do not .* repetitive subscription pitch/u,
+  "public direction must prevent every post from becoming a sales pitch",
+);
+assert.match(
+  SLURP_BUILT_IN_POST_GUIDANCE.locked,
+  /already subscribed or paid to unlock/u,
+  "locked direction must account for subscriptions and one-time unlocks",
+);
+assert.match(
+  SLURP_BUILT_IN_POST_GUIDANCE.locked,
+  /Premium does not have to mean sexual/u,
+  "premium value must not be reduced to sexual content",
+);
+assert.match(
+  SLURP_BUILT_IN_POST_GUIDANCE.locked,
+  /satisfying payoff rather than a preview/u,
+  "a paid post must deliver instead of selling another layer",
+);
+
+// --- the editor behaves like the other Backstage prompt fields ----------------------------
+const guidanceField = read("client/src/components/slurp/SlurpPostGuidanceField.tsx");
+assert.match(guidanceField, /<PromptCard/u);
+assert.match(guidanceField, /<PromptEditor/u);
+assert.doesNotMatch(guidanceField, /onBlur=/u, "post directions must not save implicitly on blur");
+assert.match(
+  guidanceField,
+  /onSuccess: \(result\) => \{\s*setDraft\(result\.guidance\);\s*setOpen\(true\);/u,
+  "AI output must open as a reviewable draft instead of saving immediately",
+);
 
 // --- draft cleanup ------------------------------------------------------------------------
 assert.equal(cleanSlurpPostGuidanceDraft("```text\nTease them.\n```"), "Tease them.");
@@ -101,6 +137,19 @@ assert.match(
   storage,
   /noodlerPostImageRetryAttempts\(metadata\) >= NOODLER_POST_IMAGE_RETRY_LIMIT\) continue;/u,
   "the automatic pass must stop on the attempt counter, which is what makes deleting the prompt unnecessary",
+);
+
+// --- clearing a conversation uses the host file-query API -------------------------------
+const messageStorage = read("server/src/services/storage/slurp-messages.storage.ts");
+const resetThread = messageStorage.slice(
+  messageStorage.indexOf("async resetThread"),
+  messageStorage.indexOf("async setThreadNotes"),
+);
+assert.match(resetThread, /const \[thread\] = await tx\.select\(\)/u);
+assert.doesNotMatch(
+  resetThread,
+  /\.get\(\)/u,
+  "the file-backed select builder is awaitable but has no Drizzle-style get() method",
 );
 
 // --- image-less posts can generate even when they did not start with an image prompt ----------

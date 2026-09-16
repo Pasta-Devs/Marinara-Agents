@@ -51,6 +51,7 @@ type SlurpStorage = {
 type MessagesStorage = {
   recoverPendingPayments: () => Promise<void>;
   deliverCommission: (id: string, content: string, imageUrl?: string | null) => Promise<{ state: string } | null>;
+  resetThread: (threadId: string) => Promise<void>;
 };
 
 async function main() {
@@ -137,6 +138,9 @@ async function main() {
     const commissionTable = slurpSchema.slurpCommissions as any;
     const messageTable = slurpSchema.slurpMessages as any;
     const threadTable = slurpSchema.slurpThreads as any;
+    const followUpTable = slurpSchema.slurpFollowUps as any;
+    const messageClaimTable = slurpSchema.slurpMessageClaims as any;
+    const replyBubbleTable = slurpSchema.slurpReplyBubbles as any;
     const eventTable = slurpSchema.slurpEvents as any;
     const tieTable = slurpSchema.slurpAudienceTies as any;
 
@@ -464,6 +468,77 @@ async function main() {
       (await rows<any>(messageTable)).filter((message) => message.id === "commission:stale:delivery").length,
       1,
     );
+
+    // Clearing a populated conversation is one atomic reset. Durable reply work disappears,
+    // unfinished commissions close, and paid/delivered commission history remains ledgered.
+    await db.insert(messageTable).values({
+      id: "clear-message",
+      threadId: "dm-thread",
+      senderAccountId: "viewer",
+      role: "viewer",
+      kind: "text",
+      content: "clear me",
+      imageUrl: null,
+      imagePrompt: null,
+      imageClaimToken: null,
+      imageClaimLeaseUntil: null,
+      price: "0",
+      unlockedAt: null,
+      readAt: null,
+      metadata: "{}",
+      senderSnapshot: "{}",
+      createdAt: timestamp,
+    });
+    await db.insert(messageClaimTable).values({
+      id: "clear-claim",
+      threadId: "dm-thread",
+      triggerMessageId: "clear-message",
+      creatorAccountId: "creator",
+      replyMessageId: null,
+      generationEpoch: "0",
+      claimedAt: timestamp,
+    });
+    await db.insert(replyBubbleTable).values({
+      id: "clear-bubble",
+      batchId: "clear-batch",
+      sequence: "0",
+      threadId: "dm-thread",
+      senderAccountId: "creator",
+      messageId: "clear-reply",
+      content: "queued",
+      deliverAt: timestamp,
+      generationEpoch: "0",
+      createdAt: timestamp,
+    });
+    await db.insert(followUpTable).values({
+      id: "clear-follow-up",
+      threadId: "dm-thread",
+      viewerAccountId: "viewer",
+      creatorAccountId: "creator",
+      scheduledAt: timestamp,
+      type: "check_in",
+      reason: "queued",
+      context: "",
+      relatedNoteId: null,
+      sequenceNumber: null,
+      totalInSequence: null,
+      recurringPattern: null,
+      status: "pending",
+      claimedAt: null,
+      sentAt: null,
+      cancelledAt: null,
+      failedAt: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    await db.insert(commissionTable).values(commissionRow("clear-brief", "brief", null, null, null));
+    await messages.resetThread("dm-thread");
+    assert.equal((await rows<any>(messageTable)).filter((row) => row.threadId === "dm-thread").length, 0);
+    assert.equal((await rows<any>(messageClaimTable)).filter((row) => row.threadId === "dm-thread").length, 0);
+    assert.equal((await rows<any>(replyBubbleTable)).filter((row) => row.threadId === "dm-thread").length, 0);
+    assert.equal((await rows<any>(followUpTable)).filter((row) => row.threadId === "dm-thread").length, 0);
+    assert.equal((await rowById<any>(commissionTable, "clear-brief")).state, "declined");
+    assert.ok((await rowById<any>(threadTable, "dm-thread")).clearedAt);
 
     console.log("slurp Phase 1 file-native durability regression passed");
   } finally {

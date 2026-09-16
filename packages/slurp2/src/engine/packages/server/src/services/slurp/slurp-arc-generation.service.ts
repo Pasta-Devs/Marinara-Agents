@@ -21,6 +21,16 @@ import { modelAnswerForCorrection, requireModelAnswer } from "./slurp-model-answ
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { claimSlurpModelBudget, slurpModelWorkerAllows } from "./slurp-model-worker.js";
 
+export class SlurpArcGenerationFailure extends Error {
+  constructor(
+    message: string,
+    readonly rawResponse: string,
+  ) {
+    super(message);
+    this.name = "SlurpArcGenerationFailure";
+  }
+}
+
 export function buildSlurpArcGenerationMessages(input: {
   stagePersonality: string;
   gender: string | null;
@@ -167,7 +177,7 @@ export async function generateSlurpArc(
     const response = await provider.chatComplete(messages, options);
     try {
       return parseSlurpGeneratedArc(response.content ?? "");
-    } catch {
+    } catch (firstError) {
       // One retry with the shape spelled out, same as the stage profile draft.
       const answer = modelAnswerForCorrection(response.content);
       if (!(await claimSlurpModelBudget(db, settings.modelBudget, "arc"))) return null;
@@ -183,9 +193,20 @@ export async function generateSlurpArc(
         ],
         options,
       );
-      return parseSlurpGeneratedArc(retry.content ?? "");
+      try {
+        return parseSlurpGeneratedArc(retry.content ?? "");
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        throw new SlurpArcGenerationFailure(
+          `The model returned an unusable arc after two attempts. ${reason} First attempt: ${
+            firstError instanceof Error ? firstError.message : String(firstError)
+          }`,
+          (retry.content ?? response.content ?? "").slice(0, 8_000),
+        );
+      }
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof SlurpArcGenerationFailure) throw error;
     return null;
   }
 }

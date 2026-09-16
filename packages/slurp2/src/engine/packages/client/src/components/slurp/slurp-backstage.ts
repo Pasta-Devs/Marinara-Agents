@@ -41,7 +41,7 @@ export const SLURP_BACKSTAGE_DEFAULT_TARGET: Record<SlurpBackstageSection, Slurp
 export const SLURP_BACKSTAGE_SECTION_LABELS: Record<SlurpBackstageSection, string> = {
   overview: "Overview",
   creators: "Creators",
-  world: "Slurp world",
+  world: "Features",
   automation: "Automation",
   maintenance: "Maintenance",
 };

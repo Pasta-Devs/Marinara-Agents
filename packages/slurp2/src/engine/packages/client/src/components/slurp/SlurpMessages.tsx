@@ -80,7 +80,7 @@ import {
  * creator, a thread already generating, and a missing connection were all the same blank screen.
  */
 const SLURP_REPLY_STATUS_FALLBACKS: Record<string, string> = {
-  queued: "{{name}} has seen this. They are not around right now and will answer later.",
+  queued: "Delivered. A reply from {{name}} is queued for later.",
   cooling: "{{name}} has stepped away from this conversation. Give them some time.",
   busy: "{{name}} is already writing back. Give it a moment.",
   ineligible: "{{name}} is not answering this conversation right now.",

@@ -54,12 +54,26 @@ import { prepareSlurpPostImageContexts, slurpImageCaptioning } from "./slurp-pos
 import { createSlurpMessagesStorage, type SlurpMessage } from "../storage/slurp-messages.storage.js";
 import type { SlurpDmPolicy } from "./slurp-messaging.js";
 import { resolveNoodlerCharacterCanon } from "./slurp-source-resolve.js";
-import { claimSlurpModelBudget, slurpModelWorkerAllows, type SlurpModelWorkerContext } from "./slurp-model-worker.js";
+import {
+  claimSlurpModelBudget,
+  getSlurpModelBudgetLedger,
+  slurpModelBudgetRetryAt,
+  slurpModelWorkerAllows,
+  type SlurpModelWorkerContext,
+} from "./slurp-model-worker.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
 /** A DM has more room than a comment reply, but not enough to become a monologue. */
 export const SLURP_MESSAGE_CONTENT_MAX_LENGTH = 900;
+
+/** Expected throttling, kept distinct from connection and generation failures. */
+export class SlurpMessageBudgetUnavailableError extends Error {
+  constructor(readonly retryAt: string | null) {
+    super("Slurp AI reply budget is unavailable.");
+    this.name = "SlurpMessageBudgetUnavailableError";
+  }
+}
 
 /** How many turns of history the model sees. Enough to hold a thread, short enough to stay cheap. */
 const HISTORY_TURNS = 16;
@@ -444,9 +458,11 @@ export async function generateSlurpMessageReply(input: SlurpMessagePromptInput):
   const { messages, stance, disclosureMode, publicIdentity, recentPosts } = await buildSlurpMessagePrompt(input);
   const budget = (await createSlurpStorage(input.db).getSettings()).modelBudget;
   const context = input.workerContext ?? "present";
-  if (!slurpModelWorkerAllows(budget, context) || !(await claimSlurpModelBudget(input.db, budget, "dm_reply"))) {
-    throw new Error("Slurp AI budget does not allow this reply yet.");
-  }
+  if (!slurpModelWorkerAllows(budget, context)) throw new SlurpMessageBudgetUnavailableError(null);
+  if (!(await claimSlurpModelBudget(input.db, budget, "dm_reply")))
+    throw new SlurpMessageBudgetUnavailableError(
+      slurpModelBudgetRetryAt(budget, await getSlurpModelBudgetLedger(input.db), "dm_reply"),
+    );
   const connections = createConnectionsStorage(input.db);
   const fallbackConnection = await connections.getFallbackForMain();
   const provider = withConnectionFallbackProvider({

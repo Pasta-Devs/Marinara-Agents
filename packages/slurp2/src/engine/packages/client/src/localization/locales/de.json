@@ -94,7 +94,7 @@
   "ui.slurp.settings.backstage.sections.creators": "Creator",
   "ui.slurp.settings.backstage.sections.maintenance": "Wartung",
   "ui.slurp.settings.backstage.sections.overview": "Übersicht",
-  "ui.slurp.settings.backstage.sections.world": "Slurp-Welt",
+  "ui.slurp.settings.backstage.sections.world": "Funktionen",
   "ui.slurp.settings.backstage.undo": "Rückgängig",
   "ui.slurp.home.latestDrops": "Neueste Drops",
   "ui.slurp.home.latestDropsDetail": "Neue Beiträge aus deinem Creator-Netzwerk.",
@@ -196,9 +196,9 @@
   "ui.slurp.settings.prompts.edit": "Prompt bearbeiten",
   "ui.slurp.settings.prompts.save": "Prompt speichern",
   "ui.slurp.settings.prompts.publicGuidance": "Vorgabe für öffentliche Beiträge",
-  "ui.slurp.settings.prompts.publicGuidanceDetail": "Wozu ein kostenloser Beitrag dient. Alle können ihn lesen, deshalb gewinnt er neue Abonnenten. Leer lassen, um die eingebaute Vorgabe zu verwenden.",
+  "ui.slurp.settings.prompts.publicGuidanceDetail": "Legt die Aufgabe eines kostenlosen Beitrags fest: allen Lesern etwas Wertvolles geben und ehrliche Neugier auf Premium-Inhalte wecken.",
   "ui.slurp.settings.prompts.lockedGuidance": "Vorgabe für bezahlte Beiträge",
-  "ui.slurp.settings.prompts.lockedGuidanceDetail": "Wozu ein bezahlter Beitrag dient. Nur Abonnenten lesen ihn, er ist also die Belohnung. Leer lassen, um die eingebaute Vorgabe zu verwenden.",
+  "ui.slurp.settings.prompts.lockedGuidanceDetail": "Legt die Aufgabe eines bezahlten Beitrags fest: die zusätzliche Nähe, Offenheit, Tiefe oder den Zugang liefern, für den bereits bezahlt wurde.",
   "ui.slurp.settings.prompts.guidanceGenerate": "Mit KI schreiben",
   "ui.slurp.settings.prompts.guidanceUseBuiltIn": "Eingebaute verwenden",
   "ui.slurp.settings.prompts.guidanceSavedAccess": "Beitragsvorgabe gespeichert.",
@@ -448,5 +448,6 @@
   "ui.slurp.settings.backstage.preview.ads.sampleCopy.scammy": "KAFFEE-GEHEIMNIS, das du nicht lesen sollst. Klicke, bevor es weg ist!!",
   "ui.slurp.settings.backstage.preview.ads.sampleCopy.local": "Gleich um die Ecke geröstet. Sag Marta Hallo, sie kennt deine Bestellung.",
   "ui.slurp.settings.backstage.preview.ads.sampleCopy.luxury": "Single Origin, von Hand aufgegossen, still perfekt. Nur auf Einladung.",
-  "ui.slurp.settings.backstage.preview.ads.sampleCopy.unhinged": "Ich trank elf Tassen und höre jetzt Farben. Kauf die Bohnen."
+  "ui.slurp.settings.backstage.preview.ads.sampleCopy.unhinged": "Ich trank elf Tassen und höre jetzt Farben. Kauf die Bohnen.",
+  "ui.slurp.settings.eyebrow": "Slurp-Einstellungen"
 }
