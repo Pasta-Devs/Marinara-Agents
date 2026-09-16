@@ -3676,7 +3676,7 @@ function StageProfileView({
   const bannerSrc = useSlurpMediaSrc(profile.bannerUrl, { width: 1280 });
   const [accessSettingsOpen, setAccessSettingsOpen] = useState(false);
   const [automationOpen, setAutomationOpen] = useState(false);
-  const [creatorToolsOpen, setCreatorToolsOpen] = useState(draft.postType === "story");
+  const [creatorToolsOpen, setCreatorToolsOpen] = useState(true);
   useEffect(() => {
     if (composerOpenSignal > 0) setCreatorToolsOpen(true);
   }, [composerOpenSignal]);
@@ -4406,8 +4406,8 @@ function StageProfileView({
             )}
             {managedCreator && !editing && (
               <section data-slurp-creator-tools className="min-w-0">
-                {/* Collapsed, this is one thin line under the header — the tools are the creator's
-                  own business, not the first thing anyone reads on the profile. */}
+                {/* Open by default: this panel only renders on a creator you own, and posting is
+                  what you came here to do. The line above it still collapses the whole thing. */}
                 <div className="flex h-11 items-stretch">
                   <button
                     type="button"
@@ -4484,6 +4484,7 @@ function StageProfileView({
                   <NoodlerPostComposer
                     key={profile.id}
                     profile={profile}
+                    openSignal={composerOpenSignal}
                     availablePosts={posts}
                     draft={draft}
                     onDraftChange={onDraftChange}
@@ -6601,6 +6602,7 @@ function NoodlerPostComposer({
   profile,
   availablePosts,
   collapsible = true,
+  openSignal = 0,
   draft,
   onDraftChange,
   onClearDraft,
@@ -6613,6 +6615,8 @@ function NoodlerPostComposer({
   profile: SlurpManagedStageProfile;
   availablePosts: SlurpProfilePost[];
   collapsible?: boolean;
+  /** Increments when something outside asks for the composer, so a collapsed one reopens. */
+  openSignal?: number;
   draft: NoodlerPostDraft;
   onDraftChange: (patch: Partial<NoodlerPostDraft>) => void;
   onClearDraft: () => void;
@@ -6630,7 +6634,11 @@ function NoodlerPostComposer({
     composerSettings && composerSettings.storyImageHeight > 0
       ? composerSettings.storyImageWidth / composerSettings.storyImageHeight
       : 4 / 5;
-  const [expanded, setExpanded] = useState(draft.postType === "story");
+  // Posting is the reason a creator opens their own profile, so the composer starts ready.
+  const [expanded, setExpanded] = useState(true);
+  useEffect(() => {
+    if (openSignal > 0) setExpanded(true);
+  }, [openSignal]);
   const [postError, setPostError] = useState<string | null>(null);
   const [guideError, setGuideError] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<NoodlerComposerTool | null>(null);

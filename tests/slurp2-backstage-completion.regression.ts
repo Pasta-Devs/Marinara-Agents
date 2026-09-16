@@ -12,6 +12,7 @@ const world = component("SlurpBackstageWorld.tsx");
 const overview = component("SlurpBackstageOverview.tsx");
 const workflow = component("SlurpBackstageWorkflow.tsx");
 const creators = component("SlurpBackstageCreators.tsx");
+const home = component("SlurpHome.tsx");
 
 for (const wizard of ["imageWizardOpen", "audienceWizardOpen", "messagingWizardOpen"]) {
   assert.match(`${automation}\n${world}`, new RegExp(`\\b${wizard}\\b`), `${wizard} must remain reachable`);
@@ -44,6 +45,21 @@ assert.match(
   creators,
   /setSelectedCreatorId\(creator\.id\);[\s\S]*setTab\("profile"\);/u,
   "selecting a Creator must return to the safe Profile tab",
+);
+
+// The Profile rail shortcuts must reach the composer itself, not only the panel around it.
+assert.match(home, /const \[creatorToolsOpen, setCreatorToolsOpen\] = useState\(true\)/u, "creator tools start open");
+assert.match(home, /const \[expanded, setExpanded\] = useState\(true\)/u, "the post composer starts expanded");
+assert.match(home, /openSignal=\{composerOpenSignal\}/u, "the rail shortcuts reach the composer");
+assert.match(
+  home,
+  /if \(openSignal > 0\) setExpanded\(true\)/u,
+  "a collapsed composer must reopen when a shortcut asks for it",
+);
+assert.match(
+  home,
+  /postType: "story", poll: null, title: "" \}\);\s*\n\s*setComposerOpenSignal/u,
+  "Add story must preselect the story type and open the composer",
 );
 
 console.log("Slurp2 Backstage completion regression passed");
