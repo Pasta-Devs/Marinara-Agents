@@ -107,6 +107,8 @@ The two side rails of 1.6.0 are gone: Help and the changelog live only in Settin
 - **World creation and Settings** (1.0.0): a Characters step for the cast, the art size and the outfits per rotation as settings, expandable lists, the changelog in one column as patch notes, and outfit directives are gone.
 - **Modes** (1.3.0): no cards for modes that are not out, and a closed mode says the Rank it needs.
 
+**1.8.1 is the first week of 1.8.0 played, and what it turned up.** The chapter written ahead is now written by the server, so a tab change, closing Gacha Forge or switching worlds no longer stops it, and coming back never restores a loading screen for a scene the chain is writing -- it used to drop the player on "Generating story" and then inside a scene they had not reached; a scene being read stays on its line when the tab comes back. The cards you pick can be reordered in place, the Cast lorebook list expands like World lorebooks (and the expanded list keeps its rows in Settings, where it opened as bare text), the cast counter counts the featured banner's two cards, and the record prompts say that prose keeps the language's own spelling -- units written in Spanish had come back without accents. Measured and fixed in Firefox: the top bar spilled out of the game at 175% text (105px), and the creator's scrollbars sat on the content (0px). It registers 113 routes.
+
 All generation — world text, cast sheets, portraits, banner art — runs through the Engine profile's own configured model and image connections. The package adds no external services and sends nothing anywhere else.
 
 ## Payloads

@@ -1,3 +1,11 @@
+## 1.8.1 — 2026-09-15
+- Writing a chapter ahead keeps going on its own: switching tabs, closing Gacha Forge or changing worlds no longer stops it.
+- Coming back to the Gacha Forge tab no longer drops you on "Generating story" or inside a scene you had not reached, and a scene you were reading stays on its line.
+- The character cards you pick can be moved up and down; the game takes them in that order. The Cast lorebook list can be expanded like World lorebooks.
+- The card counter in world creation also counts the two cards each featured banner takes.
+- Characters written in your world's language keep their accents and their ñ.
+- Fixed: in Firefox the top bar no longer runs past the game at large text sizes; the creator's scrollbars keep their distance; the expanded lorebook list in Settings draws its rows again.
+
 ## 1.8.0 — 2026-09-14
 - Combat is manual: on each turn you choose what a unit does and who it hits. Auto still plays the fight for you.
 - The Tower opens at Rank 20: a hundred floors, Tower Coin and a Tower shelf in the Shop, monthly floors built from your own story.

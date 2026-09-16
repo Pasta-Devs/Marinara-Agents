@@ -52,7 +52,7 @@ export const SLURP_DEFAULT_CREATOR_MESSAGING: SlurpCreatorMessaging = {
   commissionBase: 40,
   commissionMin: 10,
   commissionMax: 400,
-  autoQuote: false,
+  autoQuote: true,
   pricedAt: null,
 };
 
@@ -90,7 +90,9 @@ export function readSlurpCreatorMessaging(
     commissionBase,
     commissionMin,
     commissionMax,
-    autoQuote: typeof raw.autoQuote === "boolean" ? raw.autoQuote : defaults.autoQuote,
+    // Saving any price used to write the whole object, so a stored `false` does not prove anyone
+    // turned quoting off. Only a value the player set on purpose overrides the default.
+    autoQuote: raw.autoQuoteChosen === true && typeof raw.autoQuote === "boolean" ? raw.autoQuote : defaults.autoQuote,
     pricedAt: typeof raw.pricedAt === "string" ? raw.pricedAt : defaults.pricedAt,
   };
 }

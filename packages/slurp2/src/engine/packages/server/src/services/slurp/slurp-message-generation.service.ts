@@ -8,6 +8,8 @@
  */
 import { type APIProvider, type NoodleAccount } from "@marinara-engine/shared";
 import { isDebugAgentsEnabled } from "../../config/runtime-config.js";
+import { resolveSlurpCreatorMenu } from "./slurp-post-guidance.storage.js";
+import { slurpPlatformEventInstruction } from "./slurp-platform-events.js";
 import type { DB } from "../../db/connection.js";
 import { logDebugOverride } from "../../lib/logger.js";
 import { resolveBaseUrl } from "../generation/connection-base-url.js";
@@ -54,12 +56,26 @@ import { prepareSlurpPostImageContexts, slurpImageCaptioning } from "./slurp-pos
 import { createSlurpMessagesStorage, type SlurpMessage } from "../storage/slurp-messages.storage.js";
 import type { SlurpDmPolicy } from "./slurp-messaging.js";
 import { resolveNoodlerCharacterCanon } from "./slurp-source-resolve.js";
-import { claimSlurpModelBudget, slurpModelWorkerAllows, type SlurpModelWorkerContext } from "./slurp-model-worker.js";
+import {
+  claimSlurpModelBudget,
+  getSlurpModelBudgetLedger,
+  slurpModelBudgetRetryAt,
+  slurpModelWorkerAllows,
+  type SlurpModelWorkerContext,
+} from "./slurp-model-worker.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
 /** A DM has more room than a comment reply, but not enough to become a monologue. */
 export const SLURP_MESSAGE_CONTENT_MAX_LENGTH = 900;
+
+/** Expected throttling, kept distinct from connection and generation failures. */
+export class SlurpMessageBudgetUnavailableError extends Error {
+  constructor(readonly retryAt: string | null) {
+    super("Slurp AI reply budget is unavailable.");
+    this.name = "SlurpMessageBudgetUnavailableError";
+  }
+}
 
 /** How many turns of history the model sees. Enough to hold a thread, short enough to stay cheap. */
 const HISTORY_TURNS = 16;
@@ -95,6 +111,10 @@ export function buildSlurpMessageChat(input: {
   recentPosts: Array<{ id: string; title: string | null; content: string; access: string; imageUrl: string | null }>;
   /** What the pictures in the conversation show, keyed by message id. */
   imageContexts?: Map<string, string>;
+  /** The Creator's private content menu. See `slurp-post-guidance.ts`. */
+  contentMenu?: string;
+  /** Holidays and site events running today. See `slurp-platform-events.ts`. */
+  platformEvents?: string | null;
 }): ChatMessage[] {
   const protect = (value: string | null | undefined) =>
     protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
@@ -105,6 +125,9 @@ export function buildSlurpMessageChat(input: {
     "Write only as the supplied creator's stage persona. Never write the fan's side of the conversation.",
     NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
     input.generationGuidance.trim(),
+    input.contentMenu
+      ? "creator.contentMenu is your private content menu: what you offer and what you will not do. Stay inside it when fans ask for things, and turn down anything it rules out in your own voice. Never quote it as a list."
+      : "",
     noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
     input.characterCanon
       ? "Character canon is permanent identity and relationship context. Stay consistent with it unless the conversation explicitly establishes a change."
@@ -150,11 +173,13 @@ export function buildSlurpMessageChat(input: {
     .join("\n");
 
   const data = {
+    ...(input.platformEvents ? { platformEvents: input.platformEvents } : {}),
     creator: {
       displayName: protect(input.creator.displayName),
       handle: protect(input.creator.handle),
       bio: protect(input.creator.bio),
       stageVoice: protect(input.creator.settings.privacy.stagePersonality),
+      ...(input.contentMenu ? { contentMenu: protect(input.contentMenu) } : {}),
       dmPolicy: input.dmPolicy,
     },
     fan: {
@@ -407,6 +432,8 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
     .catch(() => new Map<string, string>());
   const messages = buildSlurpMessageChat({
     ...input,
+    contentMenu: await resolveSlurpCreatorMenu(input.db, input.creator.id).catch(() => ""),
+    platformEvents: slurpPlatformEventInstruction(settings.platformEvents, new Date()),
     imageContexts,
     fanVoice,
     fanMemory,
@@ -444,9 +471,11 @@ export async function generateSlurpMessageReply(input: SlurpMessagePromptInput):
   const { messages, stance, disclosureMode, publicIdentity, recentPosts } = await buildSlurpMessagePrompt(input);
   const budget = (await createSlurpStorage(input.db).getSettings()).modelBudget;
   const context = input.workerContext ?? "present";
-  if (!slurpModelWorkerAllows(budget, context) || !(await claimSlurpModelBudget(input.db, budget, "dm_reply"))) {
-    throw new Error("Slurp AI budget does not allow this reply yet.");
-  }
+  if (!slurpModelWorkerAllows(budget, context)) throw new SlurpMessageBudgetUnavailableError(null);
+  if (!(await claimSlurpModelBudget(input.db, budget, "dm_reply")))
+    throw new SlurpMessageBudgetUnavailableError(
+      slurpModelBudgetRetryAt(budget, await getSlurpModelBudgetLedger(input.db), "dm_reply"),
+    );
   const connections = createConnectionsStorage(input.db);
   const fallbackConnection = await connections.getFallbackForMain();
   const provider = withConnectionFallbackProvider({

@@ -1,3 +1,5 @@
+import type { SlurpBackstageSection, SlurpBackstageTarget } from "./slurp-backstage";
+
 export const SLURP_API_PREFIX = "/api/slurp2";
 
 export type SlurpProfileConnection = "followers" | "following";
@@ -29,7 +31,10 @@ export type SlurpNavigationState =
   | {
       mode: "creator-settings";
       tab?: "creator";
-      section?: SlurpSettingsSection;
+      section?: SlurpBackstageSection;
+      target?: SlurpBackstageTarget;
+      /** A search result to scroll to and focus once the target renders. Never persisted. */
+      settingKey?: string;
       returnTo?: SlurpNavigationState;
     };
 
@@ -40,22 +45,8 @@ export type SlurpNavigationState =
  * check. It used to be copied into each, and the copies drifted — the store silently dropped a
  * persisted `section: "ads"` because its copy never learned about it.
  */
-export const SLURP_SETTINGS_SECTIONS = [
-  "overview",
-  "general",
-  "creators",
-  "tags",
-  "arcs",
-  "messaging",
-  "images",
-  "audience",
-  "ads",
-  "wallet",
-  "autopurge",
-  "advanced",
-] as const;
-
-export type SlurpSettingsSection = (typeof SLURP_SETTINGS_SECTIONS)[number];
+export { SLURP_BACKSTAGE_SECTIONS as SLURP_SETTINGS_SECTIONS } from "./slurp-backstage";
+export type { SlurpBackstageSection as SlurpSettingsSection } from "./slurp-backstage";
 
 export type SlurpSourceKind = "character" | "persona";
 

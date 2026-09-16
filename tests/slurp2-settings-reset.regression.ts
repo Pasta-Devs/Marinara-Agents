@@ -10,6 +10,7 @@ import {
   SLURP_SETTINGS_SECTION_KEYS,
   slurpSettingsResetPatch,
 } from "../packages/slurp2/src/engine/packages/client/src/components/slurp/slurp-settings-defaults";
+import { slurp2BackstageSource } from "./slurp2-backstage-source";
 
 // The client type lists every setting by name. The server defaults spread some in (the reply
 // delays), so a line scan of them misses keys; the type does not.
@@ -37,11 +38,8 @@ assert.deepEqual(changedSlurpSettingKeys(changed, defaults, "general"), ["storyR
 assert.deepEqual(slurpSettingsResetPatch(changed, defaults, "general"), { storyRate: "rare" });
 assert.deepEqual(changedSlurpSettingKeys(changed, defaults, "audience"), [], "equal arrays are not a change");
 
-const settingsView = readFileSync(
-  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx",
-  "utf8",
-);
-assert.match(settingsView, /save\(slurpSettingsResetPatch\(settings, defaults, section\)\)/u);
+const settingsView = slurp2BackstageSource();
+assert.match(settingsView, /save\(slurpSettingsResetPatch\(settings, defaults, target\)\)/u);
 const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
 assert.match(routes, /app\.get\("\/settings\/defaults", async \(\) => DEFAULT_SLURP_SETTINGS\)/u);
 

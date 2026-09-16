@@ -1,5 +1,16 @@
 # Slurp Remastered release notes
 
+## 0.0.17 — 2026-09-16
+
+- Settings is now Backstage: Overview, Creators, Features, Automation, and Maintenance, with setting search and live previews.
+- Creators shows metrics and totals for every Creator. Click one to open its settings, content menu, message prices, and collab partners.
+- Features -> Events and holidays: yearly events that Creators mention in posts, replies, and messages.
+- Free teaser posts: some automatic posts go out free to win subscribers.
+- Featured, buried, and viral weeks change post reach, and viral posts bring a rush of followers.
+- Fans who spend a lot and show up constantly can become Too attached.
+- Crossovers prefer collab partners, and commissions get a quote by default.
+- Feed posts have Edit, Delete, and Show image context in the post menu again.
+
 ## 0.0.16 — 2026-09-15
 
 - Settings -> Audience is simpler: one Activity choice (Off, Quiet, Realistic, Lively, Generous), crowd size and tone up front, and fan types, AI writing and advanced numbers in folded sections. Off also stops commissions, DMs and the activity pulse.

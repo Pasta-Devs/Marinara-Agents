@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { slurp2BackstageSource } from "./slurp2-backstage-source";
 const base = readFileSync(
   "packages/slurp2/src/engine/packages/server/src/services/garnish-ads/garnish-ads.base.ts",
   "utf8",
@@ -44,10 +45,7 @@ assert.match(
 );
 assert.match(home, /ui\.slurp\.ads\.opened/u, "the inline promotion CTA must provide user feedback");
 
-const settings = readFileSync(
-  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx",
-  "utf8",
-);
+const settings = slurp2BackstageSource();
 assert.match(settings, /ui\.slurp\.settings\.inlinePromotions/u);
 assert.match(settings, /ui\.slurp\.settings\.inlinePromotionsDetail/u);
 

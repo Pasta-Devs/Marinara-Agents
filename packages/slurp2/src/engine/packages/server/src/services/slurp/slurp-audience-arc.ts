@@ -15,7 +15,7 @@
 
 import { SLURP_FUNNEL_STAGES, type SlurpFunnelStage } from "./slurp-population.js";
 
-export const SLURP_AUDIENCE_ARCS = ["steady", "rising", "cooling", "burnout", "returning"] as const;
+export const SLURP_AUDIENCE_ARCS = ["steady", "rising", "cooling", "burnout", "returning", "overattached"] as const;
 
 export type SlurpAudienceArc = (typeof SLURP_AUDIENCE_ARCS)[number];
 
@@ -61,6 +61,11 @@ export function slurpNextAudienceArc(subject: SlurpAudienceArcSubject): SlurpAud
 
   if (daysSinceSeen >= 10) return "cooling";
 
+  // The parasocial spiral: somebody spending heavily and showing up constantly has stopped being a
+  // fan and started needing something. Checked before rising, because it is rising gone too far.
+  // It passes once they ease off (a few quiet days), not on a timer.
+  if (subject.spent >= 250 && interactions >= 30 && daysSinceSeen <= 2) return "overattached";
+
   // Rising needs both recency and a real relationship behind it, or every active liker reads as
   // being on the way up.
   if (daysSinceSeen <= 3 && interactions >= 8 && stageIndex >= SLURP_FUNNEL_STAGES.indexOf("follower")) {
@@ -82,7 +87,7 @@ export function slurpNextAudienceArc(subject: SlurpAudienceArcSubject): SlurpAud
  */
 export function isNotableAudienceArcChange(from: SlurpAudienceArc, to: SlurpAudienceArc): boolean {
   if (from === to) return false;
-  return to === "burnout" || to === "returning" || to === "rising";
+  return to === "burnout" || to === "returning" || to === "rising" || to === "overattached";
 }
 
 /** One clause describing the direction, for the relationship line in a prompt. */
@@ -96,6 +101,8 @@ export function slurpAudienceArcDescription(arc: SlurpAudienceArc): string | nul
       return "used to be one of your biggest supporters and has gone quiet";
     case "returning":
       return "drifted away for a while and has just come back";
+    case "overattached":
+      return "is getting too attached: spending a lot, here constantly, and starting to want more than a fan gets. Stay warm, but gently and clearly hold your boundaries, and do not promise things you will not give";
     default:
       return null;
   }

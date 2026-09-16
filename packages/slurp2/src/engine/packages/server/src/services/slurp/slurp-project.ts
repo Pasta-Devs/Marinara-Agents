@@ -21,6 +21,8 @@
  * `slurp-post-variation.ts` for the rotation that decides which.
  */
 
+import { z } from "zod";
+
 import { SLURP_MODIFIER_KINDS, type SlurpModifierKind } from "./slurp-creator-state.js";
 
 /** Longest title. Matches `SLURP_GOAL_LABEL_MAX_LENGTH`: long enough to name a thread, short enough for one line. */
@@ -426,10 +428,17 @@ export function slurpCrossoverPartner(input: {
   at: Date;
   creatorTags: readonly string[];
   candidates: readonly { id: string; tags: readonly string[]; related: boolean; eligible: boolean }[];
+  /** Creators the player paired with this one as collab partners. Preferred over tag matches. */
+  collabIds?: readonly string[];
 }): string | null {
   const day = Math.floor(input.at.getTime() / DAY_MS);
   if (hash(`${input.creatorAccountId}:${day}:crossover`) % 4 !== 0) return null;
   const tags = new Set(input.creatorTags.map((tag) => tag.toLocaleLowerCase()));
+  const paired = input.candidates
+    .filter((candidate) => candidate.eligible && input.collabIds?.includes(candidate.id))
+    .map((candidate) => candidate.id)
+    .sort();
+  if (paired.length) return paired[hash(`${input.creatorAccountId}:${day}:partner`) % paired.length]!;
   const fits = input.candidates
     .filter(
       (candidate) =>
@@ -1516,4 +1525,25 @@ export function slurpProjectChoose(
     history: project.history.map((entry, index, list) => (index === list.length - 1 ? { ...entry, poll } : entry)),
   };
   return slurpProjectRecord(settled, nextChapter(settled, at), at);
+}
+
+/** A pair of Creators the player allows to collab, and what they make together. */
+export const slurpCreatorCollabSchema = z.object({
+  creatorIds: z.tuple([z.string().min(1).max(128), z.string().min(1).max(128)]),
+  content: z.string().trim().max(600).default(""),
+});
+export type SlurpCreatorCollab = z.infer<typeof slurpCreatorCollabSchema>;
+export const slurpCreatorCollabsSchema = z.array(slurpCreatorCollabSchema).max(500);
+
+/** Every collab entry that includes this Creator, as partner id and content. */
+export function slurpCollabPartners(
+  collabs: readonly SlurpCreatorCollab[],
+  creatorId: string,
+): { partnerId: string; content: string }[] {
+  return collabs.flatMap((collab) => {
+    const [a, b] = collab.creatorIds;
+    if (a === creatorId && b !== creatorId) return [{ partnerId: b, content: collab.content }];
+    if (b === creatorId && a !== creatorId) return [{ partnerId: a, content: collab.content }];
+    return [];
+  });
 }

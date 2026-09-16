@@ -29,7 +29,7 @@ const inbox = home.slice(home.indexOf("function SlurpInboxHub("), home.indexOf("
 assert.doesNotMatch(inbox, /role="tablist"|role="tab"/u);
 assert.doesNotMatch(inbox, /return \(\) => markSeen\(personaId\)/u, "opening Inbox must not mark Activity seen");
 assert.match(inbox, /onClick=\{\(\) => markSeen\(personaId\)\}/u, "Activity keeps an explicit read action");
-assert.match(store, /state\.navigation\.view === "notifications"[\s\S]*?view: "notifications"/u);
+assert.match(store, /navigation\.view === "notifications"[\s\S]*?view: "notifications"/u);
 assert.match(home, /initialActivity/u, "legacy Notifications navigation must focus Activity");
 assert.match(home, /notificationsQuery\.data\?\.unseenCount[\s\S]*?inboxThreadsQuery\.data\?\.unread/u);
 assert.match(inbox, /<MessageCircle[\s\S]*?<Avatar[\s\S]*?thread\.creatorDisplayName/u);

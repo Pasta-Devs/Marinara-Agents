@@ -25,6 +25,7 @@ import { isConnectionAdmissionFailure, type ConnectionAdmissionMode } from "../g
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { resolveNoodlerImageConnectionId } from "./slurp-image-connections.js";
+import { resolveSlurpCreatorMenu, resolveSlurpPostGuidance } from "./slurp-post-guidance.storage.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createSlurpStorage, type SlurpAccount } from "../storage/slurp.storage.js";
@@ -40,7 +41,13 @@ import type { NoodleImagePromptReviewItem } from "./slurp-public-images.service.
 import { getErrorMessage } from "./slurp-public-support.js";
 import { noodleResponseFormat } from "./slurp-response-format.js";
 import { buildSlurpPostTimingContext } from "./slurp-post-timing.js";
-import { slurpPostProject, slurpPostVariation, slurpPostVariationInstruction } from "./slurp-post-variation.js";
+import {
+  SLURP_TEASER_INSTRUCTION,
+  slurpPostProject,
+  slurpPostVariation,
+  slurpPostVariationInstruction,
+  slurpTeaserPost,
+} from "./slurp-post-variation.js";
 import {
   slurpArcImageLine,
   slurpArcRotation,
@@ -62,6 +69,7 @@ export { NOODLER_FORMAT_MAX_LENGTH, type NoodlerContentFormat } from "./slurp-co
 // this file, which cannot be imported without a database and an LLM provider.
 import { protectNoodlerGeneratedIdentity, type PublicIdentity } from "./slurp-identity-protection.js";
 import { resolveNoodlerCharacterCanon } from "./slurp-source-resolve.js";
+import { slurpPlatformEventInstruction } from "./slurp-platform-events.js";
 
 export {
   protectNoodlerGeneratedIdentity,
@@ -229,6 +237,8 @@ function formatNoodlerPostHistory(posts: NoodlerManagedPost[], protect: (value: 
 export function buildNoodlerPostMessages(input: {
   account: Pick<NoodleAccount, "displayName" | "handle" | "bio">;
   stagePersonality: string;
+  /** The Creator's private content menu. See `slurp-post-guidance.ts`. */
+  contentMenu?: string;
   sourceCharacterContext: string;
   disclosureMode: NoodleIdentityDisclosure;
   publicIdentity: PublicIdentity | null;
@@ -242,6 +252,13 @@ export function buildNoodlerPostMessages(input: {
   variationInstruction?: string;
   /** From `slurp-post-stance.ts`: who this Creator is today. Absent when today is unremarkable. */
   conditionInstruction?: string;
+  /** From `slurp-platform-events.ts`: holidays and site events running today. Absent on a normal day. */
+  eventInstruction?: string;
+  /**
+   * What this post is for, given who can read it: the resolved public or locked guidance from
+   * `slurp-post-guidance.ts`. Absent only for a caller that does not know the access yet.
+   */
+  accessInstruction?: string;
   /** A few long-term notes from the Creator's most active thread. Absent when there are none. */
   fanMemory?: string[];
   /** The project this post continues, with that project's own recent posts. Absent for a loose post. */
@@ -272,6 +289,12 @@ export function buildNoodlerPostMessages(input: {
     ...(guidance ? ["## Creative direction", guidance, "## End creative direction"] : []),
     noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
     NOODLER_FORMAT_PROMPTS[format],
+    // A public post and a paid post do different jobs, and writing both from one set of
+    // instructions made the free feed give away the payoff and the paid feed sell what the reader
+    // had already bought. Fenced like the creative direction above, because the text is editable.
+    ...(input.accessInstruction?.trim()
+      ? ["## Who can read this post", input.accessInstruction.trim(), "## End who can read this post"]
+      : []),
     // Tone, mood balance, and the adult flirty lean are supplied by the editable
     // generation guidance (see input.generationGuidance above), not hardcoded here.
     // "Do not reuse their exact wording" was the only anti-repetition rule, and eight different
@@ -295,6 +318,11 @@ export function buildNoodlerPostMessages(input: {
     `Handle: @${protect(input.account.handle)}`,
     `Bio: ${protect(input.account.bio) || "No bio provided."}`,
     `Stage voice: ${protect(input.stagePersonality) || "No additional stage voice provided."}`,
+    ...(input.contentMenu?.trim()
+      ? [
+          `Content menu (private; what this Creator offers and will not do, never quoted): ${protect(input.contentMenu)}`,
+        ]
+      : []),
     "",
     "# Source character",
     protect(input.sourceCharacterContext) || "No source character is linked to this Creator.",
@@ -306,6 +334,7 @@ export function buildNoodlerPostMessages(input: {
     // belongs with. The `Content format:` line that also lived here is gone: the system prompt
     // already states the format via NOODLER_FORMAT_PROMPTS.
     ...(input.conditionInstruction ? [input.conditionInstruction, ""] : []),
+    ...(input.eventInstruction ? ["# Platform events", input.eventInstruction, ""] : []),
     "# Today's schedule",
     protect(input.scheduleContext ?? "") || "No active Conversation Schedule is available for this Creator today.",
     "",
@@ -522,6 +551,7 @@ export async function generateNoodlerPost(
     fanMemory,
     sourceCharacterContext,
     stagePersonality: account.settings.privacy.stagePersonality ?? "",
+    contentMenu: await resolveSlurpCreatorMenu(db, account.id).catch(() => ""),
     disclosureMode,
     publicIdentity,
     recentPosts,
@@ -529,6 +559,20 @@ export async function generateNoodlerPost(
     request: { ...input.request, format },
     variationInstruction: variation ? slurpPostVariationInstruction(variation) : undefined,
     conditionInstruction: conditionInstruction ?? undefined,
+    eventInstruction:
+      slurpPlatformEventInstruction(
+        settings.platformEvents,
+        input.publicationTime ?? input.generatedAt ?? new Date(),
+      ) ?? undefined,
+    accessInstruction: [
+      await resolveSlurpPostGuidance(db, account.id, input.request.access),
+      // Same slot the scheduler used to choose free access, so only its teasers read as one.
+      input.request.access === "public" && !directed && slurpTeaserPost(account.id, sequence, settings.teaserRate)
+        ? SLURP_TEASER_INSTRUCTION
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
     project: project ? { project, posts: projectPosts } : undefined,
     allowImagePrompt: imagesEnabled,
     imageGenerationPrompt: settings.imageGenerationPrompt,
@@ -867,4 +911,16 @@ export async function generateNoodlerPost(
     image.stagedMedia?.compensate();
     throw err;
   }
+}
+
+/**
+ * Access for an automatic post: locked, except on this Creator's teaser slots, which go out free
+ * to fish for subscribers. A player-chosen access never passes through here.
+ */
+export async function resolveSlurpAutomaticPostAccess(
+  noodle: Pick<ReturnType<typeof createSlurpStorage>, "countNoodlerPostsByAccount" | "getSettings">,
+  accountId: string,
+): Promise<"public" | "locked"> {
+  const [sequence, settings] = await Promise.all([noodle.countNoodlerPostsByAccount(accountId), noodle.getSettings()]);
+  return slurpTeaserPost(accountId, sequence, settings.teaserRate) ? "public" : "locked";
 }

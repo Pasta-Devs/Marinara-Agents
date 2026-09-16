@@ -7,6 +7,8 @@ import {
   type NoodlerManagedPost,
 } from "@marinara-engine/shared";
 import { isDebugAgentsEnabled } from "../../config/runtime-config.js";
+import { resolveSlurpCreatorMenu } from "./slurp-post-guidance.storage.js";
+import { slurpPlatformEventInstruction } from "./slurp-platform-events.js";
 import type { DB } from "../../db/connection.js";
 import { logDebugOverride } from "../../lib/logger.js";
 import { resolveBaseUrl } from "../generation/connection-base-url.js";
@@ -75,6 +77,10 @@ export function buildNoodlerCreatorReplyMessages(input: {
   /** Same Creator state the post path uses: energy, exposure, emotion, day vibe, goal. */
   creatorCondition?: string | null;
   characterCanon?: string;
+  /** The Creator's private content menu. See `slurp-post-guidance.ts`. */
+  contentMenu?: string;
+  /** Holidays and site events running today. See `slurp-platform-events.ts`. */
+  platformEvents?: string | null;
 }): ChatMessage[] {
   const protect = (value: string | null | undefined) =>
     protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
@@ -84,6 +90,9 @@ export function buildNoodlerCreatorReplyMessages(input: {
     "Write only as the supplied creator's stage persona. Address the viewer's comment naturally and do not write for the viewer.",
     NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
     input.generationGuidance.trim(),
+    input.contentMenu
+      ? "creator.contentMenu is your private content menu: what you offer and what you will not do. Stay inside it when fans ask for things, and turn down anything it rules out in your own voice. Never quote it as a list."
+      : "",
     noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
     input.characterCanon
       ? "Character canon is permanent identity and relationship context. Stay consistent with it unless the conversation explicitly establishes a change."
@@ -103,11 +112,13 @@ export function buildNoodlerCreatorReplyMessages(input: {
     .filter(Boolean)
     .join("\n");
   const data = {
+    ...(input.platformEvents ? { platformEvents: input.platformEvents } : {}),
     creator: {
       displayName: protect(input.creator.displayName),
       handle: protect(input.creator.handle),
       bio: protect(input.creator.bio),
       stageVoice: protect(input.creator.settings.privacy.stagePersonality),
+      ...(input.contentMenu ? { contentMenu: protect(input.contentMenu) } : {}),
     },
     post: {
       title: protect(input.post.title),
@@ -200,6 +211,8 @@ export async function generateNoodlerCreatorReply(input: {
     relationship,
     creatorCondition,
     imageContext: imageContexts.get(input.post.id),
+    contentMenu: await resolveSlurpCreatorMenu(input.db, input.creator.id).catch(() => ""),
+    platformEvents: slurpPlatformEventInstruction(settings.platformEvents, new Date()),
   });
   const debugMode = input.debugMode === true || isDebugAgentsEnabled();
   const options = {

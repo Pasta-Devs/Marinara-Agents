@@ -5,6 +5,7 @@ import {
   moveSlurpAutopurgeDate,
   nextSlurpAutopurgeRunAt,
 } from "../packages/slurp2/src/engine/packages/shared/src/slurp-autopurge-time.ts";
+import { slurp2BackstageSource } from "./slurp2-backstage-source";
 
 const root = join(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
@@ -32,7 +33,7 @@ const scheduler = read(
 );
 const serverEntry = read("packages/slurp2/src/engine/packages/server/src/services/slurp/server-entry.ts");
 const settings = read("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
-const client = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx");
+const client = slurp2BackstageSource();
 const media = read("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-media.ts");
 
 assert.match(

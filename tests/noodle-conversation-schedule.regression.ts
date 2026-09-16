@@ -13,6 +13,66 @@ import {
 } from "../sources/engine/packages/server/src/services/conversation/timezone.js";
 import { areConversationSchedulesEnabled } from "../sources/engine/packages/server/src/services/generation/conversation-context-utils.js";
 
+const slurpScheduleGenerationSource = readFileSync(
+  new URL(
+    "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-conversation-schedule-generation.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const slurpRoutesSource = readFileSync(
+  new URL("../packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", import.meta.url),
+  "utf8",
+);
+assert.match(slurpScheduleGenerationSource, /attempt < 2/u, "invalid generated schedules must receive one retry");
+assert.match(
+  slurpScheduleGenerationSource,
+  /responseFormat: \{ type: "json_object" \}/u,
+  "schedule generation must request structured JSON output",
+);
+assert.match(
+  slurpRoutesSource,
+  /reply\.code\(502\)[\s\S]*did not return a complete schedule/u,
+  "invalid model output must produce a recoverable response instead of a generic 500",
+);
+
+// The generator must read the shapes models actually answer with, not only the documented one.
+{
+  const parserSource = slurpScheduleGenerationSource.slice(
+    slurpScheduleGenerationSource.indexOf("const DAY_KEYS"),
+    slurpScheduleGenerationSource.indexOf("export async function generateSlurpConversationSchedule("),
+  );
+  const parse = runInNewContext(
+    stripTypeScriptTypes(
+      `const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];\nconst STATUSES = new Set(["online","idle","dnd","offline"]);\n${parserSource.replace(/^export /gmu, "")}\nparseSlurpConversationSchedule;`,
+    ),
+    {},
+  ) as (content: string) => { days: Record<string, Array<{ time: string; activity: string; status: string }>> };
+
+  const day = [{ time: "00:00-24:00", activity: "streaming", status: "online" }];
+  const everyDay = Object.fromEntries(
+    ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((name) => [name, day]),
+  );
+  assert.equal(
+    Object.keys(parse(JSON.stringify({ days: everyDay })).days).length,
+    7,
+    "the documented shape still works",
+  );
+  assert.equal(Object.keys(parse(JSON.stringify(everyDay)).days).length, 7, "day keys at the top level are read");
+  assert.equal(
+    Object.keys(parse(JSON.stringify({ schedule: { mon: day, Tue: day } })).days).length,
+    7,
+    "a partial week is completed rather than thrown away",
+  );
+  assert.equal(
+    parse(JSON.stringify([{ day: "Monday", blocks: [{ start: "08:00", end: "12:00", description: "gym" }] }])).days
+      .Monday[0].activity,
+    "gym",
+    "a list of days with start and end times is read",
+  );
+  assert.throws(() => parse('{"talkativeness": 50}'), /no days/u, "an answer with no week is still a failure");
+}
+
 // Run the owned function with its real captured schedule helpers. Importing the
 // whole prompt service would require unrelated storage, provider and image setup.
 const promptSource = readFileSync(

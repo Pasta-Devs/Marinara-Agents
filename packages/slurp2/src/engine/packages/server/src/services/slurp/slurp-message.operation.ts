@@ -14,7 +14,7 @@ import { createSlurpStorage } from "../storage/slurp.storage.js";
 import { createSlurpMessagesStorage, type SlurpMessage } from "../storage/slurp-messages.storage.js";
 import { createSlurpEventsStorage } from "../storage/slurp-events.storage.js";
 import { tryNoodlerAccountOperation } from "./slurp-account-operation-lock.js";
-import { generateSlurpMessageReply } from "./slurp-message-generation.service.js";
+import { generateSlurpMessageReply, SlurpMessageBudgetUnavailableError } from "./slurp-message-generation.service.js";
 import { describeSlurpDayVibe } from "./slurp-day-vibe.service.js";
 import { recoverSlurpMood } from "./slurp-mood.js";
 import { activeSlurpStrikes, SLURP_COOL_OFF_HOURS, type SlurpStanceLatitude } from "./slurp-stance.js";
@@ -216,6 +216,11 @@ export async function replyToSlurpMessage(
         strikes: activeSlurpStrikes(thread.strikes, thread.lastStrikeAt),
         connection,
         debugMode: input.debugMode,
+        // The scheduler only calls with `force` after `messagesAwayRepliesEnabled` admitted this
+        // thread. That setting is the explicit permission for an unattended reply. Requiring the
+        // separate global background-worker switch as well made the default settings contradictory:
+        // audience messages arrived, but no Creator could answer them.
+        workerContext: "present",
       });
       // Two or three messages when the conversation is going well, one when it is not. A creator
       // who always answers in exactly one tidy block reads as a form letter.
@@ -470,6 +475,14 @@ export async function replyToSlurpMessage(
     }
     return locked.value;
   } catch (error) {
+    if (error instanceof SlurpMessageBudgetUnavailableError) {
+      const retryAt = error.retryAt ?? (input.force ? new Date(Date.now() + 60 * 60_000).toISOString() : null);
+      if (retryAt) {
+        await messagesStore.setReplyNotBefore(thread.id, retryAt);
+        return { status: "queued", pacing };
+      }
+      return { status: "ineligible" };
+    }
     logger.error(error, "[slurp-message] Reply generation failed for thread %s", thread.id);
     return { status: "failed", error: error instanceof Error ? error.message : "Reply generation failed." };
   } finally {
