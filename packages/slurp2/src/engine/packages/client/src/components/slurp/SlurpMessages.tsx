@@ -52,6 +52,7 @@ import {
   useSendSlurpViewerImage,
   useGenerateSlurpViewerImage,
   useSendSlurpMessage,
+  useForceSlurpReply,
   useSlurpCompose,
   useSlurpConnections,
   useSlurpSettings,
@@ -522,6 +523,7 @@ function SlurpThreadView({
   const byCreator = useSlurpCompose(threadId ? null : creatorAccountId, personaId);
   const threadQuery = threadId ? byThread : byCreator;
   const send = useSendSlurpMessage();
+  const forceReply = useForceSlurpReply();
   const tip = useTipInSlurpThread();
   const resolveRequest = useResolveSlurpMessageRequest();
   const resetThread = useResetSlurpThread();
@@ -735,6 +737,11 @@ function SlurpThreadView({
   useEffect(() => {
     if (pending?.id && messages.some((message) => message.id === pending.id)) setPending(null);
   }, [messages, pending]);
+
+  // The queued note describes the wait, so it goes once the answer it promised has arrived.
+  useEffect(() => {
+    if (messages[messages.length - 1]?.role === "creator") setReplyStatus(null);
+  }, [messages]);
 
   // A different conversation must not inherit the last one's unsent echo.
   useEffect(() => {
@@ -1407,6 +1414,27 @@ function SlurpThreadView({
                 defaultValue: SLURP_REPLY_STATUS_FALLBACKS[replyStatus] ?? "No answer yet.",
                 name: creator?.displayName ?? "",
               })}
+              {replyStatus === "queued" && thread && personaId && (
+                <button
+                  type="button"
+                  disabled={forceReply.isPending}
+                  onClick={async () => {
+                    setError(null);
+                    setTyping(true);
+                    try {
+                      const result = await forceReply.mutateAsync({ personaId, threadId: thread.id });
+                      setReplyStatus(result.replyStatus);
+                      holdTyping(result.reply ? (result.typingMs ?? 0) : 0, result.reply?.id);
+                    } catch (cause) {
+                      setTyping(false);
+                      setError(getApiErrorMessage(cause, "The reply could not be written."));
+                    }
+                  }}
+                  className="ml-1.5 not-italic underline decoration-dotted underline-offset-2 opacity-70 transition-opacity hover:opacity-100 focus-visible:opacity-100 disabled:opacity-40"
+                >
+                  {localizeUi("ui.slurp.messages.forceReply", { defaultValue: "Force reply now" })}
+                </button>
+              )}
             </p>
           )}
           {typing && (

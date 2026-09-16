@@ -397,6 +397,32 @@ export function SlurpBackstageAutomation(page: SlurpBackstagePageProps) {
               detail={t("ui.slurp.settings.publishing.manualDetail")}
             />
           )}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field
+              settingKey="postMaxLength"
+              label={t("ui.slurp.settings.postMaxLength")}
+              detail={t("ui.slurp.settings.postMaxLengthDetail")}
+            >
+              <NumberSetting
+                value={settings.postMaxLength}
+                min={300}
+                max={4000}
+                onSave={(value) => update("postMaxLength", value)}
+              />
+            </Field>
+            <Field
+              settingKey="postShowMoreLength"
+              label={t("ui.slurp.settings.postShowMoreLength")}
+              detail={t("ui.slurp.settings.postShowMoreLengthDetail")}
+            >
+              <NumberSetting
+                value={settings.postShowMoreLength}
+                min={100}
+                max={4000}
+                onSave={(value) => update("postShowMoreLength", value)}
+              />
+            </Field>
+          </div>
           <div className="space-y-3">
             <SectionTitle
               title={t("ui.slurp.settings.carryover.title")}

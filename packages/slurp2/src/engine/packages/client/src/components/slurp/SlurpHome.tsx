@@ -448,6 +448,11 @@ function errorMessage(error: unknown, fallback: string) {
 export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   const { t: localizeUi } = useUiTranslation();
   const accountsQuery = useNoodlerAccounts();
+  // A tab left open across an Engine update can keep running the old package bundle, and no
+  // refetch recovers from that. Reload when the retry still fails.
+  const retryAccountsOrReload = async () => {
+    if ((await accountsQuery.refetch()).isError) window.location.reload();
+  };
   const connectionCountsQuery = useNoodlerConnectionCounts();
   const viewerWalletsQuery = useNoodlerViewerWallets();
   const slurpSettingsQuery = useSlurpSettings();
@@ -1702,7 +1707,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
           <EmptyState
             title={localizeUi("ui.noodle.noodlerhome.noodlerCouldNotBeLoaded")}
             action={localizeUi("capabilities.actions.tryAgain")}
-            onAction={() => void accountsQuery.refetch()}
+            onAction={retryAccountsOrReload}
           />
         </NoodlerFrame>
       </NoodleShell>
@@ -2360,7 +2365,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
               <EmptyState
                 title={localizeUi("ui.noodle.noodlerhome.stageProfilesCouldNotBeLoaded")}
                 action={localizeUi("capabilities.actions.tryAgain")}
-                onAction={() => void accountsQuery.refetch()}
+                onAction={retryAccountsOrReload}
                 icon={TriangleAlert}
               />
             ) : accountsQuery.data && accountsQuery.data.length > 0 ? (

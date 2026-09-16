@@ -69,6 +69,12 @@ export async function rewriteNoodleImagePrompt(input: {
             interpretationInstruction,
             "Preserve the original subject, identity, action, setting, and visual facts unless the instructions explicitly change them.",
             "Use the character context to preserve appearance and personality, but do not add characters who are not in the original prompt.",
+            // Models kept burying the appearance in the middle of the scene, where tag-driven image
+            // models weigh it least, and sometimes reworded the style block the player configured.
+            "Order the result: first any leading quality or style tag block from the original prompt, verbatim and in the same order; then the character's appearance, copied word for word from the character context and written only once; then the scene: outfit, pose, expression, action, setting, lighting, camera, and mood.",
+            "Never add, remove, reword, or reorder quality, score, safety, resolution, or artist tags.",
+            'Never copy labels or field names such as "Appearance:", "Personality:", or "Style:" into the image prompt.',
+            "When the original prompt is comma-separated tags, write the whole result as comma-separated tags.",
             styleGuidance
               ? "Apply the supplied art-style guidance when the original prompt does not specify a style. Preserve an explicitly requested style in the original prompt or user instructions."
               : "",

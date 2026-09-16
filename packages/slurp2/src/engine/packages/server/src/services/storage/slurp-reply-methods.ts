@@ -7,12 +7,27 @@ import { mapThread, now } from "./slurp-messages.helpers.js";
 import { isSlurpFileUniqueConstraintError } from "./slurp-file-errors.js";
 import type { SlurpThread } from "./slurp-messages.types.js";
 
-type ReplyStorage = {
-  listMessages(threadId: string, limit?: number): Promise<Array<{ id: string; role: "viewer" | "creator" }>>;
-};
-
-export function createSlurpReplyMethods(db: DB, storage: () => ReplyStorage) {
+export function createSlurpReplyMethods(db: DB) {
+  const latestViewerMessageId = async (threadId: string): Promise<string | null> => {
+    const rows = await db
+      .select()
+      .from(slurpMessages)
+      .where(and(eq(slurpMessages.threadId, threadId), eq(slurpMessages.role, "viewer")))
+      .orderBy(desc(slurpMessages.createdAt), desc(slurpMessages.id))
+      .limit(1);
+    return rows[0] ? String(rows[0].id) : null;
+  };
   return {
+    latestViewerMessageId,
+
+    /** Drop an obligation no automatic reply can ever meet, so it stops holding a scheduler slot. */
+    async clearReplyObligation(threadId: string): Promise<void> {
+      await db
+        .update(slurpThreads)
+        .set({ needsReply: "false", replyNotBeforeAt: null, updatedAt: now() })
+        .where(eq(slurpThreads.id, threadId));
+    },
+
     async claimReply(
       threadId: string,
       triggerMessageId: string,
@@ -44,13 +59,7 @@ export function createSlurpReplyMethods(db: DB, storage: () => ReplyStorage) {
       const threadRows = await db.select().from(slurpThreads).where(eq(slurpThreads.id, threadId));
       const thread = threadRows[0];
       if (!thread || (thread.state !== "active" && thread.state !== "request")) return { status: "busy" };
-      const newestRows = await db
-        .select()
-        .from(slurpMessages)
-        .where(and(eq(slurpMessages.threadId, threadId), eq(slurpMessages.role, "viewer")))
-        .orderBy(desc(slurpMessages.createdAt), desc(slurpMessages.id))
-        .limit(1);
-      if (newestRows[0]?.id !== triggerMessageId) return { status: "busy" };
+      if ((await latestViewerMessageId(threadId)) !== triggerMessageId) return { status: "busy" };
       try {
         const id = newId();
         if (completedClaimId) {
@@ -124,8 +133,9 @@ export function createSlurpReplyMethods(db: DB, storage: () => ReplyStorage) {
       for (const thread of candidates) {
         if (ready.length >= limit) break;
         if (await queue.hasPending(thread.id)) continue;
-        const [newest] = await storage().listMessages(thread.id, 1);
-        if (newest?.role === "viewer") ready.push(thread);
+        // `needsReply` is the obligation. Requiring the newest message to be the fan's stranded
+        // every thread where a delayed bubble or follow-up landed after the fan spoke.
+        if (await latestViewerMessageId(thread.id)) ready.push(thread);
       }
       return ready;
     },

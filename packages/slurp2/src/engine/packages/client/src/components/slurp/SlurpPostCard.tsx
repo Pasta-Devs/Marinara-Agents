@@ -45,6 +45,7 @@ import {
   type ConversationMediaPickerTabId,
 } from "../chat/ConversationMediaPickerPanel";
 import type { ChatImage } from "../../hooks/use-gallery";
+import { useSlurpSettings } from "../../hooks/use-slurp";
 import { Avatar, SlurpMediaImg } from "./SlurpShell";
 import { formatTime } from "./SlurpDateTime";
 import { NoodleImageComposer } from "./SlurpImageComposer";
@@ -79,12 +80,14 @@ export function slurpReplyThreads(orderedReplies: NoodleInteraction[], replyById
 export function SlurpClampedText(props: Parameters<typeof NoodleTextContent>[0]) {
   const { t: localizeUi } = useUiTranslation();
   const [expanded, setExpanded] = useState(false);
-  // ponytail: length/line heuristic instead of measuring overflow; measure with a ref if short posts clamp oddly.
-  const long = props.content.length > 420 || props.content.split("\n").length > 7;
+  const limit = useSlurpSettings().data?.postShowMoreLength ?? 300;
+  const long = props.content.length > limit;
+  // Cut at the last word boundary inside the limit, so the preview never ends mid-word.
+  const preview = long ? `${props.content.slice(0, limit).replace(/\s+\S*$/u, "")}…` : props.content;
   return (
     <>
-      <div className={cn(long && !expanded && "line-clamp-6")}>
-        <NoodleTextContent {...props} />
+      <div>
+        <NoodleTextContent {...props} content={expanded ? props.content : preview} />
       </div>
       {long && (
         <button

@@ -17,6 +17,8 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
     "carryoverModes",
     "carryoverHours",
     "carryoverMaxItems",
+    "postMaxLength",
+    "postShowMoreLength",
     "enableLorebookContext",
     "professorMariCreatorSource",
     "postsPerDay",

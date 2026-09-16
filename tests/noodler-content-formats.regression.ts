@@ -47,9 +47,11 @@ assert.match(generation, /Every post needs a title/u);
 assert.match(generation, /imagePrompt is required/u);
 assert.match(responseFormat, /minLength: 1, maxLength: NOODLER_TITLE_HARD_MAX_LENGTH/u);
 assert.match(responseFormat, /Math\.min\(contentMaxLength, NOODLE_POST_HARD_MAX_LENGTH\)/u);
-assert.match(generation, /Hard limit 300 characters/u);
-// The caps moved to a leaf module so the storage layer can hold an edit to the post's own format
-// without importing the generation service (which imports storage back).
+// Formats are targets, not cuts: a caption that runs long is kept up to the player's ceiling.
+assert.doesNotMatch(generation, /Hard limit \d+ characters/u);
+assert.match(generation, /Never exceed \$\{input\.postMaxLength \?\? NOODLER_CONTENT_HARD_MAX_LENGTH\} characters/u);
+// The hard cap lives in a leaf module so the storage layer can hold an edit to it without importing
+// the generation service (which imports storage back).
 const contentFormat = readFileSync(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-content-format.ts",
   "utf8",
@@ -58,10 +60,10 @@ const storage = readFileSync(
   "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
   "utf8",
 );
-assert.match(contentFormat, /caption: 300,/u);
-assert.match(storage, /slice\(0, noodlerContentLimitFor\(nextMetadata\)\)/u, "edits honour the post's own cap");
+assert.doesNotMatch(contentFormat, /caption: 300,/u, "no per-format hard cut");
+assert.match(storage, /slice\(0, NOODLER_CONTENT_HARD_MAX_LENGTH\)/u, "edits honour the shared cap");
 assert.doesNotMatch(storage, /trim\(\)\.slice\(0, 4000\)/u, "no flat 4000-character truncation");
-assert.match(generation, /NOODLER_FORMAT_MAX_LENGTH\[format\]/u);
+assert.match(generation, /contentMaxLength: settings\.postMaxLength/u);
 assert.match(generation, /const format = input\.request\.format \?\? variation\?\.format \?\? "caption"/u);
 assert.match(generation, /noodlerContentFormat: format,/u, "stored posts retain the selected variation format");
 assert.match(operations, /format: "caption",\s+access: "locked"/u);

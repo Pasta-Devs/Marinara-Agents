@@ -183,6 +183,8 @@ export const SLURP_BACKSTAGE_SETTING_PLACEMENT: Record<keyof SlurpSettings, Slur
   carryoverModes: automation("general", "carryover", "Engine chats"),
   carryoverHours: automation("general", "carryover hours"),
   carryoverMaxItems: automation("general", "carryover limit"),
+  postMaxLength: automation("general", "post length", "maximum post length"),
+  postShowMoreLength: automation("general", "show more", "post preview length"),
   characterImageInstructions: place("creators", "creators", "creator", "character image instructions"),
   creatorCollabs: place("creators", "creators", "creator", "collabs", "collab partners", "crossover"),
   promptPresets: automation("general", "prompt presets", "writing presets"),

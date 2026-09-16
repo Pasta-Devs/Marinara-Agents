@@ -240,7 +240,7 @@ import {
   SLURP_DEFAULT_CREATOR_MESSAGING,
   SLURP_DM_POLICIES,
 } from "../slurp/slurp-messaging.js";
-import { noodlerContentLimitFor } from "../slurp/slurp-content-format.js";
+import { NOODLER_CONTENT_HARD_MAX_LENGTH } from "../slurp/slurp-content-format.js";
 import { readNoodlerAccountMediaPath, readNoodlerAvatarMediaPath } from "../slurp/slurp-avatar.js";
 import { newId, now } from "../../utils/id-generator.js";
 import { compareMinimizedNoodlerSourceSnapshot, minimizeNoodlerSourceSnapshot } from "../slurp/slurp-source.js";
@@ -558,6 +558,10 @@ export const slurpSettingsSchema = z.object({
     .min(1)
     .max(24 * 365),
   carryoverMaxItems: z.number().int().min(1).max(100),
+  /** Longest generated post body. Formats only aim for a length; this is where text is cut. */
+  postMaxLength: z.number().int().min(300).max(NOODLER_CONTENT_HARD_MAX_LENGTH),
+  /** Post bodies longer than this collapse behind Show more. */
+  postShowMoreLength: z.number().int().min(100).max(NOODLER_CONTENT_HARD_MAX_LENGTH),
   /** Per source character: apply its conversation image instructions to Slurp images. Unset uses the Engine checkbox. */
   /** Whether Professor Mari, the Engine's built-in character, may be picked as a new Creator source. */
   professorMariCreatorSource: z.boolean(),
@@ -1262,6 +1266,8 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   carryoverModes: [],
   carryoverHours: 24,
   carryoverMaxItems: 20,
+  postMaxLength: NOODLER_CONTENT_HARD_MAX_LENGTH,
+  postShowMoreLength: 300,
   characterImageInstructions: {},
   promptPresets: [],
   professorMariCreatorSource: true,
@@ -4979,7 +4985,7 @@ export function createSlurpStorage(db: DB) {
           .update(noodlePosts)
           .set({
             ...(input.content !== undefined && {
-              content: input.content.trim().slice(0, noodlerContentLimitFor(nextMetadata)),
+              content: input.content.trim().slice(0, NOODLER_CONTENT_HARD_MAX_LENGTH),
             }),
             ...(input.imageUrl !== undefined && { imageUrl: input.imageUrl }),
             ...(input.imagePrompt !== undefined && { imagePrompt: input.imagePrompt }),
@@ -5085,7 +5091,7 @@ export function createSlurpStorage(db: DB) {
           .set({
             ...(input.title !== undefined && { title: input.title }),
             ...(input.content !== undefined && {
-              content: input.content.trim().slice(0, noodlerContentLimitFor(nextMetadata)),
+              content: input.content.trim().slice(0, NOODLER_CONTENT_HARD_MAX_LENGTH),
             }),
             ...(imageChanged && {
               imageUrl: media?.imageUrl ?? null,

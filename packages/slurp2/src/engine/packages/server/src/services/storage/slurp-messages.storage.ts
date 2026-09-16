@@ -623,7 +623,7 @@ export function createSlurpMessagesStorage(db: DB) {
    * must render as a cold thread rather than throw the whole inbox away.
    */
   const storage = {
-    ...createSlurpReplyMethods(db, () => storage),
+    ...createSlurpReplyMethods(db),
     /** Per-creator messaging settings, falling back to the defaults Settings holds. */
     async getCreatorMessaging(creatorAccountId: string): Promise<SlurpCreatorMessaging> {
       return readSlurpCreatorMessaging((await readMessagingBlob())[creatorAccountId], await messagingDefaults());
@@ -1322,10 +1322,12 @@ export function createSlurpMessagesStorage(db: DB) {
           (current.state !== "active" && current.state !== "request")
         )
           return;
+        // The fan's newest message, not the thread's: a delayed bubble stored after the fan spoke
+        // must not void the answer that fan is still owed.
         const latestRows = await tx
           .select()
           .from(slurpMessages)
-          .where(eq(slurpMessages.threadId, threadId))
+          .where(and(eq(slurpMessages.threadId, threadId), eq(slurpMessages.role, "viewer")))
           .orderBy(desc(slurpMessages.createdAt), desc(slurpMessages.id))
           .limit(1);
         if (latestRows[0]?.id !== claim.triggerMessageId) return;

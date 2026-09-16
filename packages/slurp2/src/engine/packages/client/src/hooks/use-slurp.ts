@@ -391,6 +391,8 @@ export type SlurpSettings = {
   carryoverModes: Array<"conversation" | "roleplay" | "game">;
   carryoverHours: number;
   carryoverMaxItems: number;
+  postMaxLength: number;
+  postShowMoreLength: number;
   characterImageInstructions: Record<string, boolean>;
   promptPresets: SlurpPromptPreset[];
   professorMariCreatorSource: boolean;
@@ -3173,6 +3175,18 @@ export function useSendSlurpMessage() {
       requestId?: string;
       tip?: { amount: number; note?: string } | null;
     }) => api.post<SlurpSendResponse>("/slurp2/messages/send", input),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
+  });
+}
+
+export function useForceSlurpReply() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { personaId: string; threadId: string }) =>
+      api.post<Omit<SlurpSendResponse, "message" | "tipError">>(
+        `/slurp2/messages/threads/${encodeURIComponent(input.threadId)}/force-reply`,
+        { personaId: input.personaId },
+      ),
     onSuccess: () => invalidateSlurpMessages(queryClient),
   });
 }

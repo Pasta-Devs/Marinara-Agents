@@ -2,7 +2,7 @@
 // client has no route that serves CHANGELOG.md. So the notes are mirrored here, and
 // `tests/slurp2-release-notes.regression.ts` fails the build if this file drifts from
 // `packages/slurp2/CHANGELOG.md` or from the version in `manifest.json`.
-export const SLURP2_VERSION = "0.0.17";
+export const SLURP2_VERSION = "0.0.18";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -12,6 +12,18 @@ export interface Slurp2ReleaseEntry {
 
 /** Newest first, same order as CHANGELOG.md. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.0.18",
+    date: "2026-09-16",
+    notes: [
+      "Messages: a queued reply now has a Force reply now button that makes the Creator answer at once.",
+      "Fixed Creators sometimes never answering a message. A delayed message bubble that arrived after the fan wrote no longer cancels the answer, and conversations that can never get an automatic answer no longer block newer ones.",
+      "Posts are no longer cut off at a fixed length for their format. Automation has two new settings: Longest post and Show more after (300 characters by default).",
+      'Image prompts keep the style tags first and unchanged, put the Creator\'s appearance right after them, and never copy labels such as "Appearance:".',
+      "The Include creator descriptions setting now explains what it adds to image prompts.",
+      "Slurp retries loading after an Engine restart, and Try again reloads the page if loading still fails.",
+    ],
+  },
   {
     version: "0.0.17",
     date: "2026-09-16",

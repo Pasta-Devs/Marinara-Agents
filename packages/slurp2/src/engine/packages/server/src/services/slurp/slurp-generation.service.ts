@@ -58,13 +58,13 @@ import {
 import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js";
 import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
 import { createChatsStorage } from "../storage/chats.storage.js";
-import { NOODLER_FORMAT_MAX_LENGTH, type NoodlerContentFormat } from "./slurp-content-format.js";
+import { NOODLER_CONTENT_HARD_MAX_LENGTH, type NoodlerContentFormat } from "./slurp-content-format.js";
 import { noodleLorebookTokenBudget, SLURP_PLATFORM_CONTEXT } from "./slurp-prompt.js";
 import { processLorebooks } from "../lorebook/index.js";
 import { createCharacterGalleryStorage } from "../storage/character-gallery.storage.js";
 import { createGalleryStorage } from "../storage/gallery.storage.js";
 import { pickGalleryAttachmentForAccount } from "./slurp-generated-activity.service.js";
-export { NOODLER_FORMAT_MAX_LENGTH, type NoodlerContentFormat } from "./slurp-content-format.js";
+export type { NoodlerContentFormat } from "./slurp-content-format.js";
 // The disclosure privacy core lives in a leaf module so tests can execute it instead of grepping
 // this file, which cannot be imported without a database and an LLM provider.
 import { protectNoodlerGeneratedIdentity, type PublicIdentity } from "./slurp-identity-protection.js";
@@ -106,9 +106,8 @@ type FormattedNoodlerGenerationRequest = NoodlerGenerationRequest & {
 
 const NOODLER_FORMAT_PROMPTS: Record<NoodlerContentFormat, string> = {
   caption:
-    "Format: caption. Target 40-220 characters in one short creator-feed caption. Hard limit 300 characters: never write more, and never write several paragraphs.",
-  announcement:
-    "Format: announcement. Target 80-600 body characters with the important news first. Hard limit 1000 characters.",
+    "Format: caption. Aim for 40-220 characters in one short creator-feed caption. Go longer only when the moment really calls for it.",
+  announcement: "Format: announcement. Aim for 80-600 body characters with the important news first.",
   long_form:
     "Format: long_form. Target 500-2000 body characters with readable paragraphs. Only this format can use long text.",
 };
@@ -247,6 +246,8 @@ export function buildNoodlerPostMessages(input: {
   allowImagePrompt: boolean;
   imageGenerationPrompt: string;
   generationGuidance: string;
+  /** The player's ceiling. Formats only set a target; nothing shorter than this is cut. */
+  postMaxLength?: number;
   scheduleContext?: string;
   /** The rotating angle for this post. Absent when the player has directed the post themselves. */
   variationInstruction?: string;
@@ -288,7 +289,7 @@ export function buildNoodlerPostMessages(input: {
     // user-supplied values; the system message should not be the one place that is abandoned.
     ...(guidance ? ["## Creative direction", guidance, "## End creative direction"] : []),
     noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
-    NOODLER_FORMAT_PROMPTS[format],
+    `${NOODLER_FORMAT_PROMPTS[format]} Never exceed ${input.postMaxLength ?? NOODLER_CONTENT_HARD_MAX_LENGTH} characters.`,
     // A public post and a paid post do different jobs, and writing both from one set of
     // instructions made the free feed give away the payoff and the paid feed sell what the reader
     // had already bought. Fenced like the creative direction above, because the text is editable.
@@ -577,6 +578,7 @@ export async function generateNoodlerPost(
     allowImagePrompt: imagesEnabled,
     imageGenerationPrompt: settings.imageGenerationPrompt,
     generationGuidance: settings.generationGuidance,
+    postMaxLength: settings.postMaxLength,
     scheduleContext,
     loreContext,
     generatedAt: input.generatedAt ?? new Date(),
@@ -604,7 +606,7 @@ export async function generateNoodlerPost(
     debugMode,
     responseFormat: noodleResponseFormat(input.connection.model, "noodler_post", {
       allowImagePrompt: imagesEnabled,
-      contentMaxLength: NOODLER_FORMAT_MAX_LENGTH[format],
+      contentMaxLength: settings.postMaxLength,
     }),
   } as const;
 
@@ -652,7 +654,7 @@ export async function generateNoodlerPost(
     generated.content,
     disclosureMode,
     publicIdentity,
-    NOODLER_FORMAT_MAX_LENGTH[format],
+    settings.postMaxLength,
   );
   if (!protectedContent) throw new Error("Slurp generation returned no usable post content.");
   const protectedGenerated = {

@@ -65,10 +65,14 @@ export async function replyToSlurpMessage(
     slurp.getNoodlerAccountById(thread.creatorAccountId),
     slurp.getViewer(thread.viewerAccountId),
   ]);
-  if (!creator || !viewer) return { status: "ineligible" };
   // A persona-backed Creator is operated by hand: it never auto-posts and it never answers a DM
   // on its own either. The operator writes the answer through the draft-reply route.
-  if (creator.kind === "persona" && creator.sourceKind === "persona") return { status: "ineligible" };
+  if (!creator || !viewer || (creator.kind === "persona" && creator.sourceKind === "persona")) {
+    // No automatic reply can ever come, so the thread must stop taking one of the scheduler's
+    // oldest-first slots. Left set, these starved every newer thread the player was waiting on.
+    if (input.force) await messagesStore.clearReplyObligation(thread.id);
+    return { status: "ineligible" };
+  }
 
   // Nothing outranks a boundary. A creator who has walked away from this conversation has walked
   // away from it, whatever the rapport, the schedule or the tone dial say.

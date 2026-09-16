@@ -1,5 +1,14 @@
 # Slurp Remastered release notes
 
+## 0.0.18 — 2026-09-16
+
+- Messages: a queued reply now has a Force reply now button that makes the Creator answer at once.
+- Fixed Creators sometimes never answering a message. A delayed message bubble that arrived after the fan wrote no longer cancels the answer, and conversations that can never get an automatic answer no longer block newer ones.
+- Posts are no longer cut off at a fixed length for their format. Automation has two new settings: Longest post and Show more after (300 characters by default).
+- Image prompts keep the style tags first and unchanged, put the Creator's appearance right after them, and never copy labels such as "Appearance:".
+- The Include creator descriptions setting now explains what it adds to image prompts.
+- Slurp retries loading after an Engine restart, and Try again reloads the page if loading still fails.
+
 ## 0.0.17 — 2026-09-16
 
 - Settings is now Backstage: Overview, Creators, Features, Automation, and Maintenance, with setting search and live previews.
