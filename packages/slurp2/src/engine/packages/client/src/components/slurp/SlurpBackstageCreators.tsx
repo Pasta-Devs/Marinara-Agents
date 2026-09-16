@@ -581,12 +581,13 @@ export function SlurpBackstageCreators(page: SlurpBackstagePageProps) {
               {tab === "messages" &&
                 /* Every Creator's policy and prices are the player's to set, world-run ones
                    included: Slurp is single-player and this panel is where Creators are managed.
-                   An unset value still falls back to the world default. The persona only
-                   identifies the viewer to the route. */
+                   An unset value still falls back to the world default. The persona identifies the
+                   viewer to the route and nothing else: a Creator's own source account is not a
+                   persona, so passing that made the request 404. */
                 (viewerPersonaId ? (
                   <CreatorMessagingGroup
                     creatorId={selectedCreator.id}
-                    personaId={selectedCreator.sourceAccountId ?? viewerPersonaId}
+                    personaId={viewerPersonaId}
                     setMessaging={setCreatorMessaging}
                     setPrice={setCreatorPrice}
                     worldRulesAction={

@@ -72,7 +72,7 @@ assert.match(
 );
 assert.match(
   creators,
-  /personaId=\{selectedCreator\.sourceAccountId \?\? viewerPersonaId\}/u,
+  /personaId=\{viewerPersonaId\}/u,
   "every Creator, world-run ones included, can have its own policy and prices",
 );
 
