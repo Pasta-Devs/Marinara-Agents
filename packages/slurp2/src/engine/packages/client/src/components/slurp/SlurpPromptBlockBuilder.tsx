@@ -62,6 +62,8 @@ export function SlurpPromptBlockBuilder({ value, pending, onSave }: PromptBlockB
   useEffect(() => setDraft(value), [value]);
 
   const prompts = definitions.data?.prompts ?? [];
+  const promptLabel = (id: string) => t(`ui.slurp.settings.prompts.prompt.${id}`, { defaultValue: promptName(id) });
+  const blockLabel = (id: string) => t(`ui.slurp.settings.prompts.block.${id}`, { defaultValue: blockName(id) });
   const updateLayout = (prompt: SlurpPromptDefinition, next: SlurpPromptBlockOverride[]) =>
     setDraft((current) => ({ ...current, [prompt.id]: next }));
   const move = (prompt: SlurpPromptDefinition, index: number, offset: -1 | 1) => {
@@ -75,19 +77,26 @@ export function SlurpPromptBlockBuilder({ value, pending, onSave }: PromptBlockB
     if (await onSave(draft)) setOpenPromptId(null);
   };
 
-  if (definitions.isLoading) return <p className="text-sm text-[var(--slurp-muted)]">Loading prompt blocks...</p>;
+  if (definitions.isLoading)
+    return (
+      <p className="text-sm text-[var(--slurp-muted)]">
+        {t("ui.slurp.settings.prompts.blocksLoading", { defaultValue: "Loading prompt blocks..." })}
+      </p>
+    );
   if (definitions.isError)
     return (
       <p role="alert" className="text-sm text-[var(--destructive)]">
-        Could not load prompt blocks.
+        {t("ui.slurp.settings.prompts.blocksLoadError", { defaultValue: "Could not load prompt blocks." })}
       </p>
     );
 
   return (
     <div className="space-y-3">
       <p className="text-xs leading-5 text-[var(--slurp-muted)]">
-        Reorder every part of a prompt. Required blocks protect privacy, safety, and readable model output. They move
-        with the other blocks, but they cannot be removed or edited.
+        {t("ui.slurp.settings.prompts.blocksDetail", {
+          defaultValue:
+            "Reorder every part of a prompt. Required blocks protect privacy, safety, and readable model output. They move with the other blocks, but they cannot be removed or edited.",
+        })}
       </p>
       {prompts.map((prompt) => {
         const layout = completeLayout(prompt, draft[prompt.id]);
@@ -102,9 +111,13 @@ export function SlurpPromptBlockBuilder({ value, pending, onSave }: PromptBlockB
               className="flex min-h-12 w-full items-center gap-3 rounded-xl px-4 py-3 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
             >
               <span className="min-w-0 flex-1">
-                <span className="block text-sm font-semibold">{promptName(prompt.id)}</span>
+                <span className="block text-sm font-semibold">{promptLabel(prompt.id)}</span>
                 <span className="block text-xs text-[var(--slurp-muted)]">
-                  {layout.length} blocks{changed ? " · changed" : " · default"}
+                  {t("ui.slurp.settings.prompts.blocksSummary", {
+                    count: layout.length,
+                    state: changed ? "changed" : "default",
+                    defaultValue: "{{count}} blocks · {{state}}",
+                  })}
                 </span>
               </span>
               <ChevronDown size={17} aria-hidden="true" className={open ? "rotate-180" : ""} />
@@ -123,14 +136,14 @@ export function SlurpPromptBlockBuilder({ value, pending, onSave }: PromptBlockB
                       >
                         <GripVertical size={16} aria-hidden="true" className="text-[var(--slurp-muted)]" />
                         <span className="min-w-0 flex-1">
-                          <span className="block text-sm font-medium">{blockName(block.id)}</span>
+                          <span className="block text-sm font-medium">{blockLabel(block.id)}</span>
                           <span className="flex items-center gap-1 text-xs text-[var(--slurp-muted)]">
                             {block.kind === "required" && <LockKeyhole size={12} aria-hidden="true" />}
                             {block.kind === "required"
-                              ? "Required"
+                              ? t("ui.slurp.settings.prompts.blockRequired", { defaultValue: "Required" })
                               : block.kind === "context"
-                                ? "Runtime context"
-                                : "Editable"}
+                                ? t("ui.slurp.settings.prompts.blockContext", { defaultValue: "Runtime context" })
+                                : t("ui.slurp.settings.prompts.blockEditable", { defaultValue: "Editable" })}
                           </span>
                         </span>
                         {block.optional && (
@@ -144,13 +157,16 @@ export function SlurpPromptBlockBuilder({ value, pending, onSave }: PromptBlockB
                                 updateLayout(prompt, next);
                               }}
                             />
-                            Use
+                            {t("ui.slurp.settings.prompts.blockUse", { defaultValue: "Use" })}
                           </label>
                         )}
                         {editable && (
                           <button
                             type="button"
-                            aria-label={`Edit ${blockName(block.id)}`}
+                            aria-label={t("ui.slurp.settings.prompts.editBlockAria", {
+                              block: blockLabel(block.id),
+                              defaultValue: "Edit {{block}}",
+                            })}
                             onClick={() => {
                               setEditing({ promptId: prompt.id, blockId: block.id });
                               setTextDraft(entry.text ?? block.defaultText);
@@ -162,7 +178,10 @@ export function SlurpPromptBlockBuilder({ value, pending, onSave }: PromptBlockB
                         )}
                         <button
                           type="button"
-                          aria-label={`Move ${blockName(block.id)} up`}
+                          aria-label={t("ui.slurp.settings.prompts.moveUpAria", {
+                            block: blockLabel(block.id),
+                            defaultValue: "Move {{block}} up",
+                          })}
                           disabled={index === 0}
                           onClick={() => move(prompt, index, -1)}
                           className="inline-flex size-10 items-center justify-center rounded-lg border border-[var(--slurp-outline)] disabled:opacity-35"
@@ -171,7 +190,10 @@ export function SlurpPromptBlockBuilder({ value, pending, onSave }: PromptBlockB
                         </button>
                         <button
                           type="button"
-                          aria-label={`Move ${blockName(block.id)} down`}
+                          aria-label={t("ui.slurp.settings.prompts.moveDownAria", {
+                            block: blockLabel(block.id),
+                            defaultValue: "Move {{block}} down",
+                          })}
                           disabled={index === layout.length - 1}
                           onClick={() => move(prompt, index, 1)}
                           className="inline-flex size-10 items-center justify-center rounded-lg border border-[var(--slurp-outline)] disabled:opacity-35"
@@ -195,7 +217,8 @@ export function SlurpPromptBlockBuilder({ value, pending, onSave }: PromptBlockB
                     }
                     className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--slurp-outline)] px-3 text-xs font-semibold disabled:opacity-40"
                   >
-                    <RotateCcw size={14} aria-hidden="true" /> Reset
+                    <RotateCcw size={14} aria-hidden="true" />{" "}
+                    {t("ui.slurp.settings.prompts.blockReset", { defaultValue: "Reset" })}
                   </button>
                   <button
                     type="button"
@@ -214,12 +237,19 @@ export function SlurpPromptBlockBuilder({ value, pending, onSave }: PromptBlockB
       <Modal
         open={editing !== null}
         onClose={() => setEditing(null)}
-        title={editing ? `Edit ${blockName(editing.blockId)}` : "Edit prompt block"}
+        title={
+          editing
+            ? t("ui.slurp.settings.prompts.editBlockTitle", {
+                block: blockLabel(editing.blockId),
+                defaultValue: "Edit {{block}}",
+              })
+            : t("ui.slurp.settings.prompts.editBlock", { defaultValue: "Edit prompt block" })
+        }
         width="max-w-3xl"
       >
         <div className="space-y-4">
           <label className="block text-sm font-semibold">
-            Instructions
+            {t("ui.slurp.settings.prompts.instructions", { defaultValue: "Instructions" })}
             <textarea
               value={textDraft}
               onChange={(event) => setTextDraft(event.target.value)}
@@ -249,7 +279,7 @@ export function SlurpPromptBlockBuilder({ value, pending, onSave }: PromptBlockB
               }}
               className="min-h-10 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-45"
             >
-              Apply
+              {t("ui.slurp.settings.prompts.apply", { defaultValue: "Apply" })}
             </button>
           </div>
         </div>

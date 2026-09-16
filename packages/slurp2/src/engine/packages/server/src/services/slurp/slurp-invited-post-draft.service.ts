@@ -77,7 +77,6 @@ export async function generateInvitedNoodlePostDraft(
             id: "safety",
             kind: "required",
             text: [
-              "Keep it like a real social post: usually 40-280 characters. Use longer text only when the direction explicitly asks for long-form writing.",
               NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
               "Return one JSON object with title, content, and imagePrompt set to null.",
               "Return JSON only. Do not create interactions or other accounts.",

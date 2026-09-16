@@ -9,6 +9,7 @@ import {
   MessageCircle,
   Sparkles,
   UsersRound,
+  RefreshCw,
 } from "lucide-react";
 import { useState } from "react";
 import { Field, GuidanceBox, NumberSetting, SectionTitle, Toggle } from "./SlurpSettingsControls";
@@ -42,6 +43,9 @@ export function SlurpBackstageAutomation(page: SlurpBackstagePageProps) {
     activityPreset,
     imagesReady,
     openRefresh,
+    refreshCreators,
+    refreshFans,
+    refreshConversationSchedule,
   } = page;
   const [paceWizardOpen, setPaceWizardOpen] = useState(false);
   const [imageWizardOpen, setImageWizardOpen] = useState(false);
@@ -84,6 +88,59 @@ export function SlurpBackstageAutomation(page: SlurpBackstagePageProps) {
             })}
             scope="all-slurp"
           />
+          <div className="rounded-xl bg-[var(--slurp-surface-raised)] p-4 ring-1 ring-inset ring-[var(--slurp-outline)] sm:p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold">
+                  {t("ui.slurp.settings.manual.title", { defaultValue: "Manual actions" })}
+                </h2>
+                <p className="mt-1 text-xs text-[var(--slurp-muted)]">
+                  {t("ui.slurp.settings.manual.detail", { defaultValue: "Run Slurp actions only when you choose." })}
+                </p>
+              </div>
+              <RefreshCw size={18} className="text-[var(--noodle-accent)]" aria-hidden="true" />
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                disabled={refreshCreators.isPending}
+                onClick={openRefresh}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--slurp-outline)] px-3 text-xs font-semibold hover:bg-[var(--slurp-canvas)] disabled:opacity-50"
+              >
+                <Sparkles size={14} aria-hidden="true" />
+                {t("ui.slurp.settings.manual.posts", { defaultValue: "Create posts now" })}
+              </button>
+              <button
+                type="button"
+                disabled={refreshFans.isPending}
+                onClick={() => refreshFans.mutate()}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--slurp-outline)] px-3 text-xs font-semibold hover:bg-[var(--slurp-canvas)] disabled:opacity-50"
+              >
+                <UsersRound size={14} aria-hidden="true" />
+                {t("ui.slurp.settings.manual.audience", { defaultValue: "Run audience activity" })}
+              </button>
+              <button
+                type="button"
+                disabled={refreshConversationSchedule.isPending || page.automationCreators.length === 0}
+                onClick={() =>
+                  page.automationCreators.forEach((creator) => refreshConversationSchedule.mutate(creator.id))
+                }
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--slurp-outline)] px-3 text-xs font-semibold hover:bg-[var(--slurp-canvas)] disabled:opacity-50"
+              >
+                <MessageCircle size={14} aria-hidden="true" />
+                {t("ui.slurp.settings.manual.schedules", { defaultValue: "Refresh schedules" })}
+              </button>
+              <button
+                type="button"
+                disabled={page.imageEnabledCreators.length === 0}
+                onClick={() => go("automation", "images")}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--slurp-outline)] px-3 text-xs font-semibold hover:bg-[var(--slurp-canvas)] disabled:opacity-50"
+              >
+                <Image size={14} aria-hidden="true" />
+                {t("ui.slurp.settings.manual.images", { defaultValue: "Manage image runs" })}
+              </button>
+            </div>
+          </div>
           <SummaryRow
             icon={<Activity size={20} />}
             title={t("ui.slurp.settings.backstage.landing.publishing", { defaultValue: "Automatic publishing" })}

@@ -203,8 +203,11 @@ export function SlurpBackstagePrompts(page: SlurpBackstagePageProps) {
       </div>
       <div className="space-y-5 rounded-xl bg-[var(--slurp-surface-raised)] p-4 ring-1 ring-inset ring-[var(--slurp-outline)] sm:p-5">
         <SectionTitle
-          title="Prompt block builders"
-          detail="Change the instructions, order, and optional context for every prompt Slurp sends to a model."
+          title={t("ui.slurp.settings.prompts.blockBuildersTitle", { defaultValue: "Prompt block builders" })}
+          detail={t("ui.slurp.settings.prompts.blockBuildersDetail", {
+            defaultValue:
+              "Change the instructions, order, and optional context for every prompt Slurp sends to a model.",
+          })}
         />
         <SettingAnchor settingKey="promptBlocks">
           <SlurpPromptBlockBuilder

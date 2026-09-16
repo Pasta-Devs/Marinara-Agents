@@ -573,8 +573,10 @@ function SlurpThreadView({
   const drawerTriggerRef = useRef<HTMLButtonElement | null>(null);
   const searchTriggerRef = useRef<HTMLButtonElement | null>(null);
   const messageSearchInputRef = useRef<HTMLInputElement | null>(null);
-
   const thread = threadQuery.data?.thread ?? null;
+  const activeConversationRef = useRef({ personaId, threadId });
+  activeConversationRef.current = { personaId, threadId: thread?.id ?? threadId };
+
   const messages = useMemo(() => {
     const byId = new Map<string, SlurpMessage>();
     for (const message of loadedOlderMessages) byId.set(message.id, message);
@@ -894,7 +896,12 @@ function SlurpThreadView({
   const canForceReply = Boolean(personaId && thread && !ownsCreator && (thread.needsReply || waitingNote === "queued"));
 
   const holdTyping = (ms: number, replyId?: string) => {
+    const conversation = activeConversationRef.current;
+    const isCurrent = () =>
+      activeConversationRef.current.personaId === conversation.personaId &&
+      activeConversationRef.current.threadId === conversation.threadId;
     if (ms <= 0) {
+      if (!isCurrent()) return;
       setTyping(false);
       if (replyId) {
         setHiddenReplyIds((prev) => {
@@ -914,6 +921,7 @@ function SlurpThreadView({
       window.clearTimeout(typingTimeoutRef.current);
     }
     typingTimeoutRef.current = window.setTimeout(() => {
+      if (!isCurrent()) return;
       setTyping(false);
       if (replyId) {
         setHiddenReplyIds((prev) => {
@@ -1431,14 +1439,29 @@ function SlurpThreadView({
                   type="button"
                   disabled={forceReply.isPending}
                   onClick={async () => {
+                    const forcedPersonaId = personaId;
+                    const forcedThreadId = thread.id;
                     setError(null);
                     setTyping(true);
                     try {
-                      const result = await forceReply.mutateAsync({ personaId, threadId: thread.id });
+                      const result = await forceReply.mutateAsync({
+                        personaId: forcedPersonaId,
+                        threadId: forcedThreadId,
+                      });
+                      if (
+                        activeConversationRef.current.personaId !== forcedPersonaId ||
+                        activeConversationRef.current.threadId !== forcedThreadId
+                      )
+                        return;
                       setReplyStatus(result.replyStatus);
                       // "Now" means now: the pacing delay is the thing this button exists to skip.
                       holdTyping(0, result.reply?.id);
                     } catch (cause) {
+                      if (
+                        activeConversationRef.current.personaId !== forcedPersonaId ||
+                        activeConversationRef.current.threadId !== forcedThreadId
+                      )
+                        return;
                       setTyping(false);
                       setError(getApiErrorMessage(cause, "The reply could not be written."));
                     }

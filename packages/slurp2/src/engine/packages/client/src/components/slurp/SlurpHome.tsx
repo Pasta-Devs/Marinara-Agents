@@ -501,20 +501,23 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     (shellPersonaAccount &&
       accountsQuery.data?.find((profile) => profile.sourceAccountId === shellPersonaAccount.id)) ||
     null;
-  const viewerActorAccount =
-    shellPersonaAccount && myCreatorProfile
-      ? ({
-          ...shellPersonaAccount,
-          id: myCreatorProfile.id,
-          handle: myCreatorProfile.handle,
-          displayName: myCreatorProfile.displayName,
-          bio: myCreatorProfile.bio,
-          avatarUrl: myCreatorProfile.avatarUrl,
-          avatarCrop: myCreatorProfile.avatarCrop,
-          createdAt: myCreatorProfile.createdAt,
-          updatedAt: myCreatorProfile.updatedAt,
-        } as NoodleAccount)
-      : null;
+  const viewerActorAccount = shellPersonaAccount
+    ? ({
+        ...shellPersonaAccount,
+        ...(myCreatorProfile
+          ? {
+              id: myCreatorProfile.id,
+              handle: myCreatorProfile.handle,
+              displayName: myCreatorProfile.displayName,
+              bio: myCreatorProfile.bio,
+              avatarUrl: myCreatorProfile.avatarUrl,
+              avatarCrop: myCreatorProfile.avatarCrop,
+              createdAt: myCreatorProfile.createdAt,
+              updatedAt: myCreatorProfile.updatedAt,
+            }
+          : {}),
+      } as NoodleAccount)
+    : null;
   const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const mobileDrawerTriggerRef = useRef<HTMLButtonElement | null>(null);

@@ -172,10 +172,12 @@ export async function generateGarnishAds(
     {
       role: "user",
       content: [
-        ...(request.worldContext?.trim()
+        ...(request.worldContext?.trim() &&
+        request.promptBlocks?.garnishAds?.find((block) => block.id === "world")?.enabled !== false
           ? [`World and audience:\n${JSON.stringify(request.worldContext.trim())}`]
           : []),
-        ...(existingBrands.length
+        ...(existingBrands.length &&
+        request.promptBlocks?.garnishAds?.find((block) => block.id === "existingBrands")?.enabled !== false
           ? [`Brands that already exist, do not repeat them: ${existingBrands.join(", ")}`]
           : []),
       ].join("\n"),

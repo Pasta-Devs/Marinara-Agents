@@ -196,7 +196,7 @@ function describeFanRelationship(persona: {
 
 function buildFanActivityMessages(input: {
   creators: NoodlerFanCreatorCandidate[];
-  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone"> &
+  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone" | "promptBlocks"> &
     Partial<Pick<SlurpSettings, "simulationTuning">>;
   imageContexts?: ReadonlyMap<string, string>;
 }): ChatMessage[] {
@@ -218,7 +218,6 @@ function buildFanActivityMessages(input: {
         id: "contentRules",
         kind: "required",
         text: [
-          "Propose quiet synthetic audience activity for the supplied Slurp posts.",
           "A post's image field describes its attached picture. Treat it as something the actor can see, and never ask to be shown an image that is already described.",
           "Posts marked locked are paid posts. Only subscribers see them, so react to the title and the fact it is paid; never invent or state its hidden contents.",
           "Use only supplied creator IDs, actor handles, and post IDs. Never invent identifiers.",

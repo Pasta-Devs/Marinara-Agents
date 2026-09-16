@@ -60,6 +60,7 @@ export async function generateNoodlerPostImage(input: {
     | "imageWidth"
     | "imageHeight"
     | "characterImageInstructions"
+    | "promptBlocks"
   >;
   characters: ReturnType<typeof createCharactersStorage>;
   promptOverrides: ReturnType<typeof createPromptOverridesStorage>;

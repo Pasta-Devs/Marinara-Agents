@@ -84,8 +84,10 @@ export function SlurpBackstageSubnav({
 
 export function SlurpBackstageSearch({
   onSelect,
+  className,
 }: {
   onSelect: (section: SlurpBackstageSection, target: SlurpBackstageTarget, setting: keyof SlurpSettings) => void;
+  className?: string;
 }) {
   const { t, i18n } = useTranslation();
   const [query, setQuery] = useState("");
@@ -133,7 +135,7 @@ export function SlurpBackstageSearch({
   };
   const open = query.trim().length > 0;
   return (
-    <div className="relative z-20 w-full max-w-xl">
+    <div className={cn("relative z-20 w-full max-w-xl", className)}>
       <label className="sr-only" htmlFor="slurp-backstage-search">
         {t("ui.slurp.settings.backstage.findSetting", { defaultValue: "Find a setting" })}
       </label>
