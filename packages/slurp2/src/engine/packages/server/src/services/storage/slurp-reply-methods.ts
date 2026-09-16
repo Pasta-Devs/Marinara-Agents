@@ -8,6 +8,7 @@ import { isSlurpFileUniqueConstraintError } from "./slurp-file-errors.js";
 import type { SlurpThread } from "./slurp-messages.types.js";
 
 export function createSlurpReplyMethods(db: DB) {
+  /** The fan's newest message in a thread: the one a reply owes an answer to. */
   const latestViewerMessageId = async (threadId: string): Promise<string | null> => {
     const rows = await db
       .select()

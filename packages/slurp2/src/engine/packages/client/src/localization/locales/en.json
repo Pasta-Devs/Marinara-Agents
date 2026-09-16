@@ -1485,6 +1485,7 @@
   "ui.slurp.messages.replyStatus.connection_not_found": "No text connection is configured, so nobody can answer yet.",
   "ui.slurp.messages.replyStatus.failed": "The reply could not be written. Your message was still delivered.",
   "ui.slurp.messages.forceReply": "Force reply now",
+  "ui.slurp.messages.replyStatus.owed": "Delivered. {{name}} has not answered yet.",
   "ui.slurp.messages.resetTitle": "Clear this conversation?",
   "ui.slurp.messages.resetDetail": "Every message here is deleted, and what they remember of it goes with them. Coins, unlocks and commissions are kept. This cannot be undone.",
   "ui.slurp.messages.resetConfirm": "Clear it",

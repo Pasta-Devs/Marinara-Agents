@@ -448,8 +448,12 @@ function errorMessage(error: unknown, fallback: string) {
 export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   const { t: localizeUi } = useUiTranslation();
   const accountsQuery = useNoodlerAccounts();
-  // A tab left open across an Engine update can keep running the old package bundle, and no
-  // refetch recovers from that. Reload when the retry still fails.
+  /**
+   * Load the Hub again after a failure.
+   *
+   * A tab left open across an Engine update can keep running the old package bundle, and no refetch
+   * recovers from that. So a retry that fails again reloads the page.
+   */
   const retryAccountsOrReload = async () => {
     if ((await accountsQuery.refetch()).isError) window.location.reload();
   };

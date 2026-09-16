@@ -3179,6 +3179,7 @@ export function useSendSlurpMessage() {
   });
 }
 
+/** Answer a queued conversation now. The server still applies every guard a normal send does. */
 export function useForceSlurpReply() {
   const queryClient = useQueryClient();
   return useMutation({

@@ -82,6 +82,7 @@ import {
  */
 const SLURP_REPLY_STATUS_FALLBACKS: Record<string, string> = {
   queued: "Delivered. A reply from {{name}} is queued for later.",
+  owed: "Delivered. {{name}} has not answered yet.",
   cooling: "{{name}} has stepped away from this conversation. Give them some time.",
   busy: "{{name}} is already writing back. Give it a moment.",
   ineligible: "{{name}} is not answering this conversation right now.",
@@ -886,6 +887,12 @@ function SlurpThreadView({
    * The indicator starts when the fan hits send. Keep the full server pacing after the response too,
    * so a fast model cannot make the Creator answer appear immediately.
    */
+  // The note from the last send, and the standing obligation the server tracks. A reply can be
+  // owed long after the send that asked for it — that is the whole case this button exists for —
+  // so the button follows `needsReply`, not the note.
+  const waitingNote = replyStatus && replyStatus !== "replied" ? replyStatus : null;
+  const canForceReply = Boolean(personaId && thread && !ownsCreator && (thread.needsReply || waitingNote === "queued"));
+
   const holdTyping = (ms: number, replyId?: string) => {
     if (ms <= 0) {
       setTyping(false);
@@ -1408,13 +1415,18 @@ function SlurpThreadView({
               </div>
             </div>
           )}
-          {!typing && replyStatus && replyStatus !== "replied" && (
+          {!typing && (waitingNote || canForceReply) && (
             <p aria-live="polite" className="self-start px-1 text-xs italic text-[var(--muted-foreground)]">
-              {localizeUi(`ui.slurp.messages.replyStatus.${replyStatus}`, {
-                defaultValue: SLURP_REPLY_STATUS_FALLBACKS[replyStatus] ?? "No answer yet.",
-                name: creator?.displayName ?? "",
-              })}
-              {replyStatus === "queued" && thread && personaId && (
+              {waitingNote
+                ? localizeUi(`ui.slurp.messages.replyStatus.${waitingNote}`, {
+                    defaultValue: SLURP_REPLY_STATUS_FALLBACKS[waitingNote] ?? "No answer yet.",
+                    name: creator?.displayName ?? "",
+                  })
+                : localizeUi("ui.slurp.messages.replyStatus.owed", {
+                    defaultValue: "Delivered. {{name}} has not answered yet.",
+                    name: creator?.displayName ?? "",
+                  })}
+              {canForceReply && thread && personaId && (
                 <button
                   type="button"
                   disabled={forceReply.isPending}
