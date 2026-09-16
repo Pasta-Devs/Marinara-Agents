@@ -4426,7 +4426,10 @@ function ViewerHub({
   const openPostItem = openPostId ? (feed.find((item) => item.post.id === openPostId) ?? null) : null;
   // One place decides what clicking a post image does, so the wall, the feed, and the profile
   // all open the same dialog.
-  const feedCardCtx = { ...postCardCtx, openPost: setOpenPostId };
+  // Every Creator on the feed is one of the player's own, so the feed offers the same edit and
+  // delete as the Creator profile. The image dialog keeps management off: it draws the card
+  // without its picture, and an edit started there would save the post without it.
+  const feedCardCtx = { ...postCardCtx, postManagement: true, openPost: setOpenPostId };
   const visibleSearchResults = searchResults.slice(0, visibleFeedCount);
   // The feed is newest-first, so the divider goes after the *last* new post — the viewer's own
   // posts sitting in that run are not news themselves but must not cut it short. Shown only

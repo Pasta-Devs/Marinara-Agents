@@ -95,6 +95,8 @@ import {
   slurpCrossoverLeave,
   slurpCrossoverMerge,
   slurpCrossoverPartner,
+  slurpCollabPartners,
+  slurpCreatorCollabsSchema,
   slurpCrossoverStart,
   slurpCrossoverView,
   SLURP_PROJECT_CHAPTER_MAX_LENGTH,
@@ -148,6 +150,11 @@ import {
 import { SLURP_AUDIENCE_TONES, SLURP_DEFAULT_AUDIENCE_TONE } from "../slurp/slurp-tone.js";
 import { SLURP_REALISTIC_TUNING, slurpSimulationTuningSchema } from "../slurp/slurp-tuning.js";
 import { slurpFanTypesDefault, slurpFanTypesSchema, slurpNormalizeFanTypes } from "../slurp/slurp-fan-types.js";
+import {
+  slurpNormalizePlatformEvents,
+  slurpPlatformEventsDefault,
+  slurpPlatformEventsSchema,
+} from "../slurp/slurp-platform-events.js";
 import { slurpNormalizeReactionBanks, type SlurpReactionBanks } from "../slurp/slurp-reaction-bank.js";
 import { slurpModelBudgetSchema } from "../slurp/slurp-model-budget.js";
 import {
@@ -162,6 +169,8 @@ import {
   SLURP_DEFAULT_STORY_RATE,
   SLURP_PROJECT_RATE,
   SLURP_STORY_RATE,
+  SLURP_DEFAULT_TEASER_RATE,
+  SLURP_TEASER_RATE,
 } from "../slurp/slurp-post-variation.js";
 import { createSlurpEventsStorage } from "./slurp-events.storage.js";
 import { createSlurpPopulationStorage } from "./slurp-population.storage.js";
@@ -408,6 +417,8 @@ export const slurpSettingsSchema = z.object({
   imageHeight: z.number().int().min(64).max(4096),
   /** Share of a Creator's automatic posts published as Stories. */
   storyRate: z.enum(SLURP_STORY_RATE),
+  /** How often an automatic post goes out free as a teaser. See `slurpTeaserPost`. */
+  teaserRate: z.enum(SLURP_TEASER_RATE),
   /** Share of a Creator's automatic posts that continue a project rather than standing alone. */
   projectRate: z.enum(SLURP_PROJECT_RATE),
   /** Multiplies every arc chapter's day range. */
@@ -639,6 +650,10 @@ export const slurpSettingsSchema = z.object({
   simulationTuning: slurpSimulationTuningSchema,
   /** Who is in the audience. See `slurp-fan-types.ts`; an empty or broken list falls back to the built-ins. */
   fanTypes: slurpFanTypesSchema,
+  /** Holidays and site-wide events. See `slurp-platform-events.ts`. */
+  platformEvents: slurpPlatformEventsSchema,
+  /** Creator pairs allowed to collab, with what each pair makes. See `slurp-project.ts`. */
+  creatorCollabs: slurpCreatorCollabsSchema,
   /** Which visible text may call a model, and the hard hourly/daily budget for it. */
   modelBudget: slurpModelBudgetSchema,
   nightQuiet: z.boolean(),
@@ -1203,6 +1218,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   imageWidth: 1024,
   imageHeight: 1536,
   storyRate: SLURP_DEFAULT_STORY_RATE,
+  teaserRate: SLURP_DEFAULT_TEASER_RATE,
   projectRate: SLURP_DEFAULT_PROJECT_RATE,
   arcPace: SLURP_DEFAULT_ARC_PACE,
   discoveryTags: SLURP_DISCOVERY_TAG_SEED.map((entry) => ({ ...entry })),
@@ -1303,6 +1319,8 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   autopurgeNextRunAt: null,
   simulationTuning: SLURP_REALISTIC_TUNING,
   fanTypes: slurpFanTypesDefault(),
+  platformEvents: slurpPlatformEventsDefault(),
+  creatorCollabs: [],
   modelBudget: slurpModelBudgetSchema.parse({}),
   nightQuiet: false,
   onboarding: "not_started",
@@ -1351,6 +1369,8 @@ export function normalizeSlurpSettings(raw: unknown): SlurpSettings {
   // because a single field went out of range. An all-disabled list re-enables built-in Regular,
   // which is the one state the tick cannot run in — there would be nobody to pick.
   candidate.fanTypes = slurpNormalizeFanTypes(rawRecord.fanTypes ?? DEFAULT_SLURP_SETTINGS.fanTypes);
+  // An empty list is a real choice; only a missing or non-array value falls back to the defaults.
+  candidate.platformEvents = slurpNormalizePlatformEvents(rawRecord.platformEvents);
   candidate.arcLibrary = rawRecord.arcLibrary ?? slurpArcLibraryFromLegacy(rawRecord.arcAllowedKinds);
   candidate.onboarding = rawRecord.onboarding ?? DEFAULT_SLURP_SETTINGS.onboarding;
   candidate.fanArchetypeWeights = {
@@ -7797,6 +7817,9 @@ export function createSlurpStorage(db: DB) {
       }
       return slurpCrossoverPartner({
         creatorAccountId: creator.id,
+        collabIds: slurpCollabPartners((await this.getSettings()).creatorCollabs, creator.id).map(
+          (entry) => entry.partnerId,
+        ),
         at,
         creatorTags: creator.settings.profile.tags ?? [],
         candidates,

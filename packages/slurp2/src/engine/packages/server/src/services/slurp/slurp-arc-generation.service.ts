@@ -2,6 +2,7 @@
  * A model-invented arc for one Creator. One small structured call; the answer is only raw JSON here
  * and is clamped by `slurpGeneratedArcProject` before anything is stored.
  */
+import { slurpCollabPartners } from "./slurp-project.js";
 import type { APIProvider } from "@marinara-engine/shared";
 import { isDebugAgentsEnabled } from "../../config/runtime-config.js";
 import type { DB } from "../../db/connection.js";
@@ -40,7 +41,7 @@ export function buildSlurpArcGenerationMessages(input: {
   libraryNames: readonly string[];
   pastArcTitles: readonly string[];
   /** A crossover's other creators. */
-  partners?: readonly { name: string; stagePersonality: string; tags: readonly string[] }[];
+  partners?: readonly { name: string; stagePersonality: string; tags: readonly string[]; collab?: string }[];
 }): ChatMessage[] {
   return [
     {
@@ -74,7 +75,7 @@ export function buildSlurpArcGenerationMessages(input: {
               "# Crossover: this arc is one shared story with these other creators, who post their own side of it",
               ...input.partners.map(
                 (partner) =>
-                  `- ${partner.name}: ${partner.stagePersonality || "personality not set"} (tags: ${partner.tags.join(", ") || "none"})`,
+                  `- ${partner.name}: ${partner.stagePersonality || "personality not set"} (tags: ${partner.tags.join(", ") || "none"})${partner.collab?.trim() ? `. What the two of them make together: ${partner.collab.trim()}` : ""}`,
               ),
             ]
           : []),
@@ -108,6 +109,8 @@ export async function generateSlurpArc(
     const slurp = createSlurpStorage(db);
     const creator = await slurp.getNoodlerAccountById(creatorAccountId, { includeHidden: true });
     if (!creator) return null;
+    const settings = await slurp.getSettings();
+    const collabs = settings.creatorCollabs;
     const partners = [];
     for (const id of partnerIds) {
       const partner = await slurp.getNoodlerAccountById(id, { includeHidden: true });
@@ -116,9 +119,9 @@ export async function generateSlurpArc(
           name: partner.displayName,
           stagePersonality: partner.settings.privacy.stagePersonality ?? "",
           tags: partner.settings.profile.tags,
+          collab: slurpCollabPartners(collabs, creatorAccountId).find((entry) => entry.partnerId === id)?.content,
         });
     }
-    const settings = await slurp.getSettings();
     const workerContext = admissionMode.kind === "background" ? "background" : "present";
     if (!slurpModelWorkerAllows(settings.modelBudget, workerContext)) return null;
     if (!(await claimSlurpModelBudget(db, settings.modelBudget, "arc"))) return null;

@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import {
   BookOpen,
+  CalendarDays,
   ChevronRight,
   Coins,
   Image,
@@ -22,6 +23,8 @@ import { SlurpSimulationSettings } from "./SlurpSimulationSettings";
 import { SlurpFanTypesSettings } from "./SlurpFanTypesSettings";
 import { SlurpAudienceConfigSettings } from "./SlurpAudienceConfigSettings";
 import { SlurpTagsSettings } from "./SlurpTagsSettings";
+import { SlurpPlatformEventsSettings } from "./SlurpPlatformEventsSettings";
+import { slurpActivePlatformEvents } from "../../../../server/src/services/slurp/slurp-platform-events.js";
 import { api } from "../../lib/api-client";
 import { toast } from "sonner";
 import { SettingAnchor } from "./SlurpBackstageKit";
@@ -119,6 +122,13 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
       title: t("ui.slurp.settings.backstage.landing.discovery", { defaultValue: "Discovery tags" }),
       status: String(settings.discoveryTags.length),
       tone: settings.discoveryTags.length ? "info" : "warning",
+    },
+    {
+      target: "events",
+      icon: <CalendarDays size={20} />,
+      title: t("ui.slurp.settings.backstage.landing.events", { defaultValue: "Events and holidays" }),
+      status: String(slurpActivePlatformEvents(settings.platformEvents, new Date()).length),
+      tone: slurpActivePlatformEvents(settings.platformEvents, new Date()).length ? "ok" : "off",
     },
     {
       target: "messaging",
@@ -223,6 +233,16 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
             tags={settings.discoveryTags}
             saving={updateSettings.isPending}
             onSave={(tags) => update("discoveryTags", tags)}
+          />
+        </SettingAnchor>
+      )}
+
+      {target === "events" && (
+        <SettingAnchor settingKey="platformEvents">
+          <SlurpPlatformEventsSettings
+            events={settings.platformEvents}
+            saving={updateSettings.isPending}
+            onSave={(events) => update("platformEvents", events)}
           />
         </SettingAnchor>
       )}
@@ -773,6 +793,25 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
             value={settings.walletEnabled}
             onChange={(value) => update("walletEnabled", value)}
           />
+          <Field
+            settingKey="teaserRate"
+            label={t("ui.slurp.settings.wallet.teaserRate", { defaultValue: "Free teaser posts" })}
+            detail={t("ui.slurp.settings.wallet.teaserRateDetail", {
+              defaultValue:
+                "How often an automatic post goes out free. Creators for whom it fits use it to win subscribers; the rest just post something free.",
+            })}
+          >
+            <select
+              value={settings.teaserRate}
+              onChange={(event) => void update("teaserRate", event.target.value as SlurpSettings["teaserRate"])}
+              className="min-h-11 w-full rounded-lg bg-[var(--slurp-canvas)] px-3 text-base ring-1 ring-inset ring-[var(--slurp-outline)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] sm:text-sm"
+            >
+              <option value="off">{t("ui.slurp.settings.storyRateOff")}</option>
+              <option value="rare">{t("ui.slurp.settings.storyRateRare")}</option>
+              <option value="regular">{t("ui.slurp.settings.storyRateRegular")}</option>
+              <option value="often">{t("ui.slurp.settings.storyRateOften")}</option>
+            </select>
+          </Field>
           <Field
             settingKey="walletUnlockCost"
             label={t("ui.slurp.settings.wallet.unlockCost", { defaultValue: "Unlock a post" })}

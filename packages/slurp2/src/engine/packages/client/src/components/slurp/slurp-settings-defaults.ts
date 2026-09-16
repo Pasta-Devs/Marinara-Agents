@@ -83,6 +83,7 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
     "messagesStalePostAwayMaxMinutes",
   ],
   wallet: [
+    "teaserRate",
     "walletEnabled",
     "walletUnlockCost",
     "walletSubscriptionCost",
@@ -124,6 +125,8 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
  */
 export const SLURP_SETTINGS_NOT_RESET: readonly (keyof SlurpSettings)[] = [
   "fanTypes",
+  "platformEvents",
+  "creatorCollabs",
   "promptPresets",
   "generationConnectionId",
   "imageGenerationConnectionId",

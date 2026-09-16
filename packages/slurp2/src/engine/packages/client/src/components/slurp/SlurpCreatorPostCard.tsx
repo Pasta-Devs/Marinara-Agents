@@ -11,7 +11,9 @@ import {
   ChevronDown,
   Eye,
   Heart,
+  Flame,
   Image as ImageIcon,
+  TrendingUp,
   MessageCircle,
   MoreHorizontal,
   Pencil,
@@ -24,6 +26,7 @@ import {
   X,
 } from "lucide-react";
 import { Fragment, useMemo, useRef, useState } from "react";
+import { slurpPostWentViral, slurpReachWeek } from "../../../../server/src/services/slurp/slurp-reach.js";
 import {
   canManageNoodleReply,
   noodlePollInputSchema,
@@ -657,6 +660,17 @@ export function SlurpCreatorPostCard({
   const displayedImageUrl = postImageSrc && postImageSrc !== failedImageUrl ? postImageSrc : null;
   const imageGenerationPending = ctx.generatingPostImageId === post.id;
   const postMenuOpen = ctx.postMenuId === post.id;
+  // The algorithm week this post was made in. Derived, like its counts, so every card agrees.
+  const reachBadge = slurpPostWentViral({ accountId: post.authorAccountId, postId: post.id, createdAt: post.createdAt })
+    ? "viral"
+    : slurpReachWeek(post.authorAccountId, post.createdAt) === "featured"
+      ? "featured"
+      : null;
+  // Debug view of what the picture was made from, and what the vision model said it shows.
+  const [imageContextOpen, setImageContextOpen] = useState(false);
+  const imageDescription =
+    typeof post.metadata?.imageDescription === "string" ? post.metadata.imageDescription.trim() : "";
+  const hasImageContext = Boolean(post.imageUrl && (post.imagePrompt?.trim() || imageDescription));
   // Distinct from displayedImageUrl: while postImageSrc is still resolving (the authenticated
   // fetch hasn't returned yet) there is no evidence the image is broken, so editing must not
   // drop it. Only a confirmed <img> render failure (postImageSrc resolved and then errored,
@@ -1225,6 +1239,18 @@ export function SlurpCreatorPostCard({
             <p className="text-xs font-medium !text-[var(--noodle-accent-foreground)]">
               @{author?.handle ?? localizeUi("ui.slurp.profile.fallbackHandle")} ·{" "}
               {formatTime(post.createdAt, i18n.language)}
+              {reachBadge && (
+                <span className="ms-1.5 inline-flex items-center gap-1 rounded-full bg-[var(--noodle-accent)]/15 px-1.5 py-px text-[0.62rem] font-bold text-[var(--noodle-accent)]">
+                  {reachBadge === "viral" ? (
+                    <Flame size={10} aria-hidden="true" />
+                  ) : (
+                    <TrendingUp size={10} aria-hidden="true" />
+                  )}
+                  {reachBadge === "viral"
+                    ? localizeUi("ui.slurp.post.viral", { defaultValue: "Went viral" })
+                    : localizeUi("ui.slurp.post.featured", { defaultValue: "Featured" })}
+                </span>
+              )}
             </p>
           </div>
           <div className="relative shrink-0">
@@ -1282,6 +1308,21 @@ export function SlurpCreatorPostCard({
                       {localizeUi("lorebook.editor.batch.delete")}
                     </button>
                   </>
+                )}
+                {hasImageContext && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      ctx.setPostMenuId(null);
+                      setImageContextOpen((open) => !open);
+                    }}
+                    className="flex min-h-10 w-full items-center gap-2 px-3 text-start transition-colors hover:bg-[var(--accent)]"
+                  >
+                    <ImageIcon size={14} />
+                    {imageContextOpen
+                      ? localizeUi("ui.slurp.post.hideImageContext", { defaultValue: "Hide image context" })
+                      : localizeUi("ui.slurp.post.showImageContext", { defaultValue: "Show image context" })}
+                  </button>
                 )}
                 <button
                   type="button"
@@ -1393,6 +1434,27 @@ export function SlurpCreatorPostCard({
             )}
           </div>
         ) : null}
+        {imageContextOpen && hasImageContext && (
+          <div className="mt-3 space-y-2 rounded-xl border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/10 p-3 text-xs leading-5">
+            {post.imagePrompt?.trim() && (
+              <div>
+                <span className="mb-1 flex items-center gap-1.5 font-semibold text-[var(--noodle-accent)]">
+                  <ImageIcon size={13} aria-hidden="true" />
+                  {localizeUi("ui.noodle.noodlepostcard.imagePrompt")}
+                </span>
+                <p className="whitespace-pre-wrap break-words">{post.imagePrompt}</p>
+              </div>
+            )}
+            {imageDescription && (
+              <div>
+                <span className="mb-1 block font-semibold text-[var(--noodle-accent)]">
+                  {localizeUi("ui.slurp.post.imageDescription", { defaultValue: "Vision model description" })}
+                </span>
+                <p className="whitespace-pre-wrap break-words">{imageDescription}</p>
+              </div>
+            )}
+          </div>
+        )}
         {isEditingPost ? (
           <div className="mt-2 space-y-2">
             {titleEditing && (

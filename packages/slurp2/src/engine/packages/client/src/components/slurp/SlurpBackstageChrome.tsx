@@ -7,6 +7,7 @@ import { ProfileInitial } from "./SlurpShell";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { cn } from "../../lib/utils";
 import { estimateSlurpSimulation } from "./slurp-simulation-estimate";
+import { slurpActivePlatformEvents } from "../../../../server/src/services/slurp/slurp-platform-events.js";
 import {
   destinationForTarget,
   SLURP_BACKSTAGE_SECTION_LABELS,
@@ -262,6 +263,12 @@ export function outcomeSummary(
       });
     case "tags":
       return t(key, { defaultValue: "{{count}} discovery tags", count: settings.discoveryTags.length });
+    case "events":
+      return t(key, {
+        defaultValue: "{{count}} events · {{active}} running now",
+        count: settings.platformEvents.length,
+        active: slurpActivePlatformEvents(settings.platformEvents, new Date()).length,
+      });
     case "arcs":
       return t(key, {
         defaultValue: "{{count}} story templates · {{mode}}",

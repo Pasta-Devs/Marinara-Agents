@@ -90,6 +90,7 @@ import {
   buildNoodlerPublicIdentity,
   stageProfileContainsPublicIdentity,
   stageProfileContainsSourceDetails,
+  resolveSlurpAutomaticPostAccess,
 } from "../services/slurp/slurp-generation.service.js";
 import {
   createNoodlerPost,
@@ -2212,6 +2213,7 @@ export async function slurpRoutes(app: FastifyInstance) {
                 postId: post.id,
                 createdAt: post.createdAt,
                 creatorReach: reachByAccountId.get(post.authorAccountId) ?? 0,
+                accountId: post.authorAccountId,
                 realLikes: allInteractions.filter((item) => item.type === "like").length,
               },
               projectedAt,
@@ -2221,6 +2223,7 @@ export async function slurpRoutes(app: FastifyInstance) {
                 postId: post.id,
                 createdAt: post.createdAt,
                 creatorReach: reachByAccountId.get(post.authorAccountId) ?? 0,
+                accountId: post.authorAccountId,
                 realReplies: allInteractions.filter((item) => item.type === "reply").length,
               },
               projectedAt,
@@ -2231,6 +2234,7 @@ export async function slurpRoutes(app: FastifyInstance) {
                     postId: post.id,
                     createdAt: post.createdAt,
                     creatorReach: reachByAccountId.get(post.authorAccountId) ?? 0,
+                    accountId: post.authorAccountId,
                   },
                   projectedAt,
                 )
@@ -2824,7 +2828,7 @@ export async function slurpRoutes(app: FastifyInstance) {
         const previous = snapshot?.creators[account.id] ?? null;
         const posts = (postsByAccount.get(account.id) ?? []).map((post) => {
           const postInteractions = interactionsByPostId.get(post.id) ?? [];
-          const input = { postId: post.id, createdAt: post.createdAt, creatorReach: followers };
+          const input = { postId: post.id, createdAt: post.createdAt, creatorReach: followers, accountId: account.id };
           return {
             id: post.id,
             title: post.title,
@@ -2912,6 +2916,82 @@ export async function slurpRoutes(app: FastifyInstance) {
     });
 
     return { since: snapshot?.at ?? null, creators };
+  });
+
+  /**
+   * Metrics for every Creator, for the Backstage Creators list.
+   *
+   * Read-only on purpose. `/noodler/studio` rewrites its snapshot on every read, so the Creator
+   * home deltas would reset whenever Settings was opened. Likes and replies are the displayed
+   * counts over the newest posts, the same numbers a post card shows.
+   */
+  app.get("/noodler/creator-metrics", async () => {
+    const accounts = (await noodle.listNoodlerAccounts()).filter((account) => !isSlurpViewerActorAccount(account));
+    const ids = accounts.map((account) => account.id);
+    const settings = await noodle.getSettings();
+    const scale = slurpPlatformScaleMultiplier(settings.platformScale);
+    const population = createSlurpPopulationStorage(app.db);
+    const [funnel, fanSubscribers, threads, postsByAccount] = await Promise.all([
+      population.countFollowersForCreators(ids),
+      population.countSubscribersForCreators(ids),
+      createSlurpMessagesStorage(app.db)
+        .listThreadsForCreators(ids)
+        .catch(() => []),
+      // ponytail: newest 100 posts per Creator; add a count query if totals past that matter.
+      noodle.listNoodlerPostsByAccounts(ids, 100),
+    ]);
+    const postIds = [...postsByAccount.values()].flat().map((post) => post.id);
+    const interactions = postIds.length > 0 ? await noodle.listNoodlerInteractions(postIds) : [];
+    const realCounts = new Map<string, { likes: number; replies: number }>();
+    for (const interaction of interactions) {
+      const entry = realCounts.get(interaction.postId) ?? { likes: 0, replies: 0 };
+      if (interaction.type === "like") entry.likes += 1;
+      if (interaction.type === "reply") entry.replies += 1;
+      realCounts.set(interaction.postId, entry);
+    }
+    const at = new Date();
+    const creators = await Promise.all(
+      accounts.map(async (account) => {
+        const followers = slurpCreatorReach(
+          {
+            accountId: account.id,
+            createdAt: account.createdAt,
+            realFollowers: funnel.get(account.id) ?? 0,
+            scale,
+          },
+          at,
+          settings.simulationTuning.reach,
+        );
+        let likes = 0;
+        let replies = 0;
+        for (const post of postsByAccount.get(account.id) ?? []) {
+          const input = { postId: post.id, createdAt: post.createdAt, creatorReach: followers, accountId: account.id };
+          const real = realCounts.get(post.id) ?? { likes: 0, replies: 0 };
+          likes += slurpPostLikeCount({ ...input, realLikes: real.likes }, at);
+          replies += slurpPostReplyCount({ ...input, realReplies: real.replies }, at);
+        }
+        const [postCount, subscriptions, earnings, arcs] = await Promise.all([
+          noodle.countNoodlerPostsByAccount(account.id),
+          noodle.listSubscriptionsForCreator(account.id),
+          noodle.getEarnings(account.id),
+          noodle.listActiveProjects(account.id).catch(() => []),
+        ]);
+        return {
+          id: account.id,
+          posts: postCount,
+          followers,
+          likes,
+          replies,
+          subscribers: subscriptions.length + (fanSubscribers.get(account.id) ?? 0),
+          earnings: earnings.lifetime,
+          unread: threads
+            .filter((thread) => thread.creatorAccountId === account.id)
+            .reduce((sum, thread) => sum + thread.creatorUnread, 0),
+          arcs: arcs.length,
+        };
+      }),
+    );
+    return { creators };
   });
 
   app.get("/noodler/viewer/unseen-count", async (req, reply) => {
@@ -4760,27 +4840,33 @@ export async function slurpRoutes(app: FastifyInstance) {
         creatorId: z.string().min(1).nullable().optional(),
         public: z.string().max(SLURP_POST_GUIDANCE_MAX_LENGTH).optional(),
         locked: z.string().max(SLURP_POST_GUIDANCE_MAX_LENGTH).optional(),
+        /** A Creator's private content menu. Only valid with `creatorId`: it has no global level. */
+        menu: z.string().max(SLURP_POST_GUIDANCE_MAX_LENGTH).optional(),
       })
       .safeParse(req.body ?? {});
     if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
     const { creatorId } = body.data;
-    if (body.data.public === undefined && body.data.locked === undefined) {
-      return reply.code(400).send({ error: "Send public, locked, or both." });
+    if (body.data.public === undefined && body.data.locked === undefined && body.data.menu === undefined) {
+      return reply.code(400).send({ error: "Send public, locked, or menu." });
+    }
+    if (body.data.menu !== undefined && !creatorId) {
+      return reply.code(400).send({ error: "A content menu belongs to one Creator; send creatorId." });
     }
     if (creatorId && !(await noodle.getNoodlerAccountById(creatorId))) {
       return reply.code(404).send({ error: "Slurp stage profile not found" });
     }
     const next = await updateSlurpPostGuidance(app.db, (current) => {
-      const patch = (entry: { public: string; locked: string }) => ({
+      const patch = (entry: { public: string; locked: string; menu: string }) => ({
         public: body.data.public ?? entry.public,
         locked: body.data.locked ?? entry.locked,
+        menu: body.data.menu ?? entry.menu,
       });
       if (!creatorId) return { ...current, defaults: patch(current.defaults) };
       return {
         ...current,
         creators: {
           ...current.creators,
-          [creatorId]: patch(current.creators[creatorId] ?? { public: "", locked: "" }),
+          [creatorId]: patch(current.creators[creatorId] ?? { public: "", locked: "", menu: "" }),
         },
       };
     });
@@ -4870,7 +4956,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       const result = await generateAndApplyNoodlerPost(app.db, {
         mode: "noodler",
         targetAccountId: id,
-        access: "locked",
+        access: await resolveSlurpAutomaticPostAccess(noodle, id),
       });
       // Run-now never sets reviewImagePromptsBeforeSend, so the generator can only return a
       // plain post here — no image-prompt review is ever produced on this path.

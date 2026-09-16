@@ -8,6 +8,7 @@ import { useTranslation as useUiTranslation } from "react-i18next";
 import { api } from "../lib/api-client";
 import type { SlurpSimulationTuning } from "../../../server/src/services/slurp/slurp-tuning.js";
 import type { SlurpFanType } from "../../../server/src/services/slurp/slurp-fan-types.js";
+import type { SlurpPlatformEvent } from "../../../server/src/services/slurp/slurp-platform-events.js";
 import type { SlurpModelBudget } from "../../../server/src/services/slurp/slurp-model-budget.js";
 import { refreshSlurpCreatorBatch } from "../lib/slurp-refresh-batch";
 import { useSlurpUIStore } from "../stores/slurp-package.store";
@@ -345,6 +346,7 @@ export type SlurpSettings = {
   imageWidth: number;
   imageHeight: number;
   storyRate: "off" | "rare" | "regular" | "often";
+  teaserRate: "off" | "rare" | "regular" | "often";
   projectRate: "off" | "rare" | "regular" | "often";
   arcPace: "slow" | "normal" | "fast";
   arcAffectsMood: boolean;
@@ -408,6 +410,8 @@ export type SlurpSettings = {
   fanArchetypeWeights: Record<string, number>;
   /** Editable audience personas and their numeric behavior. */
   fanTypes: SlurpFanType[];
+  platformEvents: SlurpPlatformEvent[];
+  creatorCollabs: { creatorIds: [string, string]; content: string }[];
   /** Creators answer while you are away. Off leaves the background reply loop asleep. */
   messagesAwayRepliesEnabled: boolean;
   messagesReplyBubbleLimit: number;
@@ -882,7 +886,7 @@ export function useSlurpImageConnections(enabled = true) {
  * falls back to the built-in text on the server. Nothing here is resolved on the client, so the
  * fields show what was actually written rather than the value in force.
  */
-export type SlurpPostGuidanceEntry = { public: string; locked: string };
+export type SlurpPostGuidanceEntry = { public: string; locked: string; menu: string };
 export type SlurpPostGuidance = {
   defaults: SlurpPostGuidanceEntry;
   creators: Record<string, SlurpPostGuidanceEntry>;
@@ -903,7 +907,7 @@ export function useSlurpPostGuidance(enabled = true) {
 export function useUpdateSlurpPostGuidance() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (patch: { creatorId?: string | null; public?: string; locked?: string }) =>
+    mutationFn: (patch: { creatorId?: string | null; public?: string; locked?: string; menu?: string }) =>
       api.patch<SlurpPostGuidance>("/slurp2/noodler/post-guidance", patch),
     onSuccess: (value) => qc.setQueryData(noodleKeys.noodlerPostGuidance(), value),
   });
@@ -1529,6 +1533,28 @@ export function useDeleteSlurpProject() {
         `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects/${encodeURIComponent(projectId)}?personaId=${encodeURIComponent(personaId)}`,
       ),
     onSuccess: () => invalidateSlurpProjects(qc),
+  });
+}
+
+export type SlurpCreatorMetrics = {
+  id: string;
+  posts: number;
+  followers: number;
+  subscribers: number;
+  likes: number;
+  replies: number;
+  earnings: number;
+  unread: number;
+  arcs: number;
+};
+
+/** Read-only metrics for every Creator. Unlike the studio, reading this changes nothing. */
+export function useSlurpCreatorMetrics(enabled = true) {
+  return useQuery({
+    queryKey: [...noodleKeys.noodlerRoot(), "creator-metrics"],
+    queryFn: () => api.get<{ creators: SlurpCreatorMetrics[] }>("/slurp2/noodler/creator-metrics"),
+    enabled,
+    staleTime: 30_000,
   });
 }
 

@@ -33,7 +33,8 @@ export function SlurpPostGuidanceField({
   savedMessage,
   disabled = false,
 }: {
-  access: SlurpPostAccess;
+  /** `menu` is a Creator's private content menu: same card, no model draft. */
+  access: SlurpPostAccess | "menu";
   creatorId?: string | null;
   guidance: SlurpPostGuidance | undefined;
   /** The text that applies while this field has no override of its own. */
@@ -84,32 +85,34 @@ export function SlurpPostGuidanceField({
         }}
         onRestore={() => void save("")}
       />
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled={disabled || generate.isPending || update.isPending}
-          onClick={() =>
-            generate.mutate(
-              { access, creatorId, currentDraft: draft || effective },
-              {
-                onSuccess: (result) => {
-                  setDraft(result.guidance);
-                  setOpen(true);
+      {access !== "menu" && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={disabled || generate.isPending || update.isPending}
+            onClick={() =>
+              generate.mutate(
+                { access, creatorId, currentDraft: draft || effective },
+                {
+                  onSuccess: (result) => {
+                    setDraft(result.guidance);
+                    setOpen(true);
+                  },
+                  onError: (error) => toast.error(errorMessage(error)),
                 },
-                onError: (error) => toast.error(errorMessage(error)),
-              },
-            )
-          }
-          className={quietButton}
-        >
-          {generate.isPending ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : (
-            <Sparkles size={14} className="text-[var(--noodle-accent)]" />
-          )}
-          {generateLabel}
-        </button>
-      </div>
+              )
+            }
+            className={quietButton}
+          >
+            {generate.isPending ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Sparkles size={14} className="text-[var(--noodle-accent)]" />
+            )}
+            {generateLabel}
+          </button>
+        </div>
+      )}
       <PromptEditor
         open={open}
         title={label}

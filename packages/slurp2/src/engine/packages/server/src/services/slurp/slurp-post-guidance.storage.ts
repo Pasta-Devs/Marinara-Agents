@@ -9,6 +9,7 @@ import type { DB } from "../../db/connection.js";
 import { createAppSettingsStorage } from "../storage/app-settings.storage.js";
 import {
   sanitizeSlurpPostGuidance,
+  selectSlurpCreatorMenu,
   selectSlurpPostGuidance,
   type SlurpPostAccess,
   type SlurpPostGuidance,
@@ -57,4 +58,8 @@ export async function updateSlurpPostGuidance(
 
 export async function resolveSlurpPostGuidance(db: DB, creatorId: string, access: SlurpPostAccess): Promise<string> {
   return selectSlurpPostGuidance(await getSlurpPostGuidance(db), creatorId, access);
+}
+
+export async function resolveSlurpCreatorMenu(db: DB, creatorId: string): Promise<string> {
+  return selectSlurpCreatorMenu(await getSlurpPostGuidance(db), creatorId);
 }

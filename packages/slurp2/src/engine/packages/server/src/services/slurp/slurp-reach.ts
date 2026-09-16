@@ -81,6 +81,69 @@ function ageInDays(since: string, at: Date): number {
 }
 
 /**
+ * The algorithm: what the platform did with one Creator in one week.
+ *
+ * Growth used to be a smooth curve, and a smooth curve reads as a spreadsheet. Some weeks the
+ * platform features a Creator, some weeks it buries them, and now and then a week goes viral. It
+ * is keyed on the Creator and the calendar week, so it is as deterministic as everything else here:
+ * the same week always had the same luck, on every read.
+ */
+export type SlurpReachWeek = "normal" | "featured" | "buried" | "viral";
+
+const WEEK_MS = 7 * DAY_MS;
+const weekIndex = (time: number) => Math.floor(time / WEEK_MS);
+
+export function slurpReachWeek(accountId: string, at: Date | string): SlurpReachWeek {
+  const time = typeof at === "string" ? Date.parse(at) : at.getTime();
+  if (!Number.isFinite(time)) return "normal";
+  const roll = unitFor(`${accountId}:${weekIndex(time)}`, "algorithm");
+  if (roll < 0.03) return "viral";
+  if (roll < 0.12) return "featured";
+  if (roll >= 0.9) return "buried";
+  return "normal";
+}
+
+/** Whether this post is the one that blew up. Only a post from a viral week can be. */
+export function slurpPostWentViral(input: { accountId: string; postId: string; createdAt: string }): boolean {
+  return slurpReachWeek(input.accountId, input.createdAt) === "viral" && unitFor(input.postId, "viral") < 0.4;
+}
+
+/** How the week a post was made in changes its reach. */
+function postReachMultiplier(input: { accountId?: string; postId: string; createdAt: string }): number {
+  if (!input.accountId) return 1;
+  switch (slurpReachWeek(input.accountId, input.createdAt)) {
+    case "viral":
+      return slurpPostWentViral({ ...input, accountId: input.accountId })
+        ? 6 + unitFor(input.postId, "spike") * 6
+        : 1.3;
+    case "featured":
+      return 1.6;
+    case "buried":
+      return 0.55;
+    default:
+      return 1;
+  }
+}
+
+/**
+ * The rush of new followers each viral week brought. Each rush settles over a couple of days from
+ * the start of its week, so it arrives as a spike and then stays, like a real one.
+ */
+function viralFollowerRush(accountId: string, createdAt: string, ceiling: number, at: Date): number {
+  const start = Date.parse(createdAt);
+  if (!Number.isFinite(start)) return 0;
+  let rush = 0;
+  // ponytail: walks every week since creation; fine for years of history, cache if it ever is not.
+  for (let week = weekIndex(start); week <= weekIndex(at.getTime()); week += 1) {
+    const weekStart = week * WEEK_MS;
+    if (slurpReachWeek(accountId, new Date(Math.max(weekStart, start))) !== "viral") continue;
+    const size = 0.1 + unitFor(`${accountId}:${week}`, "rush") * 0.3;
+    rush += ceiling * size * settle((at.getTime() - Math.max(weekStart, start)) / DAY_MS, 1.5);
+  }
+  return rush;
+}
+
+/**
  * How many followers a creator appears to have.
  *
  * The ceiling is log-spread across the id, so the roster gets a believable mix: a few large
@@ -106,7 +169,9 @@ export function slurpCreatorReach(
   const scale = Number.isFinite(input.scale) && (input.scale ?? 1) > 0 ? input.scale! : 1;
   const floor = Math.max(1, tuning.floor);
   const ceiling = floor * Math.pow(Math.max(floor, tuning.ceiling) / floor, spread);
-  const grown = ceiling * settle(ageInDays(input.createdAt, at), tuning.growthDays);
+  const grown =
+    ceiling * settle(ageInDays(input.createdAt, at), tuning.growthDays) +
+    viralFollowerRush(input.accountId, input.createdAt, ceiling, at);
   return Math.round((floor + grown) * scale + Math.max(0, input.realFollowers) * tuning.realFollowerWeight);
 }
 
@@ -117,12 +182,15 @@ export function slurpCreatorReach(
  * before it settles. The per-post share is stable, so an old post never loses reach.
  */
 export function slurpPostImpressions(
-  input: { postId: string; createdAt: string; creatorReach: number },
+  /** `accountId` lets the algorithm week apply. Without it the post gets its plain share. */
+  input: { postId: string; createdAt: string; creatorReach: number; accountId?: string },
   at: Date = new Date(),
 ): number {
   // Between 18% and 70% of the audience: the spread is what stops every post looking identical.
   const share = 0.18 + unitFor(input.postId, "impressions") * 0.52;
-  return Math.round(input.creatorReach * share * settle(ageInDays(input.createdAt, at), POST_SETTLE_DAYS));
+  return Math.round(
+    input.creatorReach * share * postReachMultiplier(input) * settle(ageInDays(input.createdAt, at), POST_SETTLE_DAYS),
+  );
 }
 
 /**
@@ -132,7 +200,7 @@ export function slurpPostImpressions(
  * accounts that acted; the synthetic remainder is the part nobody can click.
  */
 export function slurpPostLikeCount(
-  input: { postId: string; createdAt: string; creatorReach: number; realLikes: number },
+  input: { postId: string; createdAt: string; creatorReach: number; realLikes: number; accountId?: string },
   at: Date = new Date(),
 ): number {
   // 4%–14% of impressions like a post. Anything higher reads as fake.
@@ -145,7 +213,7 @@ export function slurpPostLikeCount(
  * and six readable ones looks broken, not busy.
  */
 export function slurpPostReplyCount(
-  input: { postId: string; createdAt: string; creatorReach: number; realReplies: number },
+  input: { postId: string; createdAt: string; creatorReach: number; realReplies: number; accountId?: string },
   at: Date = new Date(),
 ): number {
   const rate = 0.002 + unitFor(input.postId, "replies") * 0.006;
@@ -159,7 +227,7 @@ export function slurpPostReplyCount(
  * rate is deliberately low.
  */
 export function slurpPostUnlockCount(
-  input: { postId: string; createdAt: string; creatorReach: number },
+  input: { postId: string; createdAt: string; creatorReach: number; accountId?: string },
   at: Date = new Date(),
 ): number {
   const rate = 0.004 + unitFor(input.postId, "unlocks") * 0.012;

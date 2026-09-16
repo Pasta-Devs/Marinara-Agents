@@ -15,7 +15,12 @@
 export const SLURP_POST_GUIDANCE_MAX_LENGTH = 4000;
 
 export type SlurpPostAccess = "public" | "locked";
-export type SlurpPostGuidanceEntry = { public: string; locked: string };
+/**
+ * `menu` is the Creator's private content menu: what they offer and what they will not do. It
+ * rides along in this blob because it is the same kind of per-Creator direction, but it has no
+ * global level; only a Creator's own entry is ever read.
+ */
+export type SlurpPostGuidanceEntry = { public: string; locked: string; menu: string };
 export type SlurpPostGuidance = {
   /** Applies to every Creator that has no override of its own. */
   defaults: SlurpPostGuidanceEntry;
@@ -29,11 +34,12 @@ export type SlurpPostGuidance = {
 export const SLURP_BUILT_IN_POST_GUIDANCE: SlurpPostGuidanceEntry = {
   public:
     "This post is public and may be a reader's first impression. Make it complete and worthwhile on its own: share a specific moment, thought, update, or image that expresses who you are and gives people something real to react to. When paid material is relevant, create honest curiosity by saving only the genuinely premium continuation for it; do not withhold the meaning of this post or turn every public post into a repetitive subscription pitch.",
+  menu: "",
   locked:
     "This post is the premium continuation for someone who already subscribed or paid to unlock it. Deliver the promised extra value immediately through greater intimacy, candor, access, detail, or exclusivity that fits who you are and what led here; do not give them another sales pitch or another layer of artificial withholding. Premium does not have to mean sexual, but it must feel more personal or substantial than a public post and end as a satisfying payoff rather than a preview.",
 };
 
-const emptyEntry = (): SlurpPostGuidanceEntry => ({ public: "", locked: "" });
+const emptyEntry = (): SlurpPostGuidanceEntry => ({ public: "", locked: "", menu: "" });
 const defaults = (): SlurpPostGuidance => ({ defaults: emptyEntry(), creators: {} });
 
 function readText(value: unknown): string {
@@ -42,12 +48,12 @@ function readText(value: unknown): string {
 
 function readEntry(value: unknown): SlurpPostGuidanceEntry {
   const record = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
-  return { public: readText(record.public), locked: readText(record.locked) };
+  return { public: readText(record.public), locked: readText(record.locked), menu: readText(record.menu) };
 }
 
 /** An override that says nothing is not an override; storing it would only hide the global value. */
 function hasText(entry: SlurpPostGuidanceEntry): boolean {
-  return Boolean(entry.public.trim() || entry.locked.trim());
+  return Boolean(entry.public.trim() || entry.locked.trim() || entry.menu.trim());
 }
 
 export function sanitizeSlurpPostGuidance(value: unknown): SlurpPostGuidance {
@@ -72,6 +78,11 @@ export function selectSlurpPostGuidance(
     guidance.defaults[access].trim() ||
     SLURP_BUILT_IN_POST_GUIDANCE[access]
   );
+}
+
+/** The Creator's own content menu. Empty when they have none; there is no global fallback. */
+export function selectSlurpCreatorMenu(guidance: SlurpPostGuidance, creatorId: string): string {
+  return guidance.creators[creatorId]?.menu.trim() ?? "";
 }
 
 /** Model answers arrive wrapped in quotes or a fence often enough to be worth undoing here. */

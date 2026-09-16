@@ -84,7 +84,7 @@ assert.equal(cleanSlurpPostGuidanceDraft("  Tease them.  "), "Tease them.");
 const generation = read("server/src/services/slurp/slurp-generation.service.ts");
 assert.match(
   generation,
-  /accessInstruction: await resolveSlurpPostGuidance\(db, account\.id, input\.request\.access\)/u,
+  /accessInstruction: \[\s*await resolveSlurpPostGuidance\(db, account\.id, input\.request\.access\)/u,
   "the post prompt must resolve guidance for the access this post is being written at",
 );
 assert.match(
