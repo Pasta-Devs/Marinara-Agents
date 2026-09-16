@@ -1641,8 +1641,11 @@ export async function slurpRoutes(app: FastifyInstance) {
       );
     } catch (error) {
       req.log.warn({ err: error }, "Conversation schedule generation returned invalid output");
+      // The model's own words go back to the panel: without them every failure looks identical and
+      // there is nothing to act on but "try again".
       return reply.code(502).send({
-        error: "The generation connection did not return a complete schedule. Try again or choose another connection.",
+        error:
+          `The generation connection did not return a complete schedule. ${error instanceof Error ? error.message : ""}`.trim(),
       });
     }
     const today = new Date();

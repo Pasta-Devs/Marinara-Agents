@@ -933,7 +933,7 @@ export function SlurpOnboardingWizard({
                           className={cn(
                             "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border",
                             selected.has(account.id)
-                              ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)] text-zinc-950"
+                              ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950"
                               : "border-[var(--slurp-outline)]",
                           )}
                         >
@@ -1494,7 +1494,7 @@ export function SlurpOnboardingWizard({
                   type="button"
                   disabled={intro === 2 && !postExplored}
                   onClick={() => setIntro(intro < LAST_INTRO ? ((intro + 1) as Intro) : null)}
-                  className="flex min-h-10 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950 disabled:opacity-50 max-sm:px-3"
+                  className="flex min-h-10 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50 max-sm:px-3"
                 >
                   {intro < LAST_INTRO ? t("ui.noodle.noodlerwizard.continue") : t("ui.noodle.noodlerwizard.introDone")}
                   <ChevronRight size={15} />
@@ -1509,7 +1509,7 @@ export function SlurpOnboardingWizard({
                       else if (setupLane === "easy" && step === 1) setStep(4);
                       else setStep((step + 1) as Step);
                     }}
-                    className="flex min-h-10 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950 disabled:opacity-50 max-sm:px-3 max-sm:text-xs"
+                    className="flex min-h-10 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50 max-sm:px-3 max-sm:text-xs"
                   >
                     {pending && <Loader2 size={15} className="animate-spin" />}
                     {step === 4
@@ -1533,7 +1533,7 @@ export function SlurpOnboardingWizard({
                     onSeeFeed?.();
                     if (!onSeeFeed) onClose();
                   }}
-                  className="min-h-10 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950"
+                  className="min-h-10 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950 [&_svg]:!text-zinc-950"
                 >
                   {t("ui.noodle.noodlerwizard.openAllCreators")}
                 </button>

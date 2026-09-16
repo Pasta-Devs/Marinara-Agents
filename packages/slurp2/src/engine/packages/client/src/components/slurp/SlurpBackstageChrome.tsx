@@ -638,7 +638,7 @@ export function SlurpBackstagePreview({
         <PreviewFrame>
           <div className="rounded-xl bg-[linear-gradient(135deg,color-mix(in_srgb,var(--noodle-accent)_18%,var(--slurp-surface-raised)),color-mix(in_srgb,var(--slurp-violet)_12%,var(--slurp-surface-raised)))] p-4 ring-1 ring-inset ring-[var(--slurp-outline)]">
             <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 place-items-center rounded-full bg-[var(--noodle-accent)] text-zinc-950">
+              <span className="grid h-10 w-10 place-items-center rounded-full bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950">
                 {target === "improve" ? (
                   <Sparkles size={18} aria-hidden="true" />
                 ) : (
@@ -752,7 +752,7 @@ export function SlurpBackstageApplyBar({
         type="button"
         disabled={pending}
         onClick={onApply}
-        className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-black text-zinc-950 shadow-sm hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-50"
+        className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-black text-zinc-950 [&_svg]:!text-zinc-950 shadow-sm hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-50"
       >
         <Check size={16} aria-hidden="true" />{" "}
         {t("ui.slurp.settings.backstage.apply.apply", { defaultValue: "Apply changes" })}

@@ -83,7 +83,7 @@ export function SlurpCreatorImprover({
     <div className="space-y-5">
       <section className="relative isolate overflow-hidden rounded-2xl bg-[linear-gradient(135deg,color-mix(in_srgb,var(--noodle-accent)_20%,var(--slurp-surface-raised)),color-mix(in_srgb,var(--slurp-violet)_16%,var(--slurp-surface-raised)))] p-5 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] sm:p-6">
         <div className="flex flex-wrap items-start gap-4">
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[var(--noodle-accent)] text-zinc-950 shadow-sm">
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950 shadow-sm">
             <WandSparkles size={22} aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1">
@@ -277,7 +277,7 @@ export function SlurpCreatorImprover({
                 },
               )
             }
-            className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--noodle-accent)] px-4 text-sm font-black text-zinc-950 shadow-sm hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:cursor-not-allowed disabled:opacity-45"
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--noodle-accent)] px-4 text-sm font-black text-zinc-950 [&_svg]:!text-zinc-950 shadow-sm hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:cursor-not-allowed disabled:opacity-45"
           >
             {createJob.isPending ? (
               <Loader2 size={16} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
@@ -460,7 +460,7 @@ export function SlurpCreatorImprover({
                       },
                     )
                   }
-                  className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-black text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-45"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-black text-zinc-950 [&_svg]:!text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-45"
                 >
                   {applyProposals.isPending && (
                     <Loader2 size={15} className="animate-spin motion-reduce:animate-none" />

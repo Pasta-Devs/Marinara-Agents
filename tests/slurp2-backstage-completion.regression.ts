@@ -49,7 +49,11 @@ assert.match(
 );
 
 // The Profile rail shortcuts must reach the composer itself, not only the panel around it.
-assert.match(home, /const \[creatorToolsOpen, setCreatorToolsOpen\] = useState\(true\)/u, "creator tools start open");
+assert.match(
+  home,
+  /const \[creatorToolsOpen, setCreatorToolsOpen\] = useState\(\s*viewerAccounts\.some/u,
+  "creator tools start open on a Creator this persona operates",
+);
 assert.match(home, /const \[expanded, setExpanded\] = useState\(true\)/u, "the post composer starts expanded");
 assert.match(home, /openSignal=\{composerOpenSignal\}/u, "the rail shortcuts reach the composer");
 assert.match(

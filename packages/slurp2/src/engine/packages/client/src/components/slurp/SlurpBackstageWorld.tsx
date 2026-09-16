@@ -1154,7 +1154,7 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
                     onError: (error) => toast.error(errorMessage(error)),
                   })
                 }
-                className="min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 hover:opacity-90 disabled:opacity-50"
+                className="min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 hover:opacity-90 disabled:opacity-50"
               >
                 {generateAds.isPending ? t("ui.slurp.settings.ads.generating") : t("ui.slurp.settings.ads.generate")}
               </button>
@@ -1267,7 +1267,7 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
                   <button
                     type="submit"
                     disabled={createAd.isPending}
-                    className="min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 hover:opacity-90 disabled:opacity-50"
+                    className="min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 hover:opacity-90 disabled:opacity-50"
                   >
                     {createAd.isPending ? t("ui.slurp.settings.ads.creating") : t("ui.slurp.settings.ads.createSubmit")}
                   </button>
@@ -1362,7 +1362,7 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
                           <button
                             type="submit"
                             disabled={updateAd.isPending}
-                            className="min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 hover:opacity-90 disabled:opacity-50"
+                            className="min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 hover:opacity-90 disabled:opacity-50"
                           >
                             {t("ui.slurp.settings.ads.editSubmit")}
                           </button>

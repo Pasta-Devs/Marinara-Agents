@@ -283,7 +283,8 @@ export function SlurpMessagesView({
               onClick={() => setFilter(option)}
               className={cn(
                 "min-h-11 rounded-full px-3 text-xs font-semibold text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors",
-                filter === option && "bg-[var(--noodle-accent)] text-zinc-950 ring-[var(--noodle-accent)]",
+                filter === option &&
+                  "bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950 ring-[var(--noodle-accent)]",
               )}
             >
               {localizeUi(`ui.slurp.messages.filter.${option}`, {
@@ -479,7 +480,7 @@ function ThreadRow({
       </time>
       {thread.viewerUnread > 0 && (
         <span
-          className="ml-1 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[var(--noodle-accent)] px-1.5 text-[0.65rem] font-black tabular-nums text-zinc-950"
+          className="ml-1 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[var(--noodle-accent)] px-1.5 text-[0.65rem] font-black tabular-nums text-zinc-950 [&_svg]:!text-zinc-950"
           aria-label={localizeUi("ui.slurp.messages.unreadCount", {
             defaultValue: "{{count}} unread",
             count: thread.viewerUnread,
@@ -1295,7 +1296,7 @@ function SlurpThreadView({
                 type="button"
                 disabled={resolveRequest.isPending}
                 onClick={() => resolveRequest.mutate({ threadId: thread.id, personaId, decision: "accept" })}
-                className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
+                className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
               >
                 <Check size={14} /> {localizeUi("ui.slurp.messages.accept", { defaultValue: "Accept" })}
               </button>
@@ -1395,7 +1396,7 @@ function SlurpThreadView({
           })}
           {pending && !messages.some((message) => message.id === pending.id) && (
             <div className="flex max-w-[88%] flex-col items-end gap-1 self-end opacity-60 sm:max-w-[78%]">
-              <div className="whitespace-pre-wrap break-words rounded-[1.15rem] rounded-br-[0.35rem] bg-[var(--noodle-accent)] px-3.5 py-2.5 text-sm leading-relaxed text-zinc-950 shadow-[var(--slurp-shadow-raised)]">
+              <div className="whitespace-pre-wrap break-words rounded-[1.15rem] rounded-br-[0.35rem] bg-[var(--noodle-accent)] px-3.5 py-2.5 text-sm leading-relaxed text-zinc-950 [&_svg]:!text-zinc-950 shadow-[var(--slurp-shadow-raised)]">
                 {pending.content}
               </div>
             </div>
@@ -1655,7 +1656,8 @@ function SlurpThreadView({
                         onClick={() => setTipMode(mode)}
                         className={cn(
                           "min-h-9 rounded-full px-3 text-[0.7rem] font-bold text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)] disabled:hidden",
-                          tipMode === mode && "bg-[var(--noodle-accent)] text-zinc-950 ring-[var(--noodle-accent)]",
+                          tipMode === mode &&
+                            "bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950 ring-[var(--noodle-accent)]",
                         )}
                       >
                         {mode === "now"
@@ -1722,7 +1724,7 @@ function SlurpThreadView({
                           setCustomTipAmount("");
                           setCustomTipNote("");
                         }}
-                        className="min-h-11 rounded-full bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
+                        className="min-h-11 rounded-full bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50"
                       >
                         {localizeUi("ui.slurp.messages.sendCustomTip", { defaultValue: "Send tip" })}
                       </button>
@@ -1737,7 +1739,8 @@ function SlurpThreadView({
                           onClick={() => setComposerTipAmount((current) => (current === amount ? 0 : amount))}
                           className={cn(
                             "min-h-9 rounded-full px-2.5 text-xs font-bold ring-1 ring-inset ring-[var(--noodle-accent)]/40",
-                            composerTipAmount === amount && "bg-[var(--noodle-accent)] text-zinc-950",
+                            composerTipAmount === amount &&
+                              "bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950",
                           )}
                         >
                           {amount}
@@ -1824,7 +1827,7 @@ function SlurpThreadView({
             <button
               type="submit"
               disabled={busy || !draft.trim() || !personaId || !targetCreatorAccountId}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--noodle-accent)] text-zinc-950 transition-[opacity,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-40 motion-reduce:transition-none motion-reduce:active:scale-100"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950 transition-[opacity,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-40 motion-reduce:transition-none motion-reduce:active:scale-100"
               aria-label={localizeUi("ui.slurp.messages.send", { defaultValue: "Send" })}
             >
               <Send size={16} className="!text-zinc-950" />
@@ -1998,7 +2001,7 @@ function HeaderIconButton({
     >
       <Icon size={16} aria-hidden="true" />
       {badge > 0 && (
-        <span className="absolute right-1.5 top-1.5 min-w-4 rounded-full bg-[var(--noodle-accent)] px-1 text-[0.6rem] font-black leading-4 text-zinc-950">
+        <span className="absolute right-1.5 top-1.5 min-w-4 rounded-full bg-[var(--noodle-accent)] px-1 text-[0.6rem] font-black leading-4 text-zinc-950 [&_svg]:!text-zinc-950">
           {badge}
         </span>
       )}
@@ -2431,7 +2434,7 @@ function MemoryEditor({
           type="button"
           disabled={pending || !value.trim()}
           onClick={onSave}
-          className="min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 text-[0.7rem] font-bold text-zinc-950 disabled:opacity-40"
+          className="min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 text-[0.7rem] font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-40"
         >
           {localizeUi("ui.slurp.messages.memorySave", { defaultValue: "Save" })}
         </button>
@@ -2472,7 +2475,7 @@ function SlurpCommissionsPanel({
         <button
           type="button"
           onClick={onAskCommission}
-          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950"
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950"
         >
           <BriefcaseBusiness size={15} aria-hidden="true" />
           Ask for commission
@@ -2600,7 +2603,7 @@ function MessageBubble({
         className={cn(
           "whitespace-pre-wrap break-words rounded-[1.15rem] px-3.5 py-2.5 text-sm leading-relaxed shadow-[var(--slurp-shadow-raised)]",
           mine
-            ? "rounded-br-[0.35rem] bg-[var(--noodle-accent)] text-zinc-950"
+            ? "rounded-br-[0.35rem] bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950"
             : "rounded-bl-[0.35rem] bg-[var(--slurp-surface)] ring-1 ring-inset ring-[var(--noodle-divider)]",
         )}
       >
@@ -2757,7 +2760,7 @@ export function BroadcastPanel({ creatorAccountId, personaId }: { creatorAccount
               type="button"
               disabled={!draft.trim() || broadcast.isPending}
               onClick={() => void submit()}
-              className="min-h-11 shrink-0 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
+              className="min-h-11 shrink-0 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50"
             >
               {localizeUi("ui.slurp.messages.broadcastSend", { defaultValue: "Send broadcast" })}
             </button>
@@ -2864,7 +2867,7 @@ function CreatorMessageTools({
               type="button"
               disabled={!content.trim() || price <= 0 || sendPpv.isPending}
               onClick={() => void submit()}
-              className="ml-auto min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
+              className="ml-auto min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50"
             >
               {localizeUi("ui.slurp.messages.ppvSend", { defaultValue: "Send locked" })}
             </button>
@@ -2924,7 +2927,7 @@ function CreatorMessageTools({
                   },
                 );
             }}
-            className="mt-2 min-h-10 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
+            className="mt-2 min-h-10 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50"
           >
             {sendImage.isPending ? "Making…" : "Generate and send"}
           </button>
@@ -2996,7 +2999,7 @@ function FanImageTool({
               setContent("");
             });
           }}
-          className="min-h-10 self-end rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
+          className="min-h-10 self-end rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50"
         >
           {send.isPending || generate.isPending
             ? localizeUi("ui.slurp.messages.sending", { defaultValue: "Sending…" })
@@ -3070,7 +3073,7 @@ function CommissionRequest({
               onSubmit(brief.trim());
               setBrief("");
             }}
-            className="min-h-11 rounded-xl bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
+            className="min-h-11 rounded-xl bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
           >
             {localizeUi("ui.slurp.messages.commissionSend", { defaultValue: "Send request" })}
           </button>
@@ -3189,7 +3192,7 @@ function CommissionRow({
                 className={cn(
                   "relative z-10 flex h-6 w-6 items-center justify-center rounded-full text-xs font-black ring-2 ring-[var(--slurp-surface)]",
                   index <= currentStep
-                    ? "bg-[var(--noodle-accent)] text-zinc-950"
+                    ? "bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950"
                     : "bg-[var(--slurp-surface-raised)] text-[var(--muted-foreground)]",
                 )}
               >
@@ -3244,7 +3247,7 @@ function CommissionRow({
                 localizeUi("ui.slurp.messages.commissionOfferTaken", { defaultValue: "Offer accepted." }),
               )
             }
-            className="min-h-11 rounded-xl bg-[var(--noodle-accent)] px-4 font-bold text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
+            className="min-h-11 rounded-xl bg-[var(--noodle-accent)] px-4 font-bold text-zinc-950 [&_svg]:!text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
           >
             {localizeUi("ui.slurp.messages.commissionTakeOffer", { defaultValue: "Accept offer" })}
           </button>
@@ -3296,7 +3299,7 @@ function CommissionRow({
                 localizeUi("ui.slurp.messages.commissionQuoteSent", { defaultValue: "Quote sent." }),
               )
             }
-            className="min-h-11 max-w-full rounded-xl bg-[var(--noodle-accent)] px-4 font-bold text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
+            className="min-h-11 max-w-full rounded-xl bg-[var(--noodle-accent)] px-4 font-bold text-zinc-950 [&_svg]:!text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
           >
             {quote.isPending
               ? localizeUi("ui.slurp.messages.commissionQuotePending", { defaultValue: "Sending quote…" })
@@ -3344,7 +3347,7 @@ function CommissionRow({
                 }),
               )
             }
-            className="relative inline-flex min-h-11 max-w-full items-center gap-1.5 overflow-visible rounded-xl bg-[var(--noodle-accent)] px-4 font-bold text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
+            className="relative inline-flex min-h-11 max-w-full items-center gap-1.5 overflow-visible rounded-xl bg-[var(--noodle-accent)] px-4 font-bold text-zinc-950 [&_svg]:!text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
           >
             <SlurpCoinBurst active={accept.isPending} />
             {accept.isPending && <Loader2 size={15} className="animate-spin" aria-hidden="true" />}
@@ -3480,7 +3483,7 @@ function CommissionRow({
                 localizeUi("ui.slurp.messages.commissionDeliverFailed", { defaultValue: "Could not deliver that." }),
               )
             }
-            className="ml-auto min-h-11 rounded-xl bg-[var(--noodle-accent)] px-4 font-bold text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
+            className="ml-auto min-h-11 rounded-xl bg-[var(--noodle-accent)] px-4 font-bold text-zinc-950 [&_svg]:!text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
           >
             {localizeUi("ui.slurp.messages.commissionDeliver", { defaultValue: "Deliver" })}
           </button>
@@ -3851,7 +3854,7 @@ function SlurpRelationshipPanel({
                 className={cn(
                   "min-h-9 rounded-[7px] px-2.5 text-[0.7rem] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none",
                   advanced === mode
-                    ? "bg-[var(--noodle-accent)] text-zinc-950"
+                    ? "bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950"
                     : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
                 )}
               >

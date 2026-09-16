@@ -14,31 +14,108 @@ type GeneratedSchedule = {
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
 const STATUSES = new Set<ScheduleBlock["status"]>(["online", "idle", "dnd", "offline"]);
 
-function parseResponse(content: string): GeneratedSchedule {
-  const start = content.indexOf("{");
-  const end = content.lastIndexOf("}");
-  if (start < 0 || end <= start) throw new Error("The schedule provider returned no JSON schedule.");
-  const parsed = JSON.parse(content.slice(start, end + 1)) as Record<string, unknown>;
-  const rawDays = parsed.days;
-  if (!rawDays || typeof rawDays !== "object" || Array.isArray(rawDays))
-    throw new Error("The generated schedule has no days.");
+const DAY_KEYS = new Map(
+  DAYS.flatMap((day) => [[day.toLowerCase(), day] as const, [day.slice(0, 3).toLowerCase(), day] as const]),
+);
+
+function text(source: Record<string, unknown>, ...keys: string[]): string {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number") return String(value);
+  }
+  return "";
+}
+
+/**
+ * Models write a week in more than one shape: under `days`, under `schedule`, at the top level, or
+ * as a list of day objects. Rejecting everything but the first shape made the button fail for a
+ * whole week's worth of valid answers, so every shape that carries the same information is read.
+ */
+function findDays(parsed: Record<string, unknown>): Record<string, unknown> {
+  for (const container of [parsed.days, parsed.schedule, parsed.week, parsed.weeklySchedule, parsed]) {
+    if (!container || typeof container !== "object") continue;
+    if (Array.isArray(container)) {
+      const byDay: Record<string, unknown> = {};
+      for (const entry of container) {
+        if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+        const row = entry as Record<string, unknown>;
+        const day = DAY_KEYS.get(text(row, "day", "name", "weekday").toLowerCase());
+        if (day) byDay[day] = row.blocks ?? row.schedule ?? row.activities ?? row.times;
+      }
+      if (Object.keys(byDay).length > 0) return byDay;
+      continue;
+    }
+    const source = container as Record<string, unknown>;
+    const byDay: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(source)) {
+      const day = DAY_KEYS.get(key.trim().toLowerCase());
+      if (day) byDay[day] = value;
+    }
+    if (Object.keys(byDay).length > 0) return byDay;
+  }
+  return {};
+}
+
+function readBlocks(value: unknown): ScheduleBlock[] {
+  if (!Array.isArray(value)) return [];
+  const blocks: ScheduleBlock[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const block = entry as Record<string, unknown>;
+    const start = text(block, "start", "from", "startTime");
+    const end = text(block, "end", "to", "endTime");
+    const time = text(block, "time", "range", "hours", "period") || (start && end ? `${start}-${end}` : start);
+    const activity = text(block, "activity", "description", "what", "note", "doing", "task");
+    if (!time || !activity) continue;
+    const raw = text(block, "status", "availability", "presence").toLowerCase();
+    blocks.push({
+      time,
+      activity,
+      status: STATUSES.has(raw as ScheduleBlock["status"]) ? (raw as ScheduleBlock["status"]) : "online",
+    });
+  }
+  return blocks;
+}
+
+/** The whole answer when it is already JSON, otherwise the object or list embedded in the prose. */
+function readJson(content: string): Record<string, unknown> | null {
+  const candidates = [content.trim()];
+  for (const [open, close] of [
+    ["{", "}"],
+    ["[", "]"],
+  ] as const) {
+    const start = content.indexOf(open);
+    const end = content.lastIndexOf(close);
+    if (start >= 0 && end > start) candidates.push(content.slice(start, end + 1));
+  }
+  for (const candidate of candidates) {
+    try {
+      const value = JSON.parse(candidate) as unknown;
+      if (value && typeof value === "object") return value as Record<string, unknown>;
+    } catch {
+      // Try the next candidate: a model answer often wraps its JSON in prose or a code fence.
+    }
+  }
+  return null;
+}
+
+export function parseSlurpConversationSchedule(content: string): GeneratedSchedule {
+  const parsed = readJson(content);
+  if (!parsed) throw new Error("The schedule provider returned no JSON schedule.");
+  const rawDays = findDays(parsed);
   const days: Record<string, ScheduleBlock[]> = {};
   for (const day of DAYS) {
-    const blocks = (rawDays as Record<string, unknown>)[day];
-    if (!Array.isArray(blocks) || blocks.length === 0)
-      throw new Error(`The generated schedule has no blocks for ${day}.`);
-    days[day] = blocks.map((value) => {
-      if (!value || typeof value !== "object" || Array.isArray(value))
-        throw new Error("The generated schedule has an invalid block.");
-      const block = value as Record<string, unknown>;
-      const time = typeof block.time === "string" ? block.time.trim() : "";
-      const activity = typeof block.activity === "string" ? block.activity.trim() : "";
-      const status = STATUSES.has(block.status as ScheduleBlock["status"])
-        ? (block.status as ScheduleBlock["status"])
-        : "online";
-      if (!time || !activity) throw new Error("The generated schedule has an incomplete block.");
-      return { time, activity, status };
-    });
+    const blocks = readBlocks(rawDays[day]);
+    if (blocks.length > 0) days[day] = blocks;
+  }
+  if (Object.keys(days).length === 0) throw new Error("The generated schedule has no days.");
+  // A model that answers with five weekdays has still described this character's week. Repeating
+  // the nearest day it did write beats throwing the whole answer away and asking again forever.
+  let fallback = days[DAYS.find((day) => days[day])!];
+  for (const day of DAYS) {
+    if (days[day]) fallback = days[day];
+    else days[day] = fallback.map((block) => ({ ...block }));
   }
   return {
     days,
@@ -84,6 +161,7 @@ export async function generateSlurpConversationSchedule(
     { role: "user", content: "Generate the current week's schedule." },
   ] as const;
   let validationError: unknown;
+  let lastContent = "";
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const result = await provider.chatComplete(
       attempt === 0
@@ -103,13 +181,14 @@ export async function generateSlurpConversationSchedule(
         responseFormat: { type: "json_object" },
       },
     );
+    lastContent = result.content ?? "";
     try {
-      return parseResponse(result.content ?? "");
+      return parseSlurpConversationSchedule(lastContent);
     } catch (error) {
       validationError = error;
     }
   }
-  throw validationError instanceof Error
-    ? validationError
-    : new Error("The schedule provider returned an invalid schedule.");
+  // The response itself is the only useful evidence when a connection keeps answering wrongly.
+  const reason = validationError instanceof Error ? validationError.message : "invalid schedule";
+  throw new Error(`${reason} Response: ${lastContent.slice(0, 600) || "(empty)"}`);
 }

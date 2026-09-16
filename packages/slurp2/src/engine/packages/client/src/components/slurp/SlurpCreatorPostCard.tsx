@@ -763,7 +763,7 @@ export function SlurpCreatorPostCard({
         type="button"
         onClick={() => saveEditedPost(post)}
         disabled={saveEditDisabled}
-        className="h-8 rounded-full bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        className="h-8 rounded-full bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {updatePostPending ? localizeUi("ui.noodle.noodlehome.saving") : localizeUi("ui.noodle.noodlehome.save")}
       </button>
@@ -866,7 +866,7 @@ export function SlurpCreatorPostCard({
           </button>
           <button
             type="button"
-            className="h-8 rounded-full bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            className="h-8 rounded-full bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={(!replyHasText && !replyImageUrl.trim()) || postReplyPending}
             onClick={() => submitReply(post)}
           >
@@ -888,7 +888,7 @@ export function SlurpCreatorPostCard({
               type="button"
               onClick={() => replyImageFileRef.current?.click()}
               disabled={uploadGlobalImages.isPending}
-              className="h-9 w-full rounded-full bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              className="h-9 w-full rounded-full bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {uploadGlobalImages.isPending
                 ? localizeUi("ui.noodle.noodleprofilesurface.uploading")
@@ -1056,7 +1056,7 @@ export function SlurpCreatorPostCard({
                     type="button"
                     onClick={() => saveEditedReply(post, reply)}
                     disabled={(!editingReplyContent.trim() && !reply.imageUrl) || updateInteraction.isPending}
-                    className="h-8 rounded-full bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="h-8 rounded-full bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {updateInteraction.isPending
                       ? localizeUi("ui.noodle.noodlehome.saving")

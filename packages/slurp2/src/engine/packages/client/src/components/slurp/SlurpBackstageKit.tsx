@@ -85,7 +85,7 @@ export function SummaryRow({
           type="button"
           onClick={onAction}
           className={cn(
-            "inline-flex min-h-11 items-center rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950 hover:brightness-105",
+            "inline-flex min-h-11 items-center rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950 [&_svg]:!text-zinc-950 hover:brightness-105",
             focusRing,
           )}
         >
@@ -292,7 +292,7 @@ export function BackstageWizard<P extends string>({
             disabled={pending || changed.length === 0}
             onClick={() => onApply(patch)}
             className={cn(
-              "inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-black text-zinc-950 disabled:opacity-50",
+              "inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-black text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50",
               focusRing,
             )}
           >

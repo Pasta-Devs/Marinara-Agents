@@ -1304,7 +1304,7 @@ export function PromptEditor({
               type="button"
               onClick={() => void onSave()}
               disabled={!value.trim() || pending}
-              className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-45"
+              className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-45"
             >
               {pending ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
               {t("ui.slurp.settings.prompts.save")}
@@ -1409,7 +1409,7 @@ export function AmbientProfilesPanel({
                         onError: (error) => toast.error(errorMessage(error)),
                       })
                     }
-                    className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[var(--noodle-accent)] px-2.5 text-[0.7rem] font-bold text-zinc-950 disabled:opacity-50"
+                    className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-[var(--noodle-accent)] px-2.5 text-[0.7rem] font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50"
                   >
                     <Save size={12} />
                     {t("ui.slurp.settings.ambient.save")}

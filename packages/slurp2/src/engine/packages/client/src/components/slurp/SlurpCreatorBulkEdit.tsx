@@ -181,7 +181,7 @@ export function SlurpCreatorBulkEdit({
         type="button"
         disabled={bulk.isPending || Object.keys(patch).length === 0}
         onClick={() => void apply()}
-        className="min-h-11 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950 disabled:opacity-50"
+        className="min-h-11 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50"
       >
         {t("ui.slurp.settings.creators.bulk.apply")}
       </button>

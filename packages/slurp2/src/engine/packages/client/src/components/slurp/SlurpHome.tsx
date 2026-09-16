@@ -1808,7 +1808,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
                     },
                   )
                 }
-                className="h-10 flex-1 rounded-full border border-transparent bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
+                className="h-10 flex-1 rounded-full border border-transparent bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50"
               >
                 {setupAutoPosting.isPending
                   ? localizeUi("ui.noodle.noodlerhome.enabling_5c258f0")
@@ -2155,7 +2155,8 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
                     title={label}
                     className={cn(
                       "flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted-foreground)] transition-[background-color,color,transform] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none",
-                      discoverRank === value && "bg-[var(--noodle-accent)] text-zinc-950 shadow-sm",
+                      discoverRank === value &&
+                        "bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950 shadow-sm",
                     )}
                   >
                     <Icon size={14} fill={discoverRank === value ? "currentColor" : "none"} aria-hidden="true" />
@@ -2190,7 +2191,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
                           className={cn(
                             "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[0.68rem] font-black tabular-nums",
                             index === 0
-                              ? "bg-[var(--noodle-accent)] text-zinc-950"
+                              ? "bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950"
                               : "bg-[var(--accent)] text-[var(--muted-foreground)]",
                           )}
                         >
@@ -2618,7 +2619,7 @@ function StageProfileSourcePicker({
                 type="button"
                 aria-pressed={kind === option}
                 onClick={() => onKindChange(option)}
-                className={`min-h-11 rounded-lg px-2 text-xs font-semibold capitalize ${kind === option ? "bg-[var(--noodle-accent)] text-zinc-950" : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"}`}
+                className={`min-h-11 rounded-lg px-2 text-xs font-semibold capitalize ${kind === option ? "bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950" : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"}`}
               >
                 {option === "all"
                   ? localizeUi("ui.noodle.stageprofilesourcepicker.all")
@@ -2987,7 +2988,11 @@ function StageProfileView({
   const bannerSrc = useSlurpMediaSrc(profile.bannerUrl, { width: 1280 });
   const [accessSettingsOpen, setAccessSettingsOpen] = useState(false);
   const [automationOpen, setAutomationOpen] = useState(false);
-  const [creatorToolsOpen, setCreatorToolsOpen] = useState(true);
+  // Open on a Creator this persona operates, where posting is the reason for the visit. On a
+  // world-run Creator the tools are still reachable, but they are not what you came to read.
+  const [creatorToolsOpen, setCreatorToolsOpen] = useState(
+    viewerAccounts.some((account) => account.id === profile.sourceAccountId),
+  );
   useEffect(() => {
     if (composerOpenSignal > 0) setCreatorToolsOpen(true);
   }, [composerOpenSignal]);
@@ -3532,7 +3537,7 @@ function StageProfileView({
                   "relative inline-flex min-h-11 items-center justify-center overflow-visible rounded-lg px-5 text-sm font-bold transition-[background-color,opacity,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50",
                   viewerCreator.subscribed
                     ? "border border-[var(--noodle-accent)]/50 bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent-foreground)] hover:bg-[var(--noodle-accent)]/15"
-                    : "bg-[var(--noodle-accent)] text-zinc-950 hover:opacity-90",
+                    : "bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950 hover:opacity-90",
                 )}
               >
                 <SlurpCoinBurst active={subscriptionPending && !viewerCreator.subscribed} />
@@ -3636,7 +3641,7 @@ function StageProfileView({
                           setCustomTip("");
                           setTipOpen(false);
                         }}
-                        className="min-h-9 rounded-md bg-[var(--noodle-accent)] px-2 text-xs font-bold text-zinc-950 disabled:opacity-50"
+                        className="min-h-9 rounded-md bg-[var(--noodle-accent)] px-2 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50"
                       >
                         {localizeUi("ui.slurp.profile.sendTip", { defaultValue: "Send" })}
                       </button>
@@ -3901,7 +3906,7 @@ function StageProfileView({
                   },
                 );
               }}
-              className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-50"
+              className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50"
             >
               {generateProfileArtwork.isPending ? (
                 <Loader2 size={14} className="animate-spin" />
@@ -5141,7 +5146,7 @@ function SlurpWalletView({
                     { onError: (error) => toast.error(errorMessage(error)) },
                   )
                 }
-                className="relative inline-flex min-h-11 items-center justify-center gap-2 overflow-visible rounded-full bg-[var(--noodle-accent)] px-6 text-xs font-black text-zinc-950 shadow-[0_12px_28px_-16px_var(--noodle-accent)] transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--slurp-surface)] disabled:opacity-45 motion-reduce:transition-none motion-reduce:active:scale-100"
+                className="relative inline-flex min-h-11 items-center justify-center gap-2 overflow-visible rounded-full bg-[var(--noodle-accent)] px-6 text-xs font-black text-zinc-950 [&_svg]:!text-zinc-950 shadow-[0_12px_28px_-16px_var(--noodle-accent)] transition-[opacity,transform] hover:opacity-90 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--slurp-surface)] disabled:opacity-45 motion-reduce:transition-none motion-reduce:active:scale-100"
               >
                 <SlurpCoinBurst active={payout.isPending} direction="earn" />
                 <ArrowDown size={16} strokeWidth={2.5} aria-hidden="true" />
@@ -7230,7 +7235,7 @@ function SlurpGoalEditor({ creator, personaId }: { creator: SlurpStudioCreator; 
             type="button"
             disabled={setGoal.isPending || !label.trim()}
             onClick={() => submit(label.trim())}
-            className="min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
+            className="min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50"
           >
             {localizeUi("ui.slurp.studio.goalSave", { defaultValue: "Save goal" })}
           </button>
@@ -7453,7 +7458,7 @@ function SlurpInboxHub({
                         account={{ displayName: thread.creatorDisplayName, avatarUrl: thread.creatorAvatarUrl }}
                         size="md"
                       />
-                      <span className="absolute -bottom-1 -end-1 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--noodle-accent)] text-zinc-950 ring-2 ring-[var(--slurp-surface)]">
+                      <span className="absolute -bottom-1 -end-1 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950 ring-2 ring-[var(--slurp-surface)]">
                         <MessageCircle size={11} strokeWidth={2.5} aria-hidden="true" />
                       </span>
                     </span>
@@ -7487,7 +7492,7 @@ function SlurpInboxHub({
                         {formatTime(thread.lastMessageAt, i18n.language)}
                       </time>
                       {thread.viewerUnread > 0 && (
-                        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--noodle-accent)] px-1.5 text-[0.65rem] font-black tabular-nums text-zinc-950">
+                        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--noodle-accent)] px-1.5 text-[0.65rem] font-black tabular-nums text-zinc-950 [&_svg]:!text-zinc-950">
                           {thread.viewerUnread}
                         </span>
                       )}
@@ -7974,7 +7979,7 @@ function SlurpPayoutRow({ creator, personaId }: { creator: SlurpStudioCreator; p
             { onError: (error) => toast.error(errorMessage(error)) },
           )
         }
-        className="relative min-h-10 shrink-0 overflow-visible rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
+        className="relative min-h-10 shrink-0 overflow-visible rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
       >
         <SlurpCoinBurst active={payout.isPending} direction="earn" />
         {payout.isPending
