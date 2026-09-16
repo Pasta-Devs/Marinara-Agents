@@ -50,6 +50,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.8.1",
+          "date": "2026-09-15",
+          "notes": "- Writing a chapter ahead keeps going on its own: switching tabs, closing Gacha Forge or changing worlds no longer stops it.\n- Coming back to the Gacha Forge tab no longer drops you on \"Generating story\" or inside a scene you had not reached, and a scene you were reading stays on its line.\n- The character cards you pick can be moved up and down; the game takes them in that order. The Cast lorebook list can be expanded like World lorebooks.\n- The card counter in world creation also counts the two cards each featured banner takes.\n- Characters written in your world's language keep their accents and their ñ.\n- Fixed: in Firefox the top bar no longer runs past the game at large text sizes; the creator's scrollbars keep their distance; the expanded lorebook list in Settings draws its rows again.",
+          "highlight": false
+        },
+        {
           "version": "1.8.0",
           "date": "2026-09-14",
           "notes": "- Combat is manual: on each turn you choose what a unit does and who it hits. Auto still plays the fight for you.\n- The Tower opens at Rank 20: a hundred floors, Tower Coin and a Tower shelf in the Shop, monthly floors built from your own story.\n- Bonds: every fight raises a unit's bond, and its levels open a conversation, a story chapter of their own, a Home background and an outfit.\n- Your character cards can be the banner cast, and outfit themes are yours to write, share and import.\n- Every skill and action has its own painted icon, and every screen has a ? that explains it the first time.\n- The unit sheet is split into tabs, the Gear tab shows a piece whole and compares changes, and Materials is a row of illustrated cards.\n- Combat Power measures how a unit really fights, and weapons, relics and skills were rebalanced to match their sheets.\n- Fixed: passives and skills do what they say, the game keeps your place when you come back, and screens no longer flash while they load.",
