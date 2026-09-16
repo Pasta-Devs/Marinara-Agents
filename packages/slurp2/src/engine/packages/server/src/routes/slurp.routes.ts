@@ -2206,7 +2206,12 @@ export async function slurpRoutes(app: FastifyInstance) {
             imageUrl:
               locked && !post.imageUrl?.startsWith(NOODLER_MEDIA_URL_PREFIX)
                 ? null
-                : noodlerPostMediaUrlForPersona(post.imageUrl, context.viewer.entityId, locked ? "locked" : "original"),
+                : noodlerPostMediaUrlForPersona(
+                    post.imageUrl,
+                    context.viewer.entityId,
+                    locked ? "locked" : "original",
+                    post.updatedAt,
+                  ),
             imagePrompt: locked ? null : post.imagePrompt,
             metadata: locked ? null : post.metadata,
             // A locked post withholds its metadata, so the price travels as its own field. It is
@@ -3860,6 +3865,8 @@ export async function slurpRoutes(app: FastifyInstance) {
         accountId: z.string().min(1),
         // A failed picture is usually a bad prompt, so the retry may carry a rewritten one.
         imagePrompt: z.string().trim().min(1).max(2000).optional(),
+        // Redraw a post that already has a picture; the old one comes back if the redraw fails.
+        replace: z.boolean().optional(),
         debugMode: z.boolean().optional(),
       })
       .safeParse(req.body ?? {});
@@ -3867,7 +3874,10 @@ export async function slurpRoutes(app: FastifyInstance) {
     const post = await noodle.getNoodlerPostById(id);
     if (!post) return reply.code(404).send({ error: "Slurp post not found" });
     if (post.authorAccountId !== parsed.data.accountId) return reply.code(403).send({ error: "Forbidden" });
-    if (post.imageUrl) return reply.code(409).send({ error: "This post already has an image." });
+    if (post.imageUrl && parsed.data.replace !== true) {
+      return reply.code(409).send({ error: "This post already has an image." });
+    }
+    const previousImageUrl = post.imageUrl;
     const account = await noodle.getNoodlerAccountById(post.authorAccountId);
     const imagePrompt =
       parsed.data.imagePrompt ||
@@ -3877,8 +3887,8 @@ export async function slurpRoutes(app: FastifyInstance) {
         .join("\n")
         .trim() ||
       `A new social media image for ${account?.displayName || "the creator"}.`;
-    if (imagePrompt !== post.imagePrompt) {
-      await noodle.updatePostMedia(post.id, { imagePrompt });
+    if (imagePrompt !== post.imagePrompt || previousImageUrl) {
+      await noodle.updatePostMedia(post.id, { imagePrompt, ...(previousImageUrl ? { imageUrl: null } : {}) });
     }
 
     const result = await noodlerImages.generateReviewedImages({
@@ -3886,9 +3896,13 @@ export async function slurpRoutes(app: FastifyInstance) {
       debugMode: parsed.data.debugMode === true,
       retryStoredPrompt: true,
     });
-    if (!result.ok) return reply.code(400).send({ error: result.message });
     const updated = await noodle.getNoodlerPostById(id);
-    if (updated?.imageUrl) return updated;
+    if (result.ok && updated?.imageUrl) return updated;
+    // The old picture was cleared only so the redraw could claim the post; a failed redraw gives it back.
+    if (previousImageUrl && updated && !updated.imageUrl) {
+      await noodle.updatePostMedia(post.id, { imageUrl: previousImageUrl });
+    }
+    if (!result.ok) return reply.code(400).send({ error: result.message });
     if (updated?.updatedAt !== post.updatedAt && updated?.metadata.imageGenerationFailed === true) {
       return reply.code(502).send({ error: "Image generation failed. Try again later." });
     }

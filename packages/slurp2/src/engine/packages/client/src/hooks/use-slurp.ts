@@ -2618,6 +2618,7 @@ export function useGenerateNoodlerPostImage() {
       api.post<NoodlerManagedPost>(`/slurp2/noodler/posts/${encodeURIComponent(id)}/image/generate`, {
         accountId,
         ...(imagePrompt ? { imagePrompt } : {}),
+        replace: true,
         debugMode: useSlurpUIStore.getState().debugMode,
       }),
     onSuccess: (_post, input) =>

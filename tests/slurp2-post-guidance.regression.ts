@@ -156,17 +156,22 @@ assert.doesNotMatch(
 const creatorPostCard = readFileSync(join(pkg, "client/src/components/slurp/SlurpCreatorPostCard.tsx"), "utf8");
 assert.match(
   creatorPostCard,
-  /ctx\.generatePostImage && !post\.imageUrl/u,
-  "the post menu should offer generation only when the post has no image",
-);
-assert.doesNotMatch(
-  creatorPostCard,
-  /ctx\.generatePostImage && \(post\.imagePrompt \|\| post\.imageUrl\)/u,
-  "an existing image must not expose a generate action that the server rejects",
+  /ctx\.generatePostImage && \(\s*<button[\s\S]*?setPromptDraft\(post\.imagePrompt \?\? ""\)/u,
+  "the post menu opens the image prompt editor for a new image or a redraw",
 );
 assert.match(
   routes,
-  /if \(imagePrompt !== post\.imagePrompt\) \{\s*await noodle\.updatePostMedia\(post\.id, \{ imagePrompt \}\);\s*\}/u,
+  /if \(post\.imageUrl && parsed\.data\.replace !== true\)/u,
+  "the server only redraws an existing image when the client asks to replace it",
+);
+assert.match(
+  routes,
+  /if \(previousImageUrl && updated && !updated\.imageUrl\) \{\s*await noodle\.updatePostMedia\(post\.id, \{ imageUrl: previousImageUrl \}\);/u,
+  "a failed redraw restores the previous image",
+);
+assert.match(
+  routes,
+  /if \(imagePrompt !== post\.imagePrompt \|\| previousImageUrl\) \{\s*await noodle\.updatePostMedia\(post\.id, \{ imagePrompt,/u,
   "a missing or rewritten prompt is persisted before generation",
 );
 assert.match(

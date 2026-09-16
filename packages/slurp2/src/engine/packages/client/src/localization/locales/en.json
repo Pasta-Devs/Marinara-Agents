@@ -3226,5 +3226,6 @@
   "ui.slurp.settings.manual.posts": "Create posts now",
   "ui.slurp.settings.manual.audience": "Run audience activity",
   "ui.slurp.settings.manual.schedules": "Refresh schedules",
-  "ui.slurp.settings.manual.images": "Manage image runs"
+  "ui.slurp.settings.manual.images": "Manage image runs",
+  "ui.slurp.image.regenerate": "Regenerate image"
 }

@@ -60,11 +60,14 @@ export function noodlerPostMediaUrlForPersona(
   imageUrl: string | null,
   personaId: string,
   variant: "locked" | "original",
+  version?: string,
 ): string | null {
   if (!imageUrl?.startsWith(NOODLER_MEDIA_URL_PREFIX)) return imageUrl;
   // `variant` partitions the browser cache only. The media route derives access from the
   // persona on every request and never trusts this caller-provided label for authorization.
-  return `${imageUrl}?personaId=${encodeURIComponent(personaId)}&variant=${variant}`;
+  // `version` changes when a picture is redrawn under the same URL, so the browser drops the old one.
+  const versionQuery = version ? `&v=${encodeURIComponent(version)}` : "";
+  return `${imageUrl}?personaId=${encodeURIComponent(personaId)}&variant=${variant}${versionQuery}`;
 }
 
 /**
