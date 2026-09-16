@@ -954,7 +954,7 @@ export function SlurpSettings({
     <>
       <main className="min-h-0 flex-1 overflow-y-auto bg-[var(--slurp-canvas)] pb-[calc(5rem+env(safe-area-inset-bottom))] text-[var(--slurp-text)] sm:pb-8">
         <div className="mx-auto flex w-full flex-col gap-4 p-3 sm:p-5 lg:gap-6 lg:p-6" data-slurp-settings-layout>
-          <header className="relative isolate flex flex-wrap items-start justify-between gap-3 overflow-hidden rounded-xl bg-[linear-gradient(120deg,color-mix(in_srgb,var(--slurp-surface-raised)_94%,transparent),color-mix(in_srgb,var(--noodle-accent)_17%,var(--slurp-surface-raised))_58%,color-mix(in_srgb,var(--slurp-violet)_13%,var(--slurp-surface-raised)))] p-4 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] sm:gap-4 sm:p-5">
+          <header className="relative isolate flex flex-wrap items-start justify-between gap-3 rounded-xl bg-[linear-gradient(120deg,color-mix(in_srgb,var(--slurp-surface-raised)_94%,transparent),color-mix(in_srgb,var(--noodle-accent)_17%,var(--slurp-surface-raised))_58%,color-mix(in_srgb,var(--slurp-violet)_13%,var(--slurp-surface-raised)))] p-4 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] sm:gap-4 sm:p-5">
             <div className="min-w-0">
               <p className="hidden text-xs font-bold uppercase tracking-[0.18em] text-[var(--noodle-accent)] sm:block">
                 {t("ui.slurp.settings.eyebrow", { defaultValue: "Slurp settings" })}
@@ -966,37 +966,40 @@ export function SlurpSettings({
                 {t("ui.slurp.settings.detail")}
               </p>
             </div>
-            <p
-              className={`inline-flex min-h-9 items-center gap-1.5 rounded-full bg-[var(--slurp-surface,var(--background))] px-3 py-1 text-xs font-semibold shadow-sm ring-1 ring-inset ${saveState === "error" ? "text-red-300 ring-red-400/30" : saveState === "saved" ? "text-[var(--slurp-success)] ring-[var(--slurp-success)]/25" : "text-[var(--muted-foreground)] ring-[var(--border)]"}`}
-              role="status"
-              aria-live="polite"
-            >
-              {saveState === "saving" ? (
-                <Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
-              ) : saveState === "error" ? (
-                <AlertTriangle size={13} aria-hidden="true" />
-              ) : saveState === "saved" ? (
-                <CheckCircle2 size={13} aria-hidden="true" />
-              ) : null}
-              {saveState === "saving"
-                ? t("ui.slurp.settings.saveState.saving")
-                : saveState === "error"
-                  ? t("ui.slurp.settings.saveState.error")
-                  : saveState === "saved"
-                    ? t("ui.slurp.settings.saveState.saved")
-                    : t("ui.slurp.settings.autoSave")}
-            </p>
+            {/* Search sits in the header's spare width instead of stealing a row above the sub-nav. */}
+            <div className="ms-auto flex w-full min-w-0 flex-1 flex-wrap items-center justify-end gap-3 sm:w-auto sm:basis-80">
+              <SlurpBackstageSearch
+                onSelect={(nextSection, nextTarget, settingKey) =>
+                  onNavigate({ ...navigation, section: nextSection, target: nextTarget, settingKey })
+                }
+              />
+              <p
+                className={`inline-flex min-h-9 items-center gap-1.5 rounded-full bg-[var(--slurp-surface,var(--background))] px-3 py-1 text-xs font-semibold shadow-sm ring-1 ring-inset ${saveState === "error" ? "text-red-300 ring-red-400/30" : saveState === "saved" ? "text-[var(--slurp-success)] ring-[var(--slurp-success)]/25" : "text-[var(--muted-foreground)] ring-[var(--border)]"}`}
+                role="status"
+                aria-live="polite"
+              >
+                {saveState === "saving" ? (
+                  <Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                ) : saveState === "error" ? (
+                  <AlertTriangle size={13} aria-hidden="true" />
+                ) : saveState === "saved" ? (
+                  <CheckCircle2 size={13} aria-hidden="true" />
+                ) : null}
+                {saveState === "saving"
+                  ? t("ui.slurp.settings.saveState.saving")
+                  : saveState === "error"
+                    ? t("ui.slurp.settings.saveState.error")
+                    : saveState === "saved"
+                      ? t("ui.slurp.settings.saveState.saved")
+                      : t("ui.slurp.settings.autoSave")}
+              </p>
+            </div>
           </header>
           <SlurpSettingsSectionRow navigation={navigation} onNavigate={onNavigate} />
 
           <div>
             <div className="mt-4 min-w-0 rounded-xl rounded-t-none bg-[linear-gradient(145deg,var(--slurp-surface),color-mix(in_srgb,var(--slurp-violet)_4%,var(--slurp-surface)))] p-3 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] md:mt-0 md:rounded-t-xl md:p-5 lg:p-6">
-              <div className="mb-5 space-y-3">
-                <SlurpBackstageSearch
-                  onSelect={(nextSection, nextTarget, settingKey) =>
-                    onNavigate({ ...navigation, section: nextSection, target: nextTarget, settingKey })
-                  }
-                />
+              <div className="mb-5">
                 <SlurpBackstageSubnav
                   section={section}
                   target={target}
