@@ -62,4 +62,13 @@ assert.match(
   "Add story must preselect the story type and open the composer",
 );
 
+// A world-run Creator has no own policy, but the tab must still say which rules apply.
+assert.match(creators, /refreshingConversationSchedule/u, "the schedule refresh reports that it is working");
+assert.match(
+  creators,
+  /section: "world", target: "messaging"/u,
+  "the Messages tab must lead to the rules that govern a world-run Creator",
+);
+assert.match(creators, /settings\.messagesDefaultDmPolicy/u, "the Messages tab shows the policy in force");
+
 console.log("Slurp2 Backstage completion regression passed");

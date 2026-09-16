@@ -3124,5 +3124,7 @@
   "ui.slurp.settings.backstage.preview.ads.sampleCopy.luxury": "Single origin, hand poured, and quietly perfect. By invitation.",
   "ui.slurp.settings.backstage.preview.ads.sampleCopy.unhinged": "I drank eleven cups and now I can hear colours. Buy the beans.",
   "ui.slurp.settings.arcLibrary.export": "Export",
-  "ui.slurp.settings.arcLibrary.import": "Import Arc"
+  "ui.slurp.settings.arcLibrary.import": "Import Arc",
+  "ui.slurp.settings.creators.refreshingConversationSchedule": "Rebuilding the schedule…",
+  "ui.slurp.settings.creators.openWorldMessaging": "Open messaging rules"
 }

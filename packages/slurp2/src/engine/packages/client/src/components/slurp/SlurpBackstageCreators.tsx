@@ -479,7 +479,15 @@ export function SlurpBackstageCreators(page: SlurpBackstagePageProps) {
                     ))}
                   </SettingsGroup>
                   {selectedCreator.scheduleStatus && selectedCreator.scheduleStatus.state !== "not-applicable" && (
-                    <div className={`space-y-2 ${noteClass}`}>
+                    /* A stale or missing schedule is an attention state, so it uses the same
+                       tinted callout as a missing or changed source instead of a plain note. */
+                    <div
+                      className={
+                        selectedCreator.scheduleStatus.state === "active"
+                          ? `space-y-3 ${noteClass}`
+                          : "space-y-3 rounded-lg bg-[var(--slurp-warning)]/10 p-3 text-xs leading-5 ring-1 ring-inset ring-[var(--slurp-warning)]/25"
+                      }
+                    >
                       <p>
                         <span className="font-semibold text-[var(--slurp-text)]">
                           {t("ui.slurp.settings.creators.conversationSchedule")}
@@ -505,11 +513,17 @@ export function SlurpBackstageCreators(page: SlurpBackstagePageProps) {
                           className={accentButton}
                         >
                           {refreshConversationSchedule.isPending ? (
-                            <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />
+                            <Loader2 size={14} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
                           ) : (
                             <CalendarClock size={14} aria-hidden="true" />
                           )}
-                          {t("ui.slurp.settings.creators.refreshConversationSchedule")}
+                          {/* The work happens on the server, so the button says so while it waits.
+                              The result itself arrives as a toast and as the status line above. */}
+                          {refreshConversationSchedule.isPending
+                            ? t("ui.slurp.settings.creators.refreshingConversationSchedule", {
+                                defaultValue: "Rebuilding the schedule…",
+                              })
+                            : t("ui.slurp.settings.creators.refreshConversationSchedule")}
                         </button>
                       )}
                     </div>
@@ -601,12 +615,40 @@ export function SlurpBackstageCreators(page: SlurpBackstagePageProps) {
                     setPrice={setCreatorPrice}
                   />
                 )) || (
-                  <p className={noteClass}>
-                    {t("ui.slurp.settings.creators.messagesWorldRules", {
-                      defaultValue:
-                        "This Creator follows the messaging rules in Slurp world. Only persona Creators set their own prices.",
-                    })}
-                  </p>
+                  /* Only the persona that operates a Creator may set its own policy and prices,
+                     which is what the routes enforce. A world-run Creator still has rules, so the
+                     tab shows the ones in force and the way to change them, instead of dead-ending. */
+                  <SettingsGroup title={t("ui.slurp.settings.creators.messagingTitle")}>
+                    <p className={noteClass}>{t("ui.slurp.settings.creators.messagesWorldRules")}</p>
+                    <dl className="grid gap-3 sm:grid-cols-3">
+                      {(
+                        [
+                          [
+                            t("ui.slurp.settings.messaging.dmPolicy"),
+                            t(
+                              `ui.slurp.settings.messaging.dmPolicy${settings.messagesDefaultDmPolicy.charAt(0).toUpperCase()}${settings.messagesDefaultDmPolicy.slice(1)}`,
+                            ),
+                          ],
+                          [t("ui.slurp.settings.messaging.requestFee"), String(settings.messagesDefaultRequestFee)],
+                          [t("ui.slurp.settings.messaging.ppvPrice"), String(settings.messagesDefaultPpvPrice)],
+                        ] as const
+                      ).map(([label, value]) => (
+                        <div key={label} className={noteClass}>
+                          <dt className="font-semibold text-[var(--slurp-text)]">{label}</dt>
+                          <dd className="mt-1">{value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                    <button
+                      type="button"
+                      onClick={() => onNavigate({ ...navigation, section: "world", target: "messaging" })}
+                      className={quietButton}
+                    >
+                      {t("ui.slurp.settings.creators.openWorldMessaging", {
+                        defaultValue: "Open messaging rules",
+                      })}
+                    </button>
+                  </SettingsGroup>
                 ))}
 
               {tab === "danger" && (

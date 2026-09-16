@@ -1288,5 +1288,7 @@
   "ui.slurp.settings.backstage.preview.ads.sampleCopy.scammy": "그들이 숨기려는 커피 비밀. 사라지기 전에 클릭!!",
   "ui.slurp.settings.backstage.preview.ads.sampleCopy.local": "바로 옆 골목에서 로스팅합니다. 마르타에게 인사하세요, 주문을 기억합니다.",
   "ui.slurp.settings.backstage.preview.ads.sampleCopy.luxury": "싱글 오리진, 핸드드립, 조용히 완벽합니다. 초대 전용.",
-  "ui.slurp.settings.backstage.preview.ads.sampleCopy.unhinged": "열한 잔을 마셨더니 색이 들립니다. 원두를 사세요."
+  "ui.slurp.settings.backstage.preview.ads.sampleCopy.unhinged": "열한 잔을 마셨더니 색이 들립니다. 원두를 사세요.",
+  "ui.slurp.settings.creators.refreshingConversationSchedule": "일정을 다시 만드는 중…",
+  "ui.slurp.settings.creators.openWorldMessaging": "메시지 규칙 열기"
 }
