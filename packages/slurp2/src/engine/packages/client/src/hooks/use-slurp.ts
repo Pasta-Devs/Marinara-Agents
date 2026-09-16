@@ -99,6 +99,7 @@ export const noodleKeys = {
   noodlerUnseenCount: (personaId: string) => [...noodleKeys.noodlerViewers(), "unseen-count", personaId] as const,
   noodlerReserveStatus: () => [...noodleKeys.noodlerRoot(), "reserve-status"] as const,
   noodlerImageConnections: () => [...noodleKeys.noodlerRoot(), "image-connections"] as const,
+  noodlerPostGuidance: () => [...noodleKeys.noodlerRoot(), "post-guidance"] as const,
   noodlerFanStatus: () => [...noodleKeys.noodlerRoot(), "fan-status"] as const,
   // contextTags belongs in the key: it is part of the request, so leaving it
   // out meant switching tab or crossing into evening never refetched.
@@ -874,12 +875,82 @@ export function useSlurpImageConnections(enabled = true) {
   });
 }
 
+/**
+ * What public posts and locked posts are each for, globally and per Creator.
+ *
+ * An empty string means "inherit": a Creator falls back to the global field, and the global field
+ * falls back to the built-in text on the server. Nothing here is resolved on the client, so the
+ * fields show what was actually written rather than the value in force.
+ */
+export type SlurpPostGuidanceEntry = { public: string; locked: string };
+export type SlurpPostGuidance = {
+  defaults: SlurpPostGuidanceEntry;
+  creators: Record<string, SlurpPostGuidanceEntry>;
+  /** The shipped wording, sent by the server so the client never keeps a second copy of it. */
+  builtIn: SlurpPostGuidanceEntry;
+};
+export type SlurpPostAccess = "public" | "locked";
+
+export function useSlurpPostGuidance(enabled = true) {
+  return useQuery({
+    queryKey: noodleKeys.noodlerPostGuidance(),
+    queryFn: () => api.get<SlurpPostGuidance>("/slurp2/noodler/post-guidance"),
+    enabled,
+    staleTime: 10_000,
+  });
+}
+
+export function useUpdateSlurpPostGuidance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: { creatorId?: string | null; public?: string; locked?: string }) =>
+      api.patch<SlurpPostGuidance>("/slurp2/noodler/post-guidance", patch),
+    onSuccess: (value) => qc.setQueryData(noodleKeys.noodlerPostGuidance(), value),
+  });
+}
+
+export function useGenerateSlurpPostGuidance() {
+  return useMutation({
+    mutationFn: (input: {
+      access: SlurpPostAccess;
+      creatorId?: string | null;
+      currentDraft?: string;
+      guidance?: string;
+    }) => api.post<{ guidance: string }>("/slurp2/noodler/post-guidance-draft", input),
+  });
+}
+
 export function useUpdateSlurpImageConnections() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (patch: { defaultConnectionId?: string | null; creatorId?: string; connectionId?: string | null }) =>
       api.patch<SlurpImageConnections>("/slurp2/noodler/image-connections", patch),
     onSuccess: (value) => qc.setQueryData(noodleKeys.noodlerImageConnections(), value),
+  });
+}
+
+/**
+ * Point several new Creators at one image connection.
+ *
+ * The PATCH route maps one Creator at a time and the server serializes the blob write, so these
+ * run in sequence; the wizard only ever creates a handful at once.
+ */
+export function useUpdateSlurpConnectionsForCreators() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { creatorIds: string[]; connectionId: string }) => {
+      let latest: SlurpImageConnections | undefined;
+      for (const creatorId of input.creatorIds) {
+        latest = await api.patch<SlurpImageConnections>("/slurp2/noodler/image-connections", {
+          creatorId,
+          connectionId: input.connectionId,
+        });
+      }
+      return latest;
+    },
+    onSuccess: (value) => {
+      if (value) qc.setQueryData(noodleKeys.noodlerImageConnections(), value);
+    },
   });
 }
 

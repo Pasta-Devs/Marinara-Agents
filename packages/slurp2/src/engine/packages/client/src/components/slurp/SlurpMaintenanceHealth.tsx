@@ -1,12 +1,7 @@
 import { AlertCircle, Database, HardDrive, Loader2, MessageCircle, Sparkles, UsersRound } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { SlurpAutopurgePreview, SlurpMaintenanceSummary } from "../../hooks/use-slurp";
-
-function bytes(value: number): string {
-  if (value < 1024) return `${value} B`;
-  if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KB`;
-  if (value < 1024 ** 3) return `${(value / 1024 ** 2).toFixed(1)} MB`;
-  return `${(value / 1024 ** 3).toFixed(1)} GB`;
-}
+import { formatBytes } from "./SlurpBackstageWorkflow";
 
 export function SlurpMaintenanceHealth({
   summary,
@@ -19,13 +14,15 @@ export function SlurpMaintenanceHealth({
   error: boolean;
   preview?: SlurpAutopurgePreview;
 }) {
+  const { t } = useTranslation();
   if (loading)
     return (
       <div
         className="flex min-h-24 items-center justify-center gap-2 rounded-xl bg-[var(--slurp-surface-raised)] text-sm text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)]"
         role="status"
       >
-        <Loader2 size={17} className="animate-spin motion-reduce:animate-none" /> Measuring Slurp storage…
+        <Loader2 size={17} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+        {t("ui.slurp.settings.maintenance.health.measuring", { defaultValue: "Measuring Slurp storage…" })}
       </div>
     );
   if (error || !summary)
@@ -34,7 +31,10 @@ export function SlurpMaintenanceHealth({
         className="flex min-h-20 items-center gap-3 rounded-xl bg-[var(--slurp-danger)]/10 p-4 text-sm text-[var(--slurp-danger)] ring-1 ring-inset ring-[var(--slurp-danger)]/25"
         role="alert"
       >
-        <AlertCircle size={18} /> Storage health is temporarily unavailable. No cleanup has run.
+        <AlertCircle size={18} aria-hidden="true" />
+        {t("ui.slurp.settings.maintenance.health.unavailable", {
+          defaultValue: "Storage health is not available now. No cleanup has run.",
+        })}
       </div>
     );
   const busy = Object.values(summary.operations).some(Boolean);
@@ -51,28 +51,51 @@ export function SlurpMaintenanceHealth({
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--noodle-accent)]">
-            Maintenance health
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--noodle-accent)]">
+            {t("ui.slurp.settings.maintenance.health.eyebrow", { defaultValue: "Maintenance health" })}
           </p>
           <h2 id="slurp-maintenance-health-title" className="mt-1 text-lg font-black text-balance">
-            {busy ? "An operation is working" : "Slurp is ready"}
+            {busy
+              ? t("ui.slurp.settings.maintenance.health.busyTitle", { defaultValue: "An operation is running" })
+              : t("ui.slurp.settings.maintenance.health.readyTitle", { defaultValue: "Slurp is ready" })}
           </h2>
           <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted)]">
-            Counts are exact at scan time. Storage reclaim is an estimate because files can change before cleanup.
+            {t("ui.slurp.settings.maintenance.health.countsNote", {
+              defaultValue:
+                "Counts are exact at scan time. The storage size is an estimate, because files can change before cleanup.",
+            })}
           </p>
         </div>
         <span
           className={`rounded-full px-3 py-1 text-xs font-bold ${busy ? "bg-[var(--slurp-warning)]/12 text-[var(--slurp-warning)]" : "bg-[var(--slurp-success)]/12 text-[var(--slurp-success)]"}`}
+          aria-live="polite"
         >
-          {busy ? "Busy" : "Healthy"}
+          {busy
+            ? t("ui.slurp.settings.maintenance.health.busy", { defaultValue: "Busy" })
+            : t("ui.slurp.settings.maintenance.health.healthy", { defaultValue: "Healthy" })}
         </span>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         {[
-          [UsersRound, summary.content.creators, "Creators"],
-          [Database, summary.content.posts, "Posts"],
-          [MessageCircle, summary.content.messages, "Messages"],
-          [HardDrive, bytes(summary.media.bytes), `${summary.media.files} media files`],
+          [
+            UsersRound,
+            summary.content.creators,
+            t("ui.slurp.settings.maintenance.creators", { defaultValue: "Creators" }),
+          ],
+          [Database, summary.content.posts, t("ui.slurp.settings.maintenance.posts", { defaultValue: "Posts" })],
+          [
+            MessageCircle,
+            summary.content.messages,
+            t("ui.slurp.settings.maintenance.health.messages", { defaultValue: "Messages" }),
+          ],
+          [
+            HardDrive,
+            formatBytes(summary.media.bytes),
+            t("ui.slurp.settings.maintenance.mediaFiles", {
+              defaultValue: "{{count}} media files",
+              count: summary.media.files,
+            }),
+          ],
         ].map(([Icon, value, label]) => (
           <div
             key={String(label)}
@@ -86,16 +109,20 @@ export function SlurpMaintenanceHealth({
       </div>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         <div className="rounded-lg bg-[var(--slurp-canvas)] p-3 text-xs leading-5 ring-1 ring-inset ring-[var(--slurp-outline)]">
-          <span className="font-bold">Unused work:</span> {unused} old prepared posts, attempts, and completed runs can
-          be removed.
+          {t("ui.slurp.settings.maintenance.health.unused", {
+            defaultValue: "Unused work: {{count}} old prepared posts, attempts, and finished runs can be removed.",
+            count: unused,
+          })}
         </div>
         {preview && (
           <div className="rounded-lg bg-[color-mix(in_srgb,var(--noodle-accent)_8%,var(--slurp-canvas))] p-3 text-xs leading-5 ring-1 ring-inset ring-[var(--noodle-accent)]/25">
-            <span className="inline-flex items-center gap-1 font-bold">
-              <Sparkles size={13} /> Cleanup preview:
-            </span>{" "}
-            {preview.postsToDelete} posts and {preview.postMediaFiles + preview.messageMediaFiles} media files · about{" "}
-            {bytes(preview.estimatedReclaimableBytes)}.
+            <Sparkles size={13} className="inline align-[-2px] text-[var(--noodle-accent)]" aria-hidden="true" />{" "}
+            {t("ui.slurp.settings.maintenance.purgePreview", {
+              defaultValue: "This run removes {{posts}} posts and {{files}} media files, about {{size}}.",
+              posts: preview.postsToDelete,
+              files: preview.postMediaFiles + preview.messageMediaFiles,
+              size: formatBytes(preview.estimatedReclaimableBytes),
+            })}
           </div>
         )}
       </div>

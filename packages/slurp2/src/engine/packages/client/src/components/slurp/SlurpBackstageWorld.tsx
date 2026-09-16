@@ -1,11 +1,30 @@
-import { Activity, ChevronRight, Image, Pencil, Plus, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
-import { Field, GuidanceBox, NumberSetting, SectionTitle, SettingsGroup, Toggle } from "./SlurpSettingsControls";
+import type { ReactNode } from "react";
+import {
+  BookOpen,
+  ChevronRight,
+  Coins,
+  Image,
+  Megaphone,
+  MessageCircle,
+  Pencil,
+  Plus,
+  RefreshCw,
+  RotateCcw,
+  Tags,
+  Trash2,
+  UsersRound,
+} from "lucide-react";
+import { BackstagePageHeader, FineTune, SummaryRow, type SummaryTone } from "./SlurpBackstageKit";
+import { outcomeSummary } from "./SlurpBackstageChrome";
+import type { SlurpBackstageTarget } from "./slurp-backstage";
+import { Field, GuidanceBox, NumberSetting, SettingsGroup, Toggle } from "./SlurpSettingsControls";
 import { SlurpSimulationSettings } from "./SlurpSimulationSettings";
 import { SlurpFanTypesSettings } from "./SlurpFanTypesSettings";
 import { SlurpAudienceConfigSettings } from "./SlurpAudienceConfigSettings";
 import { SlurpTagsSettings } from "./SlurpTagsSettings";
 import { api } from "../../lib/api-client";
 import { toast } from "sonner";
+import { SettingAnchor } from "./SlurpBackstageKit";
 import { type SlurpSettings, type SlurpContentRating } from "../../hooks/use-slurp";
 import { SlurpMediaImg } from "./SlurpShell";
 import {
@@ -47,27 +66,156 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
     setAdsWorldDraft,
     reactionBankDraft,
     setReactionBankDraft,
-    save,
     update,
+    updatePatch,
     fanStatusQuery,
     refreshFans,
     connectionsQuery,
     creators,
     audiencePreset,
   } = page;
+  const go = (next: SlurpBackstageTarget) => page.onNavigate({ ...page.navigation, section: "world", target: next });
+  const onOff = (value: boolean) => (value ? t("ui.slurp.settings.overview.on") : t("ui.slurp.settings.overview.off"));
+  const worldRows: Array<{
+    target: SlurpBackstageTarget;
+    icon: ReactNode;
+    title: string;
+    status: string;
+    tone: SummaryTone;
+  }> = [
+    {
+      target: "audience",
+      icon: <UsersRound size={20} />,
+      title: t("ui.slurp.settings.backstage.landing.audience", { defaultValue: "Audience" }),
+      status: onOff(settings.fanActivityEnabled),
+      tone: settings.fanActivityEnabled ? "ok" : "off",
+    },
+    {
+      target: "arcs",
+      icon: <BookOpen size={20} />,
+      title: t("ui.slurp.settings.backstage.landing.stories", { defaultValue: "Stories" }),
+      status: t(
+        `ui.slurp.settings.arcAutoMode${settings.arcAutoMode === "off" ? "Off" : settings.arcAutoMode === "suggest" ? "Suggest" : "Auto"}`,
+      ),
+      tone: settings.arcAutoMode === "off" ? "off" : "info",
+    },
+    {
+      target: "tags",
+      icon: <Tags size={20} />,
+      title: t("ui.slurp.settings.backstage.landing.discovery", { defaultValue: "Discovery tags" }),
+      status: String(settings.discoveryTags.length),
+      tone: settings.discoveryTags.length ? "info" : "warning",
+    },
+    {
+      target: "messaging",
+      icon: <MessageCircle size={20} />,
+      title: t("ui.slurp.settings.backstage.landing.messaging", { defaultValue: "Messaging rules" }),
+      status: t(
+        `ui.slurp.settings.messaging.dmPolicy${settings.messagesDefaultDmPolicy.charAt(0).toUpperCase()}${settings.messagesDefaultDmPolicy.slice(1)}`,
+      ),
+      tone: "info",
+    },
+    {
+      target: "wallet",
+      icon: <Coins size={20} />,
+      title: t("ui.slurp.settings.backstage.landing.coins", { defaultValue: "Coins and access" }),
+      status: onOff(settings.walletEnabled),
+      tone: settings.walletEnabled ? "ok" : "off",
+    },
+    {
+      target: "ads",
+      icon: <Megaphone size={20} />,
+      title: t("ui.slurp.settings.backstage.landing.ads", { defaultValue: "Ads" }),
+      status: onOff(settings.inlineAdsEnabled),
+      tone: settings.inlineAdsEnabled ? "ok" : "off",
+    },
+  ];
+  const libraries: Array<{ target: SlurpBackstageTarget; label: string; count: number }> = [
+    {
+      target: "audience",
+      label: t("ui.slurp.settings.backstage.landing.fanTypes", { defaultValue: "Fan types" }),
+      count: settings.fanTypes.length,
+    },
+    {
+      target: "audience",
+      label: t("ui.slurp.settings.backstage.landing.reactions", { defaultValue: "Reaction bank" }),
+      count: settings.audienceReactionBank.shared.length,
+    },
+    {
+      target: "arcs",
+      label: t("ui.slurp.settings.backstage.landing.arcLibrary", { defaultValue: "Arc library" }),
+      count: settings.arcLibrary.length,
+    },
+    {
+      target: "tags",
+      label: t("ui.slurp.settings.backstage.landing.tagLibrary", { defaultValue: "Tags" }),
+      count: settings.discoveryTags.length,
+    },
+    {
+      target: "ads",
+      label: t("ui.slurp.settings.backstage.landing.adPool", { defaultValue: "Ad pool" }),
+      count: adPool.data?.items.length ?? 0,
+    },
+  ];
   return (
     <>
+      {target === "world" && (
+        <div className="space-y-4">
+          <BackstagePageHeader
+            title={t("ui.slurp.settings.backstage.sections.world")}
+            detail={t("ui.slurp.settings.backstage.landing.worldDetail", {
+              defaultValue: "Shape how your Slurp feels. Open an area to change it.",
+            })}
+            scope="all-slurp"
+          />
+          {worldRows.map((row) => (
+            <SummaryRow
+              key={row.target}
+              icon={row.icon}
+              title={row.title}
+              status={row.status}
+              tone={row.tone}
+              value={outcomeSummary(t, row.target, settings, creators.length)}
+              onOpen={() => go(row.target)}
+            />
+          ))}
+          <section
+            className="rounded-xl bg-[var(--slurp-surface-raised)] p-4 ring-1 ring-inset ring-[var(--slurp-outline)]"
+            aria-labelledby="slurp-world-libraries"
+          >
+            <h2 id="slurp-world-libraries" className="text-sm font-black">
+              {t("ui.slurp.settings.backstage.landing.libraries", { defaultValue: "Libraries" })}
+            </h2>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {libraries.map((library) => (
+                <button
+                  key={library.label}
+                  type="button"
+                  onClick={() => go(library.target)}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[var(--slurp-canvas)] px-4 text-sm font-semibold ring-1 ring-inset ring-[var(--slurp-outline)] hover:text-[var(--noodle-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+                >
+                  {library.label}
+                  <span className="tabular-nums text-[var(--slurp-muted)]">{library.count}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        </div>
+      )}
+
       {target === "tags" && (
-        <SlurpTagsSettings
-          tags={settings.discoveryTags}
-          saving={updateSettings.isPending}
-          onSave={(tags) => update("discoveryTags", tags)}
-        />
+        <SettingAnchor settingKey="discoveryTags">
+          <SlurpTagsSettings
+            tags={settings.discoveryTags}
+            saving={updateSettings.isPending}
+            onSave={(tags) => update("discoveryTags", tags)}
+          />
+        </SettingAnchor>
       )}
 
       {target === "arcs" && (
         <div className="space-y-6">
-          <SectionTitle title={t("ui.slurp.settings.arcs.title")} detail={t("ui.slurp.settings.arcs.detail")} />
+          <BackstagePageHeader title={t("ui.slurp.settings.arcs.title")} detail={t("ui.slurp.settings.arcs.detail")} />
           <GuidanceBox
             title={t("ui.slurp.settings.arcs.guideTitle", { defaultValue: "Set the story rules once" })}
             detail={t("ui.slurp.settings.arcs.guideDetail", {
@@ -76,7 +224,11 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
             })}
           />
           <SettingsGroup title={t("ui.slurp.settings.arcs.behaviorGroup", { defaultValue: "Story behavior" })}>
-            <Field label={t("ui.slurp.settings.projectRate")} detail={t("ui.slurp.settings.projectRateDetail")}>
+            <Field
+              settingKey="projectRate"
+              label={t("ui.slurp.settings.projectRate")}
+              detail={t("ui.slurp.settings.projectRateDetail")}
+            >
               <select
                 value={settings.projectRate}
                 disabled={updateSettings.isPending}
@@ -89,7 +241,11 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
                 <option value="often">{t("ui.slurp.settings.projectRateOften")}</option>
               </select>
             </Field>
-            <Field label={t("ui.slurp.settings.arcPace")} detail={t("ui.slurp.settings.arcPaceDetail")}>
+            <Field
+              settingKey="arcPace"
+              label={t("ui.slurp.settings.arcPace")}
+              detail={t("ui.slurp.settings.arcPaceDetail")}
+            >
               <select
                 value={settings.arcPace}
                 disabled={updateSettings.isPending}
@@ -101,15 +257,23 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
                 <option value="fast">{t("ui.slurp.settings.arcPaceFast")}</option>
               </select>
             </Field>
-            <Field label={t("ui.slurp.settings.arcPollHours")} detail={t("ui.slurp.settings.arcPollHoursDetail")}>
+            <Field
+              settingKey="arcPollHours"
+              label={t("ui.slurp.settings.arcPollHours")}
+              detail={t("ui.slurp.settings.arcPollHoursDetail")}
+            >
               <NumberSetting
                 value={settings.arcPollHours}
                 min={1}
                 max={168}
-                onSave={(value) => save({ arcPollHours: value })}
+                onSave={(value) => update("arcPollHours", value)}
               />
             </Field>
-            <Field label={t("ui.slurp.settings.arcStatEffects")} detail={t("ui.slurp.settings.arcStatEffectsDetail")}>
+            <Field
+              settingKey="arcStatEffects"
+              label={t("ui.slurp.settings.arcStatEffects")}
+              detail={t("ui.slurp.settings.arcStatEffectsDetail")}
+            >
               <select
                 value={settings.arcStatEffects}
                 disabled={updateSettings.isPending}
@@ -124,24 +288,28 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
               </select>
             </Field>
             <Toggle
+              settingKey="arcAffectsMood"
               label={t("ui.slurp.settings.arcAffectsMood")}
               detail={t("ui.slurp.settings.arcAffectsMoodDetail")}
               value={settings.arcAffectsMood}
               onChange={(value) => update("arcAffectsMood", value)}
             />
             <Toggle
+              settingKey="arcDirectorMode"
               label={t("ui.slurp.settings.arcDirectorMode")}
               detail={t("ui.slurp.settings.arcDirectorModeDetail")}
               value={settings.arcDirectorMode}
               onChange={(value) => update("arcDirectorMode", value)}
             />
             <Toggle
+              settingKey="arcFanReactions"
               label={t("ui.slurp.settings.arcFanReactions")}
               detail={t("ui.slurp.settings.arcFanReactionsDetail")}
               value={settings.arcFanReactions}
               onChange={(value) => update("arcFanReactions", value)}
             />
             <Toggle
+              settingKey="arcCrossovers"
               label={t("ui.slurp.settings.arcCrossovers")}
               detail={t("ui.slurp.settings.arcCrossoversDetail")}
               value={settings.arcCrossovers}
@@ -149,7 +317,11 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
             />
           </SettingsGroup>
           <SettingsGroup title={t("ui.slurp.settings.arcs.automaticGroup", { defaultValue: "Automatic arcs" })}>
-            <Field label={t("ui.slurp.settings.arcAutoMode")} detail={t("ui.slurp.settings.arcAutoModeDetail")}>
+            <Field
+              settingKey="arcAutoMode"
+              label={t("ui.slurp.settings.arcAutoMode")}
+              detail={t("ui.slurp.settings.arcAutoModeDetail")}
+            >
               <select
                 value={settings.arcAutoMode}
                 disabled={updateSettings.isPending}
@@ -163,7 +335,11 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
             </Field>
             {settings.arcAutoMode !== "off" && (
               <>
-                <Field label={t("ui.slurp.settings.arcSource")} detail={t("ui.slurp.settings.arcSourceDetail")}>
+                <Field
+                  settingKey="arcSource"
+                  label={t("ui.slurp.settings.arcSource")}
+                  detail={t("ui.slurp.settings.arcSourceDetail")}
+                >
                   <select
                     value={settings.arcSource}
                     disabled={updateSettings.isPending}
@@ -176,6 +352,7 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
                   </select>
                 </Field>
                 <Field
+                  settingKey="arcCooldownWeeks"
                   label={t("ui.slurp.settings.arcCooldownWeeks")}
                   detail={t("ui.slurp.settings.arcCooldownWeeksDetail")}
                 >
@@ -183,10 +360,11 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
                     value={settings.arcCooldownWeeks}
                     min={1}
                     max={8}
-                    onSave={(value) => save({ arcCooldownWeeks: value })}
+                    onSave={(value) => update("arcCooldownWeeks", value)}
                   />
                 </Field>
                 <Field
+                  settingKey="arcMaxConcurrentAuto"
                   label={t("ui.slurp.settings.arcMaxConcurrentAuto")}
                   detail={t("ui.slurp.settings.arcMaxConcurrentAutoDetail")}
                 >
@@ -194,7 +372,7 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
                     value={settings.arcMaxConcurrentAuto}
                     min={1}
                     max={20}
-                    onSave={(value) => save({ arcMaxConcurrentAuto: value })}
+                    onSave={(value) => update("arcMaxConcurrentAuto", value)}
                   />
                 </Field>
               </>
@@ -211,32 +389,36 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
                 })}
               </p>
             </div>
-            <ArcLibraryEditor
-              library={settings.arcLibrary}
-              tags={settings.discoveryTags.map((entry) => entry.tag)}
-              busy={updateSettings.isPending}
-              creatorAccountId={selectedCreatorId}
-              personaId={viewerPersonaId}
-              onChange={(arcLibrary) => update("arcLibrary", arcLibrary)}
-            />
+            <SettingAnchor settingKey="arcLibrary">
+              <ArcLibraryEditor
+                library={settings.arcLibrary}
+                tags={settings.discoveryTags.map((entry) => entry.tag)}
+                busy={updateSettings.isPending}
+                creatorAccountId={selectedCreatorId}
+                personaId={viewerPersonaId}
+                onChange={(arcLibrary) => update("arcLibrary", arcLibrary)}
+              />
+            </SettingAnchor>
           </div>
         </div>
       )}
 
       {target === "messaging" && (
         <div className="space-y-5">
-          <SectionTitle
+          <BackstagePageHeader
             title={t("ui.slurp.settings.messaging.title")}
             detail={t("ui.slurp.settings.messaging.detail")}
           />
           <SettingsGroup title={t("ui.slurp.settings.messaging.repliesTitle")}>
             <Toggle
+              settingKey="messagesAwayRepliesEnabled"
               label={t("ui.slurp.settings.messaging.awayReplies")}
               detail={t("ui.slurp.settings.messaging.awayRepliesDetail")}
               value={settings.messagesAwayRepliesEnabled}
               onChange={(value) => update("messagesAwayRepliesEnabled", value)}
             />
             <Field
+              settingKey="messagesReplyBubbleLimit"
               label={t("ui.slurp.settings.messaging.bubbleLimit")}
               detail={t("ui.slurp.settings.messaging.bubbleLimitDetail")}
             >
@@ -253,129 +435,146 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
               {t("ui.slurp.settings.messaging.delaysDetail")}
             </p>
             <Toggle
+              settingKey="messagesUnscheduledAlwaysReachable"
               label={t("ui.slurp.settings.messaging.unscheduledAlwaysReachable")}
               detail={t("ui.slurp.settings.messaging.unscheduledAlwaysReachableDetail")}
               value={settings.messagesUnscheduledAlwaysReachable}
               onChange={(value) => update("messagesUnscheduledAlwaysReachable", value)}
             />
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field
-                label={t("ui.slurp.settings.messaging.unknownReturnDelay")}
-                detail={t("ui.slurp.settings.messaging.unknownReturnDelayDetail")}
-              >
-                <NumberSetting
-                  value={settings.messagesUnknownReturnDelayMinutes}
-                  min={0}
-                  max={1440}
-                  onSave={(value) => update("messagesUnknownReturnDelayMinutes", value)}
-                />
-              </Field>
-              <Field
-                label={t("ui.slurp.settings.messaging.maxReplyDelay")}
-                detail={t("ui.slurp.settings.messaging.maxReplyDelayDetail")}
-              >
-                <NumberSetting
-                  value={settings.messagesMaxReplyDelayMinutes}
-                  min={0}
-                  max={1440}
-                  onSave={(value) => update("messagesMaxReplyDelayMinutes", value)}
-                />
-              </Field>
-              <Field
-                label={t("ui.slurp.settings.messaging.highRapportDelayMin")}
-                detail={t("ui.slurp.settings.messaging.highRapportDelayMinDetail")}
-              >
-                <NumberSetting
-                  value={settings.messagesHighRapportDelayMinMinutes}
-                  min={0}
-                  max={1440}
-                  onSave={(value) => update("messagesHighRapportDelayMinMinutes", value)}
-                />
-              </Field>
-              <Field
-                label={t("ui.slurp.settings.messaging.highRapportDelayMax")}
-                detail={t("ui.slurp.settings.messaging.highRapportDelayMaxDetail")}
-              >
-                <NumberSetting
-                  value={settings.messagesHighRapportDelayMaxMinutes}
-                  min={0}
-                  max={1440}
-                  onSave={(value) => update("messagesHighRapportDelayMaxMinutes", value)}
-                />
-              </Field>
-              <Field
-                label={t("ui.slurp.settings.messaging.mediumRapportDelayMin")}
-                detail={t("ui.slurp.settings.messaging.mediumRapportDelayMinDetail")}
-              >
-                <NumberSetting
-                  value={settings.messagesMediumRapportDelayMinMinutes}
-                  min={0}
-                  max={1440}
-                  onSave={(value) => update("messagesMediumRapportDelayMinMinutes", value)}
-                />
-              </Field>
-              <Field
-                label={t("ui.slurp.settings.messaging.mediumRapportDelayMax")}
-                detail={t("ui.slurp.settings.messaging.mediumRapportDelayMaxDetail")}
-              >
-                <NumberSetting
-                  value={settings.messagesMediumRapportDelayMaxMinutes}
-                  min={0}
-                  max={1440}
-                  onSave={(value) => update("messagesMediumRapportDelayMaxMinutes", value)}
-                />
-              </Field>
-              <Field
-                label={t("ui.slurp.settings.messaging.recentPostAwayMin")}
-                detail={t("ui.slurp.settings.messaging.recentPostAwayMinDetail")}
-              >
-                <NumberSetting
-                  value={settings.messagesRecentPostAwayMinMinutes}
-                  min={0}
-                  max={1440}
-                  onSave={(value) => update("messagesRecentPostAwayMinMinutes", value)}
-                />
-              </Field>
-              <Field
-                label={t("ui.slurp.settings.messaging.recentPostAwayMax")}
-                detail={t("ui.slurp.settings.messaging.recentPostAwayMaxDetail")}
-              >
-                <NumberSetting
-                  value={settings.messagesRecentPostAwayMaxMinutes}
-                  min={0}
-                  max={1440}
-                  onSave={(value) => update("messagesRecentPostAwayMaxMinutes", value)}
-                />
-              </Field>
-              <Field
-                label={t("ui.slurp.settings.messaging.stalePostAwayMin")}
-                detail={t("ui.slurp.settings.messaging.stalePostAwayMinDetail")}
-              >
-                <NumberSetting
-                  value={settings.messagesStalePostAwayMinMinutes}
-                  min={0}
-                  max={1440}
-                  onSave={(value) => update("messagesStalePostAwayMinMinutes", value)}
-                />
-              </Field>
-              <Field
-                label={t("ui.slurp.settings.messaging.stalePostAwayMax")}
-                detail={t("ui.slurp.settings.messaging.stalePostAwayMaxDetail")}
-              >
-                <NumberSetting
-                  value={settings.messagesStalePostAwayMaxMinutes}
-                  min={0}
-                  max={1440}
-                  onSave={(value) => update("messagesStalePostAwayMaxMinutes", value)}
-                />
-              </Field>
-            </div>
+            <FineTune
+              summary={t("ui.slurp.settings.backstage.landing.delayFineTune", { defaultValue: "Exact reply delays" })}
+              count={10}
+            >
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field
+                  settingKey="messagesUnknownReturnDelayMinutes"
+                  label={t("ui.slurp.settings.messaging.unknownReturnDelay")}
+                  detail={t("ui.slurp.settings.messaging.unknownReturnDelayDetail")}
+                >
+                  <NumberSetting
+                    value={settings.messagesUnknownReturnDelayMinutes}
+                    min={0}
+                    max={1440}
+                    onSave={(value) => update("messagesUnknownReturnDelayMinutes", value)}
+                  />
+                </Field>
+                <Field
+                  settingKey="messagesMaxReplyDelayMinutes"
+                  label={t("ui.slurp.settings.messaging.maxReplyDelay")}
+                  detail={t("ui.slurp.settings.messaging.maxReplyDelayDetail")}
+                >
+                  <NumberSetting
+                    value={settings.messagesMaxReplyDelayMinutes}
+                    min={0}
+                    max={1440}
+                    onSave={(value) => update("messagesMaxReplyDelayMinutes", value)}
+                  />
+                </Field>
+                <Field
+                  settingKey="messagesHighRapportDelayMinMinutes"
+                  label={t("ui.slurp.settings.messaging.highRapportDelayMin")}
+                  detail={t("ui.slurp.settings.messaging.highRapportDelayMinDetail")}
+                >
+                  <NumberSetting
+                    value={settings.messagesHighRapportDelayMinMinutes}
+                    min={0}
+                    max={1440}
+                    onSave={(value) => update("messagesHighRapportDelayMinMinutes", value)}
+                  />
+                </Field>
+                <Field
+                  settingKey="messagesHighRapportDelayMaxMinutes"
+                  label={t("ui.slurp.settings.messaging.highRapportDelayMax")}
+                  detail={t("ui.slurp.settings.messaging.highRapportDelayMaxDetail")}
+                >
+                  <NumberSetting
+                    value={settings.messagesHighRapportDelayMaxMinutes}
+                    min={0}
+                    max={1440}
+                    onSave={(value) => update("messagesHighRapportDelayMaxMinutes", value)}
+                  />
+                </Field>
+                <Field
+                  settingKey="messagesMediumRapportDelayMinMinutes"
+                  label={t("ui.slurp.settings.messaging.mediumRapportDelayMin")}
+                  detail={t("ui.slurp.settings.messaging.mediumRapportDelayMinDetail")}
+                >
+                  <NumberSetting
+                    value={settings.messagesMediumRapportDelayMinMinutes}
+                    min={0}
+                    max={1440}
+                    onSave={(value) => update("messagesMediumRapportDelayMinMinutes", value)}
+                  />
+                </Field>
+                <Field
+                  settingKey="messagesMediumRapportDelayMaxMinutes"
+                  label={t("ui.slurp.settings.messaging.mediumRapportDelayMax")}
+                  detail={t("ui.slurp.settings.messaging.mediumRapportDelayMaxDetail")}
+                >
+                  <NumberSetting
+                    value={settings.messagesMediumRapportDelayMaxMinutes}
+                    min={0}
+                    max={1440}
+                    onSave={(value) => update("messagesMediumRapportDelayMaxMinutes", value)}
+                  />
+                </Field>
+                <Field
+                  settingKey="messagesRecentPostAwayMinMinutes"
+                  label={t("ui.slurp.settings.messaging.recentPostAwayMin")}
+                  detail={t("ui.slurp.settings.messaging.recentPostAwayMinDetail")}
+                >
+                  <NumberSetting
+                    value={settings.messagesRecentPostAwayMinMinutes}
+                    min={0}
+                    max={1440}
+                    onSave={(value) => update("messagesRecentPostAwayMinMinutes", value)}
+                  />
+                </Field>
+                <Field
+                  settingKey="messagesRecentPostAwayMaxMinutes"
+                  label={t("ui.slurp.settings.messaging.recentPostAwayMax")}
+                  detail={t("ui.slurp.settings.messaging.recentPostAwayMaxDetail")}
+                >
+                  <NumberSetting
+                    value={settings.messagesRecentPostAwayMaxMinutes}
+                    min={0}
+                    max={1440}
+                    onSave={(value) => update("messagesRecentPostAwayMaxMinutes", value)}
+                  />
+                </Field>
+                <Field
+                  settingKey="messagesStalePostAwayMinMinutes"
+                  label={t("ui.slurp.settings.messaging.stalePostAwayMin")}
+                  detail={t("ui.slurp.settings.messaging.stalePostAwayMinDetail")}
+                >
+                  <NumberSetting
+                    value={settings.messagesStalePostAwayMinMinutes}
+                    min={0}
+                    max={1440}
+                    onSave={(value) => update("messagesStalePostAwayMinMinutes", value)}
+                  />
+                </Field>
+                <Field
+                  settingKey="messagesStalePostAwayMaxMinutes"
+                  label={t("ui.slurp.settings.messaging.stalePostAwayMax")}
+                  detail={t("ui.slurp.settings.messaging.stalePostAwayMaxDetail")}
+                >
+                  <NumberSetting
+                    value={settings.messagesStalePostAwayMaxMinutes}
+                    min={0}
+                    max={1440}
+                    onSave={(value) => update("messagesStalePostAwayMaxMinutes", value)}
+                  />
+                </Field>
+              </div>
+            </FineTune>
           </SettingsGroup>
           <SettingsGroup title={t("ui.slurp.settings.messaging.defaultsTitle")}>
             <p className="text-xs leading-5 text-[var(--muted-foreground)]">
               {t("ui.slurp.settings.messaging.defaultsDetail")}
             </p>
             <Field
+              settingKey="messagesDefaultDmPolicy"
               label={t("ui.slurp.settings.messaging.dmPolicy")}
               detail={t("ui.slurp.settings.messaging.dmPolicyDetail")}
             >
@@ -395,6 +594,7 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field
+                settingKey="messagesDefaultRequestFee"
                 label={t("ui.slurp.settings.messaging.requestFee")}
                 detail={t("ui.slurp.settings.messaging.requestFeeDetail")}
               >
@@ -406,6 +606,7 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
                 />
               </Field>
               <Field
+                settingKey="messagesDefaultPpvPrice"
                 label={t("ui.slurp.settings.messaging.ppvPrice")}
                 detail={t("ui.slurp.settings.messaging.ppvPriceDetail")}
               >
@@ -426,7 +627,7 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
 
       {target === "wallet" && (
         <div className="space-y-5">
-          <SectionTitle
+          <BackstagePageHeader
             title={t("ui.slurp.settings.wallet.title", { defaultValue: "SlurpCoins" })}
             detail={t("ui.slurp.settings.wallet.detail", {
               defaultValue: "Prices, earning, and the daily stipend.",
@@ -447,6 +648,7 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
             </p>
           </div>
           <Toggle
+            settingKey="walletEnabled"
             label={t("ui.slurp.settings.wallet.enabled", {
               defaultValue: "SlurpCoins actually cost something",
             })}
@@ -457,6 +659,7 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
             onChange={(value) => update("walletEnabled", value)}
           />
           <Field
+            settingKey="walletUnlockCost"
             label={t("ui.slurp.settings.wallet.unlockCost", { defaultValue: "Unlock a post" })}
             detail={t("ui.slurp.settings.wallet.unlockCostDetail", {
               defaultValue: "Default price for a locked post. A post keeps the price it was created with.",
@@ -470,6 +673,7 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
             />
           </Field>
           <Field
+            settingKey="walletSubscriptionCost"
             label={t("ui.slurp.settings.wallet.subscriptionCost", { defaultValue: "Subscribe, per week" })}
             detail={t("ui.slurp.settings.wallet.subscriptionCostDetail", {
               defaultValue:
@@ -484,6 +688,7 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
             />
           </Field>
           <Toggle
+            settingKey="pricingDynamicCharacters"
             label={t("ui.slurp.settings.wallet.pricingDynamicCharacters", {
               defaultValue: "Character Creators set their own prices",
             })}
@@ -496,6 +701,7 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
           />
           {settings.pricingDynamicCharacters && (
             <Field
+              settingKey="pricingMaxWeeklyChangePercent"
               label={t("ui.slurp.settings.wallet.pricingMaxWeeklyChange", {
                 defaultValue: "Largest weekly price change, %",
               })}
@@ -511,108 +717,123 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
               />
             </Field>
           )}
-          <Field
-            label={t("ui.slurp.settings.wallet.stipendFloor", { defaultValue: "Daily top-up floor" })}
-            detail={t("ui.slurp.settings.wallet.stipendFloorDetail", {
-              defaultValue: "Once a day, a balance below this is topped up to it. Zero turns the stipend off entirely.",
+          <FineTune
+            summary={t("ui.slurp.settings.backstage.landing.earningFineTune", {
+              defaultValue: "Earning, stipend, and revenue share",
             })}
+            count={7}
           >
-            <NumberSetting
-              value={settings.walletStipendFloor}
-              min={0}
-              max={99_999}
-              onSave={(value) => update("walletStipendFloor", value)}
-            />
-          </Field>
-          <Field
-            label={t("ui.slurp.settings.wallet.dayStartHour")}
-            detail={t("ui.slurp.settings.wallet.dayStartHourDetail")}
-          >
-            <NumberSetting
-              value={settings.walletDayStartHour}
-              min={0}
-              max={23}
-              onSave={(value) => update("walletDayStartHour", value)}
-            />
-          </Field>
-          <Field
-            label={t("ui.slurp.settings.wallet.adReward", { defaultValue: "Paid per ad you act on" })}
-            detail={t("ui.slurp.settings.wallet.adRewardDetail", {
-              defaultValue: "Zero turns ad rewards off.",
-            })}
-          >
-            <NumberSetting
-              value={settings.walletAdReward}
-              min={0}
-              max={999}
-              onSave={(value) => update("walletAdReward", value)}
-            />
-          </Field>
-          <Field
-            label={t("ui.slurp.settings.wallet.adDailyCap", { defaultValue: "Most ad SlurpCoins per day" })}
-            detail={t("ui.slurp.settings.wallet.adDailyCapDetail", {
-              defaultValue: "The cap is what stops ad clicking from becoming a job.",
-            })}
-          >
-            <NumberSetting
-              value={settings.walletAdDailyCap}
-              min={0}
-              max={9999}
-              onSave={(value) => update("walletAdDailyCap", value)}
-            />
-          </Field>
-          <Field
-            label={t("ui.slurp.settings.wallet.engagementReward", {
-              defaultValue: "Paid per post or comment",
-            })}
-            detail={t("ui.slurp.settings.wallet.engagementRewardDetail", {
-              defaultValue: "Zero turns posting rewards off.",
-            })}
-          >
-            <NumberSetting
-              value={settings.walletEngagementReward}
-              min={0}
-              max={999}
-              onSave={(value) => update("walletEngagementReward", value)}
-            />
-          </Field>
-          <Field
-            label={t("ui.slurp.settings.wallet.engagementDailyCap", {
-              defaultValue: "Most posting SlurpCoins per day",
-            })}
-            detail={t("ui.slurp.settings.wallet.engagementDailyCapDetail", {
-              defaultValue: "The cap is what stops posting from becoming a grind.",
-            })}
-          >
-            <NumberSetting
-              value={settings.walletEngagementDailyCap}
-              min={0}
-              max={9999}
-              onSave={(value) => update("walletEngagementDailyCap", value)}
-            />
-          </Field>
-          <Field
-            label={t("ui.slurp.settings.wallet.creatorShare", {
-              defaultValue: "Creator keeps, in percent",
-            })}
-            detail={t("ui.slurp.settings.wallet.creatorShareDetail", {
-              defaultValue:
-                "When a fan pays one of your own creators, this share reaches your wallet. Zero means your creators earn nothing.",
-            })}
-          >
-            <NumberSetting
-              value={settings.walletCreatorRevenueSharePercent}
-              min={0}
-              max={100}
-              onSave={(value) => update("walletCreatorRevenueSharePercent", value)}
-            />
-          </Field>
+            <Field
+              settingKey="walletStipendFloor"
+              label={t("ui.slurp.settings.wallet.stipendFloor", { defaultValue: "Daily top-up floor" })}
+              detail={t("ui.slurp.settings.wallet.stipendFloorDetail", {
+                defaultValue:
+                  "Once a day, a balance below this is topped up to it. Zero turns the stipend off entirely.",
+              })}
+            >
+              <NumberSetting
+                value={settings.walletStipendFloor}
+                min={0}
+                max={99_999}
+                onSave={(value) => update("walletStipendFloor", value)}
+              />
+            </Field>
+            <Field
+              settingKey="walletDayStartHour"
+              label={t("ui.slurp.settings.wallet.dayStartHour")}
+              detail={t("ui.slurp.settings.wallet.dayStartHourDetail")}
+            >
+              <NumberSetting
+                value={settings.walletDayStartHour}
+                min={0}
+                max={23}
+                onSave={(value) => update("walletDayStartHour", value)}
+              />
+            </Field>
+            <Field
+              settingKey="walletAdReward"
+              label={t("ui.slurp.settings.wallet.adReward", { defaultValue: "Paid per ad you act on" })}
+              detail={t("ui.slurp.settings.wallet.adRewardDetail", {
+                defaultValue: "Zero turns ad rewards off.",
+              })}
+            >
+              <NumberSetting
+                value={settings.walletAdReward}
+                min={0}
+                max={999}
+                onSave={(value) => update("walletAdReward", value)}
+              />
+            </Field>
+            <Field
+              settingKey="walletAdDailyCap"
+              label={t("ui.slurp.settings.wallet.adDailyCap", { defaultValue: "Most ad SlurpCoins per day" })}
+              detail={t("ui.slurp.settings.wallet.adDailyCapDetail", {
+                defaultValue: "The cap is what stops ad clicking from becoming a job.",
+              })}
+            >
+              <NumberSetting
+                value={settings.walletAdDailyCap}
+                min={0}
+                max={9999}
+                onSave={(value) => update("walletAdDailyCap", value)}
+              />
+            </Field>
+            <Field
+              settingKey="walletEngagementReward"
+              label={t("ui.slurp.settings.wallet.engagementReward", {
+                defaultValue: "Paid per post or comment",
+              })}
+              detail={t("ui.slurp.settings.wallet.engagementRewardDetail", {
+                defaultValue: "Zero turns posting rewards off.",
+              })}
+            >
+              <NumberSetting
+                value={settings.walletEngagementReward}
+                min={0}
+                max={999}
+                onSave={(value) => update("walletEngagementReward", value)}
+              />
+            </Field>
+            <Field
+              settingKey="walletEngagementDailyCap"
+              label={t("ui.slurp.settings.wallet.engagementDailyCap", {
+                defaultValue: "Most posting SlurpCoins per day",
+              })}
+              detail={t("ui.slurp.settings.wallet.engagementDailyCapDetail", {
+                defaultValue: "The cap is what stops posting from becoming a grind.",
+              })}
+            >
+              <NumberSetting
+                value={settings.walletEngagementDailyCap}
+                min={0}
+                max={9999}
+                onSave={(value) => update("walletEngagementDailyCap", value)}
+              />
+            </Field>
+            <Field
+              settingKey="walletCreatorRevenueSharePercent"
+              label={t("ui.slurp.settings.wallet.creatorShare", {
+                defaultValue: "Creator keeps, in percent",
+              })}
+              detail={t("ui.slurp.settings.wallet.creatorShareDetail", {
+                defaultValue:
+                  "When a fan pays one of your own creators, this share reaches your wallet. Zero means your creators earn nothing.",
+              })}
+            >
+              <NumberSetting
+                value={settings.walletCreatorRevenueSharePercent}
+                min={0}
+                max={100}
+                onSave={(value) => update("walletCreatorRevenueSharePercent", value)}
+              />
+            </Field>
+          </FineTune>
         </div>
       )}
 
       {target === "ads" && (
         <div className="space-y-5">
-          <SectionTitle title={t("ui.slurp.settings.ads.title")} detail={t("ui.slurp.settings.ads.detail")} />
+          <BackstagePageHeader title={t("ui.slurp.settings.ads.title")} detail={t("ui.slurp.settings.ads.detail")} />
           <div className="rounded-xl bg-[var(--slurp-surface-raised)] p-4 text-xs leading-5 text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)]">
             <p>{t("ui.slurp.settings.ads.explainer")}</p>
             <p className="mt-2">{t("ui.slurp.settings.ads.explainerPool")}</p>
@@ -629,12 +850,17 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
           </div>
           <SettingsGroup title={t("ui.slurp.settings.ads.feedGroup", { defaultValue: "In your feed" })}>
             <Toggle
+              settingKey="inlineAdsEnabled"
               label={t("ui.slurp.settings.inlinePromotions")}
               detail={t("ui.slurp.settings.inlinePromotionsDetail")}
               value={settings.inlineAdsEnabled}
               onChange={(value) => update("inlineAdsEnabled", value)}
             />
-            <Field label={t("ui.slurp.settings.ads.frequency")} detail={t("ui.slurp.settings.ads.frequencyDetail")}>
+            <Field
+              settingKey="inlineAdsFrequency"
+              label={t("ui.slurp.settings.ads.frequency")}
+              detail={t("ui.slurp.settings.ads.frequencyDetail")}
+            >
               <select
                 value={settings.inlineAdsFrequency}
                 disabled={updateSettings.isPending}
@@ -648,7 +874,11 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
                 <option value="frequent">{t("ui.slurp.settings.ads.frequencyFrequent")}</option>
               </select>
             </Field>
-            <Field label={t("ui.slurp.settings.ads.steering")} detail={t("ui.slurp.settings.ads.steeringDetail")}>
+            <Field
+              settingKey="inlineAdsSteering"
+              label={t("ui.slurp.settings.ads.steering")}
+              detail={t("ui.slurp.settings.ads.steeringDetail")}
+            >
               <select
                 value={settings.inlineAdsSteering}
                 disabled={updateSettings.isPending}
@@ -662,7 +892,11 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
                 <option value="random">{t("ui.slurp.settings.ads.steeringRandom")}</option>
               </select>
             </Field>
-            <Field label={t("ui.slurp.settings.ads.ceiling")} detail={t("ui.slurp.settings.ads.ceilingDetail")}>
+            <Field
+              settingKey="inlineAdsContentCeiling"
+              label={t("ui.slurp.settings.ads.ceiling")}
+              detail={t("ui.slurp.settings.ads.ceilingDetail")}
+            >
               <select
                 value={settings.inlineAdsContentCeiling}
                 disabled={updateSettings.isPending}
@@ -678,7 +912,11 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
             </Field>
           </SettingsGroup>
           <SettingsGroup title={t("ui.slurp.settings.ads.voiceGroup", { defaultValue: "How ads read" })}>
-            <Field label={t("ui.slurp.settings.ads.tone")} detail={t("ui.slurp.settings.ads.toneDetail")}>
+            <Field
+              settingKey="inlineAdsTone"
+              label={t("ui.slurp.settings.ads.tone")}
+              detail={t("ui.slurp.settings.ads.toneDetail")}
+            >
               <select
                 value={settings.inlineAdsTone}
                 disabled={updateSettings.isPending}
@@ -692,7 +930,11 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
                 <option value="unhinged">{t("ui.slurp.settings.ads.toneUnhinged")}</option>
               </select>
             </Field>
-            <Field label={t("ui.slurp.settings.ads.era")} detail={t("ui.slurp.settings.ads.eraDetail")}>
+            <Field
+              settingKey="inlineAdsEra"
+              label={t("ui.slurp.settings.ads.era")}
+              detail={t("ui.slurp.settings.ads.eraDetail")}
+            >
               <select
                 value={settings.inlineAdsEra}
                 disabled={updateSettings.isPending}
@@ -705,7 +947,11 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
                 <option value="retrofuture">{t("ui.slurp.settings.ads.eraRetrofuture")}</option>
               </select>
             </Field>
-            <Field label={t("ui.slurp.settings.ads.world")} detail={t("ui.slurp.settings.ads.worldDetail")}>
+            <Field
+              settingKey="inlineAdsWorldContext"
+              label={t("ui.slurp.settings.ads.world")}
+              detail={t("ui.slurp.settings.ads.worldDetail")}
+            >
               <textarea
                 rows={3}
                 value={adsWorldDraft ?? settings.inlineAdsWorldContext}
@@ -721,18 +967,23 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
               />
             </Field>
             <Toggle
+              settingKey="inlineAdsImagesEnabled"
               label={t("ui.slurp.settings.ads.images")}
               detail={t("ui.slurp.settings.ads.imagesDetail")}
               value={settings.inlineAdsImagesEnabled}
               onChange={(value) => update("inlineAdsImagesEnabled", value)}
             />
-            <Field label={t("ui.slurp.settings.ads.lorebook")} detail={t("ui.slurp.settings.ads.lorebookDetail")}>
+            <Field
+              settingKey="inlineAdsLorebookId"
+              label={t("ui.slurp.settings.ads.lorebook")}
+              detail={t("ui.slurp.settings.ads.lorebookDetail")}
+            >
               <div className="flex flex-wrap gap-2">
                 <select
                   value={settings.inlineAdsLorebookId ?? ""}
                   disabled={updateSettings.isPending || adLorebooks.isLoading}
                   onChange={(event) =>
-                    void save({
+                    void updatePatch({
                       inlineAdsLorebookId: event.target.value || null,
                       // Clearing the fingerprint makes the next sync regenerate against
                       // the newly chosen book instead of treating it as already applied.
@@ -1116,30 +1367,32 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
             <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted)]">
               {t("ui.slurp.settings.ads.themesDetail")}
             </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {["coffee", "beauty", "luxury", "nightlife", "fashion"].map((tag) => {
-                const selected = settings.inlineAdsPreferredTags.includes(tag);
-                return (
-                  <button
-                    key={tag}
-                    type="button"
-                    aria-pressed={selected}
-                    disabled={updateSettings.isPending}
-                    onClick={() =>
-                      void update(
-                        "inlineAdsPreferredTags",
-                        selected
-                          ? settings.inlineAdsPreferredTags.filter((value) => value !== tag)
-                          : [...settings.inlineAdsPreferredTags, tag],
-                      )
-                    }
-                    className={`min-h-10 rounded-full px-4 text-sm font-semibold ring-1 ring-inset transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 ${selected ? "bg-[var(--slurp-nav-active)] text-[var(--slurp-text)] ring-[var(--noodle-accent)]/45" : "bg-[var(--slurp-surface-raised)] text-[var(--slurp-muted)] ring-[var(--slurp-outline)] hover:text-[var(--slurp-text)]"}`}
-                  >
-                    {t(`ui.slurp.settings.ads.theme.${tag}`)}
-                  </button>
-                );
-              })}
-            </div>
+            <SettingAnchor settingKey="inlineAdsPreferredTags">
+              <div className="mt-3 flex flex-wrap gap-2">
+                {["coffee", "beauty", "luxury", "nightlife", "fashion"].map((tag) => {
+                  const selected = settings.inlineAdsPreferredTags.includes(tag);
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      aria-pressed={selected}
+                      disabled={updateSettings.isPending}
+                      onClick={() =>
+                        void update(
+                          "inlineAdsPreferredTags",
+                          selected
+                            ? settings.inlineAdsPreferredTags.filter((value) => value !== tag)
+                            : [...settings.inlineAdsPreferredTags, tag],
+                        )
+                      }
+                      className={`min-h-10 rounded-full px-4 text-sm font-semibold ring-1 ring-inset transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 ${selected ? "bg-[var(--slurp-nav-active)] text-[var(--slurp-text)] ring-[var(--noodle-accent)]/45" : "bg-[var(--slurp-surface-raised)] text-[var(--slurp-muted)] ring-[var(--slurp-outline)] hover:text-[var(--slurp-text)]"}`}
+                    >
+                      {t(`ui.slurp.settings.ads.theme.${tag}`)}
+                    </button>
+                  );
+                })}
+              </div>
+            </SettingAnchor>
           </div>
           {viewerPersonaId && (adState.data?.hiddenBrands.length ?? 0) > 0 && (
             <div>
@@ -1200,7 +1453,7 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
       {target === "audience" && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <SectionTitle
+            <BackstagePageHeader
               title={t("ui.slurp.settings.audience.title")}
               detail={t("ui.slurp.settings.audience.detail")}
             />
@@ -1246,7 +1499,7 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
               label: t(`ui.slurp.settings.simulation.presets.${preset}`),
             }))}
             value={audiencePreset}
-            onChange={(preset) => void save(slurpAudiencePresetPatch(preset, settings))}
+            onChange={(preset) => void updatePatch(slurpAudiencePresetPatch(preset, settings))}
             extra={
               audiencePreset === "custom" ? (
                 <span className="min-h-10 inline-flex items-center rounded-lg border border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10 px-3 text-xs font-semibold text-[var(--noodle-accent)]">
@@ -1255,26 +1508,30 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
               ) : null
             }
           />
-          <ChoiceRow
-            title={t("ui.slurp.settings.audience.scaleTitle")}
-            detail={t("ui.slurp.settings.audience.scaleDetail")}
-            options={(["intimate", "normal", "large"] as const).map((level) => ({
-              value: level,
-              label: t(`ui.slurp.settings.audience.scale.${level}`),
-            }))}
-            value={settings.platformScale}
-            onChange={(level) => update("platformScale", level)}
-          />
-          <ChoiceRow
-            title={t("ui.slurp.settings.audience.toneTitle")}
-            detail={t("ui.slurp.settings.audience.toneDetail")}
-            options={(["warm", "mixed", "unfiltered"] as const).map((tone) => ({
-              value: tone,
-              label: t(`ui.slurp.settings.audience.tone.${tone}`),
-            }))}
-            value={settings.audienceTone}
-            onChange={(tone) => update("audienceTone", tone)}
-          />
+          <SettingAnchor settingKey="platformScale">
+            <ChoiceRow
+              title={t("ui.slurp.settings.audience.scaleTitle")}
+              detail={t("ui.slurp.settings.audience.scaleDetail")}
+              options={(["intimate", "normal", "large"] as const).map((level) => ({
+                value: level,
+                label: t(`ui.slurp.settings.audience.scale.${level}`),
+              }))}
+              value={settings.platformScale}
+              onChange={(level) => update("platformScale", level)}
+            />
+          </SettingAnchor>
+          <SettingAnchor settingKey="audienceTone">
+            <ChoiceRow
+              title={t("ui.slurp.settings.audience.toneTitle")}
+              detail={t("ui.slurp.settings.audience.toneDetail")}
+              options={(["warm", "mixed", "unfiltered"] as const).map((tone) => ({
+                value: tone,
+                label: t(`ui.slurp.settings.audience.tone.${tone}`),
+              }))}
+              value={settings.audienceTone}
+              onChange={(tone) => update("audienceTone", tone)}
+            />
+          </SettingAnchor>
 
           <details className="group rounded-xl bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
             <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 px-4 py-2 text-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] [&::-webkit-details-marker]:hidden">
@@ -1294,11 +1551,14 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
               />
             </summary>
             <div className="space-y-5 border-t border-[var(--slurp-outline)] p-4 sm:p-5">
-              <AmbientProfilesPanel
-                allowRandomUsers={settings.allowRandomUsers}
-                onAllowRandomUsersChange={(value) => update("allowRandomUsers", value)}
-              />
+              <SettingAnchor settingKey="allowRandomUsers">
+                <AmbientProfilesPanel
+                  allowRandomUsers={settings.allowRandomUsers}
+                  onAllowRandomUsersChange={(value) => update("allowRandomUsers", value)}
+                />
+              </SettingAnchor>
               <Field
+                settingKey="audienceReactionBank"
                 label={t("ui.slurp.settings.audience.reactionBank")}
                 detail={t("ui.slurp.settings.audience.reactionBankDetail", {
                   count: settings.audienceReactionBank.shared.length,
@@ -1334,12 +1594,14 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
                   className="w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] p-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
                 />
               </Field>
-              <SlurpFanTypesSettings
-                fanTypes={settings.fanTypes}
-                bankCounts={settings.audienceReactionBank.byType}
-                crowdTone={settings.audienceTone}
-                onSave={(fanTypes) => update("fanTypes", fanTypes)}
-              />
+              <SettingAnchor settingKey="fanTypes">
+                <SlurpFanTypesSettings
+                  fanTypes={settings.fanTypes}
+                  bankCounts={settings.audienceReactionBank.byType}
+                  crowdTone={settings.audienceTone}
+                  onSave={(fanTypes) => update("fanTypes", fanTypes)}
+                />
+              </SettingAnchor>
             </div>
           </details>
 
@@ -1358,13 +1620,15 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
               />
             </summary>
             <div className="space-y-5 border-t border-[var(--slurp-outline)] p-4 sm:p-5">
-              <SlurpAudienceConfigSettings
-                tuning={settings.simulationTuning}
-                fanTypes={settings.fanTypes}
-                budget={settings.modelBudget}
-                connections={connectionsQuery.data ?? []}
-                onSave={(patch) => save(patch)}
-              />
+              <SettingAnchor settingKey="modelBudget">
+                <SlurpAudienceConfigSettings
+                  tuning={settings.simulationTuning}
+                  fanTypes={settings.fanTypes}
+                  budget={settings.modelBudget}
+                  connections={connectionsQuery.data ?? []}
+                  onSave={(patch) => updatePatch(patch)}
+                />
+              </SettingAnchor>
             </div>
           </details>
 
@@ -1384,6 +1648,7 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
             </summary>
             <div className="space-y-5 border-t border-[var(--slurp-outline)] p-4 sm:p-5">
               <Toggle
+                settingKey="fanActivityEnabled"
                 label={t("ui.slurp.settings.audience.enabled")}
                 detail={t("ui.slurp.settings.audience.enabledDetail")}
                 value={settings.fanActivityEnabled}
@@ -1391,6 +1656,7 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
               />
               <div className="grid gap-4 sm:grid-cols-3">
                 <Field
+                  settingKey="fanActivityRunsPerDay"
                   label={t("ui.slurp.settings.audience.runsPerDay")}
                   detail={t("ui.slurp.settings.audience.runsPerDayDetail")}
                 >
@@ -1401,7 +1667,7 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
                     onSave={(value) => update("fanActivityRunsPerDay", value)}
                   />
                 </Field>
-                <Field label={t("ui.slurp.settings.audience.likes")}>
+                <Field settingKey="fanLikesPerRefresh" label={t("ui.slurp.settings.audience.likes")}>
                   <NumberSetting
                     value={settings.fanLikesPerRefresh}
                     min={0}
@@ -1409,7 +1675,7 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
                     onSave={(value) => update("fanLikesPerRefresh", value)}
                   />
                 </Field>
-                <Field label={t("ui.slurp.settings.audience.replies")}>
+                <Field settingKey="fanRepliesPerRefresh" label={t("ui.slurp.settings.audience.replies")}>
                   <NumberSetting
                     value={settings.fanRepliesPerRefresh}
                     min={0}
@@ -1418,41 +1684,47 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
                   />
                 </Field>
               </div>
-              <ChoiceRow
-                title={t("ui.slurp.settings.audience.activityTitle")}
-                detail={t("ui.slurp.settings.audience.activityDetail")}
-                options={(["off", "quiet", "normal", "busy"] as const).map((level) => ({
-                  value: level,
-                  label: t(`ui.slurp.settings.audience.activity.${level}`),
-                }))}
-                value={settings.worldActivity}
-                onChange={(level) => update("worldActivity", level)}
-              />
+              <SettingAnchor settingKey="worldActivity">
+                <ChoiceRow
+                  title={t("ui.slurp.settings.audience.activityTitle")}
+                  detail={t("ui.slurp.settings.audience.activityDetail")}
+                  options={(["off", "quiet", "normal", "busy"] as const).map((level) => ({
+                    value: level,
+                    label: t(`ui.slurp.settings.audience.activity.${level}`),
+                  }))}
+                  value={settings.worldActivity}
+                  onChange={(level) => update("worldActivity", level)}
+                />
+              </SettingAnchor>
               {/* ponytail: the global archetype mix stays a hidden stored field that the server still
                           reads; drop it together with the per-Creator archetype UI. */}
               {Object.values(settings.fanArchetypeWeights).some((weight) => weight !== 1) && (
-                <div className="rounded-lg border border-[var(--border)] p-3 text-xs text-[var(--muted-foreground)]">
-                  <p>{t("ui.slurp.settings.audience.legacyMix")}</p>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void update(
-                        "fanArchetypeWeights",
-                        Object.fromEntries(Object.keys(settings.fanArchetypeWeights).map((key) => [key, 1])),
-                      )
-                    }
-                    className="mt-2 inline-flex min-h-10 items-center rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)]"
-                  >
-                    {t("ui.slurp.settings.audience.legacyMixReset")}
-                  </button>
-                </div>
+                <SettingAnchor settingKey="fanArchetypeWeights">
+                  <div className="rounded-lg border border-[var(--border)] p-3 text-xs text-[var(--muted-foreground)]">
+                    <p>{t("ui.slurp.settings.audience.legacyMix")}</p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void update(
+                          "fanArchetypeWeights",
+                          Object.fromEntries(Object.keys(settings.fanArchetypeWeights).map((key) => [key, 1])),
+                        )
+                      }
+                      className="mt-2 inline-flex min-h-10 items-center rounded-lg border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)]"
+                    >
+                      {t("ui.slurp.settings.audience.legacyMixReset")}
+                    </button>
+                  </div>
+                </SettingAnchor>
               )}
               {/* Every number the simulation runs on, in its own file. Keyed on the preset so an Activity click resets the local draft instead of saving stale tuning back. */}
-              <SlurpSimulationSettings
-                key={settings.simulationTuning.preset}
-                tuning={settings.simulationTuning}
-                onSave={(next) => void update("simulationTuning", next)}
-              />
+              <SettingAnchor settingKey="simulationTuning">
+                <SlurpSimulationSettings
+                  key={settings.simulationTuning.preset}
+                  tuning={settings.simulationTuning}
+                  onSave={(next) => void update("simulationTuning", next)}
+                />
+              </SettingAnchor>
             </div>
           </details>
         </div>

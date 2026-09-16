@@ -65,7 +65,9 @@ import { slurpAudiencePresetFor } from "../../../../server/src/services/slurp/sl
 import {
   SLURP_BACKSTAGE_DEFAULT_TARGET,
   SLURP_BACKSTAGE_SECTION_LABELS,
+  SLURP_BACKSTAGE_TARGET_LABELS,
   SLURP_BACKSTAGE_TARGETS_BY_SECTION,
+  type SlurpBackstageTarget,
 } from "./slurp-backstage";
 import {
   confirmLeaveSlurpBackstage,
@@ -87,6 +89,7 @@ import {
   ScheduleSlotEditor,
   PromptEditor,
 } from "./SlurpBackstageWorkflow";
+import { focusSettingAnchor } from "./SlurpBackstageKit";
 import { SlurpBackstageOverview } from "./SlurpBackstageOverview";
 import { SlurpBackstageCreators } from "./SlurpBackstageCreators";
 import { SlurpBackstageWorld } from "./SlurpBackstageWorld";
@@ -171,20 +174,31 @@ function SlurpSettingsSectionRow({
       <span className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--slurp-muted)]">
         {t("ui.slurp.settings.backstage.destination", { defaultValue: "Destination" })}
       </span>
+      {/* Grouped so the picker reaches a page directly, instead of only its section. */}
       <select
-        value={section}
+        value={`${section}:${navigation.target ?? SLURP_BACKSTAGE_DEFAULT_TARGET[section]}`}
         onChange={(event) => {
-          const next = event.target.value as (typeof settingsSections)[number];
-          onNavigate({ ...navigation, section: next, target: SLURP_BACKSTAGE_DEFAULT_TARGET[next] });
+          const [next, nextTarget] = event.target.value.split(":") as [
+            (typeof settingsSections)[number],
+            SlurpBackstageTarget,
+          ];
+          onNavigate({ ...navigation, section: next, target: nextTarget });
         }}
         className="ms-auto min-h-11 min-w-0 flex-1 rounded-lg bg-[var(--slurp-surface-raised)] px-3 text-base font-semibold text-[var(--slurp-text)] ring-1 ring-inset ring-[var(--slurp-outline)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
       >
         {settingsSections.map((item) => (
-          <option key={item} value={item}>
-            {t(`ui.slurp.settings.backstage.sections.${item}`, {
+          <optgroup
+            key={item}
+            label={t(`ui.slurp.settings.backstage.sections.${item}`, {
               defaultValue: SLURP_BACKSTAGE_SECTION_LABELS[item],
             })}
-          </option>
+          >
+            {SLURP_BACKSTAGE_TARGETS_BY_SECTION[item].map((entry) => (
+              <option key={entry} value={`${item}:${entry}`}>
+                {SLURP_BACKSTAGE_TARGET_LABELS[entry]}
+              </option>
+            ))}
+          </optgroup>
         ))}
       </select>
     </label>
@@ -244,7 +258,7 @@ function useSlurpBackstageController({
     () => (savedSettings ? ({ ...savedSettings, ...draftPatch } as SlurpSettings) : undefined),
     [draftPatch, savedSettings],
   );
-  const maintenanceSummary = useSlurpMaintenanceSummary(section === "maintenance");
+  const maintenanceSummary = useSlurpMaintenanceSummary(section === "maintenance" || section === "overview");
   const autopurgePreview = useSlurpAutopurgePreview(settings, target === "autopurge");
   const [generationGuidanceDraft, setGenerationGuidanceDraft] = useState("");
   const [generationGuidanceEditorOpen, setGenerationGuidanceEditorOpen] = useState(false);
@@ -285,24 +299,28 @@ function useSlurpBackstageController({
       return false;
     }
   };
-  const update = async (key: keyof SlurpSettings, value: unknown) => {
-    const patch = { [key]: value } as Partial<SlurpSettings>;
+  /** Stages a patch for Review and apply; only Overview quick toggles save at once, with Undo. */
+  const updatePatch = async (patch: Partial<SlurpSettings>) => {
     if (section !== "overview") {
       setDraftPatch((current) => ({ ...current, ...patch }));
       return true;
     }
-    const previous = savedSettings?.[key];
+    const keys = Object.keys(patch) as Array<keyof SlurpSettings>;
+    const previous = savedSettings
+      ? (Object.fromEntries(keys.map((key) => [key, savedSettings[key]])) as Partial<SlurpSettings>)
+      : undefined;
     const changed = await save(patch);
-    if (changed && previous !== undefined) {
+    if (changed && previous) {
       toast.success(t("ui.slurp.settings.backstage.quickSaved", { defaultValue: "Quick setting updated." }), {
         action: {
           label: t("ui.slurp.settings.backstage.undo", { defaultValue: "Undo" }),
-          onClick: () => void save({ [key]: previous } as Partial<SlurpSettings>),
+          onClick: () => void save(previous),
         },
       });
     }
     return changed;
   };
+  const update = (key: keyof SlurpSettings, value: unknown) => updatePatch({ [key]: value } as Partial<SlurpSettings>);
   // A new retention period restarts the schedule from now, so a shorter period takes effect right away.
   const saveRetention = (patch: Partial<Pick<SlurpSettings, "autopurgeRetentionValue" | "autopurgeRetentionUnit">>) =>
     save(
@@ -310,11 +328,15 @@ function useSlurpBackstageController({
         ? { ...patch, autopurgeNextRunAt: nextSlurpAutopurgeRunAt({ ...settings, ...patch }) }
         : patch,
     );
-  const accountsQuery = useNoodlerAccounts(section === "overview" || section === "creators" || target === "general");
-  const imageSettingsQuery = useSlurpImageConnections(
-    section === "overview" || target === "images" || section === "creators",
+  const accountsQuery = useNoodlerAccounts(
+    section === "overview" || section === "creators" || section === "automation",
   );
-  const fanStatusQuery = useNoodlerFanActivityStatus(section === "overview" || target === "audience");
+  const imageSettingsQuery = useSlurpImageConnections(
+    section === "overview" || section === "automation" || section === "creators",
+  );
+  const fanStatusQuery = useNoodlerFanActivityStatus(
+    section === "overview" || target === "audience" || target === "automation",
+  );
   const reserveStatusQuery = useNoodlerReserveStatus(section === "overview" || section === "creators");
   const updateAuto = useUpdateNoodlerAutoPosting();
   const updateScheduleSlot = useUpdateNoodlerScheduleSlot();
@@ -351,7 +373,7 @@ function useSlurpBackstageController({
   const dismissSourceChanges = useDismissNoodlerSourceChanges();
   const connectionsQuery = useSlurpConnections(
     section === "overview" ||
-      target === "general" ||
+      section === "automation" ||
       target === "images" ||
       section === "creators" ||
       target === "audience",
@@ -650,6 +672,7 @@ function useSlurpBackstageController({
     setAutopurgeNextDraft,
     save,
     update,
+    updatePatch,
     saveRetention,
     accountsQuery,
     imageSettingsQuery,
@@ -891,6 +914,19 @@ export function SlurpSettings({
     runAutopurgeNow,
   } = controller;
   useSlurpBackstageDraftGuard(Object.keys(draftPatch).length);
+  const settingKey = navigation.settingKey;
+  const settingsReady = Boolean(settings);
+  // A search result lands on its page first; once that page renders, bring the setting into view.
+  useEffect(() => {
+    if (!settingKey || !settingsReady) return;
+    const frame = requestAnimationFrame(() => {
+      focusSettingAnchor(settingKey);
+      onNavigate({ ...navigation, settingKey: undefined });
+    });
+    return () => cancelAnimationFrame(frame);
+    // Runs once per search selection; `navigation` changes identity with every navigation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingKey, section, target, settingsReady]);
 
   if (settingsQuery.isError)
     return (
@@ -980,8 +1016,8 @@ export function SlurpSettings({
             <div className="mt-4 min-w-0 rounded-xl rounded-t-none bg-[linear-gradient(145deg,var(--slurp-surface),color-mix(in_srgb,var(--slurp-violet)_4%,var(--slurp-surface)))] p-3 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] md:mt-0 md:rounded-t-xl md:p-5 lg:p-6">
               <div className="mb-5 space-y-3">
                 <SlurpBackstageSearch
-                  onSelect={(nextSection, nextTarget) =>
-                    onNavigate({ ...navigation, section: nextSection, target: nextTarget })
+                  onSelect={(nextSection, nextTarget, settingKey) =>
+                    onNavigate({ ...navigation, section: nextSection, target: nextTarget, settingKey })
                   }
                 />
                 <SlurpBackstageSubnav

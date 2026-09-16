@@ -47,7 +47,14 @@ assert.match(
   /if \(!write\.acquired\) \{[\s\S]*?part\.file\.resume\(\);[\s\S]*?throw new NoodlerMediaRequestError\("Slurp data cleanup is in progress\.", 409\)/u,
 );
 assert.match(multipartReader, /return await part\.toBuffer\(\);/u);
-assert.match(multipartReader, /const buffer = write\.value;[\s\S]*?isAllowedImageBuffer\(buffer, extension\)/u);
+assert.match(multipartReader, /const buffer = write\.value;[\s\S]*?isAllowedImageBuffer\(buffer, "\.avif"\)/u);
+// An image saved straight from a post URL has no extension, so a filename gate rejected valid
+// uploads with "Unsupported image file type". The header is the only evidence of the type.
+assert.doesNotMatch(
+  multipartReader,
+  /extname\(part\.filename\)/u,
+  "post media uploads must be validated by magic bytes, not by the uploaded filename",
+);
 assert.doesNotMatch(multipartReader, /return reply\./u, "the multipart helper must not return before validating media");
 // This guarded slurp-public-generation.service.ts, which had no importers and has been deleted.
 // The live Slurp equivalent is the image gate in the generation service: a run with no usable
@@ -311,7 +318,11 @@ assert.match(settings, /import \{[^}]*Toggle \} from "\.\/SlurpSettingsControls"
 assert.match(settings, /<Toggle/u, "Settings must use the extracted shared toggle");
 assert.match(settingsControls, /data-slurp-setting-toggle/u);
 assert.match(settingsControls, /role="switch"/u, "polished settings toggles must retain native checkbox semantics");
-assert.match(settings, /snap-x grid-flow-col/u, "creator settings must stay browsable before master-detail fits");
+assert.match(
+  settings,
+  /type="search"[\s\S]*?max-h-\[22rem\] overflow-y-auto/u,
+  "creator settings must stay browsable before master-detail fits",
+);
 assert.match(settings, /xl:sticky xl:top-4/u, "the wide-screen Creator list must remain visible beside its detail");
 assert.match(settings, /ui\.slurp\.settings\.creators\.personaAutomationDetail/u);
 assert.match(settings, /ui\.slurp\.settings\.creators\.moreActions/u);

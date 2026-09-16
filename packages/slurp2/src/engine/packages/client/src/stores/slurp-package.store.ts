@@ -133,7 +133,10 @@ function readInitialState(): PersistedSlurpState {
 
 function persistSlurpState(state: Pick<SlurpPackageState, "navigation" | "viewerPersonaId" | "onboardingState">) {
   try {
-    window.localStorage.setItem(PACKAGE_STATE_KEY, JSON.stringify(state));
+    // A search deep link is a one-shot focus request, not a place to reopen after reload.
+    const navigation =
+      state.navigation.mode === "creator-settings" ? { ...state.navigation, settingKey: undefined } : state.navigation;
+    window.localStorage.setItem(PACKAGE_STATE_KEY, JSON.stringify({ ...state, navigation }));
   } catch {
     // Private browsing can refuse storage; the tab remains usable in memory.
   }

@@ -40,7 +40,7 @@ async function main() {
   );
   assert.match(settings, /section === "overview"/u);
   assert.match(settings, /const imagesReady = imageConnections\.length > 0 && imageEnabledCreators\.length > 0/u);
-  assert.match(settings, /save\(\{ autoPostingScheduleEnabled: true, postsPerDay: value \}\)/u);
+  assert.match(settings, /updatePatch\(\{ autoPostingScheduleEnabled: true, postsPerDay: value \}\)/u);
   assert.match(settings, /slurpAudiencePresetFor\(settings\)/u);
   assert.match(settings, /<OverviewActivity/u);
   assert.match(settings, /section === "overview" \|\| target === "audience"/u);

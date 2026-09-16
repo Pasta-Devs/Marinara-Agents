@@ -1,7 +1,8 @@
 import { ArrowRight, Check, ChevronDown, Search, SlidersHorizontal, Sparkles, X } from "lucide-react";
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { SlurpSettings } from "../../hooks/use-slurp";
+import type { SlurpPromotion, SlurpSettings } from "../../hooks/use-slurp";
+import { SlurpInlineAd } from "./SlurpInlineAd";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { cn } from "../../lib/utils";
 import { estimateSlurpSimulation } from "./slurp-simulation-estimate";
@@ -84,9 +85,13 @@ export function SlurpBackstageSearch({
 }: {
   onSelect: (section: SlurpBackstageSection, target: SlurpBackstageTarget, setting: keyof SlurpSettings) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [query, setQuery] = useState("");
+  const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  /** The setting's own translated label where one exists; otherwise the key made readable. */
+  const labelFor = (key: keyof SlurpSettings) =>
+    i18n.exists(`ui.slurp.settings.${key}`) ? t(`ui.slurp.settings.${key}`) : humanize(key);
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -105,18 +110,30 @@ export function SlurpBackstageSearch({
         [keyof SlurpSettings, (typeof SLURP_BACKSTAGE_SETTING_PLACEMENT)[keyof SlurpSettings]]
       >
     )
-      .filter(([key, placement]) =>
-        [key, humanize(key), SLURP_BACKSTAGE_TARGET_LABELS[placement.target], ...placement.searchTerms]
-          .join(" ")
-          .toLocaleLowerCase()
-          .includes(needle),
+      .filter(
+        ([key, placement]) =>
+          !placement.internal &&
+          [key, humanize(key), labelFor(key), SLURP_BACKSTAGE_TARGET_LABELS[placement.target], ...placement.searchTerms]
+            .join(" ")
+            .toLocaleLowerCase()
+            .includes(needle),
       )
       .slice(0, 8);
+    // labelFor only reads i18n, which re-renders this component on a language change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
+  useEffect(() => setActive(0), [query]);
+  const choose = (index: number) => {
+    const result = results[index];
+    if (!result) return;
+    onSelect(result[1].section, result[1].target, result[0]);
+    setQuery("");
+  };
+  const open = query.trim().length > 0;
   return (
     <div className="relative z-20 w-full max-w-xl">
       <label className="sr-only" htmlFor="slurp-backstage-search">
-        {t("ui.slurp.settings.backstage.search", { defaultValue: "Search every Slurp setting" })}
+        {t("ui.slurp.settings.backstage.findSetting", { defaultValue: "Find a setting" })}
       </label>
       <Search
         size={17}
@@ -128,42 +145,69 @@ export function SlurpBackstageSearch({
         id="slurp-backstage-search"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
-        placeholder={t("ui.slurp.settings.backstage.search", { defaultValue: "Search every Slurp setting" })}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            if (!results.length) return;
+            const step = event.key === "ArrowDown" ? 1 : -1;
+            setActive((index) => (index + step + results.length) % results.length);
+          } else if (event.key === "Enter") {
+            event.preventDefault();
+            choose(active);
+          } else if (event.key === "Escape" && open) {
+            event.preventDefault();
+            setQuery("");
+          }
+        }}
+        placeholder={t("ui.slurp.settings.backstage.findSetting", { defaultValue: "Find a setting" })}
         className="min-h-12 w-full rounded-xl bg-[var(--slurp-surface-raised)] ps-10 pe-16 text-base text-[var(--slurp-text)] shadow-sm ring-1 ring-inset ring-[var(--slurp-outline)] placeholder:text-[var(--slurp-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] sm:text-sm"
         role="combobox"
-        aria-expanded={results.length > 0}
+        autoComplete="off"
+        aria-autocomplete="list"
+        aria-expanded={open && results.length > 0}
         aria-controls="slurp-backstage-search-results"
+        aria-activedescendant={
+          open && results[active] ? `slurp-backstage-search-option-${results[active][0]}` : undefined
+        }
       />
       <kbd className="pointer-events-none absolute end-3 top-1/2 hidden -translate-y-1/2 rounded-md bg-[var(--slurp-canvas)] px-2 py-1 text-[0.68rem] font-semibold text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)] sm:block">
         Ctrl K
       </kbd>
-      {query.trim() && (
-        <div
-          id="slurp-backstage-search-results"
-          className="absolute inset-x-0 top-[calc(100%+0.5rem)] overflow-hidden rounded-xl bg-[var(--slurp-surface-raised)] shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--slurp-outline)]"
-        >
+      {open && (
+        <div className="absolute inset-x-0 top-[calc(100%+0.5rem)] overflow-hidden rounded-xl bg-[var(--slurp-surface-raised)] shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--slurp-outline)]">
           {results.length ? (
-            <ul className="max-h-80 overflow-y-auto p-1.5">
-              {results.map(([key, placement]) => (
-                <li key={key}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onSelect(placement.section, placement.target, key);
-                      setQuery("");
-                    }}
-                    className="flex min-h-12 w-full items-center gap-3 rounded-lg px-3 text-start hover:bg-[var(--slurp-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold">{humanize(key)}</span>
-                      <span className="block truncate text-xs text-[var(--slurp-muted)]">
-                        {SLURP_BACKSTAGE_SECTION_LABELS[placement.section]} ·{" "}
-                        {SLURP_BACKSTAGE_TARGET_LABELS[placement.target]}
-                      </span>
+            <ul
+              id="slurp-backstage-search-results"
+              role="listbox"
+              aria-label={t("ui.slurp.settings.backstage.findSetting", { defaultValue: "Find a setting" })}
+              className="max-h-80 overflow-y-auto p-1.5"
+            >
+              {results.map(([key, placement], index) => (
+                <li
+                  key={key}
+                  id={`slurp-backstage-search-option-${key}`}
+                  role="option"
+                  aria-selected={index === active}
+                  // Keep focus in the input so typing and arrow keys keep working.
+                  onMouseDown={(event) => event.preventDefault()}
+                  onMouseEnter={() => setActive(index)}
+                  onClick={() => choose(index)}
+                  className={cn(
+                    "flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-lg px-3 text-start",
+                    index === active && "bg-[var(--slurp-canvas)] ring-2 ring-inset ring-[var(--slurp-focus)]",
+                  )}
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold">{labelFor(key)}</span>
+                    <span className="block truncate text-xs text-[var(--slurp-muted)]">
+                      {t(`ui.slurp.settings.backstage.sections.${placement.section}`, {
+                        defaultValue: SLURP_BACKSTAGE_SECTION_LABELS[placement.section],
+                      })}{" "}
+                      · {SLURP_BACKSTAGE_TARGET_LABELS[placement.target]}
                     </span>
-                    <SlurpBackstageScopeBadge scope={placement.scope} />
-                    <ArrowRight size={15} className="shrink-0 rtl:rotate-180" aria-hidden="true" />
-                  </button>
+                  </span>
+                  <SlurpBackstageScopeBadge scope={placement.scope} />
+                  <ArrowRight size={15} className="shrink-0 rtl:rotate-180" aria-hidden="true" />
                 </li>
               ))}
             </ul>
@@ -192,7 +236,12 @@ function PreviewFrame({ children }: { children: ReactNode }) {
 type Translate = ReturnType<typeof useTranslation>["t"];
 
 /** One line that says what this area of Slurp will do with the given settings. */
-function outcomeSummary(t: Translate, target: SlurpBackstageTarget, settings: SlurpSettings, creatorCount: number) {
+export function outcomeSummary(
+  t: Translate,
+  target: SlurpBackstageTarget,
+  settings: SlurpSettings,
+  creatorCount: number,
+) {
   const key = `ui.slurp.settings.backstage.preview.summary.${target}`;
   switch (target) {
     case "general":
@@ -366,6 +415,22 @@ function ReplyTimeline({ current, proposed }: { current: SlurpSettings; proposed
   );
 }
 
+/** Sample copy for the preview card. Deterministic and local: a preview never spends a model call. */
+function sampleAdPromotion(t: Translate, settings: SlurpSettings): SlurpPromotion {
+  return {
+    id: "slurp-backstage-sample",
+    kind: "inline",
+    contentRating: settings.inlineAdsContentCeiling,
+    brand: t("ui.slurp.settings.backstage.preview.ads.sampleBrand", { defaultValue: "Bellweather Coffee" }),
+    product: t("ui.slurp.settings.backstage.preview.ads.sampleProduct", { defaultValue: "Cold brew subscription" }),
+    copy: t(`ui.slurp.settings.backstage.preview.ads.sampleCopy.${settings.inlineAdsTone}`, {
+      defaultValue: "Two cups a day, delivered every Friday. Your first box is half price.",
+    }),
+    categories: settings.inlineAdsPreferredTags.slice(0, 2),
+    contextTags: [],
+  };
+}
+
 function AdCadence({ current, proposed }: { current: SlurpSettings; proposed: SlurpSettings }) {
   const { t } = useTranslation();
   const every = (settings: SlurpSettings) =>
@@ -401,6 +466,25 @@ function AdCadence({ current, proposed }: { current: SlurpSettings; proposed: Sl
           proposed={label(proposed)}
         />
       </dl>
+      {/* The real feed card, with sample copy: an ad setting is easier to judge as an ad. */}
+      {proposed.inlineAdsEnabled && (
+        <div className="mt-3">
+          <p className="mb-1 text-xs font-semibold text-[var(--slurp-muted)]">
+            {t("ui.slurp.settings.backstage.preview.ads.sample", { defaultValue: "Sample ad" })}
+          </p>
+          <SlurpInlineAd
+            promotion={sampleAdPromotion(t, proposed)}
+            onAction={() => undefined}
+            onHide={() => undefined}
+            labels={{
+              sponsored: t("ui.slurp.ads.sponsored"),
+              hide: t("ui.slurp.ads.hide"),
+              hideBrand: t("ui.slurp.ads.hideBrand"),
+              actionFallback: t("ui.slurp.ads.view"),
+            }}
+          />
+        </div>
+      )}
     </figure>
   );
 }

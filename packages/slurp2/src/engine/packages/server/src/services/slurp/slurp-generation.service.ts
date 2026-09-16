@@ -25,6 +25,7 @@ import { isConnectionAdmissionFailure, type ConnectionAdmissionMode } from "../g
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { resolveNoodlerImageConnectionId } from "./slurp-image-connections.js";
+import { resolveSlurpPostGuidance } from "./slurp-post-guidance.storage.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createSlurpStorage, type SlurpAccount } from "../storage/slurp.storage.js";
@@ -242,6 +243,11 @@ export function buildNoodlerPostMessages(input: {
   variationInstruction?: string;
   /** From `slurp-post-stance.ts`: who this Creator is today. Absent when today is unremarkable. */
   conditionInstruction?: string;
+  /**
+   * What this post is for, given who can read it: the resolved public or locked guidance from
+   * `slurp-post-guidance.ts`. Absent only for a caller that does not know the access yet.
+   */
+  accessInstruction?: string;
   /** A few long-term notes from the Creator's most active thread. Absent when there are none. */
   fanMemory?: string[];
   /** The project this post continues, with that project's own recent posts. Absent for a loose post. */
@@ -272,6 +278,12 @@ export function buildNoodlerPostMessages(input: {
     ...(guidance ? ["## Creative direction", guidance, "## End creative direction"] : []),
     noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
     NOODLER_FORMAT_PROMPTS[format],
+    // A public post and a paid post do different jobs, and writing both from one set of
+    // instructions made the free feed give away the payoff and the paid feed sell what the reader
+    // had already bought. Fenced like the creative direction above, because the text is editable.
+    ...(input.accessInstruction?.trim()
+      ? ["## Who can read this post", input.accessInstruction.trim(), "## End who can read this post"]
+      : []),
     // Tone, mood balance, and the adult flirty lean are supplied by the editable
     // generation guidance (see input.generationGuidance above), not hardcoded here.
     // "Do not reuse their exact wording" was the only anti-repetition rule, and eight different
@@ -529,6 +541,7 @@ export async function generateNoodlerPost(
     request: { ...input.request, format },
     variationInstruction: variation ? slurpPostVariationInstruction(variation) : undefined,
     conditionInstruction: conditionInstruction ?? undefined,
+    accessInstruction: await resolveSlurpPostGuidance(db, account.id, input.request.access),
     project: project ? { project, posts: projectPosts } : undefined,
     allowImagePrompt: imagesEnabled,
     imageGenerationPrompt: settings.imageGenerationPrompt,

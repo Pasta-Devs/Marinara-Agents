@@ -5,9 +5,8 @@ import { createReadStream, createWriteStream, existsSync, readFileSync } from "f
 import { readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import { finished } from "node:stream/promises";
 import { randomUUID } from "node:crypto";
-import { basename, dirname, join } from "path";
+import { basename, dirname, extname, join } from "path";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { extname } from "node:path";
 import { z } from "zod";
 import { and, eq, inArray } from "../db/file-query.js";
 import {
@@ -159,6 +158,9 @@ import { readGarnishLorebookContext } from "../services/slurp/slurp-garnish-lore
 import { syncGarnishAdsWithLorebook } from "../services/slurp/slurp-garnish-sync.service.js";
 import { createLorebooksStorage } from "../services/storage/lorebooks.storage.js";
 import { generateNoodlerStageProfileDraft } from "../services/slurp/slurp-stage-profile-draft.service.js";
+import { generateSlurpPostGuidanceDraft } from "../services/slurp/slurp-post-guidance-draft.service.js";
+import { SLURP_BUILT_IN_POST_GUIDANCE, SLURP_POST_GUIDANCE_MAX_LENGTH } from "../services/slurp/slurp-post-guidance.js";
+import { getSlurpPostGuidance, updateSlurpPostGuidance } from "../services/slurp/slurp-post-guidance.storage.js";
 import {
   SLURP_DISCOVERY_TAG_MAX_LENGTH,
   slurpDiscoveryProfileComplete,
@@ -367,7 +369,6 @@ const noodleStageProfileUpdateRequestSchema = noodleStageProfileUpdateSchema.ext
 const NOODLE_IDENTITY_LOCK_BUSY = "Another Slurp identity operation is already running. Wait for it to finish.";
 const NOODLER_MEDIA_MAX_BYTES = 20 * 1024 * 1024;
 const NOODLER_FEED_PAGE_SIZE = 20;
-const NOODLER_MEDIA_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
 
 const noodlerPageCursorSchema = z
   .object({
@@ -450,11 +451,6 @@ async function readNoodlerMultipart(req: FastifyRequest): Promise<{ payload: unk
       part.file.resume();
       throw new NoodlerMediaRequestError("Upload one image in the file field.", 400);
     }
-    const extension = extname(part.filename).toLowerCase();
-    if (!NOODLER_MEDIA_EXTENSIONS.has(extension)) {
-      part.file.resume();
-      throw new NoodlerMediaRequestError("Unsupported image file type.", 400);
-    }
     const write = await trySlurpWrite(async () => {
       try {
         return await part.toBuffer();
@@ -472,9 +468,16 @@ async function readNoodlerMultipart(req: FastifyRequest): Promise<{ payload: unk
       throw new NoodlerMediaRequestError("Slurp data cleanup is in progress.", 409);
     }
     const buffer = write.value;
-    const detected = isAllowedImageBuffer(buffer, extension);
-    if (!detected || (extension === ".jpeg" ? "jpg" : extension.slice(1)) !== detected.ext) {
-      throw new NoodlerMediaRequestError("Unsupported or invalid image file.", 400);
+    // The magic bytes decide the type, not the filename. An image saved straight from a post
+    // (/noodler/posts/:id/media) has no extension at all, and browsers rename a JPEG to .jfif, so
+    // gating on the name rejected valid images. The ".avif" hint only enables AVIF brand sniffing,
+    // which has no signature of its own; every other format is detected from its own header.
+    const detected = isAllowedImageBuffer(buffer, ".avif");
+    if (!detected) {
+      throw new NoodlerMediaRequestError(
+        "That file is not a PNG, JPEG, WebP, GIF or AVIF image. Its contents are read to decide, so renaming it does not help.",
+        400,
+      );
     }
     media = { buffer, extension: detected.ext };
   }
@@ -3322,7 +3325,11 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (readable?.locked) {
       const teaser = await readNoodlerLockedTeaser(absolute);
       if (!teaser) return reply.code(404).send({ error: "Not Found" });
-      return reply.header("Cache-Control", "private, max-age=300").type("image/jpeg").send(teaser);
+      return reply
+        .header("Cache-Control", "private, max-age=300")
+        .header("Content-Disposition", `inline; filename="slurp-${id}.jpg"`)
+        .type("image/jpeg")
+        .send(teaser);
     }
     const width = z.coerce
       .number()
@@ -3336,6 +3343,10 @@ export async function slurpRoutes(app: FastifyInstance) {
         // its bytes in place. Audience URLs include distinct locked/original variants, so an
         // unlock changes the browser cache key instead of retaining a cached teaser.
         .header("Cache-Control", "private, max-age=300")
+        // This URL ends in `/media`, so saving a post image produced a file with no extension, or
+        // one the browser guessed. `inline` keeps it displaying in the feed and only names it on
+        // the way to disk, with the extension the bytes actually have.
+        .header("Content-Disposition", `inline; filename="slurp-${id}${extname(basename(served)).toLowerCase()}"`)
         .sendFile(basename(served), dirname(served))
     );
   });
@@ -4561,6 +4572,14 @@ export async function slurpRoutes(app: FastifyInstance) {
         delete creatorConnectionIds[id];
         return { ...current, creatorConnectionIds };
       });
+      // Same treatment for the post-guidance override, or a deleted Creator's direction would sit
+      // in the blob forever and travel in every backup.
+      const removedGuidance = (await getSlurpPostGuidance(app.db)).creators[id];
+      await updateSlurpPostGuidance(app.db, (current) => {
+        const creators = { ...current.creators };
+        delete creators[id];
+        return { ...current, creators };
+      });
       try {
         const target = await noodle.getNoodlerAccountById(id, { includeHidden: true });
         const deleted = await noodle.deleteNoodlerAccount(id);
@@ -4578,6 +4597,12 @@ export async function slurpRoutes(app: FastifyInstance) {
               ...current.creatorConnectionIds,
               [id]: removedConnectionId,
             },
+          }));
+        }
+        if (removedGuidance) {
+          await updateSlurpPostGuidance(app.db, (current) => ({
+            ...current,
+            creators: { ...current.creators, [id]: removedGuidance },
           }));
         }
         throw error;
@@ -4678,6 +4703,86 @@ export async function slurpRoutes(app: FastifyInstance) {
       return reply.code(409).send({ error: "This publication time is too close to another Creator post." });
     }
     return noodle.getNoodlerReserveStatus();
+  });
+
+  // `builtIn` travels with the value so the client can show what applies while a field is empty
+  // without keeping its own copy of the wording.
+  app.get("/noodler/post-guidance", async () => ({
+    ...(await getSlurpPostGuidance(app.db)),
+    builtIn: SLURP_BUILT_IN_POST_GUIDANCE,
+  }));
+
+  /**
+   * Set the global direction for public or locked posts, or one Creator's override of it.
+   *
+   * Sent the same way as the image-connection map: `creatorId` selects the override, its absence
+   * means the global field. An empty string clears the level being written and lets the level
+   * below it apply again.
+   */
+  app.patch("/noodler/post-guidance", async (req, reply) => {
+    const body = z
+      .object({
+        creatorId: z.string().min(1).nullable().optional(),
+        public: z.string().max(SLURP_POST_GUIDANCE_MAX_LENGTH).optional(),
+        locked: z.string().max(SLURP_POST_GUIDANCE_MAX_LENGTH).optional(),
+      })
+      .safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    const { creatorId } = body.data;
+    if (body.data.public === undefined && body.data.locked === undefined) {
+      return reply.code(400).send({ error: "Send public, locked, or both." });
+    }
+    if (creatorId && !(await noodle.getNoodlerAccountById(creatorId))) {
+      return reply.code(404).send({ error: "Slurp stage profile not found" });
+    }
+    const next = await updateSlurpPostGuidance(app.db, (current) => {
+      const patch = (entry: { public: string; locked: string }) => ({
+        public: body.data.public ?? entry.public,
+        locked: body.data.locked ?? entry.locked,
+      });
+      if (!creatorId) return { ...current, defaults: patch(current.defaults) };
+      return {
+        ...current,
+        creators: {
+          ...current.creators,
+          [creatorId]: patch(current.creators[creatorId] ?? { public: "", locked: "" }),
+        },
+      };
+    });
+    return { ...next, builtIn: SLURP_BUILT_IN_POST_GUIDANCE };
+  });
+
+  /** Draft one access direction with the model. Returns the text; saving it stays the client's call. */
+  app.post("/noodler/post-guidance-draft", async (req, reply) => {
+    const body = z
+      .object({
+        access: z.enum(["public", "locked"]),
+        creatorId: z.string().min(1).nullable().optional(),
+        currentDraft: z.string().max(SLURP_POST_GUIDANCE_MAX_LENGTH).optional(),
+        guidance: z.string().max(2000).optional(),
+        connectionId: z.string().min(1).nullable().optional(),
+      })
+      .safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    const settings = await noodle.getSettings();
+    const connection = await resolveSlurpTextConnection(
+      connections,
+      body.data.connectionId ?? settings.generationConnectionId,
+    );
+    if (!connection) return reply.code(404).send({ error: "Slurp generation connection not found" });
+    try {
+      return await generateSlurpPostGuidanceDraft(app.db, {
+        access: body.data.access,
+        creatorId: body.data.creatorId ?? null,
+        currentDraft: body.data.currentDraft ?? "",
+        guidance: body.data.guidance ?? "",
+        connection,
+      });
+    } catch (error) {
+      logger.error(error, "[slurp] Post guidance draft failed using %s", connection.model || connection.provider);
+      // Written for the user (no answer, empty answer, leaked identity), so show the reason.
+      return reply.code(500).send({ error: `Post guidance draft failed: ${getErrorMessage(error)}` });
+    }
   });
 
   app.get("/noodler/image-connections", async () => getNoodlerImageConnections(app.db));

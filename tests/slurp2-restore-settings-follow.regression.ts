@@ -48,7 +48,8 @@ assert.match(client, /applySlurpRestoreInspection\(/u);
 const settingsUi = slurp2BackstageSource();
 assert.match(settingsUi, /useState\(false\);\n\s*const \[restoreImportSettings/u);
 assert.match(settingsUi, /inspectSlurpRestore\(file\)/u);
-assert.match(settingsUi, /applySlurpRestoreInspection\(restoreInspection\.id, restoreImportSettings\)/u);
+assert.match(settingsUi, /const inspection = restoreInspection;[\s\S]*?showConfirmDialog\(/u);
+assert.match(settingsUi, /applySlurpRestoreInspection\(inspection\.id, restoreImportSettings\)/u);
 assert.match(settingsUi, /restoreInspection\.hasSlurp2Settings/u);
 
 const home = read("client/src/components/slurp/SlurpHome.tsx");

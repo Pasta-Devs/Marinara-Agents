@@ -33,6 +33,8 @@ export type SlurpNavigationState =
       tab?: "creator";
       section?: SlurpBackstageSection;
       target?: SlurpBackstageTarget;
+      /** A search result to scroll to and focus once the target renders. Never persisted. */
+      settingKey?: string;
       returnTo?: SlurpNavigationState;
     };
 

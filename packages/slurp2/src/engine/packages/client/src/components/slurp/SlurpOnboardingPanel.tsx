@@ -38,6 +38,7 @@ import {
   useRefreshTargetedNoodlerCreatorsNow,
   useSlurpConnections,
   useSlurpSettings,
+  useUpdateSlurpConnectionsForCreators,
   useUpdateSlurpSettings,
 } from "../../hooks/use-slurp";
 import { cn, generateClientId } from "../../lib/utils";
@@ -124,6 +125,7 @@ export function SlurpOnboardingWizard({
   const bulkCreate = useBulkCreateNoodlerStageProfiles();
   const refreshTargeted = useRefreshTargetedNoodlerCreatorsNow();
   const enqueueFirstPosts = useEnqueueNoodlerFirstPosts();
+  const assignImageConnections = useUpdateSlurpConnectionsForCreators();
   const updateSlurpSettings = useUpdateSlurpSettings();
   const connectionsQuery = useSlurpConnections(open);
   const settingsQuery = useSlurpSettings();
@@ -144,6 +146,9 @@ export function SlurpOnboardingWizard({
   const [postsPerDayDraft, setPostsPerDayDraft] = useState(String(DEFAULT_POSTS_PER_DAY));
   const [nightQuiet, setNightQuiet] = useState(true);
   const [imagesEnabled, setImagesEnabled] = useState(false);
+  // Empty means the Slurp-wide default image connection. Chosen here because the first post is
+  // written during this run: setting it afterwards in Backstage would already be too late.
+  const [imageConnectionId, setImageConnectionId] = useState("");
   const [generateNow, setGenerateNow] = useState(true);
   const [createdIds, setCreatedIds] = useState<string[]>([]);
   const [creationFailures, setCreationFailures] = useState(0);
@@ -403,6 +408,15 @@ export function SlurpOnboardingWizard({
       setStep(5);
       if (settingsSaved && newIds.length > 0) onComplete?.();
       return;
+    }
+    // Before the first posts, never after: these are the connections those posts must use.
+    // A failure here costs the chosen workflow, not the run, so the creators still get their posts.
+    if (imageConnectionId) {
+      try {
+        await assignImageConnections.mutateAsync({ creatorIds: newIds, connectionId: imageConnectionId });
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : t("ui.slurp.onboarding.imageConnectionFailed"));
+      }
     }
     try {
       await enqueueFirstPosts.mutateAsync({ accountIds: newIds, executionId });
@@ -1130,6 +1144,31 @@ export function SlurpOnboardingWizard({
                       ))}
                   </select>
                 </label>
+                {imagesEnabled && (
+                  <label className="flex min-h-14 items-center justify-between gap-4 rounded-lg border border-[var(--slurp-outline)] px-3 py-2">
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold">{t("ui.slurp.onboarding.imageConnection")}</span>
+                      <span className="block text-xs leading-5 text-[var(--slurp-muted)]">
+                        {t("ui.slurp.onboarding.imageConnectionHelp")}
+                      </span>
+                    </span>
+                    <select
+                      value={imageConnectionId}
+                      onChange={(event) => setImageConnectionId(event.target.value)}
+                      className="h-9 max-w-[55%] rounded-lg border border-[var(--noodle-accent)]/45 bg-[var(--slurp-surface)] px-2 text-sm text-[var(--slurp-text)]"
+                      disabled={connectionsQuery.isLoading}
+                    >
+                      <option value="">{t("ui.slurp.onboarding.imageConnectionDefault")}</option>
+                      {(connectionsQuery.data ?? [])
+                        .filter((connection) => connection.provider === "image_generation")
+                        .map((connection) => (
+                          <option key={connection.id} value={connection.id}>
+                            {connection.name ?? connection.model ?? connection.id}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                )}
                 {setupLane === "easy" ? (
                   <div className="divide-y divide-[var(--noodle-accent)]/20 rounded-lg border border-[var(--noodle-accent)]/30 bg-[var(--noodle-accent)]/[0.06]">
                     <div className="flex min-h-14 items-center justify-between gap-4 px-3 py-2.5">

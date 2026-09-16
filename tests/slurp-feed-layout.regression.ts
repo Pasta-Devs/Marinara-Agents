@@ -131,7 +131,8 @@ const row = settings.slice(
   settings.indexOf("export function SlurpSettings("),
 );
 assert.match(row, /<select/u, "The active destination must be exposed as a native picker");
-assert.match(row, /value=\{section\}/u, "The picker must show the current destination");
+assert.match(row, /value=\{`\$\{section\}:/u, "The picker must show the current destination");
+assert.match(row, /<optgroup/u, "The picker must reach a page, not only its section");
 assert.match(row, /min-h-11/u, "The destination picker must retain a 44px touch target");
 assert.doesNotMatch(row, /overflow-x-auto/u, "Mobile must not restore the long horizontal tab strip");
 
