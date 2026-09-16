@@ -247,7 +247,10 @@ export function SlurpBackstageCreators(page: SlurpBackstagePageProps) {
                             else next.add(creator.id);
                             return next;
                           })
-                        : setSelectedCreatorId(creator.id)
+                        : (() => {
+                            setSelectedCreatorId(creator.id);
+                            setTab("profile");
+                          })()
                     }
                     className={`flex min-h-16 w-full items-center gap-3 border-b border-[var(--slurp-outline)] px-3 py-2.5 text-start transition-colors last:border-b-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none ${selected ? "bg-[var(--noodle-accent)]/10" : "hover:bg-[var(--slurp-canvas)]"}`}
                   >

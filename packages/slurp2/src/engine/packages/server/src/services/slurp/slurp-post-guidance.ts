@@ -28,9 +28,9 @@ export type SlurpPostGuidance = {
  */
 export const SLURP_BUILT_IN_POST_GUIDANCE: SlurpPostGuidanceEntry = {
   public:
-    "This post is public: anyone browsing Slurp reads it free, including people who have never heard of you. Use it to win them over. Show one real piece of who you are, make the paid side sound worth having, and give a reason to follow or subscribe. Suggest what subscribers get without describing it as though the reader has already seen it.",
+    "This post is public and may be a reader's first impression. Make it complete and worthwhile on its own: share a specific moment, thought, update, or image that expresses who you are and gives people something real to react to. When paid material is relevant, create honest curiosity by saving only the genuinely premium continuation for it; do not withhold the meaning of this post or turn every public post into a repetitive subscription pitch.",
   locked:
-    "This post is paid: only people who subscribed or unlocked it can read it. It is the payoff they bought, so deliver it and let them have it. Write closer and more freely than you would in public, thank them by being generous rather than by saying thank you, and never advertise a subscription to somebody who is already holding one.",
+    "This post is the premium continuation for someone who already subscribed or paid to unlock it. Deliver the promised extra value immediately through greater intimacy, candor, access, detail, or exclusivity that fits who you are and what led here; do not give them another sales pitch or another layer of artificial withholding. Premium does not have to mean sexual, but it must feel more personal or substantial than a public post and end as a satisfying payoff rather than a preview.",
 };
 
 const emptyEntry = (): SlurpPostGuidanceEntry => ({ public: "", locked: "" });

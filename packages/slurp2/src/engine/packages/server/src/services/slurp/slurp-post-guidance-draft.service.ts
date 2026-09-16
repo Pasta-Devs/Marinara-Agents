@@ -32,9 +32,9 @@ type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof cre
 
 const ACCESS_BRIEF: Record<SlurpPostAccess, string> = {
   public:
-    "Public posts are free. Anyone browsing the platform sees them, including people who have never heard of this creator. They are the shop window: they have to be worth reading on their own, and they have to make the paid side look worth paying for.",
+    "Public posts may be a reader's first impression. They must be complete and worthwhile on their own, express something specific about the creator, and create honest curiosity without becoming repetitive subscription pitches or withholding the post's basic meaning.",
   locked:
-    "Locked posts are paid. Only people who subscribed or unlocked them can read them. They are the payoff, so they are closer, more generous, and more direct than a public post, and they never sell a subscription to somebody who already has one.",
+    "Locked posts are the premium continuation for someone who already paid. They must deliver greater intimacy, candor, access, detail, or exclusivity without another sales pitch or artificial withholding. Premium need not mean sexual, but it must be a satisfying payoff rather than another preview.",
 };
 
 export function buildSlurpPostGuidanceDraftMessages(input: {

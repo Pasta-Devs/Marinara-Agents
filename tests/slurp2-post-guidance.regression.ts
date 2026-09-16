@@ -120,5 +120,10 @@ assert.match(
   /if \(!post\.imagePrompt\) \{\s*await noodle\.updatePostMedia\(post\.id, \{ imagePrompt \}\);\s*\}/u,
   "an image-less post should persist a prompt derived from its title or body before generation",
 );
+assert.match(
+  routes,
+  /A new social media image for \$\{account\?\.displayName \|\| "the creator"\}/u,
+  "a textless or poll-only post still needs a usable fallback prompt when the button is shown",
+);
 
 console.log("slurp2 post guidance regression passed");

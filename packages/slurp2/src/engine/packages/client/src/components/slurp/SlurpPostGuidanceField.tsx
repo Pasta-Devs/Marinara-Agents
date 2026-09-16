@@ -7,8 +7,7 @@ import {
   type SlurpPostAccess,
   type SlurpPostGuidance,
 } from "../../hooks/use-slurp";
-import { Field } from "./SlurpSettingsControls";
-import { errorMessage } from "./SlurpBackstageWorkflow";
+import { errorMessage, PromptCard, PromptEditor } from "./SlurpBackstageWorkflow";
 
 const focusRing = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]";
 const quietButton = `inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-xs font-semibold ring-1 ring-inset ring-[var(--slurp-outline)] hover:bg-[var(--slurp-canvas)] disabled:opacity-50 ${focusRing}`;
@@ -47,54 +46,52 @@ export function SlurpPostGuidanceField({
   disabled?: boolean;
 }) {
   const saved = (creatorId ? guidance?.creators[creatorId] : guidance?.defaults)?.[access] ?? "";
-  const [draft, setDraft] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [open, setOpen] = useState(false);
   const update = useUpdateSlurpPostGuidance();
   const generate = useGenerateSlurpPostGuidance();
   // Switching Creator or tab must not carry the previous field's unsaved text across.
-  useEffect(() => setDraft(null), [access, creatorId]);
-  const value = draft ?? saved;
+  useEffect(() => {
+    setDraft("");
+    setOpen(false);
+  }, [access, creatorId]);
+  const effective = saved || inherited;
 
-  const save = (next: string) => {
+  const save = async (next: string) => {
     if (next === saved) return;
-    update.mutate(
+    await update.mutateAsync(
       { creatorId, [access]: next },
       {
         onSuccess: () => toast.success(savedMessage),
-        onError: (error) => {
-          setDraft(null);
-          toast.error(errorMessage(error));
-        },
+        onError: (error) => toast.error(errorMessage(error)),
       },
     );
   };
 
   return (
-    <Field label={label} detail={detail}>
-      <textarea
-        rows={4}
-        value={value}
-        maxLength={SLURP_POST_GUIDANCE_MAX_LENGTH}
-        placeholder={inherited}
-        disabled={disabled || update.isPending || generate.isPending}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={() => {
-          const next = draft;
-          setDraft(null);
-          if (next !== null) save(next);
+    <div className="space-y-2">
+      <p className="text-xs leading-5 text-[var(--slurp-muted)]">{detail}</p>
+      <PromptCard
+        title={label}
+        value={effective}
+        isDefault={!saved}
+        onEdit={() => {
+          setDraft(effective);
+          setOpen(true);
         }}
-        className={`w-full rounded-lg bg-[var(--slurp-canvas)] p-3 text-base ring-1 ring-inset ring-[var(--slurp-outline)] disabled:opacity-50 sm:text-sm ${focusRing}`}
+        onRestore={() => void save("")}
       />
-      <div className="mt-2 flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2">
         <button
           type="button"
           disabled={disabled || generate.isPending || update.isPending}
           onClick={() =>
             generate.mutate(
-              { access, creatorId, currentDraft: value },
+              { access, creatorId, currentDraft: draft || effective },
               {
                 onSuccess: (result) => {
                   setDraft(result.guidance);
-                  save(result.guidance);
+                  setOpen(true);
                 },
                 onError: (error) => toast.error(errorMessage(error)),
               },
@@ -109,18 +106,26 @@ export function SlurpPostGuidanceField({
           )}
           {generateLabel}
         </button>
-        <button
-          type="button"
-          disabled={disabled || !saved || generate.isPending || update.isPending}
-          onClick={() => {
-            setDraft(null);
-            save("");
-          }}
-          className={quietButton}
-        >
-          {clearLabel}
-        </button>
       </div>
-    </Field>
+      <PromptEditor
+        open={open}
+        title={label}
+        value={draft}
+        onChange={(value) => setDraft(value.slice(0, SLURP_POST_GUIDANCE_MAX_LENGTH))}
+        onClose={() => setOpen(false)}
+        onSave={async () => {
+          await save(draft.trim());
+          setOpen(false);
+        }}
+        onRestore={() => {
+          void save("").then(() => {
+            setDraft(inherited);
+            setOpen(false);
+          });
+        }}
+        restoreLabel={clearLabel}
+        pending={disabled || update.isPending || generate.isPending}
+      />
+    </div>
   );
 }

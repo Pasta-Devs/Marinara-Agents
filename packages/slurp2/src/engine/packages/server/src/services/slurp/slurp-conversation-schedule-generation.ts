@@ -65,26 +65,51 @@ export async function generateSlurpConversationSchedule(
     connection.treatAsLocalEndpoint === "true",
     connection.defaultParameters,
   );
-  const result = await provider.chatComplete(
-    [
+  const messages = [
+    {
+      role: "system",
+      content: [
+        "Create a realistic weekly Conversation Schedule for this fictional character.",
+        "Include all seven days from Monday through Sunday.",
+        "Use time ranges such as 00:00-07:00 and cover the full 24 hours each day.",
+        'Each block must contain time, activity, and status. Valid status values are "online", "idle", "dnd", and "offline".',
+        "Also include talkativeness from 0 to 100 and inactivityThresholdMinutes from 15 to 360.",
+        "Return only one JSON object. Do not use markdown or explanatory text.",
+        `Character name: ${character.name}`,
+        `Description: ${character.description}`,
+        `Personality: ${character.personality}`,
+        ...(extra.trim() ? [extra.trim()] : []),
+      ].join("\n"),
+    },
+    { role: "user", content: "Generate the current week's schedule." },
+  ] as const;
+  let validationError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const result = await provider.chatComplete(
+      attempt === 0
+        ? [...messages]
+        : [
+            ...messages,
+            {
+              role: "user" as const,
+              content:
+                "The previous response was not a valid seven-day schedule. Return one complete JSON object with a non-empty array for every day Monday through Sunday.",
+            },
+          ],
       {
-        role: "system",
-        content: [
-          "Create a realistic weekly Conversation Schedule for this fictional character.",
-          "Include all seven days from Monday through Sunday.",
-          "Use time ranges such as 00:00-07:00 and cover the full 24 hours each day.",
-          'Each block must contain time, activity, and status. Valid status values are "online", "idle", "dnd", and "offline".',
-          "Also include talkativeness from 0 to 100 and inactivityThresholdMinutes from 15 to 360.",
-          "Return only one JSON object. Do not use markdown or explanatory text.",
-          `Character name: ${character.name}`,
-          `Description: ${character.description}`,
-          `Personality: ${character.personality}`,
-          ...(extra.trim() ? [extra.trim()] : []),
-        ].join("\n"),
+        model: connection.model,
+        temperature: attempt === 0 ? 0.5 : 0.2,
+        maxTokens: Math.min(provider.maxTokensOverrideValue ?? 8192, 8192),
+        responseFormat: { type: "json_object" },
       },
-      { role: "user", content: "Generate the current week's schedule." },
-    ],
-    { model: connection.model, temperature: 0.8, maxTokens: Math.min(provider.maxTokensOverrideValue ?? 8192, 8192) },
-  );
-  return parseResponse(result.content ?? "");
+    );
+    try {
+      return parseResponse(result.content ?? "");
+    } catch (error) {
+      validationError = error;
+    }
+  }
+  throw validationError instanceof Error
+    ? validationError
+    : new Error("The schedule provider returned an invalid schedule.");
 }

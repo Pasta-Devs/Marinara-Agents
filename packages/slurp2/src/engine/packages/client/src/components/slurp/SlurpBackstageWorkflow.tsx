@@ -177,6 +177,7 @@ export function OverviewCard({
   status,
   details,
   avatars,
+  avatarTotal,
   onClick,
   tone,
   healthy,
@@ -186,6 +187,7 @@ export function OverviewCard({
   status: string;
   details: string[];
   avatars?: NoodlerManagedStageProfile[];
+  avatarTotal?: number;
   onClick: () => void;
   tone: "pink" | "violet" | "blue" | "coral";
   healthy?: boolean;
@@ -222,12 +224,17 @@ export function OverviewCard({
           </span>
           <span className="mt-2 block text-sm font-bold text-[var(--noodle-accent-foreground)]">{status}</span>
           {avatars && avatars.length > 0 && (
-            <span className="mt-3 flex -space-x-2 rtl:space-x-reverse">
+            <span className="mt-3 flex -space-x-2 rtl:space-x-reverse" aria-hidden="true">
               {avatars.map((creator) => (
                 <span key={creator.id} className="rounded-full bg-[var(--slurp-surface-raised)] p-0.5">
                   <Avatar account={creator} size="sm" />
                 </span>
               ))}
+              {(avatarTotal ?? avatars.length) > avatars.length && (
+                <span className="relative z-10 grid h-9 min-w-9 place-items-center rounded-full bg-[var(--slurp-canvas)] px-1.5 text-xs font-black tabular-nums text-[var(--slurp-text)] ring-2 ring-[var(--slurp-surface-raised)]">
+                  +{(avatarTotal ?? avatars.length) - avatars.length}
+                </span>
+              )}
             </span>
           )}
           <span className="mt-2 block space-y-0.5">
@@ -1170,6 +1177,7 @@ export function PromptEditor({
   onSave,
   onRestore,
   pending,
+  restoreLabel,
 }: {
   open: boolean;
   title: string;
@@ -1179,6 +1187,7 @@ export function PromptEditor({
   onSave: () => Promise<void>;
   onRestore: () => void;
   pending: boolean;
+  restoreLabel?: string;
 }) {
   const { t } = useTranslation();
   return (
@@ -1201,7 +1210,7 @@ export function PromptEditor({
             className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-[var(--noodle-accent)]/35 px-3 text-xs font-semibold text-[var(--noodle-accent)] disabled:opacity-45"
           >
             <RotateCcw size={13} />
-            {t("ui.slurp.settings.prompts.restoreDefault")}
+            {restoreLabel ?? t("ui.slurp.settings.prompts.restoreDefault")}
           </button>
           <div className="flex gap-2">
             <button

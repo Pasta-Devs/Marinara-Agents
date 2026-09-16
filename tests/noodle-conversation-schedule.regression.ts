@@ -13,6 +13,29 @@ import {
 } from "../sources/engine/packages/server/src/services/conversation/timezone.js";
 import { areConversationSchedulesEnabled } from "../sources/engine/packages/server/src/services/generation/conversation-context-utils.js";
 
+const slurpScheduleGenerationSource = readFileSync(
+  new URL(
+    "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-conversation-schedule-generation.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const slurpRoutesSource = readFileSync(
+  new URL("../packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", import.meta.url),
+  "utf8",
+);
+assert.match(slurpScheduleGenerationSource, /attempt < 2/u, "invalid generated schedules must receive one retry");
+assert.match(
+  slurpScheduleGenerationSource,
+  /responseFormat: \{ type: "json_object" \}/u,
+  "schedule generation must request structured JSON output",
+);
+assert.match(
+  slurpRoutesSource,
+  /reply\.code\(502\)[\s\S]*did not return a complete schedule/u,
+  "invalid model output must produce a recoverable response instead of a generic 500",
+);
+
 // Run the owned function with its real captured schedule helpers. Importing the
 // whole prompt service would require unrelated storage, provider and image setup.
 const promptSource = readFileSync(

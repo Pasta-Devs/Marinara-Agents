@@ -9,7 +9,9 @@ const component = (name: string) =>
 const settings = component("SlurpSettings.tsx");
 const automation = component("SlurpBackstageAutomation.tsx");
 const world = component("SlurpBackstageWorld.tsx");
-const preview = component("SlurpBackstageChrome.tsx");
+const overview = component("SlurpBackstageOverview.tsx");
+const workflow = component("SlurpBackstageWorkflow.tsx");
+const creators = component("SlurpBackstageCreators.tsx");
 
 for (const wizard of ["imageWizardOpen", "audienceWizardOpen", "messagingWizardOpen"]) {
   assert.match(`${automation}\n${world}`, new RegExp(`\\b${wizard}\\b`), `${wizard} must remain reachable`);
@@ -19,10 +21,12 @@ assert.match(automation, /<BackstageWizard[\s\S]*patch=\{imageDraft\}/u, "the im
 assert.match(world, /audienceWizardOpen[\s\S]*<BackstageWizard/u, "audience must expose a reviewed wizard");
 assert.match(world, /messagingWizardOpen[\s\S]*<BackstageWizard/u, "messaging must expose a reviewed wizard");
 
-for (const visualTarget of ['target === "creators"', 'target === "general"', 'target === "images"']) {
-  assert.ok(preview.includes(visualTarget), `${visualTarget} must have a representative visual preview`);
-}
-assert.match(preview, /creatorProfile=|creatorProfile\?:/u, "the preview must accept safe real Creator data");
+assert.doesNotMatch(settings, /<SlurpBackstagePreview/u, "Backstage must not reserve space for a live preview pane");
+assert.doesNotMatch(
+  settings,
+  /xl:grid-cols-\[minmax\(0,1\.5fr\)_minmax\(17rem,0\.72fr\)\]/u,
+  "settings workflows must use the full canvas",
+);
 
 assert.doesNotMatch(
   settings,
@@ -30,5 +34,16 @@ assert.doesNotMatch(
   "Backstage content must not render a second desktop destination rail",
 );
 assert.match(settings, /export function SlurpSettingsSidebar/u, "the shell-owned desktop rail must remain available");
+assert.match(
+  overview,
+  /avatars=\{autoPostingCreators\.slice\(0, 4\)\}[\s\S]*avatarTotal=\{autoPostingCreators\.length\}/u,
+  "the Overview avatar stack must show auto-posting Creators and preserve the full count",
+);
+assert.match(workflow, /\+\{\(avatarTotal/u, "a compact avatar stack must expose the remaining Creator count");
+assert.match(
+  creators,
+  /setSelectedCreatorId\(creator\.id\);[\s\S]*setTab\("profile"\);/u,
+  "selecting a Creator must return to the safe Profile tab",
+);
 
 console.log("Slurp2 Backstage completion regression passed");

@@ -38,17 +38,14 @@ assert.deepEqual(Object.keys(SLURP_LEGACY_SETTINGS_DESTINATION).sort(), [
 ]);
 
 const client = slurp2BackstageSource();
-const chrome = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpBackstageChrome.tsx");
 const improver = read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpCreatorImprover.tsx");
 const routes = read("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
 const autopurge = read("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-autopurge.ts");
 
 assert.match(client, /<SlurpBackstageSearch/u);
-assert.match(client, /<SlurpBackstagePreview/u);
+assert.doesNotMatch(client, /<SlurpBackstagePreview/u);
 assert.match(client, /<SlurpBackstageApplyBar/u);
 assert.match(client, /target === "improve"/u);
-assert.match(chrome, /Current[\s\S]*Proposed[\s\S]*Exact field changes/u);
-assert.match(chrome, /Passive previews never call a model/u);
 assert.match(improver, /Free checkup/u);
 assert.match(improver, /useCreateSlurpImprovementJob/u);
 assert.match(improver, /Apply selected/u);

@@ -72,7 +72,6 @@ import {
 import {
   confirmLeaveSlurpBackstage,
   SlurpBackstageApplyBar,
-  SlurpBackstagePreview,
   useSlurpBackstageDraftGuard,
   SlurpBackstageSearch,
   SlurpBackstageSubnav,
@@ -631,7 +630,6 @@ function useSlurpBackstageController({
     generateAdImage,
     adLorebooks,
     syncAdLorebook,
-    savedSettings,
     draftPatch,
     setDraftPatch,
     settings,
@@ -1005,7 +1003,7 @@ export function SlurpSettings({
                   onSelect={(nextTarget) => onNavigate({ ...navigation, target: nextTarget })}
                 />
               </div>
-              <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(17rem,0.72fr)]">
+              <div className="min-w-0">
                 <div className="min-w-0" data-backstage-target={target}>
                   {settings &&
                     settingsDefaultsQuery.data &&
@@ -1057,15 +1055,6 @@ export function SlurpSettings({
                     }
                   />
                 </div>
-                <SlurpBackstagePreview
-                  target={target}
-                  current={savedSettings ?? settings}
-                  proposed={settings}
-                  pending={draftPatch}
-                  creatorCount={creators.length}
-                  creatorName={target === "creators" || target === "improve" ? selectedCreator?.displayName : null}
-                  creatorProfile={selectedCreator}
-                />
               </div>
             </div>
           </div>

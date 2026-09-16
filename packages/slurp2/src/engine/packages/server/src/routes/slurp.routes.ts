@@ -1628,15 +1628,23 @@ export async function slurpRoutes(app: FastifyInstance) {
       data.extensions && typeof data.extensions === "object" && !Array.isArray(data.extensions)
         ? (data.extensions as Record<string, unknown>)
         : {};
-    const generated = await generateSlurpConversationSchedule(
-      connection,
-      {
-        name: String(data.name ?? source.displayName),
-        description: String(data.description ?? ""),
-        personality: String(data.personality ?? ""),
-      },
-      scheduleSettings.simulationTuning.prompts.scheduleExtra,
-    );
+    let generated: Awaited<ReturnType<typeof generateSlurpConversationSchedule>>;
+    try {
+      generated = await generateSlurpConversationSchedule(
+        connection,
+        {
+          name: String(data.name ?? source.displayName),
+          description: String(data.description ?? ""),
+          personality: String(data.personality ?? ""),
+        },
+        scheduleSettings.simulationTuning.prompts.scheduleExtra,
+      );
+    } catch (error) {
+      req.log.warn({ err: error }, "Conversation schedule generation returned invalid output");
+      return reply.code(502).send({
+        error: "The generation connection did not return a complete schedule. Try again or choose another connection.",
+      });
+    }
     const today = new Date();
     const monday = new Date(today);
     monday.setDate(today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1));
@@ -3747,13 +3755,14 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!post) return reply.code(404).send({ error: "Slurp post not found" });
     if (post.authorAccountId !== parsed.data.accountId) return reply.code(403).send({ error: "Forbidden" });
     if (post.imageUrl) return reply.code(409).send({ error: "This post already has an image." });
+    const account = await noodle.getNoodlerAccountById(post.authorAccountId);
     const imagePrompt =
       post.imagePrompt?.trim() ||
       [post.title, post.content]
         .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
         .join("\n")
-        .trim();
-    if (!imagePrompt) return reply.code(400).send({ error: "This post has no text to create an image from." });
+        .trim() ||
+      `A new social media image for ${account?.displayName || "the creator"}.`;
     if (!post.imagePrompt) {
       await noodle.updatePostMedia(post.id, { imagePrompt });
     }

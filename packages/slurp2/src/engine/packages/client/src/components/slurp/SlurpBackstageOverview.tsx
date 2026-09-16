@@ -273,7 +273,8 @@ export function SlurpBackstageOverview(page: SlurpBackstagePageProps) {
           title={t("ui.slurp.settings.backstage.sections.creators")}
           status={t("ui.slurp.settings.overview.autoPostingCreators", { count: autoPostingCreators.length })}
           details={[t("ui.slurp.settings.overview.totalCreators", { count: creators.length })]}
-          avatars={creators.slice(0, 4)}
+          avatars={autoPostingCreators.slice(0, 4)}
+          avatarTotal={autoPostingCreators.length}
           onClick={() => go("creators", "creators")}
           tone="violet"
         />
