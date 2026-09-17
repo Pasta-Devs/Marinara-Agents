@@ -1612,6 +1612,7 @@
   "ui.slurp.messages.unlockConfirm": "Unlock photo",
   "ui.slurp.messages.unreadCount": "{{count}} unread",
   "ui.slurp.messages.unreadTotal": "{{count}} unread",
+  "ui.slurp.moments.close": "Close Story",
   "ui.slurp.moments.detail": "Creator Stories shared in the last 24 hours.",
   "ui.slurp.moments.add": "Add Story",
   "ui.slurp.moments.empty": "Nothing new yet.",
