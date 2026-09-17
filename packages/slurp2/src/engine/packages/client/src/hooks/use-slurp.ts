@@ -1818,6 +1818,32 @@ export function useSlurpAudienceMember(memberId: string | null, creatorAccountId
   });
 }
 
+export type SlurpAudienceCharacterSummary = {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  avatarCrop: unknown;
+  conversationStatus?: string;
+};
+
+export type SlurpAudienceCharacterGroup = {
+  id: string;
+  name: string;
+  characterIds: string[];
+};
+
+export function useSlurpAudienceCharacters() {
+  return useQuery({
+    queryKey: ["slurp", "audience", "characters"],
+    queryFn: () =>
+      api.get<{
+        groups: SlurpAudienceCharacterGroup[];
+        characters: SlurpAudienceCharacterSummary[];
+      }>("/slurp2/settings/audience-characters"),
+    staleTime: 60_000,
+  });
+}
+
 export function useNoodlerSubscribers(accountId: string | null) {
   return useInfiniteQuery({
     queryKey: noodleKeys.noodlerSubscribers(accountId ?? "none"),

@@ -28,7 +28,13 @@ import { slurpActivePlatformEvents } from "../../../../server/src/services/slurp
 import { api } from "../../lib/api-client";
 import { toast } from "sonner";
 import { SettingAnchor } from "./SlurpBackstageKit";
-import { type SlurpSettings, type SlurpContentRating } from "../../hooks/use-slurp";
+import {
+  type SlurpSettings,
+  type SlurpContentRating,
+  type SlurpAudienceCharacterGroup,
+  type SlurpAudienceCharacterSummary,
+  useSlurpAudienceCharacters,
+} from "../../hooks/use-slurp";
 import { SlurpMediaImg } from "./SlurpShell";
 import {
   SLURP_AUDIENCE_PRESETS,
@@ -78,6 +84,7 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
     creators,
     audiencePreset,
   } = page;
+  const audienceCharactersQuery = useSlurpAudienceCharacters();
   const [audienceWizardOpen, setAudienceWizardOpen] = useState(false);
   const [audienceDraft, setAudienceDraft] = useState<{
     preset: (typeof SLURP_AUDIENCE_PRESETS)[number];
@@ -1800,6 +1807,150 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
               onChange={(tone) => update("audienceTone", tone)}
             />
           </SettingAnchor>
+
+          <SettingsGroup
+            title={t("ui.slurp.settings.audience.characterFansTitle", {
+              defaultValue: "Character audience",
+            })}
+          >
+            <div className="space-y-4">
+              <p className="text-xs leading-5 text-[var(--muted-foreground)]">
+                {t("ui.slurp.settings.audience.characterFansDetail", {
+                  defaultValue: "Invite your Engine characters to read posts and join the audience simulation.",
+                })}
+              </p>
+              <Field
+                settingKey="audienceCharacterLimit"
+                label={t("ui.slurp.settings.audience.characterLimit", {
+                  defaultValue: "Character fans active at once",
+                })}
+                detail={t("ui.slurp.settings.audience.characterLimitDetail", {
+                  defaultValue: "This limits prompt cost. Invited characters rotate when the list is larger.",
+                })}
+              >
+                <NumberSetting
+                  value={settings.audienceCharacterLimit}
+                  min={0}
+                  max={50}
+                  onSave={(value) => void update("audienceCharacterLimit", value)}
+                />
+              </Field>
+
+              {audienceCharactersQuery.isLoading ? (
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  {t("ui.slurp.settings.audience.characterLoading", { defaultValue: "Loading characters…" })}
+                </p>
+              ) : audienceCharactersQuery.isError ? (
+                <p role="alert" className="text-xs text-[var(--destructive)]">
+                  {t("ui.slurp.settings.audience.characterError", { defaultValue: "Characters are unavailable." })}
+                </p>
+              ) : (
+                <>
+                  <Field
+                    settingKey="audienceCharacterGroupIds"
+                    label={t("ui.slurp.settings.audience.characterGroups", { defaultValue: "Invite character groups" })}
+                    detail={t("ui.slurp.settings.audience.characterGroupsDetail", {
+                      defaultValue: "A group invites every member. A character override below can remove one.",
+                    })}
+                  >
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {(audienceCharactersQuery.data?.groups ?? []).map((group: SlurpAudienceCharacterGroup) => {
+                        const selected = settings.audienceCharacterGroupIds.includes(group.id);
+                        return (
+                          <label
+                            key={group.id}
+                            className="flex min-h-11 items-center gap-2 rounded-lg border border-[var(--slurp-outline)] px-3 text-sm"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={() =>
+                                void update(
+                                  "audienceCharacterGroupIds",
+                                  selected
+                                    ? settings.audienceCharacterGroupIds.filter((id: string) => id !== group.id)
+                                    : [...settings.audienceCharacterGroupIds, group.id],
+                                )
+                              }
+                            />
+                            <span className="min-w-0 flex-1 truncate">{group.name}</span>
+                            <span className="text-xs text-[var(--muted-foreground)]">{group.characterIds.length}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </Field>
+
+                  <Field
+                    settingKey="audienceCharacters"
+                    label={t("ui.slurp.settings.audience.characterOverrides", { defaultValue: "Character overrides" })}
+                    detail={t("ui.slurp.settings.audience.characterOverridesDetail", {
+                      defaultValue: "Choose a Fan Type, or leave a character on automatic.",
+                    })}
+                  >
+                    <div className="max-h-80 space-y-2 overflow-y-auto rounded-lg border border-[var(--slurp-outline)] p-2">
+                      {(audienceCharactersQuery.data?.characters ?? []).map(
+                        (character: SlurpAudienceCharacterSummary) => {
+                          const value = settings.audienceCharacters[character.id];
+                          const inGroup = (audienceCharactersQuery.data?.groups ?? []).some(
+                            (group: SlurpAudienceCharacterGroup) =>
+                              settings.audienceCharacterGroupIds.includes(group.id) &&
+                              group.characterIds.includes(character.id),
+                          );
+                          const enabled = value !== false && (value !== undefined || inGroup);
+                          return (
+                            <div
+                              key={character.id}
+                              className="flex flex-wrap items-center gap-2 rounded-lg px-2 py-2 hover:bg-[var(--accent)]/30"
+                            >
+                              <input
+                                type="checkbox"
+                                aria-label={character.name}
+                                checked={enabled}
+                                onChange={() =>
+                                  void update("audienceCharacters", {
+                                    ...settings.audienceCharacters,
+                                    [character.id]: enabled ? false : true,
+                                  })
+                                }
+                              />
+                              <span className="min-w-0 flex-1 truncate text-sm font-semibold">{character.name}</span>
+                              <select
+                                aria-label={t("ui.slurp.settings.audience.characterFanType", {
+                                  defaultValue: "Fan Type for {{name}}",
+                                  name: character.name,
+                                })}
+                                disabled={!enabled}
+                                value={typeof value === "string" ? value : ""}
+                                onChange={(event) =>
+                                  void update("audienceCharacters", {
+                                    ...settings.audienceCharacters,
+                                    [character.id]: event.target.value || true,
+                                  })
+                                }
+                                className="min-h-9 max-w-44 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-surface)] px-2 text-xs disabled:opacity-50"
+                              >
+                                <option value="">
+                                  {t("ui.slurp.settings.audience.automatic", { defaultValue: "Automatic" })}
+                                </option>
+                                {settings.fanTypes
+                                  .filter((type) => type.enabled)
+                                  .map((type) => (
+                                    <option key={type.id} value={type.id}>
+                                      {type.name}
+                                    </option>
+                                  ))}
+                              </select>
+                            </div>
+                          );
+                        },
+                      )}
+                    </div>
+                  </Field>
+                </>
+              )}
+            </div>
+          </SettingsGroup>
 
           <details className="group rounded-xl bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
             <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 px-4 py-2 text-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] [&::-webkit-details-marker]:hidden">

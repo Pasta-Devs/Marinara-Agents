@@ -640,6 +640,27 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
     return noodle.updateSlurpSettings(body.data);
   });
+  app.get("/settings/audience-characters", async () => {
+    const [groups, characterRows] = await Promise.all([
+      characters.listGroups(),
+      characters.listSummariesByIds((await characters.list()).map((row) => row.id)),
+    ]);
+    return {
+      groups: groups.map((group: { id: string; name: string; characterIds: string }) => ({
+        id: group.id,
+        name: group.name,
+        characterIds: (() => {
+          try {
+            const parsed = JSON.parse(group.characterIds);
+            return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
+          } catch {
+            return [];
+          }
+        })(),
+      })),
+      characters: characterRows,
+    };
+  });
   const autopurgePreviewSchema = z.object({
     autopurgeRetentionValue: z.number().int().min(1).max(3650),
     autopurgeRetentionUnit: z.enum(["days", "weeks", "months"]),
