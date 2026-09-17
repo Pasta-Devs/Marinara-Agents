@@ -1,5 +1,19 @@
 # Slurp Remastered release notes
 
+## 0.0.20 — 2026-09-17
+
+- Fixed Restart Setup stuck on "How will people recognize them?".
+- Fixed "Needs attention" on Creators with a Conversation Schedule. Older schedules now repeat weekly, like in Engine chats.
+- Ads: new Ad image connection setting.
+- Stories: wider viewer, backdrop, show whole image, likes, unlock price.
+- Messages: cleaner message bar that grows with your text.
+- Messages: sending scrolls to your message; a button jumps to the latest.
+- Messages: header buttons fold into one menu on phones.
+- Messages: a "New messages" line marks where you stopped.
+- Creators keep a separate draft for each fan thread.
+- Side menu: Creator card shows the full banner and a clean name.
+- Create posts now: no Stories, waits for busy Creators, names any that did not post.
+
 ## 0.0.19 — 2026-09-17
 
 - Fixed Force reply now doing nothing when the hourly model budget was used up.

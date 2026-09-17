@@ -137,6 +137,7 @@ export const SLURP_SETTINGS_NOT_RESET: readonly (keyof SlurpSettings)[] = [
   "generationConnectionId",
   "imageGenerationConnectionId",
   "imageContextConnectionId",
+  "inlineAdsImageConnectionId",
   "inlineAdsLorebookId",
   "inlineAdsLorebookRevision",
   "autopurgeNextRunAt",

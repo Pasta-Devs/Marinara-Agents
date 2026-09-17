@@ -377,6 +377,7 @@ function useSlurpBackstageController({
     section === "overview" ||
       section === "automation" ||
       target === "images" ||
+      target === "ads" ||
       section === "creators" ||
       target === "audience",
   );
@@ -1192,8 +1193,26 @@ export function SlurpSettings({
                       const failed = outcomes.length - generated - skipped;
                       setRefreshModalOpen(false);
                       toast.success(t("ui.slurp.settings.refresh.result", { count: generated }));
-                      if (skipped) toast(t("ui.slurp.settings.refresh.skipped", { count: skipped }));
-                      if (failed) toast.error(t("ui.slurp.settings.refresh.failed", { count: failed }));
+                      // Name the Creators that did not post, so a short batch is never a mystery.
+                      const names = (wanted: (status: string) => boolean) =>
+                        outcomes
+                          .filter((outcome) => wanted(outcome.status))
+                          .map(
+                            (outcome) =>
+                              accountsQuery.data?.find((creator) => creator.id === outcome.accountId)?.displayName ??
+                              outcome.accountId,
+                          )
+                          .join(", ");
+                      if (skipped)
+                        toast(t("ui.slurp.settings.refresh.skipped", { count: skipped }), {
+                          description: names((status) => status === "skipped"),
+                          duration: 10_000,
+                        });
+                      if (failed)
+                        toast.error(t("ui.slurp.settings.refresh.failed", { count: failed }), {
+                          description: names((status) => status !== "generated" && status !== "skipped"),
+                          duration: 10_000,
+                        });
                     },
                     onError: (error) => toast.error(errorMessage(error)),
                   },

@@ -134,6 +134,7 @@ export const SLURP_BACKSTAGE_SETTING_PLACEMENT: Record<keyof SlurpSettings, Slur
   inlineAdsEra: world("ads", "ad era", "style"),
   inlineAdsWorldContext: world("ads", "ad world", "context"),
   inlineAdsImagesEnabled: world("ads", "ad images", "pictures"),
+  inlineAdsImageConnectionId: world("ads", "ad image connection", "image model"),
   inlineAdsLorebookId: world("ads", "ad lorebook"),
   inlineAdsLorebookRevision: internal(world("ads", "ad lorebook revision")),
   walletEnabled: world("wallet", "coins", "wallet", "economy"),
