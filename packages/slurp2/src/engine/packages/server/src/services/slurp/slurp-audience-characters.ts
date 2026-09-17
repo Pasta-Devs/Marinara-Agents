@@ -106,3 +106,40 @@ export function slurpAudienceCharacterFanTypeId(
   const value = (settings.audienceCharacters ?? {})[characterId];
   return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
+
+/** FNV-1a with the murmur3 finalizer, as the other Slurp rule modules use. */
+function hash(value: string): number {
+  let out = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    out ^= value.charCodeAt(index);
+    out = Math.imul(out, 0x01000193);
+  }
+  out ^= out >>> 16;
+  out = Math.imul(out, 0x85ebca6b);
+  out ^= out >>> 13;
+  return out >>> 0;
+}
+
+/**
+ * Which character fans may act in one run.
+ *
+ * `audienceCharacterLimit` bounds the prompt cost, so when more characters are invited than the
+ * limit allows, somebody has to sit out. Taking the first N would mean the last character the user
+ * invited never speaks, so the window rotates: a slot derived from the run key walks the list, and
+ * everybody gets their turn across runs.
+ *
+ * Deterministic in `runKey`, so a replayed or resumed run draws the same people. That matters more
+ * than it looks: `createNoodlerFanInteraction` compares the stored snapshot against the account
+ * row, so a cast that changed between planning and applying would silently drop its own work.
+ */
+export function selectSlurpAudienceCharacterIds(
+  characterIds: readonly string[],
+  limit: number,
+  runKey: string,
+): string[] {
+  const capacity = Math.max(0, Math.floor(limit));
+  if (capacity === 0 || characterIds.length === 0) return [];
+  if (characterIds.length <= capacity) return [...characterIds];
+  const start = hash(runKey) % characterIds.length;
+  return Array.from({ length: capacity }, (_, index) => characterIds[(start + index) % characterIds.length]!);
+}

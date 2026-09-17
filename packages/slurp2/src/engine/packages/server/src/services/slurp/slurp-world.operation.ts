@@ -30,9 +30,11 @@ import { tryNoodleOperation } from "./slurp-operation-lock.js";
 import { readSlurpAudienceTone } from "./slurp-tone.js";
 import { slurpCapTickEvents, slurpRhythmMultiplier } from "./slurp-tuning.js";
 import { slurpCreatorReach } from "./slurp-reach.js";
+import { selectSlurpAudienceCharacterIds, slurpAudienceCharacterFanTypeId } from "./slurp-audience-characters.js";
 import { slurpMembersActiveAt } from "./slurp-population.js";
 import {
   slurpFanTypeCommissionBudget,
+  slurpFanTypeForPinnedOrSeed,
   slurpFanTypeSpendTier,
   slurpFanTypeWeeklyBudget,
   slurpPickFanType,
@@ -218,6 +220,12 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       );
       const allAccounts = await noodle.listAccounts();
 
+      // Provision character accounts invited to the audience, plus their current handle and avatar.
+      // Without this, a character added since the last tick has no row and cannot hold threads or a
+      // wallet, and a renamed character would keep the stale snapshot forever.
+      await noodle.ensureAudienceCharacterAccounts().catch(() => undefined);
+      const invitedCharacters = await noodle.listAudienceCharacterAccounts().catch(() => []);
+
       // The generated population, plus the ambient roster when it is switched on.
       //
       // The population is not gated by `allowRandomUsers`. That setting governs whether ambient
@@ -251,7 +259,22 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
         ...new Map([...dailyNewcomers, ...returning, ...newcomers].map((member) => [member.id, member])).values(),
       ];
       const awake = slurpMembersActiveAt(pool, until.getUTCHours(), WORLD_AUDIENCE_POOL);
-      const audience = [...awake.map((member) => member.id), ...ambient];
+      // Invited characters are always around. They are people the user chose by hand, not part of
+      // the generated crowd, so they are not thinned by the hourly rhythm — and `allowRandomUsers`
+      // does not hide them either, since that switch governs the six shipped ambient profiles.
+      // Account id to the Fan Type the user pinned, so the weighting below honours the choice
+      // instead of re-deriving a type from the id and contradicting it.
+      const characterFanPinnedTypeIds = new Map(
+        selectSlurpAudienceCharacterIds(
+          invitedCharacters.map((entry) => entry.characterId),
+          settings.audienceCharacterLimit ?? 0,
+          `world:${localDayKey(until)}`,
+        ).flatMap((characterId) => {
+          const account = invitedCharacters.find((entry) => entry.characterId === characterId)?.account;
+          return account ? [[account.id, slurpAudienceCharacterFanTypeId(settings, characterId)] as const] : [];
+        }),
+      );
+      const audience = [...awake.map((member) => member.id), ...ambient, ...characterFanPinnedTypeIds.keys()];
       // What each actor's Fan Type makes them do. Ambient accounts have no row, so they read as the
       // fallback type rather than dropping out of the weighting entirely.
       const actorWeights = new Map(
@@ -259,7 +282,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
           const member = pool.find((entry) => entry.id === id);
           const type = member
             ? slurpResolveFanType(settings.fanTypes, member)
-            : slurpPickFanType(settings.fanTypes, id);
+            : slurpFanTypeForPinnedOrSeed(settings.fanTypes, characterFanPinnedTypeIds.get(id) ?? null, id);
           const weeklyBudget = slurpFanTypeWeeklyBudget(type, id);
           return [
             id,

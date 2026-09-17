@@ -1505,7 +1505,14 @@ function sourceAccountFromEntity(
   };
 }
 
-function snapshotForAccount(account: NoodleAccount): NoodleAuthorSnapshot {
+/**
+ * The author snapshot recorded for an account.
+ *
+ * Exported because `createNoodlerFanInteraction` refuses any activity whose planned snapshot is not
+ * byte-identical to this, so a caller that plans activity for an account-backed audience member has
+ * to build the snapshot from here rather than assembling its own and hoping the fields match.
+ */
+export function snapshotForAccount(account: NoodleAccount): NoodleAuthorSnapshot {
   return {
     id: account.id,
     kind: account.kind,

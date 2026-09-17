@@ -4,7 +4,7 @@ import { eq } from "../../db/file-query.js";
 import { noodlerFanActivityState } from "../../db/schema/slurp.js";
 import { now } from "../../utils/id-generator.js";
 import { tryBackgroundConnection } from "../generation/connection-admission.js";
-import { createSlurpStorage, type SlurpSettings } from "../storage/slurp.storage.js";
+import { createSlurpStorage, snapshotForAccount, type SlurpSettings } from "../storage/slurp.storage.js";
 import {
   claimManualNoodleFanActivityRun,
   claimNoodleFanActivityRun,
@@ -26,8 +26,20 @@ import {
 } from "./slurp-fan-activity.service.js";
 import { tryNoodleOperation } from "./slurp-operation-lock.js";
 import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
-import { NOODLER_FAN_IDENTITY_PREFIX, populationNoodlerFanIdentityProvider } from "./slurp-fan-identity-provider.js";
-import { slurpFanMemoryForPrompt, slurpResolveFanType } from "./slurp-fan-types.js";
+import {
+  NOODLER_FAN_IDENTITY_PREFIX,
+  populationNoodlerFanIdentityProvider,
+  type NoodlerFanCastMember,
+} from "./slurp-fan-identity-provider.js";
+import {
+  slurpFanMemoryForPrompt,
+  slurpFanTypeForPinnedOrSeed,
+  slurpFanTypeSpendTier,
+  slurpFanTypeTraits,
+  slurpFanTypeWeeklyBudget,
+  slurpResolveFanType,
+} from "./slurp-fan-types.js";
+import { selectSlurpAudienceCharacterIds, slurpAudienceCharacterFanTypeId } from "./slurp-audience-characters.js";
 import { newId } from "../../utils/id-generator.js";
 import { claimSlurpModelBudget, slurpModelWorkerAllows } from "./slurp-model-worker.js";
 
@@ -59,6 +71,64 @@ export type NoodlerFanRunResult = {
 
 function localTimezone() {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "local";
+}
+
+/**
+ * The characters the user invited, as cast members for one run.
+ *
+ * Each one is an account row, not a population member, so it carries `snapshotForAccount` of that
+ * row. `createNoodlerFanInteraction` compares the planned snapshot against the live row and refuses
+ * anything that differs, so a synthesised snapshot would be silently dropped at apply time.
+ *
+ * A character has no Fan Type of its own, so one is derived: the pinned type when the user chose
+ * one, else the id-derived pick that an ambient account already uses. That is what supplies the
+ * spend budget, the traits, and the behaviour weights.
+ *
+ * Rotation is by run id, so inviting more characters than the limit does not silence the tail of
+ * the list forever.
+ */
+async function drawAudienceCharacterCast(
+  db: DB,
+  settings: SlurpSettings,
+  runId: string,
+): Promise<NoodlerFanCastMember[]> {
+  const limit = settings.audienceCharacterLimit ?? 0;
+  if (limit <= 0) return [];
+  const noodle = createSlurpStorage(db);
+  // Provision first: a character invited since the last run has no row yet, and a renamed one
+  // needs its handle and avatar refreshed before the snapshot is taken.
+  await noodle.ensureAudienceCharacterAccounts().catch(() => undefined);
+  const invited = await noodle.listAudienceCharacterAccounts().catch(() => []);
+  if (invited.length === 0) return [];
+  const chosen = selectSlurpAudienceCharacterIds(
+    invited.map((entry) => entry.characterId),
+    limit,
+    runId,
+  );
+  const byCharacterId = new Map(invited.map((entry) => [entry.characterId, entry.account]));
+  return chosen.flatMap((characterId) => {
+    const account = byCharacterId.get(characterId);
+    if (!account) return [];
+    const type = slurpFanTypeForPinnedOrSeed(
+      settings.fanTypes,
+      slurpAudienceCharacterFanTypeId(settings, characterId),
+      account.id,
+    );
+    const weeklyBudget = slurpFanTypeWeeklyBudget(type, account.id);
+    return [
+      {
+        id: account.id,
+        handle: account.handle,
+        displayName: account.displayName,
+        archetype: type.engineArchetype,
+        traits: slurpFanTypeTraits(type, account.id),
+        spendTier: slurpFanTypeSpendTier(weeklyBudget),
+        voice: type.voice,
+        tone: type.tone,
+        snapshot: snapshotForAccount(account),
+      },
+    ];
+  });
 }
 
 async function readPlans(db: DB, at = new Date(), prune = true) {
@@ -264,16 +334,23 @@ export async function runNoodlerFanActivity(input: {
       ];
       // Each member carries their Fan Type's voice, which is the one thing that makes a Lurker's
       // three words and a Superfan's paragraph read as two different people.
-      const cast = (await Promise.all(seeds.map((seed) => population.ensure(seed, at, settings.fanTypes)))).map(
-        (member) => {
-          const type = slurpResolveFanType(settings.fanTypes, member);
-          return { ...member, voice: type.voice, tone: type.tone };
-        },
-      );
+      const populationCast = (
+        await Promise.all(seeds.map((seed) => population.ensure(seed, at, settings.fanTypes)))
+      ).map((member) => {
+        const type = slurpResolveFanType(settings.fanTypes, member);
+        return { ...member, voice: type.voice, tone: type.tone };
+      });
       // Mark the drawn cast as recently active. `listAll` orders by that column, so without this
       // it kept ordering by creation time: the same earliest members were redrawn forever and
       // anybody who actually showed up sank out of the pool. Regulars could never recur.
-      await Promise.all(cast.map((member) => population.touch(member.id).catch(() => undefined)));
+      //
+      // Only population members are touched: `lastActiveAt` lives on the population row, and a
+      // character fan is an account, so touching its id would update nothing.
+      await Promise.all(populationCast.map((member) => population.touch(member.id).catch(() => undefined)));
+
+      // The characters the user put in the audience, rotated so that inviting more than the limit
+      // does not silence the ones at the end of the list.
+      const cast = [...populationCast, ...(await drawAudienceCharacterCast(input.db, settings, run.id))];
 
       // The cast carries its relationship to each Creator. Resolved for every creator in the run,
       // not just the first: a run covers up to twelve, and reusing one creator's ties for all of
