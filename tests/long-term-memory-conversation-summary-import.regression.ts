@@ -675,6 +675,47 @@ async function main() {
         `imported source evidence should include chat_name:Final Branch, got: ${JSON.stringify(importedRenamedNote?.sections?.source?.evidence)}`,
       );
       chats.pop();
+
+      // Bounded title regression proof: chat titles exceeding 240 chars must be bounded in candidates and writeFailures
+      const longName = "Very Long Chat Title ".repeat(20);
+      const longTitleConflictingChat = {
+        ...roleplayChat,
+        id: "chat-long-title-conflict",
+        name: longName,
+        metadata: {
+          summaryEntries: [
+            { id: "conflict-entry", content: "Initial summary content." },
+            { id: "conflict-entry", content: "Conflicting summary content." },
+          ],
+        },
+      };
+      chats.push(longTitleConflictingChat);
+      const longTitleConflictImport = ltmImportSourceNotesResponseSchema.parse(
+        await importPackageInterop(
+          {
+            source: "chats",
+            chatId: longTitleConflictingChat.id,
+            sourceIds: [`${longTitleConflictingChat.id}:conflict-entry`],
+            extract: false,
+            limit: 10,
+          },
+          join(dataDir, "long-term-memory"),
+          new AbortController().signal,
+        ),
+      );
+      assert.equal(longTitleConflictImport.counts.sourceNotesWritten, 0);
+      assert.equal(longTitleConflictImport.writeFailures.length, 1);
+      const conflictFailure = longTitleConflictImport.writeFailures[0]!;
+      assert.equal(conflictFailure.error.code, "ltm_source_identity_conflict");
+      assert.ok(
+        conflictFailure.title.length <= 240,
+        `failure title must not exceed 240 chars, got length: ${conflictFailure.title.length}`,
+      );
+      assert.ok(
+        conflictFailure.error.message.includes(conflictFailure.title),
+        "error message should include the bounded title",
+      );
+      chats.pop();
     },
     [() => releaseRuntime?.(), () => rm(dataDir, { recursive: true, force: true })],
   );

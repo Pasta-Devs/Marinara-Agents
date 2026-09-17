@@ -409,7 +409,7 @@ function normalizeLorebooks(books: Array<{ id: string; data: unknown; entries: u
         const rawEntryId = part ? `${base}:part:${part + 1}` : base,
           entryId = rawEntryId.length <= 120 ? rawEntryId : `entry_${hash(`${base}\0${part}`, 16)}`,
           sourceId = `lorebook_entry_${hash(`${book.id}\0${entryId}`)}`,
-          title = `Lorebook - ${name}: ${entryName}${part ? ` (${part + 1})` : ""}`,
+          title = `Lorebook - ${name}: ${entryName}${part ? ` (${part + 1})` : ""}`.slice(0, 240),
           provenance = {
             kind: "lorebook" as const,
             sourceId: book.id,
@@ -471,7 +471,7 @@ async function candidates(
         suffix = `${identifier(name, "character")}_${hash(row.id)}`;
       result.push({
         sourceId: row.id,
-        title: name,
+        title: name.slice(0, 240),
         sourceText,
         sourceNoteId: sourceNoteIdForProvenance(provenance),
         legacySourceNoteIds: [`source_import_character_${suffix}`, `scene_import_character_${suffix}`],
@@ -508,7 +508,7 @@ async function candidates(
             sourceId: chat.id,
             entryId: entry.id,
           },
-          title = `${chatDisplayName}, msgs ${entry.range}`,
+          title = `${chatDisplayName}, msgs ${entry.range}`.slice(0, 240),
           seed = `${chat.id}:${entry.id}`,
           legacy =
             entry.origin === "legacy"
@@ -863,17 +863,20 @@ export async function importPackageInterop(
     missingSourceIds = request.sourceIds.filter((id) => !resolvedIds.has(id)),
     candidateResolution = resolveImportCandidates(visibleRows),
     rows = candidateResolution.rows,
-    writeFailures: LtmImportSourceNotesResponse["writeFailures"] = candidateResolution.conflicts.map((row) => ({
-      sourceId: row.sourceId,
-      title: row.title,
-      sourceWriteStatus: "failed" as const,
-      extractionStatus: "not_started" as const,
-      retryable: false,
-      error: {
-        code: "ltm_source_identity_conflict" as const,
-        message: `Source ${row.title} has multiple records with different content for the same source ID.`,
-      },
-    })),
+    writeFailures: LtmImportSourceNotesResponse["writeFailures"] = candidateResolution.conflicts.map((row) => {
+      const title = row.title.slice(0, 240);
+      return {
+        sourceId: row.sourceId,
+        title,
+        sourceWriteStatus: "failed" as const,
+        extractionStatus: "not_started" as const,
+        retryable: false,
+        error: {
+          code: "ltm_source_identity_conflict" as const,
+          message: `Source ${title} has multiple records with different content for the same source ID.`,
+        },
+      };
+    }),
     conflictingSourceIds = new Set<string>();
   throwIfAborted(signal);
   if (!destinationScope && !chat && !legacyScopeRequest && rows.some((row) => !isGlobalLtmScope(row.scope)))
