@@ -35,8 +35,24 @@ import {
   type NoodlerSubscriber,
   type NoodlerPostView,
 } from "@marinara-engine/shared";
-import { SLURP_FUNNEL_STAGES, SLURP_NAMED_CAST_LIMIT } from "../services/slurp/slurp-population.js";
-import { planSlurpFanTypeRebalance } from "../services/slurp/slurp-fan-types.js";
+import {
+  isSlurpPopulationMemberId,
+  SLURP_FUNNEL_STAGES,
+  SLURP_NAMED_CAST_LIMIT,
+} from "../services/slurp/slurp-population.js";
+import {
+  planSlurpFanTypeRebalance,
+  slurpFanTypeActiveHour,
+  slurpFanTypeForPinnedOrSeed,
+  slurpFanTypeSpendTier,
+  slurpFanTypeTraits,
+  slurpFanTypeWeeklyBudget,
+} from "../services/slurp/slurp-fan-types.js";
+import {
+  slurpAudienceCharacterFanTypeId,
+  slurpAudienceCharacterTraits,
+  slurpCharacterIdFromFanEntityId,
+} from "../services/slurp/slurp-audience-characters.js";
 
 /**
  * A subscriber row, widened for the generated audience.
@@ -4108,24 +4124,59 @@ export async function slurpRoutes(app: FastifyInstance) {
   app.get("/noodler/audience/:memberId", async (req, reply) => {
     const { memberId } = req.params as { memberId: string };
     const creatorAccountId = (req.query as { creatorAccountId?: unknown }).creatorAccountId;
-    const member = await createSlurpPopulationStorage(app.db)
-      .get(memberId)
-      .catch(() => null);
-    if (!member) return reply.code(404).send({ error: "Audience member not found" });
+    const population = createSlurpPopulationStorage(app.db);
+    /**
+     * The card subject: a generated member, or a character the user invited.
+     *
+     * A generated member holds a `slurp2_population` row that carries all of this. An invited
+     * character holds an account row instead, so its traits, spend tier and active hour come from
+     * the same Fan Type the simulation pays it on — otherwise the card would describe somebody the
+     * world does not act like.
+     */
+    const subject = await (async () => {
+      // Only a generated member has a row, so an account id skips the read rather than paying for a
+      // query that can only return null.
+      if (isSlurpPopulationMemberId(memberId)) {
+        const member = await population.get(memberId).catch(() => null);
+        if (!member) return null;
+        return {
+          id: member.id,
+          displayName: member.displayName,
+          handle: member.handle,
+          traits: member.traits,
+          spendTier: member.spendTier,
+          activeHour: member.activeHour,
+          joinedAt: member.joinedAt,
+        };
+      }
+      const account = await noodle.getAccountById(memberId, { includeHidden: true }).catch(() => null);
+      const characterId = account ? slurpCharacterIdFromFanEntityId(account.entityId) : null;
+      if (!account || !characterId) return null;
+      const settings = await noodle.getSettings();
+      const card = await characters.getById(characterId).catch(() => null);
+      const fanType = slurpFanTypeForPinnedOrSeed(
+        settings.fanTypes,
+        slurpAudienceCharacterFanTypeId(settings, characterId),
+        account.id,
+      );
+      const cardTraits = slurpAudienceCharacterTraits(card);
+      return {
+        id: account.id,
+        displayName: account.displayName,
+        handle: account.handle,
+        traits: cardTraits.length > 0 ? cardTraits : slurpFanTypeTraits(fanType, account.id),
+        spendTier: slurpFanTypeSpendTier(slurpFanTypeWeeklyBudget(fanType, account.id)),
+        activeHour: slurpFanTypeActiveHour(fanType, account.id),
+        joinedAt: account.createdAt,
+      };
+    })();
+    if (!subject) return reply.code(404).send({ error: "Audience member not found" });
     const tie =
       typeof creatorAccountId === "string" && creatorAccountId
-        ? ((await createSlurpPopulationStorage(app.db).listTiesForCreator(creatorAccountId)).find(
-            (entry) => entry.memberId === memberId,
-          ) ?? null)
+        ? ((await population.listTiesForCreator(creatorAccountId)).find((entry) => entry.memberId === memberId) ?? null)
         : null;
     return {
-      id: member.id,
-      displayName: member.displayName,
-      handle: member.handle,
-      traits: member.traits,
-      spendTier: member.spendTier,
-      activeHour: member.activeHour,
-      joinedAt: member.joinedAt,
+      ...subject,
       tie: tie
         ? {
             stage: tie.stage,
