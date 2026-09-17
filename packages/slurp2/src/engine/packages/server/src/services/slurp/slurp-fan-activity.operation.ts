@@ -32,6 +32,7 @@ import {
   type NoodlerFanCastMember,
 } from "./slurp-fan-identity-provider.js";
 import {
+  SLURP_FAN_VOICE_PROMPT_MAX,
   slurpFanMemoryForPrompt,
   slurpFanTypeForPinnedOrSeed,
   slurpFanTypeSpendTier,
@@ -39,7 +40,13 @@ import {
   slurpFanTypeWeeklyBudget,
   slurpResolveFanType,
 } from "./slurp-fan-types.js";
-import { selectSlurpAudienceCharacterIds, slurpAudienceCharacterFanTypeId } from "./slurp-audience-characters.js";
+import {
+  selectSlurpAudienceCharacterIds,
+  slurpAudienceCharacterFanTypeId,
+  slurpAudienceCharacterTraits,
+  slurpAudienceCharacterVoice,
+} from "./slurp-audience-characters.js";
+import { createCharactersStorage } from "../storage/characters.storage.js";
 import { newId } from "../../utils/id-generator.js";
 import { claimSlurpModelBudget, slurpModelWorkerAllows } from "./slurp-model-worker.js";
 
@@ -106,6 +113,16 @@ async function drawAudienceCharacterCast(
     runId,
   );
   const byCharacterId = new Map(invited.map((entry) => [entry.characterId, entry.account]));
+  const characters = createCharactersStorage(db);
+  // Only the drawn characters are read. The invited list can be long, and a card is the largest
+  // row this feature touches.
+  const cards = new Map(
+    await Promise.all(
+      chosen.map(
+        async (characterId) => [characterId, await characters.getById(characterId).catch(() => null)] as const,
+      ),
+    ),
+  );
   return chosen.flatMap((characterId) => {
     const account = byCharacterId.get(characterId);
     if (!account) return [];
@@ -115,15 +132,20 @@ async function drawAudienceCharacterCast(
       account.id,
     );
     const weeklyBudget = slurpFanTypeWeeklyBudget(type, account.id);
+    // The character's own words are the point of inviting them, so the card wins over the Fan
+    // Type's voice. The Type still supplies everything the card cannot say: spend, hours, weights.
+    // A card with no personality or description falls back rather than sending an empty voice.
+    const card = cards.get(characterId);
+    const cardTraits = slurpAudienceCharacterTraits(card);
     return [
       {
         id: account.id,
         handle: account.handle,
         displayName: account.displayName,
         archetype: type.engineArchetype,
-        traits: slurpFanTypeTraits(type, account.id),
+        traits: cardTraits.length > 0 ? cardTraits : slurpFanTypeTraits(type, account.id),
         spendTier: slurpFanTypeSpendTier(weeklyBudget),
-        voice: type.voice,
+        voice: slurpAudienceCharacterVoice(card, SLURP_FAN_VOICE_PROMPT_MAX) ?? type.voice,
         tone: type.tone,
         snapshot: snapshotForAccount(account),
       },

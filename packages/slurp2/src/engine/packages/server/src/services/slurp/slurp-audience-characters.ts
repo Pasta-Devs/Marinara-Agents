@@ -107,6 +107,92 @@ export function slurpAudienceCharacterFanTypeId(
   return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
+/**
+ * A character card, as far as this module cares: the stored `data` blob and an avatar path.
+ *
+ * `data` is whatever the card holds, string or object, because a V2 card is stored as JSON text and
+ * a test is easier to write against an object. Nothing here trusts a field to exist.
+ */
+export type SlurpAudienceCharacterCard = { data?: unknown };
+
+function cardRecord(value: unknown): Record<string, unknown> {
+  if (!value) return {};
+  if (typeof value === "string") {
+    try {
+      return cardRecord(JSON.parse(value));
+    } catch {
+      return {};
+    }
+  }
+  return typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function cardText(value: unknown): string {
+  return typeof value === "string" ? value.replace(/\s+/gu, " ").trim() : "";
+}
+
+/** A card list field. Already an array, or JSON text holding one, or nothing usable. */
+function cardList(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string") return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * How a character writes, for the fan-activity prompt.
+ *
+ * Personality first, then description: personality is the field that says how somebody speaks, and
+ * description is the one that says who they are, so a card with both gets the useful half. Scenario,
+ * greetings, and example dialogue stay out — they describe a chat that is not happening here, and
+ * the whole point of the budget is that this rides in every prompt the character appears in.
+ *
+ * The result is cut to `voiceBudget`, which the caller takes from `SLURP_FAN_VOICE_PROMPT_MAX` so
+ * that a character costs a prompt exactly what a Fan Type voice costs. Cutting at a word boundary
+ * rather than mid-word, because a voice ending in "she is extremely deter" reads as corruption.
+ *
+ * Returns undefined for a card with nothing usable, which leaves the Fan Type's own voice in place
+ * rather than sending an empty string the model has to interpret.
+ */
+export function slurpAudienceCharacterVoice(
+  card: SlurpAudienceCharacterCard | null | undefined,
+  voiceBudget: number,
+): string | undefined {
+  const data = cardRecord(card?.data);
+  const parts = [cardText(data.personality), cardText(data.description)].filter(Boolean);
+  if (parts.length === 0) return undefined;
+  const joined = parts.join(" ");
+  if (joined.length <= voiceBudget) return joined;
+  const cut = joined.slice(0, voiceBudget);
+  const lastSpace = cut.lastIndexOf(" ");
+  // A single word longer than the whole budget has no boundary to cut on; take the hard slice.
+  return (lastSpace > voiceBudget * 0.5 ? cut.slice(0, lastSpace) : cut).trimEnd();
+}
+
+/**
+ * The card's own tags, for the prompt's `traits`.
+ *
+ * A V2 card stores `tags` as an array, but it is player-editable and may arrive as a JSON string,
+ * so both are accepted. Capped at three to match what a generated member carries, and each tag is
+ * length-capped because a "tag" pasted from elsewhere can be a paragraph.
+ *
+ * An empty result means the caller should fall back to the Fan Type's traits.
+ */
+export function slurpAudienceCharacterTraits(card: SlurpAudienceCharacterCard | null | undefined): string[] {
+  const data = cardRecord(card?.data);
+  const traits: string[] = [];
+  for (const entry of cardList(data.tags)) {
+    const tag = cardText(entry).slice(0, 32);
+    if (tag && !traits.includes(tag)) traits.push(tag);
+    if (traits.length === 3) break;
+  }
+  return traits;
+}
+
 /** FNV-1a with the murmur3 finalizer, as the other Slurp rule modules use. */
 function hash(value: string): number {
   let out = 0x811c9dc5;
