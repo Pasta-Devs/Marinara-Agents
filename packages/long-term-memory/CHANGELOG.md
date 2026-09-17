@@ -1,5 +1,11 @@
 # Long-Term Memory changelog
 
+## 1.3.1 — 2026-09-17
+
+- Fixed duplicate and conflicting source ID handling during source import.
+- Fixed updateNote call signature in source extraction.
+- Removed undeclared and unused batch extraction scope argument in import interop.
+
 ## 1.3.0 — 2026-09-13
 
 - Load additional pages of chat summaries, characters, and lorebook sources without losing filters, selections, or import status.

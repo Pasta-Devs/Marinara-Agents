@@ -88,6 +88,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.3.1",
+          "date": "2026-09-17",
+          "notes": "- Fixed duplicate and conflicting source ID handling during source import.\n- Fixed updateNote call signature in source extraction.\n- Removed undeclared and unused batch extraction scope argument in import interop.",
+          "highlight": false
+        },
+        {
           "version": "1.3.0",
           "date": "2026-09-13",
           "notes": "- Load additional pages of chat summaries, characters, and lorebook sources without losing filters, selections, or import status.\n- Keep retention cleanup recoverable when activity-index pruning fails.",
