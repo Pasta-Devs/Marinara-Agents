@@ -1,5 +1,6 @@
 import { createPortal } from "react-dom";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { ModalPortalContext } from "../ui/Modal";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import {
   ArrowLeft,
@@ -286,6 +287,7 @@ export function StageProfileForm({
   const { t: localizeUi } = useUiTranslation();
   const disclosureChoices = disclosureOptions(localizeUi);
   const accent = profileAccent(accentId);
+  const portalContainer = useContext(ModalPortalContext);
   const [connectionPickerOpen, setConnectionPickerOpen] = useState(false);
   const [relationshipPickerOpen, setRelationshipPickerOpen] = useState(false);
   const [relationshipPickerPosition, setRelationshipPickerPosition] = useState<{
@@ -361,7 +363,7 @@ export function StageProfileForm({
                 relationshipPickerRef.current?.querySelector("button")?.focus();
               }
             }}
-            className="fixed z-[9999] w-72 max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl border border-foreground/10 bg-[var(--card)] p-1 shadow-2xl"
+            className="pointer-events-auto fixed z-[9999] w-72 max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl border border-foreground/10 bg-[var(--card)] p-1 shadow-2xl"
             style={getNoodleAccentStyle(
               accent,
               relationshipPickerPosition
@@ -397,7 +399,7 @@ export function StageProfileForm({
               );
             })}
           </div>,
-          document.body,
+          portalContainer ?? document.body,
         )
       : null;
 

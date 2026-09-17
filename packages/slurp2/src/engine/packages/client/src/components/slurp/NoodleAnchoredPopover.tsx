@@ -1,6 +1,7 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useContext, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "../../lib/utils";
+import { ModalPortalContext } from "../ui/Modal";
 import { getNoodleAccentStyle, NOODLE_ICON_SCOPE_CLASS, useNoodleAccent } from "./SlurpShell";
 
 export function NoodleAnchoredPopover({
@@ -20,6 +21,9 @@ export function NoodleAnchoredPopover({
     top: number;
   } | null>(null);
   const accent = useNoodleAccent();
+  // The package stylesheet is @scope-d to the package root and its portal; document.body is outside
+  // both, so a popover portalled there rendered without any of its classes (a see-through menu).
+  const portalContainer = useContext(ModalPortalContext);
 
   useLayoutEffect(() => {
     const updatePosition = () => {
@@ -60,7 +64,7 @@ export function NoodleAnchoredPopover({
       ref={panelRef}
       data-noodle-compose-focus-portal={modalOwned ? "true" : undefined}
       className={cn(
-        "fixed max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] overflow-y-auto",
+        "pointer-events-auto fixed max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] overflow-y-auto",
         modalOwned ? "z-[10001]" : "z-[80]",
         NOODLE_ICON_SCOPE_CLASS,
         wide ? "w-[18rem] sm:w-[24rem]" : "w-[19rem]",
@@ -73,6 +77,6 @@ export function NoodleAnchoredPopover({
     >
       {children}
     </div>,
-    document.body,
+    portalContainer ?? document.body,
   );
 }

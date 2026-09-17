@@ -41,10 +41,9 @@ assert.match(view, /setReplyStatus\(result\.replyStatus \?\? null\)/u);
 // A replied outcome is the message itself. Announcing it would be noise.
 assert.match(view, /replyStatus !== "replied"/u);
 
-// The receipt goes on the newest message you sent, not on all of them.
-assert.match(view, /const lastOwnMessageId = messages\.reduce/u);
-assert.match(view, /showReceipt=\{entry\.message\.id === lastOwnMessageId\}/u);
-assert.match(view, /mine && showReceipt && message\.readAt/u);
+// Every message you sent carries a receipt, as in real messengers: one check delivered, two seen.
+assert.match(view, /\{mine && \(/u);
+assert.match(view, /message\.readAt \? <CheckCheck/u);
 assert.ok(locales["ui.slurp.messages.seenAt"], "missing seen receipt copy");
 
 console.log("slurp chat presence regression passed");

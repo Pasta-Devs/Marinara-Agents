@@ -139,4 +139,20 @@ assert.match(
   /function SlurpConnectionSwitcher[\s\S]*?"flex h-10 w-10 items-center[\s\S]*?<Link size=\{15\}[^>]*\/>\s*<\/button>/u,
 );
 
+// Every sent message carries its own delivered/seen receipt, not only the newest one.
+assert.doesNotMatch(messages, /showReceipt|lastOwnMessageId/u);
+// An away Creator never shows typing dots before the away block, and the block is an animation.
+assert.match(messages, /relationship\?\.availability\.online !== false\) setTyping\(true\)/u);
+assert.match(messages, /SLURP_AWAY_STATUSES\.has\(waitingNote\)\) && "sr-only"/u);
+assert.doesNotMatch(read("client/src/localization/locales/en.json"), /estimated from recent activity/u);
+// The tier scale shows every tier as an icon with its name, in the header popover and the details panel.
+assert.equal(messages.match(/<SlurpTierLadder /gu)?.length, 2);
+// Popovers portal into the package's scoped root, or the @scope-d stylesheet never reaches them.
+assert.match(read("client/src/components/slurp/NoodleAnchoredPopover.tsx"), /portalContainer \?\? document\.body/u);
+// Back from a chat opened elsewhere returns there instead of dropping into the list.
+assert.match(messages, /openedDirectly\.current && onExit/u);
+assert.match(
+  read("client/src/components/slurp/SlurpHome.tsx"),
+  /view: "messages", creatorAccountId, returnTo: navigation/u,
+);
 console.log("slurp messaging surface regression passed");

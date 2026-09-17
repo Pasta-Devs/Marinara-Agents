@@ -7,7 +7,12 @@
 - Messages: sent messages now show separate delivered and seen receipts.
 - Messages: mobile headers keep the Creator name visible and move the relationship label into an icon and meter.
 - Messages: fixed the transparent mobile header menu with an opaque surface.
-- Messages: desktop uses the compact connection switcher from mobile.
+- Messages: desktop uses the compact connection switcher.
+- Messages: every sent message shows one check when delivered and two when seen.
+- Messages: an away Creator shows a sleeping animation instead of typing dots.
+- Messages: tier icons are back in the desktop header; tap one to see the full tier scale.
+- Messages: Back returns to the profile or activity a chat was opened from.
+- Fixed see-through menus and pickers.
 
 ## 0.0.20 — 2026-09-17
 
