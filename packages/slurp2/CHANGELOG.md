@@ -1,5 +1,13 @@
 # Slurp Remastered release notes
 
+## 0.0.21 — 2026-09-17
+
+- Messages: the composer is shorter on one-line messages and still grows for longer text.
+- Messages: away replies use a centered Creator status block with a quiet Get reply now action.
+- Messages: sent messages now show separate delivered and seen receipts.
+- Messages: mobile headers keep the Creator name visible and move the relationship label into an icon and meter.
+- Messages: fixed the transparent mobile header menu with an opaque surface.
+
 ## 0.0.20 — 2026-09-17
 
 - Fixed Restart Setup stuck on "How will people recognize them?".

@@ -17,7 +17,12 @@ const replyScheduler = read("server/src/services/slurp/slurp-message-scheduler.s
 const replyMethods = read("server/src/services/storage/slurp-reply-methods.ts");
 const slurpStorage = read("server/src/services/storage/slurp.storage.ts");
 
-assert.match(messages, /Delivered\. A reply from \{\{name\}\} is queued for later\./u);
+assert.match(messages, /\{\{name\}\} is away right now\. They’ll reply when they next check their messages\./u);
+assert.match(messages, /CheckCheck/u, "seen messages must use the double-check receipt");
+assert.match(messages, /defaultValue: message\.readAt \? "Seen" : "Delivered"/u);
+assert.match(messages, /role="meter"/u, "the relationship symbol must open a relationship meter");
+assert.match(messages, /bg-\[var\(--slurp-canvas,var\(--background\)\)\]/u, "the mobile menu must be opaque");
+assert.match(messages, /defaultValue: "Get reply now"/u);
 assert.doesNotMatch(
   messages,
   /has seen this/u,
