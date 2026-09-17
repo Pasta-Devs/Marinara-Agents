@@ -411,7 +411,7 @@ export const slurpSettingsSchema = z.object({
   inlineAdsWorldContext: z.string().trim().max(1200),
   inlineAdsImagesEnabled: z.boolean(),
   /** Image connection for ad artwork. Null falls back to the Slurp image connection. */
-  inlineAdsImageConnectionId: z.string().nullable(),
+  inlineAdsImageConnectionId: z.string().trim().min(1).nullable(),
   /** Lorebook whose entries feed the ad generator as world context. */
   inlineAdsLorebookId: z.string().trim().min(1).nullable(),
   /** Fingerprint of the synced lorebook, so a changed book can resync itself. */
