@@ -82,14 +82,8 @@ async function main() {
   // Second line of defence: whatever makes a week look old (time zones, the Engine editor keeping the
   // original weekStart on save), the routine keeps applying, as Engine chats use it.
   const oldWeek = character({ conversationSchedule: week(lastMonday, tuesdayBlocks) });
-  assert.match(
-    await resolveSlurpCreatorScheduleContext(oldWeek, characterSource, "UTC", now),
-    /at the studio/u,
-  );
-  assert.equal(
-    (await resolveSlurpCreatorAvailability(oldWeek, characterSource, "UTC", now)).estimated,
-    undefined,
-  );
+  assert.match(await resolveSlurpCreatorScheduleContext(oldWeek, characterSource, "UTC", now), /at the studio/u);
+  assert.equal((await resolveSlurpCreatorAvailability(oldWeek, characterSource, "UTC", now)).estimated, undefined);
 
   // ── Every other reason is reported as itself ────────────────────────────────
   // The prompt paths collapse all of these into one sentence, which is right for a prompt and

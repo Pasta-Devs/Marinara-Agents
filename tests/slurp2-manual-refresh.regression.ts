@@ -10,7 +10,10 @@ const read = (path: string) => readFileSync(join(root, path), "utf8");
 const operation = read("server/src/services/slurp/slurp-post.operation.ts");
 const targeted = operation.slice(operation.indexOf("export async function refreshTargetedNoodlerCreatorsNow"));
 assert.match(targeted, /\{ allowStory: false \}/u, "manual refresh must not produce Stories");
-assert.match(targeted, /while \(result\.status === "busy" && Date\.now\(\) - startedAt < MANUAL_REFRESH_BUSY_WAIT_MS\)/u);
+assert.match(
+  targeted,
+  /while \(result\.status === "busy" && Date\.now\(\) - startedAt < MANUAL_REFRESH_BUSY_WAIT_MS\)/u,
+);
 
 const generation = read("server/src/services/slurp/slurp-generation.service.ts");
 assert.match(generation, /input\.allowStory !== false && variation\?\.story === true/u);

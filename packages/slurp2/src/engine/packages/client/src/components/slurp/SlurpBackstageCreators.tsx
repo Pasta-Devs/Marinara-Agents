@@ -29,10 +29,7 @@ const noteClass =
   "rounded-lg bg-[var(--slurp-canvas)] p-3 text-xs leading-5 text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)]";
 
 function needsAttention(creator: NoodlerManagedStageProfile) {
-  return (
-    creator.sourceStatus.state === "missing" ||
-    creator.sourceStatus.state === "changed"
-  );
+  return creator.sourceStatus.state === "missing" || creator.sourceStatus.state === "changed";
 }
 
 /** Creators: a searchable directory, bulk edit, a tabbed detail panel, and Improve with AI. */

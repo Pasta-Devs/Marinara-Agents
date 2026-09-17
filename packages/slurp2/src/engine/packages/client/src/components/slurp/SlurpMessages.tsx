@@ -1205,41 +1205,41 @@ function SlurpThreadView({
         {/* Four icons of the same size and weight, because none of them outranks the others. The
             details button was the odd one out as a word, and read as the only real control. */}
         <div className="ml-auto hidden shrink-0 items-center sm:flex">
-        {relationship && (
-          <HeaderIconButton
-            icon={Info}
-            label={localizeUi("ui.slurp.messages.relationshipToggle", { defaultValue: "Details" })}
-            onClick={() => setDrawerMode("details")}
-          />
-        )}
-        {threadId && (
-          <HeaderIconButton
-            icon={Brain}
-            label={localizeUi("ui.slurp.messages.memories", { defaultValue: "Memories" })}
-            onClick={() => setDrawerMode("memories")}
-          />
-        )}
-        {threadId && (
-          <HeaderIconButton
-            icon={BriefcaseBusiness}
-            label={localizeUi("ui.slurp.messages.commissionsTitle", { defaultValue: "Commissions" })}
-            badge={commissions.length}
-            onClick={() => setDrawerMode("commissions")}
-          />
-        )}
-        {threadId && (
-          <button
-            ref={searchTriggerRef}
-            type="button"
-            aria-expanded={messageSearchOpen}
-            onClick={() => setMessageSearchOpen((open) => !open)}
-            className="flex min-h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--muted-foreground)] transition-colors hover:bg-[var(--slurp-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
-            aria-label={localizeUi("ui.slurp.messages.searchConversation", { defaultValue: "Search conversation" })}
-            title={localizeUi("ui.slurp.messages.searchConversation", { defaultValue: "Search conversation" })}
-          >
-            <Search size={15} aria-hidden="true" />
-          </button>
-        )}
+          {relationship && (
+            <HeaderIconButton
+              icon={Info}
+              label={localizeUi("ui.slurp.messages.relationshipToggle", { defaultValue: "Details" })}
+              onClick={() => setDrawerMode("details")}
+            />
+          )}
+          {threadId && (
+            <HeaderIconButton
+              icon={Brain}
+              label={localizeUi("ui.slurp.messages.memories", { defaultValue: "Memories" })}
+              onClick={() => setDrawerMode("memories")}
+            />
+          )}
+          {threadId && (
+            <HeaderIconButton
+              icon={BriefcaseBusiness}
+              label={localizeUi("ui.slurp.messages.commissionsTitle", { defaultValue: "Commissions" })}
+              badge={commissions.length}
+              onClick={() => setDrawerMode("commissions")}
+            />
+          )}
+          {threadId && (
+            <button
+              ref={searchTriggerRef}
+              type="button"
+              aria-expanded={messageSearchOpen}
+              onClick={() => setMessageSearchOpen((open) => !open)}
+              className="flex min-h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--muted-foreground)] transition-colors hover:bg-[var(--slurp-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+              aria-label={localizeUi("ui.slurp.messages.searchConversation", { defaultValue: "Search conversation" })}
+              title={localizeUi("ui.slurp.messages.searchConversation", { defaultValue: "Search conversation" })}
+            >
+              <Search size={15} aria-hidden="true" />
+            </button>
+          )}
         </div>
         {/* Four header icons do not fit beside a name on a phone, so they fold into one menu there. */}
         {(relationship || threadId) && (
@@ -1258,7 +1258,10 @@ function SlurpThreadView({
           >
             <MoreVertical size={18} aria-hidden="true" />
             {commissions.length > 0 && (
-              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[var(--noodle-accent)]" aria-hidden="true" />
+              <span
+                className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[var(--noodle-accent)]"
+                aria-hidden="true"
+              />
             )}
           </button>
         )}
@@ -1696,7 +1699,10 @@ function SlurpThreadView({
           >
             <ArrowDown size={18} aria-hidden="true" />
             {typing && (
-              <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-[var(--noodle-accent)] ring-2 ring-[var(--slurp-surface-raised)]" aria-hidden="true" />
+              <span
+                className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-[var(--noodle-accent)] ring-2 ring-[var(--slurp-surface-raised)]"
+                aria-hidden="true"
+              />
             )}
           </button>
         )}
