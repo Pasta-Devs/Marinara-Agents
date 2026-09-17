@@ -31,7 +31,7 @@ import { readSlurpAudienceTone } from "./slurp-tone.js";
 import { slurpCapTickEvents, slurpRhythmMultiplier } from "./slurp-tuning.js";
 import { slurpCreatorReach } from "./slurp-reach.js";
 import { selectSlurpAudienceCharacterIds, slurpAudienceCharacterFanTypeId } from "./slurp-audience-characters.js";
-import { slurpMembersActiveAt } from "./slurp-population.js";
+import { isSlurpPopulationMemberId, slurpMembersActiveAt } from "./slurp-population.js";
 import {
   slurpFanTypeCommissionBudget,
   slurpFanTypeForPinnedOrSeed,
@@ -259,22 +259,28 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
         ...new Map([...dailyNewcomers, ...returning, ...newcomers].map((member) => [member.id, member])).values(),
       ];
       const awake = slurpMembersActiveAt(pool, until.getUTCHours(), WORLD_AUDIENCE_POOL);
-      // Invited characters are always around. They are people the user chose by hand, not part of
-      // the generated crowd, so they are not thinned by the hourly rhythm — and `allowRandomUsers`
-      // does not hide them either, since that switch governs the six shipped ambient profiles.
-      // Account id to the Fan Type the user pinned, so the weighting below honours the choice
-      // instead of re-deriving a type from the id and contradicting it.
+      // Every invited character's account id to the Fan Type the user pinned, whether or not they
+      // act this tick. The funnel and the money read this: a character who subscribed on a day they
+      // were drawn must still be billed and still be able to lapse on a day they are not, or a
+      // subscription would run forever unpaid.
       const characterFanPinnedTypeIds = new Map(
-        selectSlurpAudienceCharacterIds(
-          invitedCharacters.map((entry) => entry.characterId),
-          settings.audienceCharacterLimit ?? 0,
-          `world:${localDayKey(until)}`,
-        ).flatMap((characterId) => {
-          const account = invitedCharacters.find((entry) => entry.characterId === characterId)?.account;
-          return account ? [[account.id, slurpAudienceCharacterFanTypeId(settings, characterId)] as const] : [];
-        }),
+        invitedCharacters.map(
+          (entry) => [entry.account.id, slurpAudienceCharacterFanTypeId(settings, entry.characterId)] as const,
+        ),
       );
-      const audience = [...awake.map((member) => member.id), ...ambient, ...characterFanPinnedTypeIds.keys()];
+      // Who acts. `audienceCharacterLimit` is a prompt-cost bound, so it decides who speaks this
+      // tick, not who holds a relationship. Invited characters are people the user chose by hand,
+      // so they are not thinned by the hourly rhythm — and `allowRandomUsers` does not hide them
+      // either, since that switch governs the six shipped ambient profiles.
+      const actingCharacterFanIds = selectSlurpAudienceCharacterIds(
+        invitedCharacters.map((entry) => entry.characterId),
+        settings.audienceCharacterLimit ?? 0,
+        `world:${localDayKey(until)}`,
+      ).flatMap((characterId) => {
+        const account = invitedCharacters.find((entry) => entry.characterId === characterId)?.account;
+        return account ? [account.id] : [];
+      });
+      const audience = [...awake.map((member) => member.id), ...ambient, ...actingCharacterFanIds];
       // What each actor's Fan Type makes them do. Ambient accounts have no row, so they read as the
       // fallback type rather than dropping out of the weighting entirely.
       const actorWeights = new Map(
@@ -433,6 +439,37 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       // already settles. Only a first subscribe and a lapse are notified — a renewal every week from
       // every subscriber is the flood the readable-handful rule exists to prevent.
       const ambientSet = new Set(ambientIds);
+      /**
+       * The Fan Type that decides whether this member pays, or null for somebody who never can.
+       *
+       * Three kinds of audience member reach this, and they differ in where the type comes from:
+       *
+       * - A generated member has a population row, so the row's own type is authoritative.
+       * - An invited character has no row, but the user chose it by hand. It pays on its pinned
+       *   type, or one derived from its id, and `ambientCanPay` does not gate it. Reading null here
+       *   was the bug that let an invited character follow a Creator but never subscribe.
+       * - An ambient profile has no row either, and is gated: switched off it reads as somebody with
+       *   no budget, which never subscribes and lets an already-paid one lapse.
+       *
+       * Anybody else — a stale tie whose member is gone — reads null and is skipped.
+       */
+      const payingFanTypeFor = async (memberId: string): Promise<SlurpFanType | null> => {
+        // Only a generated member has a row, so anybody else skips the read rather than paying for
+        // a query that can only return null.
+        if (isSlurpPopulationMemberId(memberId)) {
+          const member = await population.get(memberId).catch(() => null);
+          if (member) return slurpResolveFanType(settings.fanTypes, member);
+        }
+        if (characterFanPinnedTypeIds.has(memberId)) {
+          return slurpFanTypeForPinnedOrSeed(
+            settings.fanTypes,
+            characterFanPinnedTypeIds.get(memberId) ?? null,
+            memberId,
+          );
+        }
+        if (!ambientSet.has(memberId)) return null;
+        return tuning.funnel.ambientCanPay ? slurpPickFanType(settings.fanTypes, memberId) : null;
+      };
       /** Resolved once per distinct member per tick: the Fan Type is what decides money now. */
       const fanTypeFor = new Map<string, SlurpFanType | null>();
       for (const account of accounts) {
@@ -442,21 +479,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
           const paidThrough = tie.paidThroughAt ? Date.parse(tie.paidThroughAt) : Number.NaN;
           if (Number.isFinite(paidThrough) ? until.getTime() < paidThrough : tie.stage !== "follower") continue;
           if (!fanTypeFor.has(tie.memberId)) {
-            const member = await population.get(tie.memberId).catch(() => null);
-            fanTypeFor.set(
-              tie.memberId,
-              member
-                ? slurpResolveFanType(settings.fanTypes, member)
-                : !ambientSet.has(tie.memberId)
-                  ? null
-                  : // An ambient account has no population row. It is mapped onto a Fan Type by id,
-                    // the same weighted draw a member gets, rather than onto a tier the id happened
-                    // to hash to. Switched off, it reads as somebody with no budget, which never
-                    // subscribes and lets an already-paid one lapse.
-                    tuning.funnel.ambientCanPay
-                    ? slurpPickFanType(settings.fanTypes, tie.memberId)
-                    : null,
-            );
+            fanTypeFor.set(tie.memberId, await payingFanTypeFor(tie.memberId));
           }
           const fanType = fanTypeFor.get(tie.memberId);
           if (!fanType) continue;

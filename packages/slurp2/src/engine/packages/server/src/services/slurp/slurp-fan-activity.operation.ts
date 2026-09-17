@@ -26,6 +26,7 @@ import {
 } from "./slurp-fan-activity.service.js";
 import { tryNoodleOperation } from "./slurp-operation-lock.js";
 import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
+import { isSlurpPopulationMemberId } from "./slurp-population.js";
 import {
   NOODLER_FAN_IDENTITY_PREFIX,
   populationNoodlerFanIdentityProvider,
@@ -272,13 +273,19 @@ async function applyAcceptedActivities(
       // Same guard as `advanceAudienceTie`: a recovered plan written before the population existed
       // still carries `noodler-fan:` archetype ids, and a tie for one is an unresolvable follower.
       if (!activity.actorId.startsWith(NOODLER_FAN_IDENTITY_PREFIX)) {
+        // Ties are keyed by plain id, so an invited character earns a relationship here like anybody
+        // else in the crowd.
         await population
           .advanceTie(activity.actorId, activity.creatorId, {
             stage: "liker",
             interactions: 1,
           })
           .catch(() => undefined);
-        await population.touch(activity.actorId).catch(() => undefined);
+        // `lastActiveAt` lives on the population row, and only a generated member has one. An
+        // account standing in the crowd — ambient or invited character — has nothing to touch.
+        if (isSlurpPopulationMemberId(activity.actorId)) {
+          await population.touch(activity.actorId).catch(() => undefined);
+        }
       }
     }
     current = markNoodleFanActivityApplied(current, run.id, activity.id);
