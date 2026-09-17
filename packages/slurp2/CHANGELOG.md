@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.0.19 — 2026-09-17
+
+- Fixed Force reply now doing nothing when the hourly model budget was used up.
+
 ## 0.0.18 — 2026-09-16
 
 - Messages: Force reply now answers a queued reply at once.
