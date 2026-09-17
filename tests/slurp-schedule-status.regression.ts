@@ -4,7 +4,11 @@ import { stripTypeScriptTypes } from "node:module";
 import { join } from "node:path";
 import { runInNewContext } from "node:vm";
 
-import { resolveSlurpCreatorScheduleStatus } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-creator-schedule-context.js";
+import {
+  resolveSlurpCreatorAvailability,
+  resolveSlurpCreatorScheduleContext,
+  resolveSlurpCreatorScheduleStatus,
+} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-creator-schedule-context.js";
 import {
   reconcileNoodleRefreshSchedule,
   type PersistedNoodleRefreshSchedule,
@@ -39,6 +43,52 @@ async function main() {
       now,
     ),
     { state: "stale" },
+  );
+
+  // Writers store Monday at *local* midnight. East of UTC that instant is Sunday in UTC, which used
+  // to read as last week: a schedule regenerated a minute ago still warned "Needs attention".
+  for (const [zone, weekStart] of [
+    ["Europe/Berlin", "2026-09-06T22:00:00.000Z"],
+    ["Asia/Tokyo", "2026-09-06T15:00:00.000Z"],
+    ["America/Los_Angeles", "2026-09-07T07:00:00.000Z"],
+    ["Pacific/Auckland", "2026-09-06T11:00:00.000Z"],
+    ["Pacific/Kiritimati", "2026-09-06T10:00:00.000Z"],
+    ["UTC", "2026-09-07T00:00:00.000Z"],
+  ] as const) {
+    // Far-east zones are already on Wednesday at `now`, so assert only that this week still counts.
+    assert.notEqual(
+      (
+        await resolveSlurpCreatorScheduleStatus(
+          character({ conversationSchedule: week(weekStart, tuesdayBlocks) }),
+          characterSource,
+          zone,
+          now,
+        )
+      ).state,
+      "stale",
+      zone,
+    );
+  }
+  assert.deepEqual(
+    await resolveSlurpCreatorScheduleStatus(
+      character({ conversationSchedule: week("2026-08-30T22:00:00.000Z", tuesdayBlocks) }),
+      characterSource,
+      "Europe/Berlin",
+      now,
+    ),
+    { state: "stale" },
+  );
+
+  // Second line of defence: whatever makes a week look old (time zones, the Engine editor keeping the
+  // original weekStart on save), the routine keeps applying, as Engine chats use it.
+  const oldWeek = character({ conversationSchedule: week(lastMonday, tuesdayBlocks) });
+  assert.match(
+    await resolveSlurpCreatorScheduleContext(oldWeek, characterSource, "UTC", now),
+    /at the studio/u,
+  );
+  assert.equal(
+    (await resolveSlurpCreatorAvailability(oldWeek, characterSource, "UTC", now)).estimated,
+    undefined,
   );
 
   // ── Every other reason is reported as itself ────────────────────────────────
@@ -149,8 +199,8 @@ const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 assert.match(read("server/src/services/storage/slurp.storage.ts"), /scheduleStatus: publicAccount/u);
 const settings = slurp2BackstageSource();
-// Only the stale case earns a warning in the list. The others are stated on the Creator itself,
-// where somebody is already deciding what to do about them.
+// An older schedule keeps repeating, so it is a note on the Creator, never a "Needs attention" warning.
+assert.doesNotMatch(settings, /function needsAttention\([^)]*\) \{[^}]*scheduleStatus/u);
 assert.match(settings, /creator\.scheduleStatus\?\.state === "stale"/u);
 assert.match(settings, /ui\.slurp\.settings\.creators\.schedule\.\$\{selectedCreator\.scheduleStatus\.state\}/u);
 

@@ -410,6 +410,8 @@ export const slurpSettingsSchema = z.object({
   inlineAdsEra: z.enum(["present", "nineties", "cyberpunk", "retrofuture"]),
   inlineAdsWorldContext: z.string().trim().max(1200),
   inlineAdsImagesEnabled: z.boolean(),
+  /** Image connection for ad artwork. Null falls back to the Slurp image connection. */
+  inlineAdsImageConnectionId: z.string().nullable(),
   /** Lorebook whose entries feed the ad generator as world context. */
   inlineAdsLorebookId: z.string().trim().min(1).nullable(),
   /** Fingerprint of the synced lorebook, so a changed book can resync itself. */
@@ -1209,6 +1211,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   inlineAdsEra: "present",
   inlineAdsWorldContext: "",
   inlineAdsImagesEnabled: false,
+  inlineAdsImageConnectionId: null,
   walletEnabled: true,
   walletUnlockCost: SLURP_DEFAULT_ECONOMY.unlockCost,
   walletSubscriptionCost: SLURP_DEFAULT_ECONOMY.subscriptionCost,

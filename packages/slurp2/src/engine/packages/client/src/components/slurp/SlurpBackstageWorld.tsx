@@ -63,6 +63,7 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
     generateAdImage,
     adLorebooks,
     syncAdLorebook,
+    imageConnections,
     settings,
     selectedCreatorId,
     adsWorldDraft,
@@ -1127,6 +1128,25 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
               value={settings.inlineAdsImagesEnabled}
               onChange={(value) => update("inlineAdsImagesEnabled", value)}
             />
+            <Field
+              settingKey="inlineAdsImageConnectionId"
+              label={t("ui.slurp.settings.ads.imageConnection")}
+              detail={t("ui.slurp.settings.ads.imageConnectionDetail")}
+            >
+              <select
+                value={settings.inlineAdsImageConnectionId ?? ""}
+                disabled={updateSettings.isPending || connectionsQuery.isLoading}
+                onChange={(event) => void update("inlineAdsImageConnectionId", event.target.value || null)}
+                className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+              >
+                <option value="">{t("ui.slurp.settings.ads.imageConnectionDefault")}</option>
+                {imageConnections.map((connection) => (
+                  <option key={connection.id} value={connection.id}>
+                    {connection.name ?? connection.model ?? connection.id}
+                  </option>
+                ))}
+              </select>
+            </Field>
             <Field
               settingKey="inlineAdsLorebookId"
               label={t("ui.slurp.settings.ads.lorebook")}

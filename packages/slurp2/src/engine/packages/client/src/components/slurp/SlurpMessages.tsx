@@ -1,4 +1,5 @@
 import {
+  ArrowDown,
   ArrowLeft,
   Activity,
   Brain,
@@ -13,6 +14,7 @@ import {
   Lock,
   MessageCircle,
   Megaphone,
+  MoreVertical,
   Palette,
   Pencil,
   Plus,
@@ -26,6 +28,7 @@ import {
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
+import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
 import { getApiErrorMessage } from "../../lib/api-client";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { cn } from "../../lib/utils";
@@ -400,6 +403,7 @@ export function SlurpMessagesView({
           creatorAccountId={composeWith}
           personaId={personaId}
           ownedCreatorAccountIds={ownedCreatorAccountIds}
+          unreadAtOpen={openThread ? { viewer: openThread.viewerUnread, creator: openThread.creatorUnread } : null}
           onBack={closeConversation}
           onOpenProfile={onOpenProfile}
           desktopSplit
@@ -506,6 +510,7 @@ function SlurpThreadView({
   creatorAccountId,
   personaId,
   ownedCreatorAccountIds,
+  unreadAtOpen = null,
   onBack,
   onOpenProfile,
   desktopSplit = false,
@@ -514,6 +519,8 @@ function SlurpThreadView({
   creatorAccountId: string | null;
   personaId: string | null;
   ownedCreatorAccountIds: string[];
+  /** Unread counts from the inbox row, read before opening marks the thread as read. */
+  unreadAtOpen?: { viewer: number; creator: number } | null;
   onBack: () => void;
   onOpenProfile: (accountId: string) => void;
   desktopSplit?: boolean;
@@ -572,6 +579,11 @@ function SlurpThreadView({
   const drawerRef = useRef<HTMLDialogElement | null>(null);
   const drawerTriggerRef = useRef<HTMLButtonElement | null>(null);
   const searchTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const headerMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const headerMenuRef = useRef<HTMLDivElement | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const [awayFromBottom, setAwayFromBottom] = useState(false);
   const messageSearchInputRef = useRef<HTMLInputElement | null>(null);
   const thread = threadQuery.data?.thread ?? null;
   const activeConversationRef = useRef({ personaId, threadId });
@@ -591,7 +603,8 @@ function SlurpThreadView({
   const counterpart = threadQuery.data?.counterpart ?? creator;
   const targetCreatorAccountId = thread?.creatorAccountId ?? creator?.id ?? creatorAccountId;
   const ownsCreator = Boolean(targetCreatorAccountId && ownedCreatorAccountIds.includes(targetCreatorAccountId));
-  const draftStorageKey = `slurp2-message-draft:${personaId ?? "none"}:${targetCreatorAccountId ?? "none"}`;
+  // A Creator answers many fans from one account, so on that side the draft belongs to the thread.
+  const draftStorageKey = `slurp2-message-draft:${personaId ?? "none"}:${targetCreatorAccountId ?? "none"}${ownsCreator && threadId ? `:${threadId}` : ""}`;
   const messaging = threadQuery.data?.messaging;
   const commissions = useMemo(() => threadQuery.data?.commissions ?? [], [threadQuery.data?.commissions]);
   const relationship = "relationship" in (threadQuery.data ?? {}) ? threadQuery.data?.relationship : undefined;
@@ -621,6 +634,23 @@ function SlurpThreadView({
     (latest, message) => ((ownsCreator ? message.role === "creator" : message.role === "viewer") ? message.id : latest),
     null,
   );
+  // Captured once per thread: the inbox count drops to zero as soon as opening marks it read, and
+  // the marker must stay on the same message while new replies arrive below it.
+  const unreadMarkerRef = useRef<{ threadId: string | null; count: number; messageId: string | null | undefined }>({
+    threadId: null,
+    count: 0,
+    messageId: null,
+  });
+  if (unreadMarkerRef.current.threadId !== threadId) {
+    const count = unreadAtOpen ? (ownsCreator ? unreadAtOpen.creator : unreadAtOpen.viewer) : 0;
+    unreadMarkerRef.current = { threadId, count, messageId: count > 0 ? undefined : null };
+  }
+  if (unreadMarkerRef.current.messageId === undefined && messages.length > 0) {
+    const incoming = messages.filter((message) => message.role !== (ownsCreator ? "creator" : "viewer"));
+    unreadMarkerRef.current.messageId =
+      incoming[Math.max(0, incoming.length - unreadMarkerRef.current.count)]?.id ?? null;
+  }
+  const firstUnreadMessageId = unreadMarkerRef.current.messageId ?? null;
   const timeline = [
     ...messages
       .filter((message) => typeof message.metadata.commissionId !== "string")
@@ -725,8 +755,8 @@ function SlurpThreadView({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const saved = window.localStorage.getItem(draftStorageKey);
-    if (saved) setDraft(saved);
+    // Clear on a key with nothing saved, or the previous conversation's draft follows you here.
+    setDraft(window.localStorage.getItem(draftStorageKey) ?? "");
   }, [draftStorageKey]);
 
   useEffect(() => {
@@ -831,8 +861,10 @@ function SlurpThreadView({
     const container = messageScrollRef.current;
     if (!container || landedAtBottomRef.current || visibleTimeline.length === 0) return;
     landedAtBottomRef.current = true;
-    container.scrollTop = container.scrollHeight;
-  }, [visibleTimeline.length]);
+    const marker = firstUnreadMessageId ? document.getElementById("slurp-unread-marker") : null;
+    if (marker) marker.scrollIntoView({ block: "start" });
+    else container.scrollTop = container.scrollHeight;
+  }, [firstUnreadMessageId, visibleTimeline.length]);
 
   /**
    * Keep the viewport on the message it was on when older ones mount above it.
@@ -947,6 +979,39 @@ function SlurpThreadView({
     setHiddenReplyIds(new Set());
   };
 
+  // The composer grows with its text up to a cap, and shrinks back once the draft is sent.
+  useLayoutEffect(() => {
+    const textarea = composerRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
+  }, [draft]);
+
+  useEffect(() => {
+    if (!headerMenuOpen) return;
+    const close = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (headerMenuRef.current?.contains(target) || headerMenuTriggerRef.current?.contains(target)) return;
+      setHeaderMenuOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setHeaderMenuOpen(false);
+      headerMenuTriggerRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [headerMenuOpen]);
+
+  const scrollToLatest = () => {
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    bottomRef.current?.scrollIntoView({ block: "end", behavior: reduceMotion ? "auto" : "smooth" });
+  };
+
   const submit = async (force = false) => {
     const content = draft.trim();
     if (!content || !personaId || !targetCreatorAccountId || busy) return;
@@ -977,6 +1042,8 @@ function SlurpThreadView({
     // Show the message and the typing indicator at once. The send route waits for the model
     // before it answers, so the chat used to sit empty for the whole generation.
     setPending({ content, id: null });
+    // Sending always lands on your own message, even when you had scrolled up to reread.
+    requestAnimationFrame(scrollToLatest);
     setReplyStatus(null);
     if (!ownsCreator) setTyping(true);
     const requestId =
@@ -1134,9 +1201,9 @@ function SlurpThreadView({
         </button>
         {/* Four icons of the same size and weight, because none of them outranks the others. The
             details button was the odd one out as a word, and read as the only real control. */}
+        <div className="ml-auto hidden shrink-0 items-center sm:flex">
         {relationship && (
           <HeaderIconButton
-            className="ml-auto"
             icon={Info}
             label={localizeUi("ui.slurp.messages.relationshipToggle", { defaultValue: "Details" })}
             onClick={() => setDrawerMode("details")}
@@ -1169,6 +1236,86 @@ function SlurpThreadView({
           >
             <Search size={15} aria-hidden="true" />
           </button>
+        )}
+        </div>
+        {/* Four header icons do not fit beside a name on a phone, so they fold into one menu there. */}
+        {(relationship || threadId) && (
+          <button
+            ref={headerMenuTriggerRef}
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={headerMenuOpen}
+            onClick={() => setHeaderMenuOpen((open) => !open)}
+            aria-label={localizeUi("ui.slurp.messages.moreActions", { defaultValue: "More actions" })}
+            title={localizeUi("ui.slurp.messages.moreActions", { defaultValue: "More actions" })}
+            className={cn(
+              "relative ml-auto flex min-h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--muted-foreground)] transition-[background-color,transform] hover:bg-[var(--slurp-surface)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100 sm:hidden",
+              headerMenuOpen && "bg-[var(--slurp-surface)] text-[var(--foreground)]",
+            )}
+          >
+            <MoreVertical size={18} aria-hidden="true" />
+            {commissions.length > 0 && (
+              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[var(--noodle-accent)]" aria-hidden="true" />
+            )}
+          </button>
+        )}
+        {headerMenuOpen && (
+          <NoodleAnchoredPopover anchorRef={headerMenuTriggerRef}>
+            <div
+              ref={headerMenuRef}
+              role="menu"
+              className="ms-auto w-56 rounded-xl bg-[var(--slurp-surface-raised)] p-1 text-[var(--foreground)] shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--noodle-divider)]"
+            >
+              {[
+                relationship && {
+                  key: "details",
+                  icon: Info,
+                  label: localizeUi("ui.slurp.messages.relationshipToggle", { defaultValue: "Details" }),
+                  run: () => setDrawerMode("details"),
+                },
+                threadId && {
+                  key: "memories",
+                  icon: Brain,
+                  label: localizeUi("ui.slurp.messages.memories", { defaultValue: "Memories" }),
+                  run: () => setDrawerMode("memories"),
+                },
+                threadId && {
+                  key: "commissions",
+                  icon: BriefcaseBusiness,
+                  label: localizeUi("ui.slurp.messages.commissionsTitle", { defaultValue: "Commissions" }),
+                  badge: commissions.length,
+                  run: () => setDrawerMode("commissions"),
+                },
+                threadId && {
+                  key: "search",
+                  icon: Search,
+                  label: localizeUi("ui.slurp.messages.searchConversation", { defaultValue: "Search conversation" }),
+                  run: () => setMessageSearchOpen(true),
+                },
+              ]
+                .filter((item): item is Exclude<typeof item, "" | null | undefined | false> => Boolean(item))
+                .map(({ key, icon: Icon, label, run, ...item }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setHeaderMenuOpen(false);
+                      run();
+                    }}
+                    className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold transition-colors hover:bg-[var(--slurp-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)]"
+                  >
+                    <Icon size={16} className="shrink-0 text-[var(--muted-foreground)]" aria-hidden="true" />
+                    <span className="min-w-0 flex-1 truncate">{label}</span>
+                    {"badge" in item && (item.badge ?? 0) > 0 && (
+                      <span className="min-w-5 rounded-full bg-[var(--noodle-accent)] px-1.5 text-center text-[0.65rem] font-black leading-5 text-zinc-950">
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                ))}
+            </div>
+          </NoodleAnchoredPopover>
         )}
       </div>
 
@@ -1338,8 +1485,10 @@ function SlurpThreadView({
       <div
         ref={messageScrollRef}
         onScroll={(event) => {
+          const container = event.currentTarget;
+          setAwayFromBottom(container.scrollHeight - container.scrollTop - container.clientHeight > 240);
           // Reaching the top is the same request as pressing the button, so it does the same thing.
-          if ((olderCount > 0 || nextOlderCursor) && event.currentTarget.scrollTop < 64) void showOlder();
+          if ((olderCount > 0 || nextOlderCursor) && container.scrollTop < 64) void showOlder();
         }}
         className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-4"
       >
@@ -1396,6 +1545,17 @@ function SlurpThreadView({
               >
                 {date !== previousDate && (
                   <div className="self-center py-2 text-[0.65rem] font-bold text-[var(--muted-foreground)]">{date}</div>
+                )}
+                {entry.kind === "message" && entry.message.id === firstUnreadMessageId && (
+                  <div
+                    id="slurp-unread-marker"
+                    role="separator"
+                    className="flex scroll-mt-16 items-center gap-3 py-1 text-[0.68rem] font-bold text-[var(--noodle-accent)]"
+                  >
+                    <span className="h-px flex-1 bg-[var(--noodle-accent)]/40" aria-hidden="true" />
+                    {localizeUi("ui.slurp.messages.newMessages", { defaultValue: "New messages" })}
+                    <span className="h-px flex-1 bg-[var(--noodle-accent)]/40" aria-hidden="true" />
+                  </div>
                 )}
                 {entry.kind === "message" ? (
                   <MessageBubble
@@ -1522,7 +1682,21 @@ function SlurpThreadView({
         </p>
       )}
 
-      <div className="shrink-0 border-t border-[var(--noodle-divider)] p-2">
+      <div className="relative shrink-0 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5">
+        {awayFromBottom && (
+          <button
+            type="button"
+            onClick={scrollToLatest}
+            aria-label={localizeUi("ui.slurp.messages.scrollToLatest", { defaultValue: "Scroll to latest message" })}
+            title={localizeUi("ui.slurp.messages.scrollToLatest", { defaultValue: "Scroll to latest message" })}
+            className="absolute bottom-full left-1/2 z-10 mb-2 flex h-10 w-10 -translate-x-1/2 items-center justify-center rounded-full bg-[var(--slurp-surface-raised)] text-[var(--foreground)] shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,transform] hover:bg-[var(--slurp-surface)] active:scale-[0.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
+          >
+            <ArrowDown size={18} aria-hidden="true" />
+            {typing && (
+              <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-[var(--noodle-accent)] ring-2 ring-[var(--slurp-surface-raised)]" aria-hidden="true" />
+            )}
+          </button>
+        )}
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-2">
           {toolsOpen && (
             <div className="flex flex-col gap-2 rounded-2xl bg-[var(--slurp-surface-raised)] p-3 ring-1 ring-inset ring-[var(--noodle-divider)] shadow-[var(--slurp-shadow-floating)]">
@@ -1831,7 +2005,11 @@ function SlurpThreadView({
             </div>
           )}
           <form
-            className="flex items-end gap-2"
+            className="flex items-end gap-0.5 rounded-2xl bg-[var(--slurp-surface)] p-1 shadow-sm ring-1 ring-inset ring-[var(--noodle-divider)] transition-shadow focus-within:ring-2 focus-within:ring-[var(--noodle-accent)]/55 motion-reduce:transition-none"
+            onClick={(event) => {
+              // A tap on the bar's padding means "write here", as in the Engine chat box.
+              if (event.target === event.currentTarget) composerRef.current?.focus();
+            }}
             onSubmit={(event) => {
               event.preventDefault();
               void submit();
@@ -1849,8 +2027,8 @@ function SlurpThreadView({
               aria-expanded={toolsOpen}
               aria-label={localizeUi("ui.slurp.messages.toggleTools", { defaultValue: "Message tools" })}
               className={cn(
-                "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--slurp-surface)] text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100",
-                toolsOpen && "bg-[var(--noodle-accent)]/15 ring-[var(--noodle-accent)]/45",
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[var(--muted-foreground)] transition-[background-color,color,transform] hover:bg-[var(--noodle-accent)]/10 hover:text-[var(--noodle-accent)] active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100",
+                toolsOpen && "bg-[var(--noodle-accent)]/15 text-[var(--noodle-accent)]",
               )}
             >
               <Plus
@@ -1873,6 +2051,7 @@ function SlurpThreadView({
               {localizeUi("ui.slurp.messages.composerLabel", { defaultValue: "Write a message" })}
             </label>
             <textarea
+              ref={composerRef}
               id="slurp-message-draft"
               value={draft}
               rows={1}
@@ -1886,15 +2065,20 @@ function SlurpThreadView({
                 }
               }}
               placeholder={localizeUi("ui.slurp.messages.composerPlaceholder", { defaultValue: "Write a message…" })}
-              className="max-h-40 min-h-11 w-full flex-1 resize-y rounded-xl bg-[var(--slurp-surface)] px-3 py-2.5 text-base outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--noodle-accent)] sm:text-sm"
+              className="max-h-40 min-h-10 min-w-0 flex-1 resize-none bg-transparent px-1.5 py-2 text-base leading-6 outline-none placeholder:text-[var(--muted-foreground)] sm:text-sm sm:leading-6"
             />
             <button
               type="submit"
               disabled={busy || !draft.trim() || !personaId || !targetCreatorAccountId}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950 transition-[opacity,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-40 motion-reduce:transition-none motion-reduce:active:scale-100"
+              className={cn(
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-[background-color,color,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none",
+                draft.trim()
+                  ? "bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950 active:scale-90 motion-reduce:active:scale-100 disabled:opacity-50"
+                  : "text-[var(--muted-foreground)] opacity-50",
+              )}
               aria-label={localizeUi("ui.slurp.messages.send", { defaultValue: "Send" })}
             >
-              <Send size={16} className="!text-zinc-950" />
+              <Send size={16} aria-hidden="true" />
             </button>
           </form>
         </div>
@@ -2104,13 +2288,13 @@ function SlurpConnectionSwitcher({
         aria-label={`Text connection: ${label}`}
         title={`Text connection: ${label}`}
         className={cn(
-          "inline-flex min-h-11 max-w-36 items-center gap-1.5 rounded-xl px-2 text-[0.68rem] text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors hover:bg-[var(--slurp-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50",
-          open && "bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)] ring-[var(--noodle-accent)]/45",
+          "inline-flex h-10 min-w-10 max-w-36 items-center justify-center gap-1 rounded-xl px-2 text-[0.68rem] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--noodle-accent)]/10 hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50",
+          open && "bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]",
         )}
       >
-        <Link size={14} aria-hidden="true" />
-        <span className="truncate">{label}</span>
-        <ChevronDown size={13} aria-hidden="true" />
+        <Link size={15} className="shrink-0" aria-hidden="true" />
+        <span className="hidden truncate sm:inline">{label}</span>
+        <ChevronDown size={12} className="hidden shrink-0 sm:block" aria-hidden="true" />
       </button>
       {open && (
         <div

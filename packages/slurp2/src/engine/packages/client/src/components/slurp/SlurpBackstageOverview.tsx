@@ -95,14 +95,6 @@ export function SlurpBackstageOverview(page: SlurpBackstagePageProps) {
         target: "creators",
       });
     }
-    if (creator.scheduleStatus?.state === "stale") {
-      attention.push({
-        id: `schedule-${creator.id}`,
-        label: `${creator.displayName}: ${t("ui.slurp.settings.creators.scheduleStale")}`,
-        section: "creators",
-        target: "creators",
-      });
-    }
   }
 
   return (

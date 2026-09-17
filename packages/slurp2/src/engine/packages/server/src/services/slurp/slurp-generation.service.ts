@@ -127,6 +127,8 @@ export type NoodlerPostGenerationInput = {
   generatedAt?: Date;
   /** Scheduled publication time. Omitted for posts generated for immediate publication. */
   publicationTime?: Date;
+  /** False keeps the Story rotation out: "Create posts now" asks for feed posts, not Stories. */
+  allowStory?: boolean;
 };
 
 const NOODLER_POST_MAX_TOKENS = 2048;
@@ -714,7 +716,8 @@ export async function generateNoodlerPost(
   // A Story is a picture with a line under it, so a run that produces no image publishes an
   // ordinary post instead. The flag is only honoured on the path that commits an image below.
   // A Story the player asked for outranks the rotation, which never fires on a directed post.
-  const storyVariation = (variation?.story === true || input.request.postType === "story") && imagesEnabled;
+  const storyVariation =
+    ((input.allowStory !== false && variation?.story === true) || input.request.postType === "story") && imagesEnabled;
 
   // Identity protection applies to the image prompt too, not only post text. The arc's chapter line
   // joins the prompt before protection, so a chapter naming a real place is redacted the same way.
