@@ -16,11 +16,13 @@ import { noodleGeneratedNoodlerPostSchema } from "@marinara-engine/shared";
 import { noodleResponseFormat } from "./slurp-response-format.js";
 import { noodlerSourceText } from "./slurp-prompt-safety.js";
 import { NOODLER_UNTRUSTED_CONTENT_INSTRUCTION } from "./slurp-generation.service.js";
+import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "./slurp-prompt-blocks.js";
 
 export type InvitedNoodlePostDraftRequest = {
   guidance?: string;
   connectionId?: string;
   debugMode?: boolean;
+  promptBlocks?: SlurpPromptBlockOverrides;
 };
 
 export type InvitedNoodlePostDraft = {
@@ -67,13 +69,32 @@ export async function generateInvitedNoodlePostDraft(
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: [
-        "Write exactly one public Slurp post as the supplied character.",
-        "Keep it like a real social post: usually 40-280 characters. Use longer text only when the direction explicitly asks for long-form writing.",
-        NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
-        "Return one JSON object with title, content, and imagePrompt set to null.",
-        "Return JSON only. Do not create interactions or other accounts.",
-      ].join("\n"),
+      content: composeSlurpPromptBlocks(
+        "invitedPost",
+        [
+          { id: "task", kind: "editable", text: "Write exactly one public Slurp post as the supplied character." },
+          {
+            id: "safety",
+            kind: "required",
+            text: [
+              NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
+              "Return one JSON object with title, content, and imagePrompt set to null.",
+              "Return JSON only. Do not create interactions or other accounts.",
+            ].join("\n"),
+          },
+          {
+            id: "style",
+            kind: "editable",
+            text: "Keep it like a real social post: usually 40-280 characters. Use longer text only when the direction explicitly asks for long-form writing.",
+          },
+          {
+            id: "output",
+            kind: "required",
+            text: "Return one JSON object with title, content, and imagePrompt set to null.",
+          },
+        ],
+        request.promptBlocks,
+      ),
     },
     {
       role: "user",

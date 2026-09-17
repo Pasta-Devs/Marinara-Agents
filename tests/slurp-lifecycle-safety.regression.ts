@@ -290,6 +290,7 @@ assert.match(
   /sticky top-0[\s\S]*?md:hidden[\s\S]*?<select[\s\S]*?settingsSections\.map/u,
   "narrow settings must expose a compact sticky destination picker",
 );
+assert.match(settings, /max-w-none basis-full md:max-w-xl/u, "narrow settings must give search a full row");
 assert.match(settings, /aria-live="polite"/u, "settings saves must announce their state");
 assert.match(settings, /selectedCreatorId/u, "creator settings must keep an explicit master-detail selection");
 assert.match(settings, /data-slurp-settings-layout/u, "settings must expose its responsive layout boundary");

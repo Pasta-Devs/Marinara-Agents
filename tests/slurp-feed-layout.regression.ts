@@ -119,22 +119,22 @@ assert.match(
   /desktopSidebar=\{\s*<SlurpSettingsSidebar navigation=\{navigation\} onNavigate=\{onNavigate\} onExit=\{exitToCreatorHub\}/u,
   "Settings must supply the desktop sidebar with a way out",
 );
-assert.match(
-  settings,
-  /md:flex md:flex-col @min-\[1024px\]:hidden/u,
-  "The in-page desktop nav must yield to the shell",
-);
+assert.match(home, /desktopSidebar/u, "The shell must own the desktop settings navigation");
 
-// Mobile uses one compact destination picker instead of a long horizontal tab strip.
+// Mobile uses one compact destination picker instead of the quick tabs, and search gets its own row.
 const row = settings.slice(
   settings.indexOf("function SlurpSettingsSectionRow("),
-  settings.indexOf("export function SlurpSettings("),
+  settings.indexOf("function useSlurpBackstageController("),
 );
 assert.match(row, /<select/u, "The active destination must be exposed as a native picker");
-assert.match(row, /value=\{`\$\{section\}:/u, "The picker must show the current destination");
 assert.match(row, /<optgroup/u, "The picker must reach a page, not only its section");
-assert.match(row, /min-h-11/u, "The destination picker must retain a 44px touch target");
-assert.doesNotMatch(row, /overflow-x-auto/u, "Mobile must not restore the long horizontal tab strip");
+assert.match(row, /md:hidden/u, "The destination picker is mobile only");
+assert.match(settings, /<SlurpBackstageSubnav\s+className="hidden md:flex"/u, "Mobile must hide the quick tabs");
+assert.match(
+  settings,
+  /className="max-w-none basis-full md:max-w-xl md:basis-auto"/u,
+  "Mobile search must use a full row",
+);
 
 const card = readFileSync(join(componentsDir, "SlurpCreatorProfileCard.tsx"), "utf8");
 

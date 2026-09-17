@@ -668,6 +668,8 @@ export function SlurpCreatorPostCard({
       : null;
   // Debug view of what the picture was made from, and what the vision model said it shows.
   const [imageContextOpen, setImageContextOpen] = useState(false);
+  // null while closed; a string while the image prompt is being rewritten for a redraw.
+  const [promptDraft, setPromptDraft] = useState<string | null>(null);
   const imageDescription =
     typeof post.metadata?.imageDescription === "string" ? post.metadata.imageDescription.trim() : "";
   const hasImageContext = Boolean(post.imageUrl && (post.imagePrompt?.trim() || imageDescription));
@@ -1279,12 +1281,12 @@ export function SlurpCreatorPostCard({
                       <Pencil size={14} />
                       {localizeUi("ui.noodle.noodlepostcard.edit")}
                     </button>
-                    {ctx.generatePostImage && !post.imageUrl && (
+                    {ctx.generatePostImage && (
                       <button
                         type="button"
                         onClick={() => {
                           ctx.setPostMenuId(null);
-                          ctx.generatePostImage?.(post);
+                          setPromptDraft(post.imagePrompt ?? "");
                         }}
                         disabled={imageGenerationPending}
                         className="flex min-h-10 w-full items-center gap-2 px-3 text-start transition-colors hover:bg-[var(--accent)] disabled:opacity-50"
@@ -1293,7 +1295,9 @@ export function SlurpCreatorPostCard({
                           size={14}
                           className={imageGenerationPending ? "animate-spin motion-reduce:animate-none" : ""}
                         />
-                        {localizeUi("ui.slurp.image.generate")}
+                        {post.imageUrl
+                          ? localizeUi("ui.slurp.image.regenerate", { defaultValue: "Regenerate image" })
+                          : localizeUi("ui.slurp.image.generate")}
                       </button>
                     )}
                     <button
@@ -1416,10 +1420,10 @@ export function SlurpCreatorPostCard({
               {localizeUi("ui.noodle.noodlepostcard.imagePrompt")}
             </span>
             {post.imagePrompt}
-            {ctx.postManagement && ctx.generatePostImage && (
+            {ctx.postManagement && ctx.generatePostImage && promptDraft === null && (
               <button
                 type="button"
-                onClick={() => ctx.generatePostImage?.(post)}
+                onClick={() => setPromptDraft(post.imagePrompt ?? "")}
                 disabled={imageGenerationPending}
                 className="absolute right-2 top-2 flex h-10 w-10 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/15 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"
                 title={localizeUi("ui.slurp.image.generate")}
@@ -1434,6 +1438,42 @@ export function SlurpCreatorPostCard({
             )}
           </div>
         ) : null}
+        {promptDraft !== null && (
+          <div className="mt-3 rounded-xl border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/10 p-3 text-xs leading-5">
+            <span className="mb-1 flex items-center gap-1.5 font-semibold text-[var(--noodle-accent)]">
+              <ImageIcon size={13} aria-hidden="true" />
+              {localizeUi("ui.noodle.noodlepostcard.imagePrompt")}
+            </span>
+            <textarea
+              value={promptDraft}
+              onChange={(event) => setPromptDraft(event.target.value)}
+              rows={4}
+              maxLength={2000}
+              aria-label={localizeUi("ui.noodle.noodlepostcard.imagePrompt")}
+              className="w-full rounded-lg border border-[var(--noodle-divider)] bg-[var(--background)] p-2 text-xs leading-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+            />
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                disabled={!promptDraft.trim() || imageGenerationPending}
+                onClick={() => {
+                  ctx.generatePostImage?.(post, promptDraft.trim());
+                  setPromptDraft(null);
+                }}
+                className="min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 font-semibold text-zinc-950 disabled:opacity-50"
+              >
+                {localizeUi("ui.slurp.image.generate")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPromptDraft(null)}
+                className="min-h-9 rounded-lg px-3 font-semibold text-[var(--muted-foreground)] hover:bg-[var(--accent)]"
+              >
+                {localizeUi("ui.slurp.actions.cancel")}
+              </button>
+            </div>
+          </div>
+        )}
         {imageContextOpen && hasImageContext && (
           <div className="mt-3 space-y-2 rounded-xl border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/10 p-3 text-xs leading-5">
             {post.imagePrompt?.trim() && (

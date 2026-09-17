@@ -71,6 +71,7 @@ export async function generateGarnishAdImage(
           prompt: rawPrompt,
           interpretationInstruction: settings.imagePromptInterpretation,
           instructions: imagePromptInstructions,
+          promptBlocks: settings.promptBlocks,
         })
       : null,
     rawPrompt,

@@ -1,5 +1,24 @@
 # Slurp Remastered release notes
 
+## 0.0.19 — 2026-09-17
+
+- Fixed Force reply now doing nothing when the hourly model budget was used up.
+
+## 0.0.18 — 2026-09-16
+
+- Messages: Force reply now answers a queued reply at once.
+- Fixed Creators sometimes never answering a message.
+- Posts are no longer cut off. New settings: Longest post, Show more after 300 characters.
+- New Backstage section Prompts, with a prompt block builder.
+- New image prompt style: Danbooru tags (experimental).
+- Image prompts put style tags first, then the Creator's appearance.
+- Edit the image prompt when you regenerate an image or retry a failed one.
+- Automation -> Manual actions: run posts, audience activity and schedules yourself.
+- Like, comment, vote and subscribe without a Creator profile.
+- Mobile Backstage: no section tabs, full-width search.
+- Fixed Prompts reset, turned-off prompt blocks, and Slurp loading after an Engine restart.
+- Creators no longer mention the time or weekday in every post.
+
 ## 0.0.17 — 2026-09-16
 
 - Settings is now Backstage: Overview, Creators, Features, Automation, and Maintenance, with setting search and live previews.

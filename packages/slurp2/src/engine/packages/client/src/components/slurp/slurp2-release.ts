@@ -2,7 +2,7 @@
 // client has no route that serves CHANGELOG.md. So the notes are mirrored here, and
 // `tests/slurp2-release-notes.regression.ts` fails the build if this file drifts from
 // `packages/slurp2/CHANGELOG.md` or from the version in `manifest.json`.
-export const SLURP2_VERSION = "0.0.17";
+export const SLURP2_VERSION = "0.0.19";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -12,6 +12,29 @@ export interface Slurp2ReleaseEntry {
 
 /** Newest first, same order as CHANGELOG.md. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.0.19",
+    date: "2026-09-17",
+    notes: ["Fixed Force reply now doing nothing when the hourly model budget was used up."],
+  },
+  {
+    version: "0.0.18",
+    date: "2026-09-16",
+    notes: [
+      "Messages: Force reply now answers a queued reply at once.",
+      "Fixed Creators sometimes never answering a message.",
+      "Posts are no longer cut off. New settings: Longest post, Show more after 300 characters.",
+      "New Backstage section Prompts, with a prompt block builder.",
+      "New image prompt style: Danbooru tags (experimental).",
+      "Image prompts put style tags first, then the Creator's appearance.",
+      "Edit the image prompt when you regenerate an image or retry a failed one.",
+      "Automation -> Manual actions: run posts, audience activity and schedules yourself.",
+      "Like, comment, vote and subscribe without a Creator profile.",
+      "Mobile Backstage: no section tabs, full-width search.",
+      "Fixed Prompts reset, turned-off prompt blocks, and Slurp loading after an Engine restart.",
+      "Creators no longer mention the time or weekday in every post.",
+    ],
+  },
   {
     version: "0.0.17",
     date: "2026-09-16",

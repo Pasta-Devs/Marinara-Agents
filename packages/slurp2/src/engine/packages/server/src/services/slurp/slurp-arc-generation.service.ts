@@ -21,6 +21,7 @@ import { SLURP_MODIFIER_KINDS } from "./slurp-creator-state.js";
 import { modelAnswerForCorrection, requireModelAnswer } from "./slurp-model-answer.js";
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { claimSlurpModelBudget, slurpModelWorkerAllows } from "./slurp-model-worker.js";
+import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "./slurp-prompt-blocks.js";
 
 export class SlurpArcGenerationFailure extends Error {
   constructor(
@@ -42,18 +43,61 @@ export function buildSlurpArcGenerationMessages(input: {
   pastArcTitles: readonly string[];
   /** A crossover's other creators. */
   partners?: readonly { name: string; stagePersonality: string; tags: readonly string[]; collab?: string }[];
+  promptBlocks?: SlurpPromptBlockOverrides;
 }): ChatMessage[] {
   return [
     {
       role: "system",
-      content: [
-        "Invent one life arc for a Slurp creator: something that happens in their own life over days or weeks and that they keep posting about.",
-        'Return JSON only: {"title": string, "direction": string, "tone": string, "chapters": [{"label": string, "minDays": number, "maxDays": number}], "durationDays": number}.',
-        "title is a short name. direction says what connects the posts and where it goes. tone is one or two words; any tone fits.",
-        "chapters are 0 to 12 short beats in order, each lasting minDays to maxDays (0-90). Use an empty list for an open-ended arc, and then set durationDays (1-365).",
-        'At most one chapter in the whole arc may add "choice": {"question": string, "options": [{"label": string, "chapters": [{"label": string, "minDays": number, "maxDays": number}]}]}. Fans vote on it at the end of that chapter. Give 2 to 4 distinct options; each option\'s 0 to 4 chapters are inserted after that chapter if it wins. Leave choice out when the arc does not need one.',
-        `Any chapter may add "mood": one of ${SLURP_MODIFIER_KINDS.join(", ")} (how the creator feels when it starts), and "effects": {"growth": number, "earnings": number, "loyalty": number} as whole percent changes from -50 to 50 while it runs. Leave both out when a chapter changes nothing.`,
-      ].join("\n"),
+      content: composeSlurpPromptBlocks(
+        "arc",
+        [
+          {
+            id: "task",
+            kind: "editable",
+            text: "Invent one life arc for a Slurp creator: something that happens in their own life over days or weeks and that they keep posting about.",
+          },
+          {
+            id: "arcRules",
+            kind: "editable",
+            text: [
+              'Return JSON only: {"title": string, "direction": string, "tone": string, "chapters": [{"label": string, "minDays": number, "maxDays": number}], "durationDays": number}.',
+              "title is a short name. direction says what connects the posts and where it goes. tone is one or two words; any tone fits.",
+              "chapters are 0 to 12 short beats in order, each lasting minDays to maxDays (0-90). Use an empty list for an open-ended arc, and then set durationDays (1-365).",
+              'At most one chapter in the whole arc may add "choice": {"question": string, "options": [{"label": string, "chapters": [{"label": string, "minDays": number, "maxDays": number}]}]}. Fans vote on it at the end of that chapter. Give 2 to 4 distinct options; each option\'s 0 to 4 chapters are inserted after that chapter if it wins. Leave choice out when the arc does not need one.',
+              `Any chapter may add "mood": one of ${SLURP_MODIFIER_KINDS.join(", ")} (how the creator feels when it starts), and "effects": {"growth": number, "earnings": number, "loyalty": number} as whole percent changes from -50 to 50 while it runs. Leave both out when a chapter changes nothing.`,
+            ].join("\n"),
+          },
+          {
+            id: "output",
+            kind: "required",
+            text: 'Return JSON only: {"title": string, "direction": string, "tone": string, "chapters": [{"label": string, "minDays": number, "maxDays": number}], "durationDays": number}.',
+          },
+          {
+            id: "creator",
+            kind: "context",
+            text: [
+              "# Stage personality",
+              input.stagePersonality || "Not set.",
+              `Gender: ${input.gender ?? "not set"}`,
+              `Tags: ${input.tags.join(", ") || "none"}`,
+            ].join("\n"),
+          },
+          {
+            id: "history",
+            kind: "context",
+            text: [
+              `# Recent posts`,
+              ...(input.recentPosts.length ? input.recentPosts.map((post) => `- ${post}`) : ["None yet."]),
+              `# Example arc types (for scale, do not copy): ${input.libraryNames.join(", ")}`,
+              `# Arcs this creator already had (do not repeat): ${input.pastArcTitles.join(", ") || "none"}`,
+            ].join("\n"),
+          },
+          ...(input.brief?.trim()
+            ? [{ id: "brief", kind: "context" as const, text: `# Player brief\n${input.brief.trim().slice(0, 2_000)}` }]
+            : []),
+        ],
+        input.promptBlocks,
+      ),
     },
     {
       role: "user",
@@ -141,6 +185,7 @@ export async function generateSlurpArc(
       libraryNames: settings.arcLibrary.filter((type) => !type.hidden).map((type) => type.name),
       pastArcTitles: (await slurp.listProjects(creator.id)).map((project) => project.title),
       partners,
+      promptBlocks: settings.promptBlocks,
     });
     const fallbackConnection = await connections.getFallbackForMain();
     const fallbackProvider = withConnectionFallbackProvider({

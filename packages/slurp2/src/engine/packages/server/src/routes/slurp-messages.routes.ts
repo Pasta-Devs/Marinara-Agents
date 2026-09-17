@@ -12,6 +12,7 @@ import { createSlurpPopulationStorage } from "../services/storage/slurp-populati
 import { createCharactersStorage } from "../services/storage/characters.storage.js";
 import { reactToSlurpPayment } from "../services/slurp/slurp-payment-reaction.js";
 import { replyToSlurpMessage } from "../services/slurp/slurp-message.operation.js";
+import { createSlurpReplyQueueStorage } from "../services/storage/slurp-reply-queue.storage.js";
 import { SLURP_DM_POLICIES } from "../services/slurp/slurp-messaging.js";
 import {
   SLURP_NOTE_MAX_LENGTH,
@@ -598,6 +599,34 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       // pacing the model was given and the pacing the player sees are the same number.
       typingMs: "pacing" in outcome ? outcome.pacing.typingMs : 0,
       tipError,
+    };
+  });
+
+  /**
+   * Answer a queued message now instead of waiting out the creator's schedule.
+   *
+   * Only the pacing wait is skipped. Claims, the account lock, cool-off and the model budget still
+   * apply inside `replyToSlurpMessage`, so the outcome is reported exactly as a send reports it.
+   */
+  app.post("/messages/threads/:threadId/force-reply", async (req, reply) => {
+    const parsed = personaQuerySchema.safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { threadId } = req.params as { threadId: string };
+    const viewer = await requireViewer(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const thread = await messages.getThreadById(threadId);
+    if (!thread || thread.viewerAccountId !== viewer.id) return reply.code(404).send({ error: "Thread not found" });
+    const triggerMessageId = await messages.latestViewerMessageId(thread.id);
+    if (!triggerMessageId) return reply.code(400).send({ error: "Nothing to reply to yet." });
+    // Bubbles from the last answer are still arriving; a second answer would interleave with them.
+    const outcome = (await createSlurpReplyQueueStorage(app.db).hasPending(thread.id))
+      ? ({ status: "busy" } as const)
+      : await replyToSlurpMessage(app.db, { threadId: thread.id, triggerMessageId, force: true });
+    return {
+      thread: (await freshView(thread.id)) ?? thread,
+      reply: outcome.status === "replied" ? outcome.message : null,
+      replyStatus: outcome.status,
+      typingMs: "pacing" in outcome ? outcome.pacing.typingMs : 0,
     };
   });
 

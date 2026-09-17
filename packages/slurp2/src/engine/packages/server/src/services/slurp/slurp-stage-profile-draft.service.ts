@@ -31,6 +31,7 @@ import { repairSlurpStageProfileDraft, SLURP_STAGE_PROFILE_LIMITS } from "./slur
 import { noodlerConcealedSourceText, noodlerSourceText } from "./slurp-prompt-safety.js";
 import { createNoodlerSourceRevisionToken } from "./slurp-source-revision.js";
 import type { SlurpStageProfileInput } from "./slurp-discovery-profile.js";
+import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "./slurp-prompt-blocks.js";
 
 /** Used only when a source card carries no usable prose, so the model still gets a starting point. */
 const CONCEALED_SOURCE_FALLBACK_BRIEF = "General temperament and creative interests from the source profile.";
@@ -51,6 +52,7 @@ export function buildNoodlerStageProfileDraftMessages(input: {
   } | null;
   /** The `discoveryTags` setting; the model may only pick from these. */
   allowedTags: readonly string[];
+  promptBlocks?: SlurpPromptBlockOverrides;
 }): ChatMessage[] {
   const identity = buildNoodlerPublicIdentity(input.publicAccount, input.source);
   const protectedDraft = input.request.currentDraft
@@ -97,25 +99,43 @@ export function buildNoodlerStageProfileDraftMessages(input: {
   return [
     {
       role: "system",
-      content: [
-        "Create one editable Slurp creator profile draft.",
-        // disclosureMode is chosen by the caller and stripped by the parser, so asking for it only
-        // invites the model to second-guess a decision it does not own.
-        "Return JSON only with displayName, handle, bio, stagePersonality, gender, and tags.",
-        // A new Creator cannot be saved without a gender and three tags, so the draft must supply them.
-        // Asking for null "when unclear" produced drafts that the create step then refused.
-        "gender must be male, female, or other. Choose the one the source supports best; use other when it is unclear. Never leave it out or use null.",
-        `tags must contain three to eight relevant values selected only from: ${input.allowedTags.join(", ")}. Always include at least three.`,
-        `Length limits: displayName at most ${SLURP_STAGE_PROFILE_LIMITS.displayName} characters, handle at most ${SLURP_STAGE_PROFILE_LIMITS.handle} characters without @, bio at most ${SLURP_STAGE_PROFILE_LIMITS.bio} characters, stagePersonality at most ${SLURP_STAGE_PROFILE_LIMITS.stagePersonality} characters (three to six sentences).`,
-        // The post prompt states the person-vs-performance contract to the model that *consumes*
-        // stagePersonality, but the model that writes it was never told what the field is for. The
-        // obvious guess is "restate the personality", which collapses the two layers into one trait
-        // list and flattens every Creator toward the same register. Define it here too.
-        "The source character is who this Creator actually is. The stage voice describes how they perform on Slurp and how they treat the people reading, layered over that person, not a replacement for them.",
-        "stagePersonality is the performance, not the person. Describe how they post: how they address readers, their recurring habits and bits, their register and pacing on a feed. Do not restate the source character's traits, because those are supplied separately every time a post is written.",
-        "Make the profile concise and usable for future Slurp post generation. Follow the disclosure rules exactly.",
-        disclosureRules(input.request.disclosureMode, identity),
-      ].join("\n"),
+      content: composeSlurpPromptBlocks(
+        "stageProfile",
+        [
+          {
+            id: "task",
+            kind: "editable" as const,
+            text: "Create one editable Slurp creator profile draft.",
+          },
+          {
+            id: "profileRules",
+            kind: "editable" as const,
+            text: [
+              "The source character is who this Creator actually is. The stage voice describes how they perform on Slurp and how they treat the people reading, layered over that person, not a replacement for them.",
+              "stagePersonality is the performance, not the person. Describe how they post: how they address readers, their recurring habits and bits, their register and pacing on a feed. Do not restate the source character's traits, because those are supplied separately every time a post is written.",
+              "Make the profile concise and usable for future Slurp post generation.",
+            ].join("\n"),
+          },
+          {
+            id: "disclosure",
+            kind: "required" as const,
+            text: disclosureRules(input.request.disclosureMode, identity),
+          },
+          {
+            id: "output",
+            kind: "required" as const,
+            text: [
+              "Return JSON only with displayName, handle, bio, stagePersonality, gender, and tags.",
+              "gender must be male, female, or other. Choose the one the source supports best; use other when it is unclear. Never leave it out or use null.",
+              `tags must contain three to eight relevant values selected only from: ${input.allowedTags.join(", ")}. Always include at least three.`,
+              `Length limits: displayName at most ${SLURP_STAGE_PROFILE_LIMITS.displayName} characters, handle at most ${SLURP_STAGE_PROFILE_LIMITS.handle} characters without @, bio at most ${SLURP_STAGE_PROFILE_LIMITS.bio} characters, stagePersonality at most ${SLURP_STAGE_PROFILE_LIMITS.stagePersonality} characters (three to six sentences).`,
+            ].join("\n"),
+          },
+          { id: "source", kind: "context" as const, text: "The source character context follows." },
+          { id: "guidance", kind: "context" as const, text: input.request.guidance || "" },
+        ],
+        input.promptBlocks,
+      ),
     },
     {
       role: "user",
@@ -204,6 +224,7 @@ export async function generateNoodlerStageProfileDraft(
     publicAccount,
     source,
     allowedTags,
+    promptBlocks: (await noodle.getSettings()).promptBlocks,
   });
   const debugMode = isDebugAgentsEnabled();
   logDebugOverride(

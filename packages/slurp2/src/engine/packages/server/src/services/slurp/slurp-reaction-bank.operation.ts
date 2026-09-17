@@ -20,6 +20,7 @@ import {
 import { slurpFanVoiceForPrompt } from "./slurp-fan-types.js";
 import { claimSlurpModelBudget, slurpModelWorkerAllows, type SlurpModelWorkerContext } from "./slurp-model-worker.js";
 import { SLURP_SHIPPED_REACTIONS, SLURP_SHIPPED_TYPE_REACTIONS } from "./slurp-world-copy.js";
+import { composeSlurpPromptBlocks } from "./slurp-prompt-blocks.js";
 
 /**
  * Growing the free comment bank.
@@ -117,19 +118,40 @@ export async function topUpSlurpReactionBank(
       [
         {
           role: "system",
-          content: [
-            `Write ${PER_BANK} short throwaway comments for each group below, as that group would leave them under a post they liked.`,
-            "These are the noise floor of a comment section: three or four words from somebody who wanted to be seen saying them. Not reviews, not questions, not compliments with reasons.",
-            "Lower case. No trailing punctuation and no emoji — those are added separately.",
-            "Each one must say nothing specific about the post: they are reused under thousands of different pictures.",
-            "Never name a person, a body part, an act, a place, or a price.",
-            slurpAudienceToneInstruction(settings.audienceTone, settings.simulationTuning.prompts.tones),
-            "Groups:",
-            ...briefs,
-            `Return JSON only, one key per group: {${Object.keys(targets)
-              .map((id) => `"${id}": ["...", "..."]`)
-              .join(", ")}}`,
-          ].join("\n"),
+          content: composeSlurpPromptBlocks(
+            "reactionBank",
+            [
+              {
+                id: "task",
+                kind: "editable",
+                text: `Write ${PER_BANK} short throwaway comments for each group below, as that group would leave them under a post they liked.`,
+              },
+              {
+                id: "style",
+                kind: "editable",
+                text: [
+                  "These are the noise floor of a comment section: three or four words from somebody who wanted to be seen saying them. Not reviews, not questions, not compliments with reasons.",
+                  "Lower case. No trailing punctuation and no emoji — those are added separately.",
+                  "Each one must say nothing specific about the post: they are reused under thousands of different pictures.",
+                  "Never name a person, a body part, an act, a place, or a price.",
+                ].join("\n"),
+              },
+              {
+                id: "tone",
+                kind: "context",
+                text: slurpAudienceToneInstruction(settings.audienceTone, settings.simulationTuning.prompts.tones),
+              },
+              { id: "groups", kind: "context", text: ["Groups:", ...briefs].join("\n") },
+              {
+                id: "output",
+                kind: "required",
+                text: `Return JSON only, one key per group: {${Object.keys(targets)
+                  .map((id) => `"${id}": ["...", "..."]`)
+                  .join(", ")}}`,
+              },
+            ],
+            settings.promptBlocks,
+          ),
         },
         { role: "user", content: "Write the lines." },
       ],

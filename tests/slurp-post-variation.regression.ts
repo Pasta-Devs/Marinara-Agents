@@ -93,7 +93,12 @@ assert.doesNotMatch(reserve, /noodlerPostGuide:/u, "a constant guide reads as pl
 // Creator with no Conversation Schedule that is the only situational anchor available.
 const timing = read("services/slurp/slurp-post-timing.ts");
 assert.match(timing, /Place this post inside the character's own day at that hour and weekday/u);
-assert.match(timing, /A Tuesday morning and a Saturday night are different posts from the same person/u);
+assert.doesNotMatch(
+  timing,
+  /A Tuesday morning and a Saturday night/u,
+  "naming the weekday invites every post to say it",
+);
+assert.match(timing, /The time shapes the scene only: do not state the time/u, "posts must not narrate the clock");
 
 // ── Stories ────────────────────────────────────────────────────────────────
 // Automatic posting only ever produced feed posts, so the Story shelf could only be filled by hand.

@@ -24,7 +24,7 @@ assert.match(
 // 3.3 — drafts only: a persona Creator never writes a DM reply or a comment reply on its own.
 assert.match(
   read(base + "slurp-message.operation.ts"),
-  /creator\.kind === "persona" && creator\.sourceKind === "persona"\) return \{ status: "ineligible" \}/u,
+  /creator\.kind === "persona" && creator\.sourceKind === "persona"\)\) \{[\s\S]*?return \{ status: "ineligible" \}/u,
 );
 assert.match(
   read(base + "slurp-audience-reply.operation.ts"),

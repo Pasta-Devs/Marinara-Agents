@@ -254,6 +254,18 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.0.19",
+          "date": "2026-09-17",
+          "notes": "- Fixed Force reply now doing nothing when the hourly model budget was used up.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.18",
+          "date": "2026-09-16",
+          "notes": "- Messages: Force reply now answers a queued reply at once.\n- Fixed Creators sometimes never answering a message.\n- Posts are no longer cut off. New settings: Longest post, Show more after 300 characters.\n- New Backstage section Prompts, with a prompt block builder.\n- New image prompt style: Danbooru tags (experimental).\n- Image prompts put style tags first, then the Creator's appearance.\n- Edit the image prompt when you regenerate an image or retry a failed one.\n- Automation -> Manual actions: run posts, audience activity and schedules yourself.\n- Like, comment, vote and subscribe without a Creator profile.\n- Mobile Backstage: no section tabs, full-width search.\n- Fixed Prompts reset, turned-off prompt blocks, and Slurp loading after an Engine restart.\n- Creators no longer mention the time or weekday in every post.",
+          "highlight": false
+        },
+        {
           "version": "0.0.17",
           "date": "2026-09-16",
           "notes": "- Settings is now Backstage: Overview, Creators, Features, Automation, and Maintenance, with setting search and live previews.\n- Creators shows metrics and totals for every Creator. Click one to open its settings, content menu, message prices, and collab partners.\n- Features -> Events and holidays: yearly events that Creators mention in posts, replies, and messages.\n- Free teaser posts: some automatic posts go out free to win subscribers.\n- Featured, buried, and viral weeks change post reach, and viral posts bring a rush of followers.\n- Fans who spend a lot and show up constantly can become Too attached.\n- Crossovers prefer collab partners, and commissions get a quote by default.\n- Feed posts have Edit, Delete, and Show image context in the post menu again.",

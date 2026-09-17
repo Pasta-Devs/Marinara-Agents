@@ -8,17 +8,17 @@ import type { SlurpSettings } from "../../hooks/use-slurp";
  * either here or in `SLURP_SETTINGS_NOT_RESET`, so a new setting cannot silently escape.
  */
 export type SlurpResettableSection =
-  "general" | "images" | "audience" | "arcs" | "messaging" | "wallet" | "ads" | "autopurge";
+  "general" | "images" | "prompts" | "audience" | "arcs" | "messaging" | "wallet" | "ads" | "autopurge";
 
 export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonly (keyof SlurpSettings)[]> = {
   general: [
     "storyRate",
-    "generationGuidance",
+    "professorMariCreatorSource",
     "carryoverModes",
     "carryoverHours",
     "carryoverMaxItems",
-    "enableLorebookContext",
-    "professorMariCreatorSource",
+    "postMaxLength",
+    "postShowMoreLength",
     "postsPerDay",
     "autoPostingScheduleEnabled",
     "autoPostGenerationMode",
@@ -30,12 +30,19 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
     "storyImageWidth",
     "storyImageHeight",
     "imageContextMode",
-    "imageGenerationPrompt",
-    "enableImageInterpretation",
     "imageGenerationUseAvatarReferences",
     "imageGenerationIncludeDescriptions",
     "autoPostingImagesEnabled",
     "allowGalleryImageAttachments",
+  ],
+  prompts: [
+    "generationGuidance",
+    "enableLorebookContext",
+    "imageGenerationPrompt",
+    "enableImageInterpretation",
+    "imagePromptInterpretation",
+    "promptPresets",
+    "promptBlocks",
   ],
   audience: [
     "audienceTone",
@@ -127,7 +134,6 @@ export const SLURP_SETTINGS_NOT_RESET: readonly (keyof SlurpSettings)[] = [
   "fanTypes",
   "platformEvents",
   "creatorCollabs",
-  "promptPresets",
   "generationConnectionId",
   "imageGenerationConnectionId",
   "imageContextConnectionId",
@@ -141,7 +147,6 @@ export const SLURP_SETTINGS_NOT_RESET: readonly (keyof SlurpSettings)[] = [
   "onboarding",
   "invitedCharacterGroupIds",
   "refreshesPerDay",
-  "imagePromptInterpretation",
   "allowProfessorMari",
   "participantSelectionMode",
   "participantMin",

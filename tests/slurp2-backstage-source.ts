@@ -8,6 +8,7 @@ export const SLURP2_BACKSTAGE_FILES = [
   "SlurpBackstageCreators.tsx",
   "SlurpBackstageWorld.tsx",
   "SlurpBackstageAutomation.tsx",
+  "SlurpBackstagePrompts.tsx",
   "SlurpBackstageMaintenance.tsx",
   "SlurpBackstageWorkflow.tsx",
 ];
