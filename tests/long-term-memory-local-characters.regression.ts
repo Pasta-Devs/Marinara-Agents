@@ -304,6 +304,22 @@ async function main() {
   assert.equal(diagnosticDetails.collisionSource, "group_catalog");
   assert.ok(diagnosticDetails.competingRecords.some((r: any) => r.provenance?.includes("group_roster")));
 
+  const aliasCollisionResolution = prepareLtmSubjectIdentityContext({
+    units: [unit({ bucket: "character_fact", subjectId: "sam", subjectNames: ["Sam"], text: "Sam waits." })],
+    catalog: buildTrustedLtmSubjectCatalog({
+      roster: [
+        { kind: "character", id: "char_sam_one", name: "Samuel One", aliases: ["Sam"] },
+        { kind: "character", id: "char_sam_two", name: "Samuel Two", aliases: ["Sam"] },
+      ],
+      notes: [],
+    }),
+    scope,
+  }).resolve({
+    units: [unit({ bucket: "character_fact", subjectId: "sam", subjectNames: ["Sam"], text: "Sam waits." })],
+    existingNotes: [],
+  });
+  assert.equal((aliasCollisionResolution.diagnostics[0]!.details as any).collisionSource, "alias_collision");
+
   // --- I02: Preserve explicit participant names through structured backfill ---
   const structuredSummaryText = `## Relationships
 - Mara and Rowan | characters: Mara, Rowan | state: Mara trusts Rowan completely.

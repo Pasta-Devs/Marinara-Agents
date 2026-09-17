@@ -765,7 +765,7 @@ function parseStructuredRelationshipLine(
       subjectId = stripUnitSubjectPrefix("relationship_state", normalizeIdentifier(value, subjectId));
       continue;
     }
-    if (["characters", "character", "participants", "participant", "names"].includes(key)) {
+    if (["characters", "character", "participants", "participant", "names", "name"].includes(key)) {
       const parsedNames = value
         .split(/[,;\n]|\s+and\s+/i)
         .map((name) => name.trim())

@@ -318,7 +318,10 @@ type SubjectMatch =
   | { status: "cardinality"; count: number; basis: string }
   | { status: "untrusted"; basis: string };
 
-function diagnoseCollision(entries: TrustedLtmSubjectCatalogEntry[]): {
+function diagnoseCollision(
+  entries: TrustedLtmSubjectCatalogEntry[],
+  basis?: string,
+): {
   collisionSource: "duplicate_local" | "group_catalog" | "alias_collision" | "mixed";
   competingRecords: CompetingSubjectRecord[];
 } {
@@ -326,11 +329,13 @@ function diagnoseCollision(entries: TrustedLtmSubjectCatalogEntry[]): {
   const allLocal = entries.every((e) => e.sourceScope === "local_note" || e.sourceScope === "local_source");
   const collisionSource = hasGroup
     ? "group_catalog"
-    : allLocal
-      ? "duplicate_local"
-      : entries.some((e) => e.sourceScope === "direct")
+    : basis === "alias"
+      ? "alias_collision"
+      : allLocal
         ? "duplicate_local"
-        : "mixed";
+        : entries.some((e) => e.sourceScope === "direct")
+          ? "duplicate_local"
+          : "mixed";
 
   const competingRecords: CompetingSubjectRecord[] = entries.slice(0, 10).map((entry) => ({
     key: entry.subject.key,
@@ -338,7 +343,8 @@ function diagnoseCollision(entries: TrustedLtmSubjectCatalogEntry[]): {
     canonicalSlug: entry.canonicalSlug,
     provenance: entry.provenance ?? entry.subject.key,
     sourceScope: entry.sourceScope,
-    collisionKind: entry.sourceScope === "group" ? "group_catalog" : "duplicate_local",
+    collisionKind:
+      entry.sourceScope === "group" ? "group_catalog" : basis === "alias" ? "alias_collision" : "duplicate_local",
   }));
 
   return { collisionSource, competingRecords };
@@ -1093,7 +1099,7 @@ function preResolveBatchSubjectNames({
   for (const name of names) {
     const normalizedName = normalizeSubjectIdentifier(name, "");
     if (familyId && index.ambiguousLocalNames.has(`${familyId}\u0000${normalizedName}`)) {
-      matches.set(name, { status: "ambiguous", keys: [], basis: "local_family_duplicate" });
+      matches.set(name, localAmbiguousMatch(index, familyId, normalizedName));
       continue;
     }
     const direct = matchDirect(index, normalizedName);
@@ -1229,7 +1235,7 @@ function resolveAndCacheSubjectName(
       ? ltmScopeFamilyId(context.scope)
       : null;
   if (familyId && index.ambiguousLocalNames.has(`${familyId}\u0000${normalizedName}`)) {
-    const match: SubjectMatch = { status: "ambiguous", keys: [], basis: "local_family_duplicate" };
+    const match = localAmbiguousMatch(index, familyId, normalizedName);
     batch.matches.set(name, match);
     return match;
   }
@@ -1245,26 +1251,25 @@ function resolveAndCacheSubjectName(
     return match;
   }
   if (familyId && context?.scope) {
-    const localKey = `${familyId}\u0000${normalizedName}`;
-    if (batch.provisionalKeys.has(localKey)) {
+    const subject = localCharacterSubjectForName(context.scope, name);
+    if (subject && batch.provisionalKeys.has(subject.key)) {
       const match: SubjectMatch = { status: "ambiguous", keys: [], basis: "batch_provisional_duplicate" };
       batch.matches.set(name, match);
       return match;
     }
-    batch.provisionalKeys.add(localKey);
-    const subject = localCharacterSubjectForName(context.scope, name);
     if (subject) {
+      const entry: TrustedLtmSubjectCatalogEntry = {
+        subject,
+        name,
+        aliases: expandedAliases(name, []),
+        canonicalSlug: normalizedName,
+        familyId,
+      };
+      addCatalogEntry(index, entry);
+      batch.provisionalKeys.add(subject.key);
       const match: SubjectMatch = {
         status: "matched",
-        entries: [
-          {
-            subject,
-            name,
-            aliases: new Set(expandedAliases(name, [])),
-            canonicalSlug: normalizedName,
-            familyId,
-          },
-        ],
+        entries: [entry],
         basis: "source_visible_name",
       };
       batch.matches.set(name, match);
@@ -1274,6 +1279,18 @@ function resolveAndCacheSubjectName(
   const untrusted: SubjectMatch = { status: "untrusted", basis: "source_visible_name" };
   batch.matches.set(name, untrusted);
   return untrusted;
+}
+
+function localAmbiguousMatch(index: CatalogIndex, familyId: string, normalizedName: string): SubjectMatch {
+  const entries = index.ambiguousLocalEntries.get(`${familyId}\u0000${normalizedName}`) ?? [];
+  const { competingRecords } = diagnoseCollision(entries, "local_family_duplicate");
+  return {
+    status: "ambiguous",
+    keys: entries.map(subjectEntryKey),
+    basis: "local_family_duplicate",
+    competingRecords,
+    collisionSource: "duplicate_local",
+  };
 }
 
 function resolveNamedUnitSubjects(
@@ -1555,7 +1572,7 @@ function matchDirect(index: CatalogIndex, token: string): SubjectMatch {
   const aliases = index.aliases.get(token) ?? [];
   if (aliases.length === 1) return { status: "matched", entries: aliases, basis: "unique_alias" };
   if (aliases.length > 1) {
-    const { collisionSource, competingRecords } = diagnoseCollision(aliases);
+    const { collisionSource, competingRecords } = diagnoseCollision(aliases, "alias");
     return {
       status: "ambiguous",
       keys: aliases.map(subjectEntryKey),
