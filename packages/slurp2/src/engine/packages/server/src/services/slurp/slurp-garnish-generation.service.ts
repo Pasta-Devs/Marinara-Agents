@@ -25,6 +25,7 @@ import { requireModelAnswer } from "./slurp-model-answer.js";
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { SLURP_GARNISH_PLATFORM } from "./slurp-garnish-context.js";
 import { NOODLER_UNTRUSTED_CONTENT_INSTRUCTION } from "./slurp-generation.service.js";
+import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "./slurp-prompt-blocks.js";
 
 export type GarnishTone = "corporate" | "scammy" | "local" | "luxury" | "unhinged";
 export type GarnishEra = "present" | "nineties" | "cyberpunk" | "retrofuture";
@@ -72,6 +73,7 @@ export type GarnishGenerationRequest = {
   contentCeiling: GarnishContentRating;
   /** World or persona flavour the ads should fit. */
   worldContext?: string;
+  promptBlocks?: SlurpPromptBlockOverrides;
 };
 
 export async function generateGarnishAds(
@@ -114,26 +116,68 @@ export async function generateGarnishAds(
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: [
-        `Invent exactly ${count} fictional advertisements for an in-world social feed.`,
-        "These are fictional brands in a fictional world. Never use a real company, product, or trademark.",
-        `Tone: ${TONE_DIRECTION[request.tone]}`,
-        `Setting: ${ERA_DIRECTION[request.era]}`,
-        `Do not exceed a "${request.contentCeiling}" content rating, and label each ad honestly with its own rating.`,
-        "Keep copy under 200 characters. It should read like an ad, not like a description of an ad.",
-        "Give each ad 1-4 lowercase single-word categories and 1-4 lowercase context tags.",
-        NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
-        "Return a JSON array of objects with brand, product, copy, categories, contextTags, actionLabel, contentRating.",
-        "Return JSON only.",
-      ].join("\n"),
+      content: composeSlurpPromptBlocks(
+        "garnishAds",
+        [
+          {
+            id: "task",
+            kind: "editable",
+            text: `Invent exactly ${count} fictional advertisements for an in-world social feed.`,
+          },
+          {
+            id: "style",
+            kind: "context",
+            text: [
+              "These are fictional brands in a fictional world. Never use a real company, product, or trademark.",
+              `Tone: ${TONE_DIRECTION[request.tone]}`,
+              `Setting: ${ERA_DIRECTION[request.era]}`,
+              `Do not exceed a "${request.contentCeiling}" content rating, and label each ad honestly with its own rating.`,
+              "Keep copy under 200 characters. It should read like an ad, not like a description of an ad.",
+              "Give each ad 1-4 lowercase single-word categories and 1-4 lowercase context tags.",
+              NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
+              "Return a JSON array of objects with brand, product, copy, categories, contextTags, actionLabel, contentRating.",
+              "Return JSON only.",
+            ].join("\n"),
+          },
+          { id: "safety", kind: "required", text: NOODLER_UNTRUSTED_CONTENT_INSTRUCTION },
+          {
+            id: "output",
+            kind: "required",
+            text: "Return a JSON array of objects with brand, product, copy, categories, contextTags, actionLabel, contentRating. Return JSON only.",
+          },
+          ...(request.worldContext?.trim()
+            ? [
+                {
+                  id: "world",
+                  kind: "context" as const,
+                  optional: true,
+                  text: `World and audience:\n${JSON.stringify(request.worldContext.trim())}`,
+                },
+              ]
+            : []),
+          ...(existingBrands.length
+            ? [
+                {
+                  id: "existingBrands",
+                  kind: "context" as const,
+                  optional: true,
+                  text: `Brands that already exist, do not repeat them: ${existingBrands.join(", ")}`,
+                },
+              ]
+            : []),
+        ],
+        request.promptBlocks,
+      ),
     },
     {
       role: "user",
       content: [
-        ...(request.worldContext?.trim()
+        ...(request.worldContext?.trim() &&
+        request.promptBlocks?.garnishAds?.find((block) => block.id === "world")?.enabled !== false
           ? [`World and audience:\n${JSON.stringify(request.worldContext.trim())}`]
           : []),
-        ...(existingBrands.length
+        ...(existingBrands.length &&
+        request.promptBlocks?.garnishAds?.find((block) => block.id === "existingBrands")?.enabled !== false
           ? [`Brands that already exist, do not repeat them: ${existingBrands.join(", ")}`]
           : []),
       ].join("\n"),

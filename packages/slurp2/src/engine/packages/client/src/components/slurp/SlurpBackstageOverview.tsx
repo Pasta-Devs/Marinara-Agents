@@ -19,7 +19,8 @@ import { OverviewCard, OverviewActivity, formatBytes } from "./SlurpBackstageWor
 
 type AttentionItem = { id: string; label: string; section: SlurpBackstageSection; target: SlurpBackstageTarget };
 
-const panelClass = "rounded-xl bg-[var(--slurp-surface-raised)] p-4 ring-1 ring-inset ring-[var(--slurp-outline)]";
+const panelClass =
+  "min-w-0 rounded-xl bg-[var(--slurp-surface-raised)] p-3 sm:p-4 ring-1 ring-inset ring-[var(--slurp-outline)]";
 const rowClass =
   "flex min-h-12 w-full items-center gap-3 rounded-lg px-3 text-start text-sm transition-colors hover:bg-[var(--slurp-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none";
 
@@ -150,7 +151,7 @@ export function SlurpBackstageOverview(page: SlurpBackstagePageProps) {
         </div>
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid min-w-0 grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2">
         <section className={panelClass} aria-labelledby="slurp-overview-attention">
           <h2 id="slurp-overview-attention" className="flex items-center gap-2 text-sm font-black">
             {attention.length ? (
@@ -165,7 +166,7 @@ export function SlurpBackstageOverview(page: SlurpBackstagePageProps) {
               {t("ui.slurp.settings.overview.attention.none", { defaultValue: "Nothing needs your attention." })}
             </p>
           ) : (
-            <ul className="mt-2 -mx-1 space-y-0.5">
+            <ul className="mt-2 space-y-0.5">
               {attention.slice(0, 6).map((item) => (
                 <li key={item.id}>
                   <button type="button" onClick={() => go(item.section, item.target)} className={rowClass}>
@@ -225,7 +226,7 @@ export function SlurpBackstageOverview(page: SlurpBackstagePageProps) {
                 void updatePatch({ autopurgeEnabled: enabled, autopurgeNextRunAt: enabled ? nextRunAt : null });
               }}
             />
-            <button type="button" onClick={() => go("automation", "images")} className={`${rowClass} -mx-1`}>
+            <button type="button" onClick={() => go("automation", "images")} className={rowClass}>
               <Image size={16} className="shrink-0 text-[var(--slurp-violet)]" aria-hidden="true" />
               <span className="min-w-0 flex-1">
                 {t("ui.slurp.settings.overview.quick.images", {

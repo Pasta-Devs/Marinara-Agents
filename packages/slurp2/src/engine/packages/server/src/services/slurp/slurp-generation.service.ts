@@ -40,6 +40,7 @@ import {
 import type { NoodleImagePromptReviewItem } from "./slurp-public-images.service.js";
 import { getErrorMessage } from "./slurp-public-support.js";
 import { noodleResponseFormat } from "./slurp-response-format.js";
+import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "./slurp-prompt-blocks.js";
 import { buildSlurpPostTimingContext } from "./slurp-post-timing.js";
 import {
   SLURP_TEASER_INSTRUCTION,
@@ -58,13 +59,13 @@ import {
 import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js";
 import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
 import { createChatsStorage } from "../storage/chats.storage.js";
-import { NOODLER_FORMAT_MAX_LENGTH, type NoodlerContentFormat } from "./slurp-content-format.js";
+import { NOODLER_CONTENT_HARD_MAX_LENGTH, type NoodlerContentFormat } from "./slurp-content-format.js";
 import { noodleLorebookTokenBudget, SLURP_PLATFORM_CONTEXT } from "./slurp-prompt.js";
 import { processLorebooks } from "../lorebook/index.js";
 import { createCharacterGalleryStorage } from "../storage/character-gallery.storage.js";
 import { createGalleryStorage } from "../storage/gallery.storage.js";
 import { pickGalleryAttachmentForAccount } from "./slurp-generated-activity.service.js";
-export { NOODLER_FORMAT_MAX_LENGTH, type NoodlerContentFormat } from "./slurp-content-format.js";
+export type { NoodlerContentFormat } from "./slurp-content-format.js";
 // The disclosure privacy core lives in a leaf module so tests can execute it instead of grepping
 // this file, which cannot be imported without a database and an LLM provider.
 import { protectNoodlerGeneratedIdentity, type PublicIdentity } from "./slurp-identity-protection.js";
@@ -106,9 +107,8 @@ type FormattedNoodlerGenerationRequest = NoodlerGenerationRequest & {
 
 const NOODLER_FORMAT_PROMPTS: Record<NoodlerContentFormat, string> = {
   caption:
-    "Format: caption. Target 40-220 characters in one short creator-feed caption. Hard limit 300 characters: never write more, and never write several paragraphs.",
-  announcement:
-    "Format: announcement. Target 80-600 body characters with the important news first. Hard limit 1000 characters.",
+    "Format: caption. Aim for 40-220 characters in one short creator-feed caption. Go longer only when the moment really calls for it.",
+  announcement: "Format: announcement. Aim for 80-600 body characters with the important news first.",
   long_form:
     "Format: long_form. Target 500-2000 body characters with readable paragraphs. Only this format can use long text.",
 };
@@ -247,6 +247,8 @@ export function buildNoodlerPostMessages(input: {
   allowImagePrompt: boolean;
   imageGenerationPrompt: string;
   generationGuidance: string;
+  /** The player's ceiling. Formats only set a target; nothing shorter than this is cut. */
+  postMaxLength?: number;
   scheduleContext?: string;
   /** The rotating angle for this post. Absent when the player has directed the post themselves. */
   variationInstruction?: string;
@@ -267,51 +269,89 @@ export function buildNoodlerPostMessages(input: {
   publicationTime?: Date;
   /** Matching lorebook entries for this Creator. Absent when lorebook context is off or nothing matched. */
   loreContext?: string;
+  promptBlocks?: SlurpPromptBlockOverrides;
 }): ChatMessage[] {
   const protect = (value: string) =>
     protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
   const guidance = input.generationGuidance.trim();
   const format = input.request.format ?? "caption";
-  const system = [
-    "You write exactly one post for one Slurp creator page in Marinara Engine.",
-    SLURP_PLATFORM_CONTEXT,
-    "Write only as the supplied Slurp account. Do not create other accounts, interactions, follows, or public timeline activity.",
-    NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
-    "Use the Slurp stage profile as supplied.",
+  const systemBlocks = [
+    {
+      id: "task",
+      kind: "editable" as const,
+      text: "You write exactly one post for one Slurp creator page in Marinara Engine.",
+    },
+    { id: "platform", kind: "required" as const, text: SLURP_PLATFORM_CONTEXT },
+    {
+      id: "safety",
+      kind: "required" as const,
+      text: `${NOODLER_UNTRUSTED_CONTENT_INSTRUCTION}\nUse the Slurp stage profile as supplied.`,
+    },
     // Bio and stage voice are written once when the Creator is set up. On their own they flatten
     // every Creator into the same register, so the source card is supplied as the person and the
     // stage voice sits on top of it as the performance.
-    "The source character is who this Creator actually is: take their temperament, register, humour, and interests from it. The stage voice describes how they perform on Slurp and how they treat the people reading, layered over that person, not a replacement for them.",
+    {
+      id: "character",
+      kind: "context" as const,
+      text: "The source character is who this Creator actually is: take their temperament, register, humour, and interests from it. The stage voice describes how they perform on Slurp and how they treat the people reading, layered over that person, not a replacement for them.",
+    },
     // Up to 20,000 characters of free-text user guidance spliced in bare, between two hard rules,
     // with nothing marking where it ends. Long guidance blurred into the disclosure instruction
     // that follows it. The untrusted-content rule above already establishes labelled blocks for
     // user-supplied values; the system message should not be the one place that is abandoned.
-    ...(guidance ? ["## Creative direction", guidance, "## End creative direction"] : []),
-    noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
-    NOODLER_FORMAT_PROMPTS[format],
+    {
+      id: "creativeDirection",
+      kind: "context" as const,
+      optional: true,
+      text: guidance ? `## Creative direction\n${guidance}\n## End creative direction` : "",
+    },
+    {
+      id: "identity",
+      kind: "required" as const,
+      text: noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
+    },
+    {
+      id: "format",
+      kind: "required" as const,
+      text: `${NOODLER_FORMAT_PROMPTS[format]} Never exceed ${input.postMaxLength ?? NOODLER_CONTENT_HARD_MAX_LENGTH} characters.`,
+    },
     // A public post and a paid post do different jobs, and writing both from one set of
     // instructions made the free feed give away the payoff and the paid feed sell what the reader
     // had already bought. Fenced like the creative direction above, because the text is editable.
-    ...(input.accessInstruction?.trim()
-      ? ["## Who can read this post", input.accessInstruction.trim(), "## End who can read this post"]
-      : []),
+    {
+      id: "access",
+      kind: "context" as const,
+      optional: true,
+      text: input.accessInstruction?.trim()
+        ? `## Who can read this post\n${input.accessInstruction.trim()}\n## End who can read this post`
+        : "",
+    },
     // Tone, mood balance, and the adult flirty lean are supplied by the editable
     // generation guidance (see input.generationGuidance above), not hardcoded here.
     // "Do not reuse their exact wording" was the only anti-repetition rule, and eight different
     // captions about the same desk satisfy it completely. Repetition of situation is what reads as
     // a broken feed, so that is what this constrains.
-    "Recent posts provide continuity. Do not repeat a recent post's setting, activity, framing, or wardrobe, and do not reuse its wording. If the last few posts happened in one place, this one happens somewhere else.",
-    "Every post needs a title: a short specific headline of at most 80 characters, never a repeat of the body text.",
-    input.allowImagePrompt
-      ? "Return one JSON object with title, content, and imagePrompt. imagePrompt is required and must be a concrete visual description of one photo or image the creator would post now (subject, pose, setting, lighting, framing). Never return null or an empty imagePrompt, and never put the post text or field names in it. Do not create a poll."
-      : "Return one JSON object with title and content only. Do not create a poll or image prompt.",
-    ...(input.allowImagePrompt && input.imageGenerationPrompt.trim()
-      ? [
-          `Apply these image directions when writing imagePrompt. They are instructions to you, not text to copy into imagePrompt: ${input.imageGenerationPrompt.trim()}`,
-        ]
-      : []),
-    "Return JSON only. No prose outside the JSON object.",
-  ].join("\n");
+    {
+      id: "continuity",
+      kind: "editable" as const,
+      text: "Recent posts provide continuity. Do not repeat a recent post's setting, activity, framing, or wardrobe, and do not reuse its wording. If the last few posts happened in one place, this one happens somewhere else.\nEvery post needs a title: a short specific headline of at most 80 characters, never a repeat of the body text.",
+    },
+    {
+      id: "imageDirection",
+      kind: "context" as const,
+      optional: true,
+      text:
+        input.allowImagePrompt && input.imageGenerationPrompt.trim()
+          ? `Apply these image directions when writing imagePrompt. They are instructions to you, not text to copy into imagePrompt: ${input.imageGenerationPrompt.trim()}`
+          : "",
+    },
+    {
+      id: "output",
+      kind: "required" as const,
+      text: `${input.allowImagePrompt ? "Return one JSON object with title, content, and imagePrompt. imagePrompt is required and must be a concrete visual description of one photo or image the creator would post now (subject, pose, setting, lighting, framing). Never return null or an empty imagePrompt, and never put the post text or field names in it. Do not create a poll." : "Return one JSON object with title and content only. Do not create a poll or image prompt."}\nReturn JSON only. No prose outside the JSON object.`,
+    },
+  ];
+  const system = composeSlurpPromptBlocks("post", systemBlocks, input.promptBlocks);
   const user = [
     "# Slurp account",
     `Display name: ${protect(input.account.displayName)}`,
@@ -577,8 +617,10 @@ export async function generateNoodlerPost(
     allowImagePrompt: imagesEnabled,
     imageGenerationPrompt: settings.imageGenerationPrompt,
     generationGuidance: settings.generationGuidance,
+    postMaxLength: settings.postMaxLength,
     scheduleContext,
     loreContext,
+    promptBlocks: settings.promptBlocks,
     generatedAt: input.generatedAt ?? new Date(),
     publicationTime: input.publicationTime,
   });
@@ -597,14 +639,15 @@ export async function generateNoodlerPost(
     maxTokens: clampGenerationMaxOutputTokens({
       provider: input.connection.provider as APIProvider,
       model: input.connection.model,
-      maxTokens: NOODLER_POST_MAX_TOKENS,
+      // A long post needs the tokens to finish; a truncated response fails the JSON parse outright.
+      maxTokens: Math.max(NOODLER_POST_MAX_TOKENS, Math.ceil(settings.postMaxLength * 1.2)),
       maxTokensOverride: input.connection.maxTokensOverride,
     }),
     stream: false,
     debugMode,
     responseFormat: noodleResponseFormat(input.connection.model, "noodler_post", {
       allowImagePrompt: imagesEnabled,
-      contentMaxLength: NOODLER_FORMAT_MAX_LENGTH[format],
+      contentMaxLength: settings.postMaxLength,
     }),
   } as const;
 
@@ -652,7 +695,7 @@ export async function generateNoodlerPost(
     generated.content,
     disclosureMode,
     publicIdentity,
-    NOODLER_FORMAT_MAX_LENGTH[format],
+    settings.postMaxLength,
   );
   if (!protectedContent) throw new Error("Slurp generation returned no usable post content.");
   const protectedGenerated = {

@@ -20,6 +20,7 @@ import { parseGameJsonish } from "../game/jsonish.js";
 import { requireModelAnswer } from "./slurp-model-answer.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
 import type { ChatMessage } from "../llm/base-provider.js";
+import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "./slurp-prompt-blocks.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { describeSlurpPostCondition } from "./slurp-post-condition.service.js";
@@ -81,36 +82,54 @@ export function buildNoodlerCreatorReplyMessages(input: {
   contentMenu?: string;
   /** Holidays and site events running today. See `slurp-platform-events.ts`. */
   platformEvents?: string | null;
+  promptBlocks?: SlurpPromptBlockOverrides;
 }): ChatMessage[] {
   const protect = (value: string | null | undefined) =>
     protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
-  const system = [
-    "You write exactly one direct reply from one Slurp creator to one real viewer comment on the creator's post.",
-    SLURP_PLATFORM_CONTEXT,
-    "Write only as the supplied creator's stage persona. Address the viewer's comment naturally and do not write for the viewer.",
-    NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
-    input.generationGuidance.trim(),
-    input.contentMenu
-      ? "creator.contentMenu is your private content menu: what you offer and what you will not do. Stay inside it when fans ask for things, and turn down anything it rules out in your own voice. Never quote it as a list."
-      : "",
-    noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
-    input.characterCanon
-      ? "Character canon is permanent identity and relationship context. Stay consistent with it unless the conversation explicitly establishes a change."
-      : "",
-    "Keep the reply direct and brief: one or two short sentences, normally under 240 characters.",
-    "Let the relationship set the warmth. A stranger gets a friendly but ordinary reply; somebody who has been here a long time or paid for a lot gets recognition, familiarity, and a callback to what they have given you.",
-    'Return exactly one JSON object with four fields: "content", "moodShift", "remember" and "stateSignals".',
-    '"content" is your reply, and the only field the viewer ever sees.',
-    // The same field the direct-message path reads, so being rude in public counts exactly as
-    // much as being rude in private. A creator who forgave in the comments what she would not
-    // forgive in a DM would not read as one person.
-    '"moodShift" is how this comment changed your feeling about this person: "up" if you enjoyed it, "same" for anything ordinary, "down" if they were rude, pushy, or tiring, "sharp_down" only for something you would genuinely take offence at. Most comments are "same".',
-    '"remember" must be an empty array here.',
-    '"stateSignals" must be an empty array here.',
-    "Return JSON only. No prose outside the JSON object.",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  const system = composeSlurpPromptBlocks(
+    "commentReply",
+    [
+      {
+        id: "task",
+        kind: "editable" as const,
+        text: "You write exactly one direct reply from one Slurp creator to one real viewer comment on the creator's post. Address the viewer's comment naturally and do not write for the viewer.",
+      },
+      { id: "platform", kind: "required" as const, text: SLURP_PLATFORM_CONTEXT },
+      { id: "safety", kind: "required" as const, text: NOODLER_UNTRUSTED_CONTENT_INSTRUCTION },
+      { id: "creativeDirection", kind: "context" as const, optional: true, text: input.generationGuidance.trim() },
+      {
+        id: "boundaries",
+        kind: "context" as const,
+        optional: true,
+        text: input.contentMenu
+          ? "creator.contentMenu is your private content menu: what you offer and what you will not do. Stay inside it when fans ask for things, and turn down anything it rules out in your own voice. Never quote it as a list."
+          : "",
+      },
+      {
+        id: "identity",
+        kind: "required" as const,
+        text: noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
+      },
+      {
+        id: "style",
+        kind: "editable" as const,
+        text: "Keep the reply direct and brief: one or two short sentences, normally under 240 characters. Let the relationship set the warmth. A stranger gets a friendly but ordinary reply; somebody who has been here a long time or paid for a lot gets recognition, familiarity, and a callback to what they have given you.",
+      },
+      {
+        id: "outputContract",
+        kind: "required" as const,
+        text: [
+          'Return exactly one JSON object with four fields: "content", "moodShift", "remember" and "stateSignals".',
+          '"content" is your reply, and the only field the viewer ever sees.',
+          '"moodShift" is how this comment changed your feeling about this person: "up" if you enjoyed it, "same" for anything ordinary, "down" if they were rude, pushy, or tiring, "sharp_down" only for something you would genuinely take offence at. Most comments are "same".',
+          '"remember" must be an empty array here.',
+          '"stateSignals" must be an empty array here.',
+        ].join("\n"),
+      },
+      { id: "output", kind: "required" as const, text: "Return JSON only. No prose outside the JSON object." },
+    ],
+    input.promptBlocks,
+  );
   const data = {
     ...(input.platformEvents ? { platformEvents: input.platformEvents } : {}),
     creator: {
@@ -213,6 +232,7 @@ export async function generateNoodlerCreatorReply(input: {
     imageContext: imageContexts.get(input.post.id),
     contentMenu: await resolveSlurpCreatorMenu(input.db, input.creator.id).catch(() => ""),
     platformEvents: slurpPlatformEventInstruction(settings.platformEvents, new Date()),
+    promptBlocks: settings.promptBlocks,
   });
   const debugMode = input.debugMode === true || isDebugAgentsEnabled();
   const options = {

@@ -52,6 +52,7 @@ import {
   useSendSlurpViewerImage,
   useGenerateSlurpViewerImage,
   useSendSlurpMessage,
+  useForceSlurpReply,
   useSlurpCompose,
   useSlurpConnections,
   useSlurpSettings,
@@ -81,6 +82,7 @@ import {
  */
 const SLURP_REPLY_STATUS_FALLBACKS: Record<string, string> = {
   queued: "Delivered. A reply from {{name}} is queued for later.",
+  owed: "Delivered. {{name}} has not answered yet.",
   cooling: "{{name}} has stepped away from this conversation. Give them some time.",
   busy: "{{name}} is already writing back. Give it a moment.",
   ineligible: "{{name}} is not answering this conversation right now.",
@@ -522,6 +524,7 @@ function SlurpThreadView({
   const byCreator = useSlurpCompose(threadId ? null : creatorAccountId, personaId);
   const threadQuery = threadId ? byThread : byCreator;
   const send = useSendSlurpMessage();
+  const forceReply = useForceSlurpReply();
   const tip = useTipInSlurpThread();
   const resolveRequest = useResolveSlurpMessageRequest();
   const resetThread = useResetSlurpThread();
@@ -570,8 +573,10 @@ function SlurpThreadView({
   const drawerTriggerRef = useRef<HTMLButtonElement | null>(null);
   const searchTriggerRef = useRef<HTMLButtonElement | null>(null);
   const messageSearchInputRef = useRef<HTMLInputElement | null>(null);
-
   const thread = threadQuery.data?.thread ?? null;
+  const activeConversationRef = useRef({ personaId, threadId });
+  activeConversationRef.current = { personaId, threadId: thread?.id ?? threadId };
+
   const messages = useMemo(() => {
     const byId = new Map<string, SlurpMessage>();
     for (const message of loadedOlderMessages) byId.set(message.id, message);
@@ -736,6 +741,11 @@ function SlurpThreadView({
     if (pending?.id && messages.some((message) => message.id === pending.id)) setPending(null);
   }, [messages, pending]);
 
+  // The queued note describes the wait, so it goes once the answer it promised has arrived.
+  useEffect(() => {
+    if (messages[messages.length - 1]?.role === "creator") setReplyStatus(null);
+  }, [messages]);
+
   // A different conversation must not inherit the last one's unsent echo.
   useEffect(() => {
     setPending(null);
@@ -879,8 +889,19 @@ function SlurpThreadView({
    * The indicator starts when the fan hits send. Keep the full server pacing after the response too,
    * so a fast model cannot make the Creator answer appear immediately.
    */
+  // The note from the last send, and the standing obligation the server tracks. A reply can be
+  // owed long after the send that asked for it — that is the whole case this button exists for —
+  // so the button follows `needsReply`, not the note.
+  const waitingNote = replyStatus && replyStatus !== "replied" ? replyStatus : null;
+  const canForceReply = Boolean(personaId && thread && !ownsCreator && (thread.needsReply || waitingNote === "queued"));
+
   const holdTyping = (ms: number, replyId?: string) => {
+    const conversation = activeConversationRef.current;
+    const isCurrent = () =>
+      activeConversationRef.current.personaId === conversation.personaId &&
+      activeConversationRef.current.threadId === conversation.threadId;
     if (ms <= 0) {
+      if (!isCurrent()) return;
       setTyping(false);
       if (replyId) {
         setHiddenReplyIds((prev) => {
@@ -900,6 +921,7 @@ function SlurpThreadView({
       window.clearTimeout(typingTimeoutRef.current);
     }
     typingTimeoutRef.current = window.setTimeout(() => {
+      if (!isCurrent()) return;
       setTyping(false);
       if (replyId) {
         setHiddenReplyIds((prev) => {
@@ -1401,12 +1423,54 @@ function SlurpThreadView({
               </div>
             </div>
           )}
-          {!typing && replyStatus && replyStatus !== "replied" && (
+          {!typing && (waitingNote || canForceReply) && (
             <p aria-live="polite" className="self-start px-1 text-xs italic text-[var(--muted-foreground)]">
-              {localizeUi(`ui.slurp.messages.replyStatus.${replyStatus}`, {
-                defaultValue: SLURP_REPLY_STATUS_FALLBACKS[replyStatus] ?? "No answer yet.",
-                name: creator?.displayName ?? "",
-              })}
+              {waitingNote
+                ? localizeUi(`ui.slurp.messages.replyStatus.${waitingNote}`, {
+                    defaultValue: SLURP_REPLY_STATUS_FALLBACKS[waitingNote] ?? "No answer yet.",
+                    name: creator?.displayName ?? "",
+                  })
+                : localizeUi("ui.slurp.messages.replyStatus.owed", {
+                    defaultValue: "Delivered. {{name}} has not answered yet.",
+                    name: creator?.displayName ?? "",
+                  })}
+              {canForceReply && thread && personaId && (
+                <button
+                  type="button"
+                  disabled={forceReply.isPending}
+                  onClick={async () => {
+                    const forcedPersonaId = personaId;
+                    const forcedThreadId = thread.id;
+                    setError(null);
+                    setTyping(true);
+                    try {
+                      const result = await forceReply.mutateAsync({
+                        personaId: forcedPersonaId,
+                        threadId: forcedThreadId,
+                      });
+                      if (
+                        activeConversationRef.current.personaId !== forcedPersonaId ||
+                        activeConversationRef.current.threadId !== forcedThreadId
+                      )
+                        return;
+                      setReplyStatus(result.replyStatus);
+                      // "Now" means now: the pacing delay is the thing this button exists to skip.
+                      holdTyping(0, result.reply?.id);
+                    } catch (cause) {
+                      if (
+                        activeConversationRef.current.personaId !== forcedPersonaId ||
+                        activeConversationRef.current.threadId !== forcedThreadId
+                      )
+                        return;
+                      setTyping(false);
+                      setError(getApiErrorMessage(cause, "The reply could not be written."));
+                    }
+                  }}
+                  className="ml-1.5 not-italic underline decoration-dotted underline-offset-2 opacity-70 transition-opacity hover:opacity-100 focus-visible:opacity-100 disabled:opacity-40"
+                >
+                  {localizeUi("ui.slurp.messages.forceReply", { defaultValue: "Force reply now" })}
+                </button>
+              )}
             </p>
           )}
           {typing && (

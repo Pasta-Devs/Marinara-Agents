@@ -101,6 +101,7 @@ import {
 } from "../services/slurp/slurp-post.operation.js";
 import { tryNoodlerAccountOperation } from "../services/slurp/slurp-account-operation-lock.js";
 import { previewSlurpAutopurge, runSlurpAutopurge } from "../services/slurp/slurp-autopurge.js";
+import { SLURP_PROMPT_DESCRIPTIONS, SLURP_PROMPT_EDITABLE_DEFAULTS } from "../services/slurp/slurp-prompt-blocks.js";
 import { createSlurpFirstPostQueue } from "../services/slurp/slurp-first-post-queue.service.js";
 import {
   getSlurpOperationStatus,
@@ -606,6 +607,16 @@ export async function slurpRoutes(app: FastifyInstance) {
   }
 
   app.get("/settings", async () => noodle.getSlurpSettings());
+
+  app.get("/settings/prompt-blocks", async () => ({
+    prompts: SLURP_PROMPT_DESCRIPTIONS.map((prompt) => ({
+      ...prompt,
+      blocks: prompt.blocks.map((block) => ({
+        ...block,
+        defaultText: SLURP_PROMPT_EDITABLE_DEFAULTS[prompt.id]?.[block.id] ?? "",
+      })),
+    })),
+  }));
   // The shipped values, so Settings can show what differs and reset one section.
   app.get("/settings/defaults", async () => DEFAULT_SLURP_SETTINGS);
   app.patch("/settings", async (req, reply) => {
@@ -1561,6 +1572,7 @@ export async function slurpRoutes(app: FastifyInstance) {
           accounts,
           connection,
           debugMode: parsed.data.debugMode ?? false,
+          promptBlocks: settings.promptBlocks,
         }),
       };
     });
@@ -1639,6 +1651,7 @@ export async function slurpRoutes(app: FastifyInstance) {
           personality: String(data.personality ?? ""),
         },
         scheduleSettings.simulationTuning.prompts.scheduleExtra,
+        scheduleSettings.promptBlocks,
       );
     } catch (error) {
       req.log.warn({ err: error }, "Conversation schedule generation returned invalid output");
@@ -2193,7 +2206,12 @@ export async function slurpRoutes(app: FastifyInstance) {
             imageUrl:
               locked && !post.imageUrl?.startsWith(NOODLER_MEDIA_URL_PREFIX)
                 ? null
-                : noodlerPostMediaUrlForPersona(post.imageUrl, context.viewer.entityId, locked ? "locked" : "original"),
+                : noodlerPostMediaUrlForPersona(
+                    post.imageUrl,
+                    context.viewer.entityId,
+                    locked ? "locked" : "original",
+                    post.updatedAt,
+                  ),
             imagePrompt: locked ? null : post.imagePrompt,
             metadata: locked ? null : post.metadata,
             // A locked post withholds its metadata, so the price travels as its own field. It is
@@ -3336,6 +3354,7 @@ export async function slurpRoutes(app: FastifyInstance) {
         era: settings.inlineAdsEra,
         contentCeiling: settings.inlineAdsContentCeiling,
         worldContext: [lorebook?.text, settings.inlineAdsWorldContext].filter((part) => part?.trim()).join("\n\n"),
+        promptBlocks: settings.promptBlocks,
       });
       let images = 0;
       if (settings.inlineAdsImagesEnabled) {
@@ -3844,6 +3863,10 @@ export async function slurpRoutes(app: FastifyInstance) {
     const parsed = z
       .object({
         accountId: z.string().min(1),
+        // A failed picture is usually a bad prompt, so the retry may carry a rewritten one.
+        imagePrompt: z.string().trim().min(1).max(2000).optional(),
+        // Redraw a post that already has a picture; the old one comes back if the redraw fails.
+        replace: z.boolean().optional(),
         debugMode: z.boolean().optional(),
       })
       .safeParse(req.body ?? {});
@@ -3851,17 +3874,21 @@ export async function slurpRoutes(app: FastifyInstance) {
     const post = await noodle.getNoodlerPostById(id);
     if (!post) return reply.code(404).send({ error: "Slurp post not found" });
     if (post.authorAccountId !== parsed.data.accountId) return reply.code(403).send({ error: "Forbidden" });
-    if (post.imageUrl) return reply.code(409).send({ error: "This post already has an image." });
+    if (post.imageUrl && parsed.data.replace !== true) {
+      return reply.code(409).send({ error: "This post already has an image." });
+    }
+    const previousImageUrl = post.imageUrl;
     const account = await noodle.getNoodlerAccountById(post.authorAccountId);
     const imagePrompt =
+      parsed.data.imagePrompt ||
       post.imagePrompt?.trim() ||
       [post.title, post.content]
         .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
         .join("\n")
         .trim() ||
       `A new social media image for ${account?.displayName || "the creator"}.`;
-    if (!post.imagePrompt) {
-      await noodle.updatePostMedia(post.id, { imagePrompt });
+    if (imagePrompt !== post.imagePrompt || previousImageUrl) {
+      await noodle.updatePostMedia(post.id, { imagePrompt, ...(previousImageUrl ? { imageUrl: null } : {}) });
     }
 
     const result = await noodlerImages.generateReviewedImages({
@@ -3869,9 +3896,14 @@ export async function slurpRoutes(app: FastifyInstance) {
       debugMode: parsed.data.debugMode === true,
       retryStoredPrompt: true,
     });
-    if (!result.ok) return reply.code(400).send({ error: result.message });
     const updated = await noodle.getNoodlerPostById(id);
-    if (updated?.imageUrl) return updated;
+    if (result.ok && updated?.imageUrl) return updated;
+    // The old picture was cleared only so the redraw could claim the post; a failed redraw gives it back.
+    // It never clears a claim: another request that now owns the redraw keeps it.
+    if (previousImageUrl && updated && !updated.imageUrl) {
+      await noodle.restorePostImageIfUnclaimed(post.id, previousImageUrl);
+    }
+    if (!result.ok) return reply.code(400).send({ error: result.message });
     if (updated?.updatedAt !== post.updatedAt && updated?.metadata.imageGenerationFailed === true) {
       return reply.code(502).send({ error: "Image generation failed. Try again later." });
     }
@@ -4220,6 +4252,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       return await generateNoodlerStageProfileDraft(app.db, {
         request: parsed.data,
         connection,
+        promptBlocks: settings.promptBlocks,
       });
     } catch (error) {
       logger.error(
@@ -4260,7 +4293,10 @@ export async function slurpRoutes(app: FastifyInstance) {
     );
     if (!connection) return reply.code(400).send({ error: "Select a Slurp generation connection first." });
     try {
-      return await generateInvitedNoodlePostDraft(app.db, account!, connection, body.data);
+      return await generateInvitedNoodlePostDraft(app.db, account!, connection, {
+        ...body.data,
+        promptBlocks: settings.promptBlocks,
+      });
     } catch (error) {
       if (isConnectionAdmissionFailure(error)) return reply.code(409).send({ error: getErrorMessage(error) });
       logger.error(error, "[slurp] Invited post draft generation failed");
@@ -4898,6 +4934,7 @@ export async function slurpRoutes(app: FastifyInstance) {
         currentDraft: body.data.currentDraft ?? "",
         guidance: body.data.guidance ?? "",
         connection,
+        promptBlocks: settings.promptBlocks,
       });
     } catch (error) {
       logger.error(error, "[slurp] Post guidance draft failed using %s", connection.model || connection.provider);

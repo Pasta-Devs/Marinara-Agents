@@ -1,6 +1,7 @@
 import { resolveBaseUrl } from "../generation/connection-base-url.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import type { createConnectionsStorage } from "../storage/connections.storage.js";
+import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "./slurp-prompt-blocks.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -129,6 +130,7 @@ export async function generateSlurpConversationSchedule(
   character: { name: string; description: string; personality: string },
   /** `simulationTuning.prompts.scheduleExtra`: the player's own additions to the prompt. */
   extra = "",
+  promptBlocks?: SlurpPromptBlockOverrides,
 ): Promise<GeneratedSchedule> {
   // The route hands over the stored connection row; it is not a provider until built here.
   const provider = createLLMProvider(
@@ -145,18 +147,39 @@ export async function generateSlurpConversationSchedule(
   const messages = [
     {
       role: "system",
-      content: [
-        "Create a realistic weekly Conversation Schedule for this fictional character.",
-        "Include all seven days from Monday through Sunday.",
-        "Use time ranges such as 00:00-07:00 and cover the full 24 hours each day.",
-        'Each block must contain time, activity, and status. Valid status values are "online", "idle", "dnd", and "offline".',
-        "Also include talkativeness from 0 to 100 and inactivityThresholdMinutes from 15 to 360.",
-        "Return only one JSON object. Do not use markdown or explanatory text.",
-        `Character name: ${character.name}`,
-        `Description: ${character.description}`,
-        `Personality: ${character.personality}`,
-        ...(extra.trim() ? [extra.trim()] : []),
-      ].join("\n"),
+      content: composeSlurpPromptBlocks(
+        "conversationSchedule",
+        [
+          {
+            id: "task",
+            kind: "editable",
+            text: "Create a realistic weekly Conversation Schedule for this fictional character.",
+          },
+          {
+            id: "scheduleRules",
+            kind: "editable",
+            text: [
+              "Include all seven days from Monday through Sunday.",
+              "Use time ranges such as 00:00-07:00 and cover the full 24 hours each day.",
+              'Each block must contain time, activity, and status. Valid status values are "online", "idle", "dnd", and "offline".',
+              "Also include talkativeness from 0 to 100 and inactivityThresholdMinutes from 15 to 360.",
+              "Return only one JSON object. Do not use markdown or explanatory text.",
+            ].join("\n"),
+          },
+          {
+            id: "character",
+            kind: "context",
+            text: [
+              `Character name: ${character.name}`,
+              `Description: ${character.description}`,
+              `Personality: ${character.personality}`,
+              ...(extra.trim() ? [extra.trim()] : []),
+            ].join("\n"),
+          },
+          { id: "output", kind: "required", text: "Return one complete JSON object." },
+        ],
+        promptBlocks,
+      ),
     },
     { role: "user", content: "Generate the current week's schedule." },
   ] as const;

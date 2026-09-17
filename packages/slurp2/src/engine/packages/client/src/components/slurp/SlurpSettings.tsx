@@ -79,6 +79,8 @@ import {
 import {
   settingsSections,
   SLURP_GUIDANCE_PRESETS,
+  SLURP_IMAGE_INTERPRETATION_PRESETS,
+  SLURP_IMAGE_INTERPRETATION_STYLES,
   SLURP_GUIDANCE_LEVELS,
   DEFAULT_SLURP_GENERATION_GUIDANCE,
   DEFAULT_SLURP_IMAGE_GENERATION_PROMPT,
@@ -93,6 +95,7 @@ import { SlurpBackstageOverview } from "./SlurpBackstageOverview";
 import { SlurpBackstageCreators } from "./SlurpBackstageCreators";
 import { SlurpBackstageWorld } from "./SlurpBackstageWorld";
 import { SlurpBackstageAutomation } from "./SlurpBackstageAutomation";
+import { SlurpBackstagePrompts } from "./SlurpBackstagePrompts";
 import { SlurpBackstageMaintenance } from "./SlurpBackstageMaintenance";
 
 type SlurpSettingsProps = {
@@ -392,6 +395,10 @@ function useSlurpBackstageController({
   const generationGuidanceIsDefault = settings?.generationGuidance === DEFAULT_SLURP_GENERATION_GUIDANCE;
   const guidanceLevel =
     SLURP_GUIDANCE_LEVELS.find((level) => SLURP_GUIDANCE_PRESETS[level] === settings?.generationGuidance) ?? null;
+  const interpretationStyle =
+    SLURP_IMAGE_INTERPRETATION_STYLES.find(
+      (style) => SLURP_IMAGE_INTERPRETATION_PRESETS[style] === settings?.imagePromptInterpretation,
+    ) ?? null;
   const imagePromptIsDefault = settings?.imageGenerationPrompt === DEFAULT_SLURP_IMAGE_GENERATION_PROMPT;
   const activityPreset = settings && slurpActivityPresetForSettings(settings);
   const autopurgeNextTime = Date.parse(autopurgeNextDraft);
@@ -713,6 +720,7 @@ function useSlurpBackstageController({
     scheduleSlots,
     generationGuidanceIsDefault,
     guidanceLevel,
+    interpretationStyle,
     imagePromptIsDefault,
     activityPreset,
     autopurgeNextTime,
@@ -883,6 +891,7 @@ export function SlurpSettings({
     scheduleSlots,
     generationGuidanceIsDefault,
     guidanceLevel,
+    interpretationStyle,
     imagePromptIsDefault,
     activityPreset,
     autopurgeNextTime,
@@ -957,7 +966,7 @@ export function SlurpSettings({
           {/* The header answers three questions and nothing else: which page am I on, where do I
               find a setting, and is my change saved. The areas of the section sit under the title
               because they belong to it, not to the content card below. */}
-          <header className="relative isolate flex flex-col gap-3 rounded-xl bg-[linear-gradient(120deg,color-mix(in_srgb,var(--slurp-surface-raised)_94%,transparent),color-mix(in_srgb,var(--noodle-accent)_17%,var(--slurp-surface-raised))_58%,color-mix(in_srgb,var(--slurp-violet)_13%,var(--slurp-surface-raised)))] p-4 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] sm:p-5">
+          <header className="relative isolate z-30 flex flex-col gap-3 rounded-xl bg-[linear-gradient(120deg,color-mix(in_srgb,var(--slurp-surface-raised)_94%,transparent),color-mix(in_srgb,var(--noodle-accent)_17%,var(--slurp-surface-raised))_58%,color-mix(in_srgb,var(--slurp-violet)_13%,var(--slurp-surface-raised)))] p-4 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] sm:p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--noodle-accent)]">
@@ -970,14 +979,15 @@ export function SlurpSettings({
                   {SLURP_BACKSTAGE_TARGET_LABELS[target]}
                 </h1>
               </div>
-              <div className="flex min-w-0 flex-1 items-center justify-end gap-3 sm:basis-80">
+              <div className="flex min-w-0 flex-1 basis-full flex-wrap items-center justify-end gap-3 md:basis-80">
                 <SlurpBackstageSearch
                   onSelect={(nextSection, nextTarget, settingKey) =>
                     onNavigate({ ...navigation, section: nextSection, target: nextTarget, settingKey })
                   }
+                  className="max-w-none basis-full md:max-w-xl md:basis-auto"
                 />
                 <p
-                  className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full bg-[var(--slurp-surface,var(--background))] px-3 py-1 text-xs font-semibold shadow-sm ring-1 ring-inset ${saveState === "error" ? "text-red-300 ring-red-400/30" : saveState === "saved" ? "text-[var(--slurp-success)] ring-[var(--slurp-success)]/25" : "text-[var(--muted-foreground)] ring-[var(--border)]"}`}
+                  className={`inline-flex min-h-6 shrink-0 items-center gap-1 rounded-full bg-[var(--slurp-surface,var(--background))] px-2 py-0.5 text-[11px] font-semibold md:min-h-9 md:gap-1.5 md:px-3 md:py-1 md:text-xs shadow-sm ring-1 ring-inset ${saveState === "error" ? "text-red-300 ring-red-400/30" : saveState === "saved" ? "text-[var(--slurp-success)] ring-[var(--slurp-success)]/25" : "text-[var(--muted-foreground)] ring-[var(--border)]"}`}
                   role="status"
                   aria-live="polite"
                 >
@@ -998,7 +1008,9 @@ export function SlurpSettings({
                 </p>
               </div>
             </div>
+            {/* Mobile hides these: the destination dropdown below already lists every area. */}
             <SlurpBackstageSubnav
+              className="hidden md:flex"
               section={section}
               target={target}
               onSelect={(nextTarget) => onNavigate({ ...navigation, target: nextTarget })}
@@ -1048,6 +1060,7 @@ export function SlurpSettings({
                   <SlurpBackstageCreators {...page} />
                   <SlurpBackstageWorld {...page} />
                   <SlurpBackstageAutomation {...page} />
+                  <SlurpBackstagePrompts {...page} />
                   <SlurpBackstageMaintenance {...page} />
                   <SlurpBackstageApplyBar
                     count={Object.keys(draftPatch).length}

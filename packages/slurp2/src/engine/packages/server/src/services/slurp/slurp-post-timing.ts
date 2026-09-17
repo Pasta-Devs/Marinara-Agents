@@ -11,7 +11,7 @@
  * the two together costs nothing. Build the stored rhythm only if this proves too vague.
  */
 const DAY_PLACEMENT_INSTRUCTION =
-  "Place this post inside the character's own day at that hour and weekday: what they have just been doing, where that puts them, what they are wearing or holding because of it. A Tuesday morning and a Saturday night are different posts from the same person.";
+  "Place this post inside the character's own day at that hour and weekday: what they have just been doing, where that puts them, what they are wearing or holding because of it. The time shapes the scene only: do not state the time, the hour, the weekday, the date, or a phrase such as 3am or Tuesday morning in the post, unless the post is about the time itself. Most real posts never mention when they were written.";
 
 export function buildSlurpPostTimingContext(generatedAt: Date, publicationTime?: Date): string {
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "local timezone";
@@ -22,7 +22,6 @@ export function buildSlurpPostTimingContext(generatedAt: Date, publicationTime?:
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
-      second: "2-digit",
       timeZoneName: "short",
     }).format(value);
   if (publicationTime) {

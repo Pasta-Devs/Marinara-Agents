@@ -9,6 +9,7 @@ import german from "./localization/locales/de.json";
 import korean from "./localization/locales/ko.json";
 import polish from "./localization/locales/pl.json";
 import { SlurpHome } from "./components/slurp/SlurpHome";
+import { ApiError } from "./lib/api-client";
 import { useSlurpUIStore } from "./stores/slurp-package.store";
 import { configureSlurpPackageState } from "./stores/slurp-package.store";
 import { ModalPortalContext } from "./components/ui/Modal";
@@ -16,8 +17,15 @@ import { AppDialogRenderer } from "./components/ui/AppDialogRenderer";
 
 const SLURP_ELEMENT_TAG = "marinara-capability-slurp2";
 const SLURP_STYLE_ID = "marinara-capability-slurp2-styles";
+// An Engine restart drops every request for a few seconds. With no retry, one poll landing in that
+// window left the Hub on "Slurp could not be loaded." Network failures and 5xx retry with backoff
+// (about 30s in total); a 4xx is a real answer and fails at once.
 const client = new QueryClient({
-  defaultOptions: { queries: { retry: false } },
+  defaultOptions: {
+    queries: {
+      retry: (failures, error) => failures < 5 && !(error instanceof ApiError && error.status < 500),
+    },
+  },
 });
 const localization = i18next.createInstance();
 

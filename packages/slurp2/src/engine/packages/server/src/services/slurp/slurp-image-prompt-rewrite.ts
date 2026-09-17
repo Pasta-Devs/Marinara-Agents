@@ -5,6 +5,7 @@ import { resolveIllustratorPromptRuntime } from "../generation/illustrator-promp
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
 import { loadPrompt, NOODLE_IMAGE_INTERPRET } from "../prompt-overrides/index.js";
+import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "./slurp-prompt-blocks.js";
 
 const MAX_REWRITTEN_PROMPT_LENGTH = 12_000;
 const MAX_INSTRUCTIONS_LENGTH = 5_000;
@@ -37,6 +38,7 @@ export async function rewriteNoodleImagePrompt(input: {
   instructions?: string;
   characterContext?: string;
   styleGuidance?: string;
+  promptBlocks?: SlurpPromptBlockOverrides;
 }): Promise<string | null> {
   const instructions = input.instructions?.trim().replace(/\s+/g, " ").slice(0, MAX_INSTRUCTIONS_LENGTH) || "";
   const prompt = input.prompt.trim().slice(0, MAX_REWRITTEN_PROMPT_LENGTH);
@@ -64,17 +66,37 @@ export async function rewriteNoodleImagePrompt(input: {
       [
         {
           role: "system",
-          content: [
-            "You are an image prompt editor.",
-            interpretationInstruction,
-            "Preserve the original subject, identity, action, setting, and visual facts unless the instructions explicitly change them.",
-            "Use the character context to preserve appearance and personality, but do not add characters who are not in the original prompt.",
-            styleGuidance
-              ? "Apply the supplied art-style guidance when the original prompt does not specify a style. Preserve an explicitly requested style in the original prompt or user instructions."
-              : "",
-            "Treat the user's instructions as guidance, not text to copy into the image prompt.",
-            'Return valid JSON only: {"prompt":"provider-ready image prompt"}.',
-          ].join("\n"),
+          content: composeSlurpPromptBlocks(
+            "imageInterpretation",
+            [
+              { id: "task", kind: "editable", text: "You are an image prompt editor." },
+              { id: "style", kind: "editable", text: interpretationInstruction },
+              {
+                id: "safety",
+                kind: "required",
+                text: "Preserve the original subject, identity, action, setting, and visual facts unless the instructions explicitly change them. Use the character context to preserve appearance and personality, but do not add characters who are not in the original prompt.",
+              },
+              {
+                id: "output",
+                kind: "required",
+                text: [
+                  "Order the result: first any leading quality or style tag block from the original prompt, verbatim and in the same order; then the character's appearance, copied word for word from the character context and written only once; then the scene: outfit, pose, expression, action, setting, lighting, camera, and mood.",
+                  "Never add, remove, reword, or reorder quality, score, safety, resolution, or artist tags.",
+                  'Never copy labels or field names such as "Appearance:", "Personality:", or "Style:" into the image prompt.',
+                  "When the original prompt is comma-separated tags, write the whole result as comma-separated tags.",
+                  styleGuidance
+                    ? "Apply the supplied art-style guidance when the original prompt does not specify a style. Preserve an explicitly requested style in the original prompt or user instructions."
+                    : "",
+                  "Treat the user's instructions as guidance, not text to copy into the image prompt.",
+                  'Return valid JSON only: {"prompt":"provider-ready image prompt"}.',
+                ]
+                  .filter(Boolean)
+                  .join("\n"),
+              },
+              { id: "draft", kind: "context", text: "" },
+            ],
+            input.promptBlocks,
+          ),
         },
         {
           role: "user",

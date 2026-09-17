@@ -265,6 +265,7 @@ export async function generateNoodlePostImage(input: {
         instructions: imagePromptInstructions,
         characterContext,
         styleGuidance,
+        promptBlocks: input.settings.promptBlocks,
       })
     : null;
   // The style profile is an Engine setting, not something the interpretation model owns. The

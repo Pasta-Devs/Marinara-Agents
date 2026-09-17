@@ -54,7 +54,14 @@ export type SlurpReplyOutcome =
  */
 export async function replyToSlurpMessage(
   db: DB,
-  input: { threadId: string; triggerMessageId: string; force?: boolean; debugMode?: boolean },
+  input: {
+    threadId: string;
+    triggerMessageId: string;
+    force?: boolean;
+    /** The scheduler, answering unattended. A person waiting at the screen is not this. */
+    background?: boolean;
+    debugMode?: boolean;
+  },
 ): Promise<SlurpReplyOutcome> {
   const messagesStore = createSlurpMessagesStorage(db);
   const slurp = createSlurpStorage(db);
@@ -65,10 +72,14 @@ export async function replyToSlurpMessage(
     slurp.getNoodlerAccountById(thread.creatorAccountId),
     slurp.getViewer(thread.viewerAccountId),
   ]);
-  if (!creator || !viewer) return { status: "ineligible" };
   // A persona-backed Creator is operated by hand: it never auto-posts and it never answers a DM
   // on its own either. The operator writes the answer through the draft-reply route.
-  if (creator.kind === "persona" && creator.sourceKind === "persona") return { status: "ineligible" };
+  if (!creator || !viewer || (creator.kind === "persona" && creator.sourceKind === "persona")) {
+    // No automatic reply can ever come, so the thread must stop taking one of the scheduler's
+    // oldest-first slots. Left set, these starved every newer thread the player was waiting on.
+    if (input.background) await messagesStore.clearReplyObligation(thread.id);
+    return { status: "ineligible" };
+  }
 
   // Nothing outranks a boundary. A creator who has walked away from this conversation has walked
   // away from it, whatever the rapport, the schedule or the tone dial say.
@@ -296,7 +307,9 @@ export async function replyToSlurpMessage(
         reply.image &&
         reply.canSendImage &&
         slurpCreatorStateCanUseMedia(creatorState, thread.threadState) &&
-        input.force !== true
+        // Unattended replies never draw: the picture costs money the player did not ask to spend.
+        // A forced reply is a person pressing a button, so it may, like an ordinary send.
+        input.background !== true
       ) {
         const imageAllowedBySettings = settings.enableImagePrompts === true;
         const recentGeneratedImage = history.some(
@@ -476,7 +489,9 @@ export async function replyToSlurpMessage(
     return locked.value;
   } catch (error) {
     if (error instanceof SlurpMessageBudgetUnavailableError) {
-      const retryAt = error.retryAt ?? (input.force ? new Date(Date.now() + 60 * 60_000).toISOString() : null);
+      // Only the scheduler backs itself off. A player pressing the button must never push their own
+      // reply an hour further away by pressing it again.
+      const retryAt = error.retryAt ?? (input.background ? new Date(Date.now() + 60 * 60_000).toISOString() : null);
       if (retryAt) {
         await messagesStore.setReplyNotBefore(thread.id, retryAt);
         return { status: "queued", pacing };

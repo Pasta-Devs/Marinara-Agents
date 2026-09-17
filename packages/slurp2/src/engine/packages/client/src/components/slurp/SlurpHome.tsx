@@ -448,6 +448,15 @@ function errorMessage(error: unknown, fallback: string) {
 export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   const { t: localizeUi } = useUiTranslation();
   const accountsQuery = useNoodlerAccounts();
+  /**
+   * Load the Hub again after a failure.
+   *
+   * A tab left open across an Engine update can keep running the old package bundle, and no refetch
+   * recovers from that. So a retry that fails again reloads the page.
+   */
+  const retryAccountsOrReload = async () => {
+    if ((await accountsQuery.refetch()).isError) window.location.reload();
+  };
   const connectionCountsQuery = useNoodlerConnectionCounts();
   const viewerWalletsQuery = useNoodlerViewerWallets();
   const slurpSettingsQuery = useSlurpSettings();
@@ -492,20 +501,23 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     (shellPersonaAccount &&
       accountsQuery.data?.find((profile) => profile.sourceAccountId === shellPersonaAccount.id)) ||
     null;
-  const viewerActorAccount =
-    shellPersonaAccount && myCreatorProfile
-      ? ({
-          ...shellPersonaAccount,
-          id: myCreatorProfile.id,
-          handle: myCreatorProfile.handle,
-          displayName: myCreatorProfile.displayName,
-          bio: myCreatorProfile.bio,
-          avatarUrl: myCreatorProfile.avatarUrl,
-          avatarCrop: myCreatorProfile.avatarCrop,
-          createdAt: myCreatorProfile.createdAt,
-          updatedAt: myCreatorProfile.updatedAt,
-        } as NoodleAccount)
-      : null;
+  const viewerActorAccount = shellPersonaAccount
+    ? ({
+        ...shellPersonaAccount,
+        ...(myCreatorProfile
+          ? {
+              id: myCreatorProfile.id,
+              handle: myCreatorProfile.handle,
+              displayName: myCreatorProfile.displayName,
+              bio: myCreatorProfile.bio,
+              avatarUrl: myCreatorProfile.avatarUrl,
+              avatarCrop: myCreatorProfile.avatarCrop,
+              createdAt: myCreatorProfile.createdAt,
+              updatedAt: myCreatorProfile.updatedAt,
+            }
+          : {}),
+      } as NoodleAccount)
+    : null;
   const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const mobileDrawerTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -1049,10 +1061,10 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   });
   const generatePostImage = useGenerateNoodlerPostImage();
   const [generatingPostImageId, setGeneratingPostImageId] = useState<string | null>(null);
-  const handleGeneratePostImage = (post: Pick<NoodlerManagedPost, "id" | "authorAccountId">) => {
+  const handleGeneratePostImage = (post: Pick<NoodlerManagedPost, "id" | "authorAccountId">, imagePrompt?: string) => {
     setGeneratingPostImageId(post.id);
     generatePostImage.mutate(
-      { id: post.id, accountId: post.authorAccountId },
+      { id: post.id, accountId: post.authorAccountId, imagePrompt },
       {
         onError: (error) => toast.error(errorMessage(error, localizeUi("ui.slurp.image.generateFailed"))),
         onSettled: () => setGeneratingPostImageId(null),
@@ -1702,7 +1714,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
           <EmptyState
             title={localizeUi("ui.noodle.noodlerhome.noodlerCouldNotBeLoaded")}
             action={localizeUi("capabilities.actions.tryAgain")}
-            onAction={() => void accountsQuery.refetch()}
+            onAction={retryAccountsOrReload}
           />
         </NoodlerFrame>
       </NoodleShell>
@@ -2360,7 +2372,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
               <EmptyState
                 title={localizeUi("ui.noodle.noodlerhome.stageProfilesCouldNotBeLoaded")}
                 action={localizeUi("capabilities.actions.tryAgain")}
-                onAction={() => void accountsQuery.refetch()}
+                onAction={retryAccountsOrReload}
                 icon={TriangleAlert}
               />
             ) : accountsQuery.data && accountsQuery.data.length > 0 ? (

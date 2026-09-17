@@ -42,6 +42,7 @@ import {
   type SlurpModelJobKind,
   type SlurpModelWorkerContext,
 } from "./slurp-model-worker.js";
+import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "./slurp-prompt-blocks.js";
 
 export type SlurpPendingKind = "commission" | "question" | "opener" | "delivery";
 
@@ -98,6 +99,7 @@ function buildMessages(input: {
   speakerMemory?: string;
   placeholder: string;
   post?: { title: string | null; content: string | null } | null;
+  promptBlocks?: SlurpPromptBlockOverrides;
 }) {
   // A delivery note is the only kind the creator speaks, so it gets the opposite framing. Handing
   // it the fan-voice preamble produced deliveries written as if the fan had drawn the picture.
@@ -138,7 +140,19 @@ function buildMessages(input: {
     placeholderToReplace: input.placeholder,
   };
   return [
-    { role: "system" as const, content: [...shared, instruction].join("\n") },
+    {
+      role: "system" as const,
+      content: composeSlurpPromptBlocks(
+        `pending${input.kind[0].toUpperCase()}${input.kind.slice(1)}` as "pendingCommission",
+        [
+          { id: "task", kind: "editable", text: instruction },
+          { id: "safety", kind: "required", text: shared.join("\n") },
+          { id: "output", kind: "required", text: shared.at(-1) ?? "Return JSON only." },
+          { id: "source", kind: "context", text: "The supplied Slurp data follows." },
+        ],
+        input.promptBlocks,
+      ),
+    },
     { role: "user" as const, content: `# Untrusted Slurp data\n${JSON.stringify(data, null, 2)}` },
   ];
 }
@@ -293,6 +307,7 @@ export async function drainSlurpPendingText(
           speakerMemory: kind === "delivery" || !member ? undefined : slurpFanMemoryForPrompt(tie),
           placeholder,
           post: post ? { title: post.title, content: post.content } : null,
+          promptBlocks: settings.promptBlocks,
         }),
         {
           model: connection.model,

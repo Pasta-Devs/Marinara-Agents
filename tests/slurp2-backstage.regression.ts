@@ -16,7 +16,7 @@ const settingKeys = [...hooks.slice(settingsStart, settingsEnd).matchAll(/^\s{2}
   (match) => match[1],
 );
 
-assert.deepEqual(SLURP_BACKSTAGE_SECTIONS, ["overview", "creators", "world", "automation", "maintenance"]);
+assert.deepEqual(SLURP_BACKSTAGE_SECTIONS, ["overview", "creators", "world", "automation", "prompts", "maintenance"]);
 assert.deepEqual(
   Object.keys(SLURP_BACKSTAGE_SETTING_PLACEMENT).sort(),
   settingKeys.sort(),

@@ -1291,5 +1291,8 @@
   "ui.slurp.settings.backstage.preview.ads.sampleCopy.unhinged": "열한 잔을 마셨더니 색이 들립니다. 원두를 사세요.",
   "ui.slurp.settings.creators.refreshingConversationSchedule": "일정을 다시 만드는 중…",
   "ui.slurp.settings.creators.openWorldMessaging": "메시지 규칙 열기",
-  "ui.slurp.settings.creators.messagingInheritsWorld": "각 값은 Slurp 세계 기본값에서 시작하며, 여기서 변경할 때까지 유지됩니다."
+  "ui.slurp.settings.creators.messagingInheritsWorld": "각 값은 Slurp 세계 기본값에서 시작하며, 여기서 변경할 때까지 유지됩니다.",
+  "ui.slurp.settings.prompts.blocksSummary": "블록 {{count}}개 · {{state}}",
+  "ui.slurp.settings.prompts.blocksSummaryChanged": "변경됨",
+  "ui.slurp.settings.prompts.blocksSummaryDefault": "기본값"
 }

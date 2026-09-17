@@ -45,6 +45,7 @@ import {
   type ConversationMediaPickerTabId,
 } from "../chat/ConversationMediaPickerPanel";
 import type { ChatImage } from "../../hooks/use-gallery";
+import { useSlurpSettings } from "../../hooks/use-slurp";
 import { Avatar, SlurpMediaImg } from "./SlurpShell";
 import { formatTime } from "./SlurpDateTime";
 import { NoodleImageComposer } from "./SlurpImageComposer";
@@ -79,8 +80,11 @@ export function slurpReplyThreads(orderedReplies: NoodleInteraction[], replyById
 export function SlurpClampedText(props: Parameters<typeof NoodleTextContent>[0]) {
   const { t: localizeUi } = useUiTranslation();
   const [expanded, setExpanded] = useState(false);
+  const limit = useSlurpSettings().data?.postShowMoreLength ?? 300;
   // ponytail: length/line heuristic instead of measuring overflow; measure with a ref if short posts clamp oddly.
-  const long = props.content.length > 420 || props.content.split("\n").length > 7;
+  // The collapsed view is a CSS clamp on the whole text, never a slice: handing the markdown parser
+  // a cut string turned an unclosed fence or link into a grey code box for the rest of the post.
+  const long = props.content.length > limit || props.content.split("\n").length > 7;
   return (
     <>
       <div className={cn(long && !expanded && "line-clamp-6")}>
@@ -1141,7 +1145,7 @@ export interface NoodlePostCardCtx {
   /** Post image crop, replacement, and removal capability. */
   imageEditing?: NoodlePostCardImageEditingCap;
   /** Generate a missing post image from its saved prompt. */
-  generatePostImage?: (post: Pick<NoodlePostCardModel, "id" | "authorAccountId">) => void;
+  generatePostImage?: (post: Pick<NoodlePostCardModel, "id" | "authorAccountId">, imagePrompt?: string) => void;
   generatingPostImageId?: string | null;
   /** Reply image/upload capability. Absent → the card hides all reply-image affordances. */
   media?: NoodlePostCardMediaCap;
@@ -1468,6 +1472,40 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
   const { t: localizeUi, i18n } = useUiTranslation();
   const [commentsExpanded, setCommentsExpanded] = useState(false);
   const [expandedThreadIds, setExpandedThreadIds] = useState<ReadonlySet<string>>(new Set());
+  // null while the stored prompt is only shown; a string while it is being rewritten for a retry.
+  const [promptDraft, setPromptDraft] = useState<string | null>(null);
+  const promptEditor = promptDraft !== null && (
+    <>
+      <textarea
+        value={promptDraft}
+        onChange={(event) => setPromptDraft(event.target.value)}
+        rows={4}
+        maxLength={2000}
+        aria-label={localizeUi("ui.noodle.noodlepostcard.imagePrompt")}
+        className="w-full rounded-lg border border-[var(--noodle-divider)] bg-[var(--background)] p-2 text-xs leading-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+      />
+      <div className="mt-2 flex gap-2">
+        <button
+          type="button"
+          disabled={!promptDraft.trim() || ctx.generatingPostImageId === post.id}
+          onClick={() => {
+            ctx.generatePostImage?.(post, promptDraft.trim());
+            setPromptDraft(null);
+          }}
+          className="min-h-9 rounded-lg bg-[var(--noodle-accent)] px-3 font-semibold text-zinc-950 disabled:opacity-50"
+        >
+          {localizeUi("ui.slurp.image.generate")}
+        </button>
+        <button
+          type="button"
+          onClick={() => setPromptDraft(null)}
+          className="min-h-9 rounded-lg px-3 font-semibold text-[var(--muted-foreground)] hover:bg-[var(--accent)]"
+        >
+          {localizeUi("ui.slurp.actions.cancel")}
+        </button>
+      </div>
+    </>
+  );
   const {
     personaAccount,
     postMenuId,
@@ -2101,6 +2139,19 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
                         <Pencil size={14} className="text-[var(--noodle-accent)]" />
                         {localizeUi("ui.noodle.noodlepostcard.edit")}
                       </button>
+                      {post.imageUrl && ctx.generatePostImage && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPostMenuId(null);
+                            setPromptDraft(post.imagePrompt ?? "");
+                          }}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--accent)]"
+                        >
+                          <RefreshCw size={14} className="text-[var(--noodle-accent)]" />
+                          {localizeUi("ui.slurp.image.regenerate", { defaultValue: "Regenerate image" })}
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => deleteNoodlePost(post)}
@@ -2254,14 +2305,38 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
                 />
               </div>
             )
-          ) : post.imagePrompt ? (
+          ) : null}
+          {post.imageUrl && promptEditor && (
+            <div className="mt-3 rounded-xl border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/10 p-3 text-xs leading-5">
+              <span className="mb-1 flex items-center gap-1.5 font-semibold text-[var(--noodle-accent)]">
+                <ImageIcon size={13} />
+                {localizeUi("ui.noodle.noodlepostcard.imagePrompt")}
+              </span>
+              {promptEditor}
+            </div>
+          )}
+          {ctx.postManagement &&
+          editingPostId === post.id &&
+          imageEditing ? null : post.imageUrl ? null : post.imagePrompt ? (
             <div className="relative mt-3 rounded-xl border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/10 p-3 pr-14 text-xs leading-5">
               <span className="mb-1 flex items-center gap-1.5 font-semibold text-[var(--noodle-accent)]">
                 <ImageIcon size={13} />
                 {localizeUi("ui.noodle.noodlepostcard.imagePrompt")}
               </span>
-              {post.imagePrompt}
-              {ctx.postManagement && ctx.generatePostImage && (
+              {/* A picture that failed usually failed on its words, so the retry can carry new ones. */}
+              {promptDraft === null ? post.imagePrompt : promptEditor}
+              {ctx.postManagement && ctx.generatePostImage && promptDraft === null && (
+                <button
+                  type="button"
+                  onClick={() => setPromptDraft(post.imagePrompt ?? "")}
+                  className="absolute right-11 top-2 flex h-10 w-10 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/15 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] motion-reduce:transition-none motion-reduce:active:scale-100"
+                  title={localizeUi("ui.slurp.image.editPrompt", { defaultValue: "Edit the image prompt" })}
+                  aria-label={localizeUi("ui.slurp.image.editPrompt", { defaultValue: "Edit the image prompt" })}
+                >
+                  <Pencil size={17} />
+                </button>
+              )}
+              {ctx.postManagement && ctx.generatePostImage && promptDraft === null && (
                 <button
                   type="button"
                   onClick={() => ctx.generatePostImage?.(post)}
