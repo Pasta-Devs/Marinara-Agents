@@ -554,6 +554,23 @@ export const slurpSettingsSchema = z.object({
   participantMin: z.number().int().min(1).max(24),
   participantMax: z.number().int().min(1).max(24),
   invitedCharacterGroupIds: z.array(z.string()),
+  /**
+   * Characters the user put in the audience.
+   *
+   * Key is the Engine character id. Value is the Fan Type id that shapes the character's
+   * behaviour, or true to let the id pick one, as an ambient account does today.
+   */
+  audienceCharacters: z.record(z.string(), z.union([z.string(), z.boolean()])),
+  /** Character groups whose members join the audience. Per-character entries above win. */
+  audienceCharacterGroupIds: z.array(z.string()).max(20),
+  /**
+   * Most character fans that may act at once.
+   *
+   * The user sets this because the cost is theirs: each character fan in a cast adds up to
+   * `SLURP_FAN_VOICE_PROMPT_MAX` characters to that prompt. The default keeps a fresh install
+   * bounded; a user with a long context window may raise it.
+   */
+  audienceCharacterLimit: z.number().int().min(0).max(50),
   carryoverModes: z.array(z.enum(["conversation", "roleplay", "game"])),
   carryoverHours: z
     .number()
@@ -1270,6 +1287,9 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   participantMin: 1,
   participantMax: 4,
   invitedCharacterGroupIds: [],
+  audienceCharacters: {},
+  audienceCharacterGroupIds: [],
+  audienceCharacterLimit: 8,
   carryoverModes: [],
   carryoverHours: 24,
   carryoverMaxItems: 20,

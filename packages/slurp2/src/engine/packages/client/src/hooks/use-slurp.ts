@@ -395,6 +395,12 @@ export type SlurpSettings = {
   participantMin: number;
   participantMax: number;
   invitedCharacterGroupIds: string[];
+  /** Characters the user put in the audience. Value is a Fan Type id, or true to derive one. */
+  audienceCharacters: Record<string, string | boolean>;
+  /** Character groups whose members join the audience. Per-character entries win. */
+  audienceCharacterGroupIds: string[];
+  /** Most character fans that may act at once. Each one costs prompt space in every fan run. */
+  audienceCharacterLimit: number;
   carryoverModes: Array<"conversation" | "roleplay" | "game">;
   carryoverHours: number;
   carryoverMaxItems: number;
