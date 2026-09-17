@@ -535,6 +535,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
     mode: resolvedMode,
     modes,
     relationshipIdentityKey: identityContext.identityKeyForUnit,
+    characterIdentityKey: identityContext.identityKeyForUnit,
   });
   const unitResponse = {
     ...extractionPayload.response,
