@@ -966,7 +966,7 @@ export function SlurpSettings({
           {/* The header answers three questions and nothing else: which page am I on, where do I
               find a setting, and is my change saved. The areas of the section sit under the title
               because they belong to it, not to the content card below. */}
-          <header className="relative isolate flex flex-col gap-3 rounded-xl bg-[linear-gradient(120deg,color-mix(in_srgb,var(--slurp-surface-raised)_94%,transparent),color-mix(in_srgb,var(--noodle-accent)_17%,var(--slurp-surface-raised))_58%,color-mix(in_srgb,var(--slurp-violet)_13%,var(--slurp-surface-raised)))] p-4 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] sm:p-5">
+          <header className="relative isolate z-30 flex flex-col gap-3 rounded-xl bg-[linear-gradient(120deg,color-mix(in_srgb,var(--slurp-surface-raised)_94%,transparent),color-mix(in_srgb,var(--noodle-accent)_17%,var(--slurp-surface-raised))_58%,color-mix(in_srgb,var(--slurp-violet)_13%,var(--slurp-surface-raised)))] p-4 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] sm:p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--noodle-accent)]">
