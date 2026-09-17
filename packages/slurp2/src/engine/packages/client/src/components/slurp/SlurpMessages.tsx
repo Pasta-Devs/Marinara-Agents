@@ -636,19 +636,20 @@ function SlurpThreadView({
   );
   // Captured once per thread: the inbox count drops to zero as soon as opening marks it read, and
   // the marker must stay on the same message while new replies arrive below it.
-  const unreadMarkerRef = useRef<{ threadId: string | null; count: number; messageId: string | null | undefined }>({
-    threadId: null,
-    count: 0,
-    messageId: null,
-  });
+  // The side (and so which count applies) is only known once the thread has loaded.
+  const unreadMarkerRef = useRef<{
+    threadId: string | null;
+    unread: { viewer: number; creator: number } | null;
+    messageId: string | null | undefined;
+  }>({ threadId: null, unread: null, messageId: null });
   if (unreadMarkerRef.current.threadId !== threadId) {
-    const count = unreadAtOpen ? (ownsCreator ? unreadAtOpen.creator : unreadAtOpen.viewer) : 0;
-    unreadMarkerRef.current = { threadId, count, messageId: count > 0 ? undefined : null };
+    unreadMarkerRef.current = { threadId, unread: unreadAtOpen, messageId: unreadAtOpen ? undefined : null };
   }
-  if (unreadMarkerRef.current.messageId === undefined && messages.length > 0) {
+  if (unreadMarkerRef.current.messageId === undefined && threadQuery.data && messages.length > 0) {
+    const unread = unreadMarkerRef.current.unread;
+    const count = unread ? (ownsCreator ? unread.creator : unread.viewer) : 0;
     const incoming = messages.filter((message) => message.role !== (ownsCreator ? "creator" : "viewer"));
-    unreadMarkerRef.current.messageId =
-      incoming[Math.max(0, incoming.length - unreadMarkerRef.current.count)]?.id ?? null;
+    unreadMarkerRef.current.messageId = count > 0 ? (incoming[Math.max(0, incoming.length - count)]?.id ?? null) : null;
   }
   const firstUnreadMessageId = unreadMarkerRef.current.messageId ?? null;
   const timeline = [
@@ -794,6 +795,8 @@ function SlurpThreadView({
     setCustomTipAmount("");
     setCustomTipNote("");
     setVisibleCount(SLURP_MESSAGE_PAGE);
+    setAwayFromBottom(false);
+    setHeaderMenuOpen(false);
     landedAtBottomRef.current = false;
   }, [threadId, creatorAccountId]);
 
