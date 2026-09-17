@@ -7,8 +7,11 @@ export type SlurpProfileConnection = "followers" | "following";
 export type SlurpNavigationState =
   | { mode: "creator"; view: "hub"; onboarding?: boolean }
   | { mode: "creator"; view: "search" }
-  /** `creatorAccountId` lands straight in that Creator's chat, when Messages was opened from a profile. */
-  | { mode: "creator"; view: "messages"; creatorAccountId?: string }
+  /**
+   * `creatorAccountId` lands straight in that Creator's chat, when Messages was opened from a profile.
+   * `returnTo` is where Back leaves that chat for.
+   */
+  | { mode: "creator"; view: "messages"; creatorAccountId?: string; returnTo?: SlurpNavigationState }
   | { mode: "creator"; view: "wallet" }
   /** The Creator home: earnings, reach, recent post performance, and goals. */
   | { mode: "creator"; view: "studio" }

@@ -14,6 +14,11 @@
 
 export type ConversationMomentum = "hot" | "warm" | "cold" | "frozen";
 
+/** A Creator who just replied stays online this long, so the fan can answer while she is there. */
+export const SLURP_ONLINE_AFTER_REPLY_MINUTES = 5;
+/** A delivered commission keeps her around longer: it is the moment a fan most wants to answer. */
+export const SLURP_ONLINE_AFTER_DELIVERY_MINUTES = 10;
+
 export type MomentumAnalysis = {
   momentum: ConversationMomentum;
   /** Minutes since last message in thread. */
