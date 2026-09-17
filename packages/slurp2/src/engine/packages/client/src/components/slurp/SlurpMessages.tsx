@@ -4209,6 +4209,7 @@ function SlurpRelationshipPanel({
   resetting: boolean;
 }) {
   const [advanced, setAdvanced] = useState(false);
+  const { t: localizeUi } = useUiTranslation();
   const { creatorState, threadState, availability } = relationship;
   const cooling = Boolean(relationship.coolUntil && relationship.coolUntil > new Date().toISOString());
   const mood = relationship.mood ?? 0;
@@ -4238,7 +4239,7 @@ function SlurpRelationshipPanel({
             <div
               className="mt-3"
               role="meter"
-              aria-label="Relationship level"
+              aria-label={localizeUi("ui.slurp.messages.relationshipLevel", { defaultValue: "Relationship level" })}
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={relationship.score}

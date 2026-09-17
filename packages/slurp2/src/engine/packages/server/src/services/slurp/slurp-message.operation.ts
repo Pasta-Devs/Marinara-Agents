@@ -115,13 +115,10 @@ export async function replyToSlurpMessage(
     history.map((m) => ({ role: m.role as "viewer" | "creator", createdAt: m.createdAt })),
   );
 
-  // Clear the window once the chat has gone cold. Clearing it as soon as it stopped being hot ended
-  // the reply and delivery windows the moment a fan took more than five minutes to answer.
-  if ((momentumAnalysis.momentum === "cold" || momentumAnalysis.momentum === "frozen") && thread.extendedOnlineUntil) {
-    await messagesStore.setExtendedOnline(thread.id, null).catch((error: unknown) => {
-      logger.warn(error, "[slurp-message] Could not clear extended online for thread %s", thread.id);
-    });
-  }
+  // The reply and delivery windows are bounded (five and ten minutes) and expire on their own.
+  // Never clear an active window before the reply outcome: queued, busy, connection_not_found,
+  // and failed paths return before keepOnlineFor, and a cleared window would strand the fan.
+  // A successful reply replaces the window afterward, so nothing here needs to be removed.
 
   // Momentum can extend the stored conversation window, but it must not override a schedule that
   // says the Creator is offline. Only an online Creator can open or extend that window.

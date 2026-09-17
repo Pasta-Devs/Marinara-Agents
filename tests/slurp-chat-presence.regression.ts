@@ -28,6 +28,11 @@ assert.match(
   /momentum === "hot" && availability\.online/u,
   "only an online Creator can extend the conversation window",
 );
+assert.doesNotMatch(
+  operation,
+  /setExtendedOnline\(thread\.id, null\)/u,
+  "an incoming message must not clear an active online window before the reply outcome",
+);
 
 // Every outcome the operation can report has copy, so none of them renders as silence.
 for (const status of ["queued", "cooling", "busy", "ineligible", "connection_not_found", "failed"]) {
