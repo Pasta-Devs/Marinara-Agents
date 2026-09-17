@@ -23,6 +23,7 @@ import {
   calculateConversationMomentum,
   extendedOnlineDurationMinutes,
   shouldPauseMoodRecovery,
+  SLURP_ONLINE_AFTER_REPLY_MINUTES,
 } from "./slurp-conversation-momentum.js";
 import { readTalkativenessProfile, allowMultiBubbleSplit } from "./slurp-talkativeness.js";
 import {
@@ -114,8 +115,9 @@ export async function replyToSlurpMessage(
     history.map((m) => ({ role: m.role as "viewer" | "creator", createdAt: m.createdAt })),
   );
 
-  // Clear extendedOnlineUntil if momentum is no longer hot
-  if (momentumAnalysis.momentum !== "hot" && thread.extendedOnlineUntil) {
+  // Clear the window once the chat has gone cold. Clearing it as soon as it stopped being hot ended
+  // the reply and delivery windows the moment a fan took more than five minutes to answer.
+  if ((momentumAnalysis.momentum === "cold" || momentumAnalysis.momentum === "frozen") && thread.extendedOnlineUntil) {
     await messagesStore.setExtendedOnline(thread.id, null).catch((error: unknown) => {
       logger.warn(error, "[slurp-message] Could not clear extended online for thread %s", thread.id);
     });
@@ -371,16 +373,15 @@ export async function replyToSlurpMessage(
           })
           .catch((error: unknown) => logger.warn(error, "[slurp-message] Could not record the reply outcome"));
 
-        // Set extended online duration if momentum is hot
-        if (momentumAnalysis.momentum === "hot" && availability.online) {
-          const extendedDuration = extendedOnlineDurationMinutes(momentumAnalysis.momentum, thread.rapport.score);
-          if (extendedDuration !== null) {
-            const extendedUntil = new Date(Date.now() + extendedDuration * 60_000).toISOString();
-            await messagesStore
-              .setExtendedOnline(thread.id, extendedUntil)
-              .catch((error: unknown) => logger.warn(error, "[slurp-message] Could not set extended online duration"));
-          }
-        }
+        // Whoever just answered is, for the next few minutes, obviously around: every reply keeps
+        // her online briefly, and a hot conversation keeps her longer.
+        const hotDuration =
+          momentumAnalysis.momentum === "hot" && availability.online
+            ? extendedOnlineDurationMinutes(momentumAnalysis.momentum, thread.rapport.score)
+            : null;
+        await messagesStore
+          .keepOnlineFor(thread.id, Math.max(SLURP_ONLINE_AFTER_REPLY_MINUTES, hotDuration ?? 0))
+          .catch((error: unknown) => logger.warn(error, "[slurp-message] Could not set extended online duration"));
 
         // Handle follow-up scheduling if AI signaled intent
         if (reply.followUp) {

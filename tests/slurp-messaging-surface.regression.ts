@@ -17,7 +17,7 @@ const replyScheduler = read("server/src/services/slurp/slurp-message-scheduler.s
 const replyMethods = read("server/src/services/storage/slurp-reply-methods.ts");
 const slurpStorage = read("server/src/services/storage/slurp.storage.ts");
 
-assert.match(messages, /\{\{name\}\} is away right now\. They’ll reply when they next check their messages\./u);
+assert.match(messages, /queued: "\{\{name\}\} is away"/u);
 assert.match(messages, /CheckCheck/u, "seen messages must use the double-check receipt");
 assert.match(messages, /defaultValue: message\.readAt \? "Seen" : "Delivered"/u);
 assert.match(messages, /role="meter"/u, "the relationship symbol must open a relationship meter");
@@ -143,7 +143,21 @@ assert.match(
 assert.doesNotMatch(messages, /showReceipt|lastOwnMessageId/u);
 // An away Creator never shows typing dots before the away block, and the block is an animation.
 assert.match(messages, /relationship\?\.availability\.online !== false\) setTyping\(true\)/u);
-assert.match(messages, /SLURP_AWAY_STATUSES\.has\(waitingNote\)\) && "sr-only"/u);
+// The away state is a real status card: animation, Away label, headline, and detail text.
+assert.match(messages, /<SlurpAwayAnimation[\s\S]{0,900}?ui\.slurp\.messages\.awayTitle\./u);
+assert.doesNotMatch(messages, /SLURP_AWAY_STATUSES\.has\(waitingNote\)\) && "sr-only"/u);
+// Creators stay online a while after a reply, and longer after delivering a commission.
+const serverRoot = "server/src/services/";
+assert.match(read(`${serverRoot}slurp/slurp-conversation-momentum.ts`), /SLURP_ONLINE_AFTER_REPLY_MINUTES = 5;/u);
+assert.match(read(`${serverRoot}slurp/slurp-conversation-momentum.ts`), /SLURP_ONLINE_AFTER_DELIVERY_MINUTES = 10;/u);
+assert.match(
+  read(`${serverRoot}slurp/slurp-message.operation.ts`),
+  /keepOnlineFor\(thread\.id, Math\.max\(SLURP_ONLINE_AFTER_REPLY_MINUTES/u,
+);
+assert.match(
+  read(`${serverRoot}storage/slurp-messages.storage.ts`),
+  /delivered\?\.state === "delivered"[\s\S]{0,120}keepOnlineFor\(delivered\.threadId, SLURP_ONLINE_AFTER_DELIVERY_MINUTES\)/u,
+);
 assert.doesNotMatch(read("client/src/localization/locales/en.json"), /estimated from recent activity/u);
 // The tier scale shows every tier as an icon with its name, in the header popover and the details panel.
 assert.equal(messages.match(/<SlurpTierLadder /gu)?.length, 2);

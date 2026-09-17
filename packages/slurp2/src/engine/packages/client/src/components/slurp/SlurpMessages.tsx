@@ -91,9 +91,9 @@ import {
  * creator, a thread already generating, and a missing connection were all the same blank screen.
  */
 const SLURP_REPLY_STATUS_FALLBACKS: Record<string, string> = {
-  queued: "{{name}} is away right now. They’ll reply when they next check their messages.",
-  owed: "Delivered. {{name}} has not answered yet.",
-  cooling: "{{name}} has stepped away from this conversation. Give them some time.",
+  queued: "Your message is delivered. They reply when they next check their messages.",
+  owed: "Your message is delivered. They have not answered yet.",
+  cooling: "They stepped away from this conversation. Give them some time.",
   busy: "{{name}} is already writing back. Give it a moment.",
   ineligible: "{{name}} is not answering this conversation right now.",
   connection_not_found: "No text connection is configured, so nobody can answer yet.",
@@ -102,6 +102,13 @@ const SLURP_REPLY_STATUS_FALLBACKS: Record<string, string> = {
 
 /** Reply outcomes that only mean "not now". They render as the away animation, without words. */
 const SLURP_AWAY_STATUSES = new Set(["queued", "owed", "cooling", "ineligible"]);
+/** The away card's headline. The status line below it carries the detail. */
+const SLURP_AWAY_TITLE_FALLBACKS: Record<string, string> = {
+  queued: "{{name}} is away",
+  owed: "Waiting for {{name}}",
+  cooling: "{{name}} needs a break",
+  ineligible: "{{name}} is not answering",
+};
 
 const TIP_PRESETS = [5, 15, 50] as const;
 
@@ -1646,28 +1653,35 @@ function SlurpThreadView({
           {!typing && (waitingNote || canForceReply) && (
             <div
               aria-live="polite"
-              className="mx-auto flex w-full max-w-sm flex-col items-center gap-3 py-3 text-center"
+              className="relative mx-auto flex w-full max-w-sm flex-col items-center gap-2 overflow-hidden rounded-2xl bg-[linear-gradient(160deg,var(--slurp-surface-raised),var(--slurp-surface))] px-5 pb-5 pt-3 text-center shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-[var(--noodle-divider)]"
             >
-              {/* Away is shown, not told: a sleeping avatar says it faster than a sentence. Problems
-                  the fan has to act on (busy, no connection, failed) keep their words. */}
+              {/* A status card, like a platform's own notice: the sleeping avatar for "not now",
+                  a plain icon for problems the fan has to act on (busy, no connection, failed). */}
               {!waitingNote || SLURP_AWAY_STATUSES.has(waitingNote) ? (
-                <SlurpAwayAnimation account={headerAccount ?? null} />
+                <>
+                  <SlurpAwayAnimation account={headerAccount ?? null} />
+                  <p className="-mt-1 inline-flex items-center gap-1.5 rounded-full bg-[var(--noodle-accent)]/12 px-2.5 py-0.5 text-[0.62rem] font-bold uppercase tracking-wider text-[var(--noodle-accent)]">
+                    <span className="h-1.5 w-1.5 rounded-full bg-gray-400" aria-hidden="true" />
+                    {localizeUi("ui.slurp.messages.away", { defaultValue: "Away" })}
+                  </p>
+                  <p className="text-sm font-bold">
+                    {localizeUi(`ui.slurp.messages.awayTitle.${waitingNote ?? "owed"}`, {
+                      defaultValue: SLURP_AWAY_TITLE_FALLBACKS[waitingNote ?? "owed"] ?? "{{name}} is away",
+                      name: creator?.displayName ?? "",
+                    })}
+                  </p>
+                </>
               ) : (
-                <Info size={17} className="text-[var(--noodle-accent)]" aria-hidden="true" />
+                <Info size={17} className="mt-2 text-[var(--noodle-accent)]" aria-hidden="true" />
               )}
-              <p
-                className={cn(
-                  "text-xs leading-relaxed text-[var(--muted-foreground)]",
-                  (!waitingNote || SLURP_AWAY_STATUSES.has(waitingNote)) && "sr-only",
-                )}
-              >
+              <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
                 {waitingNote
                   ? localizeUi(`ui.slurp.messages.replyStatus.${waitingNote}`, {
                       defaultValue: SLURP_REPLY_STATUS_FALLBACKS[waitingNote] ?? "No answer yet.",
                       name: creator?.displayName ?? "",
                     })
                   : localizeUi("ui.slurp.messages.replyStatus.owed", {
-                      defaultValue: "Delivered. {{name}} has not answered yet.",
+                      defaultValue: "Your message is delivered. They have not answered yet.",
                       name: creator?.displayName ?? "",
                     })}
               </p>
