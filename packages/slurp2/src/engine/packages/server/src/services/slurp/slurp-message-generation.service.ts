@@ -52,11 +52,16 @@ import { slurpAudienceArcDescription } from "./slurp-audience-arc.js";
 import { slurpArcLifeLine } from "./slurp-project.js";
 import { SLURP_PLATFORM_CONTEXT } from "./slurp-prompt.js";
 import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
-import { slurpFanMemoryForPrompt, slurpFanVoiceForPrompt, slurpResolveFanType } from "./slurp-fan-types.js";
+import {
+  SLURP_FAN_VOICE_PROMPT_MAX,
+  slurpFanMemoryForPrompt,
+  slurpFanVoiceForPrompt,
+  slurpResolveFanType,
+} from "./slurp-fan-types.js";
 import { prepareSlurpPostImageContexts, slurpImageCaptioning } from "./slurp-post-image-context.js";
 import { createSlurpMessagesStorage, type SlurpMessage } from "../storage/slurp-messages.storage.js";
 import type { SlurpDmPolicy } from "./slurp-messaging.js";
-import { resolveNoodlerCharacterCanon } from "./slurp-source-resolve.js";
+import { resolveNoodlerCharacterCanon, resolveSlurpCharacterFanVoice } from "./slurp-source-resolve.js";
 import {
   claimSlurpModelBudget,
   getSlurpModelBudgetLedger,
@@ -400,10 +405,19 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
   const fanMember = await createSlurpPopulationStorage(input.db)
     .get(input.viewer.id)
     .catch(() => null);
-  const fanVoice = fanMember
-    ? slurpFanVoiceForPrompt(slurpResolveFanType(settings.fanTypes, fanMember).voice)
-    : undefined;
-  const fanMemory = fanMember ? slurpFanMemoryForPrompt(tie) : undefined;
+  // An invited character is not the player either, and its own card is the reason it was invited,
+  // so the card supplies the voice. Same helper and budget as the fan-activity cast, so a character
+  // reads the same in a DM as in a comment.
+  const characterFanVoice = await resolveSlurpCharacterFanVoice(
+    input.db,
+    input.viewer.entityId,
+    SLURP_FAN_VOICE_PROMPT_MAX,
+  ).catch(() => undefined);
+  const fanVoice =
+    characterFanVoice ??
+    (fanMember ? slurpFanVoiceForPrompt(slurpResolveFanType(settings.fanTypes, fanMember).voice) : undefined);
+  // The memory is the tie said out loud, and an invited character holds a tie like anybody else.
+  const fanMemory = fanMember || characterFanVoice ? slurpFanMemoryForPrompt(tie) : undefined;
   const recentPosts = recentPostRows
     .filter((post) => post.access !== "draft")
     .slice(0, RECENT_POSTS)

@@ -5,9 +5,33 @@ import type { DB } from "../../db/connection.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
 import { parseRecord } from "./slurp-public-support.js";
 import { noodlerCharacterCanonText } from "./slurp-prompt-safety.js";
+import { slurpAudienceCharacterVoice, slurpCharacterIdFromFanEntityId } from "./slurp-audience-characters.js";
 
 function text(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+/**
+ * How an invited character writes, for a direct-message prompt.
+ *
+ * A generated audience member gets its voice from its Fan Type. An invited character is the whole
+ * point of being invited, so its own card supplies the voice instead — the same text and the same
+ * budget the fan-activity cast already uses, so a character sounds the same in a DM as in a comment.
+ *
+ * Returns undefined for anybody who is not an invited character, or whose card is gone, which
+ * leaves the existing Fan Type voice in place rather than describing nobody.
+ */
+export async function resolveSlurpCharacterFanVoice(
+  db: DB,
+  entityId: string | null | undefined,
+  voiceBudget: number,
+): Promise<string | undefined> {
+  const characterId = slurpCharacterIdFromFanEntityId(entityId);
+  if (!characterId) return undefined;
+  const card = await createCharactersStorage(db)
+    .getById(characterId)
+    .catch(() => null);
+  return slurpAudienceCharacterVoice(card, voiceBudget);
 }
 
 export async function resolveNoodlerCharacterCanon(
