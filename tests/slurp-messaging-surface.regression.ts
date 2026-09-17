@@ -133,4 +133,10 @@ assert.match(
 );
 assert.match(slurpStorage, /slurpMessages,[\s\S]*?slurpReplyBubbles,[\s\S]*?slurpCommissions/u);
 
+// The composer connection switcher is the compact icon button on every viewport, not a desktop-only label pill.
+assert.match(
+  messages,
+  /function SlurpConnectionSwitcher[\s\S]*?"flex h-10 w-10 items-center[\s\S]*?<Link size=\{15\}[^>]*\/>\s*<\/button>/u,
+);
+
 console.log("slurp messaging surface regression passed");

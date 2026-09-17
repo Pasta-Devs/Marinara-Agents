@@ -7,6 +7,7 @@
 - Messages: sent messages now show separate delivered and seen receipts.
 - Messages: mobile headers keep the Creator name visible and move the relationship label into an icon and meter.
 - Messages: fixed the transparent mobile header menu with an opaque surface.
+- Messages: desktop uses the compact connection switcher from mobile.
 
 ## 0.0.20 — 2026-09-17
 

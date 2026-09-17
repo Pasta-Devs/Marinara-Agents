@@ -262,7 +262,7 @@
         {
           "version": "0.0.21",
           "date": "2026-09-17",
-          "notes": "- Messages: the composer is shorter on one-line messages and still grows for longer text.\n- Messages: away replies use a centered Creator status block with a quiet Get reply now action.\n- Messages: sent messages now show separate delivered and seen receipts.\n- Messages: mobile headers keep the Creator name visible and move the relationship label into an icon and meter.\n- Messages: fixed the transparent mobile header menu with an opaque surface.",
+          "notes": "- Messages: the composer is shorter on one-line messages and still grows for longer text.\n- Messages: away replies use a centered Creator status block with a quiet Get reply now action.\n- Messages: sent messages now show separate delivered and seen receipts.\n- Messages: mobile headers keep the Creator name visible and move the relationship label into an icon and meter.\n- Messages: fixed the transparent mobile header menu with an opaque surface.\n- Messages: desktop uses the compact connection switcher from mobile.",
           "highlight": false
         },
         {

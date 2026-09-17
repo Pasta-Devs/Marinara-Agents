@@ -2316,13 +2316,11 @@ function SlurpConnectionSwitcher({
         aria-label={`Text connection: ${label}`}
         title={`Text connection: ${label}`}
         className={cn(
-          "inline-flex h-10 min-w-10 max-w-36 items-center justify-center gap-1 rounded-xl px-2 text-[0.68rem] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--noodle-accent)]/10 hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50",
+          "flex h-10 w-10 items-center justify-center rounded-xl text-[var(--muted-foreground)] transition-colors hover:bg-[var(--noodle-accent)]/10 hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50",
           open && "bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]",
         )}
       >
         <Link size={15} className="shrink-0" aria-hidden="true" />
-        <span className="hidden truncate sm:inline">{label}</span>
-        <ChevronDown size={12} className="hidden shrink-0 sm:block" aria-hidden="true" />
       </button>
       {open && (
         <div
