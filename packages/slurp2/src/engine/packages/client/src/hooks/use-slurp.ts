@@ -5,7 +5,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import { api } from "../lib/api-client";
+import { api, ApiError } from "../lib/api-client";
 import type { SlurpSimulationTuning } from "../../../server/src/services/slurp/slurp-tuning.js";
 import type { SlurpFanType } from "../../../server/src/services/slurp/slurp-fan-types.js";
 import type { SlurpPlatformEvent } from "../../../server/src/services/slurp/slurp-platform-events.js";
@@ -3085,6 +3085,26 @@ export type SlurpPromptDebug = {
   prompt: Array<{ role: string; content: string }>;
 };
 
+export type SlurpPromptErrorKind = "disabled" | "connection" | "unauthorized" | "not-found" | "generic";
+
+export function getSlurpPromptErrorKind(error: unknown): SlurpPromptErrorKind {
+  if (error instanceof ApiError) {
+    if (
+      error.status === 404 &&
+      typeof error.payload === "object" &&
+      error.payload !== null &&
+      "code" in error.payload &&
+      error.payload.code === "debug_disabled"
+    ) {
+      return "disabled";
+    }
+    if (error.status === 409) return "connection";
+    if (error.status === 401 || error.status === 403) return "unauthorized";
+    if (error.status === 404) return "not-found";
+  }
+  return "generic";
+}
+
 const messageKeys = {
   /** Every messaging query hangs off this, so one prefix invalidates the whole surface. */
   root: () => [...noodleKeys.noodlerRoot(), "messages"],
@@ -3271,6 +3291,21 @@ export function useSendSlurpMessage() {
   });
 }
 
+export function useSlurpCheatDirective() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { personaId: string; creatorAccountId: string; directive: string }) =>
+      api.post<{
+        status: "accepted";
+        kind: "guidance" | "coins";
+        coins?: number;
+        reply?: SlurpMessage | null;
+        replyStatus?: string;
+      }>("/slurp2/messages/cheat", input),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
+  });
+}
+
 /** Answer a queued conversation now. The server still applies every guard a normal send does. */
 export function useForceSlurpReply() {
   const queryClient = useQueryClient();
@@ -3279,6 +3314,18 @@ export function useForceSlurpReply() {
       api.post<Omit<SlurpSendResponse, "message" | "tipError">>(
         `/slurp2/messages/threads/${encodeURIComponent(input.threadId)}/force-reply`,
         { personaId: input.personaId },
+      ),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
+  });
+}
+
+export function useRequestSlurpReply() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { threadId: string; personaId: string; guidance?: string }) =>
+      api.post<{ reply: SlurpMessage | null; replyStatus: string; typingMs?: number }>(
+        `/slurp2/messages/threads/${encodeURIComponent(input.threadId)}/request-reply`,
+        input,
       ),
     onSuccess: () => invalidateSlurpMessages(queryClient),
   });

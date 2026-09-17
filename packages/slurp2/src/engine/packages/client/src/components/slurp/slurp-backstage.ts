@@ -66,7 +66,7 @@ export const SLURP_BACKSTAGE_TARGET_LABELS: Record<SlurpBackstageTarget, string>
   automation: "All automations",
   tags: "Discovery",
   events: "Events and holidays",
-  arcs: "Stories",
+  arcs: "Arcs",
   messaging: "Messaging rules",
   audience: "Audience",
   ads: "Ads",

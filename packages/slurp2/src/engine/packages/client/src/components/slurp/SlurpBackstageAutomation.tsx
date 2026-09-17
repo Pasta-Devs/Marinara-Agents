@@ -12,7 +12,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useState } from "react";
-import { Field, GuidanceBox, NumberSetting, SectionTitle, Toggle } from "./SlurpSettingsControls";
+import { Field, GuidanceBox, NumberSetting, SectionTitle, SettingsGroup, Toggle } from "./SlurpSettingsControls";
 import { toast } from "sonner";
 import { BackstagePageHeader, BackstageWizard, SettingAnchor, SummaryRow } from "./SlurpBackstageKit";
 import { outcomeSummary } from "./SlurpBackstageChrome";
@@ -834,34 +834,41 @@ export function SlurpBackstageAutomation(page: SlurpBackstagePageProps) {
               />
             </Field>
           </div>
-          {/* A Story is shown in its own tall frame, so it carries its own size. The
-                      composer crops an uploaded Story to this ratio too. */}
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field
-              settingKey="storyImageWidth"
-              label={t("ui.slurp.settings.images.storyWidth")}
-              detail={t("ui.slurp.settings.images.storyWidthDetail")}
-            >
-              <NumberSetting
-                value={settings.storyImageWidth}
-                min={64}
-                max={4096}
-                onSave={(value) => update("storyImageWidth", value)}
-              />
-            </Field>
-            <Field
-              settingKey="storyImageHeight"
-              label={t("ui.slurp.settings.images.storyHeight")}
-              detail={t("ui.slurp.settings.images.storyHeightDetail")}
-            >
-              <NumberSetting
-                value={settings.storyImageHeight}
-                min={64}
-                max={4096}
-                onSave={(value) => update("storyImageHeight", value)}
-              />
-            </Field>
-          </div>
+          <SettingsGroup title={t("ui.slurp.settings.images.storiesGroup", { defaultValue: "Story images" })}>
+            <p className="text-xs leading-5 text-[var(--slurp-muted)]">
+              {t("ui.slurp.settings.images.storiesGroupDetail", {
+                defaultValue: "Set the size used by image Stories. Story publishing cadence remains in Publishing.",
+              })}
+            </p>
+            {/* A Story is shown in its own tall frame, so it carries its own size. The
+                        composer crops an uploaded Story to this ratio too. */}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field
+                settingKey="storyImageWidth"
+                label={t("ui.slurp.settings.images.storyWidth")}
+                detail={t("ui.slurp.settings.images.storyWidthDetail")}
+              >
+                <NumberSetting
+                  value={settings.storyImageWidth}
+                  min={64}
+                  max={4096}
+                  onSave={(value) => update("storyImageWidth", value)}
+                />
+              </Field>
+              <Field
+                settingKey="storyImageHeight"
+                label={t("ui.slurp.settings.images.storyHeight")}
+                detail={t("ui.slurp.settings.images.storyHeightDetail")}
+              >
+                <NumberSetting
+                  value={settings.storyImageHeight}
+                  min={64}
+                  max={4096}
+                  onSave={(value) => update("storyImageHeight", value)}
+                />
+              </Field>
+            </div>
+          </SettingsGroup>
           <details className="group rounded-xl bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
             <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 text-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] [&::-webkit-details-marker]:hidden">
               <Image size={17} className="text-[var(--slurp-violet)]" aria-hidden="true" />

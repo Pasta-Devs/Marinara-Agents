@@ -2,6 +2,62 @@ import { Ban, ExternalLink, Megaphone, X } from "lucide-react";
 import type { SlurpPromotion } from "../../hooks/use-slurp";
 import { SlurpMediaImg } from "./SlurpShell";
 
+/**
+ * The same ad as a wall tile.
+ *
+ * The wall is a square image grid, so the list card's stacked text would break the row. An ad with
+ * no image has nothing to contribute to a wall of images and skips it rather than becoming a grey
+ * square, the same rule `SlurpMediaWall` already applies to locked and text posts.
+ */
+export function SlurpInlineAdTile({
+  promotion,
+  onHide,
+  onAction,
+  labels,
+}: {
+  promotion: SlurpPromotion;
+  onHide: () => void;
+  onAction: () => void;
+  labels: { sponsored: string; hide: string; actionFallback: string };
+}) {
+  if (!promotion.imageUrl) return null;
+  return (
+    <div className="relative aspect-square overflow-hidden bg-[var(--background)]">
+      <button
+        type="button"
+        onClick={onAction}
+        className="group block h-full w-full text-left focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
+        aria-label={`${labels.sponsored}: ${promotion.brand} — ${promotion.actionLabel ?? labels.actionFallback}`}
+      >
+        <SlurpMediaImg
+          src={promotion.imageUrl}
+          alt=""
+          loading="lazy"
+          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+        />
+        {/* An unlabelled ad inside a wall of real posts reads as a post. The gradient keeps the
+            label legible on any image without hiding the image behind a panel. */}
+        <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 pt-6">
+          <span className="block text-[0.6rem] font-bold uppercase tracking-[0.14em] text-[var(--noodle-accent)]">
+            <Megaphone size={10} aria-hidden="true" className="mr-1 inline align-[-1px]" />
+            {labels.sponsored}
+          </span>
+          <span className="mt-0.5 block truncate text-xs font-bold text-white">{promotion.brand}</span>
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={onHide}
+        aria-label={labels.hide}
+        title={labels.hide}
+        className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-lg bg-black/50 text-white hover:bg-black/70"
+      >
+        <X size={14} aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
 export function SlurpInlineAd({
   promotion,
   onHide,

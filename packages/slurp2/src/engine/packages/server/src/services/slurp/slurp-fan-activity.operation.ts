@@ -11,7 +11,6 @@ import {
   dueNoodleFanActivityRun,
   finishNoodleFanActivityRun,
   markNoodleFanActivityApplied,
-  NOODLE_FAN_ACTIVITY_RUNS_PER_DAY,
   parsePersistedNoodleFanActivityDayPlan,
   reconcileNoodleFanActivityDayPlan,
   storeNoodleFanAcceptedActivities,
@@ -60,6 +59,10 @@ const FAN_RUN_RETURNING = 10;
 const FAN_RUN_NEWCOMERS = 2;
 const FAN_PLAN_RETENTION_DAYS = 7;
 const FAN_ACTIVITY_RECOVERY_MAX_AGE_MS = 15 * 60 * 1000;
+
+export function noodlerFanActivityRunLimit(settings: Pick<SlurpSettings, "fanActivityRunsPerDay" | "modelBudget">) {
+  return Math.min(settings.fanActivityRunsPerDay, settings.modelBudget.jobs.thread.maxPerDay);
+}
 
 export type NoodlerFanRunResult = {
   status:
@@ -230,7 +233,7 @@ async function reconcilePlan(db: DB, settings: SlurpSettings, at: Date) {
     await readCurrentPlan(db, at),
     eligibleIds,
     at,
-    settings.fanActivityRunsPerDay,
+    noodlerFanActivityRunLimit(settings),
   );
   await writePlan(db, plan);
   return plan;
@@ -463,7 +466,7 @@ export async function getNoodlerFanActivityStatus(db: DB, at = new Date()) {
   return {
     localDate: plan?.localDate ?? localPlanDate(at),
     usedRuns: automaticRuns.filter((run) => run.status !== "scheduled").length,
-    runLimit: settings.fanActivityRunsPerDay ?? NOODLE_FAN_ACTIVITY_RUNS_PER_DAY,
+    runLimit: noodlerFanActivityRunLimit(settings),
     lastRun,
   };
 }

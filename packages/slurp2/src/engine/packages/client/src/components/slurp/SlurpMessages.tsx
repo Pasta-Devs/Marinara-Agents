@@ -35,6 +35,7 @@ import {
 import { useOpenSlurpCreatorThread, useSlurpComposeTargets, type SlurpComposeTarget } from "../../hooks/use-slurp";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
 import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
 import { getApiErrorMessage } from "../../lib/api-client";
@@ -63,7 +64,9 @@ import {
   useSendSlurpViewerImage,
   useGenerateSlurpViewerImage,
   useSendSlurpMessage,
+  useSlurpCheatDirective,
   useForceSlurpReply,
+  useRequestSlurpReply,
   useSlurpCompose,
   useSlurpConnections,
   useSlurpSettings,
@@ -81,6 +84,7 @@ import {
   type SlurpMessage,
   type SlurpRapport,
   type SlurpThread,
+  getSlurpPromptErrorKind,
   type SlurpPromptDebug,
 } from "../../hooks/use-slurp";
 
@@ -653,7 +657,9 @@ function SlurpThreadView({
   const byCreator = useSlurpCompose(threadId ? null : creatorAccountId, personaId);
   const threadQuery = threadId ? byThread : byCreator;
   const send = useSendSlurpMessage();
+  const cheat = useSlurpCheatDirective();
   const forceReply = useForceSlurpReply();
+  const requestReply = useRequestSlurpReply();
   const tip = useTipInSlurpThread();
   const resolveRequest = useResolveSlurpMessageRequest();
   const resetThread = useResetSlurpThread();
@@ -667,7 +673,9 @@ function SlurpThreadView({
   const typingTimeoutRef = useRef<number | null>(null);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [connectionPickerOpen, setConnectionPickerOpen] = useState(false);
-  const [toolTab, setToolTab] = useState<"tip" | "commission" | "photo" | "generated-photo" | "creator" | null>(null);
+  const [toolTab, setToolTab] = useState<
+    "tip" | "commission" | "photo" | "generated-photo" | "creator" | "request" | null
+  >(null);
   const [commissionPrefill, setCommissionPrefill] = useState("");
   const settingsQuery = useSlurpSettings();
   const connectionsQuery = useSlurpConnections(true);
@@ -680,7 +688,7 @@ function SlurpThreadView({
   const [composerTipNote, setComposerTipNote] = useState("");
   const [sendRequestId, setSendRequestId] = useState<string | null>(null);
   // The fan's own words, held on screen until the server's copy of them arrives.
-  const [pending, setPending] = useState<{ content: string; id: string | null } | null>(null);
+  const [pending, setPending] = useState<{ content: string; id: string | null; startedAt: number } | null>(null);
   // Why no answer came. The send route has always reported this and nothing ever read it, so a
   // sleeping creator, a busy thread and a missing connection all looked like the same silence.
   const [replyStatus, setReplyStatus] = useState<string | null>(null);
@@ -733,6 +741,7 @@ function SlurpThreadView({
   const messaging = threadQuery.data?.messaging;
   const commissions = useMemo(() => threadQuery.data?.commissions ?? [], [threadQuery.data?.commissions]);
   const relationship = "relationship" in (threadQuery.data ?? {}) ? threadQuery.data?.relationship : undefined;
+  const availability = threadQuery.data?.creatorAvailability ?? relationship?.availability;
   // A cleared conversation removes its messages, but commission history remains visible in chat.
   // Commissions are paid work and must not disappear when the conversation is tidied.
   const commissionTimeline = commissions.map((commission) => {
@@ -789,7 +798,8 @@ function SlurpThreadView({
   const headerAccount = ownsCreator ? counterpart : creator;
   const headerProfileId = ownsCreator ? thread?.viewerAccountId : targetCreatorAccountId;
   const busy = send.isPending || tip.isPending || creatorReply.isPending || draftReply.isPending;
-  const promptDebug = useSlurpMessagePrompt(threadId, personaId, drawerMode === "prompt");
+  const promptDebugEnabled = drawerMode === "prompt" && Boolean(threadId && personaId);
+  const promptDebug = useSlurpMessagePrompt(threadId, personaId, promptDebugEnabled);
   const activeCommission = useMemo(
     () =>
       [...commissions].sort((left, right) => {
@@ -832,13 +842,13 @@ function SlurpThreadView({
               group: "media" as const,
             },
             {
-              id: "generated-photo",
-              icon: Palette,
-              label: localizeUi("ui.slurp.messages.createPhoto", { defaultValue: "Create a photo" }),
-              detail: localizeUi("ui.slurp.messages.createPhotoDetail", {
-                defaultValue: "Describe an image to generate",
+              id: "request",
+              icon: MessageCircle,
+              label: localizeUi("ui.slurp.messages.requestReply", { defaultValue: "Request a reply" }),
+              detail: localizeUi("ui.slurp.messages.requestReplyDetail", {
+                defaultValue: "Ask gently without forcing a reply",
               }),
-              group: "media" as const,
+              group: "conversation" as const,
             },
             {
               id: "commission",
@@ -890,13 +900,26 @@ function SlurpThreadView({
   // Drop the echo only once the refetch carries the real row, so the message never blinks out
   // between the response landing and the thread reloading.
   useEffect(() => {
-    if (pending?.id && messages.some((message) => message.id === pending.id)) setPending(null);
+    if (
+      pending &&
+      messages.some(
+        (message) =>
+          (pending.id !== null && message.id === pending.id) ||
+          (message.role === "viewer" &&
+            message.content === pending.content &&
+            Date.parse(message.createdAt) >= pending.startedAt),
+      )
+    )
+      setPending(null);
   }, [messages, pending]);
 
   // The queued note describes the wait, so it goes once the answer it promised has arrived.
   useEffect(() => {
-    if (messages[messages.length - 1]?.role === "creator") setReplyStatus(null);
-  }, [messages]);
+    const visibleCreatorReply = messages.some(
+      (message) => message.role === "creator" && !hiddenReplyIds.has(message.id),
+    );
+    if (visibleCreatorReply || (thread && !thread.needsReply && hiddenReplyIds.size === 0)) setReplyStatus(null);
+  }, [hiddenReplyIds, messages, thread]);
 
   // A different conversation must not inherit the last one's unsent echo.
   useEffect(() => {
@@ -1123,6 +1146,29 @@ function SlurpThreadView({
   const submit = async (force = false) => {
     const content = draft.trim();
     if (!content || !personaId || !targetCreatorAccountId || busy) return;
+    const cheatMatch = /^\/cheat(?:\s+([\s\S]*))?$/iu.exec(content);
+    if (cheatMatch) {
+      setDraft("");
+      try {
+        const result = await cheat.mutateAsync({
+          personaId,
+          creatorAccountId: targetCreatorAccountId,
+          directive: cheatMatch[1] ?? "",
+        });
+        toast.success(
+          result.kind === "coins"
+            ? localizeUi("ui.slurp.messages.cheatCoinsAccepted", {
+                defaultValue: "Development wallet set to {{coins}} coins.",
+                coins: result.coins,
+              })
+            : localizeUi("ui.slurp.messages.cheatAccepted", { defaultValue: "Cheat directive accepted." }),
+        );
+      } catch (cause) {
+        toast.error(localizeUi("ui.slurp.messages.cheatRejected", { defaultValue: "Cheat directive rejected." }));
+      }
+      return;
+    }
+    const optimisticStartedAt = Date.now();
     if (!force && !ownsCreator && isCommissionRequest(content)) {
       setCommissionPrefill(content);
       setToolsOpen(true);
@@ -1149,13 +1195,13 @@ function SlurpThreadView({
     setDraft("");
     // Show the message and the typing indicator at once. The send route waits for the model
     // before it answers, so the chat used to sit empty for the whole generation.
-    setPending({ content, id: null });
+    setPending({ content, id: null, startedAt: optimisticStartedAt });
     // Sending always lands on your own message, even when you had scrolled up to reread.
     requestAnimationFrame(scrollToLatest);
     setReplyStatus(null);
     // An away Creator is not typing. Showing dots first and then the away block read as a reply
     // that was started and abandoned.
-    if (!ownsCreator && relationship?.availability.online !== false) setTyping(true);
+    if (!ownsCreator && availability?.online !== false) setTyping(true);
     const requestId =
       sendRequestId ??
       (typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -1173,7 +1219,7 @@ function SlurpThreadView({
           viewerAccountId: thread.viewerAccountId,
           content,
         });
-        setPending({ content, id: written.message.id });
+        setPending({ content, id: written.message.id, startedAt: optimisticStartedAt });
         return;
       }
       const result = await send.mutateAsync({
@@ -1184,7 +1230,7 @@ function SlurpThreadView({
         tip: composerTipAmount > 0 ? { amount: composerTipAmount, note: composerTipNote.trim() } : null,
       });
       setSendRequestId(null);
-      setPending({ content, id: result.message.id });
+      setPending({ content, id: result.message.id, startedAt: optimisticStartedAt });
       setReplyStatus(result.replyStatus ?? null);
       if (result.tipError) setError(result.tipError);
       setComposerTipAmount(0);
@@ -1275,19 +1321,19 @@ function SlurpThreadView({
                   <span
                     className={cn(
                       "h-1.5 w-1.5 rounded-full shrink-0",
-                      relationship.availability.online
+                      availability?.online
                         ? "bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.6)]"
-                        : relationship.availability.minutesUntilOnline !== null &&
-                            relationship.availability.minutesUntilOnline < 120
+                        : availability?.minutesUntilOnline !== null &&
+                            (availability?.minutesUntilOnline ?? Infinity) < 120
                           ? "bg-yellow-500 shadow-[0_0_4px_rgba(234,179,8,0.6)]"
                           : "bg-gray-400",
                     )}
                     aria-hidden="true"
                   />
                   <span className="truncate">
-                    {relationship.availability.online
+                    {availability?.online
                       ? localizeUi("ui.slurp.messages.availableNow", { defaultValue: "Available now" })
-                      : relationship.availability.minutesUntilOnline !== null
+                      : availability?.minutesUntilOnline !== null
                         ? localizeUi(
                             relationship.availability.estimated
                               ? "ui.slurp.messages.probablyBackIn"
@@ -1295,11 +1341,11 @@ function SlurpThreadView({
                             {
                               value1:
                                 relationship.availability.minutesUntilOnline < 60
-                                  ? `${Math.round(relationship.availability.minutesUntilOnline)}min`
-                                  : `${Math.round(relationship.availability.minutesUntilOnline / 60)}hr`,
+                                  ? `${Math.round(availability?.minutesUntilOnline ?? 0)}min`
+                                  : `${Math.round((availability?.minutesUntilOnline ?? 0) / 60)}hr`,
                             },
                           )
-                        : relationship.availability.estimated
+                        : availability?.estimated
                           ? localizeUi("ui.slurp.messages.probablyAway")
                           : localizeUi("ui.slurp.messages.away", { defaultValue: "Away" })}
                   </span>
@@ -1732,13 +1778,20 @@ function SlurpThreadView({
               </div>
             );
           })}
-          {pending && !messages.some((message) => message.id === pending.id) && (
-            <div className="flex max-w-[88%] flex-col items-end gap-1 self-end opacity-60 sm:max-w-[78%]">
-              <div className="whitespace-pre-wrap break-words rounded-[1.15rem] rounded-br-[0.35rem] bg-[var(--noodle-accent)] px-3.5 py-2.5 text-sm leading-relaxed text-zinc-950 [&_svg]:!text-zinc-950 shadow-[var(--slurp-shadow-raised)]">
-                {pending.content}
+          {pending &&
+            !messages.some(
+              (message) =>
+                (pending.id !== null && message.id === pending.id) ||
+                (message.role === "viewer" &&
+                  message.content === pending.content &&
+                  Date.parse(message.createdAt) >= pending.startedAt),
+            ) && (
+              <div className="flex max-w-[88%] flex-col items-end gap-1 self-end opacity-60 sm:max-w-[78%]">
+                <div className="whitespace-pre-wrap break-words rounded-[1.15rem] rounded-br-[0.35rem] bg-[var(--noodle-accent)] px-3.5 py-2.5 text-sm leading-relaxed text-zinc-950 [&_svg]:!text-zinc-950 shadow-[var(--slurp-shadow-raised)]">
+                  {pending.content}
+                </div>
               </div>
-            </div>
-          )}
+            )}
           {!typing && (waitingNote || canForceReply) && (
             <div
               aria-live="polite"
@@ -1746,7 +1799,7 @@ function SlurpThreadView({
             >
               {/* A status card, like a platform's own notice: the sleeping avatar for "not now",
                   a plain icon for problems the fan has to act on (busy, no connection, failed). */}
-              {!waitingNote || SLURP_AWAY_STATUSES.has(waitingNote) ? (
+              {waitingNote && SLURP_AWAY_STATUSES.has(waitingNote) ? (
                 <>
                   <SlurpAwayAnimation account={headerAccount ?? null} />
                   <p className="-mt-1 inline-flex items-center gap-1.5 rounded-full bg-[var(--noodle-accent)]/12 px-2.5 py-0.5 text-[0.62rem] font-bold uppercase tracking-wider text-[var(--noodle-accent)]">
@@ -1997,8 +2050,38 @@ function SlurpThreadView({
                   threadId={thread.id}
                   creatorAccountId={targetCreatorAccountId}
                   personaId={personaId}
-                  mode="upload"
+                  mode="choose"
                 />
+              )}
+
+              {toolTab === "request" && !ownsCreator && thread && personaId && (
+                <div className="flex flex-col gap-2 rounded-xl bg-[var(--slurp-surface)] p-3 ring-1 ring-inset ring-[var(--noodle-divider)]">
+                  <p className="text-xs leading-5 text-[var(--muted-foreground)]">
+                    {localizeUi("ui.slurp.messages.requestReplyDetail", {
+                      defaultValue: "Ask for a reply. This does not bypass availability or conversation rules.",
+                    })}
+                  </p>
+                  <button
+                    type="button"
+                    disabled={busy || requestReply.isPending || !thread.needsReply}
+                    onClick={() => {
+                      requestReply
+                        .mutateAsync({ threadId: thread.id, personaId })
+                        .then((result) => {
+                          setReplyStatus(result.replyStatus);
+                          holdTyping(result.reply ? (result.typingMs ?? 0) : 0, result.reply?.id);
+                          setToolsOpen(false);
+                          setToolTab(null);
+                        })
+                        .catch((cause: unknown) =>
+                          setError(cause instanceof Error ? cause.message : "Could not request a reply."),
+                        );
+                    }}
+                    className="min-h-11 rounded-xl bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-50"
+                  >
+                    {requestReply.isPending ? "Requesting…" : "Request a reply"}
+                  </button>
+                </div>
               )}
 
               {toolTab === "generated-photo" && !ownsCreator && thread && personaId && targetCreatorAccountId && (
@@ -2312,7 +2395,7 @@ function SlurpThreadView({
           </header>
           <div className="min-h-0 flex-1 overflow-y-auto pb-[max(1rem,env(safe-area-inset-bottom))]">
             {drawerMode === "prompt" ? (
-              <SlurpPromptDebugPanel query={promptDebug} />
+              <SlurpPromptDebugPanel enabled={promptDebugEnabled} query={promptDebug} />
             ) : drawerMode === "memories" ? (
               <SlurpMemoriesPanel
                 notes={relationship?.notes ?? []}
@@ -3002,14 +3085,15 @@ function MessageBubble({
   const mine = ownsCreator ? message.role === "creator" : message.role === "viewer";
   if (message.kind === "tip") {
     return (
-      <p
+      <div
         className={cn(
-          "inline-flex items-center gap-1.5 self-center rounded-full bg-[var(--noodle-accent)]/12 px-3 py-1.5 text-xs font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/15",
+          "flex w-full max-w-sm self-center items-center justify-center gap-2 rounded-2xl bg-[var(--noodle-accent)]/12 px-4 py-3 text-xs font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/20",
         )}
       >
+        <SlurpCoin size={16} aria-hidden="true" />
         {localizeUi("ui.slurp.messages.tipSent", { defaultValue: "Tip sent" })}{" "}
         <SlurpCoinAmount amount={message.price} />
-      </p>
+      </div>
     );
   }
   if (message.kind === "post_preview") {
@@ -3433,7 +3517,7 @@ function FanImageTool({
   threadId: string;
   creatorAccountId: string;
   personaId: string;
-  mode: "upload" | "generate";
+  mode: "choose" | "upload" | "generate";
 }) {
   const { t: localizeUi } = useUiTranslation();
   const send = useSendSlurpViewerImage();
@@ -3441,10 +3525,30 @@ function FanImageTool({
   const [file, setFile] = useState<File | null>(null);
   const [prompt, setPrompt] = useState("");
   const [content, setContent] = useState("");
+  const [selectedMode, setSelectedMode] = useState<"upload" | "generate">("upload");
+  const activeMode = mode === "choose" ? selectedMode : mode;
   return (
     <div className="overflow-hidden rounded-xl bg-[var(--slurp-surface)] ring-1 ring-inset ring-[var(--noodle-divider)]">
       <div className="flex flex-col gap-2 p-3">
-        {mode === "generate" && (
+        {mode === "choose" && (
+          <div className="flex items-center gap-1.5" role="group" aria-label="Photo source">
+            {(["upload", "generate"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={activeMode === option}
+                onClick={() => setSelectedMode(option)}
+                className={cn(
+                  "min-h-10 flex-1 rounded-lg px-3 text-xs font-bold ring-1 ring-inset ring-[var(--noodle-divider)]",
+                  activeMode === option && "bg-[var(--noodle-accent)] text-zinc-950",
+                )}
+              >
+                {option === "upload" ? "Upload" : "Generate"}
+              </button>
+            ))}
+          </div>
+        )}
+        {activeMode === "generate" && (
           <textarea
             value={prompt}
             rows={2}
@@ -3454,7 +3558,7 @@ function FanImageTool({
             className="w-full resize-y rounded-lg bg-[var(--slurp-canvas,var(--background))] px-3 py-2 text-sm ring-1 ring-inset ring-[var(--noodle-divider)]"
           />
         )}
-        {mode === "upload" && (
+        {activeMode === "upload" && (
           <input
             type="file"
             accept="image/*"
@@ -3473,7 +3577,7 @@ function FanImageTool({
         />
         <button
           type="button"
-          disabled={mode === "upload" ? !file || send.isPending : !prompt.trim() || generate.isPending}
+          disabled={activeMode === "upload" ? !file || send.isPending : !prompt.trim() || generate.isPending}
           onClick={() => {
             const request =
               mode === "upload"
@@ -3490,7 +3594,7 @@ function FanImageTool({
         >
           {send.isPending || generate.isPending
             ? localizeUi("ui.slurp.messages.sending", { defaultValue: "Sending…" })
-            : mode === "generate"
+            : activeMode === "generate"
               ? "Generate and send"
               : localizeUi("ui.slurp.messages.send", { defaultValue: "Send" })}
         </button>
@@ -4688,23 +4792,55 @@ function SlurpRelationshipPanel({
 }
 
 function SlurpPromptDebugPanel({
+  enabled,
   query,
 }: {
-  query: { data?: SlurpPromptDebug; isPending: boolean; isError: boolean };
+  enabled: boolean;
+  query: { data?: SlurpPromptDebug; error?: unknown; isPending: boolean; isError: boolean };
 }) {
   const { t: localizeUi } = useUiTranslation();
+  if (!enabled)
+    return (
+      <p className="mx-3 mt-2 shrink-0 rounded-xl bg-[var(--slurp-surface)] p-3 text-xs text-[var(--muted-foreground)]">
+        {localizeUi("ui.slurp.messages.promptDisabled", {
+          defaultValue: "Prompt details need an active conversation.",
+        })}
+      </p>
+    );
   if (query.isPending)
     return (
       <p className="mx-3 mt-2 shrink-0 rounded-xl bg-[var(--slurp-surface)] p-3 text-xs text-[var(--muted-foreground)]">
         {localizeUi("ui.slurp.messages.promptLoading", { defaultValue: "Loading prompt details…" })}
       </p>
     );
-  if (query.isError || !query.data)
+  if (query.isError || !query.data) {
+    const errorKind = getSlurpPromptErrorKind(query.error);
+    const message =
+      errorKind === "disabled"
+        ? localizeUi("ui.slurp.messages.promptDebugDisabled", {
+            defaultValue: "Prompt details are disabled outside debug mode.",
+          })
+        : errorKind === "connection"
+          ? localizeUi("ui.slurp.messages.promptNoConnection", {
+              defaultValue: "Prompt details need a configured text connection.",
+            })
+          : errorKind === "unauthorized"
+            ? localizeUi("ui.slurp.messages.promptUnauthorized", {
+                defaultValue: "You are not authorized to view these prompt details.",
+              })
+            : errorKind === "not-found"
+              ? localizeUi("ui.slurp.messages.promptNotFound", {
+                  defaultValue: "Prompt details are disabled, or this conversation was not found.",
+                })
+              : localizeUi("ui.slurp.messages.promptUnavailable", {
+                  defaultValue: "Prompt details are not available.",
+                });
     return (
       <p className="mx-3 mt-2 shrink-0 rounded-xl bg-red-500/10 p-3 text-xs text-red-600 dark:text-red-400">
-        {localizeUi("ui.slurp.messages.promptUnavailable", { defaultValue: "Prompt details are not available." })}
+        {message}
       </p>
     );
+  }
   return (
     <details
       open

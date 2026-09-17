@@ -47,6 +47,8 @@ import {
 import { logger } from "../lib/logger.js";
 import { resolveSlurpCreatorAvailability } from "../services/slurp/slurp-creator-schedule-context.js";
 import { selectSlurpAttentionCommissions } from "../services/slurp/slurp-inbox-attention.js";
+import { parseSlurpCheatDirective } from "../services/slurp/slurp-cheat-directive.js";
+import { SLURP_DEV_CHEAT_MAX_COINS } from "../services/slurp/slurp-wallet.js";
 
 const personaQuerySchema = z.object({ personaId: z.string().trim().min(1) });
 const MESSAGE_MEDIA_MAX_BYTES = 20 * 1024 * 1024;
@@ -84,6 +86,7 @@ const sendSchema = z.object({
   // Bounded at the trust boundary: this text reaches a model prompt, and an unbounded body
   // would let one message push the whole conversation out of the context window.
   content: z.string().trim().min(1).max(2000),
+  generationGuidance: z.string().trim().max(2000).optional(),
   requestId: z.string().trim().min(8).max(100).optional(),
   tip: z
     .object({ amount: z.number().int().min(1).max(9999), note: z.string().trim().max(280).default("") })
@@ -640,6 +643,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       outcome = await replyToSlurpMessage(app.db, {
         threadId: sent.thread.id,
         triggerMessageId: replyTriggerMessageId,
+        generationGuidance: parsed.data.generationGuidance,
       });
     } catch (error) {
       logger.error(error, "[slurp-message] Reply failed after a send in thread %s", sent.thread.id);
@@ -654,6 +658,47 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       // pacing the model was given and the pacing the player sees are the same number.
       typingMs: "pacing" in outcome ? outcome.pacing.typingMs : 0,
       tipError,
+    };
+  });
+
+  app.post("/messages/cheat", async (req, reply) => {
+    if (process.env.CHEATS_ENABLED !== "true") return reply.code(404).send({ error: "Not found" });
+    const parsed = z
+      .object({
+        personaId: z.string().trim().min(1),
+        creatorAccountId: z.string().trim().min(1),
+        directive: z.string().trim().min(1).max(2000),
+      })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const directive = parseSlurpCheatDirective(parsed.data.directive);
+    if (directive.kind === "invalid") return reply.code(400).send({ status: "rejected", reason: "invalid" });
+    const viewer = await requireViewer(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    if (directive.kind === "coins") {
+      if (directive.coins > SLURP_DEV_CHEAT_MAX_COINS)
+        return reply.code(400).send({ status: "rejected", reason: "coins_limit" });
+      await slurp.setWalletCoinsForDevelopment(viewer.id, directive.coins);
+      return { status: "accepted", kind: "coins", coins: directive.coins };
+    }
+    const thread = await messages.getThread(viewer.id, parsed.data.creatorAccountId);
+    if (!thread) return reply.code(400).send({ status: "rejected", reason: "no_thread" });
+    const triggerMessageId = await messages.latestViewerMessageId(thread.id);
+    if (!triggerMessageId) return reply.code(400).send({ status: "rejected", reason: "no_message" });
+    const outcome = await replyToSlurpMessage(app.db, {
+      threadId: thread.id,
+      triggerMessageId,
+      // Guidance changes the requested behavior only. Availability, policy, claims, connection,
+      // pacing, and budget checks remain inside the existing reply operation.
+      generationGuidance: directive.text,
+    });
+    if (outcome.status !== "replied") return reply.code(400).send({ status: "rejected", reason: outcome.status });
+    return {
+      status: "accepted",
+      kind: "guidance",
+      replyStatus: outcome.status,
+      reply: outcome.message,
+      typingMs: outcome.pacing.typingMs,
     };
   });
 
@@ -679,6 +724,32 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       : await replyToSlurpMessage(app.db, { threadId: thread.id, triggerMessageId, force: true });
     return {
       thread: (await freshView(thread.id)) ?? thread,
+      reply: outcome.status === "replied" ? outcome.message : null,
+      replyStatus: outcome.status,
+      typingMs: "pacing" in outcome ? outcome.pacing.typingMs : 0,
+    };
+  });
+
+  app.post("/messages/threads/:threadId/request-reply", async (req, reply) => {
+    const parsed = z
+      .object({ personaId: z.string().trim().min(1), guidance: z.string().trim().max(2000).optional() })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { threadId } = req.params as { threadId: string };
+    const viewer = await requireViewer(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const thread = await messages.getThreadById(threadId);
+    if (!thread || thread.viewerAccountId !== viewer.id) return reply.code(404).send({ error: "Thread not found" });
+    const triggerMessageId = await messages.latestViewerMessageId(thread.id);
+    if (!triggerMessageId) return reply.code(400).send({ error: "Send a message before requesting a reply." });
+    const outcome = await replyToSlurpMessage(app.db, {
+      threadId: thread.id,
+      triggerMessageId,
+      generationGuidance:
+        parsed.data.guidance ??
+        "The fan is asking for a reply. Treat this as a gentle request, not a demand. Answer only if the conversation rules and your availability allow it.",
+    });
+    return {
       reply: outcome.status === "replied" ? outcome.message : null,
       replyStatus: outcome.status,
       typingMs: "pacing" in outcome ? outcome.pacing.typingMs : 0,
@@ -1334,7 +1405,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
    * `noodlerConcealedSourceText`.
    */
   app.get("/messages/threads/:threadId/prompt", async (req, reply) => {
-    if (!isDebugAgentsEnabled()) return reply.code(404).send({ error: "Not Found" });
+    if (!isDebugAgentsEnabled()) return reply.code(404).send({ error: "Not Found", code: "debug_disabled" });
     const parsed = personaQuerySchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { threadId } = req.params as { threadId: string };

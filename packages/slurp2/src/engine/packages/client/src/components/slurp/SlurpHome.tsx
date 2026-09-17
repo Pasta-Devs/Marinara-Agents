@@ -106,6 +106,7 @@ import {
   type SlurpEventGroup,
   type SlurpEventItem,
   type SlurpStudioCreator,
+  type SlurpPromotion,
   useSetSlurpGoal,
   useSlurpPayout,
   useHideSlurpAd,
@@ -198,7 +199,7 @@ import { HelpTooltip } from "../ui/HelpTooltip";
 import { Modal } from "../ui/Modal";
 import type { SlurpNavigationState } from "./slurp-navigation.types";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import { SlurpInlineAd } from "./SlurpInlineAd";
+import { SlurpInlineAd, SlurpInlineAdTile } from "./SlurpInlineAd";
 import { SlurpCreatorProfileCard } from "./SlurpCreatorProfileCard";
 import { SlurpDiscoveryProfileEditor } from "./SlurpDiscoveryProfileEditor";
 import {
@@ -629,7 +630,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   const [feedSearch, setFeedSearch] = useState("");
   const [discoverRank, setDiscoverRank] = useState<"likes" | "subscribers">("likes");
   const discoveryInputRef = useRef<HTMLInputElement | null>(null);
-  const [feedTab, setFeedTab] = useState<"following" | "all">("following");
+  const [feedTab, setFeedTab] = useState<"following" | "all">("all");
   const [onboardingMode, setOnboardingMode] = useState<"first-run" | "add-creators" | null>(null);
   const [gateOpen, setGateOpen] = useState(false);
   // The splash comes first: it is the alpha warning, and the age gate is no use to someone who has
@@ -2857,11 +2858,20 @@ function SlurpMediaWall({
   onOpenPost,
   onLoadMore,
   total,
+  adForIndex,
+  onAdAction,
+  onAdHide,
+  adLabels,
 }: {
   items: { post: NoodlerPostView & { locked?: boolean }; creator: { profile: NoodlerStageProfile } }[];
   onOpenPost: (postId: string) => void;
   onLoadMore?: () => void;
   total: number;
+  /** Null on every row when ads are off, searching, or the pool is empty. */
+  adForIndex?: (index: number) => SlurpPromotion | null;
+  onAdAction?: (ad: SlurpPromotion) => void;
+  onAdHide?: (ad: SlurpPromotion) => void;
+  adLabels?: { sponsored: string; hide: string; actionFallback: string };
 }) {
   const { t: localizeUi } = useUiTranslation();
   const tiles = items.flatMap<SlurpProfileImagePost>(({ post, creator }) => {
@@ -2878,9 +2888,24 @@ function SlurpMediaWall({
   return (
     <div className="bg-[var(--slurp-canvas)] pb-6">
       <div className="grid grid-cols-2 gap-px bg-[var(--noodle-divider)] @min-[620px]:grid-cols-3">
-        {tiles.map((post) => (
-          <SlurpProfileMediaTile key={post.id} post={post} onOpenImage={(_url, id) => onOpenPost(id)} />
-        ))}
+        {tiles.map((post, index) => {
+          // The slot maths counts tiles, not source posts: the wall drops locked and text posts, so
+          // indexing off the feed would leave the cadence uneven and some slots permanently empty.
+          const ad = adForIndex?.(index) ?? null;
+          return (
+            <Fragment key={post.id}>
+              <SlurpProfileMediaTile post={post} onOpenImage={(_url, id) => onOpenPost(id)} />
+              {ad && adLabels ? (
+                <SlurpInlineAdTile
+                  promotion={ad}
+                  labels={adLabels}
+                  onAction={() => onAdAction?.(ad)}
+                  onHide={() => onAdHide?.(ad)}
+                />
+              ) : null}
+            </Fragment>
+          );
+        })}
       </div>
       {onLoadMore && <LoadMoreFeedButton visible={items.length} total={total} onLoadMore={onLoadMore} />}
     </div>
@@ -4474,6 +4499,7 @@ function ViewerHub({
         <LockedSlurpPostCard
           post={post}
           profile={creator.profile}
+          subscriptionPrice={creator.subscriptionPrice}
           subscribed={creator.subscribed}
           unlockPending={unlockPending}
           subscriptionPending={togglePending}
@@ -4842,6 +4868,27 @@ function ViewerHub({
             <SlurpMediaWall
               items={visibleFeed}
               onOpenPost={setOpenPostId}
+              adForIndex={(index) => {
+                const ad = inlineAdForIndex(index);
+                return inlineAdsEnabled && !searchTerm ? ad : null;
+              }}
+              adLabels={{
+                sponsored: localizeUi("ui.slurp.ads.sponsored"),
+                hide: localizeUi("ui.slurp.ads.hide"),
+                actionFallback: localizeUi("ui.slurp.ads.view"),
+              }}
+              onAdAction={(ad) => {
+                recordSlurpAdAction.mutate({ personaId: scope!.viewer.entityId, promotionId: ad.id });
+                toast.info(localizeUi("ui.slurp.ads.opened", { brand: ad.brand }));
+              }}
+              onAdHide={(ad) =>
+                hideSlurpAd.mutate(
+                  { personaId: scope!.viewer.entityId, promotionId: ad.id },
+                  {
+                    onError: (error) => toast.error(errorMessage(error, localizeUi("ui.slurp.ads.hideFailed"))),
+                  },
+                )
+              }
               onLoadMore={
                 visibleFeed.length < feed.length
                   ? () => setVisibleFeedCount((count) => Math.min(feed.length, count + NOODLER_FEED_WINDOW_SIZE))
@@ -4858,8 +4905,13 @@ function ViewerHub({
                   {(() => {
                     // One place decides whether this row gets an ad. The slot
                     // maths used to be copy-pasted six times inside the JSX.
+                    //
+                    // Following carries ads too. The query already asks for a "following" context
+                    // tag, so suppressing them here meant the default tab — the one nobody has to
+                    // switch to — never showed a single ad. Search stays clean: results are the
+                    // answer to a question, not a place to sell.
                     const ad = inlineAdForIndex(index);
-                    if (!inlineAdsEnabled || searchTerm || tab !== "all" || !ad) return null;
+                    if (!inlineAdsEnabled || searchTerm || !ad) return null;
                     return (
                       <SlurpInlineAd
                         promotion={ad}

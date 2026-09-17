@@ -118,7 +118,7 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
     {
       target: "arcs",
       icon: <BookOpen size={20} />,
-      title: t("ui.slurp.settings.backstage.landing.stories", { defaultValue: "Stories" }),
+      title: t("ui.slurp.settings.backstage.landing.stories", { defaultValue: "Arcs" }),
       status: t(
         `ui.slurp.settings.arcAutoMode${settings.arcAutoMode === "off" ? "Off" : settings.arcAutoMode === "suggest" ? "Suggest" : "Auto"}`,
       ),
