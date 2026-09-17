@@ -3227,5 +3227,7 @@
   "ui.slurp.settings.manual.audience": "Run audience activity",
   "ui.slurp.settings.manual.schedules": "Refresh schedules",
   "ui.slurp.settings.manual.images": "Manage image runs",
-  "ui.slurp.image.regenerate": "Regenerate image"
+  "ui.slurp.image.regenerate": "Regenerate image",
+  "ui.slurp.settings.prompts.blocksSummaryChanged": "changed",
+  "ui.slurp.settings.prompts.blocksSummaryDefault": "default"
 }

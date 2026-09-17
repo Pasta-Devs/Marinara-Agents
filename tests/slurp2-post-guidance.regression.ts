@@ -166,7 +166,7 @@ assert.match(
 );
 assert.match(
   routes,
-  /if \(previousImageUrl && updated && !updated\.imageUrl\) \{\s*await noodle\.updatePostMedia\(post\.id, \{ imageUrl: previousImageUrl \}\);/u,
+  /if \(previousImageUrl && updated && !updated\.imageUrl\) \{\s*await noodle\.restorePostImageIfUnclaimed\(post\.id, previousImageUrl\);/u,
   "a failed redraw restores the previous image",
 );
 assert.match(

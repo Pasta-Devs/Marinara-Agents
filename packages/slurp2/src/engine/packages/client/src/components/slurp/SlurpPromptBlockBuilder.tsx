@@ -115,7 +115,9 @@ export function SlurpPromptBlockBuilder({ value, pending, onSave }: PromptBlockB
                 <span className="block text-xs text-[var(--slurp-muted)]">
                   {t("ui.slurp.settings.prompts.blocksSummary", {
                     count: layout.length,
-                    state: changed ? "changed" : "default",
+                    state: changed
+                      ? t("ui.slurp.settings.prompts.blocksSummaryChanged", { defaultValue: "changed" })
+                      : t("ui.slurp.settings.prompts.blocksSummaryDefault", { defaultValue: "default" }),
                     defaultValue: "{{count}} blocks · {{state}}",
                   })}
                 </span>

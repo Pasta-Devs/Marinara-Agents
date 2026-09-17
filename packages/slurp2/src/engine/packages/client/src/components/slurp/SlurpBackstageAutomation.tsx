@@ -48,6 +48,7 @@ export function SlurpBackstageAutomation(page: SlurpBackstagePageProps) {
     refreshConversationSchedule,
   } = page;
   const [paceWizardOpen, setPaceWizardOpen] = useState(false);
+  const [schedulesRefreshing, setSchedulesRefreshing] = useState(false);
   const [imageWizardOpen, setImageWizardOpen] = useState(false);
   const [imageDraft, setImageDraft] = useState<Pick<
     SlurpSettings,
@@ -121,10 +122,18 @@ export function SlurpBackstageAutomation(page: SlurpBackstagePageProps) {
               </button>
               <button
                 type="button"
-                disabled={refreshConversationSchedule.isPending || page.automationCreators.length === 0}
-                onClick={() =>
-                  page.automationCreators.forEach((creator) => refreshConversationSchedule.mutate(creator.id))
-                }
+                disabled={schedulesRefreshing || page.automationCreators.length === 0}
+                onClick={async () => {
+                  // One at a time: each refresh is a model call, and a second click must not start another round.
+                  setSchedulesRefreshing(true);
+                  try {
+                    for (const creator of page.automationCreators) {
+                      await refreshConversationSchedule.mutateAsync(creator.id).catch(() => undefined);
+                    }
+                  } finally {
+                    setSchedulesRefreshing(false);
+                  }
+                }}
                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--slurp-outline)] px-3 text-xs font-semibold hover:bg-[var(--slurp-canvas)] disabled:opacity-50"
               >
                 <MessageCircle size={14} aria-hidden="true" />

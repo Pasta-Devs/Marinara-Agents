@@ -3899,8 +3899,9 @@ export async function slurpRoutes(app: FastifyInstance) {
     const updated = await noodle.getNoodlerPostById(id);
     if (result.ok && updated?.imageUrl) return updated;
     // The old picture was cleared only so the redraw could claim the post; a failed redraw gives it back.
+    // It never clears a claim: another request that now owns the redraw keeps it.
     if (previousImageUrl && updated && !updated.imageUrl) {
-      await noodle.updatePostMedia(post.id, { imageUrl: previousImageUrl });
+      await noodle.restorePostImageIfUnclaimed(post.id, previousImageUrl);
     }
     if (!result.ok) return reply.code(400).send({ error: result.message });
     if (updated?.updatedAt !== post.updatedAt && updated?.metadata.imageGenerationFailed === true) {

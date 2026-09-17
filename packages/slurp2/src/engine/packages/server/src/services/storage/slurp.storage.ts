@@ -4929,6 +4929,18 @@ export function createSlurpStorage(db: DB) {
       });
     },
 
+    /** Give a post back its previous picture unless another request now holds its image claim. */
+    async restorePostImageIfUnclaimed(id: string, imageUrl: string, at = now()): Promise<boolean> {
+      return db.transaction(async (tx) => {
+        const rows = await tx.select().from(noodlePosts).where(eq(noodlePosts.id, id));
+        const row = rows[0];
+        if (!row || row.imageUrl) return false;
+        if (row.imageClaimToken && row.imageClaimLeaseUntil && row.imageClaimLeaseUntil > at) return false;
+        await tx.update(noodlePosts).set({ imageUrl, updatedAt: at }).where(eq(noodlePosts.id, id));
+        return true;
+      });
+    },
+
     async finalizePostImageClaim(
       id: string,
       token: string,

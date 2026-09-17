@@ -463,5 +463,8 @@
   "ui.slurp.settings.backstage.preview.ads.sampleCopy.unhinged": "Wypiłem jedenaście filiżanek i słyszę kolory. Kup ziarna.",
   "ui.slurp.settings.creators.refreshingConversationSchedule": "Tworzenie nowego harmonogramu…",
   "ui.slurp.settings.creators.openWorldMessaging": "Otwórz zasady wiadomości",
-  "ui.slurp.settings.creators.messagingInheritsWorld": "Każda wartość zaczyna się od domyślnej wartości świata Slurp i pozostaje nią, dopóki jej tu nie zmienisz."
+  "ui.slurp.settings.creators.messagingInheritsWorld": "Każda wartość zaczyna się od domyślnej wartości świata Slurp i pozostaje nią, dopóki jej tu nie zmienisz.",
+  "ui.slurp.settings.prompts.blocksSummary": "Bloki: {{count}} · {{state}}",
+  "ui.slurp.settings.prompts.blocksSummaryChanged": "zmienione",
+  "ui.slurp.settings.prompts.blocksSummaryDefault": "domyślne"
 }
