@@ -882,7 +882,6 @@ export async function importPackageInterop(
       400,
       "ltm_destination_scope_required",
     );
-  const extractionScope = destinationScope ?? rows[0]?.scope;
   const extractionConfig = await getLtmExtractionConfig(root, request.mode);
   const useExtractionAgent = rows.some(
     (row) =>
@@ -1002,7 +1001,6 @@ export async function importPackageInterop(
           modes: request.modes,
           instruction: request.instruction,
           operationId,
-          scope: extractionScope,
           chatId: request.chatId,
           signal,
           applyLowRisk: request.applyLowRisk,
