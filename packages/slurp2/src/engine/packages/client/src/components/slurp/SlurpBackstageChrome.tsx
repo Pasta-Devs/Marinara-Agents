@@ -53,15 +53,20 @@ export function SlurpBackstageSubnav({
   section,
   target,
   onSelect,
+  className,
 }: {
   section: SlurpBackstageSection;
   target: SlurpBackstageTarget;
   onSelect: (target: SlurpBackstageTarget) => void;
+  className?: string;
 }) {
   const targets = SLURP_BACKSTAGE_TARGETS_BY_SECTION[section];
   if (targets.length < 2) return null;
   return (
-    <nav aria-label={`${SLURP_BACKSTAGE_SECTION_LABELS[section]} areas`} className="flex flex-wrap gap-2">
+    <nav
+      aria-label={`${SLURP_BACKSTAGE_SECTION_LABELS[section]} areas`}
+      className={cn("flex flex-wrap gap-2", className)}
+    >
       {targets.map((item) => (
         <button
           key={item}
@@ -164,7 +169,7 @@ export function SlurpBackstageSearch({
           }
         }}
         placeholder={t("ui.slurp.settings.backstage.findSetting", { defaultValue: "Find a setting" })}
-        className="min-h-12 w-full rounded-xl bg-[var(--slurp-surface-raised)] ps-10 pe-16 text-base text-[var(--slurp-text)] shadow-sm ring-1 ring-inset ring-[var(--slurp-outline)] placeholder:text-[var(--slurp-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] sm:text-sm"
+        className="min-h-14 w-full rounded-xl bg-[var(--slurp-surface-raised)] ps-10 pe-16 text-lg text-[var(--slurp-text)] shadow-sm ring-1 ring-inset ring-[var(--slurp-outline)] placeholder:text-[var(--slurp-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] md:min-h-12 md:text-sm"
         role="combobox"
         autoComplete="off"
         aria-autocomplete="list"

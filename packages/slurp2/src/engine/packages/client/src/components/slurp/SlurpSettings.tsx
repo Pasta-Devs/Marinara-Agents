@@ -158,6 +158,55 @@ export function SlurpSettingsSidebar({
   );
 }
 
+/**
+ * Mobile section row. It keeps the active section in view and fades whichever edge still has
+ * sections behind it, so a row that scrolls does not look like a row that ends.
+ */
+function SlurpSettingsSectionRow({
+  navigation,
+  onNavigate,
+}: {
+  navigation: Extract<SlurpNavigationState, { mode: "creator-settings" }>;
+  onNavigate: (navigation: SlurpNavigationState) => void;
+}) {
+  const { t } = useTranslation();
+  const section = navigation.section ?? "overview";
+  return (
+    <label className="sticky top-0 z-20 -mb-4 flex min-h-14 items-center gap-3 rounded-t-xl bg-[var(--slurp-surface)] px-3 py-2 ring-1 ring-inset ring-[var(--slurp-outline)] md:hidden">
+      <span className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--slurp-muted)]">
+        {t("ui.slurp.settings.backstage.destination", { defaultValue: "Destination" })}
+      </span>
+      {/* Grouped so the picker reaches a page directly, instead of only its section. */}
+      <select
+        value={`${section}:${navigation.target ?? SLURP_BACKSTAGE_DEFAULT_TARGET[section]}`}
+        onChange={(event) => {
+          const [next, nextTarget] = event.target.value.split(":") as [
+            (typeof settingsSections)[number],
+            SlurpBackstageTarget,
+          ];
+          onNavigate({ ...navigation, section: next, target: nextTarget });
+        }}
+        className="ms-auto min-h-11 min-w-0 flex-1 rounded-lg bg-[var(--slurp-surface-raised)] px-3 text-base font-semibold text-[var(--slurp-text)] ring-1 ring-inset ring-[var(--slurp-outline)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+      >
+        {settingsSections.map((item) => (
+          <optgroup
+            key={item}
+            label={t(`ui.slurp.settings.backstage.sections.${item}`, {
+              defaultValue: SLURP_BACKSTAGE_SECTION_LABELS[item],
+            })}
+          >
+            {SLURP_BACKSTAGE_TARGETS_BY_SECTION[item].map((entry) => (
+              <option key={entry} value={`${item}:${entry}`}>
+                {SLURP_BACKSTAGE_TARGET_LABELS[entry]}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function useSlurpBackstageController({
   navigation,
   onNavigate,
@@ -930,15 +979,15 @@ export function SlurpSettings({
                   {SLURP_BACKSTAGE_TARGET_LABELS[target]}
                 </h1>
               </div>
-              <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-3 sm:basis-80">
+              <div className="flex min-w-0 flex-1 basis-full flex-wrap items-center justify-end gap-3 md:basis-80">
                 <SlurpBackstageSearch
                   onSelect={(nextSection, nextTarget, settingKey) =>
                     onNavigate({ ...navigation, section: nextSection, target: nextTarget, settingKey })
                   }
-                  className="basis-full sm:basis-auto"
+                  className="max-w-none basis-full md:max-w-xl md:basis-auto"
                 />
                 <p
-                  className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full bg-[var(--slurp-surface,var(--background))] px-3 py-1 text-xs font-semibold shadow-sm ring-1 ring-inset ${saveState === "error" ? "text-red-300 ring-red-400/30" : saveState === "saved" ? "text-[var(--slurp-success)] ring-[var(--slurp-success)]/25" : "text-[var(--muted-foreground)] ring-[var(--border)]"}`}
+                  className={`inline-flex min-h-6 shrink-0 items-center gap-1 rounded-full bg-[var(--slurp-surface,var(--background))] px-2 py-0.5 text-[11px] font-semibold md:min-h-9 md:gap-1.5 md:px-3 md:py-1 md:text-xs shadow-sm ring-1 ring-inset ${saveState === "error" ? "text-red-300 ring-red-400/30" : saveState === "saved" ? "text-[var(--slurp-success)] ring-[var(--slurp-success)]/25" : "text-[var(--muted-foreground)] ring-[var(--border)]"}`}
                   role="status"
                   aria-live="polite"
                 >
@@ -959,12 +1008,15 @@ export function SlurpSettings({
                 </p>
               </div>
             </div>
+            {/* Mobile hides these: the destination dropdown below already lists every area. */}
             <SlurpBackstageSubnav
+              className="hidden md:flex"
               section={section}
               target={target}
               onSelect={(nextTarget) => onNavigate({ ...navigation, target: nextTarget })}
             />
           </header>
+          <SlurpSettingsSectionRow navigation={navigation} onNavigate={onNavigate} />
 
           <div>
             <div className="mt-4 min-w-0 rounded-xl rounded-t-none bg-[linear-gradient(145deg,var(--slurp-surface),color-mix(in_srgb,var(--slurp-violet)_4%,var(--slurp-surface)))] p-3 shadow-[var(--slurp-shadow)] ring-1 ring-inset ring-[var(--slurp-outline)] md:mt-0 md:rounded-t-xl md:p-5 lg:p-6">

@@ -285,12 +285,12 @@ assert.match(
   /md:grid-cols-\[12rem_minmax\(0,1fr\)\][\s\S]*?lg:grid-cols-\[13rem_minmax\(0,1fr\)\]/u,
   "settings must keep a responsive desktop section rail",
 );
-assert.doesNotMatch(
+assert.match(
   settings,
-  /function SlurpSettingsSectionRow\(/u,
-  "narrow settings must not duplicate the destination picker",
+  /sticky top-0[\s\S]*?md:hidden[\s\S]*?<select[\s\S]*?settingsSections\.map/u,
+  "narrow settings must expose a compact sticky destination picker",
 );
-assert.match(settings, /basis-full sm:basis-auto/u, "narrow settings must give search a full row");
+assert.match(settings, /max-w-none basis-full md:max-w-xl/u, "narrow settings must give search a full row");
 assert.match(settings, /aria-live="polite"/u, "settings saves must announce their state");
 assert.match(settings, /selectedCreatorId/u, "creator settings must keep an explicit master-detail selection");
 assert.match(settings, /data-slurp-settings-layout/u, "settings must expose its responsive layout boundary");
