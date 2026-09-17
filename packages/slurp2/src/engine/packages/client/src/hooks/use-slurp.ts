@@ -3137,6 +3137,35 @@ export function useSlurpThreads(personaId: string | null) {
   });
 }
 
+export type SlurpComposeTarget = {
+  id: string;
+  kind: "creator" | "character";
+  displayName: string;
+  handle: string;
+  avatarUrl: string | null;
+  threadId: string | null;
+  creatorAccountId: string | null;
+};
+
+export function useSlurpComposeTargets(personaId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: [...messageKeys.root(), "compose-targets", personaId ?? "none"],
+    queryFn: () =>
+      api.get<{ targets: SlurpComposeTarget[] }>(
+        `/slurp2/messages/compose-targets?personaId=${encodeURIComponent(personaId!)}`,
+      ),
+    enabled: Boolean(personaId) && enabled,
+    staleTime: 30_000,
+  });
+}
+
+export function useOpenSlurpCreatorThread() {
+  return useMutation({
+    mutationFn: (input: { personaId: string; creatorAccountId: string; viewerAccountId: string }) =>
+      api.post<{ thread: SlurpThread }>("/slurp2/messages/compose", input),
+  });
+}
+
 export function useSlurpThread(threadId: string | null, personaId: string | null) {
   return useQuery({
     queryKey: messageKeys.thread(threadId ?? "none", personaId),

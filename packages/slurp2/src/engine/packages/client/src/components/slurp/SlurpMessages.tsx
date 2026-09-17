@@ -32,6 +32,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
+import { useOpenSlurpCreatorThread, useSlurpComposeTargets, type SlurpComposeTarget } from "../../hooks/use-slurp";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
@@ -186,6 +187,9 @@ export function SlurpMessagesView({
   const [composeWith, setComposeWith] = useState<string | null>(composeWithCreatorAccountId);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "unread" | "requests">("all");
+  const [composePickerOpen, setComposePickerOpen] = useState(false);
+  const composeTargetsQuery = useSlurpComposeTargets(personaId, composePickerOpen);
+  const openCreatorThread = useOpenSlurpCreatorThread();
   const threadsQuery = useSlurpThreads(personaId);
   const threads = threadsQuery.data?.threads ?? [];
   const openThread = [...threads, ...(threadsQuery.data?.inbound ?? [])].find((thread) => thread.id === openThreadId);
@@ -259,6 +263,34 @@ export function SlurpMessagesView({
     setOpenThreadId(threadId);
   };
 
+  const openNewChat = async (target: SlurpComposeTarget) => {
+    if (target.threadId) {
+      openFromList(target.threadId);
+      setComposePickerOpen(false);
+      return;
+    }
+    if (target.kind === "character" && target.creatorAccountId && personaId) {
+      try {
+        const result = await openCreatorThread.mutateAsync({
+          personaId,
+          creatorAccountId: target.creatorAccountId,
+          viewerAccountId: target.id,
+        });
+        openFromList(result.thread.id);
+        setComposePickerOpen(false);
+      } catch {
+        // The thread view exposes the request state if the target cannot be opened.
+      }
+      return;
+    }
+    if (target.kind === "creator") {
+      openedDirectly.current = true;
+      setOpenThreadId(null);
+      setComposeWith(target.id);
+      setComposePickerOpen(false);
+    }
+  };
+
   const inbox = (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {onExit && (
@@ -281,12 +313,69 @@ export function SlurpMessagesView({
           <h2 className="text-sm font-black">
             {localizeUi("ui.slurp.messages.conversations", { defaultValue: "Conversations" })}
           </h2>
-          {unread > 0 && (
-            <span className="shrink-0 rounded-full bg-[var(--noodle-accent)]/12 px-2.5 py-1 text-[0.7rem] font-bold tabular-nums text-[var(--noodle-accent)]">
-              {localizeUi("ui.slurp.messages.unreadTotal", { defaultValue: "{{count}} unread", count: unread })}
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {unread > 0 && (
+              <span className="shrink-0 rounded-full bg-[var(--noodle-accent)]/12 px-2.5 py-1 text-[0.7rem] font-bold tabular-nums text-[var(--noodle-accent)]">
+                {localizeUi("ui.slurp.messages.unreadTotal", { defaultValue: "{{count}} unread", count: unread })}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => setComposePickerOpen((open) => !open)}
+              aria-expanded={composePickerOpen}
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--noodle-accent)]/35 px-3 text-xs font-bold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+            >
+              <Plus size={15} aria-hidden="true" />
+              {localizeUi("ui.slurp.messages.newChat", { defaultValue: "New chat" })}
+            </button>
+          </div>
         </div>
+        {composePickerOpen && (
+          <section
+            aria-label={localizeUi("ui.slurp.messages.newChat", { defaultValue: "New chat" })}
+            className="space-y-2 rounded-2xl bg-[var(--slurp-surface)]/55 p-2 ring-1 ring-inset ring-white/[0.055]"
+          >
+            <p className="px-2 text-xs font-semibold text-[var(--muted-foreground)]">
+              {localizeUi("ui.slurp.messages.newChatDetail", {
+                defaultValue: "Choose a Creator or invited character.",
+              })}
+            </p>
+            {composeTargetsQuery.isLoading ? (
+              <p className="px-2 py-3 text-xs text-[var(--muted-foreground)]">
+                {localizeUi("ui.slurp.messages.newChatLoading", { defaultValue: "Loading chat targets…" })}
+              </p>
+            ) : composeTargetsQuery.isError ? (
+              <p role="alert" className="px-2 py-3 text-xs text-[var(--destructive)]">
+                {localizeUi("ui.slurp.messages.newChatError", { defaultValue: "Chat targets are unavailable." })}
+              </p>
+            ) : (composeTargetsQuery.data?.targets ?? []).length === 0 ? (
+              <p className="px-2 py-3 text-xs text-[var(--muted-foreground)]">
+                {localizeUi("ui.slurp.messages.newChatEmpty", { defaultValue: "No chat targets yet." })}
+              </p>
+            ) : (
+              <div className="space-y-1">
+                {(composeTargetsQuery.data?.targets ?? []).map((target: SlurpComposeTarget) => (
+                  <button
+                    key={`${target.kind}:${target.id}`}
+                    type="button"
+                    onClick={() => openNewChat(target)}
+                    className="flex min-h-16 w-full items-center gap-3 rounded-xl px-3 py-2 text-start transition-colors hover:bg-[var(--noodle-accent)]/[0.07] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)]"
+                  >
+                    <Avatar account={{ displayName: target.displayName, avatarUrl: target.avatarUrl }} size="md" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-bold">{target.displayName}</span>
+                      <span className="block truncate text-[0.7rem] text-[var(--muted-foreground)]">
+                        {target.kind === "character"
+                          ? localizeUi("ui.slurp.messages.newChatCharacter", { defaultValue: "Invited character" })
+                          : `@${target.handle}`}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
         <div className="flex items-center gap-2">
           <div className="relative min-w-0 flex-1">
             <Search

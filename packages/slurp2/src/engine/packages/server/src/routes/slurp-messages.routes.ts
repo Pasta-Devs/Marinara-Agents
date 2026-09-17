@@ -412,6 +412,61 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     };
   });
 
+  app.get("/messages/compose-targets", async (req, reply) => {
+    const parsed = personaQuerySchema.safeParse(req.query);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await requireViewer(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    await slurp.ensureAudienceCharacterAccounts().catch(() => undefined);
+    const profiles = await slurp.listNoodlerStageProfiles();
+    const operatedAccounts = (await slurp.listNoodlerAccounts()).filter(
+      (account) => account.sourceKind === "persona" && account.sourceEntityId === viewer.id,
+    );
+    const inbound = await messages.listThreadsForCreators(operatedAccounts.map((account) => account.id));
+    const inboundByViewer = new Map(inbound.map((thread) => [thread.viewerAccountId, thread]));
+    return {
+      targets: [
+        ...profiles.map((profile) => ({
+          id: profile.id,
+          kind: "creator" as const,
+          displayName: profile.displayName,
+          handle: profile.handle,
+          avatarUrl: profile.avatarUrl,
+          threadId: null,
+          creatorAccountId: null,
+        })),
+        ...(await slurp.listAudienceCharacterAccounts()).map(({ account }) => ({
+          id: account.id,
+          kind: "character" as const,
+          displayName: account.displayName,
+          handle: account.handle,
+          avatarUrl: account.avatarUrl,
+          threadId: inboundByViewer.get(account.id)?.id ?? null,
+          creatorAccountId: operatedAccounts[0]?.id ?? null,
+        })),
+      ],
+    };
+  });
+
+  app.post("/messages/compose", async (req, reply) => {
+    const parsed = z
+      .object({
+        personaId: z.string().trim().min(1),
+        creatorAccountId: z.string().trim().min(1),
+        viewerAccountId: z.string().trim().min(1),
+      })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    if (!(await ownsCreator(parsed.data.personaId, parsed.data.creatorAccountId))) {
+      return reply.code(403).send({ error: "Only the Creator's owner can open this conversation." });
+    }
+    const target = await slurp.getNoodlerAccountById(parsed.data.viewerAccountId, { includeHidden: true });
+    if (!target) return reply.code(404).send({ error: "Audience member not found" });
+    const opened = await messages.openThread(parsed.data.viewerAccountId, parsed.data.creatorAccountId, "creator");
+    if (opened.status !== "ok") return reply.code(404).send({ error: "Could not open conversation" });
+    return { thread: await freshView(opened.thread.id, "creator") };
+  });
+
   /**
    * Empty this conversation and start it over.
    *
