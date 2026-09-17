@@ -431,26 +431,28 @@ function PersonaIdentityCard({
   const action = isCreator ? undefined : onBecomeCreator;
   return (
     <div className="overflow-hidden rounded-xl bg-[var(--slurp-surface-raised)] shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-[var(--noodle-divider)]">
-      <div className="relative h-16">
+      {/* Banners are wide art: a 3:1 frame shows them the way the profile does, instead of a thin
+          strip washed out by a full-height fade. */}
+      <div className="relative aspect-[3/1] min-h-16 overflow-hidden">
         {bannerSrc ? (
           <img src={bannerSrc} alt="" decoding="async" className="h-full w-full object-cover" />
         ) : (
           <span className="block h-full w-full bg-[var(--slurp-hero)] opacity-80" aria-hidden="true" />
         )}
         <span
-          className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[var(--slurp-surface-raised)] to-transparent"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-[var(--slurp-surface-raised)] to-transparent"
           aria-hidden="true"
         />
       </div>
-      <div className="-mt-7 px-3 pb-3">
+      <div className="px-3 pb-3">
         <button
           type="button"
           onClick={onOpenProfile}
           disabled={!onOpenProfile}
-          className="flex w-full items-end gap-3 rounded-lg text-left disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+          className="-mt-6 flex w-full flex-col items-start rounded-lg text-left disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
         >
           {account ? (
-            <span className="relative shrink-0">
+            <span className="relative shrink-0 rounded-full ring-[3px] ring-[var(--slurp-surface-raised)]">
               <Avatar account={account} />
               {personaBadge && (
                 <span
@@ -462,28 +464,25 @@ function PersonaIdentityCard({
               )}
             </span>
           ) : (
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 ring-1 ring-[var(--noodle-accent)]/25">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 ring-[3px] ring-[var(--slurp-surface-raised)]">
               <AtSign size={24} className="text-[var(--noodle-accent)]" />
             </span>
           )}
-          <span className="min-w-0 flex-1 pb-0.5">
-            <span className="block truncate text-sm font-black">
+          {/* Name sits below the avatar on the plain card, never over the banner art. */}
+          <span className="mt-1.5 block w-full min-w-0">
+            <span className="block truncate text-sm font-black leading-5" title={account?.displayName}>
               {account?.displayName ?? localizeUi("ui.noodle.noodleshell.noodleAccount")}
             </span>
-            <span className="block truncate text-xs text-[var(--muted-foreground)]">
+            <span className="block truncate text-xs leading-4 text-[var(--muted-foreground)]">
               {account ? `@${account.handle}` : localizeUi("ui.noodle.noodleshell.pickAPersonaBelow")}
             </span>
-            {account && (
+            {/* Only when it adds something: "Browsing as <the name right above>" repeated the title. */}
+            {personaBadge && (
               <span className="mt-0.5 block truncate text-xs text-[var(--muted-foreground)]">
-                {personaBadge
-                  ? localizeUi("ui.slurp.account.managingAs", {
-                      defaultValue: "Managing as {{persona}}",
-                      persona: personaBadge.displayName,
-                    })
-                  : localizeUi("ui.slurp.account.browsingAs", {
-                      defaultValue: "Browsing as {{persona}}",
-                      persona: account.displayName,
-                    })}
+                {localizeUi("ui.slurp.account.managingAs", {
+                  defaultValue: "Managing as {{persona}}",
+                  persona: personaBadge.displayName,
+                })}
               </span>
             )}
           </span>

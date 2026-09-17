@@ -81,6 +81,7 @@ export async function generateAndApplyNoodlerPost(
   request: NoodlerGenerationRequest & { format?: NoodlerContentFormat },
   media?: NoodlerPostMediaUpload,
   admissionMode?: ConnectionAdmissionMode,
+  options: { allowStory?: boolean } = {},
 ): Promise<GenerateAndApplyNoodlerPostResult> {
   const noodle = createSlurpStorage(db);
 
@@ -129,6 +130,7 @@ export async function generateAndApplyNoodlerPost(
       connection,
       media,
       admissionMode,
+      allowStory: options.allowStory,
     });
     await invalidateNearFutureReserve(noodle, account.id, generated.post.createdAt);
     return {
@@ -141,6 +143,9 @@ export async function generateAndApplyNoodlerPost(
 }
 
 const MAX_CONCURRENT_MANUAL_REFRESH = 3;
+/** How long a player-requested post waits for a Creator that is busy with another run. */
+const MANUAL_REFRESH_BUSY_WAIT_MS = 180_000;
+const MANUAL_REFRESH_BUSY_POLL_MS = 2_000;
 
 export type NoodlerRefreshNowResult = { status: "disabled" } | { status: "ok"; outcomes: NoodlerRefreshNowOutcome[] };
 
@@ -204,16 +209,33 @@ export async function refreshTargetedNoodlerCreatorsNow(
   const settled = await settleAgentJobsWithConcurrencyLimit(
     eligibleTargetAccountIds,
     MAX_CONCURRENT_MANUAL_REFRESH,
-    async (accountId): Promise<NoodlerRefreshNowOutcome> => {
-      const result = await generateAndApplyNoodlerPost(db, {
-        mode: "noodler",
-        targetAccountId: accountId,
-        format: "caption",
-        access,
-        executionId,
-      });
+    async (accountId): Promise<NoodlerRefreshNowOutcome & { postId?: string }> => {
+      const run = () =>
+        generateAndApplyNoodlerPost(
+          db,
+          { mode: "noodler", targetAccountId: accountId, format: "caption", access, executionId },
+          undefined,
+          undefined,
+          // The player pressed "Create posts now" and counts feed posts. A Story never reaches the feed,
+          // so a batch that landed on a Story slot looked like one post had gone missing.
+          { allowStory: false },
+        );
+      // A Creator busy with the scheduler or another run used to be skipped at once, and the batch
+      // still read as done. An explicit request waits for that run to finish instead.
+      const startedAt = Date.now();
+      let result = await run();
+      while (result.status === "busy" && Date.now() - startedAt < MANUAL_REFRESH_BUSY_WAIT_MS) {
+        await new Promise((resolve) => setTimeout(resolve, MANUAL_REFRESH_BUSY_POLL_MS));
+        result = await run();
+      }
       const status = result.status === "disabled" || result.status === "busy" ? "skipped" : result.status;
-      return { accountId, status };
+      logger.info(
+        "[slurp] Create posts now: %s -> %s%s",
+        accountId,
+        result.status,
+        result.status === "generated" ? ` (post ${result.post.id})` : "",
+      );
+      return { accountId, status, ...(result.status === "generated" ? { postId: result.post.id } : {}) };
     },
   );
   const outcomes = settled.map((entry, index): NoodlerRefreshNowOutcome => {

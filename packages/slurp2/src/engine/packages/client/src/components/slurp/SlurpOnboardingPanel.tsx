@@ -1492,7 +1492,7 @@ export function SlurpOnboardingWizard({
               {intro !== null ? (
                 <button
                   type="button"
-                  disabled={intro === 2 && !postExplored}
+                  disabled={intro === 3 && !postExplored}
                   onClick={() => setIntro(intro < LAST_INTRO ? ((intro + 1) as Intro) : null)}
                   className="flex min-h-10 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50 max-sm:px-3"
                 >

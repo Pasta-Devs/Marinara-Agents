@@ -335,6 +335,7 @@ export type SlurpSettings = {
   inlineAdsEra: "present" | "nineties" | "cyberpunk" | "retrofuture";
   inlineAdsWorldContext: string;
   inlineAdsImagesEnabled: boolean;
+  inlineAdsImageConnectionId: string | null;
   inlineAdsLorebookId: string | null;
   inlineAdsLorebookRevision: string | null;
   walletEnabled: boolean;

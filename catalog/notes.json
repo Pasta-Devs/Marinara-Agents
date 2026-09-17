@@ -254,6 +254,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.0.20",
+          "date": "2026-09-17",
+          "notes": "- Fixed Restart Setup stuck on \"How will people recognize them?\".\n- Fixed \"Needs attention\" on Creators with a Conversation Schedule. Older schedules now repeat weekly, like in Engine chats.\n- Ads: new Ad image connection setting.\n- Stories: wider viewer, backdrop, show whole image, likes, unlock price.\n- Messages: cleaner message bar that grows with your text.\n- Messages: sending scrolls to your message; a button jumps to the latest.\n- Messages: header buttons fold into one menu on phones.\n- Messages: a \"New messages\" line marks where you stopped.\n- Creators keep a separate draft for each fan thread.\n- Side menu: Creator card shows the full banner and a clean name.\n- Create posts now: no Stories, waits for busy Creators, names any that did not post.",
+          "highlight": false
+        },
+        {
           "version": "0.0.19",
           "date": "2026-09-17",
           "notes": "- Fixed Force reply now doing nothing when the hourly model budget was used up.",

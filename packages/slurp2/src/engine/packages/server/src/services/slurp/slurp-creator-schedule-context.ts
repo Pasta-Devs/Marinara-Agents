@@ -68,33 +68,18 @@ function zonedDate(now: Date, zone?: string): Date {
   return new Date(part("year"), part("month") - 1, part("day"), part("hour"), part("minute"), part("second"));
 }
 
-function dateKey(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
-function dateKeyInTimeZone(date: Date, zone?: string): string {
-  if (!zone) return dateKey(date);
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: zone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date);
-  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? "";
-  return `${part("year")}-${part("month")}-${part("day")}`;
-}
-
-function isStale(schedule: WeekSchedule, localNow: Date, zone?: string): boolean {
+function isStale(schedule: WeekSchedule, localNow: Date): boolean {
   const monday = new Date(localNow);
   const day = monday.getDay();
   monday.setDate(monday.getDate() - (day === 0 ? 6 : day - 1));
   monday.setHours(0, 0, 0, 0);
-  const weekStart = new Date(schedule.weekStart);
-  // Engine schedules store weekStart as the Monday date at UTC midnight. Compare
-  // that stable calendar key with the local Monday instead of shifting the stored
-  // boundary into the host or viewer time zone.
-  const storedWeekKey = dateKeyInTimeZone(weekStart, "UTC");
-  return storedWeekKey < dateKey(monday);
+  // Every writer (Engine generator, Engine schedule editor, Slurp regenerate) stores weekStart as
+  // Monday at *local* midnight of whichever host or browser wrote it, serialized to UTC. East of UTC
+  // that instant falls on Sunday in UTC, so reading the UTC date made a freshly generated schedule
+  // stale forever. Compare instants instead: this week's Monday written anywhere from UTC-12 to
+  // UTC+14 lands within [mondayUtc - 14h, mondayUtc + 12h]; last week's is at most mondayUtc - 156h.
+  const mondayUtc = Date.UTC(monday.getFullYear(), monday.getMonth(), monday.getDate());
+  return Date.parse(schedule.weekStart) < mondayUtc - 14 * 60 * 60 * 1000;
 }
 
 export function buildSlurpCreatorScheduleContext(
@@ -104,7 +89,9 @@ export function buildSlurpCreatorScheduleContext(
   localNow: Date,
   zone?: string,
 ): string | null {
-  if (!enabled || !schedule || isStale(schedule, localNow, zone)) return null;
+  // An older week still applies as a weekly routine, as it does in Engine chats. Dropping it made a
+  // Creator lose their day the moment a week passed, whatever the reason the date was old.
+  if (!enabled || !schedule) return null;
   const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
   const today = schedule.days[days[(localNow.getDay() + 6) % 7]!];
   if (!today?.length) return null;
@@ -331,7 +318,7 @@ export async function resolveSlurpCreatorScheduleStatus(
   if (!schedule) return { state: "missing" };
   if (schedule.enabled === false) return { state: "disabled" };
   const localNow = zonedDate(now, timeZone);
-  if (isStale(schedule, localNow, timeZone)) return { state: "stale" };
+  if (isStale(schedule, localNow)) return { state: "stale" };
   const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
   const today = schedule.days[days[(localNow.getDay() + 6) % 7]!];
   return today?.length ? { state: "active", blocks: today.length } : { state: "empty-today" };
@@ -353,7 +340,8 @@ export async function resolveSlurpCreatorAvailability(
       const schedule = parseSlurpWeekSchedule(record(record(character?.data).extensions).conversationSchedule);
       const localNow = zonedDate(now, timeZone);
 
-      if (schedule && schedule.enabled !== false && !isStale(schedule, localNow, timeZone)) {
+      // Same rule as the prompt context: an older week repeats rather than switching off.
+      if (schedule && schedule.enabled !== false) {
         const availability = slurpCreatorAvailability(schedule, localNow);
         if (availability) return availability;
       }
