@@ -27,6 +27,7 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
       "Like, comment, vote and subscribe without a Creator profile.",
       "Mobile Backstage: no section tabs, full-width search.",
       "Fixed Prompts reset, turned-off prompt blocks, and Slurp loading after an Engine restart.",
+      "Creators no longer mention the time or weekday in every post.",
     ],
   },
   {

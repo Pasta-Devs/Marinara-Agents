@@ -13,6 +13,7 @@
 - Like, comment, vote and subscribe without a Creator profile.
 - Mobile Backstage: no section tabs, full-width search.
 - Fixed Prompts reset, turned-off prompt blocks, and Slurp loading after an Engine restart.
+- Creators no longer mention the time or weekday in every post.
 
 ## 0.0.17 — 2026-09-16
 
