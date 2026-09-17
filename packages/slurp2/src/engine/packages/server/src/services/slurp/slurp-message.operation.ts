@@ -232,6 +232,7 @@ export async function replyToSlurpMessage(
         // separate global background-worker switch as well made the default settings contradictory:
         // audience messages arrived, but no Creator could answer them.
         workerContext: "present",
+        skipBudgetCap: input.force === true && input.background !== true,
       });
       // Two or three messages when the conversation is going well, one when it is not. A creator
       // who always answers in exactly one tidy block reads as a form letter.

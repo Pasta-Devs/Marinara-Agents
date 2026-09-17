@@ -348,6 +348,8 @@ export type SlurpMessagePromptInput = {
   generationGuidance?: string;
   /** Scheduled follow-ups are background; direct replies default to present. */
   workerContext?: SlurpModelWorkerContext;
+  /** A player pressed Force reply now: no budget setting, cap or mode may swallow that press. */
+  skipBudgetCap?: boolean;
 };
 
 /**
@@ -524,8 +526,9 @@ export async function generateSlurpMessageReply(input: SlurpMessagePromptInput):
   const { messages, stance, disclosureMode, publicIdentity, recentPosts } = await buildSlurpMessagePrompt(input);
   const budget = (await createSlurpStorage(input.db).getSettings()).modelBudget;
   const context = input.workerContext ?? "present";
-  if (!slurpModelWorkerAllows(budget, context)) throw new SlurpMessageBudgetUnavailableError(null);
-  if (!(await claimSlurpModelBudget(input.db, budget, "dm_reply")))
+  if (!input.skipBudgetCap && !slurpModelWorkerAllows(budget, context))
+    throw new SlurpMessageBudgetUnavailableError(null);
+  if (!input.skipBudgetCap && !(await claimSlurpModelBudget(input.db, budget, "dm_reply")))
     throw new SlurpMessageBudgetUnavailableError(
       slurpModelBudgetRetryAt(budget, await getSlurpModelBudgetLedger(input.db), "dm_reply"),
     );
