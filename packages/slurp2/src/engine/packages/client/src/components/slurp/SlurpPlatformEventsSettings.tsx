@@ -51,12 +51,16 @@ export function SlurpPlatformEventsSettings({
     const today = new Date();
     const item: SlurpPlatformEvent = {
       id: `custom-${Date.now().toString(36)}`,
+      kind: "calendar",
       name: t("ui.slurp.settings.events.newName", { defaultValue: "New event" }),
       enabled: true,
       month: today.getUTCMonth() + 1,
       day: today.getUTCDate(),
       durationDays: 1,
       guidance: "",
+      // A hand-added event carries no modifier. The editor has no control for one, and Slurp ships
+      // no default sale, so the seam exists without anything using it yet.
+      modifiers: [],
     };
     setSelectedId(item.id);
     setDraft(item);

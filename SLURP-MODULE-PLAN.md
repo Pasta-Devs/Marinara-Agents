@@ -256,14 +256,26 @@ Resolution is pure and deterministic:
 5. let Economy round once with `Math.round` and clamp the final subscription charge to the existing
    `0..9999` price range after all modifiers have been applied.
 
-The provider is constructed by the server entry with active modifier sources and receives the
-evaluation timestamp from its caller. It has no global clock capture, global registry, or module
-side effects.
+The provider is constructed with active modifier sources and receives the evaluation timestamp from
+its caller. It has no global clock capture, global registry, or module side effects.
+
+Corrected during Slice 6 (maintainer-approved; see `DECISIONS.md`). §4 first said the server entry
+constructs the provider. It cannot: the only new-subscription charge is computed inside one storage
+transaction, and the event list lives in settings that Backstage edits at runtime, so a provider
+built once at activation would serve a frozen event list until the next restart. The consuming
+feature therefore builds the provider from the settings snapshot its own transaction already read.
+The seam is unchanged — Economy still depends on the provider interface and never on World.
+
+A saved event stores the modifier effect only. The producing source stamps `source` on at
+activation, so a saved event cannot claim a modifier for another event or drift from its own id.
 
 ### World producer and economy consumer
 
-`features/world/events/` owns calendar activation and turns active event definitions into prompt
-guidance plus modifier descriptors. Economy receives the provider through its explicit contract and
+`modules/world/events/` owns calendar activation and turns active event definitions into prompt
+guidance plus modifier descriptors. (§4 originally said `features/world/events/`. The Slice 5 layer
+model makes activation a pure rule with no I/O, and the §3 allocation ledger already places
+platform-event evaluation in `modules/world/events/`; the client also reads activation directly, so
+a server feature would be the wrong owner. Corrected during Slice 6.) Economy receives the provider through its explicit contract and
 asks for `economy.subscription-price` modifiers when calculating a new subscription charge.
 
 An event does not rewrite creator prices or wallets when it starts, and no cleanup runs when it
@@ -492,6 +504,11 @@ and changes ownership paths together. Do not start it until PRs 1–3 are merged
 - Have the world-event module expose active prompt guidance and active modifiers from one timestamp.
 - Inject the modifier provider into economy price calculation.
 - Add only the synthetic regression modifier; do not add a default sale.
+
+Verified in Slice 6: the only new-subscription charge is in `data/economy/slp-economy-storage-1.ts`
+`subscribe()`; renewal already charges the stored agreed price from the wallet, so no renewal path
+changes. Adding two defaulted fields to `SlurpPlatformEvent` makes them required on the inferred
+type, so the Backstage event editor's new-event literal gains `kind` and `modifiers`.
 
 ### 7. Client state and hooks
 

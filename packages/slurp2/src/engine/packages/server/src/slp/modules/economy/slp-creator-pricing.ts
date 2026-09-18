@@ -4,6 +4,8 @@
  *
  * Pure and standalone, like `slurp-prices.ts`, so the rules can be tested without an Engine checkout.
  */
+import { slpApplyModifiers } from "../../base/modifiers/slp-modifier-resolver.js";
+import type { SlpActiveModifierProvider } from "../../base/modifiers/slp-modifier.types.js";
 
 export type SlurpCommissionPricing = {
   commissionBase: number;
@@ -92,4 +94,29 @@ export function slurpStepPrice(current: number, target: number, maxChangePercent
   if (maxChangePercent <= 0 || current === target) return current;
   const step = Math.max(1, Math.round((current * maxChangePercent) / 100));
   return target > current ? Math.min(target, current + step) : Math.max(target, current - step);
+}
+
+/** The range a subscription price may occupy, matching `walletSubscriptionCost` in Settings. */
+export const SLURP_SUBSCRIPTION_PRICE_MIN = 0;
+export const SLURP_SUBSCRIPTION_PRICE_MAX = 9999;
+
+/**
+ * What a *new* subscription costs right now: the Creator's price with the modifiers active at `at`
+ * applied, rounded once and clamped back into the allowed range.
+ *
+ * Economy's whole side of the modifier seam. It depends on the provider interface, never on World,
+ * so it neither knows nor cares that platform events are what is currently moving the number.
+ *
+ * Rounding happens once, at the end, so two modifiers cannot compound two rounding errors. An
+ * existing subscription never comes through here: it keeps the price it agreed to and renews at
+ * that stored price.
+ */
+export function slurpSubscriptionCharge(basePrice: number, modifiers: SlpActiveModifierProvider, at: Date): number {
+  const modified = slpApplyModifiers(
+    basePrice,
+    modifiers.modifiersFor("economy.subscription-price", at),
+    "economy.subscription-price",
+  );
+  if (!Number.isFinite(modified)) return basePrice;
+  return Math.min(SLURP_SUBSCRIPTION_PRICE_MAX, Math.max(SLURP_SUBSCRIPTION_PRICE_MIN, Math.round(modified)));
 }

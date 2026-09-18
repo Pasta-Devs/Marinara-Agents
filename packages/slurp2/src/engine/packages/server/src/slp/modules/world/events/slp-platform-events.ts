@@ -7,17 +7,31 @@
  */
 import { z } from "zod";
 
+import { slpModifierDraftsSchema, slpNormalizeModifierDrafts } from "../../../base/modifiers/slp-modifier-schema.js";
+import type { SlpModifier, SlpModifierSource } from "../../../base/modifiers/slp-modifier.types.js";
+
 /** Longest guidance an event may carry. It rides in every post and reply prompt while active. */
 export const SLURP_PLATFORM_EVENT_GUIDANCE_MAX = 600;
 
+/**
+ * How an event decides whether it is running. Only a calendar event exists today; the kind is on
+ * the record so a later kind (a one-off dated window, say) does not have to reinterpret
+ * `month`/`day`/`durationDays`, and so an old saved row keeps meaning what it meant.
+ */
+export const slurpPlatformEventKindSchema = z.enum(["calendar"]);
+export type SlurpPlatformEventKind = z.infer<typeof slurpPlatformEventKindSchema>;
+
 export const slurpPlatformEventSchema = z.object({
   id: z.string().trim().min(1).max(64),
+  kind: slurpPlatformEventKindSchema.default("calendar"),
   name: z.string().trim().min(1).max(60),
   enabled: z.boolean().default(true),
   month: z.number().int().min(1).max(12),
   day: z.number().int().min(1).max(31),
   durationDays: z.number().int().min(1).max(31).default(1),
   guidance: z.string().trim().max(SLURP_PLATFORM_EVENT_GUIDANCE_MAX).default(""),
+  // Defaulted, so every event saved before this field existed still parses, with no effect.
+  modifiers: slpModifierDraftsSchema.default([]),
 });
 
 export type SlurpPlatformEvent = z.infer<typeof slurpPlatformEventSchema>;
@@ -96,28 +110,47 @@ export function slurpPlatformEventsDefault(): SlurpPlatformEvent[] {
   ];
 }
 
-/** Parse leniently: drop broken entries instead of losing the whole list. */
+/**
+ * Parse leniently: drop broken entries instead of losing the whole list.
+ *
+ * A broken modifier is dropped on its own, before the event is parsed, so one bad modifier costs
+ * neither its event nor the list. A broken event is still dropped whole, as before.
+ */
 export function slurpNormalizePlatformEvents(raw: unknown): SlurpPlatformEvent[] {
   if (!Array.isArray(raw)) return slurpPlatformEventsDefault();
   return raw.flatMap((entry) => {
-    const parsed = slurpPlatformEventSchema.safeParse(entry);
+    const cleaned =
+      entry && typeof entry === "object" && "modifiers" in entry
+        ? { ...entry, modifiers: slpNormalizeModifierDrafts((entry as { modifiers?: unknown }).modifiers) }
+        : entry;
+    const parsed = slurpPlatformEventSchema.safeParse(cleaned);
     return parsed.success ? [parsed.data] : [];
   });
 }
 
 const DAY = 86_400_000;
 
+/** A calendar event recurs every year on its month and day. The arithmetic is unchanged. */
+function isCalendarEventActive(item: SlurpPlatformEvent, at: Date): boolean {
+  const today = Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate());
+  // Check this year's and last year's start, so a wrap across New Year still matches.
+  return [0, -1].some((offset) => {
+    const start = Date.UTC(at.getUTCFullYear() + offset, item.month - 1, item.day);
+    return today >= start && today < start + item.durationDays * DAY;
+  });
+}
+
+/**
+ * One activation rule per kind. A new kind adds a row here and nothing else: the callers below,
+ * the prompt guidance, and the modifier source all go through this table.
+ */
+const ACTIVATION_BY_KIND: Record<SlurpPlatformEventKind, (item: SlurpPlatformEvent, at: Date) => boolean> = {
+  calendar: isCalendarEventActive,
+};
+
 /** Events running on `at`. An event that starts late in December runs on into January. */
 export function slurpActivePlatformEvents(events: readonly SlurpPlatformEvent[], at: Date): SlurpPlatformEvent[] {
-  const today = Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate());
-  return events.filter((item) => {
-    if (!item.enabled) return false;
-    // Check this year's and last year's start, so a wrap across New Year still matches.
-    return [0, -1].some((offset) => {
-      const start = Date.UTC(at.getUTCFullYear() + offset, item.month - 1, item.day);
-      return today >= start && today < start + item.durationDays * DAY;
-    });
-  });
+  return events.filter((item) => item.enabled && ACTIVATION_BY_KIND[item.kind](item, at));
 }
 
 /** One prompt block for the running events. Null when nothing is on, because a normal day is not news. */
@@ -129,4 +162,26 @@ export function slurpPlatformEventInstruction(events: readonly SlurpPlatformEven
     "Platform events running today. Let them colour the content where it fits the Creator; do not force them into every line.",
     ...lines,
   ].join("\n");
+}
+
+/**
+ * The modifiers the running events ask for, each stamped with the event that owns it.
+ *
+ * Nothing is written anywhere. An event that starts does not rewrite a Creator's price or anyone's
+ * wallet, and an event that ends needs no cleanup — the answer is simply re-derived from the current
+ * settings and the current time, which is what makes it restart-safe and makes two overlapping
+ * events resolve the same way every time.
+ */
+export function slurpActivePlatformEventModifiers(events: readonly SlurpPlatformEvent[], at: Date): SlpModifier[] {
+  return slurpActivePlatformEvents(events, at).flatMap((item) =>
+    item.modifiers.map((effect) => ({ ...effect, source: { kind: "platform-event" as const, id: item.id } })),
+  );
+}
+
+/**
+ * World's side of the modifier seam: the source a provider is built from. The event list is bound
+ * once, and the evaluation time still arrives per call, so the caller keeps control of the clock.
+ */
+export function slurpPlatformEventModifierSource(events: readonly SlurpPlatformEvent[]): SlpModifierSource {
+  return (at) => slurpActivePlatformEventModifiers(events, at);
 }
