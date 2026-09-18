@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { slurpMessagePreview } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-messaging.js";
+import { slurpMessagePreview } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-messaging.js";
 import { slurp2Source } from "./slurp2-source";
 
 const root = join(import.meta.dirname, "..");

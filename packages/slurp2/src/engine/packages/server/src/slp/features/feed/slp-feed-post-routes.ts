@@ -10,40 +10,40 @@ import {
   createNoodlePoll,
 } from "@marinara-engine/shared";
 import { z } from "zod";
-import { isNoodlerHiddenFromViewer, canViewNoodlerPost } from "../../../services/slurp/slurp-access.js";
+import { isNoodlerHiddenFromViewer, canViewNoodlerPost } from "../../base/identity/slp-access.js";
 import {
   readNoodlerMediaPath,
   resolveNoodlerMediaAbsolutePath,
   readNoodlerLockedTeaser,
   resolveNoodlerMediaVariant,
   unlinkNoodlerMedia,
-} from "../../../services/slurp/slurp-media.js";
+} from "../../base/media/slp-media.js";
 import { existsSync, readFileSync } from "fs";
 import { extname, basename, dirname } from "path";
-import { renderSlurpShareCard } from "../../../services/slurp/slurp-share-card.js";
-import { readNoodlerAvatarMediaPath } from "../../../services/slurp/slurp-avatar.js";
+import { renderSlurpShareCard } from "./slp-share-card.js";
+import { readNoodlerAvatarMediaPath } from "../../base/identity/slp-avatar.js";
 import { noodleInteractions } from "../../../db/schema/slurp.js";
 import { and, eq } from "../../../db/file-query.js";
 import { newId, now } from "../../../utils/id-generator.js";
 import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
-import { generateAndApplyNoodlerCreatorReply } from "../../../services/slurp/slurp-creator-reply.operation.js";
+import { generateAndApplyNoodlerCreatorReply } from "../messages/slp-messages-contract.js";
 import { logger } from "../../../lib/logger.js";
-import { tryNoodlerAccountOperation } from "../../../services/slurp/slurp-account-operation-lock.js";
-import { createNoodlerPost, updateNoodlerPostWithMedia } from "../../../services/slurp/slurp-post.operation.js";
-import { isDirectlyInvitedNoodleCharacter } from "../../../services/slurp/slurp-invited-post-draft-access.js";
-import { resolveSlurpTextConnection } from "../../../services/slurp/slurp-connection.js";
-import { generateInvitedNoodlePostDraft } from "../../../services/slurp/slurp-invited-post-draft.service.js";
+import { tryNoodlerAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
+import { createNoodlerPost, updateNoodlerPostWithMedia } from "./slp-post-operation.js";
+import { isDirectlyInvitedNoodleCharacter } from "../../modules/feed/slp-invited-post-draft-access.js";
+import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
+import { generateInvitedNoodlePostDraft } from "./slp-invited-post-draft-service.js";
 import { isConnectionAdmissionFailure } from "../../../services/generation/connection-admission.js";
-import { getErrorMessage } from "../../../services/slurp/slurp-public-support.js";
+import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
 import type { FastifyInstance } from "fastify";
-import { slurpPostTypeSchema } from "../../base/host/slp-request-schemas.js";
+import { slurpPostTypeSchema } from "../../modules/requests/slp-request-schemas.js";
 import {
   type DecodedNoodlerMediaRequest,
   decodeNoodlerMediaRequest,
   sendNoodlerMediaError,
   readNoodlerMultipart,
 } from "../../base/host/slp-multipart.js";
-import type { SlpRouteDeps } from "../../base/host/slp-viewer-context.js";
+import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
 const slurpNoodlerPostCreateBaseSchema = (
   noodlerPostCreateWithMediaSchema instanceof z.ZodEffects

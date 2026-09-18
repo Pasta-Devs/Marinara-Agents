@@ -4,8 +4,8 @@ import {
   slurpDiscoveryFields,
   slurpDiscoveryProfileSchema,
   slurpGeneratedDiscoveryProfileSchema,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-discovery-profile";
-import { normalizeNoodlerStageProfileDraft } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-stage-profile-normalize";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/discovery/slp-discovery-profile";
+import { normalizeNoodlerStageProfileDraft } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/creators/slp-stage-profile-normalize";
 import { slurp2Source } from "./slurp2-source";
 
 assert.deepEqual(slurpDiscoveryFields(undefined), { gender: null, tags: [] });

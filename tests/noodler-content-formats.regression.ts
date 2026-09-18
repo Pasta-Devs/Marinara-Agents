@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { slurp2Source } from "./slurp2-source";
 
 // The format rules live in the Engine's compiled shared schema, which imports zod,
@@ -10,7 +9,7 @@ import { slurp2Source } from "./slurp2-source";
 // noodler-disclosure-contract.
 
 const schemaPath = "sources/engine/packages/shared/dist/schemas/noodle.schema.js";
-const schema = readFileSync(schemaPath, "utf8");
+const schema = slurp2Source(schemaPath);
 assert.match(schema, /noodlerContentFormatSchema = z\.enum\(\["caption", "teaser", "announcement", "long_form"\]\)/u);
 assert.match(schema, /DEFAULT_NOODLER_CONTENT_FORMAT = "caption"/u);
 assert.match(schema, /caption: \{ title: "optional", targetMin: 40, targetMax: 500 \}/u);
@@ -22,21 +21,17 @@ assert.match(schema, /Teaser posts must be public/u);
 assert.match(schema, /Teaser posts require a locked follow-up/u);
 assert.match(schema, /Only teaser posts can link a locked follow-up/u);
 
-const generation = readFileSync(
+const generation = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
-  "utf8",
 );
-const operations = readFileSync(
+const operations = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-post.operation.ts",
-  "utf8",
 );
-const reserve = readFileSync(
+const reserve = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-reserve.operation.ts",
-  "utf8",
 );
-const responseFormat = readFileSync(
+const responseFormat = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-response-format.ts",
-  "utf8",
 );
 const composer = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
 
@@ -53,9 +48,8 @@ assert.doesNotMatch(generation, /Hard limit \d+ characters/u);
 assert.match(generation, /Never exceed \$\{input\.postMaxLength \?\? NOODLER_CONTENT_HARD_MAX_LENGTH\} characters/u);
 // The hard cap lives in a leaf module so the storage layer can hold an edit to it without importing
 // the generation service (which imports storage back).
-const contentFormat = readFileSync(
+const contentFormat = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-content-format.ts",
-  "utf8",
 );
 const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 assert.doesNotMatch(contentFormat, /caption: 300,/u, "no per-format hard cut");

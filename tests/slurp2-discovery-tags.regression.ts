@@ -8,7 +8,7 @@ import {
   normalizeSlurpDiscoveryTags,
   replaceSlurpDiscoveryTag,
   slurpDiscoveryProfileComplete,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-discovery-profile.ts";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/discovery/slp-discovery-profile.ts";
 import { slurp2Source } from "./slurp2-source";
 
 // Rename is case-insensitive, merges into an existing tag, and keeps order.

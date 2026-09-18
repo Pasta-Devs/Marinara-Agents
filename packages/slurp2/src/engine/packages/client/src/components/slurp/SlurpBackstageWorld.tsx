@@ -25,7 +25,7 @@ import { SlurpFanTypesSettings } from "./SlurpFanTypesSettings";
 import { SlurpAudienceConfigSettings } from "./SlurpAudienceConfigSettings";
 import { SlurpTagsSettings } from "./SlurpTagsSettings";
 import { SlurpPlatformEventsSettings } from "./SlurpPlatformEventsSettings";
-import { slurpActivePlatformEvents } from "../../../../server/src/services/slurp/slurp-platform-events.js";
+import { slurpActivePlatformEvents } from "../../../../server/src/slp/modules/world/events/slp-platform-events.js";
 import { api } from "../../lib/api-client";
 import { toast } from "sonner";
 import { SettingAnchor } from "./SlurpBackstageKit";
@@ -38,10 +38,7 @@ import {
   useSlurpAudienceCharacterGroups,
 } from "../../hooks/use-slurp";
 import { SlurpMediaImg } from "./SlurpShell";
-import {
-  SLURP_AUDIENCE_PRESETS,
-  slurpAudiencePresetPatch,
-} from "../../../../server/src/services/slurp/slurp-tuning.js";
+import { SLURP_AUDIENCE_PRESETS, slurpAudiencePresetPatch } from "../../../../server/src/slp/base/model/slp-tuning.js";
 import type { SlurpBackstagePageProps } from "./SlurpSettings";
 import { errorMessage, ChoiceRow, ArcLibraryEditor, AmbientProfilesPanel } from "./SlurpBackstageWorkflow";
 

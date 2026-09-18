@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -7,19 +6,20 @@ import {
   slurpAudiencePaidThrough,
   slurpAudienceRollKey,
   slurpAudienceSubscriptionDecision,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-audience-subscription.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-audience-subscription.js";
 import {
   planSlurpWorldPulse,
   slurpPulseTieAdvance,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world-pulse.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world-pulse.js";
 import {
   slurpQuestionPostIds,
   slurpWorldElapsedDays,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world.js";
 import {
   SLURP_REALISTIC_TUNING,
   SLURP_TUNING_PULSE_PER_TICK_CEILING,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-tuning.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/base/model/slp-tuning.js";
+import { slurp2Source } from "./slurp2-source";
 
 const R = SLURP_REALISTIC_TUNING;
 
@@ -128,13 +128,12 @@ assert.equal(slurpWorldElapsedDays(day(0), day(365)), R.clock.catchUpHours / 24)
 assert.equal(slurpWorldElapsedDays(day(0), day(365), 24), 1);
 
 // ── Wiring ──────────────────────────────────────────────────────────────────
-const world = readFileSync(
+const world = slurp2Source(
   join(
     import.meta.dirname,
     "..",
     "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.operation.ts",
   ),
-  "utf8",
 );
 assert.doesNotMatch(world, /maintenanceDue \? accounts : \[\]\) \{\s*const price/u, "subscriptions run every tick");
 assert.match(world, /slurpPulseTieAdvance\(action\.kind, result\.created\)/u);

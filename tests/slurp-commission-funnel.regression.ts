@@ -1,19 +1,14 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 
-import { slurpCommissionDeliveryDelayMs } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-messaging.js";
+import { slurpCommissionDeliveryDelayMs } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-messaging.js";
 import { slurp2Source } from "./slurp2-source";
 
-const schema = readFileSync("packages/slurp2/src/engine/packages/server/src/db/schema/slurp.ts", "utf8");
+const schema = slurp2Source("packages/slurp2/src/engine/packages/server/src/db/schema/slurp.ts");
 
-const storage = readFileSync(
+const storage = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
-  "utf8",
 );
-const world = readFileSync(
-  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.operation.ts",
-  "utf8",
-);
+const world = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.operation.ts");
 const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts");
 
 assert.match(storage, /async listAudienceBriefCommissions\(\)/u);
@@ -99,9 +94,8 @@ assert.match(storage, /const automated = new Map<string, boolean>\(\)/u);
 
 // An automatic delivery is no longer one hardcoded English line, and it gets rewritten in the
 // Creator's voice on the next read. Both trigger paths share one function so they cannot drift.
-const delivery = readFileSync(
+const delivery = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-commission-delivery.service.ts",
-  "utf8",
 );
 assert.match(delivery, /slurpCommissionDeliveryNote\(commission\.id\)/u);
 assert.match(delivery, /kind: "delivery"/u);
@@ -129,9 +123,8 @@ assert.doesNotMatch(storage, /mapCommission = \(row[\s\S]{0,600}?mediaPath:/u);
 
 // The scheduler runs the clock down without the model, so a dead text connection cannot strand a
 // finished commission the fan already paid for.
-const scheduler = readFileSync(
+const scheduler = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message-scheduler.service.ts",
-  "utf8",
 );
 assert.match(scheduler, /deliverDueSlurpCommissions\(app\.db\)/u);
 

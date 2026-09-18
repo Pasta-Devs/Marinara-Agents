@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { slurp2Source } from "./slurp2-source";
 
@@ -20,9 +20,8 @@ const files = [
 
 const slurpRoutes = slurp2Source(join(root, "packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts"));
 const slurpEntry = slurp2Source(join(root, "packages/slurp2/src/engine/packages/client/src/slurp-package-entry.tsx"));
-const slurpFanActivity = readFileSync(
+const slurpFanActivity = slurp2Source(
   join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-fan-activity.service.ts"),
-  "utf8",
 );
 const slurpServerEntry = slurp2Source(
   join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/server-entry.ts"),
@@ -39,7 +38,7 @@ assert.match(
 );
 assert.match(
   slurpServerEntry,
-  /import \{ startNoodleRefreshScheduler \} from "\.\.\/services\/slurp\/slurp-refresh-scheduler\.service\.js"/u,
+  /import \{ startNoodleRefreshScheduler \} from "\.\/features\/feed\/slp-refresh-scheduler-service\.js"/u,
   "Slurp must import the automatic timeline refresh scheduler",
 );
 assert.match(
@@ -63,16 +62,14 @@ assert.match(
   "NoodleR post deletion must require and verify the owning account",
 );
 
-const slurpImages = readFileSync(
+const slurpImages = slurp2Source(
   join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-images.service.ts"),
-  "utf8",
 );
 const slurpStorage = slurp2Source(
   join(root, "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
 );
-const slurpReplyQueue = readFileSync(
+const slurpReplyQueue = slurp2Source(
   join(root, "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-reply-queue.storage.ts"),
-  "utf8",
 );
 assert.match(slurpReplyQueue, /removeForThread/u, "Slurp delayed replies must have a package-owned cancellation path");
 assert.match(
@@ -90,13 +87,11 @@ assert.doesNotMatch(
   /slurpViewers|slurp_viewers/u,
   "Slurp must not access an Engine-unregistered viewer table",
 );
-const promptSafety = readFileSync(
+const promptSafety = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-prompt-safety.ts",
-  "utf8",
 );
-const stageProfileDraft = readFileSync(
+const stageProfileDraft = slurp2Source(
   join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-stage-profile-draft.service.ts"),
-  "utf8",
 );
 assert.match(
   stageProfileDraft,
@@ -154,9 +149,8 @@ assert.match(
   "audience-stance presets must write into the existing stage voice field",
 );
 
-const slurpGeneration = readFileSync(
+const slurpGeneration = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
-  "utf8",
 );
 // Bio and stage voice are written once at Creator setup, so on their own they freeze every Creator
 // into whatever a model invented that day. The card is read at post time so the person is present
@@ -196,9 +190,8 @@ assert.match(
   "Slurp image prompts must interpret character context without connection instructions",
 );
 assert.match(slurpImages, /enableImageInterpretation !== false/u);
-const slurpPublicImages = readFileSync(
+const slurpPublicImages = slurp2Source(
   join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-public-images.service.ts"),
-  "utf8",
 );
 assert.match(
   slurpPublicImages,
@@ -209,9 +202,8 @@ assert.match(slurpPublicImages, /enableImageInterpretation !== false/u);
 // Slurp offers only Open and Hinted, and both keep avatar reference images.
 assert.doesNotMatch(slurpImages, /"secret"/u, "Slurp images must not branch on the removed Secret tier");
 
-const noodleHome = readFileSync(
+const noodleHome = slurp2Source(
   join(root, "packages/noodle/src/engine/packages/client/src/components/noodle/NoodleHome.tsx"),
-  "utf8",
 );
 assert.match(
   noodleHome,
@@ -219,9 +211,8 @@ assert.match(
   "Noodle settings must reserve space for the mobile bottom navigation",
 );
 
-const noodleShell = readFileSync(
+const noodleShell = slurp2Source(
   join(root, "packages/noodle/src/engine/packages/client/src/components/noodle/NoodleShell.tsx"),
-  "utf8",
 );
 assert.match(
   noodleShell,
@@ -230,7 +221,7 @@ assert.match(
 );
 
 for (const file of files) {
-  const source = readFileSync(join(root, file), "utf8");
+  const source = slurp2Source(join(root, file));
   for (const marker of [
     /packages\/noodle\/src\/engine\/packages/u,
     /\/api\/noodle/u,

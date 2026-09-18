@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
 import { slurp2Source } from "./slurp2-source";
 
@@ -13,19 +12,16 @@ import { slurp2Source } from "./slurp2-source";
 const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 const home = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
 const settings = slurp2BackstageSource();
-const readme = readFileSync("packages/slurp/README.md", "utf8");
+const readme = slurp2Source("packages/slurp/README.md");
 const enLocale = slurp2Source("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json");
-const generation = readFileSync(
+const generation = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
-  "utf8",
 );
-const stageDraft = readFileSync(
+const stageDraft = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-stage-profile-draft.service.ts",
-  "utf8",
 );
-const replyGeneration = readFileSync(
+const replyGeneration = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-reply-generation.service.ts",
-  "utf8",
 );
 
 /** The three spice levels, as the literal block both sides must agree on character for character. */

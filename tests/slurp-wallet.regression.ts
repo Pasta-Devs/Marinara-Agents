@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import {
   applyStipend,
   credit,
@@ -10,7 +9,7 @@ import {
   SLURP_DEFAULT_ECONOMY,
   spend,
   subscriptionPaidThrough,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-wallet.ts";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/economy/slp-wallet.ts";
 import { slurp2Source } from "./slurp2-source";
 const storageSource = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 assert.match(
@@ -207,9 +206,8 @@ assert.match(
 // The direct-message scheduler must back off like the auto-post and audience schedulers, or a
 // failing connection is retried once a minute forever.
 {
-  const scheduler = readFileSync(
+  const scheduler = slurp2Source(
     "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message-scheduler.service.ts",
-    "utf8",
   );
   assert.match(scheduler, /schedule\(slurpPollBackoffMs\(POLL_MS, consecutiveFailures\)\)/u);
   assert.match(scheduler, /consecutiveFailures = 0;/u);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { selectSlurpAttentionCommissions } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-inbox-attention.js";
+import { selectSlurpAttentionCommissions } from "../packages/slurp2/src/engine/packages/server/src/slp/features/messages/slp-inbox-attention.js";
 import type { SlurpCommission } from "../packages/slurp2/src/engine/packages/server/src/services/storage/slurp-messages.storage.js";
 
 const commission = (

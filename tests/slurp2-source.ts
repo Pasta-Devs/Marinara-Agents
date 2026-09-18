@@ -15,10 +15,10 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   "packages/client/src/components/slurp/SlurpMessages.tsx": ["packages/client/src/components/slurp/SlurpMessages.tsx"],
   "packages/client/src/hooks/use-slurp.ts": ["packages/client/src/hooks/use-slurp.ts"],
   "packages/server/src/routes/slurp.routes.ts": [
-    "packages/server/src/slp/base/host/slp-request-schemas.ts",
+    "packages/server/src/slp/modules/requests/slp-request-schemas.ts",
     "packages/server/src/slp/base/host/slp-multipart.ts",
-    "packages/server/src/slp/base/host/slp-route-host.ts",
-    "packages/server/src/slp/base/settings/slp-settings-routes.ts",
+    "packages/server/src/slp/features/viewer/slp-route-host.ts",
+    "packages/server/src/slp/features/settings/slp-settings-routes.ts",
     "packages/server/src/slp/features/audience/slp-audience-routes.ts",
     "packages/server/src/slp/features/maintenance/slp-maintenance-routes.ts",
     "packages/server/src/slp/features/projects/slp-projects-routes.ts",
@@ -29,8 +29,8 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
     "packages/server/src/slp/features/maintenance/slp-backup-jobs.ts",
     "packages/server/src/slp/features/maintenance/slp-backup-routes.ts",
     "packages/server/src/slp/features/economy/slp-wallet-routes.ts",
-    "packages/server/src/slp/base/media/slp-media-routes.ts",
-    "packages/server/src/slp/base/host/slp-viewer-context.ts",
+    "packages/server/src/slp/features/media/slp-media-routes.ts",
+    "packages/server/src/slp/features/viewer/slp-viewer-context.ts",
     "packages/server/src/slp/features/notifications/slp-notifications-routes.ts",
     "packages/server/src/slp/features/notifications/slp-notification-read-model.ts",
     "packages/server/src/slp/workflows/slp-world-tick-workflow.ts",
@@ -42,7 +42,7 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
     "packages/server/src/slp/features/feed/slp-feed-publishing-routes.ts",
   ],
   "packages/server/src/routes/slurp-messages.routes.ts": [
-    "packages/server/src/slp/features/messages/slp-messages-schemas.ts",
+    "packages/server/src/slp/modules/messages/slp-messages-schemas.ts",
     "packages/server/src/slp/features/messages/slp-messages-context.ts",
     "packages/server/src/slp/features/messages/slp-messages-thread-routes.ts",
     "packages/server/src/slp/features/messages/slp-messages-send-routes.ts",
@@ -52,57 +52,58 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
     "packages/server/src/slp/features/messages/slp-messages-routes.ts",
   ],
   "packages/server/src/services/storage/slurp.storage.ts": [
-    "packages/server/src/slp/base/host/slp-storage-constants.ts",
-    "packages/server/src/slp/base/host/slp-storage-model.ts",
-    "packages/server/src/slp/base/host/slp-storage-mappers.ts",
-    "packages/server/src/slp/base/settings/slp-settings.ts",
-    "packages/server/src/slp/base/host/slp-storage-context.ts",
-    "packages/server/src/slp/features/creators/slp-creators-storage-1.ts",
-    "packages/server/src/slp/features/creators/slp-creators-storage-2.ts",
-    "packages/server/src/slp/features/creators/slp-creators-storage-3.ts",
-    "packages/server/src/slp/features/creators/slp-creators-storage-4.ts",
-    "packages/server/src/slp/features/feed/reserve/slp-reserve-storage-1.ts",
-    "packages/server/src/slp/features/feed/reserve/slp-reserve-storage-2.ts",
-    "packages/server/src/slp/features/audience/slp-audience-storage.ts",
-    "packages/server/src/slp/features/feed/slp-feed-post-storage-1.ts",
-    "packages/server/src/slp/features/feed/slp-feed-post-storage-2.ts",
-    "packages/server/src/slp/features/feed/slp-feed-post-storage-3.ts",
-    "packages/server/src/slp/features/feed/slp-feed-interaction-storage-1.ts",
-    "packages/server/src/slp/features/feed/slp-feed-interaction-storage-2.ts",
-    "packages/server/src/slp/features/feed/slp-feed-interaction-storage-3.ts",
-    "packages/server/src/slp/features/feed/slp-feed-interaction-storage-4.ts",
-    "packages/server/src/slp/features/feed/slp-feed-refresh-storage.ts",
-    "packages/server/src/slp/features/economy/slp-economy-storage-1.ts",
-    "packages/server/src/slp/features/economy/slp-economy-storage-2.ts",
-    "packages/server/src/slp/features/economy/slp-economy-storage-3.ts",
-    "packages/server/src/slp/features/projects/slp-projects-storage-1.ts",
-    "packages/server/src/slp/features/projects/slp-projects-storage-2.ts",
-    "packages/server/src/slp/features/economy/slp-economy-tail-storage.ts",
-    "packages/server/src/slp/slp-storage.ts",
+    "packages/server/src/slp/data/host/slp-storage-constants.ts",
+    "packages/server/src/slp/modules/records/slp-storage-model.ts",
+    "packages/server/src/slp/data/host/slp-storage-queries.ts",
+    "packages/server/src/slp/data/host/slp-storage-mappers.ts",
+    "packages/server/src/slp/modules/settings/slp-settings.ts",
+    "packages/server/src/slp/data/host/slp-storage-context.ts",
+    "packages/server/src/slp/data/creators/slp-creators-storage-1.ts",
+    "packages/server/src/slp/data/creators/slp-creators-storage-2.ts",
+    "packages/server/src/slp/data/creators/slp-creators-storage-3.ts",
+    "packages/server/src/slp/data/creators/slp-creators-storage-4.ts",
+    "packages/server/src/slp/data/feed/reserve/slp-reserve-storage-1.ts",
+    "packages/server/src/slp/data/feed/reserve/slp-reserve-storage-2.ts",
+    "packages/server/src/slp/data/audience/slp-audience-storage.ts",
+    "packages/server/src/slp/data/feed/slp-feed-post-storage-1.ts",
+    "packages/server/src/slp/data/feed/slp-feed-post-storage-2.ts",
+    "packages/server/src/slp/data/feed/slp-feed-post-storage-3.ts",
+    "packages/server/src/slp/data/feed/slp-feed-interaction-storage-1.ts",
+    "packages/server/src/slp/data/feed/slp-feed-interaction-storage-2.ts",
+    "packages/server/src/slp/data/feed/slp-feed-interaction-storage-3.ts",
+    "packages/server/src/slp/data/feed/slp-feed-interaction-storage-4.ts",
+    "packages/server/src/slp/data/feed/slp-feed-refresh-storage.ts",
+    "packages/server/src/slp/data/economy/slp-economy-storage-1.ts",
+    "packages/server/src/slp/data/economy/slp-economy-storage-2.ts",
+    "packages/server/src/slp/data/economy/slp-economy-storage-3.ts",
+    "packages/server/src/slp/data/projects/slp-projects-storage-1.ts",
+    "packages/server/src/slp/data/projects/slp-projects-storage-2.ts",
+    "packages/server/src/slp/data/economy/slp-economy-tail-storage.ts",
+    "packages/server/src/slp/data/slp-storage.ts",
   ],
   "packages/server/src/services/storage/slurp-messages.storage.ts": [
-    "packages/server/src/slp/features/messages/slp-messages-storage.ts",
-    "packages/server/src/slp/features/messages/slp-messages-storage-context.ts",
-    "packages/server/src/slp/features/messages/slp-messages-storage-base.ts",
-    "packages/server/src/slp/features/messages/slp-messages-storage-conversation.ts",
-    "packages/server/src/slp/features/messages/slp-messages-storage-commissions.ts",
-    "packages/server/src/slp/features/messages/slp-messages-storage-actions.ts",
-    "packages/server/src/slp/features/messages/slp-messages-storage-follow-ups.ts",
-    "packages/server/src/slp/features/messages/slp-messages-storage-helpers.ts",
-    "packages/server/src/slp/features/messages/slp-reply-storage-methods.ts",
+    "packages/server/src/slp/data/messages/slp-messages-storage.ts",
+    "packages/server/src/slp/data/messages/slp-messages-storage-context.ts",
+    "packages/server/src/slp/data/messages/slp-messages-storage-base.ts",
+    "packages/server/src/slp/data/messages/slp-messages-storage-conversation.ts",
+    "packages/server/src/slp/data/messages/slp-messages-storage-commissions.ts",
+    "packages/server/src/slp/data/messages/slp-messages-storage-actions.ts",
+    "packages/server/src/slp/data/messages/slp-messages-storage-follow-ups.ts",
+    "packages/server/src/slp/data/messages/slp-messages-storage-helpers.ts",
+    "packages/server/src/slp/data/messages/slp-reply-storage-methods.ts",
   ],
   "packages/server/src/services/storage/slurp-population.storage.ts": [
-    "packages/server/src/slp/features/audience/slp-audience-storage-funnel.ts",
-    "packages/server/src/slp/features/audience/slp-audience-storage.ts",
+    "packages/server/src/slp/data/audience/slp-audience-storage-funnel.ts",
+    "packages/server/src/slp/data/audience/slp-audience-storage.ts",
   ],
   "packages/server/src/services/storage/slurp-events.storage.ts": [
-    "packages/server/src/slp/features/notifications/slp-notification-storage.ts",
+    "packages/server/src/slp/data/notifications/slp-notification-storage.ts",
   ],
   "packages/server/src/services/storage/slurp-reply-queue.storage.ts": [
-    "packages/server/src/slp/features/messages/slp-reply-queue-storage.ts",
+    "packages/server/src/slp/data/messages/slp-reply-queue-storage.ts",
   ],
   "packages/server/src/services/storage/slurp-reply-methods.ts": [
-    "packages/server/src/slp/features/messages/slp-reply-storage-methods.ts",
+    "packages/server/src/slp/data/messages/slp-reply-storage-methods.ts",
   ],
   "packages/server/src/services/storage/slurp-file-errors.ts": ["packages/server/src/slp/base/host/slp-file-errors.ts"],
   "packages/server/src/services/storage/slurp-host-tables.ts": ["packages/server/src/slp/base/host/slp-host-tables.ts"],
@@ -116,6 +117,404 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   "packages/client/src/localization/locales/de.json": ["packages/client/src/slp/locales/de.json"],
   "packages/client/src/localization/locales/ko.json": ["packages/client/src/slp/locales/ko.json"],
   "packages/client/src/localization/locales/pl.json": ["packages/client/src/slp/locales/pl.json"],
+  "packages/server/src/services/slurp/slurp-prompt.ts": ["packages/server/src/slp/modules/prompting/slp-prompt.ts"],
+  "packages/server/src/services/slurp/slurp-prompt-blocks.ts": [
+    "packages/server/src/slp/base/prompting/slp-prompt-blocks.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-prompt-safety.ts": [
+    "packages/server/src/slp/base/prompting/slp-prompt-safety.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-response-format.ts": [
+    "packages/server/src/slp/base/prompting/slp-response-format.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-tone.ts": ["packages/server/src/slp/base/prompting/slp-tone.ts"],
+  "packages/server/src/services/slurp/slurp-sampling-options.ts": [
+    "packages/server/src/slp/base/prompting/slp-sampling-options.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-content-format.ts": [
+    "packages/server/src/slp/base/prompting/slp-content-format.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-chat-context.ts": [
+    "packages/server/src/slp/features/creators/slp-chat-context.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-image-connections.ts": [
+    "packages/server/src/slp/base/media/slp-image-connections.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-image-format.ts": [
+    "packages/server/src/slp/base/media/slp-image-format.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-image-prompt-rewrite.ts": [
+    "packages/server/src/slp/base/media/slp-image-prompt-rewrite.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-image-prompt.ts": [
+    "packages/server/src/slp/base/media/slp-image-prompt.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-image-retry.ts": ["packages/server/src/slp/base/media/slp-image-retry.ts"],
+  "packages/server/src/services/slurp/slurp-images.service.ts": [
+    "packages/server/src/slp/features/media/slp-images-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-public-images.service.ts": [
+    "packages/server/src/slp/features/media/slp-public-images-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-media.ts": ["packages/server/src/slp/base/media/slp-media.ts"],
+  "packages/server/src/services/slurp/slurp-vision.ts": ["packages/server/src/slp/base/media/slp-vision.ts"],
+  "packages/server/src/services/slurp/slurp-post-image-context.ts": [
+    "packages/server/src/slp/base/media/slp-post-image-context.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-generated-media-policy.ts": [
+    "packages/server/src/slp/base/media/slp-generated-media-policy.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-source.ts": ["packages/server/src/slp/base/identity/slp-source.ts"],
+  "packages/server/src/services/slurp/slurp-source-resolve.ts": [
+    "packages/server/src/slp/data/creators/slp-source-resolve.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-source-revision.ts": [
+    "packages/server/src/slp/base/identity/slp-source-revision.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-handle.ts": ["packages/server/src/slp/base/identity/slp-handle.ts"],
+  "packages/server/src/services/slurp/slurp-avatar.ts": ["packages/server/src/slp/base/identity/slp-avatar.ts"],
+  "packages/server/src/services/slurp/slurp-disclosure.ts": [
+    "packages/server/src/slp/modules/creators/slp-disclosure.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-identity-protection.ts": [
+    "packages/server/src/slp/base/identity/slp-identity-protection.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-access.ts": ["packages/server/src/slp/base/identity/slp-access.ts"],
+  "packages/server/src/services/slurp/slurp-connection.ts": ["packages/server/src/slp/base/identity/slp-connection.ts"],
+  "packages/server/src/services/slurp/slurp-operation-lock.ts": [
+    "packages/server/src/slp/base/locking/slp-operation-lock.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-account-operation-lock.ts": [
+    "packages/server/src/slp/base/locking/slp-account-operation-lock.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-activation-lifecycle.ts": [
+    "packages/server/src/slp/base/locking/slp-activation-lifecycle.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-model-budget.ts": [
+    "packages/server/src/slp/base/model/slp-model-budget.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-model-worker.ts": [
+    "packages/server/src/slp/base/model/slp-model-worker.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-model-answer.ts": [
+    "packages/server/src/slp/base/model/slp-model-answer.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-tuning.ts": ["packages/server/src/slp/base/model/slp-tuning.ts"],
+  "packages/server/src/services/slurp/slurp-poll-backoff.ts": [
+    "packages/server/src/slp/base/model/slp-poll-backoff.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-stage-profile-draft.service.ts": [
+    "packages/server/src/slp/features/creators/slp-stage-profile-draft-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-stage-profile-normalize.ts": [
+    "packages/server/src/slp/modules/creators/slp-stage-profile-normalize.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-stage-profile-repair.ts": [
+    "packages/server/src/slp/modules/creators/slp-stage-profile-repair.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-creator-state.ts": [
+    "packages/server/src/slp/modules/creators/slp-creator-state.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-creator-schedule.ts": [
+    "packages/server/src/slp/features/creators/slp-creator-schedule.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-creator-schedule-context.ts": [
+    "packages/server/src/slp/modules/creators/slp-creator-schedule-context.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-artwork.operation.ts": [
+    "packages/server/src/slp/features/creators/slp-artwork-operation.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-profile-selection.ts": [
+    "packages/server/src/slp/modules/creators/slp-profile-selection.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-public-profiles.service.ts": [
+    "packages/server/src/slp/features/creators/slp-public-profiles-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-public-support.ts": [
+    "packages/server/src/slp/modules/creators/slp-public-support.ts",
+    "packages/server/src/slp/data/creators/slp-creator-accounts.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-generated-profiles.ts": [
+    "packages/server/src/slp/modules/creators/slp-generated-profiles.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-improvement.ts": [
+    "packages/server/src/slp/modules/creators/improvement/slp-improvement.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-generation.service.ts": [
+    "packages/server/src/slp/features/feed/slp-generation-service.ts",
+    "packages/server/src/slp/features/feed/slp-public-identity.ts",
+    "packages/server/src/slp/features/feed/slp-post-prompt.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-post.operation.ts": [
+    "packages/server/src/slp/features/feed/slp-post-operation.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-post-variation.ts": [
+    "packages/server/src/slp/modules/feed/slp-post-variation.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-post-stance.ts": [
+    "packages/server/src/slp/modules/feed/slp-post-stance.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-post-timing.ts": [
+    "packages/server/src/slp/modules/feed/slp-post-timing.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-post-condition.service.ts": [
+    "packages/server/src/slp/features/feed/slp-post-condition-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-post-target.ts": [
+    "packages/server/src/slp/modules/feed/slp-post-target.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-post-page.ts": ["packages/server/src/slp/modules/feed/slp-post-page.ts"],
+  "packages/server/src/services/slurp/slurp-post-guidance.ts": [
+    "packages/server/src/slp/modules/feed/slp-post-guidance.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-post-guidance-draft.service.ts": [
+    "packages/server/src/slp/features/feed/slp-post-guidance-draft-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-autopost-poll.ts": [
+    "packages/server/src/slp/modules/feed/slp-autopost-poll.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-autopost-scheduler.service.ts": [
+    "packages/server/src/slp/features/feed/slp-autopost-scheduler-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-refresh-scheduler.service.ts": [
+    "packages/server/src/slp/features/feed/slp-refresh-scheduler-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-refresh-schedule.ts": [
+    "packages/server/src/slp/modules/feed/slp-refresh-schedule.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-generated-activity.service.ts": [
+    "packages/server/src/slp/features/feed/slp-generated-activity-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-generated-refresh.ts": [
+    "packages/server/src/slp/features/feed/slp-generated-refresh.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-share-card.ts": ["packages/server/src/slp/features/feed/slp-share-card.ts"],
+  "packages/server/src/services/slurp/slurp-posting-interval.ts": [
+    "packages/server/src/slp/modules/feed/slp-posting-interval.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-interaction-policy.ts": [
+    "packages/server/src/slp/modules/feed/slp-interaction-policy.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-invited-post-draft-access.ts": [
+    "packages/server/src/slp/modules/feed/slp-invited-post-draft-access.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-invited-post-draft.service.ts": [
+    "packages/server/src/slp/features/feed/slp-invited-post-draft-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-viewer-unseen.ts": [
+    "packages/server/src/slp/modules/feed/slp-viewer-unseen.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-participant-selection.ts": [
+    "packages/server/src/slp/modules/feed/slp-participant-selection.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-reserve.operation.ts": [
+    "packages/server/src/slp/features/feed/reserve/slp-reserve-operation.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-messaging.ts": [
+    "packages/server/src/slp/modules/messages/slp-messaging.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-message.operation.ts": [
+    "packages/server/src/slp/features/messages/slp-message-operation.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-message-generation.service.ts": [
+    "packages/server/src/slp/features/messages/slp-message-generation-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-message-scheduler.service.ts": [
+    "packages/server/src/slp/features/messages/slp-message-scheduler-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-reply-generation.service.ts": [
+    "packages/server/src/slp/features/messages/slp-reply-generation-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-dm-response.ts": [
+    "packages/server/src/slp/modules/messages/slp-dm-response.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-follow-up.ts": [
+    "packages/server/src/slp/modules/messages/slp-follow-up.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-follow-up-scheduler.service.ts": [
+    "packages/server/src/slp/features/messages/slp-follow-up-scheduler-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-thread-notes.ts": [
+    "packages/server/src/slp/modules/messages/slp-thread-notes.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-conversation-momentum.ts": [
+    "packages/server/src/slp/modules/messages/slp-conversation-momentum.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-conversation-schedule-generation.ts": [
+    "packages/server/src/slp/features/messages/slp-conversation-schedule-generation.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-check-in-intervals.ts": [
+    "packages/server/src/slp/modules/messages/slp-check-in-intervals.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-cheat-directive.ts": [
+    "packages/server/src/slp/modules/messages/slp-cheat-directive.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-rapport.ts": ["packages/server/src/slp/modules/messages/slp-rapport.ts"],
+  "packages/server/src/services/slurp/slurp-inbox-attention.ts": [
+    "packages/server/src/slp/features/messages/slp-inbox-attention.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-creator-reply.operation.ts": [
+    "packages/server/src/slp/features/messages/slp-creator-reply-operation.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-commission-delivery.service.ts": [
+    "packages/server/src/slp/features/messages/commissions/slp-commission-delivery-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-commission-image.operation.ts": [
+    "packages/server/src/slp/features/messages/commissions/slp-commission-image-operation.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-population.ts": [
+    "packages/server/src/slp/modules/audience/slp-population.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-fan-types.ts": [
+    "packages/server/src/slp/modules/audience/slp-fan-types.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-fan-activity-day-plan.ts": [
+    "packages/server/src/slp/modules/audience/slp-fan-activity-day-plan.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-fan-activity.operation.ts": [
+    "packages/server/src/slp/features/audience/slp-fan-activity-operation.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-fan-activity-response.ts": [
+    "packages/server/src/slp/modules/audience/slp-fan-activity-response.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-fan-activity-scheduler.service.ts": [
+    "packages/server/src/slp/features/audience/slp-fan-activity-scheduler-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-fan-activity.service.ts": [
+    "packages/server/src/slp/features/audience/slp-fan-activity-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-fan-identity-provider.ts": [
+    "packages/server/src/slp/modules/audience/slp-fan-identity-provider.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-audience-characters.ts": [
+    "packages/server/src/slp/modules/audience/slp-audience-characters.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-audience-subscription.ts": [
+    "packages/server/src/slp/modules/audience/slp-audience-subscription.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-audience-reply.operation.ts": [
+    "packages/server/src/slp/features/audience/slp-audience-reply-operation.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-reach.ts": ["packages/server/src/slp/modules/audience/slp-reach.ts"],
+  "packages/server/src/services/slurp/slurp-scale.ts": ["packages/server/src/slp/modules/audience/slp-scale.ts"],
+  "packages/server/src/services/slurp/slurp-ambient-profiles.ts": [
+    "packages/server/src/slp/data/audience/slp-ambient-profiles.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-ambient-profile-generation.service.ts": [
+    "packages/server/src/slp/features/audience/slp-ambient-profile-generation-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-world.ts": ["packages/server/src/slp/modules/world/slp-world.ts"],
+  "packages/server/src/services/slurp/slurp-world.operation.ts": [
+    "packages/server/src/slp/features/world/slp-world-operation.ts",
+    "packages/server/src/slp/features/world/slp-world-actions.ts",
+    "packages/server/src/slp/features/world/slp-world-tick-state.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-world-copy.ts": ["packages/server/src/slp/modules/world/slp-world-copy.ts"],
+  "packages/server/src/services/slurp/slurp-world-pulse.ts": [
+    "packages/server/src/slp/modules/world/slp-world-pulse.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-world-scheduler.service.ts": [
+    "packages/server/src/slp/features/world/slp-world-scheduler-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-day-vibe.ts": ["packages/server/src/slp/modules/world/slp-day-vibe.ts"],
+  "packages/server/src/services/slurp/slurp-day-vibe.service.ts": [
+    "packages/server/src/slp/features/world/slp-day-vibe-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-mood.ts": ["packages/server/src/slp/modules/world/slp-mood.ts"],
+  "packages/server/src/services/slurp/slurp-stance.ts": ["packages/server/src/slp/modules/world/slp-stance.ts"],
+  "packages/server/src/services/slurp/slurp-talkativeness.ts": [
+    "packages/server/src/slp/modules/world/slp-talkativeness.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-pending-text.service.ts": [
+    "packages/server/src/slp/features/world/slp-pending-text-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-reaction-bank.ts": [
+    "packages/server/src/slp/modules/world/slp-reaction-bank.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-reaction-bank.operation.ts": [
+    "packages/server/src/slp/features/world/slp-reaction-bank-operation.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-milestones.ts": ["packages/server/src/slp/modules/world/slp-milestones.ts"],
+  "packages/server/src/services/slurp/slurp-platform-events.ts": [
+    "packages/server/src/slp/modules/world/events/slp-platform-events.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-project.ts": [
+    "packages/server/src/slp/modules/projects/slp-project.ts",
+    "packages/server/src/slp/modules/projects/slp-arc-crossover.ts",
+    "packages/server/src/slp/modules/projects/slp-arc-library.ts",
+    "packages/server/src/slp/modules/projects/slp-arc-progress.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-arc-generation.service.ts": [
+    "packages/server/src/slp/features/projects/slp-arc-generation-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-audience-arc.ts": [
+    "packages/server/src/slp/modules/projects/slp-audience-arc.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-goal.ts": ["packages/server/src/slp/modules/projects/slp-goal.ts"],
+  "packages/server/src/services/slurp/slurp-wallet.ts": ["packages/server/src/slp/modules/economy/slp-wallet.ts"],
+  "packages/server/src/services/slurp/slurp-prices.ts": ["packages/server/src/slp/modules/economy/slp-prices.ts"],
+  "packages/server/src/services/slurp/slurp-earnings.ts": ["packages/server/src/slp/modules/economy/slp-earnings.ts"],
+  "packages/server/src/services/slurp/slurp-payment-reaction.ts": [
+    "packages/server/src/slp/features/economy/slp-payment-reaction.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-payment-recovery-scheduler.service.ts": [
+    "packages/server/src/slp/features/economy/slp-payment-recovery-scheduler-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-media-offer.ts": [
+    "packages/server/src/slp/modules/economy/slp-media-offer.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-creator-pricing.ts": [
+    "packages/server/src/slp/modules/economy/slp-creator-pricing.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-studio-snapshot.ts": [
+    "packages/server/src/slp/features/economy/slp-studio-snapshot.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-event-weight.ts": [
+    "packages/server/src/slp/modules/notifications/slp-event-weight.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-discovery-profile.ts": [
+    "packages/server/src/slp/modules/discovery/slp-discovery-profile.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-first-post-queue.service.ts": [
+    "packages/server/src/slp/features/onboarding/slp-first-post-queue-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-autopurge.ts": [
+    "packages/server/src/slp/features/maintenance/slp-autopurge.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-autopurge-plan.ts": [
+    "packages/server/src/slp/modules/maintenance/slp-autopurge-plan.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-autopurge-scheduler.service.ts": [
+    "packages/server/src/slp/features/maintenance/slp-autopurge-scheduler-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-backup.ts": ["packages/server/src/slp/modules/maintenance/slp-backup.ts"],
+  "packages/server/src/services/slurp/slurp-backup-state.ts": [
+    "packages/server/src/slp/base/locking/slp-backup-state.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-data-deletion-state.ts": [
+    "packages/server/src/slp/base/locking/slp-data-deletion-state.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-garnish-context.ts": [
+    "packages/server/src/slp/features/ads/slp-garnish-context.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-garnish-generation.service.ts": [
+    "packages/server/src/slp/features/ads/slp-garnish-generation-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-garnish-image.service.ts": [
+    "packages/server/src/slp/features/ads/slp-garnish-image-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-garnish-image.ts": [
+    "packages/server/src/slp/features/ads/slp-garnish-image.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-garnish-lorebook.ts": [
+    "packages/server/src/slp/features/ads/slp-garnish-lorebook.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-garnish-sync.service.ts": [
+    "packages/server/src/slp/features/ads/slp-garnish-sync-service.ts",
+  ],
+  "packages/server/src/services/slurp/slurp-post-guidance.storage.ts": [
+    "packages/server/src/slp/data/settings/slp-post-guidance-storage.ts",
+  ],
 };
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));

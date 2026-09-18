@@ -2,19 +2,15 @@ import { unlink, readdir, readFile, stat } from "node:fs/promises";
 import { DATA_DIR } from "../../../utils/data-dir.js";
 import { join } from "path";
 import { randomUUID } from "node:crypto";
-import { claimSlurpBackup } from "../../../services/slurp/slurp-operation-lock.js";
-import { pauseNoodleAutoPost } from "../../../services/slurp/slurp-autopost-scheduler.service.js";
-import { pauseNoodleRefreshScheduler } from "../../../services/slurp/slurp-refresh-scheduler.service.js";
-import {
-  listNoodlerMediaFiles,
-  removeAllNoodlerMedia,
-  restoreNoodlerMediaFile,
-} from "../../../services/slurp/slurp-media.js";
-import { type StoredZipEntry, jsonEntry, writeStoredZip, readStoredZip } from "../../../services/slurp/slurp-backup.js";
+import { claimSlurpBackup } from "../../base/locking/slp-operation-lock.js";
+import { pauseNoodleAutoPost } from "../feed/slp-feed-contract.js";
+import { pauseNoodleRefreshScheduler } from "../feed/slp-feed-contract.js";
+import { listNoodlerMediaFiles, removeAllNoodlerMedia, restoreNoodlerMediaFile } from "../../base/media/slp-media.js";
+import { type StoredZipEntry, jsonEntry, writeStoredZip, readStoredZip } from "../../modules/maintenance/slp-backup.js";
 import { createWriteStream } from "fs";
 import { finished } from "node:stream/promises";
 import type { FastifyInstance } from "fastify";
-import type { SlpRouteDeps } from "../../base/host/slp-viewer-context.js";
+import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
 /**
  * The backup/restore engine. Jobs, inspections, and the archive sweep timer live here and are

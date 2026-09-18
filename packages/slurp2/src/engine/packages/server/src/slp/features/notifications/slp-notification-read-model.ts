@@ -1,9 +1,9 @@
 import type { FastifyInstance } from "fastify";
-import { createSlurpEventsStorage } from "./slp-notification-storage.js";
-import type { SlurpMessagesStorage } from "../messages/slp-messages-contract.js";
-import { createSlurpPopulationStorage } from "../audience/slp-audience-contract.js";
-import { groupSlurpEvents } from "../../../services/slurp/slurp-event-weight.js";
-import type { SlpRouteDeps } from "../../base/host/slp-viewer-context.js";
+import { createSlurpEventsStorage } from "../../data/notifications/slp-notification-storage.js";
+import type { SlurpMessagesStorage } from "../../data/messages/slp-messages-storage.js";
+import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
+import { groupSlurpEvents } from "../../modules/notifications/slp-event-weight.js";
+import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
 /** The activity-feed read model: stored events, resolved to names and grouped for display. */
 export async function readSlpNotifications(

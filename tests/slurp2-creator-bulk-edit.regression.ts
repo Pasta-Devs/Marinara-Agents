@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import {
   normalizeSlurpDiscoveryTags,
   SLURP_DISCOVERY_TAG_LIMIT,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-discovery-profile.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/discovery/slp-discovery-profile.js";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
 import { slurp2Source } from "./slurp2-source";
 

@@ -6,7 +6,7 @@ import {
   slurpEventWeight,
   SLURP_EVENT_NOTABLE,
   type SlurpEventLike,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-event-weight.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/notifications/slp-event-weight.js";
 import { slurp2Source } from "./slurp2-source";
 
 // ── Money outranks attention ────────────────────────────────────────────────

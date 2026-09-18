@@ -113,58 +113,50 @@ base <- modules <- features <- app
 
 ### Server
 
+Revised 2026-09-18 during Slice 5 (maintainer-approved; see `DECISIONS.md`). The server splits by
+role before domain: pure rules, persistence, then features.
+
 ```text
 packages/server/src/slp/
 ├── slp-server-entry.ts
-├── base/
-│   ├── host/                    Fastify/DB adapters, viewer projection, multipart transport
-│   ├── settings/                schema, defaults, normalization, settings persistence
+├── base/                        domain-neutral infrastructure
+│   ├── host/                    Fastify/DB adapters, multipart transport, table tolerance, queues
 │   ├── prompting/               prompt text and formatting; no model calls
-│   ├── media/                   image/media rules and generation support
-│   ├── identity/                source binding, handles, disclosure, protection
+│   ├── media/                   image/media rules, vision, file handling
+│   ├── identity/                source binding, handles, protection, access
 │   ├── model/                   budgets, workers, answers, tuning
-│   ├── locking/                 operation locks and activation lifecycle
-│   └── modifiers/               typed, pure cross-feature modifiers
-├── features/
-│   ├── creators/
-│   │   └── improvement/
-│   ├── feed/
-│   │   └── reserve/
-│   ├── messages/
-│   │   └── commissions/
-│   ├── audience/
-│   ├── world/
-│   │   └── events/
-│   ├── projects/
-│   ├── economy/
-│   ├── notifications/
-│   ├── discovery/
-│   ├── ads/
-│   ├── onboarding/
-│   └── maintenance/
+│   ├── locking/                 operation locks, activation lifecycle, backup/deletion flags
+│   └── modifiers/               typed, pure cross-feature modifiers (Slice 6)
+├── modules/                     pure domain rules: no DB, storage, Fastify, or model call
+│   ├── settings/  records/  requests/  prompting/
+│   └── creators/  feed/  messages/  audience/  world/events/  projects/  economy/
+│       notifications/  discovery/  maintenance/
+├── data/                        persistence
+│   ├── slp-storage.ts           the storage composition
+│   ├── host/  settings/
+│   └── creators/  feed/reserve/  messages/  audience/  economy/  projects/  notifications/
+├── features/                    routes, services, operations, schedulers
+│   ├── creators/improvement/  feed/reserve/  messages/commissions/  world/
+│   ├── audience/  projects/  economy/  notifications/  discovery/  ads/  onboarding/
+│   ├── maintenance/
+│   └── viewer/  media/  settings/   route plumbing, image generation, settings routes
 └── workflows/
-    ├── slp-subscription-workflow.ts
-    ├── slp-world-tick-workflow.ts
-    └── slp-notification-workflow.ts
+    └── slp-world-tick-workflow.ts
 ```
-
-Each server feature colocates its routes, storage facet, schema/table definitions, services, types,
-and submodules. Feature internals do not import another feature's internals.
-
-When another module needs a feature capability, that feature exposes the smallest explicit
-`slp-<feature>-contract.ts`. Workflows depend only on these contracts. `slp-server-entry.ts` creates
-the implementations and wires them into workflows and route mounts.
 
 Dependency direction:
 
 ```text
-base <- feature internals <- feature contracts <- workflows <- server entry
+base <- modules <- data <- features (contracts between features) <- workflows <- server entry
 ```
 
-The entrypoint and workflows may compose features. A feature may use `base/` but cannot import a
-workflow. Cross-feature behaviour currently buried inside the storage and route monoliths moves to
-workflows only when it already coordinates multiple domains; do not manufacture wrappers for
-single-feature operations.
+`modules/` and `data/` are shared layers; their domain folders organize files and may import each
+other without contracts. A feature may use `base/`, `modules/`, `data/`, its own files, and other
+features' `slp-<feature>-contract.ts` files. Workflows depend on feature contracts. The entry
+creates route dependencies and schedulers once and mounts routes in their original order.
+Cross-feature behaviour currently buried inside route monoliths moves to workflows only when it
+already coordinates multiple domains; do not manufacture wrappers for single-feature operations, and
+do not move logic out of a storage transaction.
 
 ### Allocation ledger
 
@@ -172,9 +164,9 @@ The following placements are fixed; they are not implementation-time naming deci
 
 | Current source | Target ownership |
 |---|---|
-| `slurp.routes.ts` settings handlers | `base/settings/slp-settings-routes.ts` |
+| `slurp.routes.ts` settings handlers | `features/settings/slp-settings-routes.ts` (moved from `base/settings/` in Slice 5) |
 | route schemas, multipart transport, viewer projection | `base/host/slp-request-schemas.ts`, `slp-multipart.ts`, `slp-viewer-context.ts` |
-| image/media transport routes | `base/media/slp-media-routes.ts` |
+| image/media transport routes | `features/media/slp-media-routes.ts` (moved from `base/media/` in Slice 5) |
 | creator/profile/improvement routes | `features/creators/`, with improvement jobs under `improvement/` |
 | posts, feed, interactions, publishing routes | `features/feed/slp-feed-routes.ts` |
 | message routes | `features/messages/slp-messages-routes.ts` |
@@ -186,16 +178,16 @@ The following placements are fixed; they are not implementation-time naming deci
 | ads | `features/ads/` using the separate Garnish contract |
 | setup and first-post queue | `features/onboarding/` |
 | backup, restore, autopurge | `features/maintenance/` |
-| settings schema/defaults/storage | `base/settings/` |
-| DB helpers, missing-table tolerance, file errors | `base/host/` |
-| creator storage and tables | `features/creators/` |
-| post/feed/interaction/reserve storage and tables | `features/feed/`, with reserve under `reserve/` |
-| message/reply/commission storage and tables | `features/messages/`, with commissions under `commissions/` |
-| audience/population storage and tables | `features/audience/` |
-| wallet/earnings/payment storage and tables | `features/economy/` |
-| project/arc/goal storage and tables | `features/projects/` |
-| platform-event settings/evaluation | `features/world/events/` |
-| notification event stream | `features/notifications/` |
+| settings schema/defaults/storage | schema and defaults in `modules/settings/`, persistence in `data/settings/` |
+| DB helpers, missing-table tolerance, file errors | `base/host/`; storage context, model queries, and mappers in `data/host/`; record model in `modules/records/` |
+| creator storage and tables | `data/creators/` |
+| post/feed/interaction/reserve storage and tables | `data/feed/`, with reserve under `reserve/` |
+| message/reply/commission storage and tables | `data/messages/` |
+| audience/population storage and tables | `data/audience/` |
+| wallet/earnings/payment storage and tables | `data/economy/` |
+| project/arc/goal storage and tables | `data/projects/` |
+| platform-event settings/evaluation | `modules/world/events/` |
+| notification event stream | `data/notifications/`, read model in `features/notifications/` |
 | `use-slurp.ts` query keys and common types | `client base/state/` |
 | `use-slurp.ts` domain hooks | corresponding client feature folder |
 | `SlurpHome.tsx` router and navigation branches | `app/`, `app/screens/`, and owning features |
@@ -482,11 +474,14 @@ and changes ownership paths together. Do not start it until PRs 1–3 are merged
 
 ### 5. Server services, contracts, and workflows
 
-- Move the 149 service files into `base/` and feature folders as pure renames first.
+- Move the service files (verified: 147 live files plus one Slice 4 duplicate, not 149) into
+  `base/`, `modules/`, `data/`, and feature folders as pure renames first.
 - Rename files to `slp-*` while rewriting imports once; do not mix behavioural cleanup into moves.
 - Add feature contracts only for existing cross-feature calls.
-- Extract subscription, world-tick, and notification coordination from route/storage internals into
-  the named workflows.
+- Keep multi-feature coordination in workflows. Verified in Slice 5: world-tick catch-up (which is
+  also the notification-open path) is the only existing route-level coordination; subscription
+  coordination lives inside one storage transaction, so no subscription or notification workflow
+  file is created.
 - Keep Garnish separate; Slurp's six adapter files move under `features/ads/`.
 
 ### 6. Event and modifier seam

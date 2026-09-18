@@ -3,10 +3,10 @@ import { unlink, writeFile, readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join } from "path";
 import { DATA_DIR } from "../../../utils/data-dir.js";
-import { getErrorMessage } from "../../../services/slurp/slurp-public-support.js";
-import { isRestoreInspectionExpired, restoreImportSettingsRequested } from "../../../services/slurp/slurp-backup.js";
+import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
+import { isRestoreInspectionExpired, restoreImportSettingsRequested } from "../../modules/maintenance/slp-backup.js";
 import type { FastifyInstance } from "fastify";
-import type { SlpRouteDeps } from "../../base/host/slp-viewer-context.js";
+import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import { createSlpBackupJobs, type SlpBackupJobs } from "./slp-backup-jobs.js";
 
 type RestoreInspection = Parameters<SlpBackupJobs["restoreInspections"]["set"]>[1];

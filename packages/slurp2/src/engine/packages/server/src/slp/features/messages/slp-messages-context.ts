@@ -1,6 +1,6 @@
-import { createSlurpPopulationStorage } from "../audience/slp-audience-contract.js";
-import type { SlurpMessagesStorage } from "./slp-messages-contract.js";
-import { resolveSlurpCreatorAvailability } from "../../../services/slurp/slurp-creator-schedule-context.js";
+import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
+import type { SlurpMessagesStorage } from "../../data/messages/slp-messages-storage.js";
+import { resolveSlurpCreatorAvailability } from "../../modules/creators/slp-creator-schedule-context.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import type { FastifyInstance } from "fastify";
 

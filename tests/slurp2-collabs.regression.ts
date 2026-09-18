@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
 
-import {
-  slurpCollabPartners,
-  slurpCrossoverPartner,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-project.js";
+import { slurpCollabPartners } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-project.js";
+import { slurpCrossoverPartner } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-arc-crossover.js";
 
 const candidates = [
   { id: "tagged", tags: ["gym"], related: false, eligible: true },

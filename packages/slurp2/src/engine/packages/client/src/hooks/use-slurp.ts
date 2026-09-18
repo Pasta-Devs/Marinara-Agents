@@ -6,10 +6,10 @@ import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { api, ApiError } from "../lib/api-client";
-import type { SlurpSimulationTuning } from "../../../server/src/services/slurp/slurp-tuning.js";
-import type { SlurpFanType } from "../../../server/src/services/slurp/slurp-fan-types.js";
-import type { SlurpPlatformEvent } from "../../../server/src/services/slurp/slurp-platform-events.js";
-import type { SlurpModelBudget } from "../../../server/src/services/slurp/slurp-model-budget.js";
+import type { SlurpSimulationTuning } from "../../../server/src/slp/base/model/slp-tuning.js";
+import type { SlurpFanType } from "../../../server/src/slp/modules/audience/slp-fan-types.js";
+import type { SlurpPlatformEvent } from "../../../server/src/slp/modules/world/events/slp-platform-events.js";
+import type { SlurpModelBudget } from "../../../server/src/slp/base/model/slp-model-budget.js";
 import { refreshSlurpCreatorBatch } from "../lib/slurp-refresh-batch";
 import { useSlurpUIStore } from "../stores/slurp-package.store";
 import type {

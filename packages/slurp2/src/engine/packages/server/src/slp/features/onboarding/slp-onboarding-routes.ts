@@ -3,22 +3,19 @@ import { z } from "zod";
 import {
   slurpDiscoveryProfileSchema,
   slurpDiscoveryProfileComplete,
-} from "../../../services/slurp/slurp-discovery-profile.js";
-import { slurpDisclosureMode } from "../../../services/slurp/slurp-disclosure.js";
-import { resolveNoodlerSourceSnapshot } from "../../../services/slurp/slurp-source-resolve.js";
-import {
-  stageProfileContainsPublicIdentity,
-  stageProfileContainsSourceDetails,
-} from "../../../services/slurp/slurp-generation.service.js";
-import { resolveNoodlerCreatorArtwork } from "../../../services/slurp/slurp-public-profiles.service.js";
-import { minimizeNoodlerSourceSnapshot } from "../../../services/slurp/slurp-source.js";
+} from "../../modules/discovery/slp-discovery-profile.js";
+import { slurpDisclosureMode } from "../../modules/creators/slp-disclosure.js";
+import { resolveNoodlerSourceSnapshot } from "../../data/creators/slp-source-resolve.js";
+import { stageProfileContainsPublicIdentity, stageProfileContainsSourceDetails } from "../feed/slp-feed-contract.js";
+import { resolveNoodlerCreatorArtwork } from "../creators/slp-creators-contract.js";
+import { minimizeNoodlerSourceSnapshot } from "../../base/identity/slp-source.js";
 import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
-import { resolveSlurpTextConnection } from "../../../services/slurp/slurp-connection.js";
+import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
 import { settleAgentJobsWithConcurrencyLimit } from "../../../services/agents/agent-concurrency.js";
 import { logger } from "../../../lib/logger.js";
-import { generateNoodlerStageProfileDraft } from "../../../services/slurp/slurp-stage-profile-draft.service.js";
+import { generateNoodlerStageProfileDraft } from "../creators/slp-creators-contract.js";
 import type { FastifyInstance } from "fastify";
-import type { SlpRouteDeps } from "../../base/host/slp-viewer-context.js";
+import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
 const slurpBulkNoodlerAccountCreateSchema = noodleBulkNoodlerAccountCreateSchema.extend({
   connectionId: z.string().min(1).nullable().optional(),

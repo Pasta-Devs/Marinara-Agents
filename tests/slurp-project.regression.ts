@@ -1,26 +1,29 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
   activeSlurpProjects,
-  makeSlurpProject,
-  readSlurpProject,
-  readSlurpProjects,
-  SLURP_ARC_LIBRARY_SEED,
-  SLURP_PROJECT_MAX_CHAPTERS,
-  SLURP_PROJECT_TITLE_MAX_LENGTH,
-  SLURP_DEFAULT_ARC_AUTO_MODE,
   slurpArcLifeLine,
   slurpArcRotation,
   slurpArcsWithoutFocus,
-  slurpAutoArcType,
   slurpProjectAdvance,
   slurpProjectChapter,
   slurpProjectInstruction,
-  slurpProjectsKey,
   slurpProjectTick,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-project.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-arc-progress.js";
+import {
+  makeSlurpProject,
+  readSlurpProject,
+  readSlurpProjects,
+  SLURP_PROJECT_MAX_CHAPTERS,
+  SLURP_PROJECT_TITLE_MAX_LENGTH,
+  slurpProjectsKey,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-project.js";
+import {
+  SLURP_ARC_LIBRARY_SEED,
+  SLURP_DEFAULT_ARC_AUTO_MODE,
+  slurpAutoArcType,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-arc-library.js";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
 import { slurp2Source } from "./slurp2-source";
 
@@ -114,9 +117,9 @@ assert.equal(slurpArcLifeLine([move, { ...focus, title: "Trip" }]), "Trip (decid
 assert.equal(slurpArcLifeLine([move]), "Moving house (deciding to move)");
 {
   const serverRoot = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src/services");
-  const stance = readFileSync(join(serverRoot, "slurp/slurp-stance.ts"), "utf8");
+  const stance = slurp2Source(join(serverRoot, "slurp/slurp-stance.ts"));
   assert.match(stance, /do not make every reply about it/u);
-  const dm = readFileSync(join(serverRoot, "slurp/slurp-message-generation.service.ts"), "utf8");
+  const dm = slurp2Source(join(serverRoot, "slurp/slurp-message-generation.service.ts"));
   // Gated by the setting, and protected: an arc title can name a Secret Creator's real city.
   assert.match(dm, /settings\.arcAffectsMood\s+\? \(protectNoodlerGeneratedIdentity\(\s+slurpArcLifeLine/u);
   const store = slurp2Source(join(serverRoot, "storage/slurp.storage.ts"));

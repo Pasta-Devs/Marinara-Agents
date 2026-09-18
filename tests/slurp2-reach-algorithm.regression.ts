@@ -5,7 +5,7 @@ import {
   slurpPostImpressions,
   slurpPostWentViral,
   slurpReachWeek,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-reach.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-reach.js";
 
 const WEEK = 7 * 86_400_000;
 const counts = { normal: 0, featured: 0, buried: 0, viral: 0 };

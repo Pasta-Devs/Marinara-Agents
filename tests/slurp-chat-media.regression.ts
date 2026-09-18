@@ -1,19 +1,14 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { slurp2Source } from "./slurp2-source";
 
 const messages = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx");
 const hooks = slurp2Source("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts");
 const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts");
-const operation = readFileSync(
+const operation = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message.operation.ts",
-  "utf8",
 );
-const response = readFileSync(
-  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-dm-response.ts",
-  "utf8",
-);
-const media = readFileSync("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-media.ts", "utf8");
+const response = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-dm-response.ts");
+const media = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-media.ts");
 
 assert.match(response, /sharePost: z\.number\(\)\.int\(\)\.min\(0\)\.max\(4\)/u);
 assert.match(operation, /kind: "post_preview"/u);

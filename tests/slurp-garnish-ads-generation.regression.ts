@@ -4,12 +4,10 @@
  * executing it — the same approach the other Slurp route regressions take.
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { slurp2Source } from "./slurp2-source";
 
-const service = readFileSync(
+const service = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-garnish-generation.service.ts",
-  "utf8",
 );
 
 // Generation is host-side: garnish-ads holds the pool, Slurp talks to the model.

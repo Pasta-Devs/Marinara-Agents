@@ -6,7 +6,7 @@ import {
   slurpFanTypeSchema,
   slurpFanTypesDefault,
   type SlurpFanType,
-} from "../../../../server/src/services/slurp/slurp-fan-types.js";
+} from "../../../../server/src/slp/modules/audience/slp-fan-types.js";
 import { api } from "../../lib/api-client";
 import { Field, NumberSetting, SectionTitle, SettingsGroup, Toggle } from "./SlurpSettingsControls";
 

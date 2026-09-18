@@ -8,17 +8,17 @@ import {
   splitSlurpReplyBurst,
   SLURP_DEFAULT_CREATOR_MESSAGING,
   SLURP_DEFAULT_REPLY_DELAYS,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-messaging";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-messaging";
 import {
   emptySlurpRapportFacts,
   scoreSlurpRapport,
   slurpRapportTier,
   SLURP_DEFAULT_RAPPORT_WEIGHTS,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-rapport";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-rapport";
 import {
   resolveSlurpCreatorAvailability,
   slurpCreatorAvailability,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-creator-schedule-context";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/creators/slp-creator-schedule-context";
 
 // ── Rapport ──────────────────────────────────────────────
 

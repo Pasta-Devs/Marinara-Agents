@@ -1,2 +1,2 @@
-export { createSlurpPopulationStorage } from "./slp-audience-storage-funnel.js";
-export type { SlurpAudienceTie } from "./slp-audience-storage-funnel.js";
+export { allocateAmbientProfileHandles } from "./slp-ambient-profile-generation-service.js";
+export { drainSlurpAudienceReplies } from "./slp-audience-reply-operation.js";

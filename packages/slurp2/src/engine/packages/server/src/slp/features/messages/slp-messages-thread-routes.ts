@@ -1,17 +1,17 @@
 import { z } from "zod";
-import { type SlurpCommissionPricing, slurpCommissionQuote } from "../../../services/slurp/slurp-creator-pricing.js";
-import { selectSlurpAttentionCommissions } from "../../../services/slurp/slurp-inbox-attention.js";
-import { activeSlurpStrikes } from "../../../services/slurp/slurp-stance.js";
-import { describeSlurpDayVibe } from "../../../services/slurp/slurp-day-vibe.service.js";
-import { readSlurpAudienceTone } from "../../../services/slurp/slurp-tone.js";
-import { isSlurpViewerActorAccount } from "../../base/settings/slp-settings.js";
+import { type SlurpCommissionPricing, slurpCommissionQuote } from "../../modules/economy/slp-creator-pricing.js";
+import { selectSlurpAttentionCommissions } from "./slp-inbox-attention.js";
+import { activeSlurpStrikes } from "../../modules/world/slp-stance.js";
+import { describeSlurpDayVibe } from "../world/slp-world-contract.js";
+import { readSlurpAudienceTone } from "../../base/prompting/slp-tone.js";
+import { isSlurpViewerActorAccount } from "../../modules/settings/slp-settings.js";
 import {
   SLURP_NOTE_MAX_LENGTH,
   SLURP_WORKING_NOTE_LIMIT,
   SLURP_LONGTERM_NOTE_LIMIT,
-} from "../../../services/slurp/slurp-thread-notes.js";
+} from "../../modules/messages/slp-thread-notes.js";
 import type { FastifyInstance } from "fastify";
-import { personaQuerySchema } from "./slp-messages-schemas.js";
+import { personaQuerySchema } from "../../modules/messages/slp-messages-schemas.js";
 import type { SlpMessagesContext } from "./slp-messages-context.js";
 
 const messagePageSchema = personaQuerySchema.extend({

@@ -1,12 +1,12 @@
 import { z } from "zod";
-import { generateSlurpCommissionImage } from "../../../../services/slurp/slurp-commission-image.operation.js";
+import { generateSlurpCommissionImage } from "./slp-commission-image-operation.js";
 import { logger } from "../../../../lib/logger.js";
-import { reactToSlurpPayment } from "../../../../services/slurp/slurp-payment-reaction.js";
-import { slurpCommissionDeliveryDelayMs } from "../../../../services/slurp/slurp-messaging.js";
-import { deliverAutomaticSlurpCommission } from "../../../../services/slurp/slurp-commission-delivery.service.js";
-import { slurpMessageMediaUrl } from "../../../../services/slurp/slurp-media.js";
+import { reactToSlurpPayment } from "../../economy/slp-economy-contract.js";
+import { slurpCommissionDeliveryDelayMs } from "../../../modules/messages/slp-messaging.js";
+import { deliverAutomaticSlurpCommission } from "./slp-commission-delivery-service.js";
+import { slurpMessageMediaUrl } from "../../../base/media/slp-media.js";
 import type { FastifyInstance } from "fastify";
-import { personaQuerySchema } from "../slp-messages-schemas.js";
+import { personaQuerySchema } from "../../../modules/messages/slp-messages-schemas.js";
 import type { SlpMessagesContext } from "../slp-messages-context.js";
 
 const commissionBriefSchema = z.object({

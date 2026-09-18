@@ -34,3 +34,23 @@ modules, rejected alternative, and migration consequence.
   payload would drift from source, and the next unrelated Slurp2 fix would ship half-migrated code.
 - **Migration consequence:** keep `modular-simping` merged with `staging`; the final PR folds the
   integration changelog entries into one `0.1.0` entry and removes unpublished `0.0.x` ZIPs.
+
+## 2026-09-18 — Split the server by role: pure rules, persistence, features
+
+- **Problem:** Slice 5 moved the 147 service files. 82 of them are pure domain rules, and 124 of the
+  176 cross-feature imports pointed at those rules. Every feature service also called the storage
+  composition, and the settings aggregate, storage context, and viewer context in `base/` imported
+  domain rules. The layers `base <- features <- workflows` could not hold that graph without
+  injection or permanent exceptions.
+- **Decision:** Server layers become `base <- modules <- data <- features <- workflows <- entry`.
+  `modules/` holds pure rules, `data/` holds persistence and the storage composition, and features
+  keep routes, services, operations, and schedulers. The remaining real I/O calls between features
+  go through small contracts.
+- **Affected modules:** every server `slp` file; Slice 4 storage facets moved from `features/` to
+  `data/`; settings and the record model moved to `modules/`; new server features `viewer`,
+  `media`, and `settings` hold the route plumbing and the routes that left `base/`.
+- **Rejected alternative:** injecting storage into about 57 call sites (not a pure move, more
+  behaviour risk); a permanent exception for `slp-storage.ts` (the rules forbid it).
+- **Migration consequence:** the architecture regression ranks `modules` and `data`, rejects I/O
+  imports in server modules, and has negative fixtures for each new edge. Client layers are
+  unchanged.

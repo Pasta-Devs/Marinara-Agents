@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { tryNoodleOperation } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-operation-lock.ts";
+import { tryNoodleOperation } from "../packages/slurp2/src/engine/packages/server/src/slp/base/locking/slp-operation-lock.ts";
 import {
   SLURP_TUNING_EVENTS_PER_TICK_CEILING,
   SLURP_WORLD_IDLE_POLL_MS,
   slurpCapTickEvents,
   slurpWorldTimerDue,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-tuning.ts";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/base/model/slp-tuning.ts";
 import { slurp2Source } from "./slurp2-source";
 
 const src = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src/services/slurp");

@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import {
   clampSlurpDraftText,
   repairSlurpStageProfileDraft,
   SLURP_STAGE_PROFILE_LIMITS,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-stage-profile-repair.ts";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/creators/slp-stage-profile-repair.ts";
 import { slurp2Source } from "./slurp2-source";
 
 const allowed = ["flirty", "playful", "dominant", "lingerie", "roleplay", "art"];
@@ -53,7 +52,7 @@ assert.equal(repairSlurpStageProfileDraft({ bio: "no name" }, allowed), null);
 
 // Wiring: the service repairs with jsonrepair as a last resort, and the bulk route strips form-only keys.
 const root = "packages/slurp2/src/engine/packages/server/src/";
-const service = readFileSync(`${root}services/slurp/slurp-stage-profile-draft.service.ts`, "utf8");
+const service = slurp2Source(`${root}services/slurp/slurp-stage-profile-draft.service.ts`);
 assert.match(service, /jsonrepair\(/u);
 assert.match(service, /Length limits: displayName at most/u);
 const routes = slurp2Source(`${root}routes/slurp.routes.ts`);

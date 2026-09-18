@@ -8,7 +8,7 @@ import {
   resolveSlurpCreatorAvailability,
   resolveSlurpCreatorScheduleContext,
   resolveSlurpCreatorScheduleStatus,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-creator-schedule-context.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/creators/slp-creator-schedule-context.js";
 import {
   reconcileNoodleRefreshSchedule,
   type PersistedNoodleRefreshSchedule,

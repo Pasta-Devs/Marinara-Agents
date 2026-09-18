@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
-import { slurpDiscoveryTagNameSchema } from "../../base/host/slp-request-schemas.js";
-import type { SlpRouteDeps } from "../../base/host/slp-viewer-context.js";
+import { slurpDiscoveryTagNameSchema } from "../../modules/requests/slp-request-schemas.js";
+import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
 export async function slpDiscoveryRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   const { noodle } = deps;

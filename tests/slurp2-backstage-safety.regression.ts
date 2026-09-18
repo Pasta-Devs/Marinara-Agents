@@ -5,16 +5,15 @@
  * atomic tag creation, and retrying failures without losing successful proposals.
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { selectSlurpAutopurge } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-autopurge-plan.ts";
+import { selectSlurpAutopurge } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/maintenance/slp-autopurge-plan.ts";
 import {
   createStoredZip,
   isRestoreInspectionExpired,
   isSafeArchiveEntryName,
   readStoredZip,
   restoreImportSettingsRequested,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-backup.ts";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/maintenance/slp-backup.ts";
 import {
   planSlurpImprovementApply,
   planSlurpImprovementRetry,
@@ -24,11 +23,11 @@ import {
   slurpImprovementModelCalls,
   slurpImprovementSnapshot,
   type SlurpImprovementProfile,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-improvement.ts";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/creators/improvement/slp-improvement.ts";
 import {
   trySlurpDataDeletion,
   trySlurpWrite,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-operation-lock.ts";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/base/locking/slp-operation-lock.ts";
 import { slurp2Source } from "./slurp2-source";
 
 // ── Purge estimate equals execution selection ────────────────────────────────
@@ -58,9 +57,8 @@ for (const keepPosts of [true, false]) {
   );
   assert.deepEqual(preview.mediaPaths, ["noodler/a.png"], "shared media is counted once");
 }
-const autopurge = readFileSync(
+const autopurge = slurp2Source(
   join(import.meta.dirname, "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-autopurge.ts"),
-  "utf8",
 );
 assert.match(
   autopurge,

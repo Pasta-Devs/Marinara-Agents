@@ -11,12 +11,12 @@ import {
   SLURP_WORLD_MAX_CATCHUP_DAYS,
   SLURP_WORLD_MAX_OPEN_REQUESTS,
   type SlurpWorldCreator,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world.js";
 import {
   slurpAudienceOpener,
   slurpAudienceQuestion,
   slurpCommissionBrief,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world-copy.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world-copy.js";
 import { slurp2Source } from "./slurp2-source";
 
 const day = (n: number) => new Date(Date.parse("2026-09-01T00:00:00.000Z") + n * 86_400_000);

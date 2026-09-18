@@ -1,8 +1,8 @@
 import type { FastifyInstance, FastifyPluginAsync, InjectOptions } from "fastify";
-import { createSlpRouteHost } from "./base/host/slp-route-host.js";
-import { createSlpViewerContext } from "./base/host/slp-viewer-context.js";
-import { slpMediaRoutes } from "./base/media/slp-media-routes.js";
-import { slpSettingsRoutes } from "./base/settings/slp-settings-routes.js";
+import { createSlpRouteHost } from "./features/viewer/slp-route-host.js";
+import { createSlpViewerContext } from "./features/viewer/slp-viewer-context.js";
+import { slpMediaRoutes } from "./features/media/slp-media-routes.js";
+import { slpSettingsRoutes } from "./features/settings/slp-settings-routes.js";
 import { slpAdsRoutes } from "./features/ads/slp-ads-routes.js";
 import { slpAudienceRoutes } from "./features/audience/slp-audience-routes.js";
 import { slpImprovementRoutes } from "./features/creators/improvement/slp-improvement-routes.js";
@@ -20,21 +20,21 @@ import { slpNotificationsRoutes } from "./features/notifications/slp-notificatio
 import { slpOnboardingRoutes } from "./features/onboarding/slp-onboarding-routes.js";
 import { slpProjectsRoutes } from "./features/projects/slp-projects-routes.js";
 import { slpCatchUpWorldOnOpen } from "./workflows/slp-world-tick-workflow.js";
-import { startNoodleAutoPostScheduler } from "../services/slurp/slurp-autopost-scheduler.service.js";
-import { startNoodlerFanActivityScheduler } from "../services/slurp/slurp-fan-activity-scheduler.service.js";
-import { startNoodleRefreshScheduler } from "../services/slurp/slurp-refresh-scheduler.service.js";
-import { startSlurpMessageScheduler } from "../services/slurp/slurp-message-scheduler.service.js";
-import { startSlurpFollowUpScheduler } from "../services/slurp/slurp-follow-up-scheduler.service.js";
-import { startSlurpPaymentRecoveryScheduler } from "../services/slurp/slurp-payment-recovery-scheduler.service.js";
-import { startSlurpWorldScheduler } from "../services/slurp/slurp-world-scheduler.service.js";
-import { createSlurpActivationLifecycle } from "../services/slurp/slurp-activation-lifecycle.js";
-import { createSlurpMessagesStorage } from "./slp-storage.js";
-import { createSlurpStorage } from "./slp-storage.js";
-import { createSlurpPopulationStorage } from "./features/audience/slp-audience-storage-funnel.js";
+import { startNoodleAutoPostScheduler } from "./features/feed/slp-autopost-scheduler-service.js";
+import { startNoodlerFanActivityScheduler } from "./features/audience/slp-fan-activity-scheduler-service.js";
+import { startNoodleRefreshScheduler } from "./features/feed/slp-refresh-scheduler-service.js";
+import { startSlurpMessageScheduler } from "./features/messages/slp-message-scheduler-service.js";
+import { startSlurpFollowUpScheduler } from "./features/messages/slp-follow-up-scheduler-service.js";
+import { startSlurpPaymentRecoveryScheduler } from "./features/economy/slp-payment-recovery-scheduler-service.js";
+import { startSlurpWorldScheduler } from "./features/world/slp-world-scheduler-service.js";
+import { createSlurpActivationLifecycle } from "./base/locking/slp-activation-lifecycle.js";
+import { createSlurpMessagesStorage } from "./data/slp-storage.js";
+import { createSlurpStorage } from "./data/slp-storage.js";
+import { createSlurpPopulationStorage } from "./data/audience/slp-audience-storage-funnel.js";
 import * as slurpSchema from "../db/schema/slurp.js";
-import { createSlurpFirstPostQueue } from "../services/slurp/slurp-first-post-queue.service.js";
-import { startSlurpAutopurgeScheduler } from "../services/slurp/slurp-autopurge-scheduler.service.js";
-import { buildSlurpChatContext, type SlurpChatContextRequest } from "../services/slurp/slurp-chat-context.js";
+import { createSlurpFirstPostQueue } from "./features/onboarding/slp-first-post-queue-service.js";
+import { startSlurpAutopurgeScheduler } from "./features/maintenance/slp-autopurge-scheduler-service.js";
+import { buildSlurpChatContext, type SlurpChatContextRequest } from "./features/creators/slp-chat-context.js";
 
 const lifecycle = createSlurpActivationLifecycle();
 

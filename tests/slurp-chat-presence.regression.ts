@@ -3,13 +3,11 @@
 // connection were the same blank screen. Read state had the same problem: written on every message
 // since messaging shipped, displayed on none.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { slurp2Source } from "./slurp2-source";
 
 const view = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx");
-const operation = readFileSync(
+const operation = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message.operation.ts",
-  "utf8",
 );
 const locales = JSON.parse(
   slurp2Source("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json"),

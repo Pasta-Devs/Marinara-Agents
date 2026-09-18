@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -7,7 +6,7 @@ import {
   slurpAudienceSubscriptionDecision,
   SLURP_AUDIENCE_SUBSCRIPTION_DAYS,
   SLURP_AUDIENCE_WEEKLY_BUDGET,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-audience-subscription.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-audience-subscription.js";
 import { slurp2Source } from "./slurp2-source";
 
 const at = new Date("2026-09-08T12:00:00.000Z");
@@ -97,9 +96,8 @@ assert.equal(
 
 // ── Wired into the world tick, and paying real earnings ─────────────────────
 const root = join(import.meta.dirname, "..");
-const world = readFileSync(
+const world = slurp2Source(
   join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.operation.ts"),
-  "utf8",
 );
 assert.ok(world.includes("slurpAudienceSubscriptionDecision("), "the world tick must run the subscription pass");
 assert.ok(world.includes("creditCreatorIncome(account.id, price,"), "an audience subscription must pay the Creator");
@@ -116,9 +114,8 @@ assert.ok(
 );
 assert.ok(routes.includes('app.get("/noodler/audience/:memberId"'), "an audience name must open a fan card");
 
-const storage = readFileSync(
+const storage = slurp2Source(
   join(root, "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-population.storage.ts"),
-  "utf8",
 );
 assert.ok(
   // `lapseTie` takes the stage (a still-following viewer keeps `follower`); billing clears either way.

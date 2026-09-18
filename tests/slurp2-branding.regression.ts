@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { join } from "node:path";
+import { slurp2Source } from "./slurp2-source";
 
 // Slurp2 shipped leaked "Noodle"/"NoodleR" branding in error messages, prompts, and labels.
 // Identifiers (noodleAccounts, /noodler routes, ui.noodle.* keys) stay; prose does not.
@@ -36,7 +37,7 @@ const files = (readdirSync(engineRoot, { recursive: true }) as string[]).filter(
 const offenders: string[] = [];
 for (const file of files) {
   // Comments are not shipped text, so only code lines are scanned.
-  const text = readFileSync(join(engineRoot, file), "utf8")
+  const text = slurp2Source(join(engineRoot, file))
     .split("\n")
     .filter((line) => !/^\s*(?:\/\/|\/?\*)/u.test(line))
     .join("\n");
@@ -52,7 +53,7 @@ for (const file of files) {
 assert.deepEqual(offenders, [], "no user-visible or LLM-bound Noodle/NoodleR prose may remain in slurp2");
 
 // Structured output schema names reach the model verbatim.
-const responseFormat = readFileSync(join(engineRoot, "server/src/services/slurp/slurp-response-format.ts"), "utf8");
+const responseFormat = slurp2Source(join(engineRoot, "server/src/services/slurp/slurp-response-format.ts"));
 // The `kind === "noodler_post"` operands are internal; only the emitted `name:` values are sent.
 const nameBlock = responseFormat.slice(responseFormat.indexOf("    name:"), responseFormat.indexOf("    schema,"));
 const emittedNames = [...nameBlock.matchAll(/[?:]\s*"([a-z_]+)"/gu)].map((match) => match[1]);
@@ -64,9 +65,7 @@ assert.deepEqual(
 );
 
 // Server log tags.
-const taggedFiles = files.filter((file) =>
-  /\[(?:debug\/)?noodler?\]/u.test(readFileSync(join(engineRoot, file), "utf8")),
-);
+const taggedFiles = files.filter((file) => /\[(?:debug\/)?noodler?\]/u.test(slurp2Source(join(engineRoot, file))));
 assert.deepEqual(taggedFiles, [], "server log tags must read [slurp] / [debug/slurp]");
 
 // Locale values: only the strings that compare Slurp with the Noodle app may say Noodle.
@@ -77,7 +76,7 @@ const allowedLocaleKeys = new Set([
   "ui.slurp.settings.advanced.backupDetail",
 ]);
 for (const localeFile of readdirSync(localeRoot)) {
-  const catalog = JSON.parse(readFileSync(join(localeRoot, localeFile), "utf8")) as Record<string, string>;
+  const catalog = JSON.parse(slurp2Source(join(localeRoot, localeFile))) as Record<string, string>;
   const leaked = Object.entries(catalog)
     .filter(([key, value]) => /noodle/iu.test(value) && !allowedLocaleKeys.has(key))
     .map(([key]) => `${localeFile}: ${key}`);

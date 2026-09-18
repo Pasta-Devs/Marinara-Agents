@@ -6,18 +6,17 @@
  * global field beats the shipped text, and a field that only holds whitespace is not an override.
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   cleanSlurpPostGuidanceDraft,
   sanitizeSlurpPostGuidance,
   selectSlurpPostGuidance,
   SLURP_BUILT_IN_POST_GUIDANCE,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-post-guidance.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-post-guidance.js";
 import { slurp2Source } from "./slurp2-source";
 
 const pkg = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages");
-const read = (path: string) => readFileSync(join(pkg, path), "utf8");
+const read = (path: string) => slurp2Source(join(pkg, path));
 
 // --- precedence ---------------------------------------------------------------------------
 const guidance = sanitizeSlurpPostGuidance({
@@ -127,7 +126,7 @@ assert.equal(
 );
 
 // --- a failed image keeps its prompt, so it can be redrawn by hand later ------------------
-const images = readFileSync(join(pkg, "server/src/services/slurp/slurp-images.service.ts"), "utf8");
+const images = slurp2Source(join(pkg, "server/src/services/slurp/slurp-images.service.ts"));
 assert.doesNotMatch(
   images,
   /imagePrompt: attempts >= NOODLER_POST_IMAGE_RETRY_LIMIT \? null : undefined/u,
@@ -154,7 +153,7 @@ assert.doesNotMatch(
 );
 
 // --- image-less posts can generate even when they did not start with an image prompt ----------
-const creatorPostCard = readFileSync(join(pkg, "client/src/components/slurp/SlurpCreatorPostCard.tsx"), "utf8");
+const creatorPostCard = slurp2Source(join(pkg, "client/src/components/slurp/SlurpCreatorPostCard.tsx"));
 assert.match(
   creatorPostCard,
   /ctx\.generatePostImage && \(\s*<button[\s\S]*?setPromptDraft\(post\.imagePrompt \?\? ""\)/u,

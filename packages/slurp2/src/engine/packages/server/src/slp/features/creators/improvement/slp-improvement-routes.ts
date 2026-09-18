@@ -4,14 +4,14 @@ import {
   planSlurpImprovementRetry,
   planSlurpImprovementApply,
   slurpStageProfileInput,
-} from "../../../../services/slurp/slurp-improvement.js";
+} from "../../../modules/creators/improvement/slp-improvement.js";
 import { slurpImprovementJobs, slurpImprovementProposals } from "../../../../db/schema/slurp.js";
 import { now, newId } from "../../../../utils/id-generator.js";
 import { logger } from "../../../../lib/logger.js";
 import { eq, inArray } from "../../../../db/file-query.js";
-import { trySlurpWrite } from "../../../../services/slurp/slurp-operation-lock.js";
+import { trySlurpWrite } from "../../../base/locking/slp-operation-lock.js";
 import type { FastifyInstance } from "fastify";
-import type { SlpRouteDeps } from "../../../base/host/slp-viewer-context.js";
+import type { SlpRouteDeps } from "../../viewer/slp-viewer-contract.js";
 import { createSlpImprovementJobs } from "./slp-improvement-jobs.js";
 
 export async function slpImprovementRoutes(app: FastifyInstance, deps: SlpRouteDeps) {

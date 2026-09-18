@@ -14,7 +14,7 @@ import { deflateRawSync } from "node:zlib";
 import {
   createStoredZip,
   readStoredZip,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-backup.ts";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/maintenance/slp-backup.ts";
 import { slurp2Source } from "./slurp2-source";
 
 const root = join(import.meta.dirname, "..");

@@ -1,20 +1,20 @@
 import { noodlerViewerPersonaSchema } from "@marinara-engine/shared";
-import { createSlurpPopulationStorage } from "../audience/slp-audience-contract.js";
-import { slurpPlatformScaleMultiplier } from "../../../services/slurp/slurp-scale.js";
-import { readSlurpStudioSnapshot, writeSlurpStudioSnapshot } from "../../../services/slurp/slurp-studio-snapshot.js";
+import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
+import { slurpPlatformScaleMultiplier } from "../../modules/audience/slp-scale.js";
+import { readSlurpStudioSnapshot, writeSlurpStudioSnapshot } from "./slp-studio-snapshot.js";
 import {
   slurpCreatorReach,
   slurpPostImpressions,
   slurpPostLikeCount,
   slurpPostReplyCount,
   slurpPostUnlockCount,
-} from "../../../services/slurp/slurp-reach.js";
-import { slurpFollowerMilestone, slurpMilestonesCrossed } from "../../../services/slurp/slurp-milestones.js";
-import { slurpGoalProgress } from "../../../services/slurp/slurp-goal.js";
-import { slurpPayoutAllowance } from "../../../services/slurp/slurp-earnings.js";
-import { isSlurpViewerActorAccount } from "../../base/settings/slp-settings.js";
+} from "../../modules/audience/slp-reach.js";
+import { slurpFollowerMilestone, slurpMilestonesCrossed } from "../../modules/world/slp-milestones.js";
+import { slurpGoalProgress } from "../../modules/projects/slp-goal.js";
+import { slurpPayoutAllowance } from "../../modules/economy/slp-earnings.js";
+import { isSlurpViewerActorAccount } from "../../modules/settings/slp-settings.js";
 import type { FastifyInstance } from "fastify";
-import type { SlpRouteDeps } from "../../base/host/slp-viewer-context.js";
+import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
 export async function slpStudioRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   const { creatorBelongsToViewer, noodle, resolveViewerPersona } = deps;

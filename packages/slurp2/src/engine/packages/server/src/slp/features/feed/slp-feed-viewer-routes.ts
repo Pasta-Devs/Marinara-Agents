@@ -1,15 +1,15 @@
 import { noodlerViewerPersonaSchema } from "@marinara-engine/shared";
 import { z } from "zod";
-import { noodlerUnseenCreatorAccountIds } from "../../../services/slurp/slurp-viewer-unseen.js";
-import { isSlurpViewerActorAccount } from "../../base/settings/slp-settings.js";
-import { isNoodlerHiddenFromViewer } from "../../../services/slurp/slurp-access.js";
+import { noodlerUnseenCreatorAccountIds } from "../../modules/feed/slp-viewer-unseen.js";
+import { isSlurpViewerActorAccount } from "../../modules/settings/slp-settings.js";
+import { isNoodlerHiddenFromViewer } from "../../base/identity/slp-access.js";
 import type { FastifyInstance } from "fastify";
 import {
   NOODLER_FEED_PAGE_SIZE,
   noodlerPageCursorSchema,
   type NoodlerViewerSignalResponse,
-} from "../../base/host/slp-request-schemas.js";
-import type { SlpRouteDeps } from "../../base/host/slp-viewer-context.js";
+} from "../../modules/requests/slp-request-schemas.js";
+import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
 const noodlerViewerFeedQuerySchema = noodlerViewerPersonaSchema
   .extend({
