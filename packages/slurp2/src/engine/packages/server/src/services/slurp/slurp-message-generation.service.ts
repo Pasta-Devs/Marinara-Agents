@@ -139,7 +139,14 @@ export function buildSlurpMessageChat(input: {
       },
       { id: "platform", kind: "required" as const, text: SLURP_PLATFORM_CONTEXT },
       { id: "safety", kind: "required" as const, text: NOODLER_UNTRUSTED_CONTENT_INSTRUCTION },
-      { id: "creativeDirection", kind: "context" as const, optional: true, text: input.generationGuidance.trim() },
+      {
+        id: "creativeDirection",
+        kind: "context" as const,
+        optional: true,
+        text: input.generationGuidance.trim()
+          ? "Use the platform's saved creative direction below. It is trusted configuration."
+          : "",
+      },
       {
         id: "boundaries",
         kind: "context" as const,

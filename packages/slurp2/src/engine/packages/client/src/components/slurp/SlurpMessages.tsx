@@ -3619,19 +3619,9 @@ function FanImageTool({
   const [content, setContent] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedMode, setSelectedMode] = useState<"upload" | "generate">("upload");
   const activeMode = mode === "choose" ? selectedMode : mode;
   const viewerPrompt = prompt.trim() ? `A photo taken by the viewer persona: ${prompt.trim()}` : "";
-  useEffect(() => {
-    if (!file) {
-      setPreviewUrl(null);
-      return;
-    }
-    const url = URL.createObjectURL(file);
-    setPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
   return (
     <div className="overflow-hidden rounded-xl bg-[var(--slurp-surface)] ring-1 ring-inset ring-[var(--noodle-divider)]">
       <div className="flex flex-col gap-2 p-3">
@@ -3698,7 +3688,7 @@ function FanImageTool({
           </>
         ) : (
           <div className="flex flex-col gap-2">
-            {previewUrl && <FanImagePreview file={file} />}
+            {file && <FanImagePreview file={file} />}
             <p className="text-xs leading-5 text-[var(--muted-foreground)]">
               {activeMode === "generate" ? viewerPrompt : "Review this photo before sending it."}
             </p>
@@ -3714,7 +3704,6 @@ function FanImageTool({
                 type="button"
                 disabled={activeMode === "upload" ? !file || send.isPending : !prompt.trim() || generate.isPending}
                 onClick={() => {
-                  setError(null);
                   setError(null);
                   const request =
                     activeMode === "upload"

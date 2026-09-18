@@ -567,10 +567,18 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
         const quotedFor = (until.getTime() - Date.parse(commission.updatedAt)) / 86_400_000;
         if (!Number.isFinite(quotedFor) || quotedFor < 1) continue;
         const member = await population.get(commission.viewerAccountId).catch(() => null);
-        if (!member) continue;
+        const invitedCharacter = invitedCharacters.find((entry) => entry.account.id === commission.viewerAccountId);
+        if (!member && !invitedCharacter) continue;
         // Cheap work is taken, expensive work is haggled away. The appetite is the Fan Type's
         // `spend.commissionBudget` now, so raising it is a setting rather than a patched constant.
-        const budget = slurpFanTypeCommissionBudget(slurpResolveFanType(settings.fanTypes, member), member.id);
+        const fanType = member
+          ? slurpResolveFanType(settings.fanTypes, member)
+          : slurpFanTypeForPinnedOrSeed(
+              settings.fanTypes,
+              slurpAudienceCharacterFanTypeId(settings, invitedCharacter!.characterId),
+              invitedCharacter!.account.id,
+            );
+        const budget = slurpFanTypeCommissionBudget(fanType, commission.viewerAccountId);
         // A pending offer waits for the Creator. A persona Creator answers it by hand.
         if (commission.counterPrice !== null) continue;
         const answer = slurpFanHaggle({ quote: commission.price, budget, round: commission.haggleRounds });
@@ -663,7 +671,9 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       const landedBy = new Map<string, number>();
       for (const action of pulse) {
         try {
-          if (await applyPulse(db, action, settings.audienceReactionBank, settings.fanTypes)) {
+          if (
+            await applyPulse(db, action, settings.audienceReactionBank, settings.fanTypes, characterFanPinnedTypeIds)
+          ) {
             pulsed += 1;
             const weight = action.kind === "follow" ? 3 : 1;
             landedBy.set(action.creatorAccountId, (landedBy.get(action.creatorAccountId) ?? 0) + weight);
@@ -788,7 +798,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       let applied = 0;
       for (const action of plan) {
         try {
-          if (await applyAction(db, action, until, noodle, settings.fanTypes)) applied += 1;
+          if (await applyAction(db, action, until, noodle, settings.fanTypes, characterFanPinnedTypeIds)) applied += 1;
         } catch (error) {
           // One failed action must not abandon the rest of the tick, and must never stop the mark
           // being written — otherwise the same stretch of time is replayed on every call.
@@ -817,6 +827,8 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
 async function resolveActor(
   db: DB,
   actorAccountId: string,
+  characterFanPinnedTypeIds: ReadonlyMap<string, string | null>,
+  fanTypes: readonly SlurpFanType[],
 ): Promise<{
   id: string;
   entityId: string;
@@ -828,12 +840,17 @@ async function resolveActor(
 } | null> {
   const account = await createSlurpStorage(db).getNoodlerAccountById(actorAccountId);
   if (account) {
+    const isCharacterFan = characterFanPinnedTypeIds.has(account.id);
+    const fanType = isCharacterFan
+      ? slurpFanTypeForPinnedOrSeed(fanTypes, characterFanPinnedTypeIds.get(account.id) ?? null, account.id)
+      : null;
     return {
       id: account.id,
       entityId: account.entityId,
       handle: account.handle,
       displayName: account.displayName,
       avatarUrl: account.avatarUrl,
+      ...(fanType ? { fanTypeId: fanType.id, archetype: fanType.engineArchetype } : {}),
     };
   }
   const member = await createSlurpPopulationStorage(db).get(actorAccountId);
@@ -855,8 +872,9 @@ async function applyAction(
   at: Date,
   noodle: ReturnType<typeof createSlurpStorage>,
   fanTypes: readonly SlurpFanType[],
+  characterFanPinnedTypeIds: ReadonlyMap<string, string | null>,
 ): Promise<boolean> {
-  const actor = await resolveActor(db, action.actorAccountId);
+  const actor = await resolveActor(db, action.actorAccountId, characterFanPinnedTypeIds, fanTypes);
   if (!actor) return false;
 
   if (action.kind === "tip") {
@@ -1014,9 +1032,10 @@ async function applyPulse(
   action: SlurpPulseAction,
   banks: SlurpReactionBanks,
   fanTypes: readonly SlurpFanType[],
+  characterFanPinnedTypeIds: ReadonlyMap<string, string | null>,
 ): Promise<boolean> {
   const noodle = createSlurpStorage(db);
-  const actor = await resolveActor(db, action.actorAccountId);
+  const actor = await resolveActor(db, action.actorAccountId, characterFanPinnedTypeIds, fanTypes);
   if (!actor) return false;
   const isComment = action.kind === "comment";
   // Whose words these are. A comment is the only place the audience is heard, so it draws from the

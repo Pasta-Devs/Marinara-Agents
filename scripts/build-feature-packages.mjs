@@ -1714,6 +1714,8 @@ for (const feature of selectedFeatures) {
   const serverSource = resolve(serverSourceRoot, feature.serverImport || feature.engineImport);
   if (!reuseExistingRuntime && existsSync(serverSource)) {
     await bundleServer(feature, serverPath);
+    const bundledServer = await readFile(serverPath, "utf8");
+    await writeFile(serverPath, bundledServer.replace(/[\t ]+$/gmu, ""));
   } else if (!existsSync(serverPath)) {
     throw new Error(`Missing package-owned server source for ${feature.id}`);
   }

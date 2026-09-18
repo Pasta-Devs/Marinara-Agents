@@ -112,6 +112,8 @@ test.describe("standalone Slurp package", () => {
             bio: "Fixture",
             stagePersonality: "Concise",
             disclosureMode: "open",
+            gender: "other",
+            tags: ["art", "gaming", "cosplay"],
           },
         },
       });
@@ -239,14 +241,15 @@ test.describe("standalone Slurp package", () => {
       )
       .toContain("linear-gradient");
 
-    const sectionNavigation = slurp.locator('nav[aria-label="Creator settings sections"]:visible');
-    await expect(sectionNavigation).toBeVisible();
     if (testInfo.project.name.includes("mobile")) {
       const mobileNavigation = slurp.getByRole("navigation", { name: "Slurp navigation" });
       for (const label of ["Slurp", "Profile", "Inbox", "Discover", "More"]) {
         await expect(mobileNavigation.getByRole("button", { name: label, exact: true })).toBeVisible();
       }
-      await expect(sectionNavigation).toHaveClass(/overflow-x-auto/u);
+      await expect(slurp.getByRole("combobox", { name: "Destination" })).toHaveValue("overview:landing");
+    } else {
+      const sectionNavigation = slurp.getByRole("navigation", { name: "Overview areas" });
+      await expect(sectionNavigation).toBeVisible();
       await expect(sectionNavigation.getByRole("button", { name: "Overview" })).toHaveAttribute("aria-current", "page");
     }
 
@@ -327,13 +330,13 @@ test.describe("standalone Slurp package", () => {
     await openSlurp(page);
     const slurp = page.locator('[data-component="NoodleView"]');
     const imageToggle = slurp.getByRole("switch", { name: /^Ad images/u });
-    await slurp.getByText("Ad images", { exact: true }).click();
+    await imageToggle.click();
     await expect(imageToggle).toBeChecked();
     await expect
       .poll(async () => (await (await page.request.get("/api/slurp2/settings")).json()).inlineAdsImagesEnabled)
       .toBe(true);
     await expect(slurp.getByRole("heading", { name: "Ad controls", exact: true })).toBeVisible();
-    await slurp.getByText("Ad images", { exact: true }).click();
+    await imageToggle.click();
     await expect(imageToggle).not.toBeChecked();
     await expect
       .poll(async () => (await (await page.request.get("/api/slurp2/settings")).json()).inlineAdsImagesEnabled)
@@ -390,6 +393,8 @@ test.describe("standalone Slurp package", () => {
             bio: "Standalone Slurp package browser proof.",
             stagePersonality: "Knowing, playful, and scientifically precise.",
             disclosureMode: "open",
+            gender: "female",
+            tags: ["art", "gaming", "cosplay"],
           },
         },
       });
@@ -408,6 +413,8 @@ test.describe("standalone Slurp package", () => {
             bio: "Persona-owned Slurp profile proof.",
             stagePersonality: "Direct and self-authored.",
             disclosureMode: "open",
+            gender: "other",
+            tags: ["art", "gaming", "cosplay"],
           },
         },
       });
