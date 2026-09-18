@@ -25,8 +25,9 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 - Active slice: 5 (server services, contracts, workflows), issue #924, branch
   `slurp2-slice5-server-services` from `origin/modular-simping` `7b9ba1f3` (Slice 4 merge commit).
   `origin/staging` is an ancestor of that commit; no staging merge was needed.
-- Pull request: draft PR against `modular-simping`, assigned to `Gunterlie` (number in the Slice 5
-  section below). Slice 4 PR #919 is merged.
+- Pull request: draft #925 targets `modular-simping` and is assigned to `Gunterlie`; issue #924 is
+  assigned to `Gunterlie`. Slice 4 PR #919 is merged. Commits: `254b9bd1` (refactor), `e77611f8`
+  (Slice 4 fix), `aa60cd99` (rebuild and ledger), plus this ledger update.
 - Package version: `0.0.28` (integration-only; `staging` stays at `0.0.22` until the final `0.1.0`
   release PR)
 - Generated artifact: `artifacts/slurp2-0.0.28.zip`, sha256
@@ -44,7 +45,7 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 |     2 | Entrypoints and shared base            | in progress      | #914 / no PR     | 0.0.25          | Validated locally; stacked on 0–1 on `modular-simping`           |
 |     3 | Server routes                          | ready for review | #915 / #916      | 0.0.26          | 179-route multiset preserved; CI failures match Slice 2 baseline |
 |     4 | Server storage                         | merged           | #918 / #919      | 0.0.27          | Merged into `modular-simping` at `7b9ba1f3`                      |
-|     5 | Server services, contracts, workflows  | ready for review | #924 / see below | 0.0.28          | Layer model approved; 0 architecture violations; unit rebuilt    |
+|     5 | Server services, contracts, workflows  | ready for review | #924 / #925      | 0.0.28          | Layer model approved; 0 architecture violations; unit rebuilt    |
 |     6 | Event and modifier seam                | not started      | —                | —               | —                                                                |
 |     7 | Client state and hooks                 | not started      | —                | —               | —                                                                |
 |     8 | Client app and reusable modules        | not started      | —                | —               | —                                                                |
@@ -155,7 +156,7 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 
 ### Slice 5 (0.0.28)
 
-Issue #924; branch `slurp2-slice5-server-services`; draft PR to `modular-simping` (see handoff).
+Issue #924; draft PR #925 to `modular-simping`; branch `slurp2-slice5-server-services`.
 
 Moved (all by `git mv`, renamed `slurp-<name>[.service|.operation].ts` → `slp-<name>[-service|-operation].ts`):
 
@@ -445,7 +446,7 @@ manifest.json}`, added `artifacts/slurp2-0.0.24.zip`, and updated `catalog/{,v2/
 
 ## Next action
 
-Slice 5: review draft PR for issue #924 and merge it into `modular-simping` after human review. Only
+Slice 5: review draft PR #925 (issue #924) and merge it into `modular-simping` after human review. Only
 then start Slice 6 from the merged `modular-simping`: add `base/modifiers/`, add `kind: "calendar"` to
 platform events (now `modules/world/events/slp-platform-events.ts`, read by
 `modules/settings/slp-settings.ts`), move calendar activation into a kind dispatch table, expose
