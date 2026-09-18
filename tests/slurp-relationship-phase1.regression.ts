@@ -6,7 +6,7 @@ const storage = readFileSync(
   "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
   "utf8",
 );
-const route = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");
+const route = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts");
 const profileRoute = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
 const client = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx");
 const slurpClientHook = slurp2Source("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts");

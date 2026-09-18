@@ -20,21 +20,21 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 ## Current state
 
 - Last updated: 2026-09-18
-- Updated by: Slice 2 implementation agent
-- Overall state: Slices 0–1 and 2 implemented and validated locally; pushed, no PR yet
+- Updated by: Slice 3 implementation agent
+- Overall state: Slice 3 implemented and validated; ready for draft PR review
 - Active slice: 3 (server routes), issue #915, branch `slurp2-slice3-server-routes` from
   `modular-simping` `92c25f9c` (0 behind `origin/staging` after fetch; no merge needed)
 - Issue: #914 (assigned `Gunterlie`)
-- Pull request: none. Slices 0–1 and 2 were pushed directly to the integration branch at the
-  maintainer's request; from Slice 3 on, each slice is a draft PR targeting `modular-simping`
+- Pull request: draft #916 targets `modular-simping`, assigned to `Gunterlie`. Slices 0–1 and 2
+  were pushed directly to the integration branch at the maintainer's request.
 - Branch: `origin/modular-simping` is the integration branch (local name
   `refactor/slurp2-module-safety-rails`); based on
   `origin/staging` `e92684d1`. Slice 0–1 commit `29ff6ec2`; Slice 2 is the commit after the ledger
   update `f22f46fa`.
-- Package version: `0.0.25` (integration-only; `staging` stays at `0.0.22` until the final `0.1.0`
+- Package version: `0.0.26` (integration-only; `staging` stays at `0.0.22` until the final `0.1.0`
   release PR)
-- Generated artifact: `artifacts/slurp2-0.0.25.zip`, sha256
-  `63110f07e58aefca8f9be2cbc7b9fb492ce8c8f5a36daeb19226f4bb7139fbfe`, 6705108 bytes
+- Generated artifact: `artifacts/slurp2-0.0.26.zip`, sha256
+  `4c12215dafb2178925b374f580b7b8eee4be3d7089db8d39c22cfceb2b09aff4`, 6707553 bytes
 - Node: `/home/dev/.nvm/versions/node/v24.18.0/bin`; `node -v` = `v24.18.0`
 - Engine source: `/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish`, branch
   `welcome-to-the-agentshop`, commit `fdb67d47b`, tracked files clean; 4 ahead / 0 behind
@@ -46,7 +46,7 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 |---:|---|---|---|---|---|
 | 0–1 | Architecture contract and safety rails | in progress | #914 / no PR yet | 0.0.24 | Validated locally; on `modular-simping` |
 | 2 | Entrypoints and shared base | in progress | #914 / no PR | 0.0.25 | Validated locally; stacked on 0–1 on `modular-simping` |
-| 3 | Server routes | in progress | #915 | 0.0.26 | Draft PR to `modular-simping` |
+| 3 | Server routes | ready for review | #915 / #916 | 0.0.26 | 179-route multiset preserved; draft PR to `modular-simping` |
 | 4 | Server storage | not started | — | — | Point of no return |
 | 5 | Server services, contracts, workflows | not started | — | — | — |
 | 6 | Event and modifier seam | not started | — | — | — |
@@ -99,12 +99,51 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 | 2026-09-18 | 2 | Two passing-or-baseline tests assert the server entry's relative import specifiers (`slurp-table-registration`, `slurp-boundary`). | Only the path inside those two regexes changed (`../../db/…` → `../db/…`, `./slurp-refresh-…` → `../services/slurp/slurp-refresh-…`); what is asserted is unchanged. |
 | 2026-09-18 | 2 | The browser runner's `pnpm install` synced the Engine worktree's ignored `node_modules`. Builds after that give `server.mjs` 2954647 bytes (same as staging's 0.0.22); the 0.0.24 build before it gave 2746627. | The earlier "Engine drift" was stale Engine `node_modules`, not the Engine commit. 0.0.25 is built with synced dependencies. |
 | 2026-09-18 | release | Maintainer decision: users must not receive intermediate refactor versions. | `modular-simping` is the integration branch; slices use `0.0.x` there; one final PR to `staging` ships `0.1.0`. Plan §7, slice prompt, package `AGENTS.md`, and `DECISIONS.md` updated. |
+| 2026-09-18 | 3 | The two route files contain 179 HTTP registrations plus one ZIP content-type parser. Long-lived state includes the viewer cache, backup/restore maps and sweep timer, improvement-job set, and commission request sets. | Added an exact route-multiset regression. The entry creates shared route dependencies once. Each long-lived state owner also has one construction site. |
 
 ## Pending decisions
 
 None.
 
 ## Latest validation
+
+### Slice 3 (0.0.26)
+
+Split `slurp.routes.ts` and `slurp-messages.routes.ts` into 33 files under `server/src/slp/base/`,
+`features/`, and `workflows/`. The server entry creates the route host and viewer context once and
+mounts feature routes in their original order. The improvement runner, backup engine, notification
+read model, and world catch-up coordinator now live in their planned modules. The old route files
+are deleted and their ownership entries are removed. No Slice 4 storage source moved.
+
+Preservation proof: `tests/slurp2-route-inventory.regression.ts` records the exact 179 HTTP method
+and path registrations plus the ZIP parser. It passes on the real tree and fails when one route is
+changed. Historical route source keys now concatenate the moved files through
+`tests/slurp2-source.ts`; affected assertion bodies are unchanged. The largest new source file is
+672 lines, below the 800-line limit. The package typecheck and architecture regression pass.
+
+Generated release unit: built with Node `v24.18.0`, `TMPDIR=/home/dev/.cache/slp-tmp`, and
+`MARINARA_ENGINE_ROOT=/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish`. Engine branch
+`welcome-to-the-agentshop`, commit `fdb67d47b`, tracked files clean, 4 ahead / 0 behind
+`origin/staging`; used unchanged. The ZIP has the six declared files. Every manifest payload hash
+and byte count matches. All three catalog lanes record artifact sha256
+`4c12215dafb2178925b374f580b7b8eee4be3d7089db8d39c22cfceb2b09aff4` and 6707553 bytes.
+
+Results:
+
+- `tsx --tsconfig tests/tsconfig.regressions.json tests/slurp2-route-inventory.regression.ts`,
+  `tests/slurp2-architecture.regression.ts`, and `tests/slurp2-release-notes.regression.ts` — pass.
+- `npm run check` — pass (0 errors, 196 warnings).
+- `node scripts/typecheck-packages.mjs slurp2` — pass.
+- `npm run test:noodle:regressions` — exit 1 at the recorded pre-existing
+  `noodler-content-formats` failure. The per-file pass/fail set and first errors match the clean
+  staging baseline recorded for Slices 0–1.
+- `npm run test:browser:slurp2` — Engine desktop and mobile servers became ready, then all 14 cases
+  stopped before test execution because Chromium cannot load host library `libnspr4.so`.
+- `node scripts/test-catalog-lanes.mjs`, `validate-package-locales.mjs`,
+  `validate-package-locale-keys.mjs`, `validate-catalog.mjs`,
+  `tests/catalog-release-notes.regression.mjs`, and `git diff --check` — pass.
+- Live install, update, restart, offline restart, and uninstall tests were not performed. Draft PR
+  human verification boxes remain unchecked.
 
 ### Slice 2 (0.0.25)
 
@@ -189,7 +228,8 @@ Generated output (builder only, no hand edits):
 
 ## Next action
 
-1. Start Slice 3 (server routes) from `SLURP-MODULE-SLICE.prompt.md`: merge `origin/staging` into
-   `modular-simping` first, then open the slice issue/draft PR targeting `modular-simping`.
+1. Review and merge draft PR #916 into `modular-simping` after its checks and human verification
+   complete. Do not start Slice 4 until PR #916 is merged and green because Slice 4 is the storage
+   point of no return.
 2. After Slice 10, open the final PR `modular-simping` → `staging` as Slurp2 `0.1.0` (one changelog
    entry, integration-only `0.0.x` ZIPs removed, one rebuild, full live lifecycle proof).

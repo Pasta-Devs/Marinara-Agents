@@ -204,11 +204,13 @@ const slurpOwnedSourcePaths = [
 ];
 // Not spread from slurpOwnedSourcePaths: the remaster's files move into its slp roots.
 const slurp2OwnedSourcePaths = [
-  ...slurpOwnedSourcePaths.filter((path) => path !== "packages/client/src/slurp-package-entry.tsx"),
+  ...slurpOwnedSourcePaths.filter(
+    (path) =>
+      !["packages/client/src/slurp-package-entry.tsx", "packages/server/src/routes/slurp.routes.ts"].includes(path),
+  ),
   "packages/client/src/slp",
   "packages/server/src/slp",
   "packages/shared/src/slp",
-  "packages/server/src/routes/slurp-messages.routes.ts",
   "packages/server/src/services/storage/slurp-financial-queue.ts",
   "packages/server/src/services/storage/slurp-file-errors.ts",
   "packages/server/src/services/storage/slurp-host-tables.ts",

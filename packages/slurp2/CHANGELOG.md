@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.0.26 — 2026-09-18
+
+- No visible changes. Split the server routes into feature modules.
+
 ## 0.0.25 — 2026-09-18
 
 - No visible changes. Moved the package entry points, shared date helper, and translations into the new source layout.

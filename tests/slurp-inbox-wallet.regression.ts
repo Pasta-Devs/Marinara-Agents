@@ -13,10 +13,7 @@ const messageStorage = readFileSync(
   "utf8",
 );
 const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
-const messageRoutes = readFileSync(
-  "packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts",
-  "utf8",
-);
+const messageRoutes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts");
 
 assert.match(english, /"ui\.slurp\.navigation\.messages": "Inbox"/u);
 assert.match(home, /function SlurpInboxHub/u);

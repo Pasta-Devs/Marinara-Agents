@@ -1,5 +1,25 @@
 import type { FastifyInstance, FastifyPluginAsync, InjectOptions } from "fastify";
-import { slurpRoutes } from "../routes/slurp.routes.js";
+import { createSlpRouteHost } from "./base/host/slp-route-host.js";
+import { createSlpViewerContext } from "./base/host/slp-viewer-context.js";
+import { slpMediaRoutes } from "./base/media/slp-media-routes.js";
+import { slpSettingsRoutes } from "./base/settings/slp-settings-routes.js";
+import { slpAdsRoutes } from "./features/ads/slp-ads-routes.js";
+import { slpAudienceRoutes } from "./features/audience/slp-audience-routes.js";
+import { slpImprovementRoutes } from "./features/creators/improvement/slp-improvement-routes.js";
+import { slpCreatorsRoutes } from "./features/creators/slp-creators-routes.js";
+import { slpDiscoveryRoutes } from "./features/discovery/slp-discovery-routes.js";
+import { slpStudioRoutes } from "./features/economy/slp-studio-routes.js";
+import { slpWalletRoutes } from "./features/economy/slp-wallet-routes.js";
+import { slpFeedPostRoutes } from "./features/feed/slp-feed-post-routes.js";
+import { slpFeedPublishingRoutes } from "./features/feed/slp-feed-publishing-routes.js";
+import { slpFeedViewerRoutes } from "./features/feed/slp-feed-viewer-routes.js";
+import { slpBackupRoutes } from "./features/maintenance/slp-backup-routes.js";
+import { slpMaintenanceRoutes } from "./features/maintenance/slp-maintenance-routes.js";
+import { slpMessagesRoutes } from "./features/messages/slp-messages-routes.js";
+import { slpNotificationsRoutes } from "./features/notifications/slp-notifications-routes.js";
+import { slpOnboardingRoutes } from "./features/onboarding/slp-onboarding-routes.js";
+import { slpProjectsRoutes } from "./features/projects/slp-projects-routes.js";
+import { slpCatchUpWorldOnOpen } from "./workflows/slp-world-tick-workflow.js";
 import { startNoodleAutoPostScheduler } from "../services/slurp/slurp-autopost-scheduler.service.js";
 import { startNoodlerFanActivityScheduler } from "../services/slurp/slurp-fan-activity-scheduler.service.js";
 import { startNoodleRefreshScheduler } from "../services/slurp/slurp-refresh-scheduler.service.js";
@@ -15,6 +35,30 @@ import { startSlurpAutopurgeScheduler } from "../services/slurp/slurp-autopurge-
 import { buildSlurpChatContext, type SlurpChatContextRequest } from "../services/slurp/slurp-chat-context.js";
 
 const lifecycle = createSlurpActivationLifecycle();
+
+/** Every Slurp HTTP route. Shared handles and mutable route state are created once, here. */
+async function mountSlpRoutes(app: FastifyInstance) {
+  const host = createSlpRouteHost(app);
+  const deps = { ...host, ...createSlpViewerContext(app, host) };
+  await slpSettingsRoutes(app, deps);
+  await slpAudienceRoutes(app, deps);
+  await slpMaintenanceRoutes(app, deps);
+  await slpProjectsRoutes(app, deps);
+  await slpDiscoveryRoutes(app, deps);
+  await slpCreatorsRoutes(app, deps);
+  await slpImprovementRoutes(app, deps);
+  await slpBackupRoutes(app, deps);
+  await slpWalletRoutes(app, deps);
+  await slpMediaRoutes(app, deps);
+  await slpNotificationsRoutes(app, deps, slpCatchUpWorldOnOpen);
+  await slpStudioRoutes(app, deps);
+  await slpFeedViewerRoutes(app, deps);
+  await slpAdsRoutes(app, deps);
+  await slpFeedPostRoutes(app, deps);
+  await slpOnboardingRoutes(app, deps);
+  await slpFeedPublishingRoutes(app, deps);
+  await slpMessagesRoutes(app);
+}
 
 export async function activate({
   app,
@@ -58,7 +102,7 @@ export async function activate({
     // Noodle's existing plugin creates storage adapters while it registers, so expose only the
     // host database on the otherwise constrained collector.
     const routes: FastifyPluginAsync = async (router) => {
-      await slurpRoutes(Object.assign(router, { db: app.db }) as FastifyInstance);
+      await mountSlpRoutes(Object.assign(router, { db: app.db }) as FastifyInstance);
     };
     addTeardown(await api.registerPrivilegedRoutes(routes, { prefix: "/api/slurp2" }));
     addTeardown(
