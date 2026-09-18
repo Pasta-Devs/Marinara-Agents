@@ -6,11 +6,10 @@ slots, hit dice, class resources, conditions, rests, and a full character sheet.
 Marinara's default combat, not 5e combat.
 
 Requires **Marinara Engine 2.4.6+ with Capability API 1.20** (the ruleset seam: a hash-pinned
-`ruleset.json` asset the Engine reads by reserved filename, exactly like `gm-verbs.json`). The
-version range stays at 2.4.6 until an Engine release carries this interface; older hosts reject the
-manifest and cannot install this package. This package ships no server entrypoint, no client
-entrypoint, and no Agent. It is pure data: nothing here runs code, and no restart is needed after
-install.
+`ruleset.json` asset the Engine reads by reserved filename, exactly like `gm-verbs.json`). Today
+that means the Engine `staging` branch; older hosts reject the manifest and cannot install this
+package. This package ships no server entrypoint, no client entrypoint, and no Agent. It is pure
+data: nothing here runs code, and no restart is needed after install.
 
 ## What it contains
 
@@ -31,9 +30,16 @@ and sheet primitives that any ruleset package can use.
 
 ## Status
 
-This package is a skeleton and is listed in `INCOMPLETE_PACKAGE_IDS`, so it is hidden from every
-Engine channel until the Capability API 1.20 ruleset seam ships in the Engine and this package is
-rebuilt and validated against it.
+Available to Engine `staging` users only. The package is listed in `STAGING_ONLY_PACKAGE_IDS`, so
+it is published to the preview overlay under `catalog/preview/` that staging Engines read, and is
+hidden from stable `main` users. It stays there until the Capability API 1.20 ruleset seam reaches
+a stable Engine release.
+
+## Installing
+
+Install it from **Agents** and **Download Agents** in a Marinara Engine build that supports
+Capability API 1.20. After installing, choose it under Rules in the Game Mode setup wizard when you
+create a new game.
 
 ## License
 
