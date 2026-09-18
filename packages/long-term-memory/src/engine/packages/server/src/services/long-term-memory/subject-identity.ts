@@ -1223,7 +1223,10 @@ function preResolveBatchSubjectNames({
 function resolveAndCacheSubjectName(
   batch: BatchSubjectNameResolution,
   index?: CatalogIndex,
-  context?: { scope?: LtmScope; mode?: LtmMode; sourceText?: string; sourceTitle?: string },
+  context?: Pick<
+    PreparedLtmSubjectIdentityContext,
+    "scope" | "mode" | "sourceBackedNpcSourceText" | "sourceBackedNpcSourceTitle"
+  >,
   name?: string,
 ): SubjectMatch {
   if (!name || !index) return { status: "untrusted", basis: "source_visible_name" };
@@ -1244,7 +1247,10 @@ function resolveAndCacheSubjectName(
     batch.matches.set(name, direct);
     return direct;
   }
-  const sourceVisible = isSourceBackedProperName(name, [context?.sourceText, context?.sourceTitle]);
+  const sourceVisible = isSourceBackedProperName(name, [
+    context?.sourceBackedNpcSourceText,
+    context?.sourceBackedNpcSourceTitle,
+  ]);
   if (!sourceVisible) {
     const match: SubjectMatch = { status: "untrusted", basis: "source_visible_name" };
     batch.matches.set(name, match);
@@ -1258,6 +1264,17 @@ function resolveAndCacheSubjectName(
       return match;
     }
     if (subject) {
+      const longerEntry = index.entries.find(
+        (entry) =>
+          entry.familyId === familyId &&
+          isLongerVersionOfName(entry.name, name) &&
+          isLocalCharacterSubject(entry.subject),
+      );
+      if (longerEntry) {
+        const match: SubjectMatch = { status: "matched", entries: [longerEntry], basis: "batch_name_alias" };
+        batch.matches.set(name, match);
+        return match;
+      }
       const entry: TrustedLtmSubjectCatalogEntry = {
         subject,
         name,
@@ -1297,7 +1314,10 @@ function resolveNamedUnitSubjects(
   unit: LtmSubjectIdentityCandidate,
   batch: BatchSubjectNameResolution,
   index?: CatalogIndex,
-  context?: { scope?: LtmScope; mode?: LtmMode; sourceText?: string; sourceTitle?: string },
+  context?: Pick<
+    PreparedLtmSubjectIdentityContext,
+    "scope" | "mode" | "sourceBackedNpcSourceText" | "sourceBackedNpcSourceTitle"
+  >,
 ): SubjectMatch {
   const expected = unit.bucket === "character_fact" ? 1 : 2;
   const subjectNames = unit.subjectNames ?? [];

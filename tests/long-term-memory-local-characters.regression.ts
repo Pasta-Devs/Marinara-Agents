@@ -29,6 +29,7 @@ function unit(input: {
 
 async function main() {
   const { compileLtmEvidenceUnits } = await import(`${source}/evidence-unit-compiler.ts`);
+  const { normalizeStructuredSummaryEvidenceUnits } = await import(`${source}/structured-summary-normalizer.ts`);
   const { localCharacterScopeError, localCharacterSubjectForName, ltmScopeFamilyId } = await import(
     `${source}/chat-scope.ts`
   );
@@ -82,6 +83,32 @@ async function main() {
   assert.equal(resolved.units[0]!.subjects?.[0]?.key.startsWith("local_character:"), true);
   assert.equal(resolved.units[1]!.subjects?.length, 2);
   assert.equal(new Set(resolved.units[1]!.subjects?.map((subject) => subject.key)).size, 2);
+  const shortNameContext = prepareLtmSubjectIdentityContext({
+    units: [
+      unit({ bucket: "character_fact", subjectId: "mara", subjectNames: ["Mara"], text: "Mara arrives." }),
+      unit({
+        bucket: "character_fact",
+        subjectId: "mara_ellison",
+        subjectNames: ["Mara Ellison"],
+        text: "Mara Ellison arrives.",
+      }),
+    ],
+    catalog: { entries: [], notes: [] },
+    scope,
+    sourceBackedNpcSourceText: "Mara and Mara Ellison arrive.",
+  }).resolve({
+    units: [
+      unit({ bucket: "character_fact", subjectId: "mara", subjectNames: ["Mara"], text: "Mara arrives." }),
+      unit({
+        bucket: "character_fact",
+        subjectId: "mara_ellison",
+        subjectNames: ["Mara Ellison"],
+        text: "Mara Ellison arrives.",
+      }),
+    ],
+    existingNotes: [],
+  });
+  assert.equal(shortNameContext.units[0]!.subjects?.[0]?.key, shortNameContext.units[1]!.subjects?.[0]?.key);
 
   const compiled = compileLtmEvidenceUnits({
     units: resolved.units,
@@ -99,6 +126,35 @@ async function main() {
 
   const validSubject = localCharacterSubjectForName(scope, "Mara")!;
   assert.equal(localCharacterScopeError([validSubject], scope), null);
+  const onDemandFullName = prepareLtmSubjectIdentityContext({
+    units: [],
+    catalog: {
+      entries: [
+        {
+          subject: validSubject,
+          name: "Mara",
+          aliases: [],
+          canonicalSlug: "mara",
+          familyId: ltmScopeFamilyId(scope),
+        },
+      ],
+      notes: [],
+    },
+    scope,
+    sourceBackedNpcSourceText: "Mara Ellison arrives.",
+    sourceBackedNpcSourceTitle: "Mara Ellison",
+  }).resolve({
+    units: [
+      unit({
+        bucket: "character_fact",
+        subjectId: "mara_ellison",
+        subjectNames: ["Mara Ellison"],
+        text: "Mara Ellison arrives.",
+      }),
+    ],
+    existingNotes: [],
+  });
+  assert.equal(onDemandFullName.units[0]!.subjects?.[0]?.key, validSubject.key);
   assert.notEqual(
     localCharacterScopeError([localCharacterSubjectForName({ chatId: "chat-b", chatIds: ["chat-b"] }, "Mara")!], scope),
     null,
@@ -262,8 +318,6 @@ async function main() {
   const promptBody = JSON.stringify(messages);
   assert.equal(promptBody.includes("local_character:"), false);
 
-  const { normalizeStructuredSummaryEvidenceUnits } = await import(`${source}/structured-summary-normalizer.ts`);
-
   // --- I01: Ambiguity diagnostics & competing records with provenance ---
   const duplicateDisplayNameCatalog = buildTrustedLtmSubjectCatalog({
     roster: [
@@ -322,7 +376,7 @@ async function main() {
 
   // --- I02: Preserve explicit participant names through structured backfill ---
   const structuredSummaryText = `## Relationships
-- Mara and Rowan | characters: Mara, Rowan | state: Mara trusts Rowan completely.
+- Mara and Rowan | characters: Mara | participants: Rowan | name: Mara | state: Mara trusts Rowan completely.
 
 ## Character Facts
 - character: Mara | Mara knows astronomy.

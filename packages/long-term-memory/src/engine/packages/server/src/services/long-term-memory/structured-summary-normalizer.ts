@@ -731,7 +731,8 @@ function parseStructuredRelationshipLine(
 
   const importanceResult = extractStructuredImportance(cleaned);
   let subjectId = "";
-  let subjectNames: string[] | undefined;
+  let explicitSubjectId = false;
+  const subjectNames: string[] = [];
   let importance = importanceResult.importance;
   let confidence = 0.9;
   let salience = 0.75;
@@ -763,6 +764,7 @@ function parseStructuredRelationshipLine(
 
     if (["id", "subject", "relationship", "relationship_id"].includes(key)) {
       subjectId = stripUnitSubjectPrefix("relationship_state", normalizeIdentifier(value, subjectId));
+      explicitSubjectId = true;
       continue;
     }
     if (["characters", "character", "participants", "participant", "names", "name"].includes(key)) {
@@ -771,13 +773,7 @@ function parseStructuredRelationshipLine(
         .map((name) => name.trim())
         .filter(Boolean);
       if (parsedNames.length > 0) {
-        subjectNames = parsedNames;
-        if (!subjectId) {
-          subjectId = parsedNames
-            .map((n) => normalizeIdentifier(n, ""))
-            .filter(Boolean)
-            .join("_");
-        }
+        subjectNames.push(...parsedNames);
       }
       continue;
     }
@@ -826,6 +822,13 @@ function parseStructuredRelationshipLine(
     }
   }
 
+  const uniqueSubjectNames = uniqueStrings(subjectNames);
+  if (!explicitSubjectId && uniqueSubjectNames.length > 0) {
+    subjectId = uniqueSubjectNames
+      .map((name) => normalizeIdentifier(name, ""))
+      .filter(Boolean)
+      .join("_");
+  }
   const normalizedSubject = stripUnitSubjectPrefix("relationship_state", normalizeIdentifier(subjectId, ""));
   const text = textParts.join(" | ").replace(/\s+/g, " ").trim();
   if (!normalizedSubject || !text) return null;
@@ -845,7 +848,7 @@ function parseStructuredRelationshipLine(
     status: "active",
     links: uniqueLinks(links),
     sourceHash,
-    ...(subjectNames && subjectNames.length > 0 ? { subjectNames } : {}),
+    ...(uniqueSubjectNames.length > 0 ? { subjectNames: uniqueSubjectNames } : {}),
     ...(dimensions && Object.keys(dimensions).length > 0 ? { dimensions } : {}),
     ...(dimensionChanges && Object.keys(dimensionChanges).length > 0 ? { dimensionChanges } : {}),
   };
