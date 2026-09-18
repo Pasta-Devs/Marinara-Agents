@@ -1,5 +1,13 @@
 # Long-Term Memory changelog
 
+## 1.3.3 — 2026-09-18
+
+- Kept static character and world facts static when their wording contains incidental narrative verbs, and stopped rejecting character facts that establish lasting status or affiliation.
+
+## 1.3.2 — 2026-09-18
+
+- Preserved all structured relationship participants and reused local identities when names arrive in short-name-first order.
+
 ## 1.3.1 — 2026-09-17
 
 - Fixed duplicate and conflicting source ID handling during source import.

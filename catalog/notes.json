@@ -50,6 +50,12 @@
     "gacha-forge": {
       "versions": [
         {
+          "version": "1.8.2",
+          "date": "2026-09-17",
+          "notes": "- Buffs and debuffs name their stat: a buff can raise ATK, DEF, SPD or crit chance, a debuff can drop DEF, ATK or SPD. Characters you already have fight exactly as before.\n- Newly minted characters and enemies stop piling up on ATK up, DEF down and shields: each new one is asked for what the cast still lacks.\n- Fixed: an outfit rotation whose theme came from your Theme library was painted, lost when it was saved and minted again on every visit. It now saves, and a rotation that fails twice in a row stops retrying.\n- Fixed: a scene keeps your line when the browser reloads the tab.\n- Fixed: when the connection lists cannot be read, the setup and Settings say why instead of opening an empty list.\n- Importing a theme set refuses oversized files and cleans control characters out of titles; creating a world no longer spends a retry on two malformed answers.",
+          "highlight": false
+        },
+        {
           "version": "1.8.1",
           "date": "2026-09-15",
           "notes": "- Writing a chapter ahead keeps going on its own: switching tabs, closing Gacha Forge or changing worlds no longer stops it.\n- Coming back to the Gacha Forge tab no longer drops you on \"Generating story\" or inside a scene you had not reached, and a scene you were reading stays on its line.\n- The character cards you pick can be moved up and down; the game takes them in that order. The Cast lorebook list can be expanded like World lorebooks.\n- The card counter in world creation also counts the two cards each featured banner takes.\n- Characters written in your world's language keep their accents and their ñ.\n- Fixed: in Firefox the top bar no longer runs past the game at large text sizes; the creator's scrollbars keep their distance; the expanded lorebook list in Settings draws its rows again.",
@@ -87,6 +93,18 @@
     },
     "long-term-memory": {
       "versions": [
+        {
+          "version": "1.3.3",
+          "date": "2026-09-18",
+          "notes": "- Kept static character and world facts static when their wording contains incidental narrative verbs, and stopped rejecting character facts that establish lasting status or affiliation.",
+          "highlight": false
+        },
+        {
+          "version": "1.3.2",
+          "date": "2026-09-18",
+          "notes": "- Preserved all structured relationship participants and reused local identities when names arrive in short-name-first order.",
+          "highlight": false
+        },
         {
           "version": "1.3.1",
           "date": "2026-09-17",
