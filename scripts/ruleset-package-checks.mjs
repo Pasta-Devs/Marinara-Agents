@@ -40,6 +40,13 @@ export function assertRulesetPackageContract(manifest) {
   const listsRulesetAsset = Array.isArray(assetPaths) && assetPaths.includes(RULESET_ASSET_PATH);
   const declaresRulesetKind = isRulesetPackage(manifest);
 
+  // Kinds compose elsewhere in this catalog (agent plus maps, agent plus turn-game). Not here: a
+  // ruleset package takes the data-only branch of the validator and skips the Agent contract, so a
+  // mixed kind would publish an Agent nobody checked. The rule is this catalog's, not the Engine's;
+  // relax it by running BOTH contracts if a ruleset ever needs to ship an Agent alongside.
+  if (declaresRulesetKind && manifest.kind.length !== 1) {
+    throw new Error(`${id} must declare "ruleset" as its only kind, because a ruleset package ships only data`);
+  }
   if (listsRulesetAsset && !declaresRulesetKind) {
     throw new Error(`${id} declares the reserved ${RULESET_ASSET_PATH} asset but is not kind "ruleset"`);
   }

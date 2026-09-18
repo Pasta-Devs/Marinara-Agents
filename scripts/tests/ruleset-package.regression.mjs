@@ -58,6 +58,12 @@ function rulesetManifest(overrides = {}) {
   };
 }
 
+// A ruleset kind mixed with another kind would take the data-only branch and skip the Agent contract.
+assert.throws(
+  () => assertRulesetPackageContract(rulesetManifest({ kind: ["ruleset", "agent"] })),
+  /must declare "ruleset" as its only kind/u,
+);
+
 // (a) A ruleset that also declares an Agent entrypoint.
 assert.throws(
   () => assertRulesetPackageContract(rulesetManifest({ entrypoints: { agents: "agents.json" } })),
