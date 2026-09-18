@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import { slurpCommissionDeliveryDelayMs } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-messaging.js";
+import { slurp2Source } from "./slurp2-source";
 
 const schema = readFileSync("packages/slurp2/src/engine/packages/server/src/db/schema/slurp.ts", "utf8");
 
@@ -13,7 +14,7 @@ const world = readFileSync(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.operation.ts",
   "utf8",
 );
-const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");
+const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts");
 
 assert.match(storage, /async listAudienceBriefCommissions\(\)/u);
 assert.match(storage, /population\.get\(viewerAccountId\)/u);

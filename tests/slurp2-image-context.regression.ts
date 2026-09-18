@@ -4,6 +4,7 @@ import { stripTypeScriptTypes } from "node:module";
 import { runInNewContext } from "node:vm";
 import { protectNoodlerGeneratedIdentity as protect } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-identity-protection";
 import { normalizeNoodleImagePrompt } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-image-prompt";
+import { slurp2Source } from "./slurp2-source";
 
 const root = "../packages/slurp2/src/engine/packages/server/src/services/slurp/";
 const read = (file: string) => readFileSync(new URL(`${root}${file}`, import.meta.url), "utf8");
@@ -89,9 +90,8 @@ async function main() {
   assert.match(refused.get("public"), /blue coat/, "stored prompts still work for a text-only model");
 
   // A locked PPV message withholds what its picture shows, not only the picture.
-  const messageRoutes = readFileSync(
+  const messageRoutes = slurp2Source(
     new URL("../packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts", import.meta.url),
-    "utf8",
   );
   const lockedRedactions =
     messageRoutes.match(/kind === "ppv" && !message\.unlockedAt\s*\?[^:]*?\{[\s\S]{0,300}?\}\s*:/gu) ?? [];

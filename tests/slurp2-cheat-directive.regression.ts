@@ -34,7 +34,7 @@ assert.deepEqual(parseSlurpCheatDirective("test promise tonight promised photo")
   reason: "promised photo",
 });
 
-const route = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");
+const route = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts");
 assert.match(route, /generationGuidance: directive\.text/u);
 const cheatRoute = route.slice(
   route.indexOf('app.post("/messages/cheat"'),

@@ -259,7 +259,7 @@ assert.match(generation, /exposure: slurpIntensityBand\(input\.creatorState\.exp
 const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 assert.match(storage, /for \(const accountId of accountIds\)[\s\S]{0,160}?SLURP_CREATOR_STATE_KEY/u);
 
-const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");
+const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts");
 assert.match(
   routes,
   /app\.get\("\/messages\/threads\/:threadId\/prompt"[\s\S]{0,700}?ownsCreator\(viewer\.id, thread\.creatorAccountId\)/u,
