@@ -117,6 +117,14 @@ const SLURP_AWAY_TITLE_FALLBACKS: Record<string, string> = {
 
 const TIP_PRESETS = [5, 15, 50] as const;
 
+function requestHintGuidance(hint: "photo" | "paid-unlock" | "follow-up"): string {
+  if (hint === "photo")
+    return "The fan would enjoy a photo if you want to share one. Treat this as an optional suggestion, not a promise or demand.";
+  if (hint === "paid-unlock")
+    return "The fan is open to paid or locked content if you choose to offer it. Do not invent an offer or pressure the fan.";
+  return "The fan would appreciate a follow-up or promise if one fits naturally. Do not promise an outcome unless you choose to do so.";
+}
+
 /** How much of a conversation is mounted at once, and how much one "show earlier" adds. */
 const SLURP_MESSAGE_PAGE = 25;
 
@@ -684,6 +692,7 @@ function SlurpThreadView({
   const [activeTipAmount, setActiveTipAmount] = useState<number | null>(null);
   const [customTipAmount, setCustomTipAmount] = useState("");
   const [customTipNote, setCustomTipNote] = useState("");
+  const [standaloneTip, setStandaloneTip] = useState<SlurpMessage | null>(null);
   const [composerTipAmount, setComposerTipAmount] = useState(0);
   const [composerTipNote, setComposerTipNote] = useState("");
   const [sendRequestId, setSendRequestId] = useState<string | null>(null);
@@ -698,6 +707,7 @@ function SlurpThreadView({
   const [messageSearchIndex, setMessageSearchIndex] = useState(0);
   const [commissionRibbonOpen, setCommissionRibbonOpen] = useState(false);
   const [preparingImage, setPreparingImage] = useState(false);
+  const [requestHint, setRequestHint] = useState<"photo" | "paid-unlock" | "follow-up">("follow-up");
   // Only the tail of a long conversation is mounted. Everything above it is one button away.
   const [visibleCount, setVisibleCount] = useState(SLURP_MESSAGE_PAGE);
   const [loadedOlderMessages, setLoadedOlderMessages] = useState<SlurpMessage[]>([]);
@@ -938,6 +948,8 @@ function SlurpThreadView({
     setCommissionPrefill("");
     setCustomTipAmount("");
     setCustomTipNote("");
+    setStandaloneTip(null);
+    setRequestHint("follow-up");
     setVisibleCount(SLURP_MESSAGE_PAGE);
     setAwayFromBottom(false);
     setHeaderMenuOpen(false);
@@ -1161,9 +1173,21 @@ function SlurpThreadView({
                 defaultValue: "Development wallet set to {{coins}} coins.",
                 coins: result.coins,
               })
-            : localizeUi("ui.slurp.messages.cheatAccepted", { defaultValue: "Cheat directive accepted." }),
+            : result.kind === "force_creator_photo"
+              ? "Creator photo generation started."
+              : result.kind === "force_ppv"
+                ? "Paid unlock message sent. Normal price and access rules remain active."
+                : result.kind === "follow_up"
+                  ? "Follow-up test scheduled. The normal scheduler and availability rules still apply."
+                  : result.kind === "mood"
+                    ? `Conversation mood adjusted by ${result.amount}.`
+                    : result.kind === "rapport"
+                      ? `Conversation rapport adjusted by ${result.amount}.`
+                      : result.kind === "availability"
+                        ? `Creator availability extended for ${result.minutes} minutes.`
+                        : localizeUi("ui.slurp.messages.cheatAccepted", { defaultValue: "Cheat directive accepted." }),
         );
-      } catch (cause) {
+      } catch {
         toast.error(localizeUi("ui.slurp.messages.cheatRejected", { defaultValue: "Cheat directive rejected." }));
       }
       return;
@@ -1273,6 +1297,7 @@ function SlurpThreadView({
         note,
         requestId: crypto.randomUUID(),
       });
+      setStandaloneTip(result.message);
       if (result.reply) holdTyping(result.typingMs ?? 0, result.reply.id);
     } catch (cause) {
       if (restore) {
@@ -1761,12 +1786,16 @@ function SlurpThreadView({
                   </div>
                 )}
                 {entry.kind === "message" ? (
-                  <MessageBubble
-                    message={entry.message}
-                    locale={i18n.language}
-                    personaId={personaId}
-                    ownsCreator={ownsCreator}
-                  />
+                  standaloneTip?.id === entry.message.id ? (
+                    <SlurpPlatformActionCard message={entry.message} relationship={relationship} />
+                  ) : (
+                    <MessageBubble
+                      message={entry.message}
+                      locale={i18n.language}
+                      personaId={personaId}
+                      ownsCreator={ownsCreator}
+                    />
+                  )
                 ) : personaId ? (
                   <CommissionRow
                     commission={entry.commission}
@@ -1793,30 +1822,35 @@ function SlurpThreadView({
               </div>
             )}
           {!typing && (waitingNote || canForceReply) && (
-            <div
+            <section
               aria-live="polite"
-              className="relative mx-auto flex w-full max-w-sm flex-col items-center gap-2 overflow-hidden rounded-2xl bg-[linear-gradient(160deg,var(--slurp-surface-raised),var(--slurp-surface))] px-5 pb-5 pt-3 text-center shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-[var(--noodle-divider)]"
+              aria-labelledby={waitingNote && SLURP_AWAY_STATUSES.has(waitingNote) ? "slurp-away-title" : undefined}
+              aria-describedby="slurp-away-detail"
+              className="relative mx-auto flex w-full max-w-md flex-col items-center overflow-hidden rounded-lg bg-[radial-gradient(circle_at_50%_0%,color-mix(in_srgb,var(--noodle-accent)_12%,transparent),transparent_48%),linear-gradient(160deg,var(--slurp-surface-raised),var(--slurp-surface))] px-5 pb-5 pt-4 text-center shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-[var(--noodle-divider)] sm:px-8 sm:pb-6 sm:pt-5"
             >
               {/* A status card, like a platform's own notice: the sleeping avatar for "not now",
                   a plain icon for problems the fan has to act on (busy, no connection, failed). */}
               {waitingNote && SLURP_AWAY_STATUSES.has(waitingNote) ? (
                 <>
                   <SlurpAwayAnimation account={headerAccount ?? null} />
-                  <p className="-mt-1 inline-flex items-center gap-1.5 rounded-full bg-[var(--noodle-accent)]/12 px-2.5 py-0.5 text-[0.62rem] font-bold uppercase tracking-wider text-[var(--noodle-accent)]">
-                    <span className="h-1.5 w-1.5 rounded-full bg-gray-400" aria-hidden="true" />
+                  <p className="-mt-1 inline-flex items-center gap-1.5 rounded-full bg-[var(--noodle-accent)]/12 px-3 py-1 text-[0.62rem] font-bold uppercase text-[var(--noodle-accent)]">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[var(--noodle-accent)]" aria-hidden="true" />
                     {localizeUi("ui.slurp.messages.away", { defaultValue: "Away" })}
                   </p>
-                  <p className="text-sm font-bold">
+                  <h3 id="slurp-away-title" className="mt-1 text-base font-bold">
                     {localizeUi(`ui.slurp.messages.awayTitle.${waitingNote ?? "owed"}`, {
                       defaultValue: SLURP_AWAY_TITLE_FALLBACKS[waitingNote ?? "owed"] ?? "{{name}} is away",
                       name: creator?.displayName ?? "",
                     })}
-                  </p>
+                  </h3>
                 </>
               ) : (
                 <Info size={17} className="mt-2 text-[var(--noodle-accent)]" aria-hidden="true" />
               )}
-              <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
+              <p
+                id="slurp-away-detail"
+                className="mt-1 max-w-sm text-xs leading-relaxed text-[var(--muted-foreground)]"
+              >
                 {waitingNote
                   ? localizeUi(`ui.slurp.messages.replyStatus.${waitingNote}`, {
                       defaultValue: SLURP_REPLY_STATUS_FALLBACKS[waitingNote] ?? "No answer yet.",
@@ -1864,7 +1898,7 @@ function SlurpThreadView({
                   {localizeUi("ui.slurp.messages.forceReply", { defaultValue: "Get reply now" })}
                 </button>
               )}
-            </div>
+            </section>
           )}
           {typing && (
             <div
@@ -1936,77 +1970,61 @@ function SlurpThreadView({
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-2">
           {toolsOpen && (
             <div className="flex flex-col gap-2 rounded-2xl bg-[var(--slurp-surface-raised)] p-3 ring-1 ring-inset ring-[var(--noodle-divider)] shadow-[var(--slurp-shadow-floating)]">
-              {!toolTab ? (
-                <div className="flex flex-col gap-3" aria-label="Message actions">
-                  <div className="flex items-center justify-between gap-3 px-1">
-                    <div>
-                      <h2 className="text-sm font-black">Add to your message</h2>
-                      <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">Choose one action to continue.</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setToolsOpen(false)}
-                      className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--slurp-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
-                      aria-label="Close message actions"
-                    >
-                      <X size={16} aria-hidden="true" />
-                    </button>
+              <div className="flex flex-col gap-3" aria-label="Message actions">
+                <div className="flex items-center justify-between gap-3 px-1">
+                  <div>
+                    <h2 className="text-sm font-black">Add to your message</h2>
+                    <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">Choose one action to continue.</p>
                   </div>
-                  {(["media", "conversation", "payment", "creator"] as const).map((group) => {
-                    const items = toolTabs.filter((tab) => tab.group === group);
-                    if (items.length === 0) return null;
-                    const heading =
-                      group === "media"
-                        ? localizeUi("ui.slurp.messages.mediaActions", { defaultValue: "Media" })
-                        : group === "conversation"
-                          ? localizeUi("ui.slurp.messages.conversationActions", { defaultValue: "Conversation" })
-                          : group === "payment"
-                            ? localizeUi("ui.slurp.messages.paymentActions", { defaultValue: "Payments" })
-                            : localizeUi("ui.slurp.messages.creatorActions", { defaultValue: "Creator tools" });
-                    return (
-                      <section key={group} className="flex flex-col gap-1.5">
-                        <h3 className="px-1 text-[0.65rem] font-bold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
-                          {heading}
-                        </h3>
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          {items.map((tab) => (
-                            <button
-                              key={tab.id}
-                              type="button"
-                              onClick={() => setToolTab(tab.id)}
-                              className="flex min-h-16 items-center gap-3 rounded-xl bg-[var(--slurp-surface)] px-3 text-left ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/[0.08] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
-                            >
-                              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--noodle-accent)]/12 text-[var(--noodle-accent)]">
-                                <tab.icon size={18} aria-hidden="true" />
-                              </span>
-                              <span className="min-w-0">
-                                <span className="block truncate text-xs font-bold">{tab.label}</span>
-                                <span className="mt-0.5 block text-[0.68rem] leading-4 text-[var(--muted-foreground)]">
-                                  {tab.detail}
-                                </span>
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      </section>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setToolTab(null)}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--slurp-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
-                    aria-label="Back to message actions"
+                    onClick={() => setToolsOpen(false)}
+                    className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--slurp-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+                    aria-label="Close message actions"
                   >
-                    <ArrowLeft size={16} aria-hidden="true" />
+                    <X size={16} aria-hidden="true" />
                   </button>
-                  <h2 className="min-w-0 truncate text-sm font-black">
-                    {toolTabs.find((tab) => tab.id === toolTab)?.label ?? "Message action"}
-                  </h2>
                 </div>
-              )}
+                {(["media", "conversation", "payment", "creator"] as const).map((group) => {
+                  const items = toolTabs.filter((tab) => tab.group === group);
+                  if (items.length === 0) return null;
+                  const heading =
+                    group === "media"
+                      ? localizeUi("ui.slurp.messages.mediaActions", { defaultValue: "Media" })
+                      : group === "conversation"
+                        ? localizeUi("ui.slurp.messages.conversationActions", { defaultValue: "Conversation" })
+                        : group === "payment"
+                          ? localizeUi("ui.slurp.messages.paymentActions", { defaultValue: "Payments" })
+                          : localizeUi("ui.slurp.messages.creatorActions", { defaultValue: "Creator tools" });
+                  return (
+                    <section key={group} className="flex flex-col gap-1.5">
+                      <h3 className="px-1 text-[0.65rem] font-bold uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
+                        {heading}
+                      </h3>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {items.map((tab) => (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setToolTab(tab.id)}
+                            className="flex min-h-16 items-center gap-3 rounded-xl bg-[var(--slurp-surface)] px-3 text-left ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/[0.08] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
+                          >
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--noodle-accent)]/12 text-[var(--noodle-accent)]">
+                              <tab.icon size={18} aria-hidden="true" />
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block truncate text-xs font-bold">{tab.label}</span>
+                              <span className="mt-0.5 block text-[0.68rem] leading-4 text-[var(--muted-foreground)]">
+                                {tab.detail}
+                              </span>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  );
+                })}
+              </div>
 
               {toolTab === "commission" && (
                 <CommissionRequest
@@ -2061,12 +2079,39 @@ function SlurpThreadView({
                       defaultValue: "Ask for a reply. This does not bypass availability or conversation rules.",
                     })}
                   </p>
+                  <div
+                    className="grid gap-1.5 sm:grid-cols-3"
+                    role="group"
+                    aria-label={localizeUi("ui.slurp.messages.requestHintLabel", { defaultValue: "Request hint" })}
+                  >
+                    {(
+                      [
+                        ["photo", "Ask for a photo"],
+                        ["paid-unlock", "Ask about paid content"],
+                        ["follow-up", "Ask for a follow-up"],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        aria-pressed={requestHint === value}
+                        onClick={() => setRequestHint(value)}
+                        className={cn(
+                          "min-h-10 rounded-lg px-2 text-xs font-semibold ring-1 ring-inset ring-[var(--noodle-divider)]",
+                          requestHint === value &&
+                            "bg-[var(--noodle-accent)] text-zinc-950 ring-[var(--noodle-accent)]",
+                        )}
+                      >
+                        {localizeUi(`ui.slurp.messages.requestHint.${value}`, { defaultValue: label })}
+                      </button>
+                    ))}
+                  </div>
                   <button
                     type="button"
-                    disabled={busy || requestReply.isPending || !thread.needsReply}
+                    disabled={busy || requestReply.isPending}
                     onClick={() => {
                       requestReply
-                        .mutateAsync({ threadId: thread.id, personaId })
+                        .mutateAsync({ threadId: thread.id, personaId, guidance: requestHintGuidance(requestHint) })
                         .then((result) => {
                           setReplyStatus(result.replyStatus);
                           holdTyping(result.reply ? (result.typingMs ?? 0) : 0, result.reply?.id);
@@ -3018,7 +3063,7 @@ function SlurpCommissionsPanel({
 /** The Creator's avatar asleep: a slow breathing glow, a moon, and three rising motes. */
 function SlurpAwayAnimation({ account }: { account: Parameters<typeof Avatar>[0]["account"] | null }) {
   return (
-    <div className="slurp-away relative flex h-24 w-24 items-center justify-center" aria-hidden="true">
+    <div className="slurp-away relative flex h-28 w-28 items-center justify-center sm:h-32 sm:w-32" aria-hidden="true">
       <style>{`
         .slurp-away-glow { animation: slurp-away-breathe 3.2s ease-in-out infinite; }
         .slurp-away-mote { animation: slurp-away-rise 3.6s ease-in infinite; opacity: 0; }
@@ -3042,14 +3087,14 @@ function SlurpAwayAnimation({ account }: { account: Parameters<typeof Avatar>[0]
         }
       `}</style>
       <span className="slurp-away-glow absolute inset-2 rounded-full bg-[radial-gradient(circle,color-mix(in_srgb,var(--noodle-accent)_45%,transparent),transparent_70%)]" />
-      <span className="relative rounded-full opacity-80 grayscale-[35%] ring-2 ring-[var(--slurp-surface-raised)]">
+      <span className="relative rounded-full opacity-90 grayscale-[20%] ring-4 ring-[var(--slurp-surface-raised)]">
         {account ? (
-          <Avatar account={account} size="md" />
+          <Avatar account={account} size="lg" />
         ) : (
-          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--slurp-surface-raised)]" />
+          <span className="flex h-24 w-24 items-center justify-center rounded-full bg-[var(--slurp-surface-raised)]" />
         )}
       </span>
-      <span className="slurp-away-moon absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full bg-[var(--slurp-surface-raised)] text-[var(--noodle-accent)] shadow-[var(--slurp-shadow-raised)]">
+      <span className="slurp-away-moon absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-[var(--slurp-surface-raised)] text-[var(--noodle-accent)] shadow-[var(--slurp-shadow-raised)] ring-1 ring-[var(--noodle-divider)] sm:right-3 sm:top-3">
         <Moon size={14} fill="currentColor" />
       </span>
       {[0, 1.2, 2.4].map((delay, index) => (
@@ -3254,6 +3299,42 @@ function MessageBubble({
         </button>
       )}
     </div>
+  );
+}
+
+function SlurpPlatformActionCard({
+  message,
+  relationship,
+}: {
+  message: SlurpMessage;
+  relationship?: SlurpThreadRelationship;
+}) {
+  const { t: localizeUi } = useUiTranslation();
+  return (
+    <article className="mx-auto flex w-full max-w-md items-center gap-3 rounded-lg bg-[var(--slurp-surface-raised)] px-4 py-3 shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-[var(--noodle-divider)]">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--noodle-accent)]/12 text-[var(--noodle-accent)]">
+        <SlurpCoin size={17} aria-hidden="true" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-xs font-black">
+          {localizeUi("ui.slurp.messages.tipFeatureTitle", { defaultValue: "Tip sent" })}
+        </span>
+        <span className="mt-0.5 block text-xs leading-5 text-[var(--muted-foreground)]">
+          {localizeUi("ui.slurp.messages.tipFeatureDetail", {
+            defaultValue: "{{amount}} coins were sent as a gift. It does not guarantee a reply.",
+            amount: message.price,
+          })}
+        </span>
+        {relationship && (
+          <span className="mt-1 block text-[0.68rem] font-semibold text-[var(--noodle-accent)]">
+            {localizeUi("ui.slurp.messages.relationshipAfterTip", {
+              defaultValue: "Relationship: {{tier}}",
+              tier: localizeUi(`ui.slurp.rapport.tier.${relationship.tier}`),
+            })}
+          </span>
+        )}
+      </span>
+    </article>
   );
 }
 
@@ -3525,8 +3606,20 @@ function FanImageTool({
   const [file, setFile] = useState<File | null>(null);
   const [prompt, setPrompt] = useState("");
   const [content, setContent] = useState("");
+  const [reviewing, setReviewing] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedMode, setSelectedMode] = useState<"upload" | "generate">("upload");
   const activeMode = mode === "choose" ? selectedMode : mode;
+  const viewerPrompt = prompt.trim() ? `A photo taken by the viewer persona: ${prompt.trim()}` : "";
+  useEffect(() => {
+    if (!file) {
+      setPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
   return (
     <div className="overflow-hidden rounded-xl bg-[var(--slurp-surface)] ring-1 ring-inset ring-[var(--noodle-divider)]">
       <div className="flex flex-col gap-2 p-3">
@@ -3548,56 +3641,81 @@ function FanImageTool({
             ))}
           </div>
         )}
-        {activeMode === "generate" && (
-          <textarea
-            value={prompt}
-            rows={2}
-            maxLength={1000}
-            onChange={(event) => setPrompt(event.target.value)}
-            placeholder="Describe the photo you want to generate"
-            className="w-full resize-y rounded-lg bg-[var(--slurp-canvas,var(--background))] px-3 py-2 text-sm ring-1 ring-inset ring-[var(--noodle-divider)]"
-          />
+        {!reviewing ? (
+          <>
+            {activeMode === "generate" && (
+              <textarea
+                value={prompt}
+                rows={2}
+                maxLength={1000}
+                onChange={(event) => setPrompt(event.target.value)}
+                placeholder="Describe the photo the viewer persona took"
+                className="w-full resize-y rounded-lg bg-[var(--slurp-canvas,var(--background))] px-3 py-2 text-sm ring-1 ring-inset ring-[var(--noodle-divider)]"
+              />
+            )}
+            {activeMode === "upload" && (
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                className="text-xs"
+              />
+            )}
+            <input
+              value={content}
+              maxLength={1000}
+              onChange={(event) => setContent(event.target.value)}
+              placeholder={localizeUi("ui.slurp.messages.imageCaption", {
+                defaultValue: "Say something with it (optional)",
+              })}
+              className="h-10 rounded-lg bg-[var(--slurp-canvas,var(--background))] px-3 text-sm ring-1 ring-inset ring-[var(--noodle-divider)]"
+            />
+            <button
+              type="button"
+              disabled={activeMode === "upload" ? !file : !prompt.trim()}
+              onClick={() => setReviewing(true)}
+              className="min-h-10 self-end rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50"
+            >
+              Review photo
+            </button>
+          </>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {previewUrl && <img src={previewUrl} alt="Photo preview" className="max-h-48 rounded-lg object-contain" />}
+            <p className="text-xs leading-5 text-[var(--muted-foreground)]">
+              {activeMode === "generate" ? viewerPrompt : "Review this photo before sending it."}
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setReviewing(false)}
+                className="min-h-10 rounded-lg px-3 text-xs font-bold ring-1 ring-inset ring-[var(--noodle-divider)]"
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                disabled={activeMode === "upload" ? !file || send.isPending : !prompt.trim() || generate.isPending}
+                onClick={() => {
+                  const request =
+                    activeMode === "upload"
+                      ? file && send.mutateAsync({ threadId, creatorAccountId, personaId, file, content })
+                      : generate.mutateAsync({ threadId, creatorAccountId, personaId, prompt: viewerPrompt, content });
+                  if (!request) return;
+                  void request.then(() => {
+                    setFile(null);
+                    setPrompt("");
+                    setContent("");
+                    setReviewing(false);
+                  });
+                }}
+                className="min-h-10 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50"
+              >
+                {send.isPending || generate.isPending ? "Sending…" : "Send photo"}
+              </button>
+            </div>
+          </div>
         )}
-        {activeMode === "upload" && (
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-            className="text-xs"
-          />
-        )}
-        <input
-          value={content}
-          maxLength={1000}
-          onChange={(event) => setContent(event.target.value)}
-          placeholder={localizeUi("ui.slurp.messages.imageCaption", {
-            defaultValue: "Say something with it (optional)",
-          })}
-          className="h-10 rounded-lg bg-[var(--slurp-canvas,var(--background))] px-3 text-sm ring-1 ring-inset ring-[var(--noodle-divider)]"
-        />
-        <button
-          type="button"
-          disabled={activeMode === "upload" ? !file || send.isPending : !prompt.trim() || generate.isPending}
-          onClick={() => {
-            const request =
-              mode === "upload"
-                ? file && send.mutateAsync({ threadId, creatorAccountId, personaId, file, content })
-                : generate.mutateAsync({ threadId, creatorAccountId, personaId, prompt: prompt.trim(), content });
-            if (!request) return;
-            void request.then(() => {
-              setFile(null);
-              setPrompt("");
-              setContent("");
-            });
-          }}
-          className="min-h-10 self-end rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50"
-        >
-          {send.isPending || generate.isPending
-            ? localizeUi("ui.slurp.messages.sending", { defaultValue: "Sending…" })
-            : activeMode === "generate"
-              ? "Generate and send"
-              : localizeUi("ui.slurp.messages.send", { defaultValue: "Send" })}
-        </button>
       </div>
     </div>
   );
