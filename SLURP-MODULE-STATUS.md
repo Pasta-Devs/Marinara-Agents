@@ -20,22 +20,28 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 ## Current state
 
 - Last updated: 2026-09-18
-- Updated by: Slice 5 implementation agent
-- Overall state: Slice 5 ready for review
-- Active slice: 5 (server services, contracts, workflows), issue #924, branch
-  `slurp2-slice5-server-services` from `origin/modular-simping` `7b9ba1f3` (Slice 4 merge commit).
-  `origin/staging` is an ancestor of that commit; no staging merge was needed.
-- Pull request: draft #925 targets `modular-simping` and is assigned to `Gunterlie`; issue #924 is
-  assigned to `Gunterlie`. Slice 4 PR #919 is merged. Commits: `254b9bd1` (refactor), `e77611f8`
-  (Slice 4 fix), `aa60cd99` (rebuild and ledger), plus this ledger update.
-- Package version: `0.0.28` (integration-only; `staging` stays at `0.0.22` until the final `0.1.0`
-  release PR)
-- Generated artifact: `artifacts/slurp2-0.0.28.zip`, sha256
-  `90d890370f807e0353e45311071ffc534ddef6b50901f29bc7a3a26ba0ed4808`, 6722866 bytes
-- Node: `/home/dev/.nvm/versions/node/v24.18.0/bin`; `node -v` = `v24.18.0`
+- Updated by: Slice 6 implementation agent
+- Overall state: Slice 6 in progress
+- Active slice: 6 (event and modifier seam), issue #926, branch
+  `slurp2-slice6-event-modifier-seam` from `origin/modular-simping` `7324d634` (the
+  `origin/staging` merge commit made at the start of this slice).
+- Slice 5 merge gate: PR #925 is `MERGED` into `modular-simping` at `c945b4a0`; its generated
+  `0.0.28` payload, manifest, `artifacts/slurp2-0.0.28.zip` (sha256
+  `90d890370f807e0353e45311071ffc534ddef6b50901f29bc7a3a26ba0ed4808`, 6722866 bytes), and all three
+  catalog lanes are present and match this ledger exactly.
+- Staging integration: `origin/modular-simping` was 21 ahead / 4 behind `origin/staging`. The four
+  staging commits add the `ruleset-5e-2014` package and change `scripts/validate-catalog.mjs`,
+  `scripts/package-locales.mjs`, and `schemas/package-manifest.schema.json`; no `packages/slurp2`
+  file overlaps. Maintainer-approved action: ordinary `--no-ff` merge of `origin/staging` into
+  `modular-simping`, pushed as `7324d634`. No conflicts, so no generated output was rebuilt.
+- Package version: `0.0.28` before this slice; this slice uses `0.0.29` (integration-only; `staging`
+  stays at `0.0.22` until the final `0.1.0` release PR)
+- Node: `/home/dev/.nvm/versions/node/v24.18.0/bin`; `node -v` = `v24.18.0`. `TMPDIR` is set to
+  `/home/dev/.cache/slp-tmp` because `/tmp` tmpfs is small.
 - Engine source: `/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish`, branch
-  `welcome-to-the-agentshop`, commit `fdb67d47b`, tracked files clean; 4 ahead / 32 behind Engine
-  `origin/staging` after a fresh fetch. Used unchanged; no Engine integration was performed.
+  `welcome-to-the-agentshop`, commit `fdb67d47b`, tracked files clean; 4 ahead / 39 behind Engine
+  `origin/staging` after a fresh fetch (the ledger's earlier 32 behind moved as Engine staging
+  advanced). Used unchanged, as in Slices 0-5, so build deltas stay comparable across slices.
 
 ## Slice ledger
 
@@ -45,8 +51,8 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 |     2 | Entrypoints and shared base            | in progress      | #914 / no PR     | 0.0.25          | Validated locally; stacked on 0–1 on `modular-simping`           |
 |     3 | Server routes                          | ready for review | #915 / #916      | 0.0.26          | 179-route multiset preserved; CI failures match Slice 2 baseline |
 |     4 | Server storage                         | merged           | #918 / #919      | 0.0.27          | Merged into `modular-simping` at `7b9ba1f3`                      |
-|     5 | Server services, contracts, workflows  | ready for review | #924 / #925      | 0.0.28          | Layer model approved; 0 architecture violations; unit rebuilt    |
-|     6 | Event and modifier seam                | not started      | —                | —               | —                                                                |
+|     5 | Server services, contracts, workflows  | merged           | #924 / #925      | 0.0.28          | Merged into `modular-simping` at `c945b4a0`                      |
+|     6 | Event and modifier seam                | in progress      | #926 / pending   | 0.0.29          | Started from `7324d634`; Slice 5 merge gate verified             |
 |     7 | Client state and hooks                 | not started      | —                | —               | —                                                                |
 |     8 | Client app and reusable modules        | not started      | —                | —               | —                                                                |
 |     9 | Backstage                              | not started      | —                | —               | —                                                                |
