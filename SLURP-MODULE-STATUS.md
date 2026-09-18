@@ -24,6 +24,7 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 - Overall state: Slice 3 implemented and validated; ready for draft PR review
 - Active slice: 3 (server routes), issue #915, branch `slurp2-slice3-server-routes` from
   `modular-simping` `92c25f9c` (0 behind `origin/staging` after fetch; no merge needed)
+- Slice 3 implementation commit: `71cfa6ce`, pushed to `origin/slurp2-slice3-server-routes`
 - Issue: #914 (assigned `Gunterlie`)
 - Pull request: draft #916 targets `modular-simping`, assigned to `Gunterlie`. Slices 0–1 and 2
   were pushed directly to the integration branch at the maintainer's request.
