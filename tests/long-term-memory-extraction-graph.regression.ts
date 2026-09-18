@@ -441,6 +441,22 @@ async function main() {
   assert.equal(transientUsesCharacter.accounting.keptUnits, 0);
   assert.equal(transientUsesCharacter.outcome.droppedCandidates[0]?.validatorCode, "event_shaped_character_fact");
 
+  const mixedDurableTransientCharacter = compile(chat, [
+    unit(chat, {
+      bucket: "character_fact",
+      subjectId: "rowan",
+      sectionKey: "facts",
+      text: "Rowan met Mara and is walking away, but is her assigned case officer.",
+      claimKind: "static",
+      subjectNames: ["Rowan"],
+    }),
+  ]);
+  assert.equal(mixedDurableTransientCharacter.accounting.keptUnits, 0);
+  assert.equal(
+    mixedDurableTransientCharacter.outcome.droppedCandidates[0]?.validatorCode,
+    "event_shaped_character_fact",
+  );
+
   const invalidEventWithDependent = compile(chat, [
     unit(chat, {
       bucket: "timeline_event",
