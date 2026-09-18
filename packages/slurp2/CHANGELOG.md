@@ -1,13 +1,5 @@
 # Slurp Remastered release notes
 
-## 0.0.23 — 2026-09-18
-
-- Image prompts are visible when a feed image opens.
-- Ads remain visible in list and wall feed layouts.
-- Invited character audience activity is limited to five by default and ten at most.
-- The default subscription price is twelve coins per week.
-- The audience settings landing page labels Stories correctly.
-
 ## 0.0.22 — 2026-09-17
 
 - Invite Engine characters to the Slurp audience from character groups or per-character controls.
@@ -15,6 +7,8 @@
 - Invited characters can follow, subscribe, spend, hold ties, and appear in fan cards.
 - Added a New Chat picker for owned Creators and invited characters.
 - Added prompt-cost limits and deterministic character rotation.
+- Fixed feed ads, image prompt display, and the configured subscription price.
+- Added configurable image Stories, platform-style message actions, and safe development cheats.
 
 ## 0.0.21 — 2026-09-17
 
