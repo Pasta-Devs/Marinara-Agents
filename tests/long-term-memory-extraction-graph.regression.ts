@@ -293,6 +293,15 @@ async function main() {
     tags: ["typed_memory"],
     sections: { summary: { text: "The archive thread remains open.", updatedAt: timestamp } },
   };
+  const parsedResolution = parseEvidenceUnitPayload(
+    { summary: "Resolved thread parser regression", units: [resolvedThread, resolutionEvent] },
+    sourceHashForLtmSourceNote(chat),
+  );
+  assert.equal(parsedResolution.parserRejections, 0);
+  assert.equal(parsedResolution.response.units.length, 2);
+  assert.deepEqual(parsedResolution.response.units[0]?.links, [
+    { target: "timeline_archive_reopened", relation: "resolved_in" },
+  ]);
   const resolvedThreadValidation = compile(chat, [resolvedThread, resolutionEvent], true, [existingThread]);
   assert.equal(resolvedThreadValidation.accounting.keptUnits, 2);
   assert.equal(
