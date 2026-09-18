@@ -21,12 +21,13 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 
 - Last updated: 2026-09-18
 - Updated by: Slice 0–1 implementation agent
-- Overall state: Slice 0–1 implemented and validated locally; committed on the branch, not pushed
+- Overall state: Slice 0–1 implemented and validated locally; pushed, no PR yet
 - Active slice: 0–1 (combined)
 - Issue: #914 (assigned `Gunterlie`)
-- Pull request: none — the maintainer approved the issue only. Open a draft PR to `staging`,
-  assigned to `Gunterlie`, after the maintainer approves it.
-- Branch: `refactor/slurp2-module-safety-rails`, created from `origin/staging` at `e92684d1`
+- Pull request: none — the maintainer asked for no PR yet. Open a draft PR to `staging`, assigned
+  to `Gunterlie`, only after the maintainer approves it.
+- Branch: local `refactor/slurp2-module-safety-rails`, pushed as `origin/modular-simping`; based on
+  `origin/staging` `e92684d1`; implementation commit `29ff6ec2`
 - Package version: `0.0.24` (staging was `0.0.22`; `0.0.23` was skipped, see discoveries)
 - Generated artifact: `artifacts/slurp2-0.0.24.zip`, sha256
   `945e245c4748afc7ff0d36ea6d8741812e8804a7aa7048b6c35abbf1bf2cdc04`, 6464540 bytes
@@ -138,8 +139,7 @@ Generated output (builder only, no hand edits):
 
 ## Next action
 
-1. Maintainer: approve pushing `refactor/slurp2-module-safety-rails` and opening the draft PR to
-   `staging` (assign `Gunterlie`, link #914, leave verification boxes unchecked). Let CI run the
+1. Maintainer: approve opening the draft PR from `modular-simping` to `staging` (assign `Gunterlie`, link #914, leave verification boxes unchecked). Let CI run the
    browser job.
 2. After merge, start Slice 2 (entrypoints and shared base) from `SLURP-MODULE-SLICE.prompt.md`: move
    the entrypoints, autopurge time module, and locales into the `slp` roots, add the three root
