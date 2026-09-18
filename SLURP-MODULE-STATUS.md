@@ -19,12 +19,14 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 
 ## Current state
 
-- Last updated: 2026-09-18
+- Last updated: 2026-09-19
 - Updated by: Slice 6 implementation agent
-- Overall state: Slice 6 in progress
+- Overall state: Slice 6 ready for review
 - Active slice: 6 (event and modifier seam), issue #926, branch
   `slurp2-slice6-event-modifier-seam` from `origin/modular-simping` `7324d634` (the
   `origin/staging` merge commit made at the start of this slice).
+- Pull request: draft #927 targets `modular-simping` and is assigned to `Gunterlie`; issue #926 is
+  assigned to `Gunterlie`. Not merged by the implementation agent, by instruction.
 - Slice 5 merge gate: PR #925 is `MERGED` into `modular-simping` at `c945b4a0`; its generated
   `0.0.28` payload, manifest, `artifacts/slurp2-0.0.28.zip` (sha256
   `90d890370f807e0353e45311071ffc534ddef6b50901f29bc7a3a26ba0ed4808`, 6722866 bytes), and all three
@@ -34,8 +36,10 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
   `scripts/package-locales.mjs`, and `schemas/package-manifest.schema.json`; no `packages/slurp2`
   file overlaps. Maintainer-approved action: ordinary `--no-ff` merge of `origin/staging` into
   `modular-simping`, pushed as `7324d634`. No conflicts, so no generated output was rebuilt.
-- Package version: `0.0.28` before this slice; this slice uses `0.0.29` (integration-only; `staging`
+- Package version: `0.0.28` before this slice; this slice ships `0.0.29` (integration-only; `staging`
   stays at `0.0.22` until the final `0.1.0` release PR)
+- Generated artifact: `artifacts/slurp2-0.0.29.zip`, sha256
+  `fde6df6369cfbe2f5f41c2be21275811cd137e568faccc5563f7398fa67db5c6`, 6725223 bytes
 - Node: `/home/dev/.nvm/versions/node/v24.18.0/bin`; `node -v` = `v24.18.0`. `TMPDIR` is set to
   `/home/dev/.cache/slp-tmp` because `/tmp` tmpfs is small.
 - Engine source: `/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish`, branch
@@ -52,7 +56,7 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 |     3 | Server routes                          | ready for review | #915 / #916      | 0.0.26          | 179-route multiset preserved; CI failures match Slice 2 baseline |
 |     4 | Server storage                         | merged           | #918 / #919      | 0.0.27          | Merged into `modular-simping` at `7b9ba1f3`                      |
 |     5 | Server services, contracts, workflows  | merged           | #924 / #925      | 0.0.28          | Merged into `modular-simping` at `c945b4a0`                      |
-|     6 | Event and modifier seam                | in progress      | #926 / pending   | 0.0.29          | Started from `7324d634`; Slice 5 merge gate verified             |
+|     6 | Event and modifier seam                | ready for review | #926 / #927      | 0.0.29          | 0 new regression failures; 4 mutants caught; unit rebuilt        |
 |     7 | Client state and hooks                 | not started      | —                | —               | —                                                                |
 |     8 | Client app and reusable modules        | not started      | —                | —               | —                                                                |
 |     9 | Backstage                              | not started      | —                | —               | —                                                                |
@@ -109,6 +113,12 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 | 2026-09-18 |        5 | Slice 4 regression (live on `modular-simping` `7b9ba1f3`): `compensate/claim/reset/settleSlurpPayment…ForDatabase` and `applySlurpTipEffectsForDatabase` became nested functions inside `createSlurpMessagesContext`, but the Slice 4 messages contract still re-exported them. esbuild drops an unresolved TypeScript re-export silently, so the build passes and `features/economy/slp-wallet-routes.ts` calls `undefined` in the profile-tip route. Slice 5 imports them directly, so the bundle now fails with "No matching export". | The profile tip (`walletEnabled`) throws at runtime on `modular-simping`. Needs a restoring fix before Slice 5 can build.                                                              |
 | 2026-09-18 |        5 | Slice 4 regression: on `staging`, `messageUnlocks`, `directMessageTips`, `commissionOperations`, `paymentIntentClaims`, and `slurpDatabases` are module-level singletons. Slice 4 moved them inside `createSlurpMessagesContext`, and `createSlurpMessagesStorage` has about 20 per-call construction sites. In-process de-duplication of concurrent unlocks, tips, commissions, and payment claims no longer spans callers. | Breaks the "one construction site per long-lived state owner" invariant. Recorded as a pending decision with the fix above.                                                          |
 
+| 2026-09-19 |        6 | Plan §4 said the server entry constructs the modifier provider. The only new-subscription charge sits inside one storage transaction (`data/economy/slp-economy-storage-1.ts` `subscribe()`), and `platformEvents` lives in Slurp settings that Backstage edits at runtime, so an entry-built provider would serve a frozen event list until restart. | Maintainer-approved: the consumer builds the provider from the settings snapshot its own transaction already read. Plan §4, the architecture guide, and `DECISIONS.md` updated. |
+| 2026-09-19 |        6 | Plan §4 also said `features/world/events/` owns calendar activation, which contradicts §3's allocation ledger (`modules/world/events/`). Under the Slice 5 layer model activation is a pure rule, and three client files import it directly. | Activation stays in `modules/world/events/`. No file moved, so no client import or ownership entry changed. Plan §4 corrected. |
+| 2026-09-19 |        6 | Adding two `.default()` fields to `slurpPlatformEventSchema` makes them required on the inferred `SlurpPlatformEvent`, so the Backstage editor's hand-built new-event literal stopped typechecking. | `SlurpPlatformEventsSettings.tsx` gained `kind: "calendar"` and `modifiers: []`. This is the only client change in a server slice, and it is forced by the type. |
+| 2026-09-19 |        6 | Storing `source` on a saved modifier lets an event's modifier name another event's id, and nothing would reconcile them. | A saved event stores the effect only (`slpModifierDraftSchema`); the producing source stamps `source` at activation, so a mismatch cannot be represented. |
+| 2026-09-19 |        6 | Bumping to `0.0.29` pushed the changelog past the 20-entry published cap, so `0.0.8` rolled off the derived `notes.json` while the splash mirror still carried 21 entries. | Dropped the `0.0.8` splash entry and retargeted `slurp2-release-notes.regression.ts`, as the 0.0.24 bump did for `0.0.3`. |
+| 2026-09-19 |        6 | `npm run test:browser:slurp2` needs `MARINARA_ENGINE_ROOT`; without it the runner fails on a missing sibling Engine `package.json`. With it, the Engine dev servers did not come up inside a 400s budget. | The browser suite still produced no result locally, as in Slices 0–5. It needs CI or a host with Playwright system libraries. |
 ## Pending decisions
 
 1. **Resolved 2026-09-18 — server layer model.** The maintainer approved
@@ -159,6 +169,84 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
   `slurp-events.storage.ts` (179), and the existing reply, queue, host, error, and retention files.
 
 ## Latest validation
+
+### Slice 6 (0.0.29)
+
+Issue #926; draft PR #927 to `modular-simping`; branch `slurp2-slice6-event-modifier-seam` from
+`origin/modular-simping` `7324d634`.
+
+**Merge gate (re-verified, not assumed).**
+
+- `gh pr view 925`: `state MERGED`, `baseRefName modular-simping`, `mergedAt 2026-09-18T21:35:58Z`,
+  merge commit `c945b4a0`. `git merge-base --is-ancestor c945b4a0 origin/modular-simping` = true.
+- Slice 5 generated outputs present and matching this ledger: manifest `0.0.28`,
+  `artifacts/slurp2-0.0.28.zip` sha256 `90d890370f807e0353e45311071ffc534ddef6b50901f29bc7a3a26ba0ed4808`,
+  6722866 bytes, and one `slurp2-0.0.28` entry in each of `catalog/v2`, `catalog/v3`, and the legacy alias.
+- Slice 5 focused regressions on the merged branch: `slurp2-architecture`, `slurp2-storage-methods`,
+  `slurp2-route-inventory`, `slurp2-platform-events`, `slurp2-creator-pricing`, `slurp-wallet` — all pass.
+  `node scripts/typecheck-packages.mjs slurp2` passes.
+- `origin/modular-simping` was 21 ahead / 4 behind `origin/staging`. Maintainer approved an ordinary
+  `--no-ff` merge pushed to `modular-simping` as `7324d634`; no conflicts, so nothing generated was
+  rebuilt. `node scripts/validate-catalog.mjs` passes on the merge (38 packages; preview overlay valid).
+- No slice commit was pushed to `modular-simping`. Nothing was reset, rebased, or force-pushed.
+
+**What changed.**
+
+- New `base/modifiers/`: `slp-modifier.types.ts` (47 lines), `slp-modifier-schema.ts`,
+  `slp-modifier-resolver.ts`, `slp-active-modifier-provider.ts`. All four are under the existing
+  `packages/server/src/slp` ownership root, so no ownership entry changed.
+- `modules/world/events/slp-platform-events.ts` (129 → 191 lines): added `kind: "calendar"` and
+  `modifiers`, both `.default()`ed so saved rows parse unchanged; moved activation into
+  `ACTIVATION_BY_KIND`, keeping the UTC and year-wrap arithmetic byte-identical; added
+  `slurpActivePlatformEventModifiers` and `slurpPlatformEventModifierSource`.
+- `modules/economy/slp-creator-pricing.ts`: added `slurpSubscriptionCharge(base, provider, at)`,
+  which rounds once and clamps to the existing `0..9999` range.
+- `data/economy/slp-economy-storage-1.ts` `subscribe()`: `at` now precedes `price`, and the new
+  charge goes through the seam. Renewal is untouched — it charges the stored agreed price.
+- `SlurpPlatformEventsSettings.tsx`: the new-event literal gained the two defaulted fields.
+- Version, changelog `0.0.29`, splash mirror (with `0.0.8` rolled off), and
+  `tests/slurp2-release-notes.regression.ts` retargeted.
+
+**Preservation proof.**
+
+- New `tests/slurp2-event-modifiers.regression.ts` covers every bullet in plan §8 "Modifier
+  behaviour": the active `0.5` multiplier halves the charge (100 → 50) and the inactive one does
+  not; a disabled event never applies; rounding happens once (7 → 4); the result clamps at both
+  ends; multiplies precede adds; overlapping events resolve identically in either save order;
+  each modifier is stamped with its owning event; evaluation mutates nothing; the same timestamp
+  gives the same answer after a settings round-trip; the eight schema rejections all fail; a broken
+  modifier is dropped without dropping its event or the list; at most eight modifiers survive; and
+  `renewSubscriptions` still charges the stored price.
+- Not vacuous — four mutants, each caught: resolver ignores `multiply`; provider skips sorting;
+  charge skips the clamp; activation ignores `enabled`. Baseline green again after restoring all four.
+- `slurp2-platform-events.regression.ts` is unchanged and still passes, which is the proof that the
+  eight default events kept their ids, dates, durations, and guidance.
+- The new test also asserts `subscribe()` never calls `setCreatorSubscriptionPrice`, so an event
+  cannot rewrite a Creator's stored price.
+
+**Commands.**
+
+- `npm run check`: passes, 0 errors (1009 pre-existing warnings, same as Slice 5).
+- `node scripts/typecheck-packages.mjs slurp2`: `no undefined names or unresolved modules`.
+- `tests/slurp2-architecture.regression.ts`: passes, 0 violations, no new exception added.
+- `slurp2-route-inventory` (179 routes) and `slurp2-storage-methods`: pass.
+- Full per-file suite compared against the branch point `7324d634` (the suite exits at its first
+  failure, so each file was run alone): baseline 25 failures / 202 files, after 25 failures / 203
+  files. The failing set is **identical** — 0 new, 0 fixed. The extra file is this slice's new test.
+- `node scripts/test-catalog-lanes.mjs`, `validate-package-locales.mjs`, `validate-catalog.mjs`,
+  `scripts/tests/catalog-release-notes.regression.mjs`, `git diff --check`: all pass.
+- `npm run test:browser:slurp2`: no result. It needs `MARINARA_ENGINE_ROOT`, and with it the Engine
+  dev servers did not start inside a 400s budget. Unresolved environment gap, as in Slices 0–5.
+- Build: `MARINARA_ENGINE_ROOT=/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish node scripts/build-feature-packages.mjs slurp2`.
+  `git status` shows exactly one generated unit: `client.js`, `server.mjs`, `manifest.json`, the three
+  catalog lanes with their `notes.json`, and the new `artifacts/slurp2-0.0.29.zip`.
+- No live install/update/restart or uninstall test was performed, and no dev box was used. The
+  human-verification boxes on issue #926 and PR #927 are unchecked.
+
+**Engine source.** `/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish`, branch
+`welcome-to-the-agentshop`, commit `fdb67d47b`, tracked files clean; 4 ahead / 39 behind Engine
+`origin/staging` after a fresh fetch. Used unchanged; no Engine integration was performed, so build
+deltas stay comparable with Slices 0–5.
 
 ### Slice 5 (0.0.28)
 
@@ -452,17 +540,19 @@ manifest.json}`, added `artifacts/slurp2-0.0.24.zip`, and updated `catalog/{,v2/
 
 ## Next action
 
-Slice 5: review draft PR #925 (issue #924) and merge it into `modular-simping` after human review. Only
-then start Slice 6 from the merged `modular-simping`: add `base/modifiers/`, add `kind: "calendar"` to
-platform events (now `modules/world/events/slp-platform-events.ts`, read by
-`modules/settings/slp-settings.ts`), move calendar activation into a kind dispatch table, expose
-active guidance and modifiers from one timestamp, and inject the modifier provider into the
-subscription price calculation (`modules/economy/slp-creator-pricing.ts` and the `data/economy`
-subscribe path). Resolve pending decisions 3–4 first if the maintainer wants them in Slice 6.
+Slice 6: review draft PR #927 (issue #926) and merge it into `modular-simping` after human review.
+Only then start Slice 7 (client state and hooks) from the merged `modular-simping`: split
+`packages/client/src/hooks/use-slurp.ts` by feature, move the shared query keys and common types
+into client `base/state/`, keep each query key factory defined exactly once so cache identity does
+not split, move the Slurp-specific discovery, refresh, and media helpers into the new namespace, and
+keep the generic `use-creator-personas.ts` hook outside Slurp with its explicit
+`lib/api-client.ts` host override intact. Slice 7 also owns pending decision 5: twelve client files
+under `components/slurp/` plus `use-slurp.ts` still import server rule files directly and must be
+routed through `shared/src/slp/` or a client module. Pending decisions 3 and 4 remain open and are
+not Slice 7 blockers.
 
 Earlier items:
 
-1. Review and merge draft PR #916 into `modular-simping` after its required review. Do not start
-   Slice 4 until PR #916 is merged because Slice 4 is the storage point of no return.
+1. Review and merge draft PR #916 into `modular-simping` after its required review.
 2. After Slice 10, open the final PR `modular-simping` → `staging` as Slurp2 `0.1.0` (one changelog
    entry, integration-only `0.0.x` ZIPs removed, one rebuild, full live lifecycle proof).

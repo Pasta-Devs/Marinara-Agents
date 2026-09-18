@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.0.29 — 2026-09-18
+
+- No visible changes. Added the cross-feature event modifier seam.
+
 ## 0.0.28 — 2026-09-18
 
 - No visible changes. Moved the server services into pure rules, data, and feature modules.
