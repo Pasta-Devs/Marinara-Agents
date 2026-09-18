@@ -1,22 +1,22 @@
 import assert from "node:assert/strict";
 
-import { slurpCreatorReach } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-reach.js";
+import { slurpCreatorReach } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-reach.js";
 import {
   planSlurpWorldPulse,
   slurpPulseBudget,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world-pulse.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world-pulse.js";
 import {
   planSlurpWorldTick,
   slurpCommissionChancePerDay,
   slurpMessageChancePerDay,
   slurpQuestionChancePerDay,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world.js";
 import {
   SLURP_REALISTIC_TUNING,
   SLURP_TUNING_ACTIONS_PER_TICK_CEILING,
   slurpSimulationTuningSchema,
   slurpTuningForPreset,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-tuning.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/base/model/slp-tuning.js";
 
 const realistic = slurpTuningForPreset("realistic");
 const lively = slurpTuningForPreset("lively");

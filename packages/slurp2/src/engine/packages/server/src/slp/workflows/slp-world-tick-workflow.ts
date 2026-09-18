@@ -1,9 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { logger } from "../../lib/logger.js";
-import { drainSlurpAudienceReplies } from "../../services/slurp/slurp-audience-reply.operation.js";
-import { drainSlurpPendingText } from "../../services/slurp/slurp-pending-text.service.js";
-import { topUpSlurpReactionBank } from "../../services/slurp/slurp-reaction-bank.operation.js";
-import { advanceSlurpWorld } from "../../services/slurp/slurp-world.operation.js";
+import { drainSlurpAudienceReplies } from "../features/audience/slp-audience-contract.js";
+import { drainSlurpPendingText } from "../features/world/slp-world-contract.js";
+import { topUpSlurpReactionBank } from "../features/world/slp-world-contract.js";
+import { advanceSlurpWorld } from "../features/world/slp-world-contract.js";
 
 /** World work that runs when the player opens the notification stream. Each step fails soft. */
 export async function slpCatchUpWorldOnOpen(app: FastifyInstance) {

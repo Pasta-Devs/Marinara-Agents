@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
 
-import { resolveSlurpTextConnection } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-connection.js";
+import { resolveSlurpTextConnection } from "../packages/slurp2/src/engine/packages/server/src/slp/base/identity/slp-connection.js";
 import { slurp2Source } from "./slurp2-source";
 
 const root = join(import.meta.dirname, "..");

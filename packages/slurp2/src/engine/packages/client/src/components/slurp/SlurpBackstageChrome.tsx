@@ -7,7 +7,7 @@ import { ProfileInitial } from "./SlurpShell";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { cn } from "../../lib/utils";
 import { estimateSlurpSimulation } from "./slurp-simulation-estimate";
-import { slurpActivePlatformEvents } from "../../../../server/src/services/slurp/slurp-platform-events.js";
+import { slurpActivePlatformEvents } from "../../../../server/src/slp/modules/world/events/slp-platform-events.js";
 import {
   destinationForTarget,
   SLURP_BACKSTAGE_SECTION_LABELS,

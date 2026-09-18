@@ -11,16 +11,16 @@ import {
   slurpCommissionChancePerDay,
   slurpMessageChancePerDay,
   slurpQuestionChancePerDay,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world.js";
 import {
   scoreSlurpRapport,
   emptySlurpRapportFacts,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-rapport.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-rapport.js";
 import {
   slurpCreatorReplyChance,
   slurpCreatorOpenerKind,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.js";
-import { slurpAudienceReaction } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world-copy.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world.js";
+import { slurpAudienceReaction } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world-copy.js";
 import { slurp2Source } from "./slurp2-source";
 
 const root = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages");

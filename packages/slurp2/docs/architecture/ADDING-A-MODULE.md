@@ -9,7 +9,9 @@ Use this checklist with `README.md` in this folder.
    or server. Name it `slp-name.ts(x)` or `SlpName.tsx`.
 3. **Promote only with a reason.** Move client presentation to `modules/` only when a second real
    feature uses it, or when it is an explicit domain primitive (Creator, post, Story, poll, coin).
-   Move code to `base/` only when it is domain-neutral.
+   Move code to `base/` only when it is domain-neutral. On the server, put a pure domain rule (no
+   database, storage, Fastify, or model call) in `modules/<domain>/` and persistence in
+   `data/<domain>/`; routes, services, operations, and schedulers stay in `features/<name>/`.
 4. **Expose the smallest contract.** When another feature or a workflow needs the capability, add
    or extend `slp-<name>-contract.ts` in the owning feature. Import only that file from outside.
 5. **Keep files small.** Stay under 400 lines where you can; 800 is the hard ceiling.

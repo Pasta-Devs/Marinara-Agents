@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { slurp2Source } from "./slurp2-source";
 
@@ -34,33 +33,33 @@ assert.doesNotMatch(entry, /migrateLegacy/u, "slurp2 must not touch legacy Slurp
 // Every table this package declares must carry the slurp2_ prefix. Sharing a name with the
 // host's built-in slurp_* tables makes registerTables keep the existing definition, which
 // silently hands legacy Slurp's rows to this package.
-const schemaSource = readFileSync(join(src, "db/schema/slurp.ts"), "utf8");
+const schemaSource = slurp2Source(join(src, "db/schema/slurp.ts"));
 for (const [, table] of schemaSource.matchAll(/fileTable\(\s*"([a-z0-9_]+)"/gu)) {
   assert.ok(table.startsWith("slurp2_"), `table ${table} must be namespaced to slurp2`);
 }
 
 // The schema module is the single source of truth: no hand-maintained list to drift.
-const schema = readFileSync(join(src, "db/schema/slurp.ts"), "utf8");
+const schema = slurp2Source(join(src, "db/schema/slurp.ts"));
 const declared = [...schema.matchAll(/fileTable\(\s*"?([a-z_]*)/gu)].length;
 assert.ok(declared > 15, `expected the full Slurp table set, saw ${declared}`);
 
 // A host that cannot hold the new tables must degrade, not fail. The feed reads follower counts
 // from the funnel, so an unsupported table there took down a surface that predates the funnel.
 const store = join(src, "slp");
-const helper = readFileSync(join(store, "base/host/slp-host-tables.ts"), "utf8");
+const helper = slurp2Source(join(store, "base/host/slp-host-tables.ts"));
 assert.match(helper, /\[file-storage\] Unsupported table/u, "only the host's own error may be swallowed");
 for (const file of [
-  "features/audience/slp-audience-storage-funnel.ts",
-  "features/notifications/slp-notification-storage.ts",
-  "features/messages/slp-messages-storage-facet.ts",
+  "data/audience/slp-audience-storage-funnel.ts",
+  "data/notifications/slp-notification-storage.ts",
+  "data/messages/slp-messages-storage-facet.ts",
 ]) {
-  const text = readFileSync(join(store, file), "utf8");
+  const text = slurp2Source(join(store, file));
   assert.match(text, /return tolerateMissingTables\(storage, \{/u, `${file} must degrade`);
 }
 
 // Counting must still answer for every creator asked about, or a caller reading the map by id
 // gets undefined where it expects a number.
-const population = readFileSync(join(store, "features/audience/slp-audience-storage-funnel.ts"), "utf8");
+const population = slurp2Source(join(store, "data/audience/slp-audience-storage-funnel.ts"));
 assert.match(
   population,
   /countFollowersForCreators: \(creatorAccountIds[\s\S]*?new Map\(creatorAccountIds\.map\(\(id\) => \[id, 0\]\)\)/u,

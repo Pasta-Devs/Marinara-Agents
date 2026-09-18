@@ -3,20 +3,17 @@
 // scheduler every minute and the creator re-answered the same message about a hundred times before
 // the fan spoke again.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { readSlurpDmReply } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-dm-response.js";
+import { readSlurpDmReply } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-dm-response.js";
+import { slurp2Source } from "./slurp2-source";
 
-const storage = readFileSync(
+const storage = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
-  "utf8",
 );
-const scheduler = readFileSync(
+const scheduler = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message-scheduler.service.ts",
-  "utf8",
 );
-const replyMethods = readFileSync(
+const replyMethods = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-reply-methods.ts",
-  "utf8",
 );
 
 // The obligation is `needsReply` plus a fan message to answer. Requiring the fan to have spoken

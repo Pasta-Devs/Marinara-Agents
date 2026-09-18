@@ -1,36 +1,30 @@
 import { noodlerTargetedRefreshSchema, noodlerGenerationRequestSchema } from "@marinara-engine/shared";
 import { z } from "zod";
-import { getSlurpPostGuidance, updateSlurpPostGuidance } from "../../base/settings/slp-post-guidance-storage.js";
-import {
-  SLURP_BUILT_IN_POST_GUIDANCE,
-  SLURP_POST_GUIDANCE_MAX_LENGTH,
-} from "../../../services/slurp/slurp-post-guidance.js";
-import { resolveSlurpTextConnection } from "../../../services/slurp/slurp-connection.js";
-import { generateSlurpPostGuidanceDraft } from "../../../services/slurp/slurp-post-guidance-draft.service.js";
+import { getSlurpPostGuidance, updateSlurpPostGuidance } from "../../data/settings/slp-post-guidance-storage.js";
+import { SLURP_BUILT_IN_POST_GUIDANCE, SLURP_POST_GUIDANCE_MAX_LENGTH } from "../../modules/feed/slp-post-guidance.js";
+import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
+import { generateSlurpPostGuidanceDraft } from "./slp-post-guidance-draft-service.js";
 import { logger } from "../../../lib/logger.js";
-import { getErrorMessage } from "../../../services/slurp/slurp-public-support.js";
-import {
-  getNoodlerImageConnections,
-  updateNoodlerImageConnections,
-} from "../../../services/slurp/slurp-image-connections.js";
+import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
+import { getNoodlerImageConnections, updateNoodlerImageConnections } from "../../base/media/slp-image-connections.js";
 import {
   generateAndApplyNoodlerPost,
   refreshAllNoodlerCreatorsNow,
   refreshTargetedNoodlerCreatorsNow,
-} from "../../../services/slurp/slurp-post.operation.js";
-import { resolveSlurpAutomaticPostAccess } from "../../../services/slurp/slurp-generation.service.js";
+} from "./slp-post-operation.js";
+import { resolveSlurpAutomaticPostAccess } from "./slp-generation-service.js";
 import {
   admissionModeForRequest,
   isConnectionAdmissionFailure,
 } from "../../../services/generation/connection-admission.js";
 import type { FastifyInstance } from "fastify";
-import { slurpPostTypeSchema } from "../../base/host/slp-request-schemas.js";
+import { slurpPostTypeSchema } from "../../modules/requests/slp-request-schemas.js";
 import {
   type DecodedNoodlerMediaRequest,
   decodeNoodlerMediaRequest,
   sendNoodlerMediaError,
 } from "../../base/host/slp-multipart.js";
-import type { SlpRouteDeps } from "../../base/host/slp-viewer-context.js";
+import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
 const slurpTargetedRefreshSchema = noodlerTargetedRefreshSchema.extend({
   access: z.enum(["public", "locked"]).optional(),

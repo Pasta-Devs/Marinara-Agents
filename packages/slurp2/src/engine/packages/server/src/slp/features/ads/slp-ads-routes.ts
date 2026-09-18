@@ -1,18 +1,15 @@
 import { z } from "zod";
-import { SLURP_GARNISH_PLATFORM, garnishContextForViewer } from "../../../services/slurp/slurp-garnish-context.js";
+import { SLURP_GARNISH_PLATFORM, garnishContextForViewer } from "./slp-garnish-context.js";
 import { newId } from "../../../utils/id-generator.js";
-import {
-  unlinkGarnishAdImage,
-  resolveGarnishAdImageAbsolutePath,
-} from "../../../services/slurp/slurp-garnish-image.js";
-import { generateGarnishAdImage } from "../../../services/slurp/slurp-garnish-image.service.js";
+import { unlinkGarnishAdImage, resolveGarnishAdImageAbsolutePath } from "./slp-garnish-image.js";
+import { generateGarnishAdImage } from "./slp-garnish-image-service.js";
 import { basename, dirname } from "path";
 import { existsSync } from "fs";
-import { resolveNoodlerMediaVariant } from "../../../services/slurp/slurp-media.js";
-import { syncGarnishAdsWithLorebook } from "../../../services/slurp/slurp-garnish-sync.service.js";
+import { resolveNoodlerMediaVariant } from "../../base/media/slp-media.js";
+import { syncGarnishAdsWithLorebook } from "./slp-garnish-sync-service.js";
 import { createLorebooksStorage } from "../../../services/storage/lorebooks.storage.js";
-import { readGarnishLorebookContext } from "../../../services/slurp/slurp-garnish-lorebook.js";
-import { generateGarnishAds, retireWeakGarnishAds } from "../../../services/slurp/slurp-garnish-generation.service.js";
+import { readGarnishLorebookContext } from "./slp-garnish-lorebook.js";
+import { generateGarnishAds, retireWeakGarnishAds } from "./slp-garnish-generation-service.js";
 import { qualityScores } from "../../../services/garnish-ads/garnish-ads.rating.js";
 import type { GarnishAd } from "../../../services/garnish-ads/garnish-ads.types.js";
 import {
@@ -21,7 +18,7 @@ import {
   GARNISH_EXPORT_VERSION,
 } from "../../../services/garnish-ads/garnish-ads.export.js";
 import type { FastifyInstance } from "fastify";
-import type { SlpRouteDeps } from "../../base/host/slp-viewer-context.js";
+import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
 export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   const { ads, characters, noodle, resolveViewerPersona } = deps;

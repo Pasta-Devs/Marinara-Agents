@@ -6,16 +6,16 @@ import {
   slurpImprovementSnapshot,
   slurpStageProfileInput,
   slurpImprovementDraftProposals,
-} from "../../../../services/slurp/slurp-improvement.js";
+} from "../../../modules/creators/improvement/slp-improvement.js";
 import { slurpImprovementJobs, slurpImprovementProposals } from "../../../../db/schema/slurp.js";
 import { eq } from "../../../../db/file-query.js";
 import { now, newId } from "../../../../utils/id-generator.js";
-import { resolveSlurpTextConnection } from "../../../../services/slurp/slurp-connection.js";
-import { generateNoodlerStageProfileDraft } from "../../../../services/slurp/slurp-stage-profile-draft.service.js";
-import { getErrorMessage } from "../../../../services/slurp/slurp-public-support.js";
+import { resolveSlurpTextConnection } from "../../../base/identity/slp-connection.js";
+import { generateNoodlerStageProfileDraft } from "../slp-stage-profile-draft-service.js";
+import { getErrorMessage } from "../../../modules/creators/slp-public-support.js";
 import { logger } from "../../../../lib/logger.js";
 import type { FastifyInstance } from "fastify";
-import type { SlpRouteDeps } from "../../../base/host/slp-viewer-context.js";
+import type { SlpRouteDeps } from "../../viewer/slp-viewer-contract.js";
 
 /**
  * The Creator improvement-job runner. Created once; on creation it re-queues jobs a restart

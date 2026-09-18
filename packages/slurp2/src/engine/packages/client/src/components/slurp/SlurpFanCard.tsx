@@ -3,7 +3,7 @@ import { useTranslation as useUiTranslation } from "react-i18next";
 import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
 import { useSlurpAudienceMember } from "../../hooks/use-slurp";
 import { cn } from "../../lib/utils";
-import { SLURP_CHARACTER_FAN_PREFIX } from "../../../../server/src/services/slurp/slurp-audience-characters.js";
+import { SLURP_CHARACTER_FAN_PREFIX } from "../../../../server/src/slp/modules/audience/slp-audience-characters.js";
 
 /** Population ids carry this prefix. An id with it has a fan card; an account id does not. */
 export const SLURP_AUDIENCE_ID_PREFIX = "slurp-fan:";

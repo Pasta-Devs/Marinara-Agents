@@ -1,14 +1,14 @@
 // A mood that only changes word choice is a number. A mood that changes how fast somebody answers,
 // and how many messages they send, is a person.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 
 import {
   slurpReplyPacing,
   slurpReplyBubbleDelayMs,
   splitSlurpReplyBurst,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-messaging.js";
-import { scoreSlurpRapport } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-rapport.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-messaging.js";
+import { scoreSlurpRapport } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-rapport.js";
+import { slurp2Source } from "./slurp2-source";
 
 const rapport = (score: number) => ({ score, tier: "regular" as const, contributions: [] });
 const pace = (mood: number, online = true) =>
@@ -99,9 +99,8 @@ const secondDelay = slurpReplyBubbleDelayMs({
 assert.ok(firstDelay >= 500 && secondDelay >= 500, "bubble delays must be positive");
 assert.ok(firstDelay <= 30_000 && secondDelay <= 30_000, "bubble delays must stay bounded");
 
-const operation = readFileSync(
+const operation = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message.operation.ts",
-  "utf8",
 );
 // The mood the pacing reads is healed first, so a fan is not kept waiting over an old argument.
 assert.match(operation, /currentMood = recoverSlurpMood\([\s\S]*?mood: currentMood,/u);
@@ -110,32 +109,28 @@ assert.match(operation, /reply\.latitude === "normal"[\s\S]{0,80}?reply\.moodShi
 
 // Being rude in public counts as much as being rude in private. A creator who forgave in the
 // comments what she would not forgive in a DM would not read as one person.
-const commentReply = readFileSync(
+const commentReply = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-reply-generation.service.ts",
-  "utf8",
 );
 assert.match(commentReply, /moodShift: generated\.moodShift/u);
 assert.match(commentReply, /noodleResponseFormat\(input\.connection\.model, "noodler_dm"\)/u);
 assert.doesNotMatch(commentReply, /noodleGeneratedNoodlerReplySchema/u);
 
-const creatorReply = readFileSync(
+const creatorReply = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-creator-reply.operation.ts",
-  "utf8",
 );
 assert.match(creatorReply, /applyExternalMoodShift\(claim\.viewer\.id, claim\.creator\.id, moodShift\)/u);
 // Never at the price of the reply, which is already written by then.
 assert.match(creatorReply, /applyExternalMoodShift[\s\S]{0,120}?\.catch\(/u);
 
 // A generated audience member's feelings are not a relationship the player has.
-const audienceReply = readFileSync(
+const audienceReply = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-audience-reply.operation.ts",
-  "utf8",
 );
 assert.doesNotMatch(audienceReply, /applyExternalMoodShift/u);
 
-const storage = readFileSync(
+const storage = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
-  "utf8",
 );
 // An ordinary comment must not cost a storage write on every reply in the world.
 assert.match(storage, /if \(shift === "same"\) return;/u);

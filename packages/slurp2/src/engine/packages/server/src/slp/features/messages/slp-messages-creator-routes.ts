@@ -1,15 +1,15 @@
 import { z } from "zod";
-import { SLURP_DEFAULT_RAPPORT_WEIGHTS } from "../../../services/slurp/slurp-rapport.js";
-import { SLURP_DM_POLICIES } from "../../../services/slurp/slurp-messaging.js";
-import { replyToSlurpMessage } from "../../../services/slurp/slurp-message.operation.js";
-import { slurpDynamicPriceTarget } from "../../../services/slurp/slurp-creator-pricing.js";
+import { SLURP_DEFAULT_RAPPORT_WEIGHTS } from "../../modules/messages/slp-rapport.js";
+import { SLURP_DM_POLICIES } from "../../modules/messages/slp-messaging.js";
+import { replyToSlurpMessage } from "./slp-message-operation.js";
+import { slurpDynamicPriceTarget } from "../../modules/economy/slp-creator-pricing.js";
 import { isDebugAgentsEnabled } from "../../../config/runtime-config.js";
-import { resolveSlurpTextConnection } from "../../../services/slurp/slurp-connection.js";
+import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
-import { buildSlurpMessagePrompt } from "../../../services/slurp/slurp-message-generation.service.js";
-import { describeSlurpDayVibe } from "../../../services/slurp/slurp-day-vibe.service.js";
+import { buildSlurpMessagePrompt } from "./slp-message-generation-service.js";
+import { describeSlurpDayVibe } from "../world/slp-world-contract.js";
 import type { FastifyInstance } from "fastify";
-import { personaQuerySchema } from "./slp-messages-schemas.js";
+import { personaQuerySchema } from "../../modules/messages/slp-messages-schemas.js";
 import type { SlpMessagesContext } from "./slp-messages-context.js";
 
 /**

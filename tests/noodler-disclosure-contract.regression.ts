@@ -1,15 +1,14 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import {
   isNoodlerDisclosureDowngrade,
   noodlerDisclosureReviewReasons,
   projectNoodlerAudienceProfile,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-disclosure";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/creators/slp-disclosure";
 import {
   compareMinimizedNoodlerSourceSnapshot,
   isMinimizedNoodlerSourceSnapshot,
   minimizeNoodlerSourceSnapshot,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-source";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/base/identity/slp-source";
 import { slurp2Source } from "./slurp2-source";
 
 const managedProfile = {
@@ -125,17 +124,15 @@ assert.deepEqual(
   },
 );
 
-const generationPrivacy = readFileSync(
+const generationPrivacy = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
-  "utf8",
 );
 // The privacy core now lives in a leaf module so tests can execute it instead of grepping it.
 // slurp-identity-protection.regression.ts covers the behaviour; these assertions only hold the
 // wiring in place. Do not move this logic back into the service: nothing there can be imported.
 assert.match(generationPrivacy, /stageProfileContainsSourceDetails/u);
-const identityPrivacy = readFileSync(
+const identityPrivacy = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-identity-protection.ts",
-  "utf8",
 );
 assert.match(identityPrivacy, /source\.scenario/u);
 assert.match(identityPrivacy, /source\.appearance/u);
@@ -147,9 +144,8 @@ assert.match(generationPrivacy, /Disclosure is hinted\. The creator's other publ
 assert.match(generationPrivacy, /Never confirm a guess/u);
 assert.match(identityPrivacy, /mode === "hinted" \? "you-know-who" : "someone"/u);
 
-const imagesPrivacy = readFileSync(
+const imagesPrivacy = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-images.service.ts",
-  "utf8",
 );
 // Open and Hinted both get image references, for personas as well as characters. Slurp has no
 // Secret tier any more, so nothing gates references on disclosure.
@@ -163,16 +159,14 @@ const storagePrivacy = slurp2Source("packages/slurp2/src/engine/packages/server/
 assert.match(storagePrivacy, /rawIdentityDisclosure === "secret" \? "hinted" : rawIdentityDisclosure/u);
 assert.doesNotMatch(storagePrivacy, /\?\? "secret"/u);
 
-const draftPrivacy = readFileSync(
+const draftPrivacy = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-stage-profile-draft.service.ts",
-  "utf8",
 );
 assert.match(draftPrivacy, /# Open-secret inspiration brief/u);
 assert.match(draftPrivacy, /noodlerConcealedSourceText\(input\.source\?\.data\)/u);
 // The concealed seed still withholds the canonical story beats, which are what someone could look up.
-const promptSafety = readFileSync(
+const promptSafety = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-prompt-safety.ts",
-  "utf8",
 );
 const concealedStart = promptSafety.indexOf("export function noodlerConcealedSourceText");
 const concealedEnd = promptSafety.indexOf("/** Character canon is private behavioral context");
@@ -180,9 +174,8 @@ assert.ok(concealedStart >= 0 && concealedEnd > concealedStart, "concealed-seed 
 const concealedPrompt = promptSafety.slice(concealedStart, concealedEnd);
 assert.doesNotMatch(concealedPrompt, /scenario|backstory|source\.name/u);
 
-const artworkPrivacy = readFileSync(
+const artworkPrivacy = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-public-profiles.service.ts",
-  "utf8",
 );
 // Only an OPEN creator may inherit the literal source photo as its avatar/banner. Hinted must
 // look like the same person through *generated* artwork (see the images-service reference-image
@@ -190,9 +183,8 @@ const artworkPrivacy = readFileSync(
 // creator on sight, defeating the one promise hinted disclosure makes.
 assert.match(artworkPrivacy, /if \(input\.disclosureMode !== "open"\) return \{ avatarUrl: null, bannerUrl: null \};/u);
 
-const fanActivityPrivacy = readFileSync(
+const fanActivityPrivacy = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-fan-activity.service.ts",
-  "utf8",
 );
 // Locked posts are eligible fan-activity targets, but only their title reaches the prompt — a
 // fan reply must never be able to restate paid content it was never shown.
@@ -209,7 +201,7 @@ assert.match(fanActivityPrivacy, /Posts marked locked are paid posts\. Only subs
 // fires on the wrong transition.
 const disclosureRankTable = /secret: 0,\s*hinted: 1,\s*open: 2,/u;
 assert.match(
-  readFileSync("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-disclosure.ts", "utf8"),
+  slurp2Source("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-disclosure.ts"),
   disclosureRankTable,
 );
 assert.match(

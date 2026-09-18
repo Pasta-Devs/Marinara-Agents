@@ -46,6 +46,8 @@ assert.deepEqual(
 assert.deepEqual(
   getSlurp2UnseenReleases("0.0.4").map((release) => release.version),
   [
+    "0.0.28",
+    "0.0.27",
     "0.0.26",
     "0.0.25",
     "0.0.24",
@@ -64,14 +66,14 @@ assert.deepEqual(
     "0.0.10",
     "0.0.9",
     "0.0.8",
-    "0.0.7",
-    "0.0.6",
   ],
   "an update from the previous release must show only the new release",
 );
 assert.deepEqual(
   getSlurp2UnseenReleases("0.0.2").map((release) => release.version),
   [
+    "0.0.28",
+    "0.0.27",
     "0.0.26",
     "0.0.25",
     "0.0.24",
@@ -90,14 +92,14 @@ assert.deepEqual(
     "0.0.10",
     "0.0.9",
     "0.0.8",
-    "0.0.7",
-    "0.0.6",
   ],
   "a skipped update must retain every unseen release",
 );
 assert.deepEqual(
   getSlurp2UnseenReleases("0.0.8").map((release) => release.version),
   [
+    "0.0.28",
+    "0.0.27",
     "0.0.26",
     "0.0.25",
     "0.0.24",
@@ -121,6 +123,8 @@ assert.deepEqual(
 assert.deepEqual(
   getSlurp2UnseenReleases("0.0.9").map((release) => release.version),
   [
+    "0.0.28",
+    "0.0.27",
     "0.0.26",
     "0.0.25",
     "0.0.24",
@@ -143,6 +147,8 @@ assert.deepEqual(
 assert.deepEqual(
   getSlurp2UnseenReleases("0.0.10").map((release) => release.version),
   [
+    "0.0.28",
+    "0.0.27",
     "0.0.26",
     "0.0.25",
     "0.0.24",
@@ -164,6 +170,8 @@ assert.deepEqual(
 assert.deepEqual(
   getSlurp2UnseenReleases("0.0.11").map((release) => release.version),
   [
+    "0.0.28",
+    "0.0.27",
     "0.0.26",
     "0.0.25",
     "0.0.24",
@@ -184,6 +192,8 @@ assert.deepEqual(
 assert.deepEqual(
   getSlurp2UnseenReleases("0.0.12").map((release) => release.version),
   [
+    "0.0.28",
+    "0.0.27",
     "0.0.26",
     "0.0.25",
     "0.0.24",
@@ -203,6 +213,8 @@ assert.deepEqual(
 assert.deepEqual(
   getSlurp2UnseenReleases("0.0.13").map((release) => release.version),
   [
+    "0.0.28",
+    "0.0.27",
     "0.0.26",
     "0.0.25",
     "0.0.24",
@@ -220,49 +232,86 @@ assert.deepEqual(
 );
 assert.deepEqual(
   getSlurp2UnseenReleases("0.0.14").map((release) => release.version),
-  ["0.0.26", "0.0.25", "0.0.24", "0.0.22", "0.0.21", "0.0.20", "0.0.19", "0.0.18", "0.0.17", "0.0.16", "0.0.15"],
+  [
+    "0.0.28",
+    "0.0.27",
+    "0.0.26",
+    "0.0.25",
+    "0.0.24",
+    "0.0.22",
+    "0.0.21",
+    "0.0.20",
+    "0.0.19",
+    "0.0.18",
+    "0.0.17",
+    "0.0.16",
+    "0.0.15",
+  ],
   "an update from 0.0.14 must show the layout and follow fix release",
 );
 assert.deepEqual(
   getSlurp2UnseenReleases("0.0.15").map((release) => release.version),
-  ["0.0.26", "0.0.25", "0.0.24", "0.0.22", "0.0.21", "0.0.20", "0.0.19", "0.0.18", "0.0.17", "0.0.16"],
+  [
+    "0.0.28",
+    "0.0.27",
+    "0.0.26",
+    "0.0.25",
+    "0.0.24",
+    "0.0.22",
+    "0.0.21",
+    "0.0.20",
+    "0.0.19",
+    "0.0.18",
+    "0.0.17",
+    "0.0.16",
+  ],
   "an update from 0.0.15 must show the audience redesign release",
 );
 assert.deepEqual(
   getSlurp2UnseenReleases("0.0.16").map((release) => release.version),
-  ["0.0.26", "0.0.25", "0.0.24", "0.0.22", "0.0.21", "0.0.20", "0.0.19", "0.0.18", "0.0.17"],
+  ["0.0.28", "0.0.27", "0.0.26", "0.0.25", "0.0.24", "0.0.22", "0.0.21", "0.0.20", "0.0.19", "0.0.18", "0.0.17"],
   "an update from 0.0.16 must show the Backstage release",
 );
 assert.deepEqual(
   getSlurp2UnseenReleases("0.0.17").map((release) => release.version),
-  ["0.0.26", "0.0.25", "0.0.24", "0.0.22", "0.0.21", "0.0.20", "0.0.19", "0.0.18"],
+  ["0.0.28", "0.0.27", "0.0.26", "0.0.25", "0.0.24", "0.0.22", "0.0.21", "0.0.20", "0.0.19", "0.0.18"],
   "an update from 0.0.17 must show the reply and post length release",
 );
 assert.deepEqual(
   getSlurp2UnseenReleases("0.0.18").map((release) => release.version),
-  ["0.0.26", "0.0.25", "0.0.24", "0.0.22", "0.0.21", "0.0.20", "0.0.19"],
+  ["0.0.28", "0.0.27", "0.0.26", "0.0.25", "0.0.24", "0.0.22", "0.0.21", "0.0.20", "0.0.19"],
   "an update from 0.0.18 must show the force reply and setup fix releases",
 );
 assert.deepEqual(
   getSlurp2UnseenReleases("0.0.19").map((release) => release.version),
-  ["0.0.26", "0.0.25", "0.0.24", "0.0.22", "0.0.21", "0.0.20"],
+  ["0.0.28", "0.0.27", "0.0.26", "0.0.25", "0.0.24", "0.0.22", "0.0.21", "0.0.20"],
   "an update from 0.0.19 must show the setup and schedule fix release",
 );
 assert.deepEqual(
   getSlurp2UnseenReleases("0.0.22").map((release) => release.version),
-  ["0.0.26", "0.0.25", "0.0.24"],
+  ["0.0.28", "0.0.27", "0.0.26", "0.0.25", "0.0.24"],
   "an update from 0.0.22 must show both source layout releases",
 );
 assert.deepEqual(
   getSlurp2UnseenReleases("0.0.24").map((release) => release.version),
-  ["0.0.26", "0.0.25"],
+  ["0.0.28", "0.0.27", "0.0.26", "0.0.25"],
   "an update from 0.0.24 must show the entry point move release",
 );
 assert.deepEqual(
   getSlurp2UnseenReleases("0.0.25").map((release) => release.version),
-  ["0.0.26"],
+  ["0.0.28", "0.0.27", "0.0.26"],
   "an update from 0.0.25 must show the route split release",
 );
-assert.deepEqual(getSlurp2UnseenReleases("0.0.26"), [], "the current release must not reopen an acknowledged splash");
+assert.deepEqual(
+  getSlurp2UnseenReleases("0.0.26").map((release) => release.version),
+  ["0.0.28", "0.0.27"],
+  "an update from 0.0.26 must show the storage split release",
+);
+assert.deepEqual(
+  getSlurp2UnseenReleases("0.0.27").map((release) => release.version),
+  ["0.0.28"],
+  "an update from 0.0.27 must show the service split release",
+);
+assert.deepEqual(getSlurp2UnseenReleases("0.0.28"), [], "the current release must not reopen an acknowledged splash");
 
 console.log("slurp2 release notes mirror CHANGELOG.md");

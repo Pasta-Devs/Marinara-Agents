@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -8,7 +7,7 @@ import {
   slurpPostLikeCount,
   slurpPostReplyCount,
   slurpPostUnlockCount,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-reach.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-reach.js";
 import { slurp2Source } from "./slurp2-source";
 
 const born = "2026-01-01T00:00:00.000Z";
@@ -134,9 +133,8 @@ assert.doesNotMatch(
   /realFollowers: 0/u,
   "no reach call may hardcode an empty audience now that the funnel exists",
 );
-const wallet = readFileSync(
+const wallet = slurp2Source(
   join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-wallet.ts"),
-  "utf8",
 );
 assert.doesNotMatch(wallet, /slurp-reach|slurpCreatorReach|slurpPost/u, "the wallet must never read synthetic reach");
 

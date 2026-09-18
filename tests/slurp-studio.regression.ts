@@ -1,16 +1,15 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
   slurpFollowerMilestone,
   slurpMilestonesCrossed,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-milestones.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-milestones.js";
 import {
   openSlurpGoal,
   readSlurpGoal,
   slurpGoalProgress,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-goal.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-goal.js";
 import { slurp2Source } from "./slurp2-source";
 
 // ── Milestones ──────────────────────────────────────────────────────────────
@@ -138,7 +137,7 @@ assert.match(
   /goalForViewer && !editing && \(/u,
   "The audience goal must render without taking the composer's slot",
 );
-const disclosure = readFileSync(join(root, "server/src/services/slurp/slurp-disclosure.ts"), "utf8");
+const disclosure = slurp2Source(join(root, "server/src/services/slurp/slurp-disclosure.ts"));
 assert.match(disclosure, /AUDIENCE_FIELDS\.map/u, "the audience projection must stay an allowlist");
 
 // ── Diegetic by default, optimisation behind a door ─────────────────────────

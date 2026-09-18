@@ -1,16 +1,14 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { slurp2Source } from "./slurp2-source";
 
 const home = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
-const shell = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpShell.tsx", "utf8");
+const shell = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpShell.tsx");
 const english = slurp2Source("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json");
-const store = readFileSync("packages/slurp2/src/engine/packages/client/src/stores/slurp-package.store.ts", "utf8");
+const store = slurp2Source("packages/slurp2/src/engine/packages/client/src/stores/slurp-package.store.ts");
 const hooks = slurp2Source("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts");
 const messages = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx");
-const messageStorage = readFileSync(
+const messageStorage = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
-  "utf8",
 );
 const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
 const messageRoutes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts");

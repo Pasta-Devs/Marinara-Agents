@@ -1,14 +1,14 @@
 import { z } from "zod";
-import { replyToSlurpMessage } from "../../../services/slurp/slurp-message.operation.js";
+import { replyToSlurpMessage } from "./slp-message-operation.js";
 import { logger } from "../../../lib/logger.js";
-import { parseSlurpCheatDirective } from "../../../services/slurp/slurp-cheat-directive.js";
-import { SLURP_DEV_CHEAT_MAX_COINS } from "../../../services/slurp/slurp-wallet.js";
-import { generateNoodlerCreatorArtwork } from "../../../services/slurp/slurp-artwork.operation.js";
-import { createScheduledFollowUps } from "../../../services/slurp/slurp-follow-up.js";
-import { createSlurpReplyQueueStorage } from "./slp-reply-queue-storage.js";
-import { reactToSlurpPayment } from "../../../services/slurp/slurp-payment-reaction.js";
+import { parseSlurpCheatDirective } from "../../modules/messages/slp-cheat-directive.js";
+import { SLURP_DEV_CHEAT_MAX_COINS } from "../../modules/economy/slp-wallet.js";
+import { generateNoodlerCreatorArtwork } from "../creators/slp-creators-contract.js";
+import { createScheduledFollowUps } from "../../modules/messages/slp-follow-up.js";
+import { createSlurpReplyQueueStorage } from "../../data/messages/slp-reply-queue-storage.js";
+import { reactToSlurpPayment } from "../economy/slp-economy-contract.js";
 import type { FastifyInstance } from "fastify";
-import { personaQuerySchema } from "./slp-messages-schemas.js";
+import { personaQuerySchema } from "../../modules/messages/slp-messages-schemas.js";
 import type { SlpMessagesContext } from "./slp-messages-context.js";
 
 const sendSchema = z.object({
@@ -159,7 +159,7 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
       return { status: "accepted", kind: directive.kind, minutes: directive.minutes };
     }
     if (directive.kind === "follow_up") {
-      const { parseTimingToMinutes } = await import("../../../services/slurp/slurp-follow-up.js");
+      const { parseTimingToMinutes } = await import("../../modules/messages/slp-follow-up.js");
       const minutes = parseTimingToMinutes(directive.timing);
       if (!minutes || minutes < 1 || minutes > 7 * 24 * 60)
         return reply.code(400).send({ status: "rejected", reason: "timing_invalid" });

@@ -1,13 +1,11 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
 import { slurp2Source } from "./slurp2-source";
 
 const root = join(import.meta.dirname, "..");
-const panel = readFileSync(
+const panel = slurp2Source(
   join(root, "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx"),
-  "utf8",
 );
 const home = slurp2Source(join(root, "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx"));
 const settings = slurp2BackstageSource();
@@ -15,21 +13,17 @@ const storage = slurp2Source(
   join(root, "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
 );
 const routes = slurp2Source(join(root, "packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts"));
-const creatorCard = readFileSync(
+const creatorCard = slurp2Source(
   join(root, "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpCreatorPostCard.tsx"),
-  "utf8",
 );
-const postCard = readFileSync(
+const postCard = slurp2Source(
   join(root, "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpPostCard.tsx"),
-  "utf8",
 );
-const fanActivity = readFileSync(
+const fanActivity = slurp2Source(
   join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-fan-activity.service.ts"),
-  "utf8",
 );
-const responseFormat = readFileSync(
+const responseFormat = slurp2Source(
   join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-response-format.ts"),
-  "utf8",
 );
 
 assert.match(

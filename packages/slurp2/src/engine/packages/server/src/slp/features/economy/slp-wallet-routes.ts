@@ -1,22 +1,22 @@
 import { type NoodlerSubscriber, noodlerSubscriptionSchema, noodlerUnlockSchema } from "@marinara-engine/shared";
 import { z } from "zod";
-import { slurpDayKey, SLURP_DEV_CHEAT_MAX_COINS } from "../../../services/slurp/slurp-wallet.js";
+import { slurpDayKey, SLURP_DEV_CHEAT_MAX_COINS } from "../../modules/economy/slp-wallet.js";
 import {
   claimSlurpPaymentIntentForDatabase,
   applySlurpTipEffectsForDatabase,
   compensateSlurpPaymentForDatabase,
   resetSlurpPaymentIntentForDatabase,
   settleSlurpPaymentIntentForDatabase,
-} from "../messages/slp-messages-contract.js";
-import { reactToSlurpPayment } from "../../../services/slurp/slurp-payment-reaction.js";
-import { slurpPayoutAllowance } from "../../../services/slurp/slurp-earnings.js";
-import { isNoodlerHiddenFromViewer } from "../../../services/slurp/slurp-access.js";
-import { createSlurpPopulationStorage } from "../audience/slp-audience-contract.js";
-import { SLURP_NAMED_CAST_LIMIT } from "../../../services/slurp/slurp-population.js";
-import { noodlerUnlockPriceFromMetadata } from "../../../services/slurp/slurp-prices.js";
+} from "../../data/messages/slp-messages-storage-context.js";
+import { reactToSlurpPayment } from "./slp-payment-reaction.js";
+import { slurpPayoutAllowance } from "../../modules/economy/slp-earnings.js";
+import { isNoodlerHiddenFromViewer } from "../../base/identity/slp-access.js";
+import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
+import { SLURP_NAMED_CAST_LIMIT } from "../../modules/audience/slp-population.js";
+import { noodlerUnlockPriceFromMetadata } from "../../modules/economy/slp-prices.js";
 import type { FastifyInstance } from "fastify";
-import { noodlerPageCursorSchema, NOODLER_FEED_PAGE_SIZE } from "../../base/host/slp-request-schemas.js";
-import type { SlpRouteDeps } from "../../base/host/slp-viewer-context.js";
+import { noodlerPageCursorSchema, NOODLER_FEED_PAGE_SIZE } from "../../modules/requests/slp-request-schemas.js";
+import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
 /**
  * A subscriber row, widened for the generated audience.

@@ -5,7 +5,7 @@ import {
   NOODLER_UNLOCK_COST,
   noodlerUnlockPriceFromMetadata,
   noodlerUnlockPriceMetadata,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-prices";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/economy/slp-prices";
 import { slurp2Source } from "./slurp2-source";
 
 // Prices became real in the coin economy, but only when the player turns it on. Until 1.0.12 the

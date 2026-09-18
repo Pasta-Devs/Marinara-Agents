@@ -1,8 +1,8 @@
 import { noodlerViewerPersonaSchema } from "@marinara-engine/shared";
-import { createSlurpEventsStorage } from "./slp-notification-storage.js";
+import { createSlurpEventsStorage } from "../../data/notifications/slp-notification-storage.js";
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
-import type { SlpRouteDeps } from "../../base/host/slp-viewer-context.js";
+import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 import { readSlpNotifications } from "./slp-notification-read-model.js";
 
 /**

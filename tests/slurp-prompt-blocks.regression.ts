@@ -4,8 +4,8 @@ import {
   normalizeSlurpPromptBlockOverrides,
   SLURP_PROMPT_DESCRIPTIONS,
   SLURP_PROMPT_IDS,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-prompt-blocks.ts";
-import { readFileSync } from "node:fs";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/base/prompting/slp-prompt-blocks.ts";
+import { slurp2Source } from "./slurp2-source";
 
 assert.equal(SLURP_PROMPT_DESCRIPTIONS.length, SLURP_PROMPT_IDS.length);
 
@@ -42,13 +42,11 @@ const output = composeSlurpPromptBlocks(
 
 assert.equal(output, "required output\ncustom task\nrequired safety");
 
-const dmSource = readFileSync(
+const dmSource = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message-generation.service.ts",
-  "utf8",
 );
-const commentSource = readFileSync(
+const commentSource = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-reply-generation.service.ts",
-  "utf8",
 );
 assert.match(dmSource, /id: "outputContract"/u);
 assert.match(dmSource, /id: "relationshipState"/u);

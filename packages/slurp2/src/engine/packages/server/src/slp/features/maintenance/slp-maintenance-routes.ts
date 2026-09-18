@@ -1,23 +1,19 @@
 import { z } from "zod";
-import { previewSlurpAutopurge, runSlurpAutopurge } from "../../../services/slurp/slurp-autopurge.js";
+import { previewSlurpAutopurge, runSlurpAutopurge } from "./slp-autopurge.js";
 import { noodleAccounts, noodlePosts, noodleInteractions, slurpMessages } from "../../../db/schema/slurp.js";
 import { now } from "../../../utils/id-generator.js";
-import { getSlurpOperationStatus, trySlurpDataDeletion } from "../../../services/slurp/slurp-operation-lock.js";
-import {
-  summarizeNoodlerMedia,
-  removeNoodlerAccountMedia,
-  removeAllNoodlerMedia,
-} from "../../../services/slurp/slurp-media.js";
-import { tryNoodlerAccountOperation } from "../../../services/slurp/slurp-account-operation-lock.js";
+import { getSlurpOperationStatus, trySlurpDataDeletion } from "../../base/locking/slp-operation-lock.js";
+import { summarizeNoodlerMedia, removeNoodlerAccountMedia, removeAllNoodlerMedia } from "../../base/media/slp-media.js";
+import { tryNoodlerAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
 import {
   getNoodlerImageConnections,
   updateNoodlerImageConnections,
   clearNoodlerImageConnections,
-} from "../../../services/slurp/slurp-image-connections.js";
-import { getSlurpPostGuidance, updateSlurpPostGuidance } from "../../base/settings/slp-post-guidance-storage.js";
-import { isAmbientNoodleAccount, dismissAmbientNoodleAccount } from "../../../services/slurp/slurp-ambient-profiles.js";
+} from "../../base/media/slp-image-connections.js";
+import { getSlurpPostGuidance, updateSlurpPostGuidance } from "../../data/settings/slp-post-guidance-storage.js";
+import { isAmbientNoodleAccount, dismissAmbientNoodleAccount } from "../../data/audience/slp-ambient-profiles.js";
 import type { FastifyInstance } from "fastify";
-import type { SlpRouteDeps } from "../../base/host/slp-viewer-context.js";
+import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
 export async function slpMaintenanceRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   const { noodle } = deps;

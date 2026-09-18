@@ -13,10 +13,12 @@ const engineRoot = join(repoRoot, "packages/slurp2/src/engine");
 const ROOTS = ["packages/client/src/slp", "packages/server/src/slp", "packages/shared/src/slp"];
 const EXCEPTIONS = ["packages/client/src/lib/api-client.ts", "packages/server/src/services/garnish-ads"];
 const MAX_LINES = 800;
+// Server modules hold pure domain rules: they may not reach the database, host storage, or Fastify.
+const SERVER_MODULE_IO = /(^fastify$|\/db\/(connection|file-query)(\.js)?$|\/services\/storage\/)/u;
 // Lower rank may not import higher rank. `app`/entries compose; locales are data.
 const RANKS: Record<string, Record<string, number>> = {
   client: { base: 0, locales: 0, modules: 1, features: 2, app: 3, entry: 4 },
-  server: { base: 0, features: 1, workflows: 2, entry: 3 },
+  server: { base: 0, modules: 1, data: 2, features: 3, workflows: 4, entry: 5 },
   shared: { shared: 0 },
 };
 
@@ -72,6 +74,9 @@ function architectureViolations(root: string, owned: readonly string[]): string[
     const lines = source.split("\n").length - (source.endsWith("\n") ? 1 : 0);
     if (lines > MAX_LINES) violations.push(`size: ${path} exceeds ${MAX_LINES} lines`);
     for (const specifier of imports(source)) {
+      if (at.side === "server" && at.layer === "modules" && SERVER_MODULE_IO.test(specifier)) {
+        violations.push(`purity: ${path} -> ${specifier} gives a pure module I/O`);
+      }
       if (!specifier.startsWith(".")) continue;
       const targetPath = posix.join(posix.dirname(path), specifier);
       const target = place(targetPath);
@@ -116,6 +121,20 @@ assert.match(
 // The real tree. New roots may still be absent; the fixtures below keep this from being vacuous.
 assert.deepEqual(architectureViolations(engineRoot, slurp2Owned), []);
 
+// Garnish stays a separate module: inside Slurp2's server tree only the ads feature may import it.
+const serverSlp = join(engineRoot, "packages/server/src/slp");
+const garnishImporters = walk(serverSlp).filter((path) =>
+  imports(readFileSync(join(serverSlp, path), "utf8")).some((specifier) =>
+    /\/services\/garnish-ads\//u.test(specifier),
+  ),
+);
+assert.ok(garnishImporters.length > 0, "the Slurp ads adapters must be found");
+assert.deepEqual(
+  garnishImporters.filter((path) => !path.startsWith("features/ads/")),
+  [],
+  "only features/ads may import the Garnish module",
+);
+
 // Logical source keys must keep reading exactly the files they name until a split remaps them.
 for (const [key, files] of Object.entries(SLURP2_SOURCE_MODULES)) {
   const direct = files.map((file) => readFileSync(join(engineRoot, file), "utf8")).join("\n");
@@ -137,11 +156,18 @@ const valid: Record<string, string> = {
   "packages/client/src/slp/locales/en.json": "{}\n",
   "packages/shared/src/slp/slp-autopurge-time.ts": "export const slpPurgeAt = 1;\n",
   "packages/server/src/slp/slp-server-entry.ts":
-    'import "./workflows/slp-subscription-workflow";\nimport "./features/economy/slp-economy-storage";\n',
+    'import "./workflows/slp-subscription-workflow";\nimport "./data/slp-storage";\n',
   "packages/server/src/slp/workflows/slp-subscription-workflow.ts":
     'import { e } from "../features/economy/slp-economy-contract.js";\nimport { m } from "../base/modifiers/slp-modifier.types";\n',
   "packages/server/src/slp/features/economy/slp-economy-contract.ts": 'import "./slp-economy-storage";\n',
-  "packages/server/src/slp/features/economy/slp-economy-storage.ts": 'import "../../base/host/slp-db";\n',
+  "packages/server/src/slp/features/economy/slp-economy-storage.ts":
+    'import "../../base/host/slp-db";\nimport "../../data/slp-storage";\nimport "../../modules/economy/slp-prices";\n',
+  "packages/server/src/slp/data/slp-storage.ts": 'import "./economy/slp-economy-facet";\n',
+  "packages/server/src/slp/data/economy/slp-economy-facet.ts":
+    'import "../../base/host/slp-db";\nimport "../../modules/economy/slp-prices";\nimport "../../modules/audience/slp-scale";\n',
+  "packages/server/src/slp/modules/economy/slp-prices.ts":
+    'import "../../base/host/slp-db";\nimport "../audience/slp-scale";\nimport type { Row } from "../../../../db/schema/slurp.js";\n',
+  "packages/server/src/slp/modules/audience/slp-scale.ts": "export const scale = 1;\n",
   "packages/server/src/slp/features/messages/commissions/slp-commission-storage.ts":
     'import "../../economy/slp-economy-contract";\n',
   "packages/server/src/slp/base/host/slp-db.ts": 'import { db } from "../../../db/connection.js";\n',
@@ -154,6 +180,30 @@ const cases: Array<[string, Record<string, string>, readonly string[], RegExp]> 
     { "packages/server/src/slp/base/host/slp-bad.ts": 'import "../../features/economy/slp-economy-storage";\n' },
     fixtureOwned,
     /direction: .*slp-bad\.ts/u,
+  ],
+  [
+    "base imports a pure module",
+    { "packages/server/src/slp/base/host/slp-bad.ts": 'import "../../modules/economy/slp-prices";\n' },
+    fixtureOwned,
+    /direction: .*base\/host\/slp-bad\.ts/u,
+  ],
+  [
+    "pure module imports data",
+    { "packages/server/src/slp/modules/economy/slp-bad.ts": 'import "../../data/slp-storage";\n' },
+    fixtureOwned,
+    /direction: .*modules\/economy\/slp-bad\.ts/u,
+  ],
+  [
+    "data imports a feature",
+    { "packages/server/src/slp/data/economy/slp-bad.ts": 'import "../../features/economy/slp-economy-storage";\n' },
+    fixtureOwned,
+    /direction: .*data\/economy\/slp-bad\.ts/u,
+  ],
+  [
+    "pure module performs I/O",
+    { "packages/server/src/slp/modules/economy/slp-bad.ts": 'import { db } from "../../../../db/connection.js";\n' },
+    fixtureOwned,
+    /purity: .*modules\/economy\/slp-bad\.ts/u,
   ],
   [
     "client module imports a feature",

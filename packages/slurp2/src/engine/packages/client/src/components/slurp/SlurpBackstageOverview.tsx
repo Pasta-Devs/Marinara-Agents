@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { nextSlurpAutopurgeRunAt } from "../../../../shared/src/slp/slp-autopurge-time.js";
 import { Toggle } from "./SlurpSettingsControls";
-import { slurpAudiencePresetFor } from "../../../../server/src/services/slurp/slurp-tuning.js";
+import { slurpAudiencePresetFor } from "../../../../server/src/slp/base/model/slp-tuning.js";
 import type { SlurpBackstagePageProps } from "./SlurpSettings";
 import type { SlurpBackstageSection, SlurpBackstageTarget } from "./slurp-backstage";
 import { formatDateTime } from "./SlurpDateTime";

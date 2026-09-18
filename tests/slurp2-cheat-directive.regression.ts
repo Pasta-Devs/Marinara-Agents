@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { parseSlurpCheatDirective } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-cheat-directive.js";
+import { parseSlurpCheatDirective } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-cheat-directive.js";
 import { slurp2Source } from "./slurp2-source";
 
 assert.deepEqual(parseSlurpCheatDirective("coins 42"), { kind: "coins", coins: 42 });
@@ -48,9 +47,8 @@ assert.match(cheatRoute, /adjustCheatState\(thread\.id/u);
 assert.match(cheatRoute, /addScheduledFollowUps\(thread\.id, followUps\)/u);
 assert.match(cheatRoute, /price: messaging\.ppvPrice/u);
 
-const storage = readFileSync(
+const storage = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
-  "utf8",
 );
 const adjustCheatState = storage.slice(
   storage.indexOf("async adjustCheatState"),

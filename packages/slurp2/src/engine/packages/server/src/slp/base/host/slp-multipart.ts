@@ -1,6 +1,6 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
-import type { NoodlerPostMediaUpload } from "../../../services/slurp/slurp-media.js";
-import { trySlurpWrite } from "../../../services/slurp/slurp-operation-lock.js";
+import type { NoodlerPostMediaUpload } from "../media/slp-media.js";
+import { trySlurpWrite } from "../locking/slp-operation-lock.js";
 import { isAllowedImageBuffer, safeFetch } from "../../../utils/security.js";
 import { logger } from "../../../lib/logger.js";
 import { z } from "zod";

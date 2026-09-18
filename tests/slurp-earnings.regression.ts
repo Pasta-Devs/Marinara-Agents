@@ -10,7 +10,7 @@ import {
   reverse,
   slurpEarningsKey,
   slurpCreatorRevenueShare,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-earnings.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/economy/slp-earnings.js";
 import { slurp2Source } from "./slurp2-source";
 
 const at = new Date("2026-09-05T12:00:00.000Z");

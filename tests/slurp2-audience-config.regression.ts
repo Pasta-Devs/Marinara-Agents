@@ -5,9 +5,9 @@ import { join } from "node:path";
 import {
   slurpFanTypesDefault,
   slurpFanTypesSchema,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-fan-types.js";
-import { slurpModelBudgetSchema } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-model-budget.js";
-import { slurpSimulationTuningSchema } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-tuning.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-fan-types.js";
+import { slurpModelBudgetSchema } from "../packages/slurp2/src/engine/packages/server/src/slp/base/model/slp-model-budget.js";
+import { slurpSimulationTuningSchema } from "../packages/slurp2/src/engine/packages/server/src/slp/base/model/slp-tuning.js";
 
 const exported = JSON.stringify({
   version: 1,

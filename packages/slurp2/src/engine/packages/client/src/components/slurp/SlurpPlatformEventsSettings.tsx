@@ -8,7 +8,7 @@ import {
   slurpPlatformEventSchema,
   slurpPlatformEventsDefault,
   type SlurpPlatformEvent,
-} from "../../../../server/src/services/slurp/slurp-platform-events.js";
+} from "../../../../server/src/slp/modules/world/events/slp-platform-events.js";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { cn } from "../../lib/utils";
 import { SectionTitle } from "./SlurpSettingsControls";

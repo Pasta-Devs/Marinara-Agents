@@ -5,11 +5,13 @@ import {
   readSlurpProject,
   SLURP_ARC_HISTORY_POSTS,
   SLURP_ARC_RANDOM_TWISTS,
+  slurpProjectRecord,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-project.js";
+import {
   slurpProjectAdvance,
   slurpProjectDirect,
   slurpProjectInstruction,
-  slurpProjectRecord,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-project.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-arc-progress.js";
 import { slurp2Source } from "./slurp2-source";
 
 const at = new Date("2026-09-13T10:00:00.000Z");

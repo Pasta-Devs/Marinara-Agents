@@ -202,5 +202,5 @@ const found = (readdirSync(root, { recursive: true }) as string[])
 assert.deepEqual(found, [...EXPECTED].sort(), "the Slurp2 route multiset changed");
 assert.equal(found.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 179);
 const entry = readFileSync(join(root, "slp-server-entry.ts"), "utf8");
-assert.match(entry, /mountSlpRoutes\(Object\.assign\(router, \{ db: app\.db \}\)/u);
+assert.match(entry, /mountSlpRoutes\(Object\.assign\(router, \{ db: app\.db, noodle \}\)/u);
 assert.equal(existsSync(join(root, "features/maintenance/slp-backup-routes.ts")), true);

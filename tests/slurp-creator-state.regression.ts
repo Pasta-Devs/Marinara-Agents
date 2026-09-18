@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 
 import {
   activeSlurpModifiers,
@@ -25,7 +24,7 @@ import {
   slurpCreatorStateCanUseMedia,
   type SlurpCreatorState,
   type SlurpThreadState,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-creator-state.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/creators/slp-creator-state.js";
 import { slurp2Source } from "./slurp2-source";
 
 const now = "2026-09-09T12:00:00.000Z";
@@ -177,15 +176,11 @@ assert.match(slurpStorage, /adjustCreatorState\(post\.authorAccountId, \{\s*ener
 // Charged after the transaction resolves: a stored post must never fail over a settings write.
 assert.match(slurpStorage, /const created = await db\.transaction\(/u);
 
-const images = readFileSync(
-  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-images.service.ts",
-  "utf8",
-);
+const images = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-images.service.ts");
 assert.match(images, /adjustCreatorState\(input\.account\.id, \{ energy: -SLURP_ENERGY_COST\.image \}\)/u);
 
-const commissions = readFileSync(
+const commissions = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-commission-delivery.service.ts",
-  "utf8",
 );
 assert.match(commissions, /energy: -SLURP_ENERGY_COST\.commission/u);
 
@@ -239,16 +234,14 @@ assert.deepEqual(
 const morning = decaySlurpCreatorState({ ...creator, exposure: 90 }, 8, now);
 assert.ok(morning.exposure < 10);
 
-const messageOperation = readFileSync(
+const messageOperation = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message.operation.ts",
-  "utf8",
 );
 assert.match(messageOperation, /creatorState\.energy >= 35/u);
 assert.match(messageOperation, /slurpCreatorStateCanUseMedia\(creatorState, thread\.threadState\)/u);
 
-const generation = readFileSync(
+const generation = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message-generation.service.ts",
-  "utf8",
 );
 assert.match(generation, /creatorState\?: SlurpCreatorState/u);
 assert.match(generation, /Arousal is not permission/u);

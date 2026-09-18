@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -7,11 +6,11 @@ import {
   slurpPulseBudget,
   SLURP_PULSE_MAX_PER_TICK,
   SLURP_PULSE_POST_MAX_AGE_HOURS,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world-pulse.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world-pulse.js";
 import {
   SLURP_REALISTIC_TUNING,
   SLURP_TUNING_PULSE_PER_TICK_CEILING,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-tuning.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/base/model/slp-tuning.js";
 import { slurp2Source } from "./slurp2-source";
 
 const targets = [
@@ -104,13 +103,12 @@ assert.ok(
 );
 
 // ── Wiring ──────────────────────────────────────────────────────────────────
-const world = readFileSync(
+const world = slurp2Source(
   join(
     import.meta.dirname,
     "..",
     "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.operation.ts",
   ),
-  "utf8",
 );
 // Driven by minutes, not days. The day-scale plan cannot fire inside a session, which is exactly
 // where a roleplay product needs the world to move.

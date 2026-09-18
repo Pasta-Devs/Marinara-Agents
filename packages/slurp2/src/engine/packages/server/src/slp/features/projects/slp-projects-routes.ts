@@ -4,7 +4,7 @@ import {
   SLURP_GOAL_MIN_TARGET,
   SLURP_GOAL_MAX_TARGET,
   slurpGoalProgress,
-} from "../../../services/slurp/slurp-goal.js";
+} from "../../modules/projects/slp-goal.js";
 import {
   SLURP_PROJECT_CHAPTER_MAX_LENGTH,
   SLURP_PROJECT_MAX_CHAPTERS,
@@ -12,22 +12,24 @@ import {
   SLURP_PROJECT_DIRECTION_MAX_LENGTH,
   SLURP_ARC_INTENSITIES,
   SLURP_PROJECT_STATUSES,
-  SLURP_ARC_DIRECTOR_ACTIONS,
-  SLURP_ARC_TWIST_MAX_LENGTH,
-  slurpCrossoverForViewer,
-  SLURP_ARC_AUTO_MODES,
-  SLURP_ARC_SOURCES,
   SLURP_ARC_PACES,
   SLURP_PROJECT_MAX_ACTIVE,
+} from "../../modules/projects/slp-project.js";
+import { SLURP_ARC_DIRECTOR_ACTIONS } from "../../modules/projects/slp-arc-progress.js";
+import { SLURP_ARC_TWIST_MAX_LENGTH } from "../../modules/projects/slp-project.js";
+import {
+  SLURP_ARC_AUTO_MODES,
+  SLURP_ARC_SOURCES,
   slurpGeneratedArcProject,
   slurpArcTypeFromProject,
-} from "../../../services/slurp/slurp-project.js";
-import { isSlurpViewerActorAccount } from "../../base/settings/slp-settings.js";
-import { isNoodlerHiddenFromViewer } from "../../../services/slurp/slurp-access.js";
-import { generateSlurpArc, SlurpArcGenerationFailure } from "../../../services/slurp/slurp-arc-generation.service.js";
+} from "../../modules/projects/slp-arc-library.js";
+import { slurpCrossoverForViewer } from "../../modules/projects/slp-arc-crossover.js";
+import { isSlurpViewerActorAccount } from "../../modules/settings/slp-settings.js";
+import { isNoodlerHiddenFromViewer } from "../../base/identity/slp-access.js";
+import { generateSlurpArc, SlurpArcGenerationFailure } from "./slp-arc-generation-service.js";
 import { isConnectionAdmissionFailure } from "../../../services/generation/connection-admission.js";
 import type { FastifyInstance } from "fastify";
-import type { SlpRouteDeps } from "../../base/host/slp-viewer-context.js";
+import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
 export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   const { creatorBelongsToViewer, noodle, resolveViewerPersona } = deps;

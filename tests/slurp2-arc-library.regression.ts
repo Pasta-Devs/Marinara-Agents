@@ -7,11 +7,13 @@ import { join } from "node:path";
 import {
   makeSlurpProject,
   readSlurpProject,
+  type SlurpArcType,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-project.ts";
+import {
   slurpArcLibraryFromLegacy,
   slurpAutoArcType,
-  slurpProjectTick,
-  type SlurpArcType,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-project.ts";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-arc-library.ts";
+import { slurpProjectTick } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-arc-progress.ts";
 import { slurp2Source } from "./slurp2-source";
 
 const at = new Date("2026-09-13T10:00:00.000Z");

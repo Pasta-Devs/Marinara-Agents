@@ -1,21 +1,24 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 
 import {
   makeSlurpProject,
   readSlurpProject,
+  slurpProjectRecord,
+  type SlurpArcType,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-project.js";
+import {
   slurpArcFanVotes,
-  slurpArcTypeFromProject,
-  slurpGeneratedArcProject,
   slurpProjectAdvance,
   slurpProjectChoose,
   slurpProjectDirect,
   slurpProjectInstruction,
   slurpProjectPollDue,
-  slurpProjectRecord,
   slurpProjectTick,
-  type SlurpArcType,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-project.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-arc-progress.js";
+import {
+  slurpArcTypeFromProject,
+  slurpGeneratedArcProject,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-arc-library.js";
 import { slurp2Source } from "./slurp2-source";
 
 const at = new Date("2026-09-13T10:00:00.000Z");
@@ -139,9 +142,8 @@ assert.match(
   }),
   /ask them in your own voice: Where to\? \(options: Lisbon \/ Stay home\)/,
 );
-const generation = readFileSync(
+const generation = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
-  "utf8",
 );
 assert.match(generation, /arcPoll \? \{ poll: arcPoll \}/);
 

@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { slurp2Source } from "./slurp2-source";
 
-const card = readFileSync("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-share-card.ts", "utf8");
+const card = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-share-card.ts");
 // Every field on the card is user- or model-authored, so it reaches the SVG untrusted. One
 // unescaped `&` in a display name would produce invalid XML and fail the whole render.
 assert.match(card, /function escapeXml/u);
@@ -24,10 +23,7 @@ assert.match(shareRoute, /readable\.locked/u, "a locked post must never be rende
 assert.match(shareRoute, /post\.access === "locked"/u, "a locked post must never be rendered on the owner path");
 assert.match(shareRoute, /Content-Disposition/u);
 
-const postCard = readFileSync(
-  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpPostCard.tsx",
-  "utf8",
-);
+const postCard = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpPostCard.tsx");
 const menu = postCard.slice(postCard.indexOf("ui.noodle.noodlepostcard.postActions"));
 // Share is on every post; edit and delete stay behind the management capability.
 assert.match(menu, /ui\.slurp\.post\.share/u);

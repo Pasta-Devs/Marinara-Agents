@@ -61,7 +61,7 @@ import { changedSlurpSettingKeys, isSlurpResettableSection, slurpSettingsResetPa
 import { type NoodlerManagedStageProfile } from "@marinara-engine/shared";
 import { Avatar, getNoodleAccentStyle, NOODLE_PINK } from "./SlurpShell";
 import { slurpActivityPresetForSettings } from "./slurp-activity-presets";
-import { slurpAudiencePresetFor } from "../../../../server/src/services/slurp/slurp-tuning.js";
+import { slurpAudiencePresetFor } from "../../../../server/src/slp/base/model/slp-tuning.js";
 import {
   SLURP_BACKSTAGE_DEFAULT_TARGET,
   SLURP_BACKSTAGE_SECTION_LABELS,

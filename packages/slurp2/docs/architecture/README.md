@@ -8,7 +8,7 @@ layout is tracked in `SLURP-MODULE-PLAN.md` and `SLURP-MODULE-STATUS.md` at the 
 
 ```text
 packages/client/src/slp/    client UI, hooks, state, locales
-packages/server/src/slp/    routes, storage, services, workflows
+packages/server/src/slp/    pure rules, persistence, routes, services, workflows
 packages/shared/src/slp/    pure code imported by both client and server
 ```
 
@@ -49,23 +49,32 @@ Each settings panel lives with the feature whose setting it controls.
 ## Server layers
 
 ```text
-base <- feature internals <- feature contracts <- workflows <- slp-server-entry.ts
+base <- modules <- data <- features <- workflows <- slp-server-entry.ts
 ```
 
-| Layer | Holds |
-|---|---|
-| `base/` | `host/`, `settings/`, `prompting/`, `media/`, `identity/`, `model/`, `locking/`, `modifiers/` |
-| `features/<name>/` | routes, storage facet, table definitions, services, and types for one area |
-| `workflows/` | coordination across features: subscription, world tick, notification |
-| `slp-server-entry.ts` | creates feature implementations and wires them into workflows and routes |
+| Layer | Holds | May import |
+|---|---|---|
+| `base/` | `host/`, `prompting/`, `media/`, `identity/`, `model/`, `locking/`, `modifiers/`: domain-neutral infrastructure | `base` |
+| `modules/<domain>/` | pure domain rules: no database, host storage, Fastify, or model call (`settings/` holds the settings schema, `records/` the stored-record model, `requests/` the shared request schemas) | `base`, `modules` |
+| `data/` | persistence: `host/` storage context, `settings/`, one `<domain>/` facet folder per area, and the `slp-storage.ts` composition | `base`, `modules`, `data` |
+| `features/<name>/` | routes, services, operations, and schedulers for one area | `base`, `modules`, `data`, own feature, other features' contracts |
+| `workflows/` | coordination across features | feature contracts, and everything below `features` |
+| `slp-server-entry.ts` | creates route dependencies and schedulers once and mounts routes in order | everything |
 
-A feature may use `base/` and its own files. It never imports a workflow or the entry.
+`modules/` and `data/` are shared layers: their domain folders organize files, and they may import
+each other's domain folders without contracts. A pure rule never reaches I/O, and persistence never
+reaches a route or a service. A feature never imports a workflow or the entry.
+
+`features/viewer/` holds the shared route plumbing (`slp-route-host.ts`, `slp-viewer-context.ts`)
+that every feature's routes receive through `SlpRouteDeps`. `features/media/` owns image generation
+and media routes, and `features/settings/` owns the settings routes; the domain-neutral image and
+media helpers stay in `base/media/`.
 
 ## Features
 
 Client and server share one feature vocabulary: `creators`, `feed`, `messages`, `discovery`,
 `audience`, `projects`, `economy`, `notifications`, `world`, `ads`, `onboarding`, `maintenance`,
-plus client-only `backstage`. Submodules that are deliberate expansion seams get a folder:
+plus client-only `backstage` and server-only `viewer`, `media`, and `settings`. Submodules that are deliberate expansion seams get a folder:
 `creators/improvement`, `feed/reserve`, `messages/commissions`, `world/events`.
 
 These are not features: Stories (a `modules/story/` presentation composed by Feed), tags
@@ -112,8 +121,10 @@ split into cohesive files as part of its move, never moved whole.
 
 ## Forbidden imports (summary)
 
-- `base/` → `modules/`, `features/`, `app/`, `workflows/`, or an entry.
-- `modules/` → `features/` or `app/`.
+- `base/` → `modules/`, `data/`, `features/`, `app/`, `workflows/`, or an entry.
+- `modules/` → `data/`, `features/`, or `app/`; a server module → `fastify`, `db/connection`,
+  `db/file-query`, or host `services/storage/`.
+- `data/` → `features/`, `workflows/`, or an entry.
 - a feature → another feature's non-contract file, a workflow, or an entry.
 - a workflow → a feature's non-contract file.
 - client `slp` ↔ server `slp`.

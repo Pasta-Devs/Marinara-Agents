@@ -88,7 +88,7 @@ assert.match(settings, /allowRandomUsers/u, "the ambient panel must expose the p
 // The restored draft service imported a symbol its neighbour never re-exported, so it could not
 // bundle. Nothing caught that while no route referenced it.
 const draftService = read("server/src/services/slurp/slurp-invited-post-draft.service.ts");
-assert.match(draftService, /import \{ noodlerSourceText \} from "\.\/slurp-prompt-safety\.js"/u);
+assert.match(draftService, /import \{ noodlerSourceText \} from "\.\.\/\.\.\/base\/prompting\/slp-prompt-safety\.js"/u);
 
 // The inbox only ever listed threads the player opened. A fan writing to your Creator — or a
 // commission the world opened on their behalf — created a thread nobody could reach, so the whole

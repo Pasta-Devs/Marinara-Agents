@@ -7,28 +7,25 @@ import {
   slurpDiscoveryProfileSchema,
   SLURP_DISCOVERY_TAG_LIMIT,
   SLURP_DISCOVERY_GENDERS,
-} from "../../../services/slurp/slurp-discovery-profile.js";
+} from "../../modules/discovery/slp-discovery-profile.js";
 import { z } from "zod";
-import { resolveSlurpTextConnection } from "../../../services/slurp/slurp-connection.js";
-import { generateSlurpConversationSchedule } from "../../../services/slurp/slurp-conversation-schedule-generation.js";
-import { slurpPlatformScaleMultiplier } from "../../../services/slurp/slurp-scale.js";
-import { createSlurpPopulationStorage } from "../audience/slp-audience-contract.js";
-import { slurpCreatorReach } from "../../../services/slurp/slurp-reach.js";
-import { generateNoodlerStageProfileDraft } from "../../../services/slurp/slurp-stage-profile-draft.service.js";
+import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
+import { generateSlurpConversationSchedule } from "../messages/slp-messages-contract.js";
+import { slurpPlatformScaleMultiplier } from "../../modules/audience/slp-scale.js";
+import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
+import { slurpCreatorReach } from "../../modules/audience/slp-reach.js";
+import { generateNoodlerStageProfileDraft } from "./slp-stage-profile-draft-service.js";
 import { logger } from "../../../lib/logger.js";
-import { getErrorMessage } from "../../../services/slurp/slurp-public-support.js";
-import { tryNoodlerAccountOperation } from "../../../services/slurp/slurp-account-operation-lock.js";
-import { resolveNoodlerSourceSnapshot } from "../../../services/slurp/slurp-source-resolve.js";
-import { slurpDisclosureMode, noodlerDisclosureReviewReasons } from "../../../services/slurp/slurp-disclosure.js";
-import {
-  stageProfileContainsPublicIdentity,
-  stageProfileContainsSourceDetails,
-} from "../../../services/slurp/slurp-generation.service.js";
-import { compareNoodlerSourceSnapshots, minimizeNoodlerSourceSnapshot } from "../../../services/slurp/slurp-source.js";
-import { verifyNoodlerSourceRevisionToken } from "../../../services/slurp/slurp-source-revision.js";
+import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
+import { tryNoodlerAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
+import { resolveNoodlerSourceSnapshot } from "../../data/creators/slp-source-resolve.js";
+import { slurpDisclosureMode, noodlerDisclosureReviewReasons } from "../../modules/creators/slp-disclosure.js";
+import { stageProfileContainsPublicIdentity, stageProfileContainsSourceDetails } from "../feed/slp-feed-contract.js";
+import { compareNoodlerSourceSnapshots, minimizeNoodlerSourceSnapshot } from "../../base/identity/slp-source.js";
+import { verifyNoodlerSourceRevisionToken } from "../../base/identity/slp-source-revision.js";
 import type { FastifyInstance } from "fastify";
-import { slurpDiscoveryTagNameSchema } from "../../base/host/slp-request-schemas.js";
-import type { SlpRouteDeps } from "../../base/host/slp-viewer-context.js";
+import { slurpDiscoveryTagNameSchema } from "../../modules/requests/slp-request-schemas.js";
+import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
 const noodleStageProfileUpdateRequestSchema = noodleStageProfileUpdateSchema.extend({
   ...slurpDiscoveryProfileSchema.shape,

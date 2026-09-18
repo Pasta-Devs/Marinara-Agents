@@ -26,7 +26,7 @@ import {
   X,
 } from "lucide-react";
 import { Fragment, useMemo, useRef, useState } from "react";
-import { slurpPostWentViral, slurpReachWeek } from "../../../../server/src/services/slurp/slurp-reach.js";
+import { slurpPostWentViral, slurpReachWeek } from "../../../../server/src/slp/modules/audience/slp-reach.js";
 import {
   canManageNoodleReply,
   noodlePollInputSchema,

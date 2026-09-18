@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 
 import {
   AMBIENT_NOODLE_PROFILES,
   dismissAmbientNoodleAccount,
   ensureAmbientNoodleAccounts,
   withoutHiddenAmbientAccounts,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-ambient-profiles.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/data/audience/slp-ambient-profiles.js";
 import { slurp2Source } from "./slurp2-source";
 
 // In-memory stand-in for the slurp storage methods the seeder uses. Existing rows are never
@@ -90,9 +89,8 @@ async function main() {
     assert.notEqual(profile.displayName, profile.legacyName);
   }
   assert.doesNotMatch(
-    readFileSync(
+    slurp2Source(
       "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-ambient-profile-generation.service.ts",
-      "utf8",
     ),
     /called Noodle/u,
   );

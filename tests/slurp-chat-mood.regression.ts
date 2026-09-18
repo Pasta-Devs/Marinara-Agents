@@ -1,7 +1,6 @@
 // Mood is the fast layer rapport cannot express. The rules that matter are the damping ones: a
 // long-standing fan is forgiven a bad message, a stranger is not, and silence heals.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 
 import {
   applySlurpMood,
@@ -9,8 +8,9 @@ import {
   slurpMoodTone,
   SLURP_MOOD_MAX,
   SLURP_MOOD_MIN,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-mood.js";
-import { readSlurpDmReply } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-dm-response.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-mood.js";
+import { readSlurpDmReply } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-dm-response.js";
+import { slurp2Source } from "./slurp2-source";
 
 const apply = (mood: number, shift: Parameters<typeof applySlurpMood>[0]["shift"], rapportScore = 0) =>
   applySlurpMood({ mood, shift, rapportScore, minutesSinceUpdate: 0 });
@@ -68,9 +68,8 @@ assert.throws(() => readSlurpDmReply({ moodShift: "up" }), /no usable content/u)
 
 // The contract is defined locally. `@marinara-engine/shared` owns the comment-reply schema and is
 // not in this repo, so the direct-message fields cannot be added there.
-const generation = readFileSync(
+const generation = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message-generation.service.ts",
-  "utf8",
 );
 assert.doesNotMatch(generation, /noodleGeneratedNoodlerReplySchema/u);
 assert.match(generation, /noodleResponseFormat\(input\.connection\.model, "noodler_dm"\)/u);
@@ -80,16 +79,14 @@ assert.match(generation, /noodleResponseFormat\(input\.connection\.model, "noodl
 assert.match(generation, /remember: generated\.remember[\s\S]{0,200}?protectNoteOperation/u);
 assert.match(generation, /knownAboutFan: \{[\s\S]{0,240}?working: known\.working/u);
 
-const storage = readFileSync(
+const storage = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
-  "utf8",
 );
 assert.match(storage, /applySlurpThreadNotes\(thread\.notes, input\.remember\)/u);
 
 // The reply is what the fan asked for. Recording the simulation around it must never lose it.
-const operation = readFileSync(
+const operation = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message.operation.ts",
-  "utf8",
 );
 assert.match(operation, /recordReplyOutcome\(thread\.id[\s\S]{0,160}?\.catch\(/u);
 

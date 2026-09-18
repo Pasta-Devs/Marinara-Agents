@@ -210,6 +210,7 @@ const slurp2OwnedSourcePaths = [
         "packages/client/src/slurp-package-entry.tsx",
         "packages/server/src/routes/slurp.routes.ts",
         "packages/server/src/services/storage/slurp.storage.ts",
+        "packages/server/src/services/slurp",
       ].includes(path) && !path.startsWith("packages/server/src/services/storage/slurp-"),
   ),
   "packages/client/src/slp",

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createSlurpPopulationStorage } from "./slp-audience-storage-funnel.js";
+import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
 import {
   planSlurpFanTypeRebalance,
   slurpFanTypeForPinnedOrSeed,
@@ -7,34 +7,31 @@ import {
   slurpFanTypeSpendTier,
   slurpFanTypeWeeklyBudget,
   slurpFanTypeActiveHour,
-} from "../../../services/slurp/slurp-fan-types.js";
-import { ensureAmbientNoodleAccounts, isAmbientNoodleAccount } from "../../../services/slurp/slurp-ambient-profiles.js";
-import { tryNoodleOperation } from "../../../services/slurp/slurp-operation-lock.js";
+} from "../../modules/audience/slp-fan-types.js";
+import { ensureAmbientNoodleAccounts, isAmbientNoodleAccount } from "../../data/audience/slp-ambient-profiles.js";
+import { tryNoodleOperation } from "../../base/locking/slp-operation-lock.js";
 import { noodleAmbientProfileRerollSchema, type NoodleAccount } from "@marinara-engine/shared";
-import { resolveSlurpTextConnection } from "../../../services/slurp/slurp-connection.js";
-import { rerollAmbientNoodleProfiles } from "../../../services/slurp/slurp-ambient-profile-generation.service.js";
+import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
+import { rerollAmbientNoodleProfiles } from "./slp-ambient-profile-generation-service.js";
 import {
   SLURP_FUNNEL_STAGES,
   SLURP_NAMED_CAST_LIMIT,
   isSlurpPopulationMemberId,
-} from "../../../services/slurp/slurp-population.js";
-import { slurpCreatorReach } from "../../../services/slurp/slurp-reach.js";
-import { slurpPlatformScaleMultiplier } from "../../../services/slurp/slurp-scale.js";
+} from "../../modules/audience/slp-population.js";
+import { slurpCreatorReach } from "../../modules/audience/slp-reach.js";
+import { slurpPlatformScaleMultiplier } from "../../modules/audience/slp-scale.js";
 import {
   slurpCharacterIdFromFanEntityId,
   slurpAudienceCharacterFanTypeId,
   slurpAudienceCharacterTraits,
-} from "../../../services/slurp/slurp-audience-characters.js";
-import { isNoodlerHiddenFromViewer } from "../../../services/slurp/slurp-access.js";
-import {
-  runNoodlerFanActivity,
-  getNoodlerFanActivityStatus,
-} from "../../../services/slurp/slurp-fan-activity.operation.js";
+} from "../../modules/audience/slp-audience-characters.js";
+import { isNoodlerHiddenFromViewer } from "../../base/identity/slp-access.js";
+import { runNoodlerFanActivity, getNoodlerFanActivityStatus } from "./slp-fan-activity-operation.js";
 import { isConnectionAdmissionFailure } from "../../../services/generation/connection-admission.js";
-import { getErrorMessage } from "../../../services/slurp/slurp-public-support.js";
+import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
 import { logger } from "../../../lib/logger.js";
 import type { FastifyInstance } from "fastify";
-import type { SlpRouteDeps } from "../../base/host/slp-viewer-context.js";
+import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
 /** The `identity` lock is shared by refresh, reroll, and profile edits, so the 409 stays operation-neutral. */
 const NOODLE_IDENTITY_LOCK_BUSY = "Another Slurp identity operation is already running. Wait for it to finish.";

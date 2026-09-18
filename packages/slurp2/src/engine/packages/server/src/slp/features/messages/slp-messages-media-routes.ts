@@ -4,15 +4,15 @@ import {
   resolveNoodlerMediaAbsolutePath,
   slurpMessageMediaUrl,
   stageSlurpMessageMedia,
-} from "../../../services/slurp/slurp-media.js";
+} from "../../base/media/slp-media.js";
 import { z } from "zod";
 import { existsSync } from "node:fs";
 import { basename, dirname } from "node:path";
-import { resolveSlurpMediaOffer } from "../../../services/slurp/slurp-media-offer.js";
-import { generateSlurpCommissionImage } from "../../../services/slurp/slurp-commission-image.operation.js";
-import { replyToSlurpMessage } from "../../../services/slurp/slurp-message.operation.js";
-import { trySlurpWrite } from "../../../services/slurp/slurp-operation-lock.js";
-import { personaQuerySchema } from "./slp-messages-schemas.js";
+import { resolveSlurpMediaOffer } from "../../modules/economy/slp-media-offer.js";
+import { generateSlurpCommissionImage } from "./commissions/slp-commission-image-operation.js";
+import { replyToSlurpMessage } from "./slp-message-operation.js";
+import { trySlurpWrite } from "../../base/locking/slp-operation-lock.js";
+import { personaQuerySchema } from "../../modules/messages/slp-messages-schemas.js";
 import type { SlpMessagesContext } from "./slp-messages-context.js";
 
 const MESSAGE_MEDIA_MAX_BYTES = 20 * 1024 * 1024;
