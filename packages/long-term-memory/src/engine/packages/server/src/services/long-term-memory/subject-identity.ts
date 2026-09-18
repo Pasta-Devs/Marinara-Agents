@@ -35,6 +35,8 @@ type RosterSubjectInput = {
   id: string;
   name: string;
   aliases?: string[];
+  provenance?: string;
+  sourceScope?: "direct" | "group";
 };
 
 export type TrustedLtmSubjectCatalogEntry = {
@@ -43,12 +45,15 @@ export type TrustedLtmSubjectCatalogEntry = {
   aliases: string[];
   canonicalSlug: string;
   familyId?: string;
+  provenance?: string;
+  sourceScope?: "direct" | "group" | "local_note" | "local_source";
 };
 
 export type TrustedLtmSubjectCatalog = {
   entries: TrustedLtmSubjectCatalogEntry[];
   notes: LtmNote[];
   ambiguousLocalNames?: string[];
+  ambiguousLocalEntries?: Record<string, TrustedLtmSubjectCatalogEntry[]>;
 };
 
 export type LtmSubjectIdentityResolution = {
@@ -88,6 +93,15 @@ export type TrustedLtmNoteSubjectIssue = {
   candidateSubjectKeys: string[];
 };
 
+export type CompetingSubjectRecord = {
+  key: string;
+  name: string;
+  canonicalSlug: string;
+  provenance?: string;
+  sourceScope?: string;
+  collisionKind?: "duplicate_local" | "group_catalog" | "alias_collision" | "mixed";
+};
+
 type CatalogIndex = {
   entries: TrustedLtmSubjectCatalogEntry[];
   byKey: Map<string, TrustedLtmSubjectCatalogEntry>;
@@ -96,6 +110,7 @@ type CatalogIndex = {
   aliases: Map<string, TrustedLtmSubjectCatalogEntry[]>;
   tokens: string[];
   ambiguousLocalNames: ReadonlySet<string>;
+  ambiguousLocalEntries: Map<string, TrustedLtmSubjectCatalogEntry[]>;
 };
 
 type BatchSubjectNameResolution = {
@@ -293,9 +308,47 @@ const GENERIC_SUBJECT_NAMES = new Set([
 
 type SubjectMatch =
   | { status: "matched"; entries: TrustedLtmSubjectCatalogEntry[]; basis: string }
-  | { status: "ambiguous"; keys: string[]; basis: string }
+  | {
+      status: "ambiguous";
+      keys: string[];
+      basis: string;
+      competingRecords?: CompetingSubjectRecord[];
+      collisionSource?: "duplicate_local" | "group_catalog" | "alias_collision" | "mixed";
+    }
   | { status: "cardinality"; count: number; basis: string }
   | { status: "untrusted"; basis: string };
+
+function diagnoseCollision(
+  entries: TrustedLtmSubjectCatalogEntry[],
+  basis?: string,
+): {
+  collisionSource: "duplicate_local" | "group_catalog" | "alias_collision" | "mixed";
+  competingRecords: CompetingSubjectRecord[];
+} {
+  const hasGroup = entries.some((e) => e.sourceScope === "group");
+  const allLocal = entries.every((e) => e.sourceScope === "local_note" || e.sourceScope === "local_source");
+  const collisionSource = hasGroup
+    ? "group_catalog"
+    : basis === "alias"
+      ? "alias_collision"
+      : allLocal
+        ? "duplicate_local"
+        : entries.some((e) => e.sourceScope === "direct")
+          ? "duplicate_local"
+          : "mixed";
+
+  const competingRecords: CompetingSubjectRecord[] = entries.slice(0, 10).map((entry) => ({
+    key: entry.subject.key,
+    name: entry.name,
+    canonicalSlug: entry.canonicalSlug,
+    provenance: entry.provenance ?? entry.subject.key,
+    sourceScope: entry.sourceScope,
+    collisionKind:
+      entry.sourceScope === "group" ? "group_catalog" : basis === "alias" ? "alias_collision" : "duplicate_local",
+  }));
+
+  return { collisionSource, competingRecords };
+}
 
 type ResolvedUnit = {
   unit: LtmEvidenceUnit;
@@ -336,6 +389,17 @@ export async function loadTrustedLtmSubjectCatalog(
       ].map((chat) => [chat.id, chat]),
     ).values(),
   ];
+  const explicitCharacterIds = new Set([
+    ...(scope.characterIds ?? []),
+    ...explicitChats.filter(Boolean).flatMap((chat) => normalizeLtmChatCharacterIds(chat!.characterIds)),
+  ]);
+  const explicitPersonaIds = new Set([
+    ...getLtmScopePersonaIds(scope),
+    ...explicitChats
+      .filter(Boolean)
+      .map((chat) => chat!.personaId ?? undefined)
+      .filter((id): id is string => Boolean(id)),
+  ]);
   const characterIds = uniqueStrings([
     ...(scope.characterIds ?? []),
     ...chats.flatMap((chat) => normalizeLtmChatCharacterIds(chat.characterIds)),
@@ -366,11 +430,14 @@ export async function loadTrustedLtmSubjectCatalog(
     const data = readObject(row.data);
     const name = readName(data.name);
     if (!name) continue;
+    const isDirect = explicitCharacterIds.has(row.id);
     roster.push({
       kind: "character",
       id: row.id,
       name,
       aliases: extractAliases(data),
+      provenance: isDirect ? `roster:character:${row.id}` : `group_roster:character:${row.id}`,
+      sourceScope: isDirect ? "direct" : "group",
     });
   }
   for (const row of personaRows) {
@@ -378,11 +445,14 @@ export async function loadTrustedLtmSubjectCatalog(
     const record = readObject(row.data);
     const name = readName(record.name);
     if (!name) continue;
+    const isDirect = explicitPersonaIds.has(row.id);
     roster.push({
       kind: "persona",
       id: row.id,
       name,
       aliases: extractAliases(record),
+      provenance: isDirect ? `roster:persona:${row.id}` : `group_roster:persona:${row.id}`,
+      sourceScope: isDirect ? "direct" : "group",
     });
   }
 
@@ -413,7 +483,15 @@ export function buildTrustedLtmSubjectCatalog({
 
   const mutable = new Map<
     string,
-    { subject: LtmSubject; name: string; aliases: Set<string>; canonicalSlug: string; familyId?: string }
+    {
+      subject: LtmSubject;
+      name: string;
+      aliases: Set<string>;
+      canonicalSlug: string;
+      familyId?: string;
+      provenance?: string;
+      sourceScope?: "direct" | "group" | "local_note" | "local_source";
+    }
   >();
   for (const item of roster) {
     const ref = { kind: item.kind, id: item.id } satisfies LtmSubjectReference;
@@ -424,6 +502,8 @@ export function buildTrustedLtmSubjectCatalog({
       name: item.name,
       aliases,
       canonicalSlug: normalizeSubjectIdentifier(item.name, "subject"),
+      provenance: item.provenance ?? `${item.kind}:${item.id}`,
+      sourceScope: item.sourceScope ?? "direct",
     });
   }
 
@@ -455,6 +535,8 @@ export function buildTrustedLtmSubjectCatalog({
         ...(localCharacterFamilyFromKey(normalizedSubject.key)
           ? { familyId: localCharacterFamilyFromKey(normalizedSubject.key)! }
           : {}),
+        provenance: `note:${note.id}`,
+        sourceScope: "local_note",
       });
     }
   }
@@ -476,15 +558,25 @@ export function buildTrustedLtmSubjectCatalog({
         aliases: new Set(expandedAliases(name, [])),
         canonicalSlug: normalizeSubjectIdentifier(name, "subject"),
         familyId,
+        provenance: `source_note:${note.id}`,
+        sourceScope: "local_source",
       });
     }
   }
 
-  const localNameCounts = new Map<string, number>();
+  const localNameEntries = new Map<string, TrustedLtmSubjectCatalogEntry[]>();
   for (const entry of mutable.values()) {
     if (!entry.familyId) continue;
     const key = `${entry.familyId}\u0000${entry.canonicalSlug}`;
-    localNameCounts.set(key, (localNameCounts.get(key) ?? 0) + 1);
+    const list = localNameEntries.get(key) ?? [];
+    list.push(entry as TrustedLtmSubjectCatalogEntry);
+    localNameEntries.set(key, list);
+  }
+  const ambiguousLocalEntries: Record<string, TrustedLtmSubjectCatalogEntry[]> = {};
+  for (const [key, list] of localNameEntries.entries()) {
+    if (list.length > 1) {
+      ambiguousLocalEntries[key] = list;
+    }
   }
   const entries = Array.from(mutable.values()).map((entry) => ({
     ...entry,
@@ -497,15 +589,17 @@ export function buildTrustedLtmSubjectCatalog({
   return {
     entries: entries
       .filter(
-        (entry) => !entry.familyId || (localNameCounts.get(`${entry.familyId}\u0000${entry.canonicalSlug}`) ?? 0) === 1,
+        (entry) =>
+          !entry.familyId || (localNameEntries.get(`${entry.familyId}\u0000${entry.canonicalSlug}`)?.length ?? 0) === 1,
       )
       .filter((entry) => !isDominatedUnboundNpcEntry(entry, refBackedIdentityTokens))
       .sort((left, right) => left.subject.key.localeCompare(right.subject.key)),
     notes: notes.filter((note) => note.type === "character" || note.type === "relationship").sort(compareNoteAge),
-    ambiguousLocalNames: [...localNameCounts.entries()]
-      .filter(([, count]) => count > 1)
+    ambiguousLocalNames: [...localNameEntries.entries()]
+      .filter(([, list]) => list.length > 1)
       .map(([key]) => key)
       .sort(),
+    ambiguousLocalEntries,
   };
 }
 
@@ -723,8 +817,10 @@ export function prepareLtmSubjectIdentityContext({
   };
   return {
     identityKeyForUnit(unit) {
-      const hasSubjectNames = unit.subjectNames !== undefined;
-      const match = hasSubjectNames ? resolveNamedUnitSubjects(unit, batchNames) : resolveUnitSubjects(unit, index);
+      const hasSubjectNames = unit.subjectNames !== undefined && unit.subjectNames.length > 0;
+      const match = hasSubjectNames
+        ? resolveNamedUnitSubjects(unit, batchNames, index, context)
+        : resolveUnitSubjects(unit, index);
       if (match.status !== "matched") return noteIdForEvidenceUnit(unit);
       const entries = sortSubjectEntries(match.entries);
       return (
@@ -810,8 +906,10 @@ function resolveLtmSubjectIdentitiesWithContext({
       continue;
     }
 
-    const hasSubjectNames = unit.subjectNames !== undefined;
-    const match = hasSubjectNames ? resolveNamedUnitSubjects(unit, batchNames) : resolveUnitSubjects(unit, index);
+    const hasSubjectNames = unit.subjectNames !== undefined && unit.subjectNames.length > 0;
+    const match = hasSubjectNames
+      ? resolveNamedUnitSubjects(unit, batchNames, index, context)
+      : resolveUnitSubjects(unit, index);
     if (match.status !== "matched") {
       const sourceBackedNpc = hasSubjectNames
         ? null
@@ -1001,7 +1099,7 @@ function preResolveBatchSubjectNames({
   for (const name of names) {
     const normalizedName = normalizeSubjectIdentifier(name, "");
     if (familyId && index.ambiguousLocalNames.has(`${familyId}\u0000${normalizedName}`)) {
-      matches.set(name, { status: "ambiguous", keys: [], basis: "local_family_duplicate" });
+      matches.set(name, localAmbiguousMatch(index, familyId, normalizedName));
       continue;
     }
     const direct = matchDirect(index, normalizedName);
@@ -1122,23 +1220,125 @@ function preResolveBatchSubjectNames({
   return { matches, provisionalKeys };
 }
 
-function resolveNamedUnitSubjects(unit: LtmSubjectIdentityCandidate, batch: BatchSubjectNameResolution): SubjectMatch {
+function resolveAndCacheSubjectName(
+  batch: BatchSubjectNameResolution,
+  index?: CatalogIndex,
+  context?: Pick<
+    PreparedLtmSubjectIdentityContext,
+    "scope" | "mode" | "sourceBackedNpcSourceText" | "sourceBackedNpcSourceTitle"
+  >,
+  name?: string,
+): SubjectMatch {
+  if (!name || !index) return { status: "untrusted", basis: "source_visible_name" };
+  const cached = batch.matches.get(name);
+  if (cached) return cached;
+  const normalizedName = normalizeSubjectIdentifier(name, "");
+  const familyId =
+    (context?.mode === undefined || context?.mode === "roleplay") && context?.scope
+      ? ltmScopeFamilyId(context.scope)
+      : null;
+  if (familyId && index.ambiguousLocalNames.has(`${familyId}\u0000${normalizedName}`)) {
+    const match = localAmbiguousMatch(index, familyId, normalizedName);
+    batch.matches.set(name, match);
+    return match;
+  }
+  const direct = matchDirect(index, normalizedName);
+  if (direct.status !== "untrusted") {
+    batch.matches.set(name, direct);
+    return direct;
+  }
+  const sourceVisible = isSourceBackedProperName(name, [
+    context?.sourceBackedNpcSourceText,
+    context?.sourceBackedNpcSourceTitle,
+  ]);
+  if (!sourceVisible) {
+    const match: SubjectMatch = { status: "untrusted", basis: "source_visible_name" };
+    batch.matches.set(name, match);
+    return match;
+  }
+  if (familyId && context?.scope) {
+    const subject = localCharacterSubjectForName(context.scope, name);
+    if (subject && batch.provisionalKeys.has(subject.key)) {
+      const match: SubjectMatch = { status: "ambiguous", keys: [], basis: "batch_provisional_duplicate" };
+      batch.matches.set(name, match);
+      return match;
+    }
+    if (subject) {
+      const longerEntry = index.entries.find(
+        (entry) =>
+          entry.familyId === familyId &&
+          isLongerVersionOfName(entry.name, name) &&
+          isLocalCharacterSubject(entry.subject),
+      );
+      if (longerEntry) {
+        const match: SubjectMatch = { status: "matched", entries: [longerEntry], basis: "batch_name_alias" };
+        batch.matches.set(name, match);
+        return match;
+      }
+      const entry: TrustedLtmSubjectCatalogEntry = {
+        subject,
+        name,
+        aliases: expandedAliases(name, []),
+        canonicalSlug: normalizedName,
+        familyId,
+      };
+      addCatalogEntry(index, entry);
+      batch.provisionalKeys.add(subject.key);
+      const match: SubjectMatch = {
+        status: "matched",
+        entries: [entry],
+        basis: "source_visible_name",
+      };
+      batch.matches.set(name, match);
+      return match;
+    }
+  }
+  const untrusted: SubjectMatch = { status: "untrusted", basis: "source_visible_name" };
+  batch.matches.set(name, untrusted);
+  return untrusted;
+}
+
+function localAmbiguousMatch(index: CatalogIndex, familyId: string, normalizedName: string): SubjectMatch {
+  const entries = index.ambiguousLocalEntries.get(`${familyId}\u0000${normalizedName}`) ?? [];
+  const { competingRecords } = diagnoseCollision(entries, "local_family_duplicate");
+  return {
+    status: "ambiguous",
+    keys: entries.map(subjectEntryKey),
+    basis: "local_family_duplicate",
+    competingRecords,
+    collisionSource: "duplicate_local",
+  };
+}
+
+function resolveNamedUnitSubjects(
+  unit: LtmSubjectIdentityCandidate,
+  batch: BatchSubjectNameResolution,
+  index?: CatalogIndex,
+  context?: Pick<
+    PreparedLtmSubjectIdentityContext,
+    "scope" | "mode" | "sourceBackedNpcSourceText" | "sourceBackedNpcSourceTitle"
+  >,
+): SubjectMatch {
   const expected = unit.bucket === "character_fact" ? 1 : 2;
   const subjectNames = unit.subjectNames ?? [];
   if (subjectNames.length !== expected) {
     return { status: "cardinality", count: subjectNames.length, basis: "subject_names" };
   }
-  const nameMatches = subjectNames.map(
-    (name) => batch.matches.get(name.trim()) ?? ({ status: "untrusted", basis: "source_visible_name" } as const),
-  );
+  const nameMatches = subjectNames.map((name) => {
+    const trimmed = name.trim();
+    return batch.matches.get(trimmed) ?? resolveAndCacheSubjectName(batch, index, context, trimmed);
+  });
   const ambiguous = nameMatches.filter(
     (match): match is Extract<SubjectMatch, { status: "ambiguous" }> => match.status === "ambiguous",
   );
   if (ambiguous.length > 0) {
+    const competingRecords = ambiguous.flatMap((m) => m.competingRecords ?? []);
     return {
       status: "ambiguous",
       keys: uniqueStrings(ambiguous.flatMap((match) => match.keys)),
       basis: ambiguous[0]!.basis,
+      competingRecords: competingRecords.length > 0 ? competingRecords : undefined,
+      collisionSource: ambiguous[0]!.collisionSource,
     };
   }
   const unmatched = nameMatches.find((match) => match.status !== "matched");
@@ -1318,6 +1518,7 @@ function buildCatalogIndex(catalog: TrustedLtmSubjectCatalog): CatalogIndex {
       (left, right) => right.length - left.length || left.localeCompare(right),
     ),
     ambiguousLocalNames: new Set(catalog.ambiguousLocalNames ?? []),
+    ambiguousLocalEntries: new Map(Object.entries(catalog.ambiguousLocalEntries ?? {})),
   };
 }
 
@@ -1352,6 +1553,13 @@ function resolveUnitSubjects(unit: LtmSubjectIdentityCandidate, index: CatalogIn
   if (unit.bucket === "character_fact") {
     const direct = matchDirect(index, raw);
     if (direct.status !== "untrusted") return direct;
+
+    const traitMatch = matchTraitPrefix(index, raw);
+    const hasCompositeConnector = /\b(?:and|with|plus)\b|_and_|_with_|_plus_|_&_/i.test(raw);
+    if (traitMatch.status === "matched" && !hasCompositeConnector) {
+      return traitMatch;
+    }
+
     const composite = segmentSubjectIdentifier(raw, index).filter(
       (sequence) => new Set(sequence.map(subjectEntryKey)).size > 1,
     );
@@ -1362,7 +1570,7 @@ function resolveUnitSubjects(unit: LtmSubjectIdentityCandidate, index: CatalogIn
         basis: "composite",
       };
     }
-    return matchTraitPrefix(index, raw);
+    return traitMatch;
   }
   return matchRelationship(index, raw);
 }
@@ -1371,14 +1579,52 @@ function matchDirect(index: CatalogIndex, token: string): SubjectMatch {
   if (!token) return { status: "untrusted", basis: "name" };
   const exact = index.exact.get(token) ?? [];
   if (exact.length === 1) return { status: "matched", entries: exact, basis: "exact_name" };
-  if (exact.length > 1) return { status: "ambiguous", keys: exact.map(subjectEntryKey), basis: "exact_name" };
+  if (exact.length > 1) {
+    const { collisionSource, competingRecords } = diagnoseCollision(exact);
+    return {
+      status: "ambiguous",
+      keys: exact.map(subjectEntryKey),
+      basis: "exact_name",
+      competingRecords,
+      collisionSource,
+    };
+  }
   const aliases = index.aliases.get(token) ?? [];
   if (aliases.length === 1) return { status: "matched", entries: aliases, basis: "unique_alias" };
-  if (aliases.length > 1) return { status: "ambiguous", keys: aliases.map(subjectEntryKey), basis: "alias" };
+  if (aliases.length > 1) {
+    const { collisionSource, competingRecords } = diagnoseCollision(aliases, "alias");
+    return {
+      status: "ambiguous",
+      keys: aliases.map(subjectEntryKey),
+      basis: "alias",
+      competingRecords,
+      collisionSource,
+    };
+  }
   const fuzzy = fuzzyMatches(index, token);
   if (fuzzy.length === 1) return { status: "matched", entries: [fuzzy[0]!.entry], basis: "spelling_variation" };
   if (fuzzy.length > 1) {
-    return { status: "ambiguous", keys: fuzzy.map(({ entry }) => subjectEntryKey(entry)), basis: "spelling_variation" };
+    const fuzzyEntries = fuzzy.map(({ entry }) => entry);
+    const { collisionSource, competingRecords } = diagnoseCollision(fuzzyEntries);
+    return {
+      status: "ambiguous",
+      keys: fuzzy.map(({ entry }) => subjectEntryKey(entry)),
+      basis: "spelling_variation",
+      competingRecords,
+      collisionSource,
+    };
+  }
+  for (const [key, entries] of index.ambiguousLocalEntries.entries()) {
+    if (key.endsWith(`\u0000${token}`)) {
+      const { collisionSource, competingRecords } = diagnoseCollision(entries);
+      return {
+        status: "ambiguous",
+        keys: entries.map(subjectEntryKey),
+        basis: "local_family_duplicate",
+        competingRecords,
+        collisionSource,
+      };
+    }
   }
   return { status: "untrusted", basis: "name" };
 }
@@ -1446,7 +1692,15 @@ function matchRelationship(index: CatalogIndex, raw: string): SubjectMatch {
     return { status: "matched", entries: [...pairByIdentity.values()][0]!, basis: "unordered_pair" };
   }
   if (pairByIdentity.size > 1) {
-    return { status: "ambiguous", keys: [...pairByIdentity.keys()], basis: "unordered_pair" };
+    const candidateEntries = [...pairByIdentity.values()].flat();
+    const { collisionSource, competingRecords } = diagnoseCollision(candidateEntries);
+    return {
+      status: "ambiguous",
+      keys: [...pairByIdentity.keys()],
+      basis: "unordered_pair",
+      competingRecords,
+      collisionSource,
+    };
   }
   if (sequences.length > 0) {
     return {
@@ -1471,7 +1725,13 @@ function segmentSubjectIdentifier(raw: string, index: CatalogIndex) {
       const match = matchDirect(index, token);
       if (match.status !== "matched") continue;
       const rest = remaining === token ? "" : remaining.slice(token.length + 1);
-      for (const entry of match.entries) visit(rest, [...sequence, entry]);
+      for (const entry of match.entries) {
+        const nameTokens = entry.canonicalSlug.split("_");
+        if (nameTokens.length > 1 && token === nameTokens.at(-1) && sequence.length > 0) {
+          continue;
+        }
+        visit(rest, [...sequence, entry]);
+      }
     }
   };
   visit(raw, []);
@@ -1609,22 +1869,22 @@ function subjectIdForTarget(noteId: string, bucket: LtmEvidenceUnit["bucket"]) {
 function subjectRejection(unit: LtmEvidenceUnit, match: Exclude<SubjectMatch, { status: "matched" }>, index: number) {
   const noteId = noteIdForEvidenceUnit(unit);
   const isCompositeCharacter = unit.bucket === "character_fact" && match.status === "cardinality" && match.count > 1;
+  const isAmbiguous = match.status === "ambiguous";
   const code = isCompositeCharacter
     ? "composite_character_subject"
-    : match.status === "ambiguous"
+    : isAmbiguous
       ? "ambiguous_subject_identity"
       : match.status === "cardinality"
         ? "invalid_subject_cardinality"
         : "untrusted_subject_identity";
-  const reason: LtmExtractionDroppedCandidate["reason"] =
-    match.status === "ambiguous"
-      ? "ambiguous_subject"
-      : match.status === "untrusted"
-        ? "untrusted_subject"
-        : "invalid_subject_cardinality";
+  const reason: LtmExtractionDroppedCandidate["reason"] = isAmbiguous
+    ? "ambiguous_subject"
+    : match.status === "untrusted"
+      ? "untrusted_subject"
+      : "invalid_subject_cardinality";
   const message = isCompositeCharacter
     ? "Dropped a character fact that combined multiple character subjects."
-    : match.status === "ambiguous"
+    : isAmbiguous
       ? "Dropped a candidate whose subject matches more than one trusted roster identity."
       : match.status === "cardinality"
         ? `Dropped a ${unit.bucket} candidate with ${match.count} resolved subjects.`
@@ -1642,6 +1902,20 @@ function subjectRejection(unit: LtmEvidenceUnit, match: Exclude<SubjectMatch, { 
         subjectNames: unit.subjectNames ?? [],
         subjectKeys: unit.subjectKeys ?? [],
         matchBasis: match.basis,
+        ...(isAmbiguous
+          ? {
+              competingSubjectKeys: match.keys,
+              competingRecords:
+                match.competingRecords ??
+                match.keys.map((key) => ({
+                  key,
+                  name: subjectLabelFromKey(key),
+                  canonicalSlug: normalizeSubjectIdentifier(subjectLabelFromKey(key), ""),
+                  provenance: key,
+                })),
+              ...(match.collisionSource ? { collisionSource: match.collisionSource } : {}),
+            }
+          : {}),
       },
     },
     dropped: {
