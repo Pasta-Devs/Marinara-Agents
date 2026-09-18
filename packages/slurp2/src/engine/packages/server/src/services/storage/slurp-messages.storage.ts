@@ -2566,6 +2566,26 @@ export function createSlurpMessagesStorage(db: DB) {
       await storage.setExtendedOnline(threadId, until);
     },
 
+    async adjustCheatState(threadId: string, input: { mood?: number; rapport?: number }): Promise<SlurpThread | null> {
+      const thread = await storage.getThreadById(threadId);
+      if (!thread) return null;
+      const timestamp = now();
+      const mood = input.mood == null ? thread.mood : Math.max(-100, Math.min(100, thread.mood + input.mood));
+      const rapportScore =
+        input.rapport == null ? thread.rapport.score : Math.max(0, Math.min(100, thread.rapport.score + input.rapport));
+      const rapport = input.rapport == null ? thread.rapport : { ...thread.rapport, score: rapportScore };
+      await db
+        .update(slurpThreads)
+        .set({
+          mood: String(mood),
+          ...(input.mood == null ? {} : { moodUpdatedAt: timestamp }),
+          rapport: JSON.stringify(rapport),
+          updatedAt: timestamp,
+        })
+        .where(eq(slurpThreads.id, threadId));
+      return storage.getThreadById(threadId);
+    },
+
     /**
      * Add scheduled follow-ups to a thread.
      */

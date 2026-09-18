@@ -3,9 +3,23 @@ import { useTranslation as useUiTranslation } from "react-i18next";
 import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
 import { useSlurpAudienceMember } from "../../hooks/use-slurp";
 import { cn } from "../../lib/utils";
+import { SLURP_CHARACTER_FAN_PREFIX } from "../../../../server/src/services/slurp/slurp-audience-characters.js";
 
 /** Population ids carry this prefix. An id with it has a fan card; an account id does not. */
 export const SLURP_AUDIENCE_ID_PREFIX = "slurp-fan:";
+
+/**
+ * Whether this actor has a fan card to open.
+ *
+ * A generated member is known by its id prefix. An invited character is an account row, so its id
+ * looks like any other account's and only its `entityId` says what it is. Both are audience, so both
+ * open a card; a Creator or a persona is a real profile and opens nothing here.
+ */
+export function hasSlurpFanCard(actorAccountId: string, entityId?: string | null): boolean {
+  return (
+    actorAccountId.startsWith(SLURP_AUDIENCE_ID_PREFIX) || Boolean(entityId?.startsWith(SLURP_CHARACTER_FAN_PREFIX))
+  );
+}
 
 /**
  * Who somebody in the audience is, opened from their name.
@@ -111,7 +125,10 @@ export function SlurpLikedBy({
   total,
   creatorAccountId,
 }: {
-  likes: ReadonlyArray<{ actorAccountId: string; actorSnapshot?: { displayName?: string | null } | null }>;
+  likes: ReadonlyArray<{
+    actorAccountId: string;
+    actorSnapshot?: { displayName?: string | null; entityId?: string } | null;
+  }>;
   total: number;
   creatorAccountId: string | null;
 }) {
@@ -119,7 +136,11 @@ export function SlurpLikedBy({
   const named = likes
     .filter((like) => like.actorSnapshot?.displayName)
     .slice(0, 2)
-    .map((like) => ({ id: like.actorAccountId, name: like.actorSnapshot!.displayName! }));
+    .map((like) => ({
+      id: like.actorAccountId,
+      name: like.actorSnapshot!.displayName!,
+      entityId: like.actorSnapshot!.entityId,
+    }));
   if (named.length === 0) return null;
   const others = Math.max(0, total - named.length);
 
@@ -128,7 +149,7 @@ export function SlurpLikedBy({
       {named.map((liker, index) => (
         <span key={liker.id}>
           {index > 0 && ", "}
-          {liker.id.startsWith(SLURP_AUDIENCE_ID_PREFIX) ? (
+          {hasSlurpFanCard(liker.id, liker.entityId) ? (
             <SlurpFanCard memberId={liker.id} creatorAccountId={creatorAccountId} className="font-bold">
               {liker.name}
             </SlurpFanCard>

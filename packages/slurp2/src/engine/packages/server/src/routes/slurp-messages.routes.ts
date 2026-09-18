@@ -6,7 +6,7 @@
 // thousand five hundred lines, and nothing here needs the feed helpers it holds.
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { createSlurpStorage } from "../services/storage/slurp.storage.js";
+import { createSlurpStorage, isSlurpViewerActorAccount } from "../services/storage/slurp.storage.js";
 import { createSlurpMessagesStorage } from "../services/storage/slurp-messages.storage.js";
 import { createSlurpPopulationStorage } from "../services/storage/slurp-population.storage.js";
 import { createCharactersStorage } from "../services/storage/characters.storage.js";
@@ -47,6 +47,10 @@ import {
 import { logger } from "../lib/logger.js";
 import { resolveSlurpCreatorAvailability } from "../services/slurp/slurp-creator-schedule-context.js";
 import { selectSlurpAttentionCommissions } from "../services/slurp/slurp-inbox-attention.js";
+import { parseSlurpCheatDirective } from "../services/slurp/slurp-cheat-directive.js";
+import { SLURP_DEV_CHEAT_MAX_COINS } from "../services/slurp/slurp-wallet.js";
+import { generateNoodlerCreatorArtwork } from "../services/slurp/slurp-artwork.operation.js";
+import { createScheduledFollowUps } from "../services/slurp/slurp-follow-up.js";
 
 const personaQuerySchema = z.object({ personaId: z.string().trim().min(1) });
 const MESSAGE_MEDIA_MAX_BYTES = 20 * 1024 * 1024;
@@ -84,6 +88,7 @@ const sendSchema = z.object({
   // Bounded at the trust boundary: this text reaches a model prompt, and an unbounded body
   // would let one message push the whole conversation out of the context window.
   content: z.string().trim().min(1).max(2000),
+  generationGuidance: z.string().trim().max(2000).optional(),
   requestId: z.string().trim().min(8).max(100).optional(),
   tip: z
     .object({ amount: z.number().int().min(1).max(9999), note: z.string().trim().max(280).default("") })
@@ -412,6 +417,63 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     };
   });
 
+  app.get("/messages/compose-targets", async (req, reply) => {
+    const parsed = personaQuerySchema.safeParse(req.query);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await requireViewer(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    await slurp.ensureAudienceCharacterAccounts().catch(() => undefined);
+    const profiles = await slurp.listNoodlerStageProfiles();
+    const operatedAccounts = (await slurp.listNoodlerAccounts()).filter(
+      (account) => account.sourceKind === "persona" && account.sourceEntityId === viewer.id,
+    );
+    const creatorAccount = operatedAccounts.find((account) => !isSlurpViewerActorAccount(account));
+    const inbound = creatorAccount ? await messages.listThreadsForCreators([creatorAccount.id]) : [];
+    const inboundByViewer = new Map(inbound.map((thread) => [thread.viewerAccountId, thread]));
+    const characterTargets = creatorAccount ? await slurp.listAudienceCharacterAccounts() : [];
+    return {
+      targets: [
+        ...profiles.map((profile) => ({
+          id: profile.id,
+          kind: "creator" as const,
+          displayName: profile.displayName,
+          handle: profile.handle,
+          avatarUrl: profile.avatarUrl,
+          threadId: null,
+          creatorAccountId: null,
+        })),
+        ...characterTargets.map(({ account }) => ({
+          id: account.id,
+          kind: "character" as const,
+          displayName: account.displayName,
+          handle: account.handle,
+          avatarUrl: account.avatarUrl,
+          threadId: inboundByViewer.get(account.id)?.id ?? null,
+          creatorAccountId: creatorAccount.id,
+        })),
+      ],
+    };
+  });
+
+  app.post("/messages/compose", async (req, reply) => {
+    const parsed = z
+      .object({
+        personaId: z.string().trim().min(1),
+        creatorAccountId: z.string().trim().min(1),
+        viewerAccountId: z.string().trim().min(1),
+      })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    if (!(await ownsCreator(parsed.data.personaId, parsed.data.creatorAccountId))) {
+      return reply.code(403).send({ error: "Only the Creator's owner can open this conversation." });
+    }
+    const target = await slurp.getNoodlerAccountById(parsed.data.viewerAccountId, { includeHidden: true });
+    if (!target) return reply.code(404).send({ error: "Audience member not found" });
+    const opened = await messages.openThread(parsed.data.viewerAccountId, parsed.data.creatorAccountId, "creator");
+    if (opened.status !== "ok") return reply.code(404).send({ error: "Could not open conversation" });
+    return { thread: await freshView(opened.thread.id, "creator") };
+  });
+
   /**
    * Empty this conversation and start it over.
    *
@@ -585,6 +647,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       outcome = await replyToSlurpMessage(app.db, {
         threadId: sent.thread.id,
         triggerMessageId: replyTriggerMessageId,
+        generationGuidance: parsed.data.generationGuidance,
       });
     } catch (error) {
       logger.error(error, "[slurp-message] Reply failed after a send in thread %s", sent.thread.id);
@@ -599,6 +662,119 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       // pacing the model was given and the pacing the player sees are the same number.
       typingMs: "pacing" in outcome ? outcome.pacing.typingMs : 0,
       tipError,
+    };
+  });
+
+  app.post("/messages/cheat", async (req, reply) => {
+    // Check on every request. Do not trust a client flag cached before the environment changed.
+    if (process.env.NODE_ENV !== "development" || process.env.CHEATS_ENABLED !== "true")
+      return reply.code(404).send({ error: "Not found" });
+    const parsed = z
+      .object({
+        personaId: z.string().trim().min(1),
+        creatorAccountId: z.string().trim().min(1),
+        directive: z.string().trim().min(1).max(2000),
+      })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const directive = parseSlurpCheatDirective(parsed.data.directive);
+    if (directive.kind === "invalid") return reply.code(400).send({ status: "rejected", reason: "invalid" });
+    if (directive.kind === "help") {
+      return {
+        status: "accepted",
+        kind: "help",
+        help: [
+          "/cheat coins <amount>",
+          "/cheat force creator photo [guidance]",
+          "/cheat force ppv [message]",
+          "/cheat mood <+/-amount>",
+          "/cheat rapport <+/-amount>",
+          "/cheat availability <minutes>",
+          "/cheat test follow-up <timing> <reason>",
+          "/cheat test promise <timing> <reason>",
+          "/cheat <free-text directive>",
+        ],
+      };
+    }
+    const viewer = await requireViewer(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    if (directive.kind === "coins") {
+      if (directive.coins > SLURP_DEV_CHEAT_MAX_COINS)
+        return reply.code(400).send({ status: "rejected", reason: "coins_limit" });
+      await slurp.setWalletCoinsForDevelopment(viewer.id, directive.coins);
+      return { status: "accepted", kind: "coins", coins: directive.coins };
+    }
+    const thread = await messages.getThread(viewer.id, parsed.data.creatorAccountId);
+    if (!thread) return reply.code(400).send({ status: "rejected", reason: "no_thread" });
+    if (directive.kind === "force_creator_photo") {
+      if (!(await ownsCreator(parsed.data.personaId, parsed.data.creatorAccountId)))
+        return reply.code(403).send({ status: "rejected", reason: "not_owner" });
+      const result = await generateNoodlerCreatorArtwork(app.db, {
+        accountId: parsed.data.creatorAccountId,
+        kind: "avatar",
+        guidance: directive.guidance,
+      });
+      if (result !== "avatar") return reply.code(400).send({ status: "rejected", reason: result });
+      return { status: "accepted", kind: directive.kind };
+    }
+    if (directive.kind === "mood" || directive.kind === "rapport") {
+      if (!Number.isFinite(directive.amount) || Math.abs(directive.amount) > 100)
+        return reply.code(400).send({ status: "rejected", reason: "amount_limit" });
+      await messages.adjustCheatState(thread.id, { [directive.kind]: directive.amount });
+      return { status: "accepted", kind: directive.kind, amount: directive.amount };
+    }
+    if (directive.kind === "availability") {
+      if (directive.minutes < 1 || directive.minutes > 24 * 60)
+        return reply.code(400).send({ status: "rejected", reason: "availability_limit" });
+      await messages.keepOnlineFor(thread.id, directive.minutes);
+      return { status: "accepted", kind: directive.kind, minutes: directive.minutes };
+    }
+    if (directive.kind === "follow_up") {
+      const { parseTimingToMinutes } = await import("../services/slurp/slurp-follow-up.js");
+      const minutes = parseTimingToMinutes(directive.timing);
+      if (!minutes || minutes < 1 || minutes > 7 * 24 * 60)
+        return reply.code(400).send({ status: "rejected", reason: "timing_invalid" });
+      const followUps = createScheduledFollowUps(
+        {
+          type: directive.type,
+          timing: directive.timing,
+          count: 1,
+          reason: directive.reason,
+          context: "Development command test",
+        },
+        new Date(),
+      );
+      await messages.addScheduledFollowUps(thread.id, followUps);
+      return { status: "accepted", kind: directive.kind, followUp: followUps[0] };
+    }
+    if (directive.kind === "force_ppv") {
+      if (!(await ownsCreator(parsed.data.personaId, parsed.data.creatorAccountId)))
+        return reply.code(403).send({ status: "rejected", reason: "not_owner" });
+      const messaging = await messages.getCreatorMessaging(parsed.data.creatorAccountId);
+      const message = await messages.sendCreatorMessage(parsed.data.creatorAccountId, thread.viewerAccountId, {
+        content: directive.guidance || "A paid unlock is ready for you.",
+        kind: "ppv",
+        price: messaging.ppvPrice,
+      });
+      if (!message) return reply.code(400).send({ status: "rejected", reason: "message_failed" });
+      return { status: "accepted", kind: directive.kind, message };
+    }
+    const triggerMessageId = await messages.latestViewerMessageId(thread.id);
+    if (!triggerMessageId) return reply.code(400).send({ status: "rejected", reason: "no_message" });
+    const outcome = await replyToSlurpMessage(app.db, {
+      threadId: thread.id,
+      triggerMessageId,
+      // Guidance changes the requested behavior only. Availability, policy, claims, connection,
+      // pacing, and budget checks remain inside the existing reply operation.
+      generationGuidance: directive.text,
+    });
+    if (outcome.status !== "replied") return reply.code(400).send({ status: "rejected", reason: outcome.status });
+    return {
+      status: "accepted",
+      kind: "guidance",
+      replyStatus: outcome.status,
+      reply: outcome.message,
+      typingMs: outcome.pacing.typingMs,
     };
   });
 
@@ -624,6 +800,32 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
       : await replyToSlurpMessage(app.db, { threadId: thread.id, triggerMessageId, force: true });
     return {
       thread: (await freshView(thread.id)) ?? thread,
+      reply: outcome.status === "replied" ? outcome.message : null,
+      replyStatus: outcome.status,
+      typingMs: "pacing" in outcome ? outcome.pacing.typingMs : 0,
+    };
+  });
+
+  app.post("/messages/threads/:threadId/request-reply", async (req, reply) => {
+    const parsed = z
+      .object({ personaId: z.string().trim().min(1), guidance: z.string().trim().max(2000).optional() })
+      .safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const { threadId } = req.params as { threadId: string };
+    const viewer = await requireViewer(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const thread = await messages.getThreadById(threadId);
+    if (!thread || thread.viewerAccountId !== viewer.id) return reply.code(404).send({ error: "Thread not found" });
+    const triggerMessageId = await messages.latestViewerMessageId(thread.id);
+    if (!triggerMessageId) return reply.code(400).send({ error: "Send a message before requesting a reply." });
+    const outcome = await replyToSlurpMessage(app.db, {
+      threadId: thread.id,
+      triggerMessageId,
+      generationGuidance:
+        parsed.data.guidance ??
+        "The fan is asking for a reply. Treat this as a gentle request, not a demand. Answer only if the conversation rules and your availability allow it.",
+    });
+    return {
       reply: outcome.status === "replied" ? outcome.message : null,
       replyStatus: outcome.status,
       typingMs: "pacing" in outcome ? outcome.pacing.typingMs : 0,
@@ -1279,7 +1481,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
    * `noodlerConcealedSourceText`.
    */
   app.get("/messages/threads/:threadId/prompt", async (req, reply) => {
-    if (!isDebugAgentsEnabled()) return reply.code(404).send({ error: "Not Found" });
+    if (!isDebugAgentsEnabled()) return reply.code(404).send({ error: "Not Found", code: "debug_disabled" });
     const parsed = personaQuerySchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { threadId } = req.params as { threadId: string };

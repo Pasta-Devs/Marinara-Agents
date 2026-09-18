@@ -150,10 +150,17 @@ assert.match(
 // Every sent message carries its own delivered/seen receipt, not only the newest one.
 assert.doesNotMatch(messages, /showReceipt|lastOwnMessageId/u);
 // An away Creator never shows typing dots before the away block, and the block is an animation.
-assert.match(messages, /relationship\?\.availability\.online !== false\) setTyping\(true\)/u);
+assert.match(messages, /availability\?\.online !== false\) setTyping\(true\)/u);
 // The away state is a real status card: animation, Away label, headline, and detail text.
 assert.match(messages, /<SlurpAwayAnimation[\s\S]{0,900}?ui\.slurp\.messages\.awayTitle\./u);
 assert.doesNotMatch(messages, /SLURP_AWAY_STATUSES\.has\(waitingNote\)\) && "sr-only"/u);
+assert.match(
+  messages,
+  /aria-labelledby=\{[\s\S]{0,180}"slurp-away-title"[\s\S]{0,180}aria-describedby="slurp-away-detail"/u,
+);
+assert.match(messages, /<Avatar account=\{account\} size="lg" \/>/u);
+assert.match(messages, /className="slurp-away-moon/u);
+assert.match(messages, /@media \(prefers-reduced-motion: reduce\)/u);
 // Creators stay online a while after a reply, and longer after delivering a commission.
 const serverRoot = "server/src/services/";
 assert.match(read(`${serverRoot}slurp/slurp-conversation-momentum.ts`), /SLURP_ONLINE_AFTER_REPLY_MINUTES = 5;/u);
@@ -177,4 +184,22 @@ assert.match(
   read("client/src/components/slurp/SlurpHome.tsx"),
   /view: "messages", creatorAccountId, returnTo: navigation/u,
 );
+
+// The plus menu is one action surface. It must not introduce an inner tab or second window.
+assert.doesNotMatch(messages, /Back to message actions/u);
+assert.match(messages, /aria-label="Message actions"/u);
+// A standalone tip becomes a platform-style chat card only after the tip mutation resolves.
+assert.match(messages, /setStandaloneTip\(result\.message\)/u);
+assert.match(messages, /<SlurpPlatformActionCard message=\{entry\.message\}/u);
+assert.match(messages, /Relationship: \{\{tier\}\}/u);
+// Photo actions share one upload/generate surface and require review before either mutation runs.
+assert.match(messages, /const \[reviewing, setReviewing\] = useState\(false\)/u);
+assert.match(messages, /onClick=\{\(\) => setReviewing\(true\)\}/u);
+assert.match(messages, /A photo taken by the viewer persona/u);
+// Requests offer guidance without requiring an existing reply obligation or promising an outcome.
+assert.match(messages, /requestHintGuidance\(requestHint\)/u);
+assert.match(messages, /disabled=\{busy \|\| requestReply\.isPending\}/u);
+assert.match(messages, /Ask for a photo/u);
+assert.match(messages, /Ask about paid content/u);
+assert.match(messages, /Ask for a follow-up/u);
 console.log("slurp messaging surface regression passed");

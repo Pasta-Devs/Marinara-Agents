@@ -62,6 +62,7 @@ export async function replyToSlurpMessage(
     /** The scheduler, answering unattended. A person waiting at the screen is not this. */
     background?: boolean;
     debugMode?: boolean;
+    generationGuidance?: string;
   },
 ): Promise<SlurpReplyOutcome> {
   const messagesStore = createSlurpMessagesStorage(db);
@@ -226,6 +227,7 @@ export async function replyToSlurpMessage(
         strikes: activeSlurpStrikes(thread.strikes, thread.lastStrikeAt),
         connection,
         debugMode: input.debugMode,
+        generationGuidance: input.generationGuidance,
         // The scheduler only calls with `force` after `messagesAwayRepliesEnabled` admitted this
         // thread. That setting is the explicit permission for an unattended reply. Requiring the
         // separate global background-worker switch as well made the default settings contradictory:

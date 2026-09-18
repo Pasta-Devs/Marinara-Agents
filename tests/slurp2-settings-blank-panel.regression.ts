@@ -8,6 +8,27 @@ const clientRoot = "packages/slurp2/src/engine/packages/client/src";
 const entry = readFileSync(`${clientRoot}/slurp-package-entry.tsx`, "utf8");
 const shell = readFileSync(`${clientRoot}/components/slurp/SlurpShell.tsx`, "utf8");
 const settings = slurp2BackstageSource();
+const backstage = readFileSync(`${clientRoot}/components/slurp/slurp-backstage.ts`, "utf8");
+const world = readFileSync(`${clientRoot}/components/slurp/SlurpBackstageWorld.tsx`, "utf8");
+const automation = readFileSync(`${clientRoot}/components/slurp/SlurpBackstageAutomation.tsx`, "utf8");
+
+assert.match(backstage, /arcs: "Arcs"/u, "the Features arc target must be labelled Arcs");
+assert.match(backstage, /world\("arcs", "arc library", "stories"\)/u, "stories must remain an arc search alias");
+assert.match(world, /landing\.stories[\s\S]*defaultValue: "Arcs"/u, "the Features landing row must use the Arcs label");
+assert.match(
+  automation,
+  /settingKey="storyRate"[\s\S]*ui\.slurp\.settings\.storyRate/u,
+  "the separate Story-post cadence must remain intact",
+);
+const storiesGroupStart = automation.indexOf("settings.images.storiesGroup");
+const storiesGroupEnd = automation.indexOf("</SettingsGroup>", storiesGroupStart);
+assert.ok(storiesGroupStart >= 0 && storiesGroupEnd > storiesGroupStart, "the Story image settings group must exist");
+const storiesGroup = automation.slice(storiesGroupStart, storiesGroupEnd);
+assert.match(
+  storiesGroup,
+  /settingKey="storyImageWidth"[\s\S]*settingKey="storyImageHeight"/u,
+  "Story image settings must keep the existing dimensions",
+);
 
 assert.match(entry, /class SlurpErrorBoundary extends Component/u, "slurp2 needs a render error boundary");
 assert.match(entry, /static getDerivedStateFromError/u, "the boundary must render a fallback, not just log");

@@ -162,6 +162,20 @@ export function slurpReactivationStage(stage: unknown, hasSubscription = false):
  */
 export const SLURP_NAMED_CAST_LIMIT = 30;
 
+/**
+ * The prefix every generated member id carries.
+ *
+ * The audience is no longer only generated members: ambient profiles and invited characters are
+ * account rows that stand in the same crowd. Only a generated member has a `slurp2_population` row,
+ * so only a generated member can be `touch`ed or read back by `population.get`.
+ */
+export const SLURP_POPULATION_MEMBER_PREFIX = "slurp-fan:";
+
+/** Whether this audience id is a generated member, as opposed to an account standing in the crowd. */
+export function isSlurpPopulationMemberId(id: string): boolean {
+  return id.startsWith(SLURP_POPULATION_MEMBER_PREFIX);
+}
+
 /** How much a member is willing to spend. Most people spend nothing; a few spend a lot. */
 export type SlurpSpendTier = "none" | "light" | "regular" | "whale";
 
@@ -223,7 +237,7 @@ export function generateSlurpPopulationMember(
   // Who they are comes first: traits, hour, archetype and appetite all hang off the Fan Type now,
   // rather than being four unrelated hashes of the same seed.
   const fanType = slurpPickFanType(fanTypes, seed);
-  const id = `slurp-fan:${seed}`;
+  const id = `${SLURP_POPULATION_MEMBER_PREFIX}${seed}`;
   return {
     id,
     handle: `${first}_${second}${suffix}`,

@@ -106,6 +106,7 @@ import {
   type SlurpEventGroup,
   type SlurpEventItem,
   type SlurpStudioCreator,
+  type SlurpPromotion,
   useSetSlurpGoal,
   useSlurpPayout,
   useHideSlurpAd,
@@ -198,7 +199,7 @@ import { HelpTooltip } from "../ui/HelpTooltip";
 import { Modal } from "../ui/Modal";
 import type { SlurpNavigationState } from "./slurp-navigation.types";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import { SlurpInlineAd } from "./SlurpInlineAd";
+import { SlurpInlineAd, SlurpInlineAdTile } from "./SlurpInlineAd";
 import { SlurpCreatorProfileCard } from "./SlurpCreatorProfileCard";
 import { SlurpDiscoveryProfileEditor } from "./SlurpDiscoveryProfileEditor";
 import {
@@ -269,9 +270,6 @@ function SlurpAccessTransition({ postId, locked, children }: { postId: string; l
 }
 // Starting balance until the wallet earns or spends coins through future transactions.
 const SLURP_PLACEHOLDER_BALANCE = 1111;
-// Stories stay in the shelf for three days. The server still owns post visibility; this is the
-// presentation window for the in-memory viewer projection.
-const SLURP_MOMENT_WINDOW_MS = 72 * 60 * 60 * 1000;
 const STAGE_PERSONALITY_MAX_LENGTH = 1000;
 
 interface NoodlerPostSubmission {
@@ -629,7 +627,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   const [feedSearch, setFeedSearch] = useState("");
   const [discoverRank, setDiscoverRank] = useState<"likes" | "subscribers">("likes");
   const discoveryInputRef = useRef<HTMLInputElement | null>(null);
-  const [feedTab, setFeedTab] = useState<"following" | "all">("following");
+  const [feedTab, setFeedTab] = useState<"following" | "all">("all");
   const [onboardingMode, setOnboardingMode] = useState<"first-run" | "add-creators" | null>(null);
   const [gateOpen, setGateOpen] = useState(false);
   // The splash comes first: it is the alpha warning, and the age gate is no use to someone who has
@@ -2509,6 +2507,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
         connectionCounts={connectionCountsQuery.data ?? {}}
         inlineAdsEnabled={slurpSettingsQuery.data?.inlineAdsEnabled !== false}
         inlineAdsFrequency={slurpSettingsQuery.data?.inlineAdsFrequency ?? "standard"}
+        storyLifetimeHours={slurpSettingsQuery.data?.storyLifetimeHours ?? 72}
       />
       <SlurpOnboardingWizard
         open={onboardingMode !== null}
@@ -2857,30 +2856,67 @@ function SlurpMediaWall({
   onOpenPost,
   onLoadMore,
   total,
+  emptyAd,
+  adForIndex,
+  onAdAction,
+  onAdHide,
+  adLabels,
 }: {
   items: { post: NoodlerPostView & { locked?: boolean }; creator: { profile: NoodlerStageProfile } }[];
   onOpenPost: (postId: string) => void;
   onLoadMore?: () => void;
   total: number;
+  emptyAd?: SlurpPromotion | null;
+  /** Null on every row when ads are off, searching, or the pool is empty. */
+  adForIndex?: (index: number) => SlurpPromotion | null;
+  onAdAction?: (ad: SlurpPromotion) => void;
+  onAdHide?: (ad: SlurpPromotion) => void;
+  adLabels?: { sponsored: string; hide: string; actionFallback: string };
 }) {
   const { t: localizeUi } = useUiTranslation();
   const tiles = items.flatMap<SlurpProfileImagePost>(({ post, creator }) => {
     if (post.locked || typeof post.imageUrl !== "string") return [];
     return [{ ...toNoodlePostCardModel(post, creator.profile), imageUrl: post.imageUrl }];
   });
+  const emptyWallAd = emptyAd ?? null;
   if (tiles.length === 0) {
     return (
-      <p className="px-4 py-8 text-xs text-[var(--muted-foreground)]">
-        {localizeUi("ui.slurp.home.layout.empty", { defaultValue: "No images in this feed yet." })}
-      </p>
+      <div className="space-y-3 px-4 py-8">
+        <p className="text-xs text-[var(--muted-foreground)]">
+          {localizeUi("ui.slurp.home.layout.empty", { defaultValue: "No images in this feed yet." })}
+        </p>
+        {emptyWallAd && adLabels ? (
+          <SlurpInlineAdTile
+            promotion={emptyWallAd}
+            labels={adLabels}
+            onAction={() => onAdAction?.(emptyWallAd)}
+            onHide={() => onAdHide?.(emptyWallAd)}
+          />
+        ) : null}
+      </div>
     );
   }
   return (
     <div className="bg-[var(--slurp-canvas)] pb-6">
       <div className="grid grid-cols-2 gap-px bg-[var(--noodle-divider)] @min-[620px]:grid-cols-3">
-        {tiles.map((post) => (
-          <SlurpProfileMediaTile key={post.id} post={post} onOpenImage={(_url, id) => onOpenPost(id)} />
-        ))}
+        {tiles.map((post, index) => {
+          // The slot maths counts tiles, not source posts: the wall drops locked and text posts, so
+          // indexing off the feed would leave the cadence uneven and some slots permanently empty.
+          const ad = adForIndex?.(index) ?? null;
+          return (
+            <Fragment key={post.id}>
+              <SlurpProfileMediaTile post={post} onOpenImage={(_url, id) => onOpenPost(id)} />
+              {ad && adLabels ? (
+                <SlurpInlineAdTile
+                  promotion={ad}
+                  labels={adLabels}
+                  onAction={() => onAdAction?.(ad)}
+                  onHide={() => onAdHide?.(ad)}
+                />
+              ) : null}
+            </Fragment>
+          );
+        })}
       </div>
       {onLoadMore && <LoadMoreFeedButton visible={items.length} total={total} onLoadMore={onLoadMore} />}
     </div>
@@ -3288,6 +3324,7 @@ function StageProfileView({
                   <LockedSlurpPostCard
                     post={item.post}
                     profile={profile}
+                    subscriptionPrice={viewerCreator?.subscriptionPrice}
                     controllerOnly={item.kind === "controller-locked"}
                     subscribed={viewerCreator?.subscribed ?? false}
                     unlockPending={unlockPending}
@@ -4216,6 +4253,7 @@ function ViewerHub({
   connectionCounts,
   inlineAdsEnabled,
   inlineAdsFrequency,
+  storyLifetimeHours,
   newSinceAt,
   onFeedShown,
   onOpenWallet,
@@ -4259,6 +4297,7 @@ function ViewerHub({
   connectionCounts: Record<string, { fans: number; followers: number }>;
   inlineAdsEnabled: boolean;
   inlineAdsFrequency: "light" | "standard" | "frequent";
+  storyLifetimeHours: number;
 }) {
   const { t: localizeUi } = useUiTranslation();
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
@@ -4278,7 +4317,8 @@ function ViewerHub({
   const [discoverMaximumPrice, setDiscoverMaximumPrice] = useState("");
   const [discoverSort, setDiscoverSort] = useState<SlurpDiscoverSort>("recommended");
   const [openPostId, setOpenPostId] = useState<string | null>(null);
-  const [momentCutoff] = useState(() => Date.now() - SLURP_MOMENT_WINDOW_MS);
+  const [momentNow] = useState(() => Date.now());
+  const momentCutoff = momentNow - storyLifetimeHours * 60 * 60 * 1000;
   useEffect(() => {
     window.localStorage.setItem("slurp2.discover.layout", discoverLayout);
   }, [discoverLayout]);
@@ -4300,6 +4340,7 @@ function ViewerHub({
     if (items.length === 0) return null;
     return items[Math.floor(index / inlineAdEvery) % items.length];
   };
+  const emptyWallAd = inlineAdsQuery.data?.items?.[0] ?? null;
   const profileKey = (scope?.creators ?? []).map((creator) => creator.profile.id).join("\u0000");
   useEffect(() => {
     setVisibleFeedCount(NOODLER_FEED_WINDOW_SIZE);
@@ -4474,6 +4515,7 @@ function ViewerHub({
         <LockedSlurpPostCard
           post={post}
           profile={creator.profile}
+          subscriptionPrice={creator.subscriptionPrice}
           subscribed={creator.subscribed}
           unlockPending={unlockPending}
           subscriptionPending={togglePending}
@@ -4842,6 +4884,28 @@ function ViewerHub({
             <SlurpMediaWall
               items={visibleFeed}
               onOpenPost={setOpenPostId}
+              emptyAd={inlineAdsEnabled && !searchTerm ? emptyWallAd : null}
+              adForIndex={(index) => {
+                const ad = inlineAdForIndex(index);
+                return inlineAdsEnabled && !searchTerm ? ad : null;
+              }}
+              adLabels={{
+                sponsored: localizeUi("ui.slurp.ads.sponsored"),
+                hide: localizeUi("ui.slurp.ads.hide"),
+                actionFallback: localizeUi("ui.slurp.ads.view"),
+              }}
+              onAdAction={(ad) => {
+                recordSlurpAdAction.mutate({ personaId: scope!.viewer.entityId, promotionId: ad.id });
+                toast.info(localizeUi("ui.slurp.ads.opened", { brand: ad.brand }));
+              }}
+              onAdHide={(ad) =>
+                hideSlurpAd.mutate(
+                  { personaId: scope!.viewer.entityId, promotionId: ad.id },
+                  {
+                    onError: (error) => toast.error(errorMessage(error, localizeUi("ui.slurp.ads.hideFailed"))),
+                  },
+                )
+              }
               onLoadMore={
                 visibleFeed.length < feed.length
                   ? () => setVisibleFeedCount((count) => Math.min(feed.length, count + NOODLER_FEED_WINDOW_SIZE))
@@ -4858,8 +4922,13 @@ function ViewerHub({
                   {(() => {
                     // One place decides whether this row gets an ad. The slot
                     // maths used to be copy-pasted six times inside the JSX.
+                    //
+                    // Following carries ads too. The query already asks for a "following" context
+                    // tag, so suppressing them here meant the default tab — the one nobody has to
+                    // switch to — never showed a single ad. Search stays clean: results are the
+                    // answer to a question, not a place to sell.
                     const ad = inlineAdForIndex(index);
-                    if (!inlineAdsEnabled || searchTerm || tab !== "all" || !ad) return null;
+                    if (!inlineAdsEnabled || searchTerm || !ad) return null;
                     return (
                       <SlurpInlineAd
                         promotion={ad}
@@ -5570,7 +5639,7 @@ function SlurpPostDialog({
         )
       }
       // The dialog owns the picture, so the card must not draw it or offer its prompt again.
-      side={<SlurpCreatorPostCard post={{ ...post, imageUrl: null, imagePrompt: null }} ctx={ctx} surface="profile" />}
+      side={<SlurpCreatorPostCard post={{ ...post, imageUrl: null }} ctx={ctx} surface="profile" />}
     />
   );
 }
