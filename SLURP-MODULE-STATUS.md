@@ -22,7 +22,8 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 - Last updated: 2026-09-18
 - Updated by: Slice 2 implementation agent
 - Overall state: Slices 0–1 and 2 implemented and validated locally; pushed, no PR yet
-- Active slice: 2, stacked on the unmerged 0–1 commits at the maintainer's request
+- Active slice: 3 (server routes), issue #915, branch `slurp2-slice3-server-routes` from
+  `modular-simping` `92c25f9c` (0 behind `origin/staging` after fetch; no merge needed)
 - Issue: #914 (assigned `Gunterlie`)
 - Pull request: none. Slices 0–1 and 2 were pushed directly to the integration branch at the
   maintainer's request; from Slice 3 on, each slice is a draft PR targeting `modular-simping`
@@ -45,7 +46,7 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 |---:|---|---|---|---|---|
 | 0–1 | Architecture contract and safety rails | in progress | #914 / no PR yet | 0.0.24 | Validated locally; on `modular-simping` |
 | 2 | Entrypoints and shared base | in progress | #914 / no PR | 0.0.25 | Validated locally; stacked on 0–1 on `modular-simping` |
-| 3 | Server routes | not started | — | — | Depends on Slice 2 merged |
+| 3 | Server routes | in progress | #915 | 0.0.26 | Draft PR to `modular-simping` |
 | 4 | Server storage | not started | — | — | Point of no return |
 | 5 | Server services, contracts, workflows | not started | — | — | — |
 | 6 | Event and modifier seam | not started | — | — | — |
