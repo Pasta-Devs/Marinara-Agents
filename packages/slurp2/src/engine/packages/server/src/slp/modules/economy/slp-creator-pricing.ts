@@ -5,7 +5,7 @@
  * Pure and standalone, like `slurp-prices.ts`, so the rules can be tested without an Engine checkout.
  */
 import { slpApplyModifiers } from "../../base/modifiers/slp-modifier-resolver.js";
-import type { SlpActiveModifierProvider } from "../../base/modifiers/slp-modifier.types.js";
+import type { SlpActiveModifierProvider } from "../../../../../shared/src/slp/slp-modifier.types.js";
 
 export type SlurpCommissionPricing = {
   commissionBase: number;

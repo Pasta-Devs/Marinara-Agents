@@ -2,17 +2,14 @@ import { Download, RefreshCw, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { slurpFanTypesSchema, type SlurpFanType } from "../../../../server/src/slp/modules/audience/slp-fan-types.js";
+import { slurpFanTypesSchema, type SlurpFanType } from "../../../../shared/src/slp/slp-fan-types.js";
 import {
   SLURP_MODEL_JOB_KINDS,
   slurpModelBudgetSchema,
   type SlurpModelBudget,
   type SlurpModelBudgetLedger,
-} from "../../../../server/src/slp/base/model/slp-model-budget.js";
-import {
-  slurpSimulationTuningSchema,
-  type SlurpSimulationTuning,
-} from "../../../../server/src/slp/base/model/slp-tuning.js";
+} from "../../../../shared/src/slp/slp-model-budget.js";
+import { slurpSimulationTuningSchema, type SlurpSimulationTuning } from "../../../../shared/src/slp/slp-tuning.js";
 import { api } from "../../lib/api-client";
 import { Field, NumberSetting, SectionTitle, SettingsGroup, Toggle } from "./SlurpSettingsControls";
 

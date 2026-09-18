@@ -1,4 +1,4 @@
-import type { SlurpSettings } from "../../hooks/use-slurp";
+import type { SlurpSettings } from "../../slp/features/settings/slp-settings-contract";
 
 export const SLURP_BACKSTAGE_SECTIONS = [
   "overview",

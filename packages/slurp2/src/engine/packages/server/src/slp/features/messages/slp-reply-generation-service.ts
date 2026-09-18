@@ -8,7 +8,7 @@ import {
 } from "@marinara-engine/shared";
 import { isDebugAgentsEnabled } from "../../../config/runtime-config.js";
 import { resolveSlurpCreatorMenu } from "../../data/settings/slp-post-guidance-storage.js";
-import { slurpPlatformEventInstruction } from "../../modules/world/events/slp-platform-events.js";
+import { slurpPlatformEventInstruction } from "../../../../../shared/src/slp/slp-platform-events.js";
 import type { DB } from "../../../db/connection.js";
 import { logDebugOverride } from "../../../lib/logger.js";
 import { resolveBaseUrl } from "../../../services/generation/connection-base-url.js";

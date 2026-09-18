@@ -77,3 +77,29 @@ modules, rejected alternative, and migration consequence.
 - **Migration consequence:** calendar activation stays in `modules/world/events/` rather than moving
   to `features/world/events/` as §4 first said, because it is a pure rule under the Slice 5 layer
   model and the client reads it directly. Plan §3's allocation ledger already placed it there.
+
+## 2026-09-19 — Shared pure rules move to `shared/src/slp/`, and the client gains a settings feature
+
+- **Problem:** Slice 7 moved the client state layer into `packages/client/src/slp/`, where the
+  architecture regression forbids importing server `slp` code. `SlurpSettings` needs
+  `SlurpSimulationTuning`, `SlurpFanType`, `SlurpPlatformEvent`, and `SlurpModelBudget`, which lived
+  in server `base/` and `modules/`. Thirteen client files already imported those rule files
+  directly; pending decision 5 recorded the debt and assigned it to Slices 7–8.
+- **Decision:** Move the closed set of pure rules both sides need into `shared/src/slp/`:
+  `slp-tone.ts`, `slp-tuning.ts`, `slp-model-budget.ts`, `slp-modifier.types.ts`,
+  `slp-modifier-schema.ts`, `slp-platform-events.ts`, `slp-fan-types.ts`, and `slp-population.ts`.
+  Every importer's path is rewritten; no re-export shim is left behind. The client also gains
+  `features/settings/`, mirroring the server feature added in Slice 5, so the settings document has
+  one owner instead of being spread across maintenance and discovery.
+- **Affected modules:** server `base/prompting/`, `base/model/`, `base/modifiers/`,
+  `modules/audience/`, and `modules/world/events/` lose those eight files; `shared/src/slp/` gains
+  them; client `slp/features/settings/` is new. The Slice 6 modifier seam is unchanged in behaviour:
+  the resolver and provider stay in server `base/modifiers/` and now import the contract from shared.
+- **Rejected alternative:** splitting each rule file into a shared type half and a server schema
+  half. The types are `z.infer` of the schemas, so the split would separate a type from its only
+  source of truth and duplicate the pairing. Also rejected: leaving the settings types outside the
+  `slp` roots, which defers the same work to Slice 8 and keeps a client-to-server edge alive.
+- **Migration consequence:** `shared/src/slp/` is no longer "pure functions only"; README now states
+  the narrower test that replaced it. The plan's server allocation ledger moves these eight files to
+  shared. Pending decision 5 is resolved for the hook layer; the remaining component importers in
+  `components/slurp/` now import shared, so Slice 8 inherits no client-to-server edge.

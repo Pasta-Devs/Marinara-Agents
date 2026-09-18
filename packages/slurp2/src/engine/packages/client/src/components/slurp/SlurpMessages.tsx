@@ -32,11 +32,12 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import { useOpenSlurpCreatorThread, useSlurpComposeTargets, type SlurpComposeTarget } from "../../hooks/use-slurp";
+import type { SlurpComposeTarget } from "../../slp/features/messages/slp-messages-contract";
+import { useOpenSlurpCreatorThread, useSlurpComposeTargets } from "../../slp/features/messages/slp-messages-hooks";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
+import { useSlurpMediaSrc } from "../../slp/base/media/slp-media-src";
 import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
 import { getApiErrorMessage } from "../../lib/api-client";
 import { showConfirmDialog } from "../../lib/app-dialogs";
@@ -45,48 +46,53 @@ import { Avatar } from "./SlurpShell";
 import { SlurpEmptyArtwork } from "./SlurpEmptyArtwork";
 import { formatTime } from "./SlurpDateTime";
 import { SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "./SlurpCoin";
+import { useSlurpConnections } from "../../slp/base/state/slp-host-connections";
+import { useSlurpWallet } from "../../slp/features/economy/slp-economy-hooks";
 import {
   useAcceptSlurpCommission,
-  useDeclineSlurpCommission,
-  useBroadcastSlurpMessage,
+  useCounterSlurpCommission,
   useCreateSlurpCommission,
-  useCancelSlurpFollowUp,
+  useDeclineSlurpCommission,
   useDeliverSlurpCommission,
   useQuoteSlurpCommission,
-  useCounterSlurpCommission,
-  useResolveSlurpMessageRequest,
-  useResetSlurpThread,
-  useSetSlurpThreadNotes,
+} from "../../slp/features/messages/commissions/slp-commission-hooks";
+import { getSlurpPromptErrorKind } from "../../slp/features/messages/slp-message-keys";
+import type {
+  SlurpCommission,
+  SlurpMessage,
+  SlurpPromptDebug,
+  SlurpRapport,
+  SlurpThread,
+  SlurpThreadRelationship,
+} from "../../slp/features/messages/slp-messages-contract";
+import {
+  useBroadcastSlurpMessage,
+  useCancelSlurpFollowUp,
   useDraftSlurpCreatorReply,
-  useSendSlurpCreatorPpv,
-  useSendSlurpCreatorImage,
-  useSendSlurpCreatorReply,
-  useSendSlurpViewerImage,
-  useGenerateSlurpViewerImage,
-  useSendSlurpMessage,
-  useSlurpCheatDirective,
   useForceSlurpReply,
-  useRequestSlurpReply,
-  useSlurpCompose,
-  useSlurpConnections,
-  useSlurpSettings,
-  useSlurpThread,
-  useSlurpOlderMessages,
-  useSlurpMessagePrompt,
-  useSlurpThreads,
-  useTipInSlurpThread,
-  useUpdateSlurpSettings,
-  useUnlockSlurpMessage,
+  useGenerateSlurpViewerImage,
   useReactToSlurpMessage,
-  useSlurpWallet,
-  type SlurpCommission,
-  type SlurpThreadRelationship,
-  type SlurpMessage,
-  type SlurpRapport,
-  type SlurpThread,
-  getSlurpPromptErrorKind,
-  type SlurpPromptDebug,
-} from "../../hooks/use-slurp";
+  useRequestSlurpReply,
+  useResetSlurpThread,
+  useResolveSlurpMessageRequest,
+  useSendSlurpCreatorImage,
+  useSendSlurpCreatorPpv,
+  useSendSlurpCreatorReply,
+  useSendSlurpMessage,
+  useSendSlurpViewerImage,
+  useSetSlurpThreadNotes,
+  useSlurpCheatDirective,
+  useTipInSlurpThread,
+  useUnlockSlurpMessage,
+} from "../../slp/features/messages/slp-message-action-hooks";
+import {
+  useSlurpCompose,
+  useSlurpMessagePrompt,
+  useSlurpOlderMessages,
+  useSlurpThread,
+  useSlurpThreads,
+} from "../../slp/features/messages/slp-messages-hooks";
+import { useSlurpSettings, useUpdateSlurpSettings } from "../../slp/features/settings/slp-settings-hooks";
 
 /** Tip amounts offered in a thread. Small enough to be a reflex, large enough to mean something. */
 /**

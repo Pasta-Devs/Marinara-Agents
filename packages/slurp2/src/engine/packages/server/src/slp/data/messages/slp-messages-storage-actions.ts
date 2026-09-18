@@ -41,7 +41,7 @@ import {
   slurpFanTypeCommissionBudget,
   slurpFanTypeWeeklyBudget,
   slurpResolveFanType,
-} from "../../modules/audience/slp-fan-types.js";
+} from "../../../../../shared/src/slp/slp-fan-types.js";
 import {
   admitSlurpThread,
   readSlurpCreatorMessaging,

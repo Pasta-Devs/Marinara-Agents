@@ -1,5 +1,5 @@
 import type { NoodleAuthorSnapshot, NoodlerFanArchetype, NoodlerFanArchetypeWeights } from "@marinara-engine/shared";
-import { slurpFanVoiceForPrompt } from "./slp-fan-types.js";
+import { slurpFanVoiceForPrompt } from "../../../../../shared/src/slp/slp-fan-types.js";
 
 export const NOODLER_FAN_IDENTITY_PREFIX = "noodler-fan:";
 

@@ -4,7 +4,7 @@ import { slurpPollBackoffMs } from "../../base/model/slp-poll-backoff.js";
 import { advanceSlurpWorld } from "./slp-world-operation.js";
 import { topUpSlurpReactionBank } from "./slp-reaction-bank-operation.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
-import { slurpWorldTimerDue } from "../../base/model/slp-tuning.js";
+import { slurpWorldTimerDue } from "../../../../../shared/src/slp/slp-tuning.js";
 
 /**
  * The background half of the world clock.

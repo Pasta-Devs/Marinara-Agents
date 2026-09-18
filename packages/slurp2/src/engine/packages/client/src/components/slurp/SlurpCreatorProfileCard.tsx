@@ -1,12 +1,13 @@
 import { useTranslation as useUiTranslation } from "react-i18next";
 import type { AvatarCrop } from "@marinara-engine/shared";
 import { cn } from "../../lib/utils";
-import { useNearViewportSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
+import { useNearViewportSlurpMediaSrc } from "../../slp/base/media/slp-media-src";
 import { ProfileInitial } from "./SlurpShell";
 import { SlurpEmptyArtwork } from "./SlurpEmptyArtwork";
 import { Check, Loader2 } from "lucide-react";
 import { DEFAULT_SLURP_SUBSCRIPTION_PRICE, SlurpCoinAmount } from "./SlurpCoin";
-import type { SlurpDiscoverLayout, SlurpDiscoveryGender } from "../../lib/slurp-discovery";
+import type { SlurpDiscoverLayout } from "../../slp/features/discovery/slp-discovery";
+import type { SlurpDiscoveryGender } from "../../slp/base/state/slp-state-types";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 
 export type SlurpCreatorProfileCardCreator = {

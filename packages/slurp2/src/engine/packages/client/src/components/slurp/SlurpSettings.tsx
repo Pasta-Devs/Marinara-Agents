@@ -4,50 +4,62 @@ import { type ChangeEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import type { SlurpContentRating } from "../../slp/base/state/slp-state-types";
+import { useSlurpConnections } from "../../slp/base/state/slp-host-connections";
 import {
-  useDeleteNoodlerStageProfile,
-  useSetSlurpCreatorMessaging,
-  useSetSlurpCreatorPrice,
-  useDeleteAllSlurpData,
-  useDeleteUnusedSlurpData,
-  getSlurpBackupJob,
-  type SlurpBackupJob,
-  type SlurpRestoreInspection,
-  useAdoptNoodlerSourceIdentity,
-  useDismissNoodlerSourceChanges,
-  useNoodlerAccounts,
-  useNoodlerFanActivityStatus,
-  useSlurpImageConnections,
-  useNoodlerReserveStatus,
-  useRefreshNoodlerFanActivityNow,
-  useRefreshTargetedNoodlerCreatorsNow,
-  useResetSlurpAds,
-  useSlurpAdPool,
   useCreateSlurpAd,
   useDeleteSlurpAd,
-  useUpdateSlurpAd,
   useGenerateSlurpAdImage,
-  useSlurpAdLorebooks,
-  useSyncSlurpAdLorebook,
-  useSlurpAdState,
-  useUnhideSlurpAdBrand,
   useGenerateSlurpAds,
   useImportSlurpAds,
-  useSlurpConnections,
-  useSlurpSettings,
-  useSlurpSettingsDefaults,
-  useSlurpMaintenanceSummary,
-  useSlurpAutopurgePreview,
-  useRunSlurpAutopurge,
+  useResetSlurpAds,
+  useSlurpAdLorebooks,
+  useSlurpAdPool,
+  useSlurpAdState,
+  useSyncSlurpAdLorebook,
+  useUnhideSlurpAdBrand,
+  useUpdateSlurpAd,
+} from "../../slp/features/ads/slp-ads-hooks";
+import {
+  useNoodlerFanActivityStatus,
+  useRefreshNoodlerFanActivityNow,
+} from "../../slp/features/audience/slp-fan-activity-hooks";
+import {
+  useAdoptNoodlerSourceIdentity,
+  useDeleteNoodlerStageProfile,
+  useDismissNoodlerSourceChanges,
+} from "../../slp/features/creators/slp-creator-profile-hooks";
+import {
+  useRefreshNoodlerConversationSchedule,
+  useRefreshTargetedNoodlerCreatorsNow,
+} from "../../slp/features/creators/slp-creator-refresh-hooks";
+import { useBulkUpdateSlurpCreators, useNoodlerAccounts } from "../../slp/features/creators/slp-creators-hooks";
+import { useSetSlurpCreatorPrice } from "../../slp/features/economy/slp-economy-hooks";
+import {
+  useNoodlerReserveStatus,
   useUpdateNoodlerAutoPosting,
   useUpdateNoodlerScheduleSlot,
-  useRefreshNoodlerConversationSchedule,
+} from "../../slp/features/feed/slp-feed-schedule-hooks";
+import { getSlurpBackupJob } from "../../slp/features/maintenance/slp-backup";
+import type { SlurpBackupJob, SlurpRestoreInspection } from "../../slp/features/maintenance/slp-backup";
+import {
+  useDeleteAllSlurpData,
+  useDeleteUnusedSlurpData,
+  useRunSlurpAutopurge,
+  useSlurpAutopurgePreview,
+  useSlurpMaintenanceSummary,
+} from "../../slp/features/maintenance/slp-maintenance-hooks";
+import { useSetSlurpCreatorMessaging } from "../../slp/features/messages/slp-messages-hooks";
+import type { SlurpSettings } from "../../slp/features/settings/slp-settings-contract";
+import {
+  useSlurpImageConnections,
   useUpdateSlurpImageConnections,
+} from "../../slp/features/settings/slp-image-connection-hooks";
+import {
+  useSlurpSettings,
+  useSlurpSettingsDefaults,
   useUpdateSlurpSettings,
-  useBulkUpdateSlurpCreators,
-  type SlurpSettings,
-  type SlurpContentRating,
-} from "../../hooks/use-slurp";
+} from "../../slp/features/settings/slp-settings-hooks";
 import { showConfirmDialog, showPromptDialog } from "../../lib/app-dialogs";
 import { Modal } from "../ui/Modal";
 import { type SlurpNavigationState } from "./slurp-navigation.types";
@@ -61,7 +73,7 @@ import { changedSlurpSettingKeys, isSlurpResettableSection, slurpSettingsResetPa
 import { type NoodlerManagedStageProfile } from "@marinara-engine/shared";
 import { Avatar, getNoodleAccentStyle, NOODLE_PINK } from "./SlurpShell";
 import { slurpActivityPresetForSettings } from "./slurp-activity-presets";
-import { slurpAudiencePresetFor } from "../../../../server/src/slp/base/model/slp-tuning.js";
+import { slurpAudiencePresetFor } from "../../../../shared/src/slp/slp-tuning.js";
 import {
   SLURP_BACKSTAGE_DEFAULT_TARGET,
   SLURP_BACKSTAGE_SECTION_LABELS,

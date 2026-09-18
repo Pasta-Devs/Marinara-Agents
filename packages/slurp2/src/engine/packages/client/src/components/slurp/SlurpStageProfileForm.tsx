@@ -15,10 +15,10 @@ import {
   UserRound,
 } from "lucide-react";
 import type { NoodleIdentityDisclosure, NoodlerStageProfile } from "@marinara-engine/shared";
-import type { SlurpStageProfileInput } from "../../hooks/use-slurp";
+import type { SlurpStageProfileInput } from "../../slp/base/state/slp-state-types";
 import { getNoodleAccentStyle, NOODLE_PINK, ProfileInitial } from "./SlurpShell";
 import { SlurpDiscoveryProfileEditor } from "./SlurpDiscoveryProfileEditor";
-import { isSlurpDiscoveryProfileIncomplete } from "../../lib/slurp-discovery";
+import { isSlurpDiscoveryProfileIncomplete } from "../../slp/features/discovery/slp-discovery";
 import { fieldClass, textareaClass } from "./SlurpPostCard";
 import { cn } from "../../lib/utils";
 

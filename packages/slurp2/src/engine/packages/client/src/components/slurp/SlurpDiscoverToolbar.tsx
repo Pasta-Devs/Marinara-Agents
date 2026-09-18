@@ -1,13 +1,13 @@
 import { Check, Coins, LayoutGrid, List, Tags, UsersRound, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import { useSlurpSettings } from "../../hooks/use-slurp";
+import { useSlurpSettings } from "../../slp/features/settings/slp-settings-hooks";
 import {
   groupSlurpDiscoveryTags,
   type SlurpDiscoverLayout,
   type SlurpDiscoverSort,
-  type SlurpDiscoveryGender,
-} from "../../lib/slurp-discovery";
+} from "../../slp/features/discovery/slp-discovery";
+import type { SlurpDiscoveryGender } from "../../slp/base/state/slp-state-types";
 import { cn } from "../../lib/utils";
 
 const triggerClass =

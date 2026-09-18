@@ -1,3 +1,4 @@
+import type { SlurpDiscoveryGender } from "../../base/state/slp-state-types.js";
 export const SLURP_DISCOVERY_TAG_GROUPS = [
   {
     id: "themes",
@@ -30,7 +31,6 @@ export function isSlurpDiscoveryProfileIncomplete(profile: { gender?: unknown; t
 }
 export const SLURP_DISCOVERY_TAG_MAX_LENGTH = 24;
 
-export type SlurpDiscoveryGender = "male" | "female" | "other";
 export type SlurpDiscoverSort = "recommended" | "newest" | "liked" | "subscribed";
 export type SlurpDiscoverLayout = "grid" | "list";
 

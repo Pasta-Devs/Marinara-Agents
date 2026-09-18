@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
-import { useSlurpAudienceMember } from "../../hooks/use-slurp";
+import { useSlurpAudienceMember } from "../../slp/features/audience/slp-audience-hooks";
 import { cn } from "../../lib/utils";
 import { SLURP_CHARACTER_FAN_PREFIX } from "../../../../server/src/slp/modules/audience/slp-audience-characters.js";
 

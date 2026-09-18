@@ -17,10 +17,10 @@
  * world tick, which is the one place allowed to advance time.
  */
 
-import { slurpBuiltinFanTypeForTier } from "./slp-fan-types.js";
-import type { SlurpSpendTier } from "./slp-population.js";
-import { SLURP_FUNNEL_STAGES, type SlurpFunnelStage } from "./slp-population.js";
-import { SLURP_REALISTIC_TUNING, type SlurpSimulationTuning } from "../../base/model/slp-tuning.js";
+import { slurpBuiltinFanTypeForTier } from "../../../../../shared/src/slp/slp-fan-types.js";
+import type { SlurpSpendTier } from "../../../../../shared/src/slp/slp-population.js";
+import { SLURP_FUNNEL_STAGES, type SlurpFunnelStage } from "../../../../../shared/src/slp/slp-population.js";
+import { SLURP_REALISTIC_TUNING, type SlurpSimulationTuning } from "../../../../../shared/src/slp/slp-tuning.js";
 
 /**
  * What one person will spend on one Creator in a week, by appetite.

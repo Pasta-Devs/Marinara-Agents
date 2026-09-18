@@ -12,7 +12,7 @@ import { reactToSlurpPayment } from "./slp-payment-reaction.js";
 import { slurpPayoutAllowance } from "../../modules/economy/slp-earnings.js";
 import { isNoodlerHiddenFromViewer } from "../../base/identity/slp-access.js";
 import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
-import { SLURP_NAMED_CAST_LIMIT } from "../../modules/audience/slp-population.js";
+import { SLURP_NAMED_CAST_LIMIT } from "../../../../../shared/src/slp/slp-population.js";
 import { noodlerUnlockPriceFromMetadata } from "../../modules/economy/slp-prices.js";
 import type { FastifyInstance } from "fastify";
 import { noodlerPageCursorSchema, NOODLER_FEED_PAGE_SIZE } from "../../modules/requests/slp-request-schemas.js";

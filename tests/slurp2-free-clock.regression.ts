@@ -6,7 +6,7 @@ import {
   SLURP_WORLD_IDLE_POLL_MS,
   slurpCapTickEvents,
   slurpWorldTimerDue,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/base/model/slp-tuning.ts";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-tuning.js";
 import { slurp2Source } from "./slurp2-source";
 
 const src = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src/services/slurp");

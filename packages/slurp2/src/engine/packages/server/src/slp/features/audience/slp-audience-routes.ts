@@ -7,7 +7,7 @@ import {
   slurpFanTypeSpendTier,
   slurpFanTypeWeeklyBudget,
   slurpFanTypeActiveHour,
-} from "../../modules/audience/slp-fan-types.js";
+} from "../../../../../shared/src/slp/slp-fan-types.js";
 import { ensureAmbientNoodleAccounts, isAmbientNoodleAccount } from "../../data/audience/slp-ambient-profiles.js";
 import { tryNoodleOperation } from "../../base/locking/slp-operation-lock.js";
 import { noodleAmbientProfileRerollSchema, type NoodleAccount } from "@marinara-engine/shared";
@@ -17,7 +17,7 @@ import {
   SLURP_FUNNEL_STAGES,
   SLURP_NAMED_CAST_LIMIT,
   isSlurpPopulationMemberId,
-} from "../../modules/audience/slp-population.js";
+} from "../../../../../shared/src/slp/slp-population.js";
 import { slurpCreatorReach } from "../../modules/audience/slp-reach.js";
 import { slurpPlatformScaleMultiplier } from "../../modules/audience/slp-scale.js";
 import {

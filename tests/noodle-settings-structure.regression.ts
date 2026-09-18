@@ -9,7 +9,7 @@ async function main() {
     slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx"),
     slurp2BackstageSource(),
     readFile("packages/slurp2/src/engine/packages/client/src/components/slurp/slurp-navigation.types.ts", "utf8"),
-    readFile("packages/slurp2/src/engine/packages/client/src/stores/slurp-package.store.ts", "utf8"),
+    slurp2Source("packages/slurp2/src/engine/packages/client/src/stores/slurp-package.store.ts"),
   ]);
   assert.doesNotMatch(noodleHome, /enableNoodler|NoodlerPublishingSettings|SlurpAgeGate/u);
   assert.match(slurpSettings, /useSlurpSettings|useUpdateSlurpSettings/u);

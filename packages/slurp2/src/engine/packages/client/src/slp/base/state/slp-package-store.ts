@@ -1,12 +1,12 @@
 import { create } from "zustand";
-import { type SlurpNavigationState } from "../components/slurp/slurp-navigation.types";
+import { type SlurpNavigationState } from "../../../components/slurp/slurp-navigation.types";
 import {
   isSlurpBackstageSection,
   isSlurpBackstageTarget,
   SLURP_BACKSTAGE_DEFAULT_TARGET,
   SLURP_LEGACY_SETTINGS_DESTINATION,
   targetBelongsToSection,
-} from "../components/slurp/slurp-backstage";
+} from "../../../components/slurp/slurp-backstage";
 
 const PACKAGE_STATE_KEY = "marinara:slurp2:package-ui";
 

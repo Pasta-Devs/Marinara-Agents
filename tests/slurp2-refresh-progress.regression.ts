@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { refreshSlurpCreatorBatch } from "../packages/slurp2/src/engine/packages/client/src/lib/slurp-refresh-batch";
+import { refreshSlurpCreatorBatch } from "../packages/slurp2/src/engine/packages/client/src/slp/features/creators/slp-refresh-batch";
 import { slurp2Source } from "./slurp2-source";
 
 async function main() {

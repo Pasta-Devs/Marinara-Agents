@@ -23,7 +23,7 @@ import {
 import {
   planSlurpFanTypeRebalance,
   slurpFanTypesDefault,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-fan-types.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-fan-types.js";
 import { slurp2Source } from "./slurp2-source";
 
 const read = (relative: string): string =>

@@ -1,6 +1,6 @@
 import { Field, SectionTitle, Toggle } from "./SlurpSettingsControls";
 import { BackstagePageHeader, SettingAnchor } from "./SlurpBackstageKit";
-import { useSlurpPostGuidance } from "../../hooks/use-slurp";
+import { useSlurpPostGuidance } from "../../slp/features/settings/slp-post-guidance-hooks";
 import { SlurpPostGuidanceField } from "./SlurpPostGuidanceField";
 import type { SlurpBackstagePageProps } from "./SlurpSettings";
 import { SlurpPromptBlockBuilder } from "./SlurpPromptBlockBuilder";

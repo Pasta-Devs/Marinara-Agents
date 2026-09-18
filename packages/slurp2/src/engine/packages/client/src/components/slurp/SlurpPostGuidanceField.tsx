@@ -4,9 +4,8 @@ import { toast } from "sonner";
 import {
   useGenerateSlurpPostGuidance,
   useUpdateSlurpPostGuidance,
-  type SlurpPostAccess,
-  type SlurpPostGuidance,
-} from "../../hooks/use-slurp";
+} from "../../slp/features/settings/slp-post-guidance-hooks";
+import type { SlurpPostAccess, SlurpPostGuidance } from "../../slp/features/settings/slp-post-guidance-hooks";
 import { errorMessage, PromptCard, PromptEditor } from "./SlurpBackstageWorkflow";
 
 const focusRing = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]";

@@ -6,7 +6,7 @@ import {
   slurpAudienceToneInstruction,
   SLURP_AUDIENCE_TONES,
   SLURP_DEFAULT_AUDIENCE_TONE,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/base/prompting/slp-tone.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-tone.js";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
 import { slurp2Source } from "./slurp2-source";
 

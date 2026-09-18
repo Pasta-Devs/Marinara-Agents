@@ -8,7 +8,7 @@ import {
   slurpPickFanType,
   slurpResolveFanType,
   type SlurpFanType,
-} from "../../modules/audience/slp-fan-types.js";
+} from "../../../../../shared/src/slp/slp-fan-types.js";
 import {
   slurpAudienceOpener,
   slurpAudienceQuestion,

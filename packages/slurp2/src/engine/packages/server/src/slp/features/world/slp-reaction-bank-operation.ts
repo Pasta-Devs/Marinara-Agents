@@ -11,13 +11,13 @@ import { createConnectionsStorage } from "../../../services/storage/connections.
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
 import { noodleSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
-import { slurpAudienceToneInstruction } from "../../base/prompting/slp-tone.js";
+import { slurpAudienceToneInstruction } from "../../../../../shared/src/slp/slp-tone.js";
 import {
   mergeSlurpReactionBankBatch,
   SLURP_REACTION_BANK_TARGET,
   slurpReactionBodiesForType,
 } from "../../modules/world/slp-reaction-bank.js";
-import { slurpFanVoiceForPrompt } from "../../modules/audience/slp-fan-types.js";
+import { slurpFanVoiceForPrompt } from "../../../../../shared/src/slp/slp-fan-types.js";
 import {
   claimSlurpModelBudget,
   slurpModelWorkerAllows,

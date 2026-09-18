@@ -45,7 +45,7 @@ import {
   type ConversationMediaPickerTabId,
 } from "../chat/ConversationMediaPickerPanel";
 import type { ChatImage } from "../../hooks/use-gallery";
-import { useSlurpSettings } from "../../hooks/use-slurp";
+import { useSlurpSettings } from "../../slp/features/settings/slp-settings-hooks";
 import { Avatar, SlurpMediaImg } from "./SlurpShell";
 import { formatTime } from "./SlurpDateTime";
 import { NoodleImageComposer } from "./SlurpImageComposer";

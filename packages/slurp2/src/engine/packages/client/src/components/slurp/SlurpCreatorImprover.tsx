@@ -7,9 +7,9 @@ import {
   useDismissSlurpImprovementProposals,
   useSetSlurpImprovementJobState,
   useSlurpImprovementJobs,
-  type SlurpImprovementProposal,
-  type SlurpSettings,
-} from "../../hooks/use-slurp";
+} from "../../slp/features/maintenance/slp-improvement-hooks";
+import type { SlurpImprovementProposal } from "../../slp/features/maintenance/slp-improvement-hooks";
+import type { SlurpSettings } from "../../slp/features/settings/slp-settings-contract";
 import { toast } from "sonner";
 import { Avatar } from "./SlurpShell";
 import { SlurpBackstageScopeBadge } from "./SlurpBackstageChrome";

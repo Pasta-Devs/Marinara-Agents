@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { ChevronDown, ChevronUp, GripVertical, LockKeyhole, Pencil, RotateCcw } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import {
-  useSlurpPromptBlocks,
-  type SlurpPromptBlockDefinition,
-  type SlurpPromptBlockOverride,
-  type SlurpPromptDefinition,
-} from "../../hooks/use-slurp";
+import type { SlurpPromptBlockOverride } from "../../slp/base/state/slp-state-types";
+import type {
+  SlurpPromptBlockDefinition,
+  SlurpPromptDefinition,
+} from "../../slp/features/settings/slp-settings-contract";
+import { useSlurpPromptBlocks } from "../../slp/features/settings/slp-settings-hooks";
 import { Modal } from "../ui/Modal";
 
 type PromptBlockBuilderProps = {

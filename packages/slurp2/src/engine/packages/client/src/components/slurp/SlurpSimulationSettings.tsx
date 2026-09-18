@@ -16,7 +16,7 @@ import {
   SLURP_REALISTIC_TUNING,
   slurpSimulationTuningSchema,
   type SlurpSimulationTuning,
-} from "../../../../server/src/slp/base/model/slp-tuning.js";
+} from "../../../../shared/src/slp/slp-tuning.js";
 import { estimateSlurpSimulation, SLURP_ESTIMATE_SAMPLE } from "./slurp-simulation-estimate";
 import { Field, NumberSetting, SectionTitle, SettingsGroup, Toggle } from "./SlurpSettingsControls";
 

@@ -62,7 +62,7 @@ export type { NoodlerContentFormat } from "../../base/prompting/slp-content-form
 // this file, which cannot be imported without a database and an LLM provider.
 import { protectNoodlerGeneratedIdentity, type PublicIdentity } from "../../base/identity/slp-identity-protection.js";
 import { resolveNoodlerCharacterCanon } from "../../data/creators/slp-source-resolve.js";
-import { slurpPlatformEventInstruction } from "../../modules/world/events/slp-platform-events.js";
+import { slurpPlatformEventInstruction } from "../../../../../shared/src/slp/slp-platform-events.js";
 import { noodlerPublicIdentityFor, protectBoundedNoodlerGeneratedText } from "./slp-public-identity.js";
 import {
   FormattedNoodlerGenerationRequest,

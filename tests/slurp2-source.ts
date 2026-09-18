@@ -13,7 +13,49 @@ import { fileURLToPath } from "node:url";
 export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   "packages/client/src/components/slurp/SlurpHome.tsx": ["packages/client/src/components/slurp/SlurpHome.tsx"],
   "packages/client/src/components/slurp/SlurpMessages.tsx": ["packages/client/src/components/slurp/SlurpMessages.tsx"],
-  "packages/client/src/hooks/use-slurp.ts": ["packages/client/src/hooks/use-slurp.ts"],
+  "packages/client/src/hooks/use-slurp.ts": [
+    "packages/client/src/slp/base/state/slp-query-keys.ts",
+    "packages/client/src/slp/base/state/slp-state-types.ts",
+    "packages/client/src/slp/base/state/slp-page-cursor.ts",
+    "packages/client/src/slp/base/state/slp-host-connections.ts",
+    "packages/client/src/slp/features/ads/slp-ads-hooks.ts",
+    "packages/client/src/slp/features/settings/slp-settings-contract.ts",
+    "packages/client/src/slp/features/settings/slp-settings-hooks.ts",
+    "packages/client/src/slp/features/settings/slp-image-connection-hooks.ts",
+    "packages/client/src/slp/features/settings/slp-post-guidance-hooks.ts",
+    "packages/client/src/slp/features/maintenance/slp-backup.ts",
+    "packages/client/src/slp/features/maintenance/slp-maintenance-hooks.ts",
+    "packages/client/src/slp/features/maintenance/slp-improvement-hooks.ts",
+    "packages/client/src/slp/features/discovery/slp-discovery-tag-hooks.ts",
+    "packages/client/src/slp/features/creators/slp-creators-contract.ts",
+    "packages/client/src/slp/features/creators/slp-creators-hooks.ts",
+    "packages/client/src/slp/features/creators/slp-creator-profile-hooks.ts",
+    "packages/client/src/slp/features/creators/slp-creator-refresh-hooks.ts",
+    "packages/client/src/slp/features/audience/slp-audience-contract.ts",
+    "packages/client/src/slp/features/audience/slp-audience-hooks.ts",
+    "packages/client/src/slp/features/audience/slp-ambient-profile-hooks.ts",
+    "packages/client/src/slp/features/audience/slp-fan-activity-hooks.ts",
+    "packages/client/src/slp/features/economy/slp-economy-contract.ts",
+    "packages/client/src/slp/features/economy/slp-economy-hooks.ts",
+    "packages/client/src/slp/features/notifications/slp-notifications-contract.ts",
+    "packages/client/src/slp/features/notifications/slp-notification-hooks.ts",
+    "packages/client/src/slp/features/projects/slp-projects-contract.ts",
+    "packages/client/src/slp/features/projects/slp-projects-hooks.ts",
+    "packages/client/src/slp/features/feed/slp-feed-contract.ts",
+    "packages/client/src/slp/features/feed/slp-feed-post-hooks.ts",
+    "packages/client/src/slp/features/feed/slp-feed-viewer-hooks.ts",
+    "packages/client/src/slp/features/feed/slp-feed-schedule-hooks.ts",
+    "packages/client/src/slp/features/onboarding/slp-first-post-hooks.ts",
+    "packages/client/src/slp/features/messages/slp-messages-contract.ts",
+    "packages/client/src/slp/features/messages/slp-message-keys.ts",
+    "packages/client/src/slp/features/messages/slp-messages-hooks.ts",
+    "packages/client/src/slp/features/messages/slp-message-action-hooks.ts",
+    "packages/client/src/slp/features/messages/commissions/slp-commission-hooks.ts",
+  ],
+  "packages/client/src/stores/slurp-package.store.ts": ["packages/client/src/slp/base/state/slp-package-store.ts"],
+  "packages/client/src/hooks/use-slurp-media-src.ts": ["packages/client/src/slp/base/media/slp-media-src.ts"],
+  "packages/client/src/lib/slurp-discovery.ts": ["packages/client/src/slp/features/discovery/slp-discovery.ts"],
+  "packages/client/src/lib/slurp-refresh-batch.ts": ["packages/client/src/slp/features/creators/slp-refresh-batch.ts"],
   "packages/server/src/routes/slurp.routes.ts": [
     "packages/server/src/slp/modules/requests/slp-request-schemas.ts",
     "packages/server/src/slp/base/host/slp-multipart.ts",
@@ -127,7 +169,7 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   "packages/server/src/services/slurp/slurp-response-format.ts": [
     "packages/server/src/slp/base/prompting/slp-response-format.ts",
   ],
-  "packages/server/src/services/slurp/slurp-tone.ts": ["packages/server/src/slp/base/prompting/slp-tone.ts"],
+  "packages/server/src/services/slurp/slurp-tone.ts": ["packages/shared/src/slp/slp-tone.ts"],
   "packages/server/src/services/slurp/slurp-sampling-options.ts": [
     "packages/server/src/slp/base/prompting/slp-sampling-options.ts",
   ],
@@ -190,16 +232,14 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   "packages/server/src/services/slurp/slurp-activation-lifecycle.ts": [
     "packages/server/src/slp/base/locking/slp-activation-lifecycle.ts",
   ],
-  "packages/server/src/services/slurp/slurp-model-budget.ts": [
-    "packages/server/src/slp/base/model/slp-model-budget.ts",
-  ],
+  "packages/server/src/services/slurp/slurp-model-budget.ts": ["packages/shared/src/slp/slp-model-budget.ts"],
   "packages/server/src/services/slurp/slurp-model-worker.ts": [
     "packages/server/src/slp/base/model/slp-model-worker.ts",
   ],
   "packages/server/src/services/slurp/slurp-model-answer.ts": [
     "packages/server/src/slp/base/model/slp-model-answer.ts",
   ],
-  "packages/server/src/services/slurp/slurp-tuning.ts": ["packages/server/src/slp/base/model/slp-tuning.ts"],
+  "packages/server/src/services/slurp/slurp-tuning.ts": ["packages/shared/src/slp/slp-tuning.ts"],
   "packages/server/src/services/slurp/slurp-poll-backoff.ts": [
     "packages/server/src/slp/base/model/slp-poll-backoff.ts",
   ],
@@ -362,12 +402,8 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   "packages/server/src/services/slurp/slurp-commission-image.operation.ts": [
     "packages/server/src/slp/features/messages/commissions/slp-commission-image-operation.ts",
   ],
-  "packages/server/src/services/slurp/slurp-population.ts": [
-    "packages/server/src/slp/modules/audience/slp-population.ts",
-  ],
-  "packages/server/src/services/slurp/slurp-fan-types.ts": [
-    "packages/server/src/slp/modules/audience/slp-fan-types.ts",
-  ],
+  "packages/server/src/services/slurp/slurp-population.ts": ["packages/shared/src/slp/slp-population.ts"],
+  "packages/server/src/services/slurp/slurp-fan-types.ts": ["packages/shared/src/slp/slp-fan-types.ts"],
   "packages/server/src/services/slurp/slurp-fan-activity-day-plan.ts": [
     "packages/server/src/slp/modules/audience/slp-fan-activity-day-plan.ts",
   ],
@@ -435,9 +471,7 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
     "packages/server/src/slp/features/world/slp-reaction-bank-operation.ts",
   ],
   "packages/server/src/services/slurp/slurp-milestones.ts": ["packages/server/src/slp/modules/world/slp-milestones.ts"],
-  "packages/server/src/services/slurp/slurp-platform-events.ts": [
-    "packages/server/src/slp/modules/world/events/slp-platform-events.ts",
-  ],
+  "packages/server/src/services/slurp/slurp-platform-events.ts": ["packages/shared/src/slp/slp-platform-events.ts"],
   "packages/server/src/services/slurp/slurp-project.ts": [
     "packages/server/src/slp/modules/projects/slp-project.ts",
     "packages/server/src/slp/modules/projects/slp-arc-crossover.ts",

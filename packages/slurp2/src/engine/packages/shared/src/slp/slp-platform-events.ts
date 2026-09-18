@@ -7,8 +7,8 @@
  */
 import { z } from "zod";
 
-import { slpModifierDraftsSchema, slpNormalizeModifierDrafts } from "../../../base/modifiers/slp-modifier-schema.js";
-import type { SlpModifier, SlpModifierSource } from "../../../base/modifiers/slp-modifier.types.js";
+import { slpModifierDraftsSchema, slpNormalizeModifierDrafts } from "./slp-modifier-schema.js";
+import type { SlpModifier, SlpModifierSource } from "./slp-modifier.types.js";
 
 /** Longest guidance an event may carry. It rides in every post and reply prompt while active. */
 export const SLURP_PLATFORM_EVENT_GUIDANCE_MAX = 600;

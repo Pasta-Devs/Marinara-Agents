@@ -4,7 +4,7 @@ import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-error
 import { readSlurpWallet, slurpWalletKey, spend, subscriptionPaidThrough } from "../../modules/economy/slp-wallet.js";
 import { createSlpActiveModifierProvider } from "../../base/modifiers/slp-active-modifier-provider.js";
 import { slurpSubscriptionCharge } from "../../modules/economy/slp-creator-pricing.js";
-import { slurpPlatformEventModifierSource } from "../../modules/world/events/slp-platform-events.js";
+import { slurpPlatformEventModifierSource } from "../../../../../shared/src/slp/slp-platform-events.js";
 import { createSlurpPopulationStorage } from "../audience/slp-audience-storage-funnel.js";
 import { slurpEarningsKey } from "../../modules/economy/slp-earnings.js";
 import { isNoodlerHiddenFromViewer } from "../../base/identity/slp-access.js";

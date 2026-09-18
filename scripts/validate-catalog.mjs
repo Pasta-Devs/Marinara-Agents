@@ -214,6 +214,8 @@ const slurp2OwnedSourcePaths = [
     (path) =>
       ![
         "packages/client/src/slurp-package-entry.tsx",
+        "packages/client/src/hooks/use-slurp.ts",
+        "packages/client/src/stores/slurp-package.store.ts",
         "packages/server/src/routes/slurp.routes.ts",
         "packages/server/src/services/storage/slurp.storage.ts",
         "packages/server/src/services/slurp",

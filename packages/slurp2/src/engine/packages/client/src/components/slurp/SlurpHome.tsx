@@ -73,82 +73,96 @@ import type {
   AvatarCrop,
   Persona,
 } from "@marinara-engine/shared";
+import type { SlurpManagedStageProfile, SlurpStageProfileInput } from "../../slp/base/state/slp-state-types";
 import {
-  useCreateNoodlerPost,
-  useCreateNoodlerInteraction,
-  useTriggerNoodlerCreatorReply,
-  useCreateNoodlerStageProfile,
-  useDeleteNoodlerPost,
-  useDeleteNoodlerInteraction,
-  useGenerateNoodlerNoodlePost,
-  useGenerateNoodlerPostImage,
-  useConfirmNoodlerImagePrompts,
-  useRunNoodlerAutoPostNow,
-  useGenerateNoodlerStageProfileDraft,
-  useLoadNoodlerPostImage,
-  useNoodlerAccounts,
-  useNoodlerEligibleAccounts,
-  useNoodlerPosts,
-  useNoodlerConnectionCounts,
-  useSlurpWallet,
-  useClaimSlurpDailyRefill,
-  useSetSlurpWalletCoinsForDevelopment,
-  useTipSlurpCreator,
-  useSlurpCompose,
-  useNoodlerViewerWallets,
-  useNoodlerSubscribers,
-  useNoodlerFollowers,
-  useNoodlerUnseenCount,
-  useSlurpStudio,
-  useSlurpNotifications,
-  useSlurpThreads,
-  useMarkSlurpNotificationsSeen,
-  type SlurpEventGroup,
-  type SlurpEventItem,
-  type SlurpStudioCreator,
-  type SlurpPromotion,
-  useSetSlurpGoal,
-  useSlurpPayout,
   useHideSlurpAd,
   useHideSlurpAdBrand,
   useRecordSlurpAdAction,
   useSlurpInlineAds,
+} from "../../slp/features/ads/slp-ads-hooks";
+import type { SlurpPromotion } from "../../slp/features/ads/slp-ads-hooks";
+import {
+  useNoodlerConnectionCounts,
+  useNoodlerFollowers,
+  useNoodlerSubscribers,
+} from "../../slp/features/audience/slp-audience-hooks";
+import { useUpdateNoodlerFanActivity } from "../../slp/features/audience/slp-fan-activity-hooks";
+import {
+  useCreateNoodlerStageProfile,
+  useGenerateNoodlerArtwork,
+  useGenerateNoodlerStageProfileDraft,
+  useRemoveNoodlerAvatar,
+  useUpdateNoodlerProfileLocation,
+  useUpdateNoodlerStageProfile,
+  useUploadNoodlerAvatar,
+  useUploadNoodlerBanner,
+  useUseNoodlerSourceAvatar,
+} from "../../slp/features/creators/slp-creator-profile-hooks";
+import { useNoodlerAccounts, useNoodlerEligibleAccounts } from "../../slp/features/creators/slp-creators-hooks";
+import type { SlurpStudioCreator } from "../../slp/features/economy/slp-economy-contract";
+import {
+  useClaimSlurpDailyRefill,
+  useNoodlerViewerWallets,
+  useSetSlurpGoal,
+  useSetSlurpWalletCoinsForDevelopment,
+  useSlurpPayout,
+  useSlurpStudio,
+  useSlurpWallet,
+  useTipSlurpCreator,
+} from "../../slp/features/economy/slp-economy-hooks";
+import type {
+  NoodlerContentFormat,
+  NoodlerPostDraftImage,
+  SlurpProfilePost,
+} from "../../slp/features/feed/slp-feed-contract";
+import {
+  useConfirmNoodlerImagePrompts,
+  useCreateNoodlerPost,
+  useDeleteNoodlerPost,
+  useGenerateNoodlerNoodlePost,
+  useGenerateNoodlerPostImage,
+  useLoadNoodlerPostImage,
+  useNoodlerPosts,
+  useReplaceNoodlerPostImage,
+  useUpdateNoodlerPost,
+} from "../../slp/features/feed/slp-feed-post-hooks";
+import {
+  useRunNoodlerAutoPostNow,
+  useUpdateNoodlerAccess,
+  useUpdateNoodlerAutoPosting,
+} from "../../slp/features/feed/slp-feed-schedule-hooks";
+import {
+  useCreateNoodlerInteraction,
+  useDeleteNoodlerInteraction,
   useMarkNoodlerFeedSeen,
+  useNoodlerUnseenCount,
   useNoodlerViewer,
   useRemoveNoodlerInteraction,
   useToggleNoodlerFollow,
   useToggleNoodlerSubscription,
+  useTriggerNoodlerCreatorReply,
   useUnlockNoodlerPost,
-  useUpdateNoodlerPost,
   useUpdateNoodlerInteraction,
-  useReplaceNoodlerPostImage,
-  useUpdateNoodlerAccess,
-  useUpdateNoodlerAutoPosting,
-  useUpdateNoodlerFanActivity,
-  useUpdateNoodlerStageProfile,
-  useUpdateNoodlerProfileLocation,
-  useSlurpArcs,
-  useSlurpSettings,
+} from "../../slp/features/feed/slp-feed-viewer-hooks";
+import {
   useRecordSlurpStoryView,
+  useSlurpCompose,
   useSlurpStoryViews,
-  useUpdateSlurpSettings,
-  useUploadNoodlerAvatar,
-  useUploadNoodlerBanner,
-  useGenerateNoodlerArtwork,
-  useUseNoodlerSourceAvatar,
-  useRemoveNoodlerAvatar,
-  type NoodlerContentFormat,
-  type SlurpProfilePost,
-  type NoodlerPostDraftImage,
-  type SlurpStageProfileInput,
-  type SlurpManagedStageProfile,
-} from "../../hooks/use-slurp";
+  useSlurpThreads,
+} from "../../slp/features/messages/slp-messages-hooks";
+import type { SlurpEventGroup, SlurpEventItem } from "../../slp/features/notifications/slp-notifications-contract";
+import {
+  useMarkSlurpNotificationsSeen,
+  useSlurpNotifications,
+} from "../../slp/features/notifications/slp-notification-hooks";
+import { useSlurpArcs } from "../../slp/features/projects/slp-projects-hooks";
+import { useSlurpSettings, useUpdateSlurpSettings } from "../../slp/features/settings/slp-settings-hooks";
 import { useActivePersona, usePersonas } from "../../hooks/use-creator-personas";
 import { useConnections } from "../../hooks/use-connections";
 import { ApiError } from "../../lib/api-client";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { cn } from "../../lib/utils";
-import { useSlurpUIStore } from "../../stores/slurp-package.store";
+import { useSlurpUIStore } from "../../slp/base/state/slp-package-store";
 import {
   ImagePromptReviewModal,
   type ImagePromptOverride,
@@ -169,7 +183,7 @@ import { LockedSlurpPostCard, SlurpCreatorPostCard } from "./SlurpCreatorPostCar
 import { SlurpSparkleVeil } from "./SlurpSparkleVeil";
 import { DEFAULT_SLURP_SUBSCRIPTION_PRICE, SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "./SlurpCoin";
 import { ChatImageLightbox } from "../chat/ChatImageLightbox";
-import { useNearViewportSlurpMediaSrc, useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
+import { useNearViewportSlurpMediaSrc, useSlurpMediaSrc } from "../../slp/base/media/slp-media-src";
 import { SlurpOnboardingWizard } from "./SlurpOnboardingPanel";
 import { SlurpAgeGate, SlurpConfetti } from "./SlurpAgeGate";
 import { SlurpSplash, slurp2SplashPending } from "./SlurpSplash";
@@ -218,8 +232,8 @@ import {
   SLURP_DISCOVERY_TAGS,
   type SlurpDiscoverLayout,
   type SlurpDiscoverSort,
-  type SlurpDiscoveryGender,
-} from "../../lib/slurp-discovery";
+} from "../../slp/features/discovery/slp-discovery";
+import type { SlurpDiscoveryGender } from "../../slp/base/state/slp-state-types";
 import { formatTime } from "./SlurpDateTime";
 
 interface SlurpHomeProps {

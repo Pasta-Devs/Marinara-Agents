@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.0.30 — 2026-09-19
+
+- No visible changes. Split the client state and hooks into feature modules.
+
 ## 0.0.29 — 2026-09-18
 
 - No visible changes. Added the cross-feature event modifier seam.

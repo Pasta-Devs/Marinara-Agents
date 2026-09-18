@@ -13,7 +13,9 @@ import { errorMessage, CreatorMessagingGroup } from "./SlurpBackstageWorkflow";
 import { BackstagePageHeader, SettingAnchor } from "./SlurpBackstageKit";
 import { SlurpPostGuidanceField } from "./SlurpPostGuidanceField";
 import { SlurpCreatorProfileEditor } from "./SlurpCreatorProfileEditor";
-import { useSlurpCreatorMetrics, useSlurpPostGuidance, type SlurpCreatorMetrics } from "../../hooks/use-slurp";
+import type { SlurpCreatorMetrics } from "../../slp/features/creators/slp-creators-contract";
+import { useSlurpCreatorMetrics } from "../../slp/features/creators/slp-creators-hooks";
+import { useSlurpPostGuidance } from "../../slp/features/settings/slp-post-guidance-hooks";
 
 type CreatorFilter = "all" | "active" | "paused" | "attention";
 type CreatorTab = "profile" | "publishing" | "images" | "messages" | "danger";
