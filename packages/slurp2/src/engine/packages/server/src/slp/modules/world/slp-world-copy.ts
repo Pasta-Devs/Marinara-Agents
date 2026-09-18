@@ -14,7 +14,7 @@
  * before reaching for the model — the combinations here already run into the hundreds.
  */
 
-import type { SlurpAudienceTone } from "../../base/prompting/slp-tone.js";
+import type { SlurpAudienceTone } from "../../../../../shared/src/slp/slp-tone.js";
 
 const COMMISSION_OPENERS = [
   "Would you take a request?",

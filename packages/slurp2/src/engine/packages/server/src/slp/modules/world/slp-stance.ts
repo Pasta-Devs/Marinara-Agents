@@ -23,7 +23,7 @@
  * The evidence is returned alongside the instruction, so the debug panel can show which layer
  * caused a reply rather than guessing from the words.
  */
-import type { SlurpAudienceTone } from "../../base/prompting/slp-tone.js";
+import type { SlurpAudienceTone } from "../../../../../shared/src/slp/slp-tone.js";
 import type { SlurpMoodTone } from "./slp-mood.js";
 import type { SlurpRapportTier } from "../messages/slp-rapport.js";
 import { describeSlurpMood } from "./slp-mood.js";

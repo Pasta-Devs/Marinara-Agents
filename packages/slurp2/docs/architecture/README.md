@@ -12,8 +12,12 @@ packages/server/src/slp/    pure rules, persistence, routes, services, workflows
 packages/shared/src/slp/    pure code imported by both client and server
 ```
 
-`shared/src/slp/` stays narrow: pure functions only (initially the autopurge date calculation). It
-imports neither client nor server code. Client and server may import it.
+`shared/src/slp/` holds pure rules that both sides genuinely need: the autopurge date calculation,
+plus the tone, tuning, model-budget, modifier, platform-event, fan-type, and population rules the
+settings surface reads and the server enforces. It imports neither client nor server code, depends
+only on `zod` and `@marinara-engine/shared`, and holds no I/O, no React, and no Fastify. Client and
+server may import it. A rule belongs here only when both sides already need it; a rule one side
+needs stays in that side's `base/` or `modules/`.
 
 Two named exceptions live outside the roots and are owned separately:
 
@@ -45,6 +49,15 @@ base <- modules <- features <- app <- slp-client-entry.tsx
 Modules render from props and import no feature hook. `features/backstage/` owns only the shell,
 save contract, search and deep links, and one explicit `{ target, Component }` panel registry.
 Each settings panel lives with the feature whose setting it controls.
+
+`features/settings/` mirrors the server feature of the same name. It owns the Slurp settings
+document itself — its type, its read and write hooks, and the image-connection and post-guidance
+hooks that write into it — and exposes `slp-settings-contract.ts` to the features that read a
+setting. It does not own another feature's panel.
+
+Hook files follow the file rule below rather than React's `use-` convention: a hook module is named
+`slp-<domain>-hooks.ts`, so every file under a root sorts and greps by domain. The hook symbols
+inside keep their existing public `useSlurp*` / `useNoodler*` names.
 
 ## Server layers
 

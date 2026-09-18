@@ -11,7 +11,7 @@ import type {
   SlpModifier,
   SlpModifierSource,
   SlpModifierTarget,
-} from "./slp-modifier.types.js";
+} from "../../../../../shared/src/slp/slp-modifier.types.js";
 
 export function createSlpActiveModifierProvider(sources: readonly SlpModifierSource[]): SlpActiveModifierProvider {
   return {

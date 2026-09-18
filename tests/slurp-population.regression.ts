@@ -9,7 +9,7 @@ import {
   slurpMembersActiveAt,
   SLURP_POPULATION_NAME_SPACE,
   slurpReactivationStage,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-population.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-population.js";
 import { slurp2Source } from "./slurp2-source";
 
 const at = new Date("2026-09-05T00:00:00.000Z");

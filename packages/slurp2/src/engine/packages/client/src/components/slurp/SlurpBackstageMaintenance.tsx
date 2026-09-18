@@ -5,13 +5,13 @@ import { Field, GuidanceBox, NumberSetting, SettingsGroup, Toggle } from "./Slur
 import { toast } from "sonner";
 import { BackstagePageHeader, SettingAnchor } from "./SlurpBackstageKit";
 import {
-  startSlurpBackup,
-  inspectSlurpRestore,
   applySlurpRestoreInspection,
   discardSlurpRestoreInspection,
   downloadSlurpBackup,
-  type SlurpSettings,
-} from "../../hooks/use-slurp";
+  inspectSlurpRestore,
+  startSlurpBackup,
+} from "../../slp/features/maintenance/slp-backup";
+import type { SlurpSettings } from "../../slp/features/settings/slp-settings-contract";
 import { showConfirmDialog, showPromptDialog } from "../../lib/app-dialogs";
 import { SlurpMaintenanceHealth } from "./SlurpMaintenanceHealth";
 import type { SlurpBackstagePageProps } from "./SlurpSettings";

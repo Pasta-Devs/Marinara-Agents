@@ -42,7 +42,7 @@ import { api } from "../../lib/api-client";
 import { toast } from "sonner";
 import { ConversationMediaPickerPanel } from "../chat/ConversationMediaPickerPanel";
 import type { ChatImage } from "../../hooks/use-gallery";
-import { useNearViewportSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
+import { useNearViewportSlurpMediaSrc } from "../../slp/base/media/slp-media-src";
 import { Modal } from "../ui/Modal";
 import { Avatar, ProfileInitial, SlurpMediaImg } from "./SlurpShell";
 import { formatTime } from "./SlurpDateTime";

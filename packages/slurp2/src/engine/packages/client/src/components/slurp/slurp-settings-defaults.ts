@@ -1,4 +1,4 @@
-import type { SlurpSettings } from "../../hooks/use-slurp";
+import type { SlurpSettings } from "../../slp/features/settings/slp-settings-contract";
 
 /**
  * Which settings each Settings section owns, for the changed count and the section reset.

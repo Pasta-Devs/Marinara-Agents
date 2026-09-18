@@ -20,8 +20,8 @@ import {
   type SlurpFunnelStage,
   type SlurpPopulationMember,
   type SlurpSpendTier,
-} from "../../modules/audience/slp-population.js";
-import type { SlurpFanType } from "../../modules/audience/slp-fan-types.js";
+} from "../../../../../shared/src/slp/slp-population.js";
+import type { SlurpFanType } from "../../../../../shared/src/slp/slp-fan-types.js";
 import { slurpAudienceWeeklySpend } from "../../modules/audience/slp-audience-subscription.js";
 
 export { SLURP_FUNNEL_STAGES, SLURP_NAMED_CAST_LIMIT, type SlurpFunnelStage };

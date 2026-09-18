@@ -11,7 +11,7 @@
  * may write.
  */
 import { z } from "zod";
-import { SLURP_AUDIENCE_TONE_INSTRUCTIONS } from "../prompting/slp-tone.js";
+import { SLURP_AUDIENCE_TONE_INSTRUCTIONS } from "./slp-tone.js";
 
 /** Most world events one tick may produce, whatever the settings say. */
 export const SLURP_TUNING_EVENTS_PER_TICK_CEILING = 60;

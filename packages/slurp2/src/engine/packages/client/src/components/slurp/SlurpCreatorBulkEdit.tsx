@@ -2,13 +2,11 @@ import { Check } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import {
-  useBulkUpdateSlurpCreators,
-  type SlurpCreatorBulkPatch,
-  type SlurpDiscoveryGender,
-} from "../../hooks/use-slurp";
+import type { SlurpDiscoveryGender } from "../../slp/base/state/slp-state-types";
+import type { SlurpCreatorBulkPatch } from "../../slp/features/creators/slp-creators-contract";
+import { useBulkUpdateSlurpCreators } from "../../slp/features/creators/slp-creators-hooks";
 import { showConfirmDialog } from "../../lib/app-dialogs";
-import { SLURP_DISCOVERY_TAG_LIMIT } from "../../lib/slurp-discovery";
+import { SLURP_DISCOVERY_TAG_LIMIT } from "../../slp/features/discovery/slp-discovery";
 import { cn } from "../../lib/utils";
 import { Field, SettingsGroup } from "./SlurpSettingsControls";
 

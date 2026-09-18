@@ -6,7 +6,7 @@ import {
   SLURP_TUNING_PULSE_PER_TICK_CEILING,
   slurpRhythmMultiplier,
   slurpTuningForPreset,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/base/model/slp-tuning.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-tuning.js";
 import {
   planSlurpWorldPulse,
   slurpPostViralMultiplier,

@@ -38,7 +38,7 @@ import {
   slurpFanMemoryForPrompt,
   slurpFanVoiceForPrompt,
   slurpResolveFanType,
-} from "../../modules/audience/slp-fan-types.js";
+} from "../../../../../shared/src/slp/slp-fan-types.js";
 import { resolveSlurpCharacterFanVoice } from "../../data/creators/slp-source-resolve.js";
 import { NOODLER_UNTRUSTED_CONTENT_INSTRUCTION } from "../feed/slp-feed-contract.js";
 import type { APIProvider } from "@marinara-engine/shared";

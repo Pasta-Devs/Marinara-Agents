@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import { BackstagePageHeader, BackstageWizard, SettingAnchor, SummaryRow } from "./SlurpBackstageKit";
 import { outcomeSummary } from "./SlurpBackstageChrome";
 import type { SlurpBackstageTarget } from "./slurp-backstage";
-import { type SlurpSettings } from "../../hooks/use-slurp";
+import type { SlurpSettings } from "../../slp/features/settings/slp-settings-contract";
 import { SLURP_ACTIVITY_PRESETS, slurpActivityPresetPatch, slurpPostsPerDayForPreset } from "./slurp-activity-presets";
 import type { SlurpBackstagePageProps } from "./SlurpSettings";
 import { errorMessage } from "./SlurpBackstageWorkflow";

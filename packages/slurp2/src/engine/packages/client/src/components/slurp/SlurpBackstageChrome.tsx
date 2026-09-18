@@ -1,13 +1,14 @@
 import { ArrowRight, Check, ChevronDown, Search, SlidersHorizontal, Sparkles, X } from "lucide-react";
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { SlurpPromotion, SlurpSettings } from "../../hooks/use-slurp";
+import type { SlurpPromotion } from "../../slp/features/ads/slp-ads-hooks";
+import type { SlurpSettings } from "../../slp/features/settings/slp-settings-contract";
 import { SlurpInlineAd } from "./SlurpInlineAd";
 import { ProfileInitial } from "./SlurpShell";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { cn } from "../../lib/utils";
 import { estimateSlurpSimulation } from "./slurp-simulation-estimate";
-import { slurpActivePlatformEvents } from "../../../../server/src/slp/modules/world/events/slp-platform-events.js";
+import { slurpActivePlatformEvents } from "../../../../shared/src/slp/slp-platform-events.js";
 import {
   destinationForTarget,
   SLURP_BACKSTAGE_SECTION_LABELS,

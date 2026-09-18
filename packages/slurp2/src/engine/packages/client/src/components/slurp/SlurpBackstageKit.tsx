@@ -2,7 +2,7 @@
 import { ArrowLeft, ArrowRight, Check, ChevronRight } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { SlurpSettings } from "../../hooks/use-slurp";
+import type { SlurpSettings } from "../../slp/features/settings/slp-settings-contract";
 import { cn } from "../../lib/utils";
 import { SlurpBackstageScopeBadge } from "./SlurpBackstageChrome";
 import type { SlurpBackstageScope } from "./slurp-backstage";

@@ -6,9 +6,9 @@ import {
   type SlurpModelBudget,
   type SlurpModelBudgetLedger,
   type SlurpModelJobKind,
-} from "./slp-model-budget.js";
+} from "../../../../../shared/src/slp/slp-model-budget.js";
 
-export * from "./slp-model-budget.js";
+export * from "../../../../../shared/src/slp/slp-model-budget.js";
 
 const LEDGER_KEY = "slurp2.model-budget-ledger";
 let claimQueue: Promise<unknown> = Promise.resolve();

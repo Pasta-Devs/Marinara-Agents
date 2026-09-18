@@ -4,14 +4,14 @@ import { join } from "node:path";
 import {
   slurpFanMemoryForPrompt,
   SLURP_FAN_MEMORY_MAX,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-fan-types.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-fan-types.js";
 import { slurpAudienceWeeklySpend } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-audience-subscription.js";
 import {
   planSlurpWorldTick,
   slurpAudienceTipAmount,
   type SlurpWorldActorWeights,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world.js";
-import { SLURP_REALISTIC_TUNING } from "../packages/slurp2/src/engine/packages/server/src/slp/base/model/slp-tuning.js";
+import { SLURP_REALISTIC_TUNING } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-tuning.js";
 import { slurp2Source } from "./slurp2-source";
 
 const at = new Date("2026-09-14T12:00:00.000Z");

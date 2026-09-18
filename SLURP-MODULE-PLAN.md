@@ -220,11 +220,16 @@ modifier contract, not a general event bus.
 Create:
 
 ```text
-base/modifiers/slp-modifier.types.ts
-base/modifiers/slp-modifier-schema.ts
-base/modifiers/slp-modifier-resolver.ts
-base/modifiers/slp-active-modifier-provider.ts
+shared/src/slp/slp-modifier.types.ts
+shared/src/slp/slp-modifier-schema.ts
+server base/modifiers/slp-modifier-resolver.ts
+server base/modifiers/slp-active-modifier-provider.ts
 ```
+
+Corrected during Slice 7 (maintainer-approved; see `DECISIONS.md`). The contract half moved to
+`shared/src/slp/` with the other pure rules the Backstage settings surface reads, because the client
+`slp` root may not import server `slp` code. The resolver and provider stay on the server; their
+behaviour is unchanged.
 
 The initial contract has:
 

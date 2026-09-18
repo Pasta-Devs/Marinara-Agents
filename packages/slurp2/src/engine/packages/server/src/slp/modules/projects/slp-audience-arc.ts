@@ -13,7 +13,7 @@
  * "Moth Hour: liker" is a database row.
  */
 
-import { SLURP_FUNNEL_STAGES, type SlurpFunnelStage } from "../audience/slp-population.js";
+import { SLURP_FUNNEL_STAGES, type SlurpFunnelStage } from "../../../../../shared/src/slp/slp-population.js";
 
 export const SLURP_AUDIENCE_ARCS = ["steady", "rising", "cooling", "burnout", "returning", "overattached"] as const;
 

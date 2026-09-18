@@ -25,16 +25,20 @@ import {
   SLURP_ARC_TYPE_NAME_MAX_LENGTH,
   SLURP_DEFAULT_ARC_AUTO_MODE,
 } from "../projects/slp-arc-library.js";
-import { SLURP_AUDIENCE_TONES, SLURP_DEFAULT_AUDIENCE_TONE } from "../../base/prompting/slp-tone.js";
-import { SLURP_REALISTIC_TUNING, slurpSimulationTuningSchema } from "../../base/model/slp-tuning.js";
-import { slurpFanTypesDefault, slurpFanTypesSchema, slurpNormalizeFanTypes } from "../audience/slp-fan-types.js";
+import { SLURP_AUDIENCE_TONES, SLURP_DEFAULT_AUDIENCE_TONE } from "../../../../../shared/src/slp/slp-tone.js";
+import { SLURP_REALISTIC_TUNING, slurpSimulationTuningSchema } from "../../../../../shared/src/slp/slp-tuning.js";
+import {
+  slurpFanTypesDefault,
+  slurpFanTypesSchema,
+  slurpNormalizeFanTypes,
+} from "../../../../../shared/src/slp/slp-fan-types.js";
 import {
   slurpNormalizePlatformEvents,
   slurpPlatformEventsDefault,
   slurpPlatformEventsSchema,
-} from "../world/events/slp-platform-events.js";
+} from "../../../../../shared/src/slp/slp-platform-events.js";
 import { slurpNormalizeReactionBanks, SlurpReactionBanks } from "../world/slp-reaction-bank.js";
-import { slurpModelBudgetSchema } from "../../base/model/slp-model-budget.js";
+import { slurpModelBudgetSchema } from "../../../../../shared/src/slp/slp-model-budget.js";
 import {
   SLURP_DEFAULT_PLATFORM_SCALE,
   SLURP_DEFAULT_WORLD_ACTIVITY,

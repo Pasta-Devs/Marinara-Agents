@@ -28,8 +28,8 @@ import {
   SLURP_AUDIENCE_TONES,
   slurpAudienceToneInstruction,
   type SlurpAudienceTone,
-} from "../../base/prompting/slp-tone.js";
-import { SLURP_REALISTIC_TUNING } from "../../base/model/slp-tuning.js";
+} from "../../../../../shared/src/slp/slp-tone.js";
+import { SLURP_REALISTIC_TUNING } from "../../../../../shared/src/slp/slp-tuning.js";
 import { slurpAudienceArcDescription, type SlurpAudienceArc } from "../../modules/projects/slp-audience-arc.js";
 import { slurpArcLifeLine } from "../../modules/projects/slp-arc-progress.js";
 import { protectNoodlerGeneratedIdentity, resolveNoodlerPublicIdentity } from "../feed/slp-feed-contract.js";

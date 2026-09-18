@@ -13,13 +13,13 @@ import {
   slurpAudiencePaidThrough,
   slurpAudienceSubscriptionDecision,
 } from "../../../../server/src/slp/modules/audience/slp-audience-subscription.js";
-import { generateSlurpPopulationMember } from "../../../../server/src/slp/modules/audience/slp-population.js";
+import { generateSlurpPopulationMember } from "../../../../shared/src/slp/slp-population.js";
 import { slurpCreatorReach } from "../../../../server/src/slp/modules/audience/slp-reach.js";
 import {
   slurpRhythmMultiplier,
   slurpWorldTimerDue,
   type SlurpSimulationTuning,
-} from "../../../../server/src/slp/base/model/slp-tuning.js";
+} from "../../../../shared/src/slp/slp-tuning.js";
 import { planSlurpWorldPulse } from "../../../../server/src/slp/modules/world/slp-world-pulse.js";
 import { planSlurpWorldTick } from "../../../../server/src/slp/modules/world/slp-world.js";
 

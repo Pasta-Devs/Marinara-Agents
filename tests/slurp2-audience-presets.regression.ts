@@ -7,8 +7,8 @@ import {
   SLURP_AUDIENCE_PRESETS,
   slurpAudiencePresetFor,
   slurpAudiencePresetPatch,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/base/model/slp-tuning.js";
-import { SLURP_REALISTIC_TUNING } from "../packages/slurp2/src/engine/packages/server/src/slp/base/model/slp-tuning.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-tuning.js";
+import { SLURP_REALISTIC_TUNING } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-tuning.js";
 import { populationNoodlerFanIdentityProvider } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-fan-identity-provider.js";
 import { slurp2Source } from "./slurp2-source";
 

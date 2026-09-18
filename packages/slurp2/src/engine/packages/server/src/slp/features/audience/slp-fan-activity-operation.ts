@@ -27,7 +27,7 @@ import {
 } from "./slp-fan-activity-service.js";
 import { tryNoodleOperation } from "../../base/locking/slp-operation-lock.js";
 import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
-import { isSlurpPopulationMemberId } from "../../modules/audience/slp-population.js";
+import { isSlurpPopulationMemberId } from "../../../../../shared/src/slp/slp-population.js";
 import {
   NOODLER_FAN_IDENTITY_PREFIX,
   populationNoodlerFanIdentityProvider,
@@ -41,7 +41,7 @@ import {
   slurpFanTypeTraits,
   slurpFanTypeWeeklyBudget,
   slurpResolveFanType,
-} from "../../modules/audience/slp-fan-types.js";
+} from "../../../../../shared/src/slp/slp-fan-types.js";
 import {
   selectSlurpAudienceCharacterIds,
   slurpAudienceCharacterFanTypeId,

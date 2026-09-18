@@ -20,8 +20,8 @@ import {
   slurpNormalizeFanTypes,
   slurpPickFanType,
   slurpResolveFanType,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-fan-types.js";
-import { generateSlurpPopulationMember } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-population.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-fan-types.js";
+import { generateSlurpPopulationMember } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-population.js";
 import {
   slurpAudienceConversionChance,
   SLURP_AUDIENCE_WEEKLY_BUDGET,

@@ -8,7 +8,7 @@
 import { CircleHelp } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
-import type { SlurpSettings } from "../../hooks/use-slurp";
+import type { SlurpSettings } from "../../slp/features/settings/slp-settings-contract";
 import { SettingAnchor } from "./SlurpBackstageKit";
 
 export function NumberSetting({

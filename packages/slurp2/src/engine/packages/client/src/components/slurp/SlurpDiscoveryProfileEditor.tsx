@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { Check, Plus, Search, X } from "lucide-react";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import { useSlurpSettings, type SlurpDiscoveryGender } from "../../hooks/use-slurp";
+import type { SlurpDiscoveryGender } from "../../slp/base/state/slp-state-types";
+import { useSlurpSettings } from "../../slp/features/settings/slp-settings-hooks";
 import {
   groupSlurpDiscoveryTags,
   normalizeSlurpDiscoveryTag,
@@ -9,7 +10,7 @@ import {
   SLURP_DISCOVERY_MIN_TAGS,
   SLURP_DISCOVERY_TAG_LIMIT,
   SLURP_DISCOVERY_TAG_MAX_LENGTH,
-} from "../../lib/slurp-discovery";
+} from "../../slp/features/discovery/slp-discovery";
 import { cn } from "../../lib/utils";
 
 export function SlurpDiscoveryProfileEditor({

@@ -17,8 +17,8 @@ import {
 import {
   slpModifierDraftSchema,
   slpNormalizeModifierDrafts,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/base/modifiers/slp-modifier-schema.ts";
-import type { SlpModifier } from "../packages/slurp2/src/engine/packages/server/src/slp/base/modifiers/slp-modifier.types.ts";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-modifier-schema.js";
+import type { SlpModifier } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-modifier.types.js";
 import {
   slurpActivePlatformEventModifiers,
   slurpActivePlatformEvents,
@@ -26,7 +26,7 @@ import {
   slurpPlatformEventModifierSource,
   slurpPlatformEventsDefault,
   slurpPlatformEventSchema,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/events/slp-platform-events.ts";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-platform-events.js";
 import {
   SLURP_SUBSCRIPTION_PRICE_MAX,
   slurpSubscriptionCharge,

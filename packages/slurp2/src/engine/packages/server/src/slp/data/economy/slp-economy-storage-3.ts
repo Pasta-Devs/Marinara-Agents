@@ -2,7 +2,7 @@ import { and, like, or } from "../../../db/file-query.js";
 import { credit, slurpWalletKey, SlurpWallet } from "../../modules/economy/slp-wallet.js";
 import { createSlurpEventsStorage } from "../notifications/slp-notification-storage.js";
 import { createSlurpPopulationStorage } from "../audience/slp-audience-storage-funnel.js";
-import type { SlurpFunnelStage } from "../../modules/audience/slp-population.js";
+import type { SlurpFunnelStage } from "../../../../../shared/src/slp/slp-population.js";
 import type { SlurpEventKind } from "../../modules/notifications/slp-event-weight.js";
 import { payout as payoutEarnings, SlurpEarnings } from "../../modules/economy/slp-earnings.js";
 import { logger } from "../../../lib/logger.js";

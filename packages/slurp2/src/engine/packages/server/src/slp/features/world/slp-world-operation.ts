@@ -24,14 +24,14 @@ import { createSlurpMessagesStorage } from "../../data/slp-storage.js";
 import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
 import { isAmbientNoodleAccount } from "../../data/audience/slp-ambient-profiles.js";
 import { tryNoodleOperation } from "../../base/locking/slp-operation-lock.js";
-import { readSlurpAudienceTone } from "../../base/prompting/slp-tone.js";
-import { slurpCapTickEvents, slurpRhythmMultiplier } from "../../base/model/slp-tuning.js";
+import { readSlurpAudienceTone } from "../../../../../shared/src/slp/slp-tone.js";
+import { slurpCapTickEvents, slurpRhythmMultiplier } from "../../../../../shared/src/slp/slp-tuning.js";
 import { slurpCreatorReach } from "../../modules/audience/slp-reach.js";
 import {
   selectSlurpAudienceCharacterIds,
   slurpAudienceCharacterFanTypeId,
 } from "../../modules/audience/slp-audience-characters.js";
-import { isSlurpPopulationMemberId, slurpMembersActiveAt } from "../../modules/audience/slp-population.js";
+import { isSlurpPopulationMemberId, slurpMembersActiveAt } from "../../../../../shared/src/slp/slp-population.js";
 import {
   slurpFanTypeCommissionBudget,
   slurpFanTypeForPinnedOrSeed,
@@ -40,7 +40,7 @@ import {
   slurpPickFanType,
   slurpResolveFanType,
   type SlurpFanType,
-} from "../../modules/audience/slp-fan-types.js";
+} from "../../../../../shared/src/slp/slp-fan-types.js";
 import { isNotableAudienceArcChange, slurpNextAudienceArc } from "../../modules/projects/slp-audience-arc.js";
 import {
   slurpAudiencePaidThrough,

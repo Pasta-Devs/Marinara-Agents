@@ -8,7 +8,7 @@
  * The resolver deliberately does not round or clamp. The consumer owns the range of its own number,
  * and rounding once at the end keeps two modifiers from compounding two rounding errors.
  */
-import type { SlpModifier, SlpModifierTarget } from "./slp-modifier.types.js";
+import type { SlpModifier, SlpModifierTarget } from "../../../../../shared/src/slp/slp-modifier.types.js";
 
 /** Stable order: source kind, then source id, then operation, then value. */
 function compareModifiers(a: SlpModifier, b: SlpModifier): number {

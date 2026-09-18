@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "../lib/api-client";
+import { api } from "../../../lib/api-client";
 
 type CachedMedia = {
   objectUrl: string | null;

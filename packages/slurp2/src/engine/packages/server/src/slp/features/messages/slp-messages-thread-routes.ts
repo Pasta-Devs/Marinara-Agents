@@ -3,7 +3,7 @@ import { type SlurpCommissionPricing, slurpCommissionQuote } from "../../modules
 import { selectSlurpAttentionCommissions } from "./slp-inbox-attention.js";
 import { activeSlurpStrikes } from "../../modules/world/slp-stance.js";
 import { describeSlurpDayVibe } from "../world/slp-world-contract.js";
-import { readSlurpAudienceTone } from "../../base/prompting/slp-tone.js";
+import { readSlurpAudienceTone } from "../../../../../shared/src/slp/slp-tone.js";
 import { isSlurpViewerActorAccount } from "../../modules/settings/slp-settings.js";
 import {
   SLURP_NOTE_MAX_LENGTH,

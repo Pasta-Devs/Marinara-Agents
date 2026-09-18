@@ -25,20 +25,21 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { formatClockTime, formatDateTime } from "./SlurpDateTime";
 import {
-  useSlurpAmbientProfiles,
   useRerollAmbientProfiles,
+  useSlurpAmbientProfiles,
   useUpdateAmbientProfile,
-  useDeleteNoodlerStageProfile,
+} from "../../slp/features/audience/slp-ambient-profile-hooks";
+import { useDeleteNoodlerStageProfile } from "../../slp/features/creators/slp-creator-profile-hooks";
+import { useSetSlurpCreatorPrice } from "../../slp/features/economy/slp-economy-hooks";
+import type { SlurpReserveStatus, SlurpScheduleSlot } from "../../slp/features/feed/slp-feed-contract";
+import type { SlurpCreatorMessaging } from "../../slp/features/messages/slp-messages-contract";
+import {
   useSetSlurpCreatorMessaging,
-  useSetSlurpCreatorPrice,
   useSlurpCreatorMessagingSettings,
-  type SlurpCreatorMessaging,
-  useResetSlurpArcType,
-  useGenerateSlurpArcType,
-  type SlurpArcType,
-  type SlurpReserveStatus,
-  type SlurpScheduleSlot,
-} from "../../hooks/use-slurp";
+} from "../../slp/features/messages/slp-messages-hooks";
+import type { SlurpArcType } from "../../slp/features/projects/slp-projects-contract";
+import { useGenerateSlurpArcType } from "../../slp/features/projects/slp-projects-hooks";
+import { useResetSlurpArcType } from "../../slp/features/settings/slp-settings-hooks";
 import { Modal } from "../ui/Modal";
 import { SLURP_SETTINGS_SECTIONS } from "./slurp-navigation.types";
 import { type NoodlerManagedStageProfile } from "@marinara-engine/shared";

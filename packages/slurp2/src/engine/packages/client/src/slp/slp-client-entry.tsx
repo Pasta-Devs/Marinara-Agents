@@ -10,8 +10,8 @@ import korean from "./locales/ko.json";
 import polish from "./locales/pl.json";
 import { SlurpHome } from "../components/slurp/SlurpHome";
 import { ApiError } from "../lib/api-client";
-import { useSlurpUIStore } from "../stores/slurp-package.store";
-import { configureSlurpPackageState } from "../stores/slurp-package.store";
+import { useSlurpUIStore } from "./base/state/slp-package-store";
+import { configureSlurpPackageState } from "./base/state/slp-package-store";
 import { ModalPortalContext } from "../components/ui/Modal";
 import { AppDialogRenderer } from "../components/ui/AppDialogRenderer";
 

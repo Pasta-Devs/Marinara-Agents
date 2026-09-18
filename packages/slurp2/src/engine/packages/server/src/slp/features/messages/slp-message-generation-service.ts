@@ -9,7 +9,7 @@
 import { type APIProvider, type NoodleAccount } from "@marinara-engine/shared";
 import { isDebugAgentsEnabled } from "../../../config/runtime-config.js";
 import { resolveSlurpCreatorMenu } from "../../data/settings/slp-post-guidance-storage.js";
-import { slurpPlatformEventInstruction } from "../../modules/world/events/slp-platform-events.js";
+import { slurpPlatformEventInstruction } from "../../../../../shared/src/slp/slp-platform-events.js";
 import type { DB } from "../../../db/connection.js";
 import { logDebugOverride } from "../../../lib/logger.js";
 import { resolveBaseUrl } from "../../../services/generation/connection-base-url.js";
@@ -43,7 +43,7 @@ import { describeSlurpRapport, type SlurpRapport } from "../../modules/messages/
 import { recoverSlurpMood, slurpMoodTone } from "../../modules/world/slp-mood.js";
 import { slurpModifierLines } from "../../modules/creators/slp-creator-state.js";
 import { resolveSlurpStance, type SlurpStance } from "../../modules/world/slp-stance.js";
-import { readSlurpAudienceTone } from "../../base/prompting/slp-tone.js";
+import { readSlurpAudienceTone } from "../../../../../shared/src/slp/slp-tone.js";
 import {
   readSlurpDmReply,
   SLURP_NOTE_MAX_LENGTH,
@@ -69,7 +69,7 @@ import {
   slurpFanMemoryForPrompt,
   slurpFanVoiceForPrompt,
   slurpResolveFanType,
-} from "../../modules/audience/slp-fan-types.js";
+} from "../../../../../shared/src/slp/slp-fan-types.js";
 import { prepareSlurpPostImageContexts, slurpImageCaptioning } from "../../base/media/slp-post-image-context.js";
 import { createSlurpMessagesStorage, type SlurpMessage } from "../../data/slp-storage.js";
 import type { SlurpDmPolicy } from "../../modules/messages/slp-messaging.js";

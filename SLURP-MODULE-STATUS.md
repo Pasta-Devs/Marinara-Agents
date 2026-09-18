@@ -20,34 +20,29 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 ## Current state
 
 - Last updated: 2026-09-19
-- Updated by: Slice 6 implementation agent
-- Overall state: Slice 6 ready for review
-- Active slice: 6 (event and modifier seam), issue #926, branch
-  `slurp2-slice6-event-modifier-seam` from `origin/modular-simping` `7324d634` (the
-  `origin/staging` merge commit made at the start of this slice).
-- Pull request: draft #927 targets `modular-simping` and is assigned to `Gunterlie`; issue #926 is
-  assigned to `Gunterlie`. Not merged by the implementation agent, by instruction.
-- Slice 5 merge gate: PR #925 is `MERGED` into `modular-simping` at `c945b4a0`; its generated
-  `0.0.28` payload, manifest, `artifacts/slurp2-0.0.28.zip` (sha256
-  `90d890370f807e0353e45311071ffc534ddef6b50901f29bc7a3a26ba0ed4808`, 6722866 bytes), and all three
-  catalog lanes are present and match this ledger exactly.
-- Staging integration: `origin/modular-simping` was 21 ahead / 4 behind `origin/staging`. The four
-  staging commits add the `ruleset-5e-2014` package and change `scripts/validate-catalog.mjs`,
-  `scripts/package-locales.mjs`, and `schemas/package-manifest.schema.json`; no `packages/slurp2`
-  file overlaps. Maintainer-approved action: ordinary `--no-ff` merge of `origin/staging` into
-  `modular-simping`, pushed as `7324d634`. No conflicts, so no generated output was rebuilt.
-- Package version: `0.0.28` before this slice; this slice ships `0.0.29` (integration-only; `staging`
-  stays at `0.0.22` until the final `0.1.0` release PR)
-- Generated artifact: `artifacts/slurp2-0.0.29.zip`, sha256
-  `66559923bee9ec2c683805731b6776c1e2cbe4792d756810ce6e462a5ce46d08`, 6725244 bytes (rebuilt after
-  the CodeRabbit review fix; the pre-review build was
-  `fde6df6369cfbe2f5f41c2be21275811cd137e568faccc5563f7398fa67db5c6`, 6725223 bytes)
-- Node: `/home/dev/.nvm/versions/node/v24.18.0/bin`; `node -v` = `v24.18.0`. `TMPDIR` is set to
-  `/home/dev/.cache/slp-tmp` because `/tmp` tmpfs is small.
+- Updated by: Slice 7 implementation agent
+- Overall state: Slice 7 ready for review
+- Active slice: 7 (client state and hooks), issue #928, branch `slurp2-slice7-client-state-hooks`
+  from `origin/modular-simping` `26a80fe7`.
+- Pull request: draft PR #929 is open against `modular-simping` and assigned to `Gunterlie`; issue
+  #928 is assigned to `Gunterlie`. Not merged by the implementation agent, by instruction.
+- Branch commits: `4f407071` records the Slice 7 start/merge gate; `40407635` is the complete
+  implementation, regression, documentation, and generated-package commit. A final ledger-only
+  handoff commit follows it.
+- Slice 6 merge gate: PR #927 is `MERGED` into `modular-simping` at `26a80fe7`; its generated
+  `0.0.29` payload, manifest, `artifacts/slurp2-0.0.29.zip` (sha256
+  `66559923bee9ec2c683805731b6776c1e2cbe4792d756810ce6e462a5ce46d08`, 6725244 bytes), and all three
+  catalog lanes are present.
+- Staging integration: `origin/modular-simping` is 27 ahead / 0 behind `origin/staging`, so
+  `origin/staging` is an ancestor and no merge was required before this slice.
+- Package version: `0.0.29` before this slice; this slice ships `0.0.30` (integration-only;
+  `staging` stays at `0.0.22` until the final `0.1.0` release PR).
+- Node: `/home/dev/.nvm/versions/node/v24.18.0/bin`; `node -v` = `v24.18.0`. Builds used
+  `TMPDIR=/home/dev/.cache/slp-tmp`; the resumed validation sandbox used writable `/tmp`.
 - Engine source: `/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish`, branch
   `welcome-to-the-agentshop`, commit `fdb67d47b`, tracked files clean; 4 ahead / 39 behind Engine
-  `origin/staging` after a fresh fetch (the ledger's earlier 32 behind moved as Engine staging
-  advanced). Used unchanged, as in Slices 0-5, so build deltas stay comparable across slices.
+  `origin/staging` after a fresh fetch. Used unchanged, as in Slices 0-6, so build deltas stay
+  comparable across slices.
 
 ## Slice ledger
 
@@ -59,7 +54,7 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 |     4 | Server storage                         | merged           | #918 / #919      | 0.0.27          | Merged into `modular-simping` at `7b9ba1f3`                      |
 |     5 | Server services, contracts, workflows  | merged           | #924 / #925      | 0.0.28          | Merged into `modular-simping` at `c945b4a0`                      |
 |     6 | Event and modifier seam                | ready for review | #926 / #927      | 0.0.29          | 0 new regression failures; 4 mutants caught; unit rebuilt        |
-|     7 | Client state and hooks                 | not started      | —                | —               | —                                                                |
+|     7 | Client state and hooks                 | ready for review | #928 / #929      | 0.0.30          | 0 new regression failures; package unit rebuilt                  |
 |     8 | Client app and reusable modules        | not started      | —                | —               | —                                                                |
 |     9 | Backstage                              | not started      | —                | —               | —                                                                |
 |    10 | Final architecture and package proof   | not started      | —                | —               | —                                                                |
@@ -123,6 +118,9 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 | 2026-09-19 |        6 | `npm run test:browser:slurp2` needs `MARINARA_ENGINE_ROOT`; without it the runner fails on a missing sibling Engine `package.json`. With it, the Engine dev servers did not come up inside a 400s budget. | The browser suite still produced no result locally, as in Slices 0–5. It needs CI or a host with Playwright system libraries. |
 | 2026-09-19 |        6 | CodeRabbit review of PR #927 (Major, valid): `subscribe()` computed one priced value shared by two branches. The second branch renews an *existing* subscription whose paid period lapsed, so a running event would have changed what an existing subscription costs and would have stored the event price as the new agreed price. The automatic sweep (`renewSubscriptions`) was never affected — it always charged the stored price. | Split the value: `basePrice` is the Creator's own price and is what the renewal branch charges and stores, exactly as before Slice 6. Only the genuinely-new-subscription branch applies `slurpSubscriptionCharge`. Regression pins both branches, and two mutants prove it. |
 | 2026-09-19 |        6 | CodeRabbit's second finding (Minor) claimed `validate-package-locales.mjs` and `validate-catalog.mjs` fail on missing repository files. | Not reproducible: both pass on the committed tree, before and after the fix, alongside `test-catalog-lanes.mjs`. The failure is an artifact of the review sandbox's checkout, not of this branch. Skipped with that reason recorded on the PR. |
+| 2026-09-19 |        7 | The repository architecture rule requires every new non-component file under `slp/` to begin with `slp-`; hook files therefore use `slp-*-hooks.ts`, not `use-slp-*.ts`. | The split consistently uses the established package convention and the architecture regression enforces it. |
+| 2026-09-19 |        7 | `SlurpSettings` and eleven other client component files consumed pure settings/rule types from server `slp` files. Leaving those imports in place would violate the approved client/server boundary. | Moved the eight pure rule modules (`slp-tone`, tuning, model budget, modifier schema/types, fan types, population, platform events) into `shared/src/slp/`; all client and server importers now use the one shared definition. Architecture docs, decision log, plan allocation, ownership, and tests were updated. |
+| 2026-09-19 |        7 | Bumping to `0.0.30` rolls `0.0.9` off the 20-entry release-note window. | Added the `0.0.30` changelog/splash entry, removed the rolled-off `0.0.9` splash entry, and updated the release-note regression without weakening its cap or acknowledgement assertions. |
 ## Pending decisions
 
 1. **Resolved 2026-09-18 — server layer model.** The maintainer approved
@@ -139,9 +137,29 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
    (hidden). With the reads routed, they fail on source regexes that Slice 4 broke (`storage.` became
    `context.storage.`; payment functions are nested and indented). Slice 5 did not weaken them.
    Decide whether to restore the source shape or re-express the assertions behaviourally.
-5. **Open — client imports server rule files.** Twelve client files under `components/slurp/` and
-   `hooks/use-slurp.ts` import server rule files directly (paths rewritten, behaviour unchanged).
-   Slices 7–8 must route them through `shared/src/slp/` or a client module.
+5. **Resolved 2026-09-19 — client imports server rule files.** The maintainer chose the pure shared
+   rule-module move. Slice 7 moved all eight dependency-closed rule modules to `shared/src/slp/`,
+   rewrote every client and server importer, and added the boundary decision and regression proof.
+
+## Slice 7 start proof
+
+- Slice 6 merge gate: PR #927 is `MERGED` into `modular-simping` at `26a80fe7`; the generated
+  `0.0.29` payload, manifest, ZIP, and all three catalog lanes are present.
+- `origin/staging` (`ccf4421f`) is an ancestor of `origin/modular-simping`; no staging merge and no
+  generated-output rebuild for conflicts was needed.
+- Branch `slurp2-slice7-client-state-hooks` created from `origin/modular-simping` `26a80fe7`.
+- Node: `/home/dev/.nvm/versions/node/v24.18.0/bin`, `v24.18.0`.
+- Engine: `/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish`, branch `welcome-to-the-agentshop`,
+  commit `fdb67d47b`, tracked files clean, 4 ahead / 39 behind Engine `origin/staging` after a fresh
+  fetch; used unchanged, as in Slices 0-6.
+- Client inventory re-derived from the tree, not from history: `hooks/use-slurp.ts` is 3,709 lines
+  with 213 exported names; `hooks/use-slurp-media-src.ts` 147; `hooks/use-creator-personas.ts` 27
+  (generic Engine hook, stays outside Slurp); `lib/api-client.ts` 499 (package-owned exception,
+  stays); `lib/slurp-discovery.ts` 127; `lib/slurp-refresh-batch.ts` 32;
+  `stores/slurp-package.store.ts` 186.
+- Query-key factories in the client tree: exactly two, `noodleKeys` (exported, `use-slurp.ts:88`)
+  and the module-local `messageKeys` (`use-slurp.ts:3123`). No other `*Keys = {` factory exists.
+- Live importers of `hooks/use-slurp.ts`: 33 files under `components/slurp/` and 22 test files.
 
 ## Slice 5 start proof
 
@@ -173,6 +191,95 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
   `slurp-events.storage.ts` (179), and the existing reply, queue, host, error, and retention files.
 
 ## Latest validation
+
+### Slice 7 (0.0.30)
+
+[Issue #928](https://github.com/Pasta-Devs/Marinara-Agents/issues/928); draft
+[PR #929](https://github.com/Pasta-Devs/Marinara-Agents/pull/929) to `modular-simping`; branch
+`slurp2-slice7-client-state-hooks` from merged Slice 6 commit `26a80fe7`. Both issue and PR are
+assigned to `Gunterlie`; human verification checkboxes remain unchecked. Implementation commit
+`40407635`. Slice 7 is not merged and Slice 8 has not started.
+
+**Client state and hook split.** The 3,709-line `hooks/use-slurp.ts` monolith is deleted with no
+shim. Its 213 exported names each have exactly one definition under `client/src/slp/`. The moved
+files are:
+
+- base state/media: `slp-query-keys.ts`, `slp-state-types.ts`, `slp-page-cursor.ts`,
+  `slp-host-connections.ts`, `slp-package-store.ts`, and `slp-media-src.ts`;
+- ads: `slp-ads-hooks.ts`;
+- audience: `slp-audience-contract.ts`, `slp-audience-hooks.ts`,
+  `slp-ambient-profile-hooks.ts`, and `slp-fan-activity-hooks.ts`;
+- creators: `slp-creators-contract.ts`, `slp-creators-hooks.ts`,
+  `slp-creator-profile-hooks.ts`, `slp-creator-refresh-hooks.ts`, and `slp-refresh-batch.ts`;
+- discovery: `slp-discovery.ts` and `slp-discovery-tag-hooks.ts`;
+- economy: `slp-economy-contract.ts` and `slp-economy-hooks.ts`;
+- feed: `slp-feed-contract.ts`, `slp-feed-post-hooks.ts`, `slp-feed-viewer-hooks.ts`, and
+  `slp-feed-schedule-hooks.ts`;
+- maintenance: `slp-backup.ts`, `slp-maintenance-hooks.ts`, and `slp-improvement-hooks.ts`;
+- messages: `slp-messages-contract.ts`, `slp-message-keys.ts`, `slp-messages-hooks.ts`,
+  `slp-message-action-hooks.ts`, and `commissions/slp-commission-hooks.ts`;
+- notifications: `slp-notifications-contract.ts` and `slp-notification-hooks.ts`;
+- onboarding: `slp-first-post-hooks.ts`;
+- projects: `slp-projects-contract.ts` and `slp-projects-hooks.ts`;
+- settings: `slp-settings-contract.ts`, `slp-settings-hooks.ts`,
+  `slp-image-connection-hooks.ts`, and `slp-post-guidance-hooks.ts`.
+
+No standalone world or backstage query-hook group existed in the current monolith; those consumers
+compose the owning feature hooks above. `SlurpHome.tsx`, `SlurpMessages.tsx`, and all reusable visual
+modules remain in place for Slice 8. The largest new client architecture file is 356 physical lines;
+no new file exceeds 800.
+
+**Keys, behaviour, and ownership.** `noodleKeys` has its sole definition in
+`base/state/slp-query-keys.ts`; the feature-local `messageKeys` has its sole definition in
+`features/messages/slp-message-keys.ts`. The focused regression freezes the complete `noodleKeys`
+source and message root, the endpoint/HTTP-method multiset, all 213 exports, and cache wiring counts:
+130 mutations, 186 queries, 5 infinite queries, 124 invalidations, 15 `setQueryData`, 5
+`cancelQueries`, one removal, one refetch, two optimistic mutations, three error handlers, and three
+settled handlers. Shared invalidator call counts remain messages 21, projects 5, viewer-shell merge 3.
+No client `slp` file imports server `slp` code. `use-creator-personas.ts` remains the generic Engine
+hook outside Slurp, and the package-owned `client/src/lib/api-client.ts` host override remains owned
+and in place. `slurp2OwnedSourcePaths` already owns all three `slp` roots and retains only the API
+client exception; obsolete hook/lib/store ownership entries were removed.
+
+**Source-test migration.** The historical logical key `packages/client/src/hooks/use-slurp.ts` maps
+to its 37 current state/contract/hook files in `tests/slurp2-source.ts`; the four satellite keys map
+individually to package store, media source, discovery, and refresh-batch destinations. Existing
+positive and negative assertions were preserved. `tests/slurp2-client-hooks.regression.ts` adds the
+focused coverage, key, endpoint/method, mutation/invalidation, feature ownership, generic-hook,
+API-client, client/server-boundary, and architecture checks.
+
+**Shared rule correction.** Eight dependency-closed pure rule modules moved from server `slp` to
+`shared/src/slp`: tone, tuning, model budget, modifier schema/types, fan types, population, and
+platform events. Every client/server importer uses those single definitions. The plan allocation,
+architecture guide, dated decision, architecture regression, source mappings, and builder ownership
+were updated; no compatibility copy or client-to-server import remains.
+
+**Validation.** Node `/home/dev/.nvm/versions/node/v24.18.0/bin/node` (`v24.18.0`); Engine
+`/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish`, branch `welcome-to-the-agentshop`, commit
+`fdb67d47bfb909f013346afdb3d2c23d72d7b399`, tracked files clean after validation, 4 ahead / 39
+behind Engine `origin/staging`; build used it unchanged with `MARINARA_ENGINE_ROOT` explicit.
+
+- `tests/slurp2-architecture.regression.ts` and `tests/slurp2-client-hooks.regression.ts` — pass.
+- `npm run check` — pass (0 errors; repository warnings remain).
+- `node scripts/typecheck-packages.mjs slurp2` — pass: no undefined names or unresolved modules.
+- `npm run test:noodle:regressions` — exits at the pre-existing
+  `noodler-content-formats.regression.ts` assertion on both Slice 7 and clean Slice 6.
+  Independent per-file sweep: Slice 7 179 pass / 25 fail; Slice 6 178 pass / 25 fail. Failure sets
+  are identical; Slice 7's extra pass is the new focused regression. No new regression failure.
+- `node scripts/test-catalog-lanes.mjs`, `node scripts/validate-package-locales.mjs`,
+  `node scripts/validate-catalog.mjs`, and
+  `node scripts/tests/catalog-release-notes.regression.mjs` — pass (`v2=38`, `v3=38`, legacy=v2).
+- `git diff --check` — pass.
+- `npm run test:browser:slurp2` — Engine server/client startup succeeded, but Chromium could not
+  launch because the host lacks `libnspr4.so`; all 14 desktop/mobile cases are environment-blocked,
+  not claimed as passed. Live install, update, restart, offline restart, and uninstall were not run.
+
+**Generated unit.** Builder-produced `artifacts/slurp2-0.0.30.zip` is 6,725,108 bytes, sha256
+`290d613cc088be535733f931769ab501a3bc9f85d19deef53d4af99a82d496c6`. It contains exactly
+`manifest.json`, `agents.json`, `server.mjs`, `client.js`, `slurp2-logo.png`, and `slurp2agent.png`.
+Every manifest payload sha256 and byte count matches; all three catalog lanes point to that ZIP with
+the same hash and size. Generated payloads, manifest, ZIP, catalog entries, hashes, sizes, notes, and
+release metadata came from the builder; none was hand-edited.
 
 ### Slice 6 (0.0.29)
 
@@ -563,19 +670,15 @@ manifest.json}`, added `artifacts/slurp2-0.0.24.zip`, and updated `catalog/{,v2/
 
 ## Next action
 
-Slice 6: review draft PR #927 (issue #926) and merge it into `modular-simping` after human review.
-Only then start Slice 7 (client state and hooks) from the merged `modular-simping`: split
-`packages/client/src/hooks/use-slurp.ts` by feature, move the shared query keys and common types
-into client `base/state/`, keep each query key factory defined exactly once so cache identity does
-not split, move the Slurp-specific discovery, refresh, and media helpers into the new namespace, and
-keep the generic `use-creator-personas.ts` hook outside Slurp with its explicit
-`lib/api-client.ts` host override intact. Slice 7 also owns pending decision 5: twelve client files
-under `components/slurp/` plus `use-slurp.ts` still import server rule files directly and must be
-routed through `shared/src/slp/` or a client module. Pending decisions 3 and 4 remain open and are
-not Slice 7 blockers.
+Review draft PR #929 (issue #928) and merge it into `modular-simping` only after human review and
+required checks. Do not start Slice 8 until PR #929 is merged. Then create a new Slice 8 issue,
+branch, and draft PR from the updated `origin/modular-simping`; re-run the staging/Slice 7 merge
+gate; and split the client app/screens and reusable visual modules without reopening the Slice 7
+state ownership, duplicating query keys, or moving server logic into the client. Begin with the
+current `SlurpHome.tsx`, `SlurpMessages.tsx`, and remaining `components/slurp/` importer graph as
+authoritative. Pending decisions 3 and 4 remain open and are not Slice 7 blockers.
 
 Earlier items:
 
-1. Review and merge draft PR #916 into `modular-simping` after its required review.
-2. After Slice 10, open the final PR `modular-simping` → `staging` as Slurp2 `0.1.0` (one changelog
+1. After Slice 10, open the final PR `modular-simping` → `staging` as Slurp2 `0.1.0` (one changelog
    entry, integration-only `0.0.x` ZIPs removed, one rebuild, full live lifecycle proof).

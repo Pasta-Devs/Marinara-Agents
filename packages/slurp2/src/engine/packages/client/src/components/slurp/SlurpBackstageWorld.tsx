@@ -25,20 +25,22 @@ import { SlurpFanTypesSettings } from "./SlurpFanTypesSettings";
 import { SlurpAudienceConfigSettings } from "./SlurpAudienceConfigSettings";
 import { SlurpTagsSettings } from "./SlurpTagsSettings";
 import { SlurpPlatformEventsSettings } from "./SlurpPlatformEventsSettings";
-import { slurpActivePlatformEvents } from "../../../../server/src/slp/modules/world/events/slp-platform-events.js";
+import { slurpActivePlatformEvents } from "../../../../shared/src/slp/slp-platform-events.js";
 import { api } from "../../lib/api-client";
 import { toast } from "sonner";
 import { SettingAnchor } from "./SlurpBackstageKit";
+import type { SlurpContentRating } from "../../slp/base/state/slp-state-types";
+import type {
+  SlurpAudienceCharacterGroup,
+  SlurpAudienceCharacterSummary,
+} from "../../slp/features/audience/slp-audience-contract";
 import {
-  type SlurpSettings,
-  type SlurpContentRating,
-  type SlurpAudienceCharacterGroup,
-  type SlurpAudienceCharacterSummary,
-  useSlurpAudienceCharacters,
   useSlurpAudienceCharacterGroups,
-} from "../../hooks/use-slurp";
+  useSlurpAudienceCharacters,
+} from "../../slp/features/audience/slp-audience-hooks";
+import type { SlurpSettings } from "../../slp/features/settings/slp-settings-contract";
 import { SlurpMediaImg } from "./SlurpShell";
-import { SLURP_AUDIENCE_PRESETS, slurpAudiencePresetPatch } from "../../../../server/src/slp/base/model/slp-tuning.js";
+import { SLURP_AUDIENCE_PRESETS, slurpAudiencePresetPatch } from "../../../../shared/src/slp/slp-tuning.js";
 import type { SlurpBackstagePageProps } from "./SlurpSettings";
 import { errorMessage, ChoiceRow, ArcLibraryEditor, AmbientProfilesPanel } from "./SlurpBackstageWorkflow";
 

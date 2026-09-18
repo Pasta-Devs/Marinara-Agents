@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { SlurpMediaImg } from "./SlurpShell";
 import { useTranslation as useUiTranslation } from "react-i18next";
+import type {
+  SlurpArcEffects,
+  SlurpArcTimeline,
+  SlurpArcType,
+  SlurpCreatorArcConfig,
+  SlurpProject,
+} from "../../slp/features/projects/slp-projects-contract";
 import {
   useCreateSlurpProject,
   useDeleteSlurpProject,
@@ -10,15 +17,10 @@ import {
   useSaveSlurpProjectToLibrary,
   useSlurpArcConfig,
   useSlurpProjects,
-  useSlurpSettings,
   useUpdateSlurpArcConfig,
   useUpdateSlurpProject,
-  type SlurpArcEffects,
-  type SlurpArcTimeline,
-  type SlurpArcType,
-  type SlurpCreatorArcConfig,
-  type SlurpProject,
-} from "../../hooks/use-slurp";
+} from "../../slp/features/projects/slp-projects-hooks";
+import { useSlurpSettings } from "../../slp/features/settings/slp-settings-hooks";
 
 /** `typeId` null is a custom arc. `durationDays` is only used by an open-ended arc from a type. */
 type Draft = {

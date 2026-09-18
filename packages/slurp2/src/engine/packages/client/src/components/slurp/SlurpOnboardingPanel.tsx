@@ -30,17 +30,16 @@ import {
 } from "@marinara-engine/shared";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { useSlurpConnections } from "../../slp/base/state/slp-host-connections";
+import { useBulkCreateNoodlerStageProfiles } from "../../slp/features/creators/slp-creator-profile-hooks";
+import { useRefreshTargetedNoodlerCreatorsNow } from "../../slp/features/creators/slp-creator-refresh-hooks";
+import { useNoodlerEligibleAccounts } from "../../slp/features/creators/slp-creators-hooks";
 import {
-  useBulkCreateNoodlerStageProfiles,
   useEnqueueNoodlerFirstPosts,
-  useNoodlerEligibleAccounts,
   useNoodlerFirstPostStatus,
-  useRefreshTargetedNoodlerCreatorsNow,
-  useSlurpConnections,
-  useSlurpSettings,
-  useUpdateSlurpConnectionsForCreators,
-  useUpdateSlurpSettings,
-} from "../../hooks/use-slurp";
+} from "../../slp/features/onboarding/slp-first-post-hooks";
+import { useUpdateSlurpConnectionsForCreators } from "../../slp/features/settings/slp-image-connection-hooks";
+import { useSlurpSettings, useUpdateSlurpSettings } from "../../slp/features/settings/slp-settings-hooks";
 import { cn, generateClientId } from "../../lib/utils";
 import { Modal } from "../ui/Modal";
 import { Avatar, getNoodleAccentStyle, NOODLE_PINK } from "./SlurpShell";

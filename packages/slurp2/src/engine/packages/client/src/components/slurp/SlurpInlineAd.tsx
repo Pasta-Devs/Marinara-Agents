@@ -1,5 +1,5 @@
 import { Ban, ExternalLink, Megaphone, X } from "lucide-react";
-import type { SlurpPromotion } from "../../hooks/use-slurp";
+import type { SlurpPromotion } from "../../slp/features/ads/slp-ads-hooks";
 import { SlurpMediaImg } from "./SlurpShell";
 
 /**

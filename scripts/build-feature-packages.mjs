@@ -165,14 +165,9 @@ const slurp2OwnedSourcePaths = [
   "packages/server/src/slp",
   "packages/shared/src/slp",
   "packages/client/src/components/slurp",
-  "packages/client/src/hooks/use-slurp.ts",
-  "packages/client/src/stores/slurp-package.store.ts",
   "packages/server/src/db/schema/slurp.ts",
   "packages/server/src/services/garnish-ads",
-  "packages/client/src/hooks/use-slurp-media-src.ts",
   "packages/client/src/lib/api-client.ts",
-  "packages/client/src/lib/slurp-discovery.ts",
-  "packages/client/src/lib/slurp-refresh-batch.ts",
 ];
 // Release builds must bundle the current source; runtime reuse is for explicit non-release verification builds.
 const releaseBuild = process.env.MARINARA_RELEASE_BUILD !== "0";
@@ -396,7 +391,7 @@ const features = [
   },
   {
     id: "slurp2",
-    version: "0.0.29",
+    version: "0.0.30",
     minEngineVersion: "2.4.5",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp Remastered",

@@ -7,7 +7,7 @@ import {
   slurpModelBudgetSchema,
   slurpModelWorkerAllows,
   spendSlurpModelBudget,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/base/model/slp-model-budget.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-model-budget.js";
 import { slurp2Source } from "./slurp2-source";
 const fanActivityOperation = slurp2Source(
   join(
