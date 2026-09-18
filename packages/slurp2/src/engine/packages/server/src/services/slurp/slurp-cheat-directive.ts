@@ -6,6 +6,7 @@ export type SlurpCheatDirective =
   | { kind: "mood"; amount: number }
   | { kind: "rapport"; amount: number }
   | { kind: "availability"; minutes: number }
+  | { kind: "help" }
   | {
       kind: "follow_up";
       type: "reminder" | "promise_delivery" | "task_update" | "check_in" | "recurring";
@@ -17,6 +18,7 @@ export type SlurpCheatDirective =
 export function parseSlurpCheatDirective(input: string): SlurpCheatDirective {
   const text = input.trim();
   if (!text) return { kind: "invalid" };
+  if (/^help(?:\s+\S+)?$/iu.test(text)) return { kind: "help" };
   const coins = /^coins\s+(\d+)$/iu.exec(text);
   if (coins) return { kind: "coins", coins: Number(coins[1]) };
   const photo = /^force\s+creator\s+photo(?:\s+([\s\S]*))?$/iu.exec(text);

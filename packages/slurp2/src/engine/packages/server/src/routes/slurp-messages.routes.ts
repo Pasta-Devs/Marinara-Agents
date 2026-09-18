@@ -676,6 +676,23 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const directive = parseSlurpCheatDirective(parsed.data.directive);
     if (directive.kind === "invalid") return reply.code(400).send({ status: "rejected", reason: "invalid" });
+    if (directive.kind === "help") {
+      return {
+        status: "accepted",
+        kind: "help",
+        help: [
+          "/cheat coins <amount>",
+          "/cheat force creator photo [guidance]",
+          "/cheat force ppv [message]",
+          "/cheat mood <+/-amount>",
+          "/cheat rapport <+/-amount>",
+          "/cheat availability <minutes>",
+          "/cheat test follow-up <timing> <reason>",
+          "/cheat test promise <timing> <reason>",
+          "/cheat <free-text directive>",
+        ],
+      };
+    }
     const viewer = await requireViewer(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     if (directive.kind === "coins") {

@@ -3320,10 +3320,12 @@ export function useSlurpCheatDirective() {
           | "mood"
           | "rapport"
           | "availability"
+          | "help"
           | "follow_up";
         coins?: number;
         amount?: number;
         minutes?: number;
+        help?: string[];
         reply?: SlurpMessage | null;
         replyStatus?: string;
       }>("/slurp2/messages/cheat", input),

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { parseSlurpCheatDirective } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-cheat-directive.js";
 
 assert.deepEqual(parseSlurpCheatDirective("coins 42"), { kind: "coins", coins: 42 });
+assert.deepEqual(parseSlurpCheatDirective("help"), { kind: "help" });
 assert.deepEqual(parseSlurpCheatDirective("budget reset"), { kind: "invalid" });
 assert.deepEqual(parseSlurpCheatDirective("make the next reply cheerful"), {
   kind: "guidance",

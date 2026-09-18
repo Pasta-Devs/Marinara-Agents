@@ -1185,7 +1185,11 @@ function SlurpThreadView({
                       ? `Conversation rapport adjusted by ${result.amount}.`
                       : result.kind === "availability"
                         ? `Creator availability extended for ${result.minutes} minutes.`
-                        : localizeUi("ui.slurp.messages.cheatAccepted", { defaultValue: "Cheat directive accepted." }),
+                        : result.kind === "help"
+                          ? (result.help?.join("\n") ?? "No cheat commands are available.")
+                          : localizeUi("ui.slurp.messages.cheatAccepted", {
+                              defaultValue: "Cheat directive accepted.",
+                            }),
         );
       } catch {
         toast.error(localizeUi("ui.slurp.messages.cheatRejected", { defaultValue: "Cheat directive rejected." }));
