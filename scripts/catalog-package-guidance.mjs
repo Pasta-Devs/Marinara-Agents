@@ -145,6 +145,12 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     modes: ["game"],
     activation: "Install it, then choose Pixelforge as the Experience when creating a Game Mode chat.",
   },
+  // A ruleset is data, not an Agent: nothing is added under Chat Settings and
+  // nothing runs. It becomes selectable in the Game Mode setup wizard instead.
+  "ruleset-5e-2014": {
+    modes: ["game"],
+    activation: "After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
+  },
   spotify: {
     modes: ["conversation", "roleplay", "game"],
     activation:

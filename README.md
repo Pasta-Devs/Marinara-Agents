@@ -75,6 +75,7 @@ These packages are being built in this repository but are not ready for the stab
 | --- | --- | --- | --- |
 | Pixelforge | [`pixelforge`](packages/pixelforge/manifest.json) | In development | A walkable pixel-art RPG Experience for Game Mode: generated settlements, NPCs, and story-driven exploration. Under active development; not yet listed for users. |
 | Quartermaster | [`quartermaster`](packages/quartermaster/manifest.json) | In development | A per-chat RPG character sheet and inventory manager: equip slots, a full inventory with saved outfits, AI-generated item and outfit art, and a narration-driven tracker agent that runs on its own. Under active development; not yet listed for users. |
+| 5e (SRD 5.1) | [`ruleset-5e-2014`](packages/ruleset-5e-2014/manifest.json) | Staging only | A Game Mode ruleset: 5e SRD 5.1 ability checks, skill checks, saving throws, and the full character sheet. Ships only data, no Agent and no code. Needs an Engine with Capability API 1.20, which today means the Engine `staging` branch. |
 
 ### Localization sources
 
@@ -103,6 +104,7 @@ Build the shared package snapshot and all feature bundles from a neighboring Mar
 ```bash
 node scripts/build-agent-catalog.mjs
 node scripts/build-feature-packages.mjs
+node scripts/build-ruleset-packages.mjs
 node scripts/test-catalog-lanes.mjs
 node scripts/validate-package-locales.mjs
 node scripts/validate-catalog.mjs

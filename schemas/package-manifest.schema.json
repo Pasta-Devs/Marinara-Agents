@@ -65,7 +65,7 @@
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "items": { "enum": ["agent", "maps", "conversation-calls", "turn-game"] }
+      "items": { "enum": ["agent", "maps", "conversation-calls", "ruleset", "turn-game"] }
     },
     "entrypoints": {
       "type": "object",
@@ -76,6 +76,10 @@
         "agents": { "type": "string" },
         "knowledge": { "type": "string" }
       }
+    },
+    "contributions": {
+      "type": "object",
+      "description": "What the package adds to the Engine (slots, assets, a Home tab, Game Mode setup and more). Left open on purpose: the Engine owns this contract and grows it with each Capability API, and scripts/validate-catalog.mjs checks the parts this catalog depends on. Closing it here would make this file a second copy that refuses shipped packages the day the Engine adds a key."
     },
     "files": {
       "type": "array",

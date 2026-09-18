@@ -79,7 +79,13 @@ Rebuild Engine-derived feature packages with:
 node scripts/build-feature-packages.mjs
 ```
 
-Both builders accept package IDs for a focused rebuild. When a build changes an artifact, commit the package payload, manifest, ZIP, catalog entry, and captured Engine sources together. Do not hand-edit generated bundles, checksums, byte sizes, or ZIP contents.
+Rebuild `ruleset` packages, which ship a data asset instead of an Agent, with:
+
+```bash
+node scripts/build-ruleset-packages.mjs
+```
+
+The first two builders accept package IDs for a focused rebuild; the ruleset builder always rebuilds every ruleset package. When a build changes an artifact, commit the package payload, manifest, ZIP, catalog entry, and captured Engine sources together. Do not hand-edit generated bundles, checksums, byte sizes, or ZIP contents.
 
 The catalog `generatedAt` field is preserved across rebuilds rather than stamped with the current time. This keeps a no-op rebuild byte-identical and stops the timestamp from being a guaranteed merge conflict between concurrent package PRs. A rebuild that touches nothing substantive should leave `catalog/**/catalog.json` unchanged — if `git status` shows only a `generatedAt` diff, discard it. To intentionally refresh the timestamp (for example when promoting a release), run the builder with `MARINARA_CATALOG_STAMP_GENERATED_AT=1`.
 
@@ -194,7 +200,7 @@ Also manually install or update affected packages through **Agents → Download 
 A new package must include:
 
 1. A unique directory and `manifest.json` under `packages/`.
-2. At least one Agent definition matching the package ID.
+2. At least one Agent definition matching the package ID. A `ruleset` package is the exception: it ships a validated `ruleset.json` data asset instead of an Agent definition, declares `entrypoints: {}`, no permissions, and no restart, and is built by `node scripts/build-ruleset-packages.mjs`.
 3. Correct category, modes, entrypoints, permissions, compatibility, and restart requirement.
 4. Reproducible package payloads and a generated ZIP artifact.
 5. A catalog entry with valid hashes, sizes, and documentation URL.
