@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.0.28 — 2026-09-18
+
+- No visible changes. Moved the server services into pure rules, data, and feature modules.
+
 ## 0.0.27 — 2026-09-18
 
 - No visible changes. Split server storage into feature-owned modules.
