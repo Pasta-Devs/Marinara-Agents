@@ -5,7 +5,7 @@ import {
   type NoodleInteraction,
   type NoodlePost,
 } from "@marinara-engine/shared";
-import type { SlurpSettings } from "../storage/slurp.storage.js";
+import type { SlurpSettings } from "../../slp/slp-storage.js";
 
 type RandomSource = () => number;
 

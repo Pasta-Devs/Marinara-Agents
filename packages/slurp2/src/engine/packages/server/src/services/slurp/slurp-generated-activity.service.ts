@@ -12,7 +12,7 @@ import { createCharactersStorage } from "../storage/characters.storage.js";
 import { createChatsStorage } from "../storage/chats.storage.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createGalleryStorage } from "../storage/gallery.storage.js";
-import { createSlurpStorage, type SlurpSettings } from "../storage/slurp.storage.js";
+import { createSlurpStorage, type SlurpSettings } from "../../slp/slp-storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
 import { canCreateGeneratedNoodleInteraction } from "./slurp-interaction-policy.js";
 import { isConnectionAdmissionFailure, type ConnectionAdmissionMode } from "../generation/connection-admission.js";

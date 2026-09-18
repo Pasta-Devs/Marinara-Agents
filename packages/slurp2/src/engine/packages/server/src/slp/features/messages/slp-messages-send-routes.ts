@@ -5,7 +5,7 @@ import { parseSlurpCheatDirective } from "../../../services/slurp/slurp-cheat-di
 import { SLURP_DEV_CHEAT_MAX_COINS } from "../../../services/slurp/slurp-wallet.js";
 import { generateNoodlerCreatorArtwork } from "../../../services/slurp/slurp-artwork.operation.js";
 import { createScheduledFollowUps } from "../../../services/slurp/slurp-follow-up.js";
-import { createSlurpReplyQueueStorage } from "../../../services/storage/slurp-reply-queue.storage.js";
+import { createSlurpReplyQueueStorage } from "./slp-reply-queue-storage.js";
 import { reactToSlurpPayment } from "../../../services/slurp/slurp-payment-reaction.js";
 import type { FastifyInstance } from "fastify";
 import { personaQuerySchema } from "./slp-messages-schemas.js";

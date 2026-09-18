@@ -14,7 +14,7 @@ import {
   updateNoodlerImageConnections,
   clearNoodlerImageConnections,
 } from "../../../services/slurp/slurp-image-connections.js";
-import { getSlurpPostGuidance, updateSlurpPostGuidance } from "../../../services/slurp/slurp-post-guidance.storage.js";
+import { getSlurpPostGuidance, updateSlurpPostGuidance } from "../../base/settings/slp-post-guidance-storage.js";
 import { isAmbientNoodleAccount, dismissAmbientNoodleAccount } from "../../../services/slurp/slurp-ambient-profiles.js";
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../../base/host/slp-viewer-context.js";

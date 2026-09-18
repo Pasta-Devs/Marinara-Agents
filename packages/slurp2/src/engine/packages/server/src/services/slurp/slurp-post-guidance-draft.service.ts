@@ -17,7 +17,7 @@ import type { ChatMessage } from "../llm/base-provider.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpStorage } from "../../slp/slp-storage.js";
 import { noodlerPublicIdentityFor, protectBoundedNoodlerGeneratedText } from "./slurp-generation.service.js";
 import { requireModelAnswer } from "./slurp-model-answer.js";
 import {

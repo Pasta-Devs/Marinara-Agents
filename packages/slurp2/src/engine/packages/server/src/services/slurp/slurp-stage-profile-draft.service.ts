@@ -18,7 +18,7 @@ import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpStorage } from "../../slp/slp-storage.js";
 import { noodleResponseFormat } from "./slurp-response-format.js";
 import {
   buildNoodlerPublicIdentity,

@@ -1,4 +1,4 @@
-import type { SlurpCommission } from "../storage/slurp-messages.storage.js";
+import type { SlurpCommission } from "../../slp/slp-storage.js";
 
 export type SlurpAttentionCommission = SlurpCommission & { side: "viewer" | "creator" };
 

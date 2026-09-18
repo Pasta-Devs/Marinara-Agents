@@ -15,15 +15,15 @@
  * most recent items are the ones anybody will actually look at.
  */
 import type { DB } from "../../db/connection.js";
-import { isUnsupportedTableError } from "../storage/slurp-host-tables.js";
+import { isUnsupportedTableError } from "../../slp/base/host/slp-host-tables.js";
 import { desc, eq } from "../../db/file-query.js";
 import { logger } from "../../lib/logger.js";
 import { slurpPendingText } from "../../db/schema/slurp.js";
 import { newId, now } from "../../utils/id-generator.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
-import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
-import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
+import { createSlurpStorage } from "../../slp/slp-storage.js";
+import { createSlurpMessagesStorage } from "../../slp/slp-storage.js";
+import { createSlurpPopulationStorage } from "../../slp/features/audience/slp-audience-storage-funnel.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
 import { resolveBaseUrl } from "../generation/connection-base-url.js";

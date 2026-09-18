@@ -6,7 +6,7 @@
  * panel can render the exact instructions the prompt was built from rather than an approximation.
  */
 import type { DB } from "../../db/connection.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpStorage } from "../../slp/slp-storage.js";
 import { describeSlurpDayVibe } from "./slurp-day-vibe.service.js";
 import { slurpGoalProgress } from "./slurp-goal.js";
 import { resolveSlurpPostStance, slurpPostStanceInstruction } from "./slurp-post-stance.js";

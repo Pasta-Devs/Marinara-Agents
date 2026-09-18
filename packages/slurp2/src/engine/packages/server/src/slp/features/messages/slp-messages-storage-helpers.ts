@@ -2,11 +2,11 @@ import {
   SLURP_THREAD_STATE_DEFAULT,
   decaySlurpThreadState,
   type SlurpThreadState as SlurpConversationState,
-} from "../slurp/slurp-creator-state.js";
-import { readStoredNotes, type SlurpThreadNote } from "../slurp/slurp-thread-notes.js";
-import type { SlurpRapport } from "../slurp/slurp-rapport.js";
-import type { SlurpMessageKind, SlurpThreadState } from "../slurp/slurp-messaging.js";
-import type { SlurpCommission, SlurpMessage, SlurpThread } from "./slurp-messages.types.js";
+} from "../../../services/slurp/slurp-creator-state.js";
+import { readStoredNotes, type SlurpThreadNote } from "../../../services/slurp/slurp-thread-notes.js";
+import type { SlurpRapport } from "../../../services/slurp/slurp-rapport.js";
+import type { SlurpMessageKind, SlurpThreadState } from "../../../services/slurp/slurp-messaging.js";
+import type { SlurpCommission, SlurpMessage, SlurpThread } from "./slp-messages-storage-types.js";
 
 export const now = () => new Date().toISOString();
 export const DAY = 86_400_000;

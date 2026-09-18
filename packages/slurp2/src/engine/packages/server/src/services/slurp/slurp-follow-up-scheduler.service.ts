@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { logger } from "../../lib/logger.js";
-import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpMessagesStorage } from "../../slp/slp-storage.js";
+import { createSlurpStorage } from "../../slp/slp-storage.js";
 import { isFollowUpDue, formatFollowUpContext, type ScheduledFollowUp } from "./slurp-follow-up.js";
 import { generateSlurpMessageReply, SlurpMessageBudgetUnavailableError } from "./slurp-message-generation.service.js";
 import { resolveSlurpTextConnection } from "./slurp-connection.js";

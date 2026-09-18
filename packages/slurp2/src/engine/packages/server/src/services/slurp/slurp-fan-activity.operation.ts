@@ -4,7 +4,7 @@ import { eq } from "../../db/file-query.js";
 import { noodlerFanActivityState } from "../../db/schema/slurp.js";
 import { now } from "../../utils/id-generator.js";
 import { tryBackgroundConnection } from "../generation/connection-admission.js";
-import { createSlurpStorage, snapshotForAccount, type SlurpSettings } from "../storage/slurp.storage.js";
+import { createSlurpStorage, snapshotForAccount, type SlurpSettings } from "../../slp/slp-storage.js";
 import {
   claimManualNoodleFanActivityRun,
   claimNoodleFanActivityRun,
@@ -24,7 +24,7 @@ import {
   resolveNoodlerFanConnection,
 } from "./slurp-fan-activity.service.js";
 import { tryNoodleOperation } from "./slurp-operation-lock.js";
-import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
+import { createSlurpPopulationStorage } from "../../slp/features/audience/slp-audience-storage-funnel.js";
 import { isSlurpPopulationMemberId } from "./slurp-population.js";
 import {
   NOODLER_FAN_IDENTITY_PREFIX,

@@ -7,11 +7,11 @@ import {
   compensateSlurpPaymentForDatabase,
   resetSlurpPaymentIntentForDatabase,
   settleSlurpPaymentIntentForDatabase,
-} from "../../../services/storage/slurp-messages.storage.js";
+} from "../messages/slp-messages-contract.js";
 import { reactToSlurpPayment } from "../../../services/slurp/slurp-payment-reaction.js";
 import { slurpPayoutAllowance } from "../../../services/slurp/slurp-earnings.js";
 import { isNoodlerHiddenFromViewer } from "../../../services/slurp/slurp-access.js";
-import { createSlurpPopulationStorage } from "../../../services/storage/slurp-population.storage.js";
+import { createSlurpPopulationStorage } from "../audience/slp-audience-contract.js";
 import { SLURP_NAMED_CAST_LIMIT } from "../../../services/slurp/slurp-population.js";
 import { noodlerUnlockPriceFromMetadata } from "../../../services/slurp/slurp-prices.js";
 import type { FastifyInstance } from "fastify";

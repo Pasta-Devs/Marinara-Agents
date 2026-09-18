@@ -19,8 +19,8 @@
 import type { DB } from "../../db/connection.js";
 import { logger } from "../../lib/logger.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
-import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
+import { createSlurpStorage } from "../../slp/slp-storage.js";
+import { createSlurpPopulationStorage } from "../../slp/features/audience/slp-audience-storage-funnel.js";
 import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { tryNoodlerAccountOperation } from "./slurp-account-operation-lock.js";
 import { generateNoodlerCreatorReply } from "./slurp-reply-generation.service.js";

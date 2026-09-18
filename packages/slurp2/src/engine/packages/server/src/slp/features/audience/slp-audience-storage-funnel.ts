@@ -5,12 +5,12 @@
  * That is what lets a Creator show thousands of followers while a few hundred rows exist: the
  * count is reach, and the rows are the people who did something.
  */
-import { tolerateMissingTables } from "./slurp-host-tables.js";
-import { and, asc, desc, eq, inArray } from "../../db/file-query.js";
-import { now } from "../../utils/id-generator.js";
-import type { DB } from "../../db/connection.js";
-import { noodleAccountSubscriptions, slurpAudienceTies, slurpPopulation } from "../../db/schema/slurp.js";
-import { SLURP_AUDIENCE_ARCS, type SlurpAudienceArc } from "../slurp/slurp-audience-arc.js";
+import { tolerateMissingTables } from "../../base/host/slp-host-tables.js";
+import { and, asc, desc, eq, inArray } from "../../../db/file-query.js";
+import { now } from "../../../utils/id-generator.js";
+import type { DB } from "../../../db/connection.js";
+import { noodleAccountSubscriptions, slurpAudienceTies, slurpPopulation } from "../../../db/schema/slurp.js";
+import { SLURP_AUDIENCE_ARCS, type SlurpAudienceArc } from "../../../services/slurp/slurp-audience-arc.js";
 import {
   generateSlurpPopulationMember,
   isSlurpPopulationMemberId,
@@ -20,9 +20,9 @@ import {
   type SlurpFunnelStage,
   type SlurpPopulationMember,
   type SlurpSpendTier,
-} from "../slurp/slurp-population.js";
-import type { SlurpFanType } from "../slurp/slurp-fan-types.js";
-import { slurpAudienceWeeklySpend } from "../slurp/slurp-audience-subscription.js";
+} from "../../../services/slurp/slurp-population.js";
+import type { SlurpFanType } from "../../../services/slurp/slurp-fan-types.js";
+import { slurpAudienceWeeklySpend } from "../../../services/slurp/slurp-audience-subscription.js";
 
 export { SLURP_FUNNEL_STAGES, SLURP_NAMED_CAST_LIMIT, type SlurpFunnelStage };
 

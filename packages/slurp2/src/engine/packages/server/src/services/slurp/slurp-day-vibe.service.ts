@@ -6,7 +6,7 @@
  */
 import type { DB } from "../../db/connection.js";
 import { createAppSettingsStorage } from "../storage/app-settings.storage.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpStorage } from "../../slp/slp-storage.js";
 import {
   slurpDayVibe,
   slurpDayVibeDescription,

@@ -3,8 +3,8 @@ import type { DB } from "../../db/connection.js";
 import { logger } from "../../lib/logger.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { resolveSlurpTextConnection } from "./slurp-connection.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
-import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
+import { createSlurpStorage } from "../../slp/slp-storage.js";
+import { createSlurpMessagesStorage } from "../../slp/slp-storage.js";
 import { tryNoodlerAccountOperation } from "./slurp-account-operation-lock.js";
 import { generateNoodlerCreatorReply } from "./slurp-reply-generation.service.js";
 

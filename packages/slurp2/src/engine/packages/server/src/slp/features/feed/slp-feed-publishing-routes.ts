@@ -1,6 +1,6 @@
 import { noodlerTargetedRefreshSchema, noodlerGenerationRequestSchema } from "@marinara-engine/shared";
 import { z } from "zod";
-import { getSlurpPostGuidance, updateSlurpPostGuidance } from "../../../services/slurp/slurp-post-guidance.storage.js";
+import { getSlurpPostGuidance, updateSlurpPostGuidance } from "../../base/settings/slp-post-guidance-storage.js";
 import {
   SLURP_BUILT_IN_POST_GUIDANCE,
   SLURP_POST_GUIDANCE_MAX_LENGTH,

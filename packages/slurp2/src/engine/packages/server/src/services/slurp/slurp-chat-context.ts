@@ -11,8 +11,8 @@
  */
 import type { DB } from "../../db/connection.js";
 import { wrapContent } from "../prompt/format-engine.js";
-import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpMessagesStorage } from "../../slp/slp-storage.js";
+import { createSlurpStorage } from "../../slp/slp-storage.js";
 import { sinceHoursIso } from "./slurp-public-support.js";
 
 type WrapFormat = "xml" | "markdown" | "none";

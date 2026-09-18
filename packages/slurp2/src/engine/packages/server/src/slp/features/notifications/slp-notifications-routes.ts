@@ -1,5 +1,5 @@
 import { noodlerViewerPersonaSchema } from "@marinara-engine/shared";
-import { createSlurpEventsStorage } from "../../../services/storage/slurp-events.storage.js";
+import { createSlurpEventsStorage } from "./slp-notification-storage.js";
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../../base/host/slp-viewer-context.js";
@@ -14,7 +14,7 @@ export async function slpNotificationsRoutes(
   deps: SlpRouteDeps,
   catchUpWorld: (app: FastifyInstance) => Promise<void>,
 ) {
-  const { noodle, resolveViewerPersona } = deps;
+  const { noodle, messages, resolveViewerPersona } = deps;
   /**
    * The notification stream, and what happened while you were away.
    *
@@ -27,7 +27,7 @@ export async function slpNotificationsRoutes(
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     await catchUpWorld(app);
-    return readSlpNotifications(app.db, noodle, viewer.id);
+    return readSlpNotifications(app.db, noodle, messages, viewer.id);
   });
 
   app.post("/noodler/notifications/seen", async (req, reply) => {

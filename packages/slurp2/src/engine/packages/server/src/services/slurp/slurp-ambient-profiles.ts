@@ -1,5 +1,5 @@
 import type { NoodleAccount } from "@marinara-engine/shared";
-import type { createSlurpStorage } from "../storage/slurp.storage.js";
+import type { createSlurpStorage } from "../../slp/slp-storage.js";
 
 /**
  * Seed copy for the ambient roster. The entity ids are the stable Engine ids

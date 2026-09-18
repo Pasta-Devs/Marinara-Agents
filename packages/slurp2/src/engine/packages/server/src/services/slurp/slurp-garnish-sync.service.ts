@@ -7,7 +7,7 @@
 import type { DB } from "../../db/connection.js";
 import { logger } from "../../lib/logger.js";
 import type { GarnishAdsStorage } from "../garnish-ads/garnish-ads.storage.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpStorage } from "../../slp/slp-storage.js";
 import { generateGarnishAds } from "./slurp-garnish-generation.service.js";
 import { generateGarnishAdImage } from "./slurp-garnish-image.service.js";
 import { readGarnishLorebookContext } from "./slurp-garnish-lorebook.js";

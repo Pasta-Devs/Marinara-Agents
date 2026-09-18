@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
-import { createSlurpEventsStorage } from "../../../services/storage/slurp-events.storage.js";
-import { createSlurpMessagesStorage } from "../../../services/storage/slurp-messages.storage.js";
-import { createSlurpPopulationStorage } from "../../../services/storage/slurp-population.storage.js";
+import { createSlurpEventsStorage } from "./slp-notification-storage.js";
+import type { SlurpMessagesStorage } from "../messages/slp-messages-contract.js";
+import { createSlurpPopulationStorage } from "../audience/slp-audience-contract.js";
 import { groupSlurpEvents } from "../../../services/slurp/slurp-event-weight.js";
 import type { SlpRouteDeps } from "../../base/host/slp-viewer-context.js";
 
@@ -9,10 +9,10 @@ import type { SlpRouteDeps } from "../../base/host/slp-viewer-context.js";
 export async function readSlpNotifications(
   db: FastifyInstance["db"],
   noodle: SlpRouteDeps["noodle"],
+  messages: SlurpMessagesStorage,
   viewerId: string,
 ) {
   const events = createSlurpEventsStorage(db);
-  const messages = createSlurpMessagesStorage(db);
   const population = createSlurpPopulationStorage(db);
   const [items, unseen] = await Promise.all([events.list(viewerId), events.listUnseen(viewerId)]);
   const legacyCommissionIds = [

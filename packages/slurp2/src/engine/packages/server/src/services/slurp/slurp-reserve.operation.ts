@@ -2,7 +2,7 @@ import type { DB } from "../../db/connection.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { resolveNoodlerImageConnectionId } from "./slurp-image-connections.js";
-import { createSlurpStorage, noodlerReservePolicyFingerprint } from "../storage/slurp.storage.js";
+import { createSlurpStorage, noodlerReservePolicyFingerprint } from "../../slp/slp-storage.js";
 import { hasSlurpCreatorPostingIntervalConflict } from "./slurp-posting-interval.js";
 import { generateNoodlerPost, resolveSlurpAutomaticPostAccess } from "./slurp-generation.service.js";
 import { generateNoodlerPostImage } from "./slurp-images.service.js";

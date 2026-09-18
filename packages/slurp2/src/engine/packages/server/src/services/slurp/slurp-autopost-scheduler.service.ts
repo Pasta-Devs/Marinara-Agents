@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { logger } from "../../lib/logger.js";
 import { sweepStagedImages } from "../image/image-generation.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpStorage } from "../../slp/slp-storage.js";
 import { reconcileNoodlerReserve, runNoodlerAutoPostPoll } from "./slurp-reserve.operation.js";
 import { tryBackfillNextNoodlerCreatorArtwork } from "./slurp-artwork.operation.js";
 import { slurpPollBackoffMs } from "./slurp-poll-backoff.js";

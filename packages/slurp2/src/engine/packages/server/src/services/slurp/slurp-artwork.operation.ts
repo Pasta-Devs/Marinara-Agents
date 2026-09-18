@@ -3,7 +3,7 @@ import { logger } from "../../lib/logger.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
 import { createCharacterGalleryStorage } from "../storage/character-gallery.storage.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpStorage } from "../../slp/slp-storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
 import { generateNoodlerPostImage } from "./slurp-images.service.js";
 import { noodlerAvatarUrl, noodlerBannerUrl, unlinkNoodlerAvatar, unlinkNoodlerBanner } from "./slurp-avatar.js";

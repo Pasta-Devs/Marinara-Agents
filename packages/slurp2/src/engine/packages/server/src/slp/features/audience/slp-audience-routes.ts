@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createSlurpPopulationStorage } from "../../../services/storage/slurp-population.storage.js";
+import { createSlurpPopulationStorage } from "./slp-audience-storage-funnel.js";
 import {
   planSlurpFanTypeRebalance,
   slurpFanTypeForPinnedOrSeed,

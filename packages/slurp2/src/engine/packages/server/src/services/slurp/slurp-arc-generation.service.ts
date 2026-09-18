@@ -14,7 +14,7 @@ import type { ChatMessage } from "../llm/base-provider.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpStorage } from "../../slp/slp-storage.js";
 import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { withConnectionAdmissionProvider, type ConnectionAdmissionMode } from "../generation/connection-admission.js";
 import { SLURP_MODIFIER_KINDS } from "./slurp-creator-state.js";

@@ -7,7 +7,7 @@ import {
   type NoodlerManagedPost,
 } from "@marinara-engine/shared";
 import { isDebugAgentsEnabled } from "../../config/runtime-config.js";
-import { resolveSlurpCreatorMenu } from "./slurp-post-guidance.storage.js";
+import { resolveSlurpCreatorMenu } from "../../slp/base/settings/slp-post-guidance-storage.js";
 import { slurpPlatformEventInstruction } from "./slurp-platform-events.js";
 import type { DB } from "../../db/connection.js";
 import { logDebugOverride } from "../../lib/logger.js";
@@ -24,8 +24,8 @@ import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "./slur
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { describeSlurpPostCondition } from "./slurp-post-condition.service.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
-import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
+import { createSlurpStorage } from "../../slp/slp-storage.js";
+import { createSlurpPopulationStorage } from "../../slp/features/audience/slp-audience-storage-funnel.js";
 import { slurpAudienceArcDescription } from "./slurp-audience-arc.js";
 import { readSlurpDmReply } from "./slurp-dm-response.js";
 import type { SlurpMoodShift } from "./slurp-mood.js";

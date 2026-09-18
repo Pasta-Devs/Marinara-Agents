@@ -12,7 +12,7 @@ import {
 } from "../../../services/slurp/slurp-generation.service.js";
 import { resolveNoodlerCreatorArtwork } from "../../../services/slurp/slurp-public-profiles.service.js";
 import { minimizeNoodlerSourceSnapshot } from "../../../services/slurp/slurp-source.js";
-import { isSlurpFileUniqueConstraintError } from "../../../services/storage/slurp-file-errors.js";
+import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
 import { resolveSlurpTextConnection } from "../../../services/slurp/slurp-connection.js";
 import { settleAgentJobsWithConcurrencyLimit } from "../../../services/agents/agent-concurrency.js";
 import { logger } from "../../../lib/logger.js";
