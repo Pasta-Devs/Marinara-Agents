@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type {
   LtmExtractionAccounting,
   LtmExtractionDiagnostic,
+  LtmExtractionFingerprint,
   LtmExtractionOutcome,
   LtmExtractionResponse,
   LtmImportedSourceResult,
@@ -17,9 +18,11 @@ import { extractLongTermMemoryFromSourceNote, finalizeLongTermMemoryExtractionDr
 import { LongTermMemoryStorage } from "./storage.js";
 import { loadTrustedLtmSubjectCatalog } from "./subject-identity.js";
 import { compileEvidenceUnitExtraction, sourceHashForEvidenceUnitExtraction } from "./evidence-unit-extraction.js";
+import { extractionFingerprintForLtmSourceNote } from "./source-hash.js";
 import { canUpdateLtmScopedTarget } from "./scoped-targets.js";
 import { LtmServiceError } from "./service-error.js";
 import { addRejectedSuggestions } from "./rejected-suggestions.js";
+import { withLtmVaultLock } from "./vault-lock.js";
 
 export type ImportedSourceItem = {
   sourceId: string;
@@ -34,6 +37,7 @@ type PreparedSource = {
   chatId?: string;
   extractionMethod: "llm" | "deterministic";
   sourceNote: LtmNote;
+  sourceFingerprintBeforeBinding: LtmExtractionFingerprint;
   extractionMode: LtmMode;
   diagnostics: LtmExtractionDiagnostic[];
   outcome: LtmExtractionOutcome;
@@ -69,15 +73,15 @@ function cancelled(error: unknown, signal?: AbortSignal) {
   return signal?.aborted || (error instanceof Error && error.name === "AbortError");
 }
 function canMarkCurrent(prepared: PreparedSource) {
-  return (
-    prepared.outcome.state === "success" ||
-    (prepared.extractionMethod === "deterministic" &&
-      prepared.outcome.state === "partial_success" &&
-      !prepared.diagnostics.some((item) => item.severity === "error")) ||
-    (prepared.outcome.state === "no_suggestions_created" &&
-      prepared.outcome.droppedUnits === 0 &&
-      !prepared.diagnostics.some((item) => item.severity === "error"))
-  );
+  if (prepared.outcome.state === "success") return true;
+  if (prepared.diagnostics.some((item) => item.severity === "error")) return false;
+  if (prepared.outcome.state === "no_suggestions_created") return prepared.outcome.droppedUnits === 0;
+  if (prepared.outcome.state === "partial_success") {
+    // Deterministic compilation may drop malformed source blocks without invalidating the run. A provider batch
+    // whose only non-kept units were deduplicated is equally complete and must not churn on re-extraction.
+    return prepared.extractionMethod === "deterministic" || prepared.outcome.droppedUnits === 0;
+  }
+  return false;
 }
 async function rebuildAfterSourceExtraction(root?: string) {
   try {
@@ -162,6 +166,9 @@ export async function prepareLongTermMemorySource(options: PrepareOptions): Prom
       operationId: options.operationId,
       chatId: options.chatId,
       sourceNote: options.sourceNote,
+      sourceFingerprintBeforeBinding: extractionFingerprintForLtmSourceNote(options.sourceNote, {
+        extractionMode: "game",
+      }),
       extractionMode: "game",
       response: compiled.compiledResponse,
       diagnostics: compiled.diagnostics,
@@ -200,46 +207,55 @@ async function commitPreparedLongTermMemorySource(
   prepared: PreparedSource,
   options: { root?: string; overlay?: Map<string, LtmNote>; applyLowRisk?: boolean },
 ) {
-  const draft = await finalizeLongTermMemoryExtractionDraft(
-    {
-      sourceNote: prepared.sourceNote,
-      response: prepared.response,
-      scope: prepared.sourceNote.destinationScope ?? prepared.sourceNote.scope,
-      modes: prepared.sourceNote.modes,
-      extractionMode: prepared.extractionMode,
-      operationId: prepared.operationId,
-      diagnostics: prepared.diagnostics,
-      outcome: prepared.outcome,
-      accounting: prepared.accounting,
-      reviewRequired: prepared.reviewRequired,
-      chatId: prepared.chatId,
-      afterWrite: (draft) =>
-        draft.extractionOutcome?.droppedCandidates.length
-          ? addRejectedSuggestions(draft, options.root)
-          : Promise.resolve(),
-    },
-    { root: options.root, overlay: options.overlay },
-  );
-  const markCurrent = canMarkCurrent(prepared);
-  const note =
-    markCurrent && draft.source.extractionFingerprint
-      ? await new LongTermMemoryStorage(options.root).updateNote(prepared.sourceNote.id, {
-          extractionFingerprint: draft.source.extractionFingerprint,
-        })
-      : prepared.sourceNote;
-  const fingerprintPersisted = markCurrent && Boolean(note.extractionFingerprint);
-  const applyResult =
-    options.applyLowRisk && !prepared.reviewRequired && fingerprintPersisted && draft.mutations.length
-      ? await applyLongTermMemoryDraft(draft.id, {
-          root: options.root,
-          actor: "maintenance_api",
-          autoApplyLowRiskOnly: true,
-          rebuildIndexes: false,
-          operationId: prepared.operationId,
-        })
-      : null;
-  const finalDraft = applyResult?.draft ?? draft;
-  return { draft: finalDraft, note, applyResult };
+  const storage = new LongTermMemoryStorage(options.root);
+  // ponytail: serialize finalization per vault; use narrower locks only if local commit throughput becomes a bottleneck.
+  return withLtmVaultLock(storage.root, async () => {
+    const draft = await finalizeLongTermMemoryExtractionDraft(
+      {
+        sourceNote: prepared.sourceNote,
+        sourceFingerprintBeforeBinding: prepared.sourceFingerprintBeforeBinding,
+        response: prepared.response,
+        scope: prepared.sourceNote.destinationScope ?? prepared.sourceNote.scope,
+        modes: prepared.sourceNote.modes,
+        extractionMode: prepared.extractionMode,
+        operationId: prepared.operationId,
+        diagnostics: prepared.diagnostics,
+        outcome: prepared.outcome,
+        accounting: prepared.accounting,
+        reviewRequired: prepared.reviewRequired,
+        chatId: prepared.chatId,
+        afterWrite: (draft) =>
+          draft.extractionOutcome?.droppedCandidates.length
+            ? addRejectedSuggestions(draft, options.root)
+            : Promise.resolve(),
+      },
+      { root: options.root, overlay: options.overlay },
+    );
+    const markCurrent = canMarkCurrent(prepared);
+    const note =
+      markCurrent && draft.source.extractionFingerprint
+        ? await storage.updateNote(prepared.sourceNote.id, {
+            ...(prepared.sourceNote.destinationScope !== undefined
+              ? { destinationScope: prepared.sourceNote.destinationScope }
+              : {}),
+            modes: prepared.sourceNote.modes,
+            extractionFingerprint: draft.source.extractionFingerprint,
+          })
+        : prepared.sourceNote;
+    const fingerprintPersisted = markCurrent && Boolean(note.extractionFingerprint);
+    const applyResult =
+      options.applyLowRisk && !prepared.reviewRequired && fingerprintPersisted && draft.mutations.length
+        ? await applyLongTermMemoryDraft(draft.id, {
+            root: options.root,
+            actor: "maintenance_api",
+            autoApplyLowRiskOnly: true,
+            rebuildIndexes: false,
+            operationId: prepared.operationId,
+          })
+        : null;
+    const finalDraft = applyResult?.draft ?? draft;
+    return { draft: finalDraft, note, applyResult };
+  });
 }
 
 export async function processLongTermMemorySource(options: PrepareOptions & { applyLowRisk?: boolean }) {
