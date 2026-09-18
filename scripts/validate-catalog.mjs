@@ -202,9 +202,12 @@ const slurpOwnedSourcePaths = [
   "packages/server/src/services/slurp",
   "packages/server/src/services/storage/slurp.storage.ts",
 ];
-// The remaster owns strictly more of the tree than the frozen legacy package does.
+// Not spread from slurpOwnedSourcePaths: the remaster's files move into its slp roots.
 const slurp2OwnedSourcePaths = [
-  ...slurpOwnedSourcePaths,
+  ...slurpOwnedSourcePaths.filter((path) => path !== "packages/client/src/slurp-package-entry.tsx"),
+  "packages/client/src/slp",
+  "packages/server/src/slp",
+  "packages/shared/src/slp",
   "packages/server/src/routes/slurp-messages.routes.ts",
   "packages/server/src/services/storage/slurp-financial-queue.ts",
   "packages/server/src/services/storage/slurp-file-errors.ts",

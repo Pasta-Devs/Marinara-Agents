@@ -1,6 +1,6 @@
 import { AlertTriangle, Download, Loader2, RefreshCw, Save, Trash2, Upload } from "lucide-react";
 import type { ReactNode } from "react";
-import { nextSlurpAutopurgeRunAt } from "../../../../shared/src/slurp-autopurge-time.js";
+import { nextSlurpAutopurgeRunAt } from "../../../../shared/src/slp/slp-autopurge-time.js";
 import { Field, GuidanceBox, NumberSetting, SettingsGroup, Toggle } from "./SlurpSettingsControls";
 import { toast } from "sonner";
 import { BackstagePageHeader, SettingAnchor } from "./SlurpBackstageKit";

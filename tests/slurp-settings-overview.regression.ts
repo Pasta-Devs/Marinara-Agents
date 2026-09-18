@@ -23,7 +23,7 @@ async function main() {
     readFile("packages/slurp2/src/engine/packages/client/src/stores/slurp-package.store.ts", "utf8"),
     slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx"),
     readFile("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpShell.tsx", "utf8"),
-    readFile("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
+    slurp2Source("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json"),
   ]);
 
   assert.match(navigation, /section\?: SlurpBackstageSection;/u);

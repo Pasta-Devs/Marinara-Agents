@@ -9,7 +9,7 @@ import {
   Play,
   UsersRound,
 } from "lucide-react";
-import { nextSlurpAutopurgeRunAt } from "../../../../shared/src/slurp-autopurge-time.js";
+import { nextSlurpAutopurgeRunAt } from "../../../../shared/src/slp/slp-autopurge-time.js";
 import { Toggle } from "./SlurpSettingsControls";
 import { slurpAudiencePresetFor } from "../../../../server/src/services/slurp/slurp-tuning.js";
 import type { SlurpBackstagePageProps } from "./SlurpSettings";

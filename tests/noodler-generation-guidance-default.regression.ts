@@ -14,7 +14,7 @@ const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/ser
 const home = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
 const settings = slurp2BackstageSource();
 const readme = readFileSync("packages/slurp/README.md", "utf8");
-const enLocale = readFileSync("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json", "utf8");
+const enLocale = slurp2Source("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json");
 const generation = readFileSync(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
   "utf8",

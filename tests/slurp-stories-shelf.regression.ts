@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { slurp2Source } from "./slurp2-source";
 
 const home = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
@@ -29,7 +28,7 @@ assert.doesNotMatch(home, /bg-\[linear-gradient\(145deg,var\(--noodle-accent\),v
 
 for (const locale of ["de", "en", "ko", "pl"]) {
   const messages = JSON.parse(
-    readFileSync(`packages/slurp2/src/engine/packages/client/src/localization/locales/${locale}.json`, "utf8"),
+    slurp2Source(`packages/slurp2/src/engine/packages/client/src/localization/locales/${locale}.json`),
   ) as Record<string, unknown>;
   assert.equal(typeof messages["ui.slurp.moments.add"], "string", `${locale} must label the Add Story action`);
 }

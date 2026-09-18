@@ -19,17 +19,13 @@ const files = [
 ];
 
 const slurpRoutes = slurp2Source(join(root, "packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts"));
-const slurpEntry = readFileSync(
-  join(root, "packages/slurp2/src/engine/packages/client/src/slurp-package-entry.tsx"),
-  "utf8",
-);
+const slurpEntry = slurp2Source(join(root, "packages/slurp2/src/engine/packages/client/src/slurp-package-entry.tsx"));
 const slurpFanActivity = readFileSync(
   join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-fan-activity.service.ts"),
   "utf8",
 );
-const slurpServerEntry = readFileSync(
+const slurpServerEntry = slurp2Source(
   join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/server-entry.ts"),
-  "utf8",
 );
 assert.match(
   slurpEntry,
@@ -43,7 +39,7 @@ assert.match(
 );
 assert.match(
   slurpServerEntry,
-  /import \{ startNoodleRefreshScheduler \} from "\.\/slurp-refresh-scheduler\.service\.js"/u,
+  /import \{ startNoodleRefreshScheduler \} from "\.\.\/services\/slurp\/slurp-refresh-scheduler\.service\.js"/u,
   "Slurp must import the automatic timeline refresh scheduler",
 );
 assert.match(

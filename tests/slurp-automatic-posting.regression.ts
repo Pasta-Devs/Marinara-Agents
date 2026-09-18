@@ -22,7 +22,7 @@ const onboardingUi = readFileSync(
   "utf8",
 );
 const locale = JSON.parse(
-  readFileSync("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
+  slurp2Source("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json"),
 ) as Record<string, string>;
 
 assert.match(

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { slurp2Source } from "./slurp2-source";
 
 const root = join(import.meta.dirname, "..");
 const src = join(root, "packages/slurp2/src/engine/packages/server/src");
@@ -8,8 +9,8 @@ const src = join(root, "packages/slurp2/src/engine/packages/server/src");
 // Every table this package added after the host image was cut lives only in the bundle. The file
 // store rejects such a table with "Unsupported table" unless the package registers it, which is
 // how the world, messaging, and population features silently failed in production.
-const entry = readFileSync(join(src, "services/slurp/server-entry.ts"), "utf8");
-assert.match(entry, /import \* as slurpSchema from "\.\.\/\.\.\/db\/schema\/slurp\.js"/u);
+const entry = slurp2Source(join(src, "services/slurp/server-entry.ts"));
+assert.match(entry, /import \* as slurpSchema from "\.\.\/db\/schema\/slurp\.js"/u);
 assert.match(entry, /registerTables\(Object\.values\(slurpSchema\)\)/u);
 
 // Registration has to happen before anything reads or writes, or the first storage call still

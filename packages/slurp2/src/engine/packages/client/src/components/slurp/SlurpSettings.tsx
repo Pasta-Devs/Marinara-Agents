@@ -1,5 +1,5 @@
 import { AlertTriangle, ArrowLeft, CheckCircle2, Loader2, RefreshCw, Sparkles } from "lucide-react";
-import { nextSlurpAutopurgeRunAt } from "../../../../shared/src/slurp-autopurge-time.js";
+import { nextSlurpAutopurgeRunAt } from "../../../../shared/src/slp/slp-autopurge-time.js";
 import { type ChangeEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";

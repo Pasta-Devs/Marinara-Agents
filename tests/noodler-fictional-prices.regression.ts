@@ -81,7 +81,7 @@ const card = readFileSync(
   "utf8",
 );
 const enLocale = JSON.parse(
-  readFileSync("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
+  slurp2Source("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json"),
 ) as Record<string, string>;
 
 // Both actions show a price, and the hint says plainly what it does and does not cost.

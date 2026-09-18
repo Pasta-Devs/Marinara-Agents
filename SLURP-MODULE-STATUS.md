@@ -20,29 +20,28 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 ## Current state
 
 - Last updated: 2026-09-18
-- Updated by: Slice 0–1 implementation agent
-- Overall state: Slice 0–1 implemented and validated locally; pushed, no PR yet
-- Active slice: 0–1 (combined)
+- Updated by: Slice 2 implementation agent
+- Overall state: Slices 0–1 and 2 implemented and validated locally; pushed, no PR yet
+- Active slice: 2, stacked on the unmerged 0–1 commits at the maintainer's request
 - Issue: #914 (assigned `Gunterlie`)
-- Pull request: none — the maintainer asked for no PR yet. Open a draft PR to `staging`, assigned
-  to `Gunterlie`, only after the maintainer approves it.
+- Pull request: none — the maintainer asked for no PR yet
 - Branch: local `refactor/slurp2-module-safety-rails`, pushed as `origin/modular-simping`; based on
-  `origin/staging` `e92684d1`; implementation commit `29ff6ec2`
-- Package version: `0.0.24` (staging was `0.0.22`; `0.0.23` was skipped, see discoveries)
-- Generated artifact: `artifacts/slurp2-0.0.24.zip`, sha256
-  `945e245c4748afc7ff0d36ea6d8741812e8804a7aa7048b6c35abbf1bf2cdc04`, 6464540 bytes
-- Node: `/home/dev/.nvm/versions/node/v24.18.0/bin` prepended to PATH; `node -v` = `v24.18.0`
+  `origin/staging` `e92684d1`. Slice 0–1 commit `29ff6ec2`; Slice 2 is the commit after the ledger
+  update `f22f46fa`.
+- Package version: `0.0.25`
+- Generated artifact: `artifacts/slurp2-0.0.25.zip`, sha256
+  `63110f07e58aefca8f9be2cbc7b9fb492ce8c8f5a36daeb19226f4bb7139fbfe`, 6705108 bytes
+- Node: `/home/dev/.nvm/versions/node/v24.18.0/bin`; `node -v` = `v24.18.0`
 - Engine source: `/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish`, branch
-  `welcome-to-the-agentshop`, commit `fdb67d47b`, clean; 4 ahead / 0 behind `origin/staging`
-  (`70f83886f`) after fetch. Used unchanged. The browser runner synced its ignored `node_modules`
-  and `.pnpm/` to its own lockfile; tracked files stayed clean.
+  `welcome-to-the-agentshop`, commit `fdb67d47b`, tracked files clean; 4 ahead / 0 behind
+  `origin/staging` after a fresh fetch. Used unchanged.
 
 ## Slice ledger
 
 | Slice | Name | State | Issue / PR | Package version | Evidence / handoff |
 |---:|---|---|---|---|---|
-| 0–1 | Architecture contract and safety rails | in progress | #914 / no PR yet | 0.0.24 | Validated locally; awaiting PR approval |
-| 2 | Entrypoints and shared base | not started | — | — | Depends on 0–1 merged |
+| 0–1 | Architecture contract and safety rails | in progress | #914 / no PR yet | 0.0.24 | Validated locally; on `modular-simping` |
+| 2 | Entrypoints and shared base | in progress | #914 / no PR | 0.0.25 | Validated locally; stacked on 0–1 on `modular-simping` |
 | 3 | Server routes | not started | — | — | Depends on Slice 2 merged |
 | 4 | Server storage | not started | — | — | Point of no return |
 | 5 | Server services, contracts, workflows | not started | — | — | — |
@@ -91,12 +90,58 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 | 2026-09-18 | 0–1 | Release-notes validation needs a changelog entry for every published version, including patches; the splash mirror in `slurp2-release.ts` must match the 20-entry changelog cap. | Added a 0.0.24 entry; dropped the rolled-off 0.0.3 from the splash mirror; extended `slurp2-release-notes.regression.ts` for 0.0.24. |
 | 2026-09-18 | 0–1 | Staging's committed 0.0.22 bundle was built against another Engine. Clean staging rebuilt against `shy-lionfish` gives a byte-identical `server.mjs` to this branch; `client.js` differs only in release notes. | Bundle-size change (server 2954647 → 2746627) is Engine drift, not this slice. |
 | 2026-09-18 | 0–1 | Host lacks `libnspr4.so`; Playwright Chromium cannot launch. | `npm run test:browser:slurp2` could not run locally; needs CI or a host with Playwright system deps. |
+| 2026-09-18 | 2 | `scripts/validate-package-locale-keys.mjs` skips a package whose catalog is absent at the Engine path, so moving Slurp2's locales would have silently disabled the check. | The script now also reads `client/src/slp/locales/en.json`; a removed-key mutant is reported. |
+| 2026-09-18 | 2 | `validate-catalog.mjs` required every legacy-owned path to exist in the Slurp2 source tree. | Its Slurp2 list now drops the moved client entry and adds the three `slp` roots. |
+| 2026-09-18 | 2 | Two passing-or-baseline tests assert the server entry's relative import specifiers (`slurp-table-registration`, `slurp-boundary`). | Only the path inside those two regexes changed (`../../db/…` → `../db/…`, `./slurp-refresh-…` → `../services/slurp/slurp-refresh-…`); what is asserted is unchanged. |
+| 2026-09-18 | 2 | The browser runner's `pnpm install` synced the Engine worktree's ignored `node_modules`. Builds after that give `server.mjs` 2954647 bytes (same as staging's 0.0.22); the 0.0.24 build before it gave 2746627. | The earlier "Engine drift" was stale Engine `node_modules`, not the Engine commit. 0.0.25 is built with synced dependencies. |
 
 ## Pending decisions
 
 None.
 
 ## Latest validation
+
+### Slice 2 (0.0.25)
+
+Moved with `git mv` (100% renames, content unchanged except import specifiers in the two entries):
+
+- `client/src/slurp-package-entry.tsx` → `client/src/slp/slp-client-entry.tsx`
+- `server/src/services/slurp/server-entry.ts` → `server/src/slp/slp-server-entry.ts`
+- `shared/src/slurp-autopurge-time.ts` → `shared/src/slp/slp-autopurge-time.ts` (five importers
+  updated)
+- `client/src/localization/locales/{en,de,ko,pl}.json` → `client/src/slp/locales/` (keys and bytes
+  unchanged)
+
+Ownership: added `packages/{client,server,shared}/src/slp`; removed the client entry, the
+`localization/locales` entry, and the shared autopurge entry. `services/slurp` stays owned (other
+live files); the package-store entry stays until Slice 7. Descriptor `serverImport`/`clientImport`
+now point at the `slp` entries. Legacy Slurp's list is unchanged.
+
+Tests: `tests/slurp2-source.ts` maps the seven historical keys to the new files; 16 test files had a
+read call routed through it; `slurp2-autopurge` import path and `slurp2-branding` locale directory
+updated; the two import-specifier regexes above updated.
+
+Preservation proof: the Slice 1 commit rebuilt against the same Engine state gives a byte-identical
+`server.mjs`; `client.js` differs only in minified names and the release-notes literal (compared
+with short names normalised). No `slp` or `localization` snapshot appears in `sources/engine`.
+
+Results (Node `v24.18.0`, same Engine):
+
+- architecture, typecheck-modules, release-notes, table-registration, autopurge, locale-keys,
+  branding regressions — pass.
+- `npm run check` — pass (0 errors).
+- `node scripts/typecheck-packages.mjs slurp2` — pass.
+- `npm run test:noodle:regressions` — exit 1 at the pre-existing `noodler-content-formats`
+  failure; per-file pass/fail set identical to the staging baseline (19 pre-existing failures), the
+  pre-existing failures' first errors unchanged.
+- `npm run test:browser:slurp2` — not rerun; host still lacks `libnspr4.so`.
+- `node scripts/test-catalog-lanes.mjs`, `validate-package-locales.mjs`,
+  `validate-package-locale-keys.mjs`, `validate-catalog.mjs` (`v2=38, v3=38`),
+  `tests/catalog-release-notes.regression.mjs`, `git diff --check` — pass.
+- ZIP holds the six declared files. The builder wrote manifest, payloads, ZIP, catalog lanes, and
+  notes. Live install/update/restart/offline/uninstall testing: not performed.
+
+### Slices 0–1 (0.0.24)
 
 Environment: Node `v24.18.0`, `TMPDIR=/home/dev/.cache/slp-tmp`,
 `MARINARA_ENGINE_ROOT=/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish` (`fdb67d47b`).
@@ -139,8 +184,6 @@ Generated output (builder only, no hand edits):
 
 ## Next action
 
-1. Maintainer: approve opening the draft PR from `modular-simping` to `staging` (assign `Gunterlie`, link #914, leave verification boxes unchecked). Let CI run the
-   browser job.
-2. After merge, start Slice 2 (entrypoints and shared base) from `SLURP-MODULE-SLICE.prompt.md`: move
-   the entrypoints, autopurge time module, and locales into the `slp` roots, add the three root
-   ownership entries, update the descriptor, and let the architecture regression check the new files.
+1. Maintainer: decide whether `modular-simping` (Slices 0–1 and 2 together) becomes one draft PR to
+   `staging`, assigned to `Gunterlie` and linked to #914, and let CI run the browser job.
+2. Then start Slice 3 (server routes) from `SLURP-MODULE-SLICE.prompt.md`.

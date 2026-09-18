@@ -14,10 +14,7 @@ const operation = readFileSync(`${root}/server/src/services/slurp/slurp-message.
 const messaging = readFileSync(`${root}/server/src/services/slurp/slurp-messaging.ts`, "utf8");
 const view = slurp2BackstageSource();
 const sections = readFileSync(`${root}/client/src/components/slurp/slurp-backstage.ts`, "utf8");
-const locales = JSON.parse(readFileSync(`${root}/client/src/localization/locales/en.json`, "utf8")) as Record<
-  string,
-  string
->;
+const locales = JSON.parse(slurp2Source(`${root}/client/src/localization/locales/en.json`)) as Record<string, string>;
 
 // Every setting is stored and defaulted.
 for (const key of [

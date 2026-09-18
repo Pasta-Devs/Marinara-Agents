@@ -1,18 +1,18 @@
 import type { FastifyInstance, FastifyPluginAsync, InjectOptions } from "fastify";
-import { slurpRoutes } from "../../routes/slurp.routes.js";
-import { startNoodleAutoPostScheduler } from "./slurp-autopost-scheduler.service.js";
-import { startNoodlerFanActivityScheduler } from "./slurp-fan-activity-scheduler.service.js";
-import { startNoodleRefreshScheduler } from "./slurp-refresh-scheduler.service.js";
-import { startSlurpMessageScheduler } from "./slurp-message-scheduler.service.js";
-import { startSlurpFollowUpScheduler } from "./slurp-follow-up-scheduler.service.js";
-import { startSlurpPaymentRecoveryScheduler } from "./slurp-payment-recovery-scheduler.service.js";
-import { startSlurpWorldScheduler } from "./slurp-world-scheduler.service.js";
-import { createSlurpActivationLifecycle } from "./slurp-activation-lifecycle.js";
-import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
-import * as slurpSchema from "../../db/schema/slurp.js";
-import { createSlurpFirstPostQueue } from "./slurp-first-post-queue.service.js";
-import { startSlurpAutopurgeScheduler } from "./slurp-autopurge-scheduler.service.js";
-import { buildSlurpChatContext, type SlurpChatContextRequest } from "./slurp-chat-context.js";
+import { slurpRoutes } from "../routes/slurp.routes.js";
+import { startNoodleAutoPostScheduler } from "../services/slurp/slurp-autopost-scheduler.service.js";
+import { startNoodlerFanActivityScheduler } from "../services/slurp/slurp-fan-activity-scheduler.service.js";
+import { startNoodleRefreshScheduler } from "../services/slurp/slurp-refresh-scheduler.service.js";
+import { startSlurpMessageScheduler } from "../services/slurp/slurp-message-scheduler.service.js";
+import { startSlurpFollowUpScheduler } from "../services/slurp/slurp-follow-up-scheduler.service.js";
+import { startSlurpPaymentRecoveryScheduler } from "../services/slurp/slurp-payment-recovery-scheduler.service.js";
+import { startSlurpWorldScheduler } from "../services/slurp/slurp-world-scheduler.service.js";
+import { createSlurpActivationLifecycle } from "../services/slurp/slurp-activation-lifecycle.js";
+import { createSlurpMessagesStorage } from "../services/storage/slurp-messages.storage.js";
+import * as slurpSchema from "../db/schema/slurp.js";
+import { createSlurpFirstPostQueue } from "../services/slurp/slurp-first-post-queue.service.js";
+import { startSlurpAutopurgeScheduler } from "../services/slurp/slurp-autopurge-scheduler.service.js";
+import { buildSlurpChatContext, type SlurpChatContextRequest } from "../services/slurp/slurp-chat-context.js";
 
 const lifecycle = createSlurpActivationLifecycle();
 

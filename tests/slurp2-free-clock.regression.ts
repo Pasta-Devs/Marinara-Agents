@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tryNoodleOperation } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-operation-lock.ts";
 import {
@@ -8,9 +7,10 @@ import {
   slurpCapTickEvents,
   slurpWorldTimerDue,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-tuning.ts";
+import { slurp2Source } from "./slurp2-source";
 
 const src = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src/services/slurp");
-const read = (name: string) => readFileSync(join(src, name), "utf8");
+const read = (name: string) => slurp2Source(join(src, name));
 
 async function main() {
   // Guard: two concurrent ticks on the shared key, one execution.

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import {
   moveSlurpAutopurgeDate,
   nextSlurpAutopurgeRunAt,
-} from "../packages/slurp2/src/engine/packages/shared/src/slurp-autopurge-time.ts";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-autopurge-time.ts";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
 import { slurp2Source } from "./slurp2-source";
 

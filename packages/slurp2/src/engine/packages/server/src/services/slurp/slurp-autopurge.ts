@@ -16,9 +16,9 @@ import { createSlurpStorage, type SlurpSettings } from "../storage/slurp.storage
 import { trySlurpDataDeletion } from "./slurp-operation-lock.js";
 import { selectSlurpAutopurge } from "./slurp-autopurge-plan.js";
 import { estimateNoodlerMediaRemovalBytes, NOODLER_MEDIA_PREFIX, unlinkNoodlerMedia } from "./slurp-media.js";
-import { moveSlurpAutopurgeDate, nextSlurpAutopurgeRunAt } from "../../../../shared/src/slurp-autopurge-time.js";
+import { moveSlurpAutopurgeDate, nextSlurpAutopurgeRunAt } from "../../../../shared/src/slp/slp-autopurge-time.js";
 
-export { moveSlurpAutopurgeDate, nextSlurpAutopurgeRunAt } from "../../../../shared/src/slurp-autopurge-time.js";
+export { moveSlurpAutopurgeDate, nextSlurpAutopurgeRunAt } from "../../../../shared/src/slp/slp-autopurge-time.js";
 
 export type SlurpAutopurgeResult = {
   cutoff: string;

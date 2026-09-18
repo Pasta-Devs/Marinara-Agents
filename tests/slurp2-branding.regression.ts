@@ -5,7 +5,7 @@ import { join } from "node:path";
 // Slurp2 shipped leaked "Noodle"/"NoodleR" branding in error messages, prompts, and labels.
 // Identifiers (noodleAccounts, /noodler routes, ui.noodle.* keys) stay; prose does not.
 const engineRoot = "packages/slurp2/src/engine/packages";
-const localeRoot = join(engineRoot, "client/src/localization/locales");
+const localeRoot = join(engineRoot, "client/src/slp/locales");
 
 // Prose that legitimately names the separate Noodle app, plus legacy values compared against
 // stored data. Everything else must say Slurp.
@@ -31,7 +31,7 @@ const allowedStrings = new Set([
 const proseLiteral = /(["`])((?:[^"`\\\n]|\\.)*?[Nn]oodle[Rr]?[ .,:!'][^"`\n]*?)\1/gu;
 
 const files = (readdirSync(engineRoot, { recursive: true }) as string[]).filter(
-  (file) => /\.tsx?$/u.test(file) && !file.includes("localization/locales"),
+  (file) => /\.tsx?$/u.test(file) && !file.includes("slp/locales"),
 );
 const offenders: string[] = [];
 for (const file of files) {

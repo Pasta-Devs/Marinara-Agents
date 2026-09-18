@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { logger } from "../../lib/logger.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
 import { runSlurpAutopurge } from "./slurp-autopurge.js";
-import { nextSlurpAutopurgeRunAt } from "../../../../shared/src/slurp-autopurge-time.js";
+import { nextSlurpAutopurgeRunAt } from "../../../../shared/src/slp/slp-autopurge-time.js";
 import { slurpPollBackoffMs } from "./slurp-poll-backoff.js";
 
 const POLL_MS = 60_000;

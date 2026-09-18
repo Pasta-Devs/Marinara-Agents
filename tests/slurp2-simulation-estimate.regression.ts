@@ -9,6 +9,7 @@ import { slurpTuningForPreset } from "../packages/slurp2/src/engine/packages/ser
 import * as pulseRules from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world-pulse.js";
 import * as worldRules from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.js";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
+import { slurp2Source } from "./slurp2-source";
 
 // The estimate must be the simulation, not a model of it. A settings screen that predicts one
 // thing while the tick does another is worse than no estimate at all, so the panel calls the same
@@ -65,7 +66,7 @@ assert.match(settings, /update\("simulationTuning", next\)/u, "saving must send 
 
 // Every static key the panel renders must exist in English.
 const en = JSON.parse(
-  readFileSync("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
+  slurp2Source("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json"),
 ) as Record<string, string>;
 for (const [, key] of panel.matchAll(/\bt\(\s*"([^"]+)"/gu)) {
   assert.ok(key in en, `missing English localization for ${key}`);

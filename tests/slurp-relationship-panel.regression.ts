@@ -11,7 +11,7 @@ const storage = readFileSync(
 const view = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx");
 const hook = slurp2Source("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts");
 const locales = JSON.parse(
-  readFileSync("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
+  slurp2Source("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json"),
 ) as Record<string, string>;
 
 // Every thread response funnels through one place, and that place defaults to the fan.

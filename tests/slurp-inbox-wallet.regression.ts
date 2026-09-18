@@ -4,7 +4,7 @@ import { slurp2Source } from "./slurp2-source";
 
 const home = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
 const shell = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpShell.tsx", "utf8");
-const english = readFileSync("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json", "utf8");
+const english = slurp2Source("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json");
 const store = readFileSync("packages/slurp2/src/engine/packages/client/src/stores/slurp-package.store.ts", "utf8");
 const hooks = slurp2Source("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts");
 const messages = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx");

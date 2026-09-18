@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.0.25 — 2026-09-18
+
+- No visible changes. Moved the package entry points, shared date helper, and translations into the new source layout.
+
 ## 0.0.24 — 2026-09-18
 
 - No visible changes. Internal groundwork for a cleaner source layout, with stricter build checks.

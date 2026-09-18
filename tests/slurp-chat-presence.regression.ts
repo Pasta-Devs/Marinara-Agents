@@ -12,7 +12,7 @@ const operation = readFileSync(
   "utf8",
 );
 const locales = JSON.parse(
-  readFileSync("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
+  slurp2Source("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json"),
 ) as Record<string, string>;
 
 // A queued reply means she noticed and did not answer. That is a beat, not a bug, and it needs a

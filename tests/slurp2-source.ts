@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
  * assertion stays module-wide instead of passing vacuously against one fragment.
  *
  * Keys are relative to `packages/slurp2/src/engine/`. Until a file moves, its key maps to itself.
+ * Unmapped paths under a moved directory are not redirected; add a key for each moved file.
  */
 export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   "packages/client/src/components/slurp/SlurpHome.tsx": ["packages/client/src/components/slurp/SlurpHome.tsx"],
@@ -15,6 +16,13 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   "packages/client/src/hooks/use-slurp.ts": ["packages/client/src/hooks/use-slurp.ts"],
   "packages/server/src/routes/slurp.routes.ts": ["packages/server/src/routes/slurp.routes.ts"],
   "packages/server/src/services/storage/slurp.storage.ts": ["packages/server/src/services/storage/slurp.storage.ts"],
+  "packages/client/src/slurp-package-entry.tsx": ["packages/client/src/slp/slp-client-entry.tsx"],
+  "packages/server/src/services/slurp/server-entry.ts": ["packages/server/src/slp/slp-server-entry.ts"],
+  "packages/shared/src/slurp-autopurge-time.ts": ["packages/shared/src/slp/slp-autopurge-time.ts"],
+  "packages/client/src/localization/locales/en.json": ["packages/client/src/slp/locales/en.json"],
+  "packages/client/src/localization/locales/de.json": ["packages/client/src/slp/locales/de.json"],
+  "packages/client/src/localization/locales/ko.json": ["packages/client/src/slp/locales/ko.json"],
+  "packages/client/src/localization/locales/pl.json": ["packages/client/src/slp/locales/pl.json"],
 };
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
