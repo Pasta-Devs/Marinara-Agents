@@ -49,6 +49,8 @@ import { resolveSlurpCreatorAvailability } from "../services/slurp/slurp-creator
 import { selectSlurpAttentionCommissions } from "../services/slurp/slurp-inbox-attention.js";
 import { parseSlurpCheatDirective } from "../services/slurp/slurp-cheat-directive.js";
 import { SLURP_DEV_CHEAT_MAX_COINS } from "../services/slurp/slurp-wallet.js";
+import { generateNoodlerCreatorArtwork } from "../services/slurp/slurp-artwork.operation.js";
+import { createScheduledFollowUps } from "../services/slurp/slurp-follow-up.js";
 
 const personaQuerySchema = z.object({ personaId: z.string().trim().min(1) });
 const MESSAGE_MEDIA_MAX_BYTES = 20 * 1024 * 1024;
@@ -662,6 +664,7 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
   });
 
   app.post("/messages/cheat", async (req, reply) => {
+    // Check on every request. Do not trust a client flag cached before the environment changed.
     if (process.env.CHEATS_ENABLED !== "true") return reply.code(404).send({ error: "Not found" });
     const parsed = z
       .object({
@@ -683,6 +686,59 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     }
     const thread = await messages.getThread(viewer.id, parsed.data.creatorAccountId);
     if (!thread) return reply.code(400).send({ status: "rejected", reason: "no_thread" });
+    if (directive.kind === "force_creator_photo") {
+      if (!(await ownsCreator(parsed.data.personaId, parsed.data.creatorAccountId)))
+        return reply.code(403).send({ status: "rejected", reason: "not_owner" });
+      const result = await generateNoodlerCreatorArtwork(app.db, {
+        accountId: parsed.data.creatorAccountId,
+        kind: "avatar",
+        guidance: directive.guidance,
+      });
+      if (result !== "avatar") return reply.code(400).send({ status: "rejected", reason: result });
+      return { status: "accepted", kind: directive.kind };
+    }
+    if (directive.kind === "mood" || directive.kind === "rapport") {
+      if (!Number.isFinite(directive.amount) || Math.abs(directive.amount) > 100)
+        return reply.code(400).send({ status: "rejected", reason: "amount_limit" });
+      await messages.adjustCheatState(thread.id, { [directive.kind]: directive.amount });
+      return { status: "accepted", kind: directive.kind, amount: directive.amount };
+    }
+    if (directive.kind === "availability") {
+      if (directive.minutes < 1 || directive.minutes > 24 * 60)
+        return reply.code(400).send({ status: "rejected", reason: "availability_limit" });
+      await messages.keepOnlineFor(thread.id, directive.minutes);
+      return { status: "accepted", kind: directive.kind, minutes: directive.minutes };
+    }
+    if (directive.kind === "follow_up") {
+      const { parseTimingToMinutes } = await import("../services/slurp/slurp-follow-up.js");
+      const minutes = parseTimingToMinutes(directive.timing);
+      if (!minutes || minutes < 1 || minutes > 7 * 24 * 60)
+        return reply.code(400).send({ status: "rejected", reason: "timing_invalid" });
+      const followUps = createScheduledFollowUps(
+        {
+          type: directive.type,
+          timing: directive.timing,
+          count: 1,
+          reason: directive.reason,
+          context: "Development command test",
+        },
+        new Date(),
+      );
+      await messages.addScheduledFollowUps(thread.id, followUps);
+      return { status: "accepted", kind: directive.kind, followUp: followUps[0] };
+    }
+    if (directive.kind === "force_ppv") {
+      if (!(await ownsCreator(parsed.data.personaId, parsed.data.creatorAccountId)))
+        return reply.code(403).send({ status: "rejected", reason: "not_owner" });
+      const messaging = await messages.getCreatorMessaging(parsed.data.creatorAccountId);
+      const message = await messages.sendCreatorMessage(parsed.data.creatorAccountId, thread.viewerAccountId, {
+        content: directive.guidance || "A paid unlock is ready for you.",
+        kind: "ppv",
+        price: messaging.ppvPrice,
+      });
+      if (!message) return reply.code(400).send({ status: "rejected", reason: "message_failed" });
+      return { status: "accepted", kind: directive.kind, message };
+    }
     const triggerMessageId = await messages.latestViewerMessageId(thread.id);
     if (!triggerMessageId) return reply.code(400).send({ status: "rejected", reason: "no_message" });
     const outcome = await replyToSlurpMessage(app.db, {

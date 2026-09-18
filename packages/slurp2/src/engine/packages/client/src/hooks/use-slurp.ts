@@ -353,6 +353,8 @@ export type SlurpSettings = {
   imageWidth: number;
   imageHeight: number;
   storyRate: "off" | "rare" | "regular" | "often";
+  storyImagesEnabled: boolean;
+  storyLifetimeHours: number;
   teaserRate: "off" | "rare" | "regular" | "often";
   projectRate: "off" | "rare" | "regular" | "often";
   arcPace: "slow" | "normal" | "fast";
@@ -3310,8 +3312,18 @@ export function useSlurpCheatDirective() {
     mutationFn: (input: { personaId: string; creatorAccountId: string; directive: string }) =>
       api.post<{
         status: "accepted";
-        kind: "guidance" | "coins";
+        kind:
+          | "guidance"
+          | "coins"
+          | "force_creator_photo"
+          | "force_ppv"
+          | "mood"
+          | "rapport"
+          | "availability"
+          | "follow_up";
         coins?: number;
+        amount?: number;
+        minutes?: number;
         reply?: SlurpMessage | null;
         replyStatus?: string;
       }>("/slurp2/messages/cheat", input),
