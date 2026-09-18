@@ -21,7 +21,7 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 
 - Last updated: 2026-09-18
 - Updated by: Slice 3 implementation agent
-- Overall state: Slice 3 implemented; blocked on six CI browser failures and pending human review
+- Overall state: Slice 3 implemented and validated; ready for draft PR review
 - Active slice: 3 (server routes), issue #915, branch `slurp2-slice3-server-routes` from
   `modular-simping` `92c25f9c` (0 behind `origin/staging` after fetch; no merge needed)
 - Slice 3 implementation commit: `71cfa6ce`, pushed to `origin/slurp2-slice3-server-routes`
@@ -47,7 +47,7 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 |---:|---|---|---|---|---|
 | 0–1 | Architecture contract and safety rails | in progress | #914 / no PR yet | 0.0.24 | Validated locally; on `modular-simping` |
 | 2 | Entrypoints and shared base | in progress | #914 / no PR | 0.0.25 | Validated locally; stacked on 0–1 on `modular-simping` |
-| 3 | Server routes | blocked | #915 / #916 | 0.0.26 | 179-route multiset preserved; CI browser job has six failures |
+| 3 | Server routes | ready for review | #915 / #916 | 0.0.26 | 179-route multiset preserved; CI failures match Slice 2 baseline |
 | 4 | Server storage | not started | — | — | Point of no return |
 | 5 | Server services, contracts, workflows | not started | — | — | — |
 | 6 | Event and modifier seam | not started | — | — | — |
@@ -147,9 +147,10 @@ Results:
   human verification boxes remain unchecked.
 - GitHub Actions run `35361067772`, Slurp2 browser job, reached both Engine servers and ran 14
   cases: 7 passed, 6 failed, and 1 skipped. Failures were settings persistence and UI readiness
-  assertions in the existing browser suite. The split route handlers preserve the old settings
-  handler bodies. Treat these as open CI findings until a clean baseline comparison or a fix proves
-  they are unrelated to this branch.
+  assertions in the existing browser suite. Temporary draft PR #917 ran the same workflow against
+  unchanged `modular-simping` commit `92c25f9c`: run `35362807451` produced the identical 7 passed,
+  6 failed, and 1 skipped result with the same assertions. The failures are pre-existing and are not
+  a Slice 3 regression. PR #917 and its remote branch were closed and deleted after comparison.
 
 ### Slice 2 (0.0.25)
 
@@ -234,7 +235,7 @@ Generated output (builder only, no hand edits):
 
 ## Next action
 
-1. Investigate and resolve the six Slurp2 browser failures in PR #916. Do not start Slice 4 until
-   PR #916 is green and merged because Slice 4 is the storage point of no return.
+1. Review and merge draft PR #916 into `modular-simping` after its required review. Do not start
+   Slice 4 until PR #916 is merged because Slice 4 is the storage point of no return.
 2. After Slice 10, open the final PR `modular-simping` → `staging` as Slurp2 `0.1.0` (one changelog
    entry, integration-only `0.0.x` ZIPs removed, one rebuild, full live lifecycle proof).
