@@ -15,7 +15,7 @@ import { withConnectionFallbackProvider } from "../llm/connection-fallback-provi
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
-import { createSlurpStorage, type SlurpPromptBlockOverrides } from "../storage/slurp.storage.js";
+import { createSlurpStorage, type SlurpPromptBlockOverrides } from "../../slp/slp-storage.js";
 import { composeSlurpPromptBlocks } from "./slurp-prompt-blocks.js";
 import type { DB } from "../../db/connection.js";
 import { parseNoodleGeneratedProfiles } from "./slurp-generated-profiles.js";

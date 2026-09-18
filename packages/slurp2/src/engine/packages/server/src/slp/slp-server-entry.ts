@@ -28,7 +28,9 @@ import { startSlurpFollowUpScheduler } from "../services/slurp/slurp-follow-up-s
 import { startSlurpPaymentRecoveryScheduler } from "../services/slurp/slurp-payment-recovery-scheduler.service.js";
 import { startSlurpWorldScheduler } from "../services/slurp/slurp-world-scheduler.service.js";
 import { createSlurpActivationLifecycle } from "../services/slurp/slurp-activation-lifecycle.js";
-import { createSlurpMessagesStorage } from "../services/storage/slurp-messages.storage.js";
+import { createSlurpMessagesStorage } from "./slp-storage.js";
+import { createSlurpStorage } from "./slp-storage.js";
+import { createSlurpPopulationStorage } from "./features/audience/slp-audience-storage-funnel.js";
 import * as slurpSchema from "../db/schema/slurp.js";
 import { createSlurpFirstPostQueue } from "../services/slurp/slurp-first-post-queue.service.js";
 import { startSlurpAutopurgeScheduler } from "../services/slurp/slurp-autopurge-scheduler.service.js";
@@ -38,8 +40,17 @@ const lifecycle = createSlurpActivationLifecycle();
 
 /** Every Slurp HTTP route. Shared handles and mutable route state are created once, here. */
 export async function mountSlpRoutes(app: FastifyInstance) {
-  const host = createSlpRouteHost(app);
-  const deps = { ...host, ...createSlpViewerContext(app, host) };
+  const noodle = createSlurpStorage(app.db);
+  const population = createSlurpPopulationStorage(app.db);
+  const messages = createSlurpMessagesStorage(app.db);
+  const host = createSlpRouteHost(app, noodle);
+  const deps = {
+    ...host,
+    noodle,
+    messages,
+    population,
+    ...createSlpViewerContext(app, host, population.countFollowersForCreators),
+  };
   await slpSettingsRoutes(app, deps);
   await slpAudienceRoutes(app, deps);
   await slpMaintenanceRoutes(app, deps);
@@ -57,7 +68,7 @@ export async function mountSlpRoutes(app: FastifyInstance) {
   await slpFeedPostRoutes(app, deps);
   await slpOnboardingRoutes(app, deps);
   await slpFeedPublishingRoutes(app, deps);
-  await slpMessagesRoutes(app);
+  await slpMessagesRoutes(app, noodle, messages);
 }
 
 export async function activate({
@@ -96,13 +107,15 @@ export async function activate({
 
     // No legacy migration runs here. Every slurp2 install starts empty, and a legacy Slurp may
     // be installed alongside this one — its rows are not ours to read, move, or rewrite.
+    const noodle = createSlurpStorage(app.db);
+    const population = createSlurpPopulationStorage(app.db);
     const messagesStorage = createSlurpMessagesStorage(app.db);
     await messagesStorage.recoverPendingPayments();
     // Capability routes are registered through the host's revocable privileged route slots.
     // Noodle's existing plugin creates storage adapters while it registers, so expose only the
     // host database on the otherwise constrained collector.
     const routes: FastifyPluginAsync = async (router) => {
-      await mountSlpRoutes(Object.assign(router, { db: app.db }) as FastifyInstance);
+      await mountSlpRoutes(Object.assign(router, { db: app.db, noodle }) as FastifyInstance);
     };
     addTeardown(await api.registerPrivilegedRoutes(routes, { prefix: "/api/slurp2" }));
     addTeardown(

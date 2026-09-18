@@ -8,10 +8,10 @@
  */
 import type { DB } from "../../db/connection.js";
 import { logger } from "../../lib/logger.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpStorage } from "../../slp/slp-storage.js";
 import { SLURP_ENERGY_COST } from "./slurp-creator-state.js";
-import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
-import type { SlurpCommission } from "../storage/slurp-messages.storage.js";
+import { createSlurpMessagesStorage } from "../../slp/slp-storage.js";
+import type { SlurpCommission } from "../../slp/slp-storage.js";
 import { enqueueSlurpPendingText } from "./slurp-pending-text.service.js";
 import { slurpMessageMediaUrl } from "./slurp-media.js";
 import { slurpCommissionDeliveryNote } from "./slurp-world-copy.js";

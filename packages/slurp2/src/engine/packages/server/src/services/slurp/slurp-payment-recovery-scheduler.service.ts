@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { logger } from "../../lib/logger.js";
-import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
+import { createSlurpMessagesStorage } from "../../slp/slp-storage.js";
 
 const POLL_MS = 60_000;
 

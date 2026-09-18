@@ -2,7 +2,7 @@ import type { DB } from "../../db/connection.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpStorage } from "../../slp/slp-storage.js";
 import { generateNoodlerPostImage } from "./slurp-images.service.js";
 import { resolveNoodlerImageConnectionId } from "./slurp-image-connections.js";
 

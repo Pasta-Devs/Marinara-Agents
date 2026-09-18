@@ -1,9 +1,9 @@
-import { asc, eq, lte } from "../../db/file-query.js";
-import { slurpReplyBubbles } from "../../db/schema/slurp.js";
-import type { DB } from "../../db/connection.js";
-import { newId } from "../../utils/id-generator.js";
-import { tolerateMissingTables } from "./slurp-host-tables.js";
-import { isSlurpFileUniqueConstraintError } from "./slurp-file-errors.js";
+import { asc, eq, lte } from "../../../db/file-query.js";
+import { slurpReplyBubbles } from "../../../db/schema/slurp.js";
+import type { DB } from "../../../db/connection.js";
+import { newId } from "../../../utils/id-generator.js";
+import { tolerateMissingTables } from "../../base/host/slp-host-tables.js";
+import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
 
 export type SlurpReplyBubble = {
   id: string;

@@ -9,7 +9,7 @@ import { modelAnswerForCorrection, requireModelAnswer } from "./slurp-model-answ
 import type { BaseLLMProvider, ChatMessage } from "../llm/base-provider.js";
 import { createCharacterGalleryStorage } from "../storage/character-gallery.storage.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpStorage } from "../../slp/slp-storage.js";
 import { parseNoodleGeneratedProfiles } from "./slurp-generated-profiles.js";
 import { allocateAmbientProfileHandles } from "./slurp-ambient-profile-generation.service.js";
 import { noodleAccountsNeedingProfiles } from "./slurp-profile-selection.js";

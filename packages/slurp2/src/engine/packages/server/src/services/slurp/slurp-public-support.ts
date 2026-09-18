@@ -13,7 +13,7 @@ import {
   parseNoodleAvatarCrop,
   type SlurpBootstrap,
   type SlurpSettings,
-} from "../storage/slurp.storage.js";
+} from "../../slp/slp-storage.js";
 import { isNoodleProfileGenerated } from "./slurp-profile-selection.js";
 import { ensureAmbientNoodleAccounts } from "./slurp-ambient-profiles.js";
 import { normalizeNoodleHandle } from "./slurp-handle.js";

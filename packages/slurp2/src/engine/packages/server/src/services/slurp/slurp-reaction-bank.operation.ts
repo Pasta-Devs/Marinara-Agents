@@ -8,7 +8,7 @@ import { parseGameJsonish } from "../game/jsonish.js";
 import { requireModelAnswer } from "./slurp-model-answer.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpStorage } from "../../slp/slp-storage.js";
 import { resolveSlurpTextConnection } from "./slurp-connection.js";
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { slurpAudienceToneInstruction } from "./slurp-tone.js";

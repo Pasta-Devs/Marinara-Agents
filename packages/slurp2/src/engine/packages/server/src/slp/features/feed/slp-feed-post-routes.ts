@@ -25,7 +25,7 @@ import { readNoodlerAvatarMediaPath } from "../../../services/slurp/slurp-avatar
 import { noodleInteractions } from "../../../db/schema/slurp.js";
 import { and, eq } from "../../../db/file-query.js";
 import { newId, now } from "../../../utils/id-generator.js";
-import { isSlurpFileUniqueConstraintError } from "../../../services/storage/slurp-file-errors.js";
+import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
 import { generateAndApplyNoodlerCreatorReply } from "../../../services/slurp/slurp-creator-reply.operation.js";
 import { logger } from "../../../lib/logger.js";
 import { tryNoodlerAccountOperation } from "../../../services/slurp/slurp-account-operation-lock.js";

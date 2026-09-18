@@ -3,7 +3,7 @@ import { logger } from "../../lib/logger.js";
 import { slurpPollBackoffMs } from "./slurp-poll-backoff.js";
 import { advanceSlurpWorld } from "./slurp-world.operation.js";
 import { topUpSlurpReactionBank } from "./slurp-reaction-bank.operation.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpStorage } from "../../slp/slp-storage.js";
 import { slurpWorldTimerDue } from "./slurp-tuning.js";
 
 /**

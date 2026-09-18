@@ -1,7 +1,7 @@
-import type { SlurpMessageKind, SlurpThreadState } from "../slurp/slurp-messaging.js";
-import type { SlurpRapport } from "../slurp/slurp-rapport.js";
-import type { SlurpThreadNote } from "../slurp/slurp-thread-notes.js";
-import type { SlurpThreadState as SlurpConversationState } from "../slurp/slurp-creator-state.js";
+import type { SlurpMessageKind, SlurpThreadState } from "../../../services/slurp/slurp-messaging.js";
+import type { SlurpRapport } from "../../../services/slurp/slurp-rapport.js";
+import type { SlurpThreadNote } from "../../../services/slurp/slurp-thread-notes.js";
+import type { SlurpThreadState as SlurpConversationState } from "../../../services/slurp/slurp-creator-state.js";
 
 export type SlurpMessage = {
   id: string;

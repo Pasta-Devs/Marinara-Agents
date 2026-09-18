@@ -1,7 +1,7 @@
 import type { DB } from "../../db/connection.js";
 import { logger } from "../../lib/logger.js";
-import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpMessagesStorage } from "../../slp/slp-storage.js";
+import { createSlurpStorage } from "../../slp/slp-storage.js";
 import { replyToSlurpMessage } from "./slurp-message.operation.js";
 
 /** What the fan just paid for. The wording the Creator reacts to. */

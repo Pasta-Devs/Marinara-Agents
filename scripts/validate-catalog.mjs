@@ -206,16 +206,16 @@ const slurpOwnedSourcePaths = [
 const slurp2OwnedSourcePaths = [
   ...slurpOwnedSourcePaths.filter(
     (path) =>
-      !["packages/client/src/slurp-package-entry.tsx", "packages/server/src/routes/slurp.routes.ts"].includes(path),
+      ![
+        "packages/client/src/slurp-package-entry.tsx",
+        "packages/server/src/routes/slurp.routes.ts",
+        "packages/server/src/services/storage/slurp.storage.ts",
+      ].includes(path) && !path.startsWith("packages/server/src/services/storage/slurp-"),
   ),
   "packages/client/src/slp",
   "packages/server/src/slp",
   "packages/shared/src/slp",
-  "packages/server/src/services/storage/slurp-financial-queue.ts",
-  "packages/server/src/services/storage/slurp-file-errors.ts",
-  "packages/server/src/services/storage/slurp-host-tables.ts",
-  "packages/server/src/services/storage/slurp-messages.storage.ts",
-  "packages/server/src/services/storage/slurp-reply-queue.storage.ts",
+  "packages/server/src/slp",
   "packages/server/src/services/garnish-ads",
 ];
 for (const [packageId, ownedSourcePaths] of [

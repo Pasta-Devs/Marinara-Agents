@@ -20,30 +20,29 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 ## Current state
 
 - Last updated: 2026-09-18
-- Updated by: Slice 3 implementation agent
-- Overall state: Slice 3 implemented and validated; ready for draft PR review
-- Active slice: 3 (server routes), issue #915, branch `slurp2-slice3-server-routes` from
-  `modular-simping` `92c25f9c` (0 behind `origin/staging` after fetch; no merge needed)
-- Slice 3 implementation commit: `71cfa6ce`, pushed to `origin/slurp2-slice3-server-routes`
-- CodeRabbit follow-up fixes are pending in the worktree. They address five verified findings from
-  the review on commit `a3dc4390`: batched improvement proposals, shared message multipart error
-  handling, reaction viewer authorization, repeated thread presence/tone reads, and route-entry
-  inventory composition proof.
-- Issue: #914 (assigned `Gunterlie`)
-- Pull request: draft #916 targets `modular-simping`, assigned to `Gunterlie`. Slices 0–1 and 2
+- Updated by: Slice 4 implementation agent
+- Overall state: Slice 4 ready for review
+- Active slice: 4 (server storage), issue #918, branch `slurp2-slice4-server-storage` from
+  `origin/modular-simping` `882e9783` (11 commits ahead / 0 behind `origin/staging`; no merge needed)
+- Slice 3 merged commit: `882e9783`; CodeRabbit follow-up fixes landed before merge.
+- Issue: #918 (assigned `Gunterlie`); parent issue #914 remains open.
+- Pull request: draft #919 targets `modular-simping` and is assigned to `Gunterlie`. Slice 3 PR
+  #916 is merged into `modular-simping`.
+  Slices 0–1 and 2
   were pushed directly to the integration branch at the maintainer's request.
 - Branch: `origin/modular-simping` is the integration branch (local name
   `refactor/slurp2-module-safety-rails`); based on
   `origin/staging` `e92684d1`. Slice 0–1 commit `29ff6ec2`; Slice 2 is the commit after the ledger
   update `f22f46fa`.
-- Package version: `0.0.26` (integration-only; `staging` stays at `0.0.22` until the final `0.1.0`
+- Package version: `0.0.27` (integration-only; `staging` stays at `0.0.22` until the final `0.1.0`
   release PR)
 - Generated artifact: `artifacts/slurp2-0.0.26.zip`, sha256
   `4c12215dafb2178925b374f580b7b8eee4be3d7089db8d39c22cfceb2b09aff4`, 6707553 bytes
 - Node: `/home/dev/.nvm/versions/node/v24.18.0/bin`; `node -v` = `v24.18.0`
 - Engine source: `/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish`, branch
-  `welcome-to-the-agentshop`, commit `fdb67d47b`, tracked files clean; 4 ahead / 0 behind
-  `origin/staging` after a fresh fetch. Used unchanged.
+  `welcome-to-the-agentshop`, commit `fdb67d47b`, tracked files clean; 4 ahead / 13 behind
+  `origin/staging` after a fresh fetch. Used unchanged for the existing package baseline; no
+  Engine integration was performed.
 
 ## Slice ledger
 
@@ -52,7 +51,7 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 |   0–1 | Architecture contract and safety rails | in progress      | #914 / no PR yet | 0.0.24          | Validated locally; on `modular-simping`                          |
 |     2 | Entrypoints and shared base            | in progress      | #914 / no PR     | 0.0.25          | Validated locally; stacked on 0–1 on `modular-simping`           |
 |     3 | Server routes                          | ready for review | #915 / #916      | 0.0.26          | 179-route multiset preserved; CI failures match Slice 2 baseline |
-|     4 | Server storage                         | not started      | —                | —               | Point of no return                                               |
+|     4 | Server storage                         | ready for review | #918 / #919      | 0.0.27          | Exact 179-method set preserved; generated unit rebuilt          |
 |     5 | Server services, contracts, workflows  | not started      | —                | —               | —                                                                |
 |     6 | Event and modifier seam                | not started      | —                | —               | —                                                                |
 |     7 | Client state and hooks                 | not started      | —                | —               | —                                                                |
@@ -110,7 +109,81 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 
 None.
 
+## Slice 4 start proof
+
+- Slice 3 merge gate: PR #916 is `MERGED` into `modular-simping` at `882e9783`; its generated
+  `0.0.26` payload, manifest, ZIP, catalogs, and hashes are present.
+- Integration branch: `origin/modular-simping` is 11 commits ahead and 0 commits behind
+  `origin/staging`; no ordinary staging merge is required before this slice.
+- Node: `/home/dev/.nvm/versions/node/v24.18.0/bin/node`, `v24.18.0`.
+- Preferred Engine: `/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish`, branch
+  `welcome-to-the-agentshop`, commit `fdb67d47b`; tracked files clean; 4 ahead and 13 behind
+  `origin/staging`; used unchanged for the baseline.
+- Complete public method-name inventory is being recorded by `tests/slurp2-storage-methods.regression.ts`
+  before the storage move. The current monolith is `slurp.storage.ts` (8,044 lines); satellite
+  storage files are `slurp-messages.storage.ts` (3,010), `slurp-population.storage.ts` (439),
+  `slurp-events.storage.ts` (179), and the existing reply, queue, host, error, and retention files.
+
 ## Latest validation
+
+### Slice 4 (0.0.27)
+
+Storage moved from the old `services/storage` boundary into explicit Slurp2 `server/src/slp`
+facets. The public `createSlurpStorage` composition exposes the exact previous 179 sorted method
+names. Settings/defaults, host helpers, creators, feed/reserve/interactions/refresh, audience,
+economy, projects, notifications, and messages now have feature-owned implementation files. The
+old storage files are deleted. Message storage uses explicit subfacets and contracts.
+
+Ownership changes:
+
+- `slurp2OwnedSourcePaths` now owns `packages/server/src/slp` for all moved server storage.
+- Old storage ownership entries were removed after their last live file moved.
+- `sources/engine/packages/server/src/services/noodle/noodle-prompt.ts` keeps a package-neutral
+  structural settings type. It does not import Slurp2 package code.
+- Legacy `slurpOwnedSourcePaths` was not changed.
+
+Generated release unit:
+
+- Engine: `/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish`, branch `welcome-to-the-agentshop`,
+  commit `fdb67d47b`, tracked files clean, 4 ahead / 13 behind `origin/staging`, used unchanged.
+- Node: `/home/dev/.nvm/versions/node/v24.18.0/bin`, `v24.18.0`.
+- Artifact: `artifacts/slurp2-0.0.27.zip`.
+- Artifact sha256: `bff898bccc680530280b87edb8c75b0afc519c346b25990fbaefc7cc8937a65e`.
+- Artifact bytes: `6723530`.
+- ZIP contents: `manifest.json`, `agents.json`, `server.mjs`, `client.js`, `slurp2-logo.png`,
+  `slurp2agent.png`.
+- Manifest payload hashes and sizes match generated files.
+
+Preservation proof:
+
+- `tests/slurp2-storage-methods.regression.ts` passes and reports exactly 179 methods.
+- `tests/slurp2-architecture.regression.ts` passes.
+- `tests/slurp-table-registration.regression.ts` passes.
+- `node scripts/typecheck-packages.mjs slurp2` passes with no undefined names or unresolved modules.
+- Representative behavior regressions pass: backup round-trip, population, arc director,
+  restore-settings/follow, autopurge, and cross-bundle unique-error handling.
+
+Validation results:
+
+- `npm run format:check` passes.
+- `npm run lint` passes with 0 errors and 1,190 warnings.
+- `node scripts/test-catalog-lanes.mjs` passes.
+- `node scripts/validate-package-locales.mjs` passes.
+- `node scripts/validate-catalog.mjs` passes.
+- `node scripts/tests/catalog-release-notes.regression.mjs` passes.
+- `git diff --check` passes.
+- `npm run test:noodle:regressions` is blocked by a pre-existing source assertion in
+  `tests/noodler-content-formats.regression.ts` that still reads the deleted historical storage
+  path. The run reached that assertion after earlier tests passed.
+- `npm run test:browser:slurp2` is blocked because this worktree has no sibling
+  `/home/dev/.paseo/worktrees/0vl25jsh/Marinara-Engine/package.json`; no browser execution occurred.
+- `tests/slurp-phase1-durability.regression.ts` has the same missing sibling Engine checkout gap.
+- Live install, update, restart, offline restart, and uninstall testing were not performed.
+
+Plan corrections: none. Pending decisions: none.
+
+Slice 4 is not merged. Slice 5 is not started. The next action is to review and merge PR #919 into
+`modular-simping` after human review; only then may Slice 5 begin.
 
 ### Slice 3 (0.0.26)
 

@@ -8,7 +8,7 @@ import {
   type NoodleInteraction,
   type NoodlePost,
 } from "@marinara-engine/shared";
-import type { SlurpSettings } from "../storage/slurp.storage.js";
+import type { SlurpSettings } from "../../slp/slp-storage.js";
 
 export const NOODLE_PAST_MEMORY_MIN_AGE_MS = 48 * 60 * 60 * 1000;
 /** Behavior when a Noodle setting's `enableEnhancedTimelineWriting` is off — reproduces the exact pre-toggle defaults. */

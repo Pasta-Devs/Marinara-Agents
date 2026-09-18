@@ -22,7 +22,7 @@ import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { resolveSlurpTextConnection } from "./slurp-connection.js";
-import { createSlurpStorage, type SlurpSettings } from "../storage/slurp.storage.js";
+import { createSlurpStorage, type SlurpSettings } from "../../slp/slp-storage.js";
 import { SLURP_AUDIENCE_TONES, slurpAudienceToneInstruction, type SlurpAudienceTone } from "./slurp-tone.js";
 import { SLURP_REALISTIC_TUNING } from "./slurp-tuning.js";
 import { slurpAudienceArcDescription, type SlurpAudienceArc } from "./slurp-audience-arc.js";

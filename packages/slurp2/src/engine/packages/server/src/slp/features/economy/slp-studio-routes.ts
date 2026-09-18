@@ -1,5 +1,5 @@
 import { noodlerViewerPersonaSchema } from "@marinara-engine/shared";
-import { createSlurpPopulationStorage } from "../../../services/storage/slurp-population.storage.js";
+import { createSlurpPopulationStorage } from "../audience/slp-audience-contract.js";
 import { slurpPlatformScaleMultiplier } from "../../../services/slurp/slurp-scale.js";
 import { readSlurpStudioSnapshot, writeSlurpStudioSnapshot } from "../../../services/slurp/slurp-studio-snapshot.js";
 import {
@@ -12,8 +12,7 @@ import {
 import { slurpFollowerMilestone, slurpMilestonesCrossed } from "../../../services/slurp/slurp-milestones.js";
 import { slurpGoalProgress } from "../../../services/slurp/slurp-goal.js";
 import { slurpPayoutAllowance } from "../../../services/slurp/slurp-earnings.js";
-import { isSlurpViewerActorAccount } from "../../../services/storage/slurp.storage.js";
-import { createSlurpMessagesStorage } from "../../../services/storage/slurp-messages.storage.js";
+import { isSlurpViewerActorAccount } from "../../base/settings/slp-settings.js";
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../../base/host/slp-viewer-context.js";
 
@@ -170,9 +169,7 @@ export async function slpStudioRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
     const [funnel, fanSubscribers, threads, postsByAccount] = await Promise.all([
       population.countFollowersForCreators(ids),
       population.countSubscribersForCreators(ids),
-      createSlurpMessagesStorage(app.db)
-        .listThreadsForCreators(ids)
-        .catch(() => []),
+      deps.messages.listThreadsForCreators(ids).catch(() => []),
       // ponytail: newest 100 posts per Creator; add a count query if totals past that matter.
       noodle.listNoodlerPostsByAccounts(ids, 100),
     ]);

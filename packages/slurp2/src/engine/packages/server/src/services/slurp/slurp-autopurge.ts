@@ -12,7 +12,7 @@ import {
   slurpMessages,
 } from "../../db/schema/slurp.js";
 import { now } from "../../utils/id-generator.js";
-import { createSlurpStorage, type SlurpSettings } from "../storage/slurp.storage.js";
+import { createSlurpStorage, type SlurpSettings } from "../../slp/slp-storage.js";
 import { trySlurpDataDeletion } from "./slurp-operation-lock.js";
 import { selectSlurpAutopurge } from "./slurp-autopurge-plan.js";
 import { estimateNoodlerMediaRemovalBytes, NOODLER_MEDIA_PREFIX, unlinkNoodlerMedia } from "./slurp-media.js";

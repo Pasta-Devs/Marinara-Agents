@@ -4,7 +4,7 @@ import { selectSlurpAttentionCommissions } from "../../../services/slurp/slurp-i
 import { activeSlurpStrikes } from "../../../services/slurp/slurp-stance.js";
 import { describeSlurpDayVibe } from "../../../services/slurp/slurp-day-vibe.service.js";
 import { readSlurpAudienceTone } from "../../../services/slurp/slurp-tone.js";
-import { isSlurpViewerActorAccount } from "../../../services/storage/slurp.storage.js";
+import { isSlurpViewerActorAccount } from "../../base/settings/slp-settings.js";
 import {
   SLURP_NOTE_MAX_LENGTH,
   SLURP_WORKING_NOTE_LIMIT,

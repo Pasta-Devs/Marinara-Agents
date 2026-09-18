@@ -15,8 +15,9 @@ assert.match(entry, /registerTables\(Object\.values\(slurpSchema\)\)/u);
 
 // Registration has to happen before anything reads or writes, or the first storage call still
 // throws. Creating the messages storage is the earliest storage touch in activate().
-const register = entry.indexOf("registerTables(Object.values(slurpSchema))");
-const firstStorage = entry.indexOf("createSlurpMessagesStorage(app.db)");
+const activateBody = entry.slice(entry.indexOf("export async function activate"));
+const register = activateBody.indexOf("registerTables(Object.values(slurpSchema))");
+const firstStorage = activateBody.indexOf("createSlurpMessagesStorage(app.db)");
 assert.ok(register > 0 && register < firstStorage, "tables must be registered before storage use");
 
 // Unlike legacy Slurp, every slurp2 table is package-owned: the host image knows only the
@@ -45,17 +46,21 @@ assert.ok(declared > 15, `expected the full Slurp table set, saw ${declared}`);
 
 // A host that cannot hold the new tables must degrade, not fail. The feed reads follower counts
 // from the funnel, so an unsupported table there took down a surface that predates the funnel.
-const store = join(src, "services/storage");
-const helper = readFileSync(join(store, "slurp-host-tables.ts"), "utf8");
+const store = join(src, "slp");
+const helper = readFileSync(join(store, "base/host/slp-host-tables.ts"), "utf8");
 assert.match(helper, /\[file-storage\] Unsupported table/u, "only the host's own error may be swallowed");
-for (const file of ["slurp-population.storage.ts", "slurp-events.storage.ts", "slurp-messages.storage.ts"]) {
+for (const file of [
+  "features/audience/slp-audience-storage-funnel.ts",
+  "features/notifications/slp-notification-storage.ts",
+  "features/messages/slp-messages-storage-facet.ts",
+]) {
   const text = readFileSync(join(store, file), "utf8");
   assert.match(text, /return tolerateMissingTables\(storage, \{/u, `${file} must degrade`);
 }
 
 // Counting must still answer for every creator asked about, or a caller reading the map by id
 // gets undefined where it expects a number.
-const population = readFileSync(join(store, "slurp-population.storage.ts"), "utf8");
+const population = readFileSync(join(store, "features/audience/slp-audience-storage-funnel.ts"), "utf8");
 assert.match(
   population,
   /countFollowersForCreators: \(creatorAccountIds[\s\S]*?new Map\(creatorAccountIds\.map\(\(id\) => \[id, 0\]\)\)/u,

@@ -1,7 +1,7 @@
 import { noodlerViewerPersonaSchema } from "@marinara-engine/shared";
 import { z } from "zod";
 import { noodlerUnseenCreatorAccountIds } from "../../../services/slurp/slurp-viewer-unseen.js";
-import { isSlurpViewerActorAccount } from "../../../services/storage/slurp.storage.js";
+import { isSlurpViewerActorAccount } from "../../base/settings/slp-settings.js";
 import { isNoodlerHiddenFromViewer } from "../../../services/slurp/slurp-access.js";
 import type { FastifyInstance } from "fastify";
 import {

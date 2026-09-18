@@ -25,10 +25,13 @@ import { isConnectionAdmissionFailure, type ConnectionAdmissionMode } from "../g
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { resolveNoodlerImageConnectionId } from "./slurp-image-connections.js";
-import { resolveSlurpCreatorMenu, resolveSlurpPostGuidance } from "./slurp-post-guidance.storage.js";
+import {
+  resolveSlurpCreatorMenu,
+  resolveSlurpPostGuidance,
+} from "../../slp/base/settings/slp-post-guidance-storage.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
-import { createSlurpStorage, type SlurpAccount } from "../storage/slurp.storage.js";
+import { createSlurpStorage, type SlurpAccount } from "../../slp/slp-storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
 import { generateNoodlerPostImage } from "./slurp-images.service.js";
 import { noodlerUnlockPriceMetadata } from "./slurp-prices.js";
@@ -57,7 +60,7 @@ import {
   type SlurpProject,
 } from "./slurp-project.js";
 import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js";
-import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
+import { createSlurpMessagesStorage } from "../../slp/slp-storage.js";
 import { createChatsStorage } from "../storage/chats.storage.js";
 import { NOODLER_CONTENT_HARD_MAX_LENGTH, type NoodlerContentFormat } from "./slurp-content-format.js";
 import { noodleLorebookTokenBudget, SLURP_PLATFORM_CONTEXT } from "./slurp-prompt.js";

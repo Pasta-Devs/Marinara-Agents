@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { isSlurpFileUniqueConstraintError } from "../packages/slurp2/src/engine/packages/server/src/services/storage/slurp-file-errors.js";
+import { isSlurpFileUniqueConstraintError } from "../packages/slurp2/src/engine/packages/server/src/slp/base/host/slp-file-errors.js";
 import { slurp2Source } from "./slurp2-source";
 
 const hostError = {

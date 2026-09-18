@@ -2,7 +2,7 @@ import {
   SLURP_PROMPT_DESCRIPTIONS,
   SLURP_PROMPT_EDITABLE_DEFAULTS,
 } from "../../../services/slurp/slurp-prompt-blocks.js";
-import { DEFAULT_SLURP_SETTINGS, slurpSettingsSchema } from "../../../services/storage/slurp.storage.js";
+import { DEFAULT_SLURP_SETTINGS, slurpSettingsSchema } from "./slp-settings.js";
 import { getSlurpModelBudgetLedger } from "../../../services/slurp/slurp-model-worker.js";
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../host/slp-viewer-context.js";

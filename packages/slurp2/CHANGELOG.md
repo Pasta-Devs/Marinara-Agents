@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.0.27 — 2026-09-18
+
+- No visible changes. Split server storage into feature-owned modules.
+
 ## 0.0.26 — 2026-09-18
 
 - No visible changes. Split the server routes into feature modules.

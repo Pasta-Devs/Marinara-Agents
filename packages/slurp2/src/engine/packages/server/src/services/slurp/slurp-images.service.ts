@@ -2,7 +2,7 @@ import type { NoodleAccount, NoodleIdentityDisclosure } from "@marinara-engine/s
 import type { DB } from "../../db/connection.js";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { newId } from "../../utils/id-generator.js";
-import { createSlurpStorage, type SlurpSettings } from "../storage/slurp.storage.js";
+import { createSlurpStorage, type SlurpSettings } from "../../slp/slp-storage.js";
 import { SLURP_ENERGY_COST } from "./slurp-creator-state.js";
 import { getErrorMessage } from "./slurp-public-support.js";
 import { NOODLER_MEDIA_PREFIX, noodlerPostMediaUrl } from "./slurp-media.js";

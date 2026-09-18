@@ -1,11 +1,10 @@
 import { resolvePersonaAccount } from "../../../services/slurp/slurp-public-support.js";
 import type { NoodleAccount, NoodlerPostView, NoodlerManagedPost } from "@marinara-engine/shared";
 import { projectNoodlerAudienceProfile } from "../../../services/slurp/slurp-disclosure.js";
-import { isSlurpViewerActorAccount } from "../../../services/storage/slurp.storage.js";
+import { isSlurpViewerActorAccount } from "../settings/slp-settings.js";
 import { isNoodlerHiddenFromViewer, canViewNoodlerPost } from "../../../services/slurp/slurp-access.js";
 import { slurpGoalProgress } from "../../../services/slurp/slurp-goal.js";
 import { NOODLER_SUBSCRIPTION_COST, noodlerUnlockPriceFromMetadata } from "../../../services/slurp/slurp-prices.js";
-import { createSlurpPopulationStorage } from "../../../services/storage/slurp-population.storage.js";
 import { slurpPlatformScaleMultiplier } from "../../../services/slurp/slurp-scale.js";
 import {
   slurpCreatorReach,
@@ -19,7 +18,11 @@ import type { FastifyInstance } from "fastify";
 import type { SlpRouteHost } from "./slp-route-host.js";
 
 /** Viewer projection: which persona is looking, what it may see, and how posts are priced for it. */
-export function createSlpViewerContext(app: FastifyInstance, host: SlpRouteHost) {
+export function createSlpViewerContext(
+  app: FastifyInstance,
+  host: SlpRouteHost,
+  countFollowersForCreators: (creatorAccountIds: readonly string[]) => Promise<Map<string, number>>,
+) {
   const { characters, noodle } = host;
   async function resolveViewerPersona(personaId: string) {
     return noodle.getViewer(personaId);
@@ -157,7 +160,7 @@ export function createSlpViewerContext(app: FastifyInstance, host: SlpRouteHost)
     // instant and two posts made together never disagree about how old they are.
     const projectedAt = new Date();
     const authorIds = [...new Set(posts.map((post) => post.authorAccountId))];
-    const projectionFunnel = await createSlurpPopulationStorage(app.db).countFollowersForCreators(authorIds);
+    const projectionFunnel = await countFollowersForCreators(authorIds);
     const projectionScaleSettings = await noodle.getSettings();
     const projectionScale = slurpPlatformScaleMultiplier(projectionScaleSettings.platformScale);
     const reachByAccountId = new Map(

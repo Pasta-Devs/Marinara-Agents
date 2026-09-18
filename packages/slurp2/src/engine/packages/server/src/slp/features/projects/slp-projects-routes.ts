@@ -22,7 +22,7 @@ import {
   slurpGeneratedArcProject,
   slurpArcTypeFromProject,
 } from "../../../services/slurp/slurp-project.js";
-import { isSlurpViewerActorAccount } from "../../../services/storage/slurp.storage.js";
+import { isSlurpViewerActorAccount } from "../../base/settings/slp-settings.js";
 import { isNoodlerHiddenFromViewer } from "../../../services/slurp/slurp-access.js";
 import { generateSlurpArc, SlurpArcGenerationFailure } from "../../../services/slurp/slurp-arc-generation.service.js";
 import { isConnectionAdmissionFailure } from "../../../services/generation/connection-admission.js";

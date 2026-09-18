@@ -1,4 +1,3 @@
-import { createSlurpStorage } from "../../../services/storage/slurp.storage.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { createCharacterGalleryStorage } from "../../../services/storage/character-gallery.storage.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
@@ -11,8 +10,7 @@ import type { FastifyInstance } from "fastify";
 import { type NoodlerViewerSignalResponse } from "./slp-request-schemas.js";
 
 /** Storage and service handles every Slurp route shares. Created once per route mount. */
-export function createSlpRouteHost(app: FastifyInstance) {
-  const noodle = createSlurpStorage(app.db);
+export function createSlpRouteHost<T>(app: FastifyInstance, noodle: T) {
   const characters = createCharactersStorage(app.db);
   const characterGallery = createCharacterGalleryStorage(app.db);
   const connections = createConnectionsStorage(app.db);

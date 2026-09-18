@@ -1,6 +1,6 @@
 import type { FastifyInstance, InjectOptions } from "fastify";
 import { logger } from "../../lib/logger.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpStorage } from "../../slp/slp-storage.js";
 import { AUTOMATIC_GENERATION_HEADER } from "../generation/connection-admission.js";
 import { createGarnishAds } from "../garnish-ads/garnish-ads.service.js";
 import { syncGarnishAdsWithLorebook } from "./slurp-garnish-sync.service.js";

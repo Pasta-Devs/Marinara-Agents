@@ -1,14 +1,15 @@
-import { createSlurpStorage } from "../../../services/storage/slurp.storage.js";
-import { createSlurpMessagesStorage } from "../../../services/storage/slurp-messages.storage.js";
-import { createSlurpPopulationStorage } from "../../../services/storage/slurp-population.storage.js";
+import { createSlurpPopulationStorage } from "../audience/slp-audience-contract.js";
+import type { SlurpMessagesStorage } from "./slp-messages-contract.js";
 import { resolveSlurpCreatorAvailability } from "../../../services/slurp/slurp-creator-schedule-context.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import type { FastifyInstance } from "fastify";
 
 /** Storage handles and access checks shared by every message route. Created once per mount. */
-export function createSlpMessagesContext(app: FastifyInstance) {
-  const slurp = createSlurpStorage(app.db);
-  const messages = createSlurpMessagesStorage(app.db);
+export function createSlpMessagesContext(
+  app: FastifyInstance,
+  slurp: SlpMessagesStorageDependencies["slurp"],
+  messages: SlpMessagesStorageDependencies["messages"],
+) {
   const population = createSlurpPopulationStorage(app.db);
 
   const creatorPresence = async (
@@ -107,3 +108,8 @@ export function createSlpMessagesContext(app: FastifyInstance) {
 }
 
 export type SlpMessagesContext = ReturnType<typeof createSlpMessagesContext>;
+
+export type SlpMessagesStorageDependencies = {
+  slurp: Record<string, any>;
+  messages: SlurpMessagesStorage;
+};

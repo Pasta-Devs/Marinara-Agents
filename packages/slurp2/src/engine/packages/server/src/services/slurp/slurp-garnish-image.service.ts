@@ -10,7 +10,7 @@ import { logger } from "../../lib/logger.js";
 import { resolveConnectionImageDefaults } from "../image/image-generation-defaults.js";
 import { generateImage, stageImageToDisk } from "../image/image-generation.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpStorage } from "../../slp/slp-storage.js";
 import type { GarnishAd } from "../garnish-ads/garnish-ads.types.js";
 import type { GarnishAdsStorage } from "../garnish-ads/garnish-ads.storage.js";
 import { generateNoodleImageWithRetry } from "./slurp-image-retry.js";

@@ -12,7 +12,7 @@ import { z } from "zod";
 import { resolveSlurpTextConnection } from "../../../services/slurp/slurp-connection.js";
 import { generateSlurpConversationSchedule } from "../../../services/slurp/slurp-conversation-schedule-generation.js";
 import { slurpPlatformScaleMultiplier } from "../../../services/slurp/slurp-scale.js";
-import { createSlurpPopulationStorage } from "../../../services/storage/slurp-population.storage.js";
+import { createSlurpPopulationStorage } from "../audience/slp-audience-contract.js";
 import { slurpCreatorReach } from "../../../services/slurp/slurp-reach.js";
 import { generateNoodlerStageProfileDraft } from "../../../services/slurp/slurp-stage-profile-draft.service.js";
 import { logger } from "../../../lib/logger.js";

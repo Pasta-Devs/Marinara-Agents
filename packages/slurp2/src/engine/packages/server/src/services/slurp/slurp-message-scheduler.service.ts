@@ -1,8 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { logger } from "../../lib/logger.js";
-import { createSlurpMessagesStorage } from "../storage/slurp-messages.storage.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
-import { createSlurpReplyQueueStorage } from "../storage/slurp-reply-queue.storage.js";
+import { createSlurpMessagesStorage } from "../../slp/slp-storage.js";
+import { createSlurpStorage } from "../../slp/slp-storage.js";
+import { createSlurpReplyQueueStorage } from "../../slp/features/messages/slp-reply-queue-storage.js";
 import { deliverDueSlurpCommissions } from "./slurp-commission-delivery.service.js";
 import { replyToSlurpMessage } from "./slurp-message.operation.js";
 import { slurpPollBackoffMs } from "./slurp-poll-backoff.js";

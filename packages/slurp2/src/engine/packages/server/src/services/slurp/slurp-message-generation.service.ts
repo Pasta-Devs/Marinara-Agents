@@ -8,7 +8,7 @@
  */
 import { type APIProvider, type NoodleAccount } from "@marinara-engine/shared";
 import { isDebugAgentsEnabled } from "../../config/runtime-config.js";
-import { resolveSlurpCreatorMenu } from "./slurp-post-guidance.storage.js";
+import { resolveSlurpCreatorMenu } from "../../slp/base/settings/slp-post-guidance-storage.js";
 import { slurpPlatformEventInstruction } from "./slurp-platform-events.js";
 import type { DB } from "../../db/connection.js";
 import { logDebugOverride } from "../../lib/logger.js";
@@ -23,7 +23,7 @@ import type { ChatMessage } from "../llm/base-provider.js";
 import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "./slurp-prompt-blocks.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
-import { createSlurpStorage, type SlurpAccount } from "../storage/slurp.storage.js";
+import { createSlurpStorage, type SlurpAccount } from "../../slp/slp-storage.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
 import {
   NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
@@ -51,7 +51,7 @@ import { slurpIntensityBand, type SlurpCreatorState, type SlurpThreadState } fro
 import { slurpAudienceArcDescription } from "./slurp-audience-arc.js";
 import { slurpArcLifeLine } from "./slurp-project.js";
 import { SLURP_PLATFORM_CONTEXT } from "./slurp-prompt.js";
-import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
+import { createSlurpPopulationStorage } from "../../slp/features/audience/slp-audience-storage-funnel.js";
 import {
   SLURP_FAN_VOICE_PROMPT_MAX,
   slurpFanMemoryForPrompt,
@@ -59,7 +59,7 @@ import {
   slurpResolveFanType,
 } from "./slurp-fan-types.js";
 import { prepareSlurpPostImageContexts, slurpImageCaptioning } from "./slurp-post-image-context.js";
-import { createSlurpMessagesStorage, type SlurpMessage } from "../storage/slurp-messages.storage.js";
+import { createSlurpMessagesStorage, type SlurpMessage } from "../../slp/slp-storage.js";
 import type { SlurpDmPolicy } from "./slurp-messaging.js";
 import { isSlurpCharacterFanAccount } from "./slurp-audience-characters.js";
 import { resolveNoodlerCharacterCanon, resolveSlurpCharacterFanVoice } from "./slurp-source-resolve.js";

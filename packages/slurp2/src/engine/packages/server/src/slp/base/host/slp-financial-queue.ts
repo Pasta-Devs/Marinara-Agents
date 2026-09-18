@@ -1,4 +1,4 @@
-import type { DB } from "../../db/connection.js";
+import type { DB } from "../../../db/connection.js";
 
 const financialQueues = new WeakMap<object, Promise<unknown>>();
 

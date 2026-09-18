@@ -7,12 +7,16 @@
  *
  * Every later stage of the live-world plan writes here rather than inventing its own surface.
  */
-import { tolerateMissingTables } from "./slurp-host-tables.js";
-import { and, desc, eq, isNull } from "../../db/file-query.js";
-import { newId, now } from "../../utils/id-generator.js";
-import type { DB } from "../../db/connection.js";
-import { slurpEvents } from "../../db/schema/slurp.js";
-import { slurpEventWeight, type SlurpEventKind, type SlurpEventLike } from "../slurp/slurp-event-weight.js";
+import { tolerateMissingTables } from "../../base/host/slp-host-tables.js";
+import { and, desc, eq, isNull } from "../../../db/file-query.js";
+import { newId, now } from "../../../utils/id-generator.js";
+import type { DB } from "../../../db/connection.js";
+import { slurpEvents } from "../../../db/schema/slurp.js";
+import {
+  slurpEventWeight,
+  type SlurpEventKind,
+  type SlurpEventLike,
+} from "../../../services/slurp/slurp-event-weight.js";
 
 export type SlurpEvent = SlurpEventLike & {
   recipientPersonaId: string;
