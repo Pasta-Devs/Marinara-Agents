@@ -2020,7 +2020,9 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
             onCancelEdit={closeProfileEditor}
             onSaveEdit={(location) => void saveProfile(location)}
             profileSavePending={updateProfile.isPending}
-            onOpenMessages={(creatorAccountId) => onNavigate({ mode: "creator", view: "messages", creatorAccountId })}
+            onOpenMessages={(creatorAccountId) =>
+              onNavigate({ mode: "creator", view: "messages", creatorAccountId, returnTo: navigation })
+            }
             posts={postsQuery.data ?? []}
             viewerCreator={selectedViewerCreator}
             viewerAccount={shellPersonaAccount}
@@ -2290,7 +2292,8 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
           ownedCreatorAccountIds={myCreatorProfile ? [myCreatorProfile.id] : []}
           composeWithCreatorAccountId={navigation.creatorAccountId ?? null}
           initialActivity={false}
-          onBack={exitToCreatorHub}
+          onBack={navigation.returnTo ? () => onNavigate(navigation.returnTo!) : exitToCreatorHub}
+          leaveOnExit={Boolean(navigation.returnTo)}
           onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
         />
       </NoodleShell>
@@ -7619,6 +7622,7 @@ function SlurpInboxView({
   composeWithCreatorAccountId,
   initialActivity,
   onBack,
+  leaveOnExit = false,
   onOpenProfile,
 }: {
   personaId: string | null;
@@ -7626,6 +7630,8 @@ function SlurpInboxView({
   composeWithCreatorAccountId: string | null;
   initialActivity: boolean;
   onBack: () => void;
+  /** Closing the chat leaves Messages entirely, back to wherever it was opened from. */
+  leaveOnExit?: boolean;
   onOpenProfile: (accountId: string) => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
@@ -7633,6 +7639,12 @@ function SlurpInboxView({
   const [composeCreatorId, setComposeCreatorId] = useState(composeWithCreatorAccountId);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [threadOpen, setThreadOpen] = useState(false);
+  const closeWorkspace = () => {
+    if (leaveOnExit) return onBack();
+    setWorkspaceOpen(false);
+    setComposeCreatorId(null);
+    setSelectedThreadId(null);
+  };
   const openMessages = (threadId: string | null = null) => {
     setComposeCreatorId(null);
     setSelectedThreadId(threadId);
@@ -7648,15 +7660,7 @@ function SlurpInboxView({
 
   return (
     <NoodlerFrame
-      onBack={
-        workspaceOpen
-          ? () => {
-              setWorkspaceOpen(false);
-              setComposeCreatorId(null);
-              setSelectedThreadId(null);
-            }
-          : onBack
-      }
+      onBack={workspaceOpen ? closeWorkspace : onBack}
       title={localizeUi(workspaceOpen ? "ui.slurp.inbox.messagesTitle" : "ui.slurp.navigation.messages", {
         defaultValue: workspaceOpen ? "Messages" : "Inbox",
       })}
@@ -7674,11 +7678,7 @@ function SlurpInboxView({
             ownedCreatorAccountIds={ownedCreatorAccountIds}
             onOpenProfile={onOpenProfile}
             onConversationOpenChange={setThreadOpen}
-            onExit={() => {
-              setWorkspaceOpen(false);
-              setComposeCreatorId(null);
-              setSelectedThreadId(null);
-            }}
+            onExit={closeWorkspace}
             exitTitle={localizeUi("ui.slurp.inbox.messagesTitle", { defaultValue: "Messages" })}
             workspace
           />
