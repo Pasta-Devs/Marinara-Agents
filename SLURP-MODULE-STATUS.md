@@ -34,8 +34,8 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
   `refactor/slurp2-module-safety-rails`); based on
   `origin/staging` `e92684d1`. Slice 0–1 commit `29ff6ec2`; Slice 2 is the commit after the ledger
   update `f22f46fa`.
-- Package version: `0.0.26` (integration-only; Slice 4 will use the next patch version; `staging`
-  stays at `0.0.22` until the final `0.1.0` release PR)
+- Package version: `0.0.27` (integration-only; `staging` stays at `0.0.22` until the final `0.1.0`
+  release PR)
 - Generated artifact: `artifacts/slurp2-0.0.26.zip`, sha256
   `4c12215dafb2178925b374f580b7b8eee4be3d7089db8d39c22cfceb2b09aff4`, 6707553 bytes
 - Node: `/home/dev/.nvm/versions/node/v24.18.0/bin`; `node -v` = `v24.18.0`
