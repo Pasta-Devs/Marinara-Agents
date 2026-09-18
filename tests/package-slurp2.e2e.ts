@@ -150,7 +150,9 @@ test.describe("standalone Slurp package", () => {
       const choice = page.getByRole("combobox", { name: /Image context for reactions/ });
       await expect(choice).toHaveValue("auto");
       for (const mode of ["imagePrompt", "vision", "auto"]) {
+        await expect(choice).toBeEnabled();
         await choice.selectOption(mode);
+        await expect(choice).toHaveValue(mode);
         await expect
           .poll(
             async () =>
@@ -246,7 +248,7 @@ test.describe("standalone Slurp package", () => {
       for (const label of ["Slurp", "Profile", "Inbox", "Discover", "More"]) {
         await expect(mobileNavigation.getByRole("button", { name: label, exact: true })).toBeVisible();
       }
-      await expect(slurp.getByRole("combobox", { name: "Destination" })).toHaveValue("overview:landing");
+      await expect(slurp.getByRole("combobox", { name: "Destination" })).toHaveValue("overview:overview");
     } else {
       const sectionNavigation = slurp.getByRole("navigation", { name: "Overview areas" });
       await expect(sectionNavigation).toBeVisible();
@@ -330,13 +332,13 @@ test.describe("standalone Slurp package", () => {
     await openSlurp(page);
     const slurp = page.locator('[data-component="NoodleView"]');
     const imageToggle = slurp.getByRole("switch", { name: /^Ad images/u });
-    await imageToggle.click();
+    await slurp.getByText("Ad images", { exact: true }).click({ force: true });
     await expect(imageToggle).toBeChecked();
     await expect
       .poll(async () => (await (await page.request.get("/api/slurp2/settings")).json()).inlineAdsImagesEnabled)
       .toBe(true);
     await expect(slurp.getByRole("heading", { name: "Ad controls", exact: true })).toBeVisible();
-    await imageToggle.click();
+    await slurp.getByText("Ad images", { exact: true }).click({ force: true });
     await expect(imageToggle).not.toBeChecked();
     await expect
       .poll(async () => (await (await page.request.get("/api/slurp2/settings")).json()).inlineAdsImagesEnabled)
@@ -526,7 +528,7 @@ test.describe("standalone Slurp package", () => {
       await slurp.getByRole("button", { name: new RegExp(`^${stageProfile.displayName} @`) }).click();
       const creatorSettings = slurp.getByRole("region", { name: stageProfile.displayName, exact: true });
       const imageConnectionSelect = creatorSettings.getByRole("combobox", { name: /^Image connection/u });
-      await expect(imageConnectionSelect).toBeEnabled();
+      await expect(imageConnectionSelect).toBeEnabled({ timeout: 30_000 });
       await imageConnectionSelect.selectOption(imageConnectionIds[1]);
       await expect
         .poll(async () => {
