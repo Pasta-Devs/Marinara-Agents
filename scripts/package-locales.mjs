@@ -59,19 +59,26 @@ export function buildEnglishPackageLocale(manifest, agentDefinitions) {
       name: manifest.name,
       ...(manifest.description === undefined ? {} : { description: manifest.description }),
     },
-    agents: Object.fromEntries(
-      agentDefinitions.map((definition) => {
-        const promptTemplates = localizedPromptTemplates(definition);
-        return [
-          definition.id,
-          {
-            name: definition.name,
-            ...(definition.description === undefined ? {} : { description: definition.description }),
-            ...(promptTemplates ? { promptTemplates } : {}),
-          },
-        ];
-      }),
-    ),
+    // A package with no Agents at all (a `ruleset` package is pure data) gets no
+    // agents block rather than an empty one, so its catalog does not advertise a
+    // section it can never fill.
+    ...(agentDefinitions.length === 0
+      ? {}
+      : {
+          agents: Object.fromEntries(
+            agentDefinitions.map((definition) => {
+              const promptTemplates = localizedPromptTemplates(definition);
+              return [
+                definition.id,
+                {
+                  name: definition.name,
+                  ...(definition.description === undefined ? {} : { description: definition.description }),
+                  ...(promptTemplates ? { promptTemplates } : {}),
+                },
+              ];
+            }),
+          ),
+        }),
   };
 }
 
