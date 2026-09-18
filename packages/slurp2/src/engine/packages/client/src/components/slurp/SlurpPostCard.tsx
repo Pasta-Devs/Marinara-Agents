@@ -674,17 +674,14 @@ export function countInteractions(interactions: NoodleInteraction[], type: Noodl
   return interactions.filter((interaction) => interaction.type === type).length;
 }
 
-export function createNoodleLightboxImage(id: string, url: string, _prompt = ""): ChatImage {
+export function createNoodleLightboxImage(id: string, url: string, prompt = ""): ChatImage {
   const filename = url.split("?")[0]?.split("/").pop();
   const safeFilename = filename && /\.(?:avif|gif|jpe?g|png|webp)$/i.test(filename) ? filename : `noodle-${id}.png`;
   return {
     id,
     chatId: "noodle",
     filePath: safeFilename,
-    // Noodle image prompts are generation bookkeeping, not user-facing captions. Passing
-    // them to the shared chat lightbox exposed raw prompt/identifier-like text below both
-    // Noodle and NoodleR images.
-    prompt: "",
+    prompt,
     provider: "",
     model: "",
     width: null,

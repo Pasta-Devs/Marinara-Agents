@@ -27,6 +27,8 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
   images: [
     "imageWidth",
     "imageHeight",
+    "storyImagesEnabled",
+    "storyLifetimeHours",
     "storyImageWidth",
     "storyImageHeight",
     "imageContextMode",

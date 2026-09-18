@@ -406,23 +406,25 @@ export function SlurpBackstageAutomation(page: SlurpBackstagePageProps) {
             </Field>
           )}
           {settings.autoPostingScheduleEnabled && (
-            <Field
-              settingKey="storyRate"
-              label={t("ui.slurp.settings.storyRate")}
-              detail={t("ui.slurp.settings.storyRateDetail")}
-            >
-              <select
-                value={settings.storyRate}
-                disabled={updateSettings.isPending}
-                onChange={(event) => void update("storyRate", event.target.value as SlurpSettings["storyRate"])}
-                className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+            <>
+              <Field
+                settingKey="storyRate"
+                label={t("ui.slurp.settings.storyRate")}
+                detail={t("ui.slurp.settings.storyRateDetail")}
               >
-                <option value="off">{t("ui.slurp.settings.storyRateOff")}</option>
-                <option value="rare">{t("ui.slurp.settings.storyRateRare")}</option>
-                <option value="regular">{t("ui.slurp.settings.storyRateRegular")}</option>
-                <option value="often">{t("ui.slurp.settings.storyRateOften")}</option>
-              </select>
-            </Field>
+                <select
+                  value={settings.storyRate}
+                  disabled={updateSettings.isPending}
+                  onChange={(event) => void update("storyRate", event.target.value as SlurpSettings["storyRate"])}
+                  className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                >
+                  <option value="off">{t("ui.slurp.settings.storyRateOff")}</option>
+                  <option value="rare">{t("ui.slurp.settings.storyRateRare")}</option>
+                  <option value="regular">{t("ui.slurp.settings.storyRateRegular")}</option>
+                  <option value="often">{t("ui.slurp.settings.storyRateOften")}</option>
+                </select>
+              </Field>
+            </>
           )}
           {settings.autoPostingScheduleEnabled ? (
             <Toggle
@@ -840,6 +842,25 @@ export function SlurpBackstageAutomation(page: SlurpBackstagePageProps) {
                 defaultValue: "Set the size used by image Stories. Story publishing cadence remains in Publishing.",
               })}
             </p>
+            <Toggle
+              settingKey="storyImagesEnabled"
+              label={t("ui.slurp.settings.storyImagesEnabled")}
+              detail={t("ui.slurp.settings.storyImagesEnabledDetail")}
+              value={settings.storyImagesEnabled}
+              onChange={(value) => update("storyImagesEnabled", value)}
+            />
+            <Field
+              settingKey="storyLifetimeHours"
+              label={t("ui.slurp.settings.storyLifetimeHours")}
+              detail={t("ui.slurp.settings.storyLifetimeHoursDetail")}
+            >
+              <NumberSetting
+                value={settings.storyLifetimeHours}
+                min={1}
+                max={168}
+                onSave={(value) => update("storyLifetimeHours", value)}
+              />
+            </Field>
             {/* A Story is shown in its own tall frame, so it carries its own size. The
                         composer crops an uploaded Story to this ratio too. */}
             <div className="grid gap-3 sm:grid-cols-2">

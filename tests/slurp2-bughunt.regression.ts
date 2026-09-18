@@ -27,8 +27,19 @@ const followUps = read(`${server}/services/slurp/slurp-follow-up-scheduler.servi
 const messages = read(`${server}/services/slurp/slurp-message.operation.ts`);
 const messageRoutes = read(`${server}/routes/slurp-messages.routes.ts`);
 const storage = read(`${server}/services/storage/slurp.storage.ts`);
+const postCard = read(`${client}/components/slurp/SlurpPostCard.tsx`);
+const inlineAd = read(`${client}/components/slurp/SlurpInlineAd.tsx`);
+const coin = read(`${client}/components/slurp/SlurpCoin.tsx`);
+const english = read(`${client}/localization/locales/en.json`);
 
 assert.match(home, /items\[Math\.floor\(index \/ inlineAdEvery\) % items\.length\]/u);
+assert.match(home, /const emptyWallAd = adForIndex\?\.\(0\)[\s\S]*?<SlurpInlineAdTile/u);
+assert.match(home, /side=\{<SlurpCreatorPostCard[\s\S]*?imageUrl: null[\s\S]*?surface="profile"/u);
+assert.match(postCard, /export function createNoodleLightboxImage\(id: string, url: string, prompt = ""\)/u);
+assert.match(postCard, /chatId: "noodle",[\s\S]{0,120}prompt,/u);
+assert.doesNotMatch(inlineAd, /if \(!promotion\.imageUrl\) return null/u);
+assert.match(coin, /DEFAULT_SLURP_SUBSCRIPTION_PRICE = 12/u);
+assert.match(english, /ui\.slurp\.settings\.backstage\.landing\.stories": "Stories"/u);
 assert.match(garnishContext, /contentCeiling: input\.contentCeiling/u);
 assert.match(generation, /z\.enum\(\["tame", "suggestive", "explicit"\]\)\.catch\("tame"\)/u);
 assert.match(shell, /import \{ SLURP_LOGO_SRC \} from "\.\/slurp-logo"/u);

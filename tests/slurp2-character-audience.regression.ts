@@ -52,6 +52,10 @@ const worldSource = readFileSync(
   ),
   "utf8",
 );
+const storageSource = readFileSync(
+  join(import.meta.dirname, "../packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
+  "utf8",
+);
 const messageSource = readFileSync(
   join(
     import.meta.dirname,
@@ -70,6 +74,8 @@ const pendingSource = readFileSync(
 assert.match(worldSource, /characterFanPinnedTypeIds/u);
 assert.match(worldSource, /payingFanTypeFor/u);
 assert.match(worldSource, /audienceCharacterLimit/u);
+assert.match(storageSource, /audienceCharacterLimit: z\.number\(\)\.int\(\)\.min\(0\)\.max\(10\)/u);
+assert.match(storageSource, /audienceCharacterLimit: 5/u);
 assert.match(messageSource, /resolveSlurpCharacterFanVoice/u);
 assert.match(pendingSource, /resolveSlurpCharacterFanVoice/u);
 

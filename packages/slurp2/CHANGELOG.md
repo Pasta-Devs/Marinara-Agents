@@ -177,3 +177,10 @@
 - Added direct messages, scheduled follow-ups, commissions, an audience funnel, and creator earnings kept apart from spending money.
 - Added a backup export and restore. A Slurp Legacy backup can be restored here, which is how you move your data across.
 - Added a welcome screen. It appears after the install and after every update, warns that this is alpha software, and lists what changed.
+# Slurp2 0.0.23 — 2026-09-18
+
+- Image prompts are visible when a feed image opens.
+- Ads remain visible in list and wall feed layouts.
+- Invited character audience activity is limited to five by default and ten at most.
+- The default subscription price is twelve coins per week.
+- The audience settings landing page labels Stories correctly.

@@ -6,8 +6,7 @@ import { SlurpMediaImg } from "./SlurpShell";
  * The same ad as a wall tile.
  *
  * The wall is a square image grid, so the list card's stacked text would break the row. An ad with
- * no image has nothing to contribute to a wall of images and skips it rather than becoming a grey
- * square, the same rule `SlurpMediaWall` already applies to locked and text posts.
+ * Text-only promotions still need a visible slot so the wall does not hide the feed's ad setting.
  */
 export function SlurpInlineAdTile({
   promotion,
@@ -20,7 +19,6 @@ export function SlurpInlineAdTile({
   onAction: () => void;
   labels: { sponsored: string; hide: string; actionFallback: string };
 }) {
-  if (!promotion.imageUrl) return null;
   return (
     <div className="relative aspect-square overflow-hidden bg-[var(--background)]">
       <button
@@ -29,12 +27,18 @@ export function SlurpInlineAdTile({
         className="group block h-full w-full text-left focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
         aria-label={`${labels.sponsored}: ${promotion.brand} — ${promotion.actionLabel ?? labels.actionFallback}`}
       >
-        <SlurpMediaImg
-          src={promotion.imageUrl}
-          alt=""
-          loading="lazy"
-          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
-        />
+        {promotion.imageUrl ? (
+          <SlurpMediaImg
+            src={promotion.imageUrl}
+            alt=""
+            loading="lazy"
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+          />
+        ) : (
+          <span className="flex h-full items-center justify-center bg-[linear-gradient(145deg,color-mix(in_srgb,var(--noodle-accent)_18%,var(--slurp-surface)),var(--slurp-surface))] p-4 text-center text-sm font-bold">
+            {promotion.brand}
+          </span>
+        )}
         {/* An unlabelled ad inside a wall of real posts reads as a post. The gradient keeps the
             label legible on any image without hiding the image behind a panel. */}
         <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 pt-6">

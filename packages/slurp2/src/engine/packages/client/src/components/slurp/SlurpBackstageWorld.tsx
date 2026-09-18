@@ -1839,7 +1839,7 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
                 <NumberSetting
                   value={settings.audienceCharacterLimit}
                   min={0}
-                  max={50}
+                  max={10}
                   onSave={(value) => void update("audienceCharacterLimit", value)}
                 />
               </Field>
