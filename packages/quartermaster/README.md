@@ -200,6 +200,13 @@ published catalog until it's ready for testers.
 
 ## Changelog
 
+### 0.1.17
+
+- Raised the minimum required Engine version from 2.4.4 to 2.4.6. This package hadn't actually
+  been re-verified against 2.4.4/2.4.5 since the very first build — current development and
+  testing has been against a 2.4.6 staging checkout for a while, so the declared minimum now
+  reflects what's actually been tested rather than a stale value from early in the project.
+
 ### 0.1.16
 
 - Added brief "Item Acquired!"-style toast notifications for tracker-agent turns — one per

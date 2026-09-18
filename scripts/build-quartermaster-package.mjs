@@ -41,15 +41,15 @@ const PACKAGE_ID = "quartermaster";
 // release (0.1.0-dev.2 < 0.1.0), so once a plain 0.1.0 is installed, no
 // prerelease build can ever look newer to Download Agents. Never reset the
 // version back down afterward, even across a long dev-iteration stretch.
-const VERSION = "0.1.16";
+const VERSION = "0.1.17";
 // Declared against the exact staging Engine this scaffold was built and tested
 // against. Do not lower this to reach stable users — see CONTRIBUTING.md.
-const ENGINE_MIN = "2.4.4";
+const ENGINE_MIN = "2.4.6";
 const MAX_ENGINE_EXCLUSIVE = "4.0.0";
 const CAPABILITY_API = Object.freeze({ major: 1, minor: 14 });
 const BUILT_AGAINST = Object.freeze({
-  engineVersion: "2.4.4",
-  engineCommit: "5c5a0bc8e7e4a6ef213dee45bf37fc7fba589e33",
+  engineVersion: "2.4.6",
+  engineCommit: "f66abf7eddb7db6312ff5ba8a080145644191775",
 });
 const BASE_DESCRIPTION =
   "A per-chat RPG character sheet and inventory manager for Roleplay mode: equip slots arranged around your persona's portrait, a full inventory with saved outfits, AI-generated item and outfit art, and a tracker agent that keeps everything in sync with the story on its own.";

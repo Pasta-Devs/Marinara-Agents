@@ -1,5 +1,9 @@
 # Quartermaster changelog
 
+## 0.1.17 — 2026-09-18
+- Raised the minimum required Engine version to 2.4.6, matching what this has actually been
+  tested against recently.
+
 ## 0.1.16 — 2026-09-16
 - Brief toast notifications now appear when the tracker agent adds, updates, equips, or removes
   an item -- visible even with the dock closed.
