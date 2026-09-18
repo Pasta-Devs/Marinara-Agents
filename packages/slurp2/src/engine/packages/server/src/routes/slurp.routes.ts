@@ -640,10 +640,24 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
     return noodle.updateSlurpSettings(body.data);
   });
-  app.get("/settings/audience-characters", async () => {
-    const [groups, characterRows] = await Promise.all([
+  app.get("/settings/audience-characters", async (req, reply) => {
+    const parsed = z
+      .object({
+        limit: z.coerce.number().int().min(1).max(100).default(30),
+        offset: z.coerce.number().int().min(0).default(0),
+        search: z.string().trim().max(120).default(""),
+      })
+      .safeParse(req.query);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const [groups, page] = await Promise.all([
       characters.listGroups(),
-      characters.listSummariesByIds((await characters.list()).map((row) => row.id)),
+      characters.listPage({
+        includeBuiltIn: true,
+        limit: parsed.data.limit,
+        offset: parsed.data.offset,
+        search: parsed.data.search,
+        sort: "name-asc",
+      }),
     ]);
     return {
       groups: groups.map((group: { id: string; name: string; characterIds: string }) => ({
@@ -658,9 +672,26 @@ export async function slurpRoutes(app: FastifyInstance) {
           }
         })(),
       })),
-      characters: characterRows,
+      characters: await characters.listSummariesByIds(page.items.map((row) => row.id)),
+      limit: parsed.data.limit,
+      offset: parsed.data.offset,
+      hasMore: page.hasMore,
     };
   });
+  app.get("/settings/audience-characters/groups", async () => ({
+    groups: (await characters.listGroups()).map((group: { id: string; name: string; characterIds: string }) => ({
+      id: group.id,
+      name: group.name,
+      characterIds: (() => {
+        try {
+          const parsed = JSON.parse(group.characterIds);
+          return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
+        } catch {
+          return [];
+        }
+      })(),
+    })),
+  }));
   const autopurgePreviewSchema = z.object({
     autopurgeRetentionValue: z.number().int().min(1).max(3650),
     autopurgeRetentionUnit: z.enum(["days", "weeks", "months"]),

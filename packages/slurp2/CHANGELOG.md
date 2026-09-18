@@ -1,5 +1,13 @@
 # Slurp Remastered release notes
 
+## 0.0.22 — 2026-09-17
+
+- Invite Engine characters to the Slurp audience from character groups or per-character controls.
+- Invited characters use their own card voice and tags in comments, audience activity, and messages.
+- Invited characters can follow, subscribe, spend, hold ties, and appear in fan cards.
+- Added a New Chat picker for owned Creators and invited characters.
+- Added prompt-cost limits and deterministic character rotation.
+
 ## 0.0.21 — 2026-09-17
 
 - Messages: the composer is shorter on one-line messages and still grows for longer text.

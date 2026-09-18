@@ -6,6 +6,7 @@ import {
   Coins,
   Image,
   Megaphone,
+  Loader2,
   MessageCircle,
   Pencil,
   Plus,
@@ -34,6 +35,7 @@ import {
   type SlurpAudienceCharacterGroup,
   type SlurpAudienceCharacterSummary,
   useSlurpAudienceCharacters,
+  useSlurpAudienceCharacterGroups,
 } from "../../hooks/use-slurp";
 import { SlurpMediaImg } from "./SlurpShell";
 import {
@@ -85,6 +87,12 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
     audiencePreset,
   } = page;
   const audienceCharactersQuery = useSlurpAudienceCharacters();
+  const audienceCharacterGroupsQuery = useSlurpAudienceCharacterGroups();
+  const audienceCharacters =
+    audienceCharactersQuery.data?.pages.flatMap(
+      (page: { characters: SlurpAudienceCharacterSummary[] }) => page.characters,
+    ) ?? [];
+  const audienceCharacterGroups = audienceCharacterGroupsQuery.data?.groups ?? [];
   const [audienceWizardOpen, setAudienceWizardOpen] = useState(false);
   const [audienceDraft, setAudienceDraft] = useState<{
     preset: (typeof SLURP_AUDIENCE_PRESETS)[number];
@@ -1836,11 +1844,11 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
                 />
               </Field>
 
-              {audienceCharactersQuery.isLoading ? (
+              {audienceCharactersQuery.isLoading || audienceCharacterGroupsQuery.isLoading ? (
                 <p className="text-xs text-[var(--muted-foreground)]">
                   {t("ui.slurp.settings.audience.characterLoading", { defaultValue: "Loading characters…" })}
                 </p>
-              ) : audienceCharactersQuery.isError ? (
+              ) : audienceCharactersQuery.isError || audienceCharacterGroupsQuery.isError ? (
                 <p role="alert" className="text-xs text-[var(--destructive)]">
                   {t("ui.slurp.settings.audience.characterError", { defaultValue: "Characters are unavailable." })}
                 </p>
@@ -1854,7 +1862,7 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
                     })}
                   >
                     <div className="grid gap-2 sm:grid-cols-2">
-                      {(audienceCharactersQuery.data?.groups ?? []).map((group: SlurpAudienceCharacterGroup) => {
+                      {audienceCharacterGroups.map((group: SlurpAudienceCharacterGroup) => {
                         const selected = settings.audienceCharacterGroupIds.includes(group.id);
                         return (
                           <label
@@ -1889,63 +1897,74 @@ export function SlurpBackstageWorld(page: SlurpBackstagePageProps) {
                     })}
                   >
                     <div className="max-h-80 space-y-2 overflow-y-auto rounded-lg border border-[var(--slurp-outline)] p-2">
-                      {(audienceCharactersQuery.data?.characters ?? []).map(
-                        (character: SlurpAudienceCharacterSummary) => {
-                          const value = settings.audienceCharacters[character.id];
-                          const inGroup = (audienceCharactersQuery.data?.groups ?? []).some(
-                            (group: SlurpAudienceCharacterGroup) =>
-                              settings.audienceCharacterGroupIds.includes(group.id) &&
-                              group.characterIds.includes(character.id),
-                          );
-                          const enabled = value !== false && (value !== undefined || inGroup);
-                          return (
-                            <div
-                              key={character.id}
-                              className="flex flex-wrap items-center gap-2 rounded-lg px-2 py-2 hover:bg-[var(--accent)]/30"
+                      {audienceCharacters.map((character: SlurpAudienceCharacterSummary) => {
+                        const value = settings.audienceCharacters[character.id];
+                        const inGroup = audienceCharacterGroups.some(
+                          (group: SlurpAudienceCharacterGroup) =>
+                            settings.audienceCharacterGroupIds.includes(group.id) &&
+                            group.characterIds.includes(character.id),
+                        );
+                        const enabled = value !== false && (value !== undefined || inGroup);
+                        return (
+                          <div
+                            key={character.id}
+                            className="flex flex-wrap items-center gap-2 rounded-lg px-2 py-2 hover:bg-[var(--accent)]/30"
+                          >
+                            <input
+                              type="checkbox"
+                              aria-label={character.name}
+                              checked={enabled}
+                              onChange={() =>
+                                void update("audienceCharacters", {
+                                  ...settings.audienceCharacters,
+                                  [character.id]: enabled ? false : true,
+                                })
+                              }
+                            />
+                            <span className="min-w-0 flex-1 truncate text-sm font-semibold">{character.name}</span>
+                            <select
+                              aria-label={t("ui.slurp.settings.audience.characterFanType", {
+                                defaultValue: "Fan Type for {{name}}",
+                                name: character.name,
+                              })}
+                              disabled={!enabled}
+                              value={typeof value === "string" ? value : ""}
+                              onChange={(event) =>
+                                void update("audienceCharacters", {
+                                  ...settings.audienceCharacters,
+                                  [character.id]: event.target.value || true,
+                                })
+                              }
+                              className="min-h-9 max-w-44 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-surface)] px-2 text-xs disabled:opacity-50"
                             >
-                              <input
-                                type="checkbox"
-                                aria-label={character.name}
-                                checked={enabled}
-                                onChange={() =>
-                                  void update("audienceCharacters", {
-                                    ...settings.audienceCharacters,
-                                    [character.id]: enabled ? false : true,
-                                  })
-                                }
-                              />
-                              <span className="min-w-0 flex-1 truncate text-sm font-semibold">{character.name}</span>
-                              <select
-                                aria-label={t("ui.slurp.settings.audience.characterFanType", {
-                                  defaultValue: "Fan Type for {{name}}",
-                                  name: character.name,
-                                })}
-                                disabled={!enabled}
-                                value={typeof value === "string" ? value : ""}
-                                onChange={(event) =>
-                                  void update("audienceCharacters", {
-                                    ...settings.audienceCharacters,
-                                    [character.id]: event.target.value || true,
-                                  })
-                                }
-                                className="min-h-9 max-w-44 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-surface)] px-2 text-xs disabled:opacity-50"
-                              >
-                                <option value="">
-                                  {t("ui.slurp.settings.audience.automatic", { defaultValue: "Automatic" })}
-                                </option>
-                                {settings.fanTypes
-                                  .filter((type) => type.enabled)
-                                  .map((type) => (
-                                    <option key={type.id} value={type.id}>
-                                      {type.name}
-                                    </option>
-                                  ))}
-                              </select>
-                            </div>
-                          );
-                        },
-                      )}
+                              <option value="">
+                                {t("ui.slurp.settings.audience.automatic", { defaultValue: "Automatic" })}
+                              </option>
+                              {settings.fanTypes
+                                .filter((type) => type.enabled)
+                                .map((type) => (
+                                  <option key={type.id} value={type.id}>
+                                    {type.name}
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+                        );
+                      })}
                     </div>
+                    {audienceCharactersQuery.hasNextPage && (
+                      <button
+                        type="button"
+                        disabled={audienceCharactersQuery.isFetchingNextPage}
+                        onClick={() => void audienceCharactersQuery.fetchNextPage()}
+                        className="mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-[var(--slurp-outline)] text-sm font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+                      >
+                        {audienceCharactersQuery.isFetchingNextPage && <Loader2 size={15} className="animate-spin" />}
+                        {audienceCharactersQuery.isFetchingNextPage
+                          ? t("ui.slurp.settings.audience.characterLoadingMore", { defaultValue: "Loading more…" })
+                          : t("ui.slurp.settings.audience.characterLoadMore", { defaultValue: "Load more characters" })}
+                      </button>
+                    )}
                   </Field>
                 </>
               )}

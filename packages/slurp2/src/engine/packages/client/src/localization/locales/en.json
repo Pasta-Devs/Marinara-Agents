@@ -1886,6 +1886,8 @@
   "ui.slurp.settings.audience.characterLimitDetail": "This limits prompt cost. Invited characters rotate when the list is larger.",
   "ui.slurp.settings.audience.characterLoading": "Loading characters…",
   "ui.slurp.settings.audience.characterError": "Characters are unavailable.",
+  "ui.slurp.settings.audience.characterLoadMore": "Load more characters",
+  "ui.slurp.settings.audience.characterLoadingMore": "Loading more…",
   "ui.slurp.settings.audience.characterGroups": "Invite character groups",
   "ui.slurp.settings.audience.characterGroupsDetail": "A group invites every member. A character override below can remove one.",
   "ui.slurp.settings.audience.characterOverrides": "Character overrides",

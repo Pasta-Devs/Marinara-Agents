@@ -1833,14 +1833,27 @@ export type SlurpAudienceCharacterGroup = {
 };
 
 export function useSlurpAudienceCharacters() {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ["slurp", "audience", "characters"],
-    queryFn: () =>
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) =>
       api.get<{
-        groups: SlurpAudienceCharacterGroup[];
         characters: SlurpAudienceCharacterSummary[];
-      }>("/slurp2/settings/audience-characters"),
+        limit: number;
+        offset: number;
+        hasMore: boolean;
+      }>(`/slurp2/settings/audience-characters?limit=30&offset=${pageParam}`),
+    getNextPageParam: (page) => (page.hasMore ? page.offset + page.characters.length : undefined),
     staleTime: 60_000,
+  });
+}
+
+export function useSlurpAudienceCharacterGroups(enabled = true) {
+  return useQuery({
+    queryKey: ["slurp", "audience", "character-groups"],
+    queryFn: () => api.get<{ groups: SlurpAudienceCharacterGroup[] }>("/slurp2/settings/audience-characters/groups"),
+    enabled,
+    staleTime: 5 * 60_000,
   });
 }
 
