@@ -1,0 +1,23 @@
+# Slurp2 architecture decisions
+
+Append-only. Add new entries at the bottom. Each entry states the date, problem, decision, affected
+modules, rejected alternative, and migration consequence.
+
+## 2026-09-18 — Feature-first `slp` namespace
+
+- **Problem:** Slurp2 grew from legacy Noodle/Slurp code into five very large route, storage, hook,
+  and UI files plus a flat service directory. Cross-feature coupling was implicit, and new features
+  had no clear place or extension seam.
+- **Decision:** Move Slurp2 into package-owned `client/src/slp`, `server/src/slp`, and a narrow
+  `shared/src/slp`. Organise each root as base → reusable modules (client) → features → app or
+  workflows → entry. Features talk to each other only through `slp-<name>-contract.ts` files.
+  Platform events reach other features through pure typed modifiers. `api-client.ts` and Garnish
+  remain named exceptions. Rules are enforced by `tests/slurp2-architecture.regression.ts`.
+- **Affected modules:** all Slurp2 source; `scripts/build-feature-packages.mjs` ownership;
+  `scripts/typecheck-packages.mjs`; Slurp2 source-reading tests.
+- **Rejected alternative:** keeping code in Engine technical folders (`routes/`, `services/`,
+  `hooks/`, `components/`) with smaller files. It gave no durable Slurp namespace and no clean
+  cross-feature seam.
+- **Migration consequence:** ten reviewable slices, recorded in `SLURP-MODULE-PLAN.md` and
+  `SLURP-MODULE-STATUS.md`. Ownership shrinks to the three roots and two exceptions as files move.
+  Persisted names, routes, and locale keys do not change.

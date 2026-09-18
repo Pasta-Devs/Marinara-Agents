@@ -29,6 +29,7 @@ import {
   trySlurpDataDeletion,
   trySlurpWrite,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-operation-lock.ts";
+import { slurp2Source } from "./slurp2-source";
 
 // ── Purge estimate equals execution selection ────────────────────────────────
 const media = (metadata: unknown) => (metadata as { path?: string }).path ?? null;
@@ -187,9 +188,8 @@ assert.deepEqual(tagged.discoveryTags, [
   { tag: "Neon", group: "AI suggestions" },
 ]);
 assert.ok(tagged.updates[0].stageProfile.tags.includes("Neon"), "the created tag is assigned in the same plan");
-const routes = readFileSync(
+const routes = slurp2Source(
   join(import.meta.dirname, "../packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts"),
-  "utf8",
 );
 const applyStart = routes.indexOf('app.post("/backstage/improvement-jobs/:id/apply"');
 const applyBody = routes.slice(applyStart, routes.indexOf("\n  });", applyStart));

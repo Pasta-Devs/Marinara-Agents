@@ -1,15 +1,13 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { slurp2Source } from "./slurp2-source";
 
 const cardSource = readFileSync(
   "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpCreatorProfileCard.tsx",
   "utf8",
 );
-const homeSource = readFileSync(
-  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
-  "utf8",
-);
+const homeSource = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
 
 test("creator discovery cards expose profile and discovery-only subscription actions", () => {
   assert.match(cardSource, /ui\.slurp\.settings\.creators\.viewProfile/);

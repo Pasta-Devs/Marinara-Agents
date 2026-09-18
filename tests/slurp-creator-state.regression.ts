@@ -26,6 +26,7 @@ import {
   type SlurpCreatorState,
   type SlurpThreadState,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-creator-state.js";
+import { slurp2Source } from "./slurp2-source";
 
 const now = "2026-09-09T12:00:00.000Z";
 const creator: SlurpCreatorState = { ...SLURP_CREATOR_STATE_DEFAULT, updatedAt: now };
@@ -170,10 +171,7 @@ assert.equal(applySlurpCreatorStateDelta({ ...creator, energy: 2 }, { energy: -8
 
 // Every path that does work charges for it. Posting is charged at the one storage choke point
 // both the manual and the generated post route through, so neither can skip it.
-const slurpStorage = readFileSync(
-  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
-  "utf8",
-);
+const slurpStorage = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 assert.match(slurpStorage, /async adjustCreatorState\(/u);
 assert.match(slurpStorage, /adjustCreatorState\(post\.authorAccountId, \{\s*energy: -SLURP_ENERGY_COST\.post,/u);
 // Charged after the transaction resolves: a stored post must never fail over a settings write.
@@ -258,10 +256,7 @@ assert.match(generation, /A sales intent is not personal intimacy/u);
 assert.match(generation, /stateSignals: generated\.stateSignals/u);
 assert.match(generation, /happeningNow: slurpModifierLines\(input\.creatorState\)/u);
 assert.match(generation, /exposure: slurpIntensityBand\(input\.creatorState\.exposure\)/u);
-const storage = readFileSync(
-  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
-  "utf8",
-);
+const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 assert.match(storage, /for \(const accountId of accountIds\)[\s\S]{0,160}?SLURP_CREATOR_STATE_KEY/u);
 
 const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");

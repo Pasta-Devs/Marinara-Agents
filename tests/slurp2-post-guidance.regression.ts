@@ -14,6 +14,7 @@ import {
   selectSlurpPostGuidance,
   SLURP_BUILT_IN_POST_GUIDANCE,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-post-guidance.js";
+import { slurp2Source } from "./slurp2-source";
 
 const pkg = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages");
 const read = (path: string) => readFileSync(join(pkg, path), "utf8");
@@ -109,7 +110,7 @@ assert.match(
 );
 
 // --- a saved post image carries a name and the right extension ----------------------------
-const routes = readFileSync(join(pkg, "server/src/routes/slurp.routes.ts"), "utf8");
+const routes = slurp2Source(join(pkg, "server/src/routes/slurp.routes.ts"));
 const mediaRoute = routes.slice(
   routes.indexOf('app.get("/noodler/posts/:id/media"'),
   routes.indexOf("/**", routes.indexOf('app.get("/noodler/posts/:id/media"')),
@@ -132,7 +133,7 @@ assert.doesNotMatch(
   /imagePrompt: attempts >= NOODLER_POST_IMAGE_RETRY_LIMIT \? null : undefined/u,
   "spending the automatic retry budget must not delete the prompt the user redraws from",
 );
-const storage = readFileSync(join(pkg, "server/src/services/storage/slurp.storage.ts"), "utf8");
+const storage = slurp2Source(join(pkg, "server/src/services/storage/slurp.storage.ts"));
 assert.match(
   storage,
   /noodlerPostImageRetryAttempts\(metadata\) >= NOODLER_POST_IMAGE_RETRY_LIMIT\) continue;/u,

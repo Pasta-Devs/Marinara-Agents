@@ -9,16 +9,16 @@
  */
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { deflateRawSync } from "node:zlib";
 import {
   createStoredZip,
   readStoredZip,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-backup.ts";
+import { slurp2Source } from "./slurp2-source";
 
 const root = join(import.meta.dirname, "..");
-const read = (path: string) => readFileSync(join(root, path), "utf8");
+const read = (path: string) => slurp2Source(join(root, path));
 
 // ── 1. Round trip ─────────────────────────────────────────────────────────────
 const manifest = { format: "marinara-slurp-backup", formatVersion: 1, sourcePackage: "slurp2" };

@@ -11,6 +11,7 @@ import {
   slurpCharacterFanEntityId,
   slurpCharacterIdFromFanEntityId,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-audience-characters.js";
+import { slurp2Source } from "./slurp2-source";
 
 const settings = {
   audienceCharacters: { explicit: "whale", excluded: false, automatic: true },
@@ -52,9 +53,8 @@ const worldSource = readFileSync(
   ),
   "utf8",
 );
-const storageSource = readFileSync(
+const storageSource = slurp2Source(
   join(import.meta.dirname, "../packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
-  "utf8",
 );
 const messageSource = readFileSync(
   join(

@@ -3,7 +3,6 @@
  * `arcAllowedKinds` list migrate, auto arcs follow Creator tags, and running arcs keep their copy.
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   makeSlurpProject,
@@ -13,6 +12,7 @@ import {
   slurpProjectTick,
   type SlurpArcType,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-project.ts";
+import { slurp2Source } from "./slurp2-source";
 
 const at = new Date("2026-09-13T10:00:00.000Z");
 
@@ -28,9 +28,8 @@ assert.deepEqual(
   ["moving", "trip"],
 );
 assert.ok(slurpArcLibraryFromLegacy(undefined).every((type) => type.enabled && type.builtin && !type.hidden));
-const storage = readFileSync(
+const storage = slurp2Source(
   join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
-  "utf8",
 );
 assert.match(storage, /rawRecord\.arcLibrary \?\? slurpArcLibraryFromLegacy\(rawRecord\.arcAllowedKinds\)/u);
 assert.doesNotMatch(storage, /arcAllowedKinds: z\./u, "arcAllowedKinds is gone from the schema");

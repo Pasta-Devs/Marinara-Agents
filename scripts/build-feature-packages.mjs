@@ -158,13 +158,22 @@ const slurpOwnedSourcePaths = [
   "packages/server/src/services/slurp",
   "packages/server/src/services/storage/slurp.storage.ts",
 ];
-// The remaster owns strictly more of the tree than the frozen legacy package does.
+// Deliberately not spread from slurpOwnedSourcePaths: that list belongs to frozen legacy Slurp, and
+// the remaster's list shrinks toward its slp roots as files move (see SLURP-MODULE-PLAN.md §5).
 const slurp2OwnedSourcePaths = [
-  ...slurpOwnedSourcePaths,
+  "packages/client/src/components/slurp",
+  "packages/client/src/hooks/use-slurp.ts",
+  "packages/client/src/localization/locales",
+  "packages/client/src/slurp-package-entry.tsx",
+  "packages/client/src/stores/slurp-package.store.ts",
+  "packages/server/src/db/schema/slurp.ts",
+  "packages/server/src/routes/slurp.routes.ts",
+  "packages/server/src/services/slurp",
+  "packages/server/src/services/storage/slurp.storage.ts",
+  "packages/server/src/services/garnish-ads",
   "packages/shared/src/slurp-autopurge-time.ts",
   "packages/client/src/hooks/use-slurp-media-src.ts",
   "packages/client/src/lib/api-client.ts",
-  "packages/client/src/lib/slurp-custom-emojis.ts",
   "packages/client/src/lib/slurp-discovery.ts",
   "packages/client/src/lib/slurp-refresh-batch.ts",
   "packages/server/src/routes/slurp-messages.routes.ts",
@@ -404,7 +413,7 @@ const features = [
   },
   {
     id: "slurp2",
-    version: "0.0.22",
+    version: "0.0.24",
     minEngineVersion: "2.4.5",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp Remastered",
@@ -803,7 +812,11 @@ export async function selfCheck() {
     if (feature.ownedSourcePaths?.length) {
       await capturePackageSources(metafile, prepared.buildRoot, feature.ownedSourcePaths);
       if (feature.id === "slurp" || feature.id === "slurp2") {
-        await removeOwnedSourceSnapshots(["packages/client/src/localization/locales"]);
+        await removeOwnedSourceSnapshots([
+          "packages/client/src/localization/locales",
+          // Captured as generic Engine material before Slurp2 claimed it; only Slurp2 imports it.
+          ...(feature.id === "slurp2" ? ["packages/server/src/services/garnish-ads"] : []),
+        ]);
       }
     } else {
       await captureEngineSources(

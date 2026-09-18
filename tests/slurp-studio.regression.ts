@@ -11,6 +11,7 @@ import {
   readSlurpGoal,
   slurpGoalProgress,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-goal.js";
+import { slurp2Source } from "./slurp2-source";
 
 // ── Milestones ──────────────────────────────────────────────────────────────
 // Before the first target there is nothing reached yet, but there is still something to aim at.
@@ -93,7 +94,7 @@ assert.equal(
 
 // ── Wiring ──────────────────────────────────────────────────────────────────
 const root = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages");
-const read = (path: string) => readFileSync(join(root, path), "utf8");
+const read = (path: string) => slurp2Source(join(root, path));
 
 const routes = read("server/src/routes/slurp.routes.ts");
 assert.match(routes, /app\.get\("\/noodler\/studio"/u);

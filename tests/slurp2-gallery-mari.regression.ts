@@ -4,10 +4,10 @@
  * - Professor Mari may be picked as a new Creator source only while the Slurp setting allows it.
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
+import { slurp2Source } from "./slurp2-source";
 
-const read = (path: string) => readFileSync(`packages/slurp2/src/engine/packages/${path}`, "utf8");
+const read = (path: string) => slurp2Source(`packages/slurp2/src/engine/packages/${path}`);
 const generation = read("server/src/services/slurp/slurp-generation.service.ts");
 const storage = read("server/src/services/storage/slurp.storage.ts");
 const settingsView = slurp2BackstageSource();

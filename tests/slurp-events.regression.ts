@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -8,6 +7,7 @@ import {
   SLURP_EVENT_NOTABLE,
   type SlurpEventLike,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-event-weight.js";
+import { slurp2Source } from "./slurp2-source";
 
 // ── Money outranks attention ────────────────────────────────────────────────
 // A like is the cheapest thing a person can do; a commission is somebody asking you to make
@@ -105,7 +105,7 @@ assert.ok(SLURP_EVENT_NOTABLE > 0);
 
 // ── Wiring ──────────────────────────────────────────────────────────────────
 const root = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages");
-const read = (path: string) => readFileSync(join(root, path), "utf8");
+const read = (path: string) => slurp2Source(join(root, path));
 
 const storage = read("server/src/services/storage/slurp.storage.ts");
 // A character-backed Creator has no operator, so it produces no notifications. That is the

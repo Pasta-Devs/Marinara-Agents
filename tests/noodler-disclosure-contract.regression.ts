@@ -10,6 +10,7 @@ import {
   isMinimizedNoodlerSourceSnapshot,
   minimizeNoodlerSourceSnapshot,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-source";
+import { slurp2Source } from "./slurp2-source";
 
 const managedProfile = {
   id: "creator",
@@ -158,10 +159,7 @@ assert.match(
 );
 assert.doesNotMatch(imagesPrivacy, /"secret"/u);
 // A stored or submitted Secret Creator becomes Hinted, and a Creator with no mode is Open.
-const storagePrivacy = readFileSync(
-  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
-  "utf8",
-);
+const storagePrivacy = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 assert.match(storagePrivacy, /rawIdentityDisclosure === "secret" \? "hinted" : rawIdentityDisclosure/u);
 assert.doesNotMatch(storagePrivacy, /\?\? "secret"/u);
 
@@ -215,7 +213,7 @@ assert.match(
   disclosureRankTable,
 );
 assert.match(
-  readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8"),
+  slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx"),
   disclosureRankTable,
   "the client disclosure rank must match the server's",
 );

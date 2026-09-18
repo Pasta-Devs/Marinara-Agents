@@ -12,6 +12,7 @@ import {
   SLURP_REALISTIC_TUNING,
   SLURP_TUNING_PULSE_PER_TICK_CEILING,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-tuning.js";
+import { slurp2Source } from "./slurp2-source";
 
 const targets = [
   { creatorAccountId: "c1", postId: "fresh", ageHours: 0.5, creatorReach: 3_000 },
@@ -151,9 +152,8 @@ assert.ok(
 // in ten a new install collected one free comment every two and a half hours — so this pins the
 // new ratio rather than the old one. Likes are still what most people leave.
 assert.ok((pulseKinds.get("like") ?? 0) > (pulseKinds.get("comment") ?? 0) * 3, "likes must dominate comments");
-const storage = readFileSync(
+const storage = slurp2Source(
   join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
-  "utf8",
 );
 assert.match(
   storage,

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -12,6 +11,7 @@ import {
   slurpEarningsKey,
   slurpCreatorRevenueShare,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-earnings.js";
+import { slurp2Source } from "./slurp2-source";
 
 const at = new Date("2026-09-05T12:00:00.000Z");
 
@@ -152,9 +152,8 @@ assert.equal(slurpEarningsKey("creator-1"), "slurp2.creator.creator-1.earnings")
 assert.equal(slurpCreatorRevenueShare(99, 37), 36, "reversals must use the configured floored Creator share");
 assert.equal(slurpCreatorRevenueShare(99, 0), 0);
 
-const storage = readFileSync(
+const storage = slurp2Source(
   join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
-  "utf8",
 );
 assert.match(storage, /creditEarningsNow\(creator\.id, reason, share/u);
 assert.doesNotMatch(
@@ -166,9 +165,8 @@ assert.doesNotMatch(
 // ── The circuit closes ──────────────────────────────────────────────────────
 // Without a payout, earnings are a scoreboard attached to nothing and being a successful Creator
 // does not change your life as a fan.
-const slurpStorage = readFileSync(
+const slurpStorage = slurp2Source(
   join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
-  "utf8",
 );
 assert.match(slurpStorage, /async payOutEarnings\(/u);
 // Only a persona-backed Creator can pay out: a character-backed one has nobody to pay.
@@ -226,9 +224,8 @@ assert.match(
 // Earnings are debited first, so a failure puts them back rather than minting spending money.
 assert.match(slurpStorage, /writeEarnings\(creatorAccountId, current\)/u);
 
-const payoutRoutes = readFileSync(
+const payoutRoutes = slurp2Source(
   join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts"),
-  "utf8",
 );
 assert.match(payoutRoutes, /app\.post\("\/noodler\/accounts\/:id\/payout"/u);
 

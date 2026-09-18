@@ -1,14 +1,15 @@
 // The relationship panel shows the complete simulation state to both sides of the conversation.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { slurp2Source } from "./slurp2-source";
 
 const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");
 const storage = readFileSync(
   "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
   "utf8",
 );
-const view = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx", "utf8");
-const hook = readFileSync("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");
+const view = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx");
+const hook = slurp2Source("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts");
 const locales = JSON.parse(
   readFileSync("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
 ) as Record<string, string>;

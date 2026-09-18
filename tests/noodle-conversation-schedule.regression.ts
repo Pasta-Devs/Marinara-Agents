@@ -12,6 +12,7 @@ import {
   toZonedWallClockDate,
 } from "../sources/engine/packages/server/src/services/conversation/timezone.js";
 import { areConversationSchedulesEnabled } from "../sources/engine/packages/server/src/services/generation/conversation-context-utils.js";
+import { slurp2Source } from "./slurp2-source";
 
 const slurpScheduleGenerationSource = readFileSync(
   new URL(
@@ -20,9 +21,8 @@ const slurpScheduleGenerationSource = readFileSync(
   ),
   "utf8",
 );
-const slurpRoutesSource = readFileSync(
+const slurpRoutesSource = slurp2Source(
   new URL("../packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", import.meta.url),
-  "utf8",
 );
 assert.match(slurpScheduleGenerationSource, /attempt < 2/u, "invalid generated schedules must receive one retry");
 assert.match(

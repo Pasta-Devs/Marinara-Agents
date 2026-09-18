@@ -4,9 +4,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
 import { readSlurpCreatorMessaging } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-messaging";
+import { slurp2Source } from "./slurp2-source";
 
 const root = "packages/slurp2/src/engine/packages";
-const settingsStorage = readFileSync(`${root}/server/src/services/storage/slurp.storage.ts`, "utf8");
+const settingsStorage = slurp2Source(`${root}/server/src/services/storage/slurp.storage.ts`);
 const messagesStorage = readFileSync(`${root}/server/src/services/storage/slurp-messages.storage.ts`, "utf8");
 const scheduler = readFileSync(`${root}/server/src/services/slurp/slurp-message-scheduler.service.ts`, "utf8");
 const operation = readFileSync(`${root}/server/src/services/slurp/slurp-message.operation.ts`, "utf8");

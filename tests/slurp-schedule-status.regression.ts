@@ -14,6 +14,7 @@ import {
   type PersistedNoodleRefreshSchedule,
 } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-refresh-schedule.js";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
+import { slurp2Source } from "./slurp2-source";
 
 async function main() {
   // A Tuesday, so "this week" starts on the Monday before it.
@@ -189,7 +190,7 @@ void main();
 
 // ── Wiring ──────────────────────────────────────────────────────────────────
 const root = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages");
-const read = (path: string) => readFileSync(join(root, path), "utf8");
+const read = (path: string) => slurp2Source(join(root, path));
 
 assert.match(read("server/src/services/storage/slurp.storage.ts"), /scheduleStatus: publicAccount/u);
 const settings = slurp2BackstageSource();

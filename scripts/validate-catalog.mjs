@@ -211,6 +211,7 @@ const slurp2OwnedSourcePaths = [
   "packages/server/src/services/storage/slurp-host-tables.ts",
   "packages/server/src/services/storage/slurp-messages.storage.ts",
   "packages/server/src/services/storage/slurp-reply-queue.storage.ts",
+  "packages/server/src/services/garnish-ads",
 ];
 for (const [packageId, ownedSourcePaths] of [
   ["slurp", slurpOwnedSourcePaths],

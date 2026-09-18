@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -11,6 +10,7 @@ import {
   SLURP_POPULATION_NAME_SPACE,
   slurpReactivationStage,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-population.js";
+import { slurp2Source } from "./slurp2-source";
 
 const at = new Date("2026-09-05T00:00:00.000Z");
 const member = (seed: string) => generateSlurpPopulationMember(seed, at);
@@ -104,7 +104,7 @@ assert.equal(slurpReactivationStage("invalid", false), "follower");
 
 // ── Wiring ──────────────────────────────────────────────────────────────────
 const root = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src");
-const read = (path: string) => readFileSync(join(root, path), "utf8");
+const read = (path: string) => slurp2Source(join(root, path));
 
 // The six fixed identities with placeholder handles are no longer what fan activity draws from.
 const operation = read("services/slurp/slurp-fan-activity.operation.ts");

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { parseSlurpCheatDirective } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-cheat-directive.js";
+import { slurp2Source } from "./slurp2-source";
 
 assert.deepEqual(parseSlurpCheatDirective("coins 42"), { kind: "coins", coins: 42 });
 assert.deepEqual(parseSlurpCheatDirective("help"), { kind: "help" });
@@ -57,7 +58,7 @@ const adjustCheatState = storage.slice(
 );
 assert.match(adjustCheatState, /input\.mood == null \? \{\} : \{ moodUpdatedAt: timestamp \}/u);
 
-const slurpRoutes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
+const slurpRoutes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
 assert.match(
   slurpRoutes,
   /cheatsEnabled:\s*process\.env\.NODE_ENV === "development" && process\.env\.CHEATS_ENABLED === "true"/u,

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
+import { slurp2Source } from "./slurp2-source";
 const base = readFileSync(
   "packages/slurp2/src/engine/packages/server/src/services/garnish-ads/garnish-ads.base.ts",
   "utf8",
@@ -27,7 +28,7 @@ const seam = readFileSync(
 );
 assert.match(seam, /function garnishTagsFromPersona/u);
 
-const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
+const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
 assert.match(routes, /\/noodler\/viewer\/ads/u);
 assert.match(routes, /inlineAdsEnabled/u);
 
@@ -37,7 +38,7 @@ assert.match(card, /labels\.hide/u);
 assert.match(card, /onAction/u, "inline promotion CTA must be wired");
 assert.match(card, /ExternalLink/u, "inline promotion CTA must communicate an action");
 
-const home = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
+const home = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
 assert.match(
   home,
   /slurpSettingsQuery\.data\?\.inlineAdsEnabled !== false/u,

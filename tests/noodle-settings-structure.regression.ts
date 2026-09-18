@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
+import { slurp2Source } from "./slurp2-source";
 
 async function main() {
   const [noodleHome, slurpHome, slurpSettings, slurpTypes, slurpStore] = await Promise.all([
     readFile("packages/noodle/src/engine/packages/client/src/components/noodle/NoodleHome.tsx", "utf8"),
-    readFile("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8"),
+    slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx"),
     slurp2BackstageSource(),
     readFile("packages/slurp2/src/engine/packages/client/src/components/slurp/slurp-navigation.types.ts", "utf8"),
     readFile("packages/slurp2/src/engine/packages/client/src/stores/slurp-package.store.ts", "utf8"),

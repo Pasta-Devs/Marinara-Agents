@@ -8,6 +8,7 @@ import {
   SLURP_AUDIENCE_SUBSCRIPTION_DAYS,
   SLURP_AUDIENCE_WEEKLY_BUDGET,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-audience-subscription.js";
+import { slurp2Source } from "./slurp2-source";
 
 const at = new Date("2026-09-08T12:00:00.000Z");
 const subject = (overrides: Partial<Parameters<typeof slurpAudienceSubscriptionDecision>[0]> = {}) => ({
@@ -107,10 +108,7 @@ assert.ok(world.includes("setTiePaidThrough("), "billing state must be recorded 
 
 // Counts. Both halves are exact rows and neither is reach: the personas on this install pay
 // through subscription rows, and the audience pays through the funnel because it holds no wallet.
-const routes = readFileSync(
-  join(root, "packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts"),
-  "utf8",
-);
+const routes = slurp2Source(join(root, "packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts"));
 assert.ok(routes.includes("countSubscribersForCreators"), "subscriber counts must include the audience");
 assert.ok(
   routes.includes('app.get("/noodler/accounts/:id/followers"'),

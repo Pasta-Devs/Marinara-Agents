@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 
 import {
   makeSlurpProject,
@@ -14,9 +13,10 @@ import {
   type SlurpArcType,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-project.js";
 import { scoreSlurpRapport } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-rapport.js";
+import { slurp2Source } from "./slurp2-source";
 
 const root = "packages/slurp2/src/engine/packages/server/src";
-const source = (path: string) => readFileSync(`${root}/${path}`, "utf8");
+const source = (path: string) => slurp2Source(`${root}/${path}`);
 const at = new Date("2026-09-13T10:00:00.000Z");
 
 const type: SlurpArcType = {

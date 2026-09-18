@@ -1,18 +1,16 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { slurp2Source } from "./slurp2-source";
 
 const storage = readFileSync(
   "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
   "utf8",
 );
 const route = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");
-const profileRoute = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
-const client = readFileSync(
-  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx",
-  "utf8",
-);
-const slurpClientHook = readFileSync("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");
-const slurp = readFileSync("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
+const profileRoute = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
+const client = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx");
+const slurpClientHook = slurp2Source("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts");
+const slurp = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 const packageSchema = readFileSync("packages/slurp2/src/engine/packages/server/src/db/schema/slurp.ts", "utf8");
 
 // A paid request must compensate both sides when income or notification fails after the debit.
@@ -347,7 +345,7 @@ assert.match(
   "profile tip hook must accept an idempotency request ID",
 );
 assert.match(
-  readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8"),
+  slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx"),
   /tipCreator\.mutate\(\{[\s\S]*?requestId:[\s\S]*?crypto\.randomUUID\(\)/u,
   "profile tip actions must provide a client idempotency request ID",
 );

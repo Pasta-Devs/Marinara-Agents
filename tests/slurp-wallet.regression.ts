@@ -11,10 +11,8 @@ import {
   spend,
   subscriptionPaidThrough,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-wallet.ts";
-const storageSource = readFileSync(
-  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
-  "utf8",
-);
+import { slurp2Source } from "./slurp2-source";
+const storageSource = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 assert.match(
   storageSource,
   /slurpSettingsSchema = z\.object\(\{[\s\S]*?walletDayStartHour: z\.number\(\)\.int\(\)\.min\(0\)\.max\(23\)/u,
@@ -135,10 +133,7 @@ assert.equal(readSlurpWallet('{"coins":-4}').coins, SLURP_DEFAULT_ECONOMY.starti
 assert.deepEqual(readSlurpWallet('{"subscriptions":{"a":{"price":"free"}}}').subscriptions, {});
 
 // The storage layer must actually gate on the wallet, not just carry it.
-const storage = readFileSync(
-  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
-  "utf8",
-);
+const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 assert.match(storage, /spend\(wallet, "unlock", price/u, "unlocking must debit the wallet");
 assert.match(storage, /spend\(previousWallet, "subscribe", price/u, "subscribing must debit the wallet");
 assert.doesNotMatch(storage, /viewerSettingsUpdateQueue/u, "viewer settings must use the shared financial queue");

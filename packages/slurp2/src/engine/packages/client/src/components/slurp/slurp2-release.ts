@@ -2,7 +2,7 @@
 // client has no route that serves CHANGELOG.md. So the notes are mirrored here, and
 // `tests/slurp2-release-notes.regression.ts` fails the build if this file drifts from
 // `packages/slurp2/CHANGELOG.md` or from the version in `manifest.json`.
-export const SLURP2_VERSION = "0.0.22";
+export const SLURP2_VERSION = "0.0.24";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -12,6 +12,14 @@ export interface Slurp2ReleaseEntry {
 
 /** Newest first, same order as CHANGELOG.md. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.0.24",
+    date: "2026-09-18",
+    notes: [
+      "No visible changes. Internal groundwork for a cleaner source layout, with stricter build checks.",
+      "Removed unused custom-emoji code.",
+    ],
+  },
   {
     version: "0.0.22",
     date: "2026-09-17",
@@ -223,14 +231,6 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
       "Added Reply timing settings under Messaging: the longest wait, the wait when the return time is unknown, check-in waits for close and regular fans, and away times for Creators without a schedule.",
       "Added Always reachable without a schedule. With it on, a Creator with no Conversation Schedule counts as online.",
       "Corrected the Creator settings text that said a Creator without a Conversation Schedule is always reachable. Slurp guesses from their last post unless the new setting is on.",
-    ],
-  },
-  {
-    version: "0.0.3",
-    date: "2026-09-12",
-    notes: [
-      "Fixed Create post and Add story doing nothing on a Creator profile with a tip goal set. The goal used to hide the post composer.",
-      "Slurp Remastered now shows its color artwork in the Agents browser. The gray artwork is for Slurp Legacy only.",
     ],
   },
 ];

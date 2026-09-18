@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { slurp2Source } from "./slurp2-source";
 
 // The format rules live in the Engine's compiled shared schema, which imports zod,
 // and in the generation service, which imports the Engine's storage and provider
@@ -37,7 +38,7 @@ const responseFormat = readFileSync(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-response-format.ts",
   "utf8",
 );
-const composer = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
+const composer = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
 
 assert.match(generation, /NOODLER_FORMAT_PROMPTS\[format\]/u);
 // Every generated NoodleR post carries a title, whatever the format.
@@ -56,10 +57,7 @@ const contentFormat = readFileSync(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-content-format.ts",
   "utf8",
 );
-const storage = readFileSync(
-  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
-  "utf8",
-);
+const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 assert.doesNotMatch(contentFormat, /caption: 300,/u, "no per-format hard cut");
 assert.match(storage, /slice\(0, NOODLER_CONTENT_HARD_MAX_LENGTH\)/u, "edits honour the shared cap");
 assert.doesNotMatch(storage, /trim\(\)\.slice\(0, 4000\)/u, "no flat 4000-character truncation");

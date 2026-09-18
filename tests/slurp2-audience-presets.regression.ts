@@ -8,15 +8,12 @@ import {
   slurpAudiencePresetFor,
   slurpAudiencePresetPatch,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-tuning.js";
-import { readFileSync } from "node:fs";
 import { SLURP_REALISTIC_TUNING } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-tuning.js";
 import { populationNoodlerFanIdentityProvider } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-fan-identity-provider.js";
+import { slurp2Source } from "./slurp2-source";
 
 // The storage module pulls in the database layer, so its shipped numbers are read as text.
-const storage = readFileSync(
-  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
-  "utf8",
-);
+const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 const shipped = (key: string) => Number(new RegExp(`\\n  ${key}: (\\d+),`, "u").exec(storage)?.[1]);
 assert.match(storage, /\n  fanActivityEnabled: true,/u);
 assert.match(storage, /worldActivity: SLURP_DEFAULT_WORLD_ACTIVITY,/u);

@@ -11,6 +11,7 @@ import {
   slurpGeneratedArcProject,
   slurpProjectInstruction,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-project.js";
+import { slurp2Source } from "./slurp2-source";
 
 const at = new Date("2026-09-09T10:00:00.000Z");
 
@@ -22,9 +23,8 @@ const generationSource = readFileSync(
   "utf8",
 );
 assert.match(generationSource, /input\.brief\.trim\(\)\.slice\(0, 2_000\)/u, "the AI builder sends the player's brief");
-const routesSource = readFileSync(
+const routesSource = slurp2Source(
   new URL("../packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", import.meta.url),
-  "utf8",
 );
 assert.match(routesSource, /arc-library\/generate/u, "the AI builder has a dedicated draft route");
 assert.match(

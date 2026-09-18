@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { slurp2Source } from "./slurp2-source";
 
 const root = join(import.meta.dirname, "..");
 
@@ -17,10 +18,7 @@ const files = [
   ...sourceFiles("packages/slurp2/src/engine/packages/server"),
 ];
 
-const slurpRoutes = readFileSync(
-  join(root, "packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts"),
-  "utf8",
-);
+const slurpRoutes = slurp2Source(join(root, "packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts"));
 const slurpEntry = readFileSync(
   join(root, "packages/slurp2/src/engine/packages/client/src/slurp-package-entry.tsx"),
   "utf8",
@@ -73,9 +71,8 @@ const slurpImages = readFileSync(
   join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-images.service.ts"),
   "utf8",
 );
-const slurpStorage = readFileSync(
+const slurpStorage = slurp2Source(
   join(root, "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
-  "utf8",
 );
 const slurpReplyQueue = readFileSync(
   join(root, "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-reply-queue.storage.ts"),
@@ -146,10 +143,7 @@ assert.doesNotMatch(
   /scenario|backstory|source\.name/u,
   "concealed Slurp profile prompts must withhold the lookupable canon",
 );
-const slurpHomeSource = readFileSync(
-  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
-  "utf8",
-);
+const slurpHomeSource = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
 // A character card says nothing about how its Creator treats an audience, so without a nudge every
 // Creator lands in the same register. The presets seed the existing free-text stage voice: the
 // privacy settings shape is defined in the Engine's shared schema and cannot gain a field here.

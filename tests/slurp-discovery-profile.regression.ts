@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import {
   normalizeSlurpDiscoveryTags,
   slurpDiscoveryFields,
@@ -7,6 +6,7 @@ import {
   slurpGeneratedDiscoveryProfileSchema,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-discovery-profile";
 import { normalizeNoodlerStageProfileDraft } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-stage-profile-normalize";
+import { slurp2Source } from "./slurp2-source";
 
 assert.deepEqual(slurpDiscoveryFields(undefined), { gender: null, tags: [] });
 assert.deepEqual(slurpDiscoveryFields({ gender: "unknown", tags: ["art"] }), { gender: null, tags: ["art"] });
@@ -53,10 +53,7 @@ const restored = slurpDiscoveryFields(
 assert.equal(restored.gender, "other");
 assert.deepEqual(restored.tags, ["art", "roleplay"], "metadata survives a backup-style JSON round trip");
 
-const storage = readFileSync(
-  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
-  "utf8",
-);
+const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 assert.match(storage, /const discovery = slurpDiscoveryFields\(rawProfile\)/u);
 assert.match(storage, /gender: stageProfile\.gender,[\s\S]*tags: stageProfile\.tags/u);
 

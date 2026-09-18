@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { resetSlurpBackupState } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-backup-state";
 import { tryNoodlerAccountOperation } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-account-operation-lock";
@@ -9,9 +8,10 @@ import {
   tryNoodleOperation,
   trySlurpDataDeletion,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-operation-lock";
+import { slurp2Source } from "./slurp2-source";
 
 const root = join(import.meta.dirname, "..");
-const read = (path: string) => readFileSync(join(root, path), "utf8");
+const read = (path: string) => slurp2Source(join(root, path));
 const client = "packages/slurp2/src/engine/packages/client/src";
 const server = "packages/slurp2/src/engine/packages/server/src";
 

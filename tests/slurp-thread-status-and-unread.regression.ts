@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 
 import { slurpCreatorStatus } from "../packages/slurp2/src/engine/packages/client/src/components/slurp/slurp-creator-status.js";
+import { slurp2Source } from "./slurp2-source";
 
-const read = (path: string) => readFileSync(path, "utf8");
+const read = (path: string) => slurp2Source(path);
 const messagesStorage = read(
   "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
 );

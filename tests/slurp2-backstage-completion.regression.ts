@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { slurp2Source } from "./slurp2-source";
 
 const root = process.cwd();
 const component = (name: string) =>
-  readFileSync(join(root, "packages/slurp2/src/engine/packages/client/src/components/slurp", name), "utf8");
+  slurp2Source(join(root, "packages/slurp2/src/engine/packages/client/src/components/slurp", name));
 
 const settings = component("SlurpSettings.tsx");
 const automation = component("SlurpBackstageAutomation.tsx");

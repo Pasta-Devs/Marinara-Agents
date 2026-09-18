@@ -5,6 +5,7 @@ import {
   repairSlurpStageProfileDraft,
   SLURP_STAGE_PROFILE_LIMITS,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-stage-profile-repair.ts";
+import { slurp2Source } from "./slurp2-source";
 
 const allowed = ["flirty", "playful", "dominant", "lingerie", "roleplay", "art"];
 const base = { displayName: "Vee Velvet", handle: "@vee velvet", bio: "Hi.", stagePersonality: "Warm." };
@@ -55,7 +56,7 @@ const root = "packages/slurp2/src/engine/packages/server/src/";
 const service = readFileSync(`${root}services/slurp/slurp-stage-profile-draft.service.ts`, "utf8");
 assert.match(service, /jsonrepair\(/u);
 assert.match(service, /Length limits: displayName at most/u);
-const routes = readFileSync(`${root}routes/slurp.routes.ts`, "utf8");
+const routes = slurp2Source(`${root}routes/slurp.routes.ts`);
 assert.match(routes, /sourceSnapshot: _draftSnapshot,[\s\S]*?\.\.\.generatedProfile/u);
 assert.match(routes, /safeParse\(\{ stageProfile: generatedProfile \}\)/u);
 

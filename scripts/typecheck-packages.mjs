@@ -11,13 +11,17 @@
  * of the merged tree is not clean today, so a narrow, honest check that runs beats a broad
  * one that gets switched off.
  *
- * ponytail: TS2304/TS2552 only. Widen the code list once the merged tree typechecks.
+ * It also reports TS2307 for relative imports, so a moved or deleted package file cannot leave a
+ * dangling import behind.
+ *
+ * ponytail: TS2304/TS2552 plus relative TS2307 only. Bare specifiers are skipped because the
+ * overlay installs no dependencies; widen once the merged tree typechecks against an Engine.
  */
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -26,6 +30,21 @@ const tsc = join(repoRoot, "node_modules/.bin/tsc");
 // Node globals resolve through @types/node, which the merged tree does not install.
 const IGNORED_NAMES = new Set(["setImmediate", "clearImmediate", "NodeJS"]);
 const CODES = /error (TS2304|TS2552): Cannot find name '([^']+)'/;
+const MISSING_MODULE = /^(.+?)\(\d+,\d+\): error TS2307: Cannot find module '(\.{1,2}\/[^']+)'/;
+// Engine host files the bundler resolves from the real Engine checkout; sources/engine omits them.
+const ENGINE_HOST_MODULES = new Set([
+  "packages/client/src/components/chat/chat-area.types",
+  "packages/client/src/hooks/use-gallery",
+  "packages/client/src/lib/agent-failures",
+  "packages/server/src/db/connection",
+  "packages/server/src/services/prompt-overrides/types",
+]);
+const isReportedMissingModule = (line) => {
+  const match = MISSING_MODULE.exec(line);
+  if (!match) return false;
+  const target = posix.join(dirname(match[1]), match[2]).replace(/\.js$/, "");
+  return !ENGINE_HOST_MODULES.has(target);
+};
 
 const packages = process.argv.slice(2);
 if (packages.length === 0) packages.push("slurp2");
@@ -70,15 +89,17 @@ for (const id of packages) {
       output = `${error.stdout ?? ""}${error.stderr ?? ""}`;
     }
 
-    const found = [...new Set(output.split("\n").filter((line) => CODES.test(line)))].filter(
-      (line) => !IGNORED_NAMES.has(CODES.exec(line)[2]),
-    );
+    const lines = [...new Set(output.split("\n"))];
+    const found = [
+      ...lines.filter((line) => CODES.test(line) && !IGNORED_NAMES.has(CODES.exec(line)[2])),
+      ...lines.filter(isReportedMissingModule),
+    ];
     if (found.length > 0) {
       failed = true;
-      console.error(`${id}: ${found.length} undefined name(s)`);
+      console.error(`${id}: ${found.length} undefined name(s) or unresolved module(s)`);
       for (const line of found) console.error(`  ${line}`);
     } else {
-      console.log(`${id}: no undefined names`);
+      console.log(`${id}: no undefined names or unresolved modules`);
     }
   } finally {
     await rm(overlay, { recursive: true, force: true });

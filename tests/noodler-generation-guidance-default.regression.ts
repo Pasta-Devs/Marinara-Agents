@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
+import { slurp2Source } from "./slurp2-source";
 
 // The shipped NoodleR generation guidance is the whole tone contract: it is the only place the
 // adult-first balance is stated, it is duplicated in the client so settings can show "Default",
@@ -9,11 +10,8 @@ import { slurp2BackstageSource } from "./slurp2-backstage-source";
 // the feature ships a tone the README and onboarding deny. noodle.storage.ts cannot be imported
 // outside an Engine checkout (it resolves ../../db/file-query.js), so this reads the source.
 
-const storage = readFileSync(
-  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
-  "utf8",
-);
-const home = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
+const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
+const home = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
 const settings = slurp2BackstageSource();
 const readme = readFileSync("packages/slurp/README.md", "utf8");
 const enLocale = readFileSync("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json", "utf8");

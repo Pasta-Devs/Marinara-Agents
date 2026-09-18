@@ -1,5 +1,10 @@
 # Slurp Remastered release notes
 
+## 0.0.24 — 2026-09-18
+
+- No visible changes. Internal groundwork for a cleaner source layout, with stricter build checks.
+- Removed unused custom-emoji code.
+
 ## 0.0.22 — 2026-09-17
 
 - Invite Engine characters to the Slurp audience from character groups or per-character controls.

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { slurp2Source } from "./slurp2-source";
 
 // slurp-images.service.ts cannot be imported here: it pulls in the database and the LLM providers,
 // and @marinara-engine/shared is not installed in this repository. These are source assertions on
@@ -9,7 +10,7 @@ import { join } from "node:path";
 const root = join(import.meta.dirname, "..");
 const server = "packages/slurp2/src/engine/packages/server/src";
 const images = readFileSync(join(root, server, "services/slurp/slurp-images.service.ts"), "utf8");
-const routes = readFileSync(join(root, server, "routes/slurp.routes.ts"), "utf8");
+const routes = slurp2Source(join(root, server, "routes/slurp.routes.ts"));
 const rewrite = readFileSync(join(root, server, "services/slurp/slurp-image-prompt-rewrite.ts"), "utf8");
 
 // --- the rewriter is fed the draft, not the rendered template -----------------------------------

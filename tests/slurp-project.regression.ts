@@ -22,6 +22,7 @@ import {
   slurpProjectTick,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-project.js";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
+import { slurp2Source } from "./slurp2-source";
 
 const at = new Date("2026-09-09T10:00:00.000Z");
 const daysLater = (days: number) => new Date(at.getTime() + days * 86_400_000);
@@ -118,7 +119,7 @@ assert.equal(slurpArcLifeLine([move]), "Moving house (deciding to move)");
   const dm = readFileSync(join(serverRoot, "slurp/slurp-message-generation.service.ts"), "utf8");
   // Gated by the setting, and protected: an arc title can name a Secret Creator's real city.
   assert.match(dm, /settings\.arcAffectsMood\s+\? \(protectNoodlerGeneratedIdentity\(\s+slurpArcLifeLine/u);
-  const store = readFileSync(join(serverRoot, "storage/slurp.storage.ts"), "utf8");
+  const store = slurp2Source(join(serverRoot, "storage/slurp.storage.ts"));
   assert.match(store, /"arc_complete"/u);
   assert.match(store, /await this\.recordArcChange\(creatorAccountId, current, next\)/u);
 }
@@ -220,7 +221,7 @@ assert.equal(slurpProjectsKey("creator-a"), "slurp2.creator.creator-a.projects")
 
 // ── Posts carry the project they were published into ────────────────────────
 const root = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src");
-const read = (path: string) => readFileSync(join(root, path), "utf8");
+const read = (path: string) => slurp2Source(join(root, path));
 
 const schema = read("db/schema/slurp.ts");
 assert.match(schema, /projectId: text\("project_id"\)/u);
@@ -328,7 +329,7 @@ assert.match(routes, /if \(!\(await noodle\.getProject\(creator\.id, projectId\)
 
 // ── Studio panel ────────────────────────────────────────────────────────────
 const clientRoot = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/client/src");
-const readClient = (path: string) => readFileSync(join(clientRoot, path), "utf8");
+const readClient = (path: string) => slurp2Source(join(clientRoot, path));
 const panel = readClient("components/slurp/SlurpProjectsPanel.tsx");
 // Read down and edit the dull ones. A review queue would be unusable at thirty Creators.
 assert.match(panel, /useSlurpProjects/u);

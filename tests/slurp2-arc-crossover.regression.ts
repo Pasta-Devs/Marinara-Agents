@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 
 import {
   makeSlurpProject,
@@ -19,6 +18,7 @@ import {
   slurpProjectInstruction,
   slurpProjectRecord,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-project.js";
+import { slurp2Source } from "./slurp2-source";
 
 const at = new Date("2026-09-13T10:00:00.000Z");
 const DAY = 86_400_000;
@@ -147,9 +147,8 @@ const instruction = slurpProjectInstruction({
   partners: ["Bee Stage"],
 });
 assert.match(instruction, /shared story with Bee Stage/);
-const storage = readFileSync(
+const storage = slurp2Source(
   new URL("../packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts", import.meta.url),
-  "utf8",
 );
 assert.match(storage, /names\.push\(account\.displayName\)/, "partner names come from the Slurp account");
 assert.match(storage, /await this\.leaveCrossovers\(id\)/, "deleting a Creator leaves its crossovers");
@@ -164,9 +163,8 @@ const forViewer = slurpCrossoverForViewer(withPosts, "a", (id) => id !== "b");
 assert.deepEqual(forViewer.partnerIds, ["c"]);
 assert.deepEqual(forViewer.history[0]!.postIds, ["post-a"]);
 assert.equal(JSON.stringify(forViewer).includes('"b"'), false, "nothing names the hidden participant");
-const routes = readFileSync(
+const routes = slurp2Source(
   new URL("../packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", import.meta.url),
-  "utf8",
 );
 assert.match(routes, /slurpCrossoverForViewer\(project, creator\.id, visible\)/);
 

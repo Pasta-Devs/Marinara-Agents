@@ -9,6 +9,7 @@ import {
   slurpPostReplyCount,
   slurpPostUnlockCount,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-reach.js";
+import { slurp2Source } from "./slurp2-source";
 
 const born = "2026-01-01T00:00:00.000Z";
 const day = (n: number) => new Date(Date.parse(born) + n * 86_400_000);
@@ -118,9 +119,8 @@ for (const postId of ["post-c", "post-d", "post-e", "post-f"]) {
 // Two halves, both exact: the personas on this install pay through subscription rows, and the
 // generated audience pays through the funnel, because an audience member is not a viewer and holds
 // no wallet. Neither half is reach.
-const routes = readFileSync(
+const routes = slurp2Source(
   join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts"),
-  "utf8",
 );
 assert.match(
   routes,

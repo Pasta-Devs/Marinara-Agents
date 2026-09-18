@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import {
   SLURP_DEFAULT_CREATOR_MESSAGING,
   readSlurpCreatorMessaging,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-messaging.js";
+import { slurp2Source } from "./slurp2-source";
 
-const read = (path: string) => readFileSync(path, "utf8");
+const read = (path: string) => slurp2Source(path);
 const server = "packages/slurp2/src/engine/packages/server/src/";
 
 // 6.1 — every payment gets a reaction, and only automatic Creators react.

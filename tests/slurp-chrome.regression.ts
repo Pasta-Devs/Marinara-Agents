@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { slurp2Source } from "./slurp2-source";
 
 const shell = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpShell.tsx", "utf8");
 
@@ -50,7 +51,7 @@ assert.match(
 );
 assert.match(shell, /linkedNoodleAccountIds\?\.has\(personaAccount\.id\)/u);
 
-const home = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
+const home = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
 assert.match(home, /creatorIdentity: viewerActorAccount,/u);
 assert.match(home, /personaAccount: shellPersonaAccount,/u, "the persona account must stay the persona's own");
 

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { slurp2Source } from "./slurp2-source";
 
 const card = readFileSync("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-share-card.ts", "utf8");
 // Every field on the card is user- or model-authored, so it reaches the SVG untrusted. One
@@ -12,7 +13,7 @@ assert.match(card, /escapeXml\(line\)/u, "wrapped title and body lines must be e
 // No sharp means no card, never a broken download.
 assert.match(card, /if \(!sharp\) return null;/u);
 
-const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
+const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
 const shareRoute = routes.slice(
   routes.indexOf('"/noodler/posts/:id/share-card"'),
   routes.indexOf('app.post("/noodler/posts/:id/interactions"'),

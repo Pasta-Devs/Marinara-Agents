@@ -6,6 +6,7 @@ import {
   slurpPollBackoffMs,
   SLURP_POLL_BACKOFF_MAX_MS,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-poll-backoff.js";
+import { slurp2Source } from "./slurp2-source";
 
 // A healthy poll keeps its normal cadence; a connection that keeps failing is retried
 // exponentially slower instead of once a minute forever, and never slower than the cap.
@@ -19,9 +20,8 @@ const root = join(import.meta.dirname, "..");
 const read = (path: string) =>
   readFileSync(join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp", path), "utf8");
 
-const storage = readFileSync(
+const storage = slurp2Source(
   join(root, "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
-  "utf8",
 );
 const autoPost = read("slurp-autopost-scheduler.service.ts");
 assert.match(autoPost, /slurpPollBackoffMs\(POLL_MS, consecutiveFailures\)/);

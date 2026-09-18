@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import {
   SLURP_BACKSTAGE_SECTIONS,
   SLURP_BACKSTAGE_SETTING_PLACEMENT,
   SLURP_LEGACY_SETTINGS_DESTINATION,
 } from "../packages/slurp2/src/engine/packages/client/src/components/slurp/slurp-backstage";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
+import { slurp2Source } from "./slurp2-source";
 
-const read = (path: string) => readFileSync(path, "utf8");
+const read = (path: string) => slurp2Source(path);
 const hooks = read("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts");
 const settingsStart = hooks.indexOf("export type SlurpSettings = {");
 const settingsEnd = hooks.indexOf("\n};", settingsStart);
