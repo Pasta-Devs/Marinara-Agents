@@ -404,7 +404,7 @@ const features = [
   },
   {
     id: "slurp2",
-    version: "0.0.21",
+    version: "0.0.22",
     minEngineVersion: "2.4.5",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp Remastered",
@@ -1714,6 +1714,8 @@ for (const feature of selectedFeatures) {
   const serverSource = resolve(serverSourceRoot, feature.serverImport || feature.engineImport);
   if (!reuseExistingRuntime && existsSync(serverSource)) {
     await bundleServer(feature, serverPath);
+    const bundledServer = await readFile(serverPath, "utf8");
+    await writeFile(serverPath, bundledServer.replace(/[\t ]+$/gmu, ""));
   } else if (!existsSync(serverPath)) {
     throw new Error(`Missing package-owned server source for ${feature.id}`);
   }

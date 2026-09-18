@@ -13,13 +13,14 @@ import { noodleAccountSubscriptions, slurpAudienceTies, slurpPopulation } from "
 import { SLURP_AUDIENCE_ARCS, type SlurpAudienceArc } from "../slurp/slurp-audience-arc.js";
 import {
   generateSlurpPopulationMember,
+  isSlurpPopulationMemberId,
   SLURP_FUNNEL_STAGES,
   SLURP_NAMED_CAST_LIMIT,
+  slurpReactivationStage,
   type SlurpFunnelStage,
   type SlurpPopulationMember,
   type SlurpSpendTier,
 } from "../slurp/slurp-population.js";
-import { slurpReactivationStage } from "../slurp/slurp-population.js";
 import type { SlurpFanType } from "../slurp/slurp-fan-types.js";
 import { slurpAudienceWeeklySpend } from "../slurp/slurp-audience-subscription.js";
 
@@ -150,7 +151,16 @@ export function createSlurpPopulationStorage(db: DB) {
       await db.update(slurpPopulation).set({ fanTypeId }).where(eq(slurpPopulation.id, memberId));
     },
 
+    /**
+     * Mark a member as recently active, so `listAll` keeps drawing whoever actually shows up.
+     *
+     * Only a generated member has a row here. The audience also contains account-backed people —
+     * ambient profiles and invited characters — and every world applier touches its actor without
+     * knowing which kind it is. Their ids match nothing, so the write was a silent no-op UPDATE
+     * against the whole table. Skipping it here fixes all six callers at once.
+     */
     async touch(memberId: string): Promise<void> {
+      if (!isSlurpPopulationMemberId(memberId)) return;
       await db.update(slurpPopulation).set({ lastActiveAt: now() }).where(eq(slurpPopulation.id, memberId));
     },
 

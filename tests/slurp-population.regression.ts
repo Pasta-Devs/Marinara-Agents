@@ -163,7 +163,9 @@ assert.match(world, /tie\.stage === "subscriber"\) continue;/u);
 // a Creator has an audience, and it defaults to false — gating the tick on it left the whole
 // obligation layer dark on a fresh install.
 assert.match(world, /const returning = await population\.listAll\(WORLD_AUDIENCE_POOL\)/u);
-assert.match(world, /const audience = \[\.\.\.awake\.map\(\(member\) => member\.id\), \.\.\.ambient\]/u);
+// The awake population and the ambient roster both reach the audience. Invited characters are
+// appended after them: chosen by hand, so never thinned by the hourly rhythm.
+assert.match(world, /const audience = \[\s*\.\.\.awake\.map\(\(member\) => member\.id\),\s*\.\.\.ambient,/u);
 // An actor is either an ambient account row or a population member with no row at all. Resolving
 // only accounts silently dropped every population action.
 assert.match(world, /async function resolveActor/u);
@@ -174,7 +176,9 @@ assert.match(world, /createSlurpPopulationStorage\(db\)\.get\(actorAccountId\)/u
 assert.match(world, /population\.touch\(actor\.id\)/u);
 assert.match(world, /const pool = \[\s*\.\.\.new Map\(\[\.\.\.dailyNewcomers, \.\.\.returning, \.\.\.newcomers\]/u);
 const fanRun = read("services/slurp/slurp-fan-activity.operation.ts");
-assert.match(fanRun, /cast\.map\(\(member\) => population\.touch\(member\.id\)/u);
+// Only population members are touched. `lastActiveAt` lives on the population row, so touching a
+// character fan's account id would update nothing.
+assert.match(fanRun, /populationCast\.map\(\(member\) => population\.touch\(member\.id\)/u);
 
 // Fan activity is the highest-volume thing the audience does, and it fed nothing into the funnel:
 // follower counts barely moved from the very people who were most active.

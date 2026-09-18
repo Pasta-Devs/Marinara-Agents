@@ -311,6 +311,26 @@ export function slurpPickFanType(types: readonly SlurpFanType[], seed: string): 
   return pool[pool.length - 1]!;
 }
 
+/**
+ * The Fan Type for somebody who has no population row: the pinned one, else derived from a seed.
+ *
+ * An audience member who is an account rather than a generated member — an ambient profile, or a
+ * character the user invited — carries no `fanTypeId`, so `slurpResolveFanType` has nothing to read.
+ * Both the world tick and the fan-activity draw need the same answer for the same member, or the
+ * weights the simulation runs on would disagree with the voice the prompt describes.
+ *
+ * A pinned type that has been deleted or disabled falls through to the seed rather than failing, so
+ * removing a Fan Type never strands a member.
+ */
+export function slurpFanTypeForPinnedOrSeed(
+  types: readonly SlurpFanType[],
+  pinnedId: string | null,
+  seed: string,
+): SlurpFanType {
+  const pinned = pinnedId ? types.find((type) => type.id === pinnedId && type.enabled) : undefined;
+  return pinned ?? slurpPickFanType(types, seed);
+}
+
 /** A whole-coin value inside a range, deterministic in the seed. */
 function inRange([low, high]: readonly [number, number], seed: string, salt: string): number {
   if (high <= low) return low;

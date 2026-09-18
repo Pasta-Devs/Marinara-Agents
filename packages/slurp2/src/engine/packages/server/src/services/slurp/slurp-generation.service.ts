@@ -559,7 +559,9 @@ export async function generateNoodlerPost(
   // One sequence for both rotations, so the project and the variation cannot drift out of step.
   const sequence = await noodle.countNoodlerPostsByAccount(account.id);
   const directed = Boolean(input.request.noodlerPostGuide?.trim());
-  const variation = directed ? null : slurpPostVariation(account.id, sequence, settings.storyRate);
+  const variation = directed
+    ? null
+    : slurpPostVariation(account.id, sequence, settings.storyImagesEnabled ? settings.storyRate : "off");
   // A project claims this post only if the rotation gives it one. Player direction stands both
   // rotations down for the same reason: their direction is the subject, and a second one fights it.
   const project = directed
@@ -717,7 +719,9 @@ export async function generateNoodlerPost(
   // ordinary post instead. The flag is only honoured on the path that commits an image below.
   // A Story the player asked for outranks the rotation, which never fires on a directed post.
   const storyVariation =
-    ((input.allowStory !== false && variation?.story === true) || input.request.postType === "story") && imagesEnabled;
+    ((input.allowStory !== false && variation?.story === true && settings.storyImagesEnabled) ||
+      input.request.postType === "story") &&
+    imagesEnabled;
 
   // Identity protection applies to the image prompt too, not only post text. The arc's chapter line
   // joins the prompt before protection, so a chapter naming a real place is redacted the same way.

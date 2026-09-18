@@ -33,7 +33,13 @@ import { parseGameJsonish } from "../game/jsonish.js";
 import { requireModelAnswer } from "./slurp-model-answer.js";
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { resolveSlurpTextConnection } from "./slurp-connection.js";
-import { slurpFanMemoryForPrompt, slurpFanVoiceForPrompt, slurpResolveFanType } from "./slurp-fan-types.js";
+import {
+  SLURP_FAN_VOICE_PROMPT_MAX,
+  slurpFanMemoryForPrompt,
+  slurpFanVoiceForPrompt,
+  slurpResolveFanType,
+} from "./slurp-fan-types.js";
+import { resolveSlurpCharacterFanVoice } from "./slurp-source-resolve.js";
 import { NOODLER_UNTRUSTED_CONTENT_INSTRUCTION } from "./slurp-generation.service.js";
 import type { APIProvider } from "@marinara-engine/shared";
 import {
@@ -288,10 +294,17 @@ export async function drainSlurpPendingText(
       const tie = actorId
         ? (await population.listTiesForCreator(creator.id).catch(() => [])).find((entry) => entry.memberId === actorId)
         : undefined;
-      const speaker =
-        member?.displayName ??
-        (actorId ? (await noodle.getNoodlerAccountById(actorId))?.displayName : null) ??
-        "a reader";
+      // Read once: the account supplies both the fallback display name and, for an invited
+      // character, the entity id that leads back to its card.
+      const actorAccount = actorId && !member ? await noodle.getNoodlerAccountById(actorId) : null;
+      const speaker = member?.displayName ?? actorAccount?.displayName ?? "a reader";
+      // An invited character speaks in its own words here too, so a rewritten placeholder matches
+      // the voice the same character uses in comments and direct messages.
+      const characterFanVoice = await resolveSlurpCharacterFanVoice(
+        db,
+        actorAccount?.entityId,
+        SLURP_FAN_VOICE_PROMPT_MAX,
+      ).catch(() => undefined);
       const post = row.postId ? await noodle.getNoodlerPostById(String(row.postId)) : null;
 
       const response = await provider.chatComplete(
@@ -303,8 +316,10 @@ export async function drainSlurpPendingText(
           speakerVoice:
             kind === "delivery"
               ? undefined
-              : slurpFanVoiceForPrompt(slurpResolveFanType(settings.fanTypes, member ?? {}).voice),
-          speakerMemory: kind === "delivery" || !member ? undefined : slurpFanMemoryForPrompt(tie),
+              : (characterFanVoice ??
+                slurpFanVoiceForPrompt(slurpResolveFanType(settings.fanTypes, member ?? {}).voice)),
+          speakerMemory:
+            kind === "delivery" || !(member || characterFanVoice) ? undefined : slurpFanMemoryForPrompt(tie),
           placeholder,
           post: post ? { title: post.title, content: post.content } : null,
           promptBlocks: settings.promptBlocks,

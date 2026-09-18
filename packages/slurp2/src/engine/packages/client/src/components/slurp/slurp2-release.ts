@@ -2,7 +2,7 @@
 // client has no route that serves CHANGELOG.md. So the notes are mirrored here, and
 // `tests/slurp2-release-notes.regression.ts` fails the build if this file drifts from
 // `packages/slurp2/CHANGELOG.md` or from the version in `manifest.json`.
-export const SLURP2_VERSION = "0.0.20";
+export const SLURP2_VERSION = "0.0.22";
 
 export interface Slurp2ReleaseEntry {
   version: string;
@@ -12,6 +12,39 @@ export interface Slurp2ReleaseEntry {
 
 /** Newest first, same order as CHANGELOG.md. */
 export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
+  {
+    version: "0.0.22",
+    date: "2026-09-17",
+    notes: [
+      "Invite Engine characters to the Slurp audience from character groups or per-character controls.",
+      "Audience characters are now available as a first expansion step. The current setup is still limited and needs clearer guidance and simpler controls.",
+      "Invited characters use their own card voice and tags in comments, audience activity, and messages.",
+      "Invited characters can follow, subscribe, spend, hold ties, and appear in fan cards.",
+      "Added a New Chat picker for owned Creators and invited characters.",
+      "Added prompt-cost limits and deterministic character rotation.",
+      "Fixed feed ads, image prompt display, and the configured subscription price.",
+      "Added configurable image Stories and platform-style message actions.",
+      "Added backend groundwork for the next expansion and bug-fix updates, with clearer service boundaries for safer iteration.",
+    ],
+  },
+  {
+    version: "0.0.21",
+    date: "2026-09-17",
+    notes: [
+      "Messages: the composer is shorter on one-line messages and still grows for longer text.",
+      "Messages: away replies use a centered Creator status block with a quiet Get reply now action.",
+      "Messages: sent messages now show separate delivered and seen receipts.",
+      "Messages: mobile headers keep the Creator name visible and move the relationship label into an icon and meter.",
+      "Messages: fixed the transparent mobile header menu with an opaque surface.",
+      "Messages: desktop uses the compact connection switcher.",
+      "Messages: every sent message shows one check when delivered and two when seen.",
+      "Messages: away Creators show a status card with a sleeping animation, not typing dots.",
+      "Creators stay online 5 minutes after replying and 10 after delivering a commission.",
+      "Messages: tier icons are back in the desktop header; tap one to see the full tier scale.",
+      "Messages: Back returns to the profile or activity a chat was opened from.",
+      "Fixed see-through menus and pickers.",
+    ],
+  },
   {
     version: "0.0.20",
     date: "2026-09-17",
@@ -198,31 +231,6 @@ export const SLURP2_RELEASES: Slurp2ReleaseEntry[] = [
     notes: [
       "Fixed Create post and Add story doing nothing on a Creator profile with a tip goal set. The goal used to hide the post composer.",
       "Slurp Remastered now shows its color artwork in the Agents browser. The gray artwork is for Slurp Legacy only.",
-    ],
-  },
-  {
-    version: "0.0.2",
-    date: "2026-09-12",
-    notes: [
-      "Added a way to write your own ad in Settings. Give it a brand, a product, ad copy, and a rating, and it joins the pool.",
-      "Fixed feed ads stopping after the first server batch, content-rating limits being dropped, and one odd rating rejecting a whole batch.",
-      "Fixed ad actions paying out for ads that were never served, and restored read tracking on the default Following feed.",
-      "Fixed audience churn, relationship arcs, and subscription billing being starved by the world tick.",
-      "Fixed recent Creator activity being ignored when replies and follow-ups decide whether a Creator is online. Drafts no longer count as activity.",
-      "Stopped backups, restores, and deletion from overlapping world or Creator writes, and persona-operated Creators from speaking on their own.",
-      "Creators no longer write first when you have turned their proactive messages off.",
-      "Corrected the logo and the welcome screen's close control and keyboard focus.",
-      "A restore now says plainly that it overrides your settings.",
-    ],
-  },
-  {
-    version: "0.0.1",
-    date: "2026-09-12",
-    notes: [
-      "First release of the Slurp remaster as its own package. It installs beside Slurp Legacy and keeps its own separate data.",
-      "Added direct messages, scheduled follow-ups, commissions, an audience funnel, and creator earnings kept apart from spending money.",
-      "Added a backup export and restore. A Slurp Legacy backup can be restored here, which is how you move your data across.",
-      "Added a welcome screen. It appears after the install and after every update, warns that this is alpha software, and lists what changed.",
     ],
   },
 ];

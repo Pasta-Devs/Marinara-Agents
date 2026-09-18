@@ -1,0 +1,28 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+async function main() {
+  const route = await readFile(
+    new URL("../packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts", import.meta.url),
+    "utf8",
+  );
+  const panel = await readFile(
+    new URL("../packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    route,
+    /if \(!isDebugAgentsEnabled\(\)\) return reply\.code\(404\)\.send\(\{ error: "Not Found", code: "debug_disabled" \}\)/u,
+  );
+  assert.match(route, /return reply\.code\(409\)\.send\(\{ error: "No text connection is configured\." \}\)/u);
+  assert.match(panel, /promptDebugDisabled/u);
+  assert.match(panel, /promptNoConnection/u);
+  assert.match(panel, /promptUnauthorized/u);
+  assert.match(panel, /promptNotFound/u);
+  assert.match(panel, /getSlurpPromptErrorKind\(query\.error\)/u);
+
+  console.log("slurp2 prompt error classification regression: ok");
+}
+
+void main();

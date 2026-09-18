@@ -5,7 +5,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import { api } from "../lib/api-client";
+import { api, ApiError } from "../lib/api-client";
 import type { SlurpSimulationTuning } from "../../../server/src/services/slurp/slurp-tuning.js";
 import type { SlurpFanType } from "../../../server/src/services/slurp/slurp-fan-types.js";
 import type { SlurpPlatformEvent } from "../../../server/src/services/slurp/slurp-platform-events.js";
@@ -353,6 +353,8 @@ export type SlurpSettings = {
   imageWidth: number;
   imageHeight: number;
   storyRate: "off" | "rare" | "regular" | "often";
+  storyImagesEnabled: boolean;
+  storyLifetimeHours: number;
   teaserRate: "off" | "rare" | "regular" | "often";
   projectRate: "off" | "rare" | "regular" | "often";
   arcPace: "slow" | "normal" | "fast";
@@ -395,6 +397,12 @@ export type SlurpSettings = {
   participantMin: number;
   participantMax: number;
   invitedCharacterGroupIds: string[];
+  /** Characters the user put in the audience. Value is a Fan Type id, or true to derive one. */
+  audienceCharacters: Record<string, string | boolean>;
+  /** Character groups whose members join the audience. Per-character entries win. */
+  audienceCharacterGroupIds: string[];
+  /** Most character fans that may act at once. Each one costs prompt space in every fan run. */
+  audienceCharacterLimit: number;
   carryoverModes: Array<"conversation" | "roleplay" | "game">;
   carryoverHours: number;
   carryoverMaxItems: number;
@@ -1812,6 +1820,45 @@ export function useSlurpAudienceMember(memberId: string | null, creatorAccountId
   });
 }
 
+export type SlurpAudienceCharacterSummary = {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  avatarCrop: unknown;
+  conversationStatus?: string;
+};
+
+export type SlurpAudienceCharacterGroup = {
+  id: string;
+  name: string;
+  characterIds: string[];
+};
+
+export function useSlurpAudienceCharacters() {
+  return useInfiniteQuery({
+    queryKey: ["slurp", "audience", "characters"],
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) =>
+      api.get<{
+        characters: SlurpAudienceCharacterSummary[];
+        limit: number;
+        offset: number;
+        hasMore: boolean;
+      }>(`/slurp2/settings/audience-characters?limit=30&offset=${pageParam}`),
+    getNextPageParam: (page) => (page.hasMore ? page.offset + page.characters.length : undefined),
+    staleTime: 60_000,
+  });
+}
+
+export function useSlurpAudienceCharacterGroups(enabled = true) {
+  return useQuery({
+    queryKey: ["slurp", "audience", "character-groups"],
+    queryFn: () => api.get<{ groups: SlurpAudienceCharacterGroup[] }>("/slurp2/settings/audience-characters/groups"),
+    enabled,
+    staleTime: 5 * 60_000,
+  });
+}
+
 export function useNoodlerSubscribers(accountId: string | null) {
   return useInfiniteQuery({
     queryKey: noodleKeys.noodlerSubscribers(accountId ?? "none"),
@@ -3053,6 +3100,26 @@ export type SlurpPromptDebug = {
   prompt: Array<{ role: string; content: string }>;
 };
 
+export type SlurpPromptErrorKind = "disabled" | "connection" | "unauthorized" | "not-found" | "generic";
+
+export function getSlurpPromptErrorKind(error: unknown): SlurpPromptErrorKind {
+  if (error instanceof ApiError) {
+    if (
+      error.status === 404 &&
+      typeof error.payload === "object" &&
+      error.payload !== null &&
+      "code" in error.payload &&
+      error.payload.code === "debug_disabled"
+    ) {
+      return "disabled";
+    }
+    if (error.status === 409) return "connection";
+    if (error.status === 401 || error.status === 403) return "unauthorized";
+    if (error.status === 404) return "not-found";
+  }
+  return "generic";
+}
+
 const messageKeys = {
   /** Every messaging query hangs off this, so one prefix invalidates the whole surface. */
   root: () => [...noodleKeys.noodlerRoot(), "messages"],
@@ -3102,6 +3169,37 @@ export function useSlurpThreads(personaId: string | null) {
     // so the whole off-hours pacing model was invisible while the app was open.
     refetchInterval: personaId ? 30_000 : false,
     refetchIntervalInBackground: false,
+  });
+}
+
+export type SlurpComposeTarget = {
+  id: string;
+  kind: "creator" | "character";
+  displayName: string;
+  handle: string;
+  avatarUrl: string | null;
+  threadId: string | null;
+  creatorAccountId: string | null;
+};
+
+export function useSlurpComposeTargets(personaId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: [...messageKeys.root(), "compose-targets", personaId ?? "none"],
+    queryFn: () =>
+      api.get<{ targets: SlurpComposeTarget[] }>(
+        `/slurp2/messages/compose-targets?personaId=${encodeURIComponent(personaId!)}`,
+      ),
+    enabled: Boolean(personaId) && enabled,
+    staleTime: 30_000,
+  });
+}
+
+export function useOpenSlurpCreatorThread() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { personaId: string; creatorAccountId: string; viewerAccountId: string }) =>
+      api.post<{ thread: SlurpThread }>("/slurp2/messages/compose", input),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
   });
 }
 
@@ -3210,6 +3308,33 @@ export function useSendSlurpMessage() {
   });
 }
 
+export function useSlurpCheatDirective() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { personaId: string; creatorAccountId: string; directive: string }) =>
+      api.post<{
+        status: "accepted";
+        kind:
+          | "guidance"
+          | "coins"
+          | "force_creator_photo"
+          | "force_ppv"
+          | "mood"
+          | "rapport"
+          | "availability"
+          | "help"
+          | "follow_up";
+        coins?: number;
+        amount?: number;
+        minutes?: number;
+        help?: string[];
+        reply?: SlurpMessage | null;
+        replyStatus?: string;
+      }>("/slurp2/messages/cheat", input),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
+  });
+}
+
 /** Answer a queued conversation now. The server still applies every guard a normal send does. */
 export function useForceSlurpReply() {
   const queryClient = useQueryClient();
@@ -3218,6 +3343,18 @@ export function useForceSlurpReply() {
       api.post<Omit<SlurpSendResponse, "message" | "tipError">>(
         `/slurp2/messages/threads/${encodeURIComponent(input.threadId)}/force-reply`,
         { personaId: input.personaId },
+      ),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
+  });
+}
+
+export function useRequestSlurpReply() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { threadId: string; personaId: string; guidance?: string }) =>
+      api.post<{ reply: SlurpMessage | null; replyStatus: string; typingMs?: number }>(
+        `/slurp2/messages/threads/${encodeURIComponent(input.threadId)}/request-reply`,
+        input,
       ),
     onSuccess: () => invalidateSlurpMessages(queryClient),
   });

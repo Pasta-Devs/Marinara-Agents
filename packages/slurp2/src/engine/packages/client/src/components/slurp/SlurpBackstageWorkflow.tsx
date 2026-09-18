@@ -1619,7 +1619,7 @@ export function CreatorMessagingGroup({
           value={messaging.unlockPrice ?? 0}
           min={0}
           max={9999}
-          onSave={(value) => patch({ creatorAccountId: creatorId, personaId, unlockPrice: value || null })}
+          onSave={(value) => patch({ creatorAccountId: creatorId, personaId, unlockPrice: value ?? null })}
         />
       </Field>
       <Field

@@ -30,9 +30,11 @@ import { tryNoodleOperation } from "./slurp-operation-lock.js";
 import { readSlurpAudienceTone } from "./slurp-tone.js";
 import { slurpCapTickEvents, slurpRhythmMultiplier } from "./slurp-tuning.js";
 import { slurpCreatorReach } from "./slurp-reach.js";
-import { slurpMembersActiveAt } from "./slurp-population.js";
+import { selectSlurpAudienceCharacterIds, slurpAudienceCharacterFanTypeId } from "./slurp-audience-characters.js";
+import { isSlurpPopulationMemberId, slurpMembersActiveAt } from "./slurp-population.js";
 import {
   slurpFanTypeCommissionBudget,
+  slurpFanTypeForPinnedOrSeed,
   slurpFanTypeSpendTier,
   slurpFanTypeWeeklyBudget,
   slurpPickFanType,
@@ -218,6 +220,12 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       );
       const allAccounts = await noodle.listAccounts();
 
+      // Provision character accounts invited to the audience, plus their current handle and avatar.
+      // Without this, a character added since the last tick has no row and cannot hold threads or a
+      // wallet, and a renamed character would keep the stale snapshot forever.
+      await noodle.ensureAudienceCharacterAccounts().catch(() => undefined);
+      const invitedCharacters = await noodle.listAudienceCharacterAccounts().catch(() => []);
+
       // The generated population, plus the ambient roster when it is switched on.
       //
       // The population is not gated by `allowRandomUsers`. That setting governs whether ambient
@@ -251,7 +259,28 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
         ...new Map([...dailyNewcomers, ...returning, ...newcomers].map((member) => [member.id, member])).values(),
       ];
       const awake = slurpMembersActiveAt(pool, until.getUTCHours(), WORLD_AUDIENCE_POOL);
-      const audience = [...awake.map((member) => member.id), ...ambient];
+      // Every invited character's account id to the Fan Type the user pinned, whether or not they
+      // act this tick. The funnel and the money read this: a character who subscribed on a day they
+      // were drawn must still be billed and still be able to lapse on a day they are not, or a
+      // subscription would run forever unpaid.
+      const characterFanPinnedTypeIds = new Map(
+        invitedCharacters.map(
+          (entry) => [entry.account.id, slurpAudienceCharacterFanTypeId(settings, entry.characterId)] as const,
+        ),
+      );
+      // Who acts. `audienceCharacterLimit` is a prompt-cost bound, so it decides who speaks this
+      // tick, not who holds a relationship. Invited characters are people the user chose by hand,
+      // so they are not thinned by the hourly rhythm — and `allowRandomUsers` does not hide them
+      // either, since that switch governs the six shipped ambient profiles.
+      const actingCharacterFanIds = selectSlurpAudienceCharacterIds(
+        invitedCharacters.map((entry) => entry.characterId),
+        settings.audienceCharacterLimit ?? 0,
+        `world:${localDayKey(until)}`,
+      ).flatMap((characterId) => {
+        const account = invitedCharacters.find((entry) => entry.characterId === characterId)?.account;
+        return account ? [account.id] : [];
+      });
+      const audience = [...awake.map((member) => member.id), ...ambient, ...actingCharacterFanIds];
       // What each actor's Fan Type makes them do. Ambient accounts have no row, so they read as the
       // fallback type rather than dropping out of the weighting entirely.
       const actorWeights = new Map(
@@ -259,7 +288,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
           const member = pool.find((entry) => entry.id === id);
           const type = member
             ? slurpResolveFanType(settings.fanTypes, member)
-            : slurpPickFanType(settings.fanTypes, id);
+            : slurpFanTypeForPinnedOrSeed(settings.fanTypes, characterFanPinnedTypeIds.get(id) ?? null, id);
           const weeklyBudget = slurpFanTypeWeeklyBudget(type, id);
           return [
             id,
@@ -410,6 +439,37 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       // already settles. Only a first subscribe and a lapse are notified — a renewal every week from
       // every subscriber is the flood the readable-handful rule exists to prevent.
       const ambientSet = new Set(ambientIds);
+      /**
+       * The Fan Type that decides whether this member pays, or null for somebody who never can.
+       *
+       * Three kinds of audience member reach this, and they differ in where the type comes from:
+       *
+       * - A generated member has a population row, so the row's own type is authoritative.
+       * - An invited character has no row, but the user chose it by hand. It pays on its pinned
+       *   type, or one derived from its id, and `ambientCanPay` does not gate it. Reading null here
+       *   was the bug that let an invited character follow a Creator but never subscribe.
+       * - An ambient profile has no row either, and is gated: switched off it reads as somebody with
+       *   no budget, which never subscribes and lets an already-paid one lapse.
+       *
+       * Anybody else — a stale tie whose member is gone — reads null and is skipped.
+       */
+      const payingFanTypeFor = async (memberId: string): Promise<SlurpFanType | null> => {
+        // Only a generated member has a row, so anybody else skips the read rather than paying for
+        // a query that can only return null.
+        if (isSlurpPopulationMemberId(memberId)) {
+          const member = await population.get(memberId).catch(() => null);
+          if (member) return slurpResolveFanType(settings.fanTypes, member);
+        }
+        if (characterFanPinnedTypeIds.has(memberId)) {
+          return slurpFanTypeForPinnedOrSeed(
+            settings.fanTypes,
+            characterFanPinnedTypeIds.get(memberId) ?? null,
+            memberId,
+          );
+        }
+        if (!ambientSet.has(memberId)) return null;
+        return tuning.funnel.ambientCanPay ? slurpPickFanType(settings.fanTypes, memberId) : null;
+      };
       /** Resolved once per distinct member per tick: the Fan Type is what decides money now. */
       const fanTypeFor = new Map<string, SlurpFanType | null>();
       for (const account of accounts) {
@@ -419,21 +479,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
           const paidThrough = tie.paidThroughAt ? Date.parse(tie.paidThroughAt) : Number.NaN;
           if (Number.isFinite(paidThrough) ? until.getTime() < paidThrough : tie.stage !== "follower") continue;
           if (!fanTypeFor.has(tie.memberId)) {
-            const member = await population.get(tie.memberId).catch(() => null);
-            fanTypeFor.set(
-              tie.memberId,
-              member
-                ? slurpResolveFanType(settings.fanTypes, member)
-                : !ambientSet.has(tie.memberId)
-                  ? null
-                  : // An ambient account has no population row. It is mapped onto a Fan Type by id,
-                    // the same weighted draw a member gets, rather than onto a tier the id happened
-                    // to hash to. Switched off, it reads as somebody with no budget, which never
-                    // subscribes and lets an already-paid one lapse.
-                    tuning.funnel.ambientCanPay
-                    ? slurpPickFanType(settings.fanTypes, tie.memberId)
-                    : null,
-            );
+            fanTypeFor.set(tie.memberId, await payingFanTypeFor(tie.memberId));
           }
           const fanType = fanTypeFor.get(tie.memberId);
           if (!fanType) continue;
@@ -521,10 +567,18 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
         const quotedFor = (until.getTime() - Date.parse(commission.updatedAt)) / 86_400_000;
         if (!Number.isFinite(quotedFor) || quotedFor < 1) continue;
         const member = await population.get(commission.viewerAccountId).catch(() => null);
-        if (!member) continue;
+        const invitedCharacter = invitedCharacters.find((entry) => entry.account.id === commission.viewerAccountId);
+        if (!member && !invitedCharacter) continue;
         // Cheap work is taken, expensive work is haggled away. The appetite is the Fan Type's
         // `spend.commissionBudget` now, so raising it is a setting rather than a patched constant.
-        const budget = slurpFanTypeCommissionBudget(slurpResolveFanType(settings.fanTypes, member), member.id);
+        const fanType = member
+          ? slurpResolveFanType(settings.fanTypes, member)
+          : slurpFanTypeForPinnedOrSeed(
+              settings.fanTypes,
+              slurpAudienceCharacterFanTypeId(settings, invitedCharacter!.characterId),
+              invitedCharacter!.account.id,
+            );
+        const budget = slurpFanTypeCommissionBudget(fanType, commission.viewerAccountId);
         // A pending offer waits for the Creator. A persona Creator answers it by hand.
         if (commission.counterPrice !== null) continue;
         const answer = slurpFanHaggle({ quote: commission.price, budget, round: commission.haggleRounds });
@@ -617,7 +671,9 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       const landedBy = new Map<string, number>();
       for (const action of pulse) {
         try {
-          if (await applyPulse(db, action, settings.audienceReactionBank, settings.fanTypes)) {
+          if (
+            await applyPulse(db, action, settings.audienceReactionBank, settings.fanTypes, characterFanPinnedTypeIds)
+          ) {
             pulsed += 1;
             const weight = action.kind === "follow" ? 3 : 1;
             landedBy.set(action.creatorAccountId, (landedBy.get(action.creatorAccountId) ?? 0) + weight);
@@ -742,7 +798,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
       let applied = 0;
       for (const action of plan) {
         try {
-          if (await applyAction(db, action, until, noodle, settings.fanTypes)) applied += 1;
+          if (await applyAction(db, action, until, noodle, settings.fanTypes, characterFanPinnedTypeIds)) applied += 1;
         } catch (error) {
           // One failed action must not abandon the rest of the tick, and must never stop the mark
           // being written — otherwise the same stretch of time is replayed on every call.
@@ -771,6 +827,8 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
 async function resolveActor(
   db: DB,
   actorAccountId: string,
+  characterFanPinnedTypeIds: ReadonlyMap<string, string | null>,
+  fanTypes: readonly SlurpFanType[],
 ): Promise<{
   id: string;
   entityId: string;
@@ -782,12 +840,17 @@ async function resolveActor(
 } | null> {
   const account = await createSlurpStorage(db).getNoodlerAccountById(actorAccountId);
   if (account) {
+    const isCharacterFan = characterFanPinnedTypeIds.has(account.id);
+    const fanType = isCharacterFan
+      ? slurpFanTypeForPinnedOrSeed(fanTypes, characterFanPinnedTypeIds.get(account.id) ?? null, account.id)
+      : null;
     return {
       id: account.id,
       entityId: account.entityId,
       handle: account.handle,
       displayName: account.displayName,
       avatarUrl: account.avatarUrl,
+      ...(fanType ? { fanTypeId: fanType.id, archetype: fanType.engineArchetype } : {}),
     };
   }
   const member = await createSlurpPopulationStorage(db).get(actorAccountId);
@@ -809,8 +872,9 @@ async function applyAction(
   at: Date,
   noodle: ReturnType<typeof createSlurpStorage>,
   fanTypes: readonly SlurpFanType[],
+  characterFanPinnedTypeIds: ReadonlyMap<string, string | null>,
 ): Promise<boolean> {
-  const actor = await resolveActor(db, action.actorAccountId);
+  const actor = await resolveActor(db, action.actorAccountId, characterFanPinnedTypeIds, fanTypes);
   if (!actor) return false;
 
   if (action.kind === "tip") {
@@ -968,9 +1032,10 @@ async function applyPulse(
   action: SlurpPulseAction,
   banks: SlurpReactionBanks,
   fanTypes: readonly SlurpFanType[],
+  characterFanPinnedTypeIds: ReadonlyMap<string, string | null>,
 ): Promise<boolean> {
   const noodle = createSlurpStorage(db);
-  const actor = await resolveActor(db, action.actorAccountId);
+  const actor = await resolveActor(db, action.actorAccountId, characterFanPinnedTypeIds, fanTypes);
   if (!actor) return false;
   const isComment = action.kind === "comment";
   // Whose words these are. A comment is the only place the audience is heard, so it draws from the

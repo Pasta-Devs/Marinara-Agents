@@ -12,7 +12,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useState } from "react";
-import { Field, GuidanceBox, NumberSetting, SectionTitle, Toggle } from "./SlurpSettingsControls";
+import { Field, GuidanceBox, NumberSetting, SectionTitle, SettingsGroup, Toggle } from "./SlurpSettingsControls";
 import { toast } from "sonner";
 import { BackstagePageHeader, BackstageWizard, SettingAnchor, SummaryRow } from "./SlurpBackstageKit";
 import { outcomeSummary } from "./SlurpBackstageChrome";
@@ -406,23 +406,25 @@ export function SlurpBackstageAutomation(page: SlurpBackstagePageProps) {
             </Field>
           )}
           {settings.autoPostingScheduleEnabled && (
-            <Field
-              settingKey="storyRate"
-              label={t("ui.slurp.settings.storyRate")}
-              detail={t("ui.slurp.settings.storyRateDetail")}
-            >
-              <select
-                value={settings.storyRate}
-                disabled={updateSettings.isPending}
-                onChange={(event) => void update("storyRate", event.target.value as SlurpSettings["storyRate"])}
-                className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+            <>
+              <Field
+                settingKey="storyRate"
+                label={t("ui.slurp.settings.storyRate")}
+                detail={t("ui.slurp.settings.storyRateDetail")}
               >
-                <option value="off">{t("ui.slurp.settings.storyRateOff")}</option>
-                <option value="rare">{t("ui.slurp.settings.storyRateRare")}</option>
-                <option value="regular">{t("ui.slurp.settings.storyRateRegular")}</option>
-                <option value="often">{t("ui.slurp.settings.storyRateOften")}</option>
-              </select>
-            </Field>
+                <select
+                  value={settings.storyRate}
+                  disabled={updateSettings.isPending}
+                  onChange={(event) => void update("storyRate", event.target.value as SlurpSettings["storyRate"])}
+                  className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 sm:text-sm"
+                >
+                  <option value="off">{t("ui.slurp.settings.storyRateOff")}</option>
+                  <option value="rare">{t("ui.slurp.settings.storyRateRare")}</option>
+                  <option value="regular">{t("ui.slurp.settings.storyRateRegular")}</option>
+                  <option value="often">{t("ui.slurp.settings.storyRateOften")}</option>
+                </select>
+              </Field>
+            </>
           )}
           {settings.autoPostingScheduleEnabled ? (
             <Toggle
@@ -834,34 +836,60 @@ export function SlurpBackstageAutomation(page: SlurpBackstagePageProps) {
               />
             </Field>
           </div>
-          {/* A Story is shown in its own tall frame, so it carries its own size. The
-                      composer crops an uploaded Story to this ratio too. */}
-          <div className="grid gap-3 sm:grid-cols-2">
+          <SettingsGroup title={t("ui.slurp.settings.images.storiesGroup", { defaultValue: "Story images" })}>
+            <p className="text-xs leading-5 text-[var(--slurp-muted)]">
+              {t("ui.slurp.settings.images.storiesGroupDetail", {
+                defaultValue: "Set the size used by image Stories. Story publishing cadence remains in Publishing.",
+              })}
+            </p>
+            <Toggle
+              settingKey="storyImagesEnabled"
+              label={t("ui.slurp.settings.storyImagesEnabled")}
+              detail={t("ui.slurp.settings.storyImagesEnabledDetail")}
+              value={settings.storyImagesEnabled}
+              onChange={(value) => update("storyImagesEnabled", value)}
+            />
             <Field
-              settingKey="storyImageWidth"
-              label={t("ui.slurp.settings.images.storyWidth")}
-              detail={t("ui.slurp.settings.images.storyWidthDetail")}
+              settingKey="storyLifetimeHours"
+              label={t("ui.slurp.settings.storyLifetimeHours")}
+              detail={t("ui.slurp.settings.storyLifetimeHoursDetail")}
             >
               <NumberSetting
-                value={settings.storyImageWidth}
-                min={64}
-                max={4096}
-                onSave={(value) => update("storyImageWidth", value)}
+                value={settings.storyLifetimeHours}
+                min={1}
+                max={168}
+                onSave={(value) => update("storyLifetimeHours", value)}
               />
             </Field>
-            <Field
-              settingKey="storyImageHeight"
-              label={t("ui.slurp.settings.images.storyHeight")}
-              detail={t("ui.slurp.settings.images.storyHeightDetail")}
-            >
-              <NumberSetting
-                value={settings.storyImageHeight}
-                min={64}
-                max={4096}
-                onSave={(value) => update("storyImageHeight", value)}
-              />
-            </Field>
-          </div>
+            {/* A Story is shown in its own tall frame, so it carries its own size. The
+                        composer crops an uploaded Story to this ratio too. */}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field
+                settingKey="storyImageWidth"
+                label={t("ui.slurp.settings.images.storyWidth")}
+                detail={t("ui.slurp.settings.images.storyWidthDetail")}
+              >
+                <NumberSetting
+                  value={settings.storyImageWidth}
+                  min={64}
+                  max={4096}
+                  onSave={(value) => update("storyImageWidth", value)}
+                />
+              </Field>
+              <Field
+                settingKey="storyImageHeight"
+                label={t("ui.slurp.settings.images.storyHeight")}
+                detail={t("ui.slurp.settings.images.storyHeightDetail")}
+              >
+                <NumberSetting
+                  value={settings.storyImageHeight}
+                  min={64}
+                  max={4096}
+                  onSave={(value) => update("storyImageHeight", value)}
+                />
+              </Field>
+            </div>
+          </SettingsGroup>
           <details className="group rounded-xl bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
             <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 text-sm font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] [&::-webkit-details-marker]:hidden">
               <Image size={17} className="text-[var(--slurp-violet)]" aria-hidden="true" />
