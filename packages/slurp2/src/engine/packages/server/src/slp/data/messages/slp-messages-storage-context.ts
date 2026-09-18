@@ -68,30 +68,34 @@ import type {
   SlurpThreadView,
 } from "./slp-messages-storage-types.js";
 import { createSlurpReplyMethods } from "./slp-reply-storage-methods.js";
+import { createSlurpStorage } from "../slp-storage.js";
 
 export type SlurpMessagesCoreFactory = (db: DB) => any;
 export type SlurpMessagesContext = ReturnType<typeof createSlurpMessagesContext>;
 
+// In-flight operations are process-wide, as they were before the storage split: every messages
+// storage instance must see the same pending unlock, tip, commission, and payment claim.
+const messageUnlocks = new Map<string, Promise<SlurpMessage | null>>();
+
+const directMessageTips = new Map<string, Promise<SlurpSendResult>>();
+
+const commissionOperations = new Map<string, Promise<SlurpCommission | null>>();
+
+const paymentIntentClaims = new Map<string, Promise<SlurpPaymentIntentClaim>>();
+
+const slurpDatabases = new WeakMap<object, DB>();
+
+type SlurpPaymentIntentClaim = "claimed" | "charged" | "settled" | "unpayable";
+
+type SlurpPayment = {
+  viewerAccountId: string;
+  creatorAccountId: string;
+  price: number;
+  note: string;
+  creditOperationId: string;
+};
+
 export function createSlurpMessagesContext(db: DB, createCore: SlurpMessagesCoreFactory) {
-  const messageUnlocks = new Map<string, Promise<SlurpMessage | null>>();
-
-  const directMessageTips = new Map<string, Promise<SlurpSendResult>>();
-
-  const commissionOperations = new Map<string, Promise<SlurpCommission | null>>();
-
-  const paymentIntentClaims = new Map<string, Promise<SlurpPaymentIntentClaim>>();
-
-  const slurpDatabases = new WeakMap<object, DB>();
-
-  type SlurpPaymentIntentClaim = "claimed" | "charged" | "settled" | "unpayable";
-
-  type SlurpPayment = {
-    viewerAccountId: string;
-    creatorAccountId: string;
-    price: number;
-    note: string;
-    creditOperationId: string;
-  };
   class SlurpCompensationError extends Error {
     constructor(
       readonly originalFailure: unknown,
@@ -640,6 +644,38 @@ export function createSlurpMessagesContext(db: DB, createCore: SlurpMessagesCore
     applyPaymentTieOnce,
     hasCompletedSlurpPaymentOperation,
     queueCommissionOperation,
+    compensateSlurpPaymentForDatabase,
+    claimSlurpPaymentIntentForDatabase,
+    resetSlurpPaymentIntentForDatabase,
+    settleSlurpPaymentIntentForDatabase,
+    applySlurpTipEffectsForDatabase,
     storage: {},
   };
 }
+
+// The profile tip route settles payments outside a messages storage instance. These run on the
+// full Slurp storage, exactly as the pre-split module-level helpers did.
+const paymentHelpers = (db: DB) => createSlurpMessagesContext(db, createSlurpStorage);
+
+export const compensateSlurpPaymentForDatabase: SlurpMessagesContext["compensateSlurpPaymentForDatabase"] = (
+  db,
+  ...rest
+) => paymentHelpers(db).compensateSlurpPaymentForDatabase(db, ...rest);
+
+export const claimSlurpPaymentIntentForDatabase: SlurpMessagesContext["claimSlurpPaymentIntentForDatabase"] = (
+  db,
+  ...rest
+) => paymentHelpers(db).claimSlurpPaymentIntentForDatabase(db, ...rest);
+
+export const resetSlurpPaymentIntentForDatabase: SlurpMessagesContext["resetSlurpPaymentIntentForDatabase"] = (
+  db,
+  ...rest
+) => paymentHelpers(db).resetSlurpPaymentIntentForDatabase(db, ...rest);
+
+export const settleSlurpPaymentIntentForDatabase: SlurpMessagesContext["settleSlurpPaymentIntentForDatabase"] = (
+  db,
+  ...rest
+) => paymentHelpers(db).settleSlurpPaymentIntentForDatabase(db, ...rest);
+
+export const applySlurpTipEffectsForDatabase: SlurpMessagesContext["applySlurpTipEffectsForDatabase"] = (db, ...rest) =>
+  paymentHelpers(db).applySlurpTipEffectsForDatabase(db, ...rest);
