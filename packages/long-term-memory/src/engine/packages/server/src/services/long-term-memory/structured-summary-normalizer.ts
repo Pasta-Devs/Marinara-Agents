@@ -153,7 +153,7 @@ const STRUCTURED_CHARACTER_METADATA_KEYS = new Set([
 ]);
 const EMPTY_LINK_VALUE_PATTERN = /^(?:n[_/]?a|none|null|unknown|unspecified|not_applicable)$/i;
 const CHARACTER_DEVELOPMENT_PATTERN =
-  /\b(?:almost\s+quit|once\b|learned|developed|started|began|became|stopped|quit|lost|gained|committed|decided|chose|promised|confronted|realized|recognised|recognized)\b/i;
+  /\b(?:almost\s+quit|(?:started|began)\s+(?:to\s+)?\w+|became\s+(?:a|an|the|more|less)\b|(?:stopped|quit)\s+\w+|(?:learned|developed)\s+(?:to\s+)?\w+|(?:lost|gained)\s+(?:the|a|an|their|her|his|its)\b|committed\s+to\b|decided\s+to\b|chose\s+to\b|promised\s+to\b|realized\s+(?:that|how|why|he|she|they|it)\b|recogni[sz]ed\s+(?:that|how|why|he|she|they|it)\b)\b/i;
 const STRUCTURED_RELATIONSHIP_METADATA_KEYS = new Set([
   "id",
   "subject",
