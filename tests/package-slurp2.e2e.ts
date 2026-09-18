@@ -92,6 +92,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.describe("standalone Slurp package", () => {
+  // Baseline trigger for the Slice 3 browser comparison. No test behavior changes.
   test("image context choices persist and creator refresh counts down", async ({ page }, testInfo) => {
     const initialSettings = await (await getSlurpSettings(page)).json();
     let profileId: string | null = null;
