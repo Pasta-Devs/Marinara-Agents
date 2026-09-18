@@ -39,7 +39,9 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 - Package version: `0.0.28` before this slice; this slice ships `0.0.29` (integration-only; `staging`
   stays at `0.0.22` until the final `0.1.0` release PR)
 - Generated artifact: `artifacts/slurp2-0.0.29.zip`, sha256
-  `fde6df6369cfbe2f5f41c2be21275811cd137e568faccc5563f7398fa67db5c6`, 6725223 bytes
+  `66559923bee9ec2c683805731b6776c1e2cbe4792d756810ce6e462a5ce46d08`, 6725244 bytes (rebuilt after
+  the CodeRabbit review fix; the pre-review build was
+  `fde6df6369cfbe2f5f41c2be21275811cd137e568faccc5563f7398fa67db5c6`, 6725223 bytes)
 - Node: `/home/dev/.nvm/versions/node/v24.18.0/bin`; `node -v` = `v24.18.0`. `TMPDIR` is set to
   `/home/dev/.cache/slp-tmp` because `/tmp` tmpfs is small.
 - Engine source: `/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish`, branch
@@ -119,6 +121,8 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 | 2026-09-19 |        6 | Storing `source` on a saved modifier lets an event's modifier name another event's id, and nothing would reconcile them. | A saved event stores the effect only (`slpModifierDraftSchema`); the producing source stamps `source` at activation, so a mismatch cannot be represented. |
 | 2026-09-19 |        6 | Bumping to `0.0.29` pushed the changelog past the 20-entry published cap, so `0.0.8` rolled off the derived `notes.json` while the splash mirror still carried 21 entries. | Dropped the `0.0.8` splash entry and retargeted `slurp2-release-notes.regression.ts`, as the 0.0.24 bump did for `0.0.3`. |
 | 2026-09-19 |        6 | `npm run test:browser:slurp2` needs `MARINARA_ENGINE_ROOT`; without it the runner fails on a missing sibling Engine `package.json`. With it, the Engine dev servers did not come up inside a 400s budget. | The browser suite still produced no result locally, as in Slices 0–5. It needs CI or a host with Playwright system libraries. |
+| 2026-09-19 |        6 | CodeRabbit review of PR #927 (Major, valid): `subscribe()` computed one priced value shared by two branches. The second branch renews an *existing* subscription whose paid period lapsed, so a running event would have changed what an existing subscription costs and would have stored the event price as the new agreed price. The automatic sweep (`renewSubscriptions`) was never affected — it always charged the stored price. | Split the value: `basePrice` is the Creator's own price and is what the renewal branch charges and stores, exactly as before Slice 6. Only the genuinely-new-subscription branch applies `slurpSubscriptionCharge`. Regression pins both branches, and two mutants prove it. |
+| 2026-09-19 |        6 | CodeRabbit's second finding (Minor) claimed `validate-package-locales.mjs` and `validate-catalog.mjs` fail on missing repository files. | Not reproducible: both pass on the committed tree, before and after the fix, alongside `test-catalog-lanes.mjs`. The failure is an artifact of the review sandbox's checkout, not of this branch. Skipped with that reason recorded on the PR. |
 ## Pending decisions
 
 1. **Resolved 2026-09-18 — server layer model.** The maintainer approved
@@ -223,6 +227,25 @@ Issue #926; draft PR #927 to `modular-simping`; branch `slurp2-slice6-event-modi
   eight default events kept their ids, dates, durations, and guidance.
 - The new test also asserts `subscribe()` never calls `setCreatorSubscriptionPrice`, so an event
   cannot rewrite a Creator's stored price.
+
+**CodeRabbit review fixes (PR #927).**
+
+- *Major, accepted.* `subscribe()` shared one priced value between the new-subscription branch and
+  the branch that renews an existing subscription after its paid period lapsed. Now `basePrice` (the
+  Creator's own price, no modifier) is what the renewal branch spends, stores, credits, notifies and
+  records on the audience tie — byte-for-byte the pre-Slice-6 behaviour — and only the genuinely new
+  subscription goes through `slurpSubscriptionCharge`. The automatic sweep `renewSubscriptions` was
+  never in scope: it charges `subscription.price` from the wallet and is untouched.
+- The regression now asserts `slurpSubscriptionCharge` appears exactly once in the file, that it
+  starts from `basePrice`, and that the renewal branch mentions no modifier and stores
+  `price: basePrice`. Two further mutants (renewal re-prices through the event; renewal stores a
+  different price) are both caught, and the source is identical to pre-mutation afterwards.
+- *Minor, skipped with reason.* The claim that `validate-package-locales.mjs` and
+  `validate-catalog.mjs` fail on missing files is not reproducible: both pass on the committed tree
+  before and after the fix. It is an artifact of the review sandbox's checkout.
+- Rebuilt `0.0.29` in place rather than bumping again, because the plan allows one integration patch
+  bump per PR and Slice 5 handled its own review fix the same way. Full suite re-run after the fix:
+  still 25 failures / 203 files, the identical set — 0 new, 0 fixed.
 
 **Commands.**
 

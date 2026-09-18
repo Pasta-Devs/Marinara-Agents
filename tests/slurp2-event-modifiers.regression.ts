@@ -192,9 +192,30 @@ const subscribeSource = slurp2Source(
 );
 assert.match(
   subscribeSource,
-  /slurpSubscriptionCharge\(\s*await this\.getCreatorSubscriptionPrice\(creatorAccountId\)/u,
-  "subscribe must price a new subscription through the modifier seam",
+  /const basePrice = settings\.walletEnabled \? await this\.getCreatorSubscriptionPrice\(creatorAccountId\) : 0;/u,
+  "the Creator's own price must be read once, with no modifier applied",
 );
+// A modifier may move exactly one charge: a genuinely new subscription.
+assert.equal(
+  (subscribeSource.match(/slurpSubscriptionCharge\(/gu) ?? []).length,
+  1,
+  "only the new-subscription charge may go through the modifier seam",
+);
+assert.match(
+  subscribeSource,
+  /slurpSubscriptionCharge\(\s*basePrice,/u,
+  "the new-subscription charge must start from the Creator's own price",
+);
+// The renewal branch — an existing subscription whose paid period ran out — must charge the
+// unmodified base price, so a running event never changes what an existing subscription costs.
+const renewalBranch = subscribeSource.slice(
+  subscribeSource.indexOf("if (existing[0] && settings.walletEnabled && existingWallet)"),
+  subscribeSource.indexOf("// A genuinely new subscription"),
+);
+assert.ok(renewalBranch.length > 0, "the renewal branch must still be present");
+assert.doesNotMatch(renewalBranch, /slurpSubscriptionCharge/u, "renewal must not re-price through an event");
+assert.match(renewalBranch, /spend\(existingWallet, "subscribe", basePrice, at, creatorAccountId\)/u);
+assert.match(renewalBranch, /price: basePrice,/u, "renewal must store the unmodified agreed price");
 assert.doesNotMatch(
   subscribeSource,
   /setCreatorSubscriptionPrice/u,

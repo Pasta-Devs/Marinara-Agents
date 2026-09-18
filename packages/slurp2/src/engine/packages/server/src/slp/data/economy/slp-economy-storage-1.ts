@@ -88,18 +88,9 @@ export function createEconomyStorage1(context: SlurpStorageContext) {
         // and `subscriptionPaidThrough` — so the string made the first subscribe for a viewer fail
         // with "toISOString is not a function" and return a 500.
         const at = new Date();
-        // The charge for a *new* subscription, with whatever is running right now applied. The
-        // provider is built from the settings snapshot this transaction already read, so a
-        // Backstage edit to the event list takes effect on the next subscribe with no restart, and
-        // the price stays derived rather than stored-and-patched. An existing subscription is not
-        // re-priced: it renews at the price captured in the wallet below.
-        const price = settings.walletEnabled
-          ? slurpSubscriptionCharge(
-              await this.getCreatorSubscriptionPrice(creatorAccountId),
-              createSlpActiveModifierProvider([slurpPlatformEventModifierSource(settings.platformEvents)]),
-              at,
-            )
-          : 0;
+        // The Creator's own price, with no event applied. Renewing an existing subscription below
+        // charges exactly this, as it did before platform events could move a price at all.
+        const basePrice = settings.walletEnabled ? await this.getCreatorSubscriptionPrice(creatorAccountId) : 0;
         const existingWallet = settings.walletEnabled ? await getWalletNow(viewerAccountId) : null;
         const existingPayment = existingWallet?.subscriptions[creatorAccountId];
         const existingPaymentIsValid =
@@ -135,8 +126,11 @@ export function createEconomyStorage1(context: SlurpStorageContext) {
           return mapSubscription(existing[0]);
         }
 
+        // Renewing an existing subscription whose paid period has run out. A running event must
+        // not change what an existing subscription costs, so this path never sees a modifier:
+        // plan §1 keeps a subscription renewing at its agreed price.
         if (existing[0] && settings.walletEnabled && existingWallet) {
-          const charged = spend(existingWallet, "subscribe", price, at, creatorAccountId);
+          const charged = spend(existingWallet, "subscribe", basePrice, at, creatorAccountId);
           if (!charged) {
             await this.unsubscribe(viewerAccountId, creatorAccountId, true);
             return null;
@@ -145,7 +139,10 @@ export function createEconomyStorage1(context: SlurpStorageContext) {
             ...charged,
             subscriptions: {
               ...charged.subscriptions,
-              [creatorAccountId]: { paidThroughAt: subscriptionPaidThrough(at, economyFrom(settings)), price },
+              [creatorAccountId]: {
+                paidThroughAt: subscriptionPaidThrough(at, economyFrom(settings)),
+                price: basePrice,
+              },
             },
           };
           const previousWalletValue = await settingsStore.get(slurpWalletKey(viewerAccountId));
@@ -174,13 +171,13 @@ export function createEconomyStorage1(context: SlurpStorageContext) {
             await creditEarningsNow(
               creatorAccountId,
               "subscribe",
-              Math.floor((price * settings.walletCreatorRevenueSharePercent) / 100),
+              Math.floor((basePrice * settings.walletCreatorRevenueSharePercent) / 100),
               `subscribe: ${creatorAccountId}`,
             );
-            await this.notifyCreatorIncome(creatorAccountId, "subscribe", price, viewerAccountId);
+            await this.notifyCreatorIncome(creatorAccountId, "subscribe", basePrice, viewerAccountId);
             await this.advanceAudienceTie(viewerAccountId, creatorAccountId, {
               stage: "subscriber",
-              spent: price,
+              spent: basePrice,
               hasSubscription: true,
             });
           } catch (error) {
@@ -197,6 +194,17 @@ export function createEconomyStorage1(context: SlurpStorageContext) {
           return mapSubscription(existing[0]);
         }
 
+        // A genuinely new subscription: the only charge an active platform event may move. The
+        // provider is built from the settings snapshot this transaction already read, so a
+        // Backstage edit to the event list takes effect on the next subscribe with no restart.
+        // The charge is captured in the wallet below and every later renewal reuses it.
+        const price = settings.walletEnabled
+          ? slurpSubscriptionCharge(
+              basePrice,
+              createSlpActiveModifierProvider([slurpPlatformEventModifierSource(settings.platformEvents)]),
+              at,
+            )
+          : 0;
         const previousWallet = existingWallet ?? (await getWalletNow(viewerAccountId));
         const charged = settings.walletEnabled
           ? spend(previousWallet, "subscribe", price, at, creatorAccountId)
