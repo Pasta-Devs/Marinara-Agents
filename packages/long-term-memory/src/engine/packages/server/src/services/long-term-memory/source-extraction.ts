@@ -87,15 +87,7 @@ async function bindSourceNoteToExtractionContext(options: {
     return sourceNote;
   }
 
-  return options.storage.updateNote(
-    sourceNote.id,
-    { destinationScope: options.scope, modes: options.modes },
-    {
-      actor: "maintenance_api",
-      cause: "source_extraction.context_bound",
-      summary: `Bound ${sourceNote.title ?? sourceNote.id} to its extraction context`,
-    },
-  );
+  return options.storage.updateNote(sourceNote.id, { destinationScope: options.scope, modes: options.modes });
 }
 
 function compatibleProjectedCreate(
@@ -543,6 +535,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
     mode: resolvedMode,
     modes,
     relationshipIdentityKey: identityContext.identityKeyForUnit,
+    characterIdentityKey: identityContext.identityKeyForUnit,
   });
   const unitResponse = {
     ...extractionPayload.response,

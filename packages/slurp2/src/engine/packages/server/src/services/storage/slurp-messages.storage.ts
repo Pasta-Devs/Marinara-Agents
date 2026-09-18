@@ -33,6 +33,7 @@ import {
   type SlurpCreatorStateSignal,
 } from "../slurp/slurp-creator-state.js";
 import { activeSlurpStrikes } from "../slurp/slurp-stance.js";
+import { SLURP_ONLINE_AFTER_DELIVERY_MINUTES } from "../slurp/slurp-conversation-momentum.js";
 import { createAppSettingsStorage } from "./app-settings.storage.js";
 import { createSlurpEventsStorage } from "./slurp-events.storage.js";
 import { createSlurpStorage } from "./slurp.storage.js";
@@ -2100,7 +2101,16 @@ export function createSlurpMessagesStorage(db: DB) {
       content: string,
       imageUrl: string | null = null,
     ): Promise<SlurpCommission | null> {
-      return queueCommissionOperation(id, () => storage.deliverCommissionUnlocked(id, content, imageUrl));
+      const delivered = await queueCommissionOperation(id, () =>
+        storage.deliverCommissionUnlocked(id, content, imageUrl),
+      );
+      // Handing a piece over is a moment the fan wants to answer, so the Creator sticks around.
+      if (delivered?.state === "delivered") {
+        await storage
+          .keepOnlineFor(delivered.threadId, SLURP_ONLINE_AFTER_DELIVERY_MINUTES)
+          .catch((error: unknown) => logger.warn(error, "[slurp] Could not keep %s online", delivered.threadId));
+      }
+      return delivered;
     },
 
     async deliverCommissionUnlocked(
@@ -2546,6 +2556,14 @@ export function createSlurpMessagesStorage(db: DB) {
         .update(slurpThreads)
         .set({ extendedOnlineUntil: until, updatedAt: now() })
         .where(eq(slurpThreads.id, threadId));
+    },
+
+    /** Keep the Creator online in this thread for at least `minutes` more. Never shortens a longer window. */
+    async keepOnlineFor(threadId: string, minutes: number): Promise<void> {
+      const until = new Date(Date.now() + minutes * 60_000).toISOString();
+      const current = (await storage.getThreadById(threadId))?.extendedOnlineUntil ?? null;
+      if (current && current >= until) return;
+      await storage.setExtendedOnline(threadId, until);
     },
 
     /**

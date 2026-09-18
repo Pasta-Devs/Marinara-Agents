@@ -1,10 +1,15 @@
 import {
+  ArrowDown,
   ArrowLeft,
   Activity,
   Brain,
   BriefcaseBusiness,
   Check,
+  CheckCheck,
   ChevronDown,
+  Coffee,
+  Crown,
+  Handshake,
   Heart,
   Image as ImageIcon,
   Info,
@@ -13,6 +18,8 @@ import {
   Lock,
   MessageCircle,
   Megaphone,
+  Moon,
+  MoreVertical,
   Palette,
   Pencil,
   Plus,
@@ -20,12 +27,15 @@ import {
   Send,
   ShieldCheck,
   Sparkles,
+  Star,
   Trash2,
+  UserRound,
   X,
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
+import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
 import { getApiErrorMessage } from "../../lib/api-client";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { cn } from "../../lib/utils";
@@ -81,13 +91,23 @@ import {
  * creator, a thread already generating, and a missing connection were all the same blank screen.
  */
 const SLURP_REPLY_STATUS_FALLBACKS: Record<string, string> = {
-  queued: "Delivered. A reply from {{name}} is queued for later.",
-  owed: "Delivered. {{name}} has not answered yet.",
-  cooling: "{{name}} has stepped away from this conversation. Give them some time.",
+  queued: "Your message is delivered. They reply when they next check their messages.",
+  owed: "Your message is delivered. They have not answered yet.",
+  cooling: "They stepped away from this conversation. Give them some time.",
   busy: "{{name}} is already writing back. Give it a moment.",
   ineligible: "{{name}} is not answering this conversation right now.",
   connection_not_found: "No text connection is configured, so nobody can answer yet.",
   failed: "The reply could not be written. Your message was still delivered.",
+};
+
+/** Reply outcomes that only mean "not now". They render as the away animation, without words. */
+const SLURP_AWAY_STATUSES = new Set(["queued", "owed", "cooling", "ineligible"]);
+/** The away card's headline. The status line below it carries the detail. */
+const SLURP_AWAY_TITLE_FALLBACKS: Record<string, string> = {
+  queued: "{{name}} is away",
+  owed: "Waiting for {{name}}",
+  cooling: "{{name}} needs a break",
+  ineligible: "{{name}} is not answering",
 };
 
 const TIP_PRESETS = [5, 15, 50] as const;
@@ -175,7 +195,13 @@ export function SlurpMessagesView({
     return () => onThreadContextChange?.(null);
   }, [onThreadContextChange, openThread]);
 
+  // A chat opened from somewhere else (a profile, an activity item) backs out to that place. A chat
+  // picked from this list backs out to the list. Backing out of a direct chat into a list you never
+  // saw is what made Back feel like it went somewhere random.
+  const openedDirectly = useRef(Boolean(initialThreadId || composeWithCreatorAccountId));
+
   useEffect(() => {
+    openedDirectly.current = Boolean(initialThreadId || composeWithCreatorAccountId);
     if (initialThreadId) {
       setComposeWith(null);
       setOpenThreadId(initialThreadId);
@@ -219,8 +245,18 @@ export function SlurpMessagesView({
     threads.reduce((total, thread) => total + thread.viewerUnread, 0) + (threadsQuery.data?.inboundUnread ?? 0);
   const conversationOpen = Boolean(openThreadId || composeWith);
   const closeConversation = () => {
+    if (openedDirectly.current && onExit) {
+      onExit();
+      return;
+    }
     setOpenThreadId(null);
     setComposeWith(null);
+  };
+
+  const openFromList = (threadId: string) => {
+    openedDirectly.current = false;
+    setComposeWith(null);
+    setOpenThreadId(threadId);
   };
 
   const inbox = (
@@ -317,7 +353,7 @@ export function SlurpMessagesView({
                   viewerUnread: thread.creatorUnread,
                 }}
                 locale={i18n.language}
-                onOpen={() => setOpenThreadId(thread.id)}
+                onOpen={() => openFromList(thread.id)}
                 selected={thread.id === openThreadId}
               />
             ))}
@@ -337,7 +373,7 @@ export function SlurpMessagesView({
                 key={thread.id}
                 thread={thread}
                 locale={i18n.language}
-                onOpen={() => setOpenThreadId(thread.id)}
+                onOpen={() => openFromList(thread.id)}
                 pending
                 selected={thread.id === openThreadId}
               />
@@ -371,7 +407,7 @@ export function SlurpMessagesView({
                 key={thread.id}
                 thread={thread}
                 locale={i18n.language}
-                onOpen={() => setOpenThreadId(thread.id)}
+                onOpen={() => openFromList(thread.id)}
                 selected={thread.id === openThreadId}
               />
             ))
@@ -400,6 +436,7 @@ export function SlurpMessagesView({
           creatorAccountId={composeWith}
           personaId={personaId}
           ownedCreatorAccountIds={ownedCreatorAccountIds}
+          unreadAtOpen={openThread ? { viewer: openThread.viewerUnread, creator: openThread.creatorUnread } : null}
           onBack={closeConversation}
           onOpenProfile={onOpenProfile}
           desktopSplit
@@ -506,6 +543,7 @@ function SlurpThreadView({
   creatorAccountId,
   personaId,
   ownedCreatorAccountIds,
+  unreadAtOpen = null,
   onBack,
   onOpenProfile,
   desktopSplit = false,
@@ -514,6 +552,8 @@ function SlurpThreadView({
   creatorAccountId: string | null;
   personaId: string | null;
   ownedCreatorAccountIds: string[];
+  /** Unread counts from the inbox row, read before opening marks the thread as read. */
+  unreadAtOpen?: { viewer: number; creator: number } | null;
   onBack: () => void;
   onOpenProfile: (accountId: string) => void;
   desktopSplit?: boolean;
@@ -572,6 +612,14 @@ function SlurpThreadView({
   const drawerRef = useRef<HTMLDialogElement | null>(null);
   const drawerTriggerRef = useRef<HTMLButtonElement | null>(null);
   const searchTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const headerMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const headerMenuRef = useRef<HTMLDivElement | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const [tierOpen, setTierOpen] = useState(false);
+  const tierTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const tierPopoverRef = useRef<HTMLDivElement | null>(null);
+  const [awayFromBottom, setAwayFromBottom] = useState(false);
   const messageSearchInputRef = useRef<HTMLInputElement | null>(null);
   const thread = threadQuery.data?.thread ?? null;
   const activeConversationRef = useRef({ personaId, threadId });
@@ -591,7 +639,8 @@ function SlurpThreadView({
   const counterpart = threadQuery.data?.counterpart ?? creator;
   const targetCreatorAccountId = thread?.creatorAccountId ?? creator?.id ?? creatorAccountId;
   const ownsCreator = Boolean(targetCreatorAccountId && ownedCreatorAccountIds.includes(targetCreatorAccountId));
-  const draftStorageKey = `slurp2-message-draft:${personaId ?? "none"}:${targetCreatorAccountId ?? "none"}`;
+  // A Creator answers many fans from one account, so on that side the draft belongs to the thread.
+  const draftStorageKey = `slurp2-message-draft:${personaId ?? "none"}:${targetCreatorAccountId ?? "none"}${ownsCreator && threadId ? `:${threadId}` : ""}`;
   const messaging = threadQuery.data?.messaging;
   const commissions = useMemo(() => threadQuery.data?.commissions ?? [], [threadQuery.data?.commissions]);
   const relationship = "relationship" in (threadQuery.data ?? {}) ? threadQuery.data?.relationship : undefined;
@@ -617,10 +666,24 @@ function SlurpThreadView({
         : null,
     };
   });
-  const lastOwnMessageId = messages.reduce<string | null>(
-    (latest, message) => ((ownsCreator ? message.role === "creator" : message.role === "viewer") ? message.id : latest),
-    null,
-  );
+  // Captured once per thread: the inbox count drops to zero as soon as opening marks it read, and
+  // the marker must stay on the same message while new replies arrive below it.
+  // The side (and so which count applies) is only known once the thread has loaded.
+  const unreadMarkerRef = useRef<{
+    threadId: string | null;
+    unread: { viewer: number; creator: number } | null;
+    messageId: string | null | undefined;
+  }>({ threadId: null, unread: null, messageId: null });
+  if (unreadMarkerRef.current.threadId !== threadId) {
+    unreadMarkerRef.current = { threadId, unread: unreadAtOpen, messageId: unreadAtOpen ? undefined : null };
+  }
+  if (unreadMarkerRef.current.messageId === undefined && threadQuery.data && messages.length > 0) {
+    const unread = unreadMarkerRef.current.unread;
+    const count = unread ? (ownsCreator ? unread.creator : unread.viewer) : 0;
+    const incoming = messages.filter((message) => message.role !== (ownsCreator ? "creator" : "viewer"));
+    unreadMarkerRef.current.messageId = count > 0 ? (incoming[Math.max(0, incoming.length - count)]?.id ?? null) : null;
+  }
+  const firstUnreadMessageId = unreadMarkerRef.current.messageId ?? null;
   const timeline = [
     ...messages
       .filter((message) => typeof message.metadata.commissionId !== "string")
@@ -725,8 +788,8 @@ function SlurpThreadView({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const saved = window.localStorage.getItem(draftStorageKey);
-    if (saved) setDraft(saved);
+    // Clear on a key with nothing saved, or the previous conversation's draft follows you here.
+    setDraft(window.localStorage.getItem(draftStorageKey) ?? "");
   }, [draftStorageKey]);
 
   useEffect(() => {
@@ -764,6 +827,9 @@ function SlurpThreadView({
     setCustomTipAmount("");
     setCustomTipNote("");
     setVisibleCount(SLURP_MESSAGE_PAGE);
+    setAwayFromBottom(false);
+    setHeaderMenuOpen(false);
+    setTierOpen(false);
     landedAtBottomRef.current = false;
   }, [threadId, creatorAccountId]);
 
@@ -831,8 +897,10 @@ function SlurpThreadView({
     const container = messageScrollRef.current;
     if (!container || landedAtBottomRef.current || visibleTimeline.length === 0) return;
     landedAtBottomRef.current = true;
-    container.scrollTop = container.scrollHeight;
-  }, [visibleTimeline.length]);
+    const marker = firstUnreadMessageId ? document.getElementById("slurp-unread-marker") : null;
+    if (marker) marker.scrollIntoView({ block: "start" });
+    else container.scrollTop = container.scrollHeight;
+  }, [firstUnreadMessageId, visibleTimeline.length]);
 
   /**
    * Keep the viewport on the message it was on when older ones mount above it.
@@ -947,6 +1015,22 @@ function SlurpThreadView({
     setHiddenReplyIds(new Set());
   };
 
+  // The composer grows with its text up to a cap, and shrinks back once the draft is sent.
+  useLayoutEffect(() => {
+    const textarea = composerRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
+  }, [draft]);
+
+  useDismissablePopover(headerMenuOpen, setHeaderMenuOpen, headerMenuRef, headerMenuTriggerRef);
+  useDismissablePopover(tierOpen, setTierOpen, tierPopoverRef, tierTriggerRef);
+
+  const scrollToLatest = () => {
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    bottomRef.current?.scrollIntoView({ block: "end", behavior: reduceMotion ? "auto" : "smooth" });
+  };
+
   const submit = async (force = false) => {
     const content = draft.trim();
     if (!content || !personaId || !targetCreatorAccountId || busy) return;
@@ -977,8 +1061,12 @@ function SlurpThreadView({
     // Show the message and the typing indicator at once. The send route waits for the model
     // before it answers, so the chat used to sit empty for the whole generation.
     setPending({ content, id: null });
+    // Sending always lands on your own message, even when you had scrolled up to reread.
+    requestAnimationFrame(scrollToLatest);
     setReplyStatus(null);
-    if (!ownsCreator) setTyping(true);
+    // An away Creator is not typing. Showing dots first and then the away block read as a reply
+    // that was started and abandoned.
+    if (!ownsCreator && relationship?.availability.online !== false) setTyping(true);
     const requestId =
       sendRequestId ??
       (typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -1089,12 +1177,12 @@ function SlurpThreadView({
           <span className="min-w-0 max-w-full overflow-hidden">
             <span className="block truncate text-sm font-bold">{headerAccount?.displayName ?? ""}</span>
             <span className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate text-[0.7rem] text-[var(--muted-foreground)]">
+              <span className="hidden truncate text-[0.7rem] text-[var(--muted-foreground)] sm:inline">
                 @{headerAccount?.handle ?? ""}
               </span>
               {relationship && (
-                <span className="flex items-center gap-1 truncate text-[0.7rem] text-[var(--muted-foreground)]">
-                  <span>·</span>
+                <span className="flex min-w-0 items-center gap-1 truncate text-[0.7rem] text-[var(--muted-foreground)]">
+                  <span className="hidden sm:inline">·</span>
                   <span
                     className={cn(
                       "h-1.5 w-1.5 rounded-full shrink-0",
@@ -1107,68 +1195,195 @@ function SlurpThreadView({
                     )}
                     aria-hidden="true"
                   />
-                  {relationship.availability.online
-                    ? localizeUi("ui.slurp.messages.availableNow", { defaultValue: "Available now" })
-                    : relationship.availability.minutesUntilOnline !== null
-                      ? localizeUi(
-                          relationship.availability.estimated
-                            ? "ui.slurp.messages.probablyBackIn"
-                            : "ui.slurp.messages.backIn",
-                          {
-                            value1:
-                              relationship.availability.minutesUntilOnline < 60
-                                ? `${Math.round(relationship.availability.minutesUntilOnline)}min`
-                                : `${Math.round(relationship.availability.minutesUntilOnline / 60)}hr`,
-                          },
-                        )
-                      : relationship.availability.estimated
-                        ? localizeUi("ui.slurp.messages.probablyAway")
-                        : localizeUi("ui.slurp.messages.away", { defaultValue: "Away" })}
+                  <span className="truncate">
+                    {relationship.availability.online
+                      ? localizeUi("ui.slurp.messages.availableNow", { defaultValue: "Available now" })
+                      : relationship.availability.minutesUntilOnline !== null
+                        ? localizeUi(
+                            relationship.availability.estimated
+                              ? "ui.slurp.messages.probablyBackIn"
+                              : "ui.slurp.messages.backIn",
+                            {
+                              value1:
+                                relationship.availability.minutesUntilOnline < 60
+                                  ? `${Math.round(relationship.availability.minutesUntilOnline)}min`
+                                  : `${Math.round(relationship.availability.minutesUntilOnline / 60)}hr`,
+                            },
+                          )
+                        : relationship.availability.estimated
+                          ? localizeUi("ui.slurp.messages.probablyAway")
+                          : localizeUi("ui.slurp.messages.away", { defaultValue: "Away" })}
+                  </span>
                 </span>
               )}
-              {/* Rapport decides how fast and how warmly a Creator answers. The player felt it and
-                  could never see it, so the one number the whole thread turns on was invisible. */}
-              {thread && <SlurpRapportBadge rapport={thread.rapport} ownsCreator={ownsCreator} />}
             </span>
           </span>
         </button>
+        {thread?.rapport && (
+          <button
+            ref={tierTriggerRef}
+            type="button"
+            aria-expanded={tierOpen}
+            aria-haspopup="dialog"
+            onClick={() => setTierOpen((open) => !open)}
+            className={cn(
+              "flex h-9 shrink-0 items-center gap-1.5 rounded-full px-1 text-[0.72rem] font-bold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] sm:pe-3",
+              tierOpen && "bg-[var(--noodle-accent)]/10",
+            )}
+            aria-label={localizeUi("ui.slurp.messages.relationshipStatus", {
+              defaultValue: "Relationship: {{tier}}",
+              tier: localizeUi(`ui.slurp.rapport.tier.${thread.rapport.tier}`),
+            })}
+          >
+            <SlurpRapportBadge rapport={thread.rapport} ownsCreator={ownsCreator} />
+            <span className="hidden sm:inline">{localizeUi(`ui.slurp.rapport.tier.${thread.rapport.tier}`)}</span>
+          </button>
+        )}
+        {tierOpen && thread?.rapport && (
+          <NoodleAnchoredPopover anchorRef={tierTriggerRef}>
+            <div
+              ref={tierPopoverRef}
+              role="dialog"
+              aria-label={localizeUi("ui.slurp.messages.relationshipLevel", { defaultValue: "Relationship level" })}
+              className="rounded-2xl bg-[var(--slurp-canvas,var(--background))] p-4 text-[var(--foreground)] shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--noodle-divider)]"
+            >
+              <p className="text-[0.68rem] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                {localizeUi("ui.slurp.messages.relationshipLevel", { defaultValue: "Relationship level" })}
+              </p>
+              <p className="mt-0.5 text-base font-black">
+                {localizeUi(`ui.slurp.rapport.tier.${thread.rapport.tier}`)}
+              </p>
+              <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                {localizeUi(
+                  ownsCreator
+                    ? `ui.slurp.rapport.creatorHint.${thread.rapport.tier}`
+                    : `ui.slurp.rapport.viewerHint.${thread.rapport.tier}`,
+                )}
+              </p>
+              <SlurpTierLadder tier={thread.rapport.tier} className="mt-4" />
+            </div>
+          </NoodleAnchoredPopover>
+        )}
         {/* Four icons of the same size and weight, because none of them outranks the others. The
             details button was the odd one out as a word, and read as the only real control. */}
-        {relationship && (
-          <HeaderIconButton
-            className="ml-auto"
-            icon={Info}
-            label={localizeUi("ui.slurp.messages.relationshipToggle", { defaultValue: "Details" })}
-            onClick={() => setDrawerMode("details")}
-          />
-        )}
-        {threadId && (
-          <HeaderIconButton
-            icon={Brain}
-            label={localizeUi("ui.slurp.messages.memories", { defaultValue: "Memories" })}
-            onClick={() => setDrawerMode("memories")}
-          />
-        )}
-        {threadId && (
-          <HeaderIconButton
-            icon={BriefcaseBusiness}
-            label={localizeUi("ui.slurp.messages.commissionsTitle", { defaultValue: "Commissions" })}
-            badge={commissions.length}
-            onClick={() => setDrawerMode("commissions")}
-          />
-        )}
-        {threadId && (
+        <div className="ml-auto hidden shrink-0 items-center sm:flex">
+          {relationship && (
+            <HeaderIconButton
+              icon={Info}
+              label={localizeUi("ui.slurp.messages.relationshipToggle", { defaultValue: "Details" })}
+              onClick={() => setDrawerMode("details")}
+            />
+          )}
+          {threadId && (
+            <HeaderIconButton
+              icon={Brain}
+              label={localizeUi("ui.slurp.messages.memories", { defaultValue: "Memories" })}
+              onClick={() => setDrawerMode("memories")}
+            />
+          )}
+          {threadId && (
+            <HeaderIconButton
+              icon={BriefcaseBusiness}
+              label={localizeUi("ui.slurp.messages.commissionsTitle", { defaultValue: "Commissions" })}
+              badge={commissions.length}
+              onClick={() => setDrawerMode("commissions")}
+            />
+          )}
+          {threadId && (
+            <button
+              ref={searchTriggerRef}
+              type="button"
+              aria-expanded={messageSearchOpen}
+              onClick={() => setMessageSearchOpen((open) => !open)}
+              className="flex min-h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--muted-foreground)] transition-colors hover:bg-[var(--slurp-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+              aria-label={localizeUi("ui.slurp.messages.searchConversation", { defaultValue: "Search conversation" })}
+              title={localizeUi("ui.slurp.messages.searchConversation", { defaultValue: "Search conversation" })}
+            >
+              <Search size={15} aria-hidden="true" />
+            </button>
+          )}
+        </div>
+        {/* Four header icons do not fit beside a name on a phone, so they fold into one menu there. */}
+        {(relationship || threadId) && (
           <button
-            ref={searchTriggerRef}
+            ref={headerMenuTriggerRef}
             type="button"
-            aria-expanded={messageSearchOpen}
-            onClick={() => setMessageSearchOpen((open) => !open)}
-            className="flex min-h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--muted-foreground)] transition-colors hover:bg-[var(--slurp-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
-            aria-label={localizeUi("ui.slurp.messages.searchConversation", { defaultValue: "Search conversation" })}
-            title={localizeUi("ui.slurp.messages.searchConversation", { defaultValue: "Search conversation" })}
+            aria-haspopup="menu"
+            aria-expanded={headerMenuOpen}
+            onClick={() => setHeaderMenuOpen((open) => !open)}
+            aria-label={localizeUi("ui.slurp.messages.moreActions", { defaultValue: "More actions" })}
+            title={localizeUi("ui.slurp.messages.moreActions", { defaultValue: "More actions" })}
+            className={cn(
+              "relative ml-auto flex min-h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--muted-foreground)] transition-[background-color,transform] hover:bg-[var(--slurp-surface)] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100 sm:hidden",
+              headerMenuOpen && "bg-[var(--slurp-surface)] text-[var(--foreground)]",
+            )}
           >
-            <Search size={15} aria-hidden="true" />
+            <MoreVertical size={18} aria-hidden="true" />
+            {commissions.length > 0 && (
+              <span
+                className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[var(--noodle-accent)]"
+                aria-hidden="true"
+              />
+            )}
           </button>
+        )}
+        {headerMenuOpen && (
+          <NoodleAnchoredPopover anchorRef={headerMenuTriggerRef}>
+            <div
+              ref={headerMenuRef}
+              role="menu"
+              className="ms-auto w-56 rounded-xl bg-[var(--slurp-canvas,var(--background))] p-1 text-[var(--foreground)] shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--noodle-divider)]"
+            >
+              {[
+                relationship && {
+                  key: "details",
+                  icon: Info,
+                  label: localizeUi("ui.slurp.messages.relationshipToggle", { defaultValue: "Details" }),
+                  run: () => setDrawerMode("details"),
+                },
+                threadId && {
+                  key: "memories",
+                  icon: Brain,
+                  label: localizeUi("ui.slurp.messages.memories", { defaultValue: "Memories" }),
+                  run: () => setDrawerMode("memories"),
+                },
+                threadId && {
+                  key: "commissions",
+                  icon: BriefcaseBusiness,
+                  label: localizeUi("ui.slurp.messages.commissionsTitle", { defaultValue: "Commissions" }),
+                  badge: commissions.length,
+                  run: () => setDrawerMode("commissions"),
+                },
+                threadId && {
+                  key: "search",
+                  icon: Search,
+                  label: localizeUi("ui.slurp.messages.searchConversation", { defaultValue: "Search conversation" }),
+                  run: () => setMessageSearchOpen(true),
+                },
+              ]
+                .filter((item): item is Exclude<typeof item, "" | null | undefined | false> => Boolean(item))
+                .map(({ key, icon: Icon, label, run, ...item }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setHeaderMenuOpen(false);
+                      run();
+                    }}
+                    className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold transition-colors hover:bg-[var(--slurp-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)]"
+                  >
+                    <Icon size={16} className="shrink-0 text-[var(--muted-foreground)]" aria-hidden="true" />
+                    <span className="min-w-0 flex-1 truncate">{label}</span>
+                    {"badge" in item && (item.badge ?? 0) > 0 && (
+                      <span className="min-w-5 rounded-full bg-[var(--noodle-accent)] px-1.5 text-center text-[0.65rem] font-black leading-5 text-zinc-950">
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                ))}
+            </div>
+          </NoodleAnchoredPopover>
         )}
       </div>
 
@@ -1338,8 +1553,10 @@ function SlurpThreadView({
       <div
         ref={messageScrollRef}
         onScroll={(event) => {
+          const container = event.currentTarget;
+          setAwayFromBottom(container.scrollHeight - container.scrollTop - container.clientHeight > 240);
           // Reaching the top is the same request as pressing the button, so it does the same thing.
-          if ((olderCount > 0 || nextOlderCursor) && event.currentTarget.scrollTop < 64) void showOlder();
+          if ((olderCount > 0 || nextOlderCursor) && container.scrollTop < 64) void showOlder();
         }}
         className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-4"
       >
@@ -1397,13 +1614,23 @@ function SlurpThreadView({
                 {date !== previousDate && (
                   <div className="self-center py-2 text-[0.65rem] font-bold text-[var(--muted-foreground)]">{date}</div>
                 )}
+                {entry.kind === "message" && entry.message.id === firstUnreadMessageId && (
+                  <div
+                    id="slurp-unread-marker"
+                    role="separator"
+                    className="flex scroll-mt-16 items-center gap-3 py-1 text-[0.68rem] font-bold text-[var(--noodle-accent)]"
+                  >
+                    <span className="h-px flex-1 bg-[var(--noodle-accent)]/40" aria-hidden="true" />
+                    {localizeUi("ui.slurp.messages.newMessages", { defaultValue: "New messages" })}
+                    <span className="h-px flex-1 bg-[var(--noodle-accent)]/40" aria-hidden="true" />
+                  </div>
+                )}
                 {entry.kind === "message" ? (
                   <MessageBubble
                     message={entry.message}
                     locale={i18n.language}
                     personaId={personaId}
                     ownsCreator={ownsCreator}
-                    showReceipt={entry.message.id === lastOwnMessageId}
                   />
                 ) : personaId ? (
                   <CommissionRow
@@ -1424,16 +1651,40 @@ function SlurpThreadView({
             </div>
           )}
           {!typing && (waitingNote || canForceReply) && (
-            <p aria-live="polite" className="self-start px-1 text-xs italic text-[var(--muted-foreground)]">
-              {waitingNote
-                ? localizeUi(`ui.slurp.messages.replyStatus.${waitingNote}`, {
-                    defaultValue: SLURP_REPLY_STATUS_FALLBACKS[waitingNote] ?? "No answer yet.",
-                    name: creator?.displayName ?? "",
-                  })
-                : localizeUi("ui.slurp.messages.replyStatus.owed", {
-                    defaultValue: "Delivered. {{name}} has not answered yet.",
-                    name: creator?.displayName ?? "",
-                  })}
+            <div
+              aria-live="polite"
+              className="relative mx-auto flex w-full max-w-sm flex-col items-center gap-2 overflow-hidden rounded-2xl bg-[linear-gradient(160deg,var(--slurp-surface-raised),var(--slurp-surface))] px-5 pb-5 pt-3 text-center shadow-[var(--slurp-shadow-raised)] ring-1 ring-inset ring-[var(--noodle-divider)]"
+            >
+              {/* A status card, like a platform's own notice: the sleeping avatar for "not now",
+                  a plain icon for problems the fan has to act on (busy, no connection, failed). */}
+              {!waitingNote || SLURP_AWAY_STATUSES.has(waitingNote) ? (
+                <>
+                  <SlurpAwayAnimation account={headerAccount ?? null} />
+                  <p className="-mt-1 inline-flex items-center gap-1.5 rounded-full bg-[var(--noodle-accent)]/12 px-2.5 py-0.5 text-[0.62rem] font-bold uppercase tracking-wider text-[var(--noodle-accent)]">
+                    <span className="h-1.5 w-1.5 rounded-full bg-gray-400" aria-hidden="true" />
+                    {localizeUi("ui.slurp.messages.away", { defaultValue: "Away" })}
+                  </p>
+                  <p className="text-sm font-bold">
+                    {localizeUi(`ui.slurp.messages.awayTitle.${waitingNote ?? "owed"}`, {
+                      defaultValue: SLURP_AWAY_TITLE_FALLBACKS[waitingNote ?? "owed"] ?? "{{name}} is away",
+                      name: creator?.displayName ?? "",
+                    })}
+                  </p>
+                </>
+              ) : (
+                <Info size={17} className="mt-2 text-[var(--noodle-accent)]" aria-hidden="true" />
+              )}
+              <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
+                {waitingNote
+                  ? localizeUi(`ui.slurp.messages.replyStatus.${waitingNote}`, {
+                      defaultValue: SLURP_REPLY_STATUS_FALLBACKS[waitingNote] ?? "No answer yet.",
+                      name: creator?.displayName ?? "",
+                    })
+                  : localizeUi("ui.slurp.messages.replyStatus.owed", {
+                      defaultValue: "Your message is delivered. They have not answered yet.",
+                      name: creator?.displayName ?? "",
+                    })}
+              </p>
               {canForceReply && thread && personaId && (
                 <button
                   type="button"
@@ -1466,12 +1717,12 @@ function SlurpThreadView({
                       setError(getApiErrorMessage(cause, "The reply could not be written."));
                     }
                   }}
-                  className="ml-1.5 not-italic underline decoration-dotted underline-offset-2 opacity-70 transition-opacity hover:opacity-100 focus-visible:opacity-100 disabled:opacity-40"
+                  className="min-h-9 rounded-full px-3 text-[0.7rem] font-semibold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/35 transition-[background-color,opacity] hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-40"
                 >
-                  {localizeUi("ui.slurp.messages.forceReply", { defaultValue: "Force reply now" })}
+                  {localizeUi("ui.slurp.messages.forceReply", { defaultValue: "Get reply now" })}
                 </button>
               )}
-            </p>
+            </div>
           )}
           {typing && (
             <div
@@ -1522,7 +1773,24 @@ function SlurpThreadView({
         </p>
       )}
 
-      <div className="shrink-0 border-t border-[var(--noodle-divider)] p-2">
+      <div className="relative shrink-0 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5">
+        {awayFromBottom && (
+          <button
+            type="button"
+            onClick={scrollToLatest}
+            aria-label={localizeUi("ui.slurp.messages.scrollToLatest", { defaultValue: "Scroll to latest message" })}
+            title={localizeUi("ui.slurp.messages.scrollToLatest", { defaultValue: "Scroll to latest message" })}
+            className="absolute bottom-full left-1/2 z-10 mb-2 flex h-10 w-10 -translate-x-1/2 items-center justify-center rounded-full bg-[var(--slurp-surface-raised)] text-[var(--foreground)] shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,transform] hover:bg-[var(--slurp-surface)] active:scale-[0.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
+          >
+            <ArrowDown size={18} aria-hidden="true" />
+            {typing && (
+              <span
+                className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-[var(--noodle-accent)] ring-2 ring-[var(--slurp-surface-raised)]"
+                aria-hidden="true"
+              />
+            )}
+          </button>
+        )}
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-2">
           {toolsOpen && (
             <div className="flex flex-col gap-2 rounded-2xl bg-[var(--slurp-surface-raised)] p-3 ring-1 ring-inset ring-[var(--noodle-divider)] shadow-[var(--slurp-shadow-floating)]">
@@ -1831,7 +2099,11 @@ function SlurpThreadView({
             </div>
           )}
           <form
-            className="flex items-end gap-2"
+            className="flex items-end gap-0.5 rounded-2xl bg-[var(--slurp-surface)] p-1 shadow-sm ring-1 ring-inset ring-[var(--noodle-divider)] transition-shadow focus-within:ring-2 focus-within:ring-[var(--noodle-accent)]/55 motion-reduce:transition-none"
+            onClick={(event) => {
+              // A tap on the bar's padding means "write here", as in the Engine chat box.
+              if (event.target === event.currentTarget) composerRef.current?.focus();
+            }}
             onSubmit={(event) => {
               event.preventDefault();
               void submit();
@@ -1849,8 +2121,8 @@ function SlurpThreadView({
               aria-expanded={toolsOpen}
               aria-label={localizeUi("ui.slurp.messages.toggleTools", { defaultValue: "Message tools" })}
               className={cn(
-                "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--slurp-surface)] text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-[background-color,transform] hover:bg-[var(--noodle-accent)]/10 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100",
-                toolsOpen && "bg-[var(--noodle-accent)]/15 ring-[var(--noodle-accent)]/45",
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[var(--muted-foreground)] transition-[background-color,color,transform] hover:bg-[var(--noodle-accent)]/10 hover:text-[var(--noodle-accent)] active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100",
+                toolsOpen && "bg-[var(--noodle-accent)]/15 text-[var(--noodle-accent)]",
               )}
             >
               <Plus
@@ -1873,6 +2145,7 @@ function SlurpThreadView({
               {localizeUi("ui.slurp.messages.composerLabel", { defaultValue: "Write a message" })}
             </label>
             <textarea
+              ref={composerRef}
               id="slurp-message-draft"
               value={draft}
               rows={1}
@@ -1886,15 +2159,20 @@ function SlurpThreadView({
                 }
               }}
               placeholder={localizeUi("ui.slurp.messages.composerPlaceholder", { defaultValue: "Write a message…" })}
-              className="max-h-40 min-h-11 w-full flex-1 resize-y rounded-xl bg-[var(--slurp-surface)] px-3 py-2.5 text-base outline-none ring-1 ring-inset ring-[var(--noodle-divider)] focus:ring-2 focus:ring-[var(--noodle-accent)] sm:text-sm"
+              className="max-h-40 min-h-9 min-w-0 flex-1 resize-none bg-transparent px-1.5 py-1.5 text-base leading-6 outline-none placeholder:text-[var(--muted-foreground)] sm:text-sm sm:leading-6"
             />
             <button
               type="submit"
               disabled={busy || !draft.trim() || !personaId || !targetCreatorAccountId}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950 transition-[opacity,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-40 motion-reduce:transition-none motion-reduce:active:scale-100"
+              className={cn(
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-[background-color,color,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none",
+                draft.trim()
+                  ? "bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950 active:scale-90 motion-reduce:active:scale-100 disabled:opacity-50"
+                  : "text-[var(--muted-foreground)] opacity-50",
+              )}
               aria-label={localizeUi("ui.slurp.messages.send", { defaultValue: "Send" })}
             >
-              <Send size={16} className="!text-zinc-950" />
+              <Send size={16} aria-hidden="true" />
             </button>
           </form>
         </div>
@@ -2104,13 +2382,11 @@ function SlurpConnectionSwitcher({
         aria-label={`Text connection: ${label}`}
         title={`Text connection: ${label}`}
         className={cn(
-          "inline-flex min-h-11 max-w-36 items-center gap-1.5 rounded-xl px-2 text-[0.68rem] text-[var(--muted-foreground)] ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors hover:bg-[var(--slurp-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50",
-          open && "bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)] ring-[var(--noodle-accent)]/45",
+          "flex h-10 w-10 items-center justify-center rounded-xl text-[var(--muted-foreground)] transition-colors hover:bg-[var(--noodle-accent)]/10 hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50",
+          open && "bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]",
         )}
       >
-        <Link size={14} aria-hidden="true" />
-        <span className="truncate">{label}</span>
-        <ChevronDown size={13} aria-hidden="true" />
+        <Link size={15} className="shrink-0" aria-hidden="true" />
       </button>
       {open && (
         <div
@@ -2567,19 +2843,64 @@ function SlurpCommissionsPanel({
   );
 }
 
+/** The Creator's avatar asleep: a slow breathing glow, a moon, and three rising motes. */
+function SlurpAwayAnimation({ account }: { account: Parameters<typeof Avatar>[0]["account"] | null }) {
+  return (
+    <div className="slurp-away relative flex h-24 w-24 items-center justify-center" aria-hidden="true">
+      <style>{`
+        .slurp-away-glow { animation: slurp-away-breathe 3.2s ease-in-out infinite; }
+        .slurp-away-mote { animation: slurp-away-rise 3.6s ease-in infinite; opacity: 0; }
+        .slurp-away-moon { animation: slurp-away-bob 3.2s ease-in-out infinite; }
+        @keyframes slurp-away-breathe {
+          0%, 100% { transform: scale(0.86); opacity: 0.35; }
+          50% { transform: scale(1.08); opacity: 0.7; }
+        }
+        @keyframes slurp-away-rise {
+          0% { transform: translate3d(0, 0, 0) scale(0.5); opacity: 0; }
+          20% { opacity: 0.9; }
+          100% { transform: translate3d(14px, -38px, 0) scale(1.1); opacity: 0; }
+        }
+        @keyframes slurp-away-bob {
+          0%, 100% { transform: translate3d(0, 0, 0) rotate(-8deg); }
+          50% { transform: translate3d(0, -3px, 0) rotate(6deg); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .slurp-away-glow, .slurp-away-moon { animation: none; }
+          .slurp-away-mote { animation: none; opacity: 0.5; }
+        }
+      `}</style>
+      <span className="slurp-away-glow absolute inset-2 rounded-full bg-[radial-gradient(circle,color-mix(in_srgb,var(--noodle-accent)_45%,transparent),transparent_70%)]" />
+      <span className="relative rounded-full opacity-80 grayscale-[35%] ring-2 ring-[var(--slurp-surface-raised)]">
+        {account ? (
+          <Avatar account={account} size="md" />
+        ) : (
+          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--slurp-surface-raised)]" />
+        )}
+      </span>
+      <span className="slurp-away-moon absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full bg-[var(--slurp-surface-raised)] text-[var(--noodle-accent)] shadow-[var(--slurp-shadow-raised)]">
+        <Moon size={14} fill="currentColor" />
+      </span>
+      {[0, 1.2, 2.4].map((delay, index) => (
+        <span
+          key={delay}
+          className="slurp-away-mote absolute right-5 top-6 rounded-full bg-[var(--noodle-accent)]"
+          style={{ animationDelay: `${delay}s`, height: 4 + index * 2, width: 4 + index * 2 }}
+        />
+      ))}
+    </div>
+  );
+}
+
 function MessageBubble({
   message,
   locale,
   personaId,
   ownsCreator,
-  showReceipt = false,
 }: {
   message: SlurpMessage;
   locale: string;
   personaId?: string | null;
   ownsCreator: boolean;
-  /** Only the newest message you sent carries a receipt, the way every chat surface does it. */
-  showReceipt?: boolean;
 }) {
   const { t: localizeUi } = useUiTranslation();
   const unlock = useUnlockSlurpMessage();
@@ -2717,13 +3038,26 @@ function MessageBubble({
       )}
       <time dateTime={message.createdAt} className="px-1 text-xs text-[var(--muted-foreground)]">
         {formatTime(message.createdAt, locale)}
-        {/* Read state was written on every message since messaging shipped and shown on none. */}
-        {mine && showReceipt && message.readAt && (
-          <span className="ml-1.5 font-semibold">
-            {localizeUi("ui.slurp.messages.seenAt", {
-              defaultValue: "Seen {{time}}",
-              time: formatTime(message.readAt, locale),
+        {/* Every sent message carries its own receipt: one check delivered, two checks seen. */}
+        {mine && (
+          <span
+            className={cn(
+              "ml-1.5 inline-flex items-center gap-1 font-semibold",
+              message.readAt && "text-[var(--noodle-accent)]",
+            )}
+            title={localizeUi(message.readAt ? "ui.slurp.messages.seen" : "ui.slurp.messages.delivered", {
+              defaultValue: message.readAt ? "Seen" : "Delivered",
             })}
+          >
+            {message.readAt ? <CheckCheck size={14} aria-hidden="true" /> : <Check size={14} aria-hidden="true" />}
+            <span className="sr-only">
+              {message.readAt
+                ? localizeUi("ui.slurp.messages.seenAt", {
+                    defaultValue: "Seen {{time}}",
+                    time: formatTime(message.readAt, locale),
+                  })
+                : localizeUi("ui.slurp.messages.delivered", { defaultValue: "Delivered" })}
+            </span>
           </span>
         )}
       </time>
@@ -3875,6 +4209,7 @@ function SlurpRelationshipPanel({
   resetting: boolean;
 }) {
   const [advanced, setAdvanced] = useState(false);
+  const { t: localizeUi } = useUiTranslation();
   const { creatorState, threadState, availability } = relationship;
   const cooling = Boolean(relationship.coolUntil && relationship.coolUntil > new Date().toISOString());
   const mood = relationship.mood ?? 0;
@@ -3901,6 +4236,17 @@ function SlurpRelationshipPanel({
                 ? `Rapport ${relationship.score}/100 · mood ${mood > 0 ? `+${mood}` : mood}`
                 : `Where you stand with them · ${moodWord(mood)} right now`}
             </p>
+            <div
+              className="mt-3"
+              role="meter"
+              aria-label={localizeUi("ui.slurp.messages.relationshipLevel", { defaultValue: "Relationship level" })}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={relationship.score}
+              aria-valuetext={humanizeValue(relationship.tier)}
+            >
+              <SlurpTierLadder tier={relationship.tier as SlurpRapport["tier"]} />
+            </div>
           </div>
           {/* Both words are on screen, one selected. A single button that swapped its own label
               left it ambiguous whether it named the current mode or the one it would switch to. */}
@@ -4073,7 +4419,7 @@ function SlurpRelationshipPanel({
                 <Field label="Activity" value={availability.activity ?? "Nothing recorded"} />
                 {availability.minutesUntilOnline !== null && !availability.online && (
                   <Field
-                    label={availability.estimated ? "Back in (estimated from recent activity)" : "Back in"}
+                    label="Back in"
                     value={
                       availability.minutesUntilOnline < 60
                         ? `~${Math.round(availability.minutesUntilOnline)}min`
@@ -4298,16 +4644,105 @@ function SlurpPromptDebugPanel({
  */
 function SlurpRapportBadge({ rapport, ownsCreator }: { rapport: SlurpRapport; ownsCreator: boolean }) {
   const { t: localizeUi } = useUiTranslation();
-  // A stranger badge on an empty thread is noise: everybody starts there.
-  if (!rapport || rapport.tier === "stranger") return null;
+  if (!rapport) return null;
+  const Icon = SLURP_TIER_ICONS[rapport.tier] ?? UserRound;
   return (
     <span
       title={localizeUi(
         ownsCreator ? `ui.slurp.rapport.creatorHint.${rapport.tier}` : `ui.slurp.rapport.viewerHint.${rapport.tier}`,
       )}
-      className="inline-flex shrink-0 items-center rounded-full bg-[var(--noodle-accent)]/15 px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-[0.08em] text-[var(--noodle-accent)]"
+      aria-label={localizeUi(`ui.slurp.rapport.tier.${rapport.tier}`)}
+      className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 text-[var(--noodle-accent)]"
     >
-      {localizeUi(`ui.slurp.rapport.tier.${rapport.tier}`)}
+      <Icon size={12} aria-hidden="true" />
     </span>
   );
+}
+
+const SLURP_TIERS = ["stranger", "acquaintance", "regular", "favourite", "whale"] as const;
+/** One icon per rung, climbing from a silhouette to a crown so the order reads without the words. */
+const SLURP_TIER_ICONS: Record<SlurpRapport["tier"], typeof Heart> = {
+  stranger: UserRound,
+  acquaintance: Handshake,
+  regular: Coffee,
+  favourite: Star,
+  whale: Crown,
+};
+
+/** The whole relationship scale: every tier as an icon on a track, with its name beneath it. */
+function SlurpTierLadder({ tier, className }: { tier: SlurpRapport["tier"]; className?: string }) {
+  const { t: localizeUi } = useUiTranslation();
+  const current = Math.max(0, SLURP_TIERS.indexOf(tier));
+  return (
+    <ol className={cn("relative grid grid-cols-5", className)}>
+      {/* The track runs centre to centre, so it starts and ends under the first and last icon. */}
+      <span className="absolute inset-x-[10%] top-4 h-1 rounded-full bg-[var(--slurp-outline)]" aria-hidden="true" />
+      <span
+        className="absolute start-[10%] top-4 h-1 rounded-full bg-[var(--noodle-accent)] transition-[width] duration-500 motion-reduce:transition-none"
+        style={{ width: `${(current / (SLURP_TIERS.length - 1)) * 80}%` }}
+        aria-hidden="true"
+      />
+      {SLURP_TIERS.map((step, index) => {
+        const Icon = SLURP_TIER_ICONS[step];
+        const reached = index <= current;
+        const isCurrent = index === current;
+        return (
+          <li
+            key={step}
+            aria-current={isCurrent ? "step" : undefined}
+            className="relative flex min-w-0 flex-col items-center gap-1.5"
+          >
+            <span
+              className={cn(
+                "flex h-9 w-9 items-center justify-center rounded-full ring-2 transition-transform motion-reduce:transition-none",
+                reached
+                  ? "bg-[var(--noodle-accent)] ring-[var(--noodle-accent)] [&_svg]:!text-zinc-950"
+                  : "bg-[var(--slurp-surface-raised)] ring-[var(--slurp-outline)] [&_svg]:!text-[var(--muted-foreground)]",
+                isCurrent &&
+                  "scale-110 shadow-[0_0_0_4px_color-mix(in_srgb,var(--noodle-accent)_25%,transparent),0_0_18px_color-mix(in_srgb,var(--noodle-accent)_55%,transparent)]",
+              )}
+            >
+              <Icon size={16} aria-hidden="true" />
+            </span>
+            <span
+              className={cn(
+                "w-full truncate text-center text-[0.62rem] leading-tight",
+                isCurrent ? "font-black text-[var(--foreground)]" : "text-[var(--muted-foreground)]",
+              )}
+            >
+              {localizeUi(`ui.slurp.rapport.tier.${step}`)}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/** Closes a popover on an outside pointer press or Escape, returning focus to its trigger. */
+function useDismissablePopover(
+  open: boolean,
+  setOpen: (open: boolean) => void,
+  panelRef: RefObject<HTMLElement | null>,
+  triggerRef: RefObject<HTMLElement | null>,
+) {
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (panelRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open, setOpen, panelRef, triggerRef]);
 }

@@ -1,5 +1,34 @@
 # Slurp Remastered release notes
 
+## 0.0.21 — 2026-09-17
+
+- Messages: the composer is shorter on one-line messages and still grows for longer text.
+- Messages: away replies use a centered Creator status block with a quiet Get reply now action.
+- Messages: sent messages now show separate delivered and seen receipts.
+- Messages: mobile headers keep the Creator name visible and move the relationship label into an icon and meter.
+- Messages: fixed the transparent mobile header menu with an opaque surface.
+- Messages: desktop uses the compact connection switcher.
+- Messages: every sent message shows one check when delivered and two when seen.
+- Messages: away Creators show a status card with a sleeping animation, not typing dots.
+- Creators stay online 5 minutes after replying and 10 after delivering a commission.
+- Messages: tier icons are back in the desktop header; tap one to see the full tier scale.
+- Messages: Back returns to the profile or activity a chat was opened from.
+- Fixed see-through menus and pickers.
+
+## 0.0.20 — 2026-09-17
+
+- Fixed Restart Setup stuck on "How will people recognize them?".
+- Fixed "Needs attention" on Creators with a Conversation Schedule. Older schedules now repeat weekly, like in Engine chats.
+- Ads: new Ad image connection setting.
+- Stories: wider viewer, backdrop, show whole image, likes, unlock price.
+- Messages: cleaner message bar that grows with your text.
+- Messages: sending scrolls to your message; a button jumps to the latest.
+- Messages: header buttons fold into one menu on phones.
+- Messages: a "New messages" line marks where you stopped.
+- Creators keep a separate draft for each fan thread.
+- Side menu: Creator card shows the full banner and a clean name.
+- Create posts now: no Stories, waits for busy Creators, names any that did not post.
+
 ## 0.0.19 — 2026-09-17
 
 - Fixed Force reply now doing nothing when the hourly model budget was used up.

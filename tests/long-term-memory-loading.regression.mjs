@@ -30,9 +30,12 @@ const testRun = (async () => {
   assert.match(vault, /staleTime: 30_000/u);
   assert.match(sources, /staleTime: 30_000/u);
 
-  const previewBlock = sources.slice(sources.indexOf("const preview = useQuery({"), sources.indexOf("const rows ="));
+  const previewBlock = sources.slice(
+    sources.indexOf("const preview = useInfiniteQuery({"),
+    sources.indexOf("const rows ="),
+  );
   assert.match(previewBlock, /sourceContextMatchesProps && sourceTargetResolved && source !== "lorebooks"/u);
-  assert.match(previewBlock, /const lorebookPreview = useQuery\(/u);
+  assert.match(previewBlock, /const lorebookPreview = useInfiniteQuery\(/u);
   assert.match(previewBlock, /sourceContextMatchesProps && sourceTargetResolved && source === "lorebooks"/u);
   const sourceDetailsBlock = sources.slice(
     sources.indexOf("const sourceDetails = useQuery({"),
@@ -45,11 +48,11 @@ const testRun = (async () => {
   assert.match(sources, /const sourceTargetResolved = Boolean\(sourceTarget && scopeTargets\.isSuccess\)/u);
   assert.match(
     sources,
-    /const previewData = sourceContextMatchesProps && sourceTargetResolved \? preview\.data : undefined/u,
+    /const previewData = sourceContextMatchesProps && sourceTargetResolved \? mergedPreview : undefined/u,
   );
   assert.match(
     sources,
-    /const lorebookPreviewData = sourceContextMatchesProps && sourceTargetResolved \? lorebookPreview\.data : undefined/u,
+    /const lorebookPreviewData = sourceContextMatchesProps && sourceTargetResolved \? mergedLorebookPreview : undefined/u,
   );
   assert.match(
     sources,

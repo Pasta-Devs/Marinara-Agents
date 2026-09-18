@@ -44,12 +44,21 @@ export async function generateGarnishAdImage(
   db: DB,
   pool: GarnishAdsStorage,
   ad: GarnishAd,
-  connectionId?: string | null,
+  /** Preferred connections in order (ad connection, then the Slurp image connection). */
+  connectionIds: ReadonlyArray<string | null | undefined> = [],
 ): Promise<GarnishAdImageOutcome> {
   const connections = createConnectionsStorage(db);
-  const connection =
-    (connectionId ? await connections.getWithKey(connectionId) : null) ??
-    (await connections.getDefaultForImageGeneration());
+  // A stored id can be blank, deleted, or point at a text connection. Skip those and fall through to
+  // the next choice, not straight to the Engine default.
+  let connection: Awaited<ReturnType<typeof connections.getWithKey>> = null;
+  for (const id of connectionIds) {
+    const candidate = id?.trim() ? await connections.getWithKey(id.trim()) : null;
+    if (candidate?.provider === "image_generation") {
+      connection = candidate;
+      break;
+    }
+  }
+  connection ??= await connections.getDefaultForImageGeneration();
   if (!connection) return "unavailable";
 
   const model = connection.model || "";

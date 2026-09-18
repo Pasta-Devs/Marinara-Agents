@@ -649,7 +649,7 @@
         },
         "id": "gacha-forge",
         "name": "Gacha Forge",
-        "version": "1.8.1",
+        "version": "1.8.2",
         "description": "A complete gacha game mode. Describe a world and Gacha Forge builds the rest: banners to pull on, a cast the model writes and paints for you, story chapters told by a visual-novel narrator, and the battles, gear and events that grow around them. Install it, restart Marinara Engine when prompted, then open Home → Gacha Forge.",
         "engine": {
           "min": "2.4.4",
@@ -938,8 +938,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "dc5b6a9a294002b977ba58f51ddebd494ec71c14c4506dcb54710e62bde258e9",
-            "bytes": 1405969
+            "sha256": "9e3258eb501b1c1828996eeedfd707c80b944fa7b25f393f00b73aac6ad2c3e5",
+            "bytes": 1412419
           },
           {
             "path": "farm-asc.webp",
@@ -1413,8 +1413,8 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "f636e08eea914eaf72605d251f4db013e7f861085dc30b5e24c170ff87f953f0",
-            "bytes": 477646
+            "sha256": "22bf5bea50dc8f81d541c4269ebd8373b204e551128a58049db4b2d1a139b105",
+            "bytes": 483868
           },
           {
             "path": "skill-aoe_damage-dark.webp",
@@ -2171,9 +2171,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/gacha-forge.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.8.1.zip",
-        "sha256": "f82962e5b1602e147da639fc0343c72a2f49627a391d34b57de8d8a3e98ed605",
-        "bytes": 7783772
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.8.2.zip",
+        "sha256": "d8ef6e02d41f0f885ffb3665cf66a1f052dc16ba52b97af7565f2107574e2bb1",
+        "bytes": 7796444
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/gacha-forge/README.md"
     },
@@ -2442,7 +2442,7 @@
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.3.0",
+        "version": "1.3.2",
         "description": "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
         "engine": {
           "min": "2.4.1",
@@ -2474,13 +2474,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "dc831ec03b239496b5eafc4f3e056ad1db79129428c1ed9abaf41f5dff1d2795",
-            "bytes": 397500
+            "sha256": "3df79024d3c1f6ddf32172373f64b0a55d5745381d1e285570bf916cf8adbb6f",
+            "bytes": 402859
           },
           {
             "path": "client.js",
-            "sha256": "a7d127a1b41ce59de1dcb1572fb4595e45387f032da4a8ca99262508daa4b069",
-            "bytes": 912095
+            "sha256": "3859e0534538cae6bf1a709013e87e73b88a626068b3446a518374ff40bb7eda",
+            "bytes": 912174
           }
         ],
         "permissions": [
@@ -2496,9 +2496,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.3.0.zip",
-        "sha256": "623206ddf595c6cb81626d4d7677b8f52f89fac38f987f23084429140808c303",
-        "bytes": 1312133
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.3.2.zip",
+        "sha256": "566d6571bdcec8b8fc69355588e4f67eb09149c35f15b5987b722ee514691b2b",
+        "bytes": 1317571
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },
@@ -3167,7 +3167,7 @@
         "schemaVersion": 1,
         "id": "slurp2",
         "name": "Slurp Remastered",
-        "version": "0.0.19",
+        "version": "0.0.21",
         "description": "The Slurp remaster. It installs beside Slurp Legacy and keeps its own separate data: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp Remastered.",
         "localizations": {
           "de": {
@@ -3227,13 +3227,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "0751f3f357ca4e10e3103b4585f8cfdf659b86f158c26992700703526a4c9af8",
-            "bytes": 2733200
+            "sha256": "2654cc45bd34fc01fe30af183143f216744f9d4b7f904b602f80d3513916b952",
+            "bytes": 2733601
           },
           {
             "path": "client.js",
-            "sha256": "dfcea8c9e65e8257e305876895d27f550a77ebad7229c74f4aad3881bb617bc9",
-            "bytes": 3517385
+            "sha256": "b00eda0cf94d65d3dcf841724a05393edcda51c8632af590f3830e5a7e0b7be7",
+            "bytes": 3542911
           },
           {
             "path": "slurp2-logo.png",
@@ -3259,9 +3259,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp2.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.0.19.zip",
-        "sha256": "8266401c0ac77083d999f24d2b64919050f511d234389c279b792011a6d70f34",
-        "bytes": 6407160
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp2-0.0.21.zip",
+        "sha256": "db1dfa7b422fe7363fd6780e0f291b0cc2b079047011017676371693d953c609",
+        "bytes": 6433087
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp2/README.md"
     },

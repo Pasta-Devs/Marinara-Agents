@@ -29,11 +29,7 @@ const noteClass =
   "rounded-lg bg-[var(--slurp-canvas)] p-3 text-xs leading-5 text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)]";
 
 function needsAttention(creator: NoodlerManagedStageProfile) {
-  return (
-    creator.sourceStatus.state === "missing" ||
-    creator.sourceStatus.state === "changed" ||
-    creator.scheduleStatus?.state === "stale"
-  );
+  return creator.sourceStatus.state === "missing" || creator.sourceStatus.state === "changed";
 }
 
 /** Creators: a searchable directory, bulk edit, a tabbed detail panel, and Improve with AI. */
@@ -305,7 +301,7 @@ export function SlurpBackstageCreators(page: SlurpBackstagePageProps) {
                  tinted callout as a missing or changed source instead of a plain note. */
               <div
                 className={
-                  selectedCreator.scheduleStatus.state === "active"
+                  selectedCreator.scheduleStatus.state === "active" || selectedCreator.scheduleStatus.state === "stale"
                     ? `space-y-3 ${noteClass}`
                     : "space-y-3 rounded-lg bg-[var(--slurp-warning)]/10 p-3 text-xs leading-5 ring-1 ring-inset ring-[var(--slurp-warning)]/25"
                 }
@@ -638,11 +634,9 @@ export function SlurpBackstageCreators(page: SlurpBackstagePageProps) {
                             })
                           : `@${creator.handle}`}
                       </span>
-                      {/* A stale schedule stops applying silently: the Creator loses their
-                          daily rhythm and their message pacing, and it just looks like the
-                          writing got worse. Say so where the Creator is managed. */}
+                      {/* An older week keeps repeating, so this is a hint to refresh it, not a warning. */}
                       {creator.scheduleStatus?.state === "stale" && (
-                        <span className="mt-0.5 block truncate text-[0.68rem] font-semibold text-[var(--slurp-warning)]">
+                        <span className="mt-0.5 block truncate text-[0.68rem] text-[var(--slurp-muted)]">
                           {t("ui.slurp.settings.creators.scheduleStale")}
                         </span>
                       )}

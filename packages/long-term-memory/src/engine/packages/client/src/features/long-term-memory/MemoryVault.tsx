@@ -312,6 +312,12 @@ function ScopeTargetPicker({
     else if (wasSearching.current) setNoMemoriesOpen(noMemoriesPreference.current);
     wasSearching.current = Boolean(needle);
   }, [needle]);
+  function selectKind(kind: (typeof categories)[number][0]) {
+    setActiveKind(kind);
+    setNoMemoriesOpen(false);
+    noMemoriesPreference.current = false;
+    wasSearching.current = false;
+  }
   const renderRegularTarget = (target: Target) => {
     const fullName = targetFullName(target, activeKind);
     const branchChatName =
@@ -411,7 +417,7 @@ function ScopeTargetPicker({
             data-ltm-vault-scope-tab={kind}
             data-active={activeKind === kind}
             className="mari-editor-tab min-h-11 min-w-0 rounded-md px-1 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--marinara-editor-focus-ring)]"
-            onClick={() => setActiveKind(kind)}
+            onClick={() => selectKind(kind)}
             onKeyDown={(event) => {
               if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
               event.preventDefault();
@@ -422,7 +428,7 @@ function ScopeTargetPicker({
                     ? categories.length - 1
                     : (index + (event.key === "ArrowRight" ? 1 : -1) + categories.length) % categories.length;
               const nextKind = categories[nextIndex]![0];
-              setActiveKind(nextKind);
+              selectKind(nextKind);
               document.getElementById(`${pickerId}-${nextKind}`)?.focus();
             }}
           >

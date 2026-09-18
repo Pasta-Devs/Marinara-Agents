@@ -1678,6 +1678,7 @@ async function main() {
       await memoryScope.locator('[data-ltm-vault-scope-tab="branch"]').click();
       assert.equal(await memoryScope.locator('[data-ltm-vault-scope-presence="with-memories"]').count(), 1);
       assert.equal(await memoryScope.locator('[data-ltm-vault-scope-presence="no-memories"]').count(), 1);
+      await memoryScope.locator('[data-ltm-vault-scope-presence="no-memories"]:not([open])').waitFor();
       assert.equal(
         await memoryScope.locator('[data-ltm-vault-scope-presence="no-memories"]').getAttribute("open"),
         null,
