@@ -24,15 +24,16 @@ tests before editing.
 ## Start protocol
 
 1. Fetch `origin/staging` and `origin/modular-simping` (the integration branch). Verify the previous
-   slice is merged into `modular-simping` and its generated package/catalog outputs are present.
-   Merge `origin/staging` into `modular-simping` with an ordinary merge if it is behind; rebuild
-   generated outputs rather than hand-resolving their conflicts.
+   slice was merged into `modular-simping` through its PR and its generated package/catalog outputs
+   are present. Merge `origin/staging` into `modular-simping` with an ordinary merge if it is behind;
+   rebuild generated outputs rather than hand-resolving their conflicts.
 2. Inspect branch, upstream, worktree, issue/PR state, current package version, Node 24+, and the
    preferred Engine worktree at `/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish`. Record its
    branch, commit, cleanliness, and relationship to `origin/staging`. Preserve unrelated work.
 3. Open/link the slice issue and draft PR targeting `modular-simping` (never `staging`; only the
-   final release PR targets `staging`), both assigned to `Gunterlie`, per
-   repository workflow. Never mark human verification checkboxes yourself.
+   final release PR targets `staging`), both assigned to `Gunterlie`, per repository workflow. Every
+   slice must merge through its own PR. Do not push slice commits directly to `modular-simping`.
+   Never mark human verification checkboxes yourself.
 4. Update `SLURP-MODULE-STATUS.md` to `in progress` with the verified coordination and environment
    details before implementation.
 5. Re-derive every path/count named by this slice from the current tree. Treat old line numbers as
@@ -90,6 +91,7 @@ add dependencies, introduce compatibility shims, or begin later slices.
 - [ ] Architecture regression passes without adding a permanent exception.
 - [ ] Generated payload, manifest, artifact, catalogs, hashes, sizes, and ZIP contents agree.
 - [ ] Status ledger contains reproducible evidence and the exact next-slice handoff.
+- [ ] The slice is ready to merge through its PR into `modular-simping`; it was not merged directly.
 
 ## Validation
 
