@@ -3195,9 +3195,11 @@ export function useSlurpComposeTargets(personaId: string | null, enabled = true)
 }
 
 export function useOpenSlurpCreatorThread() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: { personaId: string; creatorAccountId: string; viewerAccountId: string }) =>
       api.post<{ thread: SlurpThread }>("/slurp2/messages/compose", input),
+    onSuccess: () => invalidateSlurpMessages(queryClient),
   });
 }
 

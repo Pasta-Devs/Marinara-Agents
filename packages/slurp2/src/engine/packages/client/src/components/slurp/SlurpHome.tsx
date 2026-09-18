@@ -2856,6 +2856,7 @@ function SlurpMediaWall({
   onOpenPost,
   onLoadMore,
   total,
+  emptyAd,
   adForIndex,
   onAdAction,
   onAdHide,
@@ -2865,6 +2866,7 @@ function SlurpMediaWall({
   onOpenPost: (postId: string) => void;
   onLoadMore?: () => void;
   total: number;
+  emptyAd?: SlurpPromotion | null;
   /** Null on every row when ads are off, searching, or the pool is empty. */
   adForIndex?: (index: number) => SlurpPromotion | null;
   onAdAction?: (ad: SlurpPromotion) => void;
@@ -2876,7 +2878,7 @@ function SlurpMediaWall({
     if (post.locked || typeof post.imageUrl !== "string") return [];
     return [{ ...toNoodlePostCardModel(post, creator.profile), imageUrl: post.imageUrl }];
   });
-  const emptyWallAd = adForIndex?.(0) ?? null;
+  const emptyWallAd = emptyAd ?? null;
   if (tiles.length === 0) {
     return (
       <div className="space-y-3 px-4 py-8">
@@ -3322,6 +3324,7 @@ function StageProfileView({
                   <LockedSlurpPostCard
                     post={item.post}
                     profile={profile}
+                    subscriptionPrice={viewerCreator?.subscriptionPrice}
                     controllerOnly={item.kind === "controller-locked"}
                     subscribed={viewerCreator?.subscribed ?? false}
                     unlockPending={unlockPending}
@@ -4337,6 +4340,7 @@ function ViewerHub({
     if (items.length === 0) return null;
     return items[Math.floor(index / inlineAdEvery) % items.length];
   };
+  const emptyWallAd = inlineAdsQuery.data?.items?.[0] ?? null;
   const profileKey = (scope?.creators ?? []).map((creator) => creator.profile.id).join("\u0000");
   useEffect(() => {
     setVisibleFeedCount(NOODLER_FEED_WINDOW_SIZE);
@@ -4880,6 +4884,7 @@ function ViewerHub({
             <SlurpMediaWall
               items={visibleFeed}
               onOpenPost={setOpenPostId}
+              emptyAd={inlineAdsEnabled && !searchTerm ? emptyWallAd : null}
               adForIndex={(index) => {
                 const ad = inlineAdForIndex(index);
                 return inlineAdsEnabled && !searchTerm ? ad : null;

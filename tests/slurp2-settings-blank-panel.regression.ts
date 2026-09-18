@@ -20,9 +20,13 @@ assert.match(
   /settingKey="storyRate"[\s\S]*ui\.slurp\.settings\.storyRate/u,
   "the separate Story-post cadence must remain intact",
 );
+const storiesGroupStart = automation.indexOf("settings.images.storiesGroup");
+const storiesGroupEnd = automation.indexOf("</SettingsGroup>", storiesGroupStart);
+assert.ok(storiesGroupStart >= 0 && storiesGroupEnd > storiesGroupStart, "the Story image settings group must exist");
+const storiesGroup = automation.slice(storiesGroupStart, storiesGroupEnd);
 assert.match(
-  automation,
-  /settings\.images\.storiesGroup[\s\S]*settingKey="storyImageWidth"[\s\S]*settingKey="storyImageHeight"/u,
+  storiesGroup,
+  /settingKey="storyImageWidth"[\s\S]*settingKey="storyImageHeight"/u,
   "Story image settings must keep the existing dimensions",
 );
 

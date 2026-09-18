@@ -34,16 +34,31 @@ assert.deepEqual(parseSlurpCheatDirective("test promise tonight promised photo")
 });
 
 const route = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");
-assert.match(route, /process\.env\.CHEATS_ENABLED !== "true"/u);
 assert.match(route, /generationGuidance: directive\.text/u);
 const cheatRoute = route.slice(
   route.indexOf('app.post("/messages/cheat"'),
   route.indexOf('app.post("/messages/threads/:threadId/force-reply"'),
 );
+assert.match(cheatRoute, /process\.env\.NODE_ENV !== "development"\s*\|\|\s*process\.env\.CHEATS_ENABLED !== "true"/u);
 assert.doesNotMatch(cheatRoute, /force: true/u);
 assert.match(route, /setWalletCoinsForDevelopment\(viewer\.id, directive\.coins\)/u);
-assert.match(route, /process\.env\.CHEATS_ENABLED !== "true"/u);
 assert.match(cheatRoute, /ownsCreator\(parsed\.data\.personaId, parsed\.data\.creatorAccountId\)/u);
 assert.match(cheatRoute, /adjustCheatState\(thread\.id/u);
 assert.match(cheatRoute, /addScheduledFollowUps\(thread\.id, followUps\)/u);
 assert.match(cheatRoute, /price: messaging\.ppvPrice/u);
+
+const storage = readFileSync(
+  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
+  "utf8",
+);
+const adjustCheatState = storage.slice(
+  storage.indexOf("async adjustCheatState"),
+  storage.indexOf("async addScheduledFollowUps"),
+);
+assert.match(adjustCheatState, /input\.mood == null \? \{\} : \{ moodUpdatedAt: timestamp \}/u);
+
+const slurpRoutes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
+assert.match(
+  slurpRoutes,
+  /cheatsEnabled:\s*process\.env\.NODE_ENV === "development" && process\.env\.CHEATS_ENABLED === "true"/u,
+);

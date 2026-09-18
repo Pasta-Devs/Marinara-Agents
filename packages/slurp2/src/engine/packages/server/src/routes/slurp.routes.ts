@@ -1766,7 +1766,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (nextRefillAt.getTime() <= now.getTime()) nextRefillAt.setDate(nextRefillAt.getDate() + 1);
     return {
       ...wallet,
-      cheatsEnabled: process.env.CHEATS_ENABLED === "true",
+      cheatsEnabled: process.env.NODE_ENV === "development" && process.env.CHEATS_ENABLED === "true",
       refillFloor: settings.walletStipendFloor,
       nextRefillAt: nextRefillAt.toISOString(),
       refillAvailable:
@@ -1783,7 +1783,8 @@ export async function slurpRoutes(app: FastifyInstance) {
   });
 
   app.post("/noodler/viewer/wallet/dev-set", async (req, reply) => {
-    if (process.env.CHEATS_ENABLED !== "true") return reply.code(404).send({ error: "Not found" });
+    if (process.env.NODE_ENV !== "development" || process.env.CHEATS_ENABLED !== "true")
+      return reply.code(404).send({ error: "Not found" });
     const parsed = z
       .object({ personaId: z.string().trim().min(1), coins: z.number().int().min(0).max(SLURP_DEV_CHEAT_MAX_COINS) })
       .safeParse(req.body);

@@ -925,9 +925,16 @@ function SlurpThreadView({
 
   // The queued note describes the wait, so it goes once the answer it promised has arrived.
   useEffect(() => {
-    const visibleCreatorReply = messages.some(
-      (message) => message.role === "creator" && !hiddenReplyIds.has(message.id),
-    );
+    const latestViewerAt = messages.reduce((latest, message) => {
+      if (message.role !== "viewer") return latest;
+      const createdAt = Date.parse(message.createdAt);
+      return Number.isNaN(createdAt) ? latest : Math.max(latest, createdAt);
+    }, 0);
+    const visibleCreatorReply = messages.some((message) => {
+      if (message.role !== "creator" || hiddenReplyIds.has(message.id)) return false;
+      const createdAt = Date.parse(message.createdAt);
+      return latestViewerAt === 0 || Number.isNaN(createdAt) || createdAt >= latestViewerAt;
+    });
     if (visibleCreatorReply || (thread && !thread.needsReply && hiddenReplyIds.size === 0)) setReplyStatus(null);
   }, [hiddenReplyIds, messages, thread]);
 
@@ -1104,6 +1111,7 @@ function SlurpThreadView({
       }
       return;
     }
+    setTyping(true);
     // Hide the reply message until typing delay finishes
     if (replyId) {
       setHiddenReplyIds((prev) => new Set(prev).add(replyId));
@@ -1364,12 +1372,10 @@ function SlurpThreadView({
                       ? localizeUi("ui.slurp.messages.availableNow", { defaultValue: "Available now" })
                       : availability?.minutesUntilOnline !== null
                         ? localizeUi(
-                            relationship.availability.estimated
-                              ? "ui.slurp.messages.probablyBackIn"
-                              : "ui.slurp.messages.backIn",
+                            availability.estimated ? "ui.slurp.messages.probablyBackIn" : "ui.slurp.messages.backIn",
                             {
                               value1:
-                                relationship.availability.minutesUntilOnline < 60
+                                availability.minutesUntilOnline < 60
                                   ? `${Math.round(availability?.minutesUntilOnline ?? 0)}min`
                                   : `${Math.round((availability?.minutesUntilOnline ?? 0) / 60)}hr`,
                             },
@@ -2114,6 +2120,7 @@ function SlurpThreadView({
                     type="button"
                     disabled={busy || requestReply.isPending}
                     onClick={() => {
+                      setError(null);
                       requestReply
                         .mutateAsync({ threadId: thread.id, personaId, guidance: requestHintGuidance(requestHint) })
                         .then((result) => {
@@ -3610,6 +3617,7 @@ function FanImageTool({
   const [file, setFile] = useState<File | null>(null);
   const [prompt, setPrompt] = useState("");
   const [content, setContent] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedMode, setSelectedMode] = useState<"upload" | "generate">("upload");
@@ -3627,6 +3635,11 @@ function FanImageTool({
   return (
     <div className="overflow-hidden rounded-xl bg-[var(--slurp-surface)] ring-1 ring-inset ring-[var(--noodle-divider)]">
       <div className="flex flex-col gap-2 p-3">
+        {error && (
+          <p role="alert" className="text-xs leading-5 text-[var(--destructive)]">
+            {error}
+          </p>
+        )}
         {mode === "choose" && (
           <div className="flex items-center gap-1.5" role="group" aria-label="Photo source">
             {(["upload", "generate"] as const).map((option) => (
@@ -3685,7 +3698,7 @@ function FanImageTool({
           </>
         ) : (
           <div className="flex flex-col gap-2">
-            {previewUrl && <img src={previewUrl} alt="Photo preview" className="max-h-48 rounded-lg object-contain" />}
+            {previewUrl && <FanImagePreview file={file} />}
             <p className="text-xs leading-5 text-[var(--muted-foreground)]">
               {activeMode === "generate" ? viewerPrompt : "Review this photo before sending it."}
             </p>
@@ -3701,17 +3714,23 @@ function FanImageTool({
                 type="button"
                 disabled={activeMode === "upload" ? !file || send.isPending : !prompt.trim() || generate.isPending}
                 onClick={() => {
+                  setError(null);
+                  setError(null);
                   const request =
                     activeMode === "upload"
                       ? file && send.mutateAsync({ threadId, creatorAccountId, personaId, file, content })
                       : generate.mutateAsync({ threadId, creatorAccountId, personaId, prompt: viewerPrompt, content });
                   if (!request) return;
-                  void request.then(() => {
-                    setFile(null);
-                    setPrompt("");
-                    setContent("");
-                    setReviewing(false);
-                  });
+                  void request
+                    .then(() => {
+                      setFile(null);
+                      setPrompt("");
+                      setContent("");
+                      setReviewing(false);
+                    })
+                    .catch((cause: unknown) => {
+                      setError(cause instanceof Error ? cause.message : "Could not send that picture.");
+                    });
                 }}
                 className="min-h-10 rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 disabled:opacity-50"
               >
@@ -3723,6 +3742,56 @@ function FanImageTool({
       </div>
     </div>
   );
+}
+
+function FanImagePreview({ file }: { file: File | null }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!file) return;
+    let cancelled = false;
+    setFailed(false);
+    if (typeof createImageBitmap !== "function") {
+      setFailed(true);
+      return;
+    }
+    void createImageBitmap(file)
+      .then((bitmap) => {
+        if (cancelled) {
+          bitmap.close();
+          return;
+        }
+        const canvas = canvasRef.current;
+        const context = canvas?.getContext("2d");
+        if (!canvas || !context) {
+          bitmap.close();
+          setFailed(true);
+          return;
+        }
+        const scale = Math.min(1, 768 / Math.max(bitmap.width, bitmap.height));
+        canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+        canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        bitmap.close();
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [file]);
+
+  if (failed) {
+    return (
+      <p role="img" aria-label="Photo preview unavailable" className="text-xs text-[var(--muted-foreground)]">
+        Photo preview unavailable. The file can still be sent.
+      </p>
+    );
+  }
+  return <canvas ref={canvasRef} role="img" aria-label="Photo preview" className="max-h-48 max-w-full rounded-lg" />;
 }
 
 /** Fan-side brief. A commission starts as a description and a price the creator names later. */

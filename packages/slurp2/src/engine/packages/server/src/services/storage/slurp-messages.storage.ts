@@ -2576,7 +2576,12 @@ export function createSlurpMessagesStorage(db: DB) {
       const rapport = input.rapport == null ? thread.rapport : { ...thread.rapport, score: rapportScore };
       await db
         .update(slurpThreads)
-        .set({ mood: String(mood), moodUpdatedAt: timestamp, rapport: JSON.stringify(rapport), updatedAt: timestamp })
+        .set({
+          mood: String(mood),
+          ...(input.mood == null ? {} : { moodUpdatedAt: timestamp }),
+          rapport: JSON.stringify(rapport),
+          updatedAt: timestamp,
+        })
         .where(eq(slurpThreads.id, threadId));
       return storage.getThreadById(threadId);
     },

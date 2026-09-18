@@ -121,7 +121,7 @@ audienceCharacterGroupIds: z.array(z.string()).max(20),
  * `SLURP_FAN_VOICE_PROMPT_MAX` characters to that prompt. The default keeps a fresh install
  * bounded; a user with a long context window may raise it.
  */
-audienceCharacterLimit: z.number().int().min(0).max(50).default(8),
+audienceCharacterLimit: z.number().int().min(0).max(10).default(5),
 ```
 
 Account row per invited character, written by the provisioner:
@@ -138,7 +138,7 @@ Cast id is the account id. `slurp2_audience_ties.memberId` is plain text, so tie
 
 ## Cap
 
-A user-set limit, defaulted to 20. The voice budget is 240 characters per actor per prompt (`SLURP_FAN_VOICE_PROMPT_MAX`), and a fan-activity run covers up to 12 Creators. The default keeps the worst-case prompt growth bounded without capping how many characters the user may invite in principle: beyond the limit, invited characters enter a rotation the same way the existing cast draw already mixes returning members and newcomers.
+A user-set limit from 0 to 10, defaulted to 5. The voice budget is 240 characters per actor per prompt (`SLURP_FAN_VOICE_PROMPT_MAX`), and a fan-activity run covers up to 12 Creators. The default keeps the worst-case prompt growth bounded without capping how many characters the user may invite in principle: beyond the limit, invited characters enter a rotation the same way the existing cast draw already mixes returning members and newcomers.
 
 ## Slices
 

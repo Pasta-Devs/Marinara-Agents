@@ -6,7 +6,7 @@
 // thousand five hundred lines, and nothing here needs the feed helpers it holds.
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { createSlurpStorage } from "../services/storage/slurp.storage.js";
+import { createSlurpStorage, isSlurpViewerActorAccount } from "../services/storage/slurp.storage.js";
 import { createSlurpMessagesStorage } from "../services/storage/slurp-messages.storage.js";
 import { createSlurpPopulationStorage } from "../services/storage/slurp-population.storage.js";
 import { createCharactersStorage } from "../services/storage/characters.storage.js";
@@ -427,8 +427,10 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
     const operatedAccounts = (await slurp.listNoodlerAccounts()).filter(
       (account) => account.sourceKind === "persona" && account.sourceEntityId === viewer.id,
     );
-    const inbound = await messages.listThreadsForCreators(operatedAccounts.map((account) => account.id));
+    const creatorAccount = operatedAccounts.find((account) => !isSlurpViewerActorAccount(account));
+    const inbound = creatorAccount ? await messages.listThreadsForCreators([creatorAccount.id]) : [];
     const inboundByViewer = new Map(inbound.map((thread) => [thread.viewerAccountId, thread]));
+    const characterTargets = creatorAccount ? await slurp.listAudienceCharacterAccounts() : [];
     return {
       targets: [
         ...profiles.map((profile) => ({
@@ -440,14 +442,14 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
           threadId: null,
           creatorAccountId: null,
         })),
-        ...(await slurp.listAudienceCharacterAccounts()).map(({ account }) => ({
+        ...characterTargets.map(({ account }) => ({
           id: account.id,
           kind: "character" as const,
           displayName: account.displayName,
           handle: account.handle,
           avatarUrl: account.avatarUrl,
           threadId: inboundByViewer.get(account.id)?.id ?? null,
-          creatorAccountId: operatedAccounts[0]?.id ?? null,
+          creatorAccountId: creatorAccount.id,
         })),
       ],
     };
@@ -665,7 +667,8 @@ export async function slurpMessageRoutes(app: FastifyInstance) {
 
   app.post("/messages/cheat", async (req, reply) => {
     // Check on every request. Do not trust a client flag cached before the environment changed.
-    if (process.env.CHEATS_ENABLED !== "true") return reply.code(404).send({ error: "Not found" });
+    if (process.env.NODE_ENV !== "development" || process.env.CHEATS_ENABLED !== "true")
+      return reply.code(404).send({ error: "Not found" });
     const parsed = z
       .object({
         personaId: z.string().trim().min(1),

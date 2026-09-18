@@ -61,6 +61,7 @@ import {
 import { prepareSlurpPostImageContexts, slurpImageCaptioning } from "./slurp-post-image-context.js";
 import { createSlurpMessagesStorage, type SlurpMessage } from "../storage/slurp-messages.storage.js";
 import type { SlurpDmPolicy } from "./slurp-messaging.js";
+import { isSlurpCharacterFanAccount } from "./slurp-audience-characters.js";
 import { resolveNoodlerCharacterCanon, resolveSlurpCharacterFanVoice } from "./slurp-source-resolve.js";
 import {
   claimSlurpModelBudget,
@@ -121,6 +122,8 @@ export function buildSlurpMessageChat(input: {
   contentMenu?: string;
   /** Holidays and site events running today. See `slurp-platform-events.ts`. */
   platformEvents?: string | null;
+  /** A viewer request stays in the untrusted user-data message, never in trusted system guidance. */
+  viewerGenerationGuidance?: string;
   promptBlocks?: SlurpPromptBlockOverrides;
 }): ChatMessage[] {
   const protect = (value: string | null | undefined) =>
@@ -258,6 +261,9 @@ export function buildSlurpMessageChat(input: {
         }
       : {}),
     ...(input.characterCanon ? { characterCanon: protect(input.characterCanon) } : {}),
+    ...(input.viewerGenerationGuidance?.trim()
+      ? { viewerRequest: protect(input.viewerGenerationGuidance.trim()) }
+      : {}),
     ...(input.threadState
       ? {
           relationshipState: {
@@ -417,7 +423,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
     characterFanVoice ??
     (fanMember ? slurpFanVoiceForPrompt(slurpResolveFanType(settings.fanTypes, fanMember).voice) : undefined);
   // The memory is the tie said out loud, and an invited character holds a tie like anybody else.
-  const fanMemory = fanMember || characterFanVoice ? slurpFanMemoryForPrompt(tie) : undefined;
+  const fanMemory = fanMember || isSlurpCharacterFanAccount(input.viewer) ? slurpFanMemoryForPrompt(tie) : undefined;
   const recentPosts = recentPostRows
     .filter((post) => post.access !== "draft")
     .slice(0, RECENT_POSTS)
@@ -510,7 +516,8 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
     availability,
     disclosureMode,
     publicIdentity,
-    generationGuidance: [settings.generationGuidance, input.generationGuidance].filter(Boolean).join("\n"),
+    generationGuidance: settings.generationGuidance,
+    viewerGenerationGuidance: input.generationGuidance,
     promptBlocks: settings.promptBlocks,
     scheduleContext,
     characterCanon,
