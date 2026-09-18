@@ -99,6 +99,12 @@ evaluation time from its caller. Nothing rewrites stored prices when an event st
 cleans up when it ends, so the behaviour is restart-safe. Design a separate contract when a real
 non-numeric need appears.
 
+The producing side (`modules/world/events/`) stores only the effect on a saved event and stamps
+`source` on at activation, so an event cannot claim a modifier on another event's behalf. The
+consuming side builds the provider from the settings snapshot it has already read, inside its own
+transaction — never from a provider cached at activation, which would freeze the event list until
+the next restart. A consumer depends on `SlpActiveModifierProvider`, never on World.
+
 ## Naming
 
 - React components: `SlpName.tsx`, with component symbols `SlpName`.

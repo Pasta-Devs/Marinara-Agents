@@ -2,6 +2,9 @@ import { and, desc, eq, lt, or } from "../../../db/file-query.js";
 import { NoodleAccountSettings, NoodleAccountSubscription } from "@marinara-engine/shared";
 import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
 import { readSlurpWallet, slurpWalletKey, spend, subscriptionPaidThrough } from "../../modules/economy/slp-wallet.js";
+import { createSlpActiveModifierProvider } from "../../base/modifiers/slp-active-modifier-provider.js";
+import { slurpSubscriptionCharge } from "../../modules/economy/slp-creator-pricing.js";
+import { slurpPlatformEventModifierSource } from "../../modules/world/events/slp-platform-events.js";
 import { createSlurpPopulationStorage } from "../audience/slp-audience-storage-funnel.js";
 import { slurpEarningsKey } from "../../modules/economy/slp-earnings.js";
 import { isNoodlerHiddenFromViewer } from "../../base/identity/slp-access.js";
@@ -81,11 +84,22 @@ export function createEconomyStorage1(context: SlurpStorageContext) {
               eq(noodleAccountSubscriptions.creatorAccountId, creatorAccountId),
             ),
           );
-        const price = settings.walletEnabled ? await this.getCreatorSubscriptionPrice(creatorAccountId) : 0;
         // `now()` returns an ISO string. Every use below wants a Date — `at.getTime()`, `spend`,
         // and `subscriptionPaidThrough` — so the string made the first subscribe for a viewer fail
         // with "toISOString is not a function" and return a 500.
         const at = new Date();
+        // The charge for a *new* subscription, with whatever is running right now applied. The
+        // provider is built from the settings snapshot this transaction already read, so a
+        // Backstage edit to the event list takes effect on the next subscribe with no restart, and
+        // the price stays derived rather than stored-and-patched. An existing subscription is not
+        // re-priced: it renews at the price captured in the wallet below.
+        const price = settings.walletEnabled
+          ? slurpSubscriptionCharge(
+              await this.getCreatorSubscriptionPrice(creatorAccountId),
+              createSlpActiveModifierProvider([slurpPlatformEventModifierSource(settings.platformEvents)]),
+              at,
+            )
+          : 0;
         const existingWallet = settings.walletEnabled ? await getWalletNow(viewerAccountId) : null;
         const existingPayment = existingWallet?.subscriptions[creatorAccountId];
         const existingPaymentIsValid =

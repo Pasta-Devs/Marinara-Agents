@@ -54,3 +54,26 @@ modules, rejected alternative, and migration consequence.
 - **Migration consequence:** the architecture regression ranks `modules` and `data`, rejects I/O
   imports in server modules, and has negative fixtures for each new edge. Client layers are
   unchanged.
+
+## 2026-09-19 — The modifier consumer builds the provider, not the entry
+
+- **Problem:** Plan §4 said the server entry constructs the active-modifier provider. Slice 6 found
+  that it cannot. The only new-subscription charge is computed inside one storage transaction in
+  `data/economy/slp-economy-storage-1.ts`, and the platform-event list lives in Slurp settings,
+  which Backstage edits at runtime. A provider built once during `activate()` would serve a frozen
+  event list until the next Engine restart, and threading one through `createSlurpStorage` would
+  also add a constructor dependency to three construction sites for no gain.
+- **Decision:** The consuming feature builds the provider from the settings snapshot its own
+  transaction already read, and passes it to a pure `slurpSubscriptionCharge(base, provider, at)`.
+  Economy depends on `SlpActiveModifierProvider` and never on World, so the seam is unchanged.
+  A saved event stores the modifier effect only; the producing source stamps `source` on at
+  activation, which makes an id mismatch impossible.
+- **Affected modules:** `base/modifiers/` (new), `modules/world/events/slp-platform-events.ts`,
+  `modules/economy/slp-creator-pricing.ts`, `data/economy/slp-economy-storage-1.ts`, and the
+  Backstage event editor, whose new-event literal gains the two defaulted fields.
+- **Rejected alternative:** a provider constructed in the entry. It is either stale after a
+  Backstage edit or forces a settings read per request inside the entry, which is the same work in
+  a worse place. Also rejected: moving the charge out of the transaction, which plan §3 forbids.
+- **Migration consequence:** calendar activation stays in `modules/world/events/` rather than moving
+  to `features/world/events/` as §4 first said, because it is a pure rule under the Slice 5 layer
+  model and the client reads it directly. Plan §3's allocation ledger already placed it there.
