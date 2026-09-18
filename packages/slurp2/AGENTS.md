@@ -20,6 +20,8 @@ root `AGENTS.md`, `.github/agents/chai-workflow.md`, and `CONTRIBUTING.md`; they
    `client.js`, `server.mjs`, `manifest.json`, the artifact ZIP, catalogs, hashes, or sizes.
 5. When you intentionally change a boundary, update `docs/architecture/README.md`, append an entry
    to `docs/architecture/DECISIONS.md`, and update the architecture regression in the same PR.
-6. While the modular refactor is open, update `SLURP-MODULE-STATUS.md` at the repository root when
-   you start a slice, after each material discovery, and before handoff. `SLURP-MODULE-PLAN.md` is
+6. While the modular refactor is open, slice PRs target the `modular-simping` integration branch,
+   not `staging`; only the final `0.1.0` release PR targets `staging`. Update
+   `SLURP-MODULE-STATUS.md` at the repository root when you start a slice, after each material
+   discovery, and before handoff. `SLURP-MODULE-PLAN.md` is
    the architecture source of truth; change it only for a verified fact or an approved decision.

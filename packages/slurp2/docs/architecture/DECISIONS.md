@@ -21,3 +21,16 @@ modules, rejected alternative, and migration consequence.
 - **Migration consequence:** ten reviewable slices, recorded in `SLURP-MODULE-PLAN.md` and
   `SLURP-MODULE-STATUS.md`. Ownership shrinks to the three roots and two exceptions as files move.
   Persisted names, routes, and locale keys do not change.
+
+## 2026-09-18 — Ship the refactor once, through an integration branch
+
+- **Problem:** Each slice changes package source, so each needs a rebuild and version bump.
+  Publishing every slice to `staging` would give users many intermediate versions of a half-finished
+  restructure.
+- **Decision:** Slice PRs target the `modular-simping` integration branch and use `0.0.x` versions
+  there. One final PR merges it into `staging` as Slurp2 `0.1.0`.
+- **Affected modules:** release process only; no source boundary changes.
+- **Rejected alternative:** merging source-only slices to `staging` without rebuilding. The committed
+  payload would drift from source, and the next unrelated Slurp2 fix would ship half-migrated code.
+- **Migration consequence:** keep `modular-simping` merged with `staging`; the final PR folds the
+  integration changelog entries into one `0.1.0` entry and removes unpublished `0.0.x` ZIPs.

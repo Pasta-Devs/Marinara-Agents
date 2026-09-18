@@ -24,11 +24,14 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 - Overall state: Slices 0–1 and 2 implemented and validated locally; pushed, no PR yet
 - Active slice: 2, stacked on the unmerged 0–1 commits at the maintainer's request
 - Issue: #914 (assigned `Gunterlie`)
-- Pull request: none — the maintainer asked for no PR yet
-- Branch: local `refactor/slurp2-module-safety-rails`, pushed as `origin/modular-simping`; based on
+- Pull request: none. Slices 0–1 and 2 were pushed directly to the integration branch at the
+  maintainer's request; from Slice 3 on, each slice is a draft PR targeting `modular-simping`
+- Branch: `origin/modular-simping` is the integration branch (local name
+  `refactor/slurp2-module-safety-rails`); based on
   `origin/staging` `e92684d1`. Slice 0–1 commit `29ff6ec2`; Slice 2 is the commit after the ledger
   update `f22f46fa`.
-- Package version: `0.0.25`
+- Package version: `0.0.25` (integration-only; `staging` stays at `0.0.22` until the final `0.1.0`
+  release PR)
 - Generated artifact: `artifacts/slurp2-0.0.25.zip`, sha256
   `63110f07e58aefca8f9be2cbc7b9fb492ce8c8f5a36daeb19226f4bb7139fbfe`, 6705108 bytes
 - Node: `/home/dev/.nvm/versions/node/v24.18.0/bin`; `node -v` = `v24.18.0`
@@ -94,6 +97,7 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 | 2026-09-18 | 2 | `validate-catalog.mjs` required every legacy-owned path to exist in the Slurp2 source tree. | Its Slurp2 list now drops the moved client entry and adds the three `slp` roots. |
 | 2026-09-18 | 2 | Two passing-or-baseline tests assert the server entry's relative import specifiers (`slurp-table-registration`, `slurp-boundary`). | Only the path inside those two regexes changed (`../../db/…` → `../db/…`, `./slurp-refresh-…` → `../services/slurp/slurp-refresh-…`); what is asserted is unchanged. |
 | 2026-09-18 | 2 | The browser runner's `pnpm install` synced the Engine worktree's ignored `node_modules`. Builds after that give `server.mjs` 2954647 bytes (same as staging's 0.0.22); the 0.0.24 build before it gave 2746627. | The earlier "Engine drift" was stale Engine `node_modules`, not the Engine commit. 0.0.25 is built with synced dependencies. |
+| 2026-09-18 | release | Maintainer decision: users must not receive intermediate refactor versions. | `modular-simping` is the integration branch; slices use `0.0.x` there; one final PR to `staging` ships `0.1.0`. Plan §7, slice prompt, package `AGENTS.md`, and `DECISIONS.md` updated. |
 
 ## Pending decisions
 
@@ -184,6 +188,7 @@ Generated output (builder only, no hand edits):
 
 ## Next action
 
-1. Maintainer: decide whether `modular-simping` (Slices 0–1 and 2 together) becomes one draft PR to
-   `staging`, assigned to `Gunterlie` and linked to #914, and let CI run the browser job.
-2. Then start Slice 3 (server routes) from `SLURP-MODULE-SLICE.prompt.md`.
+1. Start Slice 3 (server routes) from `SLURP-MODULE-SLICE.prompt.md`: merge `origin/staging` into
+   `modular-simping` first, then open the slice issue/draft PR targeting `modular-simping`.
+2. After Slice 10, open the final PR `modular-simping` → `staging` as Slurp2 `0.1.0` (one changelog
+   entry, integration-only `0.0.x` ZIPs removed, one rebuild, full live lifecycle proof).

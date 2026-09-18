@@ -23,12 +23,15 @@ tests before editing.
 
 ## Start protocol
 
-1. Fetch and inspect current `origin/staging`; verify the previous slice is merged and its generated
-   package/catalog outputs are present.
+1. Fetch `origin/staging` and `origin/modular-simping` (the integration branch). Verify the previous
+   slice is merged into `modular-simping` and its generated package/catalog outputs are present.
+   Merge `origin/staging` into `modular-simping` with an ordinary merge if it is behind; rebuild
+   generated outputs rather than hand-resolving their conflicts.
 2. Inspect branch, upstream, worktree, issue/PR state, current package version, Node 24+, and the
    preferred Engine worktree at `/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish`. Record its
    branch, commit, cleanliness, and relationship to `origin/staging`. Preserve unrelated work.
-3. Open/link the slice issue and draft PR targeting `staging`, both assigned to `Gunterlie`, per
+3. Open/link the slice issue and draft PR targeting `modular-simping` (never `staging`; only the
+   final release PR targets `staging`), both assigned to `Gunterlie`, per
    repository workflow. Never mark human verification checkboxes yourself.
 4. Update `SLURP-MODULE-STATUS.md` to `in progress` with the verified coordination and environment
    details before implementation.
@@ -71,7 +74,7 @@ add dependencies, introduce compatibility shims, or begin later slices.
   because a file moved.
 - Run `tests/slurp2-architecture.regression.ts` and keep all new-root files within dependency,
   naming, barrel, ownership, and size rules.
-- For executable payload changes, bump Slurp2 by one patch version, rebuild from an explicit clean
+- For executable payload changes, bump the integration `0.0.x` patch version once, rebuild from an explicit clean
   Engine checkout using
   `MARINARA_ENGINE_ROOT=/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish` or the recorded clean
   substitute, and commit the complete generated release unit. Never hand-edit generated files.

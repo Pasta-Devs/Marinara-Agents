@@ -400,16 +400,30 @@ Step 1/Step 2 research prompts are not required runtime guidance and remain opti
 
 ## 7. Migration sequence
 
-Every numbered implementation item after the initial safety batch is a separate reviewable PR based
-on current `origin/staging`. Slices 0 and 1 land together as the initial safety-rails PR because
-their documentation, architecture regression, source-map helper, ownership correction, and
-typecheck correction are mutually reinforcing prerequisites and move no live implementation module.
-Open/link an
-issue and draft PR before implementation, assign both to `Gunterlie`, and keep the PR draft until
-its focused and baseline validation passes. Each source-changing PR rebuilds Slurp2 and commits the
-complete generated release unit. Each independently published structural PR increments the Slurp2
-patch version once so installed staging packages can detect the update; these refactor-only patch
-bumps do not require changelog entries.
+### Integration branch and release
+
+Staging users receive the refactor once, as Slurp2 `0.1.0`, never as intermediate versions.
+
+- `modular-simping` is the long-lived integration branch. Every slice is a separate reviewable PR
+  that targets `modular-simping`, not `staging`. Open/link an issue and draft PR before
+  implementation, assign both to `Gunterlie`, and keep the PR draft until its focused and baseline
+  validation passes. "Merged" in this plan means merged into `modular-simping`.
+- Slices 0 and 1 land together as the initial safety-rails work because their documentation,
+  architecture regression, source-map helper, ownership correction, and typecheck correction are
+  mutually reinforcing prerequisites and move no live implementation module.
+- Each source-changing slice still rebuilds Slurp2, commits the complete generated release unit, and
+  bumps the `0.0.x` patch version once, so dev-box installs can detect each slice. These versions
+  exist only on the integration branch; the Engine reads only `staging` and `main` catalogs, so no
+  user receives them. Their changelog entries are working notes.
+- Keep the integration branch current: merge `origin/staging` into `modular-simping` with an
+  ordinary merge (no rebase, no force) at least before each slice starts. Resolve generated-output
+  conflicts by rebuilding, never by hand. If a Slurp2 fix on `staging` has reached or passed the
+  integration version, bump the integration version above it in that merge.
+- The final PR merges `modular-simping` into `staging` after Slice 10. It sets the version to
+  `0.1.0` (a deliberate minor release; the usual patch-only rule does not apply), replaces the
+  integration-only `0.0.x` changelog and splash entries with one `0.1.0` entry, removes the
+  integration-only `artifacts/slurp2-0.0.*.zip` files that no `staging` catalog ever published, and
+  rebuilds once. It needs CodeRabbit review and the full live lifecycle proof below.
 
 ### 0. Architecture contract
 
@@ -423,7 +437,7 @@ bumps do not require changelog entries.
 - Add the architecture regression to the Slurp regression glob; no new runner is introduced.
 
 This slice shares the initial PR with Slice 1. Slice 0 alone would not rebuild or version-bump the
-package; the combined PR follows Slice 1's package rebuild and patch-version requirements.
+package; the combined PR follows Slice 1's rebuild and integration-version requirements.
 
 ### 1. Safety rails and ownership
 
@@ -597,7 +611,8 @@ TS2304/TS2552 checks.
   `MARINARA_ENGINE_ROOT=/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish node scripts/build-feature-packages.mjs slurp2`,
   or the recorded clean substitute path when the preferred worktree cannot be used.
 - Confirm payloads, manifest, artifact ZIP, catalogs, hashes, sizes, and changelog/version move as
-  one generated unit. A minor bump requires a matching `packages/slurp2/CHANGELOG.md` entry.
+  one generated unit. Slice PRs use `0.0.x` on `modular-simping`; only the final PR to `staging`
+  publishes `0.1.0`, which requires a matching `packages/slurp2/CHANGELOG.md` entry.
 - Confirm the ZIP contains only its declared files and all hashes match.
 - On `dev-marinara2` only, reserve the box, then exercise install/update, activation, navigation,
   restart, offline restart, and uninstall. Verify phone, tablet, and desktop layouts for affected
