@@ -53,10 +53,13 @@ export function createSlpImprovementJobs(app: FastifyInstance, deps: SlpRouteDep
         .where(eq(slurpImprovementProposals.id, proposalId));
     }
   };
-  const publicImprovementJob = async (id: string) => {
+  const publicImprovementJob = async (
+    id: string,
+    suppliedProposals?: readonly (typeof slurpImprovementProposals.$inferSelect)[],
+  ) => {
     const job = await readImprovementJob(id);
     if (!job) return null;
-    const proposals = await readJobProposals(id);
+    const proposals = suppliedProposals ?? (await readJobProposals(id));
     const modules = readStringArray(job.modules);
     return {
       id: job.id,

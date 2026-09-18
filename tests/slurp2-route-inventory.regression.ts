@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 // Every Slurp2 HTTP route (method + path, relative to /api/slurp2), plus the one content-type
@@ -201,3 +201,6 @@ const found = (readdirSync(root, { recursive: true }) as string[])
 
 assert.deepEqual(found, [...EXPECTED].sort(), "the Slurp2 route multiset changed");
 assert.equal(found.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 179);
+const entry = readFileSync(join(root, "slp-server-entry.ts"), "utf8");
+assert.match(entry, /mountSlpRoutes\(Object\.assign\(router, \{ db: app\.db \}\)/u);
+assert.equal(existsSync(join(root, "features/maintenance/slp-backup-routes.ts")), true);

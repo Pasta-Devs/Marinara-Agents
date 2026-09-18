@@ -45,7 +45,26 @@ export async function slpImprovementRoutes(app: FastifyInstance, deps: SlpRouteD
 
   app.get("/backstage/improvement-jobs", async () => {
     const rows = (await app.db.select().from(slurpImprovementJobs)).slice(-20).reverse();
-    return { items: await Promise.all(rows.map((row) => publicImprovementJob(row.id))) };
+    const proposals = rows.length
+      ? await app.db
+          .select()
+          .from(slurpImprovementProposals)
+          .where(
+            inArray(
+              slurpImprovementProposals.jobId,
+              rows.map((row) => row.id),
+            ),
+          )
+      : [];
+    const proposalsByJobId = new Map<string, typeof proposals>();
+    for (const proposal of proposals) {
+      const existing = proposalsByJobId.get(proposal.jobId) ?? [];
+      existing.push(proposal);
+      proposalsByJobId.set(proposal.jobId, existing);
+    }
+    return {
+      items: await Promise.all(rows.map((row) => publicImprovementJob(row.id, proposalsByJobId.get(row.id) ?? []))),
+    };
   });
   app.get("/backstage/improvement-jobs/:id", async (req, reply) => {
     const job = await publicImprovementJob((req.params as { id: string }).id);

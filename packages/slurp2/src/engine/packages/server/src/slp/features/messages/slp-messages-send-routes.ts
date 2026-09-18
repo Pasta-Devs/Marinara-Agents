@@ -320,7 +320,9 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
       .safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { messageId } = req.params as { messageId: string };
-    const message = await messages.setMessageReaction(messageId, parsed.data.personaId, parsed.data.reaction);
+    const viewer = await requireViewer(parsed.data.personaId);
+    if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
+    const message = await messages.setMessageReaction(messageId, viewer.id, parsed.data.reaction);
     if (!message) return reply.code(404).send({ error: "Message not found" });
     return { message };
   });

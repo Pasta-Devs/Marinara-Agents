@@ -37,7 +37,7 @@ import { buildSlurpChatContext, type SlurpChatContextRequest } from "../services
 const lifecycle = createSlurpActivationLifecycle();
 
 /** Every Slurp HTTP route. Shared handles and mutable route state are created once, here. */
-async function mountSlpRoutes(app: FastifyInstance) {
+export async function mountSlpRoutes(app: FastifyInstance) {
   const host = createSlpRouteHost(app);
   const deps = { ...host, ...createSlpViewerContext(app, host) };
   await slpSettingsRoutes(app, deps);

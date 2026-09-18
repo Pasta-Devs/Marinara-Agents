@@ -94,6 +94,8 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
     await messages.markRead(thread.id, side);
     const creator = await slurp.getNoodlerAccountById(thread.creatorAccountId);
     if (!creator) return reply.code(404).send({ error: "Creator not found" });
+    const presence = await creatorPresence(creator, thread.id);
+    const audienceTone = readSlurpAudienceTone((await slurp.getSettings()).audienceTone);
     const counterpart =
       side === "creator"
         ? ((await population.get(thread.viewerAccountId)) ??
@@ -132,7 +134,7 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
       nextCursor: page.nextCursor,
       creator,
       counterpart,
-      ...(await creatorPresence(creator, thread.id)),
+      ...presence,
       messaging: await messages.getCreatorMessaging(thread.creatorAccountId),
       commissions: withSuggestedQuotes(
         await messages.listCommissionsForThread(thread.id),
@@ -149,14 +151,10 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
         spentCoins: await messages.spentWithCreator(thread.viewerAccountId, thread.creatorAccountId),
         coolUntil: thread.coolUntil,
         dayVibe: await describeSlurpDayVibe(app.db, thread.creatorAccountId),
-        availability: (await creatorPresence(creator, thread.id)).creatorAvailability,
-        audienceTone: readSlurpAudienceTone((await slurp.getSettings()).audienceTone),
+        availability: presence.creatorAvailability,
+        audienceTone,
         imageMode:
-          thread.mood <= -40 && readSlurpAudienceTone((await slurp.getSettings()).audienceTone) === "unfiltered"
-            ? "hostile"
-            : thread.mood >= 20
-              ? "friendly"
-              : "none",
+          thread.mood <= -40 && audienceTone === "unfiltered" ? "hostile" : thread.mood >= 20 ? "friendly" : "none",
         creatorState: await slurp.getCreatorState(thread.creatorAccountId),
         threadState: thread.threadState,
         scheduledFollowUps: thread.scheduledFollowUps,
@@ -296,6 +294,8 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
     const thread = await messages.getThread(viewer.id, creator.id);
     if (thread) await messages.markRead(thread.id, "viewer");
     const page = thread ? await messages.listMessagePage(thread.id) : { messages: [], nextCursor: null };
+    const presence = await creatorPresence(creator, thread?.id);
+    const audienceTone = thread ? readSlurpAudienceTone((await slurp.getSettings()).audienceTone) : null;
     return {
       thread: thread ? await freshView(thread.id) : null,
       messages: page.messages.map((message) =>
@@ -318,7 +318,7 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
       nextCursor: page.nextCursor,
       commissions: thread ? await messages.listCommissionsForThread(thread.id) : [],
       creator,
-      ...(await creatorPresence(creator, thread?.id)),
+      ...presence,
       relationship: thread
         ? {
             side: "viewer" as const,
@@ -331,14 +331,10 @@ export async function slpMessagesThreadRoutes(app: FastifyInstance, messaging: S
             spentCoins: await messages.spentWithCreator(thread.viewerAccountId, thread.creatorAccountId),
             coolUntil: thread.coolUntil,
             dayVibe: await describeSlurpDayVibe(app.db, thread.creatorAccountId),
-            availability: (await creatorPresence(creator, thread.id)).creatorAvailability,
-            audienceTone: readSlurpAudienceTone((await slurp.getSettings()).audienceTone),
+            availability: presence.creatorAvailability,
+            audienceTone,
             imageMode:
-              thread.mood <= -40 && readSlurpAudienceTone((await slurp.getSettings()).audienceTone) === "unfiltered"
-                ? "hostile"
-                : thread.mood >= 20
-                  ? "friendly"
-                  : "none",
+              thread.mood <= -40 && audienceTone === "unfiltered" ? "hostile" : thread.mood >= 20 ? "friendly" : "none",
             creatorState: await slurp.getCreatorState(thread.creatorAccountId),
             threadState: thread.threadState,
           }

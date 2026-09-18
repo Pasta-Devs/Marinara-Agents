@@ -11,14 +11,22 @@ import { basename, dirname } from "node:path";
 import { resolveSlurpMediaOffer } from "../../../services/slurp/slurp-media-offer.js";
 import { generateSlurpCommissionImage } from "../../../services/slurp/slurp-commission-image.operation.js";
 import { replyToSlurpMessage } from "../../../services/slurp/slurp-message.operation.js";
+import { trySlurpWrite } from "../../../services/slurp/slurp-operation-lock.js";
 import { personaQuerySchema } from "./slp-messages-schemas.js";
 import type { SlpMessagesContext } from "./slp-messages-context.js";
 
 const MESSAGE_MEDIA_MAX_BYTES = 20 * 1024 * 1024;
 
-async function readSlurpMessageImage(
-  req: FastifyRequest,
-): Promise<{ payload: Record<string, string>; media: { buffer: Buffer; extension: string } }> {
+class SlurpMessageMediaRequestError extends Error {
+  constructor(
+    message: string,
+    readonly statusCode: number,
+  ) {
+    super(message);
+  }
+}
+
+async function readSlurpMessageMultipart(req: FastifyRequest) {
   const payload: Record<string, string> = {};
   let media: { buffer: Buffer; extension: string } | null = null;
   for await (const part of req.parts({ limits: { fileSize: MESSAGE_MEDIA_MAX_BYTES, files: 1 } })) {
@@ -28,19 +36,41 @@ async function readSlurpMessageImage(
     }
     if (part.fieldname !== "file" || media) {
       part.file.resume();
-      throw new Error("Upload one image in the file field.");
+      throw new SlurpMessageMediaRequestError("Upload one image in the file field.", 400);
     }
-    const buffer = await part.toBuffer();
-    // Same as the post upload path: the filename is not evidence, the header is.
-    const detected = isAllowedImageBuffer(buffer, ".avif");
-    if (!detected)
-      throw new Error(
+    const write = await trySlurpWrite(async () => {
+      try {
+        return await part.toBuffer();
+      } catch (error) {
+        const truncated = (part.file as typeof part.file & { truncated?: boolean }).truncated === true;
+        const tooLarge = truncated || (error as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE";
+        throw new SlurpMessageMediaRequestError(
+          tooLarge ? "Slurp image is too large." : "Failed to read the uploaded image.",
+          tooLarge ? 413 : 400,
+        );
+      }
+    });
+    if (!write.acquired) {
+      part.file.resume();
+      throw new SlurpMessageMediaRequestError("Slurp data cleanup is in progress.", 409);
+    }
+    const detected = isAllowedImageBuffer(write.value, ".avif");
+    if (!detected) {
+      throw new SlurpMessageMediaRequestError(
         "That file is not a PNG, JPEG, WebP, GIF or AVIF image. Its contents are read to decide, so renaming it does not help.",
+        400,
       );
-    media = { buffer, extension: detected.ext };
+    }
+    media = { buffer: write.value, extension: detected.ext };
   }
-  if (!media) throw new Error("Upload one image in the file field.");
+  if (!media) throw new SlurpMessageMediaRequestError("Upload one image in the file field.", 400);
   return { payload, media };
+}
+
+async function readSlurpMessageImage(
+  req: FastifyRequest,
+): Promise<{ payload: Record<string, string>; media: { buffer: Buffer; extension: string } }> {
+  return readSlurpMessageMultipart(req);
 }
 
 const requestDecisionSchema = z.object({
@@ -142,7 +172,8 @@ export async function slpMessagesMediaRoutes(app: FastifyInstance, messaging: Sl
     try {
       decoded = await readSlurpMessageImage(req);
     } catch (error) {
-      return reply.code(400).send({ error: error instanceof Error ? error.message : "Invalid image upload." });
+      const statusCode = error instanceof SlurpMessageMediaRequestError ? error.statusCode : 400;
+      return reply.code(statusCode).send({ error: error instanceof Error ? error.message : "Invalid image upload." });
     }
     const parsed = z
       .object({
