@@ -4,14 +4,13 @@ import { eq } from "../../db/file-query.js";
 import { noodlerFanActivityState } from "../../db/schema/slurp.js";
 import { now } from "../../utils/id-generator.js";
 import { tryBackgroundConnection } from "../generation/connection-admission.js";
-import { createSlurpStorage, type SlurpSettings } from "../storage/slurp.storage.js";
+import { createSlurpStorage, snapshotForAccount, type SlurpSettings } from "../storage/slurp.storage.js";
 import {
   claimManualNoodleFanActivityRun,
   claimNoodleFanActivityRun,
   dueNoodleFanActivityRun,
   finishNoodleFanActivityRun,
   markNoodleFanActivityApplied,
-  NOODLE_FAN_ACTIVITY_RUNS_PER_DAY,
   parsePersistedNoodleFanActivityDayPlan,
   reconcileNoodleFanActivityDayPlan,
   storeNoodleFanAcceptedActivities,
@@ -26,8 +25,28 @@ import {
 } from "./slurp-fan-activity.service.js";
 import { tryNoodleOperation } from "./slurp-operation-lock.js";
 import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
-import { NOODLER_FAN_IDENTITY_PREFIX, populationNoodlerFanIdentityProvider } from "./slurp-fan-identity-provider.js";
-import { slurpFanMemoryForPrompt, slurpResolveFanType } from "./slurp-fan-types.js";
+import { isSlurpPopulationMemberId } from "./slurp-population.js";
+import {
+  NOODLER_FAN_IDENTITY_PREFIX,
+  populationNoodlerFanIdentityProvider,
+  type NoodlerFanCastMember,
+} from "./slurp-fan-identity-provider.js";
+import {
+  SLURP_FAN_VOICE_PROMPT_MAX,
+  slurpFanMemoryForPrompt,
+  slurpFanTypeForPinnedOrSeed,
+  slurpFanTypeSpendTier,
+  slurpFanTypeTraits,
+  slurpFanTypeWeeklyBudget,
+  slurpResolveFanType,
+} from "./slurp-fan-types.js";
+import {
+  selectSlurpAudienceCharacterIds,
+  slurpAudienceCharacterFanTypeId,
+  slurpAudienceCharacterTraits,
+  slurpAudienceCharacterVoice,
+} from "./slurp-audience-characters.js";
+import { createCharactersStorage } from "../storage/characters.storage.js";
 import { newId } from "../../utils/id-generator.js";
 import { claimSlurpModelBudget, slurpModelWorkerAllows } from "./slurp-model-worker.js";
 
@@ -40,6 +59,10 @@ const FAN_RUN_RETURNING = 10;
 const FAN_RUN_NEWCOMERS = 2;
 const FAN_PLAN_RETENTION_DAYS = 7;
 const FAN_ACTIVITY_RECOVERY_MAX_AGE_MS = 15 * 60 * 1000;
+
+export function noodlerFanActivityRunLimit(settings: Pick<SlurpSettings, "fanActivityRunsPerDay" | "modelBudget">) {
+  return Math.min(settings.fanActivityRunsPerDay, settings.modelBudget.jobs.thread.maxPerDay);
+}
 
 export type NoodlerFanRunResult = {
   status:
@@ -59,6 +82,79 @@ export type NoodlerFanRunResult = {
 
 function localTimezone() {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "local";
+}
+
+/**
+ * The characters the user invited, as cast members for one run.
+ *
+ * Each one is an account row, not a population member, so it carries `snapshotForAccount` of that
+ * row. `createNoodlerFanInteraction` compares the planned snapshot against the live row and refuses
+ * anything that differs, so a synthesised snapshot would be silently dropped at apply time.
+ *
+ * A character has no Fan Type of its own, so one is derived: the pinned type when the user chose
+ * one, else the id-derived pick that an ambient account already uses. That is what supplies the
+ * spend budget, the traits, and the behaviour weights.
+ *
+ * Rotation is by run id, so inviting more characters than the limit does not silence the tail of
+ * the list forever.
+ */
+async function drawAudienceCharacterCast(
+  db: DB,
+  settings: SlurpSettings,
+  runId: string,
+): Promise<NoodlerFanCastMember[]> {
+  const limit = settings.audienceCharacterLimit ?? 0;
+  if (limit <= 0) return [];
+  const noodle = createSlurpStorage(db);
+  // Provision first: a character invited since the last run has no row yet, and a renamed one
+  // needs its handle and avatar refreshed before the snapshot is taken.
+  await noodle.ensureAudienceCharacterAccounts().catch(() => undefined);
+  const invited = await noodle.listAudienceCharacterAccounts().catch(() => []);
+  if (invited.length === 0) return [];
+  const chosen = selectSlurpAudienceCharacterIds(
+    invited.map((entry) => entry.characterId),
+    limit,
+    runId,
+  );
+  const byCharacterId = new Map(invited.map((entry) => [entry.characterId, entry.account]));
+  const characters = createCharactersStorage(db);
+  // Only the drawn characters are read. The invited list can be long, and a card is the largest
+  // row this feature touches.
+  const cards = new Map(
+    await Promise.all(
+      chosen.map(
+        async (characterId) => [characterId, await characters.getById(characterId).catch(() => null)] as const,
+      ),
+    ),
+  );
+  return chosen.flatMap((characterId) => {
+    const account = byCharacterId.get(characterId);
+    if (!account) return [];
+    const type = slurpFanTypeForPinnedOrSeed(
+      settings.fanTypes,
+      slurpAudienceCharacterFanTypeId(settings, characterId),
+      account.id,
+    );
+    const weeklyBudget = slurpFanTypeWeeklyBudget(type, account.id);
+    // The character's own words are the point of inviting them, so the card wins over the Fan
+    // Type's voice. The Type still supplies everything the card cannot say: spend, hours, weights.
+    // A card with no personality or description falls back rather than sending an empty voice.
+    const card = cards.get(characterId);
+    const cardTraits = slurpAudienceCharacterTraits(card);
+    return [
+      {
+        id: account.id,
+        handle: account.handle,
+        displayName: account.displayName,
+        archetype: type.engineArchetype,
+        traits: cardTraits.length > 0 ? cardTraits : slurpFanTypeTraits(type, account.id),
+        spendTier: slurpFanTypeSpendTier(weeklyBudget),
+        voice: slurpAudienceCharacterVoice(card, SLURP_FAN_VOICE_PROMPT_MAX) ?? type.voice,
+        tone: type.tone,
+        snapshot: snapshotForAccount(account),
+      },
+    ];
+  });
 }
 
 async function readPlans(db: DB, at = new Date(), prune = true) {
@@ -137,7 +233,7 @@ async function reconcilePlan(db: DB, settings: SlurpSettings, at: Date) {
     await readCurrentPlan(db, at),
     eligibleIds,
     at,
-    settings.fanActivityRunsPerDay,
+    noodlerFanActivityRunLimit(settings),
   );
   await writePlan(db, plan);
   return plan;
@@ -180,13 +276,19 @@ async function applyAcceptedActivities(
       // Same guard as `advanceAudienceTie`: a recovered plan written before the population existed
       // still carries `noodler-fan:` archetype ids, and a tie for one is an unresolvable follower.
       if (!activity.actorId.startsWith(NOODLER_FAN_IDENTITY_PREFIX)) {
+        // Ties are keyed by plain id, so an invited character earns a relationship here like anybody
+        // else in the crowd.
         await population
           .advanceTie(activity.actorId, activity.creatorId, {
             stage: "liker",
             interactions: 1,
           })
           .catch(() => undefined);
-        await population.touch(activity.actorId).catch(() => undefined);
+        // `lastActiveAt` lives on the population row, and only a generated member has one. An
+        // account standing in the crowd — ambient or invited character — has nothing to touch.
+        if (isSlurpPopulationMemberId(activity.actorId)) {
+          await population.touch(activity.actorId).catch(() => undefined);
+        }
       }
     }
     current = markNoodleFanActivityApplied(current, run.id, activity.id);
@@ -264,16 +366,23 @@ export async function runNoodlerFanActivity(input: {
       ];
       // Each member carries their Fan Type's voice, which is the one thing that makes a Lurker's
       // three words and a Superfan's paragraph read as two different people.
-      const cast = (await Promise.all(seeds.map((seed) => population.ensure(seed, at, settings.fanTypes)))).map(
-        (member) => {
-          const type = slurpResolveFanType(settings.fanTypes, member);
-          return { ...member, voice: type.voice, tone: type.tone };
-        },
-      );
+      const populationCast = (
+        await Promise.all(seeds.map((seed) => population.ensure(seed, at, settings.fanTypes)))
+      ).map((member) => {
+        const type = slurpResolveFanType(settings.fanTypes, member);
+        return { ...member, voice: type.voice, tone: type.tone };
+      });
       // Mark the drawn cast as recently active. `listAll` orders by that column, so without this
       // it kept ordering by creation time: the same earliest members were redrawn forever and
       // anybody who actually showed up sank out of the pool. Regulars could never recur.
-      await Promise.all(cast.map((member) => population.touch(member.id).catch(() => undefined)));
+      //
+      // Only population members are touched: `lastActiveAt` lives on the population row, and a
+      // character fan is an account, so touching its id would update nothing.
+      await Promise.all(populationCast.map((member) => population.touch(member.id).catch(() => undefined)));
+
+      // The characters the user put in the audience, rotated so that inviting more than the limit
+      // does not silence the ones at the end of the list.
+      const cast = [...populationCast, ...(await drawAudienceCharacterCast(input.db, settings, run.id))];
 
       // The cast carries its relationship to each Creator. Resolved for every creator in the run,
       // not just the first: a run covers up to twelve, and reusing one creator's ties for all of
@@ -357,7 +466,7 @@ export async function getNoodlerFanActivityStatus(db: DB, at = new Date()) {
   return {
     localDate: plan?.localDate ?? localPlanDate(at),
     usedRuns: automaticRuns.filter((run) => run.status !== "scheduled").length,
-    runLimit: settings.fanActivityRunsPerDay ?? NOODLE_FAN_ACTIVITY_RUNS_PER_DAY,
+    runLimit: noodlerFanActivityRunLimit(settings),
     lastRun,
   };
 }

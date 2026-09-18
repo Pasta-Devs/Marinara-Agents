@@ -19,9 +19,10 @@ const PLACEHOLDER_UUID = "550e8400-e29b-41d4-a716-446655440000";
 const CHARACTER_FACT_EVENT_SECTION_KEYS = new Set(["facts", "core", "profile"]);
 const CHARACTER_FACT_DURABLE_SECTION_KEYS = new Set(["developments", "abilities", "items", "voice"]);
 const EVENT_SHAPED_CHARACTER_FACT_PATTERN =
-  /\b(?:arrived|departed|entered|left|went|came|returned|walked|ran|fled|attacked|fought|killed|died|met|spoke|told|asked|answered|promised|decided|agreed|refused|accepted|rejected|gave|took|found|discovered|revealed|learned|opened|closed|escaped|rescued|betrayed|confronted|warned|saved|stopped)\b/i;
-const THREAD_RESOLUTION_PATTERN =
-  /\b(?:resolve|resolved|resolver|resolution|would resolve|will resolve|until|when|if|requires|needs|awaits|pending|unresolved|open question|pay off|payoff|future|follow-?up|goal|must|should|tomorrow|next (?:day|class|session)|cool(?:s|ed|ing)?|confess(?:ion|es|ed|ing)?|confront(?:s|ed|ing)?|dy(?:e|ing) down|explain(?:s|ed|ing|ation)?|updates?)\b/i;
+  /\b(?:arrived|departed|entered|left|went|came|returned|walked|walking|ran|fled|attacked|fought|killed|died|met|spoke|told|asked|answered|promised|decided|agreed|refused|accepted|rejected|gave|took|found|discovered|revealed|learned|opened|closed|escaped|rescued|betrayed|confronted|warned|saved|stopped|uses?|holds?|keeps?|wears?|carries?)\b/i;
+const INCIDENTAL_CHARACTER_NARRATION_PATTERN = /\b(?:met|told)\b/gi;
+const DURABLE_CHARACTER_ASSERTION_PATTERN =
+  /\b(?:(?:is|are|was|were|remains?|(?:works?|serves?)\s+as)\s+(?:an?\s+|the\s+|their\s+|his\s+|her\s+|its\s+)?(?:assigned\s+)?(?:case\s+)?(?:officer|member|ally|captain|guard|leader|partner|friend|sibling|parent|doctor|lawyer|teacher|owner|resident|citizen|exoneree)\b|belongs?\s+to\b|can\s+(?:read|speak|write|understand|control|operate)\b|knows?\s+(?:how\s+to|the|a|an)\b|lives?\s+in\b)/i;
 const SCENE_ONLY_TONE_PATTERN =
   /\b(?:this scene|single scene|momentarily|for the scene|scene tone|currently|right now)\b/i;
 const RELATIONSHIP_DIMENSION_KEYS = new Set<string>(RELATIONSHIP_DIMENSIONS);
@@ -266,17 +267,6 @@ export function validateLtmEvidenceUnits({
       });
     }
 
-    if (isVagueThread(unit)) {
-      unitDiagnostics.push({
-        severity: "error",
-        code: "vague_thread",
-        candidateIndex,
-        mutationId: unit.id,
-        noteId,
-        message: "Thread candidates must describe an unresolved condition and what would resolve it.",
-      });
-    }
-
     if (isSceneOnlyToneOrAnchor(unit)) {
       unitDiagnostics.push({
         severity: "error",
@@ -430,14 +420,12 @@ export function validateLtmEvidenceUnits({
 
   for (const unit of finalKeptUnits) {
     if (unit.bucket !== "thread" || unit.status !== "resolved") continue;
-    const threadSubjects = new Set<string>([unit.subjectId]);
-    for (const link of unit.links) {
-      if (link.target !== unit.subjectId) {
-        threadSubjects.add(link.target);
-      }
-    }
+    const timelineTargets = new Set<string>([
+      noteIdForEvidenceUnit({ bucket: "timeline_event", subjectId: unit.subjectId, sectionKey: "event" }),
+      ...unit.links.map((link) => link.target),
+    ]);
     const hasFanOut = finalKeptUnits.some(
-      (other) => other !== unit && other.bucket === "timeline_event" && threadSubjects.has(other.subjectId),
+      (other) => other.bucket === "timeline_event" && timelineTargets.has(noteIdForEvidenceUnit(other)),
     );
     if (!hasFanOut) {
       diagnostics.push({
@@ -514,12 +502,11 @@ function isEventShapedCharacterFact(unit: LtmEvidenceUnit) {
   if (unit.bucket !== "character_fact") return false;
   if (CHARACTER_FACT_DURABLE_SECTION_KEYS.has(unit.sectionKey)) return false;
   if (!CHARACTER_FACT_EVENT_SECTION_KEYS.has(unit.sectionKey)) return false;
+  if (DURABLE_CHARACTER_ASSERTION_PATTERN.test(unit.text)) {
+    const withoutIncidentalNarration = unit.text.replace(INCIDENTAL_CHARACTER_NARRATION_PATTERN, " ");
+    if (!EVENT_SHAPED_CHARACTER_FACT_PATTERN.test(withoutIncidentalNarration)) return false;
+  }
   return EVENT_SHAPED_CHARACTER_FACT_PATTERN.test(unit.text);
-}
-
-function isVagueThread(unit: LtmEvidenceUnit) {
-  if (unit.bucket !== "thread") return false;
-  return !THREAD_RESOLUTION_PATTERN.test(unit.text);
 }
 
 function isSceneOnlyToneOrAnchor(unit: LtmEvidenceUnit) {
@@ -769,7 +756,6 @@ function diagnosticToDropReason(code: string): LtmExtractionDropReason | null {
     code === "static_relationship_dimension_change" ||
     code === "unknown_link_target" ||
     code === "event_shaped_character_fact" ||
-    code === "vague_thread" ||
     code === "scene_only_tone_or_anchor"
   ) {
     return "unsupported_bucket";
@@ -808,9 +794,6 @@ function dropReasonDiagnosticCode(reason: LtmExtractionDropReason) {
 function userFacingDropMessageForCode(code: string, reason: LtmExtractionDropReason): string {
   if (code === "relationship_state_missing_caused_by") {
     return "Dropped a relationship_state change missing a caused_by link to a timeline event or existing note.";
-  }
-  if (code === "vague_thread") {
-    return "Dropped a thread that did not state what future event or condition would resolve it.";
   }
   return userFacingDropMessage(reason);
 }

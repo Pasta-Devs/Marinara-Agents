@@ -1,0 +1,25 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+async function main() {
+  const panel = await readFile(
+    new URL("../packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx", import.meta.url),
+    "utf8",
+  );
+  const route = await readFile(
+    new URL("../packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(panel, /pending\.content === message\.content|message\.content === pending\.content/u);
+  assert.match(panel, /!hiddenReplyIds\.has\(message\.id\)/u);
+  assert.match(panel, /creatorAvailability\s*\?\?\s*relationship\?\.availability/u);
+  assert.match(panel, /mode="choose"/u);
+  assert.match(panel, /message\.kind === "tip"/u);
+  assert.match(route, /messages\/threads\/:threadId\/request-reply/u);
+  assert.match(route, /generationGuidance:/u);
+
+  console.log("slurp2 messaging fixes regression: ok");
+}
+
+void main();

@@ -279,6 +279,12 @@ import { normalizeNoodlerSeenAt } from "../slurp/slurp-viewer-unseen.js";
 import { createCharactersStorage } from "./characters.storage.js";
 import { withoutHiddenAmbientAccounts } from "../slurp/slurp-ambient-profiles.js";
 import {
+  resolveSlurpAudienceCharacterIds,
+  slurpCharacterFanEntityId,
+  slurpCharacterIdFromFanEntityId,
+  type SlurpAudienceCharacterGroup,
+} from "../slurp/slurp-audience-characters.js";
+import {
   compareNoodlerPostSortKeysDescending,
   isNoodlerPostAfterCursor,
   type NoodlerPostSortKey,
@@ -420,6 +426,10 @@ export const slurpSettingsSchema = z.object({
   imageHeight: z.number().int().min(64).max(4096),
   /** Share of a Creator's automatic posts published as Stories. */
   storyRate: z.enum(SLURP_STORY_RATE),
+  /** Whether automatic Story slots may publish image Stories. Manual Stories remain available. */
+  storyImagesEnabled: z.boolean(),
+  /** How long image Stories remain in the Moments shelf. */
+  storyLifetimeHours: z.number().int().min(1).max(168),
   /** How often an automatic post goes out free as a teaser. See `slurpTeaserPost`. */
   teaserRate: z.enum(SLURP_TEASER_RATE),
   /** Share of a Creator's automatic posts that continue a project rather than standing alone. */
@@ -554,6 +564,23 @@ export const slurpSettingsSchema = z.object({
   participantMin: z.number().int().min(1).max(24),
   participantMax: z.number().int().min(1).max(24),
   invitedCharacterGroupIds: z.array(z.string()),
+  /**
+   * Characters the user put in the audience.
+   *
+   * Key is the Engine character id. Value is the Fan Type id that shapes the character's
+   * behaviour, or true to let the id pick one, as an ambient account does today.
+   */
+  audienceCharacters: z.record(z.string(), z.union([z.string(), z.boolean()])),
+  /** Character groups whose members join the audience. Per-character entries above win. */
+  audienceCharacterGroupIds: z.array(z.string()).max(20),
+  /**
+   * Most character fans that may act at once.
+   *
+   * The user sets this because the cost is theirs: each character fan in a cast adds up to
+   * `SLURP_FAN_VOICE_PROMPT_MAX` characters to that prompt. The default keeps a fresh install
+   * bounded; a user with a long context window may raise it.
+   */
+  audienceCharacterLimit: z.number().int().min(0).max(10),
   carryoverModes: z.array(z.enum(["conversation", "roleplay", "game"])),
   carryoverHours: z
     .number()
@@ -1229,6 +1256,8 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   imageWidth: 1024,
   imageHeight: 1536,
   storyRate: SLURP_DEFAULT_STORY_RATE,
+  storyImagesEnabled: true,
+  storyLifetimeHours: 72,
   teaserRate: SLURP_DEFAULT_TEASER_RATE,
   projectRate: SLURP_DEFAULT_PROJECT_RATE,
   arcPace: SLURP_DEFAULT_ARC_PACE,
@@ -1270,6 +1299,9 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   participantMin: 1,
   participantMax: 4,
   invitedCharacterGroupIds: [],
+  audienceCharacters: {},
+  audienceCharacterGroupIds: [],
+  audienceCharacterLimit: 5,
   carryoverModes: [],
   carryoverHours: 24,
   carryoverMaxItems: 20,
@@ -1479,7 +1511,14 @@ function sourceAccountFromEntity(
   };
 }
 
-function snapshotForAccount(account: NoodleAccount): NoodleAuthorSnapshot {
+/**
+ * The author snapshot recorded for an account.
+ *
+ * Exported because `createNoodlerFanInteraction` refuses any activity whose planned snapshot is not
+ * byte-identical to this, so a caller that plans activity for an account-backed audience member has
+ * to build the snapshot from here rather than assembling its own and hoping the fields match.
+ */
+export function snapshotForAccount(account: NoodleAccount): NoodleAuthorSnapshot {
   return {
     id: account.id,
     kind: account.kind,
@@ -4433,6 +4472,88 @@ export function createSlurpStorage(db: DB) {
       const existing = await this.getSlurpAccountForEntity("character", characterId);
       if (!existing) return null;
       return this.updateAccount(existing.id, { invited });
+    },
+
+    /**
+     * Put a character in the audience, or take it out.
+     *
+     * `true` invites and lets the Fan Type be derived; a string pins that Fan Type; `false` is an
+     * explicit removal that outranks group membership, so a group can be invited and one of its
+     * members dropped. `null` forgets the character entirely and lets its group decide again.
+     *
+     * The account row is never deleted here. A removed character keeps its handle, its ties, and
+     * its history, exactly as a dismissed ambient profile does, so re-inviting is not a new person.
+     */
+    async setAudienceCharacter(characterId: string, value: string | boolean | null): Promise<void> {
+      const settings = await this.getSettings();
+      const next = { ...settings.audienceCharacters };
+      if (value === null) delete next[characterId];
+      else next[characterId] = value;
+      await this.updateSettings({ audienceCharacters: next });
+    },
+
+    /** Characters eligible to stand in the audience, in priority order. Uncapped; see the module. */
+    async listAudienceCharacterIds(): Promise<string[]> {
+      const [settings, groups] = await Promise.all([this.getSettings(), characters.listGroups().catch(() => [])]);
+      return resolveSlurpAudienceCharacterIds(settings, groups as SlurpAudienceCharacterGroup[]);
+    },
+
+    /**
+     * Create the missing audience rows and refresh the identity of the rest.
+     *
+     * The `ensureAmbientNoodleAccounts` shape, for the same reasons: provision what is missing,
+     * never delete, and leave a profile the user edited by hand alone. `syncIdentity` is what makes
+     * a renamed or re-avatared character catch up, since a `random_user` row has null source columns
+     * and so cannot be resolved back to its character by `resolveAccountSource`.
+     *
+     * A character with no card left is skipped rather than provisioned, so deleting a character
+     * quietly retires its fan instead of leaving a nameless account behind.
+     */
+    async ensureAudienceCharacterAccounts(): Promise<NoodleAccount[]> {
+      const characterIds = await this.listAudienceCharacterIds();
+      const accounts: NoodleAccount[] = [];
+      for (const characterId of characterIds) {
+        const source = await characters.getById(characterId).catch(() => null);
+        if (!source) continue;
+        const identity = sourceAccountFromEntity(
+          "character",
+          characterId,
+          source as unknown as Record<string, unknown>,
+        );
+        accounts.push(
+          await this.upsertAccountFromProfile({
+            kind: "random_user",
+            entityId: slurpCharacterFanEntityId(characterId),
+            displayName: identity.displayName,
+            bio: identity.bio,
+            avatarUrl: identity.avatarUrl,
+            avatarCrop: identity.avatarCrop,
+            invited: true,
+            syncIdentity: true,
+          }),
+        );
+      }
+      return accounts;
+    },
+
+    /**
+     * The provisioned audience rows, paired with the character behind each.
+     *
+     * Reads rows rather than settings, so a character removed from the audience drops out here
+     * even though its row survives.
+     */
+    async listAudienceCharacterAccounts(): Promise<Array<{ account: SlurpAccount; characterId: string }>> {
+      const invitedIds = new Set(await this.listAudienceCharacterIds());
+      if (invitedIds.size === 0) return [];
+      const rows = await db
+        .select()
+        .from(noodleAccounts)
+        .where(and(eq(noodleAccounts.kind, "random_user"), eq(noodleAccounts.platform, "slurp")));
+      const accounts: SlurpAccount[] = rows.map(mapAccount);
+      return accounts.flatMap((account) => {
+        const characterId = slurpCharacterIdFromFanEntityId(account.entityId);
+        return characterId && invitedIds.has(characterId) ? [{ account, characterId }] : [];
+      });
     },
 
     /** Mark every currently invited character account as uninvited. */

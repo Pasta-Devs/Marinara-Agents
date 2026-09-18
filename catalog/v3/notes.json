@@ -94,6 +94,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.3.3",
+          "date": "2026-09-18",
+          "notes": "- Kept static character and world facts static when their wording contains incidental narrative verbs, and stopped rejecting character facts that establish lasting status or affiliation.",
+          "highlight": false
+        },
+        {
           "version": "1.3.2",
           "date": "2026-09-18",
           "notes": "- Preserved all structured relationship participants and reused local identities when names arrive in short-name-first order.",
@@ -272,6 +278,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.0.22",
+          "date": "2026-09-17",
+          "notes": "- Invite Engine characters to the Slurp audience from character groups or per-character controls.\n- Audience characters are now available as a first expansion step. The current setup is still limited and needs clearer guidance and simpler controls.\n- Invited characters use their own card voice and tags in comments, audience activity, and messages.\n- Invited characters can follow, subscribe, spend, hold ties, and appear in fan cards.\n- Added a New Chat picker for owned Creators and invited characters.\n- Added prompt-cost limits and deterministic character rotation.\n- Fixed feed ads, image prompt display, and the configured subscription price.\n- Added configurable image Stories and platform-style message actions.\n- Added backend groundwork for the next expansion and bug-fix updates, with clearer service boundaries for safer iteration.",
+          "highlight": false
+        },
+        {
           "version": "0.0.21",
           "date": "2026-09-17",
           "notes": "- Messages: the composer is shorter on one-line messages and still grows for longer text.\n- Messages: away replies use a centered Creator status block with a quiet Get reply now action.\n- Messages: sent messages now show separate delivered and seen receipts.\n- Messages: mobile headers keep the Creator name visible and move the relationship label into an icon and meter.\n- Messages: fixed the transparent mobile header menu with an opaque surface.\n- Messages: desktop uses the compact connection switcher.\n- Messages: every sent message shows one check when delivered and two when seen.\n- Messages: away Creators show a status card with a sleeping animation, not typing dots.\n- Creators stay online 5 minutes after replying and 10 after delivering a commission.\n- Messages: tier icons are back in the desktop header; tap one to see the full tier scale.\n- Messages: Back returns to the profile or activity a chat was opened from.\n- Fixed see-through menus and pickers.",
@@ -383,12 +395,6 @@
           "version": "0.0.3",
           "date": "2026-09-12",
           "notes": "- Fixed Create post and Add story doing nothing on a Creator profile with a tip goal set. The goal used to hide the post composer.\n- Slurp Remastered now shows its color artwork in the Agents browser. The gray artwork is for Slurp Legacy only.",
-          "highlight": true
-        },
-        {
-          "version": "0.0.2",
-          "date": "2026-09-12",
-          "notes": "- Added a way to write your own ad in Settings. Give it a brand, a product, ad copy, and a rating, and it joins the pool.\n- Fixed feed ads stopping after the first server batch, content-rating limits being dropped, and one odd rating rejecting a whole batch.\n- Fixed ad actions paying out for ads that were never served, and restored read tracking on the default Following feed.\n- Fixed audience churn, relationship arcs, and subscription billing being starved by the world tick.\n- Fixed recent Creator activity being ignored when replies and follow-ups decide whether a Creator is online. Drafts no longer count as activity.\n- Stopped backups, restores, and deletion from overlapping world or Creator writes, and persona-operated Creators from speaking on their own.\n- Creators no longer write first when you have turned their proactive messages off.\n- Corrected the logo and the welcome screen's close control and keyboard focus.\n- A restore now says plainly that it overrides your settings.",
           "highlight": true
         }
       ]

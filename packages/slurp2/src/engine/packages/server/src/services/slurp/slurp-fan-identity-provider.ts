@@ -97,6 +97,15 @@ export type NoodlerFanCastMember = {
   voice?: string;
   /** The Fan Type's tone override. Absent means the crowd tone. */
   tone?: string;
+  /**
+   * The author snapshot to record, for a member who is an account rather than a population row.
+   *
+   * `createNoodlerFanInteraction` compares the planned snapshot against `snapshotForAccount` of the
+   * live row and refuses anything that differs, so a member backed by an account must carry that
+   * row's own `entityId` and avatar. The synthesised snapshot below is right only for a population
+   * member, whose id and entity id are the same and who has no avatar.
+   */
+  snapshot?: NoodleAuthorSnapshot;
 };
 
 /** One member's history with one creator, keyed by creator then by member. */
@@ -134,7 +143,7 @@ export function populationNoodlerFanIdentityProvider(
                   }
                 : {}),
             },
-            snapshot: {
+            snapshot: member.snapshot ?? {
               id: member.id,
               kind: "random_user" as const,
               entityId: member.id,

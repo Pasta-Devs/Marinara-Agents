@@ -9,9 +9,28 @@ import {
   slurpModelWorkerAllows,
   spendSlurpModelBudget,
 } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-model-budget.js";
+const fanActivityOperation = readFileSync(
+  join(
+    import.meta.dirname,
+    "..",
+    "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-fan-activity.operation.ts",
+  ),
+  "utf8",
+);
 
 const at = new Date("2026-09-14T12:30:00.000Z");
 const budget = slurpModelBudgetSchema.parse({ callsPerHour: 2, callsPerDay: 3, jobs: { rewrite: { maxPerDay: 1 } } });
+assert.match(
+  fanActivityOperation,
+  /Math\.min\(settings\.fanActivityRunsPerDay, settings\.modelBudget\.jobs\.thread\.maxPerDay\)/u,
+  "fan activity uses the lower configured and thread model limits",
+);
+assert.match(fanActivityOperation, /noodlerFanActivityRunLimit\(settings\),/gu);
+assert.equal(
+  [...fanActivityOperation.matchAll(/noodlerFanActivityRunLimit\(settings\),/gu)].length,
+  2,
+  "plan reconciliation and status use the same authoritative limit",
+);
 const empty = readSlurpModelBudgetLedger(null, at);
 const first = spendSlurpModelBudget(budget, empty, "rewrite");
 assert.ok(first);

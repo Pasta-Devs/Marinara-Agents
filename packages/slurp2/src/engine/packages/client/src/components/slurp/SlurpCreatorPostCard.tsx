@@ -80,6 +80,7 @@ const SLURP_FEED_MEDIA_RATIO_CLASS = "aspect-[4/3] sm:aspect-[16/10]";
 export function LockedSlurpPostCard({
   post,
   profile,
+  subscriptionPrice,
   controllerOnly = false,
   subscribed,
   unlockPending,
@@ -95,6 +96,7 @@ export function LockedSlurpPostCard({
   post: Pick<NoodlerPostView, "id" | "access" | "createdAt" | "title" | "imageUrl"> &
     Partial<Pick<NoodlerPostView, "likeCount" | "replyCount" | "hasImage" | "imagePrompt">>; // controller-locked managed posts carry no counts
   profile: NoodlerStageProfile;
+  subscriptionPrice?: number | null;
   controllerOnly?: boolean;
   subscribed: boolean;
   unlockPending: boolean;
@@ -493,7 +495,7 @@ export function LockedSlurpPostCard({
                 </span>
               </span>
               <NoodlerFictionalPrice
-                amount={noodlerSubscriptionPriceOf(profile)}
+                amount={subscriptionPrice}
                 suffix={localizeUi("ui.slurp.unlocksheet.perWeek", { defaultValue: "/ week" })}
               />
             </button>
@@ -510,13 +512,10 @@ export function LockedSlurpPostCard({
 }
 
 /** Fictional SlurpCoin prices only; the tooltip makes clear that no real money is involved. */
-const NOODLER_DEFAULT_UNLOCK_PRICE = 1;
-const NOODLER_DEFAULT_SUBSCRIPTION_PRICE = 5;
-
 /** The server sends these alongside the shared view types, which have no price fields. */
-function noodlerUnlockPriceOf(post: unknown): number {
+function noodlerUnlockPriceOf(post: unknown): number | null {
   const price = (post as { unlockPrice?: unknown } | null)?.unlockPrice;
-  return typeof price === "number" && price >= 0 ? price : NOODLER_DEFAULT_UNLOCK_PRICE;
+  return typeof price === "number" && price >= 0 ? price : null;
 }
 
 /** Social proof on the paywall. Absent or zero on a post nobody has paid for yet. */
@@ -525,13 +524,9 @@ function noodlerUnlockCountOf(post: unknown): number {
   return typeof count === "number" && count > 0 ? count : 0;
 }
 
-function noodlerSubscriptionPriceOf(profile: unknown): number {
-  const price = (profile as { subscriptionPrice?: unknown } | null)?.subscriptionPrice;
-  return typeof price === "number" && price >= 0 ? price : NOODLER_DEFAULT_SUBSCRIPTION_PRICE;
-}
-
-function NoodlerFictionalPrice({ amount, suffix }: { amount: number; suffix?: string }) {
+function NoodlerFictionalPrice({ amount, suffix }: { amount?: number | null; suffix?: string }) {
   const { t: localizeUi } = useUiTranslation();
+  if (typeof amount !== "number" || amount < 0) return null;
   return (
     <span
       title={localizeUi("ui.noodle.unlocksheet.priceHint")}

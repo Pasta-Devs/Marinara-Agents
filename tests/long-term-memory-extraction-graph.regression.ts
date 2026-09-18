@@ -56,9 +56,10 @@ async function main() {
       title?: string;
       text: string;
       claimKind?: "static" | "change";
+      status?: "active" | "resolved";
       links?: Array<{
         target: string;
-        relation: "extracted_from" | "evidenced_by" | "caused_by";
+        relation: "extracted_from" | "evidenced_by" | "caused_by" | "resolved_in";
       }>;
       subjectNames?: string[];
       dimensionChanges?: Record<string, number>;
@@ -71,7 +72,7 @@ async function main() {
     evidence: [`source_note:${note.id}`],
     confidence: 0.9,
     salience: 0.8,
-    status: "active" as const,
+    status: input.status ?? ("active" as const),
     links: input.links ?? [],
     sourceHash: sourceHashForLtmSourceNote(note),
   });
@@ -113,6 +114,19 @@ async function main() {
   assert.equal(linklessCharacter.accounting.keptUnits, 1);
   assert.equal(linklessCharacter.compiledResponse.mutations.length, 1);
   assert.equal(linklessCharacter.compiledResponse.mutations[0]?.claimKind, "static");
+
+  const unresolvedThread = compile(chat, [
+    unit(chat, {
+      bucket: "thread",
+      subjectId: "archive_open",
+      sectionKey: "summary",
+      text: "The archive thread remains open.",
+      claimKind: "static",
+      status: "active",
+    }),
+  ]);
+  assert.equal(unresolvedThread.accounting.keptUnits, 1);
+  assert.equal(unresolvedThread.outcome.droppedCandidates.length, 0);
 
   const relationshipWithoutCause = compile(chat, [
     unit(chat, {
@@ -254,6 +268,85 @@ async function main() {
   assert.equal(relationshipWithEvent.accounting.keptUnits, 2);
   assert.equal(relationshipWithEvent.compiledResponse.mutations.length, 2);
 
+  const resolvedThread = unit(chat, {
+    bucket: "thread",
+    subjectId: "thread_archive_open",
+    sectionKey: "summary",
+    text: "The archive thread is resolved after Mara returned.",
+    claimKind: "change",
+    status: "resolved",
+    links: [{ target: "timeline_archive_reopened", relation: "resolved_in" }],
+  });
+  const resolutionEvent = unit(chat, {
+    bucket: "timeline_event",
+    subjectId: "archive_reopened",
+    sectionKey: "event",
+    text: "Mara returned and reopened the archive.",
+    claimKind: "change",
+    links: [{ target: chat.id, relation: "extracted_from" }],
+  });
+  const existingThread = {
+    ...chat,
+    id: "thread_archive_open",
+    type: "thread" as const,
+    status: "active" as const,
+    tags: ["typed_memory"],
+    sections: { summary: { text: "The archive thread remains open.", updatedAt: timestamp } },
+  };
+  const parsedResolution = parseEvidenceUnitPayload(
+    { summary: "Resolved thread parser regression", units: [resolvedThread, resolutionEvent] },
+    sourceHashForLtmSourceNote(chat),
+  );
+  assert.equal(parsedResolution.parserRejections, 0);
+  assert.equal(parsedResolution.response.units.length, 2);
+  assert.deepEqual(parsedResolution.response.units[0]?.links, [
+    { target: "timeline_archive_reopened", relation: "resolved_in" },
+  ]);
+  const resolvedThreadValidation = compile(chat, [resolvedThread, resolutionEvent], true, [existingThread]);
+  assert.equal(resolvedThreadValidation.accounting.keptUnits, 2);
+  assert.equal(
+    resolvedThreadValidation.compiledResponse.mutations.some(
+      (mutation) => mutation.kind === "create_note" && mutation.note.type === "thread",
+    ),
+    false,
+  );
+  assert.equal(
+    resolvedThreadValidation.compiledResponse.mutations.some(
+      (mutation) =>
+        mutation.kind === "set_status" && mutation.noteId === existingThread.id && mutation.status === "resolved",
+    ),
+    true,
+  );
+  assert.equal(
+    resolvedThreadValidation.diagnostics.some((diagnostic) => diagnostic.code === "resolved_thread_missing_fanout"),
+    false,
+  );
+  const missingThreadTarget = compile(chat, [resolvedThread]);
+  assert.equal(missingThreadTarget.accounting.keptUnits, 0);
+  assert.equal(missingThreadTarget.outcome.droppedCandidates[0]?.validatorCode, "unknown_link_target");
+  const removedResolutionEvent = compile(chat, [resolvedThread, { ...resolutionEvent, sectionKey: "facts" }]);
+  assert.equal(removedResolutionEvent.accounting.keptUnits, 0);
+  assert.equal(
+    removedResolutionEvent.outcome.droppedCandidates.some(
+      (candidate) => candidate.validatorCode === "unknown_link_target",
+    ),
+    true,
+  );
+  const missingResolutionEvent = compile(chat, [
+    unit(chat, {
+      bucket: "thread",
+      subjectId: "archive_missing",
+      sectionKey: "summary",
+      text: "The archive thread is resolved.",
+      claimKind: "change",
+      status: "resolved",
+    }),
+  ]);
+  assert.equal(
+    missingResolutionEvent.diagnostics.some((diagnostic) => diagnostic.code === "resolved_thread_missing_fanout"),
+    true,
+  );
+
   const evidenceCharacter = {
     id: "char_mara",
     title: "Mara",
@@ -320,6 +413,142 @@ async function main() {
     true,
   );
   assert.equal(structuredCharacterUnits[1]?.text.startsWith("Began processing Damo's state compensation claim"), true);
+
+  const idiomaticStaticSource = sourceNote(
+    "source_static_fact_heuristic",
+    { kind: "chat_summary", sourceId: "chat-static", entryId: "summary-static" },
+    [
+      "## character_fact",
+      "- Rowan | section: facts | text: Rowan decided the old observatory was not worth visiting again.",
+    ].join("\n"),
+  );
+  const idiomaticStaticUnit = normalizeStructuredSummaryEvidenceUnits({
+    units: [],
+    sourceText: idiomaticStaticSource.sections.source.text,
+    sourceNote: idiomaticStaticSource,
+    sourceHash: sourceHashForLtmSourceNote(idiomaticStaticSource),
+    mode: "roleplay",
+    modes: ["roleplay"],
+  }).units.find((candidate) => candidate.bucket === "character_fact");
+  assert.equal(idiomaticStaticUnit?.sectionKey, "facts");
+  assert.equal(idiomaticStaticUnit?.claimKind, "static");
+
+  const explicitStaticTransition = normalizeStructuredSummaryEvidenceUnits({
+    units: [],
+    sourceText: [
+      "## character_fact",
+      "- Rowan | section: facts | text: Rowan decided to become a case officer.",
+      "- Mara | section: facts | text: Mara lost her assigned officer role.",
+    ].join("\n"),
+    sourceNote: idiomaticStaticSource,
+    sourceHash: sourceHashForLtmSourceNote(idiomaticStaticSource),
+    mode: "roleplay",
+    modes: ["roleplay"],
+  }).units.filter((candidate) => candidate.bucket === "character_fact");
+  assert.equal(
+    explicitStaticTransition.every((candidate) => candidate.sectionKey === "developments"),
+    true,
+  );
+  assert.equal(
+    explicitStaticTransition.every((candidate) => candidate.claimKind === "change"),
+    true,
+  );
+
+  const durableNarrativeCharacter = compile(chat, [
+    unit(chat, {
+      bucket: "character_fact",
+      subjectId: "rowan",
+      sectionKey: "facts",
+      text: "Rowan met Mara and is her assigned case officer.",
+      claimKind: "static",
+      subjectNames: ["Rowan"],
+    }),
+  ]);
+  assert.equal(durableNarrativeCharacter.accounting.keptUnits, 1);
+
+  const durablePastNarrativeCharacter = compile(chat, [
+    unit(chat, {
+      bucket: "character_fact",
+      subjectId: "rowan",
+      sectionKey: "facts",
+      text: "Rowan told Mara he was her assigned case officer.",
+      claimKind: "static",
+      subjectNames: ["Rowan"],
+    }),
+  ]);
+  assert.equal(durablePastNarrativeCharacter.accounting.keptUnits, 1);
+
+  for (const text of ["Rowan met Mara and works as a doctor.", "Rowan told Mara he serves as her case officer."]) {
+    const result = compile(chat, [
+      unit(chat, {
+        bucket: "character_fact",
+        subjectId: "rowan",
+        sectionKey: "facts",
+        text,
+        claimKind: "static",
+        subjectNames: ["Rowan"],
+      }),
+    ]);
+    assert.equal(result.accounting.keptUnits, 1, text);
+  }
+
+  const transientCharacterAction = compile(chat, [
+    unit(chat, {
+      bucket: "character_fact",
+      subjectId: "rowan",
+      sectionKey: "facts",
+      text: "Rowan met Mara at the observatory.",
+      claimKind: "static",
+      subjectNames: ["Rowan"],
+    }),
+  ]);
+  assert.equal(transientCharacterAction.accounting.keptUnits, 0);
+  assert.equal(transientCharacterAction.outcome.droppedCandidates[0]?.validatorCode, "event_shaped_character_fact");
+
+  const transientDurableTokenCharacter = compile(chat, [
+    unit(chat, {
+      bucket: "character_fact",
+      subjectId: "rowan",
+      sectionKey: "facts",
+      text: "Rowan met Mara and is walking away.",
+      claimKind: "static",
+      subjectNames: ["Rowan"],
+    }),
+  ]);
+  assert.equal(transientDurableTokenCharacter.accounting.keptUnits, 0);
+  assert.equal(
+    transientDurableTokenCharacter.outcome.droppedCandidates[0]?.validatorCode,
+    "event_shaped_character_fact",
+  );
+
+  const transientUsesCharacter = compile(chat, [
+    unit(chat, {
+      bucket: "character_fact",
+      subjectId: "rowan",
+      sectionKey: "facts",
+      text: "Rowan met Mara and uses a lantern.",
+      claimKind: "static",
+      subjectNames: ["Rowan"],
+    }),
+  ]);
+  assert.equal(transientUsesCharacter.accounting.keptUnits, 0);
+  assert.equal(transientUsesCharacter.outcome.droppedCandidates[0]?.validatorCode, "event_shaped_character_fact");
+
+  const mixedDurableTransientCharacter = compile(chat, [
+    unit(chat, {
+      bucket: "character_fact",
+      subjectId: "rowan",
+      sectionKey: "facts",
+      text: "Rowan met Mara and is walking away, but is her assigned case officer.",
+      claimKind: "static",
+      subjectNames: ["Rowan"],
+    }),
+  ]);
+  assert.equal(mixedDurableTransientCharacter.accounting.keptUnits, 0);
+  assert.equal(
+    mixedDurableTransientCharacter.outcome.droppedCandidates[0]?.validatorCode,
+    "event_shaped_character_fact",
+  );
 
   const invalidEventWithDependent = compile(chat, [
     unit(chat, {

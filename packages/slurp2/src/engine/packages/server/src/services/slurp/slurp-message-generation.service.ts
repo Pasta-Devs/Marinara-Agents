@@ -52,11 +52,17 @@ import { slurpAudienceArcDescription } from "./slurp-audience-arc.js";
 import { slurpArcLifeLine } from "./slurp-project.js";
 import { SLURP_PLATFORM_CONTEXT } from "./slurp-prompt.js";
 import { createSlurpPopulationStorage } from "../storage/slurp-population.storage.js";
-import { slurpFanMemoryForPrompt, slurpFanVoiceForPrompt, slurpResolveFanType } from "./slurp-fan-types.js";
+import {
+  SLURP_FAN_VOICE_PROMPT_MAX,
+  slurpFanMemoryForPrompt,
+  slurpFanVoiceForPrompt,
+  slurpResolveFanType,
+} from "./slurp-fan-types.js";
 import { prepareSlurpPostImageContexts, slurpImageCaptioning } from "./slurp-post-image-context.js";
 import { createSlurpMessagesStorage, type SlurpMessage } from "../storage/slurp-messages.storage.js";
 import type { SlurpDmPolicy } from "./slurp-messaging.js";
-import { resolveNoodlerCharacterCanon } from "./slurp-source-resolve.js";
+import { isSlurpCharacterFanAccount } from "./slurp-audience-characters.js";
+import { resolveNoodlerCharacterCanon, resolveSlurpCharacterFanVoice } from "./slurp-source-resolve.js";
 import {
   claimSlurpModelBudget,
   getSlurpModelBudgetLedger,
@@ -116,6 +122,8 @@ export function buildSlurpMessageChat(input: {
   contentMenu?: string;
   /** Holidays and site events running today. See `slurp-platform-events.ts`. */
   platformEvents?: string | null;
+  /** A viewer request stays in the untrusted user-data message, never in trusted system guidance. */
+  viewerGenerationGuidance?: string;
   promptBlocks?: SlurpPromptBlockOverrides;
 }): ChatMessage[] {
   const protect = (value: string | null | undefined) =>
@@ -131,7 +139,14 @@ export function buildSlurpMessageChat(input: {
       },
       { id: "platform", kind: "required" as const, text: SLURP_PLATFORM_CONTEXT },
       { id: "safety", kind: "required" as const, text: NOODLER_UNTRUSTED_CONTENT_INSTRUCTION },
-      { id: "creativeDirection", kind: "context" as const, optional: true, text: input.generationGuidance.trim() },
+      {
+        id: "creativeDirection",
+        kind: "context" as const,
+        optional: true,
+        text: input.generationGuidance.trim()
+          ? "Use the platform's saved creative direction below. It is trusted configuration."
+          : "",
+      },
       {
         id: "boundaries",
         kind: "context" as const,
@@ -253,6 +268,9 @@ export function buildSlurpMessageChat(input: {
         }
       : {}),
     ...(input.characterCanon ? { characterCanon: protect(input.characterCanon) } : {}),
+    ...(input.viewerGenerationGuidance?.trim()
+      ? { viewerRequest: protect(input.viewerGenerationGuidance.trim()) }
+      : {}),
     ...(input.threadState
       ? {
           relationshipState: {
@@ -400,10 +418,19 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
   const fanMember = await createSlurpPopulationStorage(input.db)
     .get(input.viewer.id)
     .catch(() => null);
-  const fanVoice = fanMember
-    ? slurpFanVoiceForPrompt(slurpResolveFanType(settings.fanTypes, fanMember).voice)
-    : undefined;
-  const fanMemory = fanMember ? slurpFanMemoryForPrompt(tie) : undefined;
+  // An invited character is not the player either, and its own card is the reason it was invited,
+  // so the card supplies the voice. Same helper and budget as the fan-activity cast, so a character
+  // reads the same in a DM as in a comment.
+  const characterFanVoice = await resolveSlurpCharacterFanVoice(
+    input.db,
+    input.viewer.entityId,
+    SLURP_FAN_VOICE_PROMPT_MAX,
+  ).catch(() => undefined);
+  const fanVoice =
+    characterFanVoice ??
+    (fanMember ? slurpFanVoiceForPrompt(slurpResolveFanType(settings.fanTypes, fanMember).voice) : undefined);
+  // The memory is the tie said out loud, and an invited character holds a tie like anybody else.
+  const fanMemory = fanMember || isSlurpCharacterFanAccount(input.viewer) ? slurpFanMemoryForPrompt(tie) : undefined;
   const recentPosts = recentPostRows
     .filter((post) => post.access !== "draft")
     .slice(0, RECENT_POSTS)
@@ -496,7 +523,8 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
     availability,
     disclosureMode,
     publicIdentity,
-    generationGuidance: [settings.generationGuidance, input.generationGuidance].filter(Boolean).join("\n"),
+    generationGuidance: settings.generationGuidance,
+    viewerGenerationGuidance: input.generationGuidance,
     promptBlocks: settings.promptBlocks,
     scheduleContext,
     characterCanon,
