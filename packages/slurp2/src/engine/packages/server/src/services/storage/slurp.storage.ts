@@ -426,6 +426,10 @@ export const slurpSettingsSchema = z.object({
   imageHeight: z.number().int().min(64).max(4096),
   /** Share of a Creator's automatic posts published as Stories. */
   storyRate: z.enum(SLURP_STORY_RATE),
+  /** Whether automatic Story slots may publish image Stories. Manual Stories remain available. */
+  storyImagesEnabled: z.boolean(),
+  /** How long image Stories remain in the Moments shelf. */
+  storyLifetimeHours: z.number().int().min(1).max(168),
   /** How often an automatic post goes out free as a teaser. See `slurpTeaserPost`. */
   teaserRate: z.enum(SLURP_TEASER_RATE),
   /** Share of a Creator's automatic posts that continue a project rather than standing alone. */
@@ -576,7 +580,7 @@ export const slurpSettingsSchema = z.object({
    * `SLURP_FAN_VOICE_PROMPT_MAX` characters to that prompt. The default keeps a fresh install
    * bounded; a user with a long context window may raise it.
    */
-  audienceCharacterLimit: z.number().int().min(0).max(50),
+  audienceCharacterLimit: z.number().int().min(0).max(10),
   carryoverModes: z.array(z.enum(["conversation", "roleplay", "game"])),
   carryoverHours: z
     .number()
@@ -1252,6 +1256,8 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   imageWidth: 1024,
   imageHeight: 1536,
   storyRate: SLURP_DEFAULT_STORY_RATE,
+  storyImagesEnabled: true,
+  storyLifetimeHours: 72,
   teaserRate: SLURP_DEFAULT_TEASER_RATE,
   projectRate: SLURP_DEFAULT_PROJECT_RATE,
   arcPace: SLURP_DEFAULT_ARC_PACE,
@@ -1295,7 +1301,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   invitedCharacterGroupIds: [],
   audienceCharacters: {},
   audienceCharacterGroupIds: [],
-  audienceCharacterLimit: 8,
+  audienceCharacterLimit: 5,
   carryoverModes: [],
   carryoverHours: 24,
   carryoverMaxItems: 20,

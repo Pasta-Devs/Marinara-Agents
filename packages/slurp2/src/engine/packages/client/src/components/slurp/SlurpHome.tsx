@@ -270,9 +270,6 @@ function SlurpAccessTransition({ postId, locked, children }: { postId: string; l
 }
 // Starting balance until the wallet earns or spends coins through future transactions.
 const SLURP_PLACEHOLDER_BALANCE = 1111;
-// Stories stay in the shelf for three days. The server still owns post visibility; this is the
-// presentation window for the in-memory viewer projection.
-const SLURP_MOMENT_WINDOW_MS = 72 * 60 * 60 * 1000;
 const STAGE_PERSONALITY_MAX_LENGTH = 1000;
 
 interface NoodlerPostSubmission {
@@ -2510,6 +2507,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
         connectionCounts={connectionCountsQuery.data ?? {}}
         inlineAdsEnabled={slurpSettingsQuery.data?.inlineAdsEnabled !== false}
         inlineAdsFrequency={slurpSettingsQuery.data?.inlineAdsFrequency ?? "standard"}
+        storyLifetimeHours={slurpSettingsQuery.data?.storyLifetimeHours ?? 72}
       />
       <SlurpOnboardingWizard
         open={onboardingMode !== null}
@@ -2878,11 +2876,22 @@ function SlurpMediaWall({
     if (post.locked || typeof post.imageUrl !== "string") return [];
     return [{ ...toNoodlePostCardModel(post, creator.profile), imageUrl: post.imageUrl }];
   });
+  const emptyWallAd = adForIndex?.(0) ?? null;
   if (tiles.length === 0) {
     return (
-      <p className="px-4 py-8 text-xs text-[var(--muted-foreground)]">
-        {localizeUi("ui.slurp.home.layout.empty", { defaultValue: "No images in this feed yet." })}
-      </p>
+      <div className="space-y-3 px-4 py-8">
+        <p className="text-xs text-[var(--muted-foreground)]">
+          {localizeUi("ui.slurp.home.layout.empty", { defaultValue: "No images in this feed yet." })}
+        </p>
+        {emptyWallAd && adLabels ? (
+          <SlurpInlineAdTile
+            promotion={emptyWallAd}
+            labels={adLabels}
+            onAction={() => onAdAction?.(emptyWallAd)}
+            onHide={() => onAdHide?.(emptyWallAd)}
+          />
+        ) : null}
+      </div>
     );
   }
   return (
@@ -4241,6 +4250,7 @@ function ViewerHub({
   connectionCounts,
   inlineAdsEnabled,
   inlineAdsFrequency,
+  storyLifetimeHours,
   newSinceAt,
   onFeedShown,
   onOpenWallet,
@@ -4284,6 +4294,7 @@ function ViewerHub({
   connectionCounts: Record<string, { fans: number; followers: number }>;
   inlineAdsEnabled: boolean;
   inlineAdsFrequency: "light" | "standard" | "frequent";
+  storyLifetimeHours: number;
 }) {
   const { t: localizeUi } = useUiTranslation();
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
@@ -4303,7 +4314,8 @@ function ViewerHub({
   const [discoverMaximumPrice, setDiscoverMaximumPrice] = useState("");
   const [discoverSort, setDiscoverSort] = useState<SlurpDiscoverSort>("recommended");
   const [openPostId, setOpenPostId] = useState<string | null>(null);
-  const [momentCutoff] = useState(() => Date.now() - SLURP_MOMENT_WINDOW_MS);
+  const [momentNow] = useState(() => Date.now());
+  const momentCutoff = momentNow - storyLifetimeHours * 60 * 60 * 1000;
   useEffect(() => {
     window.localStorage.setItem("slurp2.discover.layout", discoverLayout);
   }, [discoverLayout]);
@@ -5622,7 +5634,7 @@ function SlurpPostDialog({
         )
       }
       // The dialog owns the picture, so the card must not draw it or offer its prompt again.
-      side={<SlurpCreatorPostCard post={{ ...post, imageUrl: null, imagePrompt: null }} ctx={ctx} surface="profile" />}
+      side={<SlurpCreatorPostCard post={{ ...post, imageUrl: null }} ctx={ctx} surface="profile" />}
     />
   );
 }
