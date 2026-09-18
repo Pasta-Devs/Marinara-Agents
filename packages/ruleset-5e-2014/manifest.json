@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 2,
+  "capabilityApi": {
+    "major": 1,
+    "minor": 20
+  },
+  "builtAgainst": {
+    "engineVersion": "2.4.6",
+    "engineCommit": "4be4e362c3e9d9019070d05f070b393c5e481868"
+  },
+  "id": "ruleset-5e-2014",
+  "name": "5e (SRD 5.1)",
+  "version": "0.1.0",
+  "description": "Provides 5e SRD 5.1 rules for Game Mode ability checks, skill checks, saving throws, and the full character sheet. Battles still use Marinara's default combat, not 5e combat.",
+  "engine": {
+    "min": "2.4.6",
+    "maxExclusive": "4.0.0"
+  },
+  "kind": [
+    "ruleset"
+  ],
+  "entrypoints": {},
+  "contributions": {
+    "assets": {
+      "paths": [
+        "ruleset.json"
+      ]
+    }
+  },
+  "files": [
+    {
+      "path": "ruleset.json",
+      "sha256": "5c08a911bbd0b8a7be6e07695efc861b243b4a8633e0f2017a9346836d9f8e9b",
+      "bytes": 25767
+    }
+  ],
+  "permissions": [],
+  "restartRequired": false
+}
