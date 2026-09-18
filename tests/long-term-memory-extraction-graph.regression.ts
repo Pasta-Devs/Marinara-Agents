@@ -321,6 +321,126 @@ async function main() {
   );
   assert.equal(structuredCharacterUnits[1]?.text.startsWith("Began processing Damo's state compensation claim"), true);
 
+  const idiomaticStaticSource = sourceNote(
+    "source_static_fact_heuristic",
+    { kind: "chat_summary", sourceId: "chat-static", entryId: "summary-static" },
+    [
+      "## character_fact",
+      "- Rowan | section: facts | text: Rowan decided the old observatory was not worth visiting again.",
+    ].join("\n"),
+  );
+  const idiomaticStaticUnit = normalizeStructuredSummaryEvidenceUnits({
+    units: [],
+    sourceText: idiomaticStaticSource.sections.source.text,
+    sourceNote: idiomaticStaticSource,
+    sourceHash: sourceHashForLtmSourceNote(idiomaticStaticSource),
+    mode: "roleplay",
+    modes: ["roleplay"],
+  }).units.find((candidate) => candidate.bucket === "character_fact");
+  assert.equal(idiomaticStaticUnit?.sectionKey, "facts");
+  assert.equal(idiomaticStaticUnit?.claimKind, "static");
+
+  const explicitStaticTransition = normalizeStructuredSummaryEvidenceUnits({
+    units: [],
+    sourceText: [
+      "## character_fact",
+      "- Rowan | section: facts | text: Rowan decided to become a case officer.",
+      "- Mara | section: facts | text: Mara lost her assigned officer role.",
+    ].join("\n"),
+    sourceNote: idiomaticStaticSource,
+    sourceHash: sourceHashForLtmSourceNote(idiomaticStaticSource),
+    mode: "roleplay",
+    modes: ["roleplay"],
+  }).units.filter((candidate) => candidate.bucket === "character_fact");
+  assert.equal(
+    explicitStaticTransition.every((candidate) => candidate.sectionKey === "developments"),
+    true,
+  );
+  assert.equal(
+    explicitStaticTransition.every((candidate) => candidate.claimKind === "change"),
+    true,
+  );
+
+  const durableNarrativeCharacter = compile(chat, [
+    unit(chat, {
+      bucket: "character_fact",
+      subjectId: "rowan",
+      sectionKey: "facts",
+      text: "Rowan met Mara and is her assigned case officer.",
+      claimKind: "static",
+      subjectNames: ["Rowan"],
+    }),
+  ]);
+  assert.equal(durableNarrativeCharacter.accounting.keptUnits, 1);
+
+  const durablePastNarrativeCharacter = compile(chat, [
+    unit(chat, {
+      bucket: "character_fact",
+      subjectId: "rowan",
+      sectionKey: "facts",
+      text: "Rowan told Mara he was her assigned case officer.",
+      claimKind: "static",
+      subjectNames: ["Rowan"],
+    }),
+  ]);
+  assert.equal(durablePastNarrativeCharacter.accounting.keptUnits, 1);
+
+  for (const text of ["Rowan met Mara and works as a doctor.", "Rowan told Mara he serves as her case officer."]) {
+    const result = compile(chat, [
+      unit(chat, {
+        bucket: "character_fact",
+        subjectId: "rowan",
+        sectionKey: "facts",
+        text,
+        claimKind: "static",
+        subjectNames: ["Rowan"],
+      }),
+    ]);
+    assert.equal(result.accounting.keptUnits, 1, text);
+  }
+
+  const transientCharacterAction = compile(chat, [
+    unit(chat, {
+      bucket: "character_fact",
+      subjectId: "rowan",
+      sectionKey: "facts",
+      text: "Rowan met Mara at the observatory.",
+      claimKind: "static",
+      subjectNames: ["Rowan"],
+    }),
+  ]);
+  assert.equal(transientCharacterAction.accounting.keptUnits, 0);
+  assert.equal(transientCharacterAction.outcome.droppedCandidates[0]?.validatorCode, "event_shaped_character_fact");
+
+  const transientDurableTokenCharacter = compile(chat, [
+    unit(chat, {
+      bucket: "character_fact",
+      subjectId: "rowan",
+      sectionKey: "facts",
+      text: "Rowan met Mara and is walking away.",
+      claimKind: "static",
+      subjectNames: ["Rowan"],
+    }),
+  ]);
+  assert.equal(transientDurableTokenCharacter.accounting.keptUnits, 0);
+  assert.equal(
+    transientDurableTokenCharacter.outcome.droppedCandidates[0]?.validatorCode,
+    "event_shaped_character_fact",
+  );
+
+  const transientUsesCharacter = compile(chat, [
+    unit(chat, {
+      bucket: "character_fact",
+      subjectId: "rowan",
+      sectionKey: "facts",
+      text: "Rowan met Mara and uses a lantern.",
+      claimKind: "static",
+      subjectNames: ["Rowan"],
+    }),
+  ]);
+  assert.equal(transientUsesCharacter.accounting.keptUnits, 0);
+  assert.equal(transientUsesCharacter.outcome.droppedCandidates[0]?.validatorCode, "event_shaped_character_fact");
+
   const invalidEventWithDependent = compile(chat, [
     unit(chat, {
       bucket: "timeline_event",

@@ -20,6 +20,8 @@ const CHARACTER_FACT_EVENT_SECTION_KEYS = new Set(["facts", "core", "profile"]);
 const CHARACTER_FACT_DURABLE_SECTION_KEYS = new Set(["developments", "abilities", "items", "voice"]);
 const EVENT_SHAPED_CHARACTER_FACT_PATTERN =
   /\b(?:arrived|departed|entered|left|went|came|returned|walked|ran|fled|attacked|fought|killed|died|met|spoke|told|asked|answered|promised|decided|agreed|refused|accepted|rejected|gave|took|found|discovered|revealed|learned|opened|closed|escaped|rescued|betrayed|confronted|warned|saved|stopped)\b/i;
+const DURABLE_CHARACTER_ASSERTION_PATTERN =
+  /\b(?:(?:is|are|was|were|remains?|(?:works?|serves?)\s+as)\s+(?:an?\s+|the\s+|their\s+|his\s+|her\s+|its\s+)?(?:assigned\s+)?(?:case\s+)?(?:officer|member|ally|captain|guard|leader|partner|friend|sibling|parent|doctor|lawyer|teacher|owner|resident|citizen|exoneree)\b|belongs?\s+to\b|can\s+(?:read|speak|write|understand|control|operate)\b|knows?\s+(?:how\s+to|the|a|an)\b|lives?\s+in\b)/i;
 const THREAD_RESOLUTION_PATTERN =
   /\b(?:resolve|resolved|resolver|resolution|would resolve|will resolve|until|when|if|requires|needs|awaits|pending|unresolved|open question|pay off|payoff|future|follow-?up|goal|must|should|tomorrow|next (?:day|class|session)|cool(?:s|ed|ing)?|confess(?:ion|es|ed|ing)?|confront(?:s|ed|ing)?|dy(?:e|ing) down|explain(?:s|ed|ing|ation)?|updates?)\b/i;
 const SCENE_ONLY_TONE_PATTERN =
@@ -514,6 +516,7 @@ function isEventShapedCharacterFact(unit: LtmEvidenceUnit) {
   if (unit.bucket !== "character_fact") return false;
   if (CHARACTER_FACT_DURABLE_SECTION_KEYS.has(unit.sectionKey)) return false;
   if (!CHARACTER_FACT_EVENT_SECTION_KEYS.has(unit.sectionKey)) return false;
+  if (DURABLE_CHARACTER_ASSERTION_PATTERN.test(unit.text)) return false;
   return EVENT_SHAPED_CHARACTER_FACT_PATTERN.test(unit.text);
 }
 
