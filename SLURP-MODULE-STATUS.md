@@ -26,6 +26,9 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
   from `origin/modular-simping` `26a80fe7`.
 - Pull request: draft PR #929 is open against `modular-simping` and assigned to `Gunterlie`; issue
   #928 is assigned to `Gunterlie`. Not merged by the implementation agent, by instruction.
+- Branch commits: `4f407071` records the Slice 7 start/merge gate; `40407635` is the complete
+  implementation, regression, documentation, and generated-package commit. A final ledger-only
+  handoff commit follows it.
 - Slice 6 merge gate: PR #927 is `MERGED` into `modular-simping` at `26a80fe7`; its generated
   `0.0.29` payload, manifest, `artifacts/slurp2-0.0.29.zip` (sha256
   `66559923bee9ec2c683805731b6776c1e2cbe4792d756810ce6e462a5ce46d08`, 6725244 bytes), and all three
@@ -191,9 +194,11 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 
 ### Slice 7 (0.0.30)
 
-Issue #928; draft PR #929 to `modular-simping`; branch `slurp2-slice7-client-state-hooks` from
-merged Slice 6 commit `26a80fe7`. Both issue and PR are assigned to `Gunterlie`; human verification
-checkboxes remain unchecked. Slice 7 is not merged and Slice 8 has not started.
+[Issue #928](https://github.com/Pasta-Devs/Marinara-Agents/issues/928); draft
+[PR #929](https://github.com/Pasta-Devs/Marinara-Agents/pull/929) to `modular-simping`; branch
+`slurp2-slice7-client-state-hooks` from merged Slice 6 commit `26a80fe7`. Both issue and PR are
+assigned to `Gunterlie`; human verification checkboxes remain unchecked. Implementation commit
+`40407635`. Slice 7 is not merged and Slice 8 has not started.
 
 **Client state and hook split.** The 3,709-line `hooks/use-slurp.ts` monolith is deleted with no
 shim. Its 213 exported names each have exactly one definition under `client/src/slp/`. The moved
