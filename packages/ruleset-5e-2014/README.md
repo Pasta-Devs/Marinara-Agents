@@ -2,9 +2,9 @@
 
 A downloadable Game Mode **ruleset** (capability package, `ruleset` kind). It provides 5e rules
 from the System Reference Document 5.1 for ability checks, skill checks, saving throws, spell
-slots, hit dice, class resources, conditions, rests, and a full character sheet. Battles start from
-the sheet's own hit points and spell slots, but the combat arithmetic is still Marinara's, not 5e
-combat.
+slots, hit dice, class resources, conditions, rests, a full character sheet, and 5e combat itself:
+a battle in a game on this ruleset is fought by these rules, on screen, against the SRD's own
+monsters.
 
 Requires **Marinara Engine 2.4.6+ with Capability API 1.27** (the ruleset seam, catalogs, the
 battle block, scaled catalog columns, the combat block and bestiaries: hash-pinned `ruleset.json`
@@ -27,7 +27,8 @@ Agent. It is pure data: nothing here runs code, and no restart is needed after i
 - Short and long rest recovery rules.
 - GM guidance text for when to call for a check or save and how to read the sheet.
 - A `battle` block: what a fight may read from the sheet, and what it writes back.
-- A `combat` block: how a fight is resolved by 5e's own rules. See 5e combat below.
+- A `combat` block: how a battle is fought by 5e's own rules, which is what a game plays on. See
+  5e combat below.
 
 Every id in `ruleset.json` (`level`, `dex`, `slots`, and so on) is this file's own naming choice.
 The Engine does not look for 5e-specific names; it reads the same closed set of resolution kinds
@@ -109,10 +110,11 @@ points starts at half of the health bar Marinara built for them, so an 8-point l
 killed by the first blow. Everything else about the fight stays Marinara's: maximum hit points,
 attack, defense, speed and level, and all of the damage arithmetic.
 
-**The battle bridge is not a 5e combat system.** Attack rolls, saving throws, concentration, and
-what a higher slot would add are recorded on the catalog entries and applied by nobody. The block
-that does say how 5e resolves a fight is `combat`, below, and no Engine release plays on that one
-yet either. `coverage.combat` is still `false` and means what it always meant.
+**The battle bridge is not a 5e combat system**, and it is no longer the usual path. A game with
+the combat director on fights by the `combat` block below instead, with real attack rolls and saves.
+This block is what a game without it still uses, and there attack rolls, saving throws,
+concentration and what a higher slot would add are recorded on the catalog entries and applied by
+nobody. A fight never uses both blocks.
 
 **Only catalog rows become skills.** A row you typed by hand has no numbers behind it, so it brings
 nothing into the fight. Utility entries and reactions (Shield) stay out too, because Marinara's
@@ -137,10 +139,14 @@ is measured from the bestiary; the converter refuses to run when one has been ty
 `ruleset.json` also carries a `combat` block, which is the other thing entirely: it says how a
 fight is **resolved** by 5e's rules rather than what a fight may borrow from the sheet.
 
-**No Marinara Engine release plays a fight on it yet.** There is no screen, no menu and no saved
-battle behind it. A game using this ruleset still fights exactly the way it did before. This
-release is the data, written now so it is ready for the release that reads it. `coverage.combat`
-is still `false` and means what it always meant.
+**This is what a battle now plays on.** In a new game on this ruleset, with the combat director on,
+a fight is resolved by 5e's rules and shown on the battle screen: you pick from your character's own
+attacks and prepared spells, you roll against an opponent's Armor Class with advantage or
+disadvantage, a natural 20 is a critical, saves are rolled against your Spell save DC, conditions
+and concentration hold, a character at zero rolls against death, and every accepted action is
+written to the sheet as it happens, spell slots included. Opponents come from the 319-creature
+bestiary below when the Game Master names one, and are otherwise built on the measured threat scale.
+`coverage.combat` is `true`. The known ceilings are listed at the end of this section.
 
 What the block says:
 
@@ -171,7 +177,8 @@ The caps and the floors are then made **monotone** along the rating order, and t
 this table is smoothed. A higher rating may never allow less than a lower one, because the scale is
 what bounds a monster a Game Master made up, and two unlucky SRD creatures at one rating should not
 cap everybody else's. The numbers are still the SRD creatures' own; only which rating may reach them
-changes.
+changes. This is live: when a Game Master invents an opponent instead of naming one out of the
+bestiary, the fight you play is built on this table.
 
 ### Creatures
 
@@ -217,9 +224,8 @@ of its own, or if the two stop printing the same actions.
 
 ### What is written down but not resolved
 
-Said plainly, because a ruleset should not claim what the Engine does not do:
+A fight plays, so this is the honest list of what it still does not do:
 
-- **Nothing is playable.** No screen, no saved battle, no opponent that picks its own actions.
 - **No positions.** Reach, range, areas, cover, speed and movement are carried and read by nobody
   yet, so an area action says how many targets it takes instead: two for a line, three for a cone or
   a sphere, two for anything else that says "each creature". Those are deliberately low, chosen once,
@@ -229,6 +235,8 @@ Said plainly, because a ruleset should not claim what the Engine does not do:
   creature will read it.
 - **No reactions**, so a reaction spell such as Shield is left off the menu and a creature's printed
   reactions are traits.
+- **Legendary actions are carried, priced and resolved, but nothing opens the window they are spent
+  in**, which arrives with reactions. A creature's three points and its options are all here.
 - **Charmed and deafened** have no effect the Engine's closed list can express, so they stay plain
   records on the sheet. So does exhaustion, which this sheet counts on a track rather than as a
   condition, so a creature immune to it says so in a trait.

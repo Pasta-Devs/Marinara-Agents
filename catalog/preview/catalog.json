@@ -11,12 +11,12 @@
         },
         "builtAgainst": {
           "engineVersion": "2.4.6",
-          "engineCommit": "e931f956c59a4569c08fcd0260d792cd78d4a97c"
+          "engineCommit": "e3599679043c0070b995f9be5d5aca85edacbdb5"
         },
         "id": "ruleset-5e-2014",
         "name": "5e (SRD 5.1)",
         "version": "0.5.0",
-        "description": "Provides 5e SRD 5.1 rules for Game Mode ability checks, skill checks, saving throws, and the full character sheet, plus pickable SRD spells, class features and weapons so you do not type them row by row, and class resources the sheet keeps current as you level up. It now also describes 5e combat itself: the d20 attack roll with advantage, criticals and misses on the naturals, the action, bonus action and reaction a turn holds, your weapons and prepared spells as the things you do with them, the SRD conditions, concentration, death saves and the thirteen damage types, together with a bestiary of 319 SRD monsters and a challenge-rating scale measured from them. No Marinara Engine release plays a fight on that block yet: battles still start from the sheet and use Marinara's own combat math. After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
+        "description": "Provides 5e SRD 5.1 rules for Game Mode ability checks, skill checks, saving throws, and the full character sheet, plus pickable SRD spells, class features and weapons so you do not type them row by row, and class resources the sheet keeps current as you level up. It also brings 5e combat itself: a battle in a new game on this ruleset is fought by these rules on screen, with attack rolls against Armor Class, advantage and disadvantage, criticals, saving throws, conditions, concentration, death saves and spell slots spent off your sheet, against a bestiary of 319 SRD monsters the Game Master can name or a new opponent built on the measured challenge scale. Not yet: positions and movement, reactions, and the window a legendary action is spent in. After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
         "engine": {
           "min": "2.4.6",
           "maxExclusive": "4.0.0"
@@ -38,8 +38,8 @@
         "files": [
           {
             "path": "ruleset.json",
-            "sha256": "041a60cc37fb084ae2922857df155ff2f9403a29920815090d7a27ccb6160a03",
-            "bytes": 73708
+            "sha256": "bdc05cbd3cc4d9d34e69860f56596f677c011e958781a456a38b5d4eed3c0a1c",
+            "bytes": 73862
           },
           {
             "path": "catalogs/spells.json",
@@ -64,8 +64,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/ruleset-5e-2014.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-0.5.0.zip",
-        "sha256": "2f9c80b8947cb0a2cf3022b41085e18203aec2883d6aed24060fbf7f44d49cd3",
-        "bytes": 1273153
+        "sha256": "423b77e6aeb5432e3c64251e7819c700097b8d8997182cc6c376ae0e74703eae",
+        "bytes": 1273263
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/game/getting-started.md#choosing-rules"
     }
