@@ -161,3 +161,6 @@ export { useSlurpSettings } from "./slp-settings-hooks.js";
 
 // The Projects arc library resets an arc type back to its shipped default.
 export { useResetSlurpArcType } from "./slp-settings-hooks.js";
+
+// Messages and Onboarding write settings directly from their own panels.
+export { useUpdateSlurpSettings } from "./slp-settings-hooks.js";

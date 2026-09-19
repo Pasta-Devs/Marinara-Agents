@@ -19,7 +19,7 @@
  * reported as clean while every undefined name in it went unmentioned. A syntax error is never
  * acceptable output, so this rule has no allowlist.
  *
- * ponytail: TS2304/TS2552, relative TS2307 and all TS1xxx only. Bare specifiers are skipped because
+ * ponytail: TS2304/TS2552, the missing-export family, relative TS2307 and all TS1xxx only. Bare specifiers are skipped because
  * the overlay installs no dependencies; widen once the merged tree typechecks against an Engine.
  */
 import { cp, mkdtemp, rm } from "node:fs/promises";
@@ -34,7 +34,10 @@ const engineSources = join(repoRoot, "sources/engine");
 const tsc = join(repoRoot, "node_modules/.bin/tsc");
 // Node globals resolve through @types/node, which the merged tree does not install.
 const IGNORED_NAMES = new Set(["setImmediate", "clearImmediate", "NodeJS"]);
-const CODES = /error (TS2304|TS2552): Cannot find name '([^']+)'/;
+// The missing-export family. TS2305 is the member that does not exist; TS2459 and TS2724 are the
+// member that exists but was never exported; TS2300 is the same name bound twice. Each one
+// typechecks nowhere and breaks the esbuild bundle, so the gate must name them here.
+const CODES = /error (TS2304|TS2552): Cannot find name '([^']+)'|error (TS2305|TS2459|TS2724|TS2300): /;
 const MISSING_MODULE = /^(.+?)\(\d+,\d+\): error TS2307: Cannot find module '(\.{1,2}\/[^']+)'/;
 // A file that does not parse yields only TS1xxx, so these must never be filtered or allowlisted.
 const SYNTAX = /error TS1\d{3}: /;
@@ -98,7 +101,11 @@ for (const id of packages) {
 
     const lines = [...new Set(output.split("\n"))];
     const found = [
-      ...lines.filter((line) => CODES.test(line) && !IGNORED_NAMES.has(CODES.exec(line)[2])),
+      ...lines.filter((line) => {
+        if (!CODES.test(line)) return false;
+        const match = CODES.exec(line);
+        return !match?.[2] || !IGNORED_NAMES.has(match[2]);
+      }),
       ...lines.filter(isReportedMissingModule),
       ...lines.filter((line) => SYNTAX.test(line)),
     ];

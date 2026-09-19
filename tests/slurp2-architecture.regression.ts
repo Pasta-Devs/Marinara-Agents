@@ -6,12 +6,25 @@ import { dirname, join, posix } from "node:path";
 import { SLURP2_SOURCE_MODULES, slurp2Source } from "./slurp2-source";
 
 // Executable half of packages/slurp2/docs/architecture/README.md. Rules apply to the three `slp`
-// roots; old source outside them is migration debt and is left alone until it moves.
+// roots; package-specific implementation outside them is an ownership violation.
 
 const repoRoot = join(import.meta.dirname, "..");
 const engineRoot = join(repoRoot, "packages/slurp2/src/engine");
 const ROOTS = ["packages/client/src/slp", "packages/server/src/slp", "packages/shared/src/slp"];
-const EXCEPTIONS = ["packages/client/src/lib/api-client.ts", "packages/server/src/services/garnish-ads"];
+const EXCEPTIONS = [
+  "packages/client/src/lib/api-client.ts",
+  "packages/server/src/services/garnish-ads",
+  "packages/server/src/db/schema/slurp.ts",
+];
+const EXPECTED_OWNERSHIP = [
+  "packages/client/src/slp",
+  "packages/server/src/slp",
+  "packages/shared/src/slp",
+  "packages/client/src/lib/api-client.ts",
+  "packages/server/src/services/garnish-ads",
+  "packages/server/src/db/schema/slurp.ts",
+];
+const UNOWNED_ENGINE_FILES = new Set(["packages/client/src/hooks/use-creator-personas.ts"]);
 const MAX_LINES = 800;
 // Server modules hold pure domain rules: they may not reach the database, host storage, or Fastify.
 const SERVER_MODULE_IO = /(^fastify$|\/db\/(connection|file-query)(\.js)?$|\/services\/storage\/)/u;
@@ -60,7 +73,9 @@ function architectureViolations(root: string, owned: readonly string[]): string[
     const name = posix.basename(path);
     const at = place(path);
     if (!at) {
-      if (/^(slp-|Slp[A-Z])/u.test(name)) violations.push(`ownership: ${path} is outside the slp roots`);
+      if (/\.(?:[cm]?[jt]sx?|vue|svelte)$/u.test(name) && !isOwned(path, owned) && !UNOWNED_ENGINE_FILES.has(path)) {
+        violations.push(`ownership: ${path} is outside the slp roots or named exceptions`);
+      }
       continue;
     }
     if (!isOwned(path, owned)) violations.push(`ownership: ${path} is not in slurp2OwnedSourcePaths`);
@@ -107,6 +122,7 @@ const ownershipBlock = /const slurp2OwnedSourcePaths = \[([\s\S]*?)\n\];/u.exec(
 const slurp2Owned = [...ownershipBlock.matchAll(/"([^"]+)"/gu)].map((match) => match[1]);
 assert.ok(slurp2Owned.length > 0, "slurp2OwnedSourcePaths must be readable from the builder");
 assert.doesNotMatch(ownershipBlock, /\.\.\./u, "Slurp2 ownership must not spread legacy Slurp's list");
+assert.deepEqual(slurp2Owned, EXPECTED_OWNERSHIP, "Slurp2 ownership must be exactly the six approved entries");
 const legacyBlock = /const slurpOwnedSourcePaths = \[([\s\S]*?)\n\];/u.exec(builder)?.[1] ?? "";
 for (const root of ROOTS) assert.ok(!legacyBlock.includes(root), `legacy Slurp must not own ${root}`);
 
@@ -276,6 +292,12 @@ const cases: Array<[string, Record<string, string>, readonly string[], RegExp]> 
     { "packages/client/src/components/slurp/SlpStray.tsx": "export {};\n" },
     fixtureOwned,
     /ownership: .*SlpStray\.tsx/u,
+  ],
+  [
+    "non-slp implementation outside the roots",
+    { "packages/client/src/components/slurp/Stray.tsx": "export {}\n" },
+    fixtureOwned,
+    /ownership: .*Stray\.tsx/u,
   ],
   [
     "unowned slp root",

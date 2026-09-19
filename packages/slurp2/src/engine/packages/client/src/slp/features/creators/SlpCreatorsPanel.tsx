@@ -16,7 +16,7 @@ import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import { CreatorMessagingGroup } from "../messages/slp-messages-contract";
 import { BackstagePageHeader, SettingAnchor } from "../../modules/settings/SlpSettingsKit";
 import { SlurpPostGuidanceField } from "../settings/slp-post-guidance-contract";
-import { SlurpCreatorProfileEditor } from "../../../components/slurp/SlurpCreatorProfileEditor";
+import { SlurpCreatorProfileEditor } from "./SlpCreatorProfileEditor";
 import { useSlurpCreatorMetrics } from "./slp-creators-hooks";
 import { useSlurpPostGuidance } from "../settings/slp-post-guidance-contract";
 

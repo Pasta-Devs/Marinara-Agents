@@ -133,3 +133,30 @@ modules, rejected alternative, and migration consequence.
   `focusRing` class string, copied byte-identically into four files by Slice 9, is now
   `base/chrome/slp-focus.ts`; the three `quietButton` composites stay separate because they differ in
   minimum height and animation, so merging them would change what renders.
+
+## 2026-09-19 — Slice 11: ownership completion and the missing-export gate
+
+- **Problem:** seven Slurp components still sat in `components/slurp/`, five of them above the size
+  ceiling, and the architecture regression tolerated them by only flagging `slp`-named strays. The
+  post cards read settings and the fan card, both feature code, from what the plan calls a module.
+  The package typecheck caught TS2305 but not an unexported or doubly-bound import, which is what a
+  mechanical split produces.
+- **Decision:** (1) Each oversized component becomes a view-model hook plus render parts; a hook's
+  type is `ReturnType` of the hook, so parts take the model instead of forty typed props. (2) The
+  fan card and its member query move to `modules/audience/`; the post cards receive the Show-more
+  threshold through the post-card controller instead of reading settings. (3) Cross-feature reads use
+  contracts, including a new `slp-media-contract`. (4) The ownership rule covers any implementation
+  file outside the roots; `slurp2OwnedSourcePaths` is the six entries, in both the builder and the
+  catalog validator. (5) The typecheck gate reports TS2305, TS2459, TS2724 and TS2300.
+- **Affected modules:** client `app/` and `app/screens/`, `features/messages/`, `features/onboarding/`,
+  `features/creators/`, `features/projects/`, `modules/post/`, `modules/audience/`, the Creators,
+  Discovery, Economy, Settings and Media contracts, server `data/slp-storage.ts`; the builder, the
+  catalog validator, the typecheck script and their regressions.
+- **Rejected alternative:** reusing the creator card's reply row and composer in the post card. The
+  two differ in locale keys, fallbacks and the ask-for-reply control, so one component would change
+  what one of them renders. Also rejected: rebaselining the client-hooks wiring counts after the
+  member query moved.
+- **Migration consequence:** no `components/slurp/` path remains, so no source test may read one
+  except through `slurp2Source`. New Slurp2 code must live in the `slp` roots or one of the three
+  permanent exceptions.
+

@@ -7,7 +7,6 @@ import type {
   NoodlerConnectionCounts,
   SlurpAudienceCharacterGroup,
   SlurpAudienceCharacterSummary,
-  SlurpAudienceMember,
   SlurpFollowerEntry,
   SlurpSubscriberEntry,
 } from "./slp-audience-contract.js";
@@ -35,18 +34,6 @@ export function useNoodlerFollowers(accountId: string | null) {
       ),
     enabled: Boolean(accountId),
     staleTime: 10_000,
-  });
-}
-/** The fan card. Fetched only when one is opened, because a feed of them would be a request each. */
-export function useSlurpAudienceMember(memberId: string | null, creatorAccountId: string | null) {
-  return useQuery({
-    queryKey: noodleKeys.audienceMember(memberId ?? "none", creatorAccountId ?? "none"),
-    queryFn: () =>
-      api.get<SlurpAudienceMember>(
-        `/slurp2/noodler/audience/${encodeURIComponent(memberId!)}?creatorAccountId=${encodeURIComponent(creatorAccountId ?? "")}`,
-      ),
-    enabled: Boolean(memberId),
-    staleTime: 60_000,
   });
 }
 export function useSlurpAudienceCharacters() {

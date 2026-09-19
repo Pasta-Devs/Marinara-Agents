@@ -1,6 +1,6 @@
 import { createPortal } from "react-dom";
 import { useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { ModalPortalContext } from "../ui/Modal";
+import { ModalPortalContext } from "../../../components/ui/Modal";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import {
   ArrowLeft,
@@ -15,12 +15,11 @@ import {
   UserRound,
 } from "lucide-react";
 import type { NoodleIdentityDisclosure, NoodlerStageProfile } from "@marinara-engine/shared";
-import type { SlurpStageProfileInput } from "../../slp/base/state/slp-state-types";
-import { getNoodleAccentStyle, NOODLE_PINK, ProfileInitial } from "../../slp/base/chrome/SlpChrome";
-import { SlurpDiscoveryProfileEditor } from "../../slp/features/discovery/SlpDiscoveryProfileEditor";
-import { isSlurpDiscoveryProfileIncomplete } from "../../slp/features/discovery/slp-discovery";
-import { fieldClass, textareaClass } from "./SlurpPostCard";
-import { cn } from "../../lib/utils";
+import type { SlurpStageProfileInput } from "../../base/state/slp-state-types";
+import { getNoodleAccentStyle, NOODLE_PINK, ProfileInitial } from "../../base/chrome/SlpChrome";
+import { isSlurpDiscoveryProfileIncomplete, SlurpDiscoveryProfileEditor } from "../discovery/slp-discovery-contract";
+import { fieldClass, textareaClass } from "../../modules/post/SlpPostCard";
+import { cn } from "../../../lib/utils";
 
 /**
  * The Creator profile form lives here, not in the home screen, so the full-page editor and the
