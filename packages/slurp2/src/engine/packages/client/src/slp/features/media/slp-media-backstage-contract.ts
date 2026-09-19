@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
 import { useSlurpConnections } from "../../base/state/slp-host-connections";
-import type { SlpBackstageSection, SlpBackstageTarget } from "../backstage/slp-backstage-target";
+import type { SlpBackstageSection, SlpBackstageTarget } from "../../base/navigation/slp-backstage-target";
 import type { SlurpSettings } from "../settings/slp-settings-contract";
 import { useSlurpImageConnections, useUpdateSlurpImageConnections } from "./slp-image-connection-hooks";
 
@@ -35,7 +35,7 @@ export function useSlpMediaBackstageState({
   const [imageWizardOpen, setImageWizardOpen] = useState(false);
   const [imageDraft, setImageDraft] = useState<Pick<
     SlurpSettings,
-    "autoPostingImagesEnabled" | "storyImagesEnabled" | "imageWidth" | "imageHeight"
+    "imageContextMode" | "autoPostingImagesEnabled" | "allowGalleryImageAttachments" | "imageWidth" | "imageHeight"
   > | null>(null);
 
   const imageConnections = (connectionsQuery.data ?? []).filter(

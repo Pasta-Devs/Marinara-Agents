@@ -2,10 +2,13 @@
 import { ArrowLeft, ArrowRight, Check, ChevronRight } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { SlurpSettings } from "../../slp/features/settings/slp-settings-contract";
-import { cn } from "../../lib/utils";
-import { SlurpBackstageScopeBadge } from "./SlurpBackstageChrome";
-import type { SlurpBackstageScope } from "./slurp-backstage";
+import { cn } from "../../../lib/utils";
+
+/** A persisted Slurp setting key. The placement map types the real key union; anchors take the
+    string so this shared kit stays a module and imports no feature. */
+export type SlpSettingKey = string;
+/** Who a setting applies to. Shown on page headers and in search results. */
+export type SlpSettingScope = "all-slurp" | "this-viewer" | "new-creators" | "creator";
 
 const focusRing = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]";
 
@@ -16,7 +19,7 @@ export function BackstagePageHeader({
 }: {
   title: string;
   detail: string;
-  scope?: SlurpBackstageScope;
+  scope?: SlpSettingScope;
 }) {
   return (
     <header className="flex flex-wrap items-start justify-between gap-3">
@@ -24,7 +27,7 @@ export function BackstagePageHeader({
         <h1 className="text-2xl font-black tracking-tight text-balance">{title}</h1>
         <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--slurp-muted)] text-pretty">{detail}</p>
       </div>
-      {scope && <SlurpBackstageScopeBadge scope={scope} />}
+      {scope && <SlpSettingScopeBadge scope={scope} />}
     </header>
   );
 }
@@ -145,7 +148,7 @@ export function FineTune({
 }
 
 /** Marks where a setting renders, so Backstage search can scroll to it and focus it. */
-export function SettingAnchor({ settingKey, children }: { settingKey: keyof SlurpSettings; children: ReactNode }) {
+export function SettingAnchor({ settingKey, children }: { settingKey: SlpSettingKey; children: ReactNode }) {
   return (
     <div data-setting-key={settingKey} tabIndex={-1} className="scroll-mt-24 rounded-lg outline-none">
       {children}
@@ -173,7 +176,7 @@ export function focusSettingAnchor(settingKey: string): boolean {
 
 export type BackstageWizardStep = { id: string; title: string; content: ReactNode };
 
-export function BackstageWizard<P extends string>({
+export function BackstageWizard<P extends string, S extends object>({
   title,
   steps,
   patch,
@@ -189,21 +192,21 @@ export function BackstageWizard<P extends string>({
   title: string;
   steps: readonly BackstageWizardStep[];
   /** The one patch the wizard writes. */
-  patch: Partial<SlurpSettings>;
-  current: SlurpSettings;
-  proposed: SlurpSettings;
+  patch: Partial<S>;
+  current: S;
+  proposed: S;
   /** Preset matcher result for the proposed values; null shows "Custom" and the values stay as they are. */
   preset: P | null;
   presetLabel?: (preset: P) => string;
   preview?: ReactNode;
   pending?: boolean;
-  onApply: (patch: Partial<SlurpSettings>) => void;
+  onApply: (patch: Partial<S>) => void;
   onCancel?: () => void;
 }) {
   const { t } = useTranslation();
   const [index, setIndex] = useState(0);
   const reviewing = index >= steps.length;
-  const changed = (Object.keys(patch) as Array<keyof SlurpSettings>).filter(
+  const changed = (Object.keys(patch) as Array<keyof S>).filter(
     (key) => JSON.stringify(current[key]) !== JSON.stringify(proposed[key]),
   );
   const heading = reviewing
@@ -314,5 +317,29 @@ export function BackstageWizard<P extends string>({
         )}
       </div>
     </section>
+  );
+}
+
+const scopeLabels: Record<SlpSettingScope, string> = {
+  "all-slurp": "All Slurp",
+  "this-viewer": "This viewer",
+  "new-creators": "New Creators",
+  creator: "This Creator",
+};
+
+export function SlpSettingScopeBadge({
+  scope,
+  creatorName,
+}: {
+  scope: SlpSettingScope;
+  creatorName?: string | null;
+}) {
+  const { t } = useTranslation();
+  return (
+    <span className="inline-flex min-h-7 max-w-40 items-center truncate rounded-full bg-[color-mix(in_srgb,var(--slurp-violet)_12%,var(--slurp-surface-raised))] px-2.5 text-xs font-semibold text-[var(--slurp-violet)] ring-1 ring-inset ring-[color-mix(in_srgb,var(--slurp-violet)_24%,transparent)]">
+      {scope === "creator" && creatorName
+        ? creatorName
+        : t(`ui.slurp.settings.backstage.scope.${scope}`, { defaultValue: scopeLabels[scope] })}
+    </span>
   );
 }

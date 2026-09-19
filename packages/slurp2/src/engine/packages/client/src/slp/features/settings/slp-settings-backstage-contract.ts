@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { errorMessage } from "../../../components/slurp/SlurpBackstageWorkflow";
-import type { SlpBackstageSection } from "../backstage/slp-backstage-target";
+import type { SlpBackstageSection } from "../../base/navigation/slp-backstage-target";
 import type { SlurpSettings } from "./slp-settings-contract";
 import { useSlurpSettings, useSlurpSettingsDefaults, useUpdateSlurpSettings } from "./slp-settings-hooks";
 

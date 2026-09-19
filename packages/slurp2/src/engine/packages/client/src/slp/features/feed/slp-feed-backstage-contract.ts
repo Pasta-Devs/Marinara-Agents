@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
-import { slurpActivityPresetForSettings } from "../../../components/slurp/slurp-activity-presets";
-import type { SlpBackstageSection } from "../backstage/slp-backstage-target";
+import {
+  SLURP_ACTIVITY_PRESETS,
+  slurpActivityPresetForSettings,
+} from "../../../components/slurp/slurp-activity-presets";
+import type { SlpBackstageSection } from "../../base/navigation/slp-backstage-target";
 import type { SlurpSettings } from "../settings/slp-settings-contract";
 import {
   useNoodlerReserveStatus,
@@ -30,9 +33,10 @@ export function useSlpFeedBackstageState({
   const [paceWizardOpen, setPaceWizardOpen] = useState(false);
   const [schedulesRefreshing, setSchedulesRefreshing] = useState(false);
   const [paceDraft, setPaceDraft] = useState<{
+    preset: (typeof SLURP_ACTIVITY_PRESETS)[number] | null;
     postsPerDay: number;
+    nightQuiet: boolean;
     storyRate: SlurpSettings["storyRate"];
-    autoPostingScheduleEnabled: boolean;
   } | null>(null);
 
   const scheduleSlots =

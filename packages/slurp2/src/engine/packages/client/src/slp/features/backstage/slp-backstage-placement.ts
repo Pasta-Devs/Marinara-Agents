@@ -1,5 +1,5 @@
 import type { SlurpSettings } from "../settings/slp-settings-contract";
-import type { SlpBackstageSection, SlpBackstageTarget } from "./slp-backstage-target";
+import type { SlpBackstageSection, SlpBackstageTarget } from "../../base/navigation/slp-backstage-target";
 
 export type SlpBackstageScope = "all-slurp" | "this-viewer" | "new-creators" | "creator";
 export type SlpBackstagePlacement = {

@@ -1,17 +1,10 @@
-import { Field, SectionTitle, Toggle } from "./SlurpSettingsControls";
-import { BackstagePageHeader, SettingAnchor } from "./SlurpBackstageKit";
-import { useSlurpPostGuidance } from "../../slp/features/settings/slp-post-guidance-hooks";
-import { SlurpPostGuidanceField } from "./SlurpPostGuidanceField";
-import type { SlurpBackstagePageProps } from "./SlurpSettings";
-import { SlurpPromptBlockBuilder } from "./SlurpPromptBlockBuilder";
-import {
-  SLURP_GUIDANCE_PRESETS,
-  SLURP_GUIDANCE_LEVELS,
-  SLURP_IMAGE_INTERPRETATION_PRESETS,
-  SLURP_IMAGE_INTERPRETATION_STYLES,
-  DEFAULT_SLURP_GENERATION_GUIDANCE,
-  PromptCard,
-} from "./SlurpBackstageWorkflow";
+import { Field, SectionTitle, Toggle } from "../../modules/settings/SlpSettingsControls";
+import { BackstagePageHeader, SettingAnchor } from "../../modules/settings/SlpSettingsKit";
+import { useSlurpPostGuidance } from "./slp-post-guidance-contract";
+import { SlurpPostGuidanceField } from "../../../components/slurp/SlurpPostGuidanceField";
+import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
+import { SlurpPromptBlockBuilder } from "../../../components/slurp/SlurpPromptBlockBuilder";
+import { SLURP_GUIDANCE_PRESETS, SLURP_GUIDANCE_LEVELS, SLURP_IMAGE_INTERPRETATION_PRESETS, SLURP_IMAGE_INTERPRETATION_STYLES, DEFAULT_SLURP_GENERATION_GUIDANCE, PromptCard } from "../../../components/slurp/SlurpBackstageWorkflow";
 
 /**
  * Prompts: every text Slurp sends to a model, in one place.
@@ -19,7 +12,7 @@ import {
  * Writing guidance sat in Automation and the image prompts sat in Images, so changing the voice of
  * a Creator meant two screens that never showed each other.
  */
-export function SlurpBackstagePrompts(page: SlurpBackstagePageProps) {
+export function SlpPromptsPanel(page: SlpBackstagePageProps) {
   const {
     t,
     updateSettings,
@@ -46,8 +39,7 @@ export function SlurpBackstagePrompts(page: SlurpBackstagePageProps) {
     restore,
     restoreDefaultImagePrompt,
   } = page;
-  const postGuidanceQuery = useSlurpPostGuidance(target === "prompts");
-  if (target !== "prompts") return null;
+  const postGuidanceQuery = useSlurpPostGuidance(true);
   return (
     <div className="space-y-4">
       <BackstagePageHeader

@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { SlurpContentRating } from "../../base/state/slp-state-types";
-import type { SlpBackstageTarget } from "../backstage/slp-backstage-target";
+import type { SlpBackstageTarget } from "../../base/navigation/slp-backstage-target";
 import {
   useCreateSlurpAd,
   useDeleteSlurpAd,

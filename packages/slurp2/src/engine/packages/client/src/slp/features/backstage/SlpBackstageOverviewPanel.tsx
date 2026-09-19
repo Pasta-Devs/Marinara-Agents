@@ -1,23 +1,13 @@
-import {
-  Activity,
-  AlertTriangle,
-  CheckCircle2,
-  ChevronRight,
-  HardDrive,
-  Image,
-  Megaphone,
-  Play,
-  UsersRound,
-} from "lucide-react";
-import { nextSlurpAutopurgeRunAt } from "../../../../shared/src/slp/slp-autopurge-time.js";
-import { Toggle } from "./SlurpSettingsControls";
-import { slurpAudiencePresetFor } from "../../../../shared/src/slp/slp-tuning.js";
-import type { SlurpBackstagePageProps } from "./SlurpSettings";
-import type { SlurpBackstageSection, SlurpBackstageTarget } from "./slurp-backstage";
-import { formatDateTime } from "./SlurpDateTime";
-import { OverviewCard, OverviewActivity, formatBytes } from "./SlurpBackstageWorkflow";
+import { Activity, AlertTriangle, CheckCircle2, ChevronRight, HardDrive, Image, Megaphone, Play, UsersRound } from "lucide-react";
+import { nextSlurpAutopurgeRunAt } from "../../../../../shared/src/slp/slp-autopurge-time.js";
+import { Toggle } from "../../modules/settings/SlpSettingsControls";
+import { slurpAudiencePresetFor } from "../../../../../shared/src/slp/slp-tuning.js";
+import type { SlpBackstagePageProps } from "./slp-backstage-contract";
+import type { SlpBackstageSection, SlpBackstageTarget } from "../../base/navigation/slp-backstage-target";
+import { formatDateTime } from "../../../components/slurp/SlurpDateTime";
+import { OverviewCard, OverviewActivity, formatBytes } from "../../../components/slurp/SlurpBackstageWorkflow";
 
-type AttentionItem = { id: string; label: string; section: SlurpBackstageSection; target: SlurpBackstageTarget };
+type AttentionItem = { id: string; label: string; section: SlpBackstageSection; target: SlpBackstageTarget };
 
 const panelClass =
   "min-w-0 rounded-xl bg-[var(--slurp-surface-raised)] p-3 sm:p-4 ring-1 ring-inset ring-[var(--slurp-outline)]";
@@ -25,7 +15,7 @@ const rowClass =
   "flex min-h-12 w-full items-center gap-3 rounded-lg px-3 text-start text-sm transition-colors hover:bg-[var(--slurp-canvas)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none";
 
 /** Overview: status, what needs attention, and the quick switches that save at once. */
-export function SlurpBackstageOverview(page: SlurpBackstagePageProps) {
+export function SlpBackstageOverviewPanel(page: SlpBackstagePageProps) {
   const {
     navigation,
     onNavigate,
@@ -53,9 +43,8 @@ export function SlurpBackstageOverview(page: SlurpBackstagePageProps) {
     paceLabel,
     openRefresh,
   } = page;
-  if (section !== "overview") return null;
 
-  const go = (nextSection: SlurpBackstageSection, target: SlurpBackstageTarget) =>
+  const go = (nextSection: SlpBackstageSection, target: SlpBackstageTarget) =>
     onNavigate({ ...navigation, section: nextSection, target });
 
   const nextPost = (reserveStatusQuery.data?.creators ?? [])

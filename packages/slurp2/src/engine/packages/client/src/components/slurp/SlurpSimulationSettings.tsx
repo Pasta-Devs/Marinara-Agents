@@ -18,7 +18,7 @@ import {
   type SlurpSimulationTuning,
 } from "../../../../shared/src/slp/slp-tuning.js";
 import { estimateSlurpSimulation, SLURP_ESTIMATE_SAMPLE } from "./slurp-simulation-estimate";
-import { Field, NumberSetting, SectionTitle, SettingsGroup, Toggle } from "./SlurpSettingsControls";
+import { Field, NumberSetting, SectionTitle, SettingsGroup, Toggle } from "../../slp/modules/settings/SlpSettingsControls";
 
 type Path = readonly string[];
 

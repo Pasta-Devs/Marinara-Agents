@@ -1,236 +1,18 @@
-import { ArrowRight, Check, ChevronDown, Search, SlidersHorizontal, Sparkles, X } from "lucide-react";
-import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ChevronDown, SlidersHorizontal, Sparkles } from "lucide-react";
+import { useDeferredValue, useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { SlurpPromotion } from "../../slp/features/ads/slp-ads-hooks";
-import type { SlurpSettings } from "../../slp/features/settings/slp-settings-contract";
-import { SlurpInlineAd } from "./SlurpInlineAd";
-import { ProfileInitial } from "./SlurpShell";
-import { showConfirmDialog } from "../../lib/app-dialogs";
-import { cn } from "../../lib/utils";
-import { estimateSlurpSimulation } from "./slurp-simulation-estimate";
-import { slurpActivePlatformEvents } from "../../../../shared/src/slp/slp-platform-events.js";
-import {
-  destinationForTarget,
-  SLURP_BACKSTAGE_SECTION_LABELS,
-  SLURP_BACKSTAGE_SETTING_PLACEMENT,
-  SLURP_BACKSTAGE_TARGET_LABELS,
-  SLURP_BACKSTAGE_TARGETS_BY_SECTION,
-  type SlurpBackstageScope,
-  type SlurpBackstageSection,
-  type SlurpBackstageTarget,
-} from "./slurp-backstage";
+import type { SlurpPromotion } from "../ads/slp-ads-contract";
+import type { SlurpSettings } from "../settings/slp-settings-contract";
+import { SlurpInlineAd } from "../../../components/slurp/SlurpInlineAd";
+import { ProfileInitial } from "../../../components/slurp/SlurpShell";
 
-const humanize = (value: string) =>
-  value
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replaceAll("Id", "")
-    .replace(/^./, (letter) => letter.toUpperCase());
-
-const scopeLabels: Record<SlurpBackstageScope, string> = {
-  "all-slurp": "All Slurp",
-  "this-viewer": "This viewer",
-  "new-creators": "New Creators",
-  creator: "This Creator",
-};
-
-export function SlurpBackstageScopeBadge({
-  scope,
-  creatorName,
-}: {
-  scope: SlurpBackstageScope;
-  creatorName?: string | null;
-}) {
-  const { t } = useTranslation();
-  return (
-    <span className="inline-flex min-h-7 max-w-40 items-center truncate rounded-full bg-[color-mix(in_srgb,var(--slurp-violet)_12%,var(--slurp-surface-raised))] px-2.5 text-xs font-semibold text-[var(--slurp-violet)] ring-1 ring-inset ring-[color-mix(in_srgb,var(--slurp-violet)_24%,transparent)]">
-      {scope === "creator" && creatorName
-        ? creatorName
-        : t(`ui.slurp.settings.backstage.scope.${scope}`, { defaultValue: scopeLabels[scope] })}
-    </span>
-  );
-}
-
-export function SlurpBackstageSubnav({
-  section,
-  target,
-  onSelect,
-  className,
-}: {
-  section: SlurpBackstageSection;
-  target: SlurpBackstageTarget;
-  onSelect: (target: SlurpBackstageTarget) => void;
-  className?: string;
-}) {
-  const targets = SLURP_BACKSTAGE_TARGETS_BY_SECTION[section];
-  if (targets.length < 2) return null;
-  return (
-    <nav
-      aria-label={`${SLURP_BACKSTAGE_SECTION_LABELS[section]} areas`}
-      className={cn("flex flex-wrap gap-2", className)}
-    >
-      {targets.map((item) => (
-        <button
-          key={item}
-          type="button"
-          aria-current={item === target ? "page" : undefined}
-          onClick={() => onSelect(item)}
-          className={cn(
-            "min-h-11 rounded-full px-4 text-sm font-semibold transition-[background-color,color,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
-            item === target
-              ? "bg-[var(--slurp-text)] text-[var(--slurp-canvas)] shadow-sm"
-              : "bg-[var(--slurp-surface-raised)] text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)] hover:text-[var(--slurp-text)]",
-          )}
-        >
-          {SLURP_BACKSTAGE_TARGET_LABELS[item]}
-        </button>
-      ))}
-    </nav>
-  );
-}
-
-export function SlurpBackstageSearch({
-  onSelect,
-  className,
-}: {
-  onSelect: (section: SlurpBackstageSection, target: SlurpBackstageTarget, setting: keyof SlurpSettings) => void;
-  className?: string;
-}) {
-  const { t, i18n } = useTranslation();
-  const [query, setQuery] = useState("");
-  const [active, setActive] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
-  /** The setting's own translated label where one exists; otherwise the key made readable. */
-  const labelFor = (key: keyof SlurpSettings) =>
-    i18n.exists(`ui.slurp.settings.${key}`) ? t(`ui.slurp.settings.${key}`) : humanize(key);
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        inputRef.current?.focus();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
-  const results = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase();
-    if (!needle) return [];
-    return (
-      Object.entries(SLURP_BACKSTAGE_SETTING_PLACEMENT) as Array<
-        [keyof SlurpSettings, (typeof SLURP_BACKSTAGE_SETTING_PLACEMENT)[keyof SlurpSettings]]
-      >
-    )
-      .filter(
-        ([key, placement]) =>
-          !placement.internal &&
-          [key, humanize(key), labelFor(key), SLURP_BACKSTAGE_TARGET_LABELS[placement.target], ...placement.searchTerms]
-            .join(" ")
-            .toLocaleLowerCase()
-            .includes(needle),
-      )
-      .slice(0, 8);
-    // labelFor only reads i18n, which re-renders this component on a language change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query]);
-  useEffect(() => setActive(0), [query]);
-  const choose = (index: number) => {
-    const result = results[index];
-    if (!result) return;
-    onSelect(result[1].section, result[1].target, result[0]);
-    setQuery("");
-  };
-  const open = query.trim().length > 0;
-  return (
-    <div className={cn("relative z-20 w-full max-w-xl", className)}>
-      <label className="sr-only" htmlFor="slurp-backstage-search">
-        {t("ui.slurp.settings.backstage.findSetting", { defaultValue: "Find a setting" })}
-      </label>
-      <Search
-        size={17}
-        className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-[var(--slurp-muted)]"
-        aria-hidden="true"
-      />
-      <input
-        ref={inputRef}
-        id="slurp-backstage-search"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-            event.preventDefault();
-            if (!results.length) return;
-            const step = event.key === "ArrowDown" ? 1 : -1;
-            setActive((index) => (index + step + results.length) % results.length);
-          } else if (event.key === "Enter") {
-            event.preventDefault();
-            choose(active);
-          } else if (event.key === "Escape" && open) {
-            event.preventDefault();
-            setQuery("");
-          }
-        }}
-        placeholder={t("ui.slurp.settings.backstage.findSetting", { defaultValue: "Find a setting" })}
-        className="min-h-14 w-full rounded-xl bg-[var(--slurp-surface-raised)] ps-10 pe-16 text-lg text-[var(--slurp-text)] shadow-sm ring-1 ring-inset ring-[var(--slurp-outline)] placeholder:text-[var(--slurp-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] md:min-h-12 md:text-sm"
-        role="combobox"
-        autoComplete="off"
-        aria-autocomplete="list"
-        aria-expanded={open && results.length > 0}
-        aria-controls="slurp-backstage-search-results"
-        aria-activedescendant={
-          open && results[active] ? `slurp-backstage-search-option-${results[active][0]}` : undefined
-        }
-      />
-      <kbd className="pointer-events-none absolute end-3 top-1/2 hidden -translate-y-1/2 rounded-md bg-[var(--slurp-canvas)] px-2 py-1 text-[0.68rem] font-semibold text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)] sm:block">
-        Ctrl K
-      </kbd>
-      {open && (
-        <div className="absolute inset-x-0 top-[calc(100%+0.5rem)] overflow-hidden rounded-xl bg-[var(--slurp-surface-raised)] shadow-[var(--slurp-shadow-floating)] ring-1 ring-inset ring-[var(--slurp-outline)]">
-          {results.length ? (
-            <ul
-              id="slurp-backstage-search-results"
-              role="listbox"
-              aria-label={t("ui.slurp.settings.backstage.findSetting", { defaultValue: "Find a setting" })}
-              className="max-h-80 overflow-y-auto p-1.5"
-            >
-              {results.map(([key, placement], index) => (
-                <li
-                  key={key}
-                  id={`slurp-backstage-search-option-${key}`}
-                  role="option"
-                  aria-selected={index === active}
-                  // Keep focus in the input so typing and arrow keys keep working.
-                  onMouseDown={(event) => event.preventDefault()}
-                  onMouseEnter={() => setActive(index)}
-                  onClick={() => choose(index)}
-                  className={cn(
-                    "flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-lg px-3 text-start",
-                    index === active && "bg-[var(--slurp-canvas)] ring-2 ring-inset ring-[var(--slurp-focus)]",
-                  )}
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold">{labelFor(key)}</span>
-                    <span className="block truncate text-xs text-[var(--slurp-muted)]">
-                      {t(`ui.slurp.settings.backstage.sections.${placement.section}`, {
-                        defaultValue: SLURP_BACKSTAGE_SECTION_LABELS[placement.section],
-                      })}{" "}
-                      · {SLURP_BACKSTAGE_TARGET_LABELS[placement.target]}
-                    </span>
-                  </span>
-                  <SlurpBackstageScopeBadge scope={placement.scope} />
-                  <ArrowRight size={15} className="shrink-0 rtl:rotate-180" aria-hidden="true" />
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="p-4 text-sm text-[var(--slurp-muted)]">
-              {t("ui.slurp.settings.backstage.noResults", { defaultValue: "No setting matches that search." })}
-            </p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
+import { cn } from "../../../lib/utils";
+import { humanize } from "./SlpBackstageNavigation";
+import { estimateSlurpSimulation } from "../../../components/slurp/slurp-simulation-estimate";
+import { slurpActivePlatformEvents } from "../../../../../shared/src/slp/slp-platform-events.js";
+import { SLP_BACKSTAGE_SETTING_PLACEMENT } from "./slp-backstage-placement";
+import { SLP_BACKSTAGE_TARGET_LABELS, type SlpBackstageTarget } from "../../base/navigation/slp-backstage-target";
+import { SlpSettingScopeBadge, type SlpSettingScope } from "../../modules/settings/SlpSettingsKit";
 
 function PreviewFrame({ children }: { children: ReactNode }) {
   return (
@@ -248,7 +30,7 @@ type Translate = ReturnType<typeof useTranslation>["t"];
 /** One line that says what this area of Slurp will do with the given settings. */
 export function outcomeSummary(
   t: Translate,
-  target: SlurpBackstageTarget,
+  target: SlpBackstageTarget,
   settings: SlurpSettings,
   creatorCount: number,
 ) {
@@ -534,11 +316,11 @@ function AudienceWeek({ current, proposed }: { current: SlurpSettings; proposed:
 
 /** Scope of an edit: the placement of the staged fields, or what the page itself acts on. */
 export function slurpBackstagePreviewScope(
-  target: SlurpBackstageTarget,
+  target: SlpBackstageTarget,
   pending: Partial<SlurpSettings>,
-): SlurpBackstageScope {
+): SlpSettingScope {
   const scopes = new Set(
-    (Object.keys(pending) as Array<keyof SlurpSettings>).map((key) => SLURP_BACKSTAGE_SETTING_PLACEMENT[key].scope),
+    (Object.keys(pending) as Array<keyof SlurpSettings>).map((key) => SLP_BACKSTAGE_SETTING_PLACEMENT[key].scope),
   );
   if (scopes.size === 1) return [...scopes][0]!;
   if (scopes.size > 1) return "all-slurp";
@@ -555,7 +337,7 @@ export function SlurpBackstagePreview({
   creatorName,
   creatorProfile,
 }: {
-  target: SlurpBackstageTarget;
+  target: SlpBackstageTarget;
   current: SlurpSettings;
   proposed: SlurpSettings;
   pending: Partial<SlurpSettings>;
@@ -648,7 +430,7 @@ export function SlurpBackstagePreview({
               {t("ui.slurp.settings.backstage.preview.title", { defaultValue: "Know what changes before it does" })}
             </h2>
           </div>
-          <SlurpBackstageScopeBadge scope={scope} creatorName={creatorName} />
+          <SlpSettingScopeBadge scope={scope} creatorName={creatorName} />
         </div>
         <PreviewFrame>
           <div className="rounded-xl bg-[linear-gradient(135deg,color-mix(in_srgb,var(--noodle-accent)_18%,var(--slurp-surface-raised)),color-mix(in_srgb,var(--slurp-violet)_12%,var(--slurp-surface-raised)))] p-4 ring-1 ring-inset ring-[var(--slurp-outline)]">
@@ -661,7 +443,7 @@ export function SlurpBackstagePreview({
                 )}
               </span>
               <div className="min-w-0">
-                <h3 className="truncate text-sm font-bold">{SLURP_BACKSTAGE_TARGET_LABELS[target]}</h3>
+                <h3 className="truncate text-sm font-bold">{SLP_BACKSTAGE_TARGET_LABELS[target]}</h3>
                 <p className="mt-0.5 text-xs leading-5 text-[var(--slurp-muted)] text-pretty" aria-live="polite">
                   {outcomeSummary(t, target, proposed, creatorCount)}
                 </p>
@@ -727,90 +509,4 @@ export function SlurpBackstagePreview({
       </div>
     </aside>
   );
-}
-
-export function SlurpBackstageApplyBar({
-  count,
-  pending,
-  onDiscard,
-  onApply,
-}: {
-  count: number;
-  pending: boolean;
-  onDiscard: () => void;
-  onApply: () => void;
-}) {
-  const { t } = useTranslation();
-  if (count === 0) return null;
-  return (
-    <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-30 mt-5 flex flex-wrap items-center gap-3 rounded-xl bg-[color-mix(in_srgb,var(--slurp-text)_94%,transparent)] p-3 text-[var(--slurp-canvas)] shadow-[var(--slurp-shadow-floating)] backdrop-blur-xl sm:bottom-3">
-      <div className="me-auto min-w-0">
-        <h2 className="text-sm font-bold">
-          {t("ui.slurp.settings.backstage.apply.title", { defaultValue: "Review and apply" })}
-        </h2>
-        <p className="text-xs opacity-75" role="status" aria-live="polite">
-          {t("ui.slurp.settings.backstage.apply.staged", {
-            defaultValue: "{{count}} setting changes staged",
-            count,
-          })}
-        </p>
-      </div>
-      <button
-        type="button"
-        disabled={pending}
-        onClick={onDiscard}
-        className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-semibold hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-50"
-      >
-        <X size={16} aria-hidden="true" /> {t("ui.slurp.settings.backstage.apply.discard", { defaultValue: "Discard" })}
-      </button>
-      <button
-        type="button"
-        disabled={pending}
-        onClick={onApply}
-        className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[var(--noodle-accent)] px-4 text-sm font-black text-zinc-950 [&_svg]:!text-zinc-950 shadow-sm hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-50"
-      >
-        <Check size={16} aria-hidden="true" />{" "}
-        {t("ui.slurp.settings.backstage.apply.apply", { defaultValue: "Apply changes" })}
-      </button>
-    </div>
-  );
-}
-
-// ponytail: one module-level count, since only one Backstage is ever mounted.
-let stagedBackstageChanges = 0;
-
-/** Publish the staged-change count so exits outside Backstage can ask first, and guard a reload. */
-export function useSlurpBackstageDraftGuard(count: number) {
-  useEffect(() => {
-    stagedBackstageChanges = count;
-    if (count === 0) return;
-    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
-    window.addEventListener("beforeunload", warn);
-    return () => {
-      window.removeEventListener("beforeunload", warn);
-      stagedBackstageChanges = 0;
-    };
-  }, [count]);
-}
-
-/** Resolves true when there is nothing staged or the user chooses to discard it. */
-export function confirmLeaveSlurpBackstage(
-  t: (key: string, options: Record<string, unknown>) => string,
-): Promise<boolean> {
-  if (stagedBackstageChanges === 0) return Promise.resolve(true);
-  return showConfirmDialog({
-    title: t("ui.slurp.settings.backstage.leave.title", { defaultValue: "Discard staged changes?" }),
-    message: t("ui.slurp.settings.backstage.leave.detail", {
-      defaultValue: "You have {{count}} setting changes that are not applied yet.",
-      count: stagedBackstageChanges,
-    }),
-    confirmLabel: t("ui.slurp.settings.backstage.leave.discard", { defaultValue: "Discard" }),
-    cancelLabel: t("ui.slurp.settings.backstage.leave.stay", { defaultValue: "Stay" }),
-    tone: "destructive",
-  });
-}
-
-export function resolveBackstageSearchDestination(setting: keyof SlurpSettings) {
-  const placement = SLURP_BACKSTAGE_SETTING_PLACEMENT[setting];
-  return { section: destinationForTarget(placement.target), target: placement.target };
 }

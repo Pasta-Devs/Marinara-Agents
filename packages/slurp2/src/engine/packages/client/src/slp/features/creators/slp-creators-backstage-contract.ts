@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
 import { showConfirmDialog } from "../../../lib/app-dialogs";
 import { errorMessage } from "../../../components/slurp/SlurpBackstageWorkflow";
-import type { SlpBackstageSection } from "../backstage/slp-backstage-target";
+import type { SlpBackstageSection } from "../../base/navigation/slp-backstage-target";
 import {
   useAdoptNoodlerSourceIdentity,
   useDeleteNoodlerStageProfile,
@@ -16,8 +16,8 @@ import {
 } from "./slp-creator-refresh-hooks";
 import { useBulkUpdateSlurpCreators, useNoodlerAccounts } from "./slp-creators-hooks";
 
-export type SlpCreatorFilter = "all" | "attention" | "paused";
-export type SlpCreatorTab = "profile" | "posting" | "messaging" | "access";
+export type SlpCreatorFilter = "all" | "active" | "paused" | "attention";
+export type SlpCreatorTab = "profile" | "publishing" | "images" | "messages" | "danger";
 
 /**
  * Creator accounts, the creator-table view state and the creator mutations Backstage drives. The

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { SLURP_AUDIENCE_PRESETS } from "../../../../../shared/src/slp/slp-tuning.js";
-import type { SlpBackstageSection, SlpBackstageTarget } from "../backstage/slp-backstage-target";
+import type { SlpBackstageSection, SlpBackstageTarget } from "../../base/navigation/slp-backstage-target";
 import type { SlurpSettings } from "../settings/slp-settings-contract";
 import type { SlurpAudienceCharacterSummary } from "./slp-audience-contract";
 import { useSlurpAudienceCharacterGroups, useSlurpAudienceCharacters } from "./slp-audience-hooks";

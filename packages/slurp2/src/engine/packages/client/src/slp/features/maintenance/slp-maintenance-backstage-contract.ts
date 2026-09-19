@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { showConfirmDialog } from "../../../lib/app-dialogs";
 import { errorMessage, localDateTimeValue } from "../../../components/slurp/SlurpBackstageWorkflow";
 import { nextSlurpAutopurgeRunAt } from "../../../../../shared/src/slp/slp-autopurge-time.js";
-import type { SlpBackstageSection, SlpBackstageTarget } from "../backstage/slp-backstage-target";
+import type { SlpBackstageSection, SlpBackstageTarget } from "../../base/navigation/slp-backstage-target";
 import type { SlurpSettings } from "../settings/slp-settings-contract";
 import type { SlurpBackupJob, SlurpRestoreInspection } from "./slp-backup";
 import {

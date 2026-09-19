@@ -13,7 +13,7 @@ import {
   SLURP_DISCOVERY_TAG_MAX_LENGTH,
 } from "../../slp/features/discovery/slp-discovery";
 import { cn } from "../../lib/utils";
-import { SectionTitle } from "./SlurpSettingsControls";
+import { SectionTitle } from "../../slp/modules/settings/SlpSettingsControls";
 
 type DiscoveryTag = { tag: string; group: string };
 

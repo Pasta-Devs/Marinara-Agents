@@ -11,7 +11,7 @@ import {
 } from "../../../../shared/src/slp/slp-platform-events.js";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { cn } from "../../lib/utils";
-import { SectionTitle } from "./SlurpSettingsControls";
+import { SectionTitle } from "../../slp/modules/settings/SlpSettingsControls";
 
 const fieldClass =
   "min-h-11 w-full min-w-0 rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] px-3 text-base font-normal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] sm:text-sm";

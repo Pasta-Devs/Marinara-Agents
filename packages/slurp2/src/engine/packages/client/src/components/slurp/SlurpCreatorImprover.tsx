@@ -12,7 +12,7 @@ import type { SlurpImprovementProposal } from "../../slp/features/maintenance/sl
 import type { SlurpSettings } from "../../slp/features/settings/slp-settings-contract";
 import { toast } from "sonner";
 import { Avatar } from "./SlurpShell";
-import { SlurpBackstageScopeBadge } from "./SlurpBackstageChrome";
+import { SlpSettingScopeBadge } from "../../slp/modules/settings/SlpSettingsKit";
 
 // Lanes with a server generator. The server rejects the rest until they exist.
 const LANES = [
@@ -89,7 +89,7 @@ export function SlurpCreatorImprover({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-xl font-black tracking-tight text-balance">Creator workshop</h2>
-              <SlurpBackstageScopeBadge scope="creator" />
+              <SlpSettingScopeBadge scope="creator" />
             </div>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--slurp-muted)] text-pretty">
               Check what is missing for free, then ask AI for proposals only where you want help. Nothing is saved until

@@ -18,7 +18,7 @@ import {
   SLP_BACKSTAGE_DEFAULT_TARGET,
   SLP_BACKSTAGE_TARGETS_BY_SECTION,
   type SlpBackstageTarget,
-} from "./slp-backstage-target";
+} from "../../base/navigation/slp-backstage-target";
 
 export type SlpBackstageShellProps = {
   navigation: Extract<SlurpNavigationState, { mode: "creator-settings" }>;

@@ -17,7 +17,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
-import { Field, GuidanceBox, NumberSetting, SettingsGroup, Toggle } from "./SlurpSettingsControls";
+import { Field, GuidanceBox, NumberSetting, SettingsGroup, Toggle } from "../../slp/modules/settings/SlpSettingsControls";
 import { type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import { useState } from "react";

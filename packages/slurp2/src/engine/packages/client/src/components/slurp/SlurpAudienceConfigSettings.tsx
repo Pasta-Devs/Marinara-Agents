@@ -11,7 +11,7 @@ import {
 } from "../../../../shared/src/slp/slp-model-budget.js";
 import { slurpSimulationTuningSchema, type SlurpSimulationTuning } from "../../../../shared/src/slp/slp-tuning.js";
 import { api } from "../../lib/api-client";
-import { Field, NumberSetting, SectionTitle, SettingsGroup, Toggle } from "./SlurpSettingsControls";
+import { Field, NumberSetting, SectionTitle, SettingsGroup, Toggle } from "../../slp/modules/settings/SlpSettingsControls";
 
 type Connection = { id: string; name?: string; model?: string; provider?: string };
 type PortableAudienceConfig = {
