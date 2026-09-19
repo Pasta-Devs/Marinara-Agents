@@ -337,6 +337,12 @@ Add `TS2307` to `scripts/typecheck-packages.mjs`'s reported diagnostics before m
 unresolved module fails package typechecking. Keep ignored-global filtering specific to
 TS2304/TS2552; TS2307 has a different diagnostic shape and must not reuse the missing-name capture.
 
+Verified during Slice 9: reporting only TS2304/TS2552/TS2307 leaves the gate blind to a file that
+does not parse. TypeScript emits only TS1xxx syntax diagnostics for such a file and no semantic
+ones, so a split panel with an unbalanced JSX fragment was reported as clean while every undefined
+name in it went unmentioned. Slice 10 must add the TS1xxx syntax codes to the reported set; a
+syntax error is never acceptable output and needs no allowlist.
+
 ## 6. Permanent architecture guidance
 
 The refactor must leave behind rules that future humans and coding agents encounter before editing
@@ -543,6 +549,11 @@ type, so the Backstage event editor's new-event literal gains `kind` and `modifi
   final tree passes with no size or boundary allowlist.
 - Remove historical source-map entries only when no test or documentation uses the logical key;
   retaining stable keys is acceptable and preferred over mass test churn.
+- Report TS1xxx syntax diagnostics from `scripts/typecheck-packages.mjs`, and prove the change with
+  a fixture whose only defect is a syntax error, which the current gate passes (verified Slice 9).
+- Move the remaining Backstage migration debt out of `components/slurp/SlurpBackstageWorkflow.tsx`
+  into `slp/modules/`, and de-duplicate the `focusRing`/`quietButton` class constants that Slice 9
+  left in both `features/creators/` and `features/maintenance/`.
 - Run the full validation and live package lifecycle checks below.
 - Self-review generated payloads, permissions, archive contents, compatibility, and the final diff
   before marking the final PR ready.
@@ -609,8 +620,9 @@ node scripts/tests/catalog-release-notes.regression.mjs
 git diff --check
 ```
 
-The required result is a focused Slurp2 typecheck that reports TS2307 as well as the existing
-TS2304/TS2552 checks.
+The required result is a focused Slurp2 typecheck that reports TS2307 and the TS1xxx syntax codes
+as well as the existing TS2304/TS2552 checks. Until the syntax codes are reported, a clean result
+from this command does not mean every file compiled — it may mean a file never parsed.
 
 ### Build and live verification
 

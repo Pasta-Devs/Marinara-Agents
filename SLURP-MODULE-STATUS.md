@@ -249,7 +249,15 @@ checklist in a browser.
    Backstage destination and needs the target vocabulary. `base` may not import `features`, so
    `slp-backstage-target.ts` is at `slp/base/navigation/`. The placement map, which depends on the
    `SlurpSettings` key union, stays in `features/backstage/`.
-3. **Two files renamed to contracts.** `features/settings/slp-post-guidance-hooks.ts` became
+3. **`scripts/typecheck-packages.mjs` is blind to syntax errors.** Verified during this slice: the
+   gate reports only TS2304/TS2552 and relative TS2307, but TypeScript emits *only* TS1xxx
+   diagnostics for a file that fails to parse and no semantic ones. A generated panel with an
+   unbalanced JSX fragment was therefore reported as clean while every undefined name in it went
+   unmentioned; a wider `tsc` run caught it. `SLURP-MODULE-PLAN.md` §5, §8 and §10 now record this
+   and make reporting the TS1xxx codes a Slice 10 deliverable with a syntax-only fixture as proof.
+   This slice did not change the script: widening the gate mid-slice would have mixed a tooling
+   change into the Backstage diff.
+4. **Two files renamed to contracts.** `features/settings/slp-post-guidance-hooks.ts` became
    `slp-post-guidance-contract.ts` and `SlurpPromotion` moved from `slp-ads-hooks.ts` to a new
    `features/ads/slp-ads-contract.ts`, because the creators panel and the Backstage preview need
    them across a feature boundary. `features/settings/slp-image-connection-hooks.ts` moved to
@@ -284,10 +292,9 @@ None blocking. For Slice 10 to consider:
   tree; it should become one or more `slp/modules/` files.
 - `focusRing` and `quietButton` class constants are now duplicated in
   `features/creators/slp-creator-classes.ts` and `features/maintenance/SlpMaintenanceTask.tsx`.
-- `scripts/typecheck-packages.mjs` reports only TS2304/TS2552 and relative TS2307. A file that
-  fails to **parse** yields only TS1xxx syntax errors and so is reported as clean. This masked
-  broken generated panels mid-slice until a wider `tsc` run caught them. Slice 10 should add
-  TS1xxx to the reported set; it is a one-line change and a real gap in the gate.
+
+Both are recorded as Slice 10 deliverables in `SLURP-MODULE-PLAN.md` §10, alongside the
+`scripts/typecheck-packages.mjs` syntax-diagnostic gap described under plan corrections.
 
 
 ### Slice 9 handoff — the exact next action for Slice 10
