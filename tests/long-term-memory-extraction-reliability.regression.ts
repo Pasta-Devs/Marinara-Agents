@@ -187,9 +187,32 @@ async function main() {
     assert.equal("reasoningEffort" in calls[2], false);
 
     calls.length = 0;
+    options.languageModel.chatComplete = async (_messages: any[], chatOptions: any) => {
+      calls.push(chatOptions);
+      throw Object.assign(new Error("provider rejected request"), { status: 400, code: "invalid_schema" });
+    };
+    await assert.rejects(
+      () => runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() }),
+      /provider rejected request/u,
+    );
+    assert.equal(calls.length, 1, "invalid_schema must not trigger a response-format fallback");
+
+    calls.length = 0;
+    options.languageModel.chatComplete = async (_messages: any[], chatOptions: any) => {
+      calls.push(chatOptions);
+      throw Object.assign(new Error("provider rejected request"), { status: 400, code: "reasoning_effort_limit" });
+    };
+    await assert.rejects(
+      () => runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() }),
+      /provider rejected request/u,
+    );
+    assert.equal(calls.length, 1, "reasoning_effort_limit must not trigger a reasoning fallback");
+
+    calls.length = 0;
     options.reasoningEffort = "low";
     options.maxOutputTokens = 200;
     options.languageModel.maxContext = 1_000;
+    options.languageModel.maxOutputTokens = 150;
     options.languageModel.fitContext = (messages: any[], _fitOptions: any) => ({
       messages,
       maxTokens: 123,
@@ -202,7 +225,7 @@ async function main() {
       (error: any) =>
         error.code === "ltm_model_output_budget_unviable" &&
         /requested=200/u.test(error.message) &&
-        /providerCapped=200/u.test(error.message) &&
+        /providerCapped=150/u.test(error.message) &&
         /fitted=123/u.test(error.message),
     );
     assert.equal(calls.length, 0, "unviable fitted budgets fail before the provider call");
@@ -212,7 +235,11 @@ async function main() {
     options.languageModel.maxOutputTokens = 123;
     await assert.rejects(
       () => runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() }),
-      (error: any) => error.code === "ltm_model_output_budget_unviable" && /fitted=123/u.test(error.message),
+      (error: any) =>
+        error.code === "ltm_model_output_budget_unviable" &&
+        /requested=200/u.test(error.message) &&
+        /providerCapped=123/u.test(error.message) &&
+        /fitted=123/u.test(error.message),
     );
     assert.equal(calls.length, 0, "provider-capped budgets fail without max-context metadata");
 

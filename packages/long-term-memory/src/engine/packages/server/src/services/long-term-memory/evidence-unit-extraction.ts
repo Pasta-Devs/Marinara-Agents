@@ -192,6 +192,22 @@ function structuredProviderError(error: unknown) {
   };
 }
 
+function hasProviderCompatibilityCode(code: string, identifiers: string[]) {
+  const tokens = code.split(/[^a-z0-9]+/u).filter(Boolean);
+  const markers = new Set(["unsupported", "unrecognized", "invalid"]);
+  return identifiers.some((identifier) => {
+    const identifierTokens = identifier.split("_");
+    return (
+      tokens.length === identifierTokens.length + 1 &&
+      tokens.some((token, index) => {
+        if (!markers.has(token)) return false;
+        const remaining = tokens.filter((_, tokenIndex) => tokenIndex !== index);
+        return identifierTokens.every((identifierToken, tokenIndex) => remaining[tokenIndex] === identifierToken);
+      })
+    );
+  });
+}
+
 function isProviderCompatibilityError(error: unknown) {
   const structured = structuredProviderError(error);
   if (
@@ -209,8 +225,15 @@ function isProviderCompatibilityError(error: unknown) {
 function isReasoningNoneUnsupportedError(error: unknown) {
   if (!isProviderCompatibilityError(error)) return false;
   const structured = structuredProviderError(error);
-  if (structured?.parameter.includes("reason") || structured?.parameter.includes("thinking")) return true;
-  if (structured?.code.includes("reason") || structured?.code.includes("thinking")) return true;
+  if (["reasoning", "reasoning_effort", "thinking", "enable_thinking"].includes(structured?.parameter ?? "")) {
+    return true;
+  }
+  if (
+    structured?.code &&
+    hasProviderCompatibilityCode(structured.code, ["reasoning", "reasoning_effort", "thinking", "enable_thinking"])
+  ) {
+    return true;
+  }
   const message = error instanceof Error ? error.message : String(error);
   return (
     /\b(?:reasoning|reasoning_effort|effort|thinking|enable_thinking)\b/i.test(message) &&
@@ -221,8 +244,15 @@ function isReasoningNoneUnsupportedError(error: unknown) {
 function isResponseFormatUnsupportedError(error: unknown) {
   if (!isProviderCompatibilityError(error)) return false;
   const structured = structuredProviderError(error);
-  if (structured?.parameter.includes("response_format") || structured?.parameter.includes("schema")) return true;
-  if (structured?.code.includes("response_format") || structured?.code.includes("schema")) return true;
+  if (["response_format", "json_schema", "structured_output", "schema"].includes(structured?.parameter ?? "")) {
+    return true;
+  }
+  if (
+    structured?.code &&
+    hasProviderCompatibilityCode(structured.code, ["response_format", "json_schema", "structured_output"])
+  ) {
+    return true;
+  }
   const message = error instanceof Error ? error.message : String(error);
   return (
     (/\b(?:response_format|response format|json_schema|json schema|structured output|schema)\b/i.test(message) &&
@@ -769,13 +799,16 @@ async function preflightExtractionPromptContext({
   extractionOptions: RunLongTermMemoryEvidenceUnitExtractionOptions;
 }): Promise<number | undefined> {
   const providerMaxContext = extractionOptions.languageModel.maxContext ?? undefined;
-  const requestedMaxTokens = chatOptions.maxTokens;
+  const requestedMaxTokens = extractionOptions.maxOutputTokens ?? chatOptions.maxTokens;
+  const providerCappedMaxTokens = chatOptions.maxTokens;
   const fit = providerMaxContext
-    ? extractionOptions.languageModel.fitContext(messages, { maxTokens: requestedMaxTokens })
+    ? extractionOptions.languageModel.fitContext(messages, { maxTokens: providerCappedMaxTokens })
     : undefined;
   const reducedOutputBudget =
-    typeof requestedMaxTokens === "number" && typeof fit?.maxTokens === "number" && fit.maxTokens < requestedMaxTokens;
-  const fittedOutputTokens = fit?.maxTokens ?? requestedMaxTokens;
+    typeof providerCappedMaxTokens === "number" &&
+    typeof fit?.maxTokens === "number" &&
+    fit.maxTokens < providerCappedMaxTokens;
+  const fittedOutputTokens = fit?.maxTokens ?? providerCappedMaxTokens;
   if (typeof fittedOutputTokens === "number" && fittedOutputTokens < MIN_LTM_EXTRACTION_OUTPUT_TOKENS) {
     await recordLtmDebugEvent({
       operationId: extractionOptions.operationId,
@@ -789,7 +822,7 @@ async function preflightExtractionPromptContext({
       counts: {
         maxContext: providerMaxContext,
         requestedOutputTokens: requestedMaxTokens ?? 0,
-        providerCappedOutputTokens: chatOptions.maxTokens ?? 0,
+        providerCappedOutputTokens: providerCappedMaxTokens ?? 0,
         fittedOutputTokens,
         minimumOutputTokens: MIN_LTM_EXTRACTION_OUTPUT_TOKENS,
         estimatedPromptTokens: fit?.estimatedTokensBefore ?? 0,
@@ -798,7 +831,7 @@ async function preflightExtractionPromptContext({
       details: { reason: "output_budget_below_viability_floor" },
     });
     throw new LtmServiceError(
-      `Long-term memory extraction model cannot provide a viable response budget (requested=${requestedMaxTokens}, providerCapped=${chatOptions.maxTokens}, fitted=${fittedOutputTokens}, minimum=${MIN_LTM_EXTRACTION_OUTPUT_TOKENS}). Choose a larger-context model or reduce the extraction input.`,
+      `Long-term memory extraction model cannot provide a viable response budget (requested=${requestedMaxTokens}, providerCapped=${providerCappedMaxTokens}, fitted=${fittedOutputTokens}, minimum=${MIN_LTM_EXTRACTION_OUTPUT_TOKENS}). Choose a larger-context model or reduce the extraction input.`,
       400,
       "ltm_model_output_budget_unviable",
     );
