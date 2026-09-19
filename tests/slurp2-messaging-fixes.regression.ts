@@ -1,14 +1,12 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { slurp2Source } from "./slurp2-source";
 
 async function main() {
-  const panel = await readFile(
+  const panel = await slurp2Source(
     new URL("../packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpMessages.tsx", import.meta.url),
-    "utf8",
   );
-  const route = await readFile(
+  const route = await slurp2Source(
     new URL("../packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts", import.meta.url),
-    "utf8",
   );
 
   assert.match(panel, /pending\.content === message\.content|message\.content === pending\.content/u);

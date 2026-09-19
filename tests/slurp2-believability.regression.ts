@@ -1,18 +1,18 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 
-import { slurpLapseReason } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-audience-subscription.js";
+import { slurpLapseReason } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-audience-subscription.js";
 import {
   SLURP_REALISTIC_TUNING,
   SLURP_TUNING_PULSE_PER_TICK_CEILING,
   slurpRhythmMultiplier,
   slurpTuningForPreset,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-tuning.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-tuning.js";
 import {
   planSlurpWorldPulse,
   slurpPostViralMultiplier,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world-pulse.js";
-import { slurpLapseNote } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world-copy.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world-pulse.js";
+import { slurpLapseNote } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world-copy.js";
+import { slurp2Source } from "./slurp2-source";
 
 const R = SLURP_REALISTIC_TUNING;
 const audience = Array.from({ length: 24 }, (_, index) => `fan-${index}`);
@@ -63,10 +63,7 @@ for (const reason of ["price", "quiet", "drift"] as const) {
 }
 
 // The tick writes exactly one event per lapse, carries the note, and stays under the events cap.
-const world = readFileSync(
-  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.operation.ts",
-  "utf8",
-);
+const world = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.operation.ts");
 const lapseBlock = world.slice(
   world.indexOf('if (decision === "lapse")'),
   world.indexOf('if (decision === "lapse")') + 900,
@@ -170,10 +167,7 @@ assert.ok((landed.get("oldest") ?? 0) < (landed.get("old") ?? 0), "and less of i
 
 // A fan who liked a post can still comment on it later. The plan's dedupe is per pulse only, and
 // the storage dedupes on (post, actor, type), so a like never blocks a later reply.
-const storage = readFileSync(
-  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
-  "utf8",
-);
+const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 const dedupe = storage.slice(storage.indexOf("async createNoodlerWorldInteraction("));
 assert.match(
   dedupe.slice(0, 4_000),

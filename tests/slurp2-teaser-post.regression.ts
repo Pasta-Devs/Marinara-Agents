@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { slurpTeaserPost } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-post-variation.js";
+import { slurpTeaserPost } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-post-variation.js";
 
 const count = (rate: Parameters<typeof slurpTeaserPost>[2]) =>
   Array.from({ length: 100 }, (_, step) => slurpTeaserPost("creator-a", step, rate)).filter(Boolean).length;

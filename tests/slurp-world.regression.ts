@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -12,12 +11,13 @@ import {
   SLURP_WORLD_MAX_CATCHUP_DAYS,
   SLURP_WORLD_MAX_OPEN_REQUESTS,
   type SlurpWorldCreator,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world.js";
 import {
   slurpAudienceOpener,
   slurpAudienceQuestion,
   slurpCommissionBrief,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world-copy.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world-copy.js";
+import { slurp2Source } from "./slurp2-source";
 
 const day = (n: number) => new Date(Date.parse("2026-09-01T00:00:00.000Z") + n * 86_400_000);
 const creator = (over: Partial<SlurpWorldCreator> = {}): SlurpWorldCreator => ({
@@ -136,7 +136,7 @@ assert.ok(new Set(Array.from({ length: 60 }, (_, index) => slurpAudienceOpener(`
 
 // ── Wiring ──────────────────────────────────────────────────────────────────
 const root = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src");
-const read = (path: string) => readFileSync(join(root, path), "utf8");
+const read = (path: string) => slurp2Source(join(root, path));
 
 const operation = read("services/slurp/slurp-world.operation.ts");
 // One function, two callers. Writing the logic twice is what the plan forbids.

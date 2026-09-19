@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { parseSlurpCheatDirective } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-cheat-directive.js";
+import { parseSlurpCheatDirective } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-cheat-directive.js";
+import { slurp2Source } from "./slurp2-source";
 
 assert.deepEqual(parseSlurpCheatDirective("coins 42"), { kind: "coins", coins: 42 });
 assert.deepEqual(parseSlurpCheatDirective("help"), { kind: "help" });
@@ -33,7 +33,7 @@ assert.deepEqual(parseSlurpCheatDirective("test promise tonight promised photo")
   reason: "promised photo",
 });
 
-const route = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");
+const route = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts");
 assert.match(route, /generationGuidance: directive\.text/u);
 const cheatRoute = route.slice(
   route.indexOf('app.post("/messages/cheat"'),
@@ -47,9 +47,8 @@ assert.match(cheatRoute, /adjustCheatState\(thread\.id/u);
 assert.match(cheatRoute, /addScheduledFollowUps\(thread\.id, followUps\)/u);
 assert.match(cheatRoute, /price: messaging\.ppvPrice/u);
 
-const storage = readFileSync(
+const storage = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/storage/slurp-messages.storage.ts",
-  "utf8",
 );
 const adjustCheatState = storage.slice(
   storage.indexOf("async adjustCheatState"),
@@ -57,7 +56,7 @@ const adjustCheatState = storage.slice(
 );
 assert.match(adjustCheatState, /input\.mood == null \? \{\} : \{ moodUpdatedAt: timestamp \}/u);
 
-const slurpRoutes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
+const slurpRoutes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
 assert.match(
   slurpRoutes,
   /cheatsEnabled:\s*process\.env\.NODE_ENV === "development" && process\.env\.CHEATS_ENABLED === "true"/u,

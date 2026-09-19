@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { slurp2Source } from "./slurp2-source";
 
 // slurp-images.service.ts cannot be imported here: it pulls in the database and the LLM providers,
 // and @marinara-engine/shared is not installed in this repository. These are source assertions on
@@ -8,9 +8,9 @@ import { join } from "node:path";
 
 const root = join(import.meta.dirname, "..");
 const server = "packages/slurp2/src/engine/packages/server/src";
-const images = readFileSync(join(root, server, "services/slurp/slurp-images.service.ts"), "utf8");
-const routes = readFileSync(join(root, server, "routes/slurp.routes.ts"), "utf8");
-const rewrite = readFileSync(join(root, server, "services/slurp/slurp-image-prompt-rewrite.ts"), "utf8");
+const images = slurp2Source(join(root, server, "services/slurp/slurp-images.service.ts"));
+const routes = slurp2Source(join(root, server, "routes/slurp.routes.ts"));
+const rewrite = slurp2Source(join(root, server, "services/slurp/slurp-image-prompt-rewrite.ts"));
 
 // --- the rewriter is fed the draft, not the rendered template -----------------------------------
 // NOODLE_IMAGE_POST documents itself as terminal ("no LLM pass runs after it") and emits bare
@@ -31,7 +31,7 @@ assert.match(
 );
 assert.match(images, /rawPrompt: rawProviderPrompt,\s*rewriteAttempted,\s*onFallback:/u);
 // Garnish ad images honour the interpretation setting and share the same rewrite and fallback.
-const garnish = readFileSync(join(root, server, "services/slurp/slurp-garnish-image.service.ts"), "utf8");
+const garnish = slurp2Source(join(root, server, "services/slurp/slurp-garnish-image.service.ts"));
 assert.match(garnish, /settings\.enableImageInterpretation !== false/u);
 assert.match(garnish, /rewriteNoodleImagePrompt\(/u);
 assert.match(garnish, /selectNoodleImageProviderPrompt\(/u);
@@ -81,7 +81,7 @@ assert.doesNotMatch(
 assert.match(images, /personality: sourcePersona\.personality\?\.trim\(\) \?\? "",/u);
 
 // --- the commission path uses the same default as everything else --------------------------------
-const commission = readFileSync(join(root, server, "services/slurp/slurp-commission-image.operation.ts"), "utf8");
+const commission = slurp2Source(join(root, server, "services/slurp/slurp-commission-image.operation.ts"));
 // Open is the default everywhere, commissions included.
 assert.match(commission, /identityDisclosure \?\? "open"/u);
 assert.doesNotMatch(

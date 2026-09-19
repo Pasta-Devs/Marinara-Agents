@@ -6,12 +6,12 @@
  * subscribed flag and replaced by a static "Subscribed" badge.
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
+import { slurp2Source } from "./slurp2-source";
 
 const pkg = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages");
-const read = (path: string) => readFileSync(join(pkg, path), "utf8");
+const read = (path: string) => slurp2Source(join(pkg, path));
 
 const storage = read("server/src/services/storage/slurp.storage.ts");
 const importStart = storage.indexOf("async importSlurpBackup(");

@@ -26,6 +26,7 @@ import {
   assertRulesetBattle,
   assertRulesetCatalogs,
   assertRulesetPackageContract,
+  assertRulesetScaled,
   isRulesetCatalogAssetPath,
 } from "./ruleset-package-checks.mjs";
 
@@ -78,16 +79,15 @@ for (const id of packageIds) {
   assertRulesetPackageContract(manifest);
   const rulesetPayload = payloads.find(({ name }) => name === RULESET_ASSET_PATH);
   const rulesetDocument = JSON.parse(rulesetPayload.buffer.toString("utf8"));
-  assertRulesetCatalogs(
-    manifest,
-    rulesetDocument,
-    new Map(
-      payloads
-        .filter(({ name }) => isRulesetCatalogAssetPath(name))
-        .map(({ name, buffer }) => [name, buffer.toString("utf8")]),
-    ),
+  const catalogSources = new Map(
+    payloads
+      .filter(({ name }) => isRulesetCatalogAssetPath(name))
+      .map(({ name, buffer }) => [name, buffer.toString("utf8")]),
   );
+  assertRulesetCatalogs(manifest, rulesetDocument, catalogSources);
   assertRulesetBattle(manifest, rulesetDocument);
+  // A scaled column is read from the same bytes and gated the same way, so it is checked here too.
+  assertRulesetScaled(manifest, rulesetDocument, catalogSources);
 
   // Written back only when something actually changed, so a no-op rebuild leaves
   // the tree byte-identical and does not show up as a spurious diff in a PR.

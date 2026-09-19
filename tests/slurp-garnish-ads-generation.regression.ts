@@ -4,11 +4,10 @@
  * executing it — the same approach the other Slurp route regressions take.
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { slurp2Source } from "./slurp2-source";
 
-const service = readFileSync(
+const service = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-garnish-generation.service.ts",
-  "utf8",
 );
 
 // Generation is host-side: garnish-ads holds the pool, Slurp talks to the model.
@@ -32,7 +31,7 @@ assert.match(
 assert.match(service, /existingBrands/u, "generation must be told what already exists to avoid duplicates");
 assert.match(service, /Math\.min\(Math\.max\(request\.count \?\? 4, 1\), 10\)/u, "generation count must be bounded");
 
-const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
+const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
 assert.match(routes, /app\.post\("\/noodler\/ads\/generate"/u);
 assert.match(routes, /retireWeakGarnishAds/u, "the pool must shed as well as grow");
 
@@ -55,10 +54,7 @@ assert.doesNotMatch(
 assert.match(routes, /await ads\.markRecent\(/u, "serving ads must mark them recent or rotation never happens");
 assert.match(routes, /"impression"\)/u, "serving ads must record impressions or quality has no denominator");
 
-const storage = readFileSync(
-  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
-  "utf8",
-);
+const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 for (const key of ["inlineAdsTone", "inlineAdsEra", "inlineAdsWorldContext", "inlineAdsContentCeiling"]) {
   assert.ok(storage.includes(key), `settings must expose ${key}`);
 }

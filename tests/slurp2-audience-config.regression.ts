@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
+import { slurp2Source } from "./slurp2-source";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
   slurpFanTypesDefault,
   slurpFanTypesSchema,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-fan-types.js";
-import { slurpModelBudgetSchema } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-model-budget.js";
-import { slurpSimulationTuningSchema } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-tuning.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-fan-types.js";
+import { slurpModelBudgetSchema } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-model-budget.js";
+import { slurpSimulationTuningSchema } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-tuning.js";
 
 const exported = JSON.stringify({
   version: 1,
@@ -22,13 +23,12 @@ assert.equal(slurpFanTypesSchema.parse(raw.fanTypes).length, 8);
 assert.equal(slurpModelBudgetSchema.parse(raw.budget).callsPerDay, 9);
 assert.throws(() => slurpFanTypesSchema.parse([]), "an import cannot erase every fan type");
 
-const component = readFileSync(
+const component = slurp2Source(
   join(
     import.meta.dirname,
     "..",
     "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpAudienceConfigSettings.tsx",
   ),
-  "utf8",
 );
 assert.match(component, /SLURP_MODEL_JOB_KINDS\.map/u, "each model job has editable policy controls");
 assert.match(component, /slurp-audience-config\.json/u, "the portable format has a stable filename");

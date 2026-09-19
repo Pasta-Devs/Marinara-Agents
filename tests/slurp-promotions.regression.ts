@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
-const base = readFileSync(
-  "packages/slurp2/src/engine/packages/server/src/services/garnish-ads/garnish-ads.base.ts",
-  "utf8",
-);
+import { slurp2Source } from "./slurp2-source";
+const base = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/garnish-ads/garnish-ads.base.ts");
 assert.match(base, /kind: "inline"/u);
 // Creator-read promotions were removed: the one built-in sponsor was stamped onto posts the model
 // knew nothing about, including hand-written ones, and paid the Creator nothing. Inline ads, which
@@ -12,32 +9,26 @@ assert.match(base, /kind: "inline"/u);
 assert.doesNotMatch(base, /kind: "creator"/u);
 assert.match(base, /contentRating: "/u, "every base ad needs a content rating for the host gate");
 
-const ads = readFileSync(
-  "packages/slurp2/src/engine/packages/server/src/services/garnish-ads/garnish-ads.service.ts",
-  "utf8",
-);
+const ads = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/garnish-ads/garnish-ads.service.ts");
 assert.doesNotMatch(ads, /creatorAdForProfile/u);
 // The stored state key is deliberately unchanged by the garnish-ads rename, so
 // existing hidden-ad lists survive.
 assert.match(ads, /slurp2\.viewer\.\$\{subjectId\}\.ads/u);
 
-const seam = readFileSync(
-  "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-garnish-context.ts",
-  "utf8",
-);
+const seam = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-garnish-context.ts");
 assert.match(seam, /function garnishTagsFromPersona/u);
 
-const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
+const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
 assert.match(routes, /\/noodler\/viewer\/ads/u);
 assert.match(routes, /inlineAdsEnabled/u);
 
-const card = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpInlineAd.tsx", "utf8");
+const card = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpInlineAd.tsx");
 assert.match(card, /labels\.sponsored/u);
 assert.match(card, /labels\.hide/u);
 assert.match(card, /onAction/u, "inline promotion CTA must be wired");
 assert.match(card, /ExternalLink/u, "inline promotion CTA must communicate an action");
 
-const home = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
+const home = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
 assert.match(
   home,
   /slurpSettingsQuery\.data\?\.inlineAdsEnabled !== false/u,
@@ -49,9 +40,8 @@ const settings = slurp2BackstageSource();
 assert.match(settings, /ui\.slurp\.settings\.inlinePromotions/u);
 assert.match(settings, /ui\.slurp\.settings\.inlinePromotionsDetail/u);
 
-const postCard = readFileSync(
+const postCard = slurp2Source(
   "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpCreatorPostCard.tsx",
-  "utf8",
 );
 // The paid-partnership label went with the creator-read promotions it described.
 assert.doesNotMatch(postCard, /Paid partnership with/u);

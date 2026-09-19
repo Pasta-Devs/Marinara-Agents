@@ -5,7 +5,8 @@ import {
   NOODLER_UNLOCK_COST,
   noodlerUnlockPriceFromMetadata,
   noodlerUnlockPriceMetadata,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-prices";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/economy/slp-prices";
+import { slurp2Source } from "./slurp2-source";
 
 // Prices became real in the coin economy, but only when the player turns it on. Until 1.0.12 the
 // old wallet gated access unconditionally, so an imported, restored, or hand-edited wallet could
@@ -35,10 +36,7 @@ for (const junk of [
   assert.equal(noodlerUnlockPriceFromMetadata(junk), NOODLER_UNLOCK_COST);
 }
 
-const storage = readFileSync(
-  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
-  "utf8",
-);
+const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 const fanInteraction = storage.slice(
   storage.indexOf("async createNoodlerFanInteraction("),
   storage.indexOf("async deleteNoodlerInteraction("),
@@ -67,7 +65,7 @@ const subscribe = storage.slice(storage.indexOf("async subscribe("), storage.ind
 assert.ok(subscribe.length > 0);
 assert.match(subscribe, /followingAccountIds\.includes\(creatorAccountId\)/u);
 
-const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
+const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
 // A locked post withholds its metadata, so the price has to travel as its own field.
 assert.match(routes, /metadata: locked \? null : post\.metadata,/u);
 assert.match(routes, /unlockPrice: locked \? noodlerUnlockPriceFromMetadata\(post\.metadata\) : null,/u);
@@ -83,7 +81,7 @@ const card = readFileSync(
   "utf8",
 );
 const enLocale = JSON.parse(
-  readFileSync("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
+  slurp2Source("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json"),
 ) as Record<string, string>;
 
 // Both actions show a price, and the hint says plainly what it does and does not cost.

@@ -1,0 +1,48 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api } from "../../../lib/api-client.js";
+import { noodleKeys } from "../../base/state/slp-query-keys.js";
+
+export type SlurpImageConnections = {
+  defaultConnectionId: string | null;
+  creatorConnectionIds: Record<string, string>;
+};
+export function useSlurpImageConnections(enabled = true) {
+  return useQuery({
+    queryKey: noodleKeys.noodlerImageConnections(),
+    queryFn: () => api.get<SlurpImageConnections>("/slurp2/noodler/image-connections"),
+    enabled,
+    staleTime: 10_000,
+  });
+}
+export function useUpdateSlurpImageConnections() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: { defaultConnectionId?: string | null; creatorId?: string; connectionId?: string | null }) =>
+      api.patch<SlurpImageConnections>("/slurp2/noodler/image-connections", patch),
+    onSuccess: (value) => qc.setQueryData(noodleKeys.noodlerImageConnections(), value),
+  });
+}
+/**
+ * Point several new Creators at one image connection.
+ *
+ * The PATCH route maps one Creator at a time and the server serializes the blob write, so these
+ * run in sequence; the wizard only ever creates a handful at once.
+ */
+export function useUpdateSlurpConnectionsForCreators() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { creatorIds: string[]; connectionId: string }) => {
+      let latest: SlurpImageConnections | undefined;
+      for (const creatorId of input.creatorIds) {
+        latest = await api.patch<SlurpImageConnections>("/slurp2/noodler/image-connections", {
+          creatorId,
+          connectionId: input.connectionId,
+        });
+      }
+      return latest;
+    },
+    onSuccess: (value) => {
+      if (value) qc.setQueryData(noodleKeys.noodlerImageConnections(), value);
+    },
+  });
+}

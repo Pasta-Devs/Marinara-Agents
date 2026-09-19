@@ -38,6 +38,7 @@ import {
   assertRulesetBattle,
   assertRulesetCatalogs,
   assertRulesetPackageContract,
+  assertRulesetScaled,
   isRulesetPackage,
   rulesetCatalogAssetPaths,
 } from "./ruleset-package-checks.mjs";
@@ -211,15 +212,14 @@ const slurpOwnedSourcePaths = [
   "packages/server/src/services/slurp",
   "packages/server/src/services/storage/slurp.storage.ts",
 ];
-// The remaster owns strictly more of the tree than the frozen legacy package does.
+// Must equal slurp2OwnedSourcePaths in the builder: the three slp roots and three permanent exceptions.
 const slurp2OwnedSourcePaths = [
-  ...slurpOwnedSourcePaths,
-  "packages/server/src/routes/slurp-messages.routes.ts",
-  "packages/server/src/services/storage/slurp-financial-queue.ts",
-  "packages/server/src/services/storage/slurp-file-errors.ts",
-  "packages/server/src/services/storage/slurp-host-tables.ts",
-  "packages/server/src/services/storage/slurp-messages.storage.ts",
-  "packages/server/src/services/storage/slurp-reply-queue.storage.ts",
+  "packages/client/src/slp",
+  "packages/server/src/slp",
+  "packages/shared/src/slp",
+  "packages/client/src/lib/api-client.ts",
+  "packages/server/src/services/garnish-ads",
+  "packages/server/src/db/schema/slurp.ts",
 ];
 for (const [packageId, ownedSourcePaths] of [
   ["slurp", slurpOwnedSourcePaths],
@@ -237,7 +237,11 @@ for (const [packageId, ownedSourcePaths] of [
 // ten stale copies of package-owned files survived in sources/engine long after the split. A
 // captured copy is worse than dead weight now: the remaster's slurp2_* table names would become
 // build input for Noodle, and tests that read the snapshot would check the wrong tree.
+// api-client.ts is the one owned path that overrides a generic Engine file, so the snapshot keeps
+// the Engine's own copy of it.
+const slurp2EngineOverrides = new Set(["packages/client/src/lib/api-client.ts"]);
 for (const relativePath of ["packages/server/src/db/schema/slurp.ts", ...slurp2OwnedSourcePaths]) {
+  if (slurp2EngineOverrides.has(relativePath)) continue;
   if (existsSync(join(repoRoot, "sources/engine", relativePath))) {
     throw new Error(`Slurp source must not be captured as generic Engine material: ${relativePath}`);
   }
@@ -703,6 +707,8 @@ for (const entry of catalog.packages) {
     // The battle block ships inside the same file and is gated the same way, so it is checked here
     // for the same reason: what this repository publishes has to be installable.
     assertRulesetBattle(manifest, document);
+    // A scaled column rides inside a catalog entry, inline or in an asset, and is gated the same way.
+    assertRulesetScaled(manifest, document, catalogSources);
   } else {
     if (!manifest.entrypoints.agents) throw new Error(`Missing agent definition entrypoint for ${manifest.id}`);
     const agentDefinitions = JSON.parse(

@@ -4,17 +4,18 @@ import { readFileSync } from "node:fs";
 import {
   estimateSlurpSimulation,
   SLURP_ESTIMATE_SAMPLE,
-} from "../packages/slurp2/src/engine/packages/client/src/components/slurp/slurp-simulation-estimate.js";
-import { slurpTuningForPreset } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-tuning.js";
-import * as pulseRules from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world-pulse.js";
-import * as worldRules from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.js";
+} from "../packages/slurp2/src/engine/packages/client/src/slp/modules/audience/slp-simulation-estimate.js";
+import { slurpTuningForPreset } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-tuning.js";
+import * as pulseRules from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world-pulse.js";
+import * as worldRules from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world.js";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
+import { slurp2Source } from "./slurp2-source";
 
 // The estimate must be the simulation, not a model of it. A settings screen that predicts one
 // thing while the tick does another is worse than no estimate at all, so the panel calls the same
 // pure rule functions the world tick calls.
 const estimateSource = readFileSync(
-  "packages/slurp2/src/engine/packages/client/src/components/slurp/slurp-simulation-estimate.ts",
+  "packages/slurp2/src/engine/packages/client/src/slp/modules/audience/slp-simulation-estimate.ts",
   "utf8",
 );
 for (const fn of [
@@ -53,9 +54,8 @@ assert.ok(realistic.followers > SLURP_ESTIMATE_SAMPLE.realFollowers, "the sample
 
 // The panel exists, lives in its own file, and is mounted. `SlurpSettings.tsx` is already about
 // five thousand lines; the plan's rule is that new settings surfaces do not land inside it.
-const panel = readFileSync(
+const panel = slurp2Source(
   "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpSimulationSettings.tsx",
-  "utf8",
 );
 assert.match(panel, /export function SlurpSimulationSettings/u, "the simulation panel must be its own component");
 assert.match(panel, /slurpSimulationTuningSchema/u, "inputs must take their range from the stored schema");
@@ -65,7 +65,7 @@ assert.match(settings, /update\("simulationTuning", next\)/u, "saving must send 
 
 // Every static key the panel renders must exist in English.
 const en = JSON.parse(
-  readFileSync("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
+  slurp2Source("packages/slurp2/src/engine/packages/client/src/localization/locales/en.json"),
 ) as Record<string, string>;
 for (const [, key] of panel.matchAll(/\bt\(\s*"([^"]+)"/gu)) {
   assert.ok(key in en, `missing English localization for ${key}`);

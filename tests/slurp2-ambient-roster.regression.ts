@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 
 import {
   AMBIENT_NOODLE_PROFILES,
   dismissAmbientNoodleAccount,
   ensureAmbientNoodleAccounts,
   withoutHiddenAmbientAccounts,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-ambient-profiles.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/data/audience/slp-ambient-profiles.js";
+import { slurp2Source } from "./slurp2-source";
 
 // In-memory stand-in for the slurp storage methods the seeder uses. Existing rows are never
 // overwritten by upsert, matching upsertAccountFromProfile.
@@ -89,9 +89,8 @@ async function main() {
     assert.notEqual(profile.displayName, profile.legacyName);
   }
   assert.doesNotMatch(
-    readFileSync(
+    slurp2Source(
       "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-ambient-profile-generation.service.ts",
-      "utf8",
     ),
     /called Noodle/u,
   );
@@ -155,10 +154,7 @@ async function main() {
   // Listing was filtered but id reads were not, so a hidden ambient author still resolved through
   // a deep link and rendered on stored comments.
   {
-    const storage = readFileSync(
-      "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
-      "utf8",
-    );
+    const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
     for (const method of ["getAccountById", "getNoodlerAccountById"]) {
       assert.match(
         storage,
@@ -175,7 +171,7 @@ async function main() {
     // Guards must still see hidden rows, or a hidden ambient account could never be deleted.
     assert.match(storage, /const existing = await this\.getNoodlerAccountById\(id, \{ includeHidden: true \}\);/u);
 
-    const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
+    const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
     assert.match(
       routes,
       /getAccountById\(id, \{ includeHidden: true \}\);\n\s*if \(!account \|\| !isAmbientNoodleAccount/u,

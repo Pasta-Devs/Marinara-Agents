@@ -1,21 +1,25 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 
 import {
   makeSlurpProject,
   readSlurpProject,
+  slurpProjectRecord,
+  type SlurpArcType,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-project.js";
+import {
   slurpArcFanVotes,
-  slurpArcTypeFromProject,
-  slurpGeneratedArcProject,
   slurpProjectAdvance,
   slurpProjectChoose,
   slurpProjectDirect,
   slurpProjectInstruction,
   slurpProjectPollDue,
-  slurpProjectRecord,
   slurpProjectTick,
-  type SlurpArcType,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-project.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-arc-progress.js";
+import {
+  slurpArcTypeFromProject,
+  slurpGeneratedArcProject,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-arc-library.js";
+import { slurp2Source } from "./slurp2-source";
 
 const at = new Date("2026-09-13T10:00:00.000Z");
 const hours = (count: number) => new Date(at.getTime() + count * 3_600_000);
@@ -138,20 +142,16 @@ assert.match(
   }),
   /ask them in your own voice: Where to\? \(options: Lisbon \/ Stay home\)/,
 );
-const generation = readFileSync(
+const generation = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
-  "utf8",
 );
 assert.match(generation, /arcPoll \? \{ poll: arcPoll \}/);
 
 // Director choose goes through the gated director route; viewer votes are one per account.
-const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
+const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
 const director = routes.slice(routes.indexOf('"/noodler/accounts/:id/projects/:projectId/director"'));
 assert.ok(director.indexOf("arcDirectorMode") < director.indexOf("directProject"));
-const storage = readFileSync(
-  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
-  "utf8",
-);
+const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 assert.match(storage, /arcPollHours: 24,/);
 assert.match(storage, /const existingVote = existingVotes\[0\];/, "a second vote replaces the first");
 const tick = storage.slice(storage.indexOf("async tickProjects("), storage.indexOf("async rollAutoArc("));

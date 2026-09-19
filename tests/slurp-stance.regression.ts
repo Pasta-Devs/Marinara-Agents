@@ -1,19 +1,19 @@
 // One resolved position, not one prompt line per signal. Nine lines describing the same person is
 // a contradiction, and a model resolves a contradiction by averaging it away.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 
 import {
   activeSlurpStrikes,
   resolveSlurpStance,
   SLURP_STRIKE_WINDOW_DAYS,
   type SlurpStanceInput,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-stance.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-stance.js";
 import {
   slurpDayVibe,
   slurpDayVibeDescription,
   slurpDayVibeFacts,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-day-vibe.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-day-vibe.js";
+import { slurp2Source } from "./slurp2-source";
 
 const base: SlurpStanceInput = {
   rapportTier: "regular",
@@ -108,7 +108,7 @@ assert.equal(facts.daysSinceLastPost, 1);
 
 // The debug view runs the real builder. A reconstruction drifts and then reports a prompt the
 // model never received.
-const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts", "utf8");
+const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts");
 assert.match(routes, /buildSlurpMessagePrompt\(\{/u);
 assert.match(routes, /if \(!isDebugAgentsEnabled\(\)\) return reply\.code\(404\)/u);
 // The prompt returned is the built one, which `buildSlurpMessagePrompt` has already redacted.
@@ -117,9 +117,8 @@ assert.match(routes, /prompt: built\.messages/u);
 assert.doesNotMatch(routes, /disclosureMode: "public"|skipProtect|protect: false/u);
 
 // A boundary outranks everything, and it is checked before any generation is paid for.
-const operation = readFileSync(
+const operation = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message.operation.ts",
-  "utf8",
 );
 assert.match(operation, /status: "cooling"/u);
 assert.match(operation, /thread\.coolUntil && thread\.coolUntil > new Date\(\)\.toISOString\(\)/u);

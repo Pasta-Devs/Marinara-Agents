@@ -12,6 +12,7 @@ import {
   assertRulesetBattle,
   assertRulesetCatalogs,
   assertRulesetPackageContract,
+  assertRulesetScaled,
   isRulesetCatalogAssetPath,
   isRulesetPackage,
   rulesetCatalogAssetPaths,
@@ -572,6 +573,220 @@ assert.doesNotThrow(() =>
     }),
   ),
 );
+
+// ── Scaled catalog columns (Capability API 1.23) ──
+//
+// A `scaled` column is a promise that the ruleset keeps a number the player otherwise would. It is
+// nothing but references into the sheet beside it, and it can ride inline or inside a catalog
+// asset, so the same pinning applies: each rejection is a package that would install and then leave
+// a maximum it promised to keep sitting at whatever it was picked with, or one an Engine that
+// predates the key would refuse outright.
+
+// The package as committed keeps nine class resources, and its references hold together.
+assert.equal(assertRulesetScaled(shippedManifest, parsedAsset, shippedCatalogSources), 9);
+
+const scaledSheet = {
+  fields: [
+    { id: "level", label: "Level", type: "number" },
+    { id: "mood", label: "Mood", type: "text" },
+    { id: "casting", label: "Casting", type: "enum", values: ["none", "cha"] },
+  ],
+  derived: [{ id: "knack_uses", label: "Knack uses" }],
+  abilities: [{ id: "cha", label: "Charisma" }],
+  skills: [{ id: "roads", label: "Roads" }],
+  saves: [{ id: "grit_save", label: "Grit save" }],
+  lists: [
+    {
+      id: "knacks",
+      label: "Knacks",
+      columns: [
+        { id: "name", label: "Name", type: "text" },
+        { id: "max", label: "Maximum", type: "number" },
+      ],
+    },
+  ],
+};
+const scaledCatalog = (entries) => ({ id: "knacks", label: "Knacks", feeds: ["knacks"], entries });
+const scaledDocument = (entries) => ({
+  id: "test",
+  version: 1,
+  name: "Test",
+  sheet: scaledSheet,
+  catalogs: [scaledCatalog(entries)],
+});
+/** One entry whose single knacks row is kept by the ruleset. */
+const scaledEntry = (scaled, values = { name: "Road Sense", max: 1 }, extraRows = []) => ({
+  id: "road-sense",
+  label: "Road Sense",
+  rows: [{ list: "knacks", values, scaled }, ...extraRows],
+});
+const scaledManifest = rulesetManifest({ capabilityApi: { major: 1, minor: 23 } });
+const byLevel = { max: { from: { field: "level" } } };
+
+assert.equal(assertRulesetScaled(scaledManifest, scaledDocument([scaledEntry(byLevel)])), 1);
+// A catalog with no scaled row anywhere is untouched, and needs no 1.23.
+assert.equal(assertRulesetScaled(rulesetManifest(), testDocument([inlineCatalog])), 0);
+assert.equal(assertRulesetScaled(rulesetManifest(), testDocument(undefined)), 0);
+assert.throws(
+  () =>
+    assertRulesetScaled(
+      rulesetManifest({ capabilityApi: { major: 1, minor: 22 } }),
+      scaledDocument([scaledEntry(byLevel)]),
+    ),
+  /ships scaled catalog rows and must declare capability API 1\.23/u,
+);
+assert.doesNotThrow(() =>
+  assertRulesetScaled(
+    rulesetManifest({ capabilityApi: { major: 2, minor: 0 } }),
+    scaledDocument([scaledEntry(byLevel)]),
+  ),
+);
+// A scaled row inside a catalog ASSET is read the same way: the manifest cannot show the keys
+// inside either file, so the gate has to open both.
+const scaledAssetDocument = {
+  id: "test",
+  version: 1,
+  name: "Test",
+  sheet: scaledSheet,
+  catalogs: [{ id: "knacks", label: "Knacks", feeds: ["knacks"], asset: "catalogs/knacks.json" }],
+};
+const scaledAssetSources = (scaled) =>
+  new Map([
+    ["catalogs/knacks.json", JSON.stringify({ schemaVersion: 1, catalog: "knacks", entries: [scaledEntry(scaled)] })],
+  ]);
+assert.equal(assertRulesetScaled(scaledManifest, scaledAssetDocument, scaledAssetSources(byLevel)), 1);
+assert.throws(
+  () =>
+    assertRulesetScaled(
+      rulesetManifest({ capabilityApi: { major: 1, minor: 22 } }),
+      scaledAssetDocument,
+      scaledAssetSources(byLevel),
+    ),
+  /ships scaled catalog rows and must declare capability API 1\.23/u,
+);
+// An asset this check cannot read is assertRulesetCatalogs' rejection to make, with its own message.
+assert.equal(assertRulesetScaled(scaledManifest, scaledAssetDocument, new Map()), 0);
+
+// The column has to be a number column of the very list the row writes into.
+assert.throws(
+  () => assertRulesetScaled(scaledManifest, scaledDocument([scaledEntry({ grit: { from: { field: "level" } } })])),
+  /scales "grit", which is not a number column of "knacks"/u,
+);
+assert.throws(
+  () => assertRulesetScaled(scaledManifest, scaledDocument([scaledEntry({ name: { from: { field: "level" } } })])),
+  /scales "name", which is not a number column of "knacks"/u,
+);
+// `values` still holds what the row starts as, because an entry is picked before anything knows
+// which sheet it lands on.
+assert.throws(
+  () => assertRulesetScaled(scaledManifest, scaledDocument([scaledEntry(byLevel, { name: "Road Sense" })])),
+  /scales "max" but its values hold no starting number for it/u,
+);
+assert.throws(
+  () => assertRulesetScaled(scaledManifest, scaledDocument([scaledEntry(byLevel, { name: "Road Sense", max: "1" })])),
+  /scales "max" but its values hold no starting number for it/u,
+);
+// A kept row must be the entry's only one for its list, or a marked row on a sheet could not be
+// matched back to the spec that writes it.
+assert.throws(
+  () =>
+    assertRulesetScaled(
+      scaledManifest,
+      scaledDocument([
+        scaledEntry(byLevel, { name: "Road Sense", max: 1 }, [{ list: "knacks", values: { name: "Second" } }]),
+      ]),
+    ),
+  /scales a row that is not its only one for the list "knacks"/u,
+);
+// One to four columns of a row, because a row is a row and not a second place to declare values.
+assert.throws(
+  () => assertRulesetScaled(scaledManifest, scaledDocument([scaledEntry({})])),
+  /scales 0 columns, not 1 to 4/u,
+);
+assert.throws(
+  () =>
+    assertRulesetScaled(
+      scaledManifest,
+      scaledDocument([
+        {
+          id: "road-sense",
+          label: "Road Sense",
+          rows: [
+            {
+              list: "knacks",
+              values: { name: "Road Sense", max: 1 },
+              scaled: Object.fromEntries(["a", "b", "c", "d", "e"].map((key) => [key, { from: { const: 1 } }])),
+            },
+          ],
+        },
+      ]),
+    ),
+  /scales 5 columns, not 1 to 4/u,
+);
+assert.throws(
+  () =>
+    assertRulesetScaled(scaledManifest, scaledDocument([scaledEntry({ max: { from: { field: "level" }, step: 2 } })])),
+  /scaled "max" has the unknown key "step"/u,
+);
+
+// The reference. Exactly one key, naming something this sheet really declares and of the right type.
+for (const [from, message] of [
+  [{}, /from names exactly one of/u],
+  [{ field: "level", const: 1 }, /from names exactly one of/u],
+  [{ fields: "level" }, /from has the unknown key "fields"/u],
+  [{ const: "1" }, /from const must be a finite number/u],
+  [{ field: "levels" }, /from names unknown field "levels"/u],
+  [{ field: "mood" }, /from field "mood" is not a number/u],
+  [{ abilityModFromField: "mood" }, /from field "mood" is not an enum/u],
+  [{ abilityModFromField: "casting" }, null],
+  [{ derived: "knack_uses" }, null],
+  [{ derived: "knack_use" }, /from names unknown derived value "knack_use"/u],
+  [{ abilityMod: "cha" }, null],
+  [{ abilityMod: "wis" }, /from names unknown ability "wis"/u],
+  [{ abilityScore: "wis" }, /from names unknown ability "wis"/u],
+  [{ skillMod: "rivers" }, /from names unknown skill "rivers"/u],
+  [{ saveMod: "luck_save" }, /from names unknown save "luck_save"/u],
+  ["level", /from must be a value reference/u],
+]) {
+  const document = scaledDocument([scaledEntry({ max: { from } })]);
+  if (message) assert.throws(() => assertRulesetScaled(scaledManifest, document), message, JSON.stringify(from));
+  else assert.doesNotThrow(() => assertRulesetScaled(scaledManifest, document), JSON.stringify(from));
+}
+
+// The step table. Thresholds ascend, because the lookup walks them in order and takes the last one
+// at or below the input; a table out of order would simply answer with the wrong step.
+for (const [table, message] of [
+  [
+    [
+      [1, 2],
+      [3, 3],
+    ],
+    null,
+  ],
+  [[], /table must be a non-empty array/u],
+  ["1,2", /table must be a non-empty array/u],
+  [
+    [
+      [3, 3],
+      [1, 2],
+    ],
+    /table thresholds must ascend/u,
+  ],
+  [
+    [
+      [1, 2],
+      [1, 3],
+    ],
+    /table thresholds must ascend/u,
+  ],
+  [[[1, 2, 3]], /each table step is a \[threshold, value\] pair of numbers/u],
+  [[["1", 2]], /each table step is a \[threshold, value\] pair of numbers/u],
+  [Array.from({ length: 101 }, (entry, index) => [index, index]), /table holds 101 steps, over 100/u],
+]) {
+  const document = scaledDocument([scaledEntry({ max: { from: { field: "level" }, table } })]);
+  if (message) assert.throws(() => assertRulesetScaled(scaledManifest, document), message, JSON.stringify(table));
+  else assert.doesNotThrow(() => assertRulesetScaled(scaledManifest, document), JSON.stringify(table));
+}
 
 // The published artifact must be reproducible: the same manifest and asset bytes
 // have to produce the same zip, or every rebuild would churn the catalog's sha256

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { slurp2Source } from "./slurp2-source";
 
-const shell = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpShell.tsx", "utf8");
+const shell = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpShell.tsx");
 
 // The drawer already overlaid the page; the flicker came from the panel sitting at x:100% during
 // its slide-in and widening the page. `clip`, not `hidden` — `hidden` would make this a scroll
@@ -18,10 +19,7 @@ const drawer = shell.slice(shell.indexOf("NoodleView.MobileDrawer"), shell.index
 assert.match(drawer, /<details className="group mt-3">/u, "the drawer's persona list must be collapsed by default");
 assert.match(drawer, /group-open:rotate-180/u);
 
-const surface = readFileSync(
-  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpProfileSurface.tsx",
-  "utf8",
-);
+const surface = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpProfileSurface.tsx");
 // Editing happens in place now: there is exactly one identity block, not a display one and a
 // separate stacked form.
 assert.match(surface, /const inPlaceFieldClass/u);
@@ -50,7 +48,7 @@ assert.match(
 );
 assert.match(shell, /linkedNoodleAccountIds\?\.has\(personaAccount\.id\)/u);
 
-const home = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
+const home = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
 assert.match(home, /creatorIdentity: viewerActorAccount,/u);
 assert.match(home, /personaAccount: shellPersonaAccount,/u, "the persona account must stay the persona's own");
 

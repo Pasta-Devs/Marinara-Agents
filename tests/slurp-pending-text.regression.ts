@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { slurp2Source } from "./slurp2-source";
 
 const root = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src");
-const read = (path: string) => readFileSync(join(root, path), "utf8");
+const read = (path: string) => slurp2Source(join(root, path));
 
 const service = read("services/slurp/slurp-pending-text.service.ts");
 const world = read("services/slurp/slurp-world.operation.ts");

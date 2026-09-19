@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { slurp2Source } from "./slurp2-source";
 
 /**
  * Persona-sourced Creators had no drafting tools: the generator refused them outright, so the
@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
  */
 const server = "packages/slurp2/src/engine/packages/server/src/";
 const client = "packages/slurp2/src/engine/packages/client/src/";
-const read = (path: string) => readFileSync(path, "utf8");
+const read = (path: string) => slurp2Source(path);
 
 const postOperation = read(`${server}services/slurp/slurp-post.operation.ts`);
 assert.match(

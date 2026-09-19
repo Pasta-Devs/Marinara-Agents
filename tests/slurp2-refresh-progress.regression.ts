@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { refreshSlurpCreatorBatch } from "../packages/slurp2/src/engine/packages/client/src/lib/slurp-refresh-batch";
+import { refreshSlurpCreatorBatch } from "../packages/slurp2/src/engine/packages/client/src/slp/features/creators/slp-refresh-batch";
+import { slurp2Source } from "./slurp2-source";
 
 async function main() {
   const releases = new Map<string, () => void>();
@@ -36,12 +36,11 @@ async function main() {
   );
   assert.deepEqual(counts, [4, 3, 2, 1, 0]);
   assert.equal(peak, 3);
-  const server = readFileSync(
+  const server = slurp2Source(
     new URL(
       "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-post.operation.ts",
       import.meta.url,
     ),
-    "utf8",
   );
   assert.match(server, /MAX_CONCURRENT_MANUAL_REFRESH = 3;/u, "client and existing server batch caps must agree");
   console.log("Slurp2 per-creator remaining count and concurrency regression passed.");

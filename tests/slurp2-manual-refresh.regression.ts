@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { slurp2Source } from "./slurp2-source";
 
 // "Create posts now" once reported a full batch while the feed showed one post fewer: a Story slot
 // sends the post to the Stories row, and a Creator busy with another run was skipped at once.
 const root = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages");
-const read = (path: string) => readFileSync(join(root, path), "utf8");
+const read = (path: string) => slurp2Source(join(root, path));
 
 const operation = read("server/src/services/slurp/slurp-post.operation.ts");
 const targeted = operation.slice(operation.indexOf("export async function refreshTargetedNoodlerCreatorsNow"));

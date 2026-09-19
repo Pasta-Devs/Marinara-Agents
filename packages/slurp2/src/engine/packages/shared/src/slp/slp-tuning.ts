@@ -1,0 +1,340 @@
+/**
+ * Simulation Tuning: every number the audience simulation runs on, in one stored object.
+ *
+ * Pure, like the other Slurp rule modules. The rules take their slice of this as an optional
+ * argument that defaults to `realistic`, so a caller that passes nothing behaves exactly as the
+ * constants did before tuning existed.
+ *
+ * Every number is clamped to its range rather than rejected, so an out-of-range import or a hand
+ * edit lands on the nearest legal value instead of throwing the whole object away. A few ranges
+ * are held by hard code ceilings that no setting can raise, because they bound how much one tick
+ * may write.
+ */
+import { z } from "zod";
+import { SLURP_AUDIENCE_TONE_INSTRUCTIONS } from "./slp-tone.js";
+
+/** Most world events one tick may produce, whatever the settings say. */
+export const SLURP_TUNING_EVENTS_PER_TICK_CEILING = 60;
+/** Most world actions (commissions, messages, questions) one tick may produce. */
+export const SLURP_TUNING_ACTIONS_PER_TICK_CEILING = 20;
+/** Most pulse reactions one tick may produce. */
+export const SLURP_TUNING_PULSE_PER_TICK_CEILING = 40;
+
+const num = (min: number, max: number, fallback: number) =>
+  z
+    .preprocess(
+      (value) => (typeof value === "number" && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : value),
+      z.number().min(min).max(max),
+    )
+    .default(fallback);
+const int = (min: number, max: number, fallback: number) =>
+  z
+    .preprocess(
+      (value) =>
+        typeof value === "number" && Number.isFinite(value) ? Math.min(max, Math.max(min, Math.round(value))) : value,
+      z.number().int().min(min).max(max),
+    )
+    .default(fallback);
+const text = (max: number, fallback: string) => z.string().max(max).default(fallback);
+const curve = (floor: number, cap: number, coef: number, capMax: number) =>
+  z.object({ floor: int(0, 1_000_000, floor), cap: num(0, capMax, cap), curve: num(0, capMax, coef) }).default({});
+
+export const SLURP_TUNING_PRESETS = ["quiet", "realistic", "lively", "generous", "custom"] as const;
+
+export const slurpSimulationTuningSchema = z.object({
+  preset: z.enum(SLURP_TUNING_PRESETS).default("realistic"),
+  clock: z
+    .object({
+      tickMinutes: int(1, 240, 5),
+      backgroundTimer: z.boolean().default(false),
+      catchUpHours: int(1, 24 * 14, 72),
+      maxEventsPerTick: int(1, SLURP_TUNING_EVENTS_PER_TICK_CEILING, 14),
+    })
+    .default({}),
+  rhythm: z
+    .object({
+      enabled: z.boolean().default(true),
+      nightLow: num(0, 1, 0.7),
+      eveningHigh: num(1, 4, 1.25),
+      weekendBoost: num(1, 4, 1.1),
+    })
+    .default({}),
+  reach: z
+    .object({
+      floor: int(0, 1_000_000, 240),
+      ceiling: int(1, 10_000_000, 34_000),
+      growthDays: num(1, 3650, 45),
+      realFollowerWeight: num(0, 1000, 25),
+    })
+    .default({}),
+  pulse: z
+    .object({
+      minutesPerReaction: num(0.1, 1440, 3),
+      referenceReach: int(1, 10_000_000, 3_000),
+      maxPerTick: int(0, SLURP_TUNING_PULSE_PER_TICK_CEILING, 6),
+      likeBudgetScale: num(0, 20, 1),
+      postMaxAgeHours: int(1, 24 * 60, 48),
+      oldPostTrickle: num(0, 1, 0.05),
+      poolSize: int(1, 500, 24),
+      wordOfMouth: num(0, 0.05, 0.002),
+      viralChance: num(0, 1, 0.02),
+      viralMultiplier: num(1, 20, 4),
+      viralHours: int(1, 24 * 14, 12),
+    })
+    .default({}),
+  world: z
+    .object({
+      maxActionsPerTick: int(0, SLURP_TUNING_ACTIONS_PER_TICK_CEILING, 4),
+      maxOpenRequests: int(0, 50, 3),
+      commission: curve(40, 0.5, 0.09, 10),
+      message: curve(60, 0.3, 0.07, 10),
+      question: curve(10, 2.5, 0.45, 20),
+      questionNeedsRecentPost: z.boolean().default(true),
+      /** Chance per day that an eligible fan buys one affordable locked post. */
+      unlockChancePerDay: num(0, 1, 0.04),
+    })
+    .default({}),
+  funnel: z
+    .object({
+      rollCadence: z.enum(["daily", "hourly"]).default("daily"),
+      churnDays: num(0.01, 30, 0.5),
+      ambientCanPay: z.boolean().default(false),
+      conversionGrowth: num(0, 10, 0),
+    })
+    .default({}),
+  economy: z
+    .object({
+      audienceCommissionPrice: int(0, 99_999, 40),
+      /** Share of a fan's weekly budget one tip is worth. A Whale tips like a Whale for free. */
+      audienceTipShare: num(0, 1, 0.25),
+    })
+    .default({}),
+  prompts: z
+    .object({
+      tones: z
+        .object({
+          warm: text(2000, SLURP_AUDIENCE_TONE_INSTRUCTIONS.warm),
+          mixed: text(2000, SLURP_AUDIENCE_TONE_INSTRUCTIONS.mixed),
+          unfiltered: text(2000, SLURP_AUDIENCE_TONE_INSTRUCTIONS.unfiltered),
+        })
+        .default({}),
+      fanActivityExtra: text(4000, ""),
+      replyMaxChars: int(20, 2000, 180),
+      scheduleExtra: text(4000, ""),
+    })
+    .default({}),
+});
+
+export type SlurpSimulationTuning = z.infer<typeof slurpSimulationTuningSchema>;
+export type SlurpTuningPreset = (typeof SLURP_TUNING_PRESETS)[number];
+
+/** Today's constants, exactly. Every schema default above is this preset. */
+export const SLURP_REALISTIC_TUNING: SlurpSimulationTuning = slurpSimulationTuningSchema.parse({});
+
+const R = SLURP_REALISTIC_TUNING;
+const scaleCurves = (world: SlurpSimulationTuning["world"], factor: number): SlurpSimulationTuning["world"] => ({
+  ...world,
+  commission: { ...world.commission, curve: world.commission.curve * factor },
+  message: { ...world.message, curve: world.message.curve * factor },
+  question: { ...world.question, curve: world.question.curve * factor },
+  unlockChancePerDay: world.unlockChancePerDay * factor,
+});
+
+const PRESETS: Record<Exclude<SlurpTuningPreset, "custom">, SlurpSimulationTuning> = {
+  realistic: R,
+  // Half the activity: reactions cost twice the time, half the actions, half the request curves.
+  quiet: {
+    ...R,
+    preset: "quiet",
+    rhythm: { ...R.rhythm, nightLow: 0.5, eveningHigh: 1.15, weekendBoost: 1.05 },
+    pulse: {
+      ...R.pulse,
+      minutesPerReaction: 6,
+      maxPerTick: 3,
+      likeBudgetScale: 0.5,
+      poolSize: 16,
+      oldPostTrickle: 0.02,
+      wordOfMouth: 0.001,
+      viralChance: 0.01,
+      viralMultiplier: 2.5,
+    },
+    world: { ...scaleCurves(R.world, 0.5), maxActionsPerTick: 2, maxOpenRequests: 2 },
+    economy: { ...R.economy, audienceTipShare: 0.15 },
+  },
+  // Two to three times the events: reactions arrive two and a half times as fast against a cap
+  // that is not the thing holding them back, and old posts keep a small trickle.
+  lively: {
+    ...R,
+    preset: "lively",
+    rhythm: { ...R.rhythm, nightLow: 0.8, eveningHigh: 1.5, weekendBoost: 1.2 },
+    pulse: {
+      ...R.pulse,
+      minutesPerReaction: 1.2,
+      maxPerTick: 15,
+      likeBudgetScale: 1.5,
+      oldPostTrickle: 0.1,
+      poolSize: 48,
+      wordOfMouth: 0.004,
+      viralChance: 0.05,
+      viralMultiplier: 6,
+      viralHours: 18,
+    },
+    world: { ...scaleCurves(R.world, 2.5), maxActionsPerTick: 8, maxOpenRequests: 5 },
+    economy: { ...R.economy, audienceTipShare: 0.3 },
+  },
+  // Lively, plus a crowd that pays: ambient accounts have a budget, engagement raises conversion
+  // to its ceiling, and commissions are worth twice what they are elsewhere.
+  generous: {
+    ...R,
+    preset: "generous",
+    rhythm: { ...R.rhythm, nightLow: 0.85, eveningHigh: 1.5, weekendBoost: 1.2 },
+    pulse: {
+      ...R.pulse,
+      minutesPerReaction: 1.2,
+      maxPerTick: 15,
+      likeBudgetScale: 2,
+      oldPostTrickle: 0.1,
+      poolSize: 48,
+      wordOfMouth: 0.006,
+      viralChance: 0.08,
+      viralMultiplier: 6,
+      viralHours: 18,
+    },
+    world: { ...scaleCurves(R.world, 2.5), maxActionsPerTick: 8, maxOpenRequests: 5 },
+    funnel: { ...R.funnel, rollCadence: "hourly", ambientCanPay: true, conversionGrowth: 3 },
+    economy: { audienceCommissionPrice: 80, audienceTipShare: 0.4 },
+  },
+};
+
+/** The tuning a preset stands for. `custom` has no values of its own, so it reads as realistic. */
+export function slurpTuningForPreset(preset: SlurpTuningPreset): SlurpSimulationTuning {
+  return structuredClone(preset === "custom" ? R : PRESETS[preset]);
+}
+
+/**
+ * How busy the platform is at this hour of this day, as a multiplier on activity.
+ *
+ * A crowd that behaves identically at four in the morning and nine in the evening is the single
+ * cheapest tell that nothing behind the feed is real. This is the whole fix: one number, applied
+ * to the pulse budget and the world-event rates, so every rule that already takes an `activity`
+ * multiplier gets a rhythm for free.
+ *
+ * The shape is a table rather than arithmetic because the curve is not symmetric — the trough is
+ * around four in the morning and the peak around nine in the evening, seventeen hours apart — and
+ * a table of twenty-four numbers is both shorter and easier to read than the phase maths that
+ * would reproduce it. UTC, like every other clock in the simulation.
+ *
+ * `nightQuiet` is a different setting and stays one: it holds back the *Creator's* auto-posting
+ * overnight, in local time. This is the audience, and the audience does not stop, it thins out.
+ */
+const HOUR_SHAPE = [
+  0.15, 0.06, 0.02, 0, 0, 0.04, 0.12, 0.24, 0.36, 0.44, 0.5, 0.54, 0.58, 0.6, 0.62, 0.66, 0.72, 0.8, 0.88, 0.95, 1,
+  0.98, 0.8, 0.45,
+] as const;
+
+export function slurpRhythmMultiplier(
+  at: Date,
+  rhythm: SlurpSimulationTuning["rhythm"] = SLURP_REALISTIC_TUNING.rhythm,
+): number {
+  if (!rhythm.enabled) return 1;
+  const shape = HOUR_SHAPE[at.getUTCHours()] ?? 0.5;
+  const day = at.getUTCDay();
+  const weekend = day === 0 || day === 6 ? rhythm.weekendBoost : 1;
+  return (rhythm.nightLow + (rhythm.eveningHigh - rhythm.nightLow) * shape) * weekend;
+}
+
+/** The background world pass when `clock.backgroundTimer` is off: a few catch-ups a day. */
+export const SLURP_WORLD_IDLE_POLL_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * Whether the world timer should tick now. It wakes every `tickMinutes` either way, so toggling
+ * `backgroundTimer` takes effect without a restart; off keeps the old four-a-day cadence.
+ */
+export function slurpWorldTimerDue(
+  clock: Pick<SlurpSimulationTuning["clock"], "backgroundTimer">,
+  lastRunMs: number,
+  nowMs: number,
+): boolean {
+  return clock.backgroundTimer || nowMs - lastRunMs >= SLURP_WORLD_IDLE_POLL_MS;
+}
+
+/**
+ * The same storage with `recordCreatorEvent` capped at `max` calls (never past the hard ceiling).
+ * Storage methods call `this.recordCreatorEvent`, so arc events written inside the storage count too.
+ */
+export function slurpCapTickEvents<T extends { recordCreatorEvent: (...args: never[]) => Promise<void> }>(
+  storage: T,
+  max: number,
+): T {
+  let left = Math.min(max, SLURP_TUNING_EVENTS_PER_TICK_CEILING);
+  return {
+    ...storage,
+    recordCreatorEvent: (...args: Parameters<T["recordCreatorEvent"]>) =>
+      left-- > 0 ? storage.recordCreatorEvent(...args) : Promise.resolve(),
+  };
+}
+
+/**
+ * The one Activity choice on Settings -> Audience.
+ *
+ * A preset is the simulation tuning plus the three fan-run numbers and the world dial, so a
+ * player picks one word instead of learning that four settings in three places move together.
+ * `off` stops everything the crowd does and leaves the numbers alone, so turning it back on
+ * restores exactly what was there.
+ */
+export const SLURP_AUDIENCE_PRESETS = ["off", "quiet", "realistic", "lively", "generous"] as const;
+export type SlurpAudiencePreset = (typeof SLURP_AUDIENCE_PRESETS)[number];
+
+/** [runs per day, likes per run, replies per run]. Realistic is the shipped default. */
+const FAN_RUNS: Record<Exclude<SlurpAudiencePreset, "off">, [number, number, number]> = {
+  quiet: [4, 1, 3],
+  realistic: [8, 2, 6],
+  lively: [16, 3, 9],
+  generous: [16, 4, 12],
+};
+
+type SlurpAudiencePresetSettings = {
+  fanActivityEnabled: boolean;
+  worldActivity: string;
+  fanActivityRunsPerDay: number;
+  fanLikesPerRefresh: number;
+  fanRepliesPerRefresh: number;
+  simulationTuning: SlurpSimulationTuning;
+};
+
+/** The settings patch a preset implies. Prompts and the background timer are the player's own. */
+export function slurpAudiencePresetPatch(
+  preset: SlurpAudiencePreset,
+  current: Pick<SlurpAudiencePresetSettings, "simulationTuning">,
+): Partial<SlurpAudiencePresetSettings> & { worldActivity: "off" | "normal" } {
+  if (preset === "off") return { fanActivityEnabled: false, worldActivity: "off" };
+  const [runs, likes, replies] = FAN_RUNS[preset];
+  const tuning = slurpTuningForPreset(preset);
+  return {
+    simulationTuning: {
+      ...tuning,
+      prompts: current.simulationTuning.prompts,
+      clock: { ...tuning.clock, backgroundTimer: current.simulationTuning.clock.backgroundTimer },
+    },
+    fanActivityEnabled: true,
+    worldActivity: "normal",
+    fanActivityRunsPerDay: runs,
+    fanLikesPerRefresh: likes,
+    fanRepliesPerRefresh: replies,
+  };
+}
+
+/** Which preset stored settings correspond to, or `custom` when anything was changed by hand. */
+export function slurpAudiencePresetFor(settings: SlurpAudiencePresetSettings): SlurpAudiencePreset | "custom" {
+  if (!settings.fanActivityEnabled && settings.worldActivity === "off") return "off";
+  const preset = settings.simulationTuning.preset;
+  if (preset === "custom" || !settings.fanActivityEnabled || settings.worldActivity !== "normal") return "custom";
+  const [runs, likes, replies] = FAN_RUNS[preset];
+  // ponytail: trusts the stored tuning preset label (field edits set it to custom); compare every
+  // tuning value if a preset label ever drifts from its numbers.
+  return settings.fanActivityRunsPerDay === runs &&
+    settings.fanLikesPerRefresh === likes &&
+    settings.fanRepliesPerRefresh === replies
+    ? preset
+    : "custom";
+}

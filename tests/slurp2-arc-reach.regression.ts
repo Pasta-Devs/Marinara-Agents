@@ -1,22 +1,26 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 
 import {
   makeSlurpProject,
   readSlurpProject,
+  type SlurpArcType,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-project.js";
+import {
   slurpArcChapterMood,
   slurpArcEffectMultiplier,
   slurpArcImageLine,
   slurpArcResolveProfile,
+  slurpProjectDirect,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-arc-progress.js";
+import {
   slurpArcTypeFromProject,
   slurpGeneratedArcProject,
-  slurpProjectDirect,
-  type SlurpArcType,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-project.js";
-import { scoreSlurpRapport } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-rapport.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-arc-library.js";
+import { scoreSlurpRapport } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-rapport.js";
+import { slurp2Source } from "./slurp2-source";
 
 const root = "packages/slurp2/src/engine/packages/server/src";
-const source = (path: string) => readFileSync(`${root}/${path}`, "utf8");
+const source = (path: string) => slurp2Source(`${root}/${path}`);
 const at = new Date("2026-09-13T10:00:00.000Z");
 
 const type: SlurpArcType = {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { slurp2Source } from "./slurp2-source";
 
-const read = (path: string) => readFileSync(path, "utf8");
+const read = (path: string) => slurp2Source(path);
 const scheduler = read(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-follow-up-scheduler.service.ts",
 );

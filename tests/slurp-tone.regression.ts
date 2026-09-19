@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -7,8 +6,9 @@ import {
   slurpAudienceToneInstruction,
   SLURP_AUDIENCE_TONES,
   SLURP_DEFAULT_AUDIENCE_TONE,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-tone.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-tone.js";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
+import { slurp2Source } from "./slurp2-source";
 
 // ── Tone is not spice ───────────────────────────────────────────────────────
 // `generationGuidance` and its three presets govern how explicit a Creator's own posts are. None of
@@ -38,7 +38,7 @@ assert.equal(readSlurpAudienceTone("unfiltered"), "unfiltered");
 
 // ── Wiring ──────────────────────────────────────────────────────────────────
 const root = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages");
-const read = (path: string) => readFileSync(join(root, path), "utf8");
+const read = (path: string) => slurp2Source(join(root, path));
 
 // It has to reach the prompt the audience actually speaks through.
 const fanService = read("server/src/services/slurp/slurp-fan-activity.service.ts");

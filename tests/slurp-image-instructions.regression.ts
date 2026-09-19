@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { compileImagePrompt } from "../sources/engine/packages/shared/dist/utils/image-prompt-compiler.js";
 import { normalizeImageGenerationProfile } from "../sources/engine/packages/shared/dist/constants/image-generation-defaults.js";
@@ -8,7 +7,8 @@ import {
   capFallbackImagePrompt,
   MAX_FALLBACK_IMAGE_PROMPT_LENGTH,
   selectNoodleImageProviderPrompt,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-image-prompt";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/base/media/slp-image-prompt";
+import { slurp2Source } from "./slurp2-source";
 
 const root = join(import.meta.dirname, "..");
 
@@ -196,13 +196,11 @@ for (const unavailablePrompt of [null, undefined, ""]) {
   assert.equal(providerPrompt.includes(renderedTemplatePrompt), false);
 }
 
-const images = readFileSync(
+const images = slurp2Source(
   join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-images.service.ts"),
-  "utf8",
 );
-const publicImages = readFileSync(
+const publicImages = slurp2Source(
   join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-public-images.service.ts"),
-  "utf8",
 );
 for (const source of [images, publicImages]) {
   assert.doesNotMatch(source, /User image instructions:/u);

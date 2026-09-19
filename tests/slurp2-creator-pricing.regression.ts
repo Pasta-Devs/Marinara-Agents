@@ -6,7 +6,7 @@ import {
   slurpDynamicPriceTarget,
   slurpFanHaggle,
   slurpStepPrice,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-creator-pricing.ts";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/economy/slp-creator-pricing.ts";
 
 const pricing = { commissionBase: 40, commissionMin: 10, commissionMax: 400 };
 

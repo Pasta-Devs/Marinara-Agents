@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { slurpMessagePreview } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-messaging.js";
+import { slurpMessagePreview } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-messaging.js";
+import { slurp2Source } from "./slurp2-source";
 
 const root = join(import.meta.dirname, "..");
 const src = join(root, "packages/slurp2/src/engine/packages/server/src");
@@ -16,7 +16,7 @@ assert.match(slurpMessagePreview("text", "hello there", 0), /hello there/u);
 assert.match(slurpMessagePreview("tip", "", 12), /12/u);
 
 // Hiding locked content in the client is not enough: the response itself must not carry it.
-const routes = readFileSync(join(src, "routes/slurp-messages.routes.ts"), "utf8");
+const routes = slurp2Source(join(src, "routes/slurp-messages.routes.ts"));
 assert.match(
   routes,
   /const visibleMessages = async \(threadId: string, side: "viewer" \| "creator"\)/u,

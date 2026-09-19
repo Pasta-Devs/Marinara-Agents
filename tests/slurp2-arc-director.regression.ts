@@ -1,16 +1,18 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 
 import {
   makeSlurpProject,
   readSlurpProject,
   SLURP_ARC_HISTORY_POSTS,
   SLURP_ARC_RANDOM_TWISTS,
+  slurpProjectRecord,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-project.js";
+import {
   slurpProjectAdvance,
   slurpProjectDirect,
   slurpProjectInstruction,
-  slurpProjectRecord,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-project.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-arc-progress.js";
+import { slurp2Source } from "./slurp2-source";
 
 const at = new Date("2026-09-13T10:00:00.000Z");
 const later = (minutes: number) => new Date(at.getTime() + minutes * 60_000);
@@ -86,10 +88,7 @@ assert.match(
   slurpProjectInstruction({ title: "Move", direction: "", chapter: "one", twist: written.twist, history: [] }),
   /Twist for this post: The van breaks down/,
 );
-const storage = readFileSync(
-  "packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts",
-  "utf8",
-);
+const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 const advanceBody = storage.slice(storage.indexOf("async advanceProject("), storage.indexOf("async directProject("));
 assert.match(advanceBody, /slurpProjectAdvance\([\s\S]*?twist: "" \}/, "advance clears the twist");
 assert.doesNotMatch(
@@ -98,7 +97,7 @@ assert.doesNotMatch(
 );
 
 // Director route is gated on the setting before anything else runs.
-const routes = readFileSync("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
+const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
 const director = routes.slice(routes.indexOf('"/noodler/accounts/:id/projects/:projectId/director"'));
 assert.ok(director.length > 0);
 const gate = director.indexOf("arcDirectorMode");

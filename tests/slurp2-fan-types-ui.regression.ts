@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
+import { slurp2Source } from "./slurp2-source";
 
 const root = join(import.meta.dirname, "..", "packages", "slurp2", "src", "engine", "packages");
-const read = (path: string) => readFileSync(join(root, path), "utf8");
+const read = (path: string) => slurp2Source(join(root, path));
 const component = read("client/src/components/slurp/SlurpFanTypesSettings.tsx");
 const settings = slurp2BackstageSource();
 const routes = read("server/src/routes/slurp.routes.ts");

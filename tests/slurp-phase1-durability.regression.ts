@@ -3,6 +3,7 @@ import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/pr
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { slurp2Source } from "./slurp2-source";
 
 const repoRoot = resolve(dirname(process.argv[1] ?? process.cwd()), "..");
 const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || join(repoRoot, "../Marinara-Engine"));
@@ -126,9 +127,8 @@ async function main() {
         }>("packages/server/src/services/slurp/slurp-payment-recovery-scheduler.service.ts"),
       ]);
     assert.match(
-      await readFile(
+      await slurp2Source(
         join(repoRoot, "packages/slurp2/src/engine/packages/server/src/services/slurp/server-entry.ts"),
-        "utf8",
       ),
       /startSlurpPaymentRecoveryScheduler\(app, addTeardown\)/u,
     );

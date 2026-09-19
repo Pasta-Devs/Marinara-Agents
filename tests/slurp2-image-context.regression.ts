@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
 import { runInNewContext } from "node:vm";
-import { protectNoodlerGeneratedIdentity as protect } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-identity-protection";
-import { normalizeNoodleImagePrompt } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-image-prompt";
+import { protectNoodlerGeneratedIdentity as protect } from "../packages/slurp2/src/engine/packages/server/src/slp/base/identity/slp-identity-protection";
+import { normalizeNoodleImagePrompt } from "../packages/slurp2/src/engine/packages/server/src/slp/base/media/slp-image-prompt";
+import { slurp2Source } from "./slurp2-source";
 
 const root = "../packages/slurp2/src/engine/packages/server/src/services/slurp/";
-const read = (file: string) => readFileSync(new URL(`${root}${file}`, import.meta.url), "utf8");
+const read = (file: string) => slurp2Source(new URL(`${root}${file}`, import.meta.url));
 const part = (source: string, start: string, end: string) => {
   assert.ok(source.includes(start) && source.includes(end));
   return source.slice(source.indexOf(start), source.indexOf(end));
@@ -89,9 +89,8 @@ async function main() {
   assert.match(refused.get("public"), /blue coat/, "stored prompts still work for a text-only model");
 
   // A locked PPV message withholds what its picture shows, not only the picture.
-  const messageRoutes = readFileSync(
+  const messageRoutes = slurp2Source(
     new URL("../packages/slurp2/src/engine/packages/server/src/routes/slurp-messages.routes.ts", import.meta.url),
-    "utf8",
   );
   const lockedRedactions =
     messageRoutes.match(/kind === "ppv" && !message\.unlockedAt\s*\?[^:]*?\{[\s\S]{0,300}?\}\s*:/gu) ?? [];
