@@ -1,5 +1,5 @@
 import { WalletCards } from "lucide-react";
-import { ArrowDown, Crown, Gift, type LucideIcon, MessageCircle, RotateCcw } from "lucide-react";
+import { ArrowDown, Crown, Gift, Lock, type LucideIcon, MessageCircle, RotateCcw } from "lucide-react";
 import { Avatar } from "../../base/chrome/SlpChrome";
 import { HelpTooltip } from "../../../components/ui/HelpTooltip";
 import { SlurpCoin, SlurpCoinBurst } from "../../modules/coin/SlpCoin";

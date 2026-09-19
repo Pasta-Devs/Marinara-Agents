@@ -73,7 +73,7 @@ import { toast } from "sonner";
 import { slurp2SplashPending } from "../features/onboarding/SlpSplash";
 
 export interface SlurpHomeProps {
-  navigation: Extract<SlurpNavigationState, { mode: "creator" }>;
+  navigation: SlurpNavigationState;
   onNavigate: (destination: SlurpNavigationState) => void;
   onLeave?: () => void;
 }
@@ -605,6 +605,7 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
   };
 
   return {
+    navigation,
     localizeUi,
     accountsQuery,
     retryAccountsOrReload,

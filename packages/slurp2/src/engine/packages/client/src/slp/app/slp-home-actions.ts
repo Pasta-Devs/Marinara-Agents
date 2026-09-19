@@ -17,6 +17,7 @@ import { useSlurpHomeBaseState, type SlurpHomeBaseState, type SlurpHomeProps } f
  */
 function useSlurpHomeActions(state: SlurpHomeBaseState) {
   const {
+    navigation,
     onNavigate,
     acceptSourceChangesForProfileId,
     accountsQuery,

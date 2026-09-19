@@ -19,7 +19,7 @@ import { renderSlurpHomeDestinations } from "./screens/SlpHomeDestinations";
 import { SlpHomeFeedRail } from "./screens/SlpHomeFeedRail";
 
 interface SlurpHomeProps {
-  navigation: Extract<SlurpNavigationState, { mode: "creator" }>;
+  navigation: SlurpNavigationState;
   onNavigate: (destination: SlurpNavigationState) => void;
   onLeave?: () => void;
 }

@@ -1,53 +1,9 @@
 # Slurp Remastered release notes
 
-## 0.0.34 — 2026-09-19
+## 0.1.0 — 2026-09-19
 
-- No visible changes. Moved the last seven Slurp client components into the slp namespace and
-  split them below the size ceiling, and made the package typecheck report missing and duplicate
-  exports.
-
-## 0.0.33 — 2026-09-19
-
-- No visible changes. Moved the remaining Slurp client components into the slp namespace, split
-  the shell, the shared Backstage kit and the Projects destination, and made the package typecheck
-  report syntax errors.
-
-## 0.0.32 — 2026-09-19
-
-- No visible changes. Made Backstage a thin host over an explicit settings panel registry.
-
-## 0.0.31 — 2026-09-19
-
-- No visible changes. Split the client app composition and reusable presentation modules.
-
-## 0.0.30 — 2026-09-19
-
-- No visible changes. Split the client state and hooks into feature modules.
-
-## 0.0.29 — 2026-09-18
-
-- No visible changes. Added the cross-feature event modifier seam.
-
-## 0.0.28 — 2026-09-18
-
-- No visible changes. Moved the server services into pure rules, data, and feature modules.
-
-## 0.0.27 — 2026-09-18
-
-- No visible changes. Split server storage into feature-owned modules.
-
-## 0.0.26 — 2026-09-18
-
-- No visible changes. Split the server routes into feature modules.
-
-## 0.0.25 — 2026-09-18
-
-- No visible changes. Moved the package entry points, shared date helper, and translations into the new source layout.
-
-## 0.0.24 — 2026-09-18
-
-- No visible changes. Internal groundwork for a cleaner source layout, with stricter build checks.
-- Removed unused custom-emoji code.
+- Completed the backend file split and modularisation.
+- You should not feel any difference. If you do, tell me in Discord.
 
 ## 0.0.22 — 2026-09-17
 

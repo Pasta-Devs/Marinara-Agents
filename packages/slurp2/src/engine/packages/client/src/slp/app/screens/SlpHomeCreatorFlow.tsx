@@ -58,6 +58,7 @@ export function renderSlurpHomeCreatorFlow({
     handleSourceSearch,
     invalidateProfileDraftGeneration,
     localizeUi,
+    navigation,
     noodlerPostDrafts,
     onNavigate,
     postCardCtx,

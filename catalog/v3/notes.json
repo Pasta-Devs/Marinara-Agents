@@ -284,70 +284,10 @@
     "slurp2": {
       "versions": [
         {
-          "version": "0.0.34",
+          "version": "0.1.0",
           "date": "2026-09-19",
-          "notes": "- No visible changes. Moved the last seven Slurp client components into the slp namespace and\n  split them below the size ceiling, and made the package typecheck report missing and duplicate\n  exports.",
-          "highlight": false
-        },
-        {
-          "version": "0.0.33",
-          "date": "2026-09-19",
-          "notes": "- No visible changes. Moved the remaining Slurp client components into the slp namespace, split\n  the shell, the shared Backstage kit and the Projects destination, and made the package typecheck\n  report syntax errors.",
-          "highlight": false
-        },
-        {
-          "version": "0.0.32",
-          "date": "2026-09-19",
-          "notes": "- No visible changes. Made Backstage a thin host over an explicit settings panel registry.",
-          "highlight": false
-        },
-        {
-          "version": "0.0.31",
-          "date": "2026-09-19",
-          "notes": "- No visible changes. Split the client app composition and reusable presentation modules.",
-          "highlight": false
-        },
-        {
-          "version": "0.0.30",
-          "date": "2026-09-19",
-          "notes": "- No visible changes. Split the client state and hooks into feature modules.",
-          "highlight": false
-        },
-        {
-          "version": "0.0.29",
-          "date": "2026-09-18",
-          "notes": "- No visible changes. Added the cross-feature event modifier seam.",
-          "highlight": false
-        },
-        {
-          "version": "0.0.28",
-          "date": "2026-09-18",
-          "notes": "- No visible changes. Moved the server services into pure rules, data, and feature modules.",
-          "highlight": false
-        },
-        {
-          "version": "0.0.27",
-          "date": "2026-09-18",
-          "notes": "- No visible changes. Split server storage into feature-owned modules.",
-          "highlight": false
-        },
-        {
-          "version": "0.0.26",
-          "date": "2026-09-18",
-          "notes": "- No visible changes. Split the server routes into feature modules.",
-          "highlight": false
-        },
-        {
-          "version": "0.0.25",
-          "date": "2026-09-18",
-          "notes": "- No visible changes. Moved the package entry points, shared date helper, and translations into the new source layout.",
-          "highlight": false
-        },
-        {
-          "version": "0.0.24",
-          "date": "2026-09-18",
-          "notes": "- No visible changes. Internal groundwork for a cleaner source layout, with stricter build checks.\n- Removed unused custom-emoji code.",
-          "highlight": false
+          "notes": "- Completed the backend file split and modularisation.\n- You should not feel any difference. If you do, tell me in Discord.",
+          "highlight": true
         },
         {
           "version": "0.0.22",
@@ -402,6 +342,66 @@
           "date": "2026-09-15",
           "notes": "- Fixed commissions drawing a new picture on every retry when the fan could not pay.\n- Fixed locked pay-per-view messages sending what their picture shows before the fan paid.\n- Pictures in messages, commissions and your recent posts now reach the AI as stored prompts or descriptions, with an optional image description model. Each picture is described once, and models that cannot read images are skipped.\n- Characters can remember their Slurp posts, messages, commissions, subscriptions and tips in Engine chats: turn on Carryover to chats in Settings and Include Slurp activity in the chat's settings.\n- Added lorebook context for Creator posts, prompt presets with import and export, a changed count and Reset section for each settings section, gallery images when no picture is generated, a Professor Mari Creator switch, and a per-character choice for chat image instructions.\n- Deleting all Slurp data now asks you to type DELETE, and the mobile bottom bar is smaller.",
           "highlight": false
+        },
+        {
+          "version": "0.0.13",
+          "date": "2026-09-15",
+          "notes": "- Fixed Creator management (profile, goal, subscription price, projects, arcs, payout, and Story viewers) rejecting edits with \"Only the Creator's owner can...\" — Slurp is single-player, so any Creator is now always yours to manage.\n- Fixed direct-message replies crashing when two reply attempts collided, along with other duplicate-safe storage operations that crossed the package boundary.\n- Persona Creators can now like and reply to their own posts as their public Creator identity.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.12",
+          "date": "2026-09-15",
+          "notes": "- AI Creator drafts are repaired instead of failing: long text is shortened, gender and tag spellings are understood, broken JSON is fixed, and the form lists what still needs a choice.\n- Persona Creators now have the same drafting tools as character Creators: AI post drafts from your own text, and an AI image toggle in the composer for drafted and manual posts.\n- Fixed bulk Creator creation skipping open-mode Creators with a wrong gender and tags reason, and draft errors now show the real cause.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.11",
+          "date": "2026-09-14",
+          "notes": "- Fixed AI Creator drafts that failed or could not be saved because the model left out gender or gave fewer than three tags.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.10",
+          "date": "2026-09-14",
+          "notes": "- Rebuilt the audience as a deterministic simulation with editable fan types, presets, a seven-day estimate, and JSON import and export.\n- Added separate free-simulation and AI-text clocks with call limits, a shared model budget, weekly fan spending limits, and a multi-process world lease.\n- Added Creator pricing: own subscription, post, and commission prices with suggestions, commission quotes that follow the brief, haggling, and weekly dynamic prices for character Creators.\n- Long posts and long comment threads now collapse, and replies nest under the comment they answer.\n- Fixed doubled subscriber totals, lost followers after an ended subscription, tips missing from fan relationships, thin like pacing, and silent subscription lapses.\n- Fixed Slurp images failing with an X-Admin-Secret error on remote installs, and sent image connection custom parameters such as LoRA settings.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.9",
+          "date": "2026-09-14",
+          "notes": "- Added Autopurge with configurable day, week, or month retention; media-only or full-post cleanup; optional direct-message media cleanup; an immediate purge action; and restart-safe scheduling for overdue purges.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.8",
+          "date": "2026-09-14",
+          "notes": "- Bug fixes for discovery filters and translations, subscription prices, image references, fan privacy, rapport details, message fees, arc editing and generation, profile validation, regression tests, and test-output handling.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.7",
+          "date": "2026-09-13",
+          "notes": "- Rebuilt Discover around direct subscription actions, persistent grid and list views, and filters for subscription status, gender, weekly price, and Creator tags.\n- Added Recommended, Newest, Most liked, and Most subscribed sorting with stable results.\n- Added editable Creator gender and tags, including safe custom tags and AI-suggested curated tags during profile creation and redrafting.\n- Added Arcs with automatic suggestions, pacing, focus, allowed kinds, and delivery to posts, messages, fan comments, and notifications.\n- Moved message, photo, subscription, and tip prices from the profile information box to the action that uses each price.\n- Hid the Follow control for subscribed Creators because a subscription already includes following.\n- Made Open the default Creator identity mode and removed the Secret identity tier.\n- Fixed persona Creator creation when Slurp already has the persona's viewer identity.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.6",
+          "date": "2026-09-13",
+          "notes": "- Added image context options for reactions: stored prompts, vision descriptions, or automatic selection. Public fan reactions keep locked images hidden and respect Creator identity privacy.\n- Generation now shows how many Creators remain, including skipped or failed requests.\n- Restored visible success and error notifications for Slurp actions.\n- Fixed persona Creator creation when Slurp already has the persona's viewer identity. The viewer and Creator accounts can now coexist for one persona.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.5",
+          "date": "2026-09-13",
+          "notes": "- Made the welcome screen shorter, put Gunterlie beside the greeting, linked Slurp General, and tucked older release notes behind an expander.\n- Corrected older ad ratings, fallback handles, onboarding text, and invalid digest account errors.",
+          "highlight": false
+        },
+        {
+          "version": "0.0.4",
+          "date": "2026-09-12",
+          "notes": "- Fixed Refresh Conversation Schedule failing with \"chatComplete is not a function\". It now creates the schedule.\n- Fixed the Conversation Schedule refresh dialog and the settings loading screen showing raw text keys instead of words.\n- Fixed the header logo not loading. The logo is now built into Slurp and no longer depends on the package asset address.\n- Added Reply timing settings under Messaging: the longest wait, the wait when the return time is unknown, check-in waits for close and regular fans, and away times for Creators without a schedule.\n- Added Always reachable without a schedule. With it on, a Creator with no Conversation Schedule counts as online.\n- Corrected the Creator settings text that said a Creator without a Conversation Schedule is always reachable. Slurp guesses from their last post unless the new setting is on.",
+          "highlight": true
         }
       ]
     },

@@ -24,6 +24,7 @@ export function renderSlurpHomeDestinations({
     eligibleNoodleAccounts,
     exitToCreatorHub,
     localizeUi,
+    navigation,
     myCreatorProfile,
     onNavigate,
     retryAccountsOrReload,

@@ -10,6 +10,5 @@ export function SlpRouter({
   onNavigate: (destination: SlurpNavigationState) => void;
   onLeave?: () => void;
 }) {
-  if (navigation.mode !== "creator") return null;
   return <SlurpHome navigation={navigation} onNavigate={onNavigate} onLeave={onLeave} />;
 }
