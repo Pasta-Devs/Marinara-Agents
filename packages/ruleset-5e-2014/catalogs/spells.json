@@ -6861,6 +6861,7 @@
         "range": 0,
         "amount": { "dice": "6d8" },
         "damageType": "radiant",
+        "save": { "save": "con_save", "onSuccess": "half" },
         "applies": [{ "condition": "blinded", "duration": { "rounds": 1 } }],
         "cost": [{ "pool": "slots_6", "amount": 1 }],
         "concentration": true

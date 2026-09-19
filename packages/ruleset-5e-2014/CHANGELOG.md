@@ -1,5 +1,14 @@
 # 5e (SRD 5.1)
 
+## 0.5.0 — 2026-09-19
+- The package now describes 5e combat itself: the d20 attack roll with advantage, a natural 20 that hits and doubles the damage dice, a natural 1 that misses, the action, bonus action and reaction a turn holds, your weapons and prepared spells, the SRD conditions, concentration, death saves and the damage types.
+- Adds a bestiary: 321 SRD monsters with their armour class, hit dice, saves, resistances, immunities, attacks, breath weapons, multiattacks and legendary actions, every number taken from the printed stat block.
+- A challenge-rating scale measured from those monsters, so an opponent a Game Master invents can be pulled onto it.
+- Cantrip damage now grows with your level, Magic Missile is three darts that simply hit, and fifteen well-known spells say which condition they apply.
+- Second Wind is spent as a bonus action, which is what the SRD says.
+- No Engine release plays a fight on any of this yet. Battles still work as they did.
+- Needs an Engine with Capability API 1.27.
+
 ## 0.4.0 — 2026-09-19
 - Class resources you pick now keep themselves. Rage, Ki, Sorcery Points, Channel Divinity, Action Surge and Indomitable follow their class tables, Bardic Inspiration and Divine Sense follow your Charisma, and the sheet sets the maximum and keeps it current as you level up.
 - Lay on Hands is a new class resource. Its pool is your level times 5.

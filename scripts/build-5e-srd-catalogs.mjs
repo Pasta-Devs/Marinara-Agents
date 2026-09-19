@@ -319,10 +319,14 @@ const SPELL_RIDERS = new Map([
       applies: [{ condition: "frightened", duration: { rounds: ROUNDS_PER_MINUTE } }],
     },
   ],
-  // "On a failed save, a creature takes 6d8 radiant damage and is blinded until your next turn. On a
-  // successful save, it takes half as much damage and isn't blinded by this spell." The save the
-  // fixture already carries is the half one, and a success stops the blindness by itself.
-  ["srd_sunbeam", { applies: [{ condition: "blinded", duration: { rounds: 1 } }] }],
+  // "Each creature in the line must make a constitution saving throw. On a failed save, a creature
+  // takes 6d8 radiant damage and is blinded until your next turn. On a successful save, it takes
+  // half as much damage and isn't blinded by this spell." The fixture's own wording does not match
+  // the half-damage sentences the converter reads, so the save is stated here.
+  [
+    "srd_sunbeam",
+    { save: { save: "con_save", onSuccess: "half" }, applies: [{ condition: "blinded", duration: { rounds: 1 } }] },
+  ],
   // "You create three glowing darts of magical force. Each dart hits a creature of your choice ... A
   // dart deals 1d4 + 1 force damage to its target." The fixture carries no damage roll for it at all
   // and its target_count says 1, so both are stated here. One more dart per slot level above 1st is
@@ -705,6 +709,12 @@ function assertSpellRiders(spells) {
     if (rider.damageType && !DAMAGE_TYPE_SET.has(rider.damageType)) {
       fail(`${pk} deals "${rider.damageType}", which is not one of the ruleset's damage types`);
     }
+    // `applies` lands on anything the save did not turn aside, so a row that puts a condition on a
+    // target without a save to resist it would be harsher than the SRD. Checked against the save the
+    // entry will really carry, so a fixture that stopped stating one stops the build.
+    if (rider.applies && !(rider.save ?? spellSave(spell.fields))) {
+      fail(`${pk} applies a condition with no saving throw to resist it`);
+    }
   }
 }
 
@@ -742,12 +752,12 @@ function spellScales(fields, options) {
 
 function spellMechanics(fields, options, healing, rider) {
   const shape = fields.shape_type ? AREA_SHAPES[fields.shape_type] : undefined;
-  const amount = rider?.amount ?? (fields.damage_roll ? amountFrom(fields.damage_roll, `Spell "${fields.name}"`) : undefined);
+  const amount =
+    rider?.amount ?? (fields.damage_roll ? amountFrom(fields.damage_roll, `Spell "${fields.name}"`) : undefined);
   // A spell that puts a condition on what it touches is a debuff even when it deals no damage, and
   // one that only hands out temporary points is a buff. Without that they would both read as
   // `utility`, which a fight leaves off the menu entirely.
-  const kind =
-    rider?.kind ?? (healing ? "heal" : amount ? "attack" : rider?.applies ? "debuff" : "utility");
+  const kind = rider?.kind ?? (healing ? "heal" : amount ? "attack" : rider?.applies ? "debuff" : "utility");
   return compact({
     // The source marks no spell as healing, so a heal is the hand-checked
     // HEALING_SPELLS table above rather than a guess at the wording. Everything
@@ -1166,7 +1176,10 @@ function plainText(text) {
 function trait(name, text) {
   const line = plainText(text);
   if (!line) return undefined;
-  return { name: trimToSentence(plainText(name), TRAIT_NAME_MAX), text: trimToSentence(line, TRAIT_TEXT_MAX, TRUNCATION_NOTE) };
+  return {
+    name: trimToSentence(plainText(name), TRAIT_NAME_MAX),
+    text: trimToSentence(line, TRAIT_TEXT_MAX, TRUNCATION_NOTE),
+  };
 }
 
 /** A sheet id from a creature's own name, so `srd_adult-red-dragon_fire-breath` becomes an action id
@@ -1201,7 +1214,15 @@ function damageClauses(text) {
       }
       found.push(
         bare
-          ? { at: match.index, length: match[0].length, joiner: match[1], count: 0, sides: 0, flat: Number(match[2]), type: match[3] }
+          ? {
+              at: match.index,
+              length: match[0].length,
+              joiner: match[1],
+              count: 0,
+              sides: 0,
+              flat: Number(match[2]),
+              type: match[3],
+            }
           : {
               at: match.index,
               length: match[0].length,
@@ -1334,7 +1355,10 @@ function creatureAction(action, attackRow, report) {
       damage: primary ? damageFrom(primary) : undefined,
       // A save on an ATTACK never relieves the damage: the blow already landed. `none` is what says
       // that a success only keeps the rider condition off.
-      save: ability && conditions.length > 0 ? { save: `${ability}_save`, difficulty: Number(save[1]), onSuccess: "none" } : undefined,
+      save:
+        ability && conditions.length > 0
+          ? { save: `${ability}_save`, difficulty: Number(save[1]), onSuccess: "none" }
+          : undefined,
       applies: conditions.length > 0 ? conditions : undefined,
       reach: reach ? Number(reach[1]) : range ? undefined : 5,
       range: range ? Number(range[1]) : undefined,
@@ -1546,7 +1570,12 @@ function creatureEntry(record, sources, report) {
   for (const condition of fields.condition_immunities) {
     if (CONDITION_SET.has(condition)) conditionImmunities.push(condition);
     else {
-      notes.push(trait("Immune to exhaustion", `The ${fields.name} is immune to ${condition}, which this sheet counts on a track rather than as a condition.`));
+      notes.push(
+        trait(
+          "Immune to exhaustion",
+          `The ${fields.name} is immune to ${condition}, which this sheet counts on a track rather than as a condition.`,
+        ),
+      );
       report.conditionImmunitiesNotCarried += 1;
     }
   }
@@ -1568,10 +1597,12 @@ function creatureEntry(record, sources, report) {
 
   const health = fields.hit_dice ? { dice: fields.hit_dice } : fields.hit_points;
   if (typeof health === "object") {
-    const dice = DICE_PATTERN.exec(fields.hit_dice.replace(/[+-]\d+$/u, "")) ?? fail(`${pk} has hit dice ${fields.hit_dice}`);
+    const dice =
+      DICE_PATTERN.exec(fields.hit_dice.replace(/[+-]\d+$/u, "")) ?? fail(`${pk} has hit dice ${fields.hit_dice}`);
     const flat = /([+-]\d+)$/u.exec(fields.hit_dice);
     const average = Math.floor(Number(dice[1]) * ((Number(dice[2]) + 1) / 2)) + (flat ? Number(flat[1]) : 0);
-    if (average !== fields.hit_points) report.hitPointDisagreements.push(`${pk} (${fields.hit_dice} averages ${average}, printed ${fields.hit_points})`);
+    if (average !== fields.hit_points)
+      report.hitPointDisagreements.push(`${pk} (${fields.hit_dice} averages ${average}, printed ${fields.hit_points})`);
   } else {
     report.creaturesWithoutHitDice.push(pk);
   }
@@ -1627,7 +1658,10 @@ function creatureEntry(record, sources, report) {
       size: capitalize(fields.size),
       environment:
         fields.environments.length > 0
-          ? fields.environments.map((slug) => environmentName(slug, sources.environments)).sort().slice(0, 24)
+          ? fields.environments
+              .map((slug) => environmentName(slug, sources.environments))
+              .sort()
+              .slice(0, 24)
           : undefined,
     }),
     creature,
@@ -1665,7 +1699,14 @@ function environmentName(slug, names) {
 // comment. Nothing here is typed by hand.
 
 /** Every challenge rating the scale has a rung for, as the SRD prints them. */
-const CHALLENGE_RATINGS = Object.freeze([0, 0.125, 0.25, 0.5, ...Array.from({ length: 24 }, (item, index) => index + 1), 30]);
+const CHALLENGE_RATINGS = Object.freeze([
+  0,
+  0.125,
+  0.25,
+  0.5,
+  ...Array.from({ length: 24 }, (item, index) => index + 1),
+  30,
+]);
 
 function challengeLabel(challenge) {
   if (challenge === 0.125) return "1/8";
@@ -1703,7 +1744,10 @@ function averageOfDamage(action) {
   const damage = action?.damage;
   if (!damage) return 0;
   const dice = damage.dice ? DICE_PATTERN.exec(damage.dice) : null;
-  return Math.max(0, averageOf({ count: dice ? Number(dice[1]) : 0, sides: dice ? Number(dice[2]) : 0, flat: damage.flat ?? 0 }));
+  return Math.max(
+    0,
+    averageOf({ count: dice ? Number(dice[1]) : 0, sides: dice ? Number(dice[2]) : 0, flat: damage.flat ?? 0 }),
+  );
 }
 
 /** Every save difficulty a creature's own actions name. */
@@ -1751,7 +1795,10 @@ function threatTiers(entries, report) {
   // A rating the SRD has no creature for takes the midpoint of the nearest measured rung on each
   // side, so the scale never has a hole an opponent could be clamped into.
   const filled = measured.map((tier, index) => {
-    const before = measured.slice(0, index).reverse().find((entry) => entry.count > 0);
+    const before = measured
+      .slice(0, index)
+      .reverse()
+      .find((entry) => entry.count > 0);
     const after = measured.slice(index + 1).find((entry) => entry.count > 0);
     const between = (pick) => {
       const low = before ? pick(before) : undefined;
@@ -2085,7 +2132,9 @@ for (const action of await fixture("CreatureAction.json")) {
 // A stat block prints its actions in one order, and the fixture says which, so a rebuild never
 // reshuffles a creature's menu.
 for (const list of creatureActions.values()) {
-  list.sort((left, right) => left.fields.order_in_statblock - right.fields.order_in_statblock || (left.pk < right.pk ? -1 : 1));
+  list.sort(
+    (left, right) => left.fields.order_in_statblock - right.fields.order_in_statblock || (left.pk < right.pk ? -1 : 1),
+  );
 }
 const creatureAttackRows = new Map();
 for (const row of await fixture("CreatureActionAttack.json")) {
@@ -2231,11 +2280,15 @@ console.log(
 // runs over the same fixtures print the same lines and a reviewer can diff them.
 
 const list = (items, limit = 8) =>
-  items.length === 0 ? "none" : `${items.slice(0, limit).join(", ")}${items.length > limit ? `, and ${items.length - limit} more` : ""}`;
+  items.length === 0
+    ? "none"
+    : `${items.slice(0, limit).join(", ")}${items.length > limit ? `, and ${items.length - limit} more` : ""}`;
 
 console.log("");
 console.log("Bestiary build report");
-console.log(`  ${creatures.length} of ${creatureRecords.length} SRD creatures shipped, ${report.skipped.length} left out`);
+console.log(
+  `  ${creatures.length} of ${creatureRecords.length} SRD creatures shipped, ${report.skipped.length} left out`,
+);
 for (const entry of report.skipped) console.log(`    left out: ${entry.id} — ${entry.reason}`);
 console.log(
   `  multiattack: ${report.multiattacksParsed} parsed into a sequence (${report.multiattacksFullyCarried} of them say nothing the sequence leaves out), ` +
@@ -2243,26 +2296,42 @@ console.log(
 );
 console.log(`    fell back: ${list(report.multiattacksFallenBack, 12)}`);
 console.log(`  ${report.legendaryReusingAnAttack} legendary action(s) reuse an attack the block already prints`);
-console.log(`  ${report.optionBlocksSplit} printed action(s) hold several options; the first is the action, the rest are traits`);
-console.log(`  damage clauses: ${report.foldedRiders} "plus" rider(s) and ${report.alternativeClauses} "or" alternative(s) kept as traits`);
+console.log(
+  `  ${report.optionBlocksSplit} printed action(s) hold several options; the first is the action, the rest are traits`,
+);
+console.log(
+  `  damage clauses: ${report.foldedRiders} "plus" rider(s) and ${report.alternativeClauses} "or" alternative(s) kept as traits`,
+);
 console.log(`  ${report.riderSavesNotCarried} attack rider save(s) name no condition this sheet has`);
 console.log(`  ${report.attacksThatOnlyApplyAConditionCount} attack(s) deal no damage and only apply a condition`);
-console.log(`  ${report.attacksWithNothingToResolve.length} attack(s) and ${report.savesWithNothingToResolve.length} save action(s) resolve to nothing and became traits`);
+console.log(
+  `  ${report.attacksWithNothingToResolve.length} attack(s) and ${report.savesWithNothingToResolve.length} save action(s) resolve to nothing and became traits`,
+);
 console.log(`    attacks: ${list(report.attacksWithNothingToResolve)}`);
 console.log(`    saves: ${list(report.savesWithNothingToResolve, 12)}`);
 console.log(
   `  ${report.actionsWithNeitherAttackNorSave} printed action(s) roll no attack and name no saving throw (summons, healing touches, auras) and became traits`,
 );
-console.log(`  traits: ${report.traitsShipped} shipped, ${report.traitsDropped} dropped over the ${CREATURE_MAX_TRAITS} a creature may carry`);
-console.log(`  ${report.conditionImmunitiesNotCarried} condition immunity/immunities and ${report.nonmagicalQualifiers} nonmagical-attack qualifier(s) became traits`);
+console.log(
+  `  traits: ${report.traitsShipped} shipped, ${report.traitsDropped} dropped over the ${CREATURE_MAX_TRAITS} a creature may carry`,
+);
+console.log(
+  `  ${report.conditionImmunitiesNotCarried} condition immunity/immunities and ${report.nonmagicalQualifiers} nonmagical-attack qualifier(s) became traits`,
+);
 console.log("  text against structured rows:");
 console.log(`    to hit: ${report.toHitDisagreements.length} disagreement(s) — ${list(report.toHitDisagreements)}`);
 console.log(`    dice: ${report.diceDisagreements.length} disagreement(s) — ${list(report.diceDisagreements, 6)}`);
 console.log(`    damage type: ${report.damageTypeDisagreements} disagreement(s)`);
-console.log(`    hit dice average against printed hit points: ${report.hitPointDisagreements.length} — ${list(report.hitPointDisagreements, 4)}`);
-console.log(`    ${report.creaturesWithoutHitDice.length} creature(s) print hit points but no hit dice — ${list(report.creaturesWithoutHitDice)}`);
+console.log(
+  `    hit dice average against printed hit points: ${report.hitPointDisagreements.length} — ${list(report.hitPointDisagreements, 4)}`,
+);
+console.log(
+  `    ${report.creaturesWithoutHitDice.length} creature(s) print hit points but no hit dice — ${list(report.creaturesWithoutHitDice)}`,
+);
 console.log("");
-console.log(`Threat scale: ${tiers.length} tiers, ${report.tiersFilledFromNeighbours.length} filled from neighbours (${list(report.tiersFilledFromNeighbours)})`);
+console.log(
+  `Threat scale: ${tiers.length} tiers, ${report.tiersFilledFromNeighbours.length} filled from neighbours (${list(report.tiersFilledFromNeighbours)})`,
+);
 console.log("  tier          n   health      defense  toHit  damage/round  save DC");
 for (const tier of tiers) {
   console.log(

@@ -11,7 +11,7 @@
   "id": "ruleset-5e-2014",
   "name": "5e (SRD 5.1)",
   "version": "0.5.0",
-  "description": "Provides 5e SRD 5.1 rules for Game Mode ability checks, skill checks, saving throws, and the full character sheet, plus pickable SRD spells, class features and weapons so you do not type them row by row. Class resources now keep themselves: pick Rage, Ki, Sorcery Points, Channel Divinity, Action Surge, Indomitable, Bardic Inspiration, Divine Sense or Lay on Hands and the sheet sets the maximum from your level or your Charisma and keeps it current as you level up. Battles start from the sheet: your hit points and spell slots go into the fight (Pact Magic slots do not), your prepared spells, your cantrips and the weapons you picked show up as skills, and what the fight cost is written back when it ends. Health is carried as a share of the maximum, the damage is still Marinara's own combat math, and attack rolls, saving throws and concentration are not applied. After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
+  "description": "Provides 5e SRD 5.1 rules for Game Mode ability checks, skill checks, saving throws, and the full character sheet, plus pickable SRD spells, class features and weapons so you do not type them row by row, and class resources the sheet keeps current as you level up. It now also describes 5e combat itself: the d20 attack roll with advantage, criticals and misses on the naturals, the action, bonus action and reaction a turn holds, your weapons and prepared spells as the things you do with them, the SRD conditions, concentration, death saves and the thirteen damage types, together with a bestiary of 321 SRD monsters and a challenge-rating scale measured from them. No Marinara Engine release plays a fight on that block yet: battles still start from the sheet and use Marinara's own combat math. After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
   "engine": {
     "min": "2.4.6",
     "maxExclusive": "4.0.0"
@@ -33,18 +33,23 @@
   "files": [
     {
       "path": "ruleset.json",
-      "sha256": "e61c7bf78d93717a50856b66e53c418cf1d800929629197e4f2f99e073c14d4d",
-      "bytes": 59629
+      "sha256": "76ce634b5de67b5f66d2065777e84378fb22bda3a9b639ede6b64934be4628ec",
+      "bytes": 73119
     },
     {
       "path": "catalogs/spells.json",
-      "sha256": "ca26bdb3231e565f166de2f41afd0dcbd96074a692e89e16e764f36c5bf1e38d",
-      "bytes": 307146
+      "sha256": "db049e43e5ff86dccf2288db9299dca4672f1ab4621af112574c44b30e5562ea",
+      "bytes": 311199
     },
     {
       "path": "catalogs/features.json",
-      "sha256": "f5461d01986872dbe3071eb34a3eb2383433a752a21d2f15c288c57c6a155524",
-      "bytes": 198169
+      "sha256": "5ae2e05546b1a4e15eec5ed8674cda89c1519a7dd4849801554a11017aabda03",
+      "bytes": 198188
+    },
+    {
+      "path": "catalogs/creatures.json",
+      "sha256": "fd669c35006b6ad6581b4a59cd7f1055a9d3477563d9548d1bb81833062cffd7",
+      "bytes": 668693
     }
   ],
   "permissions": [],

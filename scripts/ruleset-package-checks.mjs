@@ -332,7 +332,8 @@ export function assertRulesetCatalogs(manifest, document, catalogSources = new M
     seen.add(catalog.id);
     // A bestiary writes no rows, so it feeds no list; everything else names the lists it fills.
     if (catalog.holds === "creatures") {
-      if (catalog.feeds !== undefined) throw new Error(`${id} catalog "${catalog.id}" holds creatures, so it feeds no list`);
+      if (catalog.feeds !== undefined)
+        throw new Error(`${id} catalog "${catalog.id}" holds creatures, so it feeds no list`);
     } else if (!Array.isArray(catalog.feeds) || catalog.feeds.length === 0) {
       throw new Error(`${id} catalog "${catalog.id}" must feed at least one list`);
     }
@@ -633,7 +634,9 @@ export function assertRulesetCombat(manifest, document) {
     if (budgets.has(budget?.id)) throw new Error(`${id} combat repeats the budget "${budget.id}"`);
     budgets.add(budget?.id);
     if (budget?.per !== "turn" && budget?.per !== "round") {
-      throw new Error(`${id} combat budget "${budget?.id}" refills per turn or per round, not ${JSON.stringify(budget?.per)}`);
+      throw new Error(
+        `${id} combat budget "${budget?.id}" refills per turn or per round, not ${JSON.stringify(budget?.per)}`,
+      );
     }
   }
   const budget = (value, where) => {
@@ -680,7 +683,9 @@ export function assertRulesetCombat(manifest, document) {
     if (source.alwaysWhen !== undefined) {
       const column = columns.get(source.alwaysWhen?.column);
       if (!column) {
-        throw new Error(`${id} combat abilities alwaysWhen names unknown column ${JSON.stringify(source.alwaysWhen?.column)}`);
+        throw new Error(
+          `${id} combat abilities alwaysWhen names unknown column ${JSON.stringify(source.alwaysWhen?.column)}`,
+        );
       }
       const mismatch = columnEqualsIssue(column, source.alwaysWhen.equals);
       if (mismatch) throw new Error(`${id} combat abilities alwaysWhen ${mismatch}`);
@@ -719,7 +724,9 @@ export function assertRulesetCombat(manifest, document) {
 
   if (combat.concentration !== undefined) {
     if (!names.text.has(combat.concentration?.text)) {
-      throw new Error(`${id} combat concentration names unknown live text ${JSON.stringify(combat.concentration?.text)}`);
+      throw new Error(
+        `${id} combat concentration names unknown live text ${JSON.stringify(combat.concentration?.text)}`,
+      );
     }
     if (!names.saves.has(combat.concentration?.save)) {
       throw new Error(`${id} combat concentration names unknown save ${JSON.stringify(combat.concentration?.save)}`);
@@ -728,7 +735,8 @@ export function assertRulesetCombat(manifest, document) {
 
   if (combat.dying !== undefined) {
     const dying = combat.dying;
-    if (dying?.kind !== "saves") throw new Error(`${id} combat dying kind ${JSON.stringify(dying?.kind)} is not "saves"`);
+    if (dying?.kind !== "saves")
+      throw new Error(`${id} combat dying kind ${JSON.stringify(dying?.kind)} is not "saves"`);
     for (const key of ["successes", "failures"]) {
       if (!names.tracks.has(dying[key])) {
         throw new Error(`${id} combat dying ${key} names unknown track ${JSON.stringify(dying[key])}`);
@@ -741,7 +749,10 @@ export function assertRulesetCombat(manifest, document) {
       throw new Error(`${id} combat dying names unknown condition ${JSON.stringify(dying.condition)}`);
     }
     const dyingNaturals = dying.naturals ?? {};
-    if (!singleDie(dying.dice, "dying") && ((dyingNaturals.max ?? "none") !== "none" || (dyingNaturals.min ?? "none") !== "none")) {
+    if (
+      !singleDie(dying.dice, "dying") &&
+      ((dyingNaturals.max ?? "none") !== "none" || (dyingNaturals.min ?? "none") !== "none")
+    ) {
       throw new Error(`${id} combat dying naturals need a single die`);
     }
   }
@@ -767,7 +778,8 @@ export function assertRulesetCombat(manifest, document) {
         if (!Array.isArray(band) || band.length !== 2 || !band.every((value) => Number.isInteger(value))) {
           throw new Error(`${id} combat threat tier "${tier?.id}" ${key} is a pair of whole numbers`);
         }
-        if (band[0] > band[1]) throw new Error(`${id} combat threat tier "${tier.id}" ${key} lowest is above its highest`);
+        if (band[0] > band[1])
+          throw new Error(`${id} combat threat tier "${tier.id}" ${key} lowest is above its highest`);
       }
       for (const key of ["defense", "toHit", "saveDifficulty"]) {
         if (!Number.isInteger(tier?.[key])) {
@@ -794,7 +806,9 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
   const tiers = combat?.threat?.tiers ? new Set(combat.threat.tiers.map((tier) => tier.id)) : new Set();
   // Only checked where the ruleset says what its types are. One that declares none reads a type as
   // free text, exactly as a fight matches it.
-  const types = combat?.damageTypes ? new Set(combat.damageTypes.map((type) => String(type).trim().toLowerCase())) : null;
+  const types = combat?.damageTypes
+    ? new Set(combat.damageTypes.map((type) => String(type).trim().toLowerCase()))
+    : null;
 
   let count = 0;
   for (const catalog of catalogs) {
@@ -831,7 +845,8 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
         throw new Error(`${where} says what it does in its own actions, so it carries no mechanics`);
       }
       count += 1;
-      if (!tiers.has(creature.tier)) throw new Error(`${where} names unknown threat tier ${JSON.stringify(creature.tier)}`);
+      if (!tiers.has(creature.tier))
+        throw new Error(`${where} names unknown threat tier ${JSON.stringify(creature.tier)}`);
       for (const ability of Object.keys(creature.abilities ?? {})) {
         if (!names.abilities.has(ability)) throw new Error(`${where} names unknown ability ${JSON.stringify(ability)}`);
       }
@@ -841,7 +856,7 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
       for (const key of ["resist", "vulnerable", "immune"]) {
         for (const type of creature[key] ?? []) {
           if (types && !types.has(String(type).trim().toLowerCase())) {
-            throw new Error(`${where} ${key}s unknown damage type ${JSON.stringify(type)}`);
+            throw new Error(`${where} is ${key} to unknown damage type ${JSON.stringify(type)}`);
           }
         }
       }
@@ -851,7 +866,9 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
         }
       }
       if ((creature.traits ?? []).length > RULESET_CREATURE_MAX_TRAITS) {
-        throw new Error(`${where} carries ${creature.traits.length} traits, over the ${RULESET_CREATURE_MAX_TRAITS} limit`);
+        throw new Error(
+          `${where} carries ${creature.traits.length} traits, over the ${RULESET_CREATURE_MAX_TRAITS} limit`,
+        );
       }
       const actions = creature.actions;
       if (!Array.isArray(actions) || actions.length === 0 || actions.length > RULESET_CREATURE_MAX_ACTIONS) {
@@ -867,7 +884,8 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
       }
       for (const action of actions) {
         const at = `${where} action "${action.id}"`;
-        if (!budgets.has(action.budget)) throw new Error(`${at} spends unknown budget ${JSON.stringify(action.budget)}`);
+        if (!budgets.has(action.budget))
+          throw new Error(`${at} spends unknown budget ${JSON.stringify(action.budget)}`);
         if (action.damage?.type && types && !types.has(String(action.damage.type).trim().toLowerCase())) {
           throw new Error(`${at} deals unknown damage type ${JSON.stringify(action.damage.type)}`);
         }
@@ -889,11 +907,17 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
             throw new Error(`${at} applies "${entryApplies.condition}" until a save it does not name`);
           }
           if (entryApplies.saveEnds && !names.saves.has(entryApplies.saveEnds.save)) {
-            throw new Error(`${at} ends "${entryApplies.condition}" on unknown save ${JSON.stringify(entryApplies.saveEnds.save)}`);
+            throw new Error(
+              `${at} ends "${entryApplies.condition}" on unknown save ${JSON.stringify(entryApplies.saveEnds.save)}`,
+            );
           }
         }
         // A save with nothing to be rolled against is a save everybody passes.
-        if (!action.save && action.saveDifficulty === undefined && applies.some((entryApplies) => entryApplies.saveEnds)) {
+        if (
+          !action.save &&
+          action.saveDifficulty === undefined &&
+          applies.some((entryApplies) => entryApplies.saveEnds)
+        ) {
           throw new Error(`${at} ends a condition on a save with no difficulty to roll against`);
         }
         if (!action.sequence) continue;

@@ -11,6 +11,8 @@ import {
   assertRulesetAssetDocument,
   assertRulesetBattle,
   assertRulesetCatalogs,
+  assertRulesetCombat,
+  assertRulesetCreatures,
   assertRulesetPackageContract,
   assertRulesetScaled,
   isRulesetCatalogAssetPath,
@@ -786,6 +788,683 @@ for (const [table, message] of [
   const document = scaledDocument([scaledEntry({ max: { from: { field: "level" }, table } })]);
   if (message) assert.throws(() => assertRulesetScaled(scaledManifest, document), message, JSON.stringify(table));
   else assert.doesNotThrow(() => assertRulesetScaled(scaledManifest, document), JSON.stringify(table));
+}
+
+// ── Combat (Capability API 1.26) and creatures (1.27) ──
+//
+// A combat block is nothing but references into the sheet beside it, and a creature is written
+// entirely in the combat block's own names, so the same pinning applies once more: each rejection
+// is a package that would install and then be a missing number in the middle of a turn, or one an
+// Engine that predates the key would refuse outright. These mirror the Engine's own rules and are
+// never stricter than them: that was the review lesson on 0.3.0 and 0.4.0.
+
+// The package as committed opts into both, and everything they name holds together.
+assert.equal(assertRulesetCombat(shippedManifest, parsedAsset), true);
+assert.ok(
+  assertRulesetCreatures(shippedManifest, parsedAsset, shippedCatalogSources) > 300,
+  "the shipped bestiary must carry the SRD creatures",
+);
+
+const combatSheet = {
+  fields: [
+    { id: "ac", label: "Armor Class", type: "number" },
+    { id: "speed", label: "Speed", type: "number" },
+    { id: "mood", label: "Mood", type: "text" },
+  ],
+  derived: [{ id: "initiative", label: "Initiative" }],
+  abilities: [{ id: "str", label: "Strength" }],
+  skills: [],
+  saves: [{ id: "str_save", label: "Strength save" }],
+  lists: [
+    {
+      id: "attacks",
+      label: "Attacks",
+      columns: [
+        { id: "name", label: "Name", type: "text" },
+        { id: "ability", label: "Ability", type: "enum", values: ["str"] },
+        { id: "proficient", label: "Proficient", type: "boolean" },
+        { id: "bonus", label: "Bonus", type: "number" },
+        { id: "damage", label: "Damage", type: "dice" },
+        { id: "damage_type", label: "Damage type", type: "text" },
+      ],
+    },
+    {
+      id: "spells",
+      label: "Spells",
+      columns: [
+        { id: "name", label: "Name", type: "text" },
+        { id: "level", label: "Level", type: "number" },
+        { id: "prepared", label: "Prepared", type: "boolean" },
+      ],
+    },
+  ],
+  live: {
+    pools: [{ id: "hp" }, { id: "stress", start: "empty" }],
+    tracks: [{ id: "wins" }, { id: "losses" }],
+    text: [{ id: "concentration" }],
+    conditions: [{ id: "prone" }, { id: "stunned" }],
+  },
+};
+const combatBlock = {
+  kind: "attack-vs-defense",
+  health: { pool: "hp" },
+  defense: { field: "ac" },
+  initiative: { dice: { count: 1, sides: 20 }, modifier: { derived: "initiative" } },
+  attackRoll: { dice: { count: 1, sides: 20 }, advantage: true, naturals: { max: "critical", min: "miss" } },
+  economy: {
+    budgets: [
+      { id: "action", label: "Action", per: "turn", count: 1 },
+      { id: "bonus", label: "Bonus action", per: "turn", count: 1 },
+    ],
+    movement: { field: "speed" },
+  },
+  attacks: [
+    {
+      list: "attacks",
+      budget: "action",
+      name: "name",
+      toHit: { ability: { column: "ability" }, proficiency: { column: "proficient" }, bonus: { column: "bonus" } },
+      damage: { dice: { column: "damage" }, ability: { column: "ability" }, type: { column: "damage_type" } },
+    },
+  ],
+  abilities: [{ list: "spells", onlyWhen: "prepared", alwaysWhen: { column: "level", equals: 0 }, budget: "action" }],
+  standard: ["dodge", "help"],
+  conditions: [{ condition: "prone", effects: ["own-attacks-disadvantage"] }],
+  concentration: { text: "concentration", save: "str_save", floor: 10, fromDamage: 0.5 },
+  dying: { kind: "saves", successes: "wins", failures: "losses", dice: { count: 1, sides: 20 }, succeedAt: 10 },
+  damageTypes: ["fire", "cold"],
+  threat: {
+    tiers: [
+      { id: "low", label: "Low", health: [1, 10], defense: 12, toHit: 3, damagePerRound: [1, 4], saveDifficulty: 11 },
+    ],
+  },
+};
+const combatDocument = (combat) => ({ id: "test", version: 1, name: "Test", sheet: combatSheet, combat });
+const combatManifest = rulesetManifest({ capabilityApi: { major: 1, minor: 26 } });
+/** The shipped block with one thing changed, so every rejection has exactly one cause. */
+const combatWith = (edit) => {
+  const combat = structuredClone(combatBlock);
+  edit(combat);
+  return combatDocument(combat);
+};
+
+assert.equal(assertRulesetCombat(combatManifest, combatDocument(combatBlock)), true);
+// A ruleset with no combat block at all is untouched, and needs no 1.26.
+assert.equal(assertRulesetCombat(rulesetManifest(), combatDocument(undefined)), false);
+assert.throws(
+  () => assertRulesetCombat(rulesetManifest({ capabilityApi: { major: 1, minor: 25 } }), combatDocument(combatBlock)),
+  /ships a combat block and must declare capability API 1\.26 or newer/u,
+);
+assert.doesNotThrow(() =>
+  assertRulesetCombat(rulesetManifest({ capabilityApi: { major: 2, minor: 0 } }), combatDocument(combatBlock)),
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.kind = "clash")),
+    ),
+  /combat kind "clash" is not one the Engine resolves/u,
+);
+
+// The pools, fields and derived values a fight reads have to be on the sheet beside it.
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.health = { pool: "vigor" })),
+    ),
+  /combat health names unknown live pool "vigor"/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.health = { pool: "stress" })),
+    ),
+  /combat health pool "stress" starts empty, so it cannot be hit points/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.defense = { field: "guard" })),
+    ),
+  /combat defense names unknown field "guard"/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.defense = { field: "mood" })),
+    ),
+  /combat defense field "mood" is not a number/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.initiative.modifier = { derived: "wits" })),
+    ),
+  /combat initiative modifier names unknown derived value "wits"/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.economy.movement = { field: "pace" })),
+    ),
+  /combat economy movement names unknown field "pace"/u,
+);
+// A natural result is one face of one die, exactly as it is for a check.
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.attackRoll.dice = { count: 2, sides: 6 })),
+    ),
+  /combat attack roll naturals need a single die/u,
+);
+assert.doesNotThrow(() =>
+  assertRulesetCombat(
+    combatManifest,
+    combatWith((combat) => {
+      combat.attackRoll.dice = { count: 2, sides: 6 };
+      combat.attackRoll.naturals = { max: "none", min: "none" };
+    }),
+  ),
+);
+
+// The action economy: budgets are named once, and everything that spends one names a declared one.
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.economy.budgets = [])),
+    ),
+  /combat economy declares 1 to 8 budgets/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.economy.budgets[1].id = "action")),
+    ),
+  /combat repeats the budget "action"/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.economy.budgets[0].per = "fight")),
+    ),
+  /combat budget "action" refills per turn or per round/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.attacks[0].budget = "swing")),
+    ),
+  /combat attacks "attacks" budget names unknown budget "swing"/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.abilities[0].budget = "swing")),
+    ),
+  /combat abilities "spells" budget names unknown budget "swing"/u,
+);
+
+// Weapons: every column a fight reads a number out of has to be the right sort of column.
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.attacks[0].list = "gear")),
+    ),
+  /combat attacks name unknown list "gear"/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.attacks[0].name = "bonus")),
+    ),
+  /combat attacks name must name a text column, not number/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.attacks[0].damage.dice.column = "name")),
+    ),
+  /combat attacks damage dice must name a dice column, not text/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.attacks[0].damage.dice.column = "swing")),
+    ),
+  /combat attacks damage dice names unknown column "swing"/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => delete combat.attacks[0].damage.dice),
+    ),
+  /combat attacks "attacks" must name the dice column its rows are rolled from/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.attacks[0].toHit.ability.column = "name")),
+    ),
+  /combat attacks toHit ability must name a enum column, not text/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.attacks[0].toHit.proficiency.column = "bonus")),
+    ),
+  /combat attacks toHit proficiency must name a boolean column, not number/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.attacks[0].damage.type.column = "bonus")),
+    ),
+  /combat attacks damage type must name a text or enum column, not number/u,
+);
+
+// Abilities are gated exactly as battle skills are, and roll against references the sheet has.
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.abilities[0].onlyWhen = "level")),
+    ),
+  /combat abilities onlyWhen "level" must name a boolean column/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => delete combat.abilities[0].onlyWhen),
+    ),
+  /combat abilities alwaysWhen is the exception to onlyWhen, so it needs onlyWhen beside it/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.abilities[0].alwaysWhen.equals = "0")),
+    ),
+  /combat abilities alwaysWhen "level" is a number column, so equals must be a number/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.abilities[0].toHit = { derived: "aim" })),
+    ),
+  /combat abilities "spells" toHit names unknown derived value "aim"/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.abilities[0].saveDifficulty = { field: "dc" })),
+    ),
+  /combat abilities "spells" saveDifficulty names unknown field "dc"/u,
+);
+
+// The closed vocabularies: standard actions, condition effects, and the names both point at.
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.standard = ["sprint"])),
+    ),
+  /combat standard action "sprint" is not one the Engine resolves/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.standard = ["dodge", "dodge"])),
+    ),
+  /combat repeats the standard action "dodge"/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.conditions[0].condition = "hexed")),
+    ),
+  /combat maps unknown condition "hexed"/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => combat.conditions.push(combat.conditions[0])),
+    ),
+  /combat repeats the condition "prone"/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.conditions[0].effects = ["trips"])),
+    ),
+  /combat condition "prone" has the unknown effect "trips"/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.conditions[0].failsSaves = ["luck_save"])),
+    ),
+  /combat condition "prone" fails unknown save "luck_save"/u,
+);
+
+// Concentration, dying and the damage types.
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.concentration.text = "holding")),
+    ),
+  /combat concentration names unknown live text "holding"/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.concentration.save = "luck_save")),
+    ),
+  /combat concentration names unknown save "luck_save"/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.dying.kind = "bleeding")),
+    ),
+  /combat dying kind "bleeding" is not "saves"/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.dying.successes = "saves")),
+    ),
+  /combat dying successes names unknown track "saves"/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.dying.failures = "wins")),
+    ),
+  /combat dying counts successes and failures on two different tracks/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.dying.condition = "hexed")),
+    ),
+  /combat dying names unknown condition "hexed"/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => {
+        combat.dying.dice = { count: 2, sides: 10 };
+        combat.dying.naturals = { max: "revive-1" };
+      }),
+    ),
+  /combat dying naturals need a single die/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.damageTypes = ["fire", "Fire"])),
+    ),
+  /combat repeats the damage type "Fire"/u,
+);
+
+// The threat scale: one rung per id, and a band whose lowest is really the lowest.
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.threat.tiers = [])),
+    ),
+  /combat threat declares 1 to 40 tiers/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => combat.threat.tiers.push(combat.threat.tiers[0])),
+    ),
+  /combat threat repeats the tier "low"/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.threat.tiers[0].health = [10, 1])),
+    ),
+  /combat threat tier "low" health lowest is above its highest/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.threat.tiers[0].damagePerRound = [9, 4])),
+    ),
+  /combat threat tier "low" damagePerRound lowest is above its highest/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.threat.tiers[0].health = [1, 10.5])),
+    ),
+  /combat threat tier "low" health is a pair of whole numbers/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      combatManifest,
+      combatWith((combat) => (combat.threat.tiers[0].toHit = "3")),
+    ),
+  /combat threat tier "low" toHit is a whole number/u,
+);
+
+// ── Creatures ──
+
+const creature = () => ({
+  health: { dice: "3d8", flat: 3 },
+  defense: 12,
+  initiativeModifier: 1,
+  speed: 30,
+  abilities: { str: 12 },
+  saves: { str_save: 3 },
+  resist: ["fire"],
+  conditionImmunities: ["prone"],
+  tier: "low",
+  traits: [{ name: "Wary", text: "It watches the door." }],
+  actions: [
+    { id: "bite", name: "Bite", budget: "action", toHit: 3, damage: { dice: "1d6", flat: 1, type: "fire" } },
+    {
+      id: "howl",
+      name: "Howl",
+      budget: "action",
+      save: { save: "str_save", difficulty: 11, onSuccess: "half" },
+      damage: { dice: "1d4", type: "cold" },
+      applies: [{ condition: "stunned", duration: "until-save", saveEnds: { save: "str_save", at: "turn-end" } }],
+    },
+    { id: "both", name: "Bite and howl", budget: "action", sequence: [{ action: "bite", times: 2 }] },
+  ],
+});
+const bestiaryDocument = (edit = () => {}, header = {}) => {
+  const block = creature();
+  edit(block);
+  return {
+    id: "test",
+    version: 1,
+    name: "Test",
+    sheet: combatSheet,
+    combat: combatBlock,
+    catalogs: [
+      {
+        id: "beasts",
+        label: "Beasts",
+        holds: "creatures",
+        entries: [{ id: "hound", label: "Hound", creature: block }],
+        ...header,
+      },
+    ],
+  };
+};
+const creatureManifest = rulesetManifest({ capabilityApi: { major: 1, minor: 27 } });
+
+assert.equal(assertRulesetCreatures(creatureManifest, bestiaryDocument()), 1);
+// A ruleset with no bestiary at all is untouched, and needs no 1.27.
+assert.equal(assertRulesetCreatures(rulesetManifest(), combatDocument(combatBlock)), 0);
+assert.throws(
+  () => assertRulesetCreatures(rulesetManifest({ capabilityApi: { major: 1, minor: 26 } }), bestiaryDocument()),
+  /ships a bestiary and must declare capability API 1\.27 or newer/u,
+);
+// A bestiary writes no rows, so it feeds no list, and it needs a fight to be written in.
+assert.throws(
+  () =>
+    assertRulesetCreatures(
+      creatureManifest,
+      bestiaryDocument(() => {}, { feeds: ["attacks"] }),
+    ),
+  /catalog "beasts" holds creatures, so it feeds no list/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCreatures(creatureManifest, {
+      ...bestiaryDocument(),
+      combat: undefined,
+    }),
+  /catalog "beasts" holds creatures, which need a combat block to be written in/u,
+);
+// Rows and creatures never mix, in either direction.
+assert.throws(
+  () =>
+    assertRulesetCreatures(creatureManifest, {
+      ...bestiaryDocument(),
+      catalogs: [
+        {
+          id: "gear",
+          label: "Gear",
+          feeds: ["attacks"],
+          entries: [{ id: "hound", label: "Hound", creature: creature() }],
+        },
+      ],
+    }),
+  /catalog "gear" holds rows, so entry "hound" cannot carry a creature/u,
+);
+for (const [edit, message] of [
+  [(entry) => delete entry.creature, /carries no creature, and this catalog holds creatures/u],
+  [(entry) => (entry.rows = [{ list: "attacks", values: {} }]), /has both rows and a creature/u],
+  [(entry) => (entry.mechanics = { kind: "attack" }), /says what it does in its own actions/u],
+]) {
+  const document = bestiaryDocument();
+  edit(document.catalogs[0].entries[0]);
+  assert.throws(() => assertRulesetCreatures(creatureManifest, document), message);
+}
+
+// Every name a creature carries is one the ruleset already has.
+for (const [edit, message] of [
+  [(block) => (block.tier = "deadly"), /names unknown threat tier "deadly"/u],
+  [(block) => (block.abilities = { grit: 3 }), /names unknown ability "grit"/u],
+  [(block) => (block.saves = { luck_save: 3 }), /names unknown save "luck_save"/u],
+  [(block) => (block.resist = ["starfire"]), /is resist to unknown damage type "starfire"/u],
+  [(block) => (block.immune = ["starfire"]), /is immune to unknown damage type "starfire"/u],
+  [(block) => (block.vulnerable = ["starfire"]), /is vulnerable to unknown damage type "starfire"/u],
+  [(block) => (block.conditionImmunities = ["hexed"]), /is immune to unknown condition "hexed"/u],
+  [
+    (block) => (block.traits = Array.from({ length: 9 }, () => ({ name: "A", text: "B" }))),
+    /carries 9 traits, over the 8 limit/u,
+  ],
+  [(block) => (block.actions = []), /carries 1 to 12 actions, not 0/u],
+  [(block) => (block.actions[1].id = "bite"), /repeats the action id "bite"/u],
+  [(block) => (block.actions[0].budget = "swing"), /spends unknown budget "swing"/u],
+  [(block) => (block.actions[0].damage.type = "starfire"), /deals unknown damage type "starfire"/u],
+  [(block) => (block.actions[1].save.save = "luck_save"), /forces unknown save "luck_save"/u],
+  [
+    (block) => (block.actions[1].saveDifficulty = 12),
+    /has a save of its own, and that save's difficulty is what a save-ends uses/u,
+  ],
+  [(block) => (block.actions[1].applies[0].condition = "hexed"), /applies unknown condition "hexed"/u],
+  [(block) => (block.actions[1].applies[0].saveEnds.save = "luck_save"), /ends "stunned" on unknown save "luck_save"/u],
+  [(block) => delete block.actions[1].applies[0].saveEnds, /applies "stunned" until a save it does not name/u],
+  [
+    (block) => {
+      delete block.actions[1].save;
+      delete block.actions[1].damage;
+      block.actions[1].autoHit = true;
+    },
+    /ends a condition on a save with no difficulty to roll against/u,
+  ],
+  [(block) => (block.actions[2].toHit = 3), /is a sequence, so it carries no toHit of its own/u],
+  [(block) => (block.actions[2].sequence = []), /names 1 to 6 steps, not 0/u],
+  [(block) => (block.actions[2].sequence[0].action = "a_stranger"), /names unknown action "a_stranger"/u],
+  [(block) => (block.actions[2].sequence[0].action = "both"), /names itself/u],
+  [
+    (block) => {
+      block.actions.push({ id: "again", name: "Again", budget: "action", sequence: [{ action: "both", times: 1 }] });
+    },
+    /names "both", and a sequence cannot name another/u,
+  ],
+  [
+    (block) => {
+      block.actions[0].signature = { cost: 1 };
+    },
+    /buys an action with points but declares no signaturePoints/u,
+  ],
+]) {
+  assert.throws(() => assertRulesetCreatures(creatureManifest, bestiaryDocument(edit)), message, String(message));
+}
+// Points declared beside an action bought with them is the shape that passes.
+assert.doesNotThrow(() =>
+  assertRulesetCreatures(
+    creatureManifest,
+    bestiaryDocument((block) => {
+      block.actions[0].signature = { cost: 1 };
+      block.signaturePoints = 3;
+    }),
+  ),
+);
+// A bestiary shipped as its own asset is read exactly the same way.
+{
+  const document = bestiaryDocument();
+  const inline = document.catalogs[0].entries;
+  document.catalogs[0] = { id: "beasts", label: "Beasts", holds: "creatures", asset: "catalogs/beasts.json" };
+  const sources = new Map([
+    ["catalogs/beasts.json", JSON.stringify({ schemaVersion: 1, catalog: "beasts", entries: inline })],
+  ]);
+  assert.equal(assertRulesetCreatures(creatureManifest, document, sources), 1);
+  // An asset this check cannot read is assertRulesetCatalogs' rejection to make, with a better message.
+  assert.equal(assertRulesetCreatures(creatureManifest, document, new Map()), 0);
 }
 
 // The published artifact must be reproducible: the same manifest and asset bytes

@@ -6,12 +6,12 @@ slots, hit dice, class resources, conditions, rests, and a full character sheet.
 the sheet's own hit points and spell slots, but the combat arithmetic is still Marinara's, not 5e
 combat.
 
-Requires **Marinara Engine 2.4.6+ with Capability API 1.23** (the ruleset seam, catalogs, the
-battle block, and scaled catalog columns: hash-pinned `ruleset.json` and `catalogs/<id>.json`
-assets the Engine reads by reserved filename, exactly like `gm-verbs.json`). Today that means the
-Engine `staging` branch; older hosts reject the manifest and cannot install this package. This
-package ships no server entrypoint, no client entrypoint, and no Agent. It is pure data: nothing
-here runs code, and no restart is needed after install.
+Requires **Marinara Engine 2.4.6+ with Capability API 1.27** (the ruleset seam, catalogs, the
+battle block, scaled catalog columns, the combat block and bestiaries: hash-pinned `ruleset.json`
+and `catalogs/<id>.json` assets the Engine reads by reserved filename, exactly like
+`gm-verbs.json`). Today that means the Engine `staging` branch; older hosts reject the manifest and
+cannot install this package. This package ships no server entrypoint, no client entrypoint, and no
+Agent. It is pure data: nothing here runs code, and no restart is needed after install.
 
 ## What it contains
 
@@ -27,6 +27,7 @@ here runs code, and no restart is needed after install.
 - Short and long rest recovery rules.
 - GM guidance text for when to call for a check or save and how to read the sheet.
 - A `battle` block: what a fight may read from the sheet, and what it writes back.
+- A `combat` block: how a fight is resolved by 5e's own rules. See 5e combat below.
 
 Every id in `ruleset.json` (`level`, `dex`, `slots`, and so on) is this file's own naming choice.
 The Engine does not look for 5e-specific names; it reads the same closed set of resolution kinds
@@ -35,13 +36,17 @@ and sheet primitives that any ruleset package can use.
 ## Catalogs
 
 A catalog is a collection of ready-made entries the sheet editor offers in a picker, so you do not
-type a spell list or a page of class features row by row. This package ships three:
+type a spell list or a page of class features row by row. This package ships four:
 
 | Catalog | Entries | Fills | Ships as |
 | --- | --- | --- | --- |
 | Spells | 319 | Spells | `catalogs/spells.json` |
 | Class features | 208 | Features and traits, Class resources | `catalogs/features.json` |
 | Weapons | 36 | Attacks | inline in `ruleset.json` |
+| Creatures | 321 | nothing: it is a bestiary | `catalogs/creatures.json` |
+
+The bestiary is the odd one out. It writes no rows onto anyone's sheet, so the picker never offers
+it; it is the other side of a fight, and the Creatures section below says what is in it.
 
 **A picked row is a copy.** It is yours from that moment: edit the numbers, rename it, delete it.
 Your sheet keeps working while this package is uninstalled, and a later version of the package
@@ -83,9 +88,9 @@ your own number, delete the picked row and type one: a row you typed is never ke
 **Armor is not a catalog.** A catalog fills a list, and armor sets the sheet's Armor Class field,
 which is not a list. Set **Armor Class** by hand on the Combat section of the sheet.
 
-`catalogs/spells.json` and `catalogs/features.json` are generated. Rebuild them with
-`node scripts/build-5e-srd-catalogs.mjs --source <fixtures dir>` from the repository root; do not
-hand-edit them. The source, and the commit it was taken at, is recorded in each file and in
+The catalog files, the inline weapon catalog and the `combat` block are all generated. Rebuild them
+with `node scripts/build-5e-srd-catalogs.mjs --source <fixtures dir>` from the repository root; do
+not hand-edit them. The source, and the commit it was taken at, is recorded in each file and in
 [LICENSE-SRD.md](LICENSE-SRD.md).
 
 ## Battles
@@ -104,9 +109,10 @@ points starts at half of the health bar Marinara built for them, so an 8-point l
 killed by the first blow. Everything else about the fight stays Marinara's: maximum hit points,
 attack, defense, speed and level, and all of the damage arithmetic.
 
-**This is not a 5e combat system.** Attack rolls, saving throws, concentration, and what a higher
-slot would add are recorded on the catalog entries and applied by nobody. `coverage.combat` is
-still `false` and means what it always meant.
+**The battle bridge is not a 5e combat system.** Attack rolls, saving throws, concentration, and
+what a higher slot would add are recorded on the catalog entries and applied by nobody. The block
+that does say how 5e resolves a fight is `combat`, below, and no Engine release plays on that one
+yet either. `coverage.combat` is still `false` and means what it always meant.
 
 **Only catalog rows become skills.** A row you typed by hand has no numbers behind it, so it brings
 nothing into the fight. Utility entries and reactions (Shield) stay out too, because Marinara's
@@ -123,19 +129,98 @@ shared among any number of creatures rather than what one target regains.
 
 The `battle` block is hand-authored and sits **above** `catalogs` in `ruleset.json`, because the
 converter rewrites the catalogs key and every byte after it. The converter refuses to run when the
-block has drifted below.
+block has drifted below. The `combat` block is generated and sits below, because its threat scale
+is measured from the bestiary; the converter refuses to run when one has been typed above.
+
+## 5e combat
+
+`ruleset.json` also carries a `combat` block, which is the other thing entirely: it says how a
+fight is **resolved** by 5e's rules rather than what a fight may borrow from the sheet.
+
+**No Marinara Engine release plays a fight on it yet.** There is no screen, no menu and no saved
+battle behind it. A game using this ruleset still fights exactly the way it did before. This
+release is the data, written now so it is ready for the release that reads it. `coverage.combat`
+is still `false` and means what it always meant.
+
+What the block says:
+
+- Hit points are the sheet's own pool, with its temporary points. Armour Class is the defense.
+  Initiative is a d20 plus the sheet's Initiative.
+- The attack roll is a d20 with advantage and disadvantage. A natural 20 always hits and is a
+  critical, which rolls the damage dice twice. A natural 1 always misses.
+- A turn holds an action, a bonus action and a reaction, and movement comes from your Speed.
+- Your Attacks list is your weapons: the ability, the proficiency tick, the other bonus, the dice
+  and the damage type are all read off the row.
+- Your prepared spells, your cantrips and the class features you picked are the things you do with
+  an action, rolling the sheet's Spell attack bonus and asking for its Spell save DC.
+- The six standard actions, eleven of the fourteen SRD conditions, concentration (a Constitution
+  save at DC 10 or half the damage, whichever is higher), death saves (three and three, a natural
+  20 brings you back up at one hit point, a natural 1 counts twice, a blow while down costs a
+  failure and a critical costs two) and the thirteen damage types.
+- A challenge-rating scale, `threat`, measured from the bestiary at build time. It exists so an
+  opponent a Game Master invents can be pulled onto it. Nothing in this package's own bestiary is
+  ever clamped to it.
+
+### Creatures
+
+`catalogs/creatures.json` is 321 of the 325 SRD 5.1 monsters, each written in the numbers above:
+hit dice a fight rolls, armour class, speed, ability scores, saving throw bonuses, resistances,
+vulnerabilities, immunities, condition immunities, the challenge rating it sits at, its attacks and
+saving-throw actions, its multiattack as one action that strikes several times, breath weapons that
+recharge, and legendary actions bought from a pool of three points.
+
+Every number is read off the **printed stat block**, never off the machine-readable attack rows
+beside it, because those say the damage type is thunder on 514 of the SRD's attacks and leave the
+flat bonus out of 475 of them.
+
+Four creatures are left out, because the Engine's format needs a creature to have at least one
+action a fight can resolve and these have none: **Donkey**, **Frog**, **Sea Horse** (the source
+gives them no action at all) and **Shrieker** (its only action is a noise).
+
+### What is written down but not resolved
+
+Said plainly, because a ruleset should not claim what the Engine does not do:
+
+- **Nothing is playable.** No screen, no saved battle, no opponent that picks its own actions.
+- **No positions.** Reach, range, areas, cover and movement are carried and read by nobody, so an
+  area action says how many targets it takes instead: two for a line, three for a cone or a sphere,
+  two for anything else that says "each creature". Those are deliberately low, chosen once, and they
+  are the one place in the bestiary where a number is not the SRD's own.
+- **No reactions**, so a reaction spell such as Shield is left off the menu and a creature's printed
+  reactions are traits.
+- **Charmed and deafened** have no effect the Engine's closed list can express, so they stay plain
+  records on the sheet. So does exhaustion, which this sheet counts on a track rather than as a
+  condition, so a creature immune to it says so in a trait.
+- **One damage roll per action.** An SRD attack that deals a second helping of a different type
+  ("plus 7 (2d6) fire damage") keeps the first and says the rest in a trait: 64 of them. So does an
+  attack that prints an alternative ("or 8 (1d10 + 3) if used with two hands", "or 5 (2d4) if the
+  swarm has half its hit points"), which is a choice a fight has no way to make: 61 of them.
+- **Spellcasting monsters** are traits. A stat block's spell list is not something a creature action
+  can hold.
+- **A creature cannot heal.** An action such as the deva's Healing Touch is a trait.
+- **No qualifiers.** "Bludgeoning, piercing and slashing from nonmagical attacks" is carried as
+  plain resistance to those three types with a trait saying so, because a fight cannot ask whether a
+  weapon is magical. 57 creatures carry that trait.
+- **Second Wind** heals 1d10 and not the "+ your fighter level" the SRD adds, because an amount here
+  grows in dice and not in a flat number.
+- **A class feature's own difficulty** is not the spell save DC, so the Features list rolls neither
+  to hit nor against a difficulty. No entry this package ships needs one; an entry that did would
+  stop the build rather than borrow the caster's number.
+- **Extra Attack, Action Surge, Cunning Action and Sneak Attack** are text on your sheet and nothing
+  more. The Engine's format has no way to say "attack twice with one action", to hand a turn a
+  second action, or to add damage when a condition holds.
 
 ## Status
 
 Available to Engine `staging` users only. The package is listed in `STAGING_ONLY_PACKAGE_IDS`, so
 it is published to the preview overlay under `catalog/preview/` that staging Engines read, and is
-hidden from stable `main` users. It stays there until the Capability API 1.23 ruleset, catalog,
-battle and scaled-column seam reaches a stable Engine release.
+hidden from stable `main` users. It stays there until the Capability API 1.27 ruleset, catalog,
+battle, scaled-column, combat and bestiary seam reaches a stable Engine release.
 
 ## Installing
 
 Install it from **Agents** and **Download Agents** in a Marinara Engine build that supports
-Capability API 1.23. After installing, choose it under Rules in the Game Mode setup wizard when you
+Capability API 1.27. After installing, choose it under Rules in the Game Mode setup wizard when you
 create a new game.
 
 ## License
