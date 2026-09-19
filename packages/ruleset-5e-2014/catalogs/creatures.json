@@ -1280,7 +1280,6 @@
             "budget": "action",
             "damage": { "dice": "3d8", "flat": 2, "type": "bludgeoning" },
             "save": { "save": "str_save", "difficulty": 13, "onSuccess": "negates" },
-            "applies": [{ "condition": "prone", "duration": "instant" }],
             "targetCount": 2
           }
         ]
@@ -3270,6 +3269,10 @@
         "tier": "cr_3",
         "traits": [
           {
+            "name": "Glaive",
+            "text": "Hit: 8 (1d10 + 3) slashing damage. If the target is a creature other than an undead or a construct, it must succeed on a DC 12 Constitution saving throw or lose 5 (1d10) hit points at the start of each of its turns due to an infernal wound. Each time the devil hits the wounded target with this attack, the damage dealt by the wound increases by 5 (1d10). See the SRD for the full text."
+          },
+          {
             "name": "Nonmagical attacks",
             "text": "cold; bludgeoning, piercing, and slashing from nonmagical attacks not made with silvered weapons A fight has no way to ask whether a weapon is magical, so this qualifier is not applied."
           },
@@ -4346,6 +4349,10 @@
         "tier": "cr_9",
         "traits": [
           {
+            "name": "Slam",
+            "text": "Hit: 16 (2d10 + 5) bludgeoning damage. If the target is a creature, it must succeed on a DC 15 Constitution saving throw or have its hit point maximum reduced by an amount equal to the damage taken. The target dies if this attack reduces its hit point maximum to 0. The reduction lasts until removed by the greater restoration spell or other magic."
+          },
+          {
             "name": "Haste",
             "text": "Until the end of its next turn, the golem magically gains a +2 bonus to its AC, has advantage on Dexterity saving throws, and can use its slam attack as a bonus action."
           },
@@ -4369,8 +4376,7 @@
           {
             "name": "Magic Resistance",
             "text": "The golem has advantage on saving throws against spells and other magical effects."
-          },
-          { "name": "Magic Weapons", "text": "The golem's weapon attacks are magical." }
+          }
         ],
         "actions": [
           {
@@ -4533,7 +4539,13 @@
             "toHit": 3,
             "damage": { "dice": "1d4", "flat": 1, "type": "piercing" },
             "save": { "save": "con_save", "difficulty": 11, "onSuccess": "none" },
-            "applies": [{ "condition": "restrained", "duration": { "rounds": 1000 } }],
+            "applies": [
+              {
+                "condition": "restrained",
+                "duration": "until-save",
+                "saveEnds": { "save": "con_save", "at": "turn-end" }
+              }
+            ],
             "reach": 5
           }
         ]
@@ -4688,7 +4700,7 @@
             "toHit": 8,
             "damage": { "dice": "1d6", "flat": 5, "type": "piercing" },
             "save": { "save": "con_save", "difficulty": 13, "onSuccess": "none" },
-            "applies": [{ "condition": "poisoned", "duration": { "rounds": 1000 } }],
+            "applies": [{ "condition": "poisoned", "duration": "instant" }],
             "reach": 5
           },
           {
@@ -5274,6 +5286,10 @@
         "tier": "cr_17",
         "traits": [
           {
+            "name": "Tail",
+            "text": "Hit: 26 (3d12 + 7) bludgeoning damage. If the target is a creature, it must succeed on a DC 20 Strength saving throw or be pushed up to 10 feet away from the dragon turtle and knocked prone."
+          },
+          {
             "name": "Multiattack",
             "text": "The dragon turtle makes three attacks: one with its bite and two with its claws. It can make one tail attack in place of its two claw attacks."
           },
@@ -5370,7 +5386,7 @@
             "name": "Fetid Cloud",
             "budget": "action",
             "save": { "save": "con_save", "difficulty": 11, "onSuccess": "negates" },
-            "applies": [{ "condition": "poisoned", "duration": { "rounds": 10 } }],
+            "applies": [{ "condition": "poisoned", "duration": "instant" }],
             "targetCount": 3,
             "uses": { "per": "day", "count": 1 }
           }
@@ -5492,7 +5508,7 @@
             "toHit": 4,
             "damage": { "dice": "1d6", "flat": 2, "type": "piercing" },
             "save": { "save": "con_save", "difficulty": 13, "onSuccess": "none" },
-            "applies": [{ "condition": "poisoned", "duration": { "rounds": 600 } }],
+            "applies": [{ "condition": "poisoned", "duration": "instant" }],
             "range": 30
           }
         ]
@@ -5912,7 +5928,7 @@
             "toHit": 4,
             "damage": { "dice": "1d6", "flat": 2, "type": "piercing" },
             "save": { "save": "con_save", "difficulty": 13, "onSuccess": "none" },
-            "applies": [{ "condition": "poisoned", "duration": { "rounds": 600 } }],
+            "applies": [{ "condition": "poisoned", "duration": "instant" }],
             "range": 30
           },
           {
@@ -6790,7 +6806,7 @@
             "name": "Possession",
             "budget": "action",
             "save": { "save": "cha_save", "difficulty": 13, "onSuccess": "negates" },
-            "applies": [{ "condition": "incapacitated", "duration": { "rounds": 1000 } }]
+            "applies": [{ "condition": "incapacitated", "duration": "instant" }]
           }
         ]
       }
@@ -7052,8 +7068,6 @@
             "budget": "action",
             "toHit": 4,
             "damage": { "dice": "1d4", "flat": 2, "type": "piercing" },
-            "save": { "save": "con_save", "difficulty": 11, "onSuccess": "none" },
-            "applies": [{ "condition": "paralyzed", "duration": { "rounds": 600 } }],
             "reach": 5
           }
         ]
@@ -7612,6 +7626,12 @@
         "initiativeModifier": 2,
         "abilities": { "str": 7, "dex": 15, "con": 11, "int": 2, "wis": 10, "cha": 4 },
         "tier": "cr_1_8",
+        "traits": [
+          {
+            "name": "Bite",
+            "text": "Hit: 4 (1d4 + 2) piercing damage. If the target is a creature, it must succeed on a DC 10 Constitution saving throw or contract a disease. Until the disease is cured, the target can't regain hit points except by magical means, and the target's hit point maximum decreases by 3 (1d6) every 24 hours. If the target's hit point maximum drops to 0 as a result of this disease, the target dies."
+          }
+        ],
         "actions": [
           {
             "id": "bite",
@@ -7781,8 +7801,6 @@
             "budget": "action",
             "toHit": 5,
             "damage": { "dice": "1d8", "flat": 3, "type": "piercing" },
-            "save": { "save": "con_save", "difficulty": 11, "onSuccess": "none" },
-            "applies": [{ "condition": "paralyzed", "duration": { "rounds": 600 } }],
             "reach": 5
           },
           {
@@ -7921,8 +7939,6 @@
             "budget": "action",
             "toHit": 4,
             "damage": { "dice": "1d6", "flat": 2, "type": "piercing" },
-            "save": { "save": "con_save", "difficulty": 11, "onSuccess": "none" },
-            "applies": [{ "condition": "paralyzed", "duration": { "rounds": 600 } }],
             "reach": 5
           }
         ]
@@ -8002,8 +8018,6 @@
             "budget": "action",
             "toHit": 3,
             "damage": { "dice": "1d6", "flat": 1, "type": "piercing" },
-            "save": { "save": "con_save", "difficulty": 11, "onSuccess": "none" },
-            "applies": [{ "condition": "paralyzed", "duration": { "rounds": 600 } }],
             "reach": 5
           }
         ]
@@ -8469,7 +8483,13 @@
             "name": "Petrifying Breath",
             "budget": "action",
             "save": { "save": "con_save", "difficulty": 13, "onSuccess": "negates" },
-            "applies": [{ "condition": "restrained", "duration": "instant" }],
+            "applies": [
+              {
+                "condition": "restrained",
+                "duration": "until-save",
+                "saveEnds": { "save": "con_save", "at": "turn-end" }
+              }
+            ],
             "targetCount": 3
           }
         ]
@@ -8837,6 +8857,10 @@
           {
             "name": "Bite",
             "text": "Hit: 8 (1d8 + 4) piercing damage, and the target must make a DC 15 Constitution saving throw, taking 45 (10d8) poison damage on a failed save, or half as much damage on a successful one."
+          },
+          {
+            "name": "Spit Poison",
+            "text": "Hit: The target must make a DC 15 Constitution saving throw, taking 45 (10d8) poison damage on a failed save, or half as much damage on a successful one."
           },
           {
             "name": "Rejuvenation",
@@ -9406,6 +9430,10 @@
         "conditionImmunities": ["poisoned"],
         "tier": "cr_11",
         "traits": [
+          {
+            "name": "Tail",
+            "text": "Hit: 10 (1d8 + 6) piercing damage. If the target is a creature other than an undead or a construct, it must succeed on a DC 17 Constitution saving throw or lose 10 (3d6) hit points at the start of each of its turns due to an infernal wound. Each time the devil hits the wounded target with this attack, the damage dealt by the wound increases by 10 (3d6). See the SRD for the full text."
+          },
           {
             "name": "Multiattack",
             "text": "The devil makes three melee attacks: two with its fork and one with its tail. It can use Hurl Flame in place of any melee attack."
@@ -12152,8 +12180,6 @@
             "budget": "action",
             "toHit": 4,
             "damage": { "dice": "1d10", "flat": 2, "type": "piercing" },
-            "save": { "save": "con_save", "difficulty": 11, "onSuccess": "none" },
-            "applies": [{ "condition": "paralyzed", "duration": { "rounds": 600 } }],
             "reach": 5
           }
         ]
@@ -12552,7 +12578,7 @@
             "toHit": 4,
             "damage": { "dice": "1d4", "flat": 2, "type": "piercing" },
             "save": { "save": "con_save", "difficulty": 11, "onSuccess": "none" },
-            "applies": [{ "condition": "poisoned", "duration": { "rounds": 600 } }],
+            "applies": [{ "condition": "poisoned", "duration": "instant" }],
             "reach": 5
           }
         ]
@@ -13976,6 +14002,10 @@
         ],
         "tier": "cr_1",
         "traits": [
+          {
+            "name": "Life Drain",
+            "text": "Hit: 10 (3d6) necrotic damage. The target must succeed on a DC 10 Constitution saving throw or its hit point maximum is reduced by an amount equal to the damage taken. This reduction lasts until the creature finishes a long rest. The target dies if this effect reduces its hit point maximum to 0."
+          },
           {
             "name": "Immune to exhaustion",
             "text": "The Specter is immune to exhaustion, which this sheet counts on a track rather than as a condition."
@@ -16247,6 +16277,10 @@
         "tier": "cr_5",
         "traits": [
           {
+            "name": "Bite",
+            "text": "Hit: 15 (2d10 + 4) piercing damage. If the target is a humanoid, it must succeed on a DC 14 Constitution saving throw or be cursed with were bear lycanthropy."
+          },
+          {
             "name": "Multiattack",
             "text": "In bear form, the werebear makes two claw attacks. In humanoid form, it makes two greataxe attacks. In hybrid form, it can attack like a bear or a humanoid."
           },
@@ -16316,6 +16350,10 @@
         "immune": ["bludgeoning", "piercing", "slashing"],
         "tier": "cr_4",
         "traits": [
+          {
+            "name": "Tusks",
+            "text": "Hit: 10 (2d6 + 3) slashing damage. If the target is a humanoid, it must succeed on a DC 12 Constitution saving throw or be cursed with wereboar lycanthropy."
+          },
           { "name": "Multiattack", "text": "The wereboar makes two attacks, only one of which can be with its tusks." },
           {
             "name": "Nonmagical attacks",
@@ -16373,6 +16411,10 @@
         "immune": ["bludgeoning", "piercing", "slashing"],
         "tier": "cr_2",
         "traits": [
+          {
+            "name": "Bite",
+            "text": "Hit: 4 (1d4 + 2) piercing damage. If the target is a humanoid, it must succeed on a DC 11 Constitution saving throw or be cursed with wererat lycanthropy."
+          },
           { "name": "Multiattack", "text": "The wererat makes two attacks, only one of which can be a bite." },
           {
             "name": "Nonmagical attacks",
@@ -16429,6 +16471,10 @@
         "immune": ["bludgeoning", "piercing", "slashing"],
         "tier": "cr_4",
         "traits": [
+          {
+            "name": "Bite",
+            "text": "Hit: 8 (1d10 + 3) piercing damage. If the target is a humanoid, it must succeed on a DC 13 Constitution saving throw or be cursed with weretiger lycanthropy."
+          },
           {
             "name": "Multiattack",
             "text": "In humanoid form, the weretiger makes two scimitar attacks or two longbow attacks. In hybrid form, it can attack like a humanoid or make two claw attacks."
@@ -16506,6 +16552,10 @@
         "immune": ["bludgeoning", "piercing", "slashing"],
         "tier": "cr_3",
         "traits": [
+          {
+            "name": "Bite",
+            "text": "Hit: 6 (1d8 + 2) piercing damage. If the target is a humanoid, it must succeed on a DC 12 Constitution saving throw or be cursed with werewolf lycanthropy."
+          },
           {
             "name": "Spear",
             "text": "Hit: 5 (1d6 + 2) piercing damage, or 6 (1d8 + 2) piercing damage if used with two hands to make a melee attack."
@@ -16612,6 +16662,10 @@
         "conditionImmunities": ["poisoned"],
         "tier": "cr_3",
         "traits": [
+          {
+            "name": "Life Drain",
+            "text": "Hit: 5 (1d6 + 2) necrotic damage. The target must succeed on a DC 13 Constitution saving throw or its hit point maximum is reduced by an amount equal to the damage taken. This reduction lasts until the target finishes a long rest. The target dies if this effect reduces its hit point maximum to 0. See the SRD for the full text."
+          },
           {
             "name": "Longsword",
             "text": "Hit: 6 (1d8 + 2) slashing damage, or 7 (1d10 + 2) slashing damage if used with two hands."
@@ -16861,6 +16915,10 @@
         "conditionImmunities": ["charmed", "grappled", "paralyzed", "petrified", "poisoned", "prone", "restrained"],
         "tier": "cr_5",
         "traits": [
+          {
+            "name": "Life Drain",
+            "text": "Hit: 21 (4d8 + 3) necrotic damage. The target must succeed on a DC 14 Constitution saving throw or its hit point maximum is reduced by an amount equal to the damage taken. This reduction lasts until the target finishes a long rest. The target dies if this effect reduces its hit point maximum to 0."
+          },
           {
             "name": "Create Specter",
             "text": "The wraith targets a humanoid within 10 feet of it that has been dead for no longer than 1 minute and died violently. The target's spirit rises as a specter in the space of its corpse or in the nearest unoccupied space. The specter is under the wraith's control. The wraith can have no more than seven specters under its control at one time."

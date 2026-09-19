@@ -1145,7 +1145,7 @@ const REACH = /reach\s+(\d{1,3})\s*(?:ft|feet)/iu;
 const RANGE = /range\s+(\d{1,4})(?:\/\d{1,4})?\s*(?:ft|feet)/iu;
 const SAVE_DC = /DC\s*(\d{1,3})\s+(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma)\s+saving throw/iu;
 const HALF_ON_SUCCESS = /half as much damage on a success/iu;
-const REPEATS_SAVE = /saving throw at the end of each of its turns/iu;
+const REPEATS_SAVE = /saving throw at the end of (?:each of its turns|its next turn)/iu;
 // "**Fire Breath.** ... **Weakening Breath.** ...": one printed action that is really several,
 // sharing one recharge.
 const OPTION_HEADING = /\*\*([^*]{1,60}?)\*\*/gu;
@@ -1161,7 +1161,6 @@ const APPLIES_CONDITION = new RegExp(
 // condition the sentence merely mentions.
 const STATED_CONDITION = new RegExp(String.raw`\b(?:is|are|becomes?)\s+(${CONDITIONS.join("|")})\b`, "giu");
 const DURATION_MINUTES = /for\s+(\d{1,3})\s+minutes?\b/iu;
-const DURATION_HOURS = /for\s+(\d{1,3})\s+hours?\b/iu;
 
 /** Plain text a `promptSafeText` field will take: one line, no square brackets, no macro braces and
  *  no Markdown emphasis, because a trait is read by a person and not by a parser. */
@@ -1246,28 +1245,50 @@ function damageFrom(clause) {
   });
 }
 
-/** How long a condition this text applies lasts: the SRD's own stated time in rounds, the repeated
- *  save when it states one, and otherwise no clock of its own. */
-function appliesDuration(text, ability) {
-  if (REPEATS_SAVE.test(text)) {
+/** How long a condition this text applies lasts: the repeated save the SRD states, then its own
+ *  stated minutes, and otherwise no clock of its own.
+ *
+ *  `window` is the save clause, so the clock belongs to the condition rather than to some later
+ *  sentence; `full` is the whole action, because the sentence that grants the repeated save is the
+ *  one after it and is never about anything else. A duration the SRD prints in hours or days
+ *  outlasts every fight, so it is read as "until something takes it off" rather than as a count of
+ *  rounds nobody would reach. */
+function appliesDuration(window, full, ability) {
+  if (REPEATS_SAVE.test(full)) {
     return { duration: "until-save", saveEnds: { save: `${ability}_save`, at: "turn-end" } };
   }
-  const minutes = DURATION_MINUTES.exec(text);
+  const minutes = DURATION_MINUTES.exec(window);
   if (minutes) return { duration: { rounds: Number(minutes[1]) * ROUNDS_PER_MINUTE } };
-  const hours = DURATION_HOURS.exec(text);
-  if (hours) return { duration: { rounds: Math.min(1000, Number(hours[1]) * ROUNDS_PER_HOUR) } };
   return { duration: "instant" };
 }
 
-/** The conditions an action's text says it puts on what it touches, in the order it names them. */
-function appliedConditions(text, ability) {
+/** The part of an action's text that belongs to its saving throw: the sentence that names the
+ *  difficulty, plus the one after it when that one says what a failure brings.
+ *
+ *  Anything further on is a knock-on the action does not itself apply: the giant spider's paralysis
+ *  only follows its poison dropping somebody to zero, and the cockatrice's petrification only
+ *  follows a second failed save. Reading the whole paragraph would put both on a target that never
+ *  met their condition. */
+function saveClause(text, at) {
+  const rest = text.slice(at);
+  const first = /[.!?](?:\s|$)/u.exec(rest);
+  const end = first ? first.index + 1 : rest.length;
+  const after = rest.slice(end);
+  if (!/^\s*On a fail/iu.test(after)) return rest.slice(0, end);
+  const second = /[.!?](?:\s|$)/u.exec(after);
+  return rest.slice(0, end + (second ? second.index + 1 : after.length));
+}
+
+/** The conditions an action's own saving throw puts on what it touches, in the order it names them. */
+function appliedConditions(text, at, ability) {
+  const window = saveClause(text, at);
   const found = [];
   APPLIES_CONDITION.lastIndex = 0;
   let match;
-  while ((match = APPLIES_CONDITION.exec(text))) {
+  while ((match = APPLIES_CONDITION.exec(window))) {
     const condition = match[1].toLowerCase();
     if (!found.some((entry) => entry.condition === condition)) {
-      found.push({ condition, ...appliesDuration(text, ability) });
+      found.push({ condition, ...appliesDuration(window, text, ability) });
     }
   }
   return found.slice(0, 4);
@@ -1324,7 +1345,7 @@ function creatureAction(action, attackRow, report) {
     }
     const save = SAVE_DC.exec(effect);
     const ability = save ? ABILITY_BY_SAVE_NAME[save[2].toLowerCase()] : undefined;
-    const conditions = ability ? appliedConditions(effect, ability) : [];
+    const conditions = ability ? appliedConditions(effect, save.index, ability) : [];
     // A hit that deals no damage at all does whatever the sentence says flatly, with no save to make
     // first, which is what the SRD's webs and tendrils do. Escaping one is a Strength CHECK against
     // an action, not a saving throw, so the condition carries no clock and the printed escape rides
@@ -1371,8 +1392,12 @@ function creatureAction(action, attackRow, report) {
       if (clause.joiner?.toLowerCase() === "plus") report.foldedRiders += 1;
       else report.alternativeClauses += 1;
     }
-    if (dropped.length > 0 || riderDamage) notes.push(trait(label, effect));
-    if (ability && conditions.length === 0 && !riderDamage) report.riderSavesNotCarried += 1;
+    // A rider save this format cannot roll without also relieving the damage, or one whose effect is
+    // not a condition the sheet has, is kept as a trait so the rule is still in front of the Game
+    // Master rather than quietly gone.
+    const carried = conditions.length > 0 && !riderDamage;
+    if (dropped.length > 0 || riderDamage || (ability && !carried)) notes.push(trait(label, effect));
+    if (ability && !carried) report.riderSavesNotCarried += 1;
     return { action: built, notes };
   }
 
@@ -1384,7 +1409,7 @@ function creatureAction(action, attackRow, report) {
     return { action: null, notes: [...notes, trait(name, full)] };
   }
   const ability = ABILITY_BY_SAVE_NAME[save[2].toLowerCase()];
-  const conditions = appliedConditions(text, ability);
+  const conditions = appliedConditions(text, save.index, ability);
   const onSuccess = HALF_ON_SUCCESS.test(text) ? "half" : "negates";
   const built = compact({
     id,
@@ -2302,7 +2327,10 @@ console.log(
 console.log(
   `  damage clauses: ${report.foldedRiders} "plus" rider(s) and ${report.alternativeClauses} "or" alternative(s) kept as traits`,
 );
-console.log(`  ${report.riderSavesNotCarried} attack rider save(s) name no condition this sheet has`);
+console.log(
+  `  ${report.riderSavesNotCarried} attack rider save(s) could not be carried in full (a second damage roll, or an effect ` +
+    "this sheet has no condition for) and kept the printed sentence as a trait",
+);
 console.log(`  ${report.attacksThatOnlyApplyAConditionCount} attack(s) deal no damage and only apply a condition`);
 console.log(
   `  ${report.attacksWithNothingToResolve.length} attack(s) and ${report.savesWithNothingToResolve.length} save action(s) resolve to nothing and became traits`,
