@@ -613,8 +613,9 @@ function compact(object) {
 // A count and a die, which is what a per-slot-level step has to be read out of.
 const DICE_PATTERN = /^(\d{1,3})d(\d{1,4})$/u;
 // Everything the catalog's own dice field accepts, plus the plain number a few
-// SRD entries state instead (the blowgun's 1, Guardian of Faith's 20).
-const CATALOG_DICE_PATTERN = /^\d{1,3}d\d{1,4}(?:[+-]\d{1,4})?$/u;
+// SRD entries state instead (the blowgun's 1, Guardian of Faith's 20). The dice
+// shape is the Engine's: at least one die, of at least two sides, no leading zeros.
+const CATALOG_DICE_PATTERN = /^[1-9]\d{0,2}d(?:[2-9]|[1-9]\d{1,3})(?:[+-]\d{1,4})?$/u;
 const FLAT_DAMAGE_PATTERN = /^\d{1,3}$/u;
 
 /** The damage a source string states, or a loud failure when it states a shape
@@ -1120,6 +1121,51 @@ const ABILITY_BY_SAVE_NAME = Object.freeze({
   charisma: "cha",
 });
 
+// Where the FIXTURE is missing a number the printed SRD 5.1 stat block states. Two creatures come
+// out of the source with no hit dice, no speed and no challenge rating at all, which would ship them
+// as flat health, unable to move, at the bottom of the threat scale.
+//
+// `sourceSays` is what the fixture holds today for that field and `srd` is what the stat block
+// prints. assertCreatureOverrides below fails the run when a pk leaves the source, when the fixture
+// starts saying something else for an overridden field (the override is then stale, whichever way it
+// moved), or when the override's own hit dice do not average the hit points the fixture already
+// prints. Nothing here is a judgement call: every row is a sentence off the page.
+const CREATURE_OVERRIDES = new Map([
+  // Drow: "Hit Points 13 (3d8)", "Speed 30 ft.", "Challenge 1/4 (50 XP)".
+  [
+    "srd_elf-drow",
+    {
+      hit_dice: { sourceSays: null, srd: "3d8" },
+      walk: { sourceSays: 0, srd: 30 },
+      challenge_rating: { sourceSays: "0.000", srd: "0.250" },
+    },
+  ],
+  // Deep Gnome (Svirfneblin): "Hit Points 16 (3d6 + 6)", "Speed 20 ft.", "Challenge 1/2 (100 XP)".
+  [
+    "srd_gnome-deep-svirfneblin",
+    {
+      hit_dice: { sourceSays: null, srd: "3d6+6" },
+      walk: { sourceSays: 0, srd: 20 },
+      challenge_rating: { sourceSays: "0.000", srd: "0.500" },
+    },
+  ],
+]);
+
+// The shapes that put those two in this table in the first place. Any OTHER creature wearing one is
+// listed in the build report rather than guessed at, because a missing number is a decision for
+// somebody holding the book, not for a regular expression.
+const OVERRIDE_FINGERPRINTS = Object.freeze([
+  { name: "no hit dice", test: (fields) => !fields.hit_dice },
+  {
+    name: "cannot move at all",
+    test: (fields) => !fields.walk && !fields.burrow && !fields.climb && !fields.fly && !fields.swim,
+  },
+  {
+    name: "challenge 0 with real hit points and a real attack",
+    test: (fields, best) => Number(fields.challenge_rating) === 0 && fields.hit_points > 10 && best >= 4,
+  },
+]);
+
 // The SRD's own counting words, which is how a Multiattack says how many times it strikes.
 const COUNT_WORDS = Object.freeze({
   one: 1,
@@ -1543,11 +1589,70 @@ function multiattackSequence(text, attacks) {
 // what it does is a spell list, so its actions do not say what it deals in a round.
 const SPELLCASTING_TRAIT = /spellcasting/iu;
 
+/** The average of a hit dice string, floored the way the SRD's own printed hit points are. */
+function hitDiceAverage(dice) {
+  const roll = DICE_PATTERN.exec(dice.replace(/[+-]\d+$/u, "")) ?? fail(`"${dice}" is not hit dice`);
+  const flat = /([+-]\d+)$/u.exec(dice);
+  return Math.floor(Number(roll[1]) * ((Number(roll[2]) + 1) / 2)) + (flat ? Number(flat[1]) : 0);
+}
+
+/** Every override still names a creature the source has, still corrects the value the source
+ *  actually holds, and still averages the hit points the source prints. A fixture that changed under
+ *  one of these stops the build, whichever way it moved: a source that filled the gap in makes the
+ *  row redundant, and one that filled it in differently makes it wrong. */
+function assertCreatureOverrides(records) {
+  for (const [pk, fields] of CREATURE_OVERRIDES) {
+    const record = records.find((entry) => entry.pk === pk);
+    if (!record) fail(`${pk} is written as a creature override but is not in the source`);
+    for (const [field, { sourceSays, srd }] of Object.entries(fields)) {
+      const held = record.fields[field] ?? null;
+      if (held !== (sourceSays ?? null)) {
+        fail(
+          `${pk} ${field} is ${JSON.stringify(held)} in the source, not the ${JSON.stringify(sourceSays)} this override corrects; drop or restate the row`,
+        );
+      }
+      if (field === "hit_dice" && hitDiceAverage(srd) !== record.fields.hit_points) {
+        fail(
+          `${pk} override ${srd} averages ${hitDiceAverage(srd)}, but the source prints ${record.fields.hit_points} hit points`,
+        );
+      }
+    }
+  }
+}
+
+/** A record's fields with the printed SRD numbers in place of the gaps the fixture left. */
+function overriddenFields(record) {
+  const overrides = CREATURE_OVERRIDES.get(record.pk);
+  if (!overrides) return record.fields;
+  return { ...record.fields, ...Object.fromEntries(Object.entries(overrides).map(([field, { srd }]) => [field, srd])) };
+}
+
+// The speed modes a stat block prints after its walking speed, in the order the SRD prints them.
+const SPEED_MODES = Object.freeze(["burrow", "climb", "fly", "swim"]);
+
+/** The one number the Engine's creature carries, and the whole printed line for the Game Master.
+ *
+ *  A creature has one `speed`, and a later slice moves it by that number, so a shark whose walking
+ *  speed is 0 must travel at its swimming speed or it cannot move at all. The line itself rides
+ *  along as a trait wherever there is more than walking to say. */
+function speedOf(fields) {
+  const modes = SPEED_MODES.flatMap((mode) => (fields[mode] ? [{ mode, feet: fields[mode] }] : []));
+  const walk = fields.walk ?? 0;
+  const fastest = modes.length > 0 ? Math.max(...modes.map((entry) => entry.feet)) : 0;
+  const printed = [
+    `${walk} ft.`,
+    ...modes.map(({ mode, feet }) => `${mode} ${feet} ft.${mode === "fly" && fields.hover ? " (hover)" : ""}`),
+  ].join(", ");
+  return { speed: walk > 0 ? walk : fastest, fromAnotherMode: walk === 0 && fastest > 0, printed, modes: modes.length };
+}
+
 /** The entry a creature record becomes, and whether its DAMAGE can be measured from its actions.
  *  The second is only for the threat scale: a creature is in the bestiary, and in the health,
  *  defense and to-hit measurements, either way. */
 function creatureEntry(record, sources, report) {
-  const { pk, fields } = record;
+  const pk = record.pk;
+  // The printed SRD numbers where the fixture left a gap. Everything below reads these.
+  const fields = overriddenFields(record);
   const actions = (sources.actions.get(pk) ?? []).filter((action) => action.fields.action_type !== "REACTION");
   if (actions.length === 0) {
     report.skipped.push({ id: pk, reason: "the source gives it no action at all, and a block needs one" });
@@ -1652,6 +1757,15 @@ function creatureEntry(record, sources, report) {
     );
     report.nonmagicalQualifiers += 1;
   }
+  // The printed speed line, wherever there is more than walking to say. It sits ABOVE the stat
+  // block's own traits, because the block carries one speed number and this is the only place the
+  // rest of them survive; a creature already at the cap drops a printed trait from the end instead.
+  const speed = speedOf(fields);
+  if (speed.modes > 0) {
+    notes.push(trait("the speed modes one number cannot hold", "Speed", speed.printed));
+    report.speedTraits += 1;
+  }
+  if (speed.fromAnotherMode) report.speedFromAnotherMode += 1;
   for (const source of sources.traits.get(pk) ?? []) {
     notes.push(trait("a trait the stat block prints", source.fields.name, source.fields.desc));
   }
@@ -1697,7 +1811,7 @@ function creatureEntry(record, sources, report) {
   const creature = compact({
     health,
     defense: fields.armor_class,
-    speed: fields.walk ?? 0,
+    speed: speed.speed,
     initiativeModifier: Math.floor((fields.ability_score_dexterity - 10) / 2),
     abilities,
     saves: Object.keys(saves).length > 0 ? saves : undefined,
@@ -1838,7 +1952,13 @@ function averageHealth(creature) {
 
 function threatTiers(entries, report) {
   const byTier = new Map(CHALLENGE_RATINGS.map((challenge) => [tierId(challenge), []]));
-  for (const entry of entries) byTier.get(entry.creature.tier).push(entry);
+  for (const entry of entries) {
+    const group = byTier.get(entry.creature.tier);
+    // A rating the scale has no rung for would otherwise be pushed into nothing and disappear from
+    // every measurement without a word.
+    if (!group) fail(`${entry.id} sits on the tier "${entry.creature.tier}", which this scale has no rung for`);
+    group.push(entry);
+  }
   const measured = CHALLENGE_RATINGS.map((challenge) => {
     const id = tierId(challenge);
     const group = byTier.get(id);
@@ -2243,11 +2363,15 @@ const report = {
   traitsDropped: 0,
   tiersFilledFromNeighbours: [],
   tiersWithNoHitters: [],
+  speedFromAnotherMode: 0,
+  speedTraits: 0,
+  fingerprinted: [],
   damageMeasurementSkippedCasters: 0,
   damageMeasurementSkippedHiddenDamage: 0,
 };
 
 const creatureRecords = srdOnly(await fixture("Creature.json"), "creature");
+assertCreatureOverrides(creatureRecords);
 const creatureActions = new Map();
 for (const action of await fixture("CreatureAction.json")) {
   if (!creatureActions.has(action.fields.parent)) creatureActions.set(action.fields.parent, []);
@@ -2284,6 +2408,22 @@ const parsedCreatures = creatureRecords
   .map((record) => creatureEntry(record, creatureSources, report))
   .filter(Boolean)
   .sort(byId);
+
+// Other creatures wearing one of the shapes that made the override table necessary. They are LISTED
+// and never corrected: a number the fixture does not hold is a decision for somebody holding the
+// book. The two already in the table are not listed, because they are already decided.
+for (const record of creatureRecords) {
+  if (CREATURE_OVERRIDES.has(record.pk)) continue;
+  const best = Math.max(
+    0,
+    ...(creatureActions.get(record.pk) ?? []).map((action) => {
+      const printed = TO_HIT.exec(plainText(action.fields.desc));
+      return printed ? Number(printed[1]) : 0;
+    }),
+  );
+  const worn = OVERRIDE_FINGERPRINTS.filter(({ test }) => test(record.fields, best)).map(({ name }) => name);
+  if (worn.length > 0) report.fingerprinted.push(`${record.pk} (${worn.join(", ")})`);
+}
 const { measured: measuredTiers, tiers } = threatTiers(parsedCreatures, report);
 // `damageMeasurable` is the threat scale's business and nothing the Engine reads, so it comes off
 // before the entries are written.
@@ -2451,6 +2591,16 @@ for (const [kind, count] of [...report.traitsByKind].sort((left, right) => right
 console.log(
   `  ${report.conditionImmunitiesNotCarried} condition immunity/immunities and ${report.nonmagicalQualifiers} nonmagical-attack qualifier(s) became traits`,
 );
+console.log(
+  `  speed: ${report.speedFromAnotherMode} creature(s) take theirs from a mode other than walking, ` +
+    `${report.speedTraits} carry the printed speed line as a trait`,
+);
+console.log(
+  `  ${CREATURE_OVERRIDES.size} creature(s) take a printed SRD number the fixture does not hold: ` +
+    `${[...CREATURE_OVERRIDES.keys()].join(", ")}`,
+);
+console.log(`  ${report.fingerprinted.length} other creature(s) wear one of the shapes that needed an override:`);
+for (const entry of report.fingerprinted) console.log(`    ${entry}`);
 console.log("  text against structured rows:");
 console.log(`    to hit: ${report.toHitDisagreements.length} disagreement(s) — ${list(report.toHitDisagreements)}`);
 console.log(`    dice: ${report.diceDisagreements.length} disagreement(s) — ${list(report.diceDisagreements, 6)}`);

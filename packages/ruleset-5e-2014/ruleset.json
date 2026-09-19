@@ -2279,20 +2279,20 @@
         {
           "id": "cr_0",
           "label": "CR 0",
-          "health": [1, 16],
+          "health": [1, 13],
           "defense": 12,
           "toHit": 2,
-          "damagePerRound": [1, 7],
-          "saveDifficulty": 12
+          "damagePerRound": [1, 5],
+          "saveDifficulty": 10
         },
         {
           "id": "cr_1_8",
           "label": "CR 1/8",
-          "health": [2, 16],
+          "health": [2, 15],
           "defense": 12,
           "toHit": 4,
           "damagePerRound": [1, 7],
-          "saveDifficulty": 12
+          "saveDifficulty": 11
         },
         {
           "id": "cr_1_4",
@@ -2301,7 +2301,7 @@
           "defense": 12,
           "toHit": 4,
           "damagePerRound": [1, 11],
-          "saveDifficulty": 12
+          "saveDifficulty": 11
         },
         {
           "id": "cr_1_2",
@@ -2310,7 +2310,7 @@
           "defense": 12,
           "toHit": 4,
           "damagePerRound": [3, 13],
-          "saveDifficulty": 12
+          "saveDifficulty": 11
         },
         {
           "id": "cr_1",
@@ -2319,7 +2319,7 @@
           "defense": 12,
           "toHit": 4,
           "damagePerRound": [5, 20],
-          "saveDifficulty": 12
+          "saveDifficulty": 11
         },
         {
           "id": "cr_2",

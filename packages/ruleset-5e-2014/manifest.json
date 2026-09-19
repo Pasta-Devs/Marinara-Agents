@@ -33,7 +33,7 @@
   "files": [
     {
       "path": "ruleset.json",
-      "sha256": "319b89eca0b7e71eaa2d9080a591a289dc6d1e9aaf84259c891cd1af10c475eb",
+      "sha256": "2551d9ac2ae36e4b8059501063de0c87d6d64c421889d053985088c2dcb3f8a1",
       "bytes": 73706
     },
     {
@@ -48,8 +48,8 @@
     },
     {
       "path": "catalogs/creatures.json",
-      "sha256": "77b055b0d644156deefd5b5c36a28842d8cc897dcc43cfbdccbb8bd2f12e3aba",
-      "bytes": 672596
+      "sha256": "912d7f76e350b20f3d443954886ffde2d691cdc58f7703c17fb7d4cdc17ca970",
+      "bytes": 683084
     }
   ],
   "permissions": [],

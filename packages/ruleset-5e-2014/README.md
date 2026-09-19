@@ -189,15 +189,30 @@ Four creatures are left out, because the Engine's format needs a creature to hav
 action a fight can resolve and these have none: **Donkey**, **Frog**, **Sea Horse** (the source
 gives them no action at all) and **Shrieker** (its only action is a noise).
 
+**A creature has one speed.** It is the walking speed, and for the 14 SRD creatures that cannot walk
+at all it is the fastest of the other printed modes, so a shark travels at its swimming speed rather
+than standing still. Whenever there is more than walking to say, the whole printed line rides along
+as a trait ("0 ft., fly 90 ft. (hover)"), which is 172 of them.
+
+**Two creatures take a number from the printed page.** The machine-readable source has no hit dice,
+no speed and no challenge rating for the **Drow** or the **Deep Gnome (Svirfneblin)**, which would
+ship them as flat health, unable to move, at the bottom of the scale. The build states what the SRD
+stat blocks print (Drow 13 (3d8), 30 ft., Challenge 1/4; Svirfneblin 16 (3d6 + 6), 20 ft., Challenge
+1/2), and refuses to run if the source ever starts saying something else for those fields or if the
+hit dice stop averaging the hit points it already prints. Nothing else in the bestiary is hand-typed.
+
 ### What is written down but not resolved
 
 Said plainly, because a ruleset should not claim what the Engine does not do:
 
 - **Nothing is playable.** No screen, no saved battle, no opponent that picks its own actions.
-- **No positions.** Reach, range, areas, cover and movement are carried and read by nobody, so an
-  area action says how many targets it takes instead: two for a line, three for a cone or a sphere,
-  two for anything else that says "each creature". Those are deliberately low, chosen once, and they
-  are the one place in the bestiary where a number is not the SRD's own.
+- **No positions.** Reach, range, areas, cover, speed and movement are carried and read by nobody
+  yet, so an area action says how many targets it takes instead: two for a line, three for a cone or
+  a sphere, two for anything else that says "each creature". Those are deliberately low, chosen once,
+  and they are the one place in the bestiary where a number is not the SRD's own.
+- **One speed per creature.** A creature that walks, swims and flies carries the fastest of them as
+  its number and the rest as a trait, because the format has one speed and the slice that moves a
+  creature will read it.
 - **No reactions**, so a reaction spell such as Shield is left off the menu and a creature's printed
   reactions are traits.
 - **Charmed and deafened** have no effect the Engine's closed list can express, so they stay plain

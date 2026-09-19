@@ -112,6 +112,15 @@ const RULESET_CATALOG_ASSET_PATTERN = /^catalogs\/[a-z][a-z0-9_]{0,39}\.json$/u;
 const RULESET_CATALOG_ID_PATTERN = /^[a-z][a-z0-9_]{0,39}$/u;
 const RULESET_CATALOG_ENTRY_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 
+// A sheet id, which is what a budget, a list, a save and a condition are all named by.
+const RULESET_SHEET_ID_PATTERN = /^[a-z][a-z0-9_]*$/u;
+const RULESET_SHEET_ID_MAX = 40;
+
+// Dice a table really has: at least one die, of at least two sides, with no leading zeros. Mirrored
+// from the Engine, which refuses "0d6", "1d1" and "01d6" outright, so a package carrying one never
+// reaches the catalog.
+const RULESET_CATALOG_DICE_PATTERN = /^[1-9]\d{0,2}d(?:[2-9]|[1-9]\d{1,3})(?:[+-]\d{1,4})?$/u;
+
 export function isRulesetPackage(manifest) {
   return Array.isArray(manifest?.kind) && manifest.kind.includes("ruleset");
 }
@@ -631,8 +640,17 @@ export function assertRulesetCombat(manifest, document) {
     throw new Error(`${id} combat economy declares 1 to ${RULESET_COMBAT_MAX_BUDGETS} budgets`);
   }
   for (const budget of declared) {
-    if (budgets.has(budget?.id)) throw new Error(`${id} combat repeats the budget "${budget.id}"`);
-    budgets.add(budget?.id);
+    // Named before it is counted: two budgets with no id at all would otherwise read as a duplicate
+    // and say so, instead of saying that neither of them is named.
+    if (
+      typeof budget?.id !== "string" ||
+      budget.id.length > RULESET_SHEET_ID_MAX ||
+      !RULESET_SHEET_ID_PATTERN.test(budget.id)
+    ) {
+      throw new Error(`${id} combat budget id ${JSON.stringify(budget?.id)} is not a usable sheet id`);
+    }
+    if (budgets.has(budget.id)) throw new Error(`${id} combat repeats the budget "${budget.id}"`);
+    budgets.add(budget.id);
     if (budget?.per !== "turn" && budget?.per !== "round") {
       throw new Error(
         `${id} combat budget "${budget?.id}" refills per turn or per round, not ${JSON.stringify(budget?.per)}`,
@@ -847,6 +865,12 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
       count += 1;
       if (!tiers.has(creature.tier))
         throw new Error(`${where} names unknown threat tier ${JSON.stringify(creature.tier)}`);
+      // Health written as dice is thrown when the fight is created, so dice nobody can throw would
+      // build an opponent with no hit points at all.
+      const healthDice = typeof creature.health === "object" ? creature.health?.dice : undefined;
+      if (healthDice !== undefined && !RULESET_CATALOG_DICE_PATTERN.test(healthDice)) {
+        throw new Error(`${where} has health dice ${JSON.stringify(healthDice)} nobody can throw`);
+      }
       for (const ability of Object.keys(creature.abilities ?? {})) {
         if (!names.abilities.has(ability)) throw new Error(`${where} names unknown ability ${JSON.stringify(ability)}`);
       }
@@ -888,6 +912,9 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
           throw new Error(`${at} spends unknown budget ${JSON.stringify(action.budget)}`);
         if (action.damage?.type && types && !types.has(String(action.damage.type).trim().toLowerCase())) {
           throw new Error(`${at} deals unknown damage type ${JSON.stringify(action.damage.type)}`);
+        }
+        if (action.damage?.dice !== undefined && !RULESET_CATALOG_DICE_PATTERN.test(action.damage.dice)) {
+          throw new Error(`${at} rolls ${JSON.stringify(action.damage.dice)}, which is not dice a table has`);
         }
         if (action.save && !names.saves.has(action.save.save)) {
           throw new Error(`${at} forces unknown save ${JSON.stringify(action.save.save)}`);

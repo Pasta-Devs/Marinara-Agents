@@ -1028,6 +1028,19 @@ assert.throws(
     ),
   /combat repeats the budget "action"/u,
 );
+// A budget is NAMED before it is counted, or two nameless budgets would read as a duplicate and the
+// message would be about the wrong thing.
+for (const budgetId of [undefined, "", "Action", "1st", "a-ction", "a".repeat(41)]) {
+  assert.throws(
+    () =>
+      assertRulesetCombat(
+        combatManifest,
+        combatWith((combat) => (combat.economy.budgets[0].id = budgetId)),
+      ),
+    /combat budget id .* is not a usable sheet id/u,
+    JSON.stringify(budgetId),
+  );
+}
 assert.throws(
   () =>
     assertRulesetCombat(
@@ -1445,6 +1458,14 @@ for (const [edit, message] of [
   [(block) => (block.actions[1].id = "bite"), /repeats the action id "bite"/u],
   [(block) => (block.actions[0].budget = "swing"), /spends unknown budget "swing"/u],
   [(block) => (block.actions[0].damage.type = "starfire"), /deals unknown damage type "starfire"/u],
+  // Dice a table really has: at least one die, of at least two sides, no leading zeros. The Engine
+  // refuses these outright, so a package carrying one must never reach the catalog.
+  [(block) => (block.actions[0].damage.dice = "0d6"), /rolls "0d6", which is not dice a table has/u],
+  [(block) => (block.actions[0].damage.dice = "1d1"), /rolls "1d1", which is not dice a table has/u],
+  [(block) => (block.actions[0].damage.dice = "01d6"), /rolls "01d6", which is not dice a table has/u],
+  [(block) => (block.actions[0].damage.dice = "d6"), /rolls "d6", which is not dice a table has/u],
+  [(block) => (block.health = { dice: "0d8" }), /has health dice "0d8" nobody can throw/u],
+  [(block) => (block.health = { dice: "3d1" }), /has health dice "3d1" nobody can throw/u],
   [(block) => (block.actions[1].save.save = "luck_save"), /forces unknown save "luck_save"/u],
   [
     (block) => (block.actions[1].saveDifficulty = 12),
@@ -1480,6 +1501,19 @@ for (const [edit, message] of [
 ]) {
   assert.throws(() => assertRulesetCreatures(creatureManifest, bestiaryDocument(edit)), message, String(message));
 }
+// The dice a table does have, including the one with a minus on it that this package's own SRD
+// weapons ship.
+for (const dice of ["1d4-1", "1d2", "2d6+3", "999d1000", "1d9999"]) {
+  assert.doesNotThrow(
+    () =>
+      assertRulesetCreatures(
+        creatureManifest,
+        bestiaryDocument((block) => (block.actions[0].damage.dice = dice)),
+      ),
+    dice,
+  );
+}
+
 // Points declared beside an action bought with them is the shape that passes.
 assert.doesNotThrow(() =>
   assertRulesetCreatures(
