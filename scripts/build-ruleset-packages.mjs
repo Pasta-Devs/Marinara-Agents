@@ -25,6 +25,8 @@ import {
   RULESET_ASSET_PATH,
   assertRulesetBattle,
   assertRulesetCatalogs,
+  assertRulesetCombat,
+  assertRulesetCreatures,
   assertRulesetPackageContract,
   assertRulesetScaled,
   isRulesetCatalogAssetPath,
@@ -88,6 +90,9 @@ for (const id of packageIds) {
   assertRulesetBattle(manifest, rulesetDocument);
   // A scaled column is read from the same bytes and gated the same way, so it is checked here too.
   assertRulesetScaled(manifest, rulesetDocument, catalogSources);
+  // So are the combat block and the bestiary that is written in its names.
+  assertRulesetCombat(manifest, rulesetDocument);
+  assertRulesetCreatures(manifest, rulesetDocument, catalogSources);
 
   // Written back only when something actually changed, so a no-op rebuild leaves
   // the tree byte-identical and does not show up as a spurious diff in a PR.

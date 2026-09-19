@@ -42,9 +42,49 @@ export const RULESET_BATTLE_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor
 // older Engine refuses whichever file holds it.
 export const RULESET_SCALED_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 23 });
 
+// Capability API 1.26 added the `combat` block: how a fight is RESOLVED by the
+// ruleset's own numbers, rather than what a fight may borrow from the sheet. It
+// lives inside `ruleset.json` like `battle`, so the manifest cannot show it and
+// the gate is read from the document instead.
+export const RULESET_COMBAT_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 26 });
+
+// Capability API 1.27 added bestiaries: a catalog that declares
+// `"holds": "creatures"` and carries opponents instead of sheet rows. It can
+// ride inline in `ruleset.json` or inside a `catalogs/<id>.json` asset, so an
+// older Engine refuses whichever file holds it.
+export const RULESET_CREATURES_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 27 });
+
 // How many columns of one row a ruleset may keep, and how long a step table may be.
 const RULESET_SCALED_MAX_COLUMNS = 4;
 const RULESET_STEP_TABLE_MAX = 100;
+
+// What the Engine's own schema allows one creature. Mirrored so a package that
+// would be refused on install never reaches the catalog.
+export const RULESET_CREATURE_MAX_ACTIONS = 12;
+export const RULESET_CREATURE_MAX_TRAITS = 8;
+const RULESET_CREATURE_MAX_APPLIES = 4;
+const RULESET_CREATURE_MAX_SEQUENCE = 6;
+const RULESET_COMBAT_MAX_BUDGETS = 8;
+const RULESET_COMBAT_MAX_TIERS = 40;
+
+// The closed effect list a condition maps onto, and the standard actions a
+// ruleset may opt into. Both are the Engine's own vocabulary: a value outside
+// them is refused rather than quietly ignored at import.
+const RULESET_COMBAT_CONDITION_EFFECTS = Object.freeze([
+  "own-attacks-advantage",
+  "own-attacks-disadvantage",
+  "attacks-against-advantage",
+  "attacks-against-disadvantage",
+  "attacks-against-adjacent-advantage",
+  "attacks-against-far-disadvantage",
+  "attacks-from-adjacent-critical",
+  "cannot-act",
+  "cannot-react",
+  "speed-zero",
+  "half-move-to-stand",
+  "ends-on-damage",
+]);
+const RULESET_COMBAT_STANDARD_ACTIONS = Object.freeze(["dash", "disengage", "dodge", "help", "hide", "ready"]);
 
 // A value reference names exactly one of these. The same closed set the Engine has.
 const VALUE_REF_KEYS = Object.freeze([
@@ -71,6 +111,15 @@ const RULESET_CATALOGS_MAX = 12;
 const RULESET_CATALOG_ASSET_PATTERN = /^catalogs\/[a-z][a-z0-9_]{0,39}\.json$/u;
 const RULESET_CATALOG_ID_PATTERN = /^[a-z][a-z0-9_]{0,39}$/u;
 const RULESET_CATALOG_ENTRY_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
+
+// A sheet id, which is what a budget, a list, a save and a condition are all named by.
+const RULESET_SHEET_ID_PATTERN = /^[a-z][a-z0-9_]*$/u;
+const RULESET_SHEET_ID_MAX = 40;
+
+// Dice a table really has: at least one die, of at least two sides, with no leading zeros. Mirrored
+// from the Engine, which refuses "0d6", "1d1" and "01d6" outright, so a package carrying one never
+// reaches the catalog.
+export const RULESET_CATALOG_DICE_PATTERN = /^[1-9]\d{0,2}d(?:[2-9]|[1-9]\d{1,3})(?:[+-]\d{1,4})?$/u;
 
 export function isRulesetPackage(manifest) {
   return Array.isArray(manifest?.kind) && manifest.kind.includes("ruleset");
@@ -215,6 +264,9 @@ function assertCatalogEntries(entries, catalog, lists, where) {
   if (entries.length > RULESET_CATALOG_MAX_ENTRIES) {
     throw new Error(`${where} holds ${entries.length} entries, over the ${RULESET_CATALOG_MAX_ENTRIES} limit`);
   }
+  // A bestiary's entries carry an opponent instead of rows, so the row checks below have nothing to
+  // look at. What a creature must satisfy is assertRulesetCreatures' story to tell.
+  const holdsCreatures = catalog.holds === "creatures";
   const feeds = new Set(catalog.feeds);
   const seen = new Set();
   for (const entry of entries) {
@@ -227,6 +279,7 @@ function assertCatalogEntries(entries, catalog, lists, where) {
     if (typeof entry.label !== "string" || entry.label.trim().length === 0) {
       throw new Error(`${where} entry "${entry.id}" must carry a non-empty label`);
     }
+    if (holdsCreatures) continue;
     if (!Array.isArray(entry.rows) || entry.rows.length === 0) {
       throw new Error(`${where} entry "${entry.id}" must write at least one row`);
     }
@@ -286,10 +339,14 @@ export function assertRulesetCatalogs(manifest, document, catalogSources = new M
     }
     if (seen.has(catalog.id)) throw new Error(`${id} repeats the catalog id "${catalog.id}"`);
     seen.add(catalog.id);
-    if (!Array.isArray(catalog.feeds) || catalog.feeds.length === 0) {
+    // A bestiary writes no rows, so it feeds no list; everything else names the lists it fills.
+    if (catalog.holds === "creatures") {
+      if (catalog.feeds !== undefined)
+        throw new Error(`${id} catalog "${catalog.id}" holds creatures, so it feeds no list`);
+    } else if (!Array.isArray(catalog.feeds) || catalog.feeds.length === 0) {
       throw new Error(`${id} catalog "${catalog.id}" must feed at least one list`);
     }
-    for (const listId of catalog.feeds) {
+    for (const listId of catalog.feeds ?? []) {
       if (!lists.has(listId)) throw new Error(`${id} catalog "${catalog.id}" feeds unknown list "${listId}"`);
     }
     const hasEntries = catalog.entries !== undefined;
@@ -508,6 +565,433 @@ function columnEqualsIssue(column, equals) {
     return typeof equals === "boolean" ? null : `"${column.id}" is a boolean column, so equals must be true or false`;
   }
   return typeof equals === "string" ? null : `"${column.id}" is a text column, so equals must be a string`;
+}
+
+/** The sheet names a combat block or a creature may point at, gathered once. */
+function sheetNames(document) {
+  const sheet = document?.sheet ?? {};
+  const ids = (items) => new Set((items ?? []).map((item) => item?.id));
+  return {
+    fields: new Map((sheet.fields ?? []).map((field) => [field.id, field])),
+    derived: ids(sheet.derived),
+    abilities: ids(sheet.abilities),
+    skills: ids(sheet.skills),
+    saves: ids(sheet.saves),
+    pools: new Map((sheet.live?.pools ?? []).map((pool) => [pool.id, pool])),
+    tracks: ids(sheet.live?.tracks),
+    text: ids(sheet.live?.text),
+    conditions: ids(sheet.live?.conditions),
+    lists: new Map((sheet.lists ?? []).map((list) => [list.id, list])),
+  };
+}
+
+/** Assert a ruleset package's `combat` block, and report whether it has one.
+ *
+ *  Like the battle block's checks, these look into the sheet, because a combat block is nothing but
+ *  references into it: a defense that names no field, a budget an attack list cannot spend or a
+ *  condition the sheet never declares would publish fine and then be a missing number in the middle
+ *  of a turn. The Engine makes the same checks when it parses the file, so these are its rules
+ *  restated at the narrow shape the block has, never stricter. */
+export function assertRulesetCombat(manifest, document) {
+  const id = manifest?.id ?? "package";
+  const combat = document?.combat;
+  if (combat === undefined) return false;
+  if (!combat || typeof combat !== "object" || Array.isArray(combat)) throw new Error(`${id} combat must be an object`);
+  const api = RULESET_COMBAT_MIN_CAPABILITY_API;
+  if (!meetsCapabilityApi(manifest, api)) {
+    throw new Error(`${id} ships a combat block and must declare capability API ${api.major}.${api.minor} or newer`);
+  }
+  if (combat.kind !== "attack-vs-defense") {
+    throw new Error(`${id} combat kind ${JSON.stringify(combat.kind)} is not one the Engine resolves`);
+  }
+
+  const names = sheetNames(document);
+  const pool = names.pools.get(combat.health?.pool);
+  if (!pool) throw new Error(`${id} combat health names unknown live pool ${JSON.stringify(combat.health?.pool)}`);
+  // A pool that starts empty counts up, so as health it would put every fresh character into their
+  // first fight already down.
+  if (pool.start === "empty") {
+    throw new Error(`${id} combat health pool "${combat.health.pool}" starts empty, so it cannot be hit points`);
+  }
+  const ref = (value, where) => {
+    const issue = valueRefIssue(value, names);
+    if (issue) throw new Error(`${id} combat ${where} ${issue}`);
+  };
+  ref(combat.defense, "defense");
+  if (combat.initiative?.modifier !== undefined) ref(combat.initiative.modifier, "initiative modifier");
+  if (combat.economy?.movement !== undefined) ref(combat.economy.movement, "economy movement");
+
+  // A natural result is one face of one die, exactly as it is for a check.
+  const singleDie = (dice, where) => {
+    if (!Number.isInteger(dice?.count) || dice.count < 1) throw new Error(`${id} combat ${where} must roll whole dice`);
+    return dice.count === 1;
+  };
+  const naturals = combat.attackRoll?.naturals ?? {};
+  if (
+    !singleDie(combat.attackRoll?.dice, "attack roll") &&
+    ((naturals.max ?? "none") !== "none" || (naturals.min ?? "none") !== "none")
+  ) {
+    throw new Error(`${id} combat attack roll naturals need a single die`);
+  }
+
+  const budgets = new Set();
+  const declared = combat.economy?.budgets;
+  if (!Array.isArray(declared) || declared.length === 0 || declared.length > RULESET_COMBAT_MAX_BUDGETS) {
+    throw new Error(`${id} combat economy declares 1 to ${RULESET_COMBAT_MAX_BUDGETS} budgets`);
+  }
+  for (const budget of declared) {
+    // Named before it is counted: two budgets with no id at all would otherwise read as a duplicate
+    // and say so, instead of saying that neither of them is named.
+    if (
+      typeof budget?.id !== "string" ||
+      budget.id.length > RULESET_SHEET_ID_MAX ||
+      !RULESET_SHEET_ID_PATTERN.test(budget.id)
+    ) {
+      throw new Error(`${id} combat budget id ${JSON.stringify(budget?.id)} is not a usable sheet id`);
+    }
+    if (budgets.has(budget.id)) throw new Error(`${id} combat repeats the budget "${budget.id}"`);
+    budgets.add(budget.id);
+    if (budget?.per !== "turn" && budget?.per !== "round") {
+      throw new Error(
+        `${id} combat budget "${budget?.id}" refills per turn or per round, not ${JSON.stringify(budget?.per)}`,
+      );
+    }
+  }
+  const budget = (value, where) => {
+    if (!budgets.has(value)) throw new Error(`${id} combat ${where} names unknown budget ${JSON.stringify(value)}`);
+  };
+
+  for (const source of combat.attacks ?? []) {
+    const list = names.lists.get(source?.list);
+    if (!list) throw new Error(`${id} combat attacks name unknown list ${JSON.stringify(source?.list)}`);
+    budget(source.budget, `attacks "${source.list}" budget`);
+    const columns = new Map((list.columns ?? []).map((column) => [column.id, column]));
+    const column = (value, wanted, where) => {
+      if (value === undefined) return;
+      const found = columns.get(value);
+      if (!found) throw new Error(`${id} combat attacks ${where} names unknown column ${JSON.stringify(value)}`);
+      if (!wanted.includes(found.type)) {
+        throw new Error(`${id} combat attacks ${where} must name a ${wanted.join(" or ")} column, not ${found.type}`);
+      }
+    };
+    column(source.name, ["text"], "name");
+    column(source.toHit?.ability?.column, ["enum"], "toHit ability");
+    column(source.toHit?.proficiency?.column, ["boolean"], "toHit proficiency");
+    column(source.toHit?.bonus?.column, ["number"], "toHit bonus");
+    column(source.damage?.dice?.column, ["dice"], "damage dice");
+    column(source.damage?.ability?.column, ["enum"], "damage ability");
+    column(source.damage?.bonus?.column, ["number"], "damage bonus");
+    column(source.damage?.type?.column, ["text", "enum"], "damage type");
+    if (source.damage?.dice?.column === undefined) {
+      throw new Error(`${id} combat attacks "${source.list}" must name the dice column its rows are rolled from`);
+    }
+  }
+
+  for (const source of combat.abilities ?? []) {
+    const list = names.lists.get(source?.list);
+    if (!list) throw new Error(`${id} combat abilities name unknown list ${JSON.stringify(source?.list)}`);
+    budget(source.budget, `abilities "${source.list}" budget`);
+    const columns = new Map((list.columns ?? []).map((column) => [column.id, column]));
+    if (source.onlyWhen !== undefined && columns.get(source.onlyWhen)?.type !== "boolean") {
+      throw new Error(`${id} combat abilities onlyWhen ${JSON.stringify(source.onlyWhen)} must name a boolean column`);
+    }
+    if (source.alwaysWhen !== undefined && source.onlyWhen === undefined) {
+      throw new Error(`${id} combat abilities alwaysWhen is the exception to onlyWhen, so it needs onlyWhen beside it`);
+    }
+    if (source.alwaysWhen !== undefined) {
+      const column = columns.get(source.alwaysWhen?.column);
+      if (!column) {
+        throw new Error(
+          `${id} combat abilities alwaysWhen names unknown column ${JSON.stringify(source.alwaysWhen?.column)}`,
+        );
+      }
+      const mismatch = columnEqualsIssue(column, source.alwaysWhen.equals);
+      if (mismatch) throw new Error(`${id} combat abilities alwaysWhen ${mismatch}`);
+    }
+    if (source.toHit !== undefined) ref(source.toHit, `abilities "${source.list}" toHit`);
+    if (source.saveDifficulty !== undefined) ref(source.saveDifficulty, `abilities "${source.list}" saveDifficulty`);
+  }
+
+  const standard = new Set();
+  for (const action of combat.standard ?? []) {
+    if (!RULESET_COMBAT_STANDARD_ACTIONS.includes(action)) {
+      throw new Error(`${id} combat standard action ${JSON.stringify(action)} is not one the Engine resolves`);
+    }
+    if (standard.has(action)) throw new Error(`${id} combat repeats the standard action "${action}"`);
+    standard.add(action);
+  }
+
+  const mapped = new Set();
+  for (const entry of combat.conditions ?? []) {
+    if (!names.conditions.has(entry?.condition)) {
+      throw new Error(`${id} combat maps unknown condition ${JSON.stringify(entry?.condition)}`);
+    }
+    if (mapped.has(entry.condition)) throw new Error(`${id} combat repeats the condition "${entry.condition}"`);
+    mapped.add(entry.condition);
+    for (const effect of entry.effects ?? []) {
+      if (!RULESET_COMBAT_CONDITION_EFFECTS.includes(effect)) {
+        throw new Error(`${id} combat condition "${entry.condition}" has the unknown effect ${JSON.stringify(effect)}`);
+      }
+    }
+    for (const save of entry.failsSaves ?? []) {
+      if (!names.saves.has(save)) {
+        throw new Error(`${id} combat condition "${entry.condition}" fails unknown save ${JSON.stringify(save)}`);
+      }
+    }
+  }
+
+  if (combat.concentration !== undefined) {
+    if (!names.text.has(combat.concentration?.text)) {
+      throw new Error(
+        `${id} combat concentration names unknown live text ${JSON.stringify(combat.concentration?.text)}`,
+      );
+    }
+    if (!names.saves.has(combat.concentration?.save)) {
+      throw new Error(`${id} combat concentration names unknown save ${JSON.stringify(combat.concentration?.save)}`);
+    }
+  }
+
+  if (combat.dying !== undefined) {
+    const dying = combat.dying;
+    if (dying?.kind !== "saves")
+      throw new Error(`${id} combat dying kind ${JSON.stringify(dying?.kind)} is not "saves"`);
+    for (const key of ["successes", "failures"]) {
+      if (!names.tracks.has(dying[key])) {
+        throw new Error(`${id} combat dying ${key} names unknown track ${JSON.stringify(dying[key])}`);
+      }
+    }
+    if (dying.successes === dying.failures) {
+      throw new Error(`${id} combat dying counts successes and failures on two different tracks`);
+    }
+    if (dying.condition !== undefined && !names.conditions.has(dying.condition)) {
+      throw new Error(`${id} combat dying names unknown condition ${JSON.stringify(dying.condition)}`);
+    }
+    const dyingNaturals = dying.naturals ?? {};
+    if (
+      !singleDie(dying.dice, "dying") &&
+      ((dyingNaturals.max ?? "none") !== "none" || (dyingNaturals.min ?? "none") !== "none")
+    ) {
+      throw new Error(`${id} combat dying naturals need a single die`);
+    }
+  }
+
+  const types = new Set();
+  for (const type of combat.damageTypes ?? []) {
+    const key = String(type).toLowerCase();
+    if (types.has(key)) throw new Error(`${id} combat repeats the damage type "${type}"`);
+    types.add(key);
+  }
+
+  if (combat.threat !== undefined) {
+    const tiers = combat.threat?.tiers;
+    if (!Array.isArray(tiers) || tiers.length === 0 || tiers.length > RULESET_COMBAT_MAX_TIERS) {
+      throw new Error(`${id} combat threat declares 1 to ${RULESET_COMBAT_MAX_TIERS} tiers`);
+    }
+    const seen = new Set();
+    for (const tier of tiers) {
+      if (seen.has(tier?.id)) throw new Error(`${id} combat threat repeats the tier "${tier.id}"`);
+      seen.add(tier?.id);
+      for (const key of ["health", "damagePerRound"]) {
+        const band = tier?.[key];
+        if (!Array.isArray(band) || band.length !== 2 || !band.every((value) => Number.isInteger(value))) {
+          throw new Error(`${id} combat threat tier "${tier?.id}" ${key} is a pair of whole numbers`);
+        }
+        if (band[0] > band[1])
+          throw new Error(`${id} combat threat tier "${tier.id}" ${key} lowest is above its highest`);
+      }
+      for (const key of ["defense", "toHit", "saveDifficulty"]) {
+        if (!Number.isInteger(tier?.[key])) {
+          throw new Error(`${id} combat threat tier "${tier?.id}" ${key} is a whole number`);
+        }
+      }
+    }
+  }
+  return true;
+}
+
+/** Assert a ruleset package's bestiary catalogs, and report how many creatures they carry.
+ *
+ *  A creature is written entirely in the names the combat block and the sheet already declare, so
+ *  every one of them is checked against the file beside it, exactly as the Engine checks them when
+ *  it reads the catalog. `catalogSources` maps each `catalogs/<id>.json` path to its raw bytes, so
+ *  this stays a pure function a test can drive with fixtures. */
+export function assertRulesetCreatures(manifest, document, catalogSources = new Map()) {
+  const id = manifest?.id ?? "package";
+  const catalogs = Array.isArray(document?.catalogs) ? document.catalogs : [];
+  const names = sheetNames(document);
+  const combat = document?.combat;
+  const budgets = combat ? new Set((combat.economy?.budgets ?? []).map((budget) => budget.id)) : new Set();
+  const tiers = combat?.threat?.tiers ? new Set(combat.threat.tiers.map((tier) => tier.id)) : new Set();
+  // Only checked where the ruleset says what its types are. One that declares none reads a type as
+  // free text, exactly as a fight matches it.
+  const types = combat?.damageTypes
+    ? new Set(combat.damageTypes.map((type) => String(type).trim().toLowerCase()))
+    : null;
+
+  let count = 0;
+  for (const catalog of catalogs) {
+    if (catalog?.holds !== "creatures") {
+      for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+        if (entry?.creature) {
+          throw new Error(`${id} catalog "${catalog?.id}" holds rows, so entry "${entry.id}" cannot carry a creature`);
+        }
+      }
+      continue;
+    }
+    const api = RULESET_CREATURES_MIN_CAPABILITY_API;
+    if (!meetsCapabilityApi(manifest, api)) {
+      throw new Error(`${id} ships a bestiary and must declare capability API ${api.major}.${api.minor} or newer`);
+    }
+    // The picker offers a catalog on the lists it feeds, so a bestiary declaring feeds would be
+    // offered on a sheet it can write nothing into.
+    if (catalog.feeds !== undefined) {
+      throw new Error(`${id} catalog "${catalog.id}" holds creatures, so it feeds no list`);
+    }
+    if (!combat) {
+      throw new Error(`${id} catalog "${catalog.id}" holds creatures, which need a combat block to be written in`);
+    }
+    const entries = catalogEntryList(catalog, catalogSources);
+    // An asset this check cannot read is assertRulesetCatalogs' rejection to make, with a better
+    // message, so this reads only what is actually there.
+    if (entries === null) continue;
+    for (const entry of entries) {
+      const where = `${id} catalog "${catalog.id}" entry "${entry?.id}"`;
+      const creature = entry?.creature;
+      if (!creature) throw new Error(`${where} carries no creature, and this catalog holds creatures`);
+      if (entry.rows !== undefined) throw new Error(`${where} has both rows and a creature`);
+      if (entry.mechanics !== undefined) {
+        throw new Error(`${where} says what it does in its own actions, so it carries no mechanics`);
+      }
+      count += 1;
+      if (!tiers.has(creature.tier))
+        throw new Error(`${where} names unknown threat tier ${JSON.stringify(creature.tier)}`);
+      // The three numbers a fight cannot be built without. The Engine requires all of them (health a
+      // whole number from 1, or dice; defense a whole number from 0; a whole initiative modifier), and
+      // nothing on the combat path would stand in for a missing one.
+      const health = creature.health;
+      const healthIsNumber = Number.isInteger(health) && health >= 1;
+      const healthIsDice = health !== null && typeof health === "object" && typeof health.dice === "string";
+      if (!healthIsNumber && !healthIsDice) {
+        throw new Error(`${where} needs health: a whole number from 1, or dice, not ${JSON.stringify(health)}`);
+      }
+      if (!Number.isInteger(creature.defense) || creature.defense < 0) {
+        throw new Error(`${where} needs a defense: a whole number from 0, not ${JSON.stringify(creature.defense)}`);
+      }
+      if (!Number.isInteger(creature.initiativeModifier)) {
+        throw new Error(
+          `${where} needs an initiativeModifier: a whole number, not ${JSON.stringify(creature.initiativeModifier)}`,
+        );
+      }
+      // Health written as dice is thrown when the fight is created, so dice nobody can throw would
+      // build an opponent with no hit points at all.
+      const healthDice = typeof creature.health === "object" ? creature.health?.dice : undefined;
+      if (healthDice !== undefined && !RULESET_CATALOG_DICE_PATTERN.test(healthDice)) {
+        throw new Error(`${where} has health dice ${JSON.stringify(healthDice)} nobody can throw`);
+      }
+      for (const ability of Object.keys(creature.abilities ?? {})) {
+        if (!names.abilities.has(ability)) throw new Error(`${where} names unknown ability ${JSON.stringify(ability)}`);
+      }
+      for (const save of Object.keys(creature.saves ?? {})) {
+        if (!names.saves.has(save)) throw new Error(`${where} names unknown save ${JSON.stringify(save)}`);
+      }
+      for (const key of ["resist", "vulnerable", "immune"]) {
+        for (const type of creature[key] ?? []) {
+          if (types && !types.has(String(type).trim().toLowerCase())) {
+            throw new Error(`${where} is ${key} to unknown damage type ${JSON.stringify(type)}`);
+          }
+        }
+      }
+      for (const condition of creature.conditionImmunities ?? []) {
+        if (!names.conditions.has(condition)) {
+          throw new Error(`${where} is immune to unknown condition ${JSON.stringify(condition)}`);
+        }
+      }
+      if ((creature.traits ?? []).length > RULESET_CREATURE_MAX_TRAITS) {
+        throw new Error(
+          `${where} carries ${creature.traits.length} traits, over the ${RULESET_CREATURE_MAX_TRAITS} limit`,
+        );
+      }
+      const actions = creature.actions;
+      if (!Array.isArray(actions) || actions.length === 0 || actions.length > RULESET_CREATURE_MAX_ACTIONS) {
+        throw new Error(`${where} carries 1 to ${RULESET_CREATURE_MAX_ACTIONS} actions, not ${actions?.length}`);
+      }
+      const byId = new Map();
+      for (const action of actions) {
+        if (byId.has(action?.id)) throw new Error(`${where} repeats the action id ${JSON.stringify(action.id)}`);
+        byId.set(action?.id, action);
+      }
+      if (creature.signaturePoints === undefined && actions.some((action) => action.signature)) {
+        throw new Error(`${where} buys an action with points but declares no signaturePoints`);
+      }
+      for (const action of actions) {
+        const at = `${where} action "${action.id}"`;
+        if (!budgets.has(action.budget))
+          throw new Error(`${at} spends unknown budget ${JSON.stringify(action.budget)}`);
+        if (action.damage?.type && types && !types.has(String(action.damage.type).trim().toLowerCase())) {
+          throw new Error(`${at} deals unknown damage type ${JSON.stringify(action.damage.type)}`);
+        }
+        if (action.damage?.dice !== undefined && !RULESET_CATALOG_DICE_PATTERN.test(action.damage.dice)) {
+          throw new Error(`${at} rolls ${JSON.stringify(action.damage.dice)}, which is not dice a table has`);
+        }
+        if (action.save && !names.saves.has(action.save.save)) {
+          throw new Error(`${at} forces unknown save ${JSON.stringify(action.save.save)}`);
+        }
+        if (action.save && action.saveDifficulty !== undefined) {
+          throw new Error(`${at} has a save of its own, and that save's difficulty is what a save-ends uses`);
+        }
+        const applies = action.applies ?? [];
+        if (applies.length > RULESET_CREATURE_MAX_APPLIES) {
+          throw new Error(`${at} applies ${applies.length} conditions, over the ${RULESET_CREATURE_MAX_APPLIES} limit`);
+        }
+        for (const entryApplies of applies) {
+          if (!names.conditions.has(entryApplies?.condition)) {
+            throw new Error(`${at} applies unknown condition ${JSON.stringify(entryApplies?.condition)}`);
+          }
+          if (entryApplies.duration === "until-save" && !entryApplies.saveEnds) {
+            throw new Error(`${at} applies "${entryApplies.condition}" until a save it does not name`);
+          }
+          if (entryApplies.saveEnds && !names.saves.has(entryApplies.saveEnds.save)) {
+            throw new Error(
+              `${at} ends "${entryApplies.condition}" on unknown save ${JSON.stringify(entryApplies.saveEnds.save)}`,
+            );
+          }
+        }
+        // A save with nothing to be rolled against is a save everybody passes.
+        if (
+          !action.save &&
+          action.saveDifficulty === undefined &&
+          applies.some((entryApplies) => entryApplies.saveEnds)
+        ) {
+          throw new Error(`${at} ends a condition on a save with no difficulty to roll against`);
+        }
+        if (!action.sequence) continue;
+        // A sequence is a container: anything else on it would be a second thing the one budget did.
+        for (const key of ["toHit", "autoHit", "damage", "save", "saveDifficulty", "applies", "targetCount"]) {
+          if (action[key] !== undefined) throw new Error(`${at} is a sequence, so it carries no ${key} of its own`);
+        }
+        if (action.sequence.length === 0 || action.sequence.length > RULESET_CREATURE_MAX_SEQUENCE) {
+          throw new Error(`${at} names 1 to ${RULESET_CREATURE_MAX_SEQUENCE} steps, not ${action.sequence.length}`);
+        }
+        for (const step of action.sequence) {
+          const named = byId.get(step?.action);
+          if (!named) throw new Error(`${at} names unknown action ${JSON.stringify(step?.action)}`);
+          if (named.id === action.id) throw new Error(`${at} names itself`);
+          if (named.sequence) throw new Error(`${at} names "${step.action}", and a sequence cannot name another`);
+          // Bought with points while somebody else is acting, so a sequence, which is paid for with a
+          // budget on the creature's own turn, cannot hold it. The Engine refuses the same.
+          if (named.signature) {
+            throw new Error(`${at} names "${step.action}", which is bought with points, so a sequence cannot name it`);
+          }
+          // `times` may be left out (the Engine reads that as once). Written, it is a whole number
+          // from 1 to 10, which is the Engine's own bound and no stricter.
+          if (step.times !== undefined && (!Number.isInteger(step.times) || step.times < 1 || step.times > 10)) {
+            throw new Error(`${at} repeats "${step.action}" ${JSON.stringify(step.times)} times, not 1 to 10`);
+          }
+        }
+      }
+    }
+  }
+  return count;
 }
 
 /** Assert a ruleset package's `battle` block, and report whether it has one.
