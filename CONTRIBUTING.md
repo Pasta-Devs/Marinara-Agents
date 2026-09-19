@@ -87,6 +87,8 @@ node scripts/build-ruleset-packages.mjs
 
 A ruleset may also ship **catalogs**: ready-made entries the Engine's sheet editor offers in a picker, declared in `ruleset.json` and shipped either inline or as `catalogs/<id>.json` assets beside it. They are ordinary declared assets, so the ruleset builder hash-pins and zips them like any other payload, and `validate-catalog.mjs` checks that each one parses, names its own catalog, stays inside the Engine's size and entry limits, and only writes rows the sheet's own lists could hold. Declaring a catalog asset requires Capability API 1.21.
 
+A ruleset may also carry an optional `battle` block, which lends a fight the sheet's own hit point pool, spell slot pools and the catalog-marked rows that become combat skills, and writes the fight's cost back afterwards. It lives inside `ruleset.json`, so the manifest cannot show it; `validate-catalog.mjs` checks that every pool and column it names exists on the sheet beside it, and that a ruleset carrying one declares Capability API 1.22 or newer. It is not a combat adapter: the damage arithmetic stays the Engine's.
+
 The `ruleset-5e-2014` catalogs are generated from Open5e's `srd-2014` fixtures, which are not committed here. Regenerate them with a local copy of that data:
 
 ```bash
