@@ -3,9 +3,8 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { slurp2Source } from "./slurp2-source";
 
-const cardSource = readFileSync(
+const cardSource = slurp2Source(
   "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpCreatorProfileCard.tsx",
-  "utf8",
 );
 const homeSource = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
 

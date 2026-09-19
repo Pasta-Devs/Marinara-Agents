@@ -1,13 +1,12 @@
 // Persona identity card and switcher list, split out of components/slurp/SlurpShell.tsx in Slice 10.
-import { AtSign, ChevronDown, Sparkles, UserRound } from "lucide-react";
-import { AnimatePresence, motion } from "framer-motion";
-import { useState } from "react";
+import { AtSign, Sparkles } from "lucide-react";
+
 import type { NoodleAccount } from "@marinara-engine/shared";
 import { cn } from "../../../lib/utils";
 import { useSlurpMediaSrc } from "../../base/media/slp-media-src";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { SlurpCoinAmount } from "../coin/SlpCoin";
-import { Avatar, initials, NOODLE_PERSONA_SWITCHER_PAGE_SIZE, ProfileInitial } from "../../base/chrome/SlpChrome";
+import { Avatar } from "../../base/chrome/SlpChrome";
 
 /**
  * The active identity as a card rather than a selected row: switching persona changes whose

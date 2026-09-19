@@ -14,13 +14,12 @@ import {
   MessageCircle,
   Search,
   Settings2,
-  Sparkles,
   User,
   Wallet,
   X,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
+import { type CSSProperties, useRef } from "react";
 import { cn } from "../../../lib/utils";
 import { useDialogFocusScope } from "../../../hooks/use-dialog-focus-scope";
 import { useTranslation as useUiTranslation } from "react-i18next";
@@ -29,16 +28,13 @@ import {
   Avatar,
   BOTTOM_SAFE_INSET,
   getNoodleAccentStyle,
-  initials,
   NOODLE_BLUE,
   labelClass,
   NOODLE_ICON_SCOPE_CLASS,
   NOODLE_LOGO_SRC,
   NoodleAccentContext,
   NoodleLogo,
-  NOODLER_ADD_MARK,
   NOODLER_LOGO_SRC,
-  NOODLER_MARK,
   SLURP_NAME,
   SLURP_ROW_ACTIVE_CLASS,
   SLURP_ROW_CLASS,

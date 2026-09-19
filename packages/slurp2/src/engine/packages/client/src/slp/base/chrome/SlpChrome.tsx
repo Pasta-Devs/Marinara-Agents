@@ -6,7 +6,7 @@
 // ──────────────────────────────────────────────
 import { UserRound } from "lucide-react";
 import { useReducedMotion } from "framer-motion";
-import { createContext, type CSSProperties, useContext, useEffect, useRef, useState } from "react";
+import { createContext, type CSSProperties, useContext, useEffect, useState } from "react";
 import type { AvatarCrop, NoodleAccount } from "@marinara-engine/shared";
 import { cn, getAvatarCropStyle } from "../../../lib/utils";
 import { useSlurpMediaSrc } from "../media/slp-media-src";
