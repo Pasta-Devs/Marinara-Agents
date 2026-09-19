@@ -21,7 +21,7 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 
 - Last updated: 2026-09-19
 - Updated by: Slice 9 implementation agent
-- Overall state: Slice 9 in progress
+- Overall state: Slice 9 ready for review
 - Active slice: 9 (Backstage), issue #936, branch `slurp2-slice9-backstage` from
   `origin/modular-simping` `03ae3a90` (the Slice 8 merge commit).
 - Slice 8 merge gate: PR #932 is `MERGED` into `modular-simping` at `03ae3a90`. Its generated
@@ -33,8 +33,8 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
   force) so the merge reaches `modular-simping` through the Slice 9 PR rather than a direct push.
   The merge was clean; no generated Slurp2 output conflicted. The only builder change from staging
   bumps `long-term-memory` to `1.3.4` and leaves Slurp2 at `0.0.31`.
-- Pull request: draft PR against `modular-simping`, assigned to `Gunterlie`. Issue #936 is assigned
-  to `Gunterlie`.
+- Pull request: draft PR #937 against `modular-simping`, assigned to `Gunterlie`. Issue #936 is
+  assigned to `Gunterlie`. The PR stays draft; it is not merged by the implementation agent.
 - Package version: `0.0.31` before this slice; this slice ships `0.0.32` (integration-only;
   `staging` stays at `0.0.22` until the final `0.1.0` release PR).
 - Node: `/home/dev/.nvm/versions/node/v24.18.0/bin`; `node -v` = `v24.18.0` (verified this slice).
@@ -81,6 +81,236 @@ Two targets had no domain owner and were decided explicitly:
   post-guidance hook the prompts panel calls. It owns cross-cutting configuration UI only, never a
   domain panel.
 
+### Slice 9 result
+
+**Branch and commits.** `slurp2-slice9-backstage`, five commits on top of `03ae3a90`:
+`ff208848` (ordinary merge of `origin/staging`), `02e9a28b` (slice start and ownership),
+`f027729f` (feature-owned Backstage state), `3919b892` (thin host and registry), `ceedd44e`
+(rebuild 0.0.32 and the rewritten anchor regression), `85496c07` (retargeted regressions).
+
+**Package version.** `0.0.32`. Builder `scripts/build-feature-packages.mjs` bumped once.
+
+**Backstage host files.** `slp/app/backstage/SlpBackstageShell.tsx` (241),
+`slp/app/backstage/slp-backstage-controller.ts` (65), `slp/app/backstage/slp-backstage-registry.ts`
+(54). In `slp/features/backstage/`: `slp-backstage-contract.ts`, `slp-backstage-placement.ts`,
+`SlpBackstageNavigation.tsx`, `SlpBackstagePreview.tsx`, `SlpBackstageControls.tsx`,
+`SlpBackstageSidebar.tsx`, and the three landing panels. `slp/base/navigation/slp-backstage-target.ts`
+holds the target vocabulary. `slp/modules/settings/SlpSettingsKit.tsx` and
+`SlpSettingsControls.tsx` hold the shared setting controls.
+
+The shell's rendered JSX is byte-identical to the deleted `SlurpSettings.tsx` render except for
+three lines: two renamed label constants, the renamed section row, and the six hard-coded page
+components replaced by `{Panel ? <Panel {...page} /> : null}`. `git show HEAD~3:...SlurpSettings.tsx
+| sed -n '977,1093p'` diffed against the shell's `<main>` block shows only those changes.
+
+**The controller.** `useSlurpBackstageController` was 545 lines that fetched for every feature. It
+is now 65 lines of pure composition over ten feature-owned contracts:
+`slp-ads-backstage-contract.ts`, `slp-audience-backstage-contract.ts`,
+`slp-creators-backstage-contract.ts`, `slp-economy-backstage-contract.ts`,
+`slp-feed-backstage-contract.ts`, `slp-maintenance-backstage-contract.ts`,
+`slp-media-backstage-contract.ts`, `slp-messages-backstage-contract.ts`,
+`slp-prompts-backstage-contract.ts` and `slp-settings-backstage-contract.ts`. Every query keeps its
+original `enabled` condition, so the same requests fire at the same moments.
+
+**Registry — all 17 targets, one entry each, no duplicates.**
+
+| target | panel | owner |
+| --- | --- | --- |
+| overview | `SlpBackstageOverviewPanel` | backstage |
+| creators | `SlpCreatorsPanel` | creators |
+| improve | `SlpCreatorImprovePanel` | creators |
+| world | `SlpBackstageWorldPanel` | backstage |
+| tags | `SlpDiscoveryPanel` | discovery |
+| events | `SlpWorldEventsPanel` | world |
+| arcs | `SlpProjectsPanel` | projects |
+| messaging | `SlpMessagingPanel` | messages |
+| audience | `SlpAudiencePanel` | audience |
+| ads | `SlpAdsPanel` | ads |
+| wallet | `SlpWalletPanel` | economy |
+| automation | `SlpBackstageAutomationPanel` | backstage |
+| general | `SlpPublishingPanel` | feed |
+| images | `SlpImagesPanel` | media |
+| prompts | `SlpPromptsPanel` | settings |
+| autopurge | `SlpAutopurgePanel` | maintenance |
+| advanced | `SlpBackupPanel` | maintenance |
+
+Three overlays moved with their owners: `features/creators/SlpCreatorRefreshModal.tsx`,
+`features/feed/SlpCreatorScheduleModal.tsx`, `features/settings/SlpPromptEditors.tsx`.
+
+**Anchor proof.** `tests/slurp2-backstage-anchors.regression.ts` was rewritten against the registry.
+It imports the real `SLP_BACKSTAGE_SETTING_PLACEMENT` and `SLP_BACKSTAGE_TARGETS`, parses the real
+registry entries, resolves each entry's `Component` to its actual file, and asserts every
+non-internal setting renders `settingKey="<key>"` in the file its registry entry names. It also
+proves target completeness, duplicate rejection, the unknown-target fallback, the absence of a
+second switch in the shell, and the absence of glob loading, dynamic import and side-effect
+registration. Internal settings keep their anchor exemption and the exemption is asserted non-empty.
+
+Mutation checks, each confirmed to fail the regression and then reverted: dropping the `tags` entry;
+duplicating the `tags` entry; renaming one anchor (`inlineAdsTone`); adding an `import.meta.glob`
+call to the registry; pointing an entry at a component that does not exist. The suite passes again
+after each revert.
+
+There is no React renderer in this repository (no `react` in `node_modules`), so the regression
+resolves and reads the real component files rather than mounting them. DOM proof belongs to the
+browser suite, which could not run — see below.
+
+**Source-map changes.** `tests/slurp2-source.ts` gained eleven Slice 9 keys mapping each historical
+Backstage file to its new files, so `slurp2BackstageSource()` and its 26 consumers keep reading the
+same logical module. Two paths were corrected for moved hooks
+(`features/media/slp-image-connection-hooks.ts`, `features/settings/slp-post-guidance-contract.ts`)
+and `features/ads/slp-ads-contract.ts` was added to the `hooks/use-slurp.ts` aggregate. No assertion
+was deleted or weakened; the `save(` negative for World and Automation still reads through the
+aggregate keys and so stays module-wide across all eleven new panels.
+
+**Ownership.** `slurp2OwnedSourcePaths` needed no change: it owns `packages/client/src/slp` by
+directory, which covers every new file, and `packages/client/src/components/slurp` still holds 44
+live legacy files, so no entry could be removed. `node scripts/validate-catalog.mjs` and
+`node scripts/test-catalog-lanes.mjs` pass.
+
+**Validation, all run on this branch with Node v24.18.0.**
+
+| command | result |
+| --- | --- |
+| `tsx tests/slurp2-architecture.regression.ts` | pass |
+| `tsx tests/slurp2-backstage-anchors.regression.ts` | pass |
+| `npm run check` | pass, 0 errors (918 pre-existing warnings, none in the new files) |
+| `node scripts/typecheck-packages.mjs slurp2` | pass |
+| per-file sweep of `test:noodle:regressions` | 177 pass / 27 fail |
+| `node scripts/test-catalog-lanes.mjs` | pass |
+| `node scripts/validate-package-locales.mjs` | pass |
+| `node scripts/validate-catalog.mjs` | pass |
+| `node scripts/tests/catalog-release-notes.regression.mjs` | pass |
+| `git diff --check` | clean |
+| `npm run test:browser:slurp2` | 14/14 blocked, Chromium cannot start |
+
+**Baseline comparison.** `npm run test:noodle:regressions` exits on the first failure, so each file
+was run separately on this branch and on a clean detached worktree of `origin/modular-simping`.
+Both are 177 pass / 27 fail, and the failing sets are identical. Slice 9 adds no regression
+failure and fixes none. The 27 are the recorded pre-existing baseline.
+
+Three regressions did fail mid-slice and were repaired, not weakened:
+`slurp2-backstage.regression.ts` imported the deleted vocabulary module and asserted the old
+`target === "improve"` dispatch, so it now imports the moved module and asserts the registry's
+`improve` entry; `slurp2-backstage-completion.regression.ts` asserted the old
+`SlurpSettingsSidebar` export name; `slurp2-client-hooks.regression.ts` walked the whole `slp/`
+tree, which now contains Backstage, so it excludes the files the source map attributes to the
+Backstage components and its two moved-hook locations were corrected.
+
+**Generated output.** Builder-produced with
+`MARINARA_ENGINE_ROOT=/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish`. Nothing was hand-edited.
+`artifacts/slurp2-0.0.32.zip`, sha256
+`aba57f7f0604d04b40c27010f54146a13fe965e7c78f0072c63990027f280853`, 6727019 bytes, 6 entries
+including `manifest.json`, the client payload and the server payload. Every manifest hash and size
+was recomputed from disk and matches. The catalog carries that hash, that size and version `0.0.32`
+in all three lanes.
+
+**Engine source.** `/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish`, branch
+`welcome-to-the-agentshop`, commit `fdb67d47bfb909f013346afdb3d2c23d72d7b399`, tracked files clean
+before and after the build, 4 ahead / 80 behind Engine `origin/staging`. Used unchanged, as in
+Slices 7 and 8. No substitute was needed and nothing in it was reset, rebased or discarded.
+
+**File sizes.** No file under the `slp` roots exceeds 800 lines. The largest are
+`SlpAdsPanel.tsx` 682, `SlpCreatorsPanel.tsx` 662, `SlpAudiencePanel.tsx` 572,
+`SlpBackstagePreview.tsx` 512. `SlurpBackstageWorld.tsx` was 2171 lines before the split.
+
+### Slice 9 browser, responsive and lifecycle gaps
+
+No browser proof was obtained and none is claimed.
+
+`MARINARA_ENGINE_ROOT=... npm run test:browser:slurp2` started the Engine services, then all 14
+desktop and mobile cases failed in 2ms at `browserType.launch`. `ldd` on
+`~/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome` reports 20 missing shared libraries,
+including `libnspr4.so`, `libnss3.so`, `libatk-1.0.so.0` and `libxcb.so.1`. This is the same
+environment failure recorded for Slice 8, not a Slice 9 defect.
+
+Therefore **none** of the following was performed and none may be treated as verified: opening
+Backstage; switching panels; deep-linking to a panel; searching; editing, saving, applying or
+resetting a setting; navigating away with unsaved changes; unknown-target or internal-target
+behaviour in a live browser; desktop, tablet or mobile layout checks; screenshots; console or
+network inspection; accessibility checks; and install, update, restart, offline-restart or
+uninstall lifecycle testing. No production `ssh marinara` was used.
+
+Save, apply, reset, dirty-state, deep-link and fallback behaviour is evidenced only statically: the
+shell render is byte-identical apart from the registry swap, the save/apply/reset code moved
+unchanged into `slp-settings-backstage-contract.ts` and `slp-maintenance-backstage-contract.ts`, and
+the anchor regression asserts the deep-link and fallback wiring. A human must still run the PR
+checklist in a browser.
+
+### Slice 9 plan corrections
+
+1. **§9 registry path.** The plan places the registry in `features/backstage/`. The architecture
+   regression forbids one feature importing another feature's internals, and a panel registry must
+   name every feature's panel, so the registry and the shell live in `slp/app/backstage/` — the
+   layer the rank table already designates for composing features. Maintainer-approved on
+   2026-09-19 over the alternative of a boundary allowlist, because Slice 10 must end with none.
+   No architecture exception was added and `DECISIONS.md` needs no entry: no approved boundary
+   changed.
+2. **Target vocabulary in `base/`.** `slp/base/state/slp-package-store.ts` restores a persisted
+   Backstage destination and needs the target vocabulary. `base` may not import `features`, so
+   `slp-backstage-target.ts` is at `slp/base/navigation/`. The placement map, which depends on the
+   `SlurpSettings` key union, stays in `features/backstage/`.
+3. **Two files renamed to contracts.** `features/settings/slp-post-guidance-hooks.ts` became
+   `slp-post-guidance-contract.ts` and `SlurpPromotion` moved from `slp-ads-hooks.ts` to a new
+   `features/ads/slp-ads-contract.ts`, because the creators panel and the Backstage preview need
+   them across a feature boundary. `features/settings/slp-image-connection-hooks.ts` moved to
+   `features/media/`, following the approved `images` ownership.
+
+### Slice 9 recorded behaviour notes
+
+These are the only behavioural deltas, all deliberate:
+
+- Panels now mount only on their own target, so a panel's local view state resets when the user
+  leaves that target. Everything that could be user-visible was hoisted into its feature's
+  Backstage contract so it survives exactly as before: the creator table's search text, filter,
+  tab and expanded row, and the pace, image, audience and messaging wizard drafts.
+- Feature queries keep their original `enabled` conditions in the feature contracts, including the
+  two audience-character queries that the single-page host mounted for every section.
+- Export names inside the moved files were not renamed (`SettingAnchor`, `Toggle`,
+  `SlurpBackstageApplyBar` and so on). The naming rules apply to filenames, and renaming roughly
+  ten shared symbols across every panel would have added churn without a regression to catch a
+  mistake. `SlurpBackstageScopeBadge` is the exception: it became `SlpSettingScopeBadge` because it
+  moved into the shared module kit.
+- `SettingAnchor` takes `settingKey: SlpSettingKey` (a string alias) rather than
+  `keyof SlurpSettings`, because the shared kit is a module and may not import a feature. A typo'd
+  anchor is caught by the anchor regression rather than the compiler.
+- `SlurpBackstageWorkflow.tsx` (1711 lines) stays in `components/slurp/` as migration debt. It is a
+  shared editor kit, not a Backstage panel, and splitting it is Slice 10 work.
+
+### Slice 9 pending decisions
+
+None blocking. For Slice 10 to consider:
+
+- `SlurpBackstageWorkflow.tsx` still holds shared editors, presets and formatters in the legacy
+  tree; it should become one or more `slp/modules/` files.
+- `focusRing` and `quietButton` class constants are now duplicated in
+  `features/creators/slp-creator-classes.ts` and `features/maintenance/SlpMaintenanceTask.tsx`.
+- `scripts/typecheck-packages.mjs` reports only TS2304/TS2552 and relative TS2307. A file that
+  fails to **parse** yields only TS1xxx syntax errors and so is reported as clean. This masked
+  broken generated panels mid-slice until a wider `tsc` run caught them. Slice 10 should add
+  TS1xxx to the reported set; it is a one-line change and a real gap in the gate.
+
+
+### Slice 9 handoff — the exact next action for Slice 10
+
+Slice 9 is implementation-complete and validated. PR #937 is open as a draft against
+`modular-simping` and is **not** merged. Slice 10 has **not** started.
+
+The next action is **not** to write code. It is:
+
+1. A human runs the six browser checks on the PR checklist against a development Engine instance
+   that can start Chromium, because this environment cannot. Nothing about the rendered Backstage
+   has been verified in a browser.
+2. CodeRabbit reviews PR #937, its threads are resolved, and the PR is marked ready and merged into
+   `modular-simping` with `--merge` (never squash).
+
+Only then does Slice 10 begin: create a Slice 10 issue, branch and draft PR from the updated
+`origin/modular-simping`, re-run the staging merge gate, and do the final architecture and package
+proof — remove every temporary migration accommodation from the architecture regression, confirm the
+final tree passes with no size or boundary allowlist (Slice 9 added none), split the remaining
+`components/slurp/SlurpBackstageWorkflow.tsx` migration debt, widen
+`scripts/typecheck-packages.mjs` to report TS1xxx syntax errors, and run the full validation and
+live package lifecycle checks. Do not start Slice 10 until PR #937 is merged.
+
 ## Slice ledger
 
 | Slice | Name                                   | State            | Issue / PR       | Package version | Evidence / handoff                                               |
@@ -93,7 +323,7 @@ Two targets had no domain owner and were decided explicitly:
 |     6 | Event and modifier seam                | ready for review | #926 / #927      | 0.0.29          | 0 new regression failures; 4 mutants caught; unit rebuilt        |
  |     7 | Client state and hooks                 | merged           | #928 / #929      | 0.0.30          | Merged into `modular-simping` at `4776370a`; focused gate passes |
 |     8 | Client app and reusable modules        | in progress      | #931 / #932      | 0.0.31       | Partial: app boundary and coin/poll/story modules; Home/Messages split remains |
-|     9 | Backstage                              | in progress      | #936 / PR pending | 0.0.32          | Branch `slurp2-slice9-backstage` from `03ae3a90`; staging merged into the branch |
+|     9 | Backstage                              | ready for review | #936 / #937      | 0.0.32          | Thin host + 17-entry registry; 0 new regression failures vs baseline; no browser proof |
 |    10 | Final architecture and package proof   | not started      | —                | —               | —                                                                |
 
 ## Verified baseline
