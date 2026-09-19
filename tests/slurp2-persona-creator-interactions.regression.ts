@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { slurp2Source } from "./slurp2-source";
 
 const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
 const home = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
-const cards = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpPostCard.tsx", "utf8");
+const cards = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpPostCard.tsx");
 const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 
 assert.match(routes, /resolveInteractableNoodlerPost/u);

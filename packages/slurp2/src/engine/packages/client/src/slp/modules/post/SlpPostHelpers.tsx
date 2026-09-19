@@ -1,14 +1,8 @@
 import { useState } from "react";
-import {
-  type NoodleAccount,
-  type NoodleInteraction,
-  type NoodleInteractionType,
-} from "@marinara-engine/shared";
+import { type NoodleAccount, type NoodleInteraction, type NoodleInteractionType } from "@marinara-engine/shared";
 import { cn } from "../../../lib/utils";
 import { NoodleTextContent } from "./SlpMarkdownRenderer";
-import type {
-  ConversationMediaPickerTab,
-} from "../../../components/chat/ConversationMediaPickerPanel";
+import type { ConversationMediaPickerTab } from "../../../components/chat/ConversationMediaPickerPanel";
 import type { ChatImage } from "../../../hooks/use-gallery";
 import { Avatar } from "../../base/chrome/SlpChrome";
 import { useTranslation as useUiTranslation } from "react-i18next";

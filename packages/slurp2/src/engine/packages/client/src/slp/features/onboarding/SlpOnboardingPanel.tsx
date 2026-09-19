@@ -36,10 +36,7 @@ import {
   useNoodlerEligibleAccounts,
   useRefreshTargetedNoodlerCreatorsNow,
 } from "../creators/slp-creators-contract";
-import {
-  useEnqueueNoodlerFirstPosts,
-  useNoodlerFirstPostStatus,
-} from "./slp-first-post-hooks";
+import { useEnqueueNoodlerFirstPosts, useNoodlerFirstPostStatus } from "./slp-first-post-hooks";
 import { useUpdateSlurpConnectionsForCreators } from "../media/slp-media-contract";
 import { useSlurpSettings, useUpdateSlurpSettings } from "../settings/slp-settings-contract";
 import { cn, generateClientId } from "../../../lib/utils";

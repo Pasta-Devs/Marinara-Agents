@@ -1,3 +1,4 @@
+import { NOODLER_FEED_WINDOW_SIZE } from "./SlpHomeHelpers";
 import { SlurpMomentsShelf, SlurpMomentViewer } from "./SlpScreenMoments";
 import { SubscriptionSections } from "./SlpScreenSubscriptions";
 import {
@@ -41,17 +42,11 @@ import {
   useSlurpInlineAds,
 } from "../../features/ads/slp-ads-hooks";
 import { useNoodlerViewer } from "../../features/feed/slp-feed-viewer-hooks";
-import {
-  useRecordSlurpStoryView,
-  useSlurpStoryViews,
-} from "../../features/messages/slp-messages-hooks";
+import { useRecordSlurpStoryView, useSlurpStoryViews } from "../../features/messages/slp-messages-hooks";
 import { useSlurpSettings } from "../../features/settings/slp-settings-hooks";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { cn } from "../../../lib/utils";
-import {
-  NoodlePostCardCtx,
-  type NoodlePostCardModel,
-} from "../../modules/post/SlpPostCard";
+import { NoodlePostCardCtx, type NoodlePostCardModel } from "../../modules/post/SlpPostCard";
 import { SlurpCreatorProfileCard } from "../../modules/creator/SlpCreatorProfileCard";
 import { SlurpCoinAmount } from "../../modules/coin/SlpCoin";
 import { SlpStoryTile } from "../../modules/story/SlpStoryTile";
@@ -97,12 +92,11 @@ import {
 import { deriveSlurpHubView, type SlurpMoment } from "./slp-hub-view";
 import { useSlurpHubDiscoveryFilters } from "./slp-hub-discovery-filters";
 import { SlurpInlineSuggestedCreators } from "./SlpScreenSuggestedCreators";
+import { SlpHubDiscover } from "./SlpHubDiscover";
 
 // ---------------------------------------------------------------------------
 // Local types
 // ---------------------------------------------------------------------------
-
-
 
 // ---------------------------------------------------------------------------
 // ViewerHub
@@ -148,7 +142,12 @@ export function ViewerHub({
   personasError: boolean;
   onRetryPersonas: () => void;
   scope: ReturnType<typeof useNoodlerViewer>["data"];
+  /**
+   * Frozen at the moment this persona's feed was first shown, so advancing the stored
+   * timestamp does not make the divider vanish under the reader while they are still on it.
+   */
   newSinceAt: string | null;
+  /** Called once the feed is actually on screen — entering NoodleR is not the same as seeing it. */
   onFeedShown: () => void;
   onOpenWallet: () => void;
   walletCoins: number;
@@ -169,6 +168,7 @@ export function ViewerHub({
   onTabChange: (tab: "following" | "all") => void;
   authorProfile: SlurpManagedStageProfile | null;
   onAddStory: () => void;
+  /** Open the persona's own Creator profile from the empty feed. */
   onOpenAuthorProfile?: () => void;
   onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
   togglePending: boolean;
@@ -181,7 +181,7 @@ export function ViewerHub({
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
   const setStickyHeader = useHideOnScroll(scroller);
   const [discoverCollapsed, setDiscoverCollapsed] = useState(false);
-  const [visibleFeedCount, setVisibleFeedCount] = useState(20);
+  const [visibleFeedCount, setVisibleFeedCount] = useState(NOODLER_FEED_WINDOW_SIZE);
   const [activeMomentId, setActiveMomentId] = useState<string | null>(null);
   const [feedLayout, setFeedLayout] = useState<"list" | "wall">("list");
   const [discoverLayout, setDiscoverLayout] = useState<SlurpDiscoverLayout>(() => {
@@ -203,16 +203,24 @@ export function ViewerHub({
   const recordSlurpAdAction = useRecordSlurpAdAction();
   const inlineAdEvery = inlineAdsFrequency === "light" ? 8 : inlineAdsFrequency === "frequent" ? 2 : 4;
   const inlineAdForIndex = (index: number) => {
+    // Slot n sits after every nth post and takes the nth ad. Subtracting one here left the first
+    // slot permanently empty and dropped one ad out of the rotation.
     if (index % inlineAdEvery !== inlineAdEvery - 1) return null;
     const items = inlineAdsQuery.data?.items ?? [];
+    // The server hands back a small batch per fetch, not one ad per slot, so a long scroll
+    // must cycle through it rather than index off the end into slots that stay empty forever.
     if (items.length === 0) return null;
     return items[Math.floor(index / inlineAdEvery) % items.length];
   };
   const emptyWallAd = inlineAdsQuery.data?.items?.[0] ?? null;
   const profileKey = (scope?.creators ?? []).map((creator) => creator.profile.id).join("\u0000");
   useEffect(() => {
-    setVisibleFeedCount(20);
+    setVisibleFeedCount(NOODLER_FEED_WINDOW_SIZE);
   }, [authorProfile?.id, profileKey, scope?.viewer.id, search, tab]);
+  // The visit counts once the feed itself is on screen and loaded — not on app entry, and not
+  // while discovery search has replaced it. Declared above the early returns so hook order
+  // stays stable across the empty and error states below.
+  // A search-filtered list is not the feed either, so it does not count as having seen it.
   const feedIsOnScreen = Boolean(scope) && !isLoading && !isError && !discoveryOpen && !search.trim();
   useEffect(() => {
     if (feedIsOnScreen) onFeedShown();
@@ -236,6 +244,8 @@ export function ViewerHub({
     searchTerm,
     onSearchChange,
   });
+  // "Create a persona" is a claim about the user's data, so it waits for the personas query to
+  // actually succeed instead of speaking for a cold or failed load.
   if (personas.length === 0) {
     if (personasError) {
       return (
@@ -261,8 +271,18 @@ export function ViewerHub({
   const activeMoment = activeMomentIndex >= 0 ? moments[activeMomentIndex] : null;
   const visibleFeed = feed.slice(0, visibleFeedCount);
   const openPostItem = openPostId ? (feed.find((item) => item.post.id === openPostId) ?? null) : null;
+  // One place decides what clicking a post image does, so the wall, the feed, and the profile
+  // all open the same dialog.
+  // Every Creator on the feed is one of the player's own, so the feed offers the same edit and
+  // delete as the Creator profile. The image dialog keeps management off: it draws the card
+  // without its picture, and an edit started there would save the post without it.
   const feedCardCtx = { ...postCardCtx, postManagement: true, openPost: setOpenPostId };
   const visibleSearchResults = searchResults.slice(0, visibleFeedCount);
+  // The feed is newest-first, so the divider goes after the *last* new post — the viewer's own
+  // posts sitting in that run are not news themselves but must not cut it short. Shown only
+  // when there is something on both sides: with no older posts it would sit at the bottom
+  // labelling nothing, and with no new ones it says nothing. A search-filtered list is not the
+  // feed, so no boundary marker there either.
   const newSince = newSinceAt ? new Date(newSinceAt).getTime() : NaN;
   const isNewToViewer = ({ post, creator }: (typeof feed)[number]) =>
     !Number.isNaN(newSince) &&
@@ -303,154 +323,35 @@ export function ViewerHub({
       )}
     </SlurpAccessTransition>
   );
+
   if (discoveryOpen) {
     return (
-      <div ref={setScroller} className="min-h-0 flex-1 overflow-y-auto" data-component="SlurpHome.Discover">
-        <div
-          ref={setStickyHeader}
-          className={cn(
-            "sticky top-0 z-20 flex items-center gap-2 border-b border-[var(--noodle-divider)] bg-[linear-gradient(110deg,color-mix(in_srgb,var(--slurp-surface)_94%,transparent),color-mix(in_srgb,var(--noodle-accent)_7%,var(--slurp-surface)))] px-2 py-3 shadow-[var(--slurp-shadow-floating)] backdrop-blur-xl",
-            HIDE_ON_SCROLL_CLASS,
-          )}
-        >
-          <button
-            type="button"
-            onClick={onCloseDiscovery}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
-            aria-label={localizeUi("ui.noodle.noodlerframe.back")}
-          >
-            <ChevronLeft size={22} />
-          </button>
-          <label className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-full bg-[var(--accent)] px-4 text-base ring-1 ring-inset ring-[var(--noodle-divider)] transition-colors focus-within:ring-[var(--noodle-accent)] sm:text-sm">
-            <Search size={18} className="shrink-0 text-[var(--noodle-accent)]" />
-            <span className="sr-only">{localizeUi("ui.noodle.noodlerhome.searchPostsOrCreators")}</span>
-            <input
-              ref={discoveryInputRef}
-              type="search"
-              value={search}
-              onChange={(event) => onSearchChange(event.target.value)}
-              placeholder={localizeUi("ui.noodle.noodlerhome.searchPostsOrCreators")}
-              className="min-w-0 flex-1 border-0 bg-transparent text-base text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] sm:text-sm"
-            />
-            {search.trim() && (
-              <button
-                type="button"
-                onClick={() => onSearchChange("")}
-                className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10"
-                aria-label={localizeUi("ui.noodle.noodlehome.clearSearch")}
-              >
-                <X size={14} />
-              </button>
-            )}
-          </label>
-        </div>
-        {!searchTerm && (
-          <header className="relative isolate overflow-hidden px-4 pb-5 pt-7 sm:px-5">
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--noodle-accent)]">Slurp</p>
-            <h1 className="mt-1 text-2xl font-bold text-balance">{localizeUi("ui.slurp.discover.title")}</h1>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted-foreground)]">
-              {localizeUi("ui.slurp.discover.detail")}
-            </p>
-          </header>
-        )}
-
-        <SlurpDiscoverToolbar
-          notSubscribed={discover.notSubscribed}
-          onNotSubscribedChange={discover.setNotSubscribed}
-          genders={discover.genders}
-          onGenderToggle={(gender) => discover.toggle(discover.setGenders, gender)}
-          minimumPrice={discover.minimumPrice}
-          maximumPrice={discover.maximumPrice}
-          onMinimumPriceChange={discover.setMinimumPrice}
-          onMaximumPriceChange={discover.setMaximumPrice}
-          tags={discover.tags}
-          customTags={discover.customTags}
-          onTagToggle={(tag) => discover.toggle(discover.setTags, tag)}
-          sort={discover.sort}
-          onSortChange={discover.setSort}
-          layout={discoverLayout}
-          onLayoutChange={setDiscoverLayout}
-          filteredCount={discover.filtered.length}
-          filtersActive={discover.active}
-          onClear={discover.clear}
-        />
-
-        {searchTerm && (
-          <section className="px-3 pb-4 sm:px-4" aria-labelledby="noodler-search-results">
-            <div className="border-b border-[var(--noodle-divider)] px-4 py-3">
-              <h2 id="noodler-search-results" className="text-lg font-bold">
-                {localizeUi("ui.noodle.noodlehome.searchResults")}
-              </h2>
-            </div>
-            {searchResults.length > 0 ? (
-              <div className="space-y-3 pt-3">
-                {visibleSearchResults.map(renderFeedPost)}
-                {visibleSearchResults.length < searchResults.length && (
-                  <LoadMoreFeedButton
-                    visible={visibleSearchResults.length}
-                    total={searchResults.length}
-                    onLoadMore={() =>
-                      setVisibleFeedCount((count) => Math.min(searchResults.length, count + 20))
-                    }
-                  />
-                )}
-              </div>
-            ) : (
-              <EmptyState
-                title={localizeUi("ui.noodle.viewerhub.noSearchResults")}
-                detail={localizeUi("ui.slurp.empty.searchDetail")}
-                action={localizeUi("ui.slurp.empty.clearSearch")}
-                onAction={() => onSearchChange("")}
-                icon={Search}
-              />
-            )}
-          </section>
-        )}
-
-        <section className="px-3 pb-6 sm:px-4" aria-labelledby="noodler-discover-creators">
-          <div className="px-1 py-3">
-            <h2 id="noodler-discover-creators" className="text-lg font-bold">
-              {localizeUi("ui.noodle.subscriptionsections.discoverCreators")}
-            </h2>
-          </div>
-          {discover.filtered.length > 0 ? (
-            <div className={cn(discoverLayout === "grid" ? "grid gap-3 sm:grid-cols-2" : "space-y-3")}>
-              {discover.filtered.map((creator) => (
-                <SlurpCreatorProfileCard
-                  key={creator.profile.id}
-                  creator={creator}
-                  onOpenProfile={postCardCtx.openAuthorProfile}
-                  layout={discoverLayout}
-                  showDiscoveryActions
-                  subscriptionPending={togglePending}
-                  onToggleSubscription={onToggleSubscription}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="px-4 py-8 text-center">
-              <p className="text-sm font-bold">
-                {discover.active
-                  ? localizeUi("ui.slurp.discover.noMatches", { defaultValue: "No Creators match these filters" })
-                  : localizeUi("ui.noodle.subscriptionsections.noCreatorsAreVisibleToThisPersonaYet")}
-              </p>
-              {discover.active && (
-                <button
-                  type="button"
-                  onClick={discover.clear}
-                  className="mt-3 min-h-10 rounded-full px-4 text-sm font-bold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
-                >
-                  {localizeUi("ui.slurp.discover.clearFilters", { defaultValue: "Clear filters" })}
-                </button>
-              )}
-            </div>
-          )}
-        </section>
-      </div>
+      <SlpHubDiscover
+        discover={discover}
+        discoverLayout={discoverLayout}
+        setDiscoverLayout={setDiscoverLayout}
+        discoveryInputRef={discoveryInputRef}
+        localizeUi={localizeUi}
+        onCloseDiscovery={onCloseDiscovery}
+        onSearchChange={onSearchChange}
+        onToggleSubscription={onToggleSubscription}
+        postCardCtx={postCardCtx}
+        renderFeedPost={renderFeedPost}
+        search={search}
+        searchResults={searchResults}
+        searchTerm={searchTerm}
+        setScroller={setScroller}
+        setStickyHeader={setStickyHeader}
+        setVisibleFeedCount={setVisibleFeedCount}
+        togglePending={togglePending}
+        visibleSearchResults={visibleSearchResults}
+      />
     );
   }
+
   return (
     <div ref={setScroller} className="min-h-0 flex-1 overflow-y-auto">
+      {/* Keep the feed controls attached to the scroller so the bar follows the reader's scroll. */}
       <div
         ref={setStickyHeader}
         className={cn(
@@ -474,6 +375,8 @@ export function ViewerHub({
             {isRefreshing ? <Loader2 size={17} className="animate-spin" /> : <RefreshCw size={17} aria-hidden="true" />}
           </button>
           <NoodleLogo className="pointer-events-none absolute start-1/2 h-9 w-14 -translate-x-1/2 rtl:translate-x-1/2" />
+          {/* ponytail: placeholder balance, wire to the real wallet when there is one. */}
+          {/* The desktop sidebar carries the same balance, so it only shows where there is no sidebar. */}
           <button
             type="button"
             onClick={onOpenWallet}
@@ -485,6 +388,8 @@ export function ViewerHub({
           </button>
         </div>
       </div>
+      {/* Part of the page, not the bar: the strip belongs to Home, so it stays put while the
+          sticky header does its own hide-on-scroll dance above it. */}
       <SlurpMomentsShelf
         moments={moments}
         newSinceAt={newSinceAt}
@@ -492,7 +397,7 @@ export function ViewerHub({
         onAddStory={onAddStory}
         embedded
       />
-      <div className="hidden border-b border-[var(--noodle-divider)] py-3 @min-[1024px]:block @min-[1280px]:hidden">
+      <div className="hidden border-b border-[var(--noodle-divider)] py-3 @min-[1024px]:block @min-[1024px]:px-4 @min-[1280px]:hidden">
         <SubscriptionSections
           creators={(scope?.creators ?? []).filter(
             (creator) => creator.profile.id !== authorProfile?.id && !creator.subscribed,
@@ -522,6 +427,7 @@ export function ViewerHub({
       {!isLoading && !isError && scope && (
         <div className="bg-[var(--slurp-canvas)] pb-2">
           <div className="relative isolate overflow-hidden px-3 @min-[1024px]:px-5" data-slurp-home-masthead>
+            {/* Flat underline tabs: the accent marks the active feed, nothing else competes with the posts. */}
             <div className="flex items-center justify-between gap-3">
               <div
                 className="relative grid flex-1 grid-cols-2 @min-[1024px]:max-w-xs"
@@ -548,6 +454,8 @@ export function ViewerHub({
                     {option.label}
                   </button>
                 ))}
+                {/* One underline that travels, rather than two that blink in and out. Half the row
+                  wide so the transform is a plain 0/100%, with the bar centred inside it. */}
                 <span
                   className={cn(
                     "pointer-events-none absolute bottom-0 left-0 h-0.5 w-1/2 transition-transform duration-200 ease-out motion-reduce:transition-none",
@@ -558,11 +466,20 @@ export function ViewerHub({
                   <span className="mx-auto block h-full w-12 rounded-full bg-[var(--noodle-accent)]" />
                 </span>
               </div>
+              {/* List or media wall. Same feed, two ways to read it. */}
               <div className="flex shrink-0 items-center gap-1 rounded-full bg-[var(--accent)] p-1 ring-1 ring-inset ring-[var(--noodle-divider)]">
                 {(
                   [
-                    { id: "list", icon: List, label: localizeUi("ui.slurp.home.layout.list", { defaultValue: "List" }) },
-                    { id: "wall", icon: LayoutGrid, label: localizeUi("ui.slurp.home.layout.wall", { defaultValue: "Media wall" }) },
+                    {
+                      id: "list",
+                      icon: List,
+                      label: localizeUi("ui.slurp.home.layout.list", { defaultValue: "List" }),
+                    },
+                    {
+                      id: "wall",
+                      icon: LayoutGrid,
+                      label: localizeUi("ui.slurp.home.layout.wall", { defaultValue: "Media wall" }),
+                    },
                   ] as const
                 ).map((option) => (
                   <button
@@ -657,7 +574,7 @@ export function ViewerHub({
               }
               onLoadMore={
                 visibleFeed.length < feed.length
-                  ? () => setVisibleFeedCount((count) => Math.min(feed.length, count + 20))
+                  ? () => setVisibleFeedCount((count) => Math.min(feed.length, count + NOODLER_FEED_WINDOW_SIZE))
                   : undefined
               }
               total={feed.length}
@@ -669,6 +586,13 @@ export function ViewerHub({
                   {index === dividerIndex && <NewSinceLastVisitDivider />}
                   {renderFeedPost(item)}
                   {(() => {
+                    // One place decides whether this row gets an ad. The slot
+                    // maths used to be copy-pasted six times inside the JSX.
+                    //
+                    // Following carries ads too. The query already asks for a "following" context
+                    // tag, so suppressing them here meant the default tab — the one nobody has to
+                    // switch to — never showed a single ad. Search stays clean: results are the
+                    // answer to a question, not a place to sell.
                     const ad = inlineAdForIndex(index);
                     if (!inlineAdsEnabled || searchTerm || !ad) return null;
                     return (
@@ -681,9 +605,12 @@ export function ViewerHub({
                           actionFallback: localizeUi("ui.slurp.ads.view"),
                         }}
                         onAction={() => {
+                          // The rating system has no positive signal without this.
                           recordSlurpAdAction.mutate({ personaId: scope!.viewer.entityId, promotionId: ad.id });
                           toast.info(localizeUi("ui.slurp.ads.opened", { brand: ad.brand }));
                         }}
+                        // A silently failed hide leaves the ad on screen, so say so rather than
+                        // letting the reader think it worked.
                         onHide={() =>
                           hideSlurpAd.mutate(
                             { personaId: scope!.viewer.entityId, promotionId: ad.id },
@@ -718,7 +645,7 @@ export function ViewerHub({
                   visible={visibleFeed.length}
                   total={feed.length}
                   onLoadMore={() =>
-                    setVisibleFeedCount((count) => Math.min(feed.length, count + 20))
+                    setVisibleFeedCount((count) => Math.min(feed.length, count + NOODLER_FEED_WINDOW_SIZE))
                   }
                 />
               )}
@@ -780,9 +707,6 @@ export function ViewerHub({
   );
 }
 
-
-
 export { SlurpInlineSuggestedCreators } from "./SlpScreenSuggestedCreators";
 export { SlurpMomentShelfTile } from "./SlpScreenMoments";
 export { SlurpMomentsShelf, SlurpMomentViewer };
-

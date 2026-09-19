@@ -9,9 +9,7 @@ import type {
   NoodlePostImageCrop,
   NoodleTextMention,
 } from "@marinara-engine/shared";
-import type {
-  ConversationMediaPickerTabId,
-} from "../../../components/chat/ConversationMediaPickerPanel";
+import type { ConversationMediaPickerTabId } from "../../../components/chat/ConversationMediaPickerPanel";
 import type { ChatImage } from "../../../hooks/use-gallery";
 
 export type ReplyComposerTool = "image" | "media";
@@ -192,6 +190,8 @@ export interface NoodlePostCardCtx {
 
 export interface NoodlePostCardControllerOptions {
   postManagement: boolean;
+  /** The Show more threshold from settings; the card cannot read settings itself. */
+  postShowMoreLength?: number;
   personaAccount: NoodleAccount | null;
   savePost: (
     post: NoodlePostCardModel,

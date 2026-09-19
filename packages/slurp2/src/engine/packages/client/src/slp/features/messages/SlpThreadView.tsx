@@ -4,7 +4,12 @@ import {
   SLURP_MESSAGE_PAGE,
   SLURP_REPLY_STATUS_FALLBACKS,
 } from "./SlpMessages";
-import { CommissionRequest, CommissionRow, isCommissionRequest, SlurpCommissionsPanel } from "./commissions/SlpCommissions";
+import {
+  CommissionRequest,
+  CommissionRow,
+  isCommissionRequest,
+  SlurpCommissionsPanel,
+} from "./commissions/SlpCommissions";
 import {
   ArrowDown,
   ArrowLeft,

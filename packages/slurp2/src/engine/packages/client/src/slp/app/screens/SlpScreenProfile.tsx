@@ -24,13 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import {
-  Fragment,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   NOODLER_POST_CONTENT_MAX_LENGTH,
   NOODLER_POST_GUIDE_MAX_LENGTH,
@@ -48,10 +42,7 @@ import type {
 } from "@marinara-engine/shared";
 import type { SlurpManagedStageProfile, SlurpStageProfileInput } from "../../base/state/slp-state-types";
 import type { SlurpPromotion } from "../../features/ads/slp-ads-contract";
-import {
-  useNoodlerFollowers,
-  useNoodlerSubscribers,
-} from "../../features/audience/slp-audience-hooks";
+import { useNoodlerFollowers, useNoodlerSubscribers } from "../../features/audience/slp-audience-hooks";
 import { useUpdateNoodlerFanActivity } from "../../features/audience/slp-fan-activity-hooks";
 import {
   useGenerateNoodlerArtwork,
@@ -64,9 +55,7 @@ import type {
   NoodlerPostDraftImage,
   SlurpProfilePost,
 } from "../../features/feed/slp-feed-contract";
-import {
-  useUpdateNoodlerAutoPosting,
-} from "../../features/feed/slp-feed-schedule-hooks";
+import { useUpdateNoodlerAutoPosting } from "../../features/feed/slp-feed-schedule-hooks";
 import {
   useNoodlerViewer,
   useToggleNoodlerFollow,
@@ -87,10 +76,7 @@ import { SlurpArcTimelineCard } from "../../features/projects/SlpArcTimelineCard
 import { SlurpFanCard } from "../../modules/audience/SlpFanCard";
 import { LockedSlurpPostCard } from "../../modules/post/SlpLockedPostCard";
 import { SlurpCreatorPostCard } from "../../modules/post/SlpCreatorPostCard";
-import {
-  SlurpCoinAmount,
-  SlurpCoinBurst,
-} from "../../modules/coin/SlpCoin";
+import { SlurpCoinAmount, SlurpCoinBurst } from "../../modules/coin/SlpCoin";
 import { useNearViewportSlurpMediaSrc, useSlurpMediaSrc } from "../../base/media/slp-media-src";
 import { slurpCreatorStatus } from "../../modules/creator/slp-creator-status";
 import {
@@ -105,7 +91,10 @@ import { SlurpProfileSurface } from "../../features/creators/SlpProfileSurface";
 import { NoodleImageComposer } from "../../base/media/SlpImageComposer";
 import { NoodlePollComposer } from "../../modules/poll/SlpPollComposer";
 import { PostImageCropEditor } from "../../base/media/SlpPostImageCropEditor";
-import { ConversationMediaPickerPanel, type ConversationMediaPickerTabId } from "../../../components/chat/ConversationMediaPickerPanel";
+import {
+  ConversationMediaPickerPanel,
+  type ConversationMediaPickerTabId,
+} from "../../../components/chat/ConversationMediaPickerPanel";
 import { HelpTooltip } from "../../../components/ui/HelpTooltip";
 import { Modal } from "../../../components/ui/Modal";
 import { useTranslation as useUiTranslation } from "react-i18next";
@@ -246,6 +235,7 @@ export function SlurpMediaWall({
   onLoadMore?: () => void;
   total: number;
   emptyAd?: SlurpPromotion | null;
+  /** Null on every row when ads are off, searching, or the pool is empty. */
   adForIndex?: (index: number) => SlurpPromotion | null;
   onAdAction?: (ad: SlurpPromotion) => void;
   onAdHide?: (ad: SlurpPromotion) => void;
@@ -278,6 +268,8 @@ export function SlurpMediaWall({
     <div className="bg-[var(--slurp-canvas)] pb-6">
       <div className="grid grid-cols-2 gap-px bg-[var(--noodle-divider)] @min-[620px]:grid-cols-3">
         {tiles.map((post, index) => {
+          // The slot maths counts tiles, not source posts: the wall drops locked and text posts, so
+          // indexing off the feed would leave the cadence uneven and some slots permanently empty.
           const ad = adForIndex?.(index) ?? null;
           return (
             <Fragment key={post.id}>
@@ -760,12 +752,10 @@ export function StageProfileView(props: StageProfileViewProps) {
     </>
   );
 
-// ---------------------------------------------------------------------------
-// Composer
-// ---------------------------------------------------------------------------
-
+  // ---------------------------------------------------------------------------
+  // Composer
+  // ---------------------------------------------------------------------------
 }
 
 export type { NoodlerComposerTool } from "./SlpScreenComposer";
 export { NoodlerPostComposer };
-

@@ -27,6 +27,8 @@ export function deriveSlurpHubView({
   authorProfileId: string | undefined;
 }) {
   const searchable = (value: unknown) => (typeof value === "string" ? value.toLowerCase() : "");
+  // Keep a Creator's active Stories together. This makes one shelf tile a sequence rather than
+  // making the next tap jump to an unrelated Creator.
   const nextMoments = creators
     .filter((creator) => tab === "all" || creator.followed)
     .map((creator) => ({

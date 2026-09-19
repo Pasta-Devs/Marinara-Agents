@@ -1,23 +1,8 @@
-import {
-  ChevronLeft,
-  ChevronRight,
-  Clock3,
-  Eye,
-  Heart,
-  Link,
-  Lock,
-  Maximize2,
-  Minimize2,
-  Plus,
-  X,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock3, Eye, Heart, Link, Lock, Maximize2, Minimize2, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import type { NoodlerPostView } from "@marinara-engine/shared";
-import {
-  useRecordSlurpStoryView,
-  useSlurpStoryViews,
-} from "../../features/messages/slp-messages-hooks";
+import { useRecordSlurpStoryView, useSlurpStoryViews } from "../../features/messages/slp-messages-hooks";
 import { cn } from "../../../lib/utils";
 import type { NoodlePostCardCtx } from "../../modules/post/SlpPostCard";
 import { SlurpCoinAmount } from "../../modules/coin/SlpCoin";
@@ -45,7 +30,15 @@ type SlurpMoment = {
 // SlurpMomentShelfTile
 // ---------------------------------------------------------------------------
 
-export function SlurpMomentShelfTile({ moment, isNew, onOpen }: { moment: SlurpMoment; isNew: boolean; onOpen: () => void }) {
+export function SlurpMomentShelfTile({
+  moment,
+  isNew,
+  onOpen,
+}: {
+  moment: SlurpMoment;
+  isNew: boolean;
+  onOpen: () => void;
+}) {
   const mediaSrc = useSlurpMediaSrc(moment.post.imageUrl, { width: 320 });
   return (
     <SlpStoryTile
@@ -58,7 +51,6 @@ export function SlurpMomentShelfTile({ moment, isNew, onOpen }: { moment: SlurpM
     />
   );
 }
-
 
 // ---------------------------------------------------------------------------
 // SlurpMomentsShelf
@@ -147,7 +139,6 @@ export function SlurpMomentsShelf({
   );
 }
 
-
 // ---------------------------------------------------------------------------
 // SlurpMomentViewer
 // ---------------------------------------------------------------------------
@@ -185,6 +176,8 @@ export function SlurpMomentViewer({
 }) {
   const { t: localizeUi } = useUiTranslation();
   const mediaSrc = useSlurpMediaSrc(moment.post.imageUrl, { width: 1600 });
+  // Stories are drawn edge to edge, which crops any image not made in the tall Story format.
+  // Fit shows the whole image over a blurred copy of itself instead.
   const [fitImage, setFitImage] = useState(false);
   const rootLikes = moment.post.interactions.filter(
     (interaction) => interaction.type === "like" && !interaction.parentInteractionId,
@@ -202,6 +195,7 @@ export function SlurpMomentViewer({
     onOpenProfile?.(moment.creator.profile.id);
   };
   useEffect(() => {
+    // View recording is best effort. Opening a Story must remain usable when the write is slow.
     const viewKey = `${personaId ?? ""}:${moment.post.id}`;
     if (!recordedStoryViews.current.has(viewKey)) {
       recordedStoryViews.current.add(viewKey);
@@ -231,7 +225,12 @@ export function SlurpMomentViewer({
       media={
         <>
           {mediaSrc && (
-            <img src={mediaSrc} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-40 blur-2xl" />
+            <img
+              src={mediaSrc}
+              alt=""
+              aria-hidden="true"
+              className="absolute inset-0 h-full w-full scale-110 object-cover opacity-40 blur-2xl"
+            />
           )}
           {mediaSrc ? (
             <img
@@ -240,40 +239,80 @@ export function SlurpMomentViewer({
               fetchPriority="high"
               alt={
                 moment.post.locked
-                  ? localizeUi("ui.noodle.lockednoodlerpostcard.lockedImageFrom", { name: moment.creator.profile.displayName })
+                  ? localizeUi("ui.noodle.lockednoodlerpostcard.lockedImageFrom", {
+                      name: moment.creator.profile.displayName,
+                    })
                   : localizeUi("ui.noodle.post.imageBy", { name: moment.creator.profile.displayName })
               }
-              className={cn("relative h-full w-full", fitImage ? "object-contain" : "object-cover", moment.post.locked && "saturate-[0.88]")}
+              className={cn(
+                "relative h-full w-full",
+                fitImage ? "object-contain" : "object-cover",
+                moment.post.locked && "saturate-[0.88]",
+              )}
             />
           ) : (
-            <div className="absolute inset-0 animate-pulse bg-[var(--slurp-surface-raised)] motion-reduce:animate-none" aria-hidden="true" />
+            <div
+              className="absolute inset-0 animate-pulse bg-[var(--slurp-surface-raised)] motion-reduce:animate-none"
+              aria-hidden="true"
+            />
           )}
           {moment.post.locked && mediaSrc && <SlurpSparkleVeil />}
-          <div className="absolute inset-x-3 top-3 z-10 flex gap-1" role="progressbar" aria-label={localizeUi("ui.slurp.moments.progress")} aria-valuemin={1} aria-valuemax={total} aria-valuenow={index + 1}>
+          <div
+            className="absolute inset-x-3 top-3 z-10 flex gap-1"
+            role="progressbar"
+            aria-label={localizeUi("ui.slurp.moments.progress")}
+            aria-valuemin={1}
+            aria-valuemax={total}
+            aria-valuenow={index + 1}
+          >
             {Array.from({ length: total }, (_, storyIndex) => (
               <span key={storyIndex} className="h-0.5 flex-1 overflow-hidden rounded-full bg-white/35">
                 <span className={cn("block h-full rounded-full", storyIndex <= index && "bg-white")} />
               </span>
             ))}
           </div>
-          <button type="button" onClick={openProfile} disabled={!onOpenProfile} className="absolute left-4 right-16 top-6 z-10 flex min-h-11 items-center gap-2 rounded-xl text-left text-white drop-shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-default">
+          <button
+            type="button"
+            onClick={openProfile}
+            disabled={!onOpenProfile}
+            className="absolute left-4 right-16 top-6 z-10 flex min-h-11 items-center gap-2 rounded-xl text-left text-white drop-shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-default"
+          >
             <ProfileInitial profile={moment.creator.profile} />
             <span className="min-w-0">
               <span className="block truncate text-sm font-black">{moment.creator.profile.displayName}</span>
               <span className="block truncate text-[0.68rem] text-white/72">@{moment.creator.profile.handle}</span>
             </span>
           </button>
-          <span className="pointer-events-none absolute inset-x-0 top-0 z-[5] h-28 bg-gradient-to-b from-black/60 to-transparent" aria-hidden="true" />
-          <button type="button" onClick={onClose} aria-label={localizeUi("ui.slurp.moments.close", { defaultValue: "Close Story" })} title={localizeUi("ui.slurp.moments.close", { defaultValue: "Close Story" })} className="absolute right-3 top-6 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-black/45 text-white ring-1 ring-white/20 backdrop-blur-md transition-[background-color,transform] hover:bg-black/70 active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white motion-reduce:transition-none motion-reduce:active:scale-100">
+          <span
+            className="pointer-events-none absolute inset-x-0 top-0 z-[5] h-28 bg-gradient-to-b from-black/60 to-transparent"
+            aria-hidden="true"
+          />
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={localizeUi("ui.slurp.moments.close", { defaultValue: "Close Story" })}
+            title={localizeUi("ui.slurp.moments.close", { defaultValue: "Close Story" })}
+            className="absolute right-3 top-6 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-black/45 text-white ring-1 ring-white/20 backdrop-blur-md transition-[background-color,transform] hover:bg-black/70 active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white motion-reduce:transition-none motion-reduce:active:scale-100"
+          >
             <X size={20} strokeWidth={2.5} aria-hidden="true" />
           </button>
           {onPrevious && (
-            <button type="button" onClick={onPrevious} className="absolute left-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white ring-1 ring-white/15 backdrop-blur-sm hover:bg-black/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white" aria-label={localizeUi("ui.slurp.moments.previous")}>
+            <button
+              type="button"
+              onClick={onPrevious}
+              className="absolute left-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white ring-1 ring-white/15 backdrop-blur-sm hover:bg-black/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              aria-label={localizeUi("ui.slurp.moments.previous")}
+            >
               <ChevronLeft size={22} aria-hidden="true" />
             </button>
           )}
           {onNext && (
-            <button type="button" onClick={onNext} className="absolute right-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white ring-1 ring-white/15 backdrop-blur-sm hover:bg-black/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white" aria-label={localizeUi("ui.slurp.moments.next")}>
+            <button
+              type="button"
+              onClick={onNext}
+              className="absolute right-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white ring-1 ring-white/15 backdrop-blur-sm hover:bg-black/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              aria-label={localizeUi("ui.slurp.moments.next")}
+            >
               <ChevronRight size={22} aria-hidden="true" />
             </button>
           )}
@@ -296,10 +335,15 @@ export function SlurpMomentViewer({
                 <button
                   type="button"
                   disabled={!ctx.personaAccount || ctx.reactionPendingFor(moment.post.id, "like")}
-                  onClick={() => ctx.reactToPost(toNoodlePostCardModel(moment.post, moment.creator.profile), "like", liked)}
+                  onClick={() =>
+                    ctx.reactToPost(toNoodlePostCardModel(moment.post, moment.creator.profile), "like", liked)
+                  }
                   aria-pressed={liked}
                   aria-label={localizeUi(liked ? "ui.noodle.post.unlikeLabel" : "ui.noodle.post.likeLabel")}
-                  className={cn("inline-flex min-h-10 w-fit items-center gap-2 rounded-full bg-white/10 px-3.5 text-sm font-bold ring-1 ring-inset ring-white/15 backdrop-blur-sm transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-50 motion-reduce:transition-none", liked && "text-[var(--noodle-accent)]")}
+                  className={cn(
+                    "inline-flex min-h-10 w-fit items-center gap-2 rounded-full bg-white/10 px-3.5 text-sm font-bold ring-1 ring-inset ring-white/15 backdrop-blur-sm transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-50 motion-reduce:transition-none",
+                    liked && "text-[var(--noodle-accent)]",
+                  )}
                 >
                   <Heart size={17} fill={liked ? "currentColor" : "none"} aria-hidden="true" />
                   {likeCount}
@@ -337,7 +381,11 @@ export function SlurpMomentViewer({
             </details>
           )}
           {linkedPostIdForStory(moment.post) && onOpenProfile && (
-            <button type="button" onClick={openProfile} className="inline-flex min-h-10 w-fit items-center gap-2 rounded-lg bg-[var(--accent)] px-3 text-xs font-bold ring-1 ring-inset ring-[var(--noodle-divider)] hover:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]">
+            <button
+              type="button"
+              onClick={openProfile}
+              className="inline-flex min-h-10 w-fit items-center gap-2 rounded-lg bg-[var(--accent)] px-3 text-xs font-bold ring-1 ring-inset ring-[var(--noodle-divider)] hover:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+            >
               <Link size={14} aria-hidden="true" /> {localizeUi("ui.slurp.moments.viewLinkedPost")}
             </button>
           )}
@@ -355,7 +403,11 @@ export function SlurpMomentViewer({
               <button
                 type="button"
                 disabled={subscriptionPending}
-                onClick={() => void Promise.resolve(onToggleSubscription(moment.creator.profile.id, moment.creator.subscribed)).catch(() => undefined)}
+                onClick={() =>
+                  void Promise.resolve(
+                    onToggleSubscription(moment.creator.profile.id, moment.creator.subscribed),
+                  ).catch(() => undefined)
+                }
                 className="min-h-11 rounded-lg bg-[var(--accent)] px-3 text-xs font-bold ring-1 ring-inset ring-[var(--noodle-divider)] hover:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:opacity-50"
               >
                 {localizeUi("ui.slurp.profile.subscribe")}

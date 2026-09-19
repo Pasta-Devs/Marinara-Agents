@@ -61,7 +61,7 @@ export function useSlurpHubDiscoveryFilters({
       .filter((tag) => !curated.has(tag))
       .sort((left, right) => left.localeCompare(right));
   }, [discoveredCreators, discoveryTagSettings]);
-  const toggle = <T,>(setter: Dispatch<SetStateAction<Set<T>>>, value: T) =>
+  const toggle = <T>(setter: Dispatch<SetStateAction<Set<T>>>, value: T) =>
     setter((current) => {
       const next = new Set(current);
       if (next.has(value)) next.delete(value);

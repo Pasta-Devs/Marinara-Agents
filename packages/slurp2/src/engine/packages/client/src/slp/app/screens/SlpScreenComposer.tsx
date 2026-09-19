@@ -19,14 +19,15 @@ import { NoodleAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
 import { NoodleImageComposer } from "../../base/media/SlpImageComposer";
 import { NoodlePollComposer } from "../../modules/poll/SlpPollComposer";
 import { PostImageCropEditor } from "../../base/media/SlpPostImageCropEditor";
-import { ConversationMediaPickerPanel, type ConversationMediaPickerTabId } from "../../../components/chat/ConversationMediaPickerPanel";
+import {
+  ConversationMediaPickerPanel,
+  type ConversationMediaPickerTabId,
+} from "../../../components/chat/ConversationMediaPickerPanel";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { ProfileInitial, SLURP_TOGGLE_ACTIVE_CLASS } from "../../base/chrome/SlpChrome";
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Lock, Loader2, Pencil, Send, Sparkles, Trash2 } from "lucide-react";
-import {
-  cn,
-} from "../../../lib/utils";
+import { cn } from "../../../lib/utils";
 import {
   errorMessage,
   isEmptyNoodlerPostDraft,

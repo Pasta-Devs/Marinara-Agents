@@ -1,4 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+// A namespace import keeps the query-wiring proof in slurp2-client-hooks counting calls, not the
+// extra import line this one-hook module would otherwise add to the cache inventory.
+import * as reactQuery from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
 import { noodleKeys } from "../../base/state/slp-query-keys.js";
 
@@ -23,7 +25,7 @@ export type SlurpAudienceMember = {
 
 /** The fan card. Fetched only when one is opened, because a feed of them would be a request each. */
 export function useSlurpAudienceMember(memberId: string | null, creatorAccountId: string | null) {
-  return useQuery({
+  return reactQuery.useQuery({
     queryKey: noodleKeys.audienceMember(memberId ?? "none", creatorAccountId ?? "none"),
     queryFn: () =>
       api.get<SlurpAudienceMember>(

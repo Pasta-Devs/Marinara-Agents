@@ -1,10 +1,7 @@
 import { Check, ChevronRight, Loader2, Search } from "lucide-react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import type { NoodleIdentityDisclosure } from "@marinara-engine/shared";
-import {
-  disclosureOptions,
-  WizardFooter,
-} from "../../features/creators/SlpStageProfileForm";
+import { disclosureOptions, WizardFooter } from "../../features/creators/SlpStageProfileForm";
 import { fieldClass, SourceAccountAvatar } from "./SlpHomeHelpers";
 
 export function StageProfileSourcePicker({

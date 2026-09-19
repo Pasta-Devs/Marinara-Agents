@@ -94,7 +94,13 @@ export type SlurpHomeHostView = {
 };
 
 /** Creator setup and the selected stage profile: every branch that edits a Creator. */
-export function renderSlurpHomeCreatorFlow({ model, shellProps, reviewModal, feedRightRail, showDiscovery }: SlurpHomeHostView) {
+export function renderSlurpHomeCreatorFlow({
+  model,
+  shellProps,
+  reviewModal,
+  feedRightRail,
+  showDiscovery,
+}: SlurpHomeHostView) {
   void [shellProps, reviewModal, feedRightRail, showDiscovery];
   const {
     accountsQuery,

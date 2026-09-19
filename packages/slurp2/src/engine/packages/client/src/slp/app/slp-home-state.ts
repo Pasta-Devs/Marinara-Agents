@@ -1,11 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { useSlurpHomePostActions } from "./slp-home-post-actions";
 import { NOODLER_POST_TITLE_MAX_LENGTH } from "@marinara-engine/shared";
-import type { NoodleAccount, NoodleInteraction, NoodlePollInput, NoodlerManagedPost, NoodlePostAccess, NoodleIdentityDisclosure, NoodlerSourceSnapshot } from "@marinara-engine/shared";
+import type {
+  NoodleAccount,
+  NoodleInteraction,
+  NoodlePollInput,
+  NoodlerManagedPost,
+  NoodlePostAccess,
+  NoodleIdentityDisclosure,
+  NoodlerSourceSnapshot,
+} from "@marinara-engine/shared";
 import type { SlurpManagedStageProfile, SlurpStageProfileInput } from "../base/state/slp-state-types";
-import {
-  useNoodlerConnectionCounts,
-} from "../features/audience/slp-audience-hooks";
+import { useNoodlerConnectionCounts } from "../features/audience/slp-audience-hooks";
 import {
   useCreateNoodlerStageProfile,
   useGenerateNoodlerStageProfileDraft,
@@ -16,9 +22,7 @@ import {
   useUseNoodlerSourceAvatar,
 } from "../features/creators/slp-creator-profile-hooks";
 import { useNoodlerAccounts, useNoodlerEligibleAccounts } from "../features/creators/slp-creators-hooks";
-import {
-  useNoodlerViewerWallets,
-} from "../features/economy/slp-economy-hooks";
+import { useNoodlerViewerWallets } from "../features/economy/slp-economy-hooks";
 import {
   useConfirmNoodlerImagePrompts,
   useCreateNoodlerPost,
@@ -48,12 +52,8 @@ import {
   useUnlockNoodlerPost,
   useUpdateNoodlerInteraction,
 } from "../features/feed/slp-feed-viewer-hooks";
-import {
-  useSlurpThreads,
-} from "../features/messages/slp-messages-hooks";
-import {
-  useSlurpNotifications,
-} from "../features/notifications/slp-notification-hooks";
+import { useSlurpThreads } from "../features/messages/slp-messages-hooks";
+import { useSlurpNotifications } from "../features/notifications/slp-notification-hooks";
 import { useSlurpSettings, useUpdateSlurpSettings } from "../features/settings/slp-settings-hooks";
 import { useActivePersona, usePersonas } from "../../hooks/use-creator-personas";
 import { useConnections } from "../../hooks/use-connections";
@@ -73,18 +73,12 @@ import {
   type NoodlePostImageUpdate,
   useNoodlePostCardController,
 } from "../modules/post/SlpPostCard";
-import type {
-  ImagePromptOverride,
-  ImagePromptReviewItem,
-} from "../../components/ui/ImagePromptReviewModal";
+import type { ImagePromptOverride, ImagePromptReviewItem } from "../../components/ui/ImagePromptReviewModal";
 import type { SlurpNavigationState } from "../base/navigation/slp-navigation.types";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { confirmLeaveSlurpBackstage } from "../features/backstage/SlpBackstageControls";
 import { confirmSlurpAvatarReview } from "../features/creators/SlpStageProfileForm";
-import {
-  NOODLE_PERSONA_SWITCHER_PAGE_SIZE,
-  NOODLE_PINK,
-} from "../base/chrome/SlpChrome";
+import { NOODLE_PERSONA_SWITCHER_PAGE_SIZE, NOODLE_PINK } from "../base/chrome/SlpChrome";
 import { ApiError } from "../../lib/api-client";
 import { toast } from "sonner";
 import { slurp2SplashPending } from "../features/onboarding/SlpSplash";
@@ -216,8 +210,10 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
       };
       if (!isEmptyNoodlerPostDraft(nextDraft)) {
         return {
-    onNavigate,
-...current, [profileId]: nextDraft };
+          onNavigate,
+          ...current,
+          [profileId]: nextDraft,
+        };
       }
       if (!current[profileId]) return current;
       const next = { ...current };
@@ -497,6 +493,7 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
     deletePost,
   });
   const postCardController = useNoodlePostCardController({
+    postShowMoreLength: slurpSettingsQuery.data?.postShowMoreLength,
     postManagement: false,
     personaAccount: viewerActorAccount,
     savePost,
@@ -793,6 +790,5 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
     closeOnboarding,
   };
 }
-
 
 export type SlurpHomeBaseState = ReturnType<typeof useSlurpHomeBaseState>;

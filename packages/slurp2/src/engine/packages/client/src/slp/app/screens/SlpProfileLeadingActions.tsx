@@ -20,10 +20,7 @@ import {
 } from "lucide-react";
 import { showConfirmDialog } from "../../../lib/app-dialogs";
 import { cn } from "../../../lib/utils";
-import {
-  SlurpCoinAmount,
-  SlurpCoinBurst,
-} from "../../modules/coin/SlpCoin";
+import { SlurpCoinAmount, SlurpCoinBurst } from "../../modules/coin/SlpCoin";
 import {
   errorMessage,
   isEmptyNoodlerPostDraft,
@@ -74,8 +71,7 @@ export function SlpProfileLeadingActions({ model }: { model: StageProfileViewMod
     viewingOwnCreator,
   } = model;
 
-  return (
-  !editing && !viewingOwnCreator && viewerCreator ? (
+  return !editing && !viewingOwnCreator && viewerCreator ? (
     <>
       {!viewerCreator.subscribed && (
         <button
@@ -121,9 +117,7 @@ export function SlpProfileLeadingActions({ model }: { model: StageProfileViewMod
               }))
             )
               return;
-            await Promise.resolve(onToggleSubscription(profile.id, viewerCreator.subscribed)).catch(
-              () => undefined,
-            );
+            await Promise.resolve(onToggleSubscription(profile.id, viewerCreator.subscribed)).catch(() => undefined);
           })()
         }
         className={cn(
@@ -217,9 +211,7 @@ export function SlpProfileLeadingActions({ model }: { model: StageProfileViewMod
               />
               <button
                 type="button"
-                disabled={
-                  !viewerAccount?.entityId || !Number.isInteger(Number(customTip)) || Number(customTip) < 1
-                }
+                disabled={!viewerAccount?.entityId || !Number.isInteger(Number(customTip)) || Number(customTip) < 1}
                 onClick={() => {
                   if (!viewerAccount?.entityId) return;
                   tipCreator.mutate({
@@ -243,6 +235,5 @@ export function SlpProfileLeadingActions({ model }: { model: StageProfileViewMod
         )}
       </div>
     </>
-  ) : null
-  );
+  ) : null;
 }

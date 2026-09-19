@@ -32,7 +32,12 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { useSlurpMediaSrc } from "../../base/media/slp-media-src";
-import { CommissionRequest, CommissionRow, isCommissionRequest, SlurpCommissionsPanel } from "./commissions/SlpCommissions";
+import {
+  CommissionRequest,
+  CommissionRow,
+  isCommissionRequest,
+  SlurpCommissionsPanel,
+} from "./commissions/SlpCommissions";
 import { NoodleAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
 import { getApiErrorMessage } from "../../../lib/api-client";
 import { showConfirmDialog } from "../../../lib/app-dialogs";
@@ -43,11 +48,7 @@ import { formatTime } from "../../base/ui/slp-date-time";
 import { SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "../../modules/coin/SlpCoin";
 import { useSlurpConnections } from "../../base/state/slp-host-connections";
 import { useCreateSlurpCommission } from "../../features/messages/commissions/slp-commission-hooks";
-import type {
-  SlurpMessage,
-  SlurpThread,
-  SlurpThreadRelationship,
-} from "../../features/messages/slp-messages-contract";
+import type { SlurpMessage, SlurpThread, SlurpThreadRelationship } from "../../features/messages/slp-messages-contract";
 import { useSlurpThreadViewState, type SlurpThreadViewProps, type SlurpThreadViewState } from "./slp-thread-view-model";
 
 /**

@@ -424,7 +424,7 @@ function SlurpNotificationsView({
     });
     // The free bank's line, when the event carries one. A loss that says why it happened is an
     // event; the same loss without it is a number moving.
-    return event.note ? `${line} "${event.note}"` : line;
+    return event.note ? `${line} “${event.note}”` : line;
   };
 
   const groupTitle = (kind: SlurpEventItem["kind"]) =>

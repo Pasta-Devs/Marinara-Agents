@@ -61,11 +61,7 @@ import {
   useNoodlePostImageEditor,
   useNoodlePostCardController,
 } from "./SlpPostHelpers";
-import type {
-  NoodlePostCardModel,
-  NoodlePostCardCtx,
-  NoodlePostImageUpdate,
-} from "./SlpPostHelpers";
+import type { NoodlePostCardModel, NoodlePostCardCtx, NoodlePostImageUpdate } from "./SlpPostHelpers";
 
 export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: NoodlePostCardCtx }) {
   const { t: localizeUi, i18n } = useUiTranslation();
@@ -764,7 +760,6 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
     </article>
   );
 }
-
 
 // The card is the module's face: callers that need its model, its context or the pieces it is
 // assembled from import them here rather than from the fragments the split produced.

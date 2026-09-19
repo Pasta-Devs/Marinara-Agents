@@ -145,10 +145,7 @@ import {
   useSlurpThreads,
 } from "../features/messages/slp-messages-hooks";
 import type { SlurpEventGroup, SlurpEventItem } from "../features/notifications/slp-notifications-contract";
-import {
-  useMarkSlurpNotificationsSeen,
-  useSlurpNotifications,
-} from "../features/notifications/slp-notification-hooks";
+import { useMarkSlurpNotificationsSeen, useSlurpNotifications } from "../features/notifications/slp-notification-hooks";
 import { useSlurpArcs } from "../features/projects/slp-projects-hooks";
 import { useSlurpSettings, useUpdateSlurpSettings } from "../features/settings/slp-settings-hooks";
 import { useActivePersona, usePersonas } from "../../hooks/use-creator-personas";
@@ -213,12 +210,7 @@ import { SlurpFanCard } from "../modules/audience/SlpFanCard";
 import { LockedSlurpPostCard } from "../modules/post/SlpLockedPostCard";
 import { SlurpCreatorPostCard } from "../modules/post/SlpCreatorPostCard";
 import { SlurpSparkleVeil } from "../base/chrome/SlpSparkleVeil";
-import {
-  DEFAULT_SLURP_SUBSCRIPTION_PRICE,
-  SlurpCoin,
-  SlurpCoinAmount,
-  SlurpCoinBurst,
-} from "../modules/coin/SlpCoin";
+import { DEFAULT_SLURP_SUBSCRIPTION_PRICE, SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "../modules/coin/SlpCoin";
 import { ChatImageLightbox } from "../../components/chat/ChatImageLightbox";
 import { useNearViewportSlurpMediaSrc, useSlurpMediaSrc } from "../base/media/slp-media-src";
 import { SlurpOnboardingWizard } from "../features/onboarding/SlpOnboardingPanel";
@@ -247,7 +239,10 @@ import { NoodleImageComposer } from "../base/media/SlpImageComposer";
 import { NoodlePollComposer } from "../modules/poll/SlpPollComposer";
 import { SlpStoryTile } from "../modules/story/SlpStoryTile";
 import { PostImageCropEditor, PostImageFrame } from "../base/media/SlpPostImageCropEditor";
-import { ConversationMediaPickerPanel, type ConversationMediaPickerTabId } from "../../components/chat/ConversationMediaPickerPanel";
+import {
+  ConversationMediaPickerPanel,
+  type ConversationMediaPickerTabId,
+} from "../../components/chat/ConversationMediaPickerPanel";
 import { HelpTooltip } from "../../components/ui/HelpTooltip";
 import { Modal } from "../../components/ui/Modal";
 import type { SlurpNavigationState } from "../base/navigation/slp-navigation.types";
@@ -631,7 +626,6 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   const creatorFlow = renderSlurpHomeCreatorFlow({ model, shellProps, reviewModal });
   if (creatorFlow) return creatorFlow;
 
-
   if (navigation.mode === "creator" && navigation.view === "profile") {
     return (
       <NoodleShell {...shellProps}>
@@ -651,7 +645,6 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   // shell can show them as real pages instead of a dead button.
   const destination = renderSlurpHomeDestinations({ model, shellProps, reviewModal, feedRightRail, showDiscovery });
   if (destination) return destination;
-
 
   return (
     <NoodleShell {...shellProps} contextualRail="populated" rightRail={feedRightRail}>

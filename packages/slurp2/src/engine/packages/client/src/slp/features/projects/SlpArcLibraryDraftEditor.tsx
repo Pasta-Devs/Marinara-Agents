@@ -95,9 +95,7 @@ export function ArcLibraryDraftEditor({
                 ...(choice ? { choice } : {}),
                 ...(chapter.mood ? { mood: chapter.mood } : {}),
                 ...(Object.keys(effects).length ? { effects } : {}),
-                ...(bio || location
-                  ? { profile: { ...(bio ? { bio } : {}), ...(location ? { location } : {}) } }
-                  : {}),
+                ...(bio || location ? { profile: { ...(bio ? { bio } : {}), ...(location ? { location } : {}) } } : {}),
               };
             }),
         });
@@ -205,9 +203,7 @@ export function ArcLibraryDraftEditor({
             })}
           </p>
         </div>
-        <span className="shrink-0 text-xs tabular-nums text-[var(--muted-foreground)]">
-          {draft.chapters.length}/12
-        </span>
+        <span className="shrink-0 text-xs tabular-nums text-[var(--muted-foreground)]">{draft.chapters.length}/12</span>
       </div>
       {draft.chapters.map((chapter, index) => (
         <fieldset

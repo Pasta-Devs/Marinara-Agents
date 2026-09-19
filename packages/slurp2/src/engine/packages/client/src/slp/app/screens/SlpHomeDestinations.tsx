@@ -91,7 +91,13 @@ import {
 import type { SlurpHomeHostView } from "./SlpHomeCreatorFlow";
 
 /** The navigation destinations that are pages of their own: wallet, notifications, studio, messages, profiles. */
-export function renderSlurpHomeDestinations({ model, shellProps, reviewModal, feedRightRail, showDiscovery }: SlurpHomeHostView) {
+export function renderSlurpHomeDestinations({
+  model,
+  shellProps,
+  reviewModal,
+  feedRightRail,
+  showDiscovery,
+}: SlurpHomeHostView) {
   void [shellProps, reviewModal, feedRightRail, showDiscovery];
   const {
     accountsQuery,

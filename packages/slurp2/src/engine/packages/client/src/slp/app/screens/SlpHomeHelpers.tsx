@@ -1,3 +1,12 @@
+import type { NoodlerContentFormat } from "../../features/feed/slp-feed-contract";
+import { AnimatePresence } from "framer-motion";
+import { ArrowLeft } from "lucide-react";
+import { DEFAULT_SLURP_SUBSCRIPTION_PRICE } from "../../modules/coin/SlpCoin";
+import { HelpTooltip } from "../../../components/ui/HelpTooltip";
+import { type NoodleIdentityDisclosure } from "@marinara-engine/shared";
+import { PostImageFrame } from "../../base/media/SlpPostImageCropEditor";
+import { useMemo } from "react";
+import { useNoodlerViewer } from "../../features/feed/slp-feed-viewer-hooks";
 import type {
   NoodlePostAccess,
   NoodlerPostView,
@@ -23,10 +32,11 @@ export interface NoodlerPostSubmission {
   access: NoodlePostAccess;
   image: NoodlerPostDraftImage | null;
   poll: { question: string; options: string[] } | null;
-  format: NoodleContentFormat;
+  format: NoodlerContentFormat;
   postType: "post" | "story";
   linkedPostId: string | null;
   unlockPrice: number | null;
+  /** Ask the AI for an image: written by the model on a guided post, from the text on a manual one. */
   generateImage: boolean;
 }
 
@@ -38,6 +48,7 @@ export interface NoodlerPostDraft {
   poll: NoodlePollInput | null;
   postType: "post" | "story";
   linkedPostId: string | null;
+  /** Price for this locked post. Null uses the Creator's price. */
   unlockPrice: number | null;
   generateImage: boolean;
 }
@@ -47,7 +58,7 @@ export interface PendingNoodlerImage {
 }
 
 export type { NoodlerContentFormat, NoodlerPostDraftImage } from "../../features/feed/slp-feed-contract";
-export type SlurpViewerCreator = import("@marinara-engine/shared").NoodlerViewerScope;
+export type SlurpViewerCreator = NonNullable<ReturnType<typeof useNoodlerViewer>["data"]>["creators"][number];
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -97,7 +108,7 @@ export function isEmptyNoodlerPostDraft(draft: NoodlerPostDraft): boolean {
     !draft.poll &&
     draft.postType === EMPTY_NOODLER_POST_DRAFT.postType &&
     draft.linkedPostId === EMPTY_NOODLER_POST_DRAFT.linkedPostId &&
-    draft.unlockPrice === EMPTY_NOODLER_POST_DRAFT.unlockPrice
+    draft.generateImage === EMPTY_NOODLER_POST_DRAFT.generateImage
   );
 }
 
@@ -106,72 +117,67 @@ export function isSlurpStory(post: NoodlerPostView | NoodlerManagedPost): boolea
 }
 
 export function slurpSubscriptionPriceOf(profile: unknown): number {
-  const price =
-    typeof profile === "object" && profile !== null && "subscriptionPrice" in profile
-      ? (profile as { subscriptionPrice: unknown }).subscriptionPrice
-      : undefined;
-  return typeof price === "number" && price >= 0 ? price : 100;
+  const price = (profile as { subscriptionPrice?: unknown } | null)?.subscriptionPrice;
+  return typeof price === "number" && price >= 0 ? price : DEFAULT_SLURP_SUBSCRIPTION_PRICE;
 }
 
 export function linkedPostIdForStory(post: NoodlerPostView): string | null {
-  const linkedPostId = "linkedPostId" in post ? (post as { linkedPostId: unknown }).linkedPostId : undefined;
+  const linkedPostId = (post as NoodlerPostView & { linkedPostId?: unknown }).linkedPostId;
   return typeof linkedPostId === "string" && linkedPostId.length > 0 ? linkedPostId : null;
 }
 
 export function parsePrice(value: string): number | null {
-  const parsed = Number.parseFloat(value);
+  if (!value.trim()) return null;
+  const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
 export function toNoodlePostCardModel(view: NoodlerPostView, profile: NoodlerStageProfile): NoodlePostCardModel {
   return {
     id: view.id,
-    authorAccountId: profile.id,
-    authorDisplayName: profile.displayName,
-    authorHandle: profile.handle,
-    authorAvatarUrl: profile.avatarUrl,
-    title: view.title ?? null,
+    authorAccountId: view.authorAccountId,
+    access: view.access,
+    title: view.title,
     content: view.content ?? "",
-    imageUrl: view.imageUrl ?? null,
-    imageCrop: (view as NoodlerPostView & { imageCrop?: NoodlePostImageCrop }).imageCrop ?? null,
+    imageUrl: view.imageUrl,
+    imagePrompt: view.imagePrompt,
+    metadata: view.metadata ?? {},
+    authorSnapshot: {
+      id: profile.id,
+      handle: profile.handle,
+      displayName: profile.displayName,
+      avatarUrl: profile.avatarUrl,
+      avatarCrop: profile.avatarCrop,
+    },
     createdAt: view.createdAt,
-    updatedAt: view.updatedAt,
-    liked: view.viewerInteraction?.type === "like",
-    likeCount: view.stats?.likes ?? 0,
-    replyCount: view.stats?.replies ?? 0,
-    viewCount: view.stats?.views ?? 0,
-    access: view.access ?? "public",
-    poll: view.poll ?? null,
-    postType: (view as NoodlerPostView & { noodlerPostType?: string }).noodlerPostType ?? "post",
-    story: (view as NoodlerPostView & { story?: boolean }).story ?? false,
+    interactions: view.interactions,
+    likeCount: view.likeCount ?? undefined,
   };
 }
 
 export function toManagedPostCardModel(post: NoodlerManagedPost, profile: NoodlerStageProfile): NoodlePostCardModel {
   return {
     id: post.id,
-    authorAccountId: profile.id,
-    authorDisplayName: profile.displayName,
-    authorHandle: profile.handle,
-    authorAvatarUrl: profile.avatarUrl,
-    title: post.title ?? null,
-    content: post.content ?? "",
-    imageUrl: post.imageUrl ?? null,
-    imageCrop: post.imageCrop ?? null,
+    authorAccountId: post.authorAccountId,
+    access: post.access,
+    title: post.title,
+    content: post.content,
+    imageUrl: post.imageUrl,
+    imagePrompt: post.imagePrompt,
+    metadata: post.metadata,
+    authorSnapshot: {
+      id: profile.id,
+      handle: profile.handle,
+      displayName: profile.displayName,
+      avatarUrl: profile.avatarUrl,
+      avatarCrop: profile.avatarCrop,
+    },
     createdAt: post.createdAt,
-    updatedAt: post.updatedAt,
-    liked: false,
-    likeCount: post.stats?.likes ?? 0,
-    replyCount: post.stats?.replies ?? 0,
-    viewCount: post.stats?.views ?? 0,
-    access: post.access ?? "public",
-    poll: post.poll ?? null,
-    postType: post.noodlerPostType ?? "post",
-    story: post.story ?? false,
+    interactions: [],
   };
 }
 
-export function serializeNoodlerPostGuide(title: string, body: string): string {
+export function serializeNoodlerPostGuide(title: string, body: string) {
   const sections: string[] = [];
   if (title.trim()) sections.push(`Title:\n${title.trim()}`);
   if (body.trim()) sections.push(`Body:\n${body.trim()}`);
@@ -182,9 +188,10 @@ export function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-export function noodlerGoalOf(viewer: unknown): { label: string; target: number; raised: number; progress: number } | null {
-  if (!viewer || typeof viewer !== "object") return null;
-  const goal = (viewer as Record<string, unknown>).goal;
+export function noodlerGoalOf(
+  scope: unknown,
+): { label: string; raised: number; target: number; progress: number; met: boolean } | null {
+  const goal = (scope as { goal?: unknown } | null)?.goal;
   if (!goal || typeof goal !== "object") return null;
   const value = goal as Record<string, unknown>;
   if (typeof value.label !== "string" || typeof value.target !== "number" || typeof value.raised !== "number") {
@@ -192,9 +199,10 @@ export function noodlerGoalOf(viewer: unknown): { label: string; target: number;
   }
   return {
     label: value.label,
-    target: value.target,
     raised: value.raised,
+    target: value.target,
     progress: typeof value.progress === "number" ? value.progress : 0,
+    met: value.met === true,
   };
 }
 
@@ -202,21 +210,13 @@ export function noodlerGoalOf(viewer: unknown): { label: string; target: number;
 // Shared small components
 // ---------------------------------------------------------------------------
 
-import {
-  ChevronRight,
-  Loader2,
-  UserRound,
-} from "lucide-react";
+import { ChevronRight, Loader2, UserRound } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { SlurpSparkleVeil } from "../../base/chrome/SlpSparkleVeil";
 import { cn } from "../../../lib/utils";
-import {
-  getNoodleAccentStyle,
-  NOODLE_PINK,
-  ProfileInitial,
-} from "../../base/chrome/SlpChrome";
+import { getNoodleAccentStyle, NOODLE_PINK, ProfileInitial } from "../../base/chrome/SlpChrome";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { useSlurpMediaSrc } from "../../base/media/slp-media-src";
 import { Modal } from "../../../components/ui/Modal";
@@ -224,7 +224,15 @@ import type { NoodlePostCardCtx } from "../../modules/post/SlpPostCard";
 import { SlurpCreatorPostCard } from "../../modules/post/SlpCreatorPostCard";
 
 /** Keeps a feed slot mounted while its locked and revealed card shapes trade places. */
-export function SlurpAccessTransition({ postId, locked, children }: { postId: string; locked: boolean; children: ReactNode }) {
+export function SlurpAccessTransition({
+  postId,
+  locked,
+  children,
+}: {
+  postId: string;
+  locked: boolean;
+  children: ReactNode;
+}) {
   const reduceMotion = useReducedMotion();
   const previousLocked = useRef(locked);
   const [celebrating, setCelebrating] = useState(false);
@@ -245,43 +253,63 @@ export function SlurpAccessTransition({ postId, locked, children }: { postId: st
       style={{ contentVisibility: "auto", containIntrinsicSize: "auto 720px" }}
       data-slurp-access-transition={postId}
     >
-      <motion.div
-        key={locked ? "locked" : "revealed"}
-        className="relative"
-        initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.985, filter: "blur(4px)" }}
-        animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
-        exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.992, filter: "blur(4px)" }}
-        transition={{ duration: reduceMotion ? 0.12 : 0.42, ease: "easeOut" }}
-      >
-        {children}
-        {celebrating && !locked && <SlurpSparkleVeil className="z-20 rounded-xl opacity-80" />}
-      </motion.div>
+      <AnimatePresence initial={false} mode="popLayout">
+        <motion.div
+          key={locked ? "locked" : "revealed"}
+          className="relative"
+          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.985, filter: "blur(4px)" }}
+          animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
+          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.992, filter: "blur(4px)" }}
+          transition={{ duration: reduceMotion ? 0.12 : 0.42, ease: "easeOut" }}
+        >
+          {children}
+          {celebrating && !locked && <SlurpSparkleVeil className="z-20 rounded-xl opacity-80" />}
+        </motion.div>
+      </AnimatePresence>
     </motion.div>
   );
 }
 
 export function NoodlerDraftImageFrame({ image }: { image: NoodlerPostDraftImage }) {
-  const url =
-    typeof image.source === "string" ? image.source : URL.createObjectURL(image.source);
+  const { t: localizeUi } = useUiTranslation();
+  const sourceUrl = useMemo(
+    () => (typeof image.source === "string" ? image.source : URL.createObjectURL(image.source)),
+    [image.source],
+  );
+  useEffect(
+    () => () => {
+      if (image.source instanceof File) URL.revokeObjectURL(sourceUrl);
+    },
+    [image.source, sourceUrl],
+  );
   return (
-    <div className="relative mt-3 overflow-hidden rounded-xl border border-[var(--noodle-divider)]">
-      <img src={url} alt="" className="max-h-48 w-full object-cover" />
-    </div>
+    <PostImageFrame
+      src={sourceUrl}
+      crop={image.crop}
+      alt={localizeUi("ui.noodle.noodlehome.attachedPostImage")}
+      maxHeight={240}
+    />
   );
 }
 
-export function DisclosureBadge({ mode, detail }: { mode: import("@marinara-engine/shared").NoodleIdentityDisclosure | null; detail?: ReactNode }) {
+export function DisclosureBadge({ mode, detail }: { mode: NoodleIdentityDisclosure | null; detail?: ReactNode }) {
   const { t: localizeUi } = useUiTranslation();
   const label = mode
     ? localizeUi(`ui.noodle.disclosure.${mode}.shortLabel`)
     : localizeUi("ui.noodle.disclosure.setupNeeded");
+  const defaultDetail =
+    mode === "open"
+      ? localizeUi("ui.slurp.disclosure.openDetail")
+      : mode === "hinted"
+        ? localizeUi("ui.slurp.disclosure.hintedDetail")
+        : localizeUi("ui.slurp.disclosure.setupDetail");
   return (
-    <span
-      title={detail ?? label}
-      className="rounded-full border border-[var(--noodle-divider)] px-2 py-0.5 text-[0.68rem] font-bold capitalize text-[var(--muted-foreground)]"
-    >
-      {label}
-    </span>
+    <HelpTooltip
+      label={label}
+      side="bottom"
+      buttonClassName="rounded-full border border-[var(--noodle-divider)] px-2 py-0.5 text-[0.68rem] font-bold capitalize text-[var(--muted-foreground)] opacity-100 [&_svg]:hidden"
+      text={<span>{detail ?? defaultDetail}</span>}
+    />
   );
 }
 
@@ -296,6 +324,7 @@ export function EmptyState({
   detail?: string;
   action?: string;
   onAction?: () => void;
+  /** Defaults to a person, which is wrong for an empty search or an empty feed. */
   icon?: LucideIcon;
 }) {
   return (
@@ -330,6 +359,7 @@ export function NoodlerFrame({
   title: string;
   hideBack?: boolean;
   action?: ReactNode;
+  /** Set when the view below draws its own title bar, so this one would only duplicate it. */
   hideHeader?: boolean;
   hideHeaderOnMobile?: boolean;
 }) {
@@ -347,16 +377,20 @@ export function NoodlerFrame({
           <button
             type="button"
             onClick={onBack}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--noodle-accent)] hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
-            aria-label={localizeUi("ui.noodle.noodlehome.back")}
+            className="flex h-11 w-11 items-center justify-center rounded-full text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+            aria-label={localizeUi("ui.noodle.noodlerframe.back")}
           >
-            <ChevronRight size={18} className="rotate-180 rtl:rotate-0" />
+            <ArrowLeft size={18} className="rtl:-scale-x-100" />
           </button>
         )}
-        <h1 className="min-w-0 flex-1 truncate text-sm font-black">{title}</h1>
-        {action && <div className="flex shrink-0 items-center">{action}</div>}
+        <h1 className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</h1>
+        {action ?? (
+          <span className="rounded-full bg-[var(--noodle-accent)]/10 px-2.5 py-1 text-[0.65rem] font-bold text-[var(--noodle-accent)]">
+            {localizeUi("ui.noodle.noodlerframe.noodler")}
+          </span>
+        )}
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+      <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
     </div>
   );
 }
@@ -461,6 +495,7 @@ export function SlurpMediaDialog({
       panelClassName={cn(
         "noodle-icon-scope overflow-hidden",
         story &&
+          // The Modal header is hidden: a Story draws its own close button over the picture, top right.
           "bg-black [&>div:first-child]:hidden",
       )}
       panelStyle={getNoodleAccentStyle(NOODLE_PINK)}
@@ -530,6 +565,7 @@ export function SlurpPostDialog({
           <div className="h-full w-full animate-pulse bg-[var(--slurp-surface-raised)] motion-reduce:animate-none" />
         )
       }
+      // The dialog owns the picture, so the card must not draw it or offer its prompt again.
       side={<SlurpCreatorPostCard post={{ ...post, imageUrl: null }} ctx={ctx} surface="profile" />}
     />
   );

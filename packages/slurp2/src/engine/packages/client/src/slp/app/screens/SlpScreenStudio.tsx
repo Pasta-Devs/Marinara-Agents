@@ -2,11 +2,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import type { SlurpStudioCreator } from "../../features/economy/slp-economy-contract";
-import {
-  useSetSlurpGoal,
-  useSlurpPayout,
-  useSlurpStudio,
-} from "../../features/economy/slp-economy-hooks";
+import { useSetSlurpGoal, useSlurpPayout, useSlurpStudio } from "../../features/economy/slp-economy-hooks";
 import { cn } from "../../../lib/utils";
 import { Avatar } from "../../base/chrome/SlpChrome";
 import { NoodlerFrame } from "./SlpHomeHelpers";
@@ -326,7 +322,7 @@ function SlurpGoalEditor({ creator, personaId }: { creator: SlurpStudioCreator; 
       { creatorAccountId: creator.id, personaId, label: nextLabel, target },
       {
         onSuccess: () => setEditing(false),
-        onError: (error) => toast.error(errorMessage(error, "Failed to save goal")),
+        onError: (error) => toast.error(errorMessage(error)),
       },
     );
   };
@@ -454,7 +450,7 @@ function SlurpPayoutRow({ creator, personaId }: { creator: SlurpStudioCreator; p
         onClick={() =>
           payout.mutate(
             { creatorAccountId: creator.id, personaId, amount: creator.payoutAllowance },
-            { onError: (error) => toast.error(errorMessage(error, "Withdrawal failed")) },
+            { onError: (error) => toast.error(errorMessage(error)) },
           )
         }
         className="relative min-h-10 shrink-0 overflow-visible rounded-lg bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 [&_svg]:!text-zinc-950 transition-transform active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100"

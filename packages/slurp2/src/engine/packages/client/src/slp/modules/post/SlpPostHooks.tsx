@@ -228,6 +228,7 @@ export function useNoodlePostCardController(options: NoodlePostCardControllerOpt
     setImageLightbox,
     personaAccount: options.personaAccount,
     postManagement: options.postManagement,
+    postShowMoreLength: options.postShowMoreLength,
     postMenuId,
     setPostMenuId,
     editingPostId,

@@ -41,7 +41,7 @@ export function LockedSlurpPostCard({
   demo,
 }: {
   post: Pick<NoodlerPostView, "id" | "access" | "createdAt" | "title" | "imageUrl"> &
-    Partial<Pick<NoodlerPostView, "likeCount" | "replyCount" | "hasImage" | "imagePrompt">>;
+    Partial<Pick<NoodlerPostView, "likeCount" | "replyCount" | "hasImage" | "imagePrompt">>; // controller-locked managed posts carry no counts
   profile: NoodlerStageProfile;
   subscriptionPrice?: number | null;
   controllerOnly?: boolean;
