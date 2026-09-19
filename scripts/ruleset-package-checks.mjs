@@ -420,6 +420,11 @@ export function assertRulesetBattle(manifest, document) {
     if (source.onlyWhen !== undefined && columns.get(source.onlyWhen)?.type !== "boolean") {
       throw new Error(`${id} battle skills onlyWhen ${JSON.stringify(source.onlyWhen)} must name a boolean column`);
     }
+    // alwaysWhen is the exception to onlyWhen. Alone it would gate nothing, which reads like a
+    // filter and is not one.
+    if (source.alwaysWhen !== undefined && source.onlyWhen === undefined) {
+      throw new Error(`${id} battle skills alwaysWhen is the exception to onlyWhen, so it needs onlyWhen beside it`);
+    }
     if (source.alwaysWhen !== undefined) {
       const column = columns.get(source.alwaysWhen?.column);
       if (!column) {

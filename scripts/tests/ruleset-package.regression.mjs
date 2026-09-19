@@ -498,11 +498,24 @@ assert.throws(
     assertRulesetBattle(battleManifest, battleDocument({ ...battle, skills: [{ list: "knacks", onlyWhen: "gone" }] })),
   /battle skills onlyWhen "gone" must name a boolean column/u,
 );
+// alwaysWhen is the exception to onlyWhen. Alone it would gate nothing, which reads like a filter
+// and is not one, so the Engine refuses it and so does the build.
 assert.throws(
   () =>
     assertRulesetBattle(
       battleManifest,
-      battleDocument({ ...battle, skills: [{ list: "knacks", alwaysWhen: { column: "gone", equals: 0 } }] }),
+      battleDocument({ ...battle, skills: [{ list: "knacks", alwaysWhen: { column: "tier", equals: 0 } }] }),
+    ),
+  /battle skills alwaysWhen is the exception to onlyWhen, so it needs onlyWhen beside it/u,
+);
+assert.throws(
+  () =>
+    assertRulesetBattle(
+      battleManifest,
+      battleDocument({
+        ...battle,
+        skills: [{ list: "knacks", onlyWhen: "ready", alwaysWhen: { column: "gone", equals: 0 } }],
+      }),
     ),
   /battle skills alwaysWhen names unknown column "gone"/u,
 );
@@ -510,7 +523,10 @@ assert.throws(
   () =>
     assertRulesetBattle(
       battleManifest,
-      battleDocument({ ...battle, skills: [{ list: "knacks", alwaysWhen: { column: "tier", equals: "0" } }] }),
+      battleDocument({
+        ...battle,
+        skills: [{ list: "knacks", onlyWhen: "ready", alwaysWhen: { column: "tier", equals: "0" } }],
+      }),
     ),
   /battle skills alwaysWhen "tier" is a number column, so equals must be a number/u,
 );
@@ -518,7 +534,10 @@ assert.throws(
   () =>
     assertRulesetBattle(
       battleManifest,
-      battleDocument({ ...battle, skills: [{ list: "knacks", alwaysWhen: { column: "ready", equals: 1 } }] }),
+      battleDocument({
+        ...battle,
+        skills: [{ list: "knacks", onlyWhen: "ready", alwaysWhen: { column: "ready", equals: 1 } }],
+      }),
     ),
   /battle skills alwaysWhen "ready" is a boolean column, so equals must be true or false/u,
 );
@@ -526,7 +545,10 @@ assert.throws(
   () =>
     assertRulesetBattle(
       battleManifest,
-      battleDocument({ ...battle, skills: [{ list: "knacks", alwaysWhen: { column: "name", equals: 1 } }] }),
+      battleDocument({
+        ...battle,
+        skills: [{ list: "knacks", onlyWhen: "ready", alwaysWhen: { column: "name", equals: 1 } }],
+      }),
     ),
   /battle skills alwaysWhen "name" is a text column, so equals must be a string/u,
 );
@@ -534,14 +556,20 @@ assert.throws(
   () =>
     assertRulesetBattle(
       battleManifest,
-      battleDocument({ ...battle, skills: [{ list: "knacks", alwaysWhen: { column: "phase", equals: "dusk" } }] }),
+      battleDocument({
+        ...battle,
+        skills: [{ list: "knacks", onlyWhen: "ready", alwaysWhen: { column: "phase", equals: "dusk" } }],
+      }),
     ),
   /battle skills alwaysWhen "dusk" is not one of the values of "phase"/u,
 );
 assert.doesNotThrow(() =>
   assertRulesetBattle(
     battleManifest,
-    battleDocument({ ...battle, skills: [{ list: "knacks", alwaysWhen: { column: "phase", equals: "night" } }] }),
+    battleDocument({
+      ...battle,
+      skills: [{ list: "knacks", onlyWhen: "ready", alwaysWhen: { column: "phase", equals: "night" } }],
+    }),
   ),
 );
 
