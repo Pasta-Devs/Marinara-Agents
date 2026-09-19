@@ -1,5 +1,13 @@
 export type RuntimeLogArgument = string | number | boolean | null | undefined | object;
 
+export type PackageLanguageModelError = Error & {
+  status?: number;
+  code?: string;
+  param?: string;
+  parameter?: string;
+  retryAfterMs?: number;
+};
+
 export type CapabilityRuntimeHost = {
   dataDir?: string;
   embeddings?: PackageEmbeddingAdapter;
