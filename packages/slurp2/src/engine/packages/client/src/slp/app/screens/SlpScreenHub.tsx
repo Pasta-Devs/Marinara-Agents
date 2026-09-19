@@ -1,37 +1,8 @@
 import { NOODLER_FEED_WINDOW_SIZE } from "./SlpHomeHelpers";
 import { SlurpMomentsShelf, SlurpMomentViewer } from "./SlpScreenMoments";
 import { SubscriptionSections } from "./SlpScreenSubscriptions";
-import {
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Clock3,
-  Eye,
-  Heart,
-  LayoutGrid,
-  Link,
-  List,
-  Loader2,
-  Lock,
-  Maximize2,
-  Minimize2,
-  Plus,
-  RefreshCw,
-  Search,
-  Sparkles,
-  UserRound,
-  X,
-} from "lucide-react";
-import {
-  Fragment,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type Dispatch,
-  type ReactNode,
-  type SetStateAction,
-} from "react";
+import { LayoutGrid, List, Loader2, RefreshCw, Search, UserRound } from "lucide-react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { NoodlerPostView, Persona } from "@marinara-engine/shared";
 import type { SlurpManagedStageProfile } from "../../base/state/slp-state-types";
@@ -43,53 +14,32 @@ import {
 } from "../../features/ads/slp-ads-hooks";
 import { useNoodlerViewer } from "../../features/feed/slp-feed-viewer-hooks";
 import { useRecordSlurpStoryView, useSlurpStoryViews } from "../../features/messages/slp-messages-hooks";
-import { useSlurpSettings } from "../../features/settings/slp-settings-hooks";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { cn } from "../../../lib/utils";
-import { NoodlePostCardCtx, type NoodlePostCardModel } from "../../modules/post/SlpPostCard";
-import { SlurpCreatorProfileCard } from "../../modules/creator/SlpCreatorProfileCard";
+import { NoodlePostCardCtx } from "../../modules/post/SlpPostCard";
 import { SlurpCoinAmount } from "../../modules/coin/SlpCoin";
-import { SlpStoryTile } from "../../modules/story/SlpStoryTile";
 import { LockedSlurpPostCard } from "../../modules/post/SlpLockedPostCard";
 import { SlurpCreatorPostCard } from "../../modules/post/SlpCreatorPostCard";
 import { SlurpMediaWall } from "./SlpScreenProfile";
-import { useSlurpMediaSrc } from "../../base/media/slp-media-src";
 import {
-  getNoodleAccentStyle,
   SLURP_TOGGLE_ACTIVE_CLASS,
   NewSinceLastVisitDivider,
   HIDE_ON_SCROLL_CLASS,
   NoodleLogo,
-  ProfileInitial,
   useHideOnScroll,
-  NOODLE_PINK,
 } from "../../base/chrome/SlpChrome";
-import { SlurpSparkleVeil } from "../../base/chrome/SlpSparkleVeil";
 import { SlurpInlineAd } from "../../features/ads/SlpInlineAd";
-import { SlurpDiscoverToolbar } from "../../features/discovery/SlpDiscoverToolbar";
-import {
-  filterAndSortSlurpCreators,
-  SLURP_DISCOVERY_TAGS,
-  type SlurpDiscoverLayout,
-  type SlurpDiscoverSort,
-} from "../../features/discovery/slp-discovery";
-import type { SlurpDiscoveryGender } from "../../base/state/slp-state-types";
-import { Modal } from "../../../components/ui/Modal";
+import { type SlurpDiscoverLayout } from "../../features/discovery/slp-discovery";
 import {
   EmptyState,
   SlurpFeedSkeleton,
   SlurpAccessTransition,
-  isSlurpStory,
   toNoodlePostCardModel,
-  parsePrice,
-  linkedPostIdForStory,
   errorMessage,
-  type SlurpViewerCreator,
-  SlurpMediaDialog,
   SlurpPostDialog,
   LoadMoreFeedButton,
 } from "./SlpHomeHelpers";
-import { deriveSlurpHubView, type SlurpMoment } from "./slp-hub-view";
+import { deriveSlurpHubView } from "./slp-hub-view";
 import { useSlurpHubDiscoveryFilters } from "./slp-hub-discovery-filters";
 import { SlurpInlineSuggestedCreators } from "./SlpScreenSuggestedCreators";
 import { SlpHubDiscover } from "./SlpHubDiscover";

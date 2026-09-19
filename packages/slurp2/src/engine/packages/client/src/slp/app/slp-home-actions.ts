@@ -1,6 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { useSlurpHomePostActions } from "./slp-home-post-actions";
-import { NOODLER_POST_TITLE_MAX_LENGTH } from "@marinara-engine/shared";
 import type {
   NoodleAccount,
   NoodleInteraction,
@@ -11,7 +9,6 @@ import type {
   NoodlerSourceSnapshot,
 } from "@marinara-engine/shared";
 import type { SlurpManagedStageProfile, SlurpStageProfileInput } from "../base/state/slp-state-types";
-import { useNoodlerConnectionCounts } from "../features/audience/slp-audience-hooks";
 import {
   useCreateNoodlerStageProfile,
   useGenerateNoodlerStageProfileDraft,
@@ -22,7 +19,6 @@ import {
   useUseNoodlerSourceAvatar,
 } from "../features/creators/slp-creator-profile-hooks";
 import { useNoodlerAccounts, useNoodlerEligibleAccounts } from "../features/creators/slp-creators-hooks";
-import { useNoodlerViewerWallets } from "../features/economy/slp-economy-hooks";
 import {
   useConfirmNoodlerImagePrompts,
   useCreateNoodlerPost,
@@ -52,36 +48,20 @@ import {
   useUnlockNoodlerPost,
   useUpdateNoodlerInteraction,
 } from "../features/feed/slp-feed-viewer-hooks";
-import { useSlurpThreads } from "../features/messages/slp-messages-hooks";
-import { useSlurpNotifications } from "../features/notifications/slp-notification-hooks";
 import { useSlurpSettings, useUpdateSlurpSettings } from "../features/settings/slp-settings-hooks";
 import { useActivePersona, usePersonas } from "../../hooks/use-creator-personas";
-import { useConnections } from "../../hooks/use-connections";
 import { showConfirmDialog } from "../../lib/app-dialogs";
-import { useSlurpUIStore } from "../base/state/slp-package-store";
-import {
-  type NoodlerPostDraft,
-  type NoodlerPostSubmission,
-  EMPTY_NOODLER_POST_DRAFT,
-  isEmptyNoodlerPostDraft,
-  errorMessage,
-  serializeNoodlerPostGuide,
-  SLURP_PLACEHOLDER_BALANCE,
-} from "./screens/SlpHomeHelpers";
+import { type NoodlerPostSubmission, errorMessage, serializeNoodlerPostGuide } from "./screens/SlpHomeHelpers";
 import {
   type NoodlePostCardModel,
   type NoodlePostImageUpdate,
   useNoodlePostCardController,
 } from "../modules/post/SlpPostCard";
 import type { ImagePromptOverride, ImagePromptReviewItem } from "../../components/ui/ImagePromptReviewModal";
-import type { SlurpNavigationState } from "../base/navigation/slp-navigation.types";
-import { useTranslation as useUiTranslation } from "react-i18next";
-import { confirmLeaveSlurpBackstage } from "../features/backstage/SlpBackstageControls";
 import { confirmSlurpAvatarReview } from "../features/creators/SlpStageProfileForm";
 import { NOODLE_PERSONA_SWITCHER_PAGE_SIZE, NOODLE_PINK } from "../base/chrome/SlpChrome";
 import { ApiError } from "../../lib/api-client";
 import { toast } from "sonner";
-import { slurp2SplashPending } from "../features/onboarding/SlpSplash";
 import { useSlurpHomeBaseState, type SlurpHomeBaseState, type SlurpHomeProps } from "./slp-home-state";
 
 /**

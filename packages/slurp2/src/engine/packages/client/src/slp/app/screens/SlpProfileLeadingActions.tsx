@@ -1,52 +1,8 @@
-import {
-  BookmarkCheck,
-  BookmarkPlus,
-  ChevronDown,
-  ChevronLeft,
-  Clock3,
-  LayoutGrid,
-  List,
-  Loader2,
-  Lock,
-  MessageCircle,
-  Pencil,
-  Plus,
-  Search,
-  Send,
-  Sparkles,
-  Trash2,
-  TriangleAlert,
-  X,
-} from "lucide-react";
+import { BookmarkCheck, BookmarkPlus, MessageCircle } from "lucide-react";
 import { showConfirmDialog } from "../../../lib/app-dialogs";
 import { cn } from "../../../lib/utils";
 import { SlurpCoinAmount, SlurpCoinBurst } from "../../modules/coin/SlpCoin";
-import {
-  errorMessage,
-  isEmptyNoodlerPostDraft,
-  isSlurpStory,
-  linkedPostIdForStory,
-  noodlerGoalOf,
-  parsePrice,
-  serializeNoodlerPostGuide,
-  slurpSubscriptionPriceOf,
-  toManagedPostCardModel,
-  toNoodlePostCardModel,
-  type NoodlerPostDraft,
-  type NoodlerPostSubmission,
-  type PendingNoodlerImage,
-  NoodlerDraftImageFrame,
-  SlurpAccessTransition,
-  SlurpFeedSkeleton,
-  EmptyState,
-  NoodlerFrame,
-  DisclosureBadge,
-  NOODLER_FEED_WINDOW_SIZE,
-  SourceAccountAvatar,
-  LoadMoreFeedButton,
-  SlurpMediaDialog,
-  SlurpPostDialog,
-} from "./SlpHomeHelpers";
+import { slurpSubscriptionPriceOf } from "./SlpHomeHelpers";
 import type { StageProfileViewModel } from "./slp-profile-view-model";
 
 /** What a visiting viewer can do on this Creator: subscribe, follow, message, tip. */

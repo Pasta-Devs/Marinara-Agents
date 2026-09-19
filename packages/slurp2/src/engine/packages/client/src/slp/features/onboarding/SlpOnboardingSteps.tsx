@@ -1,28 +1,8 @@
 import { clampPostsPerDay, DISCLOSURES, disclosureLabel, StepHeading } from "./SlpOnboardingPanel";
-import {
-  AlertTriangle,
-  Check,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  Coins,
-  Cpu,
-  Eye,
-  Image as ImageIcon,
-  Loader2,
-  Lock,
-  RefreshCw,
-  SlidersHorizontal,
-  Sparkles,
-  Users,
-} from "lucide-react";
-import {
-  NOODLER_BULK_ACCOUNT_MAX,
-  NOODLER_POSTS_PER_DAY_MAX,
-  resolveNoodlerOnboardingCompletion,
-} from "@marinara-engine/shared";
-import { cn, generateClientId } from "../../../lib/utils";
-import { Avatar, getNoodleAccentStyle, NOODLE_PINK } from "../../base/chrome/SlpChrome";
+import { Check, Clock, Eye, Image as ImageIcon, RefreshCw, SlidersHorizontal, Users } from "lucide-react";
+import { NOODLER_BULK_ACCOUNT_MAX, NOODLER_POSTS_PER_DAY_MAX } from "@marinara-engine/shared";
+import { cn } from "../../../lib/utils";
+import { Avatar } from "../../base/chrome/SlpChrome";
 import type {
   NoodleIdentityDisclosure,
   NoodlerOnboardingCompletion,

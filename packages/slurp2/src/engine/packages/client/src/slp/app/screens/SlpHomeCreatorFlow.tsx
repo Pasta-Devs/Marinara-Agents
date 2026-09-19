@@ -1,83 +1,10 @@
-import { EMPTY_STAGE_PROFILE } from "../SlpHomeHost";
+import { EMPTY_STAGE_PROFILE } from "./SlpHomeHelpers";
 import { NoodleShell } from "../../modules/chrome/SlpShell";
-import {
-  type NoodlerPostDraft,
-  type NoodlerPostSubmission,
-  type PendingNoodlerImage,
-  type NoodlerContentFormat,
-  type NoodlerPostDraftImage,
-  type SlurpViewerCreator,
-  NOODLER_FEED_WINDOW_SIZE,
-  SLURP_PLACEHOLDER_BALANCE,
-  STAGE_PERSONALITY_MAX_LENGTH,
-  EMPTY_NOODLER_POST_DRAFT,
-  isEmptyNoodlerPostDraft,
-  isSlurpStory,
-  slurpSubscriptionPriceOf,
-  linkedPostIdForStory,
-  parsePrice,
-  errorMessage,
-  toNoodlePostCardModel,
-  toManagedPostCardModel,
-  serializeNoodlerPostGuide,
-  noodlerGoalOf,
-  SlurpAccessTransition,
-  NoodlerDraftImageFrame,
-  EmptyState,
-  NoodlerFrame,
-  DisclosureBadge,
-  SlurpFeedSkeleton,
-} from "./SlpHomeHelpers";
+import { EMPTY_NOODLER_POST_DRAFT, errorMessage, NoodlerFrame } from "./SlpHomeHelpers";
 import { StageProfileSourcePicker, DisclosureStep } from "./SlpScreenCreateProfile";
 import { toast } from "sonner";
-import {
-  appendAudienceStance,
-  confirmSlurpAvatarReview,
-  AudienceStancePresets,
-  disclosureOptions,
-  profileAccent,
-  StageProfileForm,
-  WizardFooter,
-} from "../../features/creators/SlpStageProfileForm";
-import {
-  ArrowLeft,
-  ArrowDown,
-  ArrowRight,
-  Bell,
-  BookmarkCheck,
-  BookmarkPlus,
-  BriefcaseBusiness,
-  Check,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Clock3,
-  Coins,
-  Crown,
-  Eye,
-  Gift,
-  Heart,
-  LayoutGrid,
-  Link,
-  List,
-  Loader2,
-  Lock,
-  Maximize2,
-  MessageCircle,
-  Minimize2,
-  Pencil,
-  Plus,
-  RefreshCw,
-  Search,
-  Send,
-  Sparkles,
-  Star,
-  Trash2,
-  TriangleAlert,
-  Upload,
-  UserRound,
-  X,
-} from "lucide-react";
+import { StageProfileForm } from "../../features/creators/SlpStageProfileForm";
+import { ChevronRight, LayoutGrid, Pencil, Plus, Sparkles } from "lucide-react";
 import { cn } from "../../../lib/utils";
 import { SlurpCreatorProfileCard } from "../../modules/creator/SlpCreatorProfileCard";
 import { StageProfileView } from "./SlpScreenProfile";

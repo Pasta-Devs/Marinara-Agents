@@ -1,58 +1,7 @@
 import { SlurpProfileMediaTile } from "./SlpScreenProfile";
-import {
-  BookmarkCheck,
-  BookmarkPlus,
-  ChevronDown,
-  ChevronLeft,
-  Clock3,
-  LayoutGrid,
-  List,
-  Loader2,
-  Lock,
-  MessageCircle,
-  Pencil,
-  Plus,
-  Search,
-  Send,
-  Sparkles,
-  Trash2,
-  TriangleAlert,
-  X,
-} from "lucide-react";
-import {
-  errorMessage,
-  isEmptyNoodlerPostDraft,
-  isSlurpStory,
-  linkedPostIdForStory,
-  noodlerGoalOf,
-  parsePrice,
-  serializeNoodlerPostGuide,
-  slurpSubscriptionPriceOf,
-  toManagedPostCardModel,
-  toNoodlePostCardModel,
-  type NoodlerPostDraft,
-  type NoodlerPostSubmission,
-  type PendingNoodlerImage,
-  NoodlerDraftImageFrame,
-  SlurpAccessTransition,
-  SlurpFeedSkeleton,
-  EmptyState,
-  NoodlerFrame,
-  DisclosureBadge,
-  NOODLER_FEED_WINDOW_SIZE,
-  SourceAccountAvatar,
-  LoadMoreFeedButton,
-  SlurpMediaDialog,
-  SlurpPostDialog,
-} from "./SlpHomeHelpers";
-import {
-  Avatar,
-  getNoodleAccentStyle,
-  SLURP_TOGGLE_ACTIVE_CLASS,
-  NoodleLogo,
-  ProfileInitial,
-  NOODLE_PINK,
-} from "../../base/chrome/SlpChrome";
+import { Loader2, TriangleAlert } from "lucide-react";
+import { SlurpAccessTransition, EmptyState } from "./SlpHomeHelpers";
+import { Avatar } from "../../base/chrome/SlpChrome";
 import { SlurpFanCard } from "../../modules/audience/SlpFanCard";
 import { LockedSlurpPostCard } from "../../modules/post/SlpLockedPostCard";
 import { SlurpCreatorPostCard } from "../../modules/post/SlpCreatorPostCard";

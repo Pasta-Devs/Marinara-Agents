@@ -1,4 +1,3 @@
-import { NoodlerPostComposer } from "./SlpScreenComposer";
 import {
   BookmarkCheck,
   BookmarkPlus,
@@ -20,7 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   NOODLER_POST_CONTENT_MAX_LENGTH,
   NOODLER_POST_GUIDE_MAX_LENGTH,
@@ -37,7 +36,6 @@ import type {
   NoodlerStageProfile,
 } from "@marinara-engine/shared";
 import type { SlurpManagedStageProfile, SlurpStageProfileInput } from "../../base/state/slp-state-types";
-import type { SlurpPromotion } from "../../features/ads/slp-ads-contract";
 import { useNoodlerFollowers, useNoodlerSubscribers } from "../../features/audience/slp-audience-hooks";
 import { useUpdateNoodlerFanActivity } from "../../features/audience/slp-fan-activity-hooks";
 import {
@@ -52,28 +50,13 @@ import type {
   SlurpProfilePost,
 } from "../../features/feed/slp-feed-contract";
 import { useUpdateNoodlerAutoPosting } from "../../features/feed/slp-feed-schedule-hooks";
-import {
-  useNoodlerViewer,
-  useToggleNoodlerFollow,
-  useToggleNoodlerSubscription,
-} from "../../features/feed/slp-feed-viewer-hooks";
+import { useNoodlerViewer } from "../../features/feed/slp-feed-viewer-hooks";
 import { useSlurpCompose } from "../../features/messages/slp-messages-hooks";
 import { useSlurpArcs } from "../../features/projects/slp-projects-hooks";
 import { useSlurpSettings } from "../../features/settings/slp-settings-hooks";
-import { toast } from "sonner";
-import {
-  NoodleComposerShell,
-  NoodleComposerToolRow,
-  type NoodlePostCardCtx,
-  type NoodlePostCardModel,
-} from "../../modules/post/SlpPostCard";
-import { NoodleAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
-import { SlurpArcTimelineCard } from "../../features/projects/SlpArcTimelineCard";
-import { SlurpFanCard } from "../../modules/audience/SlpFanCard";
-import { LockedSlurpPostCard } from "../../modules/post/SlpLockedPostCard";
-import { SlurpCreatorPostCard } from "../../modules/post/SlpCreatorPostCard";
+import { type NoodlePostCardCtx } from "../../modules/post/SlpPostCard";
 import { SlurpCoinAmount, SlurpCoinBurst } from "../../modules/coin/SlpCoin";
-import { useNearViewportSlurpMediaSrc, useSlurpMediaSrc } from "../../base/media/slp-media-src";
+import { useSlurpMediaSrc } from "../../base/media/slp-media-src";
 import { slurpCreatorStatus } from "../../modules/creator/slp-creator-status";
 import {
   Avatar,
@@ -83,52 +66,19 @@ import {
   ProfileInitial,
   NOODLE_PINK,
 } from "../../base/chrome/SlpChrome";
-import { SlurpProfileSurface } from "../../features/creators/SlpProfileSurface";
-import { NoodleImageComposer } from "../../base/media/SlpImageComposer";
-import { NoodlePollComposer } from "../../modules/poll/SlpPollComposer";
-import { PostImageCropEditor } from "../../base/media/SlpPostImageCropEditor";
 import {
   ConversationMediaPickerPanel,
   type ConversationMediaPickerTabId,
 } from "../../../components/chat/ConversationMediaPickerPanel";
-import { HelpTooltip } from "../../../components/ui/HelpTooltip";
-import { Modal } from "../../../components/ui/Modal";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import { SlurpInlineAdTile } from "../../features/ads/SlpInlineAd";
-import { SlurpCreatorProfileCard } from "../../modules/creator/SlpCreatorProfileCard";
-import { SlurpDiscoveryProfileEditor } from "../../features/discovery/SlpDiscoveryProfileEditor";
+import { profileAccent } from "../../features/creators/SlpStageProfileForm";
 import {
-  appendAudienceStance,
-  AudienceStancePresets,
-  profileAccent,
-} from "../../features/creators/SlpStageProfileForm";
-import { showConfirmDialog } from "../../../lib/app-dialogs";
-import { cn } from "../../../lib/utils";
-import {
-  errorMessage,
-  isEmptyNoodlerPostDraft,
   isSlurpStory,
-  linkedPostIdForStory,
   noodlerGoalOf,
-  parsePrice,
-  serializeNoodlerPostGuide,
-  slurpSubscriptionPriceOf,
   toManagedPostCardModel,
   toNoodlePostCardModel,
   type NoodlerPostDraft,
   type NoodlerPostSubmission,
-  type PendingNoodlerImage,
-  NoodlerDraftImageFrame,
-  SlurpAccessTransition,
-  SlurpFeedSkeleton,
-  EmptyState,
-  NoodlerFrame,
-  DisclosureBadge,
-  NOODLER_FEED_WINDOW_SIZE,
-  SourceAccountAvatar,
-  LoadMoreFeedButton,
-  SlurpMediaDialog,
-  SlurpPostDialog,
 } from "./SlpHomeHelpers";
 
 import type { NoodlerProfileTab, SlurpProfileImagePost } from "./SlpScreenProfile";

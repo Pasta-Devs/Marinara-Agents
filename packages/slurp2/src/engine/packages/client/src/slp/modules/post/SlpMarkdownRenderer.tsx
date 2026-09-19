@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useRef } from "react";
-import { canManageNoodleReply, findNoodleTextMentions, type NoodleAccount } from "@marinara-engine/shared";
+import { findNoodleTextMentions, type NoodleAccount } from "@marinara-engine/shared";
 import { cn } from "../../../lib/utils";
 import { renderInlineWithCustomEmojis } from "../../../lib/custom-emoji-render";
 import { useTranslation as useUiTranslation } from "react-i18next";

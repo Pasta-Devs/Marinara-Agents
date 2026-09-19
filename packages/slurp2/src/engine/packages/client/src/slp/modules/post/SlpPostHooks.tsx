@@ -3,7 +3,6 @@ import {
   noodlePollInputSchema,
   readNoodlePostImageCrop,
   readNoodlePollFromMetadata,
-  type NoodleInteractionType,
   type NoodlePostImageCrop,
   type NoodlePollInput,
 } from "@marinara-engine/shared";

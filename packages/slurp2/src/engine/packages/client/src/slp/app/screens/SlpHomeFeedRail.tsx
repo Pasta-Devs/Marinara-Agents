@@ -1,56 +1,7 @@
-import {
-  ArrowLeft,
-  ArrowDown,
-  ArrowRight,
-  Bell,
-  BookmarkCheck,
-  BookmarkPlus,
-  BriefcaseBusiness,
-  Check,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Clock3,
-  Coins,
-  Crown,
-  Eye,
-  Gift,
-  Heart,
-  LayoutGrid,
-  Link,
-  List,
-  Loader2,
-  Lock,
-  Maximize2,
-  MessageCircle,
-  Minimize2,
-  Pencil,
-  Plus,
-  RefreshCw,
-  Search,
-  Send,
-  Sparkles,
-  Star,
-  Trash2,
-  TriangleAlert,
-  Upload,
-  UserRound,
-  X,
-} from "lucide-react";
+import { Crown, Heart, Search, X } from "lucide-react";
 import { SubscriptionSections } from "./SlpScreenSubscriptions";
 import { cn } from "../../../lib/utils";
-import {
-  Avatar,
-  getNoodleAccentStyle,
-  SLURP_TOGGLE_ACTIVE_CLASS,
-  NewSinceLastVisitDivider,
-  HIDE_ON_SCROLL_CLASS,
-  NoodleLogo,
-  ProfileInitial,
-  useHideOnScroll,
-  NOODLE_PERSONA_SWITCHER_PAGE_SIZE,
-  NOODLE_PINK,
-} from "../../base/chrome/SlpChrome";
+import { Avatar } from "../../base/chrome/SlpChrome";
 import type { SlurpHomeHostView } from "./SlpHomeCreatorFlow";
 
 /** The wide-screen discovery rail beside the feed. Narrow layouts omit it. */

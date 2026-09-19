@@ -1,93 +1,11 @@
 import { NoodleShell } from "../../modules/chrome/SlpShell";
 import { SlurpWalletView } from "./SlpScreenWallet";
-import {
-  type NoodlerPostDraft,
-  type NoodlerPostSubmission,
-  type PendingNoodlerImage,
-  type NoodlerContentFormat,
-  type NoodlerPostDraftImage,
-  type SlurpViewerCreator,
-  NOODLER_FEED_WINDOW_SIZE,
-  SLURP_PLACEHOLDER_BALANCE,
-  STAGE_PERSONALITY_MAX_LENGTH,
-  EMPTY_NOODLER_POST_DRAFT,
-  isEmptyNoodlerPostDraft,
-  isSlurpStory,
-  slurpSubscriptionPriceOf,
-  linkedPostIdForStory,
-  parsePrice,
-  errorMessage,
-  toNoodlePostCardModel,
-  toManagedPostCardModel,
-  serializeNoodlerPostGuide,
-  noodlerGoalOf,
-  SlurpAccessTransition,
-  NoodlerDraftImageFrame,
-  EmptyState,
-  NoodlerFrame,
-  DisclosureBadge,
-  SlurpFeedSkeleton,
-} from "./SlpHomeHelpers";
+import { SLURP_PLACEHOLDER_BALANCE, EmptyState, DisclosureBadge } from "./SlpHomeHelpers";
 import { SlurpInboxView } from "./SlpScreenMessages";
 import { SlurpStudioView } from "./SlpScreenStudio";
-import {
-  ArrowLeft,
-  ArrowDown,
-  ArrowRight,
-  Bell,
-  BookmarkCheck,
-  BookmarkPlus,
-  BriefcaseBusiness,
-  Check,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Clock3,
-  Coins,
-  Crown,
-  Eye,
-  Gift,
-  Heart,
-  LayoutGrid,
-  Link,
-  List,
-  Loader2,
-  Lock,
-  Maximize2,
-  MessageCircle,
-  Minimize2,
-  Pencil,
-  Plus,
-  RefreshCw,
-  Search,
-  Send,
-  Sparkles,
-  Star,
-  Trash2,
-  TriangleAlert,
-  Upload,
-  UserRound,
-  X,
-} from "lucide-react";
-import {
-  Avatar,
-  getNoodleAccentStyle,
-  SLURP_TOGGLE_ACTIVE_CLASS,
-  NewSinceLastVisitDivider,
-  HIDE_ON_SCROLL_CLASS,
-  NoodleLogo,
-  ProfileInitial,
-  useHideOnScroll,
-  NOODLE_PERSONA_SWITCHER_PAGE_SIZE,
-  NOODLE_PINK,
-} from "../../base/chrome/SlpChrome";
-import {
-  filterAndSortSlurpCreators,
-  isSlurpDiscoveryProfileIncomplete,
-  SLURP_DISCOVERY_TAGS,
-  type SlurpDiscoverLayout,
-  type SlurpDiscoverSort,
-} from "../../features/discovery/slp-discovery";
+import { ChevronLeft, ChevronRight, Loader2, Plus, TriangleAlert, UserRound } from "lucide-react";
+import { ProfileInitial } from "../../base/chrome/SlpChrome";
+import { isSlurpDiscoveryProfileIncomplete } from "../../features/discovery/slp-discovery";
 import type { SlurpHomeHostView } from "./SlpHomeCreatorFlow";
 
 /** The navigation destinations that are pages of their own: wallet, notifications, studio, messages, profiles. */

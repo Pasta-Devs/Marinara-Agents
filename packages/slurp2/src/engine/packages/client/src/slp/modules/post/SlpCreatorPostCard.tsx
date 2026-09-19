@@ -5,19 +5,7 @@
 // layout (two-line header, filled access pill, full-width body, image-on-top) differs.
 // The public Noodle feed keeps the original NoodlePostCard.
 // ──────────────────────────────────────────────
-import {
-  AtSign,
-  ChevronDown,
-  Heart,
-  Flame,
-  TrendingUp,
-  MessageCircle,
-  MoreHorizontal,
-  Pencil,
-  RefreshCw,
-  Share2,
-  Trash2,
-} from "lucide-react";
+import { AtSign, ChevronDown, Heart, Flame, TrendingUp, MessageCircle, RefreshCw } from "lucide-react";
 import { Fragment, useMemo, useRef, useState } from "react";
 import { slurpPostWentViral, slurpReachWeek } from "../../../../../shared/src/slp/slp-reach.js";
 import {
@@ -28,8 +16,6 @@ import {
   type NoodleInteraction,
 } from "@marinara-engine/shared";
 import { cn } from "../../../lib/utils";
-import { api } from "../../../lib/api-client";
-import { toast } from "sonner";
 import type { ChatImage } from "../../../hooks/use-gallery";
 import { useNearViewportSlurpMediaSrc } from "../../base/media/slp-media-src";
 import { Avatar } from "../../base/chrome/SlpChrome";
@@ -49,9 +35,7 @@ import {
 import { SlurpLikedBy } from "../audience/SlpFanCard";
 import { NoodlePollComposer } from "../poll/SlpPollComposer";
 import { PostImageFrame } from "../../base/media/SlpPostImageCropEditor";
-import { LockedSlurpPostCard } from "./SlpLockedPostCard";
 import { NoodlePollCard } from "./SlpPollCard";
-import { NoodleTextContent } from "./SlpMarkdownRenderer";
 import { PostImageEditControls } from "./SlpPostImageEditControls";
 import { SlpCreatorPostMenu } from "./SlpCreatorPostMenu";
 import { SlpReplyRow } from "./SlpReplyRow";

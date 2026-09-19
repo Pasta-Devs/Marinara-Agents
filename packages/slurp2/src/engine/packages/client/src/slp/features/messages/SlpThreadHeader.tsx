@@ -1,42 +1,10 @@
 import { cn } from "../../../lib/utils";
-import {
-  ArrowDown,
-  ArrowLeft,
-  Brain,
-  BriefcaseBusiness,
-  Check,
-  CheckCheck,
-  ChevronDown,
-  Heart,
-  Image as ImageIcon,
-  Info,
-  Link,
-  Loader2,
-  Lock,
-  MessageCircle,
-  Megaphone,
-  Moon,
-  MoreVertical,
-  Palette,
-  Pencil,
-  Plus,
-  Search,
-  Send,
-  Trash2,
-  UserRound,
-  X,
-} from "lucide-react";
+import { ArrowLeft, Brain, BriefcaseBusiness, Check, ChevronDown, Info, MoreVertical, Search, X } from "lucide-react";
 import { Avatar } from "../../base/chrome/SlpChrome";
-import {
-  SlurpPromptDebugPanel,
-  SlurpRapportBadge,
-  SlurpRelationshipPanel,
-  SlurpTierLadder,
-  useDismissablePopover,
-} from "./SlpMessageInsights";
+import { SlurpRapportBadge, SlurpTierLadder } from "./SlpMessageInsights";
 import { NoodleAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
-import { HeaderIconButton, SlurpConnectionSwitcher, SlurpFollowUpItem } from "./SlpThreadChrome";
-import { SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "../../modules/coin/SlpCoin";
+import { HeaderIconButton } from "./SlpThreadChrome";
+import { SlurpCoinAmount } from "../../modules/coin/SlpCoin";
 import type { SlurpThreadViewModel } from "./slp-thread-actions";
 
 /** The conversation header, its search bar, the commission ribbon and the request banner. */

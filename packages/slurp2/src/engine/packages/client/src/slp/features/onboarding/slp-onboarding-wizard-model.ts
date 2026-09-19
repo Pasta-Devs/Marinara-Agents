@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Check,
@@ -23,11 +23,7 @@ import type {
   NoodlerPostView,
   NoodlerStageProfile,
 } from "@marinara-engine/shared";
-import {
-  NOODLER_BULK_ACCOUNT_MAX,
-  NOODLER_POSTS_PER_DAY_MAX,
-  resolveNoodlerOnboardingCompletion,
-} from "@marinara-engine/shared";
+import { NOODLER_BULK_ACCOUNT_MAX, resolveNoodlerOnboardingCompletion } from "@marinara-engine/shared";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { useSlurpConnections } from "../../base/state/slp-host-connections";
@@ -39,24 +35,18 @@ import {
 import { useEnqueueNoodlerFirstPosts, useNoodlerFirstPostStatus } from "./slp-first-post-hooks";
 import { useUpdateSlurpConnectionsForCreators } from "../media/slp-media-contract";
 import { useSlurpSettings, useUpdateSlurpSettings } from "../settings/slp-settings-contract";
-import { cn, generateClientId } from "../../../lib/utils";
-import { Modal } from "../../../components/ui/Modal";
+import { generateClientId } from "../../../lib/utils";
 import { Avatar, getNoodleAccentStyle, NOODLE_PINK } from "../../base/chrome/SlpChrome";
 import {
-  SLURP_ACTIVITY_PRESETS,
   SLURP_DEFAULT_ACTIVITY_PRESET,
   slurpActivityPresetForSettings,
   slurpActivityPresetPatch,
   type SlurpActivityPreset,
 } from "../../modules/creator/slp-activity-presets";
-import { LockedSlurpPostCard } from "../../modules/post/SlpLockedPostCard";
 import {
-  clampPostsPerDay,
   DEMO_PROFILE,
   disclosureLabel,
-  DEFAULT_ACTIVITY_PATCH,
   DEFAULT_POSTS_PER_DAY,
-  LAST_INTRO,
   type CompletionKind,
   type Intro,
   type SetupLane,

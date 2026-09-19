@@ -1,44 +1,7 @@
-import {
-  ArrowDown,
-  ArrowLeft,
-  Brain,
-  BriefcaseBusiness,
-  Check,
-  CheckCheck,
-  ChevronDown,
-  Heart,
-  Image as ImageIcon,
-  Info,
-  Link,
-  Loader2,
-  Lock,
-  MessageCircle,
-  Megaphone,
-  Moon,
-  MoreVertical,
-  Palette,
-  Pencil,
-  Plus,
-  Search,
-  Send,
-  Trash2,
-  UserRound,
-  X,
-} from "lucide-react";
-import {
-  SlurpPromptDebugPanel,
-  SlurpRapportBadge,
-  SlurpRelationshipPanel,
-  SlurpTierLadder,
-  useDismissablePopover,
-} from "./SlpMessageInsights";
+import { ArrowLeft, X } from "lucide-react";
+import { SlurpPromptDebugPanel, SlurpRapportBadge, SlurpRelationshipPanel } from "./SlpMessageInsights";
 import { SlurpMemoriesPanel } from "./SlpMemoriesPanel";
-import {
-  CommissionRequest,
-  CommissionRow,
-  isCommissionRequest,
-  SlurpCommissionsPanel,
-} from "./commissions/SlpCommissions";
+import { SlurpCommissionsPanel } from "./commissions/SlpCommissions";
 import { Avatar } from "../../base/chrome/SlpChrome";
 import { showConfirmDialog } from "../../../lib/app-dialogs";
 import type { SlurpThreadViewModel } from "./slp-thread-actions";

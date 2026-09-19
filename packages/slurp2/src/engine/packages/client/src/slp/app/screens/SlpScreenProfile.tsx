@@ -3,28 +3,9 @@ import { useStageProfileViewModel, type StageProfileViewProps } from "./slp-prof
 import { SlpProfileModals } from "./SlpProfileModals";
 import { SlpProfilePostCards } from "./SlpProfilePostCards";
 import { SlpProfileLeadingActions } from "./SlpProfileLeadingActions";
-import {
-  BookmarkCheck,
-  BookmarkPlus,
-  ChevronDown,
-  ChevronLeft,
-  Clock3,
-  LayoutGrid,
-  List,
-  Loader2,
-  Lock,
-  MessageCircle,
-  Pencil,
-  Plus,
-  Search,
-  Send,
-  Sparkles,
-  Trash2,
-  TriangleAlert,
-  X,
-} from "lucide-react";
+import { ChevronDown, ChevronLeft, Sparkles } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment } from "react";
 import {
   NOODLER_POST_CONTENT_MAX_LENGTH,
   NOODLER_POST_GUIDE_MAX_LENGTH,
@@ -43,42 +24,26 @@ import type {
 import type { SlurpManagedStageProfile, SlurpStageProfileInput } from "../../base/state/slp-state-types";
 import type { SlurpPromotion } from "../../features/ads/slp-ads-contract";
 import { useNoodlerFollowers, useNoodlerSubscribers } from "../../features/audience/slp-audience-hooks";
-import { useUpdateNoodlerFanActivity } from "../../features/audience/slp-fan-activity-hooks";
 import {
   useGenerateNoodlerArtwork,
   useUploadNoodlerAvatar,
   useUploadNoodlerBanner,
 } from "../../features/creators/slp-creator-profile-hooks";
-import { useTipSlurpCreator } from "../../features/economy/slp-economy-hooks";
 import type {
   NoodlerContentFormat,
   NoodlerPostDraftImage,
   SlurpProfilePost,
 } from "../../features/feed/slp-feed-contract";
-import { useUpdateNoodlerAutoPosting } from "../../features/feed/slp-feed-schedule-hooks";
 import {
   useNoodlerViewer,
   useToggleNoodlerFollow,
   useToggleNoodlerSubscription,
 } from "../../features/feed/slp-feed-viewer-hooks";
-import { useSlurpCompose } from "../../features/messages/slp-messages-hooks";
-import { useSlurpArcs } from "../../features/projects/slp-projects-hooks";
-import { useSlurpSettings } from "../../features/settings/slp-settings-hooks";
 import { toast } from "sonner";
-import {
-  NoodleComposerShell,
-  NoodleComposerToolRow,
-  type NoodlePostCardCtx,
-  type NoodlePostCardModel,
-} from "../../modules/post/SlpPostCard";
-import { NoodleAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
+import { type NoodlePostCardModel } from "../../modules/post/SlpPostCard";
 import { SlurpArcTimelineCard } from "../../features/projects/SlpArcTimelineCard";
-import { SlurpFanCard } from "../../modules/audience/SlpFanCard";
-import { LockedSlurpPostCard } from "../../modules/post/SlpLockedPostCard";
-import { SlurpCreatorPostCard } from "../../modules/post/SlpCreatorPostCard";
 import { SlurpCoinAmount, SlurpCoinBurst } from "../../modules/coin/SlpCoin";
-import { useNearViewportSlurpMediaSrc, useSlurpMediaSrc } from "../../base/media/slp-media-src";
-import { slurpCreatorStatus } from "../../modules/creator/slp-creator-status";
+import { useNearViewportSlurpMediaSrc } from "../../base/media/slp-media-src";
 import {
   Avatar,
   getNoodleAccentStyle,
@@ -88,50 +53,26 @@ import {
   NOODLE_PINK,
 } from "../../base/chrome/SlpChrome";
 import { SlurpProfileSurface } from "../../features/creators/SlpProfileSurface";
-import { NoodleImageComposer } from "../../base/media/SlpImageComposer";
-import { NoodlePollComposer } from "../../modules/poll/SlpPollComposer";
-import { PostImageCropEditor } from "../../base/media/SlpPostImageCropEditor";
 import {
   ConversationMediaPickerPanel,
   type ConversationMediaPickerTabId,
 } from "../../../components/chat/ConversationMediaPickerPanel";
 import { HelpTooltip } from "../../../components/ui/HelpTooltip";
-import { Modal } from "../../../components/ui/Modal";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { SlurpInlineAdTile } from "../../features/ads/SlpInlineAd";
-import { SlurpCreatorProfileCard } from "../../modules/creator/SlpCreatorProfileCard";
 import { SlurpDiscoveryProfileEditor } from "../../features/discovery/SlpDiscoveryProfileEditor";
 import {
   appendAudienceStance,
   AudienceStancePresets,
   profileAccent,
 } from "../../features/creators/SlpStageProfileForm";
-import { showConfirmDialog } from "../../../lib/app-dialogs";
 import { cn } from "../../../lib/utils";
 import {
   errorMessage,
-  isEmptyNoodlerPostDraft,
   isSlurpStory,
-  linkedPostIdForStory,
-  noodlerGoalOf,
-  parsePrice,
-  serializeNoodlerPostGuide,
-  slurpSubscriptionPriceOf,
-  toManagedPostCardModel,
   toNoodlePostCardModel,
-  type NoodlerPostDraft,
-  type NoodlerPostSubmission,
-  type PendingNoodlerImage,
-  NoodlerDraftImageFrame,
-  SlurpAccessTransition,
-  SlurpFeedSkeleton,
-  EmptyState,
-  NoodlerFrame,
   DisclosureBadge,
-  NOODLER_FEED_WINDOW_SIZE,
-  SourceAccountAvatar,
   LoadMoreFeedButton,
-  SlurpMediaDialog,
   SlurpPostDialog,
 } from "./SlpHomeHelpers";
 

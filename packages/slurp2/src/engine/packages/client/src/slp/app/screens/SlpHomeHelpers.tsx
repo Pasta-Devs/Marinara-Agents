@@ -210,7 +210,7 @@ export function noodlerGoalOf(
 // Shared small components
 // ---------------------------------------------------------------------------
 
-import { ChevronRight, Loader2, UserRound } from "lucide-react";
+import { UserRound } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { motion, useReducedMotion } from "framer-motion";

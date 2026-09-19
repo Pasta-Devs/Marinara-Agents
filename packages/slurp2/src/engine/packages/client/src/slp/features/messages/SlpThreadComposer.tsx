@@ -1,41 +1,10 @@
 import { requestHintGuidance, TIP_PRESETS } from "./SlpMessages";
-import {
-  ArrowDown,
-  ArrowLeft,
-  Brain,
-  BriefcaseBusiness,
-  Check,
-  CheckCheck,
-  ChevronDown,
-  Heart,
-  Image as ImageIcon,
-  Info,
-  Link,
-  Loader2,
-  Lock,
-  MessageCircle,
-  Megaphone,
-  Moon,
-  MoreVertical,
-  Palette,
-  Pencil,
-  Plus,
-  Search,
-  Send,
-  Trash2,
-  UserRound,
-  X,
-} from "lucide-react";
-import {
-  CommissionRequest,
-  CommissionRow,
-  isCommissionRequest,
-  SlurpCommissionsPanel,
-} from "./commissions/SlpCommissions";
-import { BroadcastPanel, CreatorMessageTools, FanImageTool } from "./SlpMessageTools";
+import { ArrowDown, Plus, Send, X } from "lucide-react";
+import { CommissionRequest } from "./commissions/SlpCommissions";
+import { CreatorMessageTools, FanImageTool } from "./SlpMessageTools";
 import { cn } from "../../../lib/utils";
-import { SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "../../modules/coin/SlpCoin";
-import { HeaderIconButton, SlurpConnectionSwitcher, SlurpFollowUpItem } from "./SlpThreadChrome";
+import { SlurpCoin, SlurpCoinBurst } from "../../modules/coin/SlpCoin";
+import { SlurpConnectionSwitcher } from "./SlpThreadChrome";
 import type { SlurpThreadViewModel } from "./slp-thread-actions";
 
 /** The message composer: the draft, the tools it opens and the tip it can carry. */

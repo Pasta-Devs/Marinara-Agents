@@ -1,79 +1,33 @@
-import {
-  ArrowDown,
-  ArrowLeft,
-  Brain,
-  BriefcaseBusiness,
-  Check,
-  CheckCheck,
-  ChevronDown,
-  Heart,
-  Image as ImageIcon,
-  Info,
-  Link,
-  Loader2,
-  Lock,
-  MessageCircle,
-  Megaphone,
-  Moon,
-  MoreVertical,
-  Palette,
-  Pencil,
-  Plus,
-  Search,
-  Send,
-  Trash2,
-  UserRound,
-  X,
-} from "lucide-react";
-import type { SlurpComposeTarget } from "../../features/messages/slp-messages-contract";
+import { BriefcaseBusiness, Image as ImageIcon, Lock, MessageCircle, Palette } from "lucide-react";
 import { useOpenSlurpCreatorThread, useSlurpComposeTargets } from "../../features/messages/slp-messages-hooks";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import { toast } from "sonner";
-import { useSlurpMediaSrc } from "../../base/media/slp-media-src";
 import {
   CommissionRequest,
   CommissionRow,
   isCommissionRequest,
   SlurpCommissionsPanel,
 } from "./commissions/SlpCommissions";
-import { NoodleAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
-import { getApiErrorMessage } from "../../../lib/api-client";
-import { showConfirmDialog } from "../../../lib/app-dialogs";
-import { cn } from "../../../lib/utils";
-import { Avatar } from "../../base/chrome/SlpChrome";
-import { SlurpEmptyArtwork } from "../../base/chrome/SlpEmptyArtwork";
-import { formatTime } from "../../base/ui/slp-date-time";
-import { SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "../../modules/coin/SlpCoin";
+import { SlurpCoin } from "../../modules/coin/SlpCoin";
 import { useSlurpConnections } from "../../base/state/slp-host-connections";
 import { useCreateSlurpCommission } from "../../features/messages/commissions/slp-commission-hooks";
 import type { SlurpMessage, SlurpThread, SlurpThreadRelationship } from "../../features/messages/slp-messages-contract";
 import {
-  useBroadcastSlurpMessage,
-  useCancelSlurpFollowUp,
   useDraftSlurpCreatorReply,
   useForceSlurpReply,
-  useGenerateSlurpViewerImage,
-  useReactToSlurpMessage,
   useRequestSlurpReply,
   useResetSlurpThread,
   useResolveSlurpMessageRequest,
-  useSendSlurpCreatorImage,
-  useSendSlurpCreatorPpv,
   useSendSlurpCreatorReply,
   useSendSlurpMessage,
-  useSendSlurpViewerImage,
-  useSetSlurpThreadNotes,
   useSlurpCheatDirective,
   useTipInSlurpThread,
-  useUnlockSlurpMessage,
 } from "../../features/messages/slp-message-action-hooks";
 import {
   useSlurpCompose,
   useSlurpMessagePrompt,
   useSlurpOlderMessages,
   useSlurpThread,
-  useSlurpThreads,
 } from "../../features/messages/slp-messages-hooks";
 import { useSlurpSettings, useUpdateSlurpSettings } from "../../features/settings/slp-settings-contract";
 import {
@@ -92,19 +46,9 @@ import {
  * creator, a thread already generating, and a missing connection were all the same blank screen.
  */
 import { HeaderIconButton, SlurpConnectionSwitcher, SlurpFollowUpItem } from "./SlpThreadChrome";
-import { SlurpMemoriesPanel } from "./SlpMemoriesPanel";
 import { MessageBubble, SlurpAwayAnimation, SlurpPlatformActionCard } from "./SlpMessageBubble";
 import { BroadcastPanel, CreatorMessageTools, FanImageTool } from "./SlpMessageTools";
-import {
-  requestHintGuidance,
-  SLURP_AWAY_STATUSES,
-  SLURP_AWAY_TITLE_FALLBACKS,
-  SLURP_MEMORY_TIER_LIMIT,
-  SLURP_MESSAGE_PAGE,
-  SLURP_REPLY_STATUS_FALLBACKS,
-  TIP_PRESETS,
-  type SlurpConversationDrawerMode,
-} from "./SlpMessages";
+import { SLURP_MESSAGE_PAGE, type SlurpConversationDrawerMode } from "./SlpMessages";
 
 export interface SlurpThreadViewProps {
   threadId: string | null;

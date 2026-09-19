@@ -8,19 +8,15 @@ import {
   Pencil,
   RefreshCw,
   Share2,
-  Smile,
   Trash2,
-  X,
 } from "lucide-react";
 import { Fragment, useRef, useState } from "react";
 import {
-  canManageNoodleReply,
   noodlePollInputSchema,
   readNoodlePollFromMetadata,
   readNoodlePostImageCrop,
   type NoodleAccount,
   type NoodleInteraction,
-  type NoodlePoll,
 } from "@marinara-engine/shared";
 import { toast } from "sonner";
 import { api } from "../../../lib/api-client";
@@ -28,38 +24,20 @@ import { cn } from "../../../lib/utils";
 import type { ChatImage } from "../../../hooks/use-gallery";
 import { SlpPostReplyRow } from "./SlpPostReplyRow";
 import { SlpPostReplyComposer } from "./SlpPostReplyComposer";
-import { ConversationMediaPickerPanel } from "../../../components/chat/ConversationMediaPickerPanel";
-import { Avatar, SlurpMediaImg } from "../../base/chrome/SlpChrome";
+import { Avatar } from "../../base/chrome/SlpChrome";
 import { formatTime } from "../../base/ui/slp-date-time";
-import { NoodleImageComposer } from "../../base/media/SlpImageComposer";
 import { NoodlePollComposer } from "../poll/SlpPollComposer";
-import { NoodleAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
 import { SlurpLikedBy } from "../audience/SlpFanCard";
 import { PostImageFrame } from "../../base/media/SlpPostImageCropEditor";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import {
-  fieldClass,
-  textareaClass,
-  labelClass,
   noodleIconButtonClass,
-  noodleCommentActionClass,
   slurpReplyThreads,
   SlurpClampedText,
-  NOODLE_MEDIA_PICKER_TABS,
-  NOODLE_TEXT_MEDIA_PICKER_TABS,
-  NoodleCustomEmojiText,
-  insertAtSelection,
-  NoodleMentionSuggestions,
-  NoodleTextContent,
   NoodlePollCard,
   countInteractions,
   createNoodleLightboxImage,
-  NoodleToolButton,
-  NoodleComposerToolRow,
-  SlurpToolPopover,
   PostImageEditControls,
-  useNoodlePostImageEditor,
-  useNoodlePostCardController,
 } from "./SlpPostHelpers";
 import type { NoodlePostCardModel, NoodlePostCardCtx, NoodlePostImageUpdate } from "./SlpPostHelpers";
 

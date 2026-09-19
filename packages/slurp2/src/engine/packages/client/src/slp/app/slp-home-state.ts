@@ -61,25 +61,17 @@ import { showConfirmDialog } from "../../lib/app-dialogs";
 import { useSlurpUIStore } from "../base/state/slp-package-store";
 import {
   type NoodlerPostDraft,
-  type NoodlerPostSubmission,
   EMPTY_NOODLER_POST_DRAFT,
   isEmptyNoodlerPostDraft,
   errorMessage,
-  serializeNoodlerPostGuide,
   SLURP_PLACEHOLDER_BALANCE,
 } from "./screens/SlpHomeHelpers";
-import {
-  type NoodlePostCardModel,
-  type NoodlePostImageUpdate,
-  useNoodlePostCardController,
-} from "../modules/post/SlpPostCard";
+import { useNoodlePostCardController } from "../modules/post/SlpPostCard";
 import type { ImagePromptOverride, ImagePromptReviewItem } from "../../components/ui/ImagePromptReviewModal";
 import type { SlurpNavigationState } from "../base/navigation/slp-navigation.types";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { confirmLeaveSlurpBackstage } from "../features/backstage/SlpBackstageControls";
-import { confirmSlurpAvatarReview } from "../features/creators/SlpStageProfileForm";
-import { NOODLE_PERSONA_SWITCHER_PAGE_SIZE, NOODLE_PINK } from "../base/chrome/SlpChrome";
-import { ApiError } from "../../lib/api-client";
+import { NOODLE_PERSONA_SWITCHER_PAGE_SIZE } from "../base/chrome/SlpChrome";
 import { toast } from "sonner";
 import { slurp2SplashPending } from "../features/onboarding/SlpSplash";
 

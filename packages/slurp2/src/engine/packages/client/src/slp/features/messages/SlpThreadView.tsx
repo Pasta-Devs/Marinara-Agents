@@ -4,39 +4,8 @@ import {
   SLURP_MESSAGE_PAGE,
   SLURP_REPLY_STATUS_FALLBACKS,
 } from "./SlpMessages";
-import {
-  CommissionRequest,
-  CommissionRow,
-  isCommissionRequest,
-  SlurpCommissionsPanel,
-} from "./commissions/SlpCommissions";
-import {
-  ArrowDown,
-  ArrowLeft,
-  Brain,
-  BriefcaseBusiness,
-  Check,
-  CheckCheck,
-  ChevronDown,
-  Heart,
-  Image as ImageIcon,
-  Info,
-  Link,
-  Loader2,
-  Lock,
-  MessageCircle,
-  Megaphone,
-  Moon,
-  MoreVertical,
-  Palette,
-  Pencil,
-  Plus,
-  Search,
-  Send,
-  Trash2,
-  UserRound,
-  X,
-} from "lucide-react";
+import { CommissionRow } from "./commissions/SlpCommissions";
+import { Info, Loader2 } from "lucide-react";
 import { getApiErrorMessage } from "../../../lib/api-client";
 import { useSlurpThreadViewModel } from "./slp-thread-actions";
 import type { SlurpThreadViewProps } from "./slp-thread-view-model";

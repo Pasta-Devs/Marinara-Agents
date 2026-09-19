@@ -1,44 +1,4 @@
-import {
-  ArrowLeft,
-  ArrowDown,
-  ArrowRight,
-  Bell,
-  BookmarkCheck,
-  BookmarkPlus,
-  BriefcaseBusiness,
-  Check,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Clock3,
-  Coins,
-  Crown,
-  Eye,
-  Gift,
-  Heart,
-  LayoutGrid,
-  Link,
-  List,
-  Loader2,
-  Lock,
-  Maximize2,
-  MessageCircle,
-  Minimize2,
-  Pencil,
-  Plus,
-  RefreshCw,
-  Search,
-  Send,
-  Sparkles,
-  Star,
-  Trash2,
-  TriangleAlert,
-  Upload,
-  UserRound,
-  X,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import { createPortal } from "react-dom";
+import { Loader2 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   Fragment,
@@ -78,13 +38,11 @@ import {
   useRecordSlurpAdAction,
   useSlurpInlineAds,
 } from "../features/ads/slp-ads-hooks";
-import type { SlurpPromotion } from "../features/ads/slp-ads-contract";
 import {
   useNoodlerConnectionCounts,
   useNoodlerFollowers,
   useNoodlerSubscribers,
 } from "../features/audience/slp-audience-hooks";
-import { useUpdateNoodlerFanActivity } from "../features/audience/slp-fan-activity-hooks";
 import {
   useCreateNoodlerStageProfile,
   useGenerateNoodlerArtwork,
@@ -97,7 +55,6 @@ import {
   useUseNoodlerSourceAvatar,
 } from "../features/creators/slp-creator-profile-hooks";
 import { useNoodlerAccounts, useNoodlerEligibleAccounts } from "../features/creators/slp-creators-hooks";
-import type { SlurpStudioCreator } from "../features/economy/slp-economy-contract";
 import {
   useClaimSlurpDailyRefill,
   useNoodlerViewerWallets,
@@ -108,7 +65,6 @@ import {
   useSlurpWallet,
   useTipSlurpCreator,
 } from "../features/economy/slp-economy-hooks";
-import type { SlurpProfilePost } from "../features/feed/slp-feed-contract";
 import {
   useConfirmNoodlerImagePrompts,
   useCreateNoodlerPost,
@@ -146,55 +102,12 @@ import {
 } from "../features/messages/slp-messages-hooks";
 import type { SlurpEventGroup, SlurpEventItem } from "../features/notifications/slp-notifications-contract";
 import { useMarkSlurpNotificationsSeen, useSlurpNotifications } from "../features/notifications/slp-notification-hooks";
-import { useSlurpArcs } from "../features/projects/slp-projects-hooks";
 import { useSlurpSettings, useUpdateSlurpSettings } from "../features/settings/slp-settings-hooks";
 import { useActivePersona, usePersonas } from "../../hooks/use-creator-personas";
-import { useConnections } from "../../hooks/use-connections";
-import { ApiError } from "../../lib/api-client";
-import { showConfirmDialog } from "../../lib/app-dialogs";
-import { cn } from "../../lib/utils";
-import { useSlurpUIStore } from "../base/state/slp-package-store";
-import { SlurpWalletView } from "./screens/SlpScreenWallet";
 import { StageProfileSourcePicker, DisclosureStep } from "./screens/SlpScreenCreateProfile";
-import { StageProfileView } from "./screens/SlpScreenProfile";
 import { ViewerHub } from "./screens/SlpScreenHub";
-import { SubscriptionSections } from "./screens/SlpScreenSubscriptions";
-import { SlurpStudioView } from "./screens/SlpScreenStudio";
-import { SlurpInboxView } from "./screens/SlpScreenMessages";
-import {
-  type NoodlerPostDraft,
-  type NoodlerPostSubmission,
-  type PendingNoodlerImage,
-  type NoodlerContentFormat,
-  type NoodlerPostDraftImage,
-  type SlurpViewerCreator,
-  NOODLER_FEED_WINDOW_SIZE,
-  SLURP_PLACEHOLDER_BALANCE,
-  STAGE_PERSONALITY_MAX_LENGTH,
-  EMPTY_NOODLER_POST_DRAFT,
-  isEmptyNoodlerPostDraft,
-  isSlurpStory,
-  slurpSubscriptionPriceOf,
-  linkedPostIdForStory,
-  parsePrice,
-  errorMessage,
-  toNoodlePostCardModel,
-  toManagedPostCardModel,
-  serializeNoodlerPostGuide,
-  noodlerGoalOf,
-  SlurpAccessTransition,
-  NoodlerDraftImageFrame,
-  EmptyState,
-  NoodlerFrame,
-  DisclosureBadge,
-  SlurpFeedSkeleton,
-} from "./screens/SlpHomeHelpers";
-import { SlurpNotificationsView } from "./screens/SlpScreenMessages";
-import {
-  ImagePromptReviewModal,
-  type ImagePromptOverride,
-  type ImagePromptReviewItem,
-} from "../../components/ui/ImagePromptReviewModal";
+import { SLURP_PLACEHOLDER_BALANCE, errorMessage, EmptyState, NoodlerFrame } from "./screens/SlpHomeHelpers";
+import { ImagePromptReviewModal } from "../../components/ui/ImagePromptReviewModal";
 import {
   NoodleComposerShell,
   NoodleComposerToolRow,
@@ -203,53 +116,25 @@ import {
   type NoodlePostImageUpdate,
   useNoodlePostCardController,
 } from "../modules/post/SlpPostCard";
-import { NoodleAnchoredPopover } from "../base/chrome/SlpAnchoredPopover";
-import { SlurpArcTimelineCard } from "../features/projects/SlpArcTimelineCard";
-import { SlurpProjectsPanel } from "../features/projects/SlpProjectsBoard";
-import { SlurpFanCard } from "../modules/audience/SlpFanCard";
-import { LockedSlurpPostCard } from "../modules/post/SlpLockedPostCard";
-import { SlurpCreatorPostCard } from "../modules/post/SlpCreatorPostCard";
-import { SlurpSparkleVeil } from "../base/chrome/SlpSparkleVeil";
 import { DEFAULT_SLURP_SUBSCRIPTION_PRICE, SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "../modules/coin/SlpCoin";
 import { ChatImageLightbox } from "../../components/chat/ChatImageLightbox";
 import { useNearViewportSlurpMediaSrc, useSlurpMediaSrc } from "../base/media/slp-media-src";
 import { SlurpOnboardingWizard } from "../features/onboarding/SlpOnboardingPanel";
 import { SlurpAgeGate, SlurpConfetti } from "../features/onboarding/SlpAgeGate";
-import { SlurpSplash, slurp2SplashPending } from "../features/onboarding/SlpSplash";
-import { slurpCreatorStatus } from "../modules/creator/slp-creator-status";
-import {
-  Avatar,
-  getNoodleAccentStyle,
-  SLURP_TOGGLE_ACTIVE_CLASS,
-  NewSinceLastVisitDivider,
-  HIDE_ON_SCROLL_CLASS,
-  NoodleLogo,
-  ProfileInitial,
-  useHideOnScroll,
-  NOODLE_PERSONA_SWITCHER_PAGE_SIZE,
-  NOODLE_PINK,
-} from "../base/chrome/SlpChrome";
+import { SlurpSplash } from "../features/onboarding/SlpSplash";
+import { getNoodleAccentStyle, NOODLE_PERSONA_SWITCHER_PAGE_SIZE, NOODLE_PINK } from "../base/chrome/SlpChrome";
 import { NoodleShell } from "../modules/chrome/SlpShell";
-import { SlurpProfileSurface } from "../features/creators/SlpProfileSurface";
 import { BroadcastPanel, SlurpMessagesView } from "../features/messages/SlpMessages";
 import { SlpBackstageShell } from "../app/backstage/SlpBackstageShell";
 import { SlpBackstageSidebar } from "../features/backstage/SlpBackstageSidebar";
-import { confirmLeaveSlurpBackstage } from "../features/backstage/SlpBackstageControls";
-import { NoodleImageComposer } from "../base/media/SlpImageComposer";
-import { NoodlePollComposer } from "../modules/poll/SlpPollComposer";
-import { SlpStoryTile } from "../modules/story/SlpStoryTile";
 import { PostImageCropEditor, PostImageFrame } from "../base/media/SlpPostImageCropEditor";
 import {
   ConversationMediaPickerPanel,
   type ConversationMediaPickerTabId,
 } from "../../components/chat/ConversationMediaPickerPanel";
-import { HelpTooltip } from "../../components/ui/HelpTooltip";
 import { Modal } from "../../components/ui/Modal";
 import type { SlurpNavigationState } from "../base/navigation/slp-navigation.types";
-import { useTranslation as useUiTranslation } from "react-i18next";
 import { SlurpInlineAd, SlurpInlineAdTile } from "../features/ads/SlpInlineAd";
-import { SlurpCreatorProfileCard } from "../modules/creator/SlpCreatorProfileCard";
-import { SlurpDiscoveryProfileEditor } from "../features/discovery/SlpDiscoveryProfileEditor";
 import {
   appendAudienceStance,
   confirmSlurpAvatarReview,
@@ -259,7 +144,6 @@ import {
   StageProfileForm,
   WizardFooter,
 } from "../features/creators/SlpStageProfileForm";
-import { SlurpDiscoverToolbar } from "../features/discovery/SlpDiscoverToolbar";
 import {
   filterAndSortSlurpCreators,
   isSlurpDiscoveryProfileIncomplete,
@@ -267,8 +151,6 @@ import {
   type SlurpDiscoverLayout,
   type SlurpDiscoverSort,
 } from "../features/discovery/slp-discovery";
-import type { SlurpDiscoveryGender } from "../base/state/slp-state-types";
-import { formatTime } from "../base/ui/slp-date-time";
 import { useSlurpHomeState } from "./slp-home-actions";
 import { renderSlurpHomeCreatorFlow } from "./screens/SlpHomeCreatorFlow";
 import { renderSlurpHomeDestinations } from "./screens/SlpHomeDestinations";
@@ -279,21 +161,6 @@ interface SlurpHomeProps {
   onNavigate: (destination: SlurpNavigationState) => void;
   onLeave?: () => void;
 }
-
-export const EMPTY_STAGE_PROFILE: SlurpStageProfileInput = {
-  displayName: "",
-  handle: "",
-  bio: "",
-  stagePersonality: "",
-  disclosureMode: "open",
-  gender: null,
-  tags: [],
-};
-
-const fieldClass =
-  "mari-chrome-field h-11 w-full rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-sm text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-accent)]";
-const textareaClass =
-  "mari-chrome-field min-h-24 w-full resize-y rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] p-3 text-sm leading-6 text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-accent)]";
 
 export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   const model = useSlurpHomeState({ navigation, onNavigate, onLeave });
