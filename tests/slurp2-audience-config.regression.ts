@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { slurp2Source } from "./slurp2-source";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -22,13 +23,12 @@ assert.equal(slurpFanTypesSchema.parse(raw.fanTypes).length, 8);
 assert.equal(slurpModelBudgetSchema.parse(raw.budget).callsPerDay, 9);
 assert.throws(() => slurpFanTypesSchema.parse([]), "an import cannot erase every fan type");
 
-const component = readFileSync(
+const component = slurp2Source(
   join(
     import.meta.dirname,
     "..",
     "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpAudienceConfigSettings.tsx",
   ),
-  "utf8",
 );
 assert.match(component, /SLURP_MODEL_JOB_KINDS\.map/u, "each model job has editable policy controls");
 assert.match(component, /slurp-audience-config\.json/u, "the portable format has a stable filename");

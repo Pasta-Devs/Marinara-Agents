@@ -664,7 +664,7 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   "packages/client/src/components/slurp/SlurpSimulationSettings.tsx": [
     "packages/client/src/slp/features/audience/SlpSimulationPanel.tsx",
   ],
-  "packages/client/src/components/slurp/slurp-simulation-estimate.ts": [
+  "packages/client/src/slp/modules/audience/slp-simulation-estimate.ts": [
     "packages/client/src/slp/modules/audience/slp-simulation-estimate.ts",
   ],
   "packages/client/src/components/slurp/SlurpPlatformEventsSettings.tsx": [
@@ -673,10 +673,10 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   "packages/client/src/components/slurp/slurp-activity-presets.ts": [
     "packages/client/src/slp/modules/creator/slp-activity-presets.ts",
   ],
-  "packages/client/src/components/slurp/slurp-settings-defaults.ts": [
+  "packages/client/src/slp/features/settings/slp-settings-defaults.ts": [
     "packages/client/src/slp/features/settings/slp-settings-defaults.ts",
   ],
-  "packages/client/src/components/slurp/slurp-prompt-presets.ts": [
+  "packages/client/src/slp/features/settings/slp-prompt-presets.ts": [
     "packages/client/src/slp/features/settings/slp-prompt-presets.ts",
   ],
   "packages/client/src/components/slurp/SlurpPromptBlockBuilder.tsx": [

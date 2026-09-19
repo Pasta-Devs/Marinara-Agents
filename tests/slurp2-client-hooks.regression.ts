@@ -19,18 +19,21 @@ function walk(dir: string, base = ""): string[] {
   });
 }
 
-// Slice 9 moved Backstage into `slp/` too. This proof is about the state layer, so the files the
-// source map attributes to the Backstage components are excluded; everything else still counts.
-const backstageFiles = new Set(
+// Slice 9 moved Backstage into `slp/`, and Slice 10 moved the rest of `components/slurp/`. This
+// proof is about the state layer that came out of `hooks/use-slurp.ts`, the package store and the
+// `lib/` helpers, so every file the source map attributes to a *component* key is excluded.
+// Otherwise each component moved into the namespace inflates these counts and the proof decays into
+// a number that gets rebaselined every slice instead of catching real state-layer drift.
+const componentFiles = new Set(
   Object.entries(SLURP2_SOURCE_MODULES)
-    .filter(([key]) => /components\/slurp\/(SlurpSettings|SlurpBackstage|slurp-backstage)/u.test(key))
+    .filter(([key]) => key.startsWith("packages/client/src/components/slurp/"))
     .flatMap(([, files]) => files)
     .filter((file) => file.startsWith("packages/client/src/slp/"))
     .map((file) => file.replace("packages/client/src/slp/", "")),
 );
 const paths = walk(slpRoot)
   .filter((path) => /\.tsx?$/u.test(path))
-  .filter((path) => !backstageFiles.has(path));
+  .filter((path) => !componentFiles.has(path));
 const sources = new Map(paths.map((path) => [path, readFileSync(join(slpRoot, path), "utf8")]));
 const combined = [...sources.values()].join("\n");
 

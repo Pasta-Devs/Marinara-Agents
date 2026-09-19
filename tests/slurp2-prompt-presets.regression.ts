@@ -7,7 +7,7 @@ import {
   mergeSlurpPromptPreset,
   sanitizeSlurpPromptPresets,
   SLURP_PROMPT_PRESET_LIMIT,
-} from "../packages/slurp2/src/engine/packages/client/src/components/slurp/slurp-prompt-presets";
+} from "../packages/slurp2/src/engine/packages/client/src/slp/features/settings/slp-prompt-presets";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
 import { slurp2Source } from "./slurp2-source";
 
@@ -48,7 +48,7 @@ assert.equal(importSlurpPromptPresets(full, file).imported, 0, "the preset limit
 const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
 assert.match(storage, /promptPresets: z\s*\.array\([\s\S]{0,300}?\.max\(20\)/u);
 const defaults = readFileSync(
-  "packages/slurp2/src/engine/packages/client/src/components/slurp/slurp-settings-defaults.ts",
+  "packages/slurp2/src/engine/packages/client/src/slp/features/settings/slp-settings-defaults.ts",
   "utf8",
 );
 assert.match(defaults, /SLURP_SETTINGS_NOT_RESET[\s\S]*?"promptPresets"/u);
