@@ -8,7 +8,12 @@ import {
   type NoodleInteraction,
   type NoodlePost,
 } from "@marinara-engine/shared";
-import type { SlurpSettings } from "../storage/slurp.storage.js";
+type SlurpTimelineSettings = {
+  allowRandomUsers: boolean;
+  enableImagePrompts: boolean;
+  allowGalleryImageAttachments: boolean;
+  imageGenerationPrompt: string;
+};
 
 export const NOODLE_PAST_MEMORY_MIN_AGE_MS = 48 * 60 * 60 * 1000;
 /** Behavior when a Noodle setting's `enableEnhancedTimelineWriting` is off — reproduces the exact pre-toggle defaults. */
@@ -106,7 +111,7 @@ export const NOODLE_RECALLED_MEMORY_INSTRUCTION =
   "- These posts are more than 48 hours old and are past context an account might plausibly remember, especially posts or threads involving currently active accounts. When a recalled post naturally continues a relevant thread, character relationship, or grievance, feel free to revisit, reply to, repost, or build on it — but do not force a reference to every recalled post, and skip ones that don't fit the moment.";
 
 type NoodleTimelineFeatureSettings = Pick<
-  SlurpSettings,
+  SlurpTimelineSettings,
   "allowRandomUsers" | "enableImagePrompts" | "allowGalleryImageAttachments" | "imageGenerationPrompt"
 >;
 

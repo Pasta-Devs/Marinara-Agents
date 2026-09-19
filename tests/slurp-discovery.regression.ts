@@ -3,7 +3,7 @@ import {
   filterAndSortSlurpCreators,
   normalizeSlurpDiscoveryTags,
   type SlurpDiscoverCreator,
-} from "../packages/slurp2/src/engine/packages/client/src/lib/slurp-discovery";
+} from "../packages/slurp2/src/engine/packages/client/src/slp/features/discovery/slp-discovery";
 
 const creators: SlurpDiscoverCreator[] = [
   {

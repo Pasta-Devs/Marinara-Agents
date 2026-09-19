@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
+import { slurp2Source } from "./slurp2-source";
 
 // Toggling an ad-image setting blanked half the Slurp panel until a refresh (#133): a render throw
 // took down the whole root, and the main column's height/animation chain could strand a hidden box.
 const clientRoot = "packages/slurp2/src/engine/packages/client/src";
-const entry = readFileSync(`${clientRoot}/slurp-package-entry.tsx`, "utf8");
+const entry = slurp2Source(`${clientRoot}/slurp-package-entry.tsx`);
 const shell = readFileSync(`${clientRoot}/components/slurp/SlurpShell.tsx`, "utf8");
 const settings = slurp2BackstageSource();
 const backstage = readFileSync(`${clientRoot}/components/slurp/slurp-backstage.ts`, "utf8");

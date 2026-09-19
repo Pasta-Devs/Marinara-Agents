@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { isSlurpFileUniqueConstraintError } from "../packages/slurp2/src/engine/packages/server/src/services/storage/slurp-file-errors.js";
+import { isSlurpFileUniqueConstraintError } from "../packages/slurp2/src/engine/packages/server/src/slp/base/host/slp-file-errors.js";
+import { slurp2Source } from "./slurp2-source";
 
 const hostError = {
   name: "FileUniqueConstraintError",
@@ -29,7 +29,7 @@ const consumers = [
   "services/storage/slurp.storage.ts",
 ];
 for (const relativePath of consumers) {
-  const source = readFileSync(join(sourceRoot, relativePath), "utf8");
+  const source = slurp2Source(join(sourceRoot, relativePath));
   assert.match(source, /isSlurpFileUniqueConstraintError/u, `${relativePath} must use the cross-bundle guard`);
   assert.doesNotMatch(source, /isFileUniqueConstraintError/u, `${relativePath} must not use instanceof matching`);
 }

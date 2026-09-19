@@ -2,13 +2,15 @@ import assert from "node:assert/strict";
 
 import {
   makeSlurpProject,
-  readSlurpCreatorArcConfig,
   readSlurpProject,
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-project.js";
+import {
+  readSlurpCreatorArcConfig,
   resolveSlurpArcConfig,
   SLURP_ARC_LIBRARY_SEED,
   slurpAutoArcCount,
   slurpAutoArcType,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-project.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/projects/slp-arc-library.js";
 
 const at = new Date("2026-09-09T10:00:00.000Z");
 const DAY = 86_400_000;

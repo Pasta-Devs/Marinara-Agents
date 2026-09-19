@@ -1,5 +1,10 @@
 # Slurp Remastered release notes
 
+## 0.1.0 — 2026-09-19
+
+- Completed the backend file split and modularisation.
+- You should not feel any difference. If you do, tell me in Discord.
+
 ## 0.0.22 — 2026-09-17
 
 - Invite Engine characters to the Slurp audience from character groups or per-character controls.

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -8,14 +7,14 @@ import {
   slurpModelBudgetSchema,
   slurpModelWorkerAllows,
   spendSlurpModelBudget,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-model-budget.js";
-const fanActivityOperation = readFileSync(
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-model-budget.js";
+import { slurp2Source } from "./slurp2-source";
+const fanActivityOperation = slurp2Source(
   join(
     import.meta.dirname,
     "..",
     "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-fan-activity.operation.ts",
   ),
-  "utf8",
 );
 
 const at = new Date("2026-09-14T12:30:00.000Z");
@@ -55,11 +54,11 @@ assert.equal(
 );
 
 const root = join(import.meta.dirname, "..", "packages", "slurp2", "src", "engine", "packages", "server", "src");
-const schema = readFileSync(join(root, "db/schema/slurp.ts"), "utf8");
-const pending = readFileSync(join(root, "services/slurp/slurp-pending-text.service.ts"), "utf8");
-const scheduler = readFileSync(join(root, "services/slurp/slurp-world-scheduler.service.ts"), "utf8");
-const messages = readFileSync(join(root, "services/slurp/slurp-message.operation.ts"), "utf8");
-const followUps = readFileSync(join(root, "services/slurp/slurp-follow-up-scheduler.service.ts"), "utf8");
+const schema = slurp2Source(join(root, "db/schema/slurp.ts"));
+const pending = slurp2Source(join(root, "services/slurp/slurp-pending-text.service.ts"));
+const scheduler = slurp2Source(join(root, "services/slurp/slurp-world-scheduler.service.ts"));
+const messages = slurp2Source(join(root, "services/slurp/slurp-message.operation.ts"));
+const followUps = slurp2Source(join(root, "services/slurp/slurp-follow-up-scheduler.service.ts"));
 assert.match(pending, /modelBudget\.jobs/u, "queued jobs read the live per-kind policy");
 assert.match(pending, /\.sort\(/u, "queued jobs are ordered before the drain limit");
 assert.match(schema, /export const slurpModelJobs = slurpPendingText/u, "existing rewrite jobs migrate in place");

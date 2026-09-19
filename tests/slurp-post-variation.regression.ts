@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -11,7 +10,8 @@ import {
   SLURP_POST_FORMATS,
   SLURP_PROJECT_RATE,
   SLURP_STORY_RATE,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-post-variation.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/feed/slp-post-variation.js";
+import { slurp2Source } from "./slurp2-source";
 
 // ── Consecutive posts must differ ───────────────────────────────────────────
 // This is the whole point. A random draw can repeat; rotation cannot, and repetition of situation
@@ -72,7 +72,7 @@ for (let step = 0; step < 60; step += 1) {
 
 // ── Wiring ──────────────────────────────────────────────────────────────────
 const root = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src");
-const read = (path: string) => readFileSync(join(root, path), "utf8");
+const read = (path: string) => slurp2Source(join(root, path));
 
 const generation = read("services/slurp/slurp-generation.service.ts");
 // The model could not see what it had already depicted, so it reinvented the same picture.

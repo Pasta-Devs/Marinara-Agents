@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -10,7 +9,8 @@ import {
   slurpAudienceCharacterVoice,
   slurpCharacterFanEntityId,
   slurpCharacterIdFromFanEntityId,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-audience-characters.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-audience-characters.js";
+import { slurp2Source } from "./slurp2-source";
 
 const settings = {
   audienceCharacters: { explicit: "whale", excluded: false, automatic: true },
@@ -45,30 +45,26 @@ assert.deepEqual(selectSlurpAudienceCharacterIds(["one"], 8, "same-run"), ["one"
 assert.equal(slurpCharacterIdFromFanEntityId(slurpCharacterFanEntityId("char-1")), "char-1");
 assert.equal(slurpCharacterIdFromFanEntityId("slurp-fan:char-1"), null);
 
-const worldSource = readFileSync(
+const worldSource = slurp2Source(
   join(
     import.meta.dirname,
     "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.operation.ts",
   ),
-  "utf8",
 );
-const storageSource = readFileSync(
+const storageSource = slurp2Source(
   join(import.meta.dirname, "../packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
-  "utf8",
 );
-const messageSource = readFileSync(
+const messageSource = slurp2Source(
   join(
     import.meta.dirname,
     "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message-generation.service.ts",
   ),
-  "utf8",
 );
-const pendingSource = readFileSync(
+const pendingSource = slurp2Source(
   join(
     import.meta.dirname,
     "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-pending-text.service.ts",
   ),
-  "utf8",
 );
 
 assert.match(worldSource, /characterFanPinnedTypeIds/u);

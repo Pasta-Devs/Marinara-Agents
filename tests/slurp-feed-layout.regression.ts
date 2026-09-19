@@ -1,29 +1,26 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
+import { slurp2Source } from "./slurp2-source";
 
 const root = join(import.meta.dirname, "..");
 const componentsDir = join(root, "packages/slurp2/src/engine/packages/client/src/components/slurp");
-const home = readFileSync(join(componentsDir, "SlurpHome.tsx"), "utf8");
+const home = slurp2Source(join(componentsDir, "SlurpHome.tsx"));
 const settings = slurp2BackstageSource();
-const shell = readFileSync(join(componentsDir, "SlurpShell.tsx"), "utf8");
-const coin = readFileSync(join(componentsDir, "SlurpCoin.tsx"), "utf8");
-const creatorPostCard = readFileSync(join(componentsDir, "SlurpCreatorPostCard.tsx"), "utf8");
-const sparkle = readFileSync(join(componentsDir, "SlurpSparkleVeil.tsx"), "utf8");
-const hooks = readFileSync(join(root, "packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts"), "utf8");
-const mediaHook = readFileSync(
+const shell = slurp2Source(join(componentsDir, "SlurpShell.tsx"));
+const coin = slurp2Source(join(componentsDir, "SlurpCoin.tsx"));
+const creatorPostCard = slurp2Source(join(componentsDir, "SlurpCreatorPostCard.tsx"));
+const sparkle = slurp2Source(join(componentsDir, "SlurpSparkleVeil.tsx"));
+const hooks = slurp2Source(join(root, "packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts"));
+const mediaHook = slurp2Source(
   join(root, "packages/slurp2/src/engine/packages/client/src/hooks/use-slurp-media-src.ts"),
-  "utf8",
 );
-const ageGate = readFileSync(join(componentsDir, "SlurpAgeGate.tsx"), "utf8");
-const artwork = readFileSync(
+const ageGate = slurp2Source(join(componentsDir, "SlurpAgeGate.tsx"));
+const artwork = slurp2Source(
   join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-artwork.operation.ts"),
-  "utf8",
 );
-const images = readFileSync(
+const images = slurp2Source(
   join(root, "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-images.service.ts"),
-  "utf8",
 );
 
 // The feed row must offer both readings of the same feed.
@@ -136,7 +133,7 @@ assert.match(
   "Mobile search must use a full row",
 );
 
-const card = readFileSync(join(componentsDir, "SlurpCreatorProfileCard.tsx"), "utf8");
+const card = slurp2Source(join(componentsDir, "SlurpCreatorProfileCard.tsx"));
 
 // One creator card everywhere; only Discover opts into its horizontal layout and actions.
 assert.match(card, /layout = "grid"/u, "the shared card must preserve the grid default");
@@ -212,8 +209,8 @@ assert.match(moment, /<SlurpMediaDialog/u, "Stories must use the same dialog sha
 assert.match(settings, /bg-\[var\(--noodle-accent\)\]\/15[\s\S]*?ui\.slurp\.settings\.exit/u);
 assert.match(shell, /<NoodleLogo[\s\S]*?\{desktopSidebar \?\? \(/u, "The mark must survive the sidebar swap");
 
-const postCard = readFileSync(join(componentsDir, "SlurpCreatorPostCard.tsx"), "utf8");
-const imageFrame = readFileSync(join(componentsDir, "PostImageCropEditor.tsx"), "utf8");
+const postCard = slurp2Source(join(componentsDir, "SlurpCreatorPostCard.tsx"));
+const imageFrame = slurp2Source(join(componentsDir, "PostImageCropEditor.tsx"));
 
 // Active state must be a fill, not a shadow that vanishes against the panel behind it.
 assert.match(shell, /export const SLURP_TOGGLE_ACTIVE_CLASS/u, "Small toggles need a shared active fill");

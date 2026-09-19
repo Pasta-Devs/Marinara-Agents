@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { resolveSlurpCreatorAvailability } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-creator-schedule-context";
-import { SLURP_DEFAULT_REPLY_DELAYS } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-messaging";
+import { resolveSlurpCreatorAvailability } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/creators/slp-creator-schedule-context";
+import { SLURP_DEFAULT_REPLY_DELAYS } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-messaging";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
+import { slurp2Source } from "./slurp2-source";
 
 const root = "packages/slurp2/src/engine/packages";
 async function main() {
   const [settings, hooks, routes, generator] = await Promise.all([
     slurp2BackstageSource(),
-    readFile(`${root}/client/src/hooks/use-slurp.ts`, "utf8"),
-    readFile(`${root}/server/src/routes/slurp.routes.ts`, "utf8"),
-    readFile(`${root}/server/src/services/slurp/slurp-conversation-schedule-generation.ts`, "utf8"),
+    slurp2Source(`${root}/client/src/hooks/use-slurp.ts`),
+    slurp2Source(`${root}/server/src/routes/slurp.routes.ts`),
+    slurp2Source(`${root}/server/src/services/slurp/slurp-conversation-schedule-generation.ts`),
   ]);
 
   assert.match(settings, /postingSchedule/u, "the existing schedule action must identify Slurp post timing");
@@ -41,7 +41,7 @@ async function main() {
   );
   assert.equal(guessed.online, false);
   assert.equal(guessed.estimated, true, "availability inferred from posts must be flagged as estimated");
-  const messagesUi = await readFile(`${root}/client/src/components/slurp/SlurpMessages.tsx`, "utf8");
+  const messagesUi = await slurp2Source(`${root}/client/src/components/slurp/SlurpMessages.tsx`);
   assert.match(messagesUi, /availability\.estimated/u, "the away status must label estimated availability");
 
   console.log("Slurp Conversation Schedule refresh wiring passed.");

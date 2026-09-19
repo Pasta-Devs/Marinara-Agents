@@ -5,7 +5,7 @@ import {
   slurpNormalizePlatformEvents,
   slurpPlatformEventInstruction,
   slurpPlatformEventsDefault,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-platform-events.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-platform-events.js";
 
 const events = slurpPlatformEventsDefault();
 const names = (at: string) => slurpActivePlatformEvents(events, new Date(at)).map((item) => item.name);

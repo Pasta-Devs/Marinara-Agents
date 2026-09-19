@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
+import { slurp2Source } from "./slurp2-source";
 
 const root = join(import.meta.dirname, "..");
 const server = join(root, "packages/slurp2/src/engine/packages/server/src");
 const client = join(root, "packages/slurp2/src/engine/packages/client/src");
-const read = (path: string) => readFileSync(path, "utf8");
+const read = (path: string) => slurp2Source(path);
 
 // ── Money ────────────────────────────────────────────────
 
@@ -421,7 +421,7 @@ assert.match(messagesView2, /if \(!ownsCreator\) setTyping\(true\)/u);
 assert.match(messagesView2, /holdTyping\(result\.reply \? \(result\.typingMs \?\? 0\) : 0, result\.reply\?\.id\)/u);
 assert.match(messagesView2, /pending && !messages\.some\(\(message\) => message\.id === pending\.id\)/u);
 
-const slurpHooks = readFileSync("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");
+const slurpHooks = slurp2Source("packages/slurp2/src/engine/packages/client/src/hooks/use-slurp.ts");
 // A chat opened from a profile polls like one opened from the inbox, or the queued off-hours
 // reply never arrives on that screen.
 assert.match(

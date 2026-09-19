@@ -158,29 +158,15 @@ const slurpOwnedSourcePaths = [
   "packages/server/src/services/slurp",
   "packages/server/src/services/storage/slurp.storage.ts",
 ];
-// The remaster owns strictly more of the tree than the frozen legacy package does.
+// Deliberately not spread from slurpOwnedSourcePaths: that list belongs to frozen legacy Slurp, and
+// the remaster's list shrinks toward its slp roots as files move (see SLURP-MODULE-PLAN.md §5).
 const slurp2OwnedSourcePaths = [
-  ...slurpOwnedSourcePaths,
-  "packages/shared/src/slurp-autopurge-time.ts",
-  "packages/client/src/hooks/use-slurp-media-src.ts",
+  "packages/client/src/slp",
+  "packages/server/src/slp",
+  "packages/shared/src/slp",
   "packages/client/src/lib/api-client.ts",
-  "packages/client/src/lib/slurp-custom-emojis.ts",
-  "packages/client/src/lib/slurp-discovery.ts",
-  "packages/client/src/lib/slurp-refresh-batch.ts",
-  "packages/server/src/routes/slurp-messages.routes.ts",
-  "packages/server/src/services/storage/slurp-financial-queue.ts",
-  "packages/server/src/services/storage/slurp-file-errors.ts",
-  "packages/server/src/services/storage/slurp-host-tables.ts",
-  "packages/server/src/services/storage/slurp-messages.helpers.ts",
-  "packages/server/src/services/storage/slurp-messages.storage.ts",
-  "packages/server/src/services/storage/slurp-messages.types.ts",
-  "packages/server/src/services/storage/slurp-reply-queue.storage.ts",
-  "packages/server/src/services/storage/slurp-reply-methods.ts",
-  // Without these three the builder captures the remaster's own files into sources/engine as
-  // generic Engine material, which puts slurp2_* table names into Noodle's build input.
-  "packages/server/src/services/storage/slurp-events.storage.ts",
-  "packages/server/src/services/storage/slurp-population.storage.ts",
-  "packages/server/src/services/storage/slurp-refresh-run-retention.ts",
+  "packages/server/src/services/garnish-ads",
+  "packages/server/src/db/schema/slurp.ts",
 ];
 // Release builds must bundle the current source; runtime reuse is for explicit non-release verification builds.
 const releaseBuild = process.env.MARINARA_RELEASE_BUILD !== "0";
@@ -404,7 +390,7 @@ const features = [
   },
   {
     id: "slurp2",
-    version: "0.0.22",
+    version: "0.1.0",
     minEngineVersion: "2.4.5",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp Remastered",
@@ -443,9 +429,9 @@ const features = [
     kind: ["agent"],
     modes: ["conversation", "roleplay", "game"],
     permissions: ["chat-read", "network", "prompt-context", "routes", "storage", "ui"],
-    serverImport: "packages/server/src/services/slurp/server-entry.ts",
+    serverImport: "packages/server/src/slp/slp-server-entry.ts",
     serverEntry: true,
-    clientImport: "packages/client/src/slurp-package-entry.tsx",
+    clientImport: "packages/client/src/slp/slp-client-entry.tsx",
     packageSourceRoot: slurp2SourceRoot,
     ownedSourcePaths: slurp2OwnedSourcePaths,
     libraryHidden: true,
@@ -803,7 +789,11 @@ export async function selfCheck() {
     if (feature.ownedSourcePaths?.length) {
       await capturePackageSources(metafile, prepared.buildRoot, feature.ownedSourcePaths);
       if (feature.id === "slurp" || feature.id === "slurp2") {
-        await removeOwnedSourceSnapshots(["packages/client/src/localization/locales"]);
+        await removeOwnedSourceSnapshots([
+          "packages/client/src/localization/locales",
+          // Captured as generic Engine material before Slurp2 claimed it; only Slurp2 imports it.
+          ...(feature.id === "slurp2" ? ["packages/server/src/services/garnish-ads"] : []),
+        ]);
       }
     } else {
       await captureEngineSources(

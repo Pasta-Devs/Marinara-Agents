@@ -4,6 +4,7 @@ import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { slurp2Source } from "./slurp2-source";
 
 // The real storage reaches into Engine DB modules that only exist once bundled, so run a
 // copy of garnish-ads against an in-memory app-settings stub.
@@ -76,10 +77,7 @@ async function main() {
 
     // The Slurp routes must scope pool lookups to the Slurp platform, or an id from another
     // Garnish platform is editable and deletable through them.
-    const routes = (await import("node:fs")).readFileSync(
-      "packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts",
-      "utf8",
-    );
+    const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
     const patchRoute = routes.slice(routes.indexOf('app.patch("/noodler/ads/pool/:id"'));
     assert.match(patchRoute.slice(0, 600), /ads\.pool\.listAll\(SLURP_GARNISH_PLATFORM\)/u);
     const deleteRoute = routes.slice(routes.indexOf('app.delete("/noodler/ads/pool/:id"'));

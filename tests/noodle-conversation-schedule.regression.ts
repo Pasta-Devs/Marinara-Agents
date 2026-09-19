@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
 import { runInNewContext } from "node:vm";
 import {
@@ -12,17 +11,16 @@ import {
   toZonedWallClockDate,
 } from "../sources/engine/packages/server/src/services/conversation/timezone.js";
 import { areConversationSchedulesEnabled } from "../sources/engine/packages/server/src/services/generation/conversation-context-utils.js";
+import { slurp2Source } from "./slurp2-source";
 
-const slurpScheduleGenerationSource = readFileSync(
+const slurpScheduleGenerationSource = slurp2Source(
   new URL(
     "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-conversation-schedule-generation.ts",
     import.meta.url,
   ),
-  "utf8",
 );
-const slurpRoutesSource = readFileSync(
+const slurpRoutesSource = slurp2Source(
   new URL("../packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts", import.meta.url),
-  "utf8",
 );
 assert.match(slurpScheduleGenerationSource, /attempt < 2/u, "invalid generated schedules must receive one retry");
 assert.match(
@@ -75,19 +73,17 @@ assert.match(
 
 // Run the owned function with its real captured schedule helpers. Importing the
 // whole prompt service would require unrelated storage, provider and image setup.
-const promptSource = readFileSync(
+const promptSource = slurp2Source(
   new URL(
     "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-public-prompt.service.ts",
     import.meta.url,
   ),
-  "utf8",
 );
-const supportSource = readFileSync(
+const supportSource = slurp2Source(
   new URL(
     "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-public-support.ts",
     import.meta.url,
   ),
-  "utf8",
 );
 const scheduleSource = promptSource.slice(
   promptSource.indexOf("function parseWeekSchedule("),

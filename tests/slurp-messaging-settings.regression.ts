@@ -1,22 +1,19 @@
 // The Messaging settings tab. Each control has to reach the behaviour it names, or it is a knob
 // that does nothing — which is how the Advanced toggle in the conversation overview ended up.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
-import { readSlurpCreatorMessaging } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-messaging";
+import { readSlurpCreatorMessaging } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/messages/slp-messaging";
+import { slurp2Source } from "./slurp2-source";
 
 const root = "packages/slurp2/src/engine/packages";
-const settingsStorage = readFileSync(`${root}/server/src/services/storage/slurp.storage.ts`, "utf8");
-const messagesStorage = readFileSync(`${root}/server/src/services/storage/slurp-messages.storage.ts`, "utf8");
-const scheduler = readFileSync(`${root}/server/src/services/slurp/slurp-message-scheduler.service.ts`, "utf8");
-const operation = readFileSync(`${root}/server/src/services/slurp/slurp-message.operation.ts`, "utf8");
-const messaging = readFileSync(`${root}/server/src/services/slurp/slurp-messaging.ts`, "utf8");
+const settingsStorage = slurp2Source(`${root}/server/src/services/storage/slurp.storage.ts`);
+const messagesStorage = slurp2Source(`${root}/server/src/services/storage/slurp-messages.storage.ts`);
+const scheduler = slurp2Source(`${root}/server/src/services/slurp/slurp-message-scheduler.service.ts`);
+const operation = slurp2Source(`${root}/server/src/services/slurp/slurp-message.operation.ts`);
+const messaging = slurp2Source(`${root}/server/src/services/slurp/slurp-messaging.ts`);
 const view = slurp2BackstageSource();
-const sections = readFileSync(`${root}/client/src/components/slurp/slurp-backstage.ts`, "utf8");
-const locales = JSON.parse(readFileSync(`${root}/client/src/localization/locales/en.json`, "utf8")) as Record<
-  string,
-  string
->;
+const sections = slurp2Source(`${root}/client/src/components/slurp/slurp-backstage.ts`);
+const locales = JSON.parse(slurp2Source(`${root}/client/src/localization/locales/en.json`)) as Record<string, string>;
 
 // Every setting is stored and defaulted.
 for (const key of [

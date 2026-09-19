@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import { requireModelAnswer } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-model-answer";
+import { requireModelAnswer } from "../packages/slurp2/src/engine/packages/server/src/slp/base/model/slp-model-answer";
+import { SLURP2_SOURCE_MODULES, slurp2Source } from "./slurp2-source";
 
 const root = join(import.meta.dirname, "..");
-const read = (path: string) => readFileSync(join(root, path), "utf8");
+const read = (path: string) => slurp2Source(join(root, path));
 const slurpServices = "packages/slurp2/src/engine/packages/server/src/services/slurp/";
 const draft = read(`${slurpServices}slurp-stage-profile-draft.service.ts`);
 const parsers = Object.fromEntries(
@@ -46,13 +47,27 @@ for (const empty of ["", "   ", "\n\t"]) {
 // Every Slurp parse of a model answer goes through the guard, or that path still throws a raw
 // JSON syntax error. The file list is checked against the tree, so a new call site cannot be
 // added without being guarded.
+// The service folder moved into `slp`; its historical file names remain the logical keys, and
+// every live `slp` server file that parses an answer must belong to one of the covered keys.
+const serviceKey = "packages/server/src/services/slurp/";
 assert.deepEqual(
-  readdirSync(join(root, slurpServices))
+  Object.keys(SLURP2_SOURCE_MODULES)
+    .filter((key) => key.startsWith(serviceKey))
+    .map((key) => key.slice(serviceKey.length))
     .filter((file) => /parseGameJsonish\(/u.test(read(`${slurpServices}${file}`)))
     .sort(),
   Object.keys(parsers).sort(),
   "A Slurp service parses a model answer without being covered here",
 );
+const coveredFiles = new Set(Object.keys(parsers).flatMap((file) => SLURP2_SOURCE_MODULES[`${serviceKey}${file}`]));
+const slpServer = "packages/slurp2/src/engine/packages/server/src/slp";
+for (const file of readdirSync(join(root, slpServer), { recursive: true, encoding: "utf8" })) {
+  if (!file.endsWith(".ts") || !/parseGameJsonish\(/u.test(read(`${slpServer}/${file}`))) continue;
+  assert.ok(
+    coveredFiles.has(`packages/server/src/slp/${file.replaceAll("\\", "/")}`),
+    `A Slurp service parses a model answer without being covered here: ${file}`,
+  );
+}
 for (const [file, source] of Object.entries(parsers)) {
   if (file === "slurp-stage-profile-draft.service.ts") {
     // Draft repair deliberately treats an empty answer as unusable, retries it,

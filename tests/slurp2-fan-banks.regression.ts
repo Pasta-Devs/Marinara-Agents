@@ -7,7 +7,6 @@
  * disagrees with what the apply writes.
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -15,19 +14,20 @@ import {
   slurpNormalizeReactionBanks,
   slurpReactionBodiesForType,
   SLURP_TYPE_BANK_THIN,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-reaction-bank.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-reaction-bank.js";
 import {
   SLURP_SHIPPED_REACTIONS,
   SLURP_SHIPPED_TYPE_REACTIONS,
   slurpAudienceReactionFrom,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world-copy.js";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world-copy.js";
 import {
   planSlurpFanTypeRebalance,
   slurpFanTypesDefault,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-fan-types.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-fan-types.js";
+import { slurp2Source } from "./slurp2-source";
 
 const read = (relative: string): string =>
-  readFileSync(join("packages/slurp2/src/engine/packages/server/src", relative), "utf8");
+  slurp2Source(join("packages/slurp2/src/engine/packages/server/src", relative));
 
 // ── The legacy array normalises into `shared`, without losing a line ────────
 const legacy = Array.from({ length: 37 }, (_, index) => `legacy body ${index}`);

@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
+import { slurp2Source } from "./slurp2-source";
 
 const root = join(import.meta.dirname, "..");
-const read = (path: string) => readFileSync(join(root, "packages/slurp2/src/engine/packages", path), "utf8");
+const read = (path: string) => slurp2Source(join(root, "packages/slurp2/src/engine/packages", path));
 
 const messages = read("client/src/components/slurp/SlurpMessages.tsx");
 const settings = slurp2BackstageSource();
@@ -88,7 +88,7 @@ assert.match(settings, /allowRandomUsers/u, "the ambient panel must expose the p
 // The restored draft service imported a symbol its neighbour never re-exported, so it could not
 // bundle. Nothing caught that while no route referenced it.
 const draftService = read("server/src/services/slurp/slurp-invited-post-draft.service.ts");
-assert.match(draftService, /import \{ noodlerSourceText \} from "\.\/slurp-prompt-safety\.js"/u);
+assert.match(draftService, /import \{ noodlerSourceText \} from "\.\.\/\.\.\/base\/prompting\/slp-prompt-safety\.js"/u);
 
 // The inbox only ever listed threads the player opened. A fan writing to your Creator — or a
 // commission the world opened on their behalf — created a thread nobody could reach, so the whole

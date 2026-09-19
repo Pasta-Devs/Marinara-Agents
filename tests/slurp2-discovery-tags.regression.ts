@@ -3,13 +3,13 @@
  * Creator needs a gender and at least 3 tags.
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   normalizeSlurpDiscoveryTags,
   replaceSlurpDiscoveryTag,
   slurpDiscoveryProfileComplete,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-discovery-profile.ts";
+} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/discovery/slp-discovery-profile.ts";
+import { slurp2Source } from "./slurp2-source";
 
 // Rename is case-insensitive, merges into an existing tag, and keeps order.
 assert.deepEqual(replaceSlurpDiscoveryTag(["Art", "gaming", "music"], "art", "painting"), [
@@ -28,14 +28,14 @@ assert.equal(slurpDiscoveryProfileComplete({ gender: "female", tags: ["a", "b"] 
 assert.equal(slurpDiscoveryProfileComplete({ gender: "other", tags: ["a", "b", "c"] }), true);
 
 const pkg = join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages");
-const storage = readFileSync(join(pkg, "server/src/services/storage/slurp.storage.ts"), "utf8");
+const storage = slurp2Source(join(pkg, "server/src/services/storage/slurp.storage.ts"));
 const replaceBody = storage.slice(storage.indexOf("async replaceDiscoveryTag("));
 assert.match(
   replaceBody.slice(0, replaceBody.indexOf("return settings;")),
   /tags: replaceSlurpDiscoveryTag\(tags, from, to\)/u,
   "rename and delete must rewrite every Creator profile",
 );
-const routes = readFileSync(join(pkg, "server/src/routes/slurp.routes.ts"), "utf8");
+const routes = slurp2Source(join(pkg, "server/src/routes/slurp.routes.ts"));
 assert.match(
   routes,
   /stageProfile: slurpStageProfileSchema\.refine\(slurpDiscoveryProfileComplete/u,

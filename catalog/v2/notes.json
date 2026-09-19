@@ -290,6 +290,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.1.0",
+          "date": "2026-09-19",
+          "notes": "- Completed the backend file split and modularisation.\n- You should not feel any difference. If you do, tell me in Discord.",
+          "highlight": true
+        },
+        {
           "version": "0.0.22",
           "date": "2026-09-17",
           "notes": "- Invite Engine characters to the Slurp audience from character groups or per-character controls.\n- Audience characters are now available as a first expansion step. The current setup is still limited and needs clearer guidance and simpler controls.\n- Invited characters use their own card voice and tags in comments, audience activity, and messages.\n- Invited characters can follow, subscribe, spend, hold ties, and appear in fan cards.\n- Added a New Chat picker for owned Creators and invited characters.\n- Added prompt-cost limits and deterministic character rotation.\n- Fixed feed ads, image prompt display, and the configured subscription price.\n- Added configurable image Stories and platform-style message actions.\n- Added backend groundwork for the next expansion and bug-fix updates, with clearer service boundaries for safer iteration.",
@@ -401,12 +407,6 @@
           "version": "0.0.4",
           "date": "2026-09-12",
           "notes": "- Fixed Refresh Conversation Schedule failing with \"chatComplete is not a function\". It now creates the schedule.\n- Fixed the Conversation Schedule refresh dialog and the settings loading screen showing raw text keys instead of words.\n- Fixed the header logo not loading. The logo is now built into Slurp and no longer depends on the package asset address.\n- Added Reply timing settings under Messaging: the longest wait, the wait when the return time is unknown, check-in waits for close and regular fans, and away times for Creators without a schedule.\n- Added Always reachable without a schedule. With it on, a Creator with no Conversation Schedule counts as online.\n- Corrected the Creator settings text that said a Creator without a Conversation Schedule is always reachable. Slurp guesses from their last post unless the new setting is on.",
-          "highlight": true
-        },
-        {
-          "version": "0.0.3",
-          "date": "2026-09-12",
-          "notes": "- Fixed Create post and Add story doing nothing on a Creator profile with a tip goal set. The goal used to hide the post composer.\n- Slurp Remastered now shows its color artwork in the Agents browser. The gray artwork is for Slurp Legacy only.",
           "highlight": true
         }
       ]

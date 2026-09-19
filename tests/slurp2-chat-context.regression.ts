@@ -3,13 +3,12 @@
  * about the characters in the chat, and what a fan pays for never travels into it.
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
 import { runInNewContext } from "node:vm";
+import { slurp2Source } from "./slurp2-source";
 
-const source = readFileSync(
+const source = slurp2Source(
   new URL("../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-chat-context.ts", import.meta.url),
-  "utf8",
 );
 
 const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();

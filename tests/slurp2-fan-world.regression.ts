@@ -1,18 +1,18 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
   slurpFanMemoryForPrompt,
   SLURP_FAN_MEMORY_MAX,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-fan-types.js";
-import { slurpAudienceWeeklySpend } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-audience-subscription.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-fan-types.js";
+import { slurpAudienceWeeklySpend } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-audience-subscription.js";
 import {
   planSlurpWorldTick,
   slurpAudienceTipAmount,
   type SlurpWorldActorWeights,
-} from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-world.js";
-import { SLURP_REALISTIC_TUNING } from "../packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-tuning.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world.js";
+import { SLURP_REALISTIC_TUNING } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-tuning.js";
+import { slurp2Source } from "./slurp2-source";
 
 const at = new Date("2026-09-14T12:00:00.000Z");
 const since = new Date(at.getTime() - 86_400_000);
@@ -144,7 +144,7 @@ assert.match(memory ?? "", /Subscribes/u);
 assert.ok((memory?.length ?? 0) <= SLURP_FAN_MEMORY_MAX);
 
 const root = join(import.meta.dirname, "..", "packages", "slurp2", "src", "engine", "packages", "server", "src");
-const operation = readFileSync(join(root, "services/slurp/slurp-world.operation.ts"), "utf8");
+const operation = slurp2Source(join(root, "services/slurp/slurp-world.operation.ts"));
 assert.match(operation, /actorWeights,/u);
 assert.match(operation, /stageOf:/u);
 assert.match(operation, /recordAudiencePostUnlock/u);

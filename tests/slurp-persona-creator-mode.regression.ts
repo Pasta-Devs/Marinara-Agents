@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { slurp2Source } from "./slurp2-source";
 
-const read = (path: string) => readFileSync(path, "utf8");
+const read = (path: string) => slurp2Source(path);
 const base = "packages/slurp2/src/engine/packages/server/src/services/slurp/";
 const schema = read("packages/slurp2/src/engine/packages/server/src/db/schema/slurp.ts");
 const storage = read("packages/slurp2/src/engine/packages/server/src/services/storage/slurp.storage.ts");
