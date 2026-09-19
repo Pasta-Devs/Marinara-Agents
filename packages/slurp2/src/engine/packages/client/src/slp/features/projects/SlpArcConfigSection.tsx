@@ -4,7 +4,7 @@ import { useTranslation as useUiTranslation } from "react-i18next";
 import type { SlurpArcType, SlurpCreatorArcConfig } from "./slp-projects-contract";
 import { useSlurpArcConfig, useUpdateSlurpArcConfig } from "./slp-projects-hooks";
 
-function ArcConfigSection({
+export function ArcConfigSection({
   personaId,
   creatorAccountId,
   global,

@@ -1111,3 +1111,23 @@ export function NoodleComposerShell({
     </div>
   );
 }
+
+// The card is the module's face: callers that need its model, its context or the pieces it is
+// assembled from import them here rather than from the fragments the split produced.
+export type { NoodlePostCardCtx, NoodlePostCardModel, NoodlePostImageUpdate } from "./SlpPostTypes";
+export { useNoodlePostCardController } from "./SlpPostHooks";
+export { NoodleComposerToolRow, NoodleToolButton, SlurpToolPopover } from "./SlpPostComposerTools";
+export {
+  countInteractions,
+  createNoodleLightboxImage,
+  fieldClass,
+  labelClass,
+  NOODLE_MEDIA_PICKER_TABS,
+  NOODLE_TEXT_MEDIA_PICKER_TABS,
+  noodleCommentActionClass,
+  noodleIconButtonClass,
+  NoodleMentionSuggestions,
+  SlurpClampedText,
+  slurpReplyThreads,
+  textareaClass,
+} from "./SlpPostHelpers";

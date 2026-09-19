@@ -18,7 +18,7 @@ import {
   useUpdateSlurpProject,
 } from "./slp-projects-hooks";
 
-type Draft = {
+export type Draft = {
   title: string;
   direction: string;
   chapters: string;

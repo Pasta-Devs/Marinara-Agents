@@ -46,7 +46,7 @@ export interface PendingNoodlerImage {
   source: File | string;
 }
 
-export type { NoodleContentFormat, NoodlerPostDraftImage } from "../../features/feed/slp-feed-contract";
+export type { NoodlerContentFormat, NoodlerPostDraftImage } from "../../features/feed/slp-feed-contract";
 export type SlurpViewerCreator = import("@marinara-engine/shared").NoodlerViewerScope;
 
 // ---------------------------------------------------------------------------
@@ -211,8 +211,8 @@ import type { LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { SlurpSparkleVeil } from "../../base/chrome/SlpSparkleVeil";
+import { cn } from "../../../lib/utils";
 import {
-  cn,
   getNoodleAccentStyle,
   NOODLE_PINK,
   ProfileInitial,
@@ -220,7 +220,7 @@ import {
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { useSlurpMediaSrc } from "../../base/media/slp-media-src";
 import { Modal } from "../../../components/ui/Modal";
-import type { NoodlePostCardModel, NoodlePostCardCtx } from "../../modules/post/SlpPostCard";
+import type { NoodlePostCardCtx } from "../../modules/post/SlpPostCard";
 import { SlurpCreatorPostCard } from "../../modules/post/SlpCreatorPostCard";
 
 /** Keeps a feed slot mounted while its locked and revealed card shapes trade places. */

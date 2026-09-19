@@ -4,9 +4,9 @@ import { Draft } from "./SlpProjectsBoard";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import type { SlurpArcType } from "./slp-projects-contract";
 
-const canSave = (draft: Draft) => Boolean(draft.title.trim()) || draft.typeId !== null;
+export const canSave = (draft: Draft) => Boolean(draft.title.trim()) || draft.typeId !== null;
 
-function ProjectEditor({
+export function ProjectEditor({
   draft,
   setDraft,
   onSave,

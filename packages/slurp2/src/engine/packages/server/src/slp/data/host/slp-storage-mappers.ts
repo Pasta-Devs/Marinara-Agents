@@ -37,7 +37,6 @@ import type {
   SubscriptionRow,
   PostUnlockRow,
 } from "../../modules/records/slp-storage-model.js";
-import type { SlurpAccount } from "../../modules/settings/slp-settings.js";
 export function mapAccount(row: AccountRow): SlurpAccount {
   const settings = normalizeNoodleAccountSettings(row.settings);
   return {

@@ -57,7 +57,6 @@ import { processLorebooks } from "../../../services/lorebook/index.js";
 import { createCharacterGalleryStorage } from "../../../services/storage/character-gallery.storage.js";
 import { createGalleryStorage } from "../../../services/storage/gallery.storage.js";
 import { pickGalleryAttachmentForAccount } from "./slp-generated-activity-service.js";
-export type { NoodlerContentFormat } from "../../base/prompting/slp-content-format.js";
 // The disclosure privacy core lives in a leaf module so tests can execute it instead of grepping
 // this file, which cannot be imported without a database and an LLM provider.
 import { protectNoodlerGeneratedIdentity, type PublicIdentity } from "../../base/identity/slp-identity-protection.js";
@@ -70,7 +69,6 @@ import {
   noodlerTitleFromContent,
   parseNoodlerPost,
 } from "./slp-post-prompt.js";
-export type { NoodlerContentFormat } from "../../base/prompting/slp-content-format.js";
 export type { NoodlerContentFormat } from "../../base/prompting/slp-content-format.js";
 
 export {
