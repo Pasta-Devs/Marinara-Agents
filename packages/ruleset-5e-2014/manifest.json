@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 2,
+  "capabilityApi": {
+    "major": 1,
+    "minor": 21
+  },
+  "builtAgainst": {
+    "engineVersion": "2.4.6",
+    "engineCommit": "d091ad7d3209e41fc8ef3a72033446dd34268fe2"
+  },
+  "id": "ruleset-5e-2014",
+  "name": "5e (SRD 5.1)",
+  "version": "0.2.0",
+  "description": "Provides 5e SRD 5.1 rules for Game Mode ability checks, skill checks, saving throws, and the full character sheet, plus pickable SRD spells, class features and weapons so you do not type them row by row. Battles still use Marinara's default combat, not 5e combat. After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
+  "engine": {
+    "min": "2.4.6",
+    "maxExclusive": "4.0.0"
+  },
+  "kind": [
+    "ruleset"
+  ],
+  "entrypoints": {},
+  "contributions": {
+    "assets": {
+      "paths": [
+        "ruleset.json",
+        "catalogs/spells.json",
+        "catalogs/features.json"
+      ]
+    }
+  },
+  "files": [
+    {
+      "path": "ruleset.json",
+      "sha256": "d419812c644c631ff5f832ff1df809191d61145c40fa1ef777811c2c174fca1f",
+      "bytes": 57209
+    },
+    {
+      "path": "catalogs/spells.json",
+      "sha256": "d2423775cf50f28a7ceaca05bfa8d803c277297270a58c5cd9f78b8bb5e1be93",
+      "bytes": 306274
+    },
+    {
+      "path": "catalogs/features.json",
+      "sha256": "70a8e57cf46712406fcd06fe74917dd81be7890d6e7881726a2a3f3ad024a07d",
+      "bytes": 195198
+    }
+  ],
+  "permissions": [],
+  "restartRequired": false
+}

@@ -1,0 +1,2086 @@
+{
+  "$comment": "First-party 5e ruleset on SRD 5.1. Every id here is this file's own choice: the Engine never looks for 'level', 'dex' or 'slots'. A $comment key is allowed on any object and ignored.",
+  "schemaVersion": 1,
+  "id": "5e-2014",
+  "version": 2,
+  "name": "5e (SRD 5.1)",
+  "edition": "System Reference Document 5.1, 2014 rules",
+  "license": {
+    "spdx": "CC-BY-4.0",
+    "attribution": "This work includes material taken from the System Reference Document 5.1 (\"SRD 5.1\") by Wizards of the Coast LLC and available at https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License available at https://creativecommons.org/licenses/by/4.0/legalcode."
+  },
+  "coverage": {
+    "checks": true,
+    "saves": true,
+    "sheet": true,
+    "resources": true,
+    "rests": true,
+    "combat": false,
+    "summary": "Ability checks, skill checks, saving throws, the full character sheet, spell slots, hit dice, class resources, conditions and rests. Battles use Marinara's default combat, not 5e combat."
+  },
+  "resolution": {
+    "kind": "dice-sum",
+    "dice": {
+      "count": 1,
+      "sides": 20
+    },
+    "abilityModifier": {
+      "op": "floorHalfMinusTen"
+    },
+    "proficiency": {
+      "bonus": {
+        "derived": "proficiency_bonus"
+      }
+    },
+    "proficiencyTiers": [
+      {
+        "id": "none",
+        "label": "Not proficient",
+        "multiplier": 0
+      },
+      {
+        "id": "half",
+        "label": "Half proficiency",
+        "multiplier": 0.5,
+        "round": "down"
+      },
+      {
+        "id": "proficient",
+        "label": "Proficient",
+        "multiplier": 1
+      },
+      {
+        "id": "expertise",
+        "label": "Expertise",
+        "multiplier": 2
+      }
+    ],
+    "advantage": true,
+    "naturals": {
+      "$comment": "2014 rules: a natural 20 or 1 decides attack rolls only. Checks and saves are pure arithmetic, unlike Marinara's own rules.",
+      "check": "none",
+      "save": "none"
+    },
+    "difficultyLadder": [
+      {
+        "label": "Very easy",
+        "dc": 5
+      },
+      {
+        "label": "Easy",
+        "dc": 10
+      },
+      {
+        "label": "Medium",
+        "dc": 15
+      },
+      {
+        "label": "Hard",
+        "dc": 20
+      },
+      {
+        "label": "Very hard",
+        "dc": 25
+      },
+      {
+        "label": "Nearly impossible",
+        "dc": 30
+      }
+    ]
+  },
+  "sheet": {
+    "version": 1,
+    "sections": [
+      {
+        "id": "identity",
+        "label": "Identity"
+      },
+      {
+        "id": "combat",
+        "label": "Combat"
+      },
+      {
+        "id": "spellcasting",
+        "label": "Spellcasting"
+      }
+    ],
+    "abilities": [
+      {
+        "id": "str",
+        "label": "Strength",
+        "short": "STR",
+        "min": 1,
+        "max": 30,
+        "default": 10
+      },
+      {
+        "id": "dex",
+        "label": "Dexterity",
+        "short": "DEX",
+        "min": 1,
+        "max": 30,
+        "default": 10
+      },
+      {
+        "id": "con",
+        "label": "Constitution",
+        "short": "CON",
+        "min": 1,
+        "max": 30,
+        "default": 10
+      },
+      {
+        "id": "int",
+        "label": "Intelligence",
+        "short": "INT",
+        "min": 1,
+        "max": 30,
+        "default": 10
+      },
+      {
+        "id": "wis",
+        "label": "Wisdom",
+        "short": "WIS",
+        "min": 1,
+        "max": 30,
+        "default": 10
+      },
+      {
+        "id": "cha",
+        "label": "Charisma",
+        "short": "CHA",
+        "min": 1,
+        "max": 30,
+        "default": 10
+      }
+    ],
+    "saves": [
+      {
+        "id": "str_save",
+        "label": "Strength save",
+        "ability": "str"
+      },
+      {
+        "id": "dex_save",
+        "label": "Dexterity save",
+        "ability": "dex"
+      },
+      {
+        "id": "con_save",
+        "label": "Constitution save",
+        "ability": "con"
+      },
+      {
+        "id": "int_save",
+        "label": "Intelligence save",
+        "ability": "int"
+      },
+      {
+        "id": "wis_save",
+        "label": "Wisdom save",
+        "ability": "wis"
+      },
+      {
+        "id": "cha_save",
+        "label": "Charisma save",
+        "ability": "cha"
+      }
+    ],
+    "saveTiers": ["none", "proficient"],
+    "skills": [
+      {
+        "id": "acrobatics",
+        "label": "Acrobatics",
+        "ability": "dex"
+      },
+      {
+        "id": "animal_handling",
+        "label": "Animal Handling",
+        "ability": "wis"
+      },
+      {
+        "id": "arcana",
+        "label": "Arcana",
+        "ability": "int"
+      },
+      {
+        "id": "athletics",
+        "label": "Athletics",
+        "ability": "str"
+      },
+      {
+        "id": "deception",
+        "label": "Deception",
+        "ability": "cha"
+      },
+      {
+        "id": "history",
+        "label": "History",
+        "ability": "int"
+      },
+      {
+        "id": "insight",
+        "label": "Insight",
+        "ability": "wis"
+      },
+      {
+        "id": "intimidation",
+        "label": "Intimidation",
+        "ability": "cha"
+      },
+      {
+        "id": "investigation",
+        "label": "Investigation",
+        "ability": "int"
+      },
+      {
+        "id": "medicine",
+        "label": "Medicine",
+        "ability": "wis"
+      },
+      {
+        "id": "nature",
+        "label": "Nature",
+        "ability": "int"
+      },
+      {
+        "id": "perception",
+        "label": "Perception",
+        "ability": "wis"
+      },
+      {
+        "id": "performance",
+        "label": "Performance",
+        "ability": "cha"
+      },
+      {
+        "id": "persuasion",
+        "label": "Persuasion",
+        "ability": "cha"
+      },
+      {
+        "id": "religion",
+        "label": "Religion",
+        "ability": "int"
+      },
+      {
+        "id": "sleight_of_hand",
+        "label": "Sleight of Hand",
+        "ability": "dex"
+      },
+      {
+        "id": "stealth",
+        "label": "Stealth",
+        "ability": "dex"
+      },
+      {
+        "id": "survival",
+        "label": "Survival",
+        "ability": "wis"
+      }
+    ],
+    "fields": [
+      {
+        "id": "level",
+        "label": "Level",
+        "type": "number",
+        "min": 1,
+        "max": 20,
+        "default": 1,
+        "section": "identity"
+      },
+      {
+        "id": "class",
+        "label": "Class",
+        "type": "text",
+        "maxLength": 80,
+        "section": "identity"
+      },
+      {
+        "id": "subclass",
+        "label": "Subclass",
+        "type": "text",
+        "maxLength": 80,
+        "section": "identity"
+      },
+      {
+        "id": "race",
+        "label": "Race",
+        "type": "text",
+        "maxLength": 80,
+        "section": "identity"
+      },
+      {
+        "id": "background",
+        "label": "Background",
+        "type": "text",
+        "maxLength": 80,
+        "section": "identity"
+      },
+      {
+        "id": "alignment",
+        "label": "Alignment",
+        "type": "text",
+        "maxLength": 40,
+        "section": "identity"
+      },
+      {
+        "id": "xp",
+        "label": "Experience points",
+        "type": "number",
+        "min": 0,
+        "max": 999999,
+        "default": 0,
+        "section": "identity"
+      },
+      {
+        "id": "ac",
+        "label": "Armor Class",
+        "type": "number",
+        "min": 0,
+        "max": 40,
+        "default": 10,
+        "section": "combat"
+      },
+      {
+        "id": "speed",
+        "label": "Speed (ft)",
+        "type": "number",
+        "min": 0,
+        "max": 300,
+        "default": 30,
+        "section": "combat"
+      },
+      {
+        "id": "initiative_misc",
+        "label": "Initiative bonus (other)",
+        "type": "number",
+        "min": -10,
+        "max": 20,
+        "default": 0,
+        "section": "combat"
+      },
+      {
+        "id": "hp_max",
+        "label": "Hit point maximum",
+        "type": "number",
+        "min": 1,
+        "max": 999,
+        "default": 8,
+        "section": "combat"
+      },
+      {
+        "id": "hit_die",
+        "label": "Hit die",
+        "type": "enum",
+        "values": ["d6", "d8", "d10", "d12"],
+        "default": "d8",
+        "section": "combat"
+      },
+      {
+        "id": "spellcasting_ability",
+        "label": "Spellcasting ability",
+        "type": "enum",
+        "values": ["none", "int", "wis", "cha"],
+        "valueLabels": {
+          "none": "None",
+          "int": "Intelligence",
+          "wis": "Wisdom",
+          "cha": "Charisma"
+        },
+        "default": "none",
+        "section": "spellcasting"
+      },
+      {
+        "id": "slots_max_1",
+        "label": "1st-level slots",
+        "type": "number",
+        "min": 0,
+        "max": 9,
+        "default": 0,
+        "section": "spellcasting",
+        "hideWhen": {
+          "field": "spellcasting_ability",
+          "equals": "none"
+        }
+      },
+      {
+        "id": "slots_max_2",
+        "label": "2nd-level slots",
+        "type": "number",
+        "min": 0,
+        "max": 9,
+        "default": 0,
+        "section": "spellcasting",
+        "hideWhen": {
+          "field": "spellcasting_ability",
+          "equals": "none"
+        }
+      },
+      {
+        "id": "slots_max_3",
+        "label": "3rd-level slots",
+        "type": "number",
+        "min": 0,
+        "max": 9,
+        "default": 0,
+        "section": "spellcasting",
+        "hideWhen": {
+          "field": "spellcasting_ability",
+          "equals": "none"
+        }
+      },
+      {
+        "id": "slots_max_4",
+        "label": "4th-level slots",
+        "type": "number",
+        "min": 0,
+        "max": 9,
+        "default": 0,
+        "section": "spellcasting",
+        "hideWhen": {
+          "field": "spellcasting_ability",
+          "equals": "none"
+        }
+      },
+      {
+        "id": "slots_max_5",
+        "label": "5th-level slots",
+        "type": "number",
+        "min": 0,
+        "max": 9,
+        "default": 0,
+        "section": "spellcasting",
+        "hideWhen": {
+          "field": "spellcasting_ability",
+          "equals": "none"
+        }
+      },
+      {
+        "id": "slots_max_6",
+        "label": "6th-level slots",
+        "type": "number",
+        "min": 0,
+        "max": 9,
+        "default": 0,
+        "section": "spellcasting",
+        "hideWhen": {
+          "field": "spellcasting_ability",
+          "equals": "none"
+        }
+      },
+      {
+        "id": "slots_max_7",
+        "label": "7th-level slots",
+        "type": "number",
+        "min": 0,
+        "max": 9,
+        "default": 0,
+        "section": "spellcasting",
+        "hideWhen": {
+          "field": "spellcasting_ability",
+          "equals": "none"
+        }
+      },
+      {
+        "id": "slots_max_8",
+        "label": "8th-level slots",
+        "type": "number",
+        "min": 0,
+        "max": 9,
+        "default": 0,
+        "section": "spellcasting",
+        "hideWhen": {
+          "field": "spellcasting_ability",
+          "equals": "none"
+        }
+      },
+      {
+        "id": "slots_max_9",
+        "label": "9th-level slots",
+        "type": "number",
+        "min": 0,
+        "max": 9,
+        "default": 0,
+        "section": "spellcasting",
+        "hideWhen": {
+          "field": "spellcasting_ability",
+          "equals": "none"
+        }
+      },
+      {
+        "id": "pact_slots_max",
+        "label": "Pact Magic slots",
+        "type": "number",
+        "min": 0,
+        "max": 4,
+        "default": 0,
+        "section": "spellcasting",
+        "hideWhen": {
+          "field": "spellcasting_ability",
+          "equals": "none"
+        }
+      },
+      {
+        "id": "pact_slot_level",
+        "label": "Pact slot level",
+        "type": "number",
+        "min": 1,
+        "max": 5,
+        "default": 1,
+        "section": "spellcasting",
+        "hideWhen": {
+          "field": "spellcasting_ability",
+          "equals": "none"
+        }
+      }
+    ],
+    "derived": [
+      {
+        "id": "proficiency_bonus",
+        "label": "Proficiency bonus",
+        "op": "stepTable",
+        "from": {
+          "field": "level"
+        },
+        "table": [
+          [1, 2],
+          [5, 3],
+          [9, 4],
+          [13, 5],
+          [17, 6]
+        ],
+        "section": "identity"
+      },
+      {
+        "id": "initiative",
+        "label": "Initiative",
+        "op": "sum",
+        "of": [
+          {
+            "abilityMod": "dex"
+          },
+          {
+            "field": "initiative_misc"
+          }
+        ],
+        "section": "combat"
+      },
+      {
+        "id": "passive_perception",
+        "label": "Passive Perception",
+        "op": "sum",
+        "of": [
+          {
+            "const": 10
+          },
+          {
+            "skillMod": "perception"
+          }
+        ],
+        "section": "combat"
+      },
+      {
+        "id": "spell_save_dc",
+        "label": "Spell save DC",
+        "op": "sum",
+        "of": [
+          {
+            "const": 8
+          },
+          {
+            "derived": "proficiency_bonus"
+          },
+          {
+            "abilityModFromField": "spellcasting_ability"
+          }
+        ],
+        "section": "spellcasting",
+        "hideWhen": {
+          "field": "spellcasting_ability",
+          "equals": "none"
+        }
+      },
+      {
+        "id": "spell_attack",
+        "label": "Spell attack bonus",
+        "op": "sum",
+        "of": [
+          {
+            "derived": "proficiency_bonus"
+          },
+          {
+            "abilityModFromField": "spellcasting_ability"
+          }
+        ],
+        "section": "spellcasting",
+        "hideWhen": {
+          "field": "spellcasting_ability",
+          "equals": "none"
+        }
+      }
+    ],
+    "lists": [
+      {
+        "id": "attacks",
+        "label": "Attacks",
+        "section": "combat",
+        "maxItems": 20,
+        "columns": [
+          {
+            "id": "name",
+            "label": "Name",
+            "type": "text",
+            "maxLength": 80,
+            "required": true
+          },
+          {
+            "id": "ability",
+            "label": "Ability",
+            "type": "enum",
+            "values": ["str", "dex", "con", "int", "wis", "cha"]
+          },
+          {
+            "id": "proficient",
+            "label": "Proficient",
+            "type": "boolean",
+            "default": true
+          },
+          {
+            "id": "bonus",
+            "label": "Other bonus",
+            "type": "number",
+            "min": -5,
+            "max": 10,
+            "default": 0
+          },
+          {
+            "id": "damage",
+            "label": "Damage dice",
+            "type": "dice",
+            "example": "1d8"
+          },
+          {
+            "id": "damage_type",
+            "label": "Damage type",
+            "type": "text",
+            "maxLength": 30
+          }
+        ]
+      },
+      {
+        "id": "spells",
+        "label": "Spells",
+        "section": "spellcasting",
+        "hideWhen": {
+          "field": "spellcasting_ability",
+          "equals": "none"
+        },
+        "maxItems": 150,
+        "columns": [
+          {
+            "id": "name",
+            "label": "Name",
+            "type": "text",
+            "maxLength": 80,
+            "required": true
+          },
+          {
+            "id": "level",
+            "label": "Level",
+            "type": "number",
+            "min": 0,
+            "max": 9,
+            "default": 0
+          },
+          {
+            "id": "prepared",
+            "label": "Prepared",
+            "type": "boolean",
+            "default": true
+          },
+          {
+            "id": "ritual",
+            "label": "Ritual",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "id": "concentration",
+            "label": "Concentration",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "id": "notes",
+            "label": "Notes",
+            "type": "text",
+            "maxLength": 300
+          }
+        ]
+      },
+      {
+        "id": "features",
+        "label": "Features and traits",
+        "maxItems": 60,
+        "columns": [
+          {
+            "id": "name",
+            "label": "Name",
+            "type": "text",
+            "maxLength": 80,
+            "required": true
+          },
+          {
+            "id": "text",
+            "label": "Description",
+            "type": "longtext",
+            "maxLength": 800
+          }
+        ]
+      },
+      {
+        "$comment": "Ki, Rage, Sorcery Points, Channel Divinity, Bardic Inspiration and the like, without shipping class tables. Each row is a live pool.",
+        "id": "counters",
+        "label": "Class resources",
+        "maxItems": 12,
+        "pools": {
+          "nameColumn": "name",
+          "maxColumn": "max",
+          "rechargeColumn": "recharge"
+        },
+        "columns": [
+          {
+            "id": "name",
+            "label": "Name",
+            "type": "text",
+            "maxLength": 40,
+            "required": true
+          },
+          {
+            "id": "max",
+            "label": "Maximum",
+            "type": "number",
+            "min": 0,
+            "max": 99,
+            "default": 1
+          },
+          {
+            "id": "recharge",
+            "label": "Recharges on",
+            "type": "enum",
+            "values": ["short", "long", "none"],
+            "valueLabels": {
+              "short": "Short rest",
+              "long": "Long rest",
+              "none": "Never"
+            },
+            "default": "long"
+          }
+        ]
+      },
+      {
+        "id": "proficiencies",
+        "label": "Other proficiencies and languages",
+        "maxItems": 40,
+        "columns": [
+          {
+            "id": "name",
+            "label": "Name",
+            "type": "text",
+            "maxLength": 80,
+            "required": true
+          }
+        ]
+      }
+    ],
+    "live": {
+      "$comment": "Fast-changing state. Starts from the build when a game copies the sheet, and lives with the game-state snapshot so a swipe rewinds it.",
+      "pools": [
+        {
+          "id": "hp",
+          "label": "Hit points",
+          "max": {
+            "field": "hp_max"
+          },
+          "allowTemp": true
+        },
+        {
+          "id": "hit_dice",
+          "label": "Hit dice",
+          "max": {
+            "field": "level"
+          }
+        },
+        {
+          "id": "slots_1",
+          "label": "1st-level slots",
+          "max": {
+            "field": "slots_max_1"
+          },
+          "group": "slots",
+          "hideWhen": {
+            "field": "spellcasting_ability",
+            "equals": "none"
+          }
+        },
+        {
+          "id": "slots_2",
+          "label": "2nd-level slots",
+          "max": {
+            "field": "slots_max_2"
+          },
+          "group": "slots",
+          "hideWhen": {
+            "field": "spellcasting_ability",
+            "equals": "none"
+          }
+        },
+        {
+          "id": "slots_3",
+          "label": "3rd-level slots",
+          "max": {
+            "field": "slots_max_3"
+          },
+          "group": "slots",
+          "hideWhen": {
+            "field": "spellcasting_ability",
+            "equals": "none"
+          }
+        },
+        {
+          "id": "slots_4",
+          "label": "4th-level slots",
+          "max": {
+            "field": "slots_max_4"
+          },
+          "group": "slots",
+          "hideWhen": {
+            "field": "spellcasting_ability",
+            "equals": "none"
+          }
+        },
+        {
+          "id": "slots_5",
+          "label": "5th-level slots",
+          "max": {
+            "field": "slots_max_5"
+          },
+          "group": "slots",
+          "hideWhen": {
+            "field": "spellcasting_ability",
+            "equals": "none"
+          }
+        },
+        {
+          "id": "slots_6",
+          "label": "6th-level slots",
+          "max": {
+            "field": "slots_max_6"
+          },
+          "group": "slots",
+          "hideWhen": {
+            "field": "spellcasting_ability",
+            "equals": "none"
+          }
+        },
+        {
+          "id": "slots_7",
+          "label": "7th-level slots",
+          "max": {
+            "field": "slots_max_7"
+          },
+          "group": "slots",
+          "hideWhen": {
+            "field": "spellcasting_ability",
+            "equals": "none"
+          }
+        },
+        {
+          "id": "slots_8",
+          "label": "8th-level slots",
+          "max": {
+            "field": "slots_max_8"
+          },
+          "group": "slots",
+          "hideWhen": {
+            "field": "spellcasting_ability",
+            "equals": "none"
+          }
+        },
+        {
+          "id": "slots_9",
+          "label": "9th-level slots",
+          "max": {
+            "field": "slots_max_9"
+          },
+          "group": "slots",
+          "hideWhen": {
+            "field": "spellcasting_ability",
+            "equals": "none"
+          }
+        },
+        {
+          "id": "pact_slots",
+          "label": "Pact Magic slots",
+          "max": {
+            "field": "pact_slots_max"
+          },
+          "group": "pact",
+          "hideWhen": {
+            "field": "spellcasting_ability",
+            "equals": "none"
+          }
+        }
+      ],
+      "tracks": [
+        {
+          "id": "death_save_successes",
+          "label": "Death save successes",
+          "min": 0,
+          "max": 3
+        },
+        {
+          "id": "death_save_failures",
+          "label": "Death save failures",
+          "min": 0,
+          "max": 3
+        },
+        {
+          "id": "exhaustion",
+          "label": "Exhaustion",
+          "min": 0,
+          "max": 6
+        }
+      ],
+      "text": [
+        {
+          "id": "concentration",
+          "label": "Concentrating on",
+          "maxLength": 80
+        }
+      ],
+      "conditions": [
+        {
+          "id": "blinded",
+          "label": "Blinded"
+        },
+        {
+          "id": "charmed",
+          "label": "Charmed"
+        },
+        {
+          "id": "deafened",
+          "label": "Deafened"
+        },
+        {
+          "id": "frightened",
+          "label": "Frightened"
+        },
+        {
+          "id": "grappled",
+          "label": "Grappled"
+        },
+        {
+          "id": "incapacitated",
+          "label": "Incapacitated"
+        },
+        {
+          "id": "invisible",
+          "label": "Invisible"
+        },
+        {
+          "id": "paralyzed",
+          "label": "Paralyzed"
+        },
+        {
+          "id": "petrified",
+          "label": "Petrified"
+        },
+        {
+          "id": "poisoned",
+          "label": "Poisoned"
+        },
+        {
+          "id": "prone",
+          "label": "Prone"
+        },
+        {
+          "id": "restrained",
+          "label": "Restrained"
+        },
+        {
+          "id": "stunned",
+          "label": "Stunned"
+        },
+        {
+          "id": "unconscious",
+          "label": "Unconscious"
+        }
+      ]
+    }
+  },
+  "rests": [
+    {
+      "$comment": "Spending hit dice is a player choice made on the sheet; the rest itself does not spend them.",
+      "id": "short",
+      "label": "Short rest",
+      "restore": [
+        {
+          "pool": "pact_slots",
+          "to": "max"
+        },
+        {
+          "listPools": "counters",
+          "recharge": ["short"],
+          "to": "max"
+        }
+      ]
+    },
+    {
+      "id": "long",
+      "label": "Long rest",
+      "restore": [
+        {
+          "pool": "hp",
+          "to": "max"
+        },
+        {
+          "poolGroup": "slots",
+          "to": "max"
+        },
+        {
+          "pool": "pact_slots",
+          "to": "max"
+        },
+        {
+          "pool": "hit_dice",
+          "by": {
+            "fractionOfMax": 0.5,
+            "round": "down",
+            "min": 1
+          }
+        },
+        {
+          "listPools": "counters",
+          "recharge": ["short", "long"],
+          "to": "max"
+        },
+        {
+          "track": "exhaustion",
+          "by": {
+            "const": -1
+          }
+        },
+        {
+          "track": "death_save_successes",
+          "to": 0
+        },
+        {
+          "track": "death_save_failures",
+          "to": 0
+        }
+      ],
+      "clear": {
+        "text": ["concentration"]
+      }
+    }
+  ],
+  "gm": {
+    "checkGuidance": "This game uses 5e rules from SRD 5.1. Call for an ability check, skill check or saving throw only when the outcome is uncertain and failure is interesting. Name the skill or the save and set a DC from the ladder below. Never add modifiers, never state a total and never decide the result: the Engine applies the character sheet and reports the outcome. A natural 20 or natural 1 has no special effect on checks or saves.",
+    "sheetGuidance": "The character sheets below are authoritative. A character can only cast a spell that is on their sheet and only with a slot they still have. When a character spends or regains a resource, takes damage, heals, gains or loses a condition, or rests, record it with the sheet command. If a command is refused, the fiction did not happen: narrate around it.",
+    "sheetSummary": {
+      "fields": ["level", "class", "ac", "speed"],
+      "derived": ["proficiency_bonus", "passive_perception", "spell_save_dc", "spell_attack"],
+      "lists": [
+        {
+          "list": "spells",
+          "nameColumn": "name",
+          "groupBy": "level",
+          "onlyWhen": "prepared"
+        },
+        {
+          "list": "attacks",
+          "nameColumn": "name"
+        }
+      ]
+    }
+  },
+  "catalogs": [
+    {
+      "$comment": "Ready-made SRD 5.1 spells. A picked row is a copy the player can edit. Generated by scripts/build-5e-srd-catalogs.mjs. Do not edit by hand. Source: Open5e srd-2014 data, https://github.com/open5e/open5e-api, data/v2/wizards-of-the-coast/srd-2014, commit 0e594c370b4daa9c8d8690979a58eab615afd6d5, licensed CC-BY-4.0 like SRD 5.1 itself.",
+      "id": "spells",
+      "label": "Spells",
+      "feeds": ["spells"],
+      "filters": [
+        { "id": "level", "label": "Level", "type": "number" },
+        { "id": "school", "label": "School", "type": "text" },
+        { "id": "classes", "label": "Class", "type": "tags", "startFrom": { "field": "class" } }
+      ],
+      "units": { "distance": { "label": "ft", "perCell": 5 } },
+      "asset": "catalogs/spells.json"
+    },
+    {
+      "$comment": "Class and subclass features. One pick fills the feature row and, where the SRD states a plain count, the class resource that tracks it. Generated by scripts/build-5e-srd-catalogs.mjs. Do not edit by hand. Source: Open5e srd-2014 data, https://github.com/open5e/open5e-api, data/v2/wizards-of-the-coast/srd-2014, commit 0e594c370b4daa9c8d8690979a58eab615afd6d5, licensed CC-BY-4.0 like SRD 5.1 itself.",
+      "id": "features",
+      "label": "Class features",
+      "feeds": ["features", "counters"],
+      "filters": [
+        { "id": "class", "label": "Class", "type": "text", "startFrom": { "field": "class" } },
+        { "id": "subclass", "label": "Subclass", "type": "text" },
+        { "id": "level", "label": "Level", "type": "number" }
+      ],
+      "units": { "distance": { "label": "ft", "perCell": 5 } },
+      "asset": "catalogs/features.json"
+    },
+    {
+      "$comment": "The SRD weapon table as attack rows. Short enough to ship inline. Generated by scripts/build-5e-srd-catalogs.mjs. Do not edit by hand. Source: Open5e srd-2014 data, https://github.com/open5e/open5e-api, data/v2/wizards-of-the-coast/srd-2014, commit 0e594c370b4daa9c8d8690979a58eab615afd6d5, licensed CC-BY-4.0 like SRD 5.1 itself.",
+      "id": "weapons",
+      "label": "Weapons",
+      "feeds": ["attacks"],
+      "filters": [
+        { "id": "category", "label": "Category", "type": "text" },
+        { "id": "properties", "label": "Properties", "type": "tags" }
+      ],
+      "units": { "distance": { "label": "ft", "perCell": 5 } },
+      "entries": [
+        {
+          "id": "battleaxe",
+          "label": "Battleaxe",
+          "summary": "Martial melee weapon. Properties: Versatile. Versatile: 1d10 in two hands.",
+          "filters": { "category": "Martial melee", "properties": ["Versatile"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Battleaxe",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d8",
+                "damage_type": "slashing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 5,
+            "amount": { "dice": "1d8" },
+            "damageType": "slashing",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "blowgun",
+          "label": "Blowgun",
+          "summary": "Martial ranged weapon. Properties: Ammunition, Loading. Range 25/100 feet.",
+          "filters": { "category": "Martial ranged", "properties": ["Ammunition", "Loading"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Blowgun",
+                "ability": "dex",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1",
+                "damage_type": "piercing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 25,
+            "amount": { "flat": 1 },
+            "damageType": "piercing",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "club",
+          "label": "Club",
+          "summary": "Simple melee weapon. Properties: Light.",
+          "filters": { "category": "Simple melee", "properties": ["Light"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Club",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d4",
+                "damage_type": "bludgeoning"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 5,
+            "amount": { "dice": "1d4" },
+            "damageType": "bludgeoning",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "crossbow-hand",
+          "label": "Crossbow, hand",
+          "summary": "Martial ranged weapon. Properties: Ammunition, Light, Loading. Range 30/120 feet.",
+          "filters": { "category": "Martial ranged", "properties": ["Ammunition", "Light", "Loading"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Crossbow, hand",
+                "ability": "dex",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d6",
+                "damage_type": "piercing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 30,
+            "amount": { "dice": "1d6" },
+            "damageType": "piercing",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "crossbow-heavy",
+          "label": "Crossbow, heavy",
+          "summary": "Martial ranged weapon. Properties: Ammunition, Heavy, Loading, Two-Handed. Range 100/400 feet.",
+          "filters": { "category": "Martial ranged", "properties": ["Ammunition", "Heavy", "Loading", "Two-Handed"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Crossbow, heavy",
+                "ability": "dex",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d10",
+                "damage_type": "piercing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 100,
+            "amount": { "dice": "1d10" },
+            "damageType": "piercing",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "crossbow-light",
+          "label": "Crossbow, light",
+          "summary": "Simple ranged weapon. Properties: Ammunition, Loading, Two-Handed. Range 80/320 feet.",
+          "filters": { "category": "Simple ranged", "properties": ["Ammunition", "Loading", "Two-Handed"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Crossbow, light",
+                "ability": "dex",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d8",
+                "damage_type": "piercing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 80,
+            "amount": { "dice": "1d8" },
+            "damageType": "piercing",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "dagger",
+          "label": "Dagger",
+          "summary": "Simple melee weapon. Properties: Finesse, Light, Thrown. Finesse: may use Dexterity. Range 20/60 feet.",
+          "filters": { "category": "Simple melee", "properties": ["Finesse", "Light", "Thrown"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Dagger",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d4",
+                "damage_type": "piercing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 20,
+            "amount": { "dice": "1d4" },
+            "damageType": "piercing",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "dart",
+          "label": "Dart",
+          "summary": "Simple ranged weapon. Properties: Finesse, Thrown. Finesse: may use Dexterity. Range 20/60 feet.",
+          "filters": { "category": "Simple ranged", "properties": ["Finesse", "Thrown"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Dart",
+                "ability": "dex",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d4",
+                "damage_type": "piercing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 20,
+            "amount": { "dice": "1d4" },
+            "damageType": "piercing",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "flail",
+          "label": "Flail",
+          "summary": "Martial melee weapon.",
+          "filters": { "category": "Martial melee", "properties": [] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Flail",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d8",
+                "damage_type": "bludgeoning"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 5,
+            "amount": { "dice": "1d8" },
+            "damageType": "bludgeoning",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "glaive",
+          "label": "Glaive",
+          "summary": "Martial melee weapon. Properties: Heavy, Reach, Two-Handed.",
+          "filters": { "category": "Martial melee", "properties": ["Heavy", "Reach", "Two-Handed"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Glaive",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d10",
+                "damage_type": "slashing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 10,
+            "amount": { "dice": "1d10" },
+            "damageType": "slashing",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "greataxe",
+          "label": "Greataxe",
+          "summary": "Martial melee weapon. Properties: Heavy, Two-Handed.",
+          "filters": { "category": "Martial melee", "properties": ["Heavy", "Two-Handed"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Greataxe",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d12",
+                "damage_type": "slashing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 5,
+            "amount": { "dice": "1d12" },
+            "damageType": "slashing",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "greatclub",
+          "label": "Greatclub",
+          "summary": "Simple melee weapon. Properties: Two-Handed.",
+          "filters": { "category": "Simple melee", "properties": ["Two-Handed"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Greatclub",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d8",
+                "damage_type": "bludgeoning"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 5,
+            "amount": { "dice": "1d8" },
+            "damageType": "bludgeoning",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "greatsword",
+          "label": "Greatsword",
+          "summary": "Martial melee weapon. Properties: Heavy, Two-Handed.",
+          "filters": { "category": "Martial melee", "properties": ["Heavy", "Two-Handed"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Greatsword",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "2d6",
+                "damage_type": "slashing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 5,
+            "amount": { "dice": "2d6" },
+            "damageType": "slashing",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "halberd",
+          "label": "Halberd",
+          "summary": "Martial melee weapon. Properties: Heavy, Reach, Two-Handed.",
+          "filters": { "category": "Martial melee", "properties": ["Heavy", "Reach", "Two-Handed"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Halberd",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d10",
+                "damage_type": "slashing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 10,
+            "amount": { "dice": "1d10" },
+            "damageType": "slashing",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "handaxe",
+          "label": "Handaxe",
+          "summary": "Simple melee weapon. Properties: Light, Thrown. Range 20/60 feet.",
+          "filters": { "category": "Simple melee", "properties": ["Light", "Thrown"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Handaxe",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d6",
+                "damage_type": "slashing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 20,
+            "amount": { "dice": "1d6" },
+            "damageType": "slashing",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "javelin",
+          "label": "Javelin",
+          "summary": "Simple melee weapon. Properties: Thrown. Range 30/120 feet.",
+          "filters": { "category": "Simple melee", "properties": ["Thrown"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Javelin",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d6",
+                "damage_type": "piercing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 30,
+            "amount": { "dice": "1d6" },
+            "damageType": "piercing",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "lance",
+          "label": "Lance",
+          "summary": "Martial melee weapon. Properties: Reach, Special.",
+          "filters": { "category": "Martial melee", "properties": ["Reach", "Special"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Lance",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d12",
+                "damage_type": "piercing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 10,
+            "amount": { "dice": "1d12" },
+            "damageType": "piercing",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "light-hammer",
+          "label": "Light hammer",
+          "summary": "Simple melee weapon. Properties: Light, Thrown. Range 20/60 feet.",
+          "filters": { "category": "Simple melee", "properties": ["Light", "Thrown"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Light hammer",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d4",
+                "damage_type": "bludgeoning"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 20,
+            "amount": { "dice": "1d4" },
+            "damageType": "bludgeoning",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "longbow",
+          "label": "Longbow",
+          "summary": "Martial ranged weapon. Properties: Ammunition, Heavy, Two-Handed. Range 150/600 feet.",
+          "filters": { "category": "Martial ranged", "properties": ["Ammunition", "Heavy", "Two-Handed"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Longbow",
+                "ability": "dex",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d8",
+                "damage_type": "piercing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 150,
+            "amount": { "dice": "1d8" },
+            "damageType": "piercing",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "longsword",
+          "label": "Longsword",
+          "summary": "Martial melee weapon. Properties: Versatile. Versatile: 1d10 in two hands.",
+          "filters": { "category": "Martial melee", "properties": ["Versatile"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Longsword",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d8",
+                "damage_type": "slashing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 5,
+            "amount": { "dice": "1d8" },
+            "damageType": "slashing",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "mace",
+          "label": "Mace",
+          "summary": "Simple melee weapon.",
+          "filters": { "category": "Simple melee", "properties": [] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Mace",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d6",
+                "damage_type": "bludgeoning"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 5,
+            "amount": { "dice": "1d6" },
+            "damageType": "bludgeoning",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "maul",
+          "label": "Maul",
+          "summary": "Martial melee weapon. Properties: Heavy, Two-Handed.",
+          "filters": { "category": "Martial melee", "properties": ["Heavy", "Two-Handed"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Maul",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "2d6",
+                "damage_type": "bludgeoning"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 5,
+            "amount": { "dice": "2d6" },
+            "damageType": "bludgeoning",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "morningstar",
+          "label": "Morningstar",
+          "summary": "Martial melee weapon.",
+          "filters": { "category": "Martial melee", "properties": [] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Morningstar",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d8",
+                "damage_type": "piercing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 5,
+            "amount": { "dice": "1d8" },
+            "damageType": "piercing",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "pike",
+          "label": "Pike",
+          "summary": "Martial melee weapon. Properties: Heavy, Reach, Two-Handed.",
+          "filters": { "category": "Martial melee", "properties": ["Heavy", "Reach", "Two-Handed"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Pike",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d10",
+                "damage_type": "piercing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 10,
+            "amount": { "dice": "1d10" },
+            "damageType": "piercing",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "quarterstaff",
+          "label": "Quarterstaff",
+          "summary": "Simple melee weapon. Properties: Versatile. Versatile: 1d8 in two hands.",
+          "filters": { "category": "Simple melee", "properties": ["Versatile"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Quarterstaff",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d6",
+                "damage_type": "bludgeoning"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 5,
+            "amount": { "dice": "1d6" },
+            "damageType": "bludgeoning",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "rapier",
+          "label": "Rapier",
+          "summary": "Martial melee weapon. Properties: Finesse. Finesse: may use Dexterity.",
+          "filters": { "category": "Martial melee", "properties": ["Finesse"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Rapier",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d8",
+                "damage_type": "piercing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 5,
+            "amount": { "dice": "1d8" },
+            "damageType": "piercing",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "scimitar",
+          "label": "Scimitar",
+          "summary": "Martial melee weapon. Properties: Finesse, Light. Finesse: may use Dexterity.",
+          "filters": { "category": "Martial melee", "properties": ["Finesse", "Light"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Scimitar",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d6",
+                "damage_type": "slashing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 5,
+            "amount": { "dice": "1d6" },
+            "damageType": "slashing",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "shortbow",
+          "label": "Shortbow",
+          "summary": "Simple ranged weapon. Properties: Ammunition, Two-Handed. Range 80/320 feet.",
+          "filters": { "category": "Simple ranged", "properties": ["Ammunition", "Two-Handed"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Shortbow",
+                "ability": "dex",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d6",
+                "damage_type": "piercing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 80,
+            "amount": { "dice": "1d6" },
+            "damageType": "piercing",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "shortsword",
+          "label": "Shortsword",
+          "summary": "Martial melee weapon. Properties: Finesse, Light. Finesse: may use Dexterity.",
+          "filters": { "category": "Martial melee", "properties": ["Finesse", "Light"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Shortsword",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d6",
+                "damage_type": "slashing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 5,
+            "amount": { "dice": "1d6" },
+            "damageType": "slashing",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "sickle",
+          "label": "Sickle",
+          "summary": "Simple melee weapon. Properties: Light.",
+          "filters": { "category": "Simple melee", "properties": ["Light"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Sickle",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d4",
+                "damage_type": "slashing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 5,
+            "amount": { "dice": "1d4" },
+            "damageType": "slashing",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "sling",
+          "label": "Sling",
+          "summary": "Simple ranged weapon. Properties: Ammunition. Range 30/120 feet.",
+          "filters": { "category": "Simple ranged", "properties": ["Ammunition"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Sling",
+                "ability": "dex",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d4",
+                "damage_type": "bludgeoning"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 30,
+            "amount": { "dice": "1d4" },
+            "damageType": "bludgeoning",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "spear",
+          "label": "Spear",
+          "summary": "Simple melee weapon. Properties: Thrown, Versatile. Versatile: 1d8 in two hands. Range 20/60 feet.",
+          "filters": { "category": "Simple melee", "properties": ["Thrown", "Versatile"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Spear",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d6",
+                "damage_type": "piercing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 20,
+            "amount": { "dice": "1d6" },
+            "damageType": "piercing",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "trident",
+          "label": "Trident",
+          "summary": "Martial melee weapon. Properties: Thrown, Versatile. Versatile: 1d8 in two hands. Range 20/60 feet.",
+          "filters": { "category": "Martial melee", "properties": ["Thrown", "Versatile"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Trident",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d6",
+                "damage_type": "piercing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 20,
+            "amount": { "dice": "1d6" },
+            "damageType": "piercing",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "war-pick",
+          "label": "War Pick",
+          "summary": "Martial melee weapon.",
+          "filters": { "category": "Martial melee", "properties": [] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "War Pick",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d8",
+                "damage_type": "piercing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 5,
+            "amount": { "dice": "1d8" },
+            "damageType": "piercing",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "warhammer",
+          "label": "Warhammer",
+          "summary": "Martial melee weapon. Properties: Versatile. Versatile: 1d10 in two hands.",
+          "filters": { "category": "Martial melee", "properties": ["Versatile"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Warhammer",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d8",
+                "damage_type": "bludgeoning"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 5,
+            "amount": { "dice": "1d8" },
+            "damageType": "bludgeoning",
+            "attackRoll": true
+          }
+        },
+        {
+          "id": "whip",
+          "label": "Whip",
+          "summary": "Martial melee weapon. Properties: Finesse, Reach. Finesse: may use Dexterity.",
+          "filters": { "category": "Martial melee", "properties": ["Finesse", "Reach"] },
+          "rows": [
+            {
+              "list": "attacks",
+              "values": {
+                "name": "Whip",
+                "ability": "str",
+                "proficient": true,
+                "bonus": 0,
+                "damage": "1d4",
+                "damage_type": "slashing"
+              }
+            }
+          ],
+          "mechanics": {
+            "kind": "attack",
+            "range": 10,
+            "amount": { "dice": "1d4" },
+            "damageType": "slashing",
+            "attackRoll": true
+          }
+        }
+      ]
+    }
+  ]
+}

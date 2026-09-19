@@ -79,7 +79,23 @@ Rebuild Engine-derived feature packages with:
 node scripts/build-feature-packages.mjs
 ```
 
-Both builders accept package IDs for a focused rebuild. When a build changes an artifact, commit the package payload, manifest, ZIP, catalog entry, and captured Engine sources together. Do not hand-edit generated bundles, checksums, byte sizes, or ZIP contents.
+Rebuild `ruleset` packages, which ship a data asset instead of an Agent, with:
+
+```bash
+node scripts/build-ruleset-packages.mjs
+```
+
+A ruleset may also ship **catalogs**: ready-made entries the Engine's sheet editor offers in a picker, declared in `ruleset.json` and shipped either inline or as `catalogs/<id>.json` assets beside it. They are ordinary declared assets, so the ruleset builder hash-pins and zips them like any other payload, and `validate-catalog.mjs` checks that each one parses, names its own catalog, stays inside the Engine's size and entry limits, and only writes rows the sheet's own lists could hold. Declaring a catalog asset requires Capability API 1.21.
+
+The `ruleset-5e-2014` catalogs are generated from Open5e's `srd-2014` fixtures, which are not committed here. Regenerate them with a local copy of that data:
+
+```bash
+node scripts/build-5e-srd-catalogs.mjs --source <fixtures dir>
+```
+
+It is deterministic and rewrites `packages/ruleset-5e-2014/ruleset.json` in place, so a rebuild that changes nothing leaves the tree byte-identical. Run the ruleset builder afterwards to re-derive the manifest hashes. Do not hand-edit the generated catalog files.
+
+The first two builders accept package IDs for a focused rebuild; the ruleset builder always rebuilds every ruleset package. When a build changes an artifact, commit the package payload, manifest, ZIP, catalog entry, and captured Engine sources together. Do not hand-edit generated bundles, checksums, byte sizes, or ZIP contents.
 
 The catalog `generatedAt` field is preserved across rebuilds rather than stamped with the current time. This keeps a no-op rebuild byte-identical and stops the timestamp from being a guaranteed merge conflict between concurrent package PRs. A rebuild that touches nothing substantive should leave `catalog/**/catalog.json` unchanged — if `git status` shows only a `generatedAt` diff, discard it. To intentionally refresh the timestamp (for example when promoting a release), run the builder with `MARINARA_CATALOG_STAMP_GENERATED_AT=1`.
 
@@ -194,7 +210,7 @@ Also manually install or update affected packages through **Agents → Download 
 A new package must include:
 
 1. A unique directory and `manifest.json` under `packages/`.
-2. At least one Agent definition matching the package ID.
+2. At least one Agent definition matching the package ID. A `ruleset` package is the exception: it ships a validated `ruleset.json` data asset instead of an Agent definition, declares `entrypoints: {}`, no permissions, and no restart, and is built by `node scripts/build-ruleset-packages.mjs`.
 3. Correct category, modes, entrypoints, permissions, compatibility, and restart requirement.
 4. Reproducible package payloads and a generated ZIP artifact.
 5. A catalog entry with valid hashes, sizes, and documentation URL.

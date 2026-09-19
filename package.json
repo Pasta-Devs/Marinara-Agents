@@ -21,6 +21,8 @@
     "zod": "3.25.76"
   },
   "scripts": {
+    "build:5e-srd-catalogs": "node scripts/build-5e-srd-catalogs.mjs",
+    "build:rulesets": "node scripts/build-ruleset-packages.mjs",
     "check": "npm run format:check && npm run lint",
     "format": "prettier --write \"packages/**/src/**/*.{js,mjs,ts,tsx}\" \"scripts/**/*.{js,mjs}\" \"tests/**/*.{js,mjs,ts,tsx}\" eslint.config.mjs",
     "format:check": "prettier --check \"packages/**/src/**/*.{js,mjs,ts,tsx}\" \"scripts/**/*.{js,mjs}\" \"tests/**/*.{js,mjs,ts,tsx}\" eslint.config.mjs",
