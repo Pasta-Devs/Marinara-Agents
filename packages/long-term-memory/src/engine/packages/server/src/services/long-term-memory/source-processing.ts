@@ -73,8 +73,8 @@ function cancelled(error: unknown, signal?: AbortSignal) {
   return signal?.aborted || (error instanceof Error && error.name === "AbortError");
 }
 function canMarkCurrent(prepared: PreparedSource) {
-  if (prepared.outcome.state === "success") return true;
   if (prepared.diagnostics.some((item) => item.severity === "error")) return false;
+  if (prepared.outcome.state === "success") return true;
   if (prepared.outcome.state === "no_suggestions_created") return prepared.outcome.droppedUnits === 0;
   if (prepared.outcome.state === "partial_success") {
     // Deterministic compilation may drop malformed source blocks without invalidating the run. A provider batch
@@ -142,10 +142,20 @@ export async function prepareLongTermMemorySource(options: PrepareOptions): Prom
   const scope = options.scope ?? options.sourceNote.destinationScope ?? options.sourceNote.scope;
   const extractionMode = options.extractionMode ?? options.mode ?? options.sourceNote.modes[0] ?? "roleplay";
   if (options.directGameMode && extractionMode === "game") {
-    const sourceHash = sourceHashForEvidenceUnitExtraction(options.sourceNote);
-    const sourceText = options.directSourceText ?? options.sourceNote.sections.source?.text ?? "";
+    const requestedScope = options.scope ?? options.sourceNote.destinationScope ?? options.sourceNote.scope;
+    const requestedModes = options.modes ?? options.sourceNote.modes;
+    const sourceFingerprintBeforeBinding = extractionFingerprintForLtmSourceNote(options.sourceNote, {
+      extractionMode: "game",
+    });
+    const sourceNote = {
+      ...options.sourceNote,
+      destinationScope: requestedScope,
+      modes: requestedModes,
+    };
+    const sourceHash = sourceHashForEvidenceUnitExtraction(sourceNote);
+    const sourceText = options.directSourceText ?? sourceNote.sections.source?.text ?? "";
     const existingNotes = (await new LongTermMemoryStorage(options.root).listNotes()).filter(
-      (note) => !isLtmSourceLikeNote(note) && canUpdateLtmScopedTarget(note.scope, scope),
+      (note) => !isLtmSourceLikeNote(note) && canUpdateLtmScopedTarget(note.scope, requestedScope),
     );
     const response = {
       summary: "Directly ingested Game Mode summary.",
@@ -154,10 +164,10 @@ export async function prepareLongTermMemorySource(options: PrepareOptions): Prom
     const compiled = compileEvidenceUnitExtraction({
       unitResponse: response,
       sourceText,
-      sourceNote: options.sourceNote,
+      sourceNote,
       existingNotes,
-      scope,
-      modes: options.modes ?? options.sourceNote.modes,
+      scope: requestedScope,
+      modes: requestedModes,
       mode: "game",
       sourceHash,
       skipStructuredBackfill: true,
@@ -165,10 +175,8 @@ export async function prepareLongTermMemorySource(options: PrepareOptions): Prom
     return {
       operationId: options.operationId,
       chatId: options.chatId,
-      sourceNote: options.sourceNote,
-      sourceFingerprintBeforeBinding: extractionFingerprintForLtmSourceNote(options.sourceNote, {
-        extractionMode: "game",
-      }),
+      sourceNote,
+      sourceFingerprintBeforeBinding,
       extractionMode: "game",
       response: compiled.compiledResponse,
       diagnostics: compiled.diagnostics,
