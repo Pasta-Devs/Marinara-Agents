@@ -1494,7 +1494,25 @@ for (const [edit, message] of [
   ],
   [
     (block) => {
+      block.signaturePoints = 2;
       block.actions[0].signature = { cost: 1 };
+    },
+    /which is bought with points, so a sequence cannot name it/u,
+  ],
+  [(block) => (block.actions[2].sequence[0].times = 0), /repeats "[a-z_]+" 0 times, not 1 to 10/u],
+  [(block) => (block.actions[2].sequence[0].times = 2.5), /repeats "[a-z_]+" 2\.5 times, not 1 to 10/u],
+  [(block) => (block.actions[2].sequence[0].times = 11), /repeats "[a-z_]+" 11 times, not 1 to 10/u],
+  [
+    (block) => {
+      // Its own action, because one a sequence names may not be bought with points at all.
+      block.actions.push({
+        id: "lash",
+        name: "Lash",
+        budget: "action",
+        toHit: 4,
+        damage: { dice: "1d6" },
+        signature: { cost: 1 },
+      });
     },
     /buys an action with points but declares no signaturePoints/u,
   ],
@@ -1519,7 +1537,14 @@ assert.doesNotThrow(() =>
   assertRulesetCreatures(
     creatureManifest,
     bestiaryDocument((block) => {
-      block.actions[0].signature = { cost: 1 };
+      block.actions.push({
+        id: "lash",
+        name: "Lash",
+        budget: "action",
+        toHit: 4,
+        damage: { dice: "1d6" },
+        signature: { cost: 1 },
+      });
       block.signaturePoints = 3;
     }),
   ),

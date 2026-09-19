@@ -960,6 +960,16 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
           if (!named) throw new Error(`${at} names unknown action ${JSON.stringify(step?.action)}`);
           if (named.id === action.id) throw new Error(`${at} names itself`);
           if (named.sequence) throw new Error(`${at} names "${step.action}", and a sequence cannot name another`);
+          // Bought with points while somebody else is acting, so a sequence, which is paid for with a
+          // budget on the creature's own turn, cannot hold it. The Engine refuses the same.
+          if (named.signature) {
+            throw new Error(`${at} names "${step.action}", which is bought with points, so a sequence cannot name it`);
+          }
+          // `times` may be left out (the Engine reads that as once). Written, it is a whole number
+          // from 1 to 10, which is the Engine's own bound and no stricter.
+          if (step.times !== undefined && (!Number.isInteger(step.times) || step.times < 1 || step.times > 10)) {
+            throw new Error(`${at} repeats "${step.action}" ${JSON.stringify(step.times)} times, not 1 to 10`);
+          }
         }
       }
     }
