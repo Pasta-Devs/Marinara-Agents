@@ -112,9 +112,9 @@ attack, defense, speed and level, and all of the damage arithmetic.
 
 **The battle bridge is not a 5e combat system**, and it is no longer the usual path. A game with
 the combat director on fights by the `combat` block below instead, with real attack rolls and saves.
-This block is what a game without it still uses, and there attack rolls, saving throws,
-concentration and what a higher slot would add are recorded on the catalog entries and applied by
-nobody. A fight never uses both blocks.
+The battle bridge is what a game with the combat director OFF still uses, and on that path attack
+rolls, saving throws, concentration and what a higher slot would add are recorded on the catalog
+entries and applied by nobody. A fight never uses both blocks.
 
 **Only catalog rows become skills.** A row you typed by hand has no numbers behind it, so it brings
 nothing into the fight. Utility entries and reactions (Shield) stay out too, because Marinara's
