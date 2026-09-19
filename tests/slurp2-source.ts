@@ -95,6 +95,7 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
     "packages/client/src/slp/base/state/slp-state-types.ts",
     "packages/client/src/slp/base/state/slp-page-cursor.ts",
     "packages/client/src/slp/base/state/slp-host-connections.ts",
+    "packages/client/src/slp/features/ads/slp-ads-contract.ts",
     "packages/client/src/slp/features/ads/slp-ads-hooks.ts",
     "packages/client/src/slp/features/settings/slp-settings-contract.ts",
     "packages/client/src/slp/features/settings/slp-settings-hooks.ts",

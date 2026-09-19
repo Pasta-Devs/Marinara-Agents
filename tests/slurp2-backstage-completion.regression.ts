@@ -35,7 +35,7 @@ assert.doesNotMatch(
   /md:grid-cols-\[12rem_minmax\(0,1fr\)\]/u,
   "Backstage content must not render a second desktop destination rail",
 );
-assert.match(settings, /export function SlurpSettingsSidebar/u, "the shell-owned desktop rail must remain available");
+assert.match(settings, /export function SlpBackstageSidebar/u, "the shell-owned desktop rail must remain available");
 assert.match(
   overview,
   /avatars=\{autoPostingCreators\.slice\(0, 4\)\}[\s\S]*avatarTotal=\{autoPostingCreators\.length\}/u,
