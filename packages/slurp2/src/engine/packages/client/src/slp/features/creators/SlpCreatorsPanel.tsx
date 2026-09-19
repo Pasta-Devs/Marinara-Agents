@@ -65,9 +65,9 @@ export function SlpCreatorsPanel(page: SlpBackstagePageProps) {
     creatorQuery: query,
     setCreatorQuery: setQuery,
     creatorFilter: filter,
-    setSlpCreatorFilter: setFilter,
+    setCreatorFilter: setFilter,
     creatorTab: tab,
-    setSlpCreatorTab: setTab,
+    setCreatorTab: setTab,
     // The list is the overview; one Creator at a time opens under its own row.
     expandedCreatorId: expandedId,
     setExpandedCreatorId: setExpandedId,

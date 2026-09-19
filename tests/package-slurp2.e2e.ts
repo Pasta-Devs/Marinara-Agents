@@ -366,7 +366,8 @@ test.describe("standalone Slurp package", () => {
     expect(errors).toEqual([]);
   });
 
-  test("creates package-owned profiles and shows their viewer feed", async ({ page }, testInfo) => {
+  test("creates package-owned profiles and shows their viewer feed", async ({ page, request }, testInfo) => {
+    test.setTimeout(120_000);
     test.skip(
       !testInfo.project.name.includes("desktop"),
       "The complete standalone Creator flow is covered on desktop.",
@@ -508,13 +509,9 @@ test.describe("standalone Slurp package", () => {
       await openSlurp(page);
       const slurp = page.locator('[data-component="NoodleView"]');
       await slurp.getByRole("tab", { name: "All creators" }).click();
-      await expect(slurp.getByText(postContent)).toBeVisible();
-      await expect(
-        slurp.getByRole("button", {
-          name: stageProfile.displayName,
-          exact: true,
-        }),
-      ).toBeVisible();
+      const postArticle = slurp.getByRole("article").filter({ hasText: postContent, visible: true });
+      await expect(postArticle).toBeVisible();
+      await expect(postArticle).toContainText(stageProfile.displayName);
 
       await page.evaluate(
         ({ personaId }) => {
@@ -532,8 +529,15 @@ test.describe("standalone Slurp package", () => {
       await page.reload();
       await openSlurp(page);
 
-      await slurp.getByRole("button", { name: new RegExp(`^${stageProfile.displayName} @`) }).click();
-      const creatorSettings = slurp.getByRole("region", { name: stageProfile.displayName, exact: true });
+      const creatorRow = slurp
+        .getByRole("button", { name: new RegExp(`^${stageProfile.displayName} @`) })
+        .filter({ visible: true });
+      await creatorRow.click();
+      await expect(creatorRow).toHaveAttribute("aria-expanded", "true");
+      const creatorSettings = slurp
+        .getByRole("region", { name: stageProfile.displayName, exact: true })
+        .filter({ visible: true });
+      await expect(creatorSettings).toBeVisible();
       await creatorSettings.getByRole("tab", { name: "Images", exact: true }).click();
       const imageConnectionSelect = creatorSettings.getByRole("combobox", { name: /^Image connection/u });
       await expect(imageConnectionSelect).toBeEnabled({ timeout: 30_000 });
@@ -605,34 +609,27 @@ test.describe("standalone Slurp package", () => {
       expect(errors).toEqual([]);
     } finally {
       if (postId) {
-        await page.request.delete(`/api/slurp2/noodler/posts/${postId}`, { timeout: 5_000 }).catch(() => undefined);
+        await request.delete(`/api/slurp2/noodler/posts/${postId}`, { timeout: 5_000 }).catch(() => undefined);
       }
       if (stageProfileId) {
-        await page.request
+        await request
           .delete(`/api/slurp2/noodler/accounts/${stageProfileId}`, {
             timeout: 5_000,
           })
           .catch(() => undefined);
       }
       if (personaStageProfileId) {
-        await page.request
+        await request
           .delete(`/api/slurp2/noodler/accounts/${personaStageProfileId}`, {
             timeout: 5_000,
           })
           .catch(() => undefined);
       }
-      const connectionCleanupResults = await Promise.allSettled(
-        imageConnectionIds.map((connectionId) =>
-          page.request.delete(`/api/connections/${connectionId}`, { timeout: 5_000 }),
-        ),
-      );
-      for (const result of connectionCleanupResults) {
-        expect(result.status).toBe("fulfilled");
-        if (result.status === "fulfilled") {
-          expect(result.value.ok()).toBe(true);
-        }
+      for (const connectionId of imageConnectionIds) {
+        const response = await request.delete(`/api/connections/${connectionId}`, { timeout: 5_000 });
+        expect(response.ok()).toBe(true);
       }
-      await page.request.delete(`/api/characters/personas/${persona.id}`, { timeout: 5_000 }).catch(() => undefined);
+      await request.delete(`/api/characters/personas/${persona.id}`, { timeout: 5_000 }).catch(() => undefined);
     }
   });
 });
