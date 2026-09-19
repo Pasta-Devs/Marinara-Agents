@@ -1,5 +1,9 @@
 # Calls release notes
 
+## 1.0.17 — 2026-09-19
+
+- Keep calls responsive when Safari blocks voice playback: wait for a new touch or key press, and let stopping a call cancel pending playback.
+
 ## 1.0.16 — 2026-09-13 [highlight]
 
 - SwarmUI video connections now generate character call clips using their saved workflow, resolution, frame rate, and LoRAs. Backup SwarmUI connections keep their own workflow settings.

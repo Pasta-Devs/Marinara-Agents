@@ -67,10 +67,61 @@ function playbackAbortError(): DOMException {
   return new DOMException("TTS playback aborted", "AbortError");
 }
 
-function shouldWaitForPlaybackReturn(error: unknown): boolean {
-  if (typeof document !== "undefined" && document.visibilityState === "hidden") return true;
-  if (!(error instanceof Error)) return false;
-  return error.name === "NotAllowedError";
+// #5889: Safari rejects play() with NotAllowedError when there is no live
+// user activation - autoplay firing after generation, and even manual play
+// once the awaited synthesis fetch has left the click's synchronous window.
+// The old loop treated that as "wait until the tab is visible and focused",
+// which it already was, so it retried with zero backoff forever: a promise
+// and DOMException per iteration until the tab froze and WebKit killed it.
+// No retry can succeed without a NEW gesture, so a blocked visible tab now
+// waits for one - the retried play() then lands inside that gesture's
+// transient activation and is allowed.
+const MAX_PLAY_ATTEMPTS = 20;
+const PLAY_RETRY_FLOOR_MS = 250;
+
+function sleepWithAbort(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.reject(playbackAbortError());
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(playbackAbortError());
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+const USER_GESTURE_EVENTS = ["pointerdown", "pointerup", "keydown", "touchend"] as const;
+
+function waitForUserGesture(signal?: AbortSignal): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
+  if (signal?.aborted) return Promise.reject(playbackAbortError());
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      for (const name of USER_GESTURE_EVENTS) window.removeEventListener(name, onGesture, true);
+      signal?.removeEventListener("abort", onAbort);
+    };
+    const onGesture = (event: Event) => {
+      if (!event.isTrusted) return;
+      if (event.type === "pointerdown" && (event as PointerEvent).pointerType !== "mouse") return;
+      if (event.type === "pointerup" && (event as PointerEvent).pointerType === "mouse") return;
+      if (event.type === "keydown") {
+        const key = event as KeyboardEvent;
+        if (key.key === "Escape" || key.ctrlKey || key.metaKey || key.altKey) return;
+      }
+      cleanup();
+      resolve();
+    };
+    const onAbort = () => {
+      cleanup();
+      reject(playbackAbortError());
+    };
+    for (const name of USER_GESTURE_EVENTS) window.addEventListener(name, onGesture, true);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 function waitForPlaybackReturn(signal?: AbortSignal): Promise<void> {
@@ -104,7 +155,13 @@ function waitForPlaybackReturn(signal?: AbortSignal): Promise<void> {
   });
 }
 
-async function playWhenAvailable(audio: HTMLAudioElement, signal?: AbortSignal): Promise<void> {
+/** Exported for the regression lane, which drives it with stubbed globals. */
+export async function playWhenAvailable(
+  audio: Pick<HTMLAudioElement, "play">,
+  signal?: AbortSignal,
+  onBlocked?: () => void,
+): Promise<void> {
+  let attempts = 0;
   let waitBeforeRetry = typeof document !== "undefined" && document.visibilityState === "hidden";
 
   while (true) {
@@ -112,14 +169,34 @@ async function playWhenAvailable(audio: HTMLAudioElement, signal?: AbortSignal):
     if (waitBeforeRetry) {
       await waitForPlaybackReturn(signal);
       waitBeforeRetry = false;
+      // The return gate resolves instantly for a visible, focused tab, so a
+      // floor between attempts keeps any residual misclassification from
+      // ever spinning hot again.
+      await sleepWithAbort(PLAY_RETRY_FLOOR_MS, signal);
     }
 
     try {
       await audio.play();
       return;
     } catch (err) {
-      if (!shouldWaitForPlaybackReturn(err)) throw err;
+      attempts += 1;
+      if (attempts >= MAX_PLAY_ATTEMPTS) {
+        throw err instanceof Error ? err : new Error("Browser blocked audio playback");
+      }
+      // Only the autoplay-policy rejection is retryable - a decode or
+      // not-supported failure does not heal by waiting or foregrounding.
+      if (!(err instanceof Error) || err.name !== "NotAllowedError") throw err;
+      const hiddenNow = typeof document !== "undefined" && document.visibilityState === "hidden";
+      if (!hiddenNow) {
+        // Autoplay policy, not visibility: only a fresh user gesture can
+        // unblock playback, and retrying inside its transient activation is
+        // exactly what makes the retry succeed.
+        onBlocked?.();
+        await waitForUserGesture(signal);
+        continue;
+      }
       waitBeforeRetry = true;
+      continue;
     }
   }
 }
