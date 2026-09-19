@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.0.31 — 2026-09-19
+
+- No visible changes. Split the client app composition and reusable presentation modules.
+
 ## 0.0.30 — 2026-09-19
 
 - No visible changes. Split the client state and hooks into feature modules.

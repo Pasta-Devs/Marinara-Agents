@@ -49,7 +49,7 @@ import { useSlurpSettings } from "../../slp/features/settings/slp-settings-hooks
 import { Avatar, SlurpMediaImg } from "./SlurpShell";
 import { formatTime } from "./SlurpDateTime";
 import { NoodleImageComposer } from "./SlurpImageComposer";
-import { NoodlePollComposer } from "./SlurpPollComposer";
+import { NoodlePollComposer } from "../../slp/modules/poll/SlpPollComposer";
 import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
 import { SlurpLikedBy } from "./SlurpFanCard";
 import { PostImageCropEditor, PostImageFrame } from "./PostImageCropEditor";

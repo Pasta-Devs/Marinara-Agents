@@ -70,10 +70,10 @@ import {
 } from "./SlurpPostCard";
 import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
 import { SlurpLikedBy } from "./SlurpFanCard";
-import { NoodlePollComposer } from "./SlurpPollComposer";
+import { NoodlePollComposer } from "../../slp/modules/poll/SlpPollComposer";
 import { PostImageFrame } from "./PostImageCropEditor";
 import { SlurpCelebrationRing, SlurpSparkleVeil } from "./SlurpSparkleVeil";
-import { SlurpCoin, SlurpCoinBurst } from "./SlurpCoin";
+import { SlurpCoin, SlurpCoinBurst } from "../../slp/modules/coin/SlpCoin";
 
 const SLURP_FEED_MEDIA_RATIO_CLASS = "aspect-[4/3] sm:aspect-[16/10]";
 

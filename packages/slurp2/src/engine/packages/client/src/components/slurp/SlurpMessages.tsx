@@ -45,7 +45,7 @@ import { cn } from "../../lib/utils";
 import { Avatar } from "./SlurpShell";
 import { SlurpEmptyArtwork } from "./SlurpEmptyArtwork";
 import { formatTime } from "./SlurpDateTime";
-import { SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "./SlurpCoin";
+import { SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "../../slp/modules/coin/SlpCoin";
 import { useSlurpConnections } from "../../slp/base/state/slp-host-connections";
 import { useSlurpWallet } from "../../slp/features/economy/slp-economy-hooks";
 import {

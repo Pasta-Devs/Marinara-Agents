@@ -181,7 +181,12 @@ import { SlurpArcTimelineCard, SlurpProjectsPanel } from "./SlurpProjectsPanel";
 import { SlurpFanCard } from "./SlurpFanCard";
 import { LockedSlurpPostCard, SlurpCreatorPostCard } from "./SlurpCreatorPostCard";
 import { SlurpSparkleVeil } from "./SlurpSparkleVeil";
-import { DEFAULT_SLURP_SUBSCRIPTION_PRICE, SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "./SlurpCoin";
+import {
+  DEFAULT_SLURP_SUBSCRIPTION_PRICE,
+  SlurpCoin,
+  SlurpCoinAmount,
+  SlurpCoinBurst,
+} from "../../slp/modules/coin/SlpCoin";
 import { ChatImageLightbox } from "../chat/ChatImageLightbox";
 import { useNearViewportSlurpMediaSrc, useSlurpMediaSrc } from "../../slp/base/media/slp-media-src";
 import { SlurpOnboardingWizard } from "./SlurpOnboardingPanel";
@@ -206,7 +211,8 @@ import { BroadcastPanel, SlurpMessagesView } from "./SlurpMessages";
 import { SlurpSettings, SlurpSettingsSidebar } from "./SlurpSettings";
 import { confirmLeaveSlurpBackstage } from "./SlurpBackstageChrome";
 import { NoodleImageComposer } from "./SlurpImageComposer";
-import { NoodlePollComposer } from "./SlurpPollComposer";
+import { NoodlePollComposer } from "../../slp/modules/poll/SlpPollComposer";
+import { SlpStoryTile } from "../../slp/modules/story/SlpStoryTile";
 import { PostImageCropEditor, PostImageFrame } from "./PostImageCropEditor";
 import { ConversationMediaPickerPanel, type ConversationMediaPickerTabId } from "../chat/ConversationMediaPickerPanel";
 import { HelpTooltip } from "../ui/HelpTooltip";
@@ -5664,48 +5670,16 @@ type SlurpMoment = {
 };
 
 function SlurpMomentShelfTile({ moment, isNew, onOpen }: { moment: SlurpMoment; isNew: boolean; onOpen: () => void }) {
-  const { t: localizeUi } = useUiTranslation();
   const mediaSrc = useSlurpMediaSrc(moment.post.imageUrl, { width: 320 });
-
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="group relative aspect-[3/4] w-[4.75rem] shrink-0 snap-start overflow-hidden rounded-xl bg-[var(--slurp-surface-raised)] text-start shadow-[0_10px_24px_-18px_rgba(0,0,0,0.95)] outline outline-1 -outline-offset-1 outline-white/10 transition-transform active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--noodle-accent)] @min-[1024px]:w-[5.25rem] motion-reduce:transition-none motion-reduce:active:scale-100"
-      aria-label={localizeUi("ui.slurp.moments.open", { name: moment.creator.profile.displayName })}
-    >
-      {mediaSrc ? (
-        <img
-          src={mediaSrc}
-          alt=""
-          decoding="async"
-          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
-        />
-      ) : (
-        <span className="absolute inset-0 flex items-center justify-center bg-[linear-gradient(145deg,color-mix(in_srgb,var(--noodle-accent)_14%,var(--slurp-surface-raised)),var(--slurp-surface))]">
-          <ProfileInitial profile={moment.creator.profile} />
-        </span>
-      )}
-      <span
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-[linear-gradient(to_top,rgba(9,5,12,0.92),rgba(9,5,12,0.26)_58%,transparent)]"
-        aria-hidden="true"
-      />
-      <span
-        className={cn(
-          "absolute inset-x-2 top-2 h-0.5 rounded-full",
-          isNew ? "bg-[var(--noodle-accent)] shadow-[0_0_10px_var(--noodle-accent)]" : "bg-white/45",
-        )}
-        aria-hidden="true"
-      />
-      {moment.post.locked && (
-        <span className="absolute end-1.5 top-3.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/65 text-white backdrop-blur-sm ring-1 ring-inset ring-white/15">
-          <Lock size={11} aria-hidden="true" />
-        </span>
-      )}
-      <span className="absolute inset-x-2 bottom-2 truncate text-xs font-bold text-white drop-shadow-sm">
-        {moment.creator.profile.displayName}
-      </span>
-    </button>
+    <SlpStoryTile
+      creator={moment.creator}
+      post={moment.post}
+      mediaSrc={mediaSrc}
+      fallback={<ProfileInitial profile={moment.creator.profile} />}
+      isNew={isNew}
+      onOpen={onOpen}
+    />
   );
 }
 

@@ -11,8 +11,17 @@ import { fileURLToPath } from "node:url";
  * Unmapped paths under a moved directory are not redirected; add a key for each moved file.
  */
 export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
-  "packages/client/src/components/slurp/SlurpHome.tsx": ["packages/client/src/components/slurp/SlurpHome.tsx"],
+  "packages/client/src/components/slurp/SlurpHome.tsx": [
+    "packages/client/src/components/slurp/SlurpHome.tsx",
+    "packages/client/src/slp/app/SlpApp.tsx",
+    "packages/client/src/slp/app/SlpRouter.tsx",
+    "packages/client/src/slp/modules/story/SlpStoryTile.tsx",
+  ],
   "packages/client/src/components/slurp/SlurpMessages.tsx": ["packages/client/src/components/slurp/SlurpMessages.tsx"],
+  "packages/client/src/components/slurp/SlurpCoin.tsx": ["packages/client/src/slp/modules/coin/SlpCoin.tsx"],
+  "packages/client/src/components/slurp/SlurpPollComposer.tsx": [
+    "packages/client/src/slp/modules/poll/SlpPollComposer.tsx",
+  ],
   "packages/client/src/hooks/use-slurp.ts": [
     "packages/client/src/slp/base/state/slp-query-keys.ts",
     "packages/client/src/slp/base/state/slp-state-types.ts",

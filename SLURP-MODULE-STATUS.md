@@ -20,12 +20,14 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 ## Current state
 
 - Last updated: 2026-09-19
-- Updated by: Slice 7 implementation agent
-- Overall state: Slice 7 ready for review
-- Active slice: 7 (client state and hooks), issue #928, branch `slurp2-slice7-client-state-hooks`
-  from `origin/modular-simping` `26a80fe7`.
-- Pull request: draft PR #929 is open against `modular-simping` and assigned to `Gunterlie`; issue
-  #928 is assigned to `Gunterlie`. Not merged by the implementation agent, by instruction.
+- Updated by: Slice 8 implementation agent
+- Overall state: Slice 8 in progress
+- Active slice: 8 (client app and reusable modules), issue #931, branch
+  `slurp2-slice8-client-app-modules` from `origin/modular-simping`
+  `4776370ab2c7c828e1336bfecfe629808cab4162`.
+- Pull request: draft PR to be opened against `modular-simping` and assigned to `Gunterlie`; issue
+  #931 is assigned to `Gunterlie`. Slice 7 PR #929 is merged into `modular-simping` at
+  `4776370ab2c7c828e1336bfecfe629808cab4162`.
 - Branch commits: `4f407071` records the Slice 7 start/merge gate; `40407635` is the complete
   implementation, regression, documentation, and generated-package commit. A final ledger-only
   handoff commit follows it.
@@ -35,14 +37,39 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
   catalog lanes are present.
 - Staging integration: `origin/modular-simping` is 27 ahead / 0 behind `origin/staging`, so
   `origin/staging` is an ancestor and no merge was required before this slice.
-- Package version: `0.0.29` before this slice; this slice ships `0.0.30` (integration-only;
+- Package version: `0.0.30` before this slice; this slice ships `0.0.31` (integration-only;
   `staging` stays at `0.0.22` until the final `0.1.0` release PR).
 - Node: `/home/dev/.nvm/versions/node/v24.18.0/bin`; `node -v` = `v24.18.0`. Builds used
   `TMPDIR=/home/dev/.cache/slp-tmp`; the resumed validation sandbox used writable `/tmp`.
 - Engine source: `/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish`, branch
-  `welcome-to-the-agentshop`, commit `fdb67d47b`, tracked files clean; 4 ahead / 39 behind Engine
-  `origin/staging` after a fresh fetch. Used unchanged, as in Slices 0-6, so build deltas stay
+  `welcome-to-the-agentshop`, commit `fdb67d47bfb909f013346afdb3d2c23d72d7b399`, tracked files clean;
+  4 ahead / 39 behind Engine `origin/staging` after a fresh fetch. Used unchanged, as in Slice 7, so build deltas stay
   comparable across slices.
+
+- Slice 8 implementation discovery: the first extraction moved coin and poll presentation to
+  `client/src/slp/modules/coin/SlpCoin.tsx` and `client/src/slp/modules/poll/SlpPollComposer.tsx`,
+  moved Story tile presentation to `client/src/slp/modules/story/SlpStoryTile.tsx`, and added
+  `app/SlpApp.tsx` plus `app/SlpRouter.tsx`. The full Home and Messages hosts remain legacy files
+  while their stateful behavior is preserved; no Backstage panel was moved.
+- Slice 8 focused results so far: architecture regression passes; `node scripts/typecheck-packages.mjs
+  slurp2` passes; `slurp2-client-hooks`, `slurp-media-surfaces`, `slurp-inbox-wallet`,
+  `slurp-share-card`, `slurp2-post-guidance`, `slurp-relationship-panel` (baseline route-count
+  mismatch), `slurp-chat-media`, `slurp-messaging-surface`, `slurp2-messaging-fixes`, and
+  `slurp2-prompt-errors` pass. `slurp-stories-shelf` and `slurp-feed-layout` fail with the same
+  source-shape assertions on `origin/modular-simping` and are recorded as pre-existing baseline
+  failures, not Slice 8 regressions.
+- Scope gap: `SlurpHome.tsx` remains the stateful host and `SlurpMessages.tsx` remains the stateful
+  Messages host. `SlpApp` and `SlpRouter` compose the current host, but they are not a complete
+  Home screen split. Creator presentation remains feature-owned because the current card owns media
+  hooks and subscription confirmation. The PR must remain draft until these missing Slice 8
+  deliverables are implemented.
+- Browser proof: `MARINARA_ENGINE_ROOT=/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish npm run
+  test:browser:slurp2` launched the Engine services, but all 14 desktop/mobile cases were blocked
+  by Chromium missing `libnspr4.so`. No browser or lifecycle result is claimed.
+- Implementation commit: `541e4874`; branch pushed to
+  `origin/slurp2-slice8-client-app-modules`. Draft PR #932 remains open against `modular-simping`
+  and assigned to `Gunterlie`; it is not ready for review because the Home and Messages splits are
+  incomplete.
 
 ## Slice ledger
 
@@ -54,8 +81,8 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 |     4 | Server storage                         | merged           | #918 / #919      | 0.0.27          | Merged into `modular-simping` at `7b9ba1f3`                      |
 |     5 | Server services, contracts, workflows  | merged           | #924 / #925      | 0.0.28          | Merged into `modular-simping` at `c945b4a0`                      |
 |     6 | Event and modifier seam                | ready for review | #926 / #927      | 0.0.29          | 0 new regression failures; 4 mutants caught; unit rebuilt        |
-|     7 | Client state and hooks                 | ready for review | #928 / #929      | 0.0.30          | 0 new regression failures; package unit rebuilt                  |
-|     8 | Client app and reusable modules        | not started      | —                | —               | —                                                                |
+ |     7 | Client state and hooks                 | merged           | #928 / #929      | 0.0.30          | Merged into `modular-simping` at `4776370a`; focused gate passes |
+|     8 | Client app and reusable modules        | in progress      | #931 / #932      | 0.0.31       | Partial: app boundary and coin/poll/story modules; Home/Messages split remains |
 |     9 | Backstage                              | not started      | —                | —               | —                                                                |
 |    10 | Final architecture and package proof   | not started      | —                | —               | —                                                                |
 
