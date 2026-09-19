@@ -72,6 +72,12 @@ class QuartermasterElement extends HTMLElement {
       return;
     }
 
+    // Mirrors disconnectedCallback's own cleanup, for when "view" changes on
+    // an element that's still connected (observedAttributes watches it for
+    // exactly this) -- otherwise the toolbar button below overwrites
+    // QM.panel's own DOM while QM.panel still thinks it's mounted here.
+    if (QM.panel.container === this) QM.panel.unmount();
+
     let button = this._button;
     if (!button || !this.contains(button)) {
       button = document.createElement("button");

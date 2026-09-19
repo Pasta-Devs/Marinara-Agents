@@ -1,5 +1,14 @@
 # Quartermaster changelog
 
+## 0.1.18 — 2026-09-19
+- Fixed the Settings avatar-swap toggle showing a stale value from the previous chat after a
+  failed reload.
+- Fixed a failed image delete permanently hiding an item's picture instead of just the delete.
+- Fixed the Build Wardrobe and Generate Image modals letting a stale, still-running generation
+  overwrite what a later session in the same modal was showing.
+- Fixed the tracker panel briefly reappearing over the toolbar button in a rare mount-reuse case.
+- Corrected the README's stated minimum Engine version to 2.4.6, matching the manifest.
+
 ## 0.1.17 — 2026-09-18
 - Raised the minimum required Engine version to 2.4.6, matching what this has actually been
   tested against recently.

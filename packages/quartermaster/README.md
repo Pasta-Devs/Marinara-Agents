@@ -4,7 +4,7 @@ A per-chat RPG character sheet and inventory manager with equip slots around you
 portrait, a full inventory with item locations, saved outfits, and AI-generated images — in a
 draggable floating dock, plus a native Tracker Panel view.
 
-**Requires Marinara Engine 2.4.4+.** Roleplay only (no Game Mode yet), persona only (no party/NPC
+**Requires Marinara Engine 2.4.6+.** Roleplay only (no Game Mode yet), persona only (no party/NPC
 support yet). Actively evolving — not yet an official catalog package.
 
 ## The main feature: an LLM tracker that runs on its own
@@ -199,6 +199,28 @@ overwrite an already-released version's artifact file if you forget to bump `VER
 published catalog until it's ready for testers.
 
 ## Changelog
+
+### 0.1.18
+
+A round of fixes from CodeRabbit's automated review on the initial pull request — verified each
+against the actual code before touching anything, rather than applying suggestions as-is (one
+finding turned out to be a false positive from its own sandbox, and one real architectural gap was
+deliberately deferred rather than fixed; see the PR discussion for both).
+
+- Fixed the Settings "replace persona's real avatar" toggle showing the *previous* chat's value if
+  a reload failed right after switching chats — `setChat` reset every other per-chat setting except
+  this one.
+- Fixed a failed item-image delete permanently hiding that item's picture instead of just the
+  delete — the missing-image cache was marked before the delete request even resolved, so a failed
+  delete left the image suppressed forever with no error shown.
+- Fixed both Build Wardrobe and Generate Image letting a stale, still-in-flight generation from a
+  previous modal session overwrite what a *later* session in the same modal was showing — closing
+  and reopening either modal (or switching items/chats, for Generate Image) mid-generation no
+  longer lets the old result land somewhere it doesn't belong.
+- Fixed the tracker panel's own DOM getting silently overwritten by the toolbar button in the rare
+  case where the host changes an already-mounted element's view without disconnecting it first.
+- Corrected the README's stated minimum Engine version (was still 2.4.4) to match the 2.4.6 already
+  declared everywhere else.
 
 ### 0.1.17
 

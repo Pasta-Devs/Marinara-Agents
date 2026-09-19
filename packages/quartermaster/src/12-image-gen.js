@@ -30,6 +30,12 @@ Object.assign(QM.dock, {
   _imageGenLoadingLabel: "",
   _imageGenError: null,
   _imageGenContentContainer: null,
+  // Bumped every time the modal closes (including the close-then-reopen
+  // _openImageGenModal already does) -- lets _submitImageGenGenerate tell a
+  // still-in-flight generation from a previous session apart from the
+  // current one, so a stale result can't get uploaded onto whatever item,
+  // outfit, or chat happens to be open when it finally finishes.
+  _imageGenSessionToken: 0,
 
   _openImageGenModal({ kind, subjectId, fileInput }) {
     this._closeImageGenModal();
@@ -100,6 +106,7 @@ Object.assign(QM.dock, {
   },
 
   _closeImageGenModal() {
+    this._imageGenSessionToken++;
     this.imageGenBackdrop?.remove();
     this.imageGenBackdrop = null;
     this._imageGenContentContainer = null;
@@ -256,25 +263,39 @@ Object.assign(QM.dock, {
   },
 
   async _submitImageGenGenerate() {
+    // Captured up front, not re-read after the (potentially slow) generation
+    // call -- closing/reopening this modal for a different item, or
+    // switching chats, must not silently redirect the upload below onto
+    // whatever's current by then instead of what this generation was for.
+    const token = this._imageGenSessionToken;
+    const chatId = QM.state.chatId;
+    const kind = this._imageGenKind;
+    const subjectId = this._imageGenSubjectId;
     this._imageGenViewState = "loading";
     this._imageGenLoadingLabel = "Generating image…";
     this._renderImageGenContent();
     try {
-      const isOutfit = this._imageGenKind === "outfit";
+      const isOutfit = kind === "outfit";
       const result = isOutfit
-        ? await QM.generateOutfitPortrait(QM.state.chatId, QM_OWNER_ID, this._imageGenSubjectId, this._imageGenPrompt)
-        : await QM.generateItemImage(QM.state.chatId, QM_OWNER_ID, this._imageGenSubjectId, this._imageGenPrompt);
+        ? await QM.generateOutfitPortrait(chatId, QM_OWNER_ID, subjectId, this._imageGenPrompt)
+        : await QM.generateItemImage(chatId, QM_OWNER_ID, subjectId, this._imageGenPrompt);
+
+      // Session moved on (modal closed/reopened) or the chat changed while
+      // generation was in flight -- discard the result rather than upload it
+      // under a subject/chat the user didn't ask for.
+      if (token !== this._imageGenSessionToken || chatId !== QM.state.chatId) return;
 
       this._imageGenLoadingLabel = "Saving…";
       this._renderImageGenContent();
       if (isOutfit) {
-        await QM.state.uploadOutfitPortrait(this._imageGenSubjectId, result.imageDataUrl);
+        await QM.state.uploadOutfitPortrait(subjectId, result.imageDataUrl);
       } else {
-        await QM.state.uploadItemImage(this._imageGenSubjectId, result.imageDataUrl);
+        await QM.state.uploadItemImage(subjectId, result.imageDataUrl);
       }
       if (QM.state.error) throw new Error(QM.state.error);
       this._closeImageGenModal();
     } catch (error) {
+      if (token !== this._imageGenSessionToken) return;
       const code = error && error.message;
       this._imageGenError =
         (code && QM_IMAGE_GEN_ERROR_MESSAGES[code]) ||

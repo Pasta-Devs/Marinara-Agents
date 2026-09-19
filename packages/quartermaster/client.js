@@ -1,4 +1,4 @@
-// Quartermaster 0.1.17 — Marinara Engine roleplay-tracker capability (single-file client bundle)
+// Quartermaster 0.1.18 — Marinara Engine roleplay-tracker capability (single-file client bundle)
 // Built from packages/quartermaster/src (10 modules) by scripts/build-quartermaster-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -765,6 +765,7 @@ QM.state = {
     this.showArmor = true;
     this.showWeapons = true;
     this.personaAvatarUrl = null;
+    this.replaceRealAvatarOnEquip = false;
     this.previousSnapshot = null;
     this.lastTrackerChange = null;
     this.imageConnectionId = null;
@@ -922,9 +923,13 @@ QM.state = {
     QM._missingItemImageIds.delete(itemId);
     return this._mutate(QM.uploadItemImage(this.chatId, QM_OWNER_ID, itemId, imageDataUrl));
   },
-  deleteItemImage(itemId) {
-    QM._missingItemImageIds.add(itemId);
-    return this._mutate(QM.deleteItemImage(this.chatId, QM_OWNER_ID, itemId));
+  async deleteItemImage(itemId) {
+    await this._mutate(QM.deleteItemImage(this.chatId, QM_OWNER_ID, itemId));
+    // Only suppress future image lookups for this item once the delete has
+    // actually happened server-side -- marking it missing first (like
+    // uploadItemImage's own delete-from-cache does on success) would leave a
+    // failed delete permanently hiding an image that's still there.
+    if (!this.error) QM._missingItemImageIds.add(itemId);
   },
   unequipAll() {
     return this._mutate(QM.unequipAll(this.chatId, QM_OWNER_ID));
@@ -5506,6 +5511,12 @@ Object.assign(QM.dock, {
   _wardrobeError: null,
   _wardrobeSummary: null,
   _wardrobeContentContainer: null,
+  // Bumped every time the modal closes (including the close-then-reopen
+  // _openWardrobeBuilder already does) -- lets _submitWardrobeGeneration tell
+  // a still-in-flight generation from a previous session apart from the
+  // current one, so a stale response can't overwrite what the user's looking
+  // at now.
+  _wardrobeSessionToken: 0,
 
   _openWardrobeBuilder() {
     this._closeWardrobeBuilder();
@@ -5571,6 +5582,7 @@ Object.assign(QM.dock, {
   },
 
   _closeWardrobeBuilder() {
+    this._wardrobeSessionToken++;
     this.wardrobeBuilderBackdrop?.remove();
     this.wardrobeBuilderBackdrop = null;
     this._wardrobeContentContainer = null;
@@ -5645,14 +5657,17 @@ Object.assign(QM.dock, {
   },
 
   async _submitWardrobeGeneration() {
+    const token = this._wardrobeSessionToken;
     this._wardrobeViewState = "loading";
     this._renderWardrobeBuilderContent();
     try {
       const result = await QM.state.generateWardrobe(this._wardrobeDirection, this._wardrobeIncludePersonaContext);
+      if (token !== this._wardrobeSessionToken) return; // modal closed/reopened while this was in flight
       this._wardrobeProposal = result.proposal;
       this._wardrobeSummary = null;
       this._wardrobeViewState = "preview";
     } catch (error) {
+      if (token !== this._wardrobeSessionToken) return;
       const code = error && error.message;
       this._wardrobeError =
         (code && QM_WARDROBE_ERROR_MESSAGES[code]) || code || "The wardrobe could not be generated.";
@@ -5838,6 +5853,12 @@ Object.assign(QM.dock, {
   _imageGenLoadingLabel: "",
   _imageGenError: null,
   _imageGenContentContainer: null,
+  // Bumped every time the modal closes (including the close-then-reopen
+  // _openImageGenModal already does) -- lets _submitImageGenGenerate tell a
+  // still-in-flight generation from a previous session apart from the
+  // current one, so a stale result can't get uploaded onto whatever item,
+  // outfit, or chat happens to be open when it finally finishes.
+  _imageGenSessionToken: 0,
 
   _openImageGenModal({ kind, subjectId, fileInput }) {
     this._closeImageGenModal();
@@ -5908,6 +5929,7 @@ Object.assign(QM.dock, {
   },
 
   _closeImageGenModal() {
+    this._imageGenSessionToken++;
     this.imageGenBackdrop?.remove();
     this.imageGenBackdrop = null;
     this._imageGenContentContainer = null;
@@ -6064,25 +6086,39 @@ Object.assign(QM.dock, {
   },
 
   async _submitImageGenGenerate() {
+    // Captured up front, not re-read after the (potentially slow) generation
+    // call -- closing/reopening this modal for a different item, or
+    // switching chats, must not silently redirect the upload below onto
+    // whatever's current by then instead of what this generation was for.
+    const token = this._imageGenSessionToken;
+    const chatId = QM.state.chatId;
+    const kind = this._imageGenKind;
+    const subjectId = this._imageGenSubjectId;
     this._imageGenViewState = "loading";
     this._imageGenLoadingLabel = "Generating image…";
     this._renderImageGenContent();
     try {
-      const isOutfit = this._imageGenKind === "outfit";
+      const isOutfit = kind === "outfit";
       const result = isOutfit
-        ? await QM.generateOutfitPortrait(QM.state.chatId, QM_OWNER_ID, this._imageGenSubjectId, this._imageGenPrompt)
-        : await QM.generateItemImage(QM.state.chatId, QM_OWNER_ID, this._imageGenSubjectId, this._imageGenPrompt);
+        ? await QM.generateOutfitPortrait(chatId, QM_OWNER_ID, subjectId, this._imageGenPrompt)
+        : await QM.generateItemImage(chatId, QM_OWNER_ID, subjectId, this._imageGenPrompt);
+
+      // Session moved on (modal closed/reopened) or the chat changed while
+      // generation was in flight -- discard the result rather than upload it
+      // under a subject/chat the user didn't ask for.
+      if (token !== this._imageGenSessionToken || chatId !== QM.state.chatId) return;
 
       this._imageGenLoadingLabel = "Saving…";
       this._renderImageGenContent();
       if (isOutfit) {
-        await QM.state.uploadOutfitPortrait(this._imageGenSubjectId, result.imageDataUrl);
+        await QM.state.uploadOutfitPortrait(subjectId, result.imageDataUrl);
       } else {
-        await QM.state.uploadItemImage(this._imageGenSubjectId, result.imageDataUrl);
+        await QM.state.uploadItemImage(subjectId, result.imageDataUrl);
       }
       if (QM.state.error) throw new Error(QM.state.error);
       this._closeImageGenModal();
     } catch (error) {
+      if (token !== this._imageGenSessionToken) return;
       const code = error && error.message;
       this._imageGenError =
         (code && QM_IMAGE_GEN_ERROR_MESSAGES[code]) ||
@@ -6545,6 +6581,12 @@ class QuartermasterElement extends HTMLElement {
       QM.panel.mount(this);
       return;
     }
+
+    // Mirrors disconnectedCallback's own cleanup, for when "view" changes on
+    // an element that's still connected (observedAttributes watches it for
+    // exactly this) -- otherwise the toolbar button below overwrites
+    // QM.panel's own DOM while QM.panel still thinks it's mounted here.
+    if (QM.panel.container === this) QM.panel.unmount();
 
     let button = this._button;
     if (!button || !this.contains(button)) {

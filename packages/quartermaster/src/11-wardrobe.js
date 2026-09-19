@@ -30,6 +30,12 @@ Object.assign(QM.dock, {
   _wardrobeError: null,
   _wardrobeSummary: null,
   _wardrobeContentContainer: null,
+  // Bumped every time the modal closes (including the close-then-reopen
+  // _openWardrobeBuilder already does) -- lets _submitWardrobeGeneration tell
+  // a still-in-flight generation from a previous session apart from the
+  // current one, so a stale response can't overwrite what the user's looking
+  // at now.
+  _wardrobeSessionToken: 0,
 
   _openWardrobeBuilder() {
     this._closeWardrobeBuilder();
@@ -95,6 +101,7 @@ Object.assign(QM.dock, {
   },
 
   _closeWardrobeBuilder() {
+    this._wardrobeSessionToken++;
     this.wardrobeBuilderBackdrop?.remove();
     this.wardrobeBuilderBackdrop = null;
     this._wardrobeContentContainer = null;
@@ -169,14 +176,17 @@ Object.assign(QM.dock, {
   },
 
   async _submitWardrobeGeneration() {
+    const token = this._wardrobeSessionToken;
     this._wardrobeViewState = "loading";
     this._renderWardrobeBuilderContent();
     try {
       const result = await QM.state.generateWardrobe(this._wardrobeDirection, this._wardrobeIncludePersonaContext);
+      if (token !== this._wardrobeSessionToken) return; // modal closed/reopened while this was in flight
       this._wardrobeProposal = result.proposal;
       this._wardrobeSummary = null;
       this._wardrobeViewState = "preview";
     } catch (error) {
+      if (token !== this._wardrobeSessionToken) return;
       const code = error && error.message;
       this._wardrobeError =
         (code && QM_WARDROBE_ERROR_MESSAGES[code]) || code || "The wardrobe could not be generated.";

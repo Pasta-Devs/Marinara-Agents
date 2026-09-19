@@ -417,6 +417,7 @@ QM.state = {
     this.showArmor = true;
     this.showWeapons = true;
     this.personaAvatarUrl = null;
+    this.replaceRealAvatarOnEquip = false;
     this.previousSnapshot = null;
     this.lastTrackerChange = null;
     this.imageConnectionId = null;
@@ -574,9 +575,13 @@ QM.state = {
     QM._missingItemImageIds.delete(itemId);
     return this._mutate(QM.uploadItemImage(this.chatId, QM_OWNER_ID, itemId, imageDataUrl));
   },
-  deleteItemImage(itemId) {
-    QM._missingItemImageIds.add(itemId);
-    return this._mutate(QM.deleteItemImage(this.chatId, QM_OWNER_ID, itemId));
+  async deleteItemImage(itemId) {
+    await this._mutate(QM.deleteItemImage(this.chatId, QM_OWNER_ID, itemId));
+    // Only suppress future image lookups for this item once the delete has
+    // actually happened server-side -- marking it missing first (like
+    // uploadItemImage's own delete-from-cache does on success) would leave a
+    // failed delete permanently hiding an image that's still there.
+    if (!this.error) QM._missingItemImageIds.add(itemId);
   },
   unequipAll() {
     return this._mutate(QM.unequipAll(this.chatId, QM_OWNER_ID));
