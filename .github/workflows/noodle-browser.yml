@@ -5,6 +5,9 @@ on:
     types: [opened, reopened, synchronize, ready_for_review]
     paths:
       - ".github/workflows/noodle-browser.yml"
+      - "artifacts/conversation-calls-*.zip"
+      - "packages/conversation-calls/**"
+      - "tests/package-calls.e2e.ts"
       - "artifacts/noodle-*.zip"
       - "artifacts/slurp-*.zip"
       - "artifacts/slurp2-*.zip"
@@ -91,6 +94,11 @@ jobs:
         env:
           MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
         run: npm run test:browser:noodle
+
+      - name: Run installed Calls playback browser proof
+        env:
+          MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
+        run: node scripts/run-package-browser-tests.mjs conversation-calls tests/package-calls.e2e.ts
 
   slurp-browser:
     name: Slurp Legacy package browser
