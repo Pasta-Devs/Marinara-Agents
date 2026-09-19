@@ -39,7 +39,7 @@ const slpStageProfileUpdateRequestSchema = slpStageProfileUpdateSchema.extend({
 export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   const { characters, connections, noodle, resolveNoodlerPublicIdentity, resolveViewerPersona } = deps;
   // One edit for many Creators, also used for a single Creator's quick edit. Capped so one request stays bounded.
-  app.post("/noodler/accounts/bulk-update", async (req, reply) => {
+  app.post("/slurp/accounts/bulk-update", async (req, reply) => {
     const tagList = z.array(slurpDiscoveryTagNameSchema).max(SLURP_DISCOVERY_TAG_LIMIT);
     const body = z
       .object({
@@ -95,11 +95,11 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
     return updated;
   });
 
-  app.get("/noodler/accounts", async (_req, reply) => {
+  app.get("/slurp/accounts", async (_req, reply) => {
     return noodle.listNoodlerStageProfiles();
   });
 
-  app.post("/noodler/accounts/:id/conversation-schedule/refresh", async (req, reply) => {
+  app.post("/slurp/accounts/:id/conversation-schedule/refresh", async (req, reply) => {
     const { id } = req.params as { id: string };
     const account = await noodle.getNoodlerAccountById(id);
     const source = account ? await noodle.resolveAccountSource(account) : null;
@@ -161,7 +161,7 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
   // instead of one per row. Keyed by creator account id.
   // ponytail: counts by scanning; swap for aggregate queries if a player ever keeps
   // enough creator profiles for this to show up in the request time.
-  app.get("/noodler/account-connection-counts", async (_req, _reply) => {
+  app.get("/slurp/account-connection-counts", async (_req, _reply) => {
     const creators = await noodle.listNoodlerAccounts();
     const at = new Date();
     // Real followers come from the audience funnel, and only from there. Following also moves the
@@ -199,7 +199,7 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
     return Object.fromEntries(entries) as Record<string, { fans: number; followers: number }>;
   });
 
-  app.post("/noodler/stage-profile-draft", async (req, reply) => {
+  app.post("/slurp/stage-profile-draft", async (req, reply) => {
     const parsed = slpStageProfileDraftRequestSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const settings = await noodle.getSettings();
@@ -227,7 +227,7 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
     }
   });
 
-  app.put("/noodler/accounts/:id/stage-profile", async (req, reply) => {
+  app.put("/slurp/accounts/:id/stage-profile", async (req, reply) => {
     const parsed = slpStageProfileUpdateRequestSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
@@ -360,7 +360,7 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
     };
   });
 
-  app.post("/noodler/accounts/:id/source/dismiss", async (req, reply) => {
+  app.post("/slurp/accounts/:id/source/dismiss", async (req, reply) => {
     const { id } = req.params as { id: string };
     const locked = await tryCreatorAccountOperation(id, async () => {
       const account = await noodle.getNoodlerAccountById(id);
@@ -378,7 +378,7 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
     return (await noodle.listNoodlerStageProfiles()).find((profile) => profile.id === id);
   });
 
-  app.post("/noodler/accounts/:id/source/adopt-identity", async (req, reply) => {
+  app.post("/slurp/accounts/:id/source/adopt-identity", async (req, reply) => {
     const { id } = req.params as { id: string };
     const locked = await tryCreatorAccountOperation(id, async () => {
       const account = await noodle.getNoodlerAccountById(id);

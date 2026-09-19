@@ -26,7 +26,7 @@ export function useRefreshCreatorFanActivityNow() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () =>
-      api.post<{ status: string; created: number }>("/slurp2/noodler/fan-activity/refresh-now", {
+      api.post<{ status: string; created: number }>("/slurp2/slurp/fan-activity/refresh-now", {
         debugMode: useSlurpUIStore.getState().debugMode,
       }),
     onSuccess: () =>
@@ -48,7 +48,7 @@ export function useCreatorFanActivityStatus(enabled = true) {
         usedRuns: number;
         runLimit: number;
         lastRun: { status: string; finishedAt: string | null } | null;
-      }>("/slurp2/noodler/fan-activity/status"),
+      }>("/slurp2/slurp/fan-activity/status"),
     enabled,
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,

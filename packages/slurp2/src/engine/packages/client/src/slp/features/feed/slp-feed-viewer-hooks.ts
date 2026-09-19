@@ -55,7 +55,7 @@ export function useCreatorViewer(personaId: string | null, enabled = true) {
           }>;
           total: number;
           nextCursor: SlurpPageCursor | null;
-        }>(`/slurp2/noodler/viewer/feed?personaId=${encodedPersonaId}&tab=all&limit=20${cursorQuery(cursor)}`, {
+        }>(`/slurp2/slurp/viewer/feed?personaId=${encodedPersonaId}&tab=all&limit=20${cursorQuery(cursor)}`, {
           signal,
         });
         feedItems.push(...page.items);
@@ -64,7 +64,7 @@ export function useCreatorViewer(personaId: string | null, enabled = true) {
       // Read the shell after the feed. A newly-created Creator account and its first post can
       // otherwise be observed from different file-store snapshots when these requests start
       // together, leaving the client with a post whose Creator is absent from the shell.
-      const scope = await api.get<SlurpViewerScope>(`/slurp2/noodler/viewer?personaId=${encodedPersonaId}`, {
+      const scope = await api.get<SlurpViewerScope>(`/slurp2/slurp/viewer?personaId=${encodedPersonaId}`, {
         signal,
       });
       const postsByCreator = new Map<string, SlurpViewerScope["creators"][number]["posts"]>();
@@ -100,7 +100,7 @@ export function useCreatorUnseenCount(personaId: string | null, enabled = true) 
   const { data } = useQuery({
     queryKey: slpKeys.noodlerUnseenCount(personaId ?? "none"),
     queryFn: () =>
-      api.get<{ count: number }>(`/slurp2/noodler/viewer/unseen-count?personaId=${encodeURIComponent(personaId!)}`),
+      api.get<{ count: number }>(`/slurp2/slurp/viewer/unseen-count?personaId=${encodeURIComponent(personaId!)}`),
     enabled: enabled && Boolean(personaId),
     staleTime: 10_000,
     refetchInterval: enabled && personaId ? 30_000 : false,
@@ -127,7 +127,7 @@ export function useCreatorUnseenCount(personaId: string | null, enabled = true) 
 export function useMarkCreatorFeedSeen() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (personaId: string) => api.post<SlpAccount>("/slurp2/noodler/viewer/mark-seen", { personaId }),
+    mutationFn: (personaId: string) => api.post<SlpAccount>("/slurp2/slurp/viewer/mark-seen", { personaId }),
     onSuccess: (_viewer, personaId) =>
       Promise.all([
         qc.invalidateQueries({ queryKey: slpKeys.viewer(personaId) }),
@@ -149,10 +149,10 @@ export function useToggleCreatorSubscription() {
     }) =>
       subscribed
         ? api.delete<SlpCreatorViewerScope>(
-            `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/subscribe?personaId=${encodeURIComponent(personaId)}`,
+            `/slurp2/slurp/accounts/${encodeURIComponent(creatorAccountId)}/subscribe?personaId=${encodeURIComponent(personaId)}`,
           )
         : api.post<SlpCreatorViewerScope>(
-            `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/subscribe`,
+            `/slurp2/slurp/accounts/${encodeURIComponent(creatorAccountId)}/subscribe`,
             {
               personaId,
             },
@@ -188,7 +188,7 @@ export function useToggleCreatorFollow() {
       personaId: string;
       followed: boolean;
     }) =>
-      api.patch<SlpCreatorViewerScope>(`/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/follow`, {
+      api.patch<SlpCreatorViewerScope>(`/slurp2/slurp/accounts/${encodeURIComponent(creatorAccountId)}/follow`, {
         personaId,
         followed,
       }),
@@ -205,7 +205,7 @@ export function useUnlockCreatorPost() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ postId, personaId }: { postId: string; personaId: string }) =>
-      api.post<SlpCreatorViewerScope>(`/slurp2/noodler/posts/${encodeURIComponent(postId)}/unlock`, { personaId }),
+      api.post<SlpCreatorViewerScope>(`/slurp2/slurp/posts/${encodeURIComponent(postId)}/unlock`, { personaId }),
     onSuccess: async (scope, input) => {
       // Cancel any in-flight viewer poll first, or it can land after us and restore the locked scope.
       await qc.cancelQueries({ queryKey: slpKeys.viewer(input.personaId) });
@@ -228,7 +228,7 @@ export function useCreateCreatorInteraction() {
       actorAccountId: _actorAccountId,
       ...input
     }: { postId: string; actorAccountId?: string } & SlpCreatorCreateInteractionInput) =>
-      api.post<SlpInteraction>(`/slurp2/noodler/posts/${encodeURIComponent(postId)}/interactions`, input),
+      api.post<SlpInteraction>(`/slurp2/slurp/posts/${encodeURIComponent(postId)}/interactions`, input),
     onMutate: async (input) => {
       if (input.type !== "like") return undefined;
       await qc.cancelQueries({ queryKey: slpKeys.viewer(input.personaId) });
@@ -271,7 +271,7 @@ export function useTriggerCreatorReply() {
   return useMutation({
     mutationFn: ({ postId, interactionId, personaId }: { postId: string; interactionId: string; personaId: string }) =>
       api.post<SlpCreatorReplyResult>(
-        `/slurp2/noodler/posts/${encodeURIComponent(postId)}/interactions/${encodeURIComponent(interactionId)}/creator-reply`,
+        `/slurp2/slurp/posts/${encodeURIComponent(postId)}/interactions/${encodeURIComponent(interactionId)}/creator-reply`,
         { personaId, debugMode: useSlurpUIStore.getState().debugMode },
       ),
     onSettled: (_result, _error, input) => qc.invalidateQueries({ queryKey: slpKeys.viewer(input.personaId) }),
@@ -290,7 +290,7 @@ export function useRemoveCreatorInteraction() {
         type: input.type,
       });
       if (input.parentInteractionId) params.set("parentInteractionId", input.parentInteractionId);
-      return api.delete<SlpInteraction>(`/slurp2/noodler/posts/${encodeURIComponent(postId)}/interactions?${params}`);
+      return api.delete<SlpInteraction>(`/slurp2/slurp/posts/${encodeURIComponent(postId)}/interactions?${params}`);
     },
     onMutate: async (input) => {
       if (input.type !== "like") return undefined;
@@ -344,7 +344,7 @@ export function useUpdateCreatorInteraction() {
       imageUrl?: string | null;
     }) =>
       api.patch<SlpInteraction>(
-        `/slurp2/noodler/posts/${encodeURIComponent(postId)}/interactions/${encodeURIComponent(interactionId)}`,
+        `/slurp2/slurp/posts/${encodeURIComponent(postId)}/interactions/${encodeURIComponent(interactionId)}`,
         { personaId, ...input },
       ),
     onSuccess: (_interaction, input) => qc.invalidateQueries({ queryKey: slpKeys.viewer(input.personaId) }),
@@ -355,7 +355,7 @@ export function useDeleteCreatorInteraction() {
   return useMutation({
     mutationFn: ({ postId, interactionId, personaId }: { postId: string; interactionId: string; personaId: string }) =>
       api.delete<SlpInteraction[]>(
-        `/slurp2/noodler/posts/${encodeURIComponent(postId)}/interactions/${encodeURIComponent(interactionId)}?personaId=${encodeURIComponent(personaId)}`,
+        `/slurp2/slurp/posts/${encodeURIComponent(postId)}/interactions/${encodeURIComponent(interactionId)}?personaId=${encodeURIComponent(personaId)}`,
       ),
     onSuccess: (_deleted, input) => qc.invalidateQueries({ queryKey: slpKeys.viewer(input.personaId) }),
   });

@@ -35,7 +35,7 @@ export function useCreatorPosts(accountId: string | null, personaId: string | nu
         const page: {
           items: SlurpProfilePost[];
           nextCursor: SlurpPageCursor | null;
-        } = await api.get(`/slurp2/noodler/accounts/${encodeURIComponent(accountId!)}/posts?${query.toString()}`, {
+        } = await api.get(`/slurp2/slurp/accounts/${encodeURIComponent(accountId!)}/posts?${query.toString()}`, {
           signal,
         });
         items.push(...page.items);
@@ -124,7 +124,7 @@ export function useConfirmCreatorImagePrompts() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: { targetAccountId: string; prompts: ImagePromptOverride[] }) =>
-      api.post<{ finalized: number }>("/slurp2/noodler/refresh/images", {
+      api.post<{ finalized: number }>("/slurp2/slurp/refresh/images", {
         prompts: input.prompts,
         debugMode: useSlurpUIStore.getState().debugMode,
       }),
@@ -141,7 +141,7 @@ export function useCreateCreatorPost() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ image, ...input }: SlpCreatorCreatePostRequest) =>
-      postCreatorRequestWithImage<SlpCreatorManagedPost>("/slurp2/noodler/posts", input, image),
+      postCreatorRequestWithImage<SlpCreatorManagedPost>("/slurp2/slurp/posts", input, image),
     onSuccess: (_post, input) =>
       Promise.all([
         qc.invalidateQueries({
@@ -180,7 +180,7 @@ export function useUpdateCreatorPost() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, accountId, ...input }: { id: string; accountId: string } & SlpCreatorPostUpdateInput) =>
-      api.patch<SlpCreatorManagedPost>(`/slurp2/noodler/posts/${encodeURIComponent(id)}`, { ...input, accountId }),
+      api.patch<SlpCreatorManagedPost>(`/slurp2/slurp/posts/${encodeURIComponent(id)}`, { ...input, accountId }),
     onSuccess: (_post, input) => {
       return Promise.all([
         qc.invalidateQueries({
@@ -209,7 +209,7 @@ export function useReplaceCreatorPostImage() {
       const form = new FormData();
       form.append("payload", JSON.stringify({ ...input, imageCrop: crop, accountId }));
       form.append("file", file);
-      return api.upload<SlpCreatorManagedPost>(`/slurp2/noodler/posts/${encodeURIComponent(id)}/media`, form);
+       return api.upload<SlpCreatorManagedPost>(`/slurp2/slurp/posts/${encodeURIComponent(id)}/media`, form);
     },
     onSuccess: (_post, input) =>
       Promise.all([
@@ -224,7 +224,7 @@ export function useGenerateCreatorPostImage() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, accountId, imagePrompt }: { id: string; accountId: string; imagePrompt?: string }) =>
-      api.post<SlpCreatorManagedPost>(`/slurp2/noodler/posts/${encodeURIComponent(id)}/image/generate`, {
+      api.post<SlpCreatorManagedPost>(`/slurp2/slurp/posts/${encodeURIComponent(id)}/image/generate`, {
         accountId,
         ...(imagePrompt ? { imagePrompt } : {}),
         replace: true,
@@ -242,7 +242,7 @@ export function useDeleteCreatorPost() {
   return useMutation({
     mutationFn: ({ id, accountId }: { id: string; accountId: string }) =>
       api.delete<SlpCreatorManagedPost>(
-        `/slurp2/noodler/posts/${encodeURIComponent(id)}?accountId=${encodeURIComponent(accountId)}`,
+        `/slurp2/slurp/posts/${encodeURIComponent(id)}?accountId=${encodeURIComponent(accountId)}`,
       ),
     onSuccess: (_post, input) => {
       return Promise.all([

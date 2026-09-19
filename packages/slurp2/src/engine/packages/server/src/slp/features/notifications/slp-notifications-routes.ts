@@ -21,7 +21,7 @@ export async function slpNotificationsRoutes(
    * One table, two presentations: `items` is the full list, `unseen` is what to show on open.
    * Grouping keeps a busy day to a readable handful instead of a wall.
    */
-  app.get("/noodler/notifications", async (req, reply) => {
+  app.get("/slurp/notifications", async (req, reply) => {
     const parsed = slpCreatorViewerPersonaSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
@@ -30,7 +30,7 @@ export async function slpNotificationsRoutes(
     return readSlpNotifications(app.db, noodle, messages, viewer.id);
   });
 
-  app.post("/noodler/notifications/seen", async (req, reply) => {
+  app.post("/slurp/notifications/seen", async (req, reply) => {
     const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);

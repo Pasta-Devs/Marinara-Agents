@@ -338,7 +338,7 @@ export async function generateCreatorPostImage(input: {
   const outputHeight = input.height ?? input.settings.imageHeight;
   logDebugOverride(
     input.debugMode,
-    "[debug/noodler/image] final image prompt for %s:\n%s",
+    "[debug/slurp/image] final image prompt for %s:\n%s",
     input.account.displayName,
     finalPrompt,
   );

@@ -9,7 +9,7 @@ export function useSlurpArcs(personaId: string | null, creatorAccountId: string 
     queryKey: [...slpKeys.noodlerRoot(), "projects", "arcs", creatorAccountId ?? "none", personaId ?? "none"],
     queryFn: () =>
       api.get<{ arcs: SlurpArcTimeline[] }>(
-        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId!)}/arcs?personaId=${encodeURIComponent(personaId!)}`,
+        `/slurp2/slurp/accounts/${encodeURIComponent(creatorAccountId!)}/arcs?personaId=${encodeURIComponent(personaId!)}`,
       ),
     enabled: Boolean(personaId) && Boolean(creatorAccountId),
   });
@@ -30,7 +30,7 @@ export function useDirectSlurpProject() {
       value?: string;
     }) =>
       api.post<{ project: SlurpProject }>(
-        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects/${encodeURIComponent(projectId)}/director`,
+        `/slurp2/slurp/accounts/${encodeURIComponent(creatorAccountId)}/projects/${encodeURIComponent(projectId)}/director`,
         body,
       ),
     onSuccess: () => invalidateSlurpProjects(qc),
@@ -51,7 +51,7 @@ export function useResolveSlurpArcProfile() {
       apply: boolean;
     }) =>
       api.post<{ project: SlurpProject }>(
-        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects/${encodeURIComponent(projectId)}/profile`,
+        `/slurp2/slurp/accounts/${encodeURIComponent(creatorAccountId)}/projects/${encodeURIComponent(projectId)}/profile`,
         body,
       ),
     // The profile itself changed too, so every Creator view refetches.
@@ -69,7 +69,7 @@ export function useSlurpArcConfig(personaId: string | null, creatorAccountId: st
     queryKey: slurpArcConfigKey(creatorAccountId, personaId),
     queryFn: () =>
       api.get<{ config: SlurpCreatorArcConfig }>(
-        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId!)}/arc-config?personaId=${encodeURIComponent(personaId!)}`,
+        `/slurp2/slurp/accounts/${encodeURIComponent(creatorAccountId!)}/arc-config?personaId=${encodeURIComponent(personaId!)}`,
       ),
     enabled: Boolean(personaId) && Boolean(creatorAccountId),
   });
@@ -88,7 +88,7 @@ export function useUpdateSlurpArcConfig() {
       config: SlurpCreatorArcConfig;
     }) =>
       api.put<{ config: SlurpCreatorArcConfig }>(
-        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/arc-config`,
+        `/slurp2/slurp/accounts/${encodeURIComponent(creatorAccountId)}/arc-config`,
         { personaId, ...config },
       ),
     onSuccess: (data, { creatorAccountId, personaId }) =>
@@ -106,7 +106,7 @@ export function useSlurpProjects(personaId: string | null, creatorAccountId: str
     queryKey: [...slpKeys.noodlerRoot(), "projects", creatorAccountId ?? "none", personaId ?? "none"],
     queryFn: () =>
       api.get<{ projects: SlurpProject[] }>(
-        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId!)}/projects?personaId=${encodeURIComponent(personaId!)}`,
+        `/slurp2/slurp/accounts/${encodeURIComponent(creatorAccountId!)}/projects?personaId=${encodeURIComponent(personaId!)}`,
       ),
     enabled: Boolean(personaId) && Boolean(creatorAccountId) && enabled,
   });
@@ -130,7 +130,7 @@ export function useCreateSlurpProject() {
       crossoverWith?: string[];
     }) =>
       api.post<{ project: SlurpProject }>(
-        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects`,
+        `/slurp2/slurp/accounts/${encodeURIComponent(creatorAccountId)}/projects`,
         body,
       ),
     onSuccess: () => invalidateSlurpProjects(qc),
@@ -142,7 +142,7 @@ export function useGenerateSlurpProject() {
   return useMutation({
     mutationFn: ({ creatorAccountId, personaId }: { creatorAccountId: string; personaId: string }) =>
       api.post<{ project: SlurpProject }>(
-        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects/generate`,
+        `/slurp2/slurp/accounts/${encodeURIComponent(creatorAccountId)}/projects/generate`,
         { personaId },
       ),
     onSuccess: () => invalidateSlurpProjects(qc),
@@ -161,7 +161,7 @@ export function useGenerateSlurpArcType() {
       brief: string;
     }) =>
       api.post<{ type: SlurpArcType }>(
-        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/arc-library/generate`,
+        `/slurp2/slurp/accounts/${encodeURIComponent(creatorAccountId)}/arc-library/generate`,
         { personaId, brief },
       ),
   });
@@ -180,7 +180,7 @@ export function useSaveSlurpProjectToLibrary() {
       personaId: string;
     }) =>
       api.post<{ type: SlurpArcType }>(
-        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects/${encodeURIComponent(projectId)}/library`,
+        `/slurp2/slurp/accounts/${encodeURIComponent(creatorAccountId)}/projects/${encodeURIComponent(projectId)}/library`,
         { personaId },
       ),
     onSuccess: () => qc.invalidateQueries({ queryKey: slpKeys.settings() }),
@@ -206,7 +206,7 @@ export function useUpdateSlurpProject() {
       durationDays?: number | null;
     }) =>
       api.patch<{ project: SlurpProject }>(
-        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects/${encodeURIComponent(projectId)}`,
+        `/slurp2/slurp/accounts/${encodeURIComponent(creatorAccountId)}/projects/${encodeURIComponent(projectId)}`,
         body,
       ),
     onSuccess: () => invalidateSlurpProjects(qc),
@@ -225,7 +225,7 @@ export function useDeleteSlurpProject() {
       personaId: string;
     }) =>
       api.delete<{ deleted: boolean }>(
-        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects/${encodeURIComponent(projectId)}?personaId=${encodeURIComponent(personaId)}`,
+        `/slurp2/slurp/accounts/${encodeURIComponent(creatorAccountId)}/projects/${encodeURIComponent(projectId)}?personaId=${encodeURIComponent(personaId)}`,
       ),
     onSuccess: () => invalidateSlurpProjects(qc),
   });

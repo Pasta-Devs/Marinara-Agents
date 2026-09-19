@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.1.3 — 2026-09-20
+
+- Slurp HTTP routes now use Slurp naming. Existing avatars, banners, ad images, post images and backups keep working.
+
 ## 0.1.2 — 2026-09-19
 
 - Fixed Creator filters, profile expansion, and settings tabs not responding after the 0.1.1 update.

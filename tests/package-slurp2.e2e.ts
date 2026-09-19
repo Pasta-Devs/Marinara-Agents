@@ -119,12 +119,12 @@ test.describe("standalone Slurp package", () => {
       });
       expect(profileResponse.ok()).toBe(true);
       profileId = ((await profileResponse.json()) as { id: string }).id;
-      const profiles = (await (await page.request.get("/api/slurp2/noodler/accounts")).json()) as Array<
+      const profiles = (await (await page.request.get("/api/slurp2/slurp/accounts")).json()) as Array<
         Record<string, unknown>
       >;
       const profile = profiles.find(({ id }) => id === profileId)!;
       expect(profile).toBeTruthy();
-      await page.route("**/api/slurp2/noodler/accounts", (route) =>
+      await page.route("**/api/slurp2/slurp/accounts", (route) =>
         route.fulfill({
           json: [0, 1, 2].map((index) => ({
             ...profile,
@@ -133,7 +133,7 @@ test.describe("standalone Slurp package", () => {
           })),
         }),
       );
-      await page.route("**/api/slurp2/noodler/auto-post/refresh-targeted", async (route) => {
+      await page.route("**/api/slurp2/slurp/auto-post/refresh-targeted", async (route) => {
         const body = route.request().postDataJSON() as { accountIds: string[] };
         expect(body.accountIds).toHaveLength(1);
         await new Promise<void>((resolve) => releases.push(resolve));
@@ -187,7 +187,7 @@ test.describe("standalone Slurp package", () => {
       await page.request.patch("/api/slurp2/settings", {
         data: { imageContextMode: initialSettings.imageContextMode, onboarding: initialSettings.onboarding },
       });
-      if (profileId) await page.request.delete(`/api/slurp2/noodler/accounts/${profileId}`);
+      if (profileId) await page.request.delete(`/api/slurp2/slurp/accounts/${profileId}`);
     }
   });
 
@@ -325,7 +325,7 @@ test.describe("standalone Slurp package", () => {
         }),
       );
     });
-    await page.route("**/api/slurp2/noodler/ads/pool", async (route) => {
+    await page.route("**/api/slurp2/slurp/ads/pool", async (route) => {
       const response = await route.fetch();
       const data = (await response.json()) as { items: Array<{ id: string; contentRating?: string }> };
       for (const ad of data.items) {
@@ -451,7 +451,7 @@ test.describe("standalone Slurp package", () => {
       }
 
       const postContent = `Standalone Slurp viewer post ${suffix}`;
-      const postResponse = await page.request.post("/api/slurp2/noodler/posts", {
+      const postResponse = await page.request.post("/api/slurp2/slurp/posts", {
         data: {
           targetAccountId: stageProfile.id,
           title: null,
@@ -483,7 +483,7 @@ test.describe("standalone Slurp package", () => {
       );
 
       const feedProbe = await page.request.get(
-        `/api/slurp2/noodler/viewer/feed?personaId=${encodeURIComponent(persona.id)}&tab=all&limit=20`,
+        `/api/slurp2/slurp/viewer/feed?personaId=${encodeURIComponent(persona.id)}&tab=all&limit=20`,
       );
       expect(feedProbe.ok(), `${feedProbe.status()} ${feedProbe.statusText()} ${await feedProbe.text()}`).toBe(true);
       const feedProbeBody = (await feedProbe.json()) as {
@@ -494,7 +494,7 @@ test.describe("standalone Slurp package", () => {
         JSON.stringify(feedProbeBody),
       ).toBe(true);
       const shellProbe = await page.request.get(
-        `/api/slurp2/noodler/viewer?personaId=${encodeURIComponent(persona.id)}`,
+        `/api/slurp2/slurp/viewer?personaId=${encodeURIComponent(persona.id)}`,
       );
       expect(shellProbe.ok()).toBe(true);
       const shellProbeBody = (await shellProbe.json()) as {
@@ -544,7 +544,7 @@ test.describe("standalone Slurp package", () => {
       await imageConnectionSelect.selectOption(imageConnectionIds[1]);
       await expect
         .poll(async () => {
-          const response = await page.request.get("/api/slurp2/noodler/image-connections");
+          const response = await page.request.get("/api/slurp2/slurp/image-connections");
           if (!response.ok()) return null;
           const mappings = (await response.json()) as { creatorConnectionIds: Record<string, string> };
           return mappings.creatorConnectionIds[stageProfile.id] ?? null;
@@ -609,18 +609,18 @@ test.describe("standalone Slurp package", () => {
       expect(errors).toEqual([]);
     } finally {
       if (postId) {
-        await request.delete(`/api/slurp2/noodler/posts/${postId}`, { timeout: 5_000 }).catch(() => undefined);
+        await request.delete(`/api/slurp2/slurp/posts/${postId}`, { timeout: 5_000 }).catch(() => undefined);
       }
       if (stageProfileId) {
         await request
-          .delete(`/api/slurp2/noodler/accounts/${stageProfileId}`, {
+          .delete(`/api/slurp2/slurp/accounts/${stageProfileId}`, {
             timeout: 5_000,
           })
           .catch(() => undefined);
       }
       if (personaStageProfileId) {
         await request
-          .delete(`/api/slurp2/noodler/accounts/${personaStageProfileId}`, {
+          .delete(`/api/slurp2/slurp/accounts/${personaStageProfileId}`, {
             timeout: 5_000,
           })
           .catch(() => undefined);

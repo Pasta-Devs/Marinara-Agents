@@ -282,7 +282,7 @@ export function SlpAdsPanel(page: SlpBackstagePageProps) {
             type="button"
             onClick={() =>
               void api
-                .download("/slurp2/noodler/ads/export", "slurp-ads.json")
+                .download("/slurp2/slurp/ads/export", "slurp-ads.json")
                 .catch((error: unknown) => toast.error(errorMessage(error)))
             }
             className="min-h-9 rounded-lg border border-[var(--slurp-outline)] px-3 text-xs font-bold hover:bg-[var(--accent)]"

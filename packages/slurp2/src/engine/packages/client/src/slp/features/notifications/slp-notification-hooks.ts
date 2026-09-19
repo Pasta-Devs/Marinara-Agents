@@ -9,7 +9,7 @@ export function useSlurpNotifications(personaId: string | null, enabled = true) 
     queryKey: [...slpKeys.noodlerRoot(), "notifications", personaId ?? "none"],
     queryFn: () =>
       api.get<{ items: SlurpEventGroup[]; unseen: SlurpEventGroup[]; unseenCount: number }>(
-        `/slurp2/noodler/notifications?personaId=${encodeURIComponent(personaId!)}`,
+        `/slurp2/slurp/notifications?personaId=${encodeURIComponent(personaId!)}`,
       ),
     enabled: Boolean(personaId) && enabled,
     staleTime: 15_000,
@@ -18,7 +18,7 @@ export function useSlurpNotifications(personaId: string | null, enabled = true) 
 export function useMarkSlurpNotificationsSeen() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (personaId: string) => api.post<{ ok: boolean }>("/slurp2/noodler/notifications/seen", { personaId }),
+    mutationFn: (personaId: string) => api.post<{ ok: boolean }>("/slurp2/slurp/notifications/seen", { personaId }),
     onSuccess: () => qc.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "notifications"] }),
   });
 }
