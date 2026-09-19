@@ -21,7 +21,12 @@ import {
 } from "./catalog-path-safety.mjs";
 import { createDeterministicZip } from "./deterministic-zip.mjs";
 import { writeEnglishPackageLocale } from "./package-locales.mjs";
-import { assertRulesetPackageContract } from "./ruleset-package-checks.mjs";
+import {
+  RULESET_ASSET_PATH,
+  assertRulesetCatalogs,
+  assertRulesetPackageContract,
+  isRulesetCatalogAssetPath,
+} from "./ruleset-package-checks.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packagesDir = join(repoRoot, "packages");
@@ -55,6 +60,8 @@ for (const id of packageIds) {
 
   // The declared asset paths are the contract; their hashes and sizes are
   // re-derived from the committed bytes so they can never drift from what ships.
+  // `catalogs/<id>.json` assets ride the same path, so a catalog is hash-pinned
+  // and zipped exactly like the ruleset file beside it.
   const assetPaths = manifest.contributions?.assets?.paths ?? [];
   const payloads = [];
   for (const assetPath of assetPaths) {
@@ -68,6 +75,16 @@ for (const id of packageIds) {
   }));
   // Fail here rather than emitting a catalog entry the validator would reject.
   assertRulesetPackageContract(manifest);
+  const rulesetPayload = payloads.find(({ name }) => name === RULESET_ASSET_PATH);
+  assertRulesetCatalogs(
+    manifest,
+    JSON.parse(rulesetPayload.buffer.toString("utf8")),
+    new Map(
+      payloads
+        .filter(({ name }) => isRulesetCatalogAssetPath(name))
+        .map(({ name, buffer }) => [name, buffer.toString("utf8")]),
+    ),
+  );
 
   // Written back only when something actually changed, so a no-op rebuild leaves
   // the tree byte-identical and does not show up as a spurious diff in a PR.
