@@ -23,7 +23,7 @@ import {
   type LtmNote,
   type LtmScope,
 } from "../../../../shared/src/features/agents/long-term-memory/index.js";
-import type { PackageLanguageModel } from "./package-runtime.js";
+import type { PackageLanguageModel, PackageLanguageModelError } from "./package-runtime.js";
 import { logger } from "./package-runtime.js";
 import { isPackageDebugAgentsEnabled } from "./package-runtime.js";
 import { countBy, safeSnippet } from "./ltm-utils.js";
@@ -71,6 +71,7 @@ const LTM_EXTRACTION_LINK_RELATIONS = [
 ] as const;
 const LTM_EXTRACTION_LINK_RELATION_SET = new Set<string>(LTM_EXTRACTION_LINK_RELATIONS);
 const LTM_EXTRACTION_NOTE_ID_PREFIX_PATTERN = /^(?:timeline|thread|world|tone|rel|char)_/;
+const MIN_LTM_EXTRACTION_OUTPUT_TOKENS = 256;
 const LTM_EXTRACTION_TIMELINE_LINK_RELATIONS = new Set<string>([
   "occurred_in",
   "triggered_by",
@@ -176,7 +177,40 @@ function isEvidenceUnitResponseObject(value: unknown): value is Record<string, u
   );
 }
 
+function structuredProviderError(error: unknown) {
+  if (!error || typeof error !== "object") return null;
+  const value = error as PackageLanguageModelError;
+  return {
+    status: typeof value.status === "number" ? value.status : undefined,
+    code: typeof value.code === "string" ? value.code.toLowerCase() : "",
+    parameter:
+      typeof value.param === "string"
+        ? value.param.toLowerCase()
+        : typeof value.parameter === "string"
+          ? value.parameter.toLowerCase()
+          : "",
+  };
+}
+
+function isProviderCompatibilityError(error: unknown) {
+  const structured = structuredProviderError(error);
+  if (
+    structured?.code &&
+    /(?:auth|forbidden|quota|rate[_-]?limit|timeout|overload|unavailable)/u.test(structured.code)
+  ) {
+    return false;
+  }
+  if (structured?.status && [401, 403, 408, 409, 413, 429, 500, 502, 503, 504, 529].includes(structured.status)) {
+    return false;
+  }
+  return true;
+}
+
 function isReasoningNoneUnsupportedError(error: unknown) {
+  if (!isProviderCompatibilityError(error)) return false;
+  const structured = structuredProviderError(error);
+  if (structured?.parameter.includes("reason") || structured?.parameter.includes("thinking")) return true;
+  if (structured?.code.includes("reason") || structured?.code.includes("thinking")) return true;
   const message = error instanceof Error ? error.message : String(error);
   return (
     /\b(?:reasoning|reasoning_effort|effort|thinking|enable_thinking)\b/i.test(message) &&
@@ -185,6 +219,10 @@ function isReasoningNoneUnsupportedError(error: unknown) {
 }
 
 function isResponseFormatUnsupportedError(error: unknown) {
+  if (!isProviderCompatibilityError(error)) return false;
+  const structured = structuredProviderError(error);
+  if (structured?.parameter.includes("response_format") || structured?.parameter.includes("schema")) return true;
+  if (structured?.code.includes("response_format") || structured?.code.includes("schema")) return true;
   const message = error instanceof Error ? error.message : String(error);
   return (
     (/\b(?:response_format|response format|json_schema|json schema|structured output|schema)\b/i.test(message) &&
@@ -338,17 +376,19 @@ async function chatCompleteWithReasoningFallback({
   messages,
   chatOptions,
   extractionOptions,
-  fallbackUsed = false,
+  responseFormatFallbackUsed = false,
+  reasoningFallbackUsed = false,
 }: {
   messages: LanguageModelMessage[];
   chatOptions: LtmEvidenceUnitChatOptions;
   extractionOptions: RunLongTermMemoryEvidenceUnitExtractionOptions;
-  fallbackUsed?: boolean;
+  responseFormatFallbackUsed?: boolean;
+  reasoningFallbackUsed?: boolean;
 }) {
   try {
     return await extractionOptions.languageModel.chatComplete(messages, chatOptions);
   } catch (err) {
-    if (fallbackUsed) {
+    if (responseFormatFallbackUsed && reasoningFallbackUsed) {
       logger.warn(err, "[ltm] LLM compatibility fallback failed for evidence unit extraction");
       throw err;
     }
@@ -374,7 +414,8 @@ async function chatCompleteWithReasoningFallback({
         messages,
         chatOptions: fallbackChatOptions,
         extractionOptions,
-        fallbackUsed: true,
+        responseFormatFallbackUsed: true,
+        reasoningFallbackUsed,
       });
     }
 
@@ -393,18 +434,18 @@ async function chatCompleteWithReasoningFallback({
       model: extractionOptions.languageModel.model,
       error: err,
       details: {
-        requestedReasoningEffort: "none",
-        appliedReasoningEffort: DEFAULT_LTM_EXTRACTION_REASONING_EFFORT,
+        requestedReasoningEffort: chatOptions.reasoningEffort,
+        appliedReasoningEffort: "none",
       },
     });
+    const fallbackChatOptions = { ...chatOptions };
+    delete fallbackChatOptions.reasoningEffort;
     return chatCompleteWithReasoningFallback({
       messages,
-      chatOptions: {
-        ...chatOptions,
-        reasoningEffort: DEFAULT_LTM_EXTRACTION_REASONING_EFFORT,
-      },
+      chatOptions: fallbackChatOptions,
       extractionOptions,
-      fallbackUsed: true,
+      responseFormatFallbackUsed,
+      reasoningFallbackUsed: true,
     });
   }
 }
@@ -728,12 +769,41 @@ async function preflightExtractionPromptContext({
   extractionOptions: RunLongTermMemoryEvidenceUnitExtractionOptions;
 }): Promise<number | undefined> {
   const providerMaxContext = extractionOptions.languageModel.maxContext ?? undefined;
-  if (!providerMaxContext) return;
-
-  const fit = extractionOptions.languageModel.fitContext(messages, { maxTokens: chatOptions.maxTokens });
   const requestedMaxTokens = chatOptions.maxTokens;
+  const fit = providerMaxContext
+    ? extractionOptions.languageModel.fitContext(messages, { maxTokens: requestedMaxTokens })
+    : undefined;
   const reducedOutputBudget =
-    typeof requestedMaxTokens === "number" && typeof fit.maxTokens === "number" && fit.maxTokens < requestedMaxTokens;
+    typeof requestedMaxTokens === "number" && typeof fit?.maxTokens === "number" && fit.maxTokens < requestedMaxTokens;
+  const fittedOutputTokens = fit?.maxTokens ?? requestedMaxTokens;
+  if (typeof fittedOutputTokens === "number" && fittedOutputTokens < MIN_LTM_EXTRACTION_OUTPUT_TOKENS) {
+    await recordLtmDebugEvent({
+      operationId: extractionOptions.operationId,
+      root: extractionOptions.root,
+      phase: "llm",
+      action: "evidence_unit_context_preflight",
+      status: "error",
+      sourceNoteId: extractionOptions.sourceNote.id,
+      provider: extractionOptions.languageModel.name,
+      model: extractionOptions.languageModel.model,
+      counts: {
+        maxContext: providerMaxContext,
+        requestedOutputTokens: requestedMaxTokens ?? 0,
+        providerCappedOutputTokens: chatOptions.maxTokens ?? 0,
+        fittedOutputTokens,
+        minimumOutputTokens: MIN_LTM_EXTRACTION_OUTPUT_TOKENS,
+        estimatedPromptTokens: fit?.estimatedTokensBefore ?? 0,
+        fittedPromptTokens: fit?.estimatedTokensAfter ?? 0,
+      },
+      details: { reason: "output_budget_below_viability_floor" },
+    });
+    throw new LtmServiceError(
+      `Long-term memory extraction model cannot provide a viable response budget (requested=${requestedMaxTokens}, providerCapped=${chatOptions.maxTokens}, fitted=${fittedOutputTokens}, minimum=${MIN_LTM_EXTRACTION_OUTPUT_TOKENS}). Choose a larger-context model or reduce the extraction input.`,
+      400,
+      "ltm_model_output_budget_unviable",
+    );
+  }
+  if (!providerMaxContext || !fit) return;
   if (!fit.trimmed && !reducedOutputBudget) return;
 
   await recordLtmDebugEvent({

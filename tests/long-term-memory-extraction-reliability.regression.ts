@@ -156,6 +156,78 @@ async function main() {
     );
     assert.equal(calls.length, 2, "schema compatibility is the only allowed second call");
     assert.equal("responseFormat" in calls[1], false);
+
+    calls.length = 0;
+    fallbackCalls = 0;
+    options.reasoningEffort = "low";
+    options.languageModel.chatComplete = async (_messages: any[], chatOptions: any) => {
+      calls.push(chatOptions);
+      fallbackCalls += 1;
+      if (fallbackCalls === 1)
+        throw Object.assign(new Error("unsupported response_format"), { status: 400, param: "response_format" });
+      if (fallbackCalls === 2)
+        throw Object.assign(new Error("unsupported reasoning effort"), { status: 400, param: "reasoning_effort" });
+      return { content: validContent, finishReason: "stop" };
+    };
+    const dualFallback = await runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() });
+    assert.equal(dualFallback.response.units.length, 1);
+    assert.equal(calls.length, 3, "response-format and reasoning fallbacks are independently bounded");
+    assert.equal("responseFormat" in calls[1], false);
+    assert.equal("reasoningEffort" in calls[2], false);
+
+    calls.length = 0;
+    options.reasoningEffort = "low";
+    options.maxOutputTokens = 200;
+    options.languageModel.maxContext = 1_000;
+    options.languageModel.fitContext = (messages: any[], _fitOptions: any) => ({
+      messages,
+      maxTokens: 123,
+      estimatedTokensBefore: 950,
+      estimatedTokensAfter: 950,
+      trimmed: false,
+    });
+    await assert.rejects(
+      () => runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() }),
+      (error: any) =>
+        error.code === "ltm_model_output_budget_unviable" &&
+        /requested=200/u.test(error.message) &&
+        /providerCapped=200/u.test(error.message) &&
+        /fitted=123/u.test(error.message),
+    );
+    assert.equal(calls.length, 0, "unviable fitted budgets fail before the provider call");
+
+    calls.length = 0;
+    options.languageModel.maxContext = null;
+    options.languageModel.maxOutputTokens = 123;
+    await assert.rejects(
+      () => runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() }),
+      (error: any) => error.code === "ltm_model_output_budget_unviable" && /fitted=123/u.test(error.message),
+    );
+    assert.equal(calls.length, 0, "provider-capped budgets fail without max-context metadata");
+
+    calls.length = 0;
+    options.maxOutputTokens = null;
+    options.languageModel.maxOutputTokens = null;
+    options.languageModel.fitContext = (messages: any[], fitOptions: any) => ({
+      messages,
+      maxTokens: fitOptions.maxTokens,
+      estimatedTokensBefore: 20,
+      estimatedTokensAfter: 20,
+      trimmed: false,
+    });
+    options.languageModel.chatComplete = async (_messages: any[], _chatOptions: any) => {
+      calls.push(_chatOptions);
+      throw Object.assign(new Error("schema quota exceeded"), {
+        status: 400,
+        code: "quota_exceeded",
+        param: "response_format",
+      });
+    };
+    await assert.rejects(
+      () => runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() }),
+      /quota exceeded/u,
+    );
+    assert.equal(calls.length, 1, "permanent quota errors do not trigger compatibility fallback");
   } finally {
     release();
     await rm(root, { recursive: true, force: true });
