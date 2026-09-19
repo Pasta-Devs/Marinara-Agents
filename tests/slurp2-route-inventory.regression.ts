@@ -195,11 +195,20 @@ const RETAINED_OLD_PATHS = new Set([
   "GET /noodler/posts/:id/media",
 ]);
 
-const routeAfterRename = (route: string): string => {
+const stagingRoutes = readFileSync(join(import.meta.dirname, "fixtures/slurp2-route-inventory.staging.txt"), "utf8")
+  .split("\n")
+  .filter(Boolean)
+  .sort();
+const routeFromStaging = (route: string): string => {
+  if (route.startsWith("ADDCONTENTTYPEPARSER ") || RETAINED_OLD_PATHS.has(route)) return route;
+  return route.replace("/noodler/", "/slurp/");
+};
+const routeToStaging = (route: string): string => {
   if (route.startsWith("ADDCONTENTTYPEPARSER ") || RETAINED_OLD_PATHS.has(route)) return route;
   return route.replace("/slurp/", "/noodler/");
 };
-const BASELINE = EXPECTED.map(routeAfterRename);
+const mappedStagingRoutes = stagingRoutes.map(routeFromStaging).sort();
+assert.deepEqual([...EXPECTED].sort(), mappedStagingRoutes, "the route mapping must match the staging fixture");
 
 const EXPECTED_HANDLER_COUNTS = {
   "features/ads": 18,
@@ -279,8 +288,8 @@ assert.ok(
   "changing the media upload method must fail the fixture",
 );
 assert.deepEqual(
-  foundRoutes.map(routeAfterRename).sort(),
-  [...BASELINE].sort(),
+  foundRoutes.map(routeToStaging).sort(),
+  stagingRoutes,
   "the route change must be limited to the explicit Slurp mapping",
 );
 assert.deepEqual(
