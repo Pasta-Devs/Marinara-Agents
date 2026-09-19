@@ -94,15 +94,14 @@ import {
   SlurpPostDialog,
   LoadMoreFeedButton,
 } from "./SlpHomeHelpers";
+import { deriveSlurpHubView, type SlurpMoment } from "./slp-hub-view";
+import { useSlurpHubDiscoveryFilters } from "./slp-hub-discovery-filters";
+import { SlurpInlineSuggestedCreators } from "./SlpScreenSuggestedCreators";
 
 // ---------------------------------------------------------------------------
 // Local types
 // ---------------------------------------------------------------------------
 
-type SlurpMoment = {
-  creator: SlurpViewerCreator;
-  post: NoodlerPostView;
-};
 
 
 // ---------------------------------------------------------------------------
@@ -189,12 +188,6 @@ export function ViewerHub({
     if (typeof window === "undefined") return "grid";
     return window.localStorage.getItem("slurp2.discover.layout") === "list" ? "list" : "grid";
   });
-  const [discoverNotSubscribed, setDiscoverNotSubscribed] = useState(false);
-  const [discoverGenders, setDiscoverGenders] = useState<Set<SlurpDiscoveryGender>>(() => new Set());
-  const [discoverTags, setDiscoverTags] = useState<Set<string>>(() => new Set());
-  const [discoverMinimumPrice, setDiscoverMinimumPrice] = useState("");
-  const [discoverMaximumPrice, setDiscoverMaximumPrice] = useState("");
-  const [discoverSort, setDiscoverSort] = useState<SlurpDiscoverSort>("recommended");
   const [openPostId, setOpenPostId] = useState<string | null>(null);
   const [momentNow] = useState(() => Date.now());
   const momentCutoff = momentNow - storyLifetimeHours * 60 * 60 * 1000;
@@ -225,105 +218,24 @@ export function ViewerHub({
     if (feedIsOnScreen) onFeedShown();
   }, [feedIsOnScreen, onFeedShown]);
   const searchTerm = search.trim().toLowerCase();
-  const { moments, feed, searchResults, discoveredCreators, suggestedCreators } = useMemo(() => {
-    const searchable = (value: unknown) => (typeof value === "string" ? value.toLowerCase() : "");
-    const creators = scope?.creators ?? [];
-    const nextMoments = creators
-      .filter((creator) => tab === "all" || creator.followed)
-      .map((creator) => ({
-        creator,
-        posts: creator.posts
-          .filter((post) => isSlurpStory(post) && new Date(post.createdAt).getTime() >= momentCutoff)
-          .sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()),
-      }))
-      .filter(({ posts }) => posts.length > 0)
-      .sort(
-        (left, right) =>
-          new Date(right.posts[right.posts.length - 1]!.createdAt).getTime() -
-          new Date(left.posts[left.posts.length - 1]!.createdAt).getTime(),
-      )
-      .flatMap(({ creator, posts }) => posts.map((post) => ({ creator, post })));
-    const allPosts = creators.flatMap((creator) =>
-      creator.posts.filter((post) => !isSlurpStory(post)).map((post) => ({ post, creator })),
-    );
-    const matchesSearch = ({ post, creator }: (typeof allPosts)[number]) =>
-      !searchTerm ||
-      (post.title ?? "").toLowerCase().includes(searchTerm) ||
-      (post.content ?? "").toLowerCase().includes(searchTerm) ||
-      searchable(creator.profile.handle).includes(searchTerm) ||
-      searchable(creator.profile.displayName).includes(searchTerm);
-    const newestFirst = (left: (typeof allPosts)[number], right: (typeof allPosts)[number]) =>
-      new Date(right.post.createdAt).getTime() - new Date(left.post.createdAt).getTime();
-    return {
-      moments: nextMoments,
-      feed: allPosts
-        .filter(({ creator }) => tab === "all" || creator.followed)
-        .filter(matchesSearch)
-        .sort(newestFirst),
-      searchResults: searchTerm ? allPosts.filter(matchesSearch).sort(newestFirst) : [],
-      discoveredCreators: creators.filter((creator) => creator.profile.id !== authorProfile?.id),
-      suggestedCreators: creators
-        .filter((creator) => creator.profile.id !== authorProfile?.id && !creator.followed)
-        .slice(0, 3),
-    };
-  }, [authorProfile?.id, momentCutoff, scope, searchTerm, tab]);
-  const filteredDiscoveredCreators = useMemo(
+  const { moments, feed, searchResults, discoveredCreators, suggestedCreators } = useMemo(
     () =>
-      filterAndSortSlurpCreators(
-        discoveredCreators,
-        {
-          search,
-          notSubscribed: discoverNotSubscribed,
-          genders: discoverGenders,
-          tags: discoverTags,
-          minimumPrice: parsePrice(discoverMinimumPrice),
-          maximumPrice: parsePrice(discoverMaximumPrice),
-          sort: discoverSort,
-        },
-        connectionCounts,
-      ),
-    [
-      connectionCounts,
-      discoverGenders,
-      discoverMaximumPrice,
-      discoverMinimumPrice,
-      discoverNotSubscribed,
-      discoverSort,
-      discoverTags,
-      discoveredCreators,
-      search,
-    ],
+      deriveSlurpHubView({
+        creators: scope?.creators ?? [],
+        tab,
+        momentCutoff,
+        searchTerm,
+        authorProfileId: authorProfile?.id,
+      }),
+    [authorProfile?.id, momentCutoff, scope, searchTerm, tab],
   );
-  const discoverFiltersActive = Boolean(
-    searchTerm ||
-    discoverNotSubscribed ||
-    discoverGenders.size ||
-    discoverTags.size ||
-    discoverMinimumPrice ||
-    discoverMaximumPrice,
-  );
-  const discoveryTagSettings = useSlurpSettings().data?.discoveryTags;
-  const customDiscoverTags = useMemo(() => {
-    const curated = new Set<string>(discoveryTagSettings?.map((entry) => entry.tag) ?? SLURP_DISCOVERY_TAGS);
-    return [...new Set(discoveredCreators.flatMap((creator) => creator.profile.tags ?? []))]
-      .filter((tag) => !curated.has(tag))
-      .sort((left, right) => left.localeCompare(right));
-  }, [discoveredCreators, discoveryTagSettings]);
-  const toggleDiscoverSetValue = <T,>(setter: Dispatch<SetStateAction<Set<T>>>, value: T) =>
-    setter((current) => {
-      const next = new Set(current);
-      if (next.has(value)) next.delete(value);
-      else next.add(value);
-      return next;
-    });
-  const clearDiscoverFilters = () => {
-    onSearchChange("");
-    setDiscoverNotSubscribed(false);
-    setDiscoverGenders(new Set());
-    setDiscoverTags(new Set());
-    setDiscoverMinimumPrice("");
-    setDiscoverMaximumPrice("");
-  };
+  const discover = useSlurpHubDiscoveryFilters({
+    discoveredCreators,
+    connectionCounts,
+    search,
+    searchTerm,
+    onSearchChange,
+  });
   if (personas.length === 0) {
     if (personasError) {
       return (
@@ -443,24 +355,24 @@ export function ViewerHub({
         )}
 
         <SlurpDiscoverToolbar
-          notSubscribed={discoverNotSubscribed}
-          onNotSubscribedChange={setDiscoverNotSubscribed}
-          genders={discoverGenders}
-          onGenderToggle={(gender) => toggleDiscoverSetValue(setDiscoverGenders, gender)}
-          minimumPrice={discoverMinimumPrice}
-          maximumPrice={discoverMaximumPrice}
-          onMinimumPriceChange={setDiscoverMinimumPrice}
-          onMaximumPriceChange={setDiscoverMaximumPrice}
-          tags={discoverTags}
-          customTags={customDiscoverTags}
-          onTagToggle={(tag) => toggleDiscoverSetValue(setDiscoverTags, tag)}
-          sort={discoverSort}
-          onSortChange={setDiscoverSort}
+          notSubscribed={discover.notSubscribed}
+          onNotSubscribedChange={discover.setNotSubscribed}
+          genders={discover.genders}
+          onGenderToggle={(gender) => discover.toggle(discover.setGenders, gender)}
+          minimumPrice={discover.minimumPrice}
+          maximumPrice={discover.maximumPrice}
+          onMinimumPriceChange={discover.setMinimumPrice}
+          onMaximumPriceChange={discover.setMaximumPrice}
+          tags={discover.tags}
+          customTags={discover.customTags}
+          onTagToggle={(tag) => discover.toggle(discover.setTags, tag)}
+          sort={discover.sort}
+          onSortChange={discover.setSort}
           layout={discoverLayout}
           onLayoutChange={setDiscoverLayout}
-          filteredCount={filteredDiscoveredCreators.length}
-          filtersActive={discoverFiltersActive}
-          onClear={clearDiscoverFilters}
+          filteredCount={discover.filtered.length}
+          filtersActive={discover.active}
+          onClear={discover.clear}
         />
 
         {searchTerm && (
@@ -501,9 +413,9 @@ export function ViewerHub({
               {localizeUi("ui.noodle.subscriptionsections.discoverCreators")}
             </h2>
           </div>
-          {filteredDiscoveredCreators.length > 0 ? (
+          {discover.filtered.length > 0 ? (
             <div className={cn(discoverLayout === "grid" ? "grid gap-3 sm:grid-cols-2" : "space-y-3")}>
-              {filteredDiscoveredCreators.map((creator) => (
+              {discover.filtered.map((creator) => (
                 <SlurpCreatorProfileCard
                   key={creator.profile.id}
                   creator={creator}
@@ -518,14 +430,14 @@ export function ViewerHub({
           ) : (
             <div className="px-4 py-8 text-center">
               <p className="text-sm font-bold">
-                {discoverFiltersActive
+                {discover.active
                   ? localizeUi("ui.slurp.discover.noMatches", { defaultValue: "No Creators match these filters" })
                   : localizeUi("ui.noodle.subscriptionsections.noCreatorsAreVisibleToThisPersonaYet")}
               </p>
-              {discoverFiltersActive && (
+              {discover.active && (
                 <button
                   type="button"
-                  onClick={clearDiscoverFilters}
+                  onClick={discover.clear}
                   className="mt-3 min-h-10 rounded-full px-4 text-sm font-bold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
                 >
                   {localizeUi("ui.slurp.discover.clearFilters", { defaultValue: "Clear filters" })}
@@ -869,45 +781,8 @@ export function ViewerHub({
 }
 
 
-// ---------------------------------------------------------------------------
-// SlurpInlineSuggestedCreators
-// ---------------------------------------------------------------------------
 
-export function SlurpInlineSuggestedCreators({
-  creators,
-  onOpenProfile,
-}: {
-  creators: SlurpViewerCreator[];
-  onOpenProfile?: (accountId: string) => void;
-}) {
-  const { t: localizeUi } = useUiTranslation();
-  if (creators.length === 0) return null;
-  return (
-    <aside
-      data-component="SlurpHome.InlineSuggestedCreators"
-      aria-labelledby="slurp-inline-suggested-creators"
-      className="overflow-hidden rounded-xl bg-[var(--slurp-surface)] px-3 py-3 ring-1 ring-inset ring-[var(--noodle-divider)]"
-    >
-      <div className="flex items-center justify-between gap-3 px-1">
-        <h2 id="slurp-inline-suggested-creators" className="text-sm font-bold">
-          {localizeUi("ui.slurp.suggestedCreators")}
-        </h2>
-        <Sparkles size={15} className="shrink-0 text-[var(--noodle-accent)]" aria-hidden="true" />
-      </div>
-      <div className="mt-2 flex snap-x gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {creators.map((creator) => (
-          <SlurpCreatorProfileCard
-            key={creator.profile.id}
-            creator={creator}
-            onOpenProfile={onOpenProfile}
-            className="w-64 shrink-0 snap-start"
-          />
-        ))}
-      </div>
-    </aside>
-  );
-}
-
+export { SlurpInlineSuggestedCreators } from "./SlpScreenSuggestedCreators";
 export { SlurpMomentShelfTile } from "./SlpScreenMoments";
 export { SlurpMomentsShelf, SlurpMomentViewer };
 
