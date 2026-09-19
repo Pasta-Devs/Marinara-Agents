@@ -1673,7 +1673,14 @@
           }
         }
       ],
-      "mechanics": { "kind": "utility", "range": 0, "cost": [{ "pool": "slots_1", "amount": 1 }] }
+      "mechanics": {
+        "kind": "heal",
+        "range": 0,
+        "targets": "ally",
+        "amount": { "dice": "1d8" },
+        "cost": [{ "pool": "slots_1", "amount": 1 }],
+        "perCostStep": { "dice": "1d8" }
+      }
     },
     {
       "id": "dancing-lights",
@@ -3671,7 +3678,14 @@
           }
         }
       ],
-      "mechanics": { "kind": "utility", "range": 60, "cost": [{ "pool": "slots_6", "amount": 1 }] }
+      "mechanics": {
+        "kind": "heal",
+        "range": 60,
+        "targets": "ally",
+        "amount": { "flat": 70 },
+        "cost": [{ "pool": "slots_6", "amount": 1 }],
+        "perCostStep": { "flat": 10 }
+      }
     },
     {
       "id": "healing-word",
@@ -3691,7 +3705,14 @@
           }
         }
       ],
-      "mechanics": { "kind": "utility", "range": 60, "cost": [{ "pool": "slots_1", "amount": 1 }] }
+      "mechanics": {
+        "kind": "heal",
+        "range": 60,
+        "targets": "ally",
+        "amount": { "dice": "1d4" },
+        "cost": [{ "pool": "slots_1", "amount": 1 }],
+        "perCostStep": { "dice": "1d4" }
+      }
     },
     {
       "id": "heat-metal",
@@ -4659,10 +4680,13 @@
         }
       ],
       "mechanics": {
-        "kind": "utility",
+        "kind": "heal",
         "range": 60,
         "area": { "shape": "burst", "size": 30 },
-        "cost": [{ "pool": "slots_5", "amount": 1 }]
+        "targets": "ally",
+        "amount": { "dice": "3d8" },
+        "cost": [{ "pool": "slots_5", "amount": 1 }],
+        "perCostStep": { "dice": "1d8" }
       }
     },
     {
@@ -4683,7 +4707,7 @@
           }
         }
       ],
-      "mechanics": { "kind": "utility", "range": 60, "cost": [{ "pool": "slots_9", "amount": 1 }] }
+      "mechanics": { "kind": "heal", "range": 60, "targets": "ally", "cost": [{ "pool": "slots_9", "amount": 1 }] }
     },
     {
       "id": "mass-healing-word",
@@ -4703,7 +4727,14 @@
           }
         }
       ],
-      "mechanics": { "kind": "utility", "range": 60, "cost": [{ "pool": "slots_3", "amount": 1 }] }
+      "mechanics": {
+        "kind": "heal",
+        "range": 60,
+        "targets": "ally",
+        "amount": { "dice": "1d4" },
+        "cost": [{ "pool": "slots_3", "amount": 1 }],
+        "perCostStep": { "dice": "1d4" }
+      }
     },
     {
       "id": "mass-suggestion",
@@ -5343,7 +5374,14 @@
           }
         }
       ],
-      "mechanics": { "kind": "utility", "range": 30, "cost": [{ "pool": "slots_2", "amount": 1 }] }
+      "mechanics": {
+        "kind": "heal",
+        "range": 30,
+        "targets": "ally",
+        "amount": { "dice": "2d8" },
+        "cost": [{ "pool": "slots_2", "amount": 1 }],
+        "perCostStep": { "dice": "1d8" }
+      }
     },
     {
       "id": "prestidigitation",
@@ -5696,7 +5734,13 @@
           }
         }
       ],
-      "mechanics": { "kind": "utility", "range": 0, "cost": [{ "pool": "slots_7", "amount": 1 }] }
+      "mechanics": {
+        "kind": "heal",
+        "range": 0,
+        "targets": "ally",
+        "amount": { "dice": "4d8+15" },
+        "cost": [{ "pool": "slots_7", "amount": 1 }]
+      }
     },
     {
       "id": "reincarnate",

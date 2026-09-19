@@ -35,6 +35,7 @@ import {
 import {
   RULESET_ASSET_PATH,
   assertRulesetAssetDocument,
+  assertRulesetBattle,
   assertRulesetCatalogs,
   assertRulesetPackageContract,
   isRulesetPackage,
@@ -699,6 +700,9 @@ for (const entry of catalog.packages) {
       catalogSources.set(catalogPath, await readFile(path, "utf8"));
     }
     assertRulesetCatalogs(manifest, document, catalogSources);
+    // The battle block ships inside the same file and is gated the same way, so it is checked here
+    // for the same reason: what this repository publishes has to be installable.
+    assertRulesetBattle(manifest, document);
   } else {
     if (!manifest.entrypoints.agents) throw new Error(`Missing agent definition entrypoint for ${manifest.id}`);
     const agentDefinitions = JSON.parse(

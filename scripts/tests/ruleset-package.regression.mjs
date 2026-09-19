@@ -9,6 +9,7 @@ import {
   RULESET_ASSET_PATH,
   RULESET_CATALOG_MAX_BYTES,
   assertRulesetAssetDocument,
+  assertRulesetBattle,
   assertRulesetCatalogs,
   assertRulesetPackageContract,
   isRulesetCatalogAssetPath,
@@ -354,6 +355,194 @@ assert.throws(
 assert.throws(
   () => assertRulesetCatalogs(assetManifest, testDocument(undefined)),
   /declares catalogs\/knacks\.json but its ruleset\.json has no catalogs/u,
+);
+
+// ── Battles (Capability API 1.22) ──
+//
+// A `battle` block is nothing but references into the sheet beside it, and it
+// ships inside ruleset.json where the manifest cannot show it. The same pinning
+// applies: each rejection is a package that would install and then lend a fight
+// nothing, or be refused outright by a host that predates the key.
+
+// The package as committed opts in, and its block holds together.
+assert.equal(assertRulesetBattle(shippedManifest, parsedAsset), true);
+
+const battleSheet = {
+  lists: [
+    {
+      id: "knacks",
+      columns: [
+        { id: "name", type: "text" },
+        { id: "ready", type: "boolean" },
+        { id: "tier", type: "number" },
+        { id: "phase", type: "enum", values: ["day", "night"] },
+      ],
+    },
+    // A list whose rows are pools is keyed by a row's name, so it can never be a battle pool.
+    { id: "counters", pools: { nameColumn: "name", maxColumn: "max" }, columns: [{ id: "name", type: "text" }] },
+  ],
+  live: {
+    pools: [{ id: "grit" }, { id: "luck" }, { id: "slots_1" }, { id: "slots_2" }, { id: "stress", start: "empty" }],
+  },
+};
+const battleDocument = (battle) => ({ id: "test", version: 1, name: "Test", sheet: battleSheet, battle });
+const battle = {
+  health: { pool: "grit" },
+  energy: { pool: "luck" },
+  slots: [
+    { pool: "slots_1", level: 1 },
+    { pool: "slots_2", level: 2 },
+  ],
+  skills: [{ list: "knacks", onlyWhen: "ready", alwaysWhen: { column: "tier", equals: 0 } }],
+};
+const battleManifest = rulesetManifest({ capabilityApi: { major: 1, minor: 22 } });
+
+assert.equal(assertRulesetBattle(battleManifest, battleDocument(battle)), true);
+// A ruleset with no battle block at all is untouched, and needs no 1.22.
+assert.equal(assertRulesetBattle(rulesetManifest(), battleDocument(undefined)), false);
+assert.throws(
+  () => assertRulesetBattle(rulesetManifest({ capabilityApi: { major: 1, minor: 21 } }), battleDocument(battle)),
+  /ships a battle block and must declare capability API 1\.22 or newer/u,
+);
+assert.doesNotThrow(() =>
+  assertRulesetBattle(rulesetManifest({ capabilityApi: { major: 2, minor: 0 } }), battleDocument(battle)),
+);
+
+// The pools a fight reads have to be declared live pools of this very sheet.
+assert.throws(
+  () => assertRulesetBattle(battleManifest, battleDocument({ ...battle, health: { pool: "vigor" } })),
+  /battle health names unknown live pool "vigor"/u,
+);
+assert.throws(
+  () => assertRulesetBattle(battleManifest, battleDocument({ ...battle, health: { pool: "counters" } })),
+  /battle health "counters" is a list whose rows are pools, not a live pool/u,
+);
+assert.throws(() => assertRulesetBattle(battleManifest, battleDocument({ skills: [] })), /must name a health pool/u);
+// A pool that starts empty counts up, so as health every fresh character would begin already down.
+assert.throws(
+  () => assertRulesetBattle(battleManifest, battleDocument({ ...battle, health: { pool: "stress" } })),
+  /battle health pool "stress" starts empty, so it cannot be hit points/u,
+);
+// Hit points cannot also be the fight's fuel: the Engine drains one as damage and spends the other.
+assert.throws(
+  () => assertRulesetBattle(battleManifest, battleDocument({ ...battle, energy: { pool: "grit" } })),
+  /battle energy pool "grit" cannot also be the health pool/u,
+);
+assert.throws(
+  () => assertRulesetBattle(battleManifest, battleDocument({ ...battle, energy: { pool: "vigor" } })),
+  /battle energy names unknown live pool "vigor"/u,
+);
+
+// Slots: declared, each pool and each level used once, and a level 5e could hold.
+assert.throws(
+  () => assertRulesetBattle(battleManifest, battleDocument({ ...battle, slots: [{ pool: "vigor", level: 1 }] })),
+  /battle slot pool names unknown live pool "vigor"/u,
+);
+assert.throws(
+  () => assertRulesetBattle(battleManifest, battleDocument({ ...battle, slots: [{ pool: "grit", level: 1 }] })),
+  /battle slot pool "grit" is already the health or energy pool/u,
+);
+assert.throws(
+  () => assertRulesetBattle(battleManifest, battleDocument({ ...battle, slots: [{ pool: "luck", level: 1 }] })),
+  /battle slot pool "luck" is already the health or energy pool/u,
+);
+assert.throws(
+  () =>
+    assertRulesetBattle(
+      battleManifest,
+      battleDocument({
+        ...battle,
+        slots: [
+          { pool: "slots_1", level: 1 },
+          { pool: "slots_1", level: 2 },
+        ],
+      }),
+    ),
+  /battle repeats the slot pool "slots_1"/u,
+);
+assert.throws(
+  () =>
+    assertRulesetBattle(
+      battleManifest,
+      battleDocument({
+        ...battle,
+        slots: [
+          { pool: "slots_1", level: 1 },
+          { pool: "slots_2", level: 1 },
+        ],
+      }),
+    ),
+  /battle repeats the slot level 1/u,
+);
+for (const level of [0, 10, 1.5, "1"]) {
+  assert.throws(
+    () => assertRulesetBattle(battleManifest, battleDocument({ ...battle, slots: [{ pool: "slots_1", level }] })),
+    /battle slot pool "slots_1" has level .*, not 1 to 9/u,
+    String(level),
+  );
+}
+
+// Skills: the list exists, the gate is a boolean column, and the value compared against a column is
+// one that column could hold. A comparison that can never match would silently drop every row.
+assert.throws(
+  () => assertRulesetBattle(battleManifest, battleDocument({ ...battle, skills: [{ list: "tricks" }] })),
+  /battle skills name unknown list "tricks"/u,
+);
+assert.throws(
+  () =>
+    assertRulesetBattle(battleManifest, battleDocument({ ...battle, skills: [{ list: "knacks", onlyWhen: "tier" }] })),
+  /battle skills onlyWhen "tier" must name a boolean column/u,
+);
+assert.throws(
+  () =>
+    assertRulesetBattle(battleManifest, battleDocument({ ...battle, skills: [{ list: "knacks", onlyWhen: "gone" }] })),
+  /battle skills onlyWhen "gone" must name a boolean column/u,
+);
+assert.throws(
+  () =>
+    assertRulesetBattle(
+      battleManifest,
+      battleDocument({ ...battle, skills: [{ list: "knacks", alwaysWhen: { column: "gone", equals: 0 } }] }),
+    ),
+  /battle skills alwaysWhen names unknown column "gone"/u,
+);
+assert.throws(
+  () =>
+    assertRulesetBattle(
+      battleManifest,
+      battleDocument({ ...battle, skills: [{ list: "knacks", alwaysWhen: { column: "tier", equals: "0" } }] }),
+    ),
+  /battle skills alwaysWhen "tier" is a number column, so equals must be a number/u,
+);
+assert.throws(
+  () =>
+    assertRulesetBattle(
+      battleManifest,
+      battleDocument({ ...battle, skills: [{ list: "knacks", alwaysWhen: { column: "ready", equals: 1 } }] }),
+    ),
+  /battle skills alwaysWhen "ready" is a boolean column, so equals must be true or false/u,
+);
+assert.throws(
+  () =>
+    assertRulesetBattle(
+      battleManifest,
+      battleDocument({ ...battle, skills: [{ list: "knacks", alwaysWhen: { column: "name", equals: 1 } }] }),
+    ),
+  /battle skills alwaysWhen "name" is a text column, so equals must be a string/u,
+);
+assert.throws(
+  () =>
+    assertRulesetBattle(
+      battleManifest,
+      battleDocument({ ...battle, skills: [{ list: "knacks", alwaysWhen: { column: "phase", equals: "dusk" } }] }),
+    ),
+  /battle skills alwaysWhen "dusk" is not one of the values of "phase"/u,
+);
+assert.doesNotThrow(() =>
+  assertRulesetBattle(
+    battleManifest,
+    battleDocument({ ...battle, skills: [{ list: "knacks", alwaysWhen: { column: "phase", equals: "night" } }] }),
+  ),
 );
 
 // The published artifact must be reproducible: the same manifest and asset bytes

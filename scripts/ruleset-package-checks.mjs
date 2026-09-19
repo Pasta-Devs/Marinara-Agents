@@ -11,7 +11,8 @@
 // Re-implementing that schema here would give this repository a second copy of a
 // contract it does not own, which would drift silently the first time the Engine
 // adds a field. These checks cover only what the catalog itself needs to publish the
-// asset honestly: that it parses, and that it carries the identity the Engine keys on.
+// asset honestly: that it parses, that it carries the identity the Engine keys on, and
+// that the ids a catalog or a `battle` block points at exist on the sheet beside them.
 //
 // The functions are pure so they can be exercised directly by
 // scripts/tests/ruleset-package.regression.mjs; validate-catalog.mjs does the file
@@ -29,6 +30,11 @@ export const RULESET_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 20 })
 // the reserved `catalogs/<id>.json` family, so declaring one against 1.20 would
 // again advertise an install that cannot work.
 export const RULESET_CATALOG_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 21 });
+
+// Capability API 1.22 added the `battle` block: the sheet pools and lists a fight
+// may read, and write back to. It lives inside `ruleset.json` like `catalogs`, so
+// the manifest cannot show it and the gate is read from the document instead.
+export const RULESET_BATTLE_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 22 });
 
 // The Engine refuses a catalog asset on its declared size before reading it, and
 // refuses a catalog holding more entries than this. Both are mirrored here so a
@@ -317,4 +323,113 @@ export function assertRulesetCatalogs(manifest, document, catalogSources = new M
       throw new Error(`${id} declares ${path} but no catalog in ${RULESET_ASSET_PATH} names it`);
   }
   return summaries;
+}
+
+/** Why `equals` is not a value this list column could hold, or null when it is. A comparison that
+ *  can never match is a typo, and the row it was meant to let through would simply never appear. */
+function columnEqualsIssue(column, equals) {
+  if (column.type === "enum") {
+    return typeof equals === "string" && (column.values ?? []).includes(equals)
+      ? null
+      : `${JSON.stringify(equals)} is not one of the values of "${column.id}"`;
+  }
+  if (column.type === "number") {
+    return typeof equals === "number" ? null : `"${column.id}" is a number column, so equals must be a number`;
+  }
+  if (column.type === "boolean") {
+    return typeof equals === "boolean" ? null : `"${column.id}" is a boolean column, so equals must be true or false`;
+  }
+  return typeof equals === "string" ? null : `"${column.id}" is a text column, so equals must be a string`;
+}
+
+/** Assert a ruleset package's `battle` block, and report whether it has one.
+ *
+ *  This one does look into the sheet, unlike the checks above, because a battle block is nothing but
+ *  references into it: a pool id that is not a live pool, or a column that cannot hold the value
+ *  compared against it, would publish fine and then lend a fight nothing. The Engine makes the same
+ *  checks when it parses the file, so these are its rules restated at the narrow shape the block
+ *  has, not a second copy of the ruleset schema. */
+export function assertRulesetBattle(manifest, document) {
+  const id = manifest?.id ?? "package";
+  const battle = document?.battle;
+  if (battle === undefined) return false;
+  if (!battle || typeof battle !== "object" || Array.isArray(battle)) {
+    throw new Error(`${id} battle must be an object`);
+  }
+  // A battle key means the host has to understand battles at all: an older Engine's strict schema
+  // refuses the whole ruleset file, exactly as it does for catalogs under 1.21.
+  const api = RULESET_BATTLE_MIN_CAPABILITY_API;
+  if (!meetsCapabilityApi(manifest, api)) {
+    throw new Error(`${id} ships a battle block and must declare capability API ${api.major}.${api.minor} or newer`);
+  }
+
+  const pools = new Map((document.sheet?.live?.pools ?? []).map((pool) => [pool.id, pool]));
+  const lists = new Map((document.sheet?.lists ?? []).map((list) => [list.id, list]));
+  // A list whose rows are pools is keyed by a row's name, so it comes and goes as the player edits
+  // the sheet. A battle names declared live pools only.
+  const livePool = (pool, where) => {
+    if (pools.has(pool)) return;
+    throw new Error(
+      lists.get(pool)?.pools
+        ? `${id} battle ${where} "${pool}" is a list whose rows are pools, not a live pool`
+        : `${id} battle ${where} names unknown live pool ${JSON.stringify(pool)}`,
+    );
+  };
+
+  if (!battle.health || typeof battle.health.pool !== "string") {
+    throw new Error(`${id} battle must name a health pool`);
+  }
+  livePool(battle.health.pool, "health");
+  // A pool that starts empty counts up (stress, corruption), so as health it would put every fresh
+  // character into their first fight already down.
+  if (pools.get(battle.health.pool).start === "empty") {
+    throw new Error(`${id} battle health pool "${battle.health.pool}" starts empty, so it cannot be hit points`);
+  }
+  if (battle.energy !== undefined) {
+    livePool(battle.energy?.pool, "energy");
+    // The Engine drains hit points as damage and spends energy as a cost, and one pool cannot be both.
+    if (battle.energy.pool === battle.health.pool) {
+      throw new Error(`${id} battle energy pool "${battle.energy.pool}" cannot also be the health pool`);
+    }
+  }
+
+  const slots = battle.slots ?? [];
+  if (!Array.isArray(slots)) throw new Error(`${id} battle slots must be an array`);
+  const slotPools = new Set();
+  const slotLevels = new Set();
+  for (const slot of slots) {
+    livePool(slot?.pool, "slot pool");
+    if (slot.pool === battle.health.pool || slot.pool === battle.energy?.pool) {
+      throw new Error(`${id} battle slot pool "${slot.pool}" is already the health or energy pool`);
+    }
+    if (slotPools.has(slot.pool)) throw new Error(`${id} battle repeats the slot pool "${slot.pool}"`);
+    slotPools.add(slot.pool);
+    if (!Number.isInteger(slot.level) || slot.level < 1 || slot.level > 9) {
+      throw new Error(`${id} battle slot pool "${slot.pool}" has level ${JSON.stringify(slot.level)}, not 1 to 9`);
+    }
+    if (slotLevels.has(slot.level)) throw new Error(`${id} battle repeats the slot level ${slot.level}`);
+    slotLevels.add(slot.level);
+  }
+
+  const skills = battle.skills ?? [];
+  if (!Array.isArray(skills)) throw new Error(`${id} battle skills must be an array`);
+  for (const source of skills) {
+    const list = lists.get(source?.list);
+    if (!list) throw new Error(`${id} battle skills name unknown list ${JSON.stringify(source?.list)}`);
+    const columns = new Map((list.columns ?? []).map((column) => [column.id, column]));
+    if (source.onlyWhen !== undefined && columns.get(source.onlyWhen)?.type !== "boolean") {
+      throw new Error(`${id} battle skills onlyWhen ${JSON.stringify(source.onlyWhen)} must name a boolean column`);
+    }
+    if (source.alwaysWhen !== undefined) {
+      const column = columns.get(source.alwaysWhen?.column);
+      if (!column) {
+        throw new Error(
+          `${id} battle skills alwaysWhen names unknown column ${JSON.stringify(source.alwaysWhen?.column)}`,
+        );
+      }
+      const mismatch = columnEqualsIssue(column, source.alwaysWhen.equals);
+      if (mismatch) throw new Error(`${id} battle skills alwaysWhen ${mismatch}`);
+    }
+  }
+  return true;
 }
