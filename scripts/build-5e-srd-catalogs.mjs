@@ -1172,10 +1172,13 @@ function plainText(text) {
     .trim();
 }
 
-function trait(name, text) {
+/** One line the Game Master is shown. `kind` is only for the build report, and is dropped before the
+ *  trait is written, so the report can say what each trait is standing in for. */
+function trait(kind, name, text) {
   const line = plainText(text);
   if (!line) return undefined;
   return {
+    kind,
     name: trimToSentence(plainText(name), TRAIT_NAME_MAX),
     text: trimToSentence(line, TRAIT_TEXT_MAX, TRUNCATION_NOTE),
   };
@@ -1314,7 +1317,7 @@ function creatureAction(action, attackRow, report) {
     const second = headings[1];
     label = plainText(first[1]).replace(/\.$/u, "");
     text = plainText(marked.slice(first.index + first[0].length, second.index));
-    notes.push(trait(name, marked.slice(second.index)));
+    notes.push(trait("other options of one printed action", name, marked.slice(second.index)));
     report.optionBlocksSplit += 1;
   }
   text = plainText(text);
@@ -1359,7 +1362,7 @@ function creatureAction(action, attackRow, report) {
         }
       }
       if (conditions.length > 0) {
-        notes.push(trait(label, effect));
+        notes.push(trait("how a condition an attack applies is escaped", label, effect));
         report.attacksThatOnlyApplyAConditionCount += 1;
       }
     }
@@ -1386,7 +1389,7 @@ function creatureAction(action, attackRow, report) {
     });
     if (!built.damage && !built.applies) {
       report.attacksWithNothingToResolve.push(action.pk);
-      return { action: null, notes: [...notes, trait(name, full)] };
+      return { action: null, notes: [...notes, trait("a printed action nothing can resolve", name, full)] };
     }
     for (const clause of dropped) {
       if (clause.joiner?.toLowerCase() === "plus") report.foldedRiders += 1;
@@ -1396,7 +1399,9 @@ function creatureAction(action, attackRow, report) {
     // not a condition the sheet has, is kept as a trait so the rule is still in front of the Game
     // Master rather than quietly gone.
     const carried = conditions.length > 0 && !riderDamage;
-    if (dropped.length > 0 || riderDamage || (ability && !carried)) notes.push(trait(label, effect));
+    if (dropped.length > 0 || riderDamage || (ability && !carried)) {
+      notes.push(trait(dropped.length > 0 ? "a damage clause one roll cannot hold" : "a rider save", label, effect));
+    }
     if (ability && !carried) report.riderSavesNotCarried += 1;
     return { action: built, notes };
   }
@@ -1406,7 +1411,7 @@ function creatureAction(action, attackRow, report) {
   const save = SAVE_DC.exec(text);
   if (!save) {
     report.actionsWithNeitherAttackNorSave += 1;
-    return { action: null, notes: [...notes, trait(name, full)] };
+    return { action: null, notes: [...notes, trait("a printed action nothing can resolve", name, full)] };
   }
   const ability = ABILITY_BY_SAVE_NAME[save[2].toLowerCase()];
   const conditions = appliedConditions(text, save.index, ability);
@@ -1425,13 +1430,13 @@ function creatureAction(action, attackRow, report) {
   });
   if (!built.damage && !built.applies) {
     report.savesWithNothingToResolve.push(action.pk);
-    return { action: null, notes: [...notes, trait(name, full)] };
+    return { action: null, notes: [...notes, trait("a printed action nothing can resolve", name, full)] };
   }
   for (const clause of dropped) {
     if (clause.joiner?.toLowerCase() === "plus") report.foldedRiders += 1;
     else report.alternativeClauses += 1;
   }
-  if (dropped.length > 0) notes.push(trait(label, text));
+  if (dropped.length > 0) notes.push(trait("a damage clause one roll cannot hold", label, text));
   return { action: built, notes };
 }
 
@@ -1578,8 +1583,9 @@ function creatureEntry(record, sources, report) {
     }
     // A sequence carries the strikes and never the riders and alternatives the same sentence states,
     // so the printed sentence rides along as a trait unless the sequence is the whole of it.
-    if (!sequence || MULTI_RIDER.test(text) || /[.;]\s+\S/u.test(text)) notes.push(trait("Multiattack", text));
-    else report.multiattacksFullyCarried += 1;
+    if (!sequence || MULTI_RIDER.test(text) || /[.;]\s+\S/u.test(text)) {
+      notes.push(trait("what a multiattack says beyond its strikes", "Multiattack", text));
+    } else report.multiattacksFullyCarried += 1;
   }
 
   if (built.length === 0) {
@@ -1597,6 +1603,7 @@ function creatureEntry(record, sources, report) {
     else {
       notes.push(
         trait(
+          "a condition immunity this sheet cannot hold",
           "Immune to exhaustion",
           `The ${fields.name} is immune to ${condition}, which this sheet counts on a track rather than as a condition.`,
         ),
@@ -1608,17 +1615,21 @@ function creatureEntry(record, sources, report) {
     const word = fields.nonmagical_attack_immunity ? "immune to" : "resistant to";
     notes.push(
       trait(
+        "a qualifier on a resistance",
         "Nonmagical attacks",
         `${plainText(fields.damage_resistances_display || fields.damage_immunities_display) || `It is ${word} damage from nonmagical attacks.`} A fight has no way to ask whether a weapon is magical, so this qualifier is not applied.`,
       ),
     );
     report.nonmagicalQualifiers += 1;
   }
-  for (const source of sources.traits.get(pk) ?? []) notes.push(trait(source.fields.name, source.fields.desc));
+  for (const source of sources.traits.get(pk) ?? []) {
+    notes.push(trait("a trait the stat block prints", source.fields.name, source.fields.desc));
+  }
 
   const kept = notes.filter(Boolean).slice(0, CREATURE_MAX_TRAITS);
   report.traitsShipped += kept.length;
   report.traitsDropped += notes.filter(Boolean).length - kept.length;
+  for (const note of kept) report.traitsByKind.set(note.kind, (report.traitsByKind.get(note.kind) ?? 0) + 1);
 
   const health = fields.hit_dice ? { dice: fields.hit_dice } : fields.hit_points;
   if (typeof health === "object") {
@@ -1665,7 +1676,7 @@ function creatureEntry(record, sources, report) {
     immune: fields.damage_immunities.length > 0 ? [...fields.damage_immunities] : undefined,
     conditionImmunities: conditionImmunities.length > 0 ? conditionImmunities : undefined,
     tier: tierId(challenge),
-    traits: kept.length > 0 ? kept : undefined,
+    traits: kept.length > 0 ? kept.map(({ name, text }) => ({ name, text })) : undefined,
     signaturePoints,
     actions: built,
   });
@@ -2084,7 +2095,8 @@ for (const { fields } of await fixture("SpellCastingOption.json")) {
   if (!castingOptions.has(fields.parent)) castingOptions.set(fields.parent, new Map());
   castingOptions.get(fields.parent).set(fields.type, fields);
 }
-const spells = buildSpellEntries(srdOnly(await fixture("Spell.json"), "spell"), castingOptions, classNames);
+const srdSpells = srdOnly(await fixture("Spell.json"), "spell");
+const spells = buildSpellEntries(srdSpells, castingOptions, classNames);
 
 // A class table's rows are modelled as features whose description is the marker
 // "[Column data]". They are the source for a counter maximum, never a feature a
@@ -2144,6 +2156,7 @@ const report = {
   conditionImmunitiesNotCarried: 0,
   nonmagicalQualifiers: 0,
   traitsShipped: 0,
+  traitsByKind: new Map(),
   traitsDropped: 0,
   tiersFilledFromNeighbours: [],
 };
@@ -2343,6 +2356,9 @@ console.log(
 console.log(
   `  traits: ${report.traitsShipped} shipped, ${report.traitsDropped} dropped over the ${CREATURE_MAX_TRAITS} a creature may carry`,
 );
+for (const [kind, count] of [...report.traitsByKind].sort((left, right) => right[1] - left[1])) {
+  console.log(`    ${String(count).padStart(4)}  ${kind}`);
+}
 console.log(
   `  ${report.conditionImmunitiesNotCarried} condition immunity/immunities and ${report.nonmagicalQualifiers} nonmagical-attack qualifier(s) became traits`,
 );
