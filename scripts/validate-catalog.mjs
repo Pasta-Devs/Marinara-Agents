@@ -35,8 +35,10 @@ import {
 import {
   RULESET_ASSET_PATH,
   assertRulesetAssetDocument,
+  assertRulesetCatalogs,
   assertRulesetPackageContract,
   isRulesetPackage,
+  rulesetCatalogAssetPaths,
 } from "./ruleset-package-checks.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -690,13 +692,22 @@ for (const entry of catalog.packages) {
   // contract check itself runs for every package, because the binding between the
   // kind and the reserved asset has to hold in both directions.
   if (assertRulesetPackageContract(manifest)) {
-    assertRulesetAssetDocument(
+    const document = assertRulesetAssetDocument(
       await readFile(
         await resolveContainedPortablePath(packageRoot, RULESET_ASSET_PATH, `Ruleset asset for ${manifest.id}`),
         "utf8",
       ),
       manifest.id,
     );
+    // Catalogs ship beside the ruleset file and are read by the same Engine
+    // seam, so they are checked here for the same reason: what this repository
+    // publishes has to be installable.
+    const catalogSources = new Map();
+    for (const catalogPath of rulesetCatalogAssetPaths(manifest)) {
+      const path = await resolveContainedPortablePath(packageRoot, catalogPath, `Catalog asset for ${manifest.id}`);
+      catalogSources.set(catalogPath, await readFile(path, "utf8"));
+    }
+    assertRulesetCatalogs(manifest, document, catalogSources);
   } else {
     if (!manifest.entrypoints.agents) throw new Error(`Missing agent definition entrypoint for ${manifest.id}`);
     const agentDefinitions = JSON.parse(
