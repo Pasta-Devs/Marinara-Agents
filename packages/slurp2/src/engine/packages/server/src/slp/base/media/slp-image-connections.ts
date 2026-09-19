@@ -4,21 +4,21 @@ import { createAppSettingsStorage } from "../../../services/storage/app-settings
 const KEY = "slurp2.image-connections";
 const LEGACY_KEY = "noodle.noodler-image-connections";
 export const SLURP_IMAGE_CONNECTIONS_KEY = KEY;
-export const LEGACY_NOODLER_IMAGE_CONNECTIONS_KEY = LEGACY_KEY;
+export const LEGACY_SLP_CREATOR_IMAGE_CONNECTIONS_KEY = LEGACY_KEY;
 
-export type NoodlerImageConnections = {
+export type SlpCreatorImageConnections = {
   defaultConnectionId: string | null;
   creatorConnectionIds: Record<string, string>;
 };
 
-const defaults = (): NoodlerImageConnections => ({ defaultConnectionId: null, creatorConnectionIds: {} });
+const defaults = (): SlpCreatorImageConnections => ({ defaultConnectionId: null, creatorConnectionIds: {} });
 
-export async function getNoodlerImageConnections(db: DB): Promise<NoodlerImageConnections> {
+export async function getCreatorImageConnections(db: DB): Promise<SlpCreatorImageConnections> {
   const storage = createAppSettingsStorage(db);
   const raw = (await storage.get(KEY)) ?? (await storage.get(LEGACY_KEY));
   if (!raw) return defaults();
   try {
-    const value = JSON.parse(raw) as Partial<NoodlerImageConnections>;
+    const value = JSON.parse(raw) as Partial<SlpCreatorImageConnections>;
     const result = {
       defaultConnectionId: typeof value.defaultConnectionId === "string" ? value.defaultConnectionId : null,
       creatorConnectionIds:
@@ -37,11 +37,11 @@ export async function getNoodlerImageConnections(db: DB): Promise<NoodlerImageCo
   }
 }
 
-export async function saveNoodlerImageConnections(db: DB, value: NoodlerImageConnections): Promise<void> {
+export async function saveCreatorImageConnections(db: DB, value: SlpCreatorImageConnections): Promise<void> {
   await createAppSettingsStorage(db).set(KEY, JSON.stringify(value));
 }
 
-export async function clearNoodlerImageConnections(db: DB): Promise<void> {
+export async function clearCreatorImageConnections(db: DB): Promise<void> {
   const storage = createAppSettingsStorage(db);
   await storage.remove(KEY);
   await storage.remove(LEGACY_KEY);
@@ -52,20 +52,20 @@ export async function clearNoodlerImageConnections(db: DB): Promise<void> {
 // enough. ponytail: in-process queue; needs a row lock if this ever runs multi-process.
 let updateQueue: Promise<unknown> = Promise.resolve();
 
-export async function updateNoodlerImageConnections(
+export async function updateCreatorImageConnections(
   db: DB,
-  mutate: (current: NoodlerImageConnections) => NoodlerImageConnections,
-): Promise<NoodlerImageConnections> {
+  mutate: (current: SlpCreatorImageConnections) => SlpCreatorImageConnections,
+): Promise<SlpCreatorImageConnections> {
   const run = updateQueue.then(async () => {
-    const next = mutate(await getNoodlerImageConnections(db));
-    await saveNoodlerImageConnections(db, next);
+    const next = mutate(await getCreatorImageConnections(db));
+    await saveCreatorImageConnections(db, next);
     return next;
   });
   updateQueue = run.catch(() => undefined);
   return run;
 }
 
-export async function resolveNoodlerImageConnectionId(db: DB, creatorId: string): Promise<string | null> {
-  const value = await getNoodlerImageConnections(db);
+export async function resolveCreatorImageConnectionId(db: DB, creatorId: string): Promise<string | null> {
+  const value = await getCreatorImageConnections(db);
   return value.creatorConnectionIds[creatorId] ?? value.defaultConnectionId;
 }

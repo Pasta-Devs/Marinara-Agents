@@ -26,7 +26,7 @@ import {
   type GarnishContentRating,
 } from "../../../services/garnish-ads/garnish-ads.types.js";
 import { requireModelAnswer } from "../../base/model/slp-model-answer.js";
-import { noodleSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
+import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
 import { SLURP_GARNISH_PLATFORM } from "./slp-garnish-context.js";
 import { NOODLER_UNTRUSTED_CONTENT_INSTRUCTION } from "../feed/slp-feed-contract.js";
 import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "../../base/prompting/slp-prompt-blocks.js";
@@ -190,7 +190,7 @@ export async function generateGarnishAds(
 
   const options = {
     model: connection.model,
-    ...noodleSamplingOptions(
+    ...slpSamplingOptions(
       resolveStoredChatOptions(connection.defaultParameters, connection.provider, connection.model),
       { temperature: 1, topP: 0.95 },
     ),

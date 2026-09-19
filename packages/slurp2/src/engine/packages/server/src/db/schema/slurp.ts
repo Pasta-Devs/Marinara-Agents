@@ -3,7 +3,7 @@
 // ──────────────────────────────────────────────
 import { fileTable, text } from "../file-schema.js";
 
-export const noodleAccounts = fileTable(
+export const slpAccounts = fileTable(
   "slurp2_accounts",
   {
     id: text("id").primaryKey(),
@@ -61,7 +61,7 @@ export const noodleAccounts = fileTable(
   },
 );
 
-export const noodlePosts = fileTable("slurp2_posts", {
+export const slpPosts = fileTable("slurp2_posts", {
   id: text("id").primaryKey(),
   authorAccountId: text("author_account_id").notNull(),
   title: text("title"),
@@ -84,7 +84,7 @@ export const noodlePosts = fileTable("slurp2_posts", {
   updatedAt: text("updated_at").notNull(),
 });
 
-export const noodleAccountSubscriptions = fileTable(
+export const slpAccountSubscriptions = fileTable(
   "slurp2_account_subscriptions",
   {
     id: text("id").primaryKey(),
@@ -95,7 +95,7 @@ export const noodleAccountSubscriptions = fileTable(
   { uniqueBy: [{ keys: ["viewerAccountId", "creatorAccountId"] }] },
 );
 
-export const noodlePostUnlocks = fileTable(
+export const slpPostUnlocks = fileTable(
   "slurp2_post_unlocks",
   {
     id: text("id").primaryKey(),
@@ -106,7 +106,7 @@ export const noodlePostUnlocks = fileTable(
   { uniqueBy: [{ keys: ["viewerAccountId", "postId"] }] },
 );
 
-export const noodleInteractions = fileTable(
+export const slpInteractions = fileTable(
   "slurp2_interactions",
   {
     id: text("id").primaryKey(),
@@ -129,7 +129,7 @@ export const noodleInteractions = fileTable(
   },
 );
 
-export const noodlerCreatorReplyClaims = fileTable(
+export const slpCreatorCreatorReplyClaims = fileTable(
   "slurp2_creator_reply_claims",
   {
     id: text("id").primaryKey(),
@@ -142,7 +142,7 @@ export const noodlerCreatorReplyClaims = fileTable(
   { uniqueBy: [{ keys: ["parentInteractionId", "creatorAccountId"] }] },
 );
 
-export const noodlerPreparedPosts = fileTable(
+export const slpCreatorPreparedPosts = fileTable(
   "slurp2_prepared_posts",
   {
     id: text("id").primaryKey(),
@@ -161,14 +161,14 @@ export const noodlerPreparedPosts = fileTable(
   { uniqueBy: [{ keys: ["publishedPostId"], when: (row) => row.publishedPostId != null }] },
 );
 
-export const noodlerAutomaticAttempts = fileTable("slurp2_automatic_attempts", {
+export const slpCreatorAutomaticAttempts = fileTable("slurp2_automatic_attempts", {
   id: text("id").primaryKey(),
   kind: text("kind").notNull(),
   claimedAt: text("claimed_at").notNull(),
   outcome: text("outcome").notNull().default("claimed"),
 });
 
-export const noodlerReserveState = fileTable("slurp2_reserve_state", {
+export const slpCreatorReserveState = fileTable("slurp2_reserve_state", {
   id: text("id").primaryKey(),
   lastObservedBudgetTime: text("last_observed_budget_time").notNull(),
   preparationNotBefore: text("preparation_not_before").notNull(),
@@ -176,13 +176,13 @@ export const noodlerReserveState = fileTable("slurp2_reserve_state", {
   updatedAt: text("updated_at").notNull(),
 });
 
-export const noodlerFanActivityState = fileTable("slurp2_fan_activity_state", {
+export const slpCreatorFanActivityState = fileTable("slurp2_fan_activity_state", {
   id: text("id").primaryKey(),
   plan: text("plan").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
 
-export const noodleActivityDigests = fileTable("slurp2_activity_digests", {
+export const slpActivityDigests = fileTable("slurp2_activity_digests", {
   id: text("id").primaryKey(),
   accountIds: text("account_ids").notNull().default("[]"),
   content: text("content").notNull().default(""),
@@ -192,7 +192,7 @@ export const noodleActivityDigests = fileTable("slurp2_activity_digests", {
   createdAt: text("created_at").notNull(),
 });
 
-export const noodleRefreshRuns = fileTable("slurp2_refresh_runs", {
+export const slpRefreshRuns = fileTable("slurp2_refresh_runs", {
   id: text("id").primaryKey(),
   status: text("status").notNull(),
   activeAccountIds: text("active_account_ids").notNull().default("[]"),
@@ -204,7 +204,7 @@ export const noodleRefreshRuns = fileTable("slurp2_refresh_runs", {
   updatedAt: text("updated_at").notNull(),
 });
 
-export const noodlerFirstPostJobs = fileTable(
+export const slpCreatorFirstPostJobs = fileTable(
   "slurp2_first_post_jobs",
   {
     id: text("id").primaryKey(),

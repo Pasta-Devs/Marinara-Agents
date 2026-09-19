@@ -3,8 +3,8 @@ import { createCharactersStorage } from "../../../../services/storage/characters
 import { createConnectionsStorage } from "../../../../services/storage/connections.storage.js";
 import { createPromptOverridesStorage } from "../../../../services/storage/prompt-overrides.storage.js";
 import { createSlurpStorage } from "../../../data/slp-storage.js";
-import { generateNoodlerPostImage } from "../../media/slp-media-contract.js";
-import { resolveNoodlerImageConnectionId } from "../../../base/media/slp-image-connections.js";
+import { generateCreatorPostImage } from "../../media/slp-media-contract.js";
+import { resolveCreatorImageConnectionId } from "../../../base/media/slp-image-connections.js";
 
 /**
  * Draw the piece a fan commissioned.
@@ -24,7 +24,7 @@ export async function generateSlurpCommissionImage(
   const connections = createConnectionsStorage(db);
   const account = await noodle.getNoodlerAccountById(input.creatorAccountId);
   if (!account) return "unavailable";
-  const mappedId = await resolveNoodlerImageConnectionId(db, account.id);
+  const mappedId = await resolveCreatorImageConnectionId(db, account.id);
   const imageConnection =
     (mappedId ? await connections.getWithKey(mappedId) : null) ?? (await connections.getDefaultForImageGeneration());
   if (!imageConnection) return "unavailable";
@@ -36,7 +36,7 @@ export async function generateSlurpCommissionImage(
   const disclosureMode = account.settings.privacy.identityDisclosure ?? "open";
   const settings = await noodle.getSettings();
   const brief = input.brief.trim().slice(0, 2000);
-  const image = await generateNoodlerPostImage({
+  const image = await generateCreatorPostImage({
     account,
     linkedPublicAccount,
     disclosureMode,

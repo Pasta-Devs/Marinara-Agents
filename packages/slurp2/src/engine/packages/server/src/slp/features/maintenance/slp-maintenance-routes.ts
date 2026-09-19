@@ -1,17 +1,17 @@
 import { z } from "zod";
 import { previewSlurpAutopurge, runSlurpAutopurge } from "./slp-autopurge.js";
-import { noodleAccounts, noodlePosts, noodleInteractions, slurpMessages } from "../../../db/schema/slurp.js";
+import { slpAccounts, slpPosts, slpInteractions, slurpMessages } from "../../../db/schema/slurp.js";
 import { now } from "../../../utils/id-generator.js";
 import { getSlurpOperationStatus, trySlurpDataDeletion } from "../../base/locking/slp-operation-lock.js";
-import { summarizeNoodlerMedia, removeNoodlerAccountMedia, removeAllNoodlerMedia } from "../../base/media/slp-media.js";
-import { tryNoodlerAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
+import { summarizeCreatorMedia, removeCreatorAccountMedia, removeAllCreatorMedia } from "../../base/media/slp-media.js";
+import { tryCreatorAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
 import {
-  getNoodlerImageConnections,
-  updateNoodlerImageConnections,
-  clearNoodlerImageConnections,
+  getCreatorImageConnections,
+  updateCreatorImageConnections,
+  clearCreatorImageConnections,
 } from "../../base/media/slp-image-connections.js";
 import { getSlurpPostGuidance, updateSlurpPostGuidance } from "../../data/settings/slp-post-guidance-storage.js";
-import { isAmbientNoodleAccount, dismissAmbientNoodleAccount } from "../../data/audience/slp-ambient-profiles.js";
+import { isAmbientSlpAccount, dismissAmbientSlpAccount } from "../../data/audience/slp-ambient-profiles.js";
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
@@ -31,9 +31,9 @@ export async function slpMaintenanceRoutes(app: FastifyInstance, deps: SlpRouteD
   });
   app.get("/maintenance/summary", async () => {
     const [accounts, posts, interactions, messages, unused] = await Promise.all([
-      app.db.select().from(noodleAccounts),
-      app.db.select().from(noodlePosts),
-      app.db.select().from(noodleInteractions),
+      app.db.select().from(slpAccounts),
+      app.db.select().from(slpPosts),
+      app.db.select().from(slpInteractions),
       app.db.select().from(slurpMessages),
       noodle.previewUnusedSlurpData(),
     ]);
@@ -46,7 +46,7 @@ export async function slpMaintenanceRoutes(app: FastifyInstance, deps: SlpRouteD
         interactions: interactions.length,
         messages: messages.length,
       },
-      media: summarizeNoodlerMedia(),
+      media: summarizeCreatorMedia(),
       unused,
     };
   });
@@ -60,10 +60,10 @@ export async function slpMaintenanceRoutes(app: FastifyInstance, deps: SlpRouteD
 
   app.delete("/noodler/accounts/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const locked = await tryNoodlerAccountOperation(id, async () => {
-      const imageConnections = await getNoodlerImageConnections(app.db);
+    const locked = await tryCreatorAccountOperation(id, async () => {
+      const imageConnections = await getCreatorImageConnections(app.db);
       const removedConnectionId = imageConnections.creatorConnectionIds[id];
-      await updateNoodlerImageConnections(app.db, (current) => {
+      await updateCreatorImageConnections(app.db, (current) => {
         const creatorConnectionIds = { ...current.creatorConnectionIds };
         delete creatorConnectionIds[id];
         return { ...current, creatorConnectionIds };
@@ -81,13 +81,12 @@ export async function slpMaintenanceRoutes(app: FastifyInstance, deps: SlpRouteD
         const deleted = await noodle.deleteNoodlerAccount(id);
         // A deleted ambient account stays deleted; the seeder skips dismissed ids. Record the
         // dismissal only after the delete succeeded, or a failed delete would hide a live account.
-        if (deleted && target && isAmbientNoodleAccount(target))
-          await dismissAmbientNoodleAccount(noodle, target.entityId);
-        if (deleted) removeNoodlerAccountMedia(id);
+        if (deleted && target && isAmbientSlpAccount(target)) await dismissAmbientSlpAccount(noodle, target.entityId);
+        if (deleted) removeCreatorAccountMedia(id);
         return deleted;
       } catch (error) {
         if (removedConnectionId) {
-          await updateNoodlerImageConnections(app.db, (current) => ({
+          await updateCreatorImageConnections(app.db, (current) => ({
             ...current,
             creatorConnectionIds: {
               ...current.creatorConnectionIds,
@@ -117,8 +116,8 @@ export async function slpMaintenanceRoutes(app: FastifyInstance, deps: SlpRouteD
   app.delete("/data", async (_req, reply) => {
     const locked = await trySlurpDataDeletion(async () => {
       const result = await noodle.deleteAllSlurpData();
-      await clearNoodlerImageConnections(app.db);
-      removeAllNoodlerMedia();
+      await clearCreatorImageConnections(app.db);
+      removeAllCreatorMedia();
       return result;
     });
     if (!locked.acquired) return reply.code(409).send({ error: "Another Slurp operation is already running." });

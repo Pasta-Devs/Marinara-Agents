@@ -26,7 +26,7 @@ import {
   slurpAudienceConversionChance,
   SLURP_AUDIENCE_WEEKLY_BUDGET,
 } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-audience-subscription.js";
-import { populationNoodlerFanIdentityProvider } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-fan-identity-provider.js";
+import { populationCreatorFanIdentityProvider } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-fan-identity-provider.js";
 import { planSlurpWorldPulse } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world-pulse.js";
 import { slurp2Source } from "./slurp2-source";
 
@@ -132,7 +132,7 @@ assert.equal(slurpResolveFanType(slurpFanTypesDefault(), { fanTypeId: null, arch
 assert.equal(slurpResolveFanType(slurpFanTypesDefault(), {}).id, "regular");
 
 // ── The voice reaches the prompt ────────────────────────────────────────────
-const identities = populationNoodlerFanIdentityProvider([
+const identities = populationCreatorFanIdentityProvider([
   {
     id: "slurp-fan:v",
     handle: "moth_hour",

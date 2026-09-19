@@ -1,53 +1,53 @@
 import { useEffect, useRef, useState } from "react";
 import { useSlurpHomePostActions } from "./slp-home-post-actions";
-import { NOODLER_POST_TITLE_MAX_LENGTH } from "@marinara-engine/shared";
+import { SLP_CREATOR_POST_TITLE_MAX_LENGTH } from "../../../../shared/src/slp/slp-social.schema.js";
 import type {
-  NoodleAccount,
-  NoodlerManagedPost,
-  NoodleIdentityDisclosure,
-  NoodlerSourceSnapshot,
-} from "@marinara-engine/shared";
+  SlpAccount,
+  SlpCreatorManagedPost,
+  SlpCreatorSourceSnapshot,
+  SlpIdentityDisclosure,
+} from "../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpStageProfileInput } from "../base/state/slp-state-types";
-import { useNoodlerConnectionCounts } from "../features/audience/slp-audience-hooks";
+import { useCreatorConnectionCounts } from "../features/audience/slp-audience-hooks";
 import {
-  useCreateNoodlerStageProfile,
-  useGenerateNoodlerStageProfileDraft,
-  useRemoveNoodlerAvatar,
-  useUpdateNoodlerProfileLocation,
-  useUpdateNoodlerStageProfile,
-  useUploadNoodlerAvatar,
-  useUseNoodlerSourceAvatar,
+  useCreateCreatorStageProfile,
+  useGenerateCreatorStageProfileDraft,
+  useRemoveCreatorAvatar,
+  useUpdateCreatorProfileLocation,
+  useUpdateCreatorStageProfile,
+  useUploadCreatorAvatar,
+  useUseCreatorSourceAvatar,
 } from "../features/creators/slp-creator-profile-hooks";
-import { useNoodlerAccounts, useNoodlerEligibleAccounts } from "../features/creators/slp-creators-hooks";
-import { useNoodlerViewerWallets } from "../features/economy/slp-economy-hooks";
+import { useCreatorAccounts, useCreatorEligibleAccounts } from "../features/creators/slp-creators-hooks";
+import { useCreatorViewerWallets } from "../features/economy/slp-economy-hooks";
 import {
-  useConfirmNoodlerImagePrompts,
-  useCreateNoodlerPost,
-  useDeleteNoodlerPost,
-  useGenerateNoodlerNoodlePost,
-  useGenerateNoodlerPostImage,
-  useLoadNoodlerPostImage,
-  useNoodlerPosts,
-  useReplaceNoodlerPostImage,
-  useUpdateNoodlerPost,
+  useConfirmCreatorImagePrompts,
+  useCreateCreatorPost,
+  useDeleteCreatorPost,
+  useGenerateCreatorSlpPost,
+  useGenerateCreatorPostImage,
+  useLoadCreatorPostImage,
+  useCreatorPosts,
+  useReplaceCreatorPostImage,
+  useUpdateCreatorPost,
 } from "../features/feed/slp-feed-post-hooks";
 import {
-  useRunNoodlerAutoPostNow,
-  useUpdateNoodlerAccess,
-  useUpdateNoodlerAutoPosting,
+  useRunCreatorAutoPostNow,
+  useUpdateCreatorAccess,
+  useUpdateCreatorAutoPosting,
 } from "../features/feed/slp-feed-schedule-hooks";
 import {
-  useCreateNoodlerInteraction,
-  useDeleteNoodlerInteraction,
-  useMarkNoodlerFeedSeen,
-  useNoodlerUnseenCount,
-  useNoodlerViewer,
-  useRemoveNoodlerInteraction,
-  useToggleNoodlerFollow,
-  useToggleNoodlerSubscription,
-  useTriggerNoodlerCreatorReply,
-  useUnlockNoodlerPost,
-  useUpdateNoodlerInteraction,
+  useCreateCreatorInteraction,
+  useDeleteCreatorInteraction,
+  useMarkCreatorFeedSeen,
+  useCreatorUnseenCount,
+  useCreatorViewer,
+  useRemoveCreatorInteraction,
+  useToggleCreatorFollow,
+  useToggleCreatorSubscription,
+  useTriggerCreatorReply,
+  useUnlockCreatorPost,
+  useUpdateCreatorInteraction,
 } from "../features/feed/slp-feed-viewer-hooks";
 import { useSlurpThreads } from "../features/messages/slp-messages-hooks";
 import { useSlurpNotifications } from "../features/notifications/slp-notification-hooks";
@@ -57,18 +57,18 @@ import { useConnections } from "../../hooks/use-connections";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { useSlurpUIStore } from "../base/state/slp-package-store";
 import {
-  type NoodlerPostDraft,
-  EMPTY_NOODLER_POST_DRAFT,
-  isEmptyNoodlerPostDraft,
+  type SlpCreatorPostDraft,
+  EMPTY_SLP_CREATOR_POST_DRAFT,
+  isEmptyCreatorPostDraft,
   errorMessage,
   SLURP_PLACEHOLDER_BALANCE,
 } from "./screens/SlpHomeHelpers";
-import { useNoodlePostCardController } from "../modules/post/SlpPostCard";
+import { useSlpPostCardController } from "../modules/post/SlpPostCard";
 import type { ImagePromptReviewItem } from "../../components/ui/ImagePromptReviewModal";
 import type { SlurpNavigationState } from "../base/navigation/slp-navigation.types";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { confirmLeaveSlurpBackstage } from "../features/backstage/SlpBackstageControls";
-import { NOODLE_PERSONA_SWITCHER_PAGE_SIZE } from "../base/chrome/SlpChrome";
+import { SLP_PERSONA_SWITCHER_PAGE_SIZE } from "../base/chrome/SlpChrome";
 import { toast } from "sonner";
 import { slurp2SplashPending } from "../features/onboarding/SlpSplash";
 
@@ -80,12 +80,12 @@ export interface SlurpHomeProps {
 
 export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   const { t: localizeUi } = useUiTranslation();
-  const accountsQuery = useNoodlerAccounts();
+  const accountsQuery = useCreatorAccounts();
   const retryAccountsOrReload = async () => {
     if ((await accountsQuery.refetch()).isError) window.location.reload();
   };
-  const connectionCountsQuery = useNoodlerConnectionCounts();
-  const viewerWalletsQuery = useNoodlerViewerWallets();
+  const connectionCountsQuery = useCreatorConnectionCounts();
+  const viewerWalletsQuery = useCreatorViewerWallets();
   const slurpSettingsQuery = useSlurpSettings();
   const updateSlurpSettings = useUpdateSlurpSettings();
   const personasQuery = usePersonas();
@@ -117,7 +117,7 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
         avatarUrl: persona.avatarPath,
         avatarCrop: persona.avatarCrop,
         settings: { social: {} },
-      }) as NoodleAccount,
+      }) as SlpAccount,
   );
   const shellPersonaAccount = viewerAccounts.find((account) => account.entityId === viewerPersonaId) ?? null;
   const myCreatorProfile =
@@ -139,16 +139,16 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
               updatedAt: myCreatorProfile.updatedAt,
             }
           : {}),
-      } as NoodleAccount)
+      } as SlpAccount)
     : null;
   const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const mobileDrawerTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [mobileAccountSwitcherOpen, setMobileAccountSwitcherOpen] = useState(false);
-  const [personaAccountLimit, setPersonaAccountLimit] = useState(NOODLE_PERSONA_SWITCHER_PAGE_SIZE);
+  const [personaAccountLimit, setPersonaAccountLimit] = useState(SLP_PERSONA_SWITCHER_PAGE_SIZE);
   const accountSwitcherRef = useRef<HTMLDivElement | null>(null);
   const visiblePersonaAccounts = viewerAccounts.slice(0, personaAccountLimit);
-  const switchViewerPersona = (account: NoodleAccount, mobile: boolean) => {
+  const switchViewerPersona = (account: SlpAccount, mobile: boolean) => {
     postCardController.reset();
     setEditingReplyId(null);
     setEditingReplyContent("");
@@ -157,7 +157,7 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
     else setAccountSwitcherOpen(false);
   };
   useEffect(() => {
-    if (accountSwitcherOpen) setPersonaAccountLimit(NOODLE_PERSONA_SWITCHER_PAGE_SIZE);
+    if (accountSwitcherOpen) setPersonaAccountLimit(SLP_PERSONA_SWITCHER_PAGE_SIZE);
   }, [accountSwitcherOpen]);
   useEffect(() => {
     if (!mobileDrawerOpen) {
@@ -187,17 +187,17 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
       window.removeEventListener("pointerdown", onPointerDown, true);
     };
   }, [accountSwitcherOpen]);
-  const replacePostImage = useReplaceNoodlerPostImage();
-  const loadPostImage = useLoadNoodlerPostImage();
-  const [noodlerPostDrafts, setNoodlerPostDrafts] = useState<Record<string, NoodlerPostDraft>>({});
-  const updateNoodlerPostDraft = (profileId: string, patch: Partial<NoodlerPostDraft>) => {
+  const replacePostImage = useReplaceCreatorPostImage();
+  const loadPostImage = useLoadCreatorPostImage();
+  const [noodlerPostDrafts, setNoodlerPostDrafts] = useState<Record<string, SlpCreatorPostDraft>>({});
+  const updateNoodlerPostDraft = (profileId: string, patch: Partial<SlpCreatorPostDraft>) => {
     setNoodlerPostDrafts((current) => {
       const nextDraft = {
-        ...EMPTY_NOODLER_POST_DRAFT,
+        ...EMPTY_SLP_CREATOR_POST_DRAFT,
         ...current[profileId],
         ...patch,
       };
-      if (!isEmptyNoodlerPostDraft(nextDraft)) {
+      if (!isEmptyCreatorPostDraft(nextDraft)) {
         return {
           onNavigate,
           ...current,
@@ -257,11 +257,11 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
   const [gateCelebrating, setGateCelebrating] = useState(false);
   const gatePresentedRef = useRef(false);
   const onboardingPresentedRef = useRef(false);
-  const viewerQuery = useNoodlerViewer(viewerPersonaId);
-  const noodlerUnseenCount = useNoodlerUnseenCount(viewerPersonaId);
+  const viewerQuery = useCreatorViewer(viewerPersonaId);
+  const noodlerUnseenCount = useCreatorUnseenCount(viewerPersonaId);
   const notificationsQuery = useSlurpNotifications(viewerPersonaId);
   const inboxThreadsQuery = useSlurpThreads(viewerPersonaId);
-  const markFeedSeenMutation = useMarkNoodlerFeedSeen();
+  const markFeedSeenMutation = useMarkCreatorFeedSeen();
   const [frozenFeedSeenAt, setFrozenFeedSeenAt] = useState<Record<string, string | null>>({});
   const feedShownForAccountRef = useRef<string | null>(null);
   const markFeedShown = () => {
@@ -274,38 +274,38 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
     }));
     markFeedSeenMutation.mutate(scope.viewer.id);
   };
-  const toggleFollow = useToggleNoodlerFollow();
-  const toggleSubscription = useToggleNoodlerSubscription();
-  const unlockPost = useUnlockNoodlerPost();
-  const createInteraction = useCreateNoodlerInteraction();
-  const triggerCreatorReply = useTriggerNoodlerCreatorReply();
-  const removeInteraction = useRemoveNoodlerInteraction();
-  const updatePost = useUpdateNoodlerPost();
-  const deletePost = useDeleteNoodlerPost();
-  const updateInteraction = useUpdateNoodlerInteraction();
-  const deleteInteraction = useDeleteNoodlerInteraction();
-  const updateAccess = useUpdateNoodlerAccess();
+  const toggleFollow = useToggleCreatorFollow();
+  const toggleSubscription = useToggleCreatorSubscription();
+  const unlockPost = useUnlockCreatorPost();
+  const createInteraction = useCreateCreatorInteraction();
+  const triggerCreatorReply = useTriggerCreatorReply();
+  const removeInteraction = useRemoveCreatorInteraction();
+  const updatePost = useUpdateCreatorPost();
+  const deletePost = useDeleteCreatorPost();
+  const updateInteraction = useUpdateCreatorInteraction();
+  const deleteInteraction = useDeleteCreatorInteraction();
+  const updateAccess = useUpdateCreatorAccess();
   const [draftNoodleAccountId, setDraftNoodleAccountId] = useState<string | null>(null);
   const [sourceSearch, setSourceSearch] = useState("");
   const [sourceKind, setSourceKind] = useState<"all" | "character" | "persona">("all");
-  const eligibleAccountsQuery = useNoodlerEligibleAccounts(
+  const eligibleAccountsQuery = useCreatorEligibleAccounts(
     sourceSearch,
     sourceKind,
     navigation.mode === "creator",
     draftNoodleAccountId,
   );
-  const createProfile = useCreateNoodlerStageProfile();
-  const updateProfile = useUpdateNoodlerStageProfile();
-  const updateProfileLocation = useUpdateNoodlerProfileLocation();
-  const uploadAvatar = useUploadNoodlerAvatar();
-  const useSourceAvatar = useUseNoodlerSourceAvatar();
-  const removeAvatar = useRemoveNoodlerAvatar();
-  const generatePost = useGenerateNoodlerNoodlePost();
-  const confirmImagePrompts = useConfirmNoodlerImagePrompts();
-  const runAutoPostNow = useRunNoodlerAutoPostNow();
-  const setupAutoPosting = useUpdateNoodlerAutoPosting();
-  const createPost = useCreateNoodlerPost();
-  const generateProfileDraft = useGenerateNoodlerStageProfileDraft();
+  const createProfile = useCreateCreatorStageProfile();
+  const updateProfile = useUpdateCreatorStageProfile();
+  const updateProfileLocation = useUpdateCreatorProfileLocation();
+  const uploadAvatar = useUploadCreatorAvatar();
+  const useSourceAvatar = useUseCreatorSourceAvatar();
+  const removeAvatar = useRemoveCreatorAvatar();
+  const generatePost = useGenerateCreatorSlpPost();
+  const confirmImagePrompts = useConfirmCreatorImagePrompts();
+  const runAutoPostNow = useRunCreatorAutoPostNow();
+  const setupAutoPosting = useUpdateCreatorAutoPosting();
+  const createPost = useCreateCreatorPost();
+  const generateProfileDraft = useGenerateCreatorStageProfileDraft();
   const connectionsQuery = useConnections();
   const connections = (connectionsQuery.data ?? []) as Array<{ id: string; name: string; model?: string }>;
   const [profileDraft, setProfileDraft] = useState<SlurpStageProfileInput | null>(null);
@@ -316,7 +316,7 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
   } | null>(null);
   const [creationStep, setCreationStep] = useState<"source" | "disclosure" | "draft" | "automatic" | null>(null);
   const [autoPostSetupId, setAutoPostSetupId] = useState<string | null>(null);
-  const [creationDisclosure, setCreationDisclosure] = useState<NoodleIdentityDisclosure>("open");
+  const [creationDisclosure, setCreationDisclosure] = useState<SlpIdentityDisclosure>("open");
   const [draftGuidance, setDraftGuidance] = useState("");
   const [draftConnectionId, setDraftConnectionId] = useState("");
   const [previousDraft, setPreviousDraft] = useState<SlurpStageProfileInput | null>(null);
@@ -324,7 +324,7 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
   const [composerOpenSignal, setComposerOpenSignal] = useState(0);
   const profileReturnToSettingsRef = useRef<SlurpNavigationState | null>(null);
   const [acceptSourceChangesForProfileId, setAcceptSourceChangesForProfileId] = useState<string | null>(null);
-  const [draftSourceSnapshot, setDraftSourceSnapshot] = useState<NoodlerSourceSnapshot | null>(null);
+  const [draftSourceSnapshot, setDraftSourceSnapshot] = useState<SlpCreatorSourceSnapshot | null>(null);
   const [draftSourceRevisionToken, setDraftSourceRevisionToken] = useState<string | null>(null);
   const profileDraftGenerationIdRef = useRef(0);
   const confirmProviderDisclosure = async () => {
@@ -481,7 +481,7 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
     updatePost,
     deletePost,
   });
-  const postCardController = useNoodlePostCardController({
+  const postCardController = useSlpPostCardController({
     postShowMoreLength: slurpSettingsQuery.data?.postShowMoreLength,
     postManagement: false,
     personaAccount: viewerActorAccount,
@@ -497,7 +497,7 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
       (type === "reply" && (createInteraction.isPending || triggerCreatorReply.isPending)) ||
       (type === "vote" && createInteraction.isPending),
     updatePostPending: updatePost.isPending || replacePostImage.isPending,
-    titleMaxLength: NOODLER_POST_TITLE_MAX_LENGTH,
+    titleMaxLength: SLP_CREATOR_POST_TITLE_MAX_LENGTH,
     allowPollOnlyEdits: true,
     replyManagement: {
       editingReplyId,
@@ -519,9 +519,12 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
     },
     openAuthorProfile: (accountId) => onNavigate({ mode: "creator", view: "profile", accountId }),
   });
-  const generatePostImage = useGenerateNoodlerPostImage();
+  const generatePostImage = useGenerateCreatorPostImage();
   const [generatingPostImageId, setGeneratingPostImageId] = useState<string | null>(null);
-  const handleGeneratePostImage = (post: Pick<NoodlerManagedPost, "id" | "authorAccountId">, imagePrompt?: string) => {
+  const handleGeneratePostImage = (
+    post: Pick<SlpCreatorManagedPost, "id" | "authorAccountId">,
+    imagePrompt?: string,
+  ) => {
     setGeneratingPostImageId(post.id);
     generatePostImage.mutate(
       { id: post.id, accountId: post.authorAccountId, imagePrompt },
@@ -540,7 +543,7 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
     navigation.mode === "creator" && navigation.view === "profile"
       ? (accountsQuery.data?.find((profile) => profile.id === navigation.accountId) ?? null)
       : null;
-  const postsQuery = useNoodlerPosts(selectedProfile?.id ?? null, viewerPersonaId);
+  const postsQuery = useCreatorPosts(selectedProfile?.id ?? null, viewerPersonaId);
   const selectedViewerCreator =
     viewerQuery.data?.creators.find((creator) => creator.profile.id === selectedProfile?.id) ?? null;
   const eligibleNoodleAccounts = eligibleAccountsQuery.data?.pages.flatMap((page) => page.items) ?? [];

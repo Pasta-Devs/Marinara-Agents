@@ -1,21 +1,21 @@
-import { noodlerViewerPersonaSchema } from "@marinara-engine/shared";
+import { slpCreatorViewerPersonaSchema } from "../../../../../shared/src/slp/slp-social.schema.js";
 import { z } from "zod";
-import { noodlerUnseenCreatorAccountIds } from "../../modules/feed/slp-viewer-unseen.js";
+import { slpCreatorUnseenCreatorAccountIds } from "../../modules/feed/slp-viewer-unseen.js";
 import { isSlurpViewerActorAccount } from "../../modules/settings/slp-settings.js";
-import { isNoodlerHiddenFromViewer } from "../../base/identity/slp-access.js";
+import { isCreatorHiddenFromViewer } from "../../base/identity/slp-access.js";
 import type { FastifyInstance } from "fastify";
 import {
-  NOODLER_FEED_PAGE_SIZE,
-  noodlerPageCursorSchema,
-  type NoodlerViewerSignalResponse,
+  SLP_CREATOR_FEED_PAGE_SIZE,
+  slpCreatorPageCursorSchema,
+  type SlpCreatorViewerSignalResponse,
 } from "../../modules/requests/slp-request-schemas.js";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
-const noodlerViewerFeedQuerySchema = noodlerViewerPersonaSchema
+const slpCreatorViewerFeedQuerySchema = slpCreatorViewerPersonaSchema
   .extend({
     tab: z.enum(["following", "all"]).default("all"),
     search: z.string().trim().max(200).default(""),
-    limit: z.coerce.number().int().min(1).max(NOODLER_FEED_PAGE_SIZE).default(NOODLER_FEED_PAGE_SIZE),
+    limit: z.coerce.number().int().min(1).max(SLP_CREATOR_FEED_PAGE_SIZE).default(SLP_CREATOR_FEED_PAGE_SIZE),
     cursorAt: z.string().datetime().optional(),
     cursorId: z.string().trim().min(1).max(200).optional(),
   })
@@ -24,11 +24,11 @@ const noodlerViewerFeedQuerySchema = noodlerViewerPersonaSchema
     "cursorAt and cursorId must be provided together",
   );
 
-const noodlerProfilePostsQuerySchema = noodlerPageCursorSchema.and(
+const slpCreatorProfilePostsQuerySchema = slpCreatorPageCursorSchema.and(
   z.object({
     personaId: z.string().trim().min(1).optional(),
     filter: z.enum(["posts", "media"]).default("posts"),
-    limit: z.coerce.number().int().min(1).max(NOODLER_FEED_PAGE_SIZE).default(NOODLER_FEED_PAGE_SIZE),
+    limit: z.coerce.number().int().min(1).max(SLP_CREATOR_FEED_PAGE_SIZE).default(SLP_CREATOR_FEED_PAGE_SIZE),
   }),
 );
 export async function slpFeedViewerRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
@@ -42,16 +42,16 @@ export async function slpFeedViewerRoutes(app: FastifyInstance, deps: SlpRouteDe
     resolveViewerPersona,
   } = deps;
   app.get("/noodler/viewer/unseen-count", async (req, reply) => {
-    const parsed = noodlerViewerPersonaSchema.safeParse(req.query);
+    const parsed = slpCreatorViewerPersonaSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
     const accounts = await noodle.listNoodlerAccounts();
-    const unseenCreatorAccountIds = noodlerUnseenCreatorAccountIds(accounts, viewer.id);
+    const unseenCreatorAccountIds = slpCreatorUnseenCreatorAccountIds(accounts, viewer.id);
     const visibleAccounts = accounts.filter(
       (account) =>
         !isSlurpViewerActorAccount(account) &&
-        (creatorBelongsToViewer(account, viewer) || !isNoodlerHiddenFromViewer(account, viewer.id)),
+        (creatorBelongsToViewer(account, viewer) || !isCreatorHiddenFromViewer(account, viewer.id)),
     );
     const visibleAccountIds = visibleAccounts.map((account) => account.id);
     const generationKey = [
@@ -72,7 +72,7 @@ export async function slpFeedViewerRoutes(app: FastifyInstance, deps: SlpRouteDe
     const latestCreator = visibleAccounts.sort(
       (left, right) => right.updatedAt.localeCompare(left.updatedAt) || right.id.localeCompare(left.id),
     )[0];
-    const value: NoodlerViewerSignalResponse = {
+    const value: SlpCreatorViewerSignalResponse = {
       count: signal.count,
       revision: {
         latestPost: signal.latestPost,
@@ -95,7 +95,7 @@ export async function slpFeedViewerRoutes(app: FastifyInstance, deps: SlpRouteDe
   });
 
   app.post("/noodler/viewer/mark-seen", async (req, reply) => {
-    const parsed = noodlerViewerPersonaSchema.safeParse(req.body ?? {});
+    const parsed = slpCreatorViewerPersonaSchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await noodle.patchViewerSettings(parsed.data.personaId, {
       subtree: "social",
@@ -106,7 +106,7 @@ export async function slpFeedViewerRoutes(app: FastifyInstance, deps: SlpRouteDe
   });
 
   app.get("/noodler/viewer", async (req, reply) => {
-    const parsed = noodlerViewerPersonaSchema.safeParse(req.query);
+    const parsed = slpCreatorViewerPersonaSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
@@ -114,7 +114,7 @@ export async function slpFeedViewerRoutes(app: FastifyInstance, deps: SlpRouteDe
   });
 
   app.get("/noodler/viewer/feed", async (req, reply) => {
-    const parsed = noodlerViewerFeedQuerySchema.safeParse(req.query);
+    const parsed = slpCreatorViewerFeedQuerySchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
@@ -161,7 +161,7 @@ export async function slpFeedViewerRoutes(app: FastifyInstance, deps: SlpRouteDe
   });
 
   app.get("/noodler/accounts/:id/posts", async (req, reply) => {
-    const parsed = noodlerProfilePostsQuerySchema.safeParse(req.query);
+    const parsed = slpCreatorProfilePostsQuerySchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
     if (!(await noodle.getNoodlerAccountById(id))) {

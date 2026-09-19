@@ -178,12 +178,12 @@ assert.match(slurpStorage, /enqueueSlurpFinancial\(db, operation\)/u, "financial
 assert.match(slurpStorage, /creditEarningsNow/u, "nested earnings writes must bypass the outer queue");
 assert.match(
   slurpStorage,
-  /await writeWallet\(viewerAccountId, charged\);[\s\S]*?restoreWallet\(viewerAccountId, previousWalletValue, previousViewerSettingsValue\)[\s\S]*?await db\.delete\(noodlePostUnlocks\)\.where\(eq\(noodlePostUnlocks\.id, unlock\.id\)/u,
+  /await writeWallet\(viewerAccountId, charged\);[\s\S]*?restoreWallet\(viewerAccountId, previousWalletValue, previousViewerSettingsValue\)[\s\S]*?await db\.delete\(slpPostUnlocks\)\.where\(eq\(slpPostUnlocks\.id, unlock\.id\)/u,
   "an unlock failure restores both wallet keys and removes only its unlock row",
 );
 assert.match(
   slurpStorage,
-  /if \(!paymentCompleted\)[\s\S]*?\/\/ Never leave a newly-created row[\s\S]*?await db\.delete\(noodlePostUnlocks\)/u,
+  /if \(!paymentCompleted\)[\s\S]*?\/\/ Never leave a newly-created row[\s\S]*?await db\.delete\(slpPostUnlocks\)/u,
   "unlock cleanup runs even when compensation fails",
 );
 assert.match(
@@ -203,12 +203,12 @@ assert.match(
 );
 assert.match(
   slurpStorage,
-  /if \(settings\.walletEnabled\) await writeWallet\(viewerAccountId, walletAfterCharge\);[\s\S]*?await tx\.insert\(noodleAccountSubscriptions\)/u,
+  /if \(settings\.walletEnabled\) await writeWallet\(viewerAccountId, walletAfterCharge\);[\s\S]*?await tx\.insert\(slpAccountSubscriptions\)/u,
   "a new subscription must charge before inserting its row",
 );
 assert.match(
   slurpStorage,
-  /where\(eq\(noodleAccountSubscriptions\.id, subscriptionId\)\)/u,
+  /where\(eq\(slpAccountSubscriptions\.id, subscriptionId\)\)/u,
   "subscription rollback must remove only the new row",
 );
 assert.match(

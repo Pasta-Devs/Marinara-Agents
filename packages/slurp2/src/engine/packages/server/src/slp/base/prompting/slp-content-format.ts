@@ -7,7 +7,7 @@
  * to the shared schema maximum.
  */
 
-export type NoodlerContentFormat = "caption" | "announcement" | "long_form";
+export type SlpCreatorContentFormat = "caption" | "announcement" | "long_form";
 
 /** Mirrors NOODLE_POST_CONTENT_MAX_LENGTH, the shared schema's limit for any stored post. */
 export const NOODLER_CONTENT_HARD_MAX_LENGTH = 4000;

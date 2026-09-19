@@ -1,19 +1,23 @@
 import { useState } from "react";
-import { type NoodleAccount, type NoodleInteraction, type NoodleInteractionType } from "@marinara-engine/shared";
+import {
+  type SlpAccount,
+  type SlpInteraction,
+  type SlpInteractionType,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 import { cn } from "../../../lib/utils";
-import { NoodleTextContent } from "./SlpMarkdownRenderer";
+import { SlpTextContent } from "./SlpMarkdownRenderer";
 import type { ConversationMediaPickerTab } from "../../../components/chat/ConversationMediaPickerPanel";
 import type { ChatImage } from "../../../hooks/use-gallery";
 import { Avatar } from "../../base/chrome/SlpChrome";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import type { ActiveComposerMention } from "./SlpPostTypes";
 
-export type { NoodlePostCardModel, NoodlePostImageUpdate, NoodlePostCardCtx } from "./SlpPostTypes";
-export type { NoodlePostCardControllerOptions } from "./SlpPostTypes";
-export { NoodleToolButton, NoodleComposerToolRow, SlurpToolPopover } from "./SlpPostComposerTools";
-export { useNoodlePostImageEditor, useNoodlePostCardController } from "./SlpPostHooks";
-export { NoodleCustomEmojiText, NoodleTextContent } from "./SlpMarkdownRenderer";
-export { NoodlePollCard } from "./SlpPollCard";
+export type { SlpPostCardModel, SlpPostImageUpdate, SlpPostCardCtx } from "./SlpPostTypes";
+export type { SlpPostCardControllerOptions } from "./SlpPostTypes";
+export { SlpToolButton, SlpComposerToolRow, SlurpToolPopover } from "./SlpPostComposerTools";
+export { useSlpPostImageEditor, useSlpPostCardController } from "./SlpPostHooks";
+export { SlpCustomEmojiText, SlpTextContent } from "./SlpMarkdownRenderer";
+export { SlpPollCard } from "./SlpPollCard";
 export { PostImageEditControls } from "./SlpPostImageEditControls";
 
 export const fieldClass =
@@ -22,13 +26,13 @@ export const textareaClass =
   "mari-chrome-field min-h-24 w-full min-w-0 resize-y rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] p-3 text-xs leading-relaxed text-[var(--foreground)] outline-none transition-colors focus:border-[var(--noodle-accent)]";
 export const labelClass =
   "text-[0.68rem] font-semibold uppercase tracking-normal text-[var(--marinara-chat-chrome-panel-muted)]";
-export const noodleIconButtonClass =
+export const slpIconButtonClass =
   "inline-flex h-11 min-w-11 items-center justify-center gap-1 rounded-lg px-3 text-xs font-semibold !text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:!text-[var(--noodle-accent)]";
-export const noodleCommentActionClass =
+export const slpCommentActionClass =
   "inline-flex h-7 items-center justify-center gap-1 rounded-full !text-[var(--noodle-accent-foreground)] transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70 disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:!text-[var(--noodle-accent-foreground)]";
 /** Groups depth-first replies into top-level threads. Deeper replies stay flat inside their thread. */
-export function slurpReplyThreads(orderedReplies: NoodleInteraction[], replyById: Map<string, NoodleInteraction>) {
-  const threads: { root: NoodleInteraction; children: NoodleInteraction[] }[] = [];
+export function slurpReplyThreads(orderedReplies: SlpInteraction[], replyById: Map<string, SlpInteraction>) {
+  const threads: { root: SlpInteraction; children: SlpInteraction[] }[] = [];
   for (const reply of orderedReplies) {
     const parentId = reply.parentInteractionId;
     if (!parentId || !replyById.has(parentId) || threads.length === 0) threads.push({ root: reply, children: [] });
@@ -38,7 +42,7 @@ export function slurpReplyThreads(orderedReplies: NoodleInteraction[], replyById
 }
 
 /** Post body that clamps long text behind a Show more toggle. */
-export function SlurpClampedText(props: Parameters<typeof NoodleTextContent>[0] & { clampLength?: number }) {
+export function SlurpClampedText(props: Parameters<typeof SlpTextContent>[0] & { clampLength?: number }) {
   const { t: localizeUi } = useUiTranslation();
   const [expanded, setExpanded] = useState(false);
   const limit = props.clampLength ?? 300;
@@ -49,7 +53,7 @@ export function SlurpClampedText(props: Parameters<typeof NoodleTextContent>[0] 
   return (
     <>
       <div className={cn(long && !expanded && "line-clamp-6")}>
-        <NoodleTextContent {...props} />
+        <SlpTextContent {...props} />
       </div>
       {long && (
         <button
@@ -67,12 +71,12 @@ export function SlurpClampedText(props: Parameters<typeof NoodleTextContent>[0] 
   );
 }
 
-export const NOODLE_MEDIA_PICKER_TABS: ConversationMediaPickerTab[] = [
+export const SLP_MEDIA_PICKER_TABS: ConversationMediaPickerTab[] = [
   { id: "emoji", label: "Emoji" },
   { id: "gifs", label: "GIFs" },
   { id: "stickers", label: "Stickers" },
 ];
-export const NOODLE_TEXT_MEDIA_PICKER_TABS: ConversationMediaPickerTab[] = [
+export const SLP_TEXT_MEDIA_PICKER_TABS: ConversationMediaPickerTab[] = [
   { id: "emoji", label: "Emoji" },
   { id: "stickers", label: "Stickers" },
 ];
@@ -86,7 +90,7 @@ export function insertAtSelection(value: string, insertion: string, start: numbe
   };
 }
 
-export function NoodleMentionSuggestions({
+export function SlpMentionSuggestions({
   activeMention,
   activeIndex,
   accounts,
@@ -95,9 +99,9 @@ export function NoodleMentionSuggestions({
 }: {
   activeMention: ActiveComposerMention | null;
   activeIndex: number;
-  accounts: NoodleAccount[];
+  accounts: SlpAccount[];
   listboxId: string;
-  onSelect: (account: NoodleAccount) => void;
+  onSelect: (account: SlpAccount) => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
   if (!activeMention) return null;
@@ -140,11 +144,11 @@ export function NoodleMentionSuggestions({
   );
 }
 
-export function countInteractions(interactions: NoodleInteraction[], type: NoodleInteractionType) {
+export function countInteractions(interactions: SlpInteraction[], type: SlpInteractionType) {
   return interactions.filter((interaction) => interaction.type === type).length;
 }
 
-export function createNoodleLightboxImage(id: string, url: string, prompt = ""): ChatImage {
+export function createSlpLightboxImage(id: string, url: string, prompt = ""): ChatImage {
   const filename = url.split("?")[0]?.split("/").pop();
   const safeFilename = filename && /\.(?:avif|gif|jpe?g|png|webp)$/i.test(filename) ? filename : `noodle-${id}.png`;
   return {

@@ -1,12 +1,12 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import type { NoodlerSourceSnapshot } from "@marinara-engine/shared";
+import type { SlpCreatorSourceSnapshot } from "../../../../../shared/src/slp/slp-social.types.js";
 
 // Drafts live only for the current Engine session, so an ephemeral signing key is
 // preferable to persisting another secret. Restarting invalidates an open draft and
 // asks the user to regenerate it; no private source fields ever leave the server.
 const sourceRevisionKey = randomBytes(32);
 
-function sourceRevisionPayload(noodlerAccountId: string, snapshot: NoodlerSourceSnapshot): string {
+function sourceRevisionPayload(noodlerAccountId: string, snapshot: SlpCreatorSourceSnapshot): string {
   return JSON.stringify([
     noodlerAccountId,
     snapshot.publicDisplayName,
@@ -20,19 +20,19 @@ function sourceRevisionPayload(noodlerAccountId: string, snapshot: NoodlerSource
   ]);
 }
 
-export function createNoodlerSourceRevisionToken(noodlerAccountId: string, snapshot: NoodlerSourceSnapshot): string {
+export function createCreatorSourceRevisionToken(noodlerAccountId: string, snapshot: SlpCreatorSourceSnapshot): string {
   return createHmac("sha256", sourceRevisionKey)
     .update(sourceRevisionPayload(noodlerAccountId, snapshot))
     .digest("base64url");
 }
 
-export function verifyNoodlerSourceRevisionToken(
+export function verifyCreatorSourceRevisionToken(
   token: string,
   noodlerAccountId: string,
-  snapshot: NoodlerSourceSnapshot,
+  snapshot: SlpCreatorSourceSnapshot,
 ): boolean {
   if (!/^[A-Za-z0-9_-]{43}$/u.test(token)) return false;
-  const expected = Buffer.from(createNoodlerSourceRevisionToken(noodlerAccountId, snapshot), "utf8");
+  const expected = Buffer.from(createCreatorSourceRevisionToken(noodlerAccountId, snapshot), "utf8");
   const submitted = Buffer.from(token, "utf8");
   return submitted.length === expected.length && timingSafeEqual(submitted, expected);
 }

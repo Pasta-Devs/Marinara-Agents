@@ -1,4 +1,4 @@
-export const NOODLE_FINISHED_REFRESH_RUN_RETENTION_LIMIT = 100;
+export const SLP_FINISHED_REFRESH_RUN_RETENTION_LIMIT = 100;
 
 type RefreshRunRetentionRecord = {
   id: string;
@@ -13,9 +13,9 @@ type RefreshRunRetentionStore<TRow extends RefreshRunRetentionRecord> = {
   flush: () => Promise<void>;
 };
 
-export function selectNoodleRefreshRunIdsToPrune(
+export function selectSlpRefreshRunIdsToPrune(
   rows: readonly RefreshRunRetentionRecord[],
-  limit = NOODLE_FINISHED_REFRESH_RUN_RETENTION_LIMIT,
+  limit = SLP_FINISHED_REFRESH_RUN_RETENTION_LIMIT,
 ): string[] {
   return rows
     .filter((row) => row.status === "completed" || row.status === "failed")
@@ -24,11 +24,11 @@ export function selectNoodleRefreshRunIdsToPrune(
     .map((row) => row.id);
 }
 
-export async function pruneNoodleRefreshRuns<TRow extends RefreshRunRetentionRecord>(
+export async function pruneSlpRefreshRuns<TRow extends RefreshRunRetentionRecord>(
   store: RefreshRunRetentionStore<TRow>,
 ): Promise<void> {
   const rows = await store.list();
-  const staleIds = new Set(selectNoodleRefreshRunIdsToPrune(rows));
+  const staleIds = new Set(selectSlpRefreshRunIdsToPrune(rows));
   if (staleIds.size === 0) return;
 
   const retained = rows

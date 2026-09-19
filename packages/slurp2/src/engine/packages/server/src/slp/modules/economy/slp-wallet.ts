@@ -4,7 +4,7 @@
  * Pure by design. Nothing here touches the DB, so the rules can be unit-tested without an
  * Engine checkout — the same reason `slurp-prices.ts` stands alone.
  *
- * The state lives under its own app-settings key rather than in `NoodleAccountSettings.wallet`,
+ * The state lives under its own app-settings key rather than in `SlpAccountSettings.wallet`,
  * because that shape (`{ coins }`, defaulting to 999_999) is defined in the vendored Engine
  * shared schema and cannot grow a ledger from this repository. `wallet.coins` is still mirrored
  * on write so existing balance UI keeps reading the number it already knows.

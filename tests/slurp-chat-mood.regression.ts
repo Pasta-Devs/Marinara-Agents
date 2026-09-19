@@ -71,8 +71,8 @@ assert.throws(() => readSlurpDmReply({ moodShift: "up" }), /no usable content/u)
 const generation = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-message-generation.service.ts",
 );
-assert.doesNotMatch(generation, /noodleGeneratedNoodlerReplySchema/u);
-assert.match(generation, /noodleResponseFormat\(input\.connection\.model, "noodler_dm"\)/u);
+assert.doesNotMatch(generation, /slpGeneratedCreatorReplySchema/u);
+assert.match(generation, /slpResponseFormat\(input\.connection\.model, "noodler_dm"\)/u);
 
 // Notes are model output about the player, stored and replayed into a later prompt. They are
 // redacted on the way in and on the way out, and they never reach the system block.

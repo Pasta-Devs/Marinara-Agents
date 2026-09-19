@@ -1,43 +1,40 @@
 import { Fragment } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { Heart, MessageCircle, Pencil, Trash2 } from "lucide-react";
-import {
-  canManageNoodleReply,
-  type NoodleAccount,
-  type NoodleInteraction,
-  type NoodlePostCardModel,
-} from "@marinara-engine/shared";
+import { canManageSlpReply } from "../../../../../shared/src/slp/slp-interactions.js";
+import { type SlpAccount, type SlpInteraction } from "../../../../../shared/src/slp/slp-social.types.js";
+import { type SlpPostCardModel } from "./SlpPostCard";
 import type { ChatImage } from "../../../hooks/use-gallery";
 import { cn } from "../../../lib/utils";
 import { Avatar, SlurpMediaImg } from "../../base/chrome/SlpChrome";
 import { formatTime } from "../../base/ui/slp-date-time";
-import { createNoodleLightboxImage, noodleCommentActionClass, textareaClass } from "./SlpPostCard";
-import { NoodleTextContent } from "./SlpMarkdownRenderer";
+import { createSlpLightboxImage, slpCommentActionClass, textareaClass } from "./SlpPostCard";
+import { SlpTextContent } from "./SlpMarkdownRenderer";
 
 export interface SlpReplyRowProps {
-  reply: NoodleInteraction;
+  reply: SlpInteraction;
   nested: boolean;
-  post: NoodlePostCardModel;
-  accountById: Map<string, NoodleAccount>;
-  accountByHandle: Map<string, NoodleAccount>;
-  personaAccount: NoodleAccount | null;
+  post: SlpPostCardModel;
+  accountById: Map<string, SlpAccount>;
+  accountByHandle: Map<string, SlpAccount>;
+  personaAccount: SlpAccount | null;
   highlightedInteractionId: string | null;
-  openProfile: (account: NoodleAccount | null) => void;
+  openProfile: (account: SlpAccount | null) => void;
   replyPostId: string | null;
   replyParentInteractionId: string | null;
-  replyById: Map<string, NoodleInteraction>;
-  replyLikesByParentId: Map<string, NoodleInteraction[]>;
+  replyById: Map<string, SlpInteraction>;
+  replyLikesByParentId: Map<string, SlpInteraction[]>;
   editingReplyId: string | null;
   editingReplyContent: string;
   setEditingReplyContent: React.Dispatch<React.SetStateAction<string>>;
   cancelEditingReply: () => void;
   updateInteraction: { isPending: boolean };
   deleteInteraction: { isPending: boolean };
-  startEditingReply: (reply: NoodleInteraction) => void;
-  saveEditedReply: (post: NoodlePostCardModel, reply: NoodleInteraction) => void;
-  deleteNoodleReply: (post: NoodlePostCardModel, reply: NoodleInteraction) => void;
-  canManageReplyOverride?: (reply: NoodleInteraction) => boolean;
-  reactToReply: (post: NoodlePostCardModel, target: NoodleInteraction, active: boolean) => void;
+  startEditingReply: (reply: SlpInteraction) => void;
+  saveEditedReply: (post: SlpPostCardModel, reply: SlpInteraction) => void;
+  deleteNoodleReply: (post: SlpPostCardModel, reply: SlpInteraction) => void;
+  canManageReplyOverride?: (reply: SlpInteraction) => boolean;
+  reactToReply: (post: SlpPostCardModel, target: SlpInteraction, active: boolean) => void;
   reactionPendingFor: (postId: string, type: "like", parentInteractionId?: string | null) => boolean;
   openReplyComposer: (postId: string, parentInteractionId?: string | null) => void;
   setImageLightbox: React.Dispatch<React.SetStateAction<ChatImage | null>>;
@@ -87,7 +84,7 @@ export function SlpReplyRow({
     ? canManageReplyOverride(reply)
     : Boolean(
         personaAccount &&
-        canManageNoodleReply({
+        canManageSlpReply({
           actorKind: actorAccount?.kind ?? reply.actorSnapshot?.kind,
           actorAccountId: reply.actorAccountId,
           personaAccountId: personaAccount.id,
@@ -195,7 +192,7 @@ export function SlpReplyRow({
               </div>
             </div>
           ) : reply.content ? (
-            <NoodleTextContent
+            <SlpTextContent
               content={reply.content}
               accountByHandle={accountByHandle}
               onOpenProfile={openProfile}
@@ -205,9 +202,7 @@ export function SlpReplyRow({
           {reply.imageUrl && (
             <button
               type="button"
-              onClick={() =>
-                setImageLightbox(createNoodleLightboxImage(reply.id, reply.imageUrl!, reply.content ?? ""))
-              }
+              onClick={() => setImageLightbox(createSlpLightboxImage(reply.id, reply.imageUrl!, reply.content ?? ""))}
               className="mt-2 block w-full overflow-hidden rounded-xl text-left ring-offset-[var(--background)] transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2"
               title={localizeUi("ui.noodle.noodlepostcard.openImage")}
               aria-label={localizeUi("ui.noodle.noodlepostcard.openCommentImage")}
@@ -227,7 +222,7 @@ export function SlpReplyRow({
               onClick={() => reactToReply(post, reply, likedReplyByPersona)}
               disabled={!personaAccount || reactionPendingFor(post.id, "like", reply.id)}
               className={cn(
-                noodleCommentActionClass,
+                slpCommentActionClass,
                 "px-2 font-medium",
                 likedReplyByPersona && "bg-[var(--noodle-accent)]/10",
               )}
@@ -253,7 +248,7 @@ export function SlpReplyRow({
               type="button"
               onClick={() => openReplyComposer(post.id, reply.id)}
               disabled={!personaAccount}
-              className={cn(noodleCommentActionClass, "w-7")}
+              className={cn(slpCommentActionClass, "w-7")}
               title={localizeUi("ui.noodle.noodlepostcard.reply")}
               aria-label={localizeUi("ui.noodle.noodlepostcard.reply")}
             >
@@ -265,7 +260,7 @@ export function SlpReplyRow({
                   type="button"
                   onClick={() => startEditingReply(reply)}
                   disabled={updateInteraction.isPending || deleteInteraction.isPending}
-                  className={cn(noodleCommentActionClass, "w-7")}
+                  className={cn(slpCommentActionClass, "w-7")}
                   title={localizeUi("ui.noodle.noodlepostcard.editComment")}
                   aria-label={localizeUi("ui.noodle.noodlepostcard.editComment")}
                 >
@@ -275,7 +270,7 @@ export function SlpReplyRow({
                   type="button"
                   onClick={() => deleteNoodleReply(post, reply)}
                   disabled={updateInteraction.isPending || deleteInteraction.isPending}
-                  className={cn(noodleCommentActionClass, "w-7")}
+                  className={cn(slpCommentActionClass, "w-7")}
                   title={localizeUi("ui.noodle.noodlepostcard.deleteComment")}
                   aria-label={localizeUi("ui.noodle.noodlepostcard.deleteComment")}
                 >

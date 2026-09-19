@@ -1,7 +1,7 @@
 import { ChevronDown } from "lucide-react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { cn } from "../../../lib/utils";
-import { useNoodlerViewer } from "../../features/feed/slp-feed-viewer-hooks";
+import { useCreatorViewer } from "../../features/feed/slp-feed-viewer-hooks";
 import { SlurpCreatorProfileCard } from "../../modules/creator/SlpCreatorProfileCard";
 
 export function SubscriptionSections({
@@ -12,7 +12,7 @@ export function SubscriptionSections({
   collapsed = false,
   onToggleCollapsed,
 }: {
-  creators: NonNullable<ReturnType<typeof useNoodlerViewer>["data"]>["creators"];
+  creators: NonNullable<ReturnType<typeof useCreatorViewer>["data"]>["creators"];
   onOpenProfile?: (accountId: string) => void;
   compact?: boolean;
   embedded?: boolean;

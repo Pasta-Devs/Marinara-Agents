@@ -5,7 +5,7 @@ import type { SlurpStudioCreator } from "../../features/economy/slp-economy-cont
 import { useSetSlurpGoal, useSlurpPayout, useSlurpStudio } from "../../features/economy/slp-economy-hooks";
 import { cn } from "../../../lib/utils";
 import { Avatar } from "../../base/chrome/SlpChrome";
-import { NoodlerFrame } from "./SlpHomeHelpers";
+import { SlpCreatorFrame } from "./SlpHomeHelpers";
 import { formatTime } from "../../base/ui/slp-date-time";
 import { BroadcastPanel } from "../../features/messages/SlpMessages";
 import { SlurpProjectsPanel } from "../../features/projects/SlpProjectsBoard";
@@ -48,7 +48,7 @@ function SlurpStudioView({
   };
 
   return (
-    <NoodlerFrame onBack={onBack} title={localizeUi("ui.slurp.navigation.studio")} action={<span />}>
+    <SlpCreatorFrame onBack={onBack} title={localizeUi("ui.slurp.navigation.studio")} action={<span />}>
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-4 sm:p-5">
         <div className="flex flex-wrap items-baseline justify-between gap-3 px-1">
           {since ? (
@@ -297,7 +297,7 @@ function SlurpStudioView({
           ))
         )}
       </div>
-    </NoodlerFrame>
+    </SlpCreatorFrame>
   );
 }
 

@@ -1,20 +1,21 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import type { NoodleAccount, NoodleInteraction, NoodlePollInput } from "@marinara-engine/shared";
+import type { SlpPollInput } from "../../../../shared/src/slp/slp-social-generation.schema.js";
+import type { SlpAccount, SlpInteraction } from "../../../../shared/src/slp/slp-social.types.js";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { errorMessage } from "./screens/SlpHomeHelpers";
-import type { NoodlePostCardModel, NoodlePostImageUpdate } from "../modules/post/SlpPostCard";
+import type { SlpPostCardModel, SlpPostImageUpdate } from "../modules/post/SlpPostCard";
 import type {
-  useCreateNoodlerInteraction,
-  useDeleteNoodlerInteraction,
-  useRemoveNoodlerInteraction,
-  useTriggerNoodlerCreatorReply,
-  useUpdateNoodlerInteraction,
+  useCreateCreatorInteraction,
+  useDeleteCreatorInteraction,
+  useRemoveCreatorInteraction,
+  useTriggerCreatorReply,
+  useUpdateCreatorInteraction,
 } from "../features/feed/slp-feed-viewer-hooks";
 import type {
-  useDeleteNoodlerPost,
-  useReplaceNoodlerPostImage,
-  useUpdateNoodlerPost,
+  useDeleteCreatorPost,
+  useReplaceCreatorPostImage,
+  useUpdateCreatorPost,
 } from "../features/feed/slp-feed-post-hooks";
 
 /**
@@ -40,18 +41,18 @@ export function useSlurpHomePostActions({
 }: {
   localizeUi: (key: string, options?: Record<string, unknown>) => string;
   viewerPersonaId: string | null;
-  viewerActorAccount: NoodleAccount | null;
+  viewerActorAccount: SlpAccount | null;
   confirmProviderDisclosure: () => Promise<boolean>;
-  createInteraction: ReturnType<typeof useCreateNoodlerInteraction>;
-  removeInteraction: ReturnType<typeof useRemoveNoodlerInteraction>;
-  updateInteraction: ReturnType<typeof useUpdateNoodlerInteraction>;
-  deleteInteraction: ReturnType<typeof useDeleteNoodlerInteraction>;
-  triggerCreatorReply: ReturnType<typeof useTriggerNoodlerCreatorReply>;
-  replacePostImage: ReturnType<typeof useReplaceNoodlerPostImage>;
-  updatePost: ReturnType<typeof useUpdateNoodlerPost>;
-  deletePost: ReturnType<typeof useDeleteNoodlerPost>;
+  createInteraction: ReturnType<typeof useCreateCreatorInteraction>;
+  removeInteraction: ReturnType<typeof useRemoveCreatorInteraction>;
+  updateInteraction: ReturnType<typeof useUpdateCreatorInteraction>;
+  deleteInteraction: ReturnType<typeof useDeleteCreatorInteraction>;
+  triggerCreatorReply: ReturnType<typeof useTriggerCreatorReply>;
+  replacePostImage: ReturnType<typeof useReplaceCreatorPostImage>;
+  updatePost: ReturnType<typeof useUpdateCreatorPost>;
+  deletePost: ReturnType<typeof useDeleteCreatorPost>;
 }) {
-  const reactToPost = (post: NoodlePostCardModel, type: "like", active = false) => {
+  const reactToPost = (post: SlpPostCardModel, type: "like", active = false) => {
     if (!viewerPersonaId) return;
     const onError = (error: unknown) =>
       toast.error(
@@ -67,7 +68,7 @@ export function useSlurpHomePostActions({
       removeInteraction.mutate({ postId: post.id, personaId: viewerPersonaId, actorAccountId, type }, { onError });
     else createInteraction.mutate({ postId: post.id, personaId: viewerPersonaId, actorAccountId, type }, { onError });
   };
-  const reactToReply = (post: NoodlePostCardModel, reply: NoodleInteraction, active: boolean) => {
+  const reactToReply = (post: SlpPostCardModel, reply: SlpInteraction, active: boolean) => {
     if (!viewerPersonaId) return;
     const payload = {
       postId: post.id,
@@ -81,7 +82,7 @@ export function useSlurpHomePostActions({
     if (active) removeInteraction.mutate(payload, { onError });
     else createInteraction.mutate(payload, { onError });
   };
-  const voteInPoll = (post: NoodlePostCardModel, optionId: string, selectedOptionId: string | null) => {
+  const voteInPoll = (post: SlpPostCardModel, optionId: string, selectedOptionId: string | null) => {
     if (!viewerPersonaId || optionId === selectedOptionId) return;
     createInteraction.mutate(
       {
@@ -98,7 +99,7 @@ export function useSlurpHomePostActions({
     );
   };
   const submitReply = async (
-    post: NoodlePostCardModel,
+    post: SlpPostCardModel,
     input: {
       content: string;
       parentInteractionId: string | null;
@@ -131,12 +132,12 @@ export function useSlurpHomePostActions({
     }
   };
   const savePost = async (
-    post: NoodlePostCardModel,
+    post: SlpPostCardModel,
     input: {
       title: string | null;
       content: string;
-      image: NoodlePostImageUpdate | null;
-      poll?: NoodlePollInput | null;
+      image: SlpPostImageUpdate | null;
+      poll?: SlpPollInput | null;
     },
   ) => {
     try {
@@ -166,7 +167,7 @@ export function useSlurpHomePostActions({
       throw error;
     }
   };
-  const deleteNoodlePost = async (post: NoodlePostCardModel) => {
+  const deleteNoodlePost = async (post: SlpPostCardModel) => {
     const confirmed = await showConfirmDialog({
       title: localizeUi("ui.noodle.noodlerhome.deleteNoodlerPost"),
       message: localizeUi("ui.slurp.posts.deleteDetail"),
@@ -184,7 +185,7 @@ export function useSlurpHomePostActions({
   };
   const [editingReplyId, setEditingReplyId] = useState<string | null>(null);
   const [editingReplyContent, setEditingReplyContent] = useState("");
-  const startEditingReply = (reply: NoodleInteraction) => {
+  const startEditingReply = (reply: SlpInteraction) => {
     setEditingReplyId(reply.id);
     setEditingReplyContent(reply.content ?? "");
   };
@@ -192,7 +193,7 @@ export function useSlurpHomePostActions({
     setEditingReplyId(null);
     setEditingReplyContent("");
   };
-  const saveEditedReply = (post: NoodlePostCardModel, reply: NoodleInteraction) => {
+  const saveEditedReply = (post: SlpPostCardModel, reply: SlpInteraction) => {
     if (!viewerPersonaId) return;
     const content = editingReplyContent.trim();
     if (!content && !reply.imageUrl) {
@@ -212,7 +213,7 @@ export function useSlurpHomePostActions({
       },
     );
   };
-  const deleteNoodleReply = async (post: NoodlePostCardModel, reply: NoodleInteraction) => {
+  const deleteNoodleReply = async (post: SlpPostCardModel, reply: SlpInteraction) => {
     const confirmed = await showConfirmDialog({
       title: localizeUi("ui.slurp.comment.deleteTitle"),
       message: localizeUi("ui.noodle.noodlehome.thisRemovesTheCommentAndAnyRepliesOrLikes"),

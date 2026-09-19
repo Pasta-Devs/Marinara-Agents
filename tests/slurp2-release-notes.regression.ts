@@ -1,4 +1,4 @@
-/** Ensure the splash mirrors the final public 0.1.0 release history. */
+/** Ensure the splash mirrors the final public 0.1.1 release history. */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -18,12 +18,12 @@ const changelog = parsePackageChangelog(readFileSync(join(root, "CHANGELOG.md"),
   notes: string;
 }>;
 
-assert.equal(SLURP2_VERSION, "0.1.0");
+assert.equal(SLURP2_VERSION, "0.1.1");
 assert.equal(SLURP2_VERSION, manifest.version);
 assert.deepEqual(
   SLURP2_RELEASES.map(({ version, date, notes }) => ({ version, date, notes })),
   changelog
-    .filter((entry) => entry.version === "0.1.0" || entry.version === "0.0.22")
+    .filter((entry) => entry.version === "0.1.1" || entry.version === "0.1.0" || entry.version === "0.0.22")
     .map((entry) => ({
       version: entry.version,
       date: entry.date,
@@ -35,16 +35,20 @@ assert.deepEqual(
 );
 assert.deepEqual(
   SLURP2_RELEASES.map((release) => release.version),
-  ["0.1.0", "0.0.22"],
+  ["0.1.1", "0.1.0", "0.0.22"],
 );
 assert.deepEqual(
   getSlurp2UnseenReleases(null).map((release) => release.version),
-  ["0.1.0", "0.0.22"],
+  ["0.1.1", "0.1.0", "0.0.22"],
 );
 assert.deepEqual(
   getSlurp2UnseenReleases("0.0.22").map((release) => release.version),
-  ["0.1.0"],
+  ["0.1.1", "0.1.0"],
 );
-assert.deepEqual(getSlurp2UnseenReleases("0.1.0"), []);
+assert.deepEqual(
+  getSlurp2UnseenReleases("0.1.0").map((release) => release.version),
+  ["0.1.1"],
+);
+assert.deepEqual(getSlurp2UnseenReleases("0.1.1"), []);
 
 console.log("slurp2 release notes mirror CHANGELOG.md");

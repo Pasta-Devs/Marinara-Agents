@@ -1,26 +1,26 @@
 import { existsSync } from "node:fs";
 import { and, desc, eq, inArray } from "../../../../db/file-query.js";
 import {
-  noodlerPostMediaUrl,
-  resolveNoodlerMediaAbsolutePath,
-  unlinkNoodlerMedia,
+  slpCreatorPostMediaUrl,
+  resolveCreatorMediaAbsolutePath,
+  unlinkCreatorMedia,
 } from "../../../base/media/slp-media.js";
 import {
-  noodleAccounts,
-  noodlePosts,
-  noodlerAutomaticAttempts,
-  noodlerPreparedPosts,
+  slpAccounts,
+  slpPosts,
+  slpCreatorAutomaticAttempts,
+  slpCreatorPreparedPosts,
 } from "../../../../db/schema/slurp.js";
 import { newId } from "../../../../utils/id-generator.js";
-import { resolveNoodlerSourceSnapshot } from "../../creators/slp-source-resolve.js";
+import { resolveCreatorSourceSnapshot } from "../../creators/slp-source-resolve.js";
 import { slurpCreatorPostingIntervalMs } from "../../../modules/feed/slp-posting-interval.js";
 import {
   ROLLING_DAY_MS,
   elapsedPreparedSlotMs,
   TERMINAL_PREPARED_POST_RETENTION_MS,
 } from "../../host/slp-storage-constants.js";
-import { noodlerReservePolicyFingerprint, parseRecord } from "../../../modules/records/slp-storage-model.js";
-import type { NoodlerPreparedPostPayload, SlurpReserveStatus } from "../../../modules/records/slp-storage-model.js";
+import { slpCreatorReservePolicyFingerprint, parseRecord } from "../../../modules/records/slp-storage-model.js";
+import type { SlpCreatorPreparedPostPayload, SlurpReserveStatus } from "../../../modules/records/slp-storage-model.js";
 import { mapAccount, snapshotForAccount } from "../../host/slp-storage-mappers.js";
 import type { SlurpStorageContext } from "../../host/slp-storage-context.js";
 
@@ -63,7 +63,7 @@ export function createReserveStorage2(context: SlurpStorageContext) {
       // One pass over posts for the whole batch: the crash-recovery lookup below only needs
       // to know which prepared items already published, not to rescan every post per item.
       const publishedPreparedIds = new Map<string, { id: string }>();
-      for (const post of await db.select().from(noodlePosts)) {
+      for (const post of await db.select().from(slpPosts)) {
         const preparedId = parseRecord(post.metadata).noodlerPreparedPostId;
         if (typeof preparedId === "string" && !publishedPreparedIds.has(preparedId)) {
           publishedPreparedIds.set(preparedId, { id: post.id });
@@ -73,7 +73,9 @@ export function createReserveStorage2(context: SlurpStorageContext) {
       const discardedMediaPaths: Array<string | null> = [];
       for (const item of due) {
         const didPublish = await db.transaction(async (tx) => {
-          const current = (await tx.select().from(noodlerPreparedPosts).where(eq(noodlerPreparedPosts.id, item.id)))[0];
+          const current = (
+            await tx.select().from(slpCreatorPreparedPosts).where(eq(slpCreatorPreparedPosts.id, item.id))
+          )[0];
           if (!current || current.state !== "prepared" || Date.parse(current.publishAt) > at.getTime()) return false;
           const existingPost = publishedPreparedIds.get(current.id);
           if (
@@ -81,9 +83,9 @@ export function createReserveStorage2(context: SlurpStorageContext) {
             Date.parse(current.publishAt) < at.getTime() - elapsedPreparedSlotMs(settings.postsPerDay)
           ) {
             await tx
-              .update(noodlerPreparedPosts)
+              .update(slpCreatorPreparedPosts)
               .set({ state: "discarded", updatedAt: at.toISOString() })
-              .where(eq(noodlerPreparedPosts.id, current.id));
+              .where(eq(slpCreatorPreparedPosts.id, current.id));
             // Unlinked only after the discard commits, so a crash here leaks a file rather than
             // leaving a publishable row whose image is already gone.
             discardedMediaPaths.push(
@@ -93,42 +95,42 @@ export function createReserveStorage2(context: SlurpStorageContext) {
           }
           if (existingPost) {
             await tx
-              .update(noodlerPreparedPosts)
+              .update(slpCreatorPreparedPosts)
               .set({ state: "published", publishedPostId: existingPost.id, updatedAt: at.toISOString() })
-              .where(eq(noodlerPreparedPosts.id, current.id));
+              .where(eq(slpCreatorPreparedPosts.id, current.id));
             return false;
           }
           const accountRow = (
-            await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, current.creatorAccountId))
+            await tx.select().from(slpAccounts).where(eq(slpAccounts.id, current.creatorAccountId))
           )[0];
           if (!accountRow || accountRow.platform !== "slurp") {
             await tx
-              .update(noodlerPreparedPosts)
+              .update(slpCreatorPreparedPosts)
               .set({ state: "discarded", updatedAt: at.toISOString() })
-              .where(eq(noodlerPreparedPosts.id, current.id));
+              .where(eq(slpCreatorPreparedPosts.id, current.id));
             return false;
           }
           const account = mapAccount(accountRow);
           const source = await this.resolveAccountSource(account);
-          const sourceSnapshot = source ? await resolveNoodlerSourceSnapshot(db, source) : null;
+          const sourceSnapshot = source ? await resolveCreatorSourceSnapshot(db, source) : null;
           if (
             !account.settings.scheduler.autoPosting?.enabled ||
             !source ||
             !sourceSnapshot ||
-            current.policyFingerprint !== noodlerReservePolicyFingerprint(account, settings, source.updatedAt)
+            current.policyFingerprint !== slpCreatorReservePolicyFingerprint(account, settings, source.updatedAt)
           ) {
             await tx
-              .update(noodlerPreparedPosts)
+              .update(slpCreatorPreparedPosts)
               .set({ state: "discarded", updatedAt: at.toISOString() })
-              .where(eq(noodlerPreparedPosts.id, current.id));
+              .where(eq(slpCreatorPreparedPosts.id, current.id));
             return false;
           }
           const latestCreatorPost = (
             await tx
               .select()
-              .from(noodlePosts)
-              .where(eq(noodlePosts.authorAccountId, account.id))
-              .orderBy(desc(noodlePosts.createdAt))
+              .from(slpPosts)
+              .where(eq(slpPosts.authorAccountId, account.id))
+              .orderBy(desc(slpPosts.createdAt))
           )[0];
           if (
             latestCreatorPost &&
@@ -138,17 +140,17 @@ export function createReserveStorage2(context: SlurpStorageContext) {
               String(parseRecord(parseRecord(current.payload).metadata).noodlerMediaPath ?? "") || null,
             );
             await tx
-              .update(noodlerPreparedPosts)
+              .update(slpCreatorPreparedPosts)
               .set({ state: "discarded", updatedAt: at.toISOString() })
-              .where(eq(noodlerPreparedPosts.id, current.id));
+              .where(eq(slpCreatorPreparedPosts.id, current.id));
             return false;
           }
-          const payload = parseRecord(current.payload) as NoodlerPreparedPostPayload;
+          const payload = parseRecord(current.payload) as SlpCreatorPreparedPostPayload;
           if (typeof payload.content !== "string" || !payload.content.trim()) {
             await tx
-              .update(noodlerPreparedPosts)
+              .update(slpCreatorPreparedPosts)
               .set({ state: "discarded", updatedAt: at.toISOString() })
-              .where(eq(noodlerPreparedPosts.id, current.id));
+              .where(eq(slpCreatorPreparedPosts.id, current.id));
             return false;
           }
           const postId = newId();
@@ -163,12 +165,12 @@ export function createReserveStorage2(context: SlurpStorageContext) {
           // A Story is a picture with a line under it. The prepared payload carries the story
           // intent, but a run whose image never attached publishes as an ordinary post.
           if (!hasMedia) delete preparedMetadata.noodlerPostType;
-          await tx.insert(noodlePosts).values({
+          await tx.insert(slpPosts).values({
             id: postId,
             authorAccountId: account.id,
             title: typeof payload.title === "string" ? payload.title : null,
             content: payload.content,
-            imageUrl: hasMedia ? noodlerPostMediaUrl(postId) : galleryImageUrl,
+            imageUrl: hasMedia ? slpCreatorPostMediaUrl(postId) : galleryImageUrl,
             imagePrompt: typeof payload.imagePrompt === "string" ? payload.imagePrompt : null,
             parentPostId: null,
             quotePostId: null,
@@ -184,7 +186,7 @@ export function createReserveStorage2(context: SlurpStorageContext) {
             updatedAt: at.toISOString(),
           });
           await tx
-            .update(noodlerPreparedPosts)
+            .update(slpCreatorPreparedPosts)
             .set({
               state: "published",
               publishedPostId: postId,
@@ -193,7 +195,7 @@ export function createReserveStorage2(context: SlurpStorageContext) {
               imageClaimLeaseUntil: null,
               updatedAt: at.toISOString(),
             })
-            .where(eq(noodlerPreparedPosts.id, current.id));
+            .where(eq(slpCreatorPreparedPosts.id, current.id));
           return postId;
         });
         if (!didPublish) continue;
@@ -204,15 +206,15 @@ export function createReserveStorage2(context: SlurpStorageContext) {
           await this.advanceProject(item.creatorAccountId, item.payload.projectId, didPublish);
         }
       }
-      for (const path of discardedMediaPaths) unlinkNoodlerMedia(path);
+      for (const path of discardedMediaPaths) unlinkCreatorMedia(path);
       return published;
     },
     async reconcileNoodlerPreparedPosts(at = new Date()): Promise<number> {
       const settings = await this.getSettings();
       const repaired = await db.transaction(async (tx) => {
         const [items, posts] = await Promise.all([
-          tx.select().from(noodlerPreparedPosts),
-          tx.select().from(noodlePosts),
+          tx.select().from(slpCreatorPreparedPosts),
+          tx.select().from(slpPosts),
         ]);
         const postsByPreparedId = new Map<string, typeof posts>();
         for (const post of posts) {
@@ -231,9 +233,9 @@ export function createReserveStorage2(context: SlurpStorageContext) {
           if (linkedPost) {
             if (item.state !== "published" || item.publishedPostId !== linkedPost.id) {
               await tx
-                .update(noodlerPreparedPosts)
+                .update(slpCreatorPreparedPosts)
                 .set({ state: "published", publishedPostId: linkedPost.id, updatedAt: at.toISOString() })
-                .where(eq(noodlerPreparedPosts.id, item.id));
+                .where(eq(slpCreatorPreparedPosts.id, item.id));
               count += 1;
             }
           } else if (item.state === "published") {
@@ -242,13 +244,13 @@ export function createReserveStorage2(context: SlurpStorageContext) {
             // so a user who deletes an automatic post would watch it come back. Discard those.
             const slotStillAhead = Date.parse(item.publishAt) > at.getTime();
             await tx
-              .update(noodlerPreparedPosts)
+              .update(slpCreatorPreparedPosts)
               .set(
                 slotStillAhead
                   ? { state: "prepared", publishedPostId: null, updatedAt: at.toISOString() }
                   : { state: "discarded", updatedAt: at.toISOString() },
               )
-              .where(eq(noodlerPreparedPosts.id, item.id));
+              .where(eq(slpCreatorPreparedPosts.id, item.id));
             count += 1;
           }
         }
@@ -269,7 +271,7 @@ export function createReserveStorage2(context: SlurpStorageContext) {
           await Promise.all(
             [...accounts.values()].map(async (account) => {
               const source = sources.get(account.id) ?? null;
-              return !source || !(await resolveNoodlerSourceSnapshot(db, source)) ? account.id : null;
+              return !source || !(await resolveCreatorSourceSnapshot(db, source)) ? account.id : null;
             }),
           )
         ).filter((id): id is string => id !== null),
@@ -288,7 +290,7 @@ export function createReserveStorage2(context: SlurpStorageContext) {
             !source ||
             missingSourceAccountIds.has(item.creatorAccountId) ||
             !account.settings.scheduler.autoPosting?.enabled ||
-            item.policyFingerprint !== noodlerReservePolicyFingerprint(account, settings, source.updatedAt)
+            item.policyFingerprint !== slpCreatorReservePolicyFingerprint(account, settings, source.updatedAt)
           );
         })
         .map((item) => item.id);
@@ -304,14 +306,14 @@ export function createReserveStorage2(context: SlurpStorageContext) {
       if (discarded.length > 0) {
         await db.transaction(async (tx) =>
           tx
-            .update(noodlerPreparedPosts)
+            .update(slpCreatorPreparedPosts)
             .set({ state: "discarded", updatedAt: at.toISOString() })
-            .where(inArray(noodlerPreparedPosts.id, discarded)),
+            .where(inArray(slpCreatorPreparedPosts.id, discarded)),
         );
         for (const item of active.filter(
           (candidate) => candidate.state === "prepared" && discardedSet.has(candidate.id),
         )) {
-          unlinkNoodlerMedia(String(parseRecord(item.payload.metadata).noodlerMediaPath ?? "") || null);
+          unlinkCreatorMedia(String(parseRecord(item.payload.metadata).noodlerMediaPath ?? "") || null);
         }
       }
       // A crash between the durable row write and the media promotion leaves a row pointing at a
@@ -321,18 +323,18 @@ export function createReserveStorage2(context: SlurpStorageContext) {
         if (item.state !== "prepared" || discardedSet.has(item.id)) continue;
         const mediaPath = item.payload.metadata.noodlerMediaPath;
         if (typeof mediaPath !== "string" || !mediaPath) continue;
-        const absolute = resolveNoodlerMediaAbsolutePath(mediaPath);
+        const absolute = resolveCreatorMediaAbsolutePath(mediaPath);
         if (absolute && existsSync(absolute)) continue;
         const { noodlerMediaPath: _missing, ...metadata } = item.payload.metadata;
         await db.transaction(async (tx) =>
           tx
-            .update(noodlerPreparedPosts)
+            .update(slpCreatorPreparedPosts)
             .set({
               payload: JSON.stringify({ ...item.payload, metadata }),
               imageState: "closed",
               updatedAt: at.toISOString(),
             })
-            .where(eq(noodlerPreparedPosts.id, item.id)),
+            .where(eq(slpCreatorPreparedPosts.id, item.id)),
         );
       }
       // Published and discarded rows only exist for crash recovery, and this table is read whole
@@ -348,7 +350,7 @@ export function createReserveStorage2(context: SlurpStorageContext) {
         )
         .map((item) => item.id);
       if (prunable.length > 0) {
-        await db.delete(noodlerPreparedPosts).where(inArray(noodlerPreparedPosts.id, prunable));
+        await db.delete(slpCreatorPreparedPosts).where(inArray(slpCreatorPreparedPosts.id, prunable));
       }
       return repaired + discarded.length;
     },
@@ -359,7 +361,7 @@ export function createReserveStorage2(context: SlurpStorageContext) {
       const cutoff = effectiveMs - ROLLING_DAY_MS;
       const [items, attempts, creators] = await Promise.all([
         this.listNoodlerPreparedPosts(),
-        db.select().from(noodlerAutomaticAttempts),
+        db.select().from(slpCreatorAutomaticAttempts),
         this.listAutoPostEnabledAccounts(),
       ]);
       const prepared = items.filter((item) => item.state === "prepared");

@@ -143,7 +143,7 @@ const operation = read("services/slurp/slurp-world.operation.ts");
 assert.match(operation, /export async function advanceSlurpWorld/u);
 // A failed action must never stop the mark being written, or the same stretch replays forever.
 assert.match(operation, /await writeLastTick\(db, until\);\s*return \{\s*status: applied \+ pulsed > 0/u);
-assert.match(operation, /tryNoodleOperation\("slurp-world-tick"/u, "concurrent ticks must not double-apply");
+assert.match(operation, /trySlpOperation\("slurp-world-tick"/u, "concurrent ticks must not double-apply");
 // An unanswered conversation is somebody waiting on the player, exactly like an unanswered
 // commission, so both count against the same queue.
 assert.match(operation, /listOpenCommissionsForCreator\(account\.id\)/u);

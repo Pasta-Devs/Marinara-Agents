@@ -34,7 +34,7 @@ assert.match(surface, /hasBanner \? "relative z-10 pt-0" : "pt-5"/u);
 
 // A persona that runs a Creator is known to the feed by the Creator's name and face, so the
 // switcher card leads with that and keeps the persona as a small circle beside it.
-assert.match(shell, /creatorIdentity\?: NoodleAccount \| null;/u);
+assert.match(shell, /creatorIdentity\?: SlpAccount \| null;/u);
 assert.match(shell, /account=\{creatorIdentity \?\? personaAccount\}/u);
 assert.match(shell, /personaBadge=\{creatorIdentity \? personaAccount : null\}/u);
 assert.match(shell, /ui\.slurp\.account\.asPersona/u);

@@ -25,7 +25,7 @@ import {
 } from "../../../services/generation/connection-admission.js";
 import { SLURP_MODIFIER_KINDS } from "../../modules/creators/slp-creator-state.js";
 import { modelAnswerForCorrection, requireModelAnswer } from "../../base/model/slp-model-answer.js";
-import { noodleSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
+import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
 import { claimSlurpModelBudget, slurpModelWorkerAllows } from "../../base/model/slp-model-worker.js";
 import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "../../base/prompting/slp-prompt-blocks.js";
 
@@ -220,7 +220,7 @@ export async function generateSlurpArc(
         maxTokens: resolveStoredMaxTokens(connection.defaultParameters, 800),
         maxTokensOverride: connection.maxTokensOverride,
       }),
-      ...noodleSamplingOptions(
+      ...slpSamplingOptions(
         resolveStoredChatOptions(connection.defaultParameters, connection.provider, connection.model),
         { temperature: 0.9, topP: 0.95 },
       ),

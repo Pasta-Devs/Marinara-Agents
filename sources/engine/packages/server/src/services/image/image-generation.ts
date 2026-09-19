@@ -3231,7 +3231,23 @@ export function buildSwarmUiGenerationBody(request: ImageGenRequest, sessionId: 
   if (model) body.model = model;
 
   const workflowText = request.comfyWorkflow?.trim();
-  if (!workflowText) return body;
+  if (!workflowText) {
+    const loras = defaults.loras.filter((lora) => lora.model.trim());
+    if (loras.length > 0) {
+      body.loras = loras.map((lora) => lora.model).join(",");
+      body.loraweights = loras.map((lora) => lora.strength).join(",");
+    }
+    const references = collectComfyReferenceImages(request, defaults);
+    if (references.length > 0) {
+      body.promptimages = references
+        .map((reference) => {
+          const { base64, mimeType } = decodeReferenceImage(reference);
+          return `data:${mimeType};base64,${base64}`;
+        })
+        .join("|");
+    }
+    return body;
+  }
   if (/%reference_image_name(?:_0[1-4])?%/.test(workflowText)) {
     throw new Error(
       "SwarmUI workflows must use %reference_image% placeholders; backend-local filename placeholders cannot be distributed safely.",
@@ -3310,6 +3326,7 @@ async function generateSwarmUI(baseUrl: string, apiKey: string, request: ImageGe
   const sessionId = await createSwarmUiSession(base, apiKey, request);
   const body = buildSwarmUiGenerationBody(request, sessionId);
   const debugBody: Record<string, unknown> = { ...body, session_id: "[session]" };
+  if (debugBody.promptimages) debugBody.promptimages = "[reference images]";
   if (typeof debugBody.comfyworkflowraw === "string") {
     debugBody.comfyworkflowraw = redactSwarmUiWorkflowImages(debugBody.comfyworkflowraw, request);
   }

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import {
   containsIdentity,
   normalizedDisclosureWords,
-  protectNoodlerGeneratedIdentity,
+  protectCreatorGeneratedIdentity,
   protectedIdentityValues,
   stageProfileContainsPublicIdentity,
   stageProfileContainsSourceDetails,
@@ -16,38 +16,38 @@ import { slurp2Source } from "./slurp2-source";
 
 const identity = { displayName: "Mari Vale", handle: "marivale", sourceIdentifiers: ["char-1"] };
 
-// --- protectNoodlerGeneratedIdentity ---------------------------------------------------------
+// --- protectCreatorGeneratedIdentity ---------------------------------------------------------
 
 // Open is a pass-through.
-assert.equal(protectNoodlerGeneratedIdentity("Mari Vale was here", "open", identity), "Mari Vale was here");
+assert.equal(protectCreatorGeneratedIdentity("Mari Vale was here", "open", identity), "Mari Vale was here");
 
 // Hinted rewrites into something a creator would type; Secret uses the flatter word.
-assert.equal(protectNoodlerGeneratedIdentity("Mari Vale was here", "hinted", identity), "you-know-who was here");
-assert.equal(protectNoodlerGeneratedIdentity("Mari Vale was here", "secret", identity), "someone was here");
+assert.equal(protectCreatorGeneratedIdentity("Mari Vale was here", "hinted", identity), "you-know-who was here");
+assert.equal(protectCreatorGeneratedIdentity("Mari Vale was here", "secret", identity), "someone was here");
 
 // A leading @ is consumed rather than left dangling.
-assert.equal(protectNoodlerGeneratedIdentity("ask @marivale", "secret", identity), "ask someone");
+assert.equal(protectCreatorGeneratedIdentity("ask @marivale", "secret", identity), "ask someone");
 
 // The longest identifier wins, so the name is not half-replaced from the inside.
-assert.doesNotMatch(protectNoodlerGeneratedIdentity("Mari Vale", "secret", identity) ?? "", /Vale/u);
+assert.doesNotMatch(protectCreatorGeneratedIdentity("Mari Vale", "secret", identity) ?? "", /Vale/u);
 
 // A "Name (@handle)" pair collapses to one token instead of "someone (@someone)".
-assert.equal(protectNoodlerGeneratedIdentity("Mari Vale (@marivale)", "secret", identity), "someone");
+assert.equal(protectCreatorGeneratedIdentity("Mari Vale (@marivale)", "secret", identity), "someone");
 
 // Word boundaries are respected: a longer word that merely contains the handle is left alone.
 assert.equal(
-  protectNoodlerGeneratedIdentity("marivalentine posts daily", "secret", identity),
+  protectCreatorGeneratedIdentity("marivalentine posts daily", "secret", identity),
   "marivalentine posts daily",
 );
 
 // The source entity id never survives into generated text either.
-assert.doesNotMatch(protectNoodlerGeneratedIdentity("see char-1", "hinted", identity) ?? "", /char-1/u);
+assert.doesNotMatch(protectCreatorGeneratedIdentity("see char-1", "hinted", identity) ?? "", /char-1/u);
 
 // Empty input is null, not an empty string that would read as "no identity to protect".
-assert.equal(protectNoodlerGeneratedIdentity("   ", "secret", identity), null);
+assert.equal(protectCreatorGeneratedIdentity("   ", "secret", identity), null);
 
 // With no linked identity there is nothing to redact against, so the value passes through trimmed.
-assert.equal(protectNoodlerGeneratedIdentity(" hello ", "secret", null), "hello");
+assert.equal(protectCreatorGeneratedIdentity(" hello ", "secret", null), "hello");
 
 // --- protectedIdentityValues / containsIdentity ------------------------------------------------
 

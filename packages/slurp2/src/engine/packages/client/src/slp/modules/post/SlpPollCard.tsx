@@ -1,11 +1,11 @@
 import { Check } from "lucide-react";
 import { useState } from "react";
-import type { NoodleAccount, NoodleInteraction, NoodlePoll } from "@marinara-engine/shared";
+import type { SlpAccount, SlpInteraction, SlpPoll } from "../../../../../shared/src/slp/slp-social.types.js";
 import { cn } from "../../../lib/utils";
 import { Avatar } from "../../base/chrome/SlpChrome";
 import { useTranslation as useUiTranslation } from "react-i18next";
 
-export function NoodlePollCard({
+export function SlpPollCard({
   poll,
   votes,
   accountById,
@@ -15,14 +15,14 @@ export function NoodlePollCard({
   onVote,
   onOpenProfile,
 }: {
-  poll: NoodlePoll;
-  votes: NoodleInteraction[];
-  accountById: Map<string, NoodleAccount>;
+  poll: SlpPoll;
+  votes: SlpInteraction[];
+  accountById: Map<string, SlpAccount>;
   selectedOptionId: string | null;
   disabled: boolean;
   pending: boolean;
   onVote: (optionId: string) => void;
-  onOpenProfile: (account: NoodleAccount) => void;
+  onOpenProfile: (account: SlpAccount) => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
   const totalVotes = votes.length;

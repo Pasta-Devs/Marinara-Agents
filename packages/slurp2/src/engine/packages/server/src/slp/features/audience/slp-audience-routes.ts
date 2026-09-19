@@ -8,11 +8,12 @@ import {
   slurpFanTypeWeeklyBudget,
   slurpFanTypeActiveHour,
 } from "../../../../../shared/src/slp/slp-fan-types.js";
-import { ensureAmbientNoodleAccounts, isAmbientNoodleAccount } from "../../data/audience/slp-ambient-profiles.js";
-import { tryNoodleOperation } from "../../base/locking/slp-operation-lock.js";
-import { noodleAmbientProfileRerollSchema, type NoodleAccount } from "@marinara-engine/shared";
+import { ensureAmbientNoodleAccounts, isAmbientSlpAccount } from "../../data/audience/slp-ambient-profiles.js";
+import { trySlpOperation } from "../../base/locking/slp-operation-lock.js";
+import { slpAmbientProfileRerollSchema } from "../../../../../shared/src/slp/slp-social.schema.js";
+import { type SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
-import { rerollAmbientNoodleProfiles } from "./slp-ambient-profile-generation-service.js";
+import { rerollAmbientSlpProfiles } from "./slp-ambient-profile-generation-service.js";
 import {
   SLURP_FUNNEL_STAGES,
   SLURP_NAMED_CAST_LIMIT,
@@ -25,8 +26,8 @@ import {
   slurpAudienceCharacterFanTypeId,
   slurpAudienceCharacterTraits,
 } from "../../../../../shared/src/slp/slp-audience-characters.js";
-import { isNoodlerHiddenFromViewer } from "../../base/identity/slp-access.js";
-import { runNoodlerFanActivity, getNoodlerFanActivityStatus } from "./slp-fan-activity-operation.js";
+import { isCreatorHiddenFromViewer } from "../../base/identity/slp-access.js";
+import { runCreatorFanActivity, getCreatorFanActivityStatus } from "./slp-fan-activity-operation.js";
 import { isConnectionAdmissionFailure } from "../../../services/generation/connection-admission.js";
 import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
 import { logger } from "../../../lib/logger.js";
@@ -34,7 +35,7 @@ import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
 /** The `identity` lock is shared by refresh, reroll, and profile edits, so the 409 stays operation-neutral. */
-const NOODLE_IDENTITY_LOCK_BUSY = "Another Slurp identity operation is already running. Wait for it to finish.";
+const SLP_IDENTITY_LOCK_BUSY = "Another Slurp identity operation is already running. Wait for it to finish.";
 export async function slpAudienceRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   const {
     buildViewerContext,
@@ -150,13 +151,13 @@ export async function slpAudienceRoutes(app: FastifyInstance, deps: SlpRouteDeps
       .safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
-    const operation = await tryNoodleOperation("identity", async () => {
+    const operation = await trySlpOperation("identity", async () => {
       // Ambient management edits the roster while it is hidden, so it reads past the hide filter.
       const account = await noodle.getAccountById(id, { includeHidden: true });
-      if (!account || !isAmbientNoodleAccount(account)) return null;
+      if (!account || !isAmbientSlpAccount(account)) return null;
       return noodle.updateAccountProfile(id, { ...parsed.data, profile: { profileManuallyEdited: true } });
     });
-    if (!operation.acquired) return reply.code(409).send({ error: NOODLE_IDENTITY_LOCK_BUSY });
+    if (!operation.acquired) return reply.code(409).send({ error: SLP_IDENTITY_LOCK_BUSY });
     if (!operation.value) return reply.code(404).send({ error: "Ambient profile not found" });
     return operation.value;
   });
@@ -169,22 +170,22 @@ export async function slpAudienceRoutes(app: FastifyInstance, deps: SlpRouteDeps
    * profile edit rewriting the same accounts would interleave.
    */
   app.post("/ambient-profiles/reroll", async (req, reply) => {
-    const parsed = noodleAmbientProfileRerollSchema.safeParse(req.body ?? {});
+    const parsed = slpAmbientProfileRerollSchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const settings = await noodle.getSettings();
     const connection = await resolveSlurpTextConnection(connections, settings.generationConnectionId);
     if (!connection) return reply.code(400).send({ error: "Select a Slurp generation connection first." });
-    const operation = await tryNoodleOperation("identity", async () => {
+    const operation = await trySlpOperation("identity", async () => {
       await ensureAmbientNoodleAccounts(noodle, settings.allowRandomUsers);
       const accounts = (
         await Promise.all(parsed.data.accountIds.map((id) => noodle.getAccountById(id, { includeHidden: true })))
-      ).filter((account): account is NoodleAccount => account !== null);
-      if (accounts.length !== parsed.data.accountIds.length || accounts.some((a) => !isAmbientNoodleAccount(a))) {
+      ).filter((account): account is SlpAccount => account !== null);
+      if (accounts.length !== parsed.data.accountIds.length || accounts.some((a) => !isAmbientSlpAccount(a))) {
         return { status: "invalid" } as const;
       }
       return {
         status: "ok" as const,
-        result: await rerollAmbientNoodleProfiles({
+        result: await rerollAmbientSlpProfiles({
           db: app.db,
           noodle,
           accounts,
@@ -194,7 +195,7 @@ export async function slpAudienceRoutes(app: FastifyInstance, deps: SlpRouteDeps
         }),
       };
     });
-    if (!operation.acquired) return reply.code(409).send({ error: NOODLE_IDENTITY_LOCK_BUSY });
+    if (!operation.acquired) return reply.code(409).send({ error: SLP_IDENTITY_LOCK_BUSY });
     if (operation.value.status === "invalid") {
       return reply.code(400).send({ error: "Only managed ambient Slurp profiles can be rerolled." });
     }
@@ -339,7 +340,7 @@ export async function slpAudienceRoutes(app: FastifyInstance, deps: SlpRouteDeps
       !viewer ||
       !creator ||
       creatorBelongsToViewer(creator, viewer) ||
-      isNoodlerHiddenFromViewer(creator, viewer.id)
+      isCreatorHiddenFromViewer(creator, viewer.id)
     ) {
       return reply.code(404).send({ error: "Slurp stage profile not found" });
     }
@@ -361,7 +362,7 @@ export async function slpAudienceRoutes(app: FastifyInstance, deps: SlpRouteDeps
 
   app.post("/noodler/fan-activity/refresh-now", async (req, reply) => {
     try {
-      const result = await runNoodlerFanActivity({
+      const result = await runCreatorFanActivity({
         db: app.db,
         mode: "manual",
         debugMode: (req.body as { debugMode?: unknown } | undefined)?.debugMode === true,
@@ -384,5 +385,5 @@ export async function slpAudienceRoutes(app: FastifyInstance, deps: SlpRouteDeps
     }
   });
 
-  app.get("/noodler/fan-activity/status", async () => getNoodlerFanActivityStatus(app.db));
+  app.get("/noodler/fan-activity/status", async () => getCreatorFanActivityStatus(app.db));
 }

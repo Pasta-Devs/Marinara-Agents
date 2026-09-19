@@ -131,7 +131,7 @@ assert.match(routes, /recordCreatorEvent\(creator\.id, "milestone", \{ amount: t
 // to be able to see it. It rides on the viewer scope beside subscriptionPrice, because the
 // audience profile projection is a strict allowlist and must stay one.
 assert.match(routes, /goal: context\.goalByAccountId\.get\(account\.id\) \?\? null/u);
-assert.match(home, /function noodlerGoalOf/u);
+assert.match(home, /function slpCreatorGoalOf/u);
 assert.match(
   home,
   /goalForViewer && !editing && \(/u,

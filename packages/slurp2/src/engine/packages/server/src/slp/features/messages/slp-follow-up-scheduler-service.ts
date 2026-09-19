@@ -12,8 +12,8 @@ import { slurpPollBackoffMs } from "../../base/model/slp-poll-backoff.js";
 import { activeSlurpStrikes, SLURP_COOL_OFF_HOURS, type SlurpStanceLatitude } from "../../modules/world/slp-stance.js";
 import { resolveSlurpCreatorAvailability } from "../../modules/creators/slp-creator-schedule-context.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
-import { isNoodlerNightQuietTime } from "../feed/slp-feed-contract.js";
-import { tryNoodleOperation } from "../../base/locking/slp-operation-lock.js";
+import { isCreatorNightQuietTime } from "../feed/slp-feed-contract.js";
+import { trySlpOperation } from "../../base/locking/slp-operation-lock.js";
 
 const INITIAL_DELAY_MS = 60_000; // Start after 1 minute
 const POLL_MS = 120_000; // Check every 2 minutes
@@ -37,7 +37,7 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
   const poll = async () => {
     if (stopped || active) return;
     active = (async () => {
-      const operation = await tryNoodleOperation("slurp-follow-up-scheduler", async () => {
+      const operation = await trySlpOperation("slurp-follow-up-scheduler", async () => {
         const messages = createSlurpMessagesStorage(app.db);
         const slurp = createSlurpStorage(app.db);
         const settings = await slurp.getSettings();
@@ -97,7 +97,7 @@ export function startSlurpFollowUpScheduler(app: FastifyInstance, registerStop?:
                   settings,
                 )
               : { online: true, activity: null, minutesUntilOnline: 0 };
-            const quiet = settings.nightQuiet && isNoodlerNightQuietTime(new Date());
+            const quiet = settings.nightQuiet && isCreatorNightQuietTime(new Date());
             if (coolingOff || quiet || !availability.online) {
               const delayMinutes = coolingOff
                 ? Math.max(1, Math.ceil((Date.parse(thread.coolUntil as string) - Date.now()) / 60_000))

@@ -1,7 +1,7 @@
 import { ImageIcon, MoreHorizontal, Pencil, RefreshCw, Share2, Trash2 } from "lucide-react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { toast } from "sonner";
-import type { NoodlePostCardCtx, NoodlePostCardModel } from "./SlpPostTypes";
+import type { SlpPostCardCtx, SlpPostCardModel } from "./SlpPostTypes";
 import { api } from "../../../lib/api-client";
 
 /** The post's own action menu: edit, regenerate its image, delete, show its context, share it. */
@@ -18,12 +18,12 @@ export function SlpCreatorPostMenu({
   setImageContextOpen,
   setPromptDraft,
 }: {
-  post: NoodlePostCardModel;
-  ctx: NoodlePostCardCtx;
+  post: SlpPostCardModel;
+  ctx: SlpPostCardCtx;
   postMenuOpen: boolean;
-  editablePost: NoodlePostCardModel;
-  startEditingPost: (post: NoodlePostCardModel) => void;
-  deleteNoodlePost: (post: NoodlePostCardModel) => void;
+  editablePost: SlpPostCardModel;
+  startEditingPost: (post: SlpPostCardModel) => void;
+  deleteNoodlePost: (post: SlpPostCardModel) => void;
   imageGenerationPending: boolean;
   hasImageContext: boolean;
   imageContextOpen: boolean;

@@ -1,4 +1,4 @@
-import { hasActiveNoodlerAccountOperations } from "./slp-account-operation-lock.js";
+import { hasActiveCreatorAccountOperations } from "./slp-account-operation-lock.js";
 import {
   hasActiveSlurpMutations,
   isSlurpBackupActive as readSlurpBackupActive,
@@ -6,16 +6,16 @@ import {
 } from "./slp-backup-state.js";
 import { claimSlurpDataDeletion, isSlurpDataDeletionActive } from "./slp-data-deletion-state.js";
 
-const activeNoodleOperations = new Set<string>();
+const activeSlpOperations = new Set<string>();
 
-function claimNoodleOperation(key: string): (() => void) | null {
-  if (activeNoodleOperations.has(key)) return null;
-  activeNoodleOperations.add(key);
+function claimSlpOperation(key: string): (() => void) | null {
+  if (activeSlpOperations.has(key)) return null;
+  activeSlpOperations.add(key);
   let released = false;
   return () => {
     if (released) return;
     released = true;
-    activeNoodleOperations.delete(key);
+    activeSlpOperations.delete(key);
   };
 }
 
@@ -30,12 +30,12 @@ export function claimSlurpBackup(): (() => void) | null {
   if (
     isSlurpDataDeletionActive() ||
     readSlurpBackupActive() ||
-    hasActiveNoodlerAccountOperations() ||
+    hasActiveCreatorAccountOperations() ||
     hasActiveSlurpMutations() ||
-    activeNoodleOperations.size > 0
+    activeSlpOperations.size > 0
   )
     return null;
-  const releaseWrite = claimNoodleOperation("slurp-write");
+  const releaseWrite = claimSlpOperation("slurp-write");
   if (!releaseWrite) return null;
   setSlurpBackupActive(true);
   let released = false;
@@ -48,12 +48,12 @@ export function claimSlurpBackup(): (() => void) | null {
 }
 
 /** Runs an operation while owning its claim lifecycle, or reports that the key is busy. */
-export async function tryNoodleOperation<T>(
+export async function trySlpOperation<T>(
   key: string,
   operation: () => Promise<T>,
 ): Promise<{ acquired: true; value: T } | { acquired: false }> {
   if (readSlurpBackupActive() || isSlurpDataDeletionActive()) return { acquired: false };
-  const release = claimNoodleOperation(key);
+  const release = claimSlpOperation(key);
   if (!release) return { acquired: false };
   try {
     return { acquired: true, value: await operation() };
@@ -64,11 +64,11 @@ export async function tryNoodleOperation<T>(
 
 export async function trySlurpWrite<T>(operation: () => Promise<T>) {
   if (isSlurpDataDeletionActive() || readSlurpBackupActive()) return { acquired: false as const };
-  return tryNoodleOperation("slurp-write", operation);
+  return trySlpOperation("slurp-write", operation);
 }
 
 export async function trySlurpDataDeletion<T>(operation: () => Promise<T>) {
-  if (readSlurpBackupActive() || hasActiveNoodlerAccountOperations() || activeNoodleOperations.size > 0)
+  if (readSlurpBackupActive() || hasActiveCreatorAccountOperations() || activeSlpOperations.size > 0)
     return { acquired: false as const };
   const release = claimSlurpDataDeletion();
   if (!release) return { acquired: false as const };
@@ -79,19 +79,19 @@ export async function trySlurpDataDeletion<T>(operation: () => Promise<T>) {
   }
 }
 
-export function isNoodleOperationActive(key: string): boolean {
-  return activeNoodleOperations.has(key);
+export function isSlpOperationActive(key: string): boolean {
+  return activeSlpOperations.has(key);
 }
 
 export function getSlurpOperationStatus() {
   return {
     backup: readSlurpBackupActive(),
     deletion: isSlurpDataDeletionActive(),
-    account: hasActiveNoodlerAccountOperations(),
-    mutation: hasActiveSlurpMutations() || activeNoodleOperations.size > 0,
+    account: hasActiveCreatorAccountOperations(),
+    mutation: hasActiveSlurpMutations() || activeSlpOperations.size > 0,
   };
 }
 
-export function resetNoodleOperationsForTests() {
-  activeNoodleOperations.clear();
+export function resetSlpOperationsForTests() {
+  activeSlpOperations.clear();
 }

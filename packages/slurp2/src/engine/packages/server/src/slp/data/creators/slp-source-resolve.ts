@@ -1,10 +1,14 @@
 // Split from noodle-noodler-source.ts so the identity-minimization helpers stay a
 // pure module that regressions can import without an Engine database.
-import type { NoodleAccount, NoodleIdentityDisclosure, NoodlerSourceSnapshot } from "@marinara-engine/shared";
+import type {
+  SlpAccount,
+  SlpCreatorSourceSnapshot,
+  SlpIdentityDisclosure,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 import type { DB } from "../../../db/connection.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { parseRecord } from "../../modules/creators/slp-public-support.js";
-import { noodlerCharacterCanonText } from "../../base/prompting/slp-prompt-safety.js";
+import { slpCreatorCharacterCanonText } from "../../base/prompting/slp-prompt-safety.js";
 import {
   slurpAudienceCharacterVoice,
   slurpCharacterIdFromFanEntityId,
@@ -37,21 +41,21 @@ export async function resolveSlurpCharacterFanVoice(
   return slurpAudienceCharacterVoice(card, voiceBudget);
 }
 
-export async function resolveNoodlerCharacterCanon(
+export async function resolveCreatorCharacterCanon(
   db: DB,
-  publicAccount: Pick<NoodleAccount, "kind" | "entityId"> | null,
-  disclosureMode: NoodleIdentityDisclosure,
+  publicAccount: Pick<SlpAccount, "kind" | "entityId"> | null,
+  disclosureMode: SlpIdentityDisclosure,
 ): Promise<string> {
   if (!publicAccount) return "";
   const characters = createCharactersStorage(db);
   if (publicAccount.kind === "character") {
     const source = await characters.getById(publicAccount.entityId);
-    return source ? noodlerCharacterCanonText(source.data, disclosureMode === "open") : "";
+    return source ? slpCreatorCharacterCanonText(source.data, disclosureMode === "open") : "";
   }
   if (publicAccount.kind === "persona") {
     const source = await characters.getPersona(publicAccount.entityId);
     return source
-      ? noodlerCharacterCanonText(
+      ? slpCreatorCharacterCanonText(
           {
             name: source.name,
             description: source.description,
@@ -67,10 +71,10 @@ export async function resolveNoodlerCharacterCanon(
   return "";
 }
 
-export async function resolveNoodlerSourceSnapshot(
+export async function resolveCreatorSourceSnapshot(
   db: DB,
-  publicAccount: Pick<NoodleAccount, "kind" | "entityId" | "displayName" | "handle">,
-): Promise<NoodlerSourceSnapshot | null> {
+  publicAccount: Pick<SlpAccount, "kind" | "entityId" | "displayName" | "handle">,
+): Promise<SlpCreatorSourceSnapshot | null> {
   const characters = createCharactersStorage(db);
   if (publicAccount.kind === "character") {
     const source = await characters.getById(publicAccount.entityId);

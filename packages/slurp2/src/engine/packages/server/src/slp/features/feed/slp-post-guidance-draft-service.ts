@@ -6,7 +6,8 @@
  * fields; guidance is one paragraph, and asking a small local model for JSON around one string is
  * a second way for the call to fail.
  */
-import type { APIProvider, NoodleIdentityDisclosure } from "@marinara-engine/shared";
+import type { APIProvider } from "@marinara-engine/shared";
+import type { SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
 import { isDebugAgentsEnabled } from "../../../config/runtime-config.js";
 import type { DB } from "../../../db/connection.js";
 import { logDebugOverride } from "../../../lib/logger.js";
@@ -21,15 +22,15 @@ import { withConnectionFallbackProvider } from "../../../services/llm/connection
 import { createLLMProvider } from "../../../services/llm/provider-registry.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
-import { noodlerPublicIdentityFor, protectBoundedNoodlerGeneratedText } from "./slp-public-identity.js";
+import { slpCreatorPublicIdentityFor, protectBoundedCreatorGeneratedText } from "./slp-public-identity.js";
 import { requireModelAnswer } from "../../base/model/slp-model-answer.js";
 import {
   cleanSlurpPostGuidanceDraft,
   SLURP_POST_GUIDANCE_MAX_LENGTH,
   type SlurpPostAccess,
 } from "../../modules/feed/slp-post-guidance.js";
-import { noodleSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
-import { resolveNoodlerCharacterCanon } from "../../data/creators/slp-source-resolve.js";
+import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
+import { resolveCreatorCharacterCanon } from "../../data/creators/slp-source-resolve.js";
 import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "../../base/prompting/slp-prompt-blocks.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
@@ -112,12 +113,12 @@ export async function generateSlurpPostGuidanceDraft(
   const noodle = createSlurpStorage(db);
   const account = input.creatorId ? await noodle.getNoodlerAccountById(input.creatorId) : null;
   if (input.creatorId && !account) throw new Error("Slurp stage profile not found.");
-  const disclosureMode: NoodleIdentityDisclosure = account?.settings.privacy.identityDisclosure ?? "open";
+  const disclosureMode: SlpIdentityDisclosure = account?.settings.privacy.identityDisclosure ?? "open";
   const publicAccount = account ? await noodle.resolveAccountSource(account) : null;
   // Concealed Creators get the same seed the stage profile draft uses; what may be *said* about
   // them is limited by the protection pass below, not by hiding the card from the writer.
-  const characterContext = account ? await resolveNoodlerCharacterCanon(db, publicAccount, disclosureMode) : "";
-  const publicIdentity = await noodlerPublicIdentityFor(db, publicAccount);
+  const characterContext = account ? await resolveCreatorCharacterCanon(db, publicAccount, disclosureMode) : "";
+  const publicIdentity = await slpCreatorPublicIdentityFor(db, publicAccount);
   const messages = buildSlurpPostGuidanceDraftMessages({
     access: input.access,
     characterContext,
@@ -158,7 +159,7 @@ export async function generateSlurpPostGuidanceDraft(
       maxTokens: resolveStoredMaxTokens(input.connection.defaultParameters, 600),
       maxTokensOverride: input.connection.maxTokensOverride,
     }),
-    ...noodleSamplingOptions(
+    ...slpSamplingOptions(
       resolveStoredChatOptions(input.connection.defaultParameters, input.connection.provider, input.connection.model),
       { temperature: 0.8, topP: 0.9 },
     ),
@@ -169,7 +170,7 @@ export async function generateSlurpPostGuidanceDraft(
   const guidance = cleanSlurpPostGuidanceDraft(requireModelAnswer(response.content ?? "", "post guidance"));
   // This text is stored, shown, and later spliced into the post prompt. A hinted Creator's source
   // name must not reach it by any of those routes.
-  const protectedGuidance = protectBoundedNoodlerGeneratedText(
+  const protectedGuidance = protectBoundedCreatorGeneratedText(
     guidance,
     disclosureMode,
     publicIdentity,

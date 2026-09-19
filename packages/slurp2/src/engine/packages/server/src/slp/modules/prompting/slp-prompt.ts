@@ -1,23 +1,23 @@
 // ──────────────────────────────────────────────
 // Noodle Prompt Instructions
 // ──────────────────────────────────────────────
+import { LIMITS } from "@marinara-engine/shared";
+import { readSlpPollFromMetadata } from "../../../../../shared/src/slp/slp-polls.js";
 import {
-  LIMITS,
-  readNoodlePollFromMetadata,
-  type NoodleAccountKind,
-  type NoodleInteraction,
-  type NoodlePost,
-} from "@marinara-engine/shared";
+  type SlpAccountKind,
+  type SlpInteraction,
+  type SlpPost,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpSettings } from "../settings/slp-settings.js";
-import type { NoodlePromptImageCandidate } from "../../base/media/slp-vision.js";
+import type { SlpPromptImageCandidate } from "../../base/media/slp-vision.js";
 
-export const NOODLE_PAST_MEMORY_MIN_AGE_MS = 48 * 60 * 60 * 1000;
+export const SLP_PAST_MEMORY_MIN_AGE_MS = 48 * 60 * 60 * 1000;
 /** Behavior when a Noodle setting's `enableEnhancedTimelineWriting` is off — reproduces the exact pre-toggle defaults. */
-export const NOODLE_LEGACY_PAST_MEMORY_MAX_ITEMS = 3;
-export const NOODLE_LEGACY_PAST_MEMORY_INCLUSION_CHANCE = 0.5;
+export const SLP_LEGACY_PAST_MEMORY_MAX_ITEMS = 3;
+export const SLP_LEGACY_PAST_MEMORY_INCLUSION_CHANCE = 0.5;
 /** Behavior when `enableEnhancedTimelineWriting` is on. */
 export const NOODLE_PAST_MEMORY_MAX_ITEMS = 5;
-export const NOODLE_PAST_MEMORY_INCLUSION_CHANCE = 0.85;
+export const SLP_PAST_MEMORY_INCLUSION_CHANCE = 0.85;
 export const NOODLE_ADULT_PLATFORM_POLICY =
   "Noodle only accepts confirmed adult accounts and personas. Every participant on Noodle is 18+; minors are not allowed on the platform. NSFW content is allowed, anything goes, and adult in-character drama, flirtation, gossip, and explicit references may appear when they fit the accounts involved.";
 export const SLURP_PLATFORM_CONTEXT =
@@ -34,7 +34,7 @@ export const NOODLE_CONTENT_MIX_INSTRUCTION =
   "- Vary the feed across casual updates, humor, questions, useful observations, teasing, affection, projects, promotion, and occasional conflict or low mood. Drama, hostility, anxiety, and sadness are possibilities, not the default mood or a quota.";
 export const NOODLE_HISTORY_MOOD_INSTRUCTION =
   "- Use recent activity for facts, relationships, and continuity. Do not copy its length, format, or emotional mood by default; let each account's present personality and situation set the tone.";
-export const NOODLE_TIMELINE_BASE_DEFAULT_PROMPT = [
+export const SLP_TIMELINE_BASE_DEFAULT_PROMPT = [
   "You write a fake social media timeline for Marinara Engine's in-app parody site called Slurp.",
   NOODLE_ADULT_PLATFORM_POLICY,
   "- Structured actions are limited to posts, polls, follows, likes, replies, and poll votes.",
@@ -54,34 +54,34 @@ export const NOODLE_TIMELINE_BASE_DEFAULT_PROMPT = [
   "- Return JSON only. No prose outside the JSON object.",
 ].join("\n");
 
-export function composeNoodleTimelineSystemPrompt(basePromptText: string, timelineVoiceText: string): string {
+export function composeSlpTimelineSystemPrompt(basePromptText: string, timelineVoiceText: string): string {
   return [basePromptText.trim(), timelineVoiceText.trim()].filter(Boolean).join("\n");
 }
-export const NOODLE_CREATIVE_FORMAT_INSTRUCTIONS = [
+export const SLP_CREATIVE_FORMAT_INSTRUCTIONS = [
   "- Characters and random users may create polls in their own posts and vote in polls. Occasionally use a poll when an audience question or set of choices fits naturally with the account and current activity; polls are optional, not a quota.",
   "- Standard Unicode emojis are allowed in post and reply content. Use them naturally when they fit the account's voice or reaction; emojis are optional, and not every post or reply needs one.",
   "- Characters are allowed to be assholes to each other when it fits their personalities, history, and relationships. They may be rude, insulting, confrontational, jealous, petty, sarcastic, start arguments, revive old grievances, form rivalries, or deliberately stir up interpersonal drama. This is permission, not a quota: do not force hostility into every refresh or flatten established characterization just to create conflict.",
 ] as const;
-const NOODLE_CHARACTER_ONLY_POLL_INSTRUCTION =
+const SLP_CHARACTER_ONLY_POLL_INSTRUCTION =
   "- Characters may create polls in their own posts and vote in polls. Occasionally use a poll when an audience question or set of choices fits naturally with the account and current activity; polls are optional, not a quota.";
-const NOODLE_CHARACTER_ONLY_CREATIVE_FORMAT_INSTRUCTIONS = [
-  NOODLE_CHARACTER_ONLY_POLL_INSTRUCTION,
-  ...NOODLE_CREATIVE_FORMAT_INSTRUCTIONS.slice(1),
+const SLP_CHARACTER_ONLY_CREATIVE_FORMAT_INSTRUCTIONS = [
+  SLP_CHARACTER_ONLY_POLL_INSTRUCTION,
+  ...SLP_CREATIVE_FORMAT_INSTRUCTIONS.slice(1),
 ] as const;
 
-export function noodleCreativeFormatInstructions(allowRandomUsers: boolean): readonly string[] {
-  return allowRandomUsers ? NOODLE_CREATIVE_FORMAT_INSTRUCTIONS : NOODLE_CHARACTER_ONLY_CREATIVE_FORMAT_INSTRUCTIONS;
+export function slpCreativeFormatInstructions(allowRandomUsers: boolean): readonly string[] {
+  return allowRandomUsers ? SLP_CREATIVE_FORMAT_INSTRUCTIONS : SLP_CHARACTER_ONLY_CREATIVE_FORMAT_INSTRUCTIONS;
 }
 /** Legacy single-line tone instruction, used when enhanced timeline writing is off. */
-export const NOODLE_LEGACY_TONE_INSTRUCTION =
+export const SLP_LEGACY_TONE_INSTRUCTION =
   "- Characters should act in character but like people posting online: funny, messy, indirect, petty, affectionate, dramatic, vulgar, or casual as fits them.";
-export const NOODLE_TONE_INSTRUCTIONS = [
+export const SLP_TONE_INSTRUCTIONS = [
   "- Characters post like real people online (funny, messy, indirect, petty, affectionate, dramatic, vulgar, or casual) — but which of these fits, and how much, must come from each character's own Personality/Description/Backstory below, not a default upbeat voice. Do not make every account sound equally enthusiastic, chatty, or friendly.",
   "- Before writing each account's posts/replies, briefly ground yourself in that account's stated personality traits (guarded, blunt, anxious, arrogant, deadpan, etc.) and let sentence length, punctuation, capitalization, and emoji use vary accordingly. A withdrawn or hostile character should not sound like an enthusiastic extrovert.",
 ] as const;
-export const NOODLE_CONGRUENCY_INSTRUCTION =
+export const SLP_CONGRUENCY_INSTRUCTION =
   "- Multiple active accounts may know each other from shared chats, prior Slurp posts, or each other's lore below. When it fits, have accounts react to, quote, subtweet, or argue with each other's posts in this same batch (via @handle mentions and targetTempId), not just post in isolation.";
-export const NOODLE_RANDOM_USER_TREATMENT_INSTRUCTION =
+export const SLP_RANDOM_USER_TREATMENT_INSTRUCTION =
   "- Random user accounts are not characters. Treat them as ordinary fictional Slurp profiles that may follow, like, reply, gossip, or casually join public drama.";
 /**
  * Default text for the editable "Noodle Timeline Voice & Tone" prompt override
@@ -89,7 +89,7 @@ export const NOODLE_RANDOM_USER_TREATMENT_INSTRUCTION =
  * instructions only — schema-critical output-format rules (structured action limits, target
  * field rules, handle preservation, persona authorship, adult platform policy, "Return JSON
  * only") stay hardcoded in buildRefreshPrompt() outside this override, so a user rewriting their
- * voice/tone text cannot accidentally break the noodleGeneratedRefreshSchema output contract.
+ * voice/tone text cannot accidentally break the slpGeneratedRefreshSchema output contract.
  *
  * `enhanced` mirrors the Noodle setting `enableEnhancedTimelineWriting` (off by default): off
  * reproduces the original single-line tone instruction with no congruency instruction; on adds
@@ -97,32 +97,32 @@ export const NOODLE_RANDOM_USER_TREATMENT_INSTRUCTION =
  * only affects the UNEDITED default — once a user customizes the override, their text is used
  * regardless of the setting.
  */
-export function noodleTimelineVoiceDefaultText(enhanced: boolean, allowRandomUsers = true): string {
+export function slpTimelineVoiceDefaultText(enhanced: boolean, allowRandomUsers = true): string {
   return [
-    ...(enhanced ? NOODLE_TONE_INSTRUCTIONS : [NOODLE_LEGACY_TONE_INSTRUCTION]),
-    ...(allowRandomUsers ? [NOODLE_RANDOM_USER_TREATMENT_INSTRUCTION] : []),
-    ...noodleCreativeFormatInstructions(allowRandomUsers),
-    ...(enhanced ? [NOODLE_CONGRUENCY_INSTRUCTION] : []),
+    ...(enhanced ? SLP_TONE_INSTRUCTIONS : [SLP_LEGACY_TONE_INSTRUCTION]),
+    ...(allowRandomUsers ? [SLP_RANDOM_USER_TREATMENT_INSTRUCTION] : []),
+    ...slpCreativeFormatInstructions(allowRandomUsers),
+    ...(enhanced ? [SLP_CONGRUENCY_INSTRUCTION] : []),
   ].join("\n");
 }
 /** Legacy recalled-memory instruction, used when `enableEnhancedTimelineWriting` is off. */
-export const NOODLE_LEGACY_RECALLED_MEMORY_INSTRUCTION =
+export const SLP_LEGACY_RECALLED_MEMORY_INSTRUCTION =
   "- These posts are more than 48 hours old and are optional long-term memories. Active accounts may naturally remember, revisit, like, reply to, or build on them, but do not force a reference.";
-export const NOODLE_RECALLED_MEMORY_INSTRUCTION =
+export const SLP_RECALLED_MEMORY_INSTRUCTION =
   "- These posts are more than 48 hours old and are past context an account might plausibly remember, especially posts or threads involving currently active accounts. When a recalled post naturally continues a relevant thread, character relationship, or grievance, feel free to revisit, reply to, or build on it — but do not force a reference to every recalled post, and skip ones that don't fit the moment.";
 
-type NoodleTimelineFeatureSettings = Pick<
+type SlpTimelineFeatureSettings = Pick<
   SlurpSettings,
   "allowRandomUsers" | "enableImagePrompts" | "allowGalleryImageAttachments" | "imageGenerationPrompt"
 >;
 
 type RandomSource = () => number;
-type NoodlePromptPost = Pick<
-  NoodlePost,
+type SlpPromptPost = Pick<
+  SlpPost,
   "id" | "authorAccountId" | "authorSnapshot" | "content" | "imageUrl" | "imagePrompt" | "metadata" | "createdAt"
 >;
-type NoodlePromptInteraction = Pick<
-  NoodleInteraction,
+type SlpPromptInteraction = Pick<
+  SlpInteraction,
   | "id"
   | "postId"
   | "parentInteractionId"
@@ -134,27 +134,27 @@ type NoodlePromptInteraction = Pick<
   | "createdAt"
 >;
 
-const NOODLE_PROMPT_REPLIES_PER_POST = 12;
+const SLP_PROMPT_REPLIES_PER_POST = 12;
 
-function formatNoodlePromptAccount(snapshot: NoodlePost["authorSnapshot"], fallbackAccountId: string): string {
+function formatSlpPromptAccount(snapshot: SlpPost["authorSnapshot"], fallbackAccountId: string): string {
   if (!snapshot) return `accountKey=${fallbackAccountId}`;
   return `${snapshot.displayName} (@${snapshot.handle}; ${snapshot.kind} accountKey=${snapshot.kind}:${snapshot.entityId})`;
 }
 
-export function noodlePostImageKey(postId: string): string {
+export function slpPostImageKey(postId: string): string {
   return `noodle-post-image:${postId}`;
 }
 
-export function noodleReplyImageKey(interactionId: string): string {
+export function slpReplyImageKey(interactionId: string): string {
   return `noodle-reply-image:${interactionId}`;
 }
 
-export function canGenerateNoodleActivityForAccountKind(kind: NoodleAccountKind): boolean {
+export function canGenerateSlpActivityForAccountKind(kind: SlpAccountKind): boolean {
   return kind === "character" || kind === "random_user";
 }
 
-export function noodlePersonaCommentPostIds(
-  interactions: Array<Pick<NoodleInteraction, "postId" | "actorAccountId" | "type">>,
+export function slpPersonaCommentPostIds(
+  interactions: Array<Pick<SlpInteraction, "postId" | "actorAccountId" | "type">>,
   personaAccountId?: string,
 ): string[] {
   if (!personaAccountId) return [];
@@ -167,19 +167,15 @@ export function noodlePersonaCommentPostIds(
   );
 }
 
-function promptRepliesForPost(
-  interactions: NoodlePromptInteraction[],
-  postId: string,
-  priorityActorAccountId?: string,
-) {
+function promptRepliesForPost(interactions: SlpPromptInteraction[], postId: string, priorityActorAccountId?: string) {
   const replies = interactions.filter((interaction) => interaction.postId === postId && interaction.type === "reply");
   const prioritized = priorityActorAccountId
     ? replies.filter((interaction) => interaction.actorAccountId === priorityActorAccountId).reverse()
     : [];
   const newest = replies.slice().reverse();
-  const selected = new Map<string, NoodlePromptInteraction>();
+  const selected = new Map<string, SlpPromptInteraction>();
   for (const reply of [...prioritized, ...newest]) {
-    if (selected.size >= NOODLE_PROMPT_REPLIES_PER_POST) break;
+    if (selected.size >= SLP_PROMPT_REPLIES_PER_POST) break;
     selected.set(reply.id, reply);
   }
   return [...selected.values()].sort(
@@ -187,16 +183,16 @@ function promptRepliesForPost(
   );
 }
 
-export function collectNoodlePromptImageCandidates(
-  posts: NoodlePromptPost[],
-  interactions: NoodlePromptInteraction[],
+export function collectSlpPromptImageCandidates(
+  posts: SlpPromptPost[],
+  interactions: SlpPromptInteraction[],
   options: { priorityActorAccountId?: string } = {},
-): NoodlePromptImageCandidate[] {
-  const candidates: NoodlePromptImageCandidate[] = [];
+): SlpPromptImageCandidate[] {
+  const candidates: SlpPromptImageCandidate[] = [];
   for (const post of posts) {
     if (post.imageUrl) {
       candidates.push({
-        key: noodlePostImageKey(post.id),
+        key: slpPostImageKey(post.id),
         imageUrl: post.imageUrl,
         postId: post.id,
         interactionId: null,
@@ -206,7 +202,7 @@ export function collectNoodlePromptImageCandidates(
     for (const reply of promptRepliesForPost(interactions, post.id, options.priorityActorAccountId)) {
       if (!reply.imageUrl) continue;
       candidates.push({
-        key: noodleReplyImageKey(reply.id),
+        key: slpReplyImageKey(reply.id),
         imageUrl: reply.imageUrl,
         postId: post.id,
         interactionId: reply.id,
@@ -217,9 +213,9 @@ export function collectNoodlePromptImageCandidates(
   return candidates;
 }
 
-export function formatNoodleTimelineForPrompt(
-  posts: NoodlePromptPost[],
-  interactions: NoodlePromptInteraction[],
+export function formatSlpTimelineForPrompt(
+  posts: SlpPromptPost[],
+  interactions: SlpPromptInteraction[],
   options: {
     emptyMessage?: string;
     includeTimestamp?: boolean;
@@ -233,8 +229,8 @@ export function formatNoodleTimelineForPrompt(
     .slice()
     .reverse()
     .map((post) => {
-      const author = formatNoodlePromptAccount(post.authorSnapshot, post.authorAccountId);
-      const poll = readNoodlePollFromMetadata(post.metadata);
+      const author = formatSlpPromptAccount(post.authorSnapshot, post.authorAccountId);
+      const poll = readSlpPollFromMetadata(post.metadata);
       const pollSummary = poll
         ? ` [poll: ${poll.question}; ${poll.options
             .map((option, index) => {
@@ -248,9 +244,9 @@ export function formatNoodleTimelineForPrompt(
         : "";
       const timestamp = options.includeTimestamp ? ` at ${post.createdAt}` : "";
       const replyLines = promptRepliesForPost(interactions, post.id, options.priorityActorAccountId).map((reply) => {
-        const replyAuthor = formatNoodlePromptAccount(reply.actorSnapshot, reply.actorAccountId);
+        const replyAuthor = formatSlpPromptAccount(reply.actorSnapshot, reply.actorAccountId);
         const parent = reply.parentInteractionId ? ` parentReplyId=${reply.parentInteractionId}` : "";
-        const imageKey = noodleReplyImageKey(reply.id);
+        const imageKey = slpReplyImageKey(reply.id);
         const imageAttached = options.attachedImageKeys?.has(imageKey) === true;
         const imageCaption = options.imageCaptions?.get(imageKey)?.trim();
         const replyBody =
@@ -265,7 +261,7 @@ export function formatNoodleTimelineForPrompt(
                 : ""
         }`;
       });
-      const postImageKey = noodlePostImageKey(post.id);
+      const postImageKey = slpPostImageKey(post.id);
       const postImageAttached = options.attachedImageKeys?.has(postImageKey) === true;
       const postImageCaption = options.imageCaptions?.get(postImageKey)?.trim();
       return [
@@ -292,24 +288,20 @@ function normalizedRandom(random: RandomSource): number {
   return Math.min(0.999_999, Math.max(0, value));
 }
 
-export function noodlePastMemoryCutoff(at = new Date()): string {
-  return new Date(at.getTime() - NOODLE_PAST_MEMORY_MIN_AGE_MS).toISOString();
+export function slpPastMemoryCutoff(at = new Date()): string {
+  return new Date(at.getTime() - SLP_PAST_MEMORY_MIN_AGE_MS).toISOString();
 }
 
-export function noodlePastMemorySampleSize(
+export function slpPastMemorySampleSize(
   random: RandomSource = Math.random,
-  inclusionChance: number = NOODLE_PAST_MEMORY_INCLUSION_CHANCE,
+  inclusionChance: number = SLP_PAST_MEMORY_INCLUSION_CHANCE,
   maxItems: number = NOODLE_PAST_MEMORY_MAX_ITEMS,
 ): number {
   if (normalizedRandom(random) >= inclusionChance) return 0;
   return 1 + Math.floor(normalizedRandom(random) * maxItems);
 }
 
-export function sampleNoodlePastMemories<T>(
-  items: readonly T[],
-  limit: number,
-  random: RandomSource = Math.random,
-): T[] {
+export function sampleSlpPastMemories<T>(items: readonly T[], limit: number, random: RandomSource = Math.random): T[] {
   const count = Math.min(Math.max(0, Math.floor(limit)), NOODLE_PAST_MEMORY_MAX_ITEMS, items.length);
   if (count === 0) return [];
   const pool = [...items];
@@ -321,12 +313,12 @@ export function sampleNoodlePastMemories<T>(
 }
 
 /**
- * Like sampleNoodlePastMemories, but biases selection toward items weightFn scores higher
+ * Like sampleSlpPastMemories, but biases selection toward items weightFn scores higher
  * (e.g. posts authored by or mentioning currently active accounts), using weighted sampling
  * without replacement (`-log(random) / weight` keys, sorted ascending). Baseline weight (see
  * weightFn) keeps unrelated older posts occasionally reachable rather than filtering them out.
  */
-export function sampleNoodlePastMemoriesWeighted<T>(
+export function sampleSlpPastMemoriesWeighted<T>(
   items: readonly T[],
   limit: number,
   weightFn: (item: T) => number,
@@ -350,12 +342,12 @@ export function sampleNoodlePastMemoriesWeighted<T>(
  * single-character refresh gets at least the floor, and a large roster is capped at Noodle's
  * explicit 8k-token hard ceiling, never more.
  */
-export function noodleLorebookTokenBudget(activeCharacterCount: number): number {
+export function slpLorebookTokenBudget(activeCharacterCount: number): number {
   const scaled = Math.max(activeCharacterCount, 0) * LIMITS.NOODLE_LOREBOOK_TOKEN_BUDGET_PER_ACCOUNT;
   return Math.min(LIMITS.NOODLE_LOREBOOK_TOKEN_BUDGET_MAX, Math.max(LIMITS.NOODLE_LOREBOOK_TOKEN_BUDGET_FLOOR, scaled));
 }
 
-export function noodleTimelineFeatureInstructions(settings: NoodleTimelineFeatureSettings): string[] {
+export function slpTimelineFeatureInstructions(settings: SlpTimelineFeatureSettings): string[] {
   return [
     ...(settings.allowRandomUsers
       ? [

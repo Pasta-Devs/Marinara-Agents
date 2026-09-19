@@ -1,6 +1,6 @@
 import { AlertCircle, CheckCircle2, Loader2, Pause, Play, Sparkles, WandSparkles } from "lucide-react";
 import { useMemo, useState } from "react";
-import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
+import type { SlpCreatorManagedStageProfile } from "../../../../../shared/src/slp/slp-social.types.js";
 import {
   useApplySlurpImprovementProposals,
   useCreateSlurpImprovementJob,
@@ -27,7 +27,7 @@ const LANES = [
 const DEFERRED_LANES = ["Art direction", "Fan types and reactions", "Arc starters", "Messaging", "Ads"];
 
 type Checkup = {
-  creator: NoodlerManagedStageProfile;
+  creator: SlpCreatorManagedStageProfile;
   needs: string[];
 };
 
@@ -45,7 +45,7 @@ export function SlurpCreatorImprover({
   creators,
   settings,
 }: {
-  creators: NoodlerManagedStageProfile[];
+  creators: SlpCreatorManagedStageProfile[];
   settings: SlurpSettings;
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());

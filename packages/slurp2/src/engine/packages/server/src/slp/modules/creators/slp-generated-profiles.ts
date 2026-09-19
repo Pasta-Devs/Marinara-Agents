@@ -1,10 +1,10 @@
 import {
-  noodleGeneratedProfileSchema,
-  noodleGeneratedProfilesSchema,
-  type NoodleGeneratedProfile,
-} from "@marinara-engine/shared";
+  slpGeneratedProfileSchema,
+  slpGeneratedProfilesSchema,
+  type SlpGeneratedProfile,
+} from "../../../../../shared/src/slp/slp-social-generation.schema.js";
 
-export type RejectedNoodleGeneratedProfile = {
+export type RejectedSlpGeneratedProfile = {
   index: number;
   issueCount: number;
 };
@@ -13,9 +13,9 @@ export type RejectedNoodleGeneratedProfile = {
  * Parse model-generated profile rows independently so one malformed account
  * cannot discard valid profiles from the same Noodle setup batch.
  */
-export function parseNoodleGeneratedProfiles(value: unknown): {
-  profiles: NoodleGeneratedProfile[];
-  rejected: RejectedNoodleGeneratedProfile[];
+export function parseSlpGeneratedProfiles(value: unknown): {
+  profiles: SlpGeneratedProfile[];
+  rejected: RejectedSlpGeneratedProfile[];
 } {
   const wrappedValue =
     Array.isArray(value) &&
@@ -36,14 +36,14 @@ export function parseNoodleGeneratedProfiles(value: unknown): {
     // Preserve the useful top-level validation error for a wholly malformed
     // response. Only a single object wrapper and individual profile failures
     // are recoverable.
-    noodleGeneratedProfilesSchema.parse(normalizedValue);
+    slpGeneratedProfilesSchema.parse(normalizedValue);
     return { profiles: [], rejected: [] };
   }
 
-  const profiles: NoodleGeneratedProfile[] = [];
-  const rejected: RejectedNoodleGeneratedProfile[] = [];
+  const profiles: SlpGeneratedProfile[] = [];
+  const rejected: RejectedSlpGeneratedProfile[] = [];
   rawProfiles.forEach((rawProfile, index) => {
-    const parsed = noodleGeneratedProfileSchema.safeParse(rawProfile);
+    const parsed = slpGeneratedProfileSchema.safeParse(rawProfile);
     if (parsed.success) profiles.push(parsed.data);
     else rejected.push({ index, issueCount: parsed.error.issues.length });
   });

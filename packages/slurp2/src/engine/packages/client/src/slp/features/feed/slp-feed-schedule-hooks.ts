@@ -1,44 +1,45 @@
-import type { NoodleAccount, NoodleAccountSettingsPatchInput, NoodlerManagedPost } from "@marinara-engine/shared";
+import type { SlpAccountSettingsPatchInput } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import type { SlpAccount, SlpCreatorManagedPost } from "../../../../../shared/src/slp/slp-social.types.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
-import { noodleKeys } from "../../base/state/slp-query-keys.js";
+import { slpKeys } from "../../base/state/slp-query-keys.js";
 import type { SlurpReserveStatus } from "./slp-feed-contract.js";
 
-export function useUpdateNoodlerAccess() {
+export function useUpdateCreatorAccess() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ accountId, ...access }: { accountId: string; hiddenFromAccountIds: string[] }) =>
-      api.patch<NoodleAccount>(`/slurp2/accounts/${encodeURIComponent(accountId)}/settings`, {
+      api.patch<SlpAccount>(`/slurp2/accounts/${encodeURIComponent(accountId)}/settings`, {
         subtree: "privacy",
         patch: { access },
-      } satisfies NoodleAccountSettingsPatchInput),
+      } satisfies SlpAccountSettingsPatchInput),
     onSuccess: () => {
       return Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
+        qc.invalidateQueries({ queryKey: slpKeys.noodlerAccounts() }),
+        qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() }),
       ]);
     },
   });
 }
-export function useUpdateNoodlerAutoPosting() {
+export function useUpdateCreatorAutoPosting() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ accountId, ...autoPosting }: { accountId: string; enabled?: boolean; imagesEnabled?: boolean }) =>
-      api.patch<NoodleAccount>(`/slurp2/accounts/${encodeURIComponent(accountId)}/settings`, {
+      api.patch<SlpAccount>(`/slurp2/accounts/${encodeURIComponent(accountId)}/settings`, {
         subtree: "scheduler",
         patch: { autoPosting },
-      } satisfies NoodleAccountSettingsPatchInput),
+      } satisfies SlpAccountSettingsPatchInput),
     // Auto-post state lives only under noodlerAccounts(); the /slurp bootstrap has none of it.
     onSuccess: () =>
       Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerReserveStatus() }),
+        qc.invalidateQueries({ queryKey: slpKeys.noodlerAccounts() }),
+        qc.invalidateQueries({ queryKey: slpKeys.noodlerReserveStatus() }),
       ]),
   });
 }
-export function useNoodlerReserveStatus(enabled = true) {
+export function useCreatorReserveStatus(enabled = true) {
   return useQuery({
-    queryKey: noodleKeys.noodlerReserveStatus(),
+    queryKey: slpKeys.noodlerReserveStatus(),
     queryFn: () => api.get<SlurpReserveStatus>("/slurp2/noodler/auto-post/status"),
     enabled,
     // The scheduler prepares posts on its own timer, so nothing here invalidates this key when
@@ -47,25 +48,25 @@ export function useNoodlerReserveStatus(enabled = true) {
     refetchIntervalInBackground: false,
   });
 }
-export function useUpdateNoodlerScheduleSlot() {
+export function useUpdateCreatorScheduleSlot() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ slotId, publishAt }: { slotId: string; publishAt: string }) =>
       api.patch<SlurpReserveStatus>(`/slurp2/noodler/auto-post/schedule/${encodeURIComponent(slotId)}`, {
         publishAt,
       }),
-    onSuccess: (status) => qc.setQueryData(noodleKeys.noodlerReserveStatus(), status),
+    onSuccess: (status) => qc.setQueryData(slpKeys.noodlerReserveStatus(), status),
   });
 }
-export function useRunNoodlerAutoPostNow() {
+export function useRunCreatorAutoPostNow() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (accountId: string) =>
-      api.post<NoodlerManagedPost>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/auto-post/run-now`),
+      api.post<SlpCreatorManagedPost>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/auto-post/run-now`),
     onSuccess: (_post, accountId) =>
       Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerPosts(accountId) }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
+        qc.invalidateQueries({ queryKey: slpKeys.noodlerPosts(accountId) }),
+        qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() }),
       ]),
   });
 }

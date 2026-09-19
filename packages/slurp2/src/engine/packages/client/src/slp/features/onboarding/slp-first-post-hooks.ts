@@ -1,8 +1,8 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
-import { noodleKeys } from "../../base/state/slp-query-keys.js";
+import { slpKeys } from "../../base/state/slp-query-keys.js";
 
-export type NoodlerFirstPostJob = {
+export type SlpCreatorFirstPostJob = {
   id: string;
   executionId: string;
   accountId: string;
@@ -11,17 +11,17 @@ export type NoodlerFirstPostJob = {
   postId: string | null;
   error: string | null;
 };
-export function useEnqueueNoodlerFirstPosts() {
+export function useEnqueueCreatorFirstPosts() {
   return useMutation({
     mutationFn: (input: { executionId: string; accountIds: string[] }) =>
-      api.post<{ jobs: NoodlerFirstPostJob[] }>("/slurp2/noodler/first-posts/enqueue", input),
+      api.post<{ jobs: SlpCreatorFirstPostJob[] }>("/slurp2/noodler/first-posts/enqueue", input),
   });
 }
-export function useNoodlerFirstPostStatus(executionId: string | null, enabled = true) {
+export function useCreatorFirstPostStatus(executionId: string | null, enabled = true) {
   return useQuery({
-    queryKey: [...noodleKeys.noodlerRoot(), "first-posts", executionId ?? "none"],
+    queryKey: [...slpKeys.noodlerRoot(), "first-posts", executionId ?? "none"],
     queryFn: () =>
-      api.get<{ jobs: NoodlerFirstPostJob[]; complete: boolean }>(
+      api.get<{ jobs: SlpCreatorFirstPostJob[]; complete: boolean }>(
         `/slurp2/noodler/first-posts/status?executionId=${encodeURIComponent(executionId!)}`,
       ),
     enabled: enabled && Boolean(executionId),

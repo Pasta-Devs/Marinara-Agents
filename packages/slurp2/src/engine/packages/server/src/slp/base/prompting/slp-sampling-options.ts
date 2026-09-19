@@ -6,7 +6,7 @@
 // this — an unset stored parameter is present as undefined, so it overwrote the
 // package value — and spreading the package default over the stored options threw
 // the user's sampling settings away.
-export function noodleSamplingOptions<T extends { temperature?: number; topP?: number }>(
+export function slpSamplingOptions<T extends { temperature?: number; topP?: number }>(
   stored: T,
   defaults: { temperature: number; topP: number },
 ): T & {

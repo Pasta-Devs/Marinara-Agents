@@ -1,10 +1,10 @@
 import { ImageIcon, ListChecks, Smile, X } from "lucide-react";
 import type { RefObject } from "react";
 import { cn } from "../../../lib/utils";
-import { NoodleAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
+import { SlpAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
 import { useTranslation as useUiTranslation } from "react-i18next";
 
-export function NoodleToolButton({
+export function SlpToolButton({
   active,
   title,
   onClick,
@@ -38,7 +38,7 @@ export function NoodleToolButton({
   );
 }
 
-type NoodleComposerTool = {
+type SlpComposerTool = {
   ref?: RefObject<HTMLDivElement | null>;
   active?: boolean;
   disabled?: boolean;
@@ -47,32 +47,32 @@ type NoodleComposerTool = {
 
 // Shared composer icon row (image / poll / emoji) so every Noodle surface renders
 // the identical toolbar. NoodleR passes a trailing coin control for monetization settings.
-export function NoodleComposerToolRow({
+export function SlpComposerToolRow({
   image,
   poll,
   media,
   trailing,
 }: {
-  image: NoodleComposerTool;
-  poll: NoodleComposerTool;
-  media: NoodleComposerTool;
+  image: SlpComposerTool;
+  poll: SlpComposerTool;
+  media: SlpComposerTool;
   trailing?: React.ReactNode;
 }) {
   const { t: localizeUi } = useUiTranslation();
   return (
     <>
       <div ref={image.ref} className="relative">
-        <NoodleToolButton
+        <SlpToolButton
           title={localizeUi("ui.noodle.noodlehome.attachImage")}
           active={Boolean(image.active)}
           disabled={image.disabled}
           onClick={() => image.onClick?.()}
         >
           <ImageIcon size={18} />
-        </NoodleToolButton>
+        </SlpToolButton>
       </div>
       <div ref={poll.ref} className="relative">
-        <NoodleToolButton
+        <SlpToolButton
           title={
             poll.active ? localizeUi("ui.noodle.noodlehome.editPoll") : localizeUi("ui.noodle.noodlehome.createPoll")
           }
@@ -81,17 +81,17 @@ export function NoodleComposerToolRow({
           onClick={() => poll.onClick?.()}
         >
           <ListChecks size={18} />
-        </NoodleToolButton>
+        </SlpToolButton>
       </div>
       <div ref={media.ref} className="relative">
-        <NoodleToolButton
+        <SlpToolButton
           title={localizeUi("ui.noodle.noodlehome.emojiGifsAndStickers")}
           active={Boolean(media.active)}
           disabled={media.disabled}
           onClick={() => media.onClick?.()}
         >
           <Smile size={18} />
-        </NoodleToolButton>
+        </SlpToolButton>
       </div>
       {trailing}
     </>
@@ -115,7 +115,7 @@ export function SlurpToolPopover({
 }) {
   const { t: localizeUi } = useUiTranslation();
   return (
-    <NoodleAnchoredPopover anchorRef={anchorRef} wide={wide} modalOwned={modalOwned}>
+    <SlpAnchoredPopover anchorRef={anchorRef} wide={wide} modalOwned={modalOwned}>
       <div className="marinara-chat-popover flex h-[22rem] max-h-[60vh] flex-col overflow-hidden rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] text-[var(--foreground)] shadow-2xl shadow-black/35">
         <div className="flex shrink-0 items-center gap-1 border-b border-foreground/10 px-2 py-1.5">
           <span className="flex-1 rounded-lg bg-foreground/10 px-2 py-1 text-center text-xs font-medium text-foreground/80 ring-1 ring-foreground/15">
@@ -132,6 +132,6 @@ export function SlurpToolPopover({
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-3">{children}</div>
       </div>
-    </NoodleAnchoredPopover>
+    </SlpAnchoredPopover>
   );
 }

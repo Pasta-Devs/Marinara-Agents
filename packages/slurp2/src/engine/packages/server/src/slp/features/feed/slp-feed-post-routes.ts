@@ -1,56 +1,55 @@
+import { createSlpPoll, readSlpPollFromMetadata } from "../../../../../shared/src/slp/slp-polls.js";
 import {
-  noodlerPostCreateWithMediaSchema,
-  noodlerCreateInteractionSchema,
-  readNoodlePollFromMetadata,
-  noodlerViewerPersonaSchema,
-  noodlerCreatorReplyRequestSchema,
-  noodlerRemoveInteractionSchema,
-  noodleInteractionUpdateSchema,
-  noodlerPostUpdateSchema,
-  createNoodlePoll,
-} from "@marinara-engine/shared";
+  slpCreatorCreateInteractionSchema,
+  slpCreatorPostCreateWithMediaSchema,
+  slpCreatorPostUpdateSchema,
+  slpCreatorRemoveInteractionSchema,
+  slpCreatorReplyRequestSchema,
+  slpCreatorViewerPersonaSchema,
+  slpInteractionUpdateSchema,
+} from "../../../../../shared/src/slp/slp-social.schema.js";
 import { z } from "zod";
-import { isNoodlerHiddenFromViewer, canViewNoodlerPost } from "../../base/identity/slp-access.js";
+import { isCreatorHiddenFromViewer, canViewCreatorPost } from "../../base/identity/slp-access.js";
 import {
-  readNoodlerMediaPath,
-  resolveNoodlerMediaAbsolutePath,
-  readNoodlerLockedTeaser,
-  resolveNoodlerMediaVariant,
-  unlinkNoodlerMedia,
+  readCreatorMediaPath,
+  resolveCreatorMediaAbsolutePath,
+  readCreatorLockedTeaser,
+  resolveCreatorMediaVariant,
+  unlinkCreatorMedia,
 } from "../../base/media/slp-media.js";
 import { existsSync, readFileSync } from "fs";
 import { extname, basename, dirname } from "path";
 import { renderSlurpShareCard } from "./slp-share-card.js";
-import { readNoodlerAvatarMediaPath } from "../../base/identity/slp-avatar.js";
-import { noodleInteractions } from "../../../db/schema/slurp.js";
+import { readCreatorAvatarMediaPath } from "../../base/identity/slp-avatar.js";
+import { slpInteractions } from "../../../db/schema/slurp.js";
 import { and, eq } from "../../../db/file-query.js";
 import { newId, now } from "../../../utils/id-generator.js";
 import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
-import { generateAndApplyNoodlerCreatorReply } from "../messages/slp-messages-contract.js";
+import { generateAndApplyCreatorReply } from "../messages/slp-messages-contract.js";
 import { logger } from "../../../lib/logger.js";
-import { tryNoodlerAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
-import { createNoodlerPost, updateNoodlerPostWithMedia } from "./slp-post-operation.js";
-import { isDirectlyInvitedNoodleCharacter } from "../../modules/feed/slp-invited-post-draft-access.js";
+import { tryCreatorAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
+import { createCreatorPost, updateCreatorPostWithMedia } from "./slp-post-operation.js";
+import { isDirectlyInvitedSlpCharacter } from "../../modules/feed/slp-invited-post-draft-access.js";
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
-import { generateInvitedNoodlePostDraft } from "./slp-invited-post-draft-service.js";
+import { generateInvitedSlpPostDraft } from "./slp-invited-post-draft-service.js";
 import { isConnectionAdmissionFailure } from "../../../services/generation/connection-admission.js";
 import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
 import type { FastifyInstance } from "fastify";
 import { slurpPostTypeSchema } from "../../modules/requests/slp-request-schemas.js";
 import {
-  type DecodedNoodlerMediaRequest,
-  decodeNoodlerMediaRequest,
-  sendNoodlerMediaError,
-  readNoodlerMultipart,
+  type DecodedCreatorMediaRequest,
+  decodeCreatorMediaRequest,
+  sendCreatorMediaError,
+  readCreatorMultipart,
 } from "../../base/host/slp-multipart.js";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
-const slurpNoodlerPostCreateBaseSchema = (
-  noodlerPostCreateWithMediaSchema instanceof z.ZodEffects
-    ? noodlerPostCreateWithMediaSchema.innerType()
-    : noodlerPostCreateWithMediaSchema
-) as typeof noodlerPostCreateWithMediaSchema;
-const slurpNoodlerPostCreateWithMediaSchema = slurpNoodlerPostCreateBaseSchema
+const slurpCreatorPostCreateBaseSchema = (
+  slpCreatorPostCreateWithMediaSchema instanceof z.ZodEffects
+    ? slpCreatorPostCreateWithMediaSchema.innerType()
+    : slpCreatorPostCreateWithMediaSchema
+) as typeof slpCreatorPostCreateWithMediaSchema;
+const slurpCreatorPostCreateWithMediaSchema = slurpCreatorPostCreateBaseSchema
   .extend({
     postType: slurpPostTypeSchema.default("post"),
     linkedPostId: z.string().trim().min(1).nullable().optional(),
@@ -72,13 +71,13 @@ const slurpNoodlerPostCreateWithMediaSchema = slurpNoodlerPostCreateBaseSchema
       },
       ctx,
     ) => {
-      const result = noodlerPostCreateWithMediaSchema.safeParse(rest);
+      const result = slpCreatorPostCreateWithMediaSchema.safeParse(rest);
       if (!result.success) {
         for (const issue of result.error.issues) ctx.addIssue(issue);
       }
     },
   );
-const slurpNoodlerPostCreateSchema = slurpNoodlerPostCreateWithMediaSchema.superRefine((input, ctx) => {
+const slurpCreatorPostCreateSchema = slurpCreatorPostCreateWithMediaSchema.superRefine((input, ctx) => {
   if (!input.content && !input.poll && !input.uploadedImageUrl) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -92,20 +91,20 @@ function requestRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 }
 export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
-  const { connections, creatorBelongsToViewer, noodle, noodlerImages, resolveViewerIdentity, resolveViewerPersona } =
+  const { connections, creatorBelongsToViewer, noodle, slpCreatorImages, resolveViewerIdentity, resolveViewerPersona } =
     deps;
-  async function resolveReadableNoodlerPost(personaId: string, postId: string) {
+  async function resolveReadableCreatorPost(personaId: string, postId: string) {
     const viewer = await resolveViewerPersona(personaId);
     const post = viewer ? await noodle.getNoodlerPostById(postId) : null;
     const creator = post ? await noodle.getNoodlerAccountById(post.authorAccountId) : null;
-    if (!viewer || !post || !creator || isNoodlerHiddenFromViewer(creator, viewer.id)) return null;
+    if (!viewer || !post || !creator || isCreatorHiddenFromViewer(creator, viewer.id)) return null;
     if (creatorBelongsToViewer(creator, viewer)) return { viewer, post, creator, locked: false };
     const [subscriptions, unlocks] = await Promise.all([
       noodle.listSubscriptionsForViewer(viewer.id),
       noodle.listPostUnlocksForViewer(viewer.id),
     ]);
     const subscribed = subscriptions.some((item) => item.creatorAccountId === creator.id);
-    const locked = !canViewNoodlerPost({
+    const locked = !canViewCreatorPost({
       post,
       subscribed,
       unlockedPostIds: new Set(unlocks.map((item) => item.postId)),
@@ -115,16 +114,16 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     return { viewer, post, creator, locked };
   }
 
-  async function resolveGatedNoodlerPost(personaId: string, postId: string) {
-    const readable = await resolveReadableNoodlerPost(personaId, postId);
+  async function resolveGatedCreatorPost(personaId: string, postId: string) {
+    const readable = await resolveReadableCreatorPost(personaId, postId);
     // A viewer persona linked to the creator's own public account may read its posts, but
     // is not an audience member and must not persist self-interactions.
     if (!readable || readable.locked || creatorBelongsToViewer(readable.creator, readable.viewer)) return null;
     return readable;
   }
 
-  async function resolveInteractableNoodlerPost(personaId: string, postId: string) {
-    const readable = await resolveReadableNoodlerPost(personaId, postId);
+  async function resolveInteractableCreatorPost(personaId: string, postId: string) {
+    const readable = await resolveReadableCreatorPost(personaId, postId);
     return !readable || readable.locked ? null : readable;
   }
 
@@ -138,16 +137,16 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
   app.get("/noodler/posts/:id/media", async (req, reply) => {
     const { id } = req.params as { id: string };
     const personaId = (req.query as { personaId?: string }).personaId;
-    const readable = personaId ? await resolveReadableNoodlerPost(personaId, id) : null;
+    const readable = personaId ? await resolveReadableCreatorPost(personaId, id) : null;
     const post = personaId ? readable?.post : await noodle.getNoodlerPostById(id);
     if (!post) return reply.code(404).send({ error: "Not Found" });
-    const mediaPath = readNoodlerMediaPath(post);
-    const absolute = mediaPath ? resolveNoodlerMediaAbsolutePath(mediaPath) : null;
+    const mediaPath = readCreatorMediaPath(post);
+    const absolute = mediaPath ? resolveCreatorMediaAbsolutePath(mediaPath) : null;
     if (!absolute || !existsSync(absolute)) return reply.code(404).send({ error: "Not Found" });
     // A locked viewer gets the blurred derivative, never the original bytes. If it cannot be
     // built the frame stays empty rather than falling back to the protected image.
     if (readable?.locked) {
-      const teaser = await readNoodlerLockedTeaser(absolute);
+      const teaser = await readCreatorLockedTeaser(absolute);
       if (!teaser) return reply.code(404).send({ error: "Not Found" });
       return reply
         .header("Cache-Control", "private, max-age=300")
@@ -160,7 +159,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
       .int()
       .optional()
       .safeParse((req.query as { width?: string }).width);
-    const served = await resolveNoodlerMediaVariant(absolute, width.success ? width.data : undefined);
+    const served = await resolveCreatorMediaVariant(absolute, width.success ? width.data : undefined);
     return (
       reply
         // The post-owned URL is stable across ordinary feed refreshes, but an owner can replace
@@ -187,7 +186,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
   app.get("/noodler/posts/:id/share-card", async (req, reply) => {
     const { id } = req.params as { id: string };
     const personaId = (req.query as { personaId?: string }).personaId;
-    const readable = personaId ? await resolveReadableNoodlerPost(personaId, id) : null;
+    const readable = personaId ? await resolveReadableCreatorPost(personaId, id) : null;
     if (personaId && (!readable || readable.locked)) return reply.code(404).send({ error: "Not Found" });
     const post = readable?.post ?? (personaId ? null : await noodle.getNoodlerPostById(id));
     if (!post) return reply.code(404).send({ error: "Not Found" });
@@ -196,7 +195,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     if (!creator) return reply.code(404).send({ error: "Not Found" });
 
     const readBytes = (mediaPath: string | null) => {
-      const absolute = mediaPath ? resolveNoodlerMediaAbsolutePath(mediaPath) : null;
+      const absolute = mediaPath ? resolveCreatorMediaAbsolutePath(mediaPath) : null;
       return absolute && existsSync(absolute) ? readFileSync(absolute) : null;
     };
     const card = await renderSlurpShareCard({
@@ -204,8 +203,8 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
       handle: creator.handle,
       title: post.title ?? null,
       content: post.content,
-      avatar: readBytes(readNoodlerAvatarMediaPath(creator.id, creator.avatarUrl ?? null)),
-      image: readBytes(readNoodlerMediaPath(post)),
+      avatar: readBytes(readCreatorAvatarMediaPath(creator.id, creator.avatarUrl ?? null)),
+      image: readBytes(readCreatorMediaPath(post)),
     });
     // No sharp means no card. Say so rather than sending a broken download.
     if (!card) return reply.code(503).send({ error: "Image rendering is unavailable on this install" });
@@ -217,17 +216,17 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
   });
 
   app.post("/noodler/posts/:id/interactions", async (req, reply) => {
-    const parsed = noodlerCreateInteractionSchema.safeParse(req.body);
+    const parsed = slpCreatorCreateInteractionSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     if (parsed.data.type === "repost") return reply.code(400).send({ error: "Reposts are not available in Slurp." });
     const { id } = req.params as { id: string };
     const identity = await resolveViewerIdentity(parsed.data.personaId);
     if (!identity?.actor) return reply.code(404).send({ error: "Slurp viewer profile not found" });
-    const gated = await resolveInteractableNoodlerPost(parsed.data.personaId, id);
+    const gated = await resolveInteractableCreatorPost(parsed.data.personaId, id);
     if (!gated) return reply.code(404).send({ error: "Slurp post not found" });
     const actor = creatorBelongsToViewer(gated.creator, identity.viewer) ? gated.creator : identity.actor;
     if (parsed.data.type === "vote") {
-      const poll = readNoodlePollFromMetadata(gated.post.metadata);
+      const poll = readSlpPollFromMetadata(gated.post.metadata);
       const optionId = parsed.data.content?.trim() ?? "";
       if (!poll?.options.some((option) => option.id === optionId)) {
         return reply.code(400).send({ error: "Choose a valid poll option." });
@@ -250,7 +249,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
   });
 
   app.post("/noodler/stories/:id/view", async (req, reply) => {
-    const parsed = noodlerViewerPersonaSchema.safeParse(req.body ?? {});
+    const parsed = slpCreatorViewerPersonaSchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
     const identity = await resolveViewerIdentity(parsed.data.personaId);
@@ -258,21 +257,21 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     if (!identity?.actor || !post || post.metadata.noodlerPostType !== "story") {
       return reply.code(404).send({ error: "Story not found" });
     }
-    const gated = await resolveGatedNoodlerPost(parsed.data.personaId, id);
+    const gated = await resolveGatedCreatorPost(parsed.data.personaId, id);
     if (!gated || gated.locked) return reply.code(404).send({ error: "Story not found" });
     const existing = await app.db
       .select()
-      .from(noodleInteractions)
+      .from(slpInteractions)
       .where(
         and(
-          eq(noodleInteractions.postId, id),
-          eq(noodleInteractions.actorAccountId, identity.actor.id),
-          eq(noodleInteractions.type, "story_view"),
+          eq(slpInteractions.postId, id),
+          eq(slpInteractions.actorAccountId, identity.actor.id),
+          eq(slpInteractions.type, "story_view"),
         ),
       );
     if (existing[0]) return { viewed: true, duplicate: true };
     try {
-      await app.db.insert(noodleInteractions).values({
+      await app.db.insert(slpInteractions).values({
         id: newId(),
         postId: id,
         parentInteractionId: null,
@@ -303,7 +302,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
   });
 
   app.get("/noodler/stories/:id/views", async (req, reply) => {
-    const parsed = noodlerViewerPersonaSchema.safeParse(req.query);
+    const parsed = slpCreatorViewerPersonaSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
     const post = await noodle.getNoodlerPostById(id);
@@ -315,8 +314,8 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     }
     const rows = await app.db
       .select()
-      .from(noodleInteractions)
-      .where(and(eq(noodleInteractions.postId, id), eq(noodleInteractions.type, "story_view")));
+      .from(slpInteractions)
+      .where(and(eq(slpInteractions.postId, id), eq(slpInteractions.type, "story_view")));
     return {
       count: rows.length,
       viewers: rows.map((row) => {
@@ -330,7 +329,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
   });
 
   app.post("/noodler/posts/:postId/interactions/:interactionId/creator-reply", async (req, reply) => {
-    const parsed = noodlerCreatorReplyRequestSchema.safeParse(req.body);
+    const parsed = slpCreatorReplyRequestSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { postId, interactionId } = req.params as {
       postId: string;
@@ -339,7 +338,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     const identity = await resolveViewerIdentity(parsed.data.personaId);
     if (!identity?.actor) return reply.code(404).send({ error: "Slurp viewer profile not found" });
     try {
-      const result = await generateAndApplyNoodlerCreatorReply(app.db, {
+      const result = await generateAndApplyCreatorReply(app.db, {
         postId,
         parentInteractionId: interactionId,
         viewerPersonaId: identity.personaId,
@@ -380,12 +379,12 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
   });
 
   app.delete("/noodler/posts/:id/interactions", async (req, reply) => {
-    const parsed = noodlerRemoveInteractionSchema.safeParse(req.query);
+    const parsed = slpCreatorRemoveInteractionSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
     const identity = await resolveViewerIdentity(parsed.data.personaId);
     if (!identity?.actor) return reply.code(404).send({ error: "Slurp viewer profile not found" });
-    const gated = await resolveInteractableNoodlerPost(parsed.data.personaId, id);
+    const gated = await resolveInteractableCreatorPost(parsed.data.personaId, id);
     if (!gated) return reply.code(404).send({ error: "Slurp post not found" });
     const actor = creatorBelongsToViewer(gated.creator, identity.viewer) ? gated.creator : identity.actor;
     const interaction = await noodle.deleteNoodlerInteraction(id, {
@@ -400,7 +399,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
 
   app.patch("/noodler/posts/:postId/interactions/:interactionId", async (req, reply) => {
     const { postId, interactionId } = req.params as { postId: string; interactionId: string };
-    const parsed = noodleInteractionUpdateSchema.safeParse(req.body);
+    const parsed = slpInteractionUpdateSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const interaction = await noodle.getInteractionById(interactionId);
     if (!interaction || interaction.postId !== postId)
@@ -424,7 +423,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
 
   app.delete("/noodler/posts/:postId/interactions/:interactionId", async (req, reply) => {
     const { postId, interactionId } = req.params as { postId: string; interactionId: string };
-    const parsed = noodlerViewerPersonaSchema.safeParse(req.query);
+    const parsed = slpCreatorViewerPersonaSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const interaction = await noodle.getInteractionById(interactionId);
     if (!interaction || interaction.postId !== postId)
@@ -451,7 +450,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     const accountId = typeof body?.accountId === "string" ? body.accountId : null;
     if (!accountId) return reply.code(400).send({ error: "accountId is required" });
     const { accountId: _accountId, ...updateBody } = body;
-    const parsed = noodlerPostUpdateSchema.safeParse(updateBody);
+    const parsed = slpCreatorPostUpdateSchema.safeParse(updateBody);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
     const existing = await noodle.getNoodlerPostById(id);
@@ -460,9 +459,9 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     const nextContent = parsed.data.content === undefined ? existing.content : parsed.data.content;
     const nextPoll =
       parsed.data.poll === undefined
-        ? readNoodlePollFromMetadata(existing.metadata)
+        ? readSlpPollFromMetadata(existing.metadata)
         : parsed.data.poll
-          ? createNoodlePoll(parsed.data.poll)
+          ? createSlpPoll(parsed.data.poll)
           : null;
     const nextHasImage = parsed.data.removeImage ? false : Boolean(existing.imageUrl);
     if (!nextContent.trim() && !nextPoll && !nextHasImage) {
@@ -470,13 +469,13 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     }
     // The media path has to be re-read under the lock: the pre-lock `existing` snapshot can
     // name a file a concurrent write already replaced, and unlinking that deletes live bytes.
-    const locked = await tryNoodlerAccountOperation(existing.authorAccountId, async () => {
+    const locked = await tryCreatorAccountOperation(existing.authorAccountId, async () => {
       const current = parsed.data.removeImage ? await noodle.getNoodlerPostById(id) : null;
       const updated = await noodle.updateNoodlerPost(id, parsed.data);
       return updated
         ? {
             updated,
-            staleMedia: current ? readNoodlerMediaPath(current) : null,
+            staleMedia: current ? readCreatorMediaPath(current) : null,
           }
         : null;
     });
@@ -486,21 +485,21 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
       });
     }
     if (!locked.value) return reply.code(404).send({ error: "Slurp post not found" });
-    if (parsed.data.removeImage) unlinkNoodlerMedia(locked.value.staleMedia);
+    if (parsed.data.removeImage) unlinkCreatorMedia(locked.value.staleMedia);
     return locked.value.updated;
   });
 
   app.post("/noodler/posts", async (req, reply) => {
-    let decoded: DecodedNoodlerMediaRequest<
-      z.output<typeof slurpNoodlerPostCreateWithMediaSchema> | z.output<typeof slurpNoodlerPostCreateSchema>
+    let decoded: DecodedCreatorMediaRequest<
+      z.output<typeof slurpCreatorPostCreateWithMediaSchema> | z.output<typeof slurpCreatorPostCreateSchema>
     >;
     try {
-      decoded = await decodeNoodlerMediaRequest(req, {
-        withMedia: slurpNoodlerPostCreateWithMediaSchema,
-        withoutMedia: slurpNoodlerPostCreateSchema,
+      decoded = await decodeCreatorMediaRequest(req, {
+        withMedia: slurpCreatorPostCreateWithMediaSchema,
+        withoutMedia: slurpCreatorPostCreateSchema,
       });
     } catch (error) {
-      return sendNoodlerMediaError(reply, error);
+      return sendCreatorMediaError(reply, error);
     }
     if (!decoded.success) return reply.code(400).send({ error: decoded.error.flatten() });
     if (decoded.data.postType === "story" && !decoded.media) {
@@ -518,7 +517,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
         return reply.code(400).send({ error: "The linked Post must belong to this Creator." });
       }
     }
-    const result = await createNoodlerPost(app.db, decoded.data, decoded.media);
+    const result = await createCreatorPost(app.db, decoded.data, decoded.media);
     if (result.status === "created") return reply.code(201).send(result.post);
     if (result.status === "busy") {
       return reply.code(409).send({
@@ -531,22 +530,22 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
 
   app.post("/noodler/posts/:id/media", async (req, reply) => {
     const { id } = req.params as { id: string };
-    let multipart: Awaited<ReturnType<typeof readNoodlerMultipart>>;
+    let multipart: Awaited<ReturnType<typeof readCreatorMultipart>>;
     try {
-      multipart = await readNoodlerMultipart(req);
+      multipart = await readCreatorMultipart(req);
     } catch (error) {
-      return sendNoodlerMediaError(reply, error);
+      return sendCreatorMediaError(reply, error);
     }
     const payload = requestRecord(multipart.payload);
     const accountId = typeof payload?.accountId === "string" ? payload.accountId : null;
     if (!accountId) return reply.code(400).send({ error: "accountId is required" });
     const { accountId: _accountId, ...updatePayload } = payload;
-    const parsed = noodlerPostUpdateSchema.safeParse(updatePayload);
+    const parsed = slpCreatorPostUpdateSchema.safeParse(updatePayload);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     if (parsed.data.removeImage) {
       return reply.code(400).send({ error: "A replacement image cannot also remove the image." });
     }
-    const result = await updateNoodlerPostWithMedia(app.db, id, accountId, parsed.data, multipart.media);
+    const result = await updateCreatorPostWithMedia(app.db, id, accountId, parsed.data, multipart.media);
     if (result.status === "updated") return result.post;
     if (result.status === "busy") {
       return reply.code(409).send({
@@ -591,7 +590,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
       await noodle.updatePostMedia(post.id, { imagePrompt, ...(previousImageUrl ? { imageUrl: null } : {}) });
     }
 
-    const result = await noodlerImages.generateReviewedImages({
+    const result = await slpCreatorImages.generateReviewedImages({
       prompts: [{ id: post.id, prompt: imagePrompt }],
       debugMode: parsed.data.debugMode === true,
       retryStoredPrompt: true,
@@ -622,14 +621,14 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     const existing = await noodle.getNoodlerPostById(id);
     if (!existing) return reply.code(404).send({ error: "Slurp post not found" });
     if (existing.authorAccountId !== accountId) return reply.code(403).send({ error: "Forbidden" });
-    const locked = await tryNoodlerAccountOperation(existing.authorAccountId, () => noodle.deleteNoodlerPost(id));
+    const locked = await tryCreatorAccountOperation(existing.authorAccountId, () => noodle.deleteNoodlerPost(id));
     if (!locked.acquired) {
       return reply.code(409).send({
         error: "Another operation for this Slurp account is already running.",
       });
     }
     if (!locked.value) return reply.code(404).send({ error: "Slurp post not found" });
-    unlinkNoodlerMedia(readNoodlerMediaPath(locked.value));
+    unlinkCreatorMedia(readCreatorMediaPath(locked.value));
     return locked.value;
   });
 
@@ -649,7 +648,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
     const { id } = req.params as { id: string };
     const account = await noodle.getAccountById(id);
-    if (!isDirectlyInvitedNoodleCharacter(account)) {
+    if (!isDirectlyInvitedSlpCharacter(account)) {
       return reply.code(403).send({ error: "Only directly invited characters can generate post drafts." });
     }
     const settings = await noodle.getSettings();
@@ -659,7 +658,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     );
     if (!connection) return reply.code(400).send({ error: "Select a Slurp generation connection first." });
     try {
-      return await generateInvitedNoodlePostDraft(app.db, account!, connection, {
+      return await generateInvitedSlpPostDraft(app.db, account!, connection, {
         ...body.data,
         promptBlocks: settings.promptBlocks,
       });

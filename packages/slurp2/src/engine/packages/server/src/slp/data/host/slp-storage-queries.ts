@@ -1,29 +1,29 @@
 import { and, eq, inArray, isNotNull, like, lt, ne, or } from "../../../db/file-query.js";
-import { noodlePosts } from "../../../db/schema/slurp.js";
+import { slpPosts } from "../../../db/schema/slurp.js";
 import { NOODLER_MEDIA_URL_PREFIX } from "../../base/media/slp-media.js";
-import type { NoodlerPostPageOptions } from "../../modules/records/slp-storage-model.js";
+import type { SlpCreatorPostPageOptions } from "../../modules/records/slp-storage-model.js";
 
-export function noodlerReadablePostCondition(options: NoodlerPostPageOptions) {
+export function slpCreatorReadablePostCondition(options: SlpCreatorPostPageOptions) {
   return or(
-    eq(noodlePosts.access, "public"),
-    inArray(noodlePosts.authorAccountId, options.readableContentAccountIds ?? []),
-    inArray(noodlePosts.id, options.unlockedPostIds ?? []),
+    eq(slpPosts.access, "public"),
+    inArray(slpPosts.authorAccountId, options.readableContentAccountIds ?? []),
+    inArray(slpPosts.id, options.unlockedPostIds ?? []),
   );
 }
 
-export function noodlerPostPageCondition(options: NoodlerPostPageOptions, includeCursor: boolean) {
-  const readable = noodlerReadablePostCondition(options);
+export function slpCreatorPostPageCondition(options: SlpCreatorPostPageOptions, includeCursor: boolean) {
+  const readable = slpCreatorReadablePostCondition(options);
   return and(
-    inArray(noodlePosts.authorAccountId, options.accountIds),
-    ne(noodlePosts.access, "draft"),
+    inArray(slpPosts.authorAccountId, options.accountIds),
+    ne(slpPosts.access, "draft"),
     options.mediaOnly
-      ? and(isNotNull(noodlePosts.imageUrl), or(readable, like(noodlePosts.imageUrl, `${NOODLER_MEDIA_URL_PREFIX}%`)))
+      ? and(isNotNull(slpPosts.imageUrl), or(readable, like(slpPosts.imageUrl, `${NOODLER_MEDIA_URL_PREFIX}%`)))
       : undefined,
     options.readableOnly ? readable : undefined,
     includeCursor && options.cursor
       ? or(
-          lt(noodlePosts.createdAt, options.cursor.createdAt),
-          and(eq(noodlePosts.createdAt, options.cursor.createdAt), lt(noodlePosts.id, options.cursor.id)),
+          lt(slpPosts.createdAt, options.cursor.createdAt),
+          and(eq(slpPosts.createdAt, options.cursor.createdAt), lt(slpPosts.id, options.cursor.id)),
         )
       : undefined,
   );

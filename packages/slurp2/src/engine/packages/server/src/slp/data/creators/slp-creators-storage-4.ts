@@ -1,22 +1,24 @@
 import { and, eq, like, or } from "../../../db/file-query.js";
+import { AvatarCrop } from "@marinara-engine/shared";
 import {
-  NoodleAccount,
-  NoodleAccountKind,
-  NoodleAccountProfileUpdateInput,
-  NoodleAccountSettings,
-  NoodleAccountSettingsPatchInput,
-  NoodleAccountUpdateInput,
-  AvatarCrop,
-  NoodlerSourceSnapshot,
-} from "@marinara-engine/shared";
-import { withoutNoodlerSelfHiddenAccountId } from "../../base/identity/slp-access.js";
-import { noodleAccounts, noodlePosts, noodlerPreparedPosts } from "../../../db/schema/slurp.js";
+  SlpAccountProfileUpdateInput,
+  SlpAccountSettingsPatchInput,
+  SlpAccountUpdateInput,
+} from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import {
+  SlpAccount,
+  SlpAccountKind,
+  SlpAccountSettings,
+  SlpCreatorSourceSnapshot,
+} from "../../../../../shared/src/slp/slp-social.types.js";
+import { withoutCreatorSelfHiddenAccountId } from "../../base/identity/slp-access.js";
+import { slpAccounts, slpPosts, slpCreatorPreparedPosts } from "../../../db/schema/slurp.js";
 import { newId, now } from "../../../utils/id-generator.js";
-import { resolveNoodlerSourceSnapshot } from "./slp-source-resolve.js";
+import { resolveCreatorSourceSnapshot } from "./slp-source-resolve.js";
 import {
-  emptyNoodleAccountSettings,
+  emptySlpAccountSettings,
   defaultAutoPostingSettings,
-  normalizeNoodleAccountSettings,
+  normalizeSlpAccountSettings,
   normalizeHandle,
   nextAvailablePublicHandle,
 } from "../../modules/records/slp-storage-model.js";
@@ -54,12 +56,12 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
   const storage = {
     async updateNoodlerSourceSnapshot(
       id: string,
-      sourceSnapshot: NoodlerSourceSnapshot,
-    ): Promise<NoodleAccount | null> {
+      sourceSnapshot: SlpCreatorSourceSnapshot,
+    ): Promise<SlpAccount | null> {
       return db.transaction(async (tx) => {
-        const row = (await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id)))[0];
+        const row = (await tx.select().from(slpAccounts).where(eq(slpAccounts.id, id)))[0];
         if (!row || row.platform !== "slurp") return null;
-        const settings = normalizeNoodleAccountSettings(row.settings);
+        const settings = normalizeSlpAccountSettings(row.settings);
         // The snapshot is re-minimised and handed back on every stage-profile save, almost always
         // byte-identical to the stored one. Writing it anyway churned the row and moved updatedAt,
         // which made a save with no source change look like a source change to everything reading
@@ -68,28 +70,28 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
           return mapAccount(row);
         }
         await tx
-          .update(noodleAccounts)
+          .update(slpAccounts)
           .set({
             settings: JSON.stringify({
               ...settings,
               profile: { ...settings.profile, noodlerSourceSnapshot: sourceSnapshot },
-            } satisfies NoodleAccountSettings),
+            } satisfies SlpAccountSettings),
             updatedAt: now(),
           })
-          .where(eq(noodleAccounts.id, id));
-        const updated = (await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id)))[0];
+          .where(eq(slpAccounts.id, id));
+        const updated = (await tx.select().from(slpAccounts).where(eq(slpAccounts.id, id)))[0];
         return updated ? mapAccount(updated) : null;
       });
     },
-    async adoptNoodlerPublicIdentity(id: string, currentSource: NoodlerSourceSnapshot): Promise<NoodleAccount | null> {
+    async adoptNoodlerPublicIdentity(id: string, currentSource: SlpCreatorSourceSnapshot): Promise<SlpAccount | null> {
       return db.transaction(async (tx) => {
-        const row = (await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id)))[0];
+        const row = (await tx.select().from(slpAccounts).where(eq(slpAccounts.id, id)))[0];
         if (!row || row.platform !== "slurp") return null;
-        const settings = normalizeNoodleAccountSettings(row.settings);
+        const settings = normalizeSlpAccountSettings(row.settings);
         if (settings.privacy.identityDisclosure !== "open") return null;
         const baseline = settings.profile.noodlerSourceSnapshot ?? currentSource;
         await tx
-          .update(noodleAccounts)
+          .update(slpAccounts)
           .set({
             displayName: currentSource.publicDisplayName,
             handle: normalizeHandle(currentSource.publicHandle, row.entityId),
@@ -103,16 +105,16 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
                   publicHandle: currentSource.publicHandle,
                 },
               },
-            } satisfies NoodleAccountSettings),
+            } satisfies SlpAccountSettings),
             updatedAt: now(),
           })
-          .where(eq(noodleAccounts.id, id));
-        const updated = (await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id)))[0];
+          .where(eq(slpAccounts.id, id));
+        const updated = (await tx.select().from(slpAccounts).where(eq(slpAccounts.id, id)))[0];
         return updated ? mapAccount(updated) : null;
       });
     },
     async upsertAccountFromProfile(input: {
-      kind: NoodleAccountKind;
+      kind: SlpAccountKind;
       entityId: string;
       displayName: string;
       avatarUrl?: string | null;
@@ -121,7 +123,7 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
       invited?: boolean;
       /** Keep entity-owned identity fields current without replacing generated profile copy. */
       syncIdentity?: boolean;
-    }): Promise<NoodleAccount> {
+    }): Promise<SlpAccount> {
       await reconcilePublicHandles();
       const existing = await this.getSlurpAccountForEntity(
         input.kind,
@@ -130,10 +132,10 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
       );
       if (existing) {
         return db.transaction(async (tx) => {
-          const rows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, existing.id));
+          const rows = await tx.select().from(slpAccounts).where(eq(slpAccounts.id, existing.id));
           const row = rows[0];
           if (!row) return existing;
-          const settings = normalizeNoodleAccountSettings(row.settings);
+          const settings = normalizeSlpAccountSettings(row.settings);
           const profileManuallyEdited = settings.profile.profileManuallyEdited === true;
           const updates: Record<string, unknown> = { updatedAt: now() };
           if (input.syncIdentity && !profileManuallyEdited) {
@@ -151,8 +153,8 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
               profile: { ...settings.profile, avatarCrop: input.avatarCrop },
             });
           }
-          await tx.update(noodleAccounts).set(updates).where(eq(noodleAccounts.id, existing.id));
-          const updatedRows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, existing.id));
+          await tx.update(slpAccounts).set(updates).where(eq(slpAccounts.id, existing.id));
+          const updatedRows = await tx.select().from(slpAccounts).where(eq(slpAccounts.id, existing.id));
           return updatedRows[0] ? mapAccount(updatedRows[0]) : existing;
         });
       }
@@ -161,10 +163,10 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
         const timestamp = now();
         const accountId = newId();
         const displayName = input.displayName.trim() || (input.kind === "persona" ? "User" : "Character");
-        const publicRows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.platform, "slurp"));
+        const publicRows = await tx.select().from(slpAccounts).where(eq(slpAccounts.platform, "slurp"));
         const reserved = new Set(publicRows.map((row) => normalizeHandle(row.handle, row.entityId)));
         const handle = nextAvailablePublicHandle(normalizeHandle(displayName, input.entityId), reserved);
-        await tx.insert(noodleAccounts).values({
+        await tx.insert(slpAccounts).values({
           id: accountId,
           kind: input.kind,
           entityId: input.entityId,
@@ -174,7 +176,7 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
           avatarUrl: input.avatarUrl ?? null,
           invited: String(input.invited ?? input.kind === "persona"),
           settings: JSON.stringify({
-            ...emptyNoodleAccountSettings(),
+            ...emptySlpAccountSettings(),
             profile: input.avatarCrop !== undefined ? { avatarCrop: input.avatarCrop } : {},
           }),
           platform: "slurp",
@@ -191,17 +193,17 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
       });
       return (await this.getAccountById(id, { includeHidden: true }))!;
     },
-    async updateAccount(id: string, input: NoodleAccountUpdateInput): Promise<NoodleAccount | null> {
+    async updateAccount(id: string, input: SlpAccountUpdateInput): Promise<SlpAccount | null> {
       await reconcilePublicHandles();
       return db.transaction(async (tx) => {
         const rows = await tx
           .select()
-          .from(noodleAccounts)
-          .where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.platform, "slurp")));
+          .from(slpAccounts)
+          .where(and(eq(slpAccounts.id, id), eq(slpAccounts.platform, "slurp")));
         const row = rows[0];
         if (!row) return null;
         await tx
-          .update(noodleAccounts)
+          .update(slpAccounts)
           .set({
             ...(input.handle !== undefined && { handle: normalizeHandle(input.handle, row.entityId) }),
             ...(input.displayName !== undefined && { displayName: input.displayName.trim().slice(0, 120) }),
@@ -210,27 +212,27 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
             ...(input.invited !== undefined && { invited: String(input.invited) }),
             updatedAt: now(),
           })
-          .where(eq(noodleAccounts.id, id));
-        const updatedRows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id));
+          .where(eq(slpAccounts.id, id));
+        const updatedRows = await tx.select().from(slpAccounts).where(eq(slpAccounts.id, id));
         return updatedRows[0] ? mapAccount(updatedRows[0]) : null;
       });
     },
-    async updateAccountProfile(id: string, input: NoodleAccountProfileUpdateInput): Promise<NoodleAccount | null> {
+    async updateAccountProfile(id: string, input: SlpAccountProfileUpdateInput): Promise<SlpAccount | null> {
       await reconcilePublicHandles();
       return db.transaction(async (tx) => {
         const rows = await tx
           .select()
-          .from(noodleAccounts)
-          .where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.platform, "slurp")));
+          .from(slpAccounts)
+          .where(and(eq(slpAccounts.id, id), eq(slpAccounts.platform, "slurp")));
         const row = rows[0];
         if (!row) return null;
-        const settings = normalizeNoodleAccountSettings(row.settings);
-        const nextSettings: NoodleAccountSettings = {
+        const settings = normalizeSlpAccountSettings(row.settings);
+        const nextSettings: SlpAccountSettings = {
           ...settings,
           profile: { ...settings.profile, ...input.profile },
         };
         await tx
-          .update(noodleAccounts)
+          .update(slpAccounts)
           .set({
             ...(input.handle !== undefined && { handle: normalizeHandle(input.handle, row.entityId) }),
             ...(input.displayName !== undefined && { displayName: input.displayName.trim().slice(0, 120) }),
@@ -239,14 +241,14 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
             settings: JSON.stringify(nextSettings),
             updatedAt: now(),
           })
-          .where(eq(noodleAccounts.id, id));
-        const updatedRows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id));
+          .where(eq(slpAccounts.id, id));
+        const updatedRows = await tx.select().from(slpAccounts).where(eq(slpAccounts.id, id));
         return updatedRows[0] ? mapAccount(updatedRows[0]) : null;
       });
     },
-    async patchAccountSettings(id: string, input: NoodleAccountSettingsPatchInput): Promise<NoodleAccount | null> {
+    async patchAccountSettings(id: string, input: SlpAccountSettingsPatchInput): Promise<SlpAccount | null> {
       return db.transaction(async (tx) => {
-        const rows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id));
+        const rows = await tx.select().from(slpAccounts).where(eq(slpAccounts.id, id));
         const row = rows[0];
         if (!row) return null;
         if (row.platform !== "slurp") return null;
@@ -258,8 +260,8 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
         ) {
           return null;
         }
-        const current = normalizeNoodleAccountSettings(row.settings);
-        let next: NoodleAccountSettings;
+        const current = normalizeSlpAccountSettings(row.settings);
+        let next: SlpAccountSettings;
         if (input.subtree === "social") {
           // Feed-visit timestamps only ever move forward. Two visits can be in flight at once
           // (both surfaces record on mount), and the later request is not always the later
@@ -312,7 +314,7 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
               ...input.patch,
               access: {
                 ...access,
-                hiddenFromAccountIds: withoutNoodlerSelfHiddenAccountId(
+                hiddenFromAccountIds: withoutCreatorSelfHiddenAccountId(
                   access.hiddenFromAccountIds,
                   row.sourceEntityId ?? row.entityId,
                 ),
@@ -321,16 +323,16 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
           };
         }
         await tx
-          .update(noodleAccounts)
+          .update(slpAccounts)
           .set({ settings: JSON.stringify(next), updatedAt: now() })
-          .where(eq(noodleAccounts.id, id));
-        const updatedRows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id));
+          .where(eq(slpAccounts.id, id));
+        const updatedRows = await tx.select().from(slpAccounts).where(eq(slpAccounts.id, id));
         return updatedRows[0] ? mapAccount(updatedRows[0]) : null;
       });
     },
     /** Every NoodleR creator account with automatic posting enabled, settings attached. */
-    async listAutoPostEnabledAccounts(): Promise<NoodleAccount[]> {
-      const rows = await db.select().from(noodleAccounts).where(eq(noodleAccounts.platform, "slurp"));
+    async listAutoPostEnabledAccounts(): Promise<SlpAccount[]> {
+      const rows = await db.select().from(slpAccounts).where(eq(slpAccounts.platform, "slurp"));
       const enabled = rows
         .map(mapAccount)
         .filter((account) => account.settings.scheduler.autoPosting?.enabled === true);
@@ -344,7 +346,7 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
             return null;
           }
           const publicAccount = await this.resolveAccountSource(account);
-          if (publicAccount && (await resolveNoodlerSourceSnapshot(db, publicAccount))) return account;
+          if (publicAccount && (await resolveCreatorSourceSnapshot(db, publicAccount))) return account;
           await this.patchAccountSettings(account.id, {
             subtree: "scheduler",
             patch: { autoPosting: { enabled: false } },
@@ -352,7 +354,7 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
           return null;
         }),
       );
-      return checked.filter((account): account is NoodleAccount => account !== null);
+      return checked.filter((account): account is SlpAccount => account !== null);
     },
     /**
      * Latest real posting activity per creator: the newest published post or prepared slot.
@@ -361,8 +363,8 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
      */
     async getNoodlerCreatorActivityTimes(): Promise<Map<string, string>> {
       const [posts, prepared] = await Promise.all([
-        db.select().from(noodlePosts),
-        db.select().from(noodlerPreparedPosts),
+        db.select().from(slpPosts),
+        db.select().from(slpCreatorPreparedPosts),
       ]);
       const latest = new Map<string, string>();
       const observe = (accountId: string, at: string) => {

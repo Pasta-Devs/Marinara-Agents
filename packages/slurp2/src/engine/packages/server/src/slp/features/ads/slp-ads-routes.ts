@@ -5,7 +5,7 @@ import { unlinkGarnishAdImage, resolveGarnishAdImageAbsolutePath } from "./slp-g
 import { generateGarnishAdImage } from "./slp-garnish-image-service.js";
 import { basename, dirname } from "path";
 import { existsSync } from "fs";
-import { resolveNoodlerMediaVariant } from "../../base/media/slp-media.js";
+import { resolveCreatorMediaVariant } from "../../base/media/slp-media.js";
 import { syncGarnishAdsWithLorebook } from "./slp-garnish-sync-service.js";
 import { createLorebooksStorage } from "../../../services/storage/lorebooks.storage.js";
 import { readGarnishLorebookContext } from "./slp-garnish-lorebook.js";
@@ -218,7 +218,7 @@ export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
       .int()
       .optional()
       .safeParse((req.query as { width?: string }).width);
-    const served = await resolveNoodlerMediaVariant(absolute, width.success ? width.data : undefined);
+    const served = await resolveCreatorMediaVariant(absolute, width.success ? width.data : undefined);
     return reply
       .header("Cache-Control", "private, max-age=31536000, immutable")
       .sendFile(basename(served), dirname(served));

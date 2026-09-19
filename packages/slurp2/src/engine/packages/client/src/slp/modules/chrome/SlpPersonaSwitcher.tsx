@@ -1,7 +1,7 @@
 // Persona identity card and switcher list, split out of components/slurp/SlurpShell.tsx in Slice 10.
 import { AtSign, Sparkles } from "lucide-react";
 
-import type { NoodleAccount } from "@marinara-engine/shared";
+import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import { cn } from "../../../lib/utils";
 import { useSlurpMediaSrc } from "../../base/media/slp-media-src";
 import { useTranslation as useUiTranslation } from "react-i18next";
@@ -23,9 +23,9 @@ export function PersonaIdentityCard({
   onOpenProfile,
   onBecomeCreator,
 }: {
-  account: NoodleAccount | null;
+  account: SlpAccount | null;
   /** The persona behind a Creator identity. Null when the two are the same account. */
-  personaBadge?: NoodleAccount | null;
+  personaBadge?: SlpAccount | null;
   bannerUrl?: string | null;
   counts?: { fans: number; followers: number };
   balanceLabel?: string;
@@ -128,12 +128,12 @@ export function PersonaList({
   wallets,
   onSwitch,
 }: {
-  accounts: NoodleAccount[];
+  accounts: SlpAccount[];
   activeId?: string | null;
   counts?: Record<string, { fans: number; followers: number }>;
   linkedIds?: ReadonlySet<string>;
   wallets?: Record<string, { coins: number }>;
-  onSwitch: (account: NoodleAccount) => void;
+  onSwitch: (account: SlpAccount) => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
   if (accounts.length === 0) {

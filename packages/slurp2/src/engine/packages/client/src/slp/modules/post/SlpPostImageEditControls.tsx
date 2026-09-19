@@ -1,28 +1,28 @@
 import { Crop, ImagePlus, Loader2, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, type ChangeEvent, type RefObject } from "react";
-import type { NoodlePostImageCrop } from "@marinara-engine/shared";
-import { readNoodlePostImageCrop } from "@marinara-engine/shared";
+import type { SlpPostImageCrop } from "../../../../../shared/src/slp/slp-social.types.js";
+import { readSlpPostImageCrop } from "../../../../../shared/src/slp/slp-post-images.js";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { PostImageCropEditor, PostImageFrame } from "../../base/media/SlpPostImageCropEditor";
-import { labelClass, type NoodlePostCardModel, type NoodlePostImageUpdate } from "./SlpPostCard";
+import { labelClass, type SlpPostCardModel, type SlpPostImageUpdate } from "./SlpPostCard";
 
-type NoodlePostImageCropSource =
+type SlpPostImageCropSource =
   | {
       source: File | string;
-      crop: NoodlePostImageCrop | null;
+      crop: SlpPostImageCrop | null;
       mode: "existing";
     }
-  | { source: File; crop: NoodlePostImageCrop | null; mode: "replace" };
+  | { source: File; crop: SlpPostImageCrop | null; mode: "replace" };
 
-interface NoodlePostCardImageEditingCap {
-  update: NoodlePostImageUpdate | null;
-  cropSource: NoodlePostImageCropSource | null;
+interface SlpPostCardImageEditingCap {
+  update: SlpPostImageUpdate | null;
+  cropSource: SlpPostImageCropSource | null;
   loading: boolean;
   error: string | null;
   fileInputRef: RefObject<HTMLInputElement | null>;
-  beginCrop: (post: NoodlePostCardModel) => void;
+  beginCrop: (post: SlpPostCardModel) => void;
   selectReplacement: (event: ChangeEvent<HTMLInputElement>) => void;
-  applyCrop: (crop: NoodlePostImageCrop) => Promise<void>;
+  applyCrop: (crop: SlpPostImageCrop) => Promise<void>;
   cancelCrop: () => void;
   remove: () => void;
   restore: () => void;
@@ -34,8 +34,8 @@ export function PostImageEditControls({
   disabled,
   footer,
 }: {
-  post: NoodlePostCardModel;
-  editing: NoodlePostCardImageEditingCap;
+  post: SlpPostCardModel;
+  editing: SlpPostCardImageEditingCap;
   disabled: boolean;
   footer: React.ReactNode;
 }) {
@@ -156,7 +156,7 @@ export function PostImageEditControls({
         <div className="relative overflow-hidden rounded-lg">
           <PostImageFrame
             src={post.imageUrl}
-            crop={editing.update?.kind === "crop" ? editing.update.crop : readNoodlePostImageCrop(post.metadata)}
+            crop={editing.update?.kind === "crop" ? editing.update.crop : readSlpPostImageCrop(post.metadata)}
             alt={localizeUi("ui.noodle.postimageeditcontrols.currentPost")}
             maxHeight={240}
           />
@@ -177,7 +177,7 @@ export function PostImageEditControls({
   );
 }
 
-function FileImagePreview({ file, crop }: { file: File; crop: NoodlePostImageCrop }) {
+function FileImagePreview({ file, crop }: { file: File; crop: SlpPostImageCrop }) {
   const { t: localizeUi } = useUiTranslation();
   const url = useMemo(() => URL.createObjectURL(file), [file]);
   useEffect(() => () => URL.revokeObjectURL(url), [url]);
