@@ -783,7 +783,7 @@
             "label": "Maximum",
             "type": "number",
             "min": 0,
-            "max": 99,
+            "max": 999,
             "default": 1
           },
           {

@@ -264,7 +264,12 @@ const COUNTERS = [
     name: "Bardic Inspiration",
     max: 1,
     recharge: "long",
-    scaled: { from: { derived: "bardic_inspiration_uses" }, follows: "your Charisma modifier, at least one" },
+    // Charisma tops out at 30 on the sheet, a modifier of +10.
+    scaled: {
+      from: { derived: "bardic_inspiration_uses" },
+      follows: "your Charisma modifier, at least one",
+      highest: 10,
+    },
   },
   // "You must then finish a short or long rest to use your Channel Divinity again." "Beginning at
   // 6th level, you can use your Channel Divinity twice between rests, and beginning at 18th level,
@@ -312,7 +317,7 @@ const COUNTERS = [
     name: "Divine Sense",
     max: 1,
     recharge: "long",
-    scaled: { from: { derived: "divine_sense_uses" }, follows: "1 plus your Charisma modifier" },
+    scaled: { from: { derived: "divine_sense_uses" }, follows: "1 plus your Charisma modifier", highest: 11 },
   },
   // "You have a pool of healing power that replenishes when you take a long rest. With that pool,
   // you can restore a total number of hit points equal to your paladin level x 5."
@@ -321,7 +326,8 @@ const COUNTERS = [
     name: "Lay on Hands",
     max: 5,
     recharge: "long",
-    scaled: { from: { derived: "lay_on_hands_pool" }, follows: "your level times 5", readsLevel: true },
+    // Level 20 times 5.
+    scaled: { from: { derived: "lay_on_hands_pool" }, follows: "your level times 5", readsLevel: true, highest: 100 },
   },
   // Sorcerer table, Sorcery Points column: 2 at 2nd level. "You regain all spent sorcery points
   // when you finish a long rest."
@@ -609,6 +615,9 @@ function stepTableFromColumn(counter, levels) {
   return table;
 }
 
+/** What each kept counter can reach at most, gathered while the rows are built. */
+const SCALED_CEILINGS = new Map();
+
 /** The `scaled` block a counter row carries: which column the ruleset keeps, what it reads off the
  *  sheet, and the step table that reading is looked up in. */
 function scaledFor(counter, levels) {
@@ -634,6 +643,12 @@ function scaledFor(counter, levels) {
   if (table && stepTableAt(table, 1) !== counter.max) {
     fail(`${counter.name} starts at ${counter.max} but its table says ${stepTableAt(table, 1)} at level 1`);
   }
+  // The most the kept number can ever be. A table says so itself; a derived value has to be told,
+  // because nothing here evaluates the sheet. It is checked against the column's own ceiling once
+  // the ruleset is written, so a counter can never be clamped short of what the rules give.
+  const highest = table ? Math.max(...table.map(([, value]) => value)) : spec.highest;
+  if (!Number.isInteger(highest)) fail(`${counter.name} follows a derived value and must say the highest it can reach`);
+  SCALED_CEILINGS.set(counter.name, highest);
   return { max: compact({ from: spec.from, table }) };
 }
 
@@ -974,6 +989,16 @@ for (const assetPath of assets.keys()) sources.set(assetPath, await readFile(joi
 const summaries = assertRulesetCatalogs(manifest, document, sources);
 assertRulesetBattle(manifest, document);
 const scaledRows = assertRulesetScaled(manifest, document, sources);
+// A kept maximum is fitted to its column when the sheet is edited, so the column has to have room
+// for the most the rules can give (Lay on Hands is 100 at level 20).
+const counterMax = document.sheet.lists
+  .find((list) => list.id === COUNTER_LIST)
+  ?.columns.find((column) => column.id === "max")?.max;
+for (const [name, highest] of SCALED_CEILINGS) {
+  if (!(highest <= counterMax)) {
+    fail(`${name} can reach ${highest}, but the ${COUNTER_LIST} list's max column stops at ${counterMax}`);
+  }
+}
 
 console.log(`5e SRD catalogs built from ${SOURCE_DOCUMENT} at ${sourceCommit}`);
 console.log(`  ruleset.json ${rulesetBytes} bytes`);
