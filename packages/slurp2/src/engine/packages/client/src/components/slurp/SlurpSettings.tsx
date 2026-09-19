@@ -54,7 +54,7 @@ import type { SlurpSettings } from "../../slp/features/settings/slp-settings-con
 import {
   useSlurpImageConnections,
   useUpdateSlurpImageConnections,
-} from "../../slp/features/settings/slp-image-connection-hooks";
+} from "../../slp/features/media/slp-image-connection-hooks";
 import {
   useSlurpSettings,
   useSlurpSettingsDefaults,

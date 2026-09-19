@@ -38,7 +38,7 @@ import {
   useEnqueueNoodlerFirstPosts,
   useNoodlerFirstPostStatus,
 } from "../../slp/features/onboarding/slp-first-post-hooks";
-import { useUpdateSlurpConnectionsForCreators } from "../../slp/features/settings/slp-image-connection-hooks";
+import { useUpdateSlurpConnectionsForCreators } from "../../slp/features/media/slp-image-connection-hooks";
 import { useSlurpSettings, useUpdateSlurpSettings } from "../../slp/features/settings/slp-settings-hooks";
 import { cn, generateClientId } from "../../lib/utils";
 import { Modal } from "../ui/Modal";
