@@ -1,5 +1,6 @@
 import { and, eq, inArray, isNull, or } from "../../../db/file-query.js";
-import { readNoodlePollFromMetadata, NoodleAccount, NoodleInteraction, NoodlePlatform } from "@marinara-engine/shared";
+import { readSlpPollFromMetadata } from "../../../../../shared/src/slp/slp-polls.js";
+import { SlpAccount, SlpInteraction, SlpPlatform } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { DB } from "../../../db/connection.js";
 import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
 import {
@@ -31,20 +32,20 @@ import {
   SlurpEarningsEntryKind,
 } from "../../modules/economy/slp-earnings.js";
 import { logger } from "../../../lib/logger.js";
-import { canViewNoodlerPost, isNoodlerHiddenFromViewer } from "../../base/identity/slp-access.js";
+import { canViewCreatorPost, isCreatorHiddenFromViewer } from "../../base/identity/slp-access.js";
 import {
-  noodleAccounts,
-  noodleAccountSubscriptions,
-  noodleActivityDigests,
-  noodleInteractions,
-  noodlePosts,
-  noodlePostUnlocks,
-  noodleRefreshRuns,
-  noodlerCreatorReplyClaims,
+  slpAccounts,
+  slpAccountSubscriptions,
+  slpActivityDigests,
+  slpInteractions,
+  slpPosts,
+  slpPostUnlocks,
+  slpRefreshRuns,
+  slpCreatorCreatorReplyClaims,
 } from "../../../db/schema/slurp.js";
 import { newId, now } from "../../../utils/id-generator.js";
 import { createAppSettingsStorage } from "../../../services/storage/app-settings.storage.js";
-import { pruneNoodleRefreshRuns } from "../../base/host/slp-refresh-run-retention.js";
+import { pruneSlpRefreshRuns } from "../../base/host/slp-refresh-run-retention.js";
 import { enqueueSlurpFinancial } from "../../base/host/slp-financial-queue.js";
 import {
   addSlurpModifier,
@@ -56,7 +57,7 @@ import { createCharactersStorage } from "../../../services/storage/characters.st
 import { SLURP_SETTINGS_KEY, SLURP_CREATOR_STATE_KEY, slurpViewerSettingsKey } from "./slp-storage-constants.js";
 import {
   parseRecord,
-  normalizeNoodleAccountSettings,
+  normalizeSlpAccountSettings,
   parseStringArray,
   normalizeHandle,
   nextAvailablePublicHandle,
@@ -185,7 +186,7 @@ export function createSlurpStorageContext(db: DB) {
   };
 
   /**
-   * Write the wallet, mirroring the balance onto `NoodleAccountSettings.wallet.coins` so the
+   * Write the wallet, mirroring the balance onto `SlpAccountSettings.wallet.coins` so the
    * balance the sidebar and header already read stays the authoritative number.
    */
   const writeWallet = async (viewerAccountId: string, wallet: SlurpWallet) => {
@@ -195,7 +196,7 @@ export function createSlurpStorageContext(db: DB) {
     const previousViewerSettings = await settingsStore.get(viewerSettingsKey);
     try {
       await settingsStore.set(walletKey, JSON.stringify(wallet));
-      const stored = normalizeNoodleAccountSettings(previousViewerSettings);
+      const stored = normalizeSlpAccountSettings(previousViewerSettings);
       await settingsStore.set(viewerSettingsKey, JSON.stringify({ ...stored, wallet: { coins: wallet.coins } }));
     } catch (error) {
       await compensate(
@@ -288,14 +289,14 @@ export function createSlurpStorageContext(db: DB) {
 
   const pruneFinishedRefreshRuns = async () => {
     await db.transaction(async (tx) => {
-      await pruneNoodleRefreshRuns({
-        list: () => tx.select().from(noodleRefreshRuns),
+      await pruneSlpRefreshRuns({
+        list: () => tx.select().from(slpRefreshRuns),
         replace: async (rows) => {
-          await tx.delete(noodleRefreshRuns);
-          if (rows.length > 0) await tx.insert(noodleRefreshRuns).values(rows);
+          await tx.delete(slpRefreshRuns);
+          if (rows.length > 0) await tx.insert(slpRefreshRuns).values(rows);
         },
         touch: async (row) => {
-          await tx.update(noodleRefreshRuns).set({ updatedAt: row.updatedAt }).where(eq(noodleRefreshRuns.id, row.id));
+          await tx.update(slpRefreshRuns).set({ updatedAt: row.updatedAt }).where(eq(slpRefreshRuns.id, row.id));
         },
         flush: () => tx._fileStore.flush(),
       });
@@ -306,7 +307,7 @@ export function createSlurpStorageContext(db: DB) {
     if (publicHandleReconciliation) return publicHandleReconciliation;
     publicHandleReconciliation = db
       .transaction(async (tx) => {
-        const rows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.platform, "slurp"));
+        const rows = await tx.select().from(slpAccounts).where(eq(slpAccounts.platform, "slurp"));
         const groups = new Map<string, AccountRow[]>();
         for (const row of rows) {
           const normalized = normalizeHandle(row.handle, row.entityId);
@@ -326,16 +327,10 @@ export function createSlurpStorageContext(db: DB) {
             if (duplicate.id === keeper.id) continue;
             const handle = nextAvailablePublicHandle(base, reserved);
             reserved.add(handle);
-            await tx
-              .update(noodleAccounts)
-              .set({ handle, updatedAt: now() })
-              .where(eq(noodleAccounts.id, duplicate.id));
+            await tx.update(slpAccounts).set({ handle, updatedAt: now() }).where(eq(slpAccounts.id, duplicate.id));
           }
           if (keeper.handle !== base) {
-            await tx
-              .update(noodleAccounts)
-              .set({ handle: base, updatedAt: now() })
-              .where(eq(noodleAccounts.id, keeper.id));
+            await tx.update(slpAccounts).set({ handle: base, updatedAt: now() }).where(eq(slpAccounts.id, keeper.id));
           }
         }
       })
@@ -346,23 +341,20 @@ export function createSlurpStorageContext(db: DB) {
     return publicHandleReconciliation;
   };
 
-  const insertInteraction = async (
-    postId: string,
-    input: InsertInteractionCommand,
-  ): Promise<NoodleInteraction | null> => {
+  const insertInteraction = async (postId: string, input: InsertInteractionCommand): Promise<SlpInteraction | null> => {
     const readExistingToggleInteraction = async () => {
       if (!isToggleInteractionType(input.type)) return null;
       const existing = await db
         .select()
-        .from(noodleInteractions)
+        .from(slpInteractions)
         .where(
           and(
-            eq(noodleInteractions.postId, postId),
-            eq(noodleInteractions.actorAccountId, input.actor.id),
-            eq(noodleInteractions.type, input.type),
+            eq(slpInteractions.postId, postId),
+            eq(slpInteractions.actorAccountId, input.actor.id),
+            eq(slpInteractions.type, input.type),
             input.parentInteractionId
-              ? eq(noodleInteractions.parentInteractionId, input.parentInteractionId)
-              : isNull(noodleInteractions.parentInteractionId),
+              ? eq(slpInteractions.parentInteractionId, input.parentInteractionId)
+              : isNull(slpInteractions.parentInteractionId),
           ),
         );
       return existing[0] ? mapInteraction(existing[0]) : null;
@@ -373,7 +365,7 @@ export function createSlurpStorageContext(db: DB) {
 
     const id = newId();
     try {
-      await db.insert(noodleInteractions).values({
+      await db.insert(slpInteractions).values({
         id,
         postId,
         parentInteractionId: input.parentInteractionId,
@@ -395,7 +387,7 @@ export function createSlurpStorageContext(db: DB) {
       }
       throw error;
     }
-    const rows = await db.select().from(noodleInteractions).where(eq(noodleInteractions.id, id));
+    const rows = await db.select().from(slpInteractions).where(eq(slpInteractions.id, id));
     return rows[0] ? mapInteraction(rows[0]) : null;
   };
 
@@ -407,42 +399,42 @@ export function createSlurpStorageContext(db: DB) {
       viewerPersonaId: string;
       type: "like" | "repost" | "vote";
       parentInteractionId: string | null;
-      actor: NoodleAccount;
+      actor: SlpAccount;
     },
   ) => {
     if (input.actorAccountId === input.viewerPersonaId) return;
     const actorWhere = and(
-      eq(noodleInteractions.postId, input.postId),
-      eq(noodleInteractions.type, input.type),
+      eq(slpInteractions.postId, input.postId),
+      eq(slpInteractions.type, input.type),
       input.parentInteractionId
-        ? eq(noodleInteractions.parentInteractionId, input.parentInteractionId)
-        : isNull(noodleInteractions.parentInteractionId),
+        ? eq(slpInteractions.parentInteractionId, input.parentInteractionId)
+        : isNull(slpInteractions.parentInteractionId),
     );
     const [legacyRows, actorRows] = await Promise.all([
       tx
         .select()
-        .from(noodleInteractions)
-        .where(and(actorWhere, eq(noodleInteractions.actorAccountId, input.viewerPersonaId))),
+        .from(slpInteractions)
+        .where(and(actorWhere, eq(slpInteractions.actorAccountId, input.viewerPersonaId))),
       tx
         .select()
-        .from(noodleInteractions)
-        .where(and(actorWhere, eq(noodleInteractions.actorAccountId, input.actorAccountId))),
+        .from(slpInteractions)
+        .where(and(actorWhere, eq(slpInteractions.actorAccountId, input.actorAccountId))),
     ]);
     if (legacyRows.length === 0) return;
     const legacyIds = legacyRows.map((row) => row.id);
     if (actorRows.length > 0) {
-      await tx.delete(noodleInteractions).where(inArray(noodleInteractions.id, legacyIds));
+      await tx.delete(slpInteractions).where(inArray(slpInteractions.id, legacyIds));
       return;
     }
     const [keeper, ...duplicates] = legacyRows;
     await tx
-      .update(noodleInteractions)
+      .update(slpInteractions)
       .set({ actorAccountId: input.actorAccountId, actorSnapshot: JSON.stringify(snapshotForAccount(input.actor)) })
-      .where(eq(noodleInteractions.id, keeper!.id));
+      .where(eq(slpInteractions.id, keeper!.id));
     if (duplicates.length > 0) {
-      await tx.delete(noodleInteractions).where(
+      await tx.delete(slpInteractions).where(
         inArray(
-          noodleInteractions.id,
+          slpInteractions.id,
           duplicates.map((row) => row.id),
         ),
       );
@@ -451,33 +443,33 @@ export function createSlurpStorageContext(db: DB) {
 
   const upsertPollVote = async (
     postId: string,
-    actor: NoodleAccount,
+    actor: SlpAccount,
     viewerPersonaId: string,
     optionId: string,
-    authorPlatform: NoodlePlatform,
+    authorPlatform: SlpPlatform,
     imageUrl: string | null,
-  ): Promise<NoodleInteraction | null> => {
+  ): Promise<SlpInteraction | null> => {
     return db.transaction(async (tx) => {
       const [postRows, actorRows] = await Promise.all([
-        tx.select().from(noodlePosts).where(eq(noodlePosts.id, postId)),
+        tx.select().from(slpPosts).where(eq(slpPosts.id, postId)),
         tx
           .select()
-          .from(noodleAccounts)
-          .where(and(eq(noodleAccounts.id, actor.id), eq(noodleAccounts.platform, "slurp"))),
+          .from(slpAccounts)
+          .where(and(eq(slpAccounts.id, actor.id), eq(slpAccounts.platform, "slurp"))),
       ]);
       const currentPost = postRows[0];
       if (!currentPost || !actorRows[0]) return null;
       const authorRows = await tx
         .select()
-        .from(noodleAccounts)
-        .where(and(eq(noodleAccounts.id, currentPost.authorAccountId), eq(noodleAccounts.platform, authorPlatform)));
-      const currentPoll = readNoodlePollFromMetadata(parseRecord(currentPost.metadata));
+        .from(slpAccounts)
+        .where(and(eq(slpAccounts.id, currentPost.authorAccountId), eq(slpAccounts.platform, authorPlatform)));
+      const currentPoll = readSlpPollFromMetadata(parseRecord(currentPost.metadata));
       if (!authorRows[0] || !currentPoll?.options.some((option) => option.id === optionId)) return null;
 
       const currentActor = actorRows[0] ? mapAccount(actorRows[0]) : actor;
       if (authorPlatform === "noodler") {
         const currentAuthor = mapAccount(authorRows[0]);
-        if (currentActor.kind !== "persona" || isNoodlerHiddenFromViewer(currentAuthor, viewerPersonaId)) {
+        if (currentActor.kind !== "persona" || isCreatorHiddenFromViewer(currentAuthor, viewerPersonaId)) {
           return null;
         }
         const currentPostView = mapPost(currentPost);
@@ -487,28 +479,28 @@ export function createSlurpStorageContext(db: DB) {
             ? []
             : await tx
                 .select()
-                .from(noodleAccountSubscriptions)
+                .from(slpAccountSubscriptions)
                 .where(
                   and(
-                    eq(noodleAccountSubscriptions.viewerAccountId, viewerPersonaId),
-                    eq(noodleAccountSubscriptions.creatorAccountId, currentAuthor.id),
+                    eq(slpAccountSubscriptions.viewerAccountId, viewerPersonaId),
+                    eq(slpAccountSubscriptions.creatorAccountId, currentAuthor.id),
                   ),
                 );
         const unlockRows =
           currentPostView.access === "locked"
             ? await tx
                 .select()
-                .from(noodlePostUnlocks)
+                .from(slpPostUnlocks)
                 .where(
                   and(
-                    eq(noodlePostUnlocks.viewerAccountId, viewerPersonaId),
-                    eq(noodlePostUnlocks.postId, currentPostView.id),
+                    eq(slpPostUnlocks.viewerAccountId, viewerPersonaId),
+                    eq(slpPostUnlocks.postId, currentPostView.id),
                   ),
                 )
             : [];
         if (
           !ownsAuthor &&
-          !canViewNoodlerPost({
+          !canViewCreatorPost({
             post: currentPostView,
             subscribed: subscriptionRows.length > 0,
             unlockedPostIds: new Set(unlockRows.map((unlock) => unlock.postId)),
@@ -527,35 +519,35 @@ export function createSlurpStorageContext(db: DB) {
       });
       const existingVotes = await tx
         .select()
-        .from(noodleInteractions)
+        .from(slpInteractions)
         .where(
           and(
-            eq(noodleInteractions.postId, postId),
-            eq(noodleInteractions.actorAccountId, currentActor.id),
-            eq(noodleInteractions.type, "vote"),
-            isNull(noodleInteractions.parentInteractionId),
+            eq(slpInteractions.postId, postId),
+            eq(slpInteractions.actorAccountId, currentActor.id),
+            eq(slpInteractions.type, "vote"),
+            isNull(slpInteractions.parentInteractionId),
           ),
         );
       const existingVote = existingVotes[0];
       const voteId = existingVote?.id ?? newId();
       if (existingVotes.length > 1) {
-        await tx.delete(noodleInteractions).where(
+        await tx.delete(slpInteractions).where(
           inArray(
-            noodleInteractions.id,
+            slpInteractions.id,
             existingVotes.slice(1).map((vote) => vote.id),
           ),
         );
       }
       if (existingVote) {
         await tx
-          .update(noodleInteractions)
+          .update(slpInteractions)
           .set({
             content: optionId,
             actorSnapshot: JSON.stringify(snapshotForAccount(currentActor)),
           })
-          .where(eq(noodleInteractions.id, voteId));
+          .where(eq(slpInteractions.id, voteId));
       } else {
-        await tx.insert(noodleInteractions).values({
+        await tx.insert(slpInteractions).values({
           id: voteId,
           postId,
           parentInteractionId: null,
@@ -567,7 +559,7 @@ export function createSlurpStorageContext(db: DB) {
           createdAt: now(),
         });
       }
-      const updated = await tx.select().from(noodleInteractions).where(eq(noodleInteractions.id, voteId));
+      const updated = await tx.select().from(slpInteractions).where(eq(slpInteractions.id, voteId));
       return updated[0] ? mapInteraction(updated[0]) : null;
     });
   };
@@ -581,10 +573,8 @@ export function createSlurpStorageContext(db: DB) {
     tx: Parameters<Parameters<DB["transaction"]>[0]>[0],
     parentId: string,
   ): Promise<void> => {
-    const parent = (await tx.select().from(noodleInteractions).where(eq(noodleInteractions.id, parentId)))[0];
-    const rows = parent
-      ? await tx.select().from(noodleInteractions).where(eq(noodleInteractions.postId, parent.postId))
-      : [];
+    const parent = (await tx.select().from(slpInteractions).where(eq(slpInteractions.id, parentId)))[0];
+    const rows = parent ? await tx.select().from(slpInteractions).where(eq(slpInteractions.postId, parent.postId)) : [];
     // The whole descendant subtree goes, not just the direct children (same closure as
     // deleteInteractionById): a reply to a creator reply would otherwise survive its thread.
     const removed = new Set([parentId]);
@@ -601,36 +591,36 @@ export function createSlurpStorageContext(db: DB) {
     // Claims are keyed by either end of the pair, so a claim whose reply is going away must go
     // too or it keeps consuming the rolling allowance forever.
     await tx
-      .delete(noodlerCreatorReplyClaims)
+      .delete(slpCreatorCreatorReplyClaims)
       .where(
         or(
-          inArray(noodlerCreatorReplyClaims.parentInteractionId, removedIds),
-          inArray(noodlerCreatorReplyClaims.replyInteractionId, removedIds),
+          inArray(slpCreatorCreatorReplyClaims.parentInteractionId, removedIds),
+          inArray(slpCreatorCreatorReplyClaims.replyInteractionId, removedIds),
         ),
       );
     const childIds = removedIds.filter((id) => id !== parentId);
     if (childIds.length === 0) return;
-    await tx.delete(noodleActivityDigests).where(inArray(noodleActivityDigests.sourceInteractionId, childIds));
-    await tx.delete(noodleInteractions).where(inArray(noodleInteractions.id, childIds));
+    await tx.delete(slpActivityDigests).where(inArray(slpActivityDigests.sourceInteractionId, childIds));
+    await tx.delete(slpInteractions).where(inArray(slpInteractions.id, childIds));
   };
 
   const deleteStoredInteraction = async (
     postId: string,
     input: DeleteStoredInteractionCommand,
     digestDeletionPolicy: "protect-public-digests" | "delete-directly",
-  ): Promise<NoodleInteraction | null> => {
+  ): Promise<SlpInteraction | null> => {
     const parentInteractionId = input.parentInteractionId ?? null;
     const rows = await db
       .select()
-      .from(noodleInteractions)
+      .from(slpInteractions)
       .where(
         and(
-          eq(noodleInteractions.postId, postId),
-          eq(noodleInteractions.actorAccountId, input.actorAccountId),
-          eq(noodleInteractions.type, input.type),
+          eq(slpInteractions.postId, postId),
+          eq(slpInteractions.actorAccountId, input.actorAccountId),
+          eq(slpInteractions.type, input.type),
           parentInteractionId
-            ? eq(noodleInteractions.parentInteractionId, parentInteractionId)
-            : isNull(noodleInteractions.parentInteractionId),
+            ? eq(slpInteractions.parentInteractionId, parentInteractionId)
+            : isNull(slpInteractions.parentInteractionId),
         ),
       );
     const existing = rows[0];
@@ -639,17 +629,17 @@ export function createSlurpStorageContext(db: DB) {
     if (digestDeletionPolicy === "delete-directly") {
       await db.transaction(async (tx) => {
         await deleteInteractionChildren(tx, existing.id);
-        await tx.delete(noodleInteractions).where(eq(noodleInteractions.id, existing.id));
+        await tx.delete(slpInteractions).where(eq(slpInteractions.id, existing.id));
       });
       return mapInteraction(existing);
     }
 
     const relatedDigests = await db
       .select()
-      .from(noodleActivityDigests)
-      .where(eq(noodleActivityDigests.sourceInteractionId, existing.id));
+      .from(slpActivityDigests)
+      .where(eq(slpActivityDigests.sourceInteractionId, existing.id));
     const slurpSourceAccountIds = new Set(
-      (await db.select().from(noodleAccounts).where(eq(noodleAccounts.platform, "slurp"))).map((row) => row.id),
+      (await db.select().from(slpAccounts).where(eq(slpAccounts.platform, "slurp"))).map((row) => row.id),
     );
     if (
       relatedDigests.some(
@@ -660,8 +650,8 @@ export function createSlurpStorageContext(db: DB) {
     }
     await db.transaction(async (tx) => {
       await deleteInteractionChildren(tx, existing.id);
-      await tx.delete(noodleActivityDigests).where(eq(noodleActivityDigests.sourceInteractionId, existing.id));
-      await tx.delete(noodleInteractions).where(eq(noodleInteractions.id, existing.id));
+      await tx.delete(slpActivityDigests).where(eq(slpActivityDigests.sourceInteractionId, existing.id));
+      await tx.delete(slpInteractions).where(eq(slpInteractions.id, existing.id));
     });
     return mapInteraction(existing);
   };

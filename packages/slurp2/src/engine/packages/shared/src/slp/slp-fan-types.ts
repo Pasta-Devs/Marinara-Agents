@@ -16,7 +16,7 @@
  */
 import { z } from "zod";
 
-import type { NoodlerFanArchetype } from "@marinara-engine/shared";
+import type { SlpCreatorFanArchetype } from "./slp-social.types.js";
 import type { SlurpSpendTier } from "./slp-population.js";
 
 const num = (min: number, max: number, fallback: number) =>
@@ -241,7 +241,7 @@ export function slurpNormalizeFanTypes(raw: unknown): SlurpFanType[] {
   return types;
 }
 
-const ARCHETYPE_FALLBACK: Record<NoodlerFanArchetype, string> = {
+const ARCHETYPE_FALLBACK: Record<SlpCreatorFanArchetype, string> = {
   ordinary: "regular",
   eccentric: "night-owl",
   crossFandom: "crossover-fan",
@@ -254,7 +254,7 @@ const ARCHETYPE_FALLBACK: Record<NoodlerFanArchetype, string> = {
 export function slurpFallbackFanType(types: readonly SlurpFanType[], archetype?: string): SlurpFanType {
   const usable = types.filter((type) => type.enabled);
   const pool = usable.length > 0 ? usable : types;
-  const byArchetype = archetype ? ARCHETYPE_FALLBACK[archetype as NoodlerFanArchetype] : undefined;
+  const byArchetype = archetype ? ARCHETYPE_FALLBACK[archetype as SlpCreatorFanArchetype] : undefined;
   return (
     (byArchetype ? pool.find((type) => type.id === byArchetype) : undefined) ??
     (archetype ? pool.find((type) => type.engineArchetype === archetype) : undefined) ??

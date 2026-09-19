@@ -1,7 +1,10 @@
-import type { NoodleIdentityDisclosure, NoodlerManagedStageProfile } from "@marinara-engine/shared";
+import type {
+  SlpCreatorManagedStageProfile,
+  SlpIdentityDisclosure,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpDiscoveryGender } from "../discovery/slp-discovery-profile.js";
 
-type SlurpManagedStageProfile = NoodlerManagedStageProfile & {
+type SlurpManagedStageProfile = SlpCreatorManagedStageProfile & {
   gender: SlurpDiscoveryGender | null;
   tags: string[];
 };
@@ -11,18 +14,18 @@ type SlurpManagedStageProfile = NoodlerManagedStageProfile & {
  * carries `secret`, so a stored or submitted Secret Creator becomes Hinted, the closest tier that
  * still keeps the source name and handle protected.
  */
-export function slurpDisclosureMode<T extends NoodleIdentityDisclosure | null | undefined>(mode: T) {
+export function slurpDisclosureMode<T extends SlpIdentityDisclosure | null | undefined>(mode: T) {
   return (mode === "secret" ? "hinted" : mode) as T extends "secret" ? "hinted" : T;
 }
 
-const DISCLOSURE_RANK: Record<NoodleIdentityDisclosure, number> = {
+const DISCLOSURE_RANK: Record<SlpIdentityDisclosure, number> = {
   secret: 0,
   hinted: 1,
   open: 2,
 };
 
 // Explicit allow-list: the audience projection names every field it exposes, so a
-// new field on NoodlerManagedStageProfile is private until it is added here.
+// new field on SlpCreatorManagedStageProfile is private until it is added here.
 const AUDIENCE_FIELDS = [
   "id",
   "handle",
@@ -41,19 +44,16 @@ const AUDIENCE_FIELDS = [
   "updatedAt",
 ] as const;
 
-export type NoodlerAudienceProfile = Pick<
+export type SlpCreatorAudienceProfile = Pick<
   SlurpManagedStageProfile,
   (typeof AUDIENCE_FIELDS)[number] | "slurpSourceAccountId" | "publicIdentity"
 >;
 
-export function isNoodlerDisclosureDowngrade(
-  current: NoodleIdentityDisclosure,
-  next: NoodleIdentityDisclosure,
-): boolean {
+export function isCreatorDisclosureDowngrade(current: SlpIdentityDisclosure, next: SlpIdentityDisclosure): boolean {
   return DISCLOSURE_RANK[next] < DISCLOSURE_RANK[current];
 }
 
-export function projectNoodlerAudienceProfile(profile: SlurpManagedStageProfile): NoodlerAudienceProfile {
+export function projectCreatorAudienceProfile(profile: SlurpManagedStageProfile): SlpCreatorAudienceProfile {
   const open = profile.disclosureMode === "open";
   return {
     ...(Object.fromEntries(AUDIENCE_FIELDS.map((field) => [field, profile[field]])) as Pick<
@@ -65,23 +65,23 @@ export function projectNoodlerAudienceProfile(profile: SlurpManagedStageProfile)
   };
 }
 
-export type NoodlerDisclosureReviewReason = {
+export type SlpCreatorDisclosureReviewReason = {
   // Stable code so callers can match a reason without parsing its English label.
   code: "published_posts" | "published_media" | "creator_avatar" | "creator_banner" | "prepared_posts";
   count: number;
   label: string;
 };
 
-export function noodlerDisclosureReviewReasons(input: {
-  currentMode: NoodleIdentityDisclosure;
-  nextMode: NoodleIdentityDisclosure;
+export function slpCreatorDisclosureReviewReasons(input: {
+  currentMode: SlpIdentityDisclosure;
+  nextMode: SlpIdentityDisclosure;
   postCount: number;
   mediaCount: number;
   hasAvatar: boolean;
   hasBanner: boolean;
   preparedPostCount: number;
-}): NoodlerDisclosureReviewReason[] {
-  if (!isNoodlerDisclosureDowngrade(input.currentMode, input.nextMode)) return [];
+}): SlpCreatorDisclosureReviewReason[] {
+  if (!isCreatorDisclosureDowngrade(input.currentMode, input.nextMode)) return [];
   const plural = (count: number) => (count === 1 ? "" : "s");
   return [
     ...(input.postCount > 0

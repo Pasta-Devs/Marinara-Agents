@@ -34,7 +34,7 @@ assert.match(
   /settings\.allowGalleryImageAttachments &&\s*typeof payload\.metadata\.noodlerMediaPath !== "string" &&\s*payload\.metadata\.imageGenerationDeferred !== true/u,
 );
 assert.match(reserve, /galleryAttachmentImageUrl: attachment\.imageUrl/u);
-assert.match(storage, /imageUrl: hasMedia \? noodlerPostMediaUrl\(postId\) : galleryImageUrl,/u);
+assert.match(storage, /imageUrl: hasMedia \? slpCreatorPostMediaUrl\(postId\) : galleryImageUrl,/u);
 
 // Professor Mari: one gate where new Creators and drafts resolve a source, plus the source list.
 assert.match(

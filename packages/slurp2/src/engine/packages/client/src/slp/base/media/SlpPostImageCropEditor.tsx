@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Crop, Move, RotateCcw } from "lucide-react";
-import type { NoodlePostImageCrop } from "@marinara-engine/shared";
+import type { SlpPostImageCrop } from "../../../../../shared/src/slp/slp-social.types.js";
 import { cn } from "../../../lib/utils";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { useSlurpMediaSrc } from "./slp-media-src";
@@ -54,7 +54,7 @@ export function PostImageCropEditor({
   onApply,
 }: {
   source: File | string;
-  crop?: NoodlePostImageCrop | null;
+  crop?: SlpPostImageCrop | null;
   disabled?: boolean;
   /**
    * Pin the crop to one ratio and hide the picker. A Story is drawn and shown in one shape, so
@@ -64,7 +64,7 @@ export function PostImageCropEditor({
    */
   lockedRatio?: number;
   onCancel: () => void;
-  onApply: (crop: NoodlePostImageCrop) => Promise<void>;
+  onApply: (crop: SlpPostImageCrop) => Promise<void>;
 }) {
   const { t: localizeUi } = useUiTranslation();
   const imageRef = useRef<HTMLImageElement>(null);
@@ -357,7 +357,7 @@ export function PostImageFrame({
   onError,
 }: {
   src: string;
-  crop: NoodlePostImageCrop | null;
+  crop: SlpPostImageCrop | null;
   alt: string;
   maxHeight?: number;
   onError?: () => void;
@@ -439,7 +439,7 @@ function ImageWithSource({ source, ...props }: { source: string } & Omit<React.C
   return <img ref={imageRef} {...props} />;
 }
 
-function isValidCrop(crop: NoodlePostImageCrop): boolean {
+function isValidCrop(crop: SlpPostImageCrop): boolean {
   return (
     Number.isFinite(crop.x) &&
     Number.isFinite(crop.y) &&
@@ -491,7 +491,7 @@ function resolveCrop(
   return { x: centerX - width / 2, y: centerY - height / 2, width, height };
 }
 
-function closestAspect(size: ImageSize, crop: NoodlePostImageCrop): CropAspect {
+function closestAspect(size: ImageSize, crop: SlpPostImageCrop): CropAspect {
   const ratio = (crop.width * crop.sourceWidth) / (crop.height * crop.sourceHeight);
   const sourceRatio = size.width / size.height;
   const candidates: Array<{ aspect: CropAspect; ratio: number }> = [

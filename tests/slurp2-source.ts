@@ -772,7 +772,7 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
     "packages/client/src/slp/features/audience/SlpAmbientProfilesPanel.tsx",
     "packages/client/src/slp/features/messages/SlpCreatorMessagingGroup.tsx",
   ],
-  "packages/client/src/components/slurp/NoodleAnchoredPopover.tsx": [
+  "packages/client/src/components/slurp/SlpAnchoredPopover.tsx": [
     "packages/client/src/slp/base/chrome/SlpAnchoredPopover.tsx",
   ],
   "packages/client/src/components/slurp/slurp2-release.ts": [

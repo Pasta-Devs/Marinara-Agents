@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 
 import {
-  AMBIENT_NOODLE_PROFILES,
-  dismissAmbientNoodleAccount,
+  AMBIENT_SLP_PROFILES,
+  dismissAmbientSlpAccount,
   ensureAmbientNoodleAccounts,
   withoutHiddenAmbientAccounts,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/data/audience/slp-ambient-profiles.js";
@@ -60,7 +60,7 @@ function fakeStorage() {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const seed = (store: ReturnType<typeof fakeStorage>) => ensureAmbientNoodleAccounts(store as any, true);
 
-const [first, second, third] = AMBIENT_NOODLE_PROFILES;
+const [first, second, third] = AMBIENT_SLP_PROFILES;
 
 async function main() {
   // ── Legacy roster is renamed in place, not duplicated ───────────────────────
@@ -80,11 +80,11 @@ async function main() {
     assert.equal(row.id, "legacy-1");
     assert.equal(row.displayName, first.displayName);
     assert.equal(row.bio, first.bio);
-    assert.equal(store.rows.size, AMBIENT_NOODLE_PROFILES.length);
+    assert.equal(store.rows.size, AMBIENT_SLP_PROFILES.length);
   }
 
   // ── No carried-over names or Noodle text in the roster ──────────────────────
-  for (const profile of AMBIENT_NOODLE_PROFILES) {
+  for (const profile of AMBIENT_SLP_PROFILES) {
     assert.doesNotMatch(`${profile.displayName} ${profile.bio}`, /noodle/iu);
     assert.notEqual(profile.displayName, profile.legacyName);
   }
@@ -118,11 +118,11 @@ async function main() {
     const store = fakeStorage();
     await seed(store);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await dismissAmbientNoodleAccount(store as any, third.entityId);
+    await dismissAmbientSlpAccount(store as any, third.entityId);
     store.rows.delete(third.entityId);
     const accounts = await seed(store);
     assert.equal(store.rows.has(third.entityId), false);
-    assert.equal(accounts.length, AMBIENT_NOODLE_PROFILES.length - 1);
+    assert.equal(accounts.length, AMBIENT_SLP_PROFILES.length - 1);
   }
 
   // ── Switching off hides the roster; switching on again keeps edits ──────────
@@ -136,10 +136,10 @@ async function main() {
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const offAccounts = await ensureAmbientNoodleAccounts(store as any, false);
-    assert.equal(store.rows.size, AMBIENT_NOODLE_PROFILES.length);
-    assert.equal(offAccounts.length, AMBIENT_NOODLE_PROFILES.length, "settings panel still lists them");
+    assert.equal(store.rows.size, AMBIENT_SLP_PROFILES.length);
+    assert.equal(offAccounts.length, AMBIENT_SLP_PROFILES.length, "settings panel still lists them");
     await seed(store);
-    assert.equal(store.rows.size, AMBIENT_NOODLE_PROFILES.length);
+    assert.equal(store.rows.size, AMBIENT_SLP_PROFILES.length);
     assert.equal(store.rows.get(first.entityId)!.displayName, "Kept Edit");
     assert.equal(store.rows.get(first.entityId)!.bio, "kept");
 
@@ -174,18 +174,18 @@ async function main() {
     const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
     assert.match(
       routes,
-      /getAccountById\(id, \{ includeHidden: true \}\);\n\s*if \(!account \|\| !isAmbientNoodleAccount/u,
+      /getAccountById\(id, \{ includeHidden: true \}\);\n\s*if \(!account \|\| !isAmbientSlpAccount/u,
     );
     assert.match(routes, /getAccountById\(id, \{ includeHidden: true \}\)\)/u, "reroll reads past the hide filter");
 
     // The dismissal is only recorded once the delete actually succeeded.
     assert.match(
       routes,
-      /const deleted = await noodle\.deleteNoodlerAccount\(id\);[\s\S]{0,300}?if \(deleted && target && isAmbientNoodleAccount\(target\)\)\s*\n?\s*await dismissAmbientNoodleAccount/u,
+      /const deleted = await noodle\.deleteNoodlerAccount\(id\);[\s\S]{0,300}?if \(deleted && target && isAmbientSlpAccount\(target\)\)\s*\n?\s*await dismissAmbientSlpAccount/u,
     );
     assert.doesNotMatch(
       routes,
-      /await dismissAmbientNoodleAccount\(noodle, target\.entityId\);\s*\n\s*const deleted = await noodle\.deleteNoodlerAccount/u,
+      /await dismissAmbientSlpAccount\(noodle, target\.entityId\);\s*\n\s*const deleted = await noodle\.deleteNoodlerAccount/u,
     );
   }
 

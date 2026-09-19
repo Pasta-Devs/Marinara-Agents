@@ -1,5 +1,9 @@
 import { createHmac, randomBytes } from "node:crypto";
-import type { NoodleIdentityDisclosure, NoodlerSourceSnapshot, NoodlerSourceStatus } from "@marinara-engine/shared";
+import type {
+  SlpCreatorSourceSnapshot,
+  SlpCreatorSourceStatus,
+  SlpIdentityDisclosure,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 
 const HINTED_THEME_TOKENS = [
   "adventurous",
@@ -45,46 +49,46 @@ function hintedThemes(value: string): string {
   return HINTED_THEME_TOKENS.filter((token) => words.has(token)).join(" ");
 }
 
-export function minimizeNoodlerSourceSnapshot(
-  snapshot: NoodlerSourceSnapshot,
-  mode: NoodleIdentityDisclosure,
-  baseline?: NoodlerSourceSnapshot | null,
-): NoodlerSourceSnapshot {
+export function minimizeCreatorSourceSnapshot(
+  snapshot: SlpCreatorSourceSnapshot,
+  mode: SlpIdentityDisclosure,
+  baseline?: SlpCreatorSourceSnapshot | null,
+): SlpCreatorSourceSnapshot {
   if (mode === "open") return snapshot;
   return Object.fromEntries(
-    (Object.keys(snapshot) as Array<keyof NoodlerSourceSnapshot>).map((field) => {
+    (Object.keys(snapshot) as Array<keyof SlpCreatorSourceSnapshot>).map((field) => {
       const value = snapshot[field];
       const themes = mode === "hinted" && field === "personality" ? hintedThemes(value) : "";
       const digest = sourceDigest(value, saltFor(baseline?.[field]));
       return [field, `${themes ? `${themes} ` : ""}revision:${digest}`];
     }),
-  ) as NoodlerSourceSnapshot;
+  ) as SlpCreatorSourceSnapshot;
 }
 
-export function isMinimizedNoodlerSourceSnapshot(snapshot: NoodlerSourceSnapshot): boolean {
+export function isMinimizedCreatorSourceSnapshot(snapshot: SlpCreatorSourceSnapshot): boolean {
   // Unsalted legacy tokens deliberately fail this test, so storage re-minimizes them.
-  return (Object.keys(snapshot) as Array<keyof NoodlerSourceSnapshot>).every((field) =>
+  return (Object.keys(snapshot) as Array<keyof SlpCreatorSourceSnapshot>).every((field) =>
     REVISION_TOKEN.test(snapshot[field]),
   );
 }
 
-export function compareNoodlerSourceSnapshots(
-  baseline: NoodlerSourceSnapshot,
-  current: NoodlerSourceSnapshot,
-): NoodlerSourceStatus {
-  const changes = (Object.keys(baseline) as Array<keyof NoodlerSourceSnapshot>).flatMap((field) =>
+export function compareCreatorSourceSnapshots(
+  baseline: SlpCreatorSourceSnapshot,
+  current: SlpCreatorSourceSnapshot,
+): SlpCreatorSourceStatus {
+  const changes = (Object.keys(baseline) as Array<keyof SlpCreatorSourceSnapshot>).flatMap((field) =>
     baseline[field] === current[field] ? [] : [{ field, previous: baseline[field], current: current[field] }],
   );
   return changes.length > 0 ? { state: "changed", changes } : { state: "current" };
 }
 
-export function compareMinimizedNoodlerSourceSnapshot(
-  baseline: NoodlerSourceSnapshot,
-  current: NoodlerSourceSnapshot,
-  mode: NoodleIdentityDisclosure,
-): NoodlerSourceStatus {
-  const minimizedCurrent = minimizeNoodlerSourceSnapshot(current, mode, baseline);
-  const comparison = compareNoodlerSourceSnapshots(baseline, minimizedCurrent);
+export function compareMinimizedCreatorSourceSnapshot(
+  baseline: SlpCreatorSourceSnapshot,
+  current: SlpCreatorSourceSnapshot,
+  mode: SlpIdentityDisclosure,
+): SlpCreatorSourceStatus {
+  const minimizedCurrent = minimizeCreatorSourceSnapshot(current, mode, baseline);
+  const comparison = compareCreatorSourceSnapshots(baseline, minimizedCurrent);
   if (mode === "open" || comparison.state !== "changed") return comparison;
   return {
     state: "changed",

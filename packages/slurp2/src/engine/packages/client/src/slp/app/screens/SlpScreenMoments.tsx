@@ -1,21 +1,16 @@
 import { ChevronLeft, ChevronRight, Clock3, Eye, Heart, Link, Lock, Maximize2, Minimize2, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import type { NoodlerPostView } from "@marinara-engine/shared";
+import type { SlpCreatorPostView } from "../../../../../shared/src/slp/slp-social.types.js";
 import { useRecordSlurpStoryView, useSlurpStoryViews } from "../../features/messages/slp-messages-hooks";
 import { cn } from "../../../lib/utils";
-import type { NoodlePostCardCtx } from "../../modules/post/SlpPostCard";
+import type { SlpPostCardCtx } from "../../modules/post/SlpPostCard";
 import { SlurpCoinAmount } from "../../modules/coin/SlpCoin";
 import { SlpStoryTile } from "../../modules/story/SlpStoryTile";
 import { useSlurpMediaSrc } from "../../base/media/slp-media-src";
 import { ProfileInitial } from "../../base/chrome/SlpChrome";
 import { SlurpSparkleVeil } from "../../base/chrome/SlpSparkleVeil";
-import {
-  toNoodlePostCardModel,
-  linkedPostIdForStory,
-  type SlurpViewerCreator,
-  SlurpMediaDialog,
-} from "./SlpHomeHelpers";
+import { toSlpPostCardModel, linkedPostIdForStory, type SlurpViewerCreator, SlurpMediaDialog } from "./SlpHomeHelpers";
 
 // ---------------------------------------------------------------------------
 // Local types
@@ -23,7 +18,7 @@ import {
 
 type SlurpMoment = {
   creator: SlurpViewerCreator;
-  post: NoodlerPostView;
+  post: SlpCreatorPostView;
 };
 
 // ---------------------------------------------------------------------------
@@ -172,7 +167,7 @@ export function SlurpMomentViewer({
   onUnlock: (postId: string) => void;
   onToggleSubscription: (creatorAccountId: string, subscribed: boolean) => void;
   onOpenProfile?: (accountId: string) => void;
-  ctx: NoodlePostCardCtx;
+  ctx: SlpPostCardCtx;
 }) {
   const { t: localizeUi } = useUiTranslation();
   const mediaSrc = useSlurpMediaSrc(moment.post.imageUrl, { width: 1600 });
@@ -336,7 +331,7 @@ export function SlurpMomentViewer({
                   type="button"
                   disabled={!ctx.personaAccount || ctx.reactionPendingFor(moment.post.id, "like")}
                   onClick={() =>
-                    ctx.reactToPost(toNoodlePostCardModel(moment.post, moment.creator.profile), "like", liked)
+                    ctx.reactToPost(toSlpPostCardModel(moment.post, moment.creator.profile), "like", liked)
                   }
                   aria-pressed={liked}
                   aria-label={localizeUi(liked ? "ui.noodle.post.unlikeLabel" : "ui.noodle.post.likeLabel")}

@@ -1,10 +1,6 @@
-import {
-  createNoodlePoll,
-  readNoodlePollFromMetadata,
-  type NoodleAccount,
-  type NoodleGeneratedRefresh,
-  type NoodleInteractionType,
-} from "@marinara-engine/shared";
+import { createSlpPoll, readSlpPollFromMetadata } from "../../../../../shared/src/slp/slp-polls.js";
+import { type SlpGeneratedRefresh } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import { type SlpAccount, type SlpInteractionType } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { DB } from "../../../db/connection.js";
 import { logger } from "../../../lib/logger.js";
 import { createCharacterGalleryStorage } from "../../../services/storage/character-gallery.storage.js";
@@ -15,18 +11,18 @@ import { createGalleryStorage } from "../../../services/storage/gallery.storage.
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { type SlurpSettings } from "../../modules/settings/slp-settings.js";
 import { createPromptOverridesStorage } from "../../../services/storage/prompt-overrides.storage.js";
-import { canCreateGeneratedNoodleInteraction } from "../../modules/feed/slp-interaction-policy.js";
+import { canCreateGeneratedSlpInteraction } from "../../modules/feed/slp-interaction-policy.js";
 import {
   isConnectionAdmissionFailure,
   type ConnectionAdmissionMode,
 } from "../../../services/generation/connection-admission.js";
-import { normalizeNoodleHandle } from "../../base/identity/slp-handle.js";
-import { normalizeNoodleImagePrompt } from "../../base/media/slp-image-prompt.js";
-import { canGenerateNoodleActivityForAccountKind } from "../../modules/prompting/slp-prompt.js";
+import { normalizeSlpHandle } from "../../base/identity/slp-handle.js";
+import { normalizeSlpImagePrompt } from "../../base/media/slp-image-prompt.js";
+import { canGenerateSlpActivityForAccountKind } from "../../modules/prompting/slp-prompt.js";
 import {
-  generateNoodlePostImage,
-  type NoodleImagePromptReviewItem,
-  type StagedNoodlePostMedia,
+  generateSlpPostImage,
+  type SlpImagePromptReviewItem,
+  type StagedSlpPostMedia,
 } from "../media/slp-media-contract.js";
 import {
   getErrorMessage,
@@ -46,17 +42,17 @@ type PreparedPostMedia = {
   imagePrompt: string | null;
   imageUrl: string | null;
   metadata: Record<string, unknown>;
-  preview: Omit<NoodleImagePromptReviewItem, "id"> | null;
-  stagedMedia: StagedNoodlePostMedia | null;
+  preview: Omit<SlpImagePromptReviewItem, "id"> | null;
+  stagedMedia: StagedSlpPostMedia | null;
 };
 
-export type PreparedGeneratedNoodleMedia = {
-  posts: Map<NoodleGeneratedRefresh["posts"][number], PreparedPostMedia>;
-  stagedMedia: StagedNoodlePostMedia[];
+export type PreparedGeneratedSlpMedia = {
+  posts: Map<SlpGeneratedRefresh["posts"][number], PreparedPostMedia>;
+  stagedMedia: StagedSlpPostMedia[];
 };
 
 export async function pickGalleryAttachmentForAccount(input: {
-  account: NoodleAccount;
+  account: SlpAccount;
   chats: ReturnType<typeof createChatsStorage>;
   gallery: ReturnType<typeof createGalleryStorage>;
   characterGallery: ReturnType<typeof createCharacterGalleryStorage>;
@@ -91,33 +87,33 @@ export async function pickGalleryAttachmentForAccount(input: {
   };
 }
 
-export async function prepareGeneratedNoodleMedia(input: {
+export async function prepareGeneratedSlpMedia(input: {
   db: DB;
   characters: ReturnType<typeof createCharactersStorage>;
   chats: ReturnType<typeof createChatsStorage>;
   gallery: ReturnType<typeof createGalleryStorage>;
   characterGallery: ReturnType<typeof createCharacterGalleryStorage>;
   promptOverrides: ReturnType<typeof createPromptOverridesStorage>;
-  generated: NoodleGeneratedRefresh;
-  selectedParticipants: NoodleAccount[];
-  personaAccount: NoodleAccount | null;
+  generated: SlpGeneratedRefresh;
+  selectedParticipants: SlpAccount[];
+  personaAccount: SlpAccount | null;
   settings: SlurpSettings;
   imageConnection: ImageConnection | null;
   debugMode: boolean;
   reviewImagePromptsBeforeSend: boolean;
   admissionMode?: ConnectionAdmissionMode;
-}): Promise<PreparedGeneratedNoodleMedia> {
+}): Promise<PreparedGeneratedSlpMedia> {
   const activeAccounts = [...(input.personaAccount ? [input.personaAccount] : []), ...input.selectedParticipants];
-  const handleToAccount = new Map(activeAccounts.map((account) => [normalizeNoodleHandle(account.handle), account]));
+  const handleToAccount = new Map(activeAccounts.map((account) => [normalizeSlpHandle(account.handle), account]));
   const activeCharacterReferenceAccounts = activeAccounts.filter((account) => account.kind === "character");
-  const posts = new Map<NoodleGeneratedRefresh["posts"][number], PreparedPostMedia>();
-  const stagedMedia: StagedNoodlePostMedia[] = [];
+  const posts = new Map<SlpGeneratedRefresh["posts"][number], PreparedPostMedia>();
+  const stagedMedia: StagedSlpPostMedia[] = [];
   let remainingImagePrompts = input.settings.enableImagePrompts ? input.settings.maxImagesPerRefresh : 0;
 
   for (const generatedPost of input.generated.posts.slice(0, input.settings.maxGeneratedPostsPerRefresh)) {
-    const account = handleToAccount.get(normalizeNoodleHandle(generatedPost.authorHandle));
-    if (!account || !canGenerateNoodleActivityForAccountKind(account.kind)) continue;
-    const imagePrompt = remainingImagePrompts > 0 ? normalizeNoodleImagePrompt(generatedPost.imagePrompt) : null;
+    const account = handleToAccount.get(normalizeSlpHandle(generatedPost.authorHandle));
+    if (!account || !canGenerateSlpActivityForAccountKind(account.kind)) continue;
+    const imagePrompt = remainingImagePrompts > 0 ? normalizeSlpImagePrompt(generatedPost.imagePrompt) : null;
     if (imagePrompt) remainingImagePrompts -= 1;
     const prepared: PreparedPostMedia = {
       imagePrompt,
@@ -128,7 +124,7 @@ export async function prepareGeneratedNoodleMedia(input: {
     };
     if (imagePrompt && input.imageConnection) {
       try {
-        const generatedImage = await generateNoodlePostImage({
+        const generatedImage = await generateSlpPostImage({
           account,
           referenceAccounts: activeCharacterReferenceAccounts,
           postContent: generatedPost.content,
@@ -189,21 +185,21 @@ export async function prepareGeneratedNoodleMedia(input: {
   return { posts, stagedMedia };
 }
 
-export async function persistGeneratedNoodleActivity(input: {
+export async function persistGeneratedSlpActivity(input: {
   noodle: ReturnType<typeof createSlurpStorage>;
   characterGallery: ReturnType<typeof createCharacterGalleryStorage>;
-  generated: NoodleGeneratedRefresh;
-  selectedParticipants: NoodleAccount[];
-  personaAccount: NoodleAccount | null;
+  generated: SlpGeneratedRefresh;
+  selectedParticipants: SlpAccount[];
+  personaAccount: SlpAccount | null;
   settings: SlurpSettings;
   runId: string;
   recalledPostIds: string[];
-  preparedMedia: PreparedGeneratedNoodleMedia;
+  preparedMedia: PreparedGeneratedSlpMedia;
 }) {
   const activeAccounts = [...input.selectedParticipants, ...(input.personaAccount ? [input.personaAccount] : [])];
   const handleToAccount = new Map(
     [...(input.personaAccount ? [input.personaAccount] : []), ...input.selectedParticipants].map((account) => [
-      normalizeNoodleHandle(account.handle),
+      normalizeSlpHandle(account.handle),
       account,
     ]),
   );
@@ -217,13 +213,13 @@ export async function persistGeneratedNoodleActivity(input: {
   );
   const existingInteractions = [...existingInteractionById.values()];
   const tempIdToPostId = new Map<string, string>();
-  const imagePromptReviewItems: NoodleImagePromptReviewItem[] = [];
+  const imagePromptReviewItems: SlpImagePromptReviewItem[] = [];
   const committedCounts = { posts: 0, interactions: 0, follows: 0 };
 
   for (const generatedPost of input.generated.posts.slice(0, input.settings.maxGeneratedPostsPerRefresh)) {
-    const account = handleToAccount.get(normalizeNoodleHandle(generatedPost.authorHandle));
+    const account = handleToAccount.get(normalizeSlpHandle(generatedPost.authorHandle));
     if (!account) continue;
-    if (!canGenerateNoodleActivityForAccountKind(account.kind)) {
+    if (!canGenerateSlpActivityForAccountKind(account.kind)) {
       logger.warn("[slurp] Ignoring generated post attributed to persona %s", account.entityId);
       continue;
     }
@@ -231,7 +227,7 @@ export async function persistGeneratedNoodleActivity(input: {
     if (!preparedMedia) continue;
     const mediaMetadata = { ...preparedMedia.metadata };
     const mentionedAccounts = mentionedCharacterAccounts(activeAccounts, generatedPost.content);
-    const poll = generatedPost.poll ? createNoodlePoll(generatedPost.poll) : null;
+    const poll = generatedPost.poll ? createSlpPoll(generatedPost.poll) : null;
     const post = await input.noodle.createPost({
       authorAccountId: account.id,
       content: generatedPost.content,
@@ -273,7 +269,7 @@ export async function persistGeneratedNoodleActivity(input: {
     });
   }
 
-  const quotas: Record<NoodleInteractionType, number> = {
+  const quotas: Record<SlpInteractionType, number> = {
     like: input.settings.maxLikesPerRefresh,
     reply: input.settings.maxRepliesPerRefresh,
     vote: input.settings.maxLikesPerRefresh,
@@ -281,9 +277,9 @@ export async function persistGeneratedNoodleActivity(input: {
   for (const generatedInteraction of input.generated.interactions) {
     const interactionType = generatedInteraction.type;
     if ((quotas[interactionType] ?? 0) <= 0) continue;
-    const actor = handleToAccount.get(normalizeNoodleHandle(generatedInteraction.actorHandle));
+    const actor = handleToAccount.get(normalizeSlpHandle(generatedInteraction.actorHandle));
     if (!actor) continue;
-    if (!canGenerateNoodleActivityForAccountKind(actor.kind)) {
+    if (!canGenerateSlpActivityForAccountKind(actor.kind)) {
       logger.warn(
         "[slurp] Ignoring generated %s interaction attributed to persona %s",
         generatedInteraction.type,
@@ -305,7 +301,7 @@ export async function persistGeneratedNoodleActivity(input: {
     )
       continue;
     if (
-      !canCreateGeneratedNoodleInteraction({
+      !canCreateGeneratedSlpInteraction({
         actor,
         targetPost,
         parentInteraction,
@@ -313,7 +309,7 @@ export async function persistGeneratedNoodleActivity(input: {
       })
     )
       continue;
-    const poll = readNoodlePollFromMetadata(targetPost.metadata);
+    const poll = readSlpPollFromMetadata(targetPost.metadata);
     const selectedPollOption =
       generatedInteraction.type === "vote" ? poll?.options[generatedInteraction.pollOptionIndex ?? -1] : undefined;
     if (generatedInteraction.type === "vote" && !selectedPollOption) continue;
@@ -348,10 +344,10 @@ export async function persistGeneratedNoodleActivity(input: {
   const maxGeneratedFollows = Math.max(12, activeAccounts.length * 2);
   const seenGeneratedFollows = new Set<string>();
   for (const generatedFollow of input.generated.follows.slice(0, maxGeneratedFollows)) {
-    const actor = handleToAccount.get(normalizeNoodleHandle(generatedFollow.actorHandle));
-    const target = handleToAccount.get(normalizeNoodleHandle(generatedFollow.targetHandle));
+    const actor = handleToAccount.get(normalizeSlpHandle(generatedFollow.actorHandle));
+    const target = handleToAccount.get(normalizeSlpHandle(generatedFollow.targetHandle));
     if (!actor || !target || actor.id === target.id) continue;
-    if (!canGenerateNoodleActivityForAccountKind(actor.kind)) {
+    if (!canGenerateSlpActivityForAccountKind(actor.kind)) {
       logger.warn("[slurp] Ignoring generated follow attributed to persona %s", actor.entityId);
       continue;
     }
@@ -374,23 +370,23 @@ export async function persistGeneratedNoodleActivity(input: {
   };
 }
 
-export async function commitGeneratedNoodleActivity(input: {
+export async function commitGeneratedSlpActivity(input: {
   db: DB;
-  generated: NoodleGeneratedRefresh;
-  selectedParticipants: NoodleAccount[];
-  personaAccount: NoodleAccount | null;
+  generated: SlpGeneratedRefresh;
+  selectedParticipants: SlpAccount[];
+  personaAccount: SlpAccount | null;
   settings: SlurpSettings;
   runId: string;
   result: string;
   recalledPostIds: string[];
-  preparedMedia: PreparedGeneratedNoodleMedia;
+  preparedMedia: PreparedGeneratedSlpMedia;
   rejectedActivityCount: number;
 }) {
   try {
     for (const media of input.preparedMedia.stagedMedia) media.file.promote();
     return await input.db.transaction(async (tx) => {
       const noodle = createSlurpStorage(tx);
-      const persisted = await persistGeneratedNoodleActivity({
+      const persisted = await persistGeneratedSlpActivity({
         noodle,
         characterGallery: createCharacterGalleryStorage(tx),
         generated: input.generated,

@@ -1,6 +1,6 @@
 import { useState, type ComponentType } from "react";
 import { useTranslation } from "react-i18next";
-import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
+import type { SlpCreatorManagedStageProfile } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpNavigationState } from "../../base/navigation/slp-navigation.types";
 import type { slurpAudiencePresetFor } from "../../../../../shared/src/slp/slp-tuning.js";
 import type { SlpAdsBackstageState } from "../ads/slp-ads-backstage-contract";
@@ -25,8 +25,8 @@ export type SlpBackstageShellProps = {
   onNavigate: (navigation: SlurpNavigationState) => void;
   onAddCreators: () => void;
   personaSourceIds: ReadonlySet<string>;
-  onEditCreator: (creator: NoodlerManagedStageProfile) => void;
-  onRedraftCreator: (creator: NoodlerManagedStageProfile) => void;
+  onEditCreator: (creator: SlpCreatorManagedStageProfile) => void;
+  onRedraftCreator: (creator: SlpCreatorManagedStageProfile) => void;
   onRestartOnboarding: () => void;
   viewerPersonaId: string | null;
 };
@@ -49,8 +49,8 @@ export function useSlpBackstageHostState(props: SlpBackstageShellProps) {
   const [refreshAccess, setRefreshAccess] = useState<"public" | "locked">("locked");
 
   const openRefreshFor = (
-    autoPostingCreators: NoodlerManagedStageProfile[],
-    automationCreators: NoodlerManagedStageProfile[],
+    autoPostingCreators: SlpCreatorManagedStageProfile[],
+    automationCreators: SlpCreatorManagedStageProfile[],
   ) => {
     setRefreshAccountIds(
       new Set((autoPostingCreators.length > 0 ? autoPostingCreators : automationCreators).map((creator) => creator.id)),

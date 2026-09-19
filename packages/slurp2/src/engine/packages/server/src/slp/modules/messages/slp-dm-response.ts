@@ -1,7 +1,7 @@
 /**
  * What a direct-message reply is allowed to come back as.
  *
- * The shared package owns `noodleGeneratedNoodlerReplySchema`, and this repo does not contain it,
+ * The shared package owns `slpGeneratedCreatorReplySchema`, and this repo does not contain it,
  * so the direct-message contract is defined here instead of extended there.
  *
  * Everything except `content` is optional on the way in. A connection that cannot honour a JSON

@@ -5,10 +5,10 @@ import { SlpProfilePostCards } from "./SlpProfilePostCards";
 import { SlpProfileLeadingActions } from "./SlpProfileLeadingActions";
 import { ChevronDown, ChevronLeft, Sparkles } from "lucide-react";
 import { Fragment } from "react";
-import type { NoodlerPostView, NoodlerStageProfile } from "@marinara-engine/shared";
+import type { SlpCreatorPostView, SlpCreatorStageProfile } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpPromotion } from "../../features/ads/slp-ads-contract";
 import { toast } from "sonner";
-import { type NoodlePostCardModel } from "../../modules/post/SlpPostCard";
+import { type SlpPostCardModel } from "../../modules/post/SlpPostCard";
 import { SlurpArcTimelineCard } from "../../features/projects/SlpArcTimelineCard";
 import { useNearViewportSlurpMediaSrc } from "../../base/media/slp-media-src";
 import { SlurpProfileSurface } from "../../features/creators/SlpProfileSurface";
@@ -25,7 +25,7 @@ import { cn } from "../../../lib/utils";
 import {
   errorMessage,
   isSlurpStory,
-  toNoodlePostCardModel,
+  toSlpPostCardModel,
   DisclosureBadge,
   LoadMoreFeedButton,
   SlurpPostDialog,
@@ -35,11 +35,11 @@ import {
 // Local types
 // ---------------------------------------------------------------------------
 
-export type SlurpProfileImagePost = NoodlePostCardModel & { imageUrl: string };
+export type SlurpProfileImagePost = SlpPostCardModel & { imageUrl: string };
 
-type NoodlerComposerTool = "image" | "poll" | "media" | "access";
+type SlpCreatorComposerTool = "image" | "poll" | "media" | "access";
 
-export type NoodlerProfileTab = "posts" | "media" | "stories" | "subscribers" | "followers";
+export type SlpCreatorProfileTab = "posts" | "media" | "stories" | "subscribers" | "followers";
 
 // ---------------------------------------------------------------------------
 // Components
@@ -126,7 +126,7 @@ export function SlurpMediaWall({
   onAdHide,
   adLabels,
 }: {
-  items: { post: NoodlerPostView & { locked?: boolean }; creator: { profile: NoodlerStageProfile } }[];
+  items: { post: SlpCreatorPostView & { locked?: boolean }; creator: { profile: SlpCreatorStageProfile } }[];
   onOpenPost: (postId: string) => void;
   onLoadMore?: () => void;
   total: number;
@@ -140,7 +140,7 @@ export function SlurpMediaWall({
   const { t: localizeUi } = useUiTranslation();
   const tiles = items.flatMap<SlurpProfileImagePost>(({ post, creator }) => {
     if (post.locked || typeof post.imageUrl !== "string") return [];
-    return [{ ...toNoodlePostCardModel(post, creator.profile), imageUrl: post.imageUrl }];
+    return [{ ...toSlpPostCardModel(post, creator.profile), imageUrl: post.imageUrl }];
   });
   const emptyWallAd = emptyAd ?? null;
   if (tiles.length === 0) {
@@ -194,7 +194,7 @@ export function SlurpMediaWall({
  * field — the same arrangement `subscriptionPrice` already uses. It cannot ride on the profile,
  * because the audience profile projection is a strict allowlist and must stay one.
  */
-export function noodlerGoalOfProfile(
+export function slpCreatorGoalOfProfile(
   scope: unknown,
 ): { label: string; raised: number; target: number; progress: number; met: boolean } | null {
   const goal = (scope as { goal?: unknown } | null)?.goal;
@@ -615,5 +615,5 @@ export function StageProfileView({
   // ---------------------------------------------------------------------------
 }
 
-export type { NoodlerComposerTool } from "./SlpScreenComposer";
+export type { SlpCreatorComposerTool } from "./SlpScreenComposer";
 export { NoodlerPostComposer };

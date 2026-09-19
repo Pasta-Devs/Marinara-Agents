@@ -3,9 +3,9 @@ import { SLURP_DISCOVERY_TAG_MAX_LENGTH } from "../discovery/slp-discovery-profi
 
 export const slurpPostTypeSchema = z.enum(["post", "story"]);
 export const slurpDiscoveryTagNameSchema = z.string().trim().min(1).max(SLURP_DISCOVERY_TAG_MAX_LENGTH);
-export const NOODLER_FEED_PAGE_SIZE = 20;
+export const SLP_CREATOR_FEED_PAGE_SIZE = 20;
 
-export const noodlerPageCursorSchema = z
+export const slpCreatorPageCursorSchema = z
   .object({
     cursorAt: z.string().datetime().optional(),
     cursorId: z.string().trim().min(1).max(200).optional(),
@@ -15,7 +15,7 @@ export const noodlerPageCursorSchema = z
     "cursorAt and cursorId must be provided together",
   );
 
-export type NoodlerViewerSignalResponse = {
+export type SlpCreatorViewerSignalResponse = {
   count: number;
   revision: {
     latestPost: string | null;

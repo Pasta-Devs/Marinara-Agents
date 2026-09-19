@@ -31,7 +31,7 @@ import { resolveStoredChatOptions } from "../../../services/generation/generatio
 import { clampGenerationMaxOutputTokens } from "../../../services/generation/output-token-limits.js";
 import { parseGameJsonish } from "../../../services/game/jsonish.js";
 import { requireModelAnswer } from "../../base/model/slp-model-answer.js";
-import { noodleSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
+import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
 import {
   SLURP_FAN_VOICE_PROMPT_MAX,
@@ -326,7 +326,7 @@ export async function drainSlurpPendingText(
         }),
         {
           model: connection.model,
-          ...noodleSamplingOptions(
+          ...slpSamplingOptions(
             resolveStoredChatOptions(connection.defaultParameters, connection.provider, connection.model),
             { temperature: 0.95, topP: 0.95 },
           ),

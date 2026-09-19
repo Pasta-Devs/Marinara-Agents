@@ -1,8 +1,8 @@
 import { basename } from "node:path";
 import {
   NOODLER_MEDIA_PREFIX,
-  resolveNoodlerMediaAbsolutePath,
-  unlinkNoodlerMedia,
+  resolveCreatorMediaAbsolutePath,
+  unlinkCreatorMedia,
 } from "../../base/media/slp-media.js";
 
 /**
@@ -38,11 +38,11 @@ export function readGarnishAdMediaPath(adId: string, url: string | null | undefi
 
 export function resolveGarnishAdImageAbsolutePath(adId: string, url: string | null | undefined): string | null {
   const mediaPath = readGarnishAdMediaPath(adId, url);
-  return mediaPath ? resolveNoodlerMediaAbsolutePath(mediaPath) : null;
+  return mediaPath ? resolveCreatorMediaAbsolutePath(mediaPath) : null;
 }
 
 /** Drop an ad's previous artwork once its replacement is stored. */
 export function unlinkGarnishAdImage(adId: string, url: string | null | undefined): void {
   const mediaPath = readGarnishAdMediaPath(adId, url);
-  if (mediaPath) unlinkNoodlerMedia(mediaPath);
+  if (mediaPath) unlinkCreatorMedia(mediaPath);
 }

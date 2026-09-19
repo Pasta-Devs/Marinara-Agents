@@ -88,7 +88,10 @@ assert.match(settings, /allowRandomUsers/u, "the ambient panel must expose the p
 // The restored draft service imported a symbol its neighbour never re-exported, so it could not
 // bundle. Nothing caught that while no route referenced it.
 const draftService = read("server/src/services/slurp/slurp-invited-post-draft.service.ts");
-assert.match(draftService, /import \{ noodlerSourceText \} from "\.\.\/\.\.\/base\/prompting\/slp-prompt-safety\.js"/u);
+assert.match(
+  draftService,
+  /import \{ slpCreatorSourceText \} from "\.\.\/\.\.\/base\/prompting\/slp-prompt-safety\.js"/u,
+);
 
 // The inbox only ever listed threads the player opened. A fan writing to your Creator — or a
 // commission the world opened on their behalf — created a thread nobody could reach, so the whole
@@ -177,7 +180,7 @@ assert.doesNotMatch(read("client/src/localization/locales/en.json"), /estimated 
 // The tier scale shows every tier as an icon with its name, in the header popover and the details panel.
 assert.equal(messages.match(/<SlurpTierLadder /gu)?.length, 2);
 // Popovers portal into the package's scoped root, or the @scope-d stylesheet never reaches them.
-assert.match(read("client/src/components/slurp/NoodleAnchoredPopover.tsx"), /portalContainer \?\? document\.body/u);
+assert.match(read("client/src/components/slurp/SlpAnchoredPopover.tsx"), /portalContainer \?\? document\.body/u);
 // Back from a chat opened elsewhere returns there instead of dropping into the list.
 assert.match(messages, /openedDirectly\.current && onExit/u);
 assert.match(

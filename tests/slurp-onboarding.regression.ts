@@ -33,7 +33,7 @@ assert.match(
 );
 assert.doesNotMatch(panel, /showConfirmDialog/u, "onboarding must not wait on the disconnected host dialog store");
 assert.match(panel, /open=\{providerConfirmationOpen\}[\s\S]*?void performFinish\(\)/u);
-assert.match(panel, /open=\{providerConfirmationOpen\}[\s\S]*?panelStyle=\{getNoodleAccentStyle\(NOODLE_PINK/u);
+assert.match(panel, /open=\{providerConfirmationOpen\}[\s\S]*?panelStyle=\{getSlpAccentStyle\(SLP_PINK/u);
 assert.match(
   panel,
   /const performFinish = async \(\) => \{[\s\S]*?bulkCreate\.mutateAsync\([\s\S]*?\} catch \(error\) \{[\s\S]*?if \(error instanceof Error\) setCreationError\(error\.message\);/u,
@@ -99,7 +99,7 @@ assert.match(
 );
 assert.match(
   routes,
-  /noodleBulkNoodlerAccountCreateSchema\.extend\(\{[\s\S]*?connectionId: z\.string\(\)\.min\(1\)\.nullable\(\)\.optional\(\)/u,
+  /slpBulkCreatorAccountCreateSchema\.extend\(\{[\s\S]*?connectionId: z\.string\(\)\.min\(1\)\.nullable\(\)\.optional\(\)/u,
   "Creator creation must accept the wizard connection override",
 );
 assert.match(

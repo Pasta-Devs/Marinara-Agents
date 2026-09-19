@@ -1,7 +1,7 @@
 import { and, eq, or } from "../../../db/file-query.js";
-import { NoodlePostUnlock } from "@marinara-engine/shared";
+import { SlpPostUnlock } from "../../../../../shared/src/slp/slp-social.types.js";
 import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
-import { noodlerUnlockPriceFromMetadata } from "../../modules/economy/slp-prices.js";
+import { slpCreatorUnlockPriceFromMetadata } from "../../modules/economy/slp-prices.js";
 import {
   applyStipend,
   credit,
@@ -17,8 +17,8 @@ import {
 } from "../../modules/economy/slp-wallet.js";
 import { reverse as reverseEarnings, slurpEarningsKey } from "../../modules/economy/slp-earnings.js";
 import { logger } from "../../../lib/logger.js";
-import { isNoodlerHiddenFromViewer } from "../../base/identity/slp-access.js";
-import { noodleAccounts, noodlePosts, noodlePostUnlocks } from "../../../db/schema/slurp.js";
+import { isCreatorHiddenFromViewer } from "../../base/identity/slp-access.js";
+import { slpAccounts, slpPosts, slpPostUnlocks } from "../../../db/schema/slurp.js";
 import { newId, now } from "../../../utils/id-generator.js";
 import { slurpViewerSettingsKey } from "../host/slp-storage-constants.js";
 import { mapAccount, mapPost, mapPostUnlock } from "../host/slp-storage-mappers.js";
@@ -62,59 +62,59 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
      * survives a refresh.
      *
      */
-    async unlockPost(viewerAccountId: string, postId: string): Promise<NoodlePostUnlock | null> {
+    async unlockPost(viewerAccountId: string, postId: string): Promise<SlpPostUnlock | null> {
       return enqueueFinancial(async () => {
         const viewer = await this.getViewer(viewerAccountId);
         if (!viewer) return null;
         const settings = await this.getSettings();
         let price = 0;
         if (settings.walletEnabled) {
-          const target = (await db.select().from(noodlePosts).where(eq(noodlePosts.id, postId)))[0];
+          const target = (await db.select().from(slpPosts).where(eq(slpPosts.id, postId)))[0];
           if (!target) return null;
-          price = noodlerUnlockPriceFromMetadata(mapPost(target).metadata);
+          price = slpCreatorUnlockPriceFromMetadata(mapPost(target).metadata);
         }
         let created = false;
         const unlock = await db.transaction(async (tx) => {
-          const postRows = await tx.select().from(noodlePosts).where(eq(noodlePosts.id, postId));
+          const postRows = await tx.select().from(slpPosts).where(eq(slpPosts.id, postId));
           const postRow = postRows[0];
           if (!postRow || mapPost(postRow).access !== "locked") {
             return null;
           }
           const authorRows = await tx
             .select()
-            .from(noodleAccounts)
-            .where(and(eq(noodleAccounts.id, postRow.authorAccountId), eq(noodleAccounts.platform, "slurp")));
+            .from(slpAccounts)
+            .where(and(eq(slpAccounts.id, postRow.authorAccountId), eq(slpAccounts.platform, "slurp")));
           const author = authorRows[0] ? mapAccount(authorRows[0]) : null;
           if (
             !author ||
             (author.sourceKind === "persona" && author.sourceEntityId === viewerAccountId) ||
-            isNoodlerHiddenFromViewer(author, viewerAccountId)
+            isCreatorHiddenFromViewer(author, viewerAccountId)
           ) {
             return null;
           }
           const existing = await tx
             .select()
-            .from(noodlePostUnlocks)
-            .where(and(eq(noodlePostUnlocks.viewerAccountId, viewerAccountId), eq(noodlePostUnlocks.postId, postId)));
+            .from(slpPostUnlocks)
+            .where(and(eq(slpPostUnlocks.viewerAccountId, viewerAccountId), eq(slpPostUnlocks.postId, postId)));
           if (existing[0]) return mapPostUnlock(existing[0]);
           const timestamp = now();
           // An already-unlocked post stays idempotent.
           try {
-            await tx.insert(noodlePostUnlocks).values({ id: newId(), viewerAccountId, postId, createdAt: timestamp });
+            await tx.insert(slpPostUnlocks).values({ id: newId(), viewerAccountId, postId, createdAt: timestamp });
             created = true;
           } catch (error) {
             if (!isSlurpFileUniqueConstraintError(error, "slurp2_post_unlocks", ["viewerAccountId", "postId"]))
               throw error;
             const duplicate = await tx
               .select()
-              .from(noodlePostUnlocks)
-              .where(and(eq(noodlePostUnlocks.viewerAccountId, viewerAccountId), eq(noodlePostUnlocks.postId, postId)));
+              .from(slpPostUnlocks)
+              .where(and(eq(slpPostUnlocks.viewerAccountId, viewerAccountId), eq(slpPostUnlocks.postId, postId)));
             return duplicate[0] ? mapPostUnlock(duplicate[0]) : null;
           }
           const rows = await tx
             .select()
-            .from(noodlePostUnlocks)
-            .where(and(eq(noodlePostUnlocks.viewerAccountId, viewerAccountId), eq(noodlePostUnlocks.postId, postId)));
+            .from(slpPostUnlocks)
+            .where(and(eq(slpPostUnlocks.viewerAccountId, viewerAccountId), eq(slpPostUnlocks.postId, postId)));
           return rows[0] ? mapPostUnlock(rows[0]) : null;
         });
         if (unlock && created && settings.walletEnabled) {
@@ -129,7 +129,7 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
           try {
             const charged = spend(wallet, "unlock", price, new Date(), postId);
             if (!charged) return null;
-            const post = (await db.select().from(noodlePosts).where(eq(noodlePosts.id, postId)))[0];
+            const post = (await db.select().from(slpPosts).where(eq(slpPosts.id, postId)))[0];
             if (post) {
               earningsKey = slurpEarningsKey(post.authorAccountId);
               earningsValue = await settingsStore.get(earningsKey);
@@ -162,7 +162,7 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
             if (!paymentCompleted) {
               // Never leave a newly-created row that a retry could mistake for a paid unlock.
               try {
-                await db.delete(noodlePostUnlocks).where(eq(noodlePostUnlocks.id, unlock.id));
+                await db.delete(slpPostUnlocks).where(eq(slpPostUnlocks.id, unlock.id));
               } catch (error) {
                 logger.error(error, "[slurp] unlock cleanup failed for %s", unlock.id);
               }

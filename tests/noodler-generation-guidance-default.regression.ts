@@ -39,7 +39,7 @@ function level(presets: string, name: string): string {
 
 const serverPresets = guidancePresets(storage);
 const serverDefault = level(serverPresets, "steamy");
-assert.doesNotMatch(home, /NOODLER_DEFAULT_GENERATION_GUIDANCE/u);
+assert.doesNotMatch(home, /SLP_CREATOR_DEFAULT_GENERATION_GUIDANCE/u);
 assert.equal(
   guidancePresets(settings),
   serverPresets,
@@ -57,7 +57,7 @@ for (const level of levels)
   assert.match(serverPresets, new RegExp(`\\n  ${level}:\\s+"`, "u"), `missing level: ${level}`);
 assert.match(
   storage,
-  /export const NOODLER_DEFAULT_GENERATION_GUIDANCE: string = SLURP_GUIDANCE_PRESETS\.steamy;/u,
+  /export const SLP_CREATOR_DEFAULT_GENERATION_GUIDANCE: string = SLURP_GUIDANCE_PRESETS\.steamy;/u,
   "the middle level must be the shipped default",
 );
 // The levels must actually differ in explicitness, or the control does nothing.
@@ -74,25 +74,25 @@ assert.doesNotMatch(serverPresets, /normallly/u);
 assert.match(storage, /LEGACY_TYPO_SLURP_DEFAULT_GENERATION_GUIDANCE/u);
 assert.match(storage, /LEGACY_STEAMY_SLURP_DEFAULT_GENERATION_GUIDANCE/u);
 assert.match(storage, /LEGACY_EXPLICIT_SLURP_DEFAULT_GENERATION_GUIDANCE/u);
-assert.match(storage, /LEGACY_NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT/u);
+assert.match(storage, /LEGACY_SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT/u);
 assert.match(serverPresets, /\n  steamy:\s+"[^"]*tits, nipples, ass, pussy, clit, cock, balls, cum/u);
 assert.match(serverPresets, /\n  explicit:\s+"[^"]*tits, nipples, ass, pussy, clit, cock, balls, cum/u);
 assert.doesNotMatch(serverPresets, /\n  mild:\s+"[^"]*tits, nipples, ass/u);
 assert.match(
   storage,
-  /NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT =\n  "[^"]*tits, nipples, ass, pussy, clit, cock, balls, cum/u,
+  /SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT =\n  "[^"]*tits, nipples, ass, pussy, clit, cock, balls, cum/u,
 );
-assert.match(storage, /LEGACY_NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION/u);
+assert.match(storage, /LEGACY_SLP_CREATOR_DEFAULT_IMAGE_PROMPT_INTERPRETATION/u);
 assert.match(
   storage,
-  /NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION =\n  "[^"]*tits, nipples, ass, pussy, clit, cock, balls, cum/u,
+  /SLP_CREATOR_DEFAULT_IMAGE_PROMPT_INTERPRETATION =\n  "[^"]*tits, nipples, ass, pussy, clit, cock, balls, cum/u,
 );
 
 // The exact previously shipped prompt migrates, while any customized value remains untouched.
-assert.match(storage, /LEGACY_NOODLER_DEFAULT_GENERATION_GUIDANCE/u);
-assert.match(storage, /rawRecord\.generationGuidance === LEGACY_NOODLER_DEFAULT_GENERATION_GUIDANCE/u);
+assert.match(storage, /LEGACY_SLP_CREATOR_DEFAULT_GENERATION_GUIDANCE/u);
+assert.match(storage, /rawRecord\.generationGuidance === LEGACY_SLP_CREATOR_DEFAULT_GENERATION_GUIDANCE/u);
 assert.match(storage, /rawRecord\.generationGuidance === LEGACY_STEAMY_SLURP_DEFAULT_GENERATION_GUIDANCE/u);
-assert.match(storage, /rawRecord\.imageGenerationPrompt === LEGACY_NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT/u);
+assert.match(storage, /rawRecord\.imageGenerationPrompt === LEGACY_SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT/u);
 assert.doesNotMatch(generation, /"[^"\n]*NoodleR/u);
 assert.doesNotMatch(stageDraft, /"[^"\n]*NoodleR/u);
 assert.doesNotMatch(replyGeneration, /"[^"\n]*NoodleR/u);
@@ -102,7 +102,7 @@ assert.doesNotMatch(replyGeneration, /"[^"\n]*NoodleR/u);
 assert.match(storage, /const SLURP_SETTINGS_KEY = "slurp2\.settings";/u);
 assert.match(storage, /export const slurpSettingsSchema = z\.object\(/u);
 assert.match(storage, /export type SlurpSettings = z\.infer<typeof slurpSettingsSchema>;/u);
-assert.doesNotMatch(storage, /DEFAULT_NOODLE_SETTINGS|noodleSettingsSchema|NoodleSettingsUpdateInput/u);
+assert.doesNotMatch(storage, /DEFAULT_SLP_SETTINGS|slpSettingsSchema|SlpSettingsUpdateInput/u);
 assert.doesNotMatch(storage, /"noodle\.settings"/u);
 
 // Player-facing copy must not deny the shipped default.
@@ -119,7 +119,7 @@ assert.match(enLocale, /Edit image generation prompt/u);
 assert.match(settings, /SLURP_GUIDANCE_PRESETS\[level\]/u, "the spice picker must apply a shipped level");
 assert.match(settings, /restoreDefaultImagePrompt/u);
 assert.match(settings, /saveImagePrompt/u);
-assert.match(storage, /NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT/u);
+assert.match(storage, /SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT/u);
 assert.match(storage, /rawRecord\.imageGenerationPrompt === undefined \|\|/u);
 assert.match(storage, /rawRecord\.imageGenerationPrompt === ""/u);
 assert.match(settings, /DEFAULT_SLURP_IMAGE_GENERATION_PROMPT/u);

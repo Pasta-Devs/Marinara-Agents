@@ -20,9 +20,9 @@ import { slpNotificationsRoutes } from "./features/notifications/slp-notificatio
 import { slpOnboardingRoutes } from "./features/onboarding/slp-onboarding-routes.js";
 import { slpProjectsRoutes } from "./features/projects/slp-projects-routes.js";
 import { slpCatchUpWorldOnOpen } from "./workflows/slp-world-tick-workflow.js";
-import { startNoodleAutoPostScheduler } from "./features/feed/slp-autopost-scheduler-service.js";
-import { startNoodlerFanActivityScheduler } from "./features/audience/slp-fan-activity-scheduler-service.js";
-import { startNoodleRefreshScheduler } from "./features/feed/slp-refresh-scheduler-service.js";
+import { startSlpAutoPostScheduler } from "./features/feed/slp-autopost-scheduler-service.js";
+import { startCreatorFanActivityScheduler } from "./features/audience/slp-fan-activity-scheduler-service.js";
+import { startSlpRefreshScheduler } from "./features/feed/slp-refresh-scheduler-service.js";
 import { startSlurpMessageScheduler } from "./features/messages/slp-message-scheduler-service.js";
 import { startSlurpFollowUpScheduler } from "./features/messages/slp-follow-up-scheduler-service.js";
 import { startSlurpPaymentRecoveryScheduler } from "./features/economy/slp-payment-recovery-scheduler-service.js";
@@ -130,9 +130,9 @@ export async function activate({
     const firstPostQueue = createSlurpFirstPostQueue(app.db);
     firstPostQueue.start();
     addTeardown(() => firstPostQueue.stop());
-    startNoodleAutoPostScheduler(app, addTeardown);
-    startNoodlerFanActivityScheduler(app, addTeardown);
-    startNoodleRefreshScheduler(app, addTeardown, api.runInternalRoute);
+    startSlpAutoPostScheduler(app, addTeardown);
+    startCreatorFanActivityScheduler(app, addTeardown);
+    startSlpRefreshScheduler(app, addTeardown, api.runInternalRoute);
     startSlurpMessageScheduler(app, addTeardown);
     startSlurpPaymentRecoveryScheduler(app, addTeardown);
     startSlurpFollowUpScheduler(app, addTeardown);

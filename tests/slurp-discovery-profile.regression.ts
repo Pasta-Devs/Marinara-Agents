@@ -5,7 +5,7 @@ import {
   slurpDiscoveryProfileSchema,
   slurpGeneratedDiscoveryProfileSchema,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/discovery/slp-discovery-profile";
-import { normalizeNoodlerStageProfileDraft } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/creators/slp-stage-profile-normalize";
+import { normalizeCreatorStageProfileDraft } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/creators/slp-stage-profile-normalize";
 import { slurp2Source } from "./slurp2-source";
 
 assert.deepEqual(slurpDiscoveryFields(undefined), { gender: null, tags: [] });
@@ -29,7 +29,7 @@ assert.equal(
   "malformed model output must trigger the correction path",
 );
 assert.deepEqual(
-  normalizeNoodlerStageProfileDraft({
+  normalizeCreatorStageProfileDraft({
     name: "Velvet",
     gender_identity: "female",
     categories: ["cosplay", "gaming"],

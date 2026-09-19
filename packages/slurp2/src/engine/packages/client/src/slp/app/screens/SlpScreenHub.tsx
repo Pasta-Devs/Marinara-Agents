@@ -1,4 +1,4 @@
-import { NOODLER_FEED_WINDOW_SIZE } from "./SlpHomeHelpers";
+import { SLP_CREATOR_FEED_WINDOW_SIZE } from "./SlpHomeHelpers";
 import { SlurpMomentsShelf, SlurpMomentViewer } from "./SlpScreenMoments";
 import { SubscriptionSections } from "./SlpScreenSubscriptions";
 import { LayoutGrid, List, Loader2, RefreshCw, Search, UserRound } from "lucide-react";
@@ -12,10 +12,10 @@ import {
   useRecordSlurpAdAction,
   useSlurpInlineAds,
 } from "../../features/ads/slp-ads-hooks";
-import { useNoodlerViewer } from "../../features/feed/slp-feed-viewer-hooks";
+import { useCreatorViewer } from "../../features/feed/slp-feed-viewer-hooks";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { cn } from "../../../lib/utils";
-import { NoodlePostCardCtx } from "../../modules/post/SlpPostCard";
+import { SlpPostCardCtx } from "../../modules/post/SlpPostCard";
 import { SlurpCoinAmount } from "../../modules/coin/SlpCoin";
 import { LockedSlurpPostCard } from "../../modules/post/SlpLockedPostCard";
 import { SlurpCreatorPostCard } from "../../modules/post/SlpCreatorPostCard";
@@ -24,7 +24,7 @@ import {
   SLURP_TOGGLE_ACTIVE_CLASS,
   NewSinceLastVisitDivider,
   HIDE_ON_SCROLL_CLASS,
-  NoodleLogo,
+  SlpLogo,
   useHideOnScroll,
 } from "../../base/chrome/SlpChrome";
 import { SlurpInlineAd } from "../../features/ads/SlpInlineAd";
@@ -33,7 +33,7 @@ import {
   EmptyState,
   SlurpFeedSkeleton,
   SlurpAccessTransition,
-  toNoodlePostCardModel,
+  toSlpPostCardModel,
   errorMessage,
   SlurpPostDialog,
   LoadMoreFeedButton,
@@ -90,7 +90,7 @@ export function ViewerHub({
   personasLoading: boolean;
   personasError: boolean;
   onRetryPersonas: () => void;
-  scope: ReturnType<typeof useNoodlerViewer>["data"];
+  scope: ReturnType<typeof useCreatorViewer>["data"];
   /**
    * Frozen at the moment this persona's feed was first shown, so advancing the stored
    * timestamp does not make the divider vanish under the reader while they are still on it.
@@ -106,7 +106,7 @@ export function ViewerHub({
   onRefresh: () => void;
   isRefreshing: boolean;
   unlockPending: boolean;
-  postCardCtx: NoodlePostCardCtx;
+  postCardCtx: SlpPostCardCtx;
   onUnlock: (postId: string) => void;
   search: string;
   onSearchChange: (value: string) => void;
@@ -130,7 +130,7 @@ export function ViewerHub({
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
   const setStickyHeader = useHideOnScroll(scroller);
   const [discoverCollapsed, setDiscoverCollapsed] = useState(false);
-  const [visibleFeedCount, setVisibleFeedCount] = useState(NOODLER_FEED_WINDOW_SIZE);
+  const [visibleFeedCount, setVisibleFeedCount] = useState(SLP_CREATOR_FEED_WINDOW_SIZE);
   const [activeMomentId, setActiveMomentId] = useState<string | null>(null);
   const [feedLayout, setFeedLayout] = useState<"list" | "wall">("list");
   const [discoverLayout, setDiscoverLayout] = useState<SlurpDiscoverLayout>(() => {
@@ -164,7 +164,7 @@ export function ViewerHub({
   const emptyWallAd = inlineAdsQuery.data?.items?.[0] ?? null;
   const profileKey = (scope?.creators ?? []).map((creator) => creator.profile.id).join("\u0000");
   useEffect(() => {
-    setVisibleFeedCount(NOODLER_FEED_WINDOW_SIZE);
+    setVisibleFeedCount(SLP_CREATOR_FEED_WINDOW_SIZE);
   }, [authorProfile?.id, profileKey, scope?.viewer.id, search, tab]);
   // The visit counts once the feed itself is on screen and loaded — not on app entry, and not
   // while discovery search has replaced it. Declared above the early returns so hook order
@@ -263,7 +263,7 @@ export function ViewerHub({
         />
       ) : (
         <SlurpCreatorPostCard
-          post={toNoodlePostCardModel(post, creator.profile)}
+          post={toSlpPostCardModel(post, creator.profile)}
           ctx={{
             ...feedCardCtx,
             personaAccount: postCardCtx.personaAccount,
@@ -323,7 +323,7 @@ export function ViewerHub({
           >
             {isRefreshing ? <Loader2 size={17} className="animate-spin" /> : <RefreshCw size={17} aria-hidden="true" />}
           </button>
-          <NoodleLogo className="pointer-events-none absolute start-1/2 h-9 w-14 -translate-x-1/2 rtl:translate-x-1/2" />
+          <SlpLogo className="pointer-events-none absolute start-1/2 h-9 w-14 -translate-x-1/2 rtl:translate-x-1/2" />
           {/* ponytail: placeholder balance, wire to the real wallet when there is one. */}
           {/* The desktop sidebar carries the same balance, so it only shows where there is no sidebar. */}
           <button
@@ -523,7 +523,7 @@ export function ViewerHub({
               }
               onLoadMore={
                 visibleFeed.length < feed.length
-                  ? () => setVisibleFeedCount((count) => Math.min(feed.length, count + NOODLER_FEED_WINDOW_SIZE))
+                  ? () => setVisibleFeedCount((count) => Math.min(feed.length, count + SLP_CREATOR_FEED_WINDOW_SIZE))
                   : undefined
               }
               total={feed.length}
@@ -594,7 +594,7 @@ export function ViewerHub({
                   visible={visibleFeed.length}
                   total={feed.length}
                   onLoadMore={() =>
-                    setVisibleFeedCount((count) => Math.min(feed.length, count + NOODLER_FEED_WINDOW_SIZE))
+                    setVisibleFeedCount((count) => Math.min(feed.length, count + SLP_CREATOR_FEED_WINDOW_SIZE))
                   }
                 />
               )}
@@ -620,7 +620,7 @@ export function ViewerHub({
       {openPostItem?.post.imageUrl && (
         <SlurpPostDialog
           post={{
-            ...toNoodlePostCardModel(openPostItem.post, openPostItem.creator.profile),
+            ...toSlpPostCardModel(openPostItem.post, openPostItem.creator.profile),
             imageUrl: openPostItem.post.imageUrl,
           }}
           ctx={postCardCtx}

@@ -23,7 +23,7 @@ async function main() {
   assert.match(generator, /Return only one JSON object/u);
 
   // #128: feedback must not depend on per-call mutate() callbacks, which die with the caller.
-  const hook = hooks.slice(hooks.indexOf("export function useRefreshNoodlerConversationSchedule"));
+  const hook = hooks.slice(hooks.indexOf("export function useRefreshCreatorConversationSchedule"));
   const hookBody = hook.slice(0, hook.indexOf("\nexport function"));
   assert.match(hookBody, /toast\.success/u, "schedule refresh success toast must live in the hook");
   assert.match(hookBody, /toast\.error/u, "schedule refresh error toast must live in the hook");

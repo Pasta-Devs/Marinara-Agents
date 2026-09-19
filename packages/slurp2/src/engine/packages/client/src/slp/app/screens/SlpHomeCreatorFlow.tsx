@@ -1,6 +1,6 @@
 import { EMPTY_STAGE_PROFILE } from "./SlpHomeHelpers";
-import { NoodleShell } from "../../modules/chrome/SlpShell";
-import { EMPTY_NOODLER_POST_DRAFT, errorMessage, NoodlerFrame } from "./SlpHomeHelpers";
+import { SlpShell } from "../../modules/chrome/SlpShell";
+import { EMPTY_SLP_CREATOR_POST_DRAFT, errorMessage, SlpCreatorFrame } from "./SlpHomeHelpers";
 import { StageProfileSourcePicker, DisclosureStep } from "./SlpScreenCreateProfile";
 import { toast } from "sonner";
 import { StageProfileForm } from "../../features/creators/SlpStageProfileForm";
@@ -9,12 +9,12 @@ import { cn } from "../../../lib/utils";
 import { SlurpCreatorProfileCard } from "../../modules/creator/SlpCreatorProfileCard";
 import { StageProfileView } from "./SlpScreenProfile";
 import type { ReactNode } from "react";
-import type { NoodleShellProps } from "../../modules/chrome/slp-shell.types";
+import type { SlpShellProps } from "../../modules/chrome/slp-shell.types";
 import type { useSlurpHomeState } from "../slp-home-actions";
 
 export type SlurpHomeHostView = {
   model: ReturnType<typeof useSlurpHomeState>;
-  shellProps: Omit<NoodleShellProps, "children">;
+  shellProps: Omit<SlpShellProps, "children">;
   reviewModal: ReactNode;
   feedRightRail?: ReactNode;
   showDiscovery?: boolean;
@@ -108,8 +108,8 @@ export function renderSlurpHomeCreatorFlow({
   } = model;
   if (creationStep === "source") {
     return (
-      <NoodleShell {...shellProps}>
-        <NoodlerFrame
+      <SlpShell {...shellProps}>
+        <SlpCreatorFrame
           onBack={() => setCreationStep(null)}
           title={localizeUi("ui.noodle.noodlehome.createStageProfile")}
           hideBack
@@ -134,15 +134,15 @@ export function renderSlurpHomeCreatorFlow({
             onBack={cancelCreateProfile}
             onContinue={() => setCreationStep("disclosure")}
           />
-        </NoodlerFrame>
-      </NoodleShell>
+        </SlpCreatorFrame>
+      </SlpShell>
     );
   }
 
   if (creationStep === "disclosure") {
     return (
-      <NoodleShell {...shellProps}>
-        <NoodlerFrame
+      <SlpShell {...shellProps}>
+        <SlpCreatorFrame
           onBack={cancelCreateProfile}
           title={localizeUi("ui.noodle.noodlerhome.setIdentityDisclosure")}
           hideBack
@@ -158,8 +158,8 @@ export function renderSlurpHomeCreatorFlow({
             }
             onContinue={() => setCreationStep("draft")}
           />
-        </NoodlerFrame>
-      </NoodleShell>
+        </SlpCreatorFrame>
+      </SlpShell>
     );
   }
 
@@ -171,8 +171,12 @@ export function renderSlurpHomeCreatorFlow({
       onNavigate({ mode: "creator", view: "profile", accountId });
     };
     return (
-      <NoodleShell {...shellProps}>
-        <NoodlerFrame onBack={finishSetup} title={localizeUi("ui.noodle.stageprofileview.automaticPosting")} hideBack>
+      <SlpShell {...shellProps}>
+        <SlpCreatorFrame
+          onBack={finishSetup}
+          title={localizeUi("ui.noodle.stageprofileview.automaticPosting")}
+          hideBack
+        >
           <div className="mx-auto max-w-md space-y-5 p-4">
             <div className="space-y-1">
               <p className="text-sm font-bold">
@@ -213,15 +217,15 @@ export function renderSlurpHomeCreatorFlow({
               </button>
             </div>
           </div>
-        </NoodlerFrame>
-      </NoodleShell>
+        </SlpCreatorFrame>
+      </SlpShell>
     );
   }
 
   if ((profileDraft || creationStep === "draft") && !editingProfileId) {
     return (
-      <NoodleShell {...shellProps}>
-        <NoodlerFrame
+      <SlpShell {...shellProps}>
+        <SlpCreatorFrame
           onBack={editingProfileId ? closeProfileEditor : () => setCreationStep("disclosure")}
           title={
             editingProfileId
@@ -299,8 +303,8 @@ export function renderSlurpHomeCreatorFlow({
             onCancel={editingProfileId ? closeProfileEditor : cancelCreateProfile}
             onSave={saveProfile}
           />
-        </NoodlerFrame>
-      </NoodleShell>
+        </SlpCreatorFrame>
+      </SlpShell>
     );
   }
 
@@ -392,7 +396,7 @@ export function renderSlurpHomeCreatorFlow({
       </aside>
     ) : undefined;
     return (
-      <NoodleShell {...shellProps} contextualRail={profileRail ? "populated" : "spanning"} rightRail={profileRail}>
+      <SlpShell {...shellProps} contextualRail={profileRail ? "populated" : "spanning"} rightRail={profileRail}>
         <div className="h-full min-h-0 overflow-y-auto">
           <StageProfileView
             key={`${selectedProfile.id}:${shellPersonaAccount?.id ?? "no-viewer"}`}
@@ -417,7 +421,7 @@ export function renderSlurpHomeCreatorFlow({
             viewerIsLoading={Boolean(viewerPersonaId) && !viewerQuery.data && viewerQuery.isLoading}
             viewerIsError={Boolean(viewerPersonaId) && !viewerQuery.data && viewerQuery.isError}
             onRetryViewer={() => void viewerQuery.refetch()}
-            draft={noodlerPostDrafts[selectedProfile.id] ?? EMPTY_NOODLER_POST_DRAFT}
+            draft={noodlerPostDrafts[selectedProfile.id] ?? EMPTY_SLP_CREATOR_POST_DRAFT}
             onDraftChange={(patch) => updateNoodlerPostDraft(selectedProfile.id, patch)}
             onClearDraft={() => clearNoodlerPostDraft(selectedProfile.id)}
             onDiscardDraft={() => clearNoodlerPostDraft(selectedProfile.id)}
@@ -465,7 +469,7 @@ export function renderSlurpHomeCreatorFlow({
           />
         </div>
         {reviewModal}
-      </NoodleShell>
+      </SlpShell>
     );
   }
   return null;

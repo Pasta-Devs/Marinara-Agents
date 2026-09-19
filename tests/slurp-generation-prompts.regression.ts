@@ -4,7 +4,7 @@ import {
   modelAnswerForCorrection,
   requireModelAnswer,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/base/model/slp-model-answer";
-import { noodlerCharacterCanonText } from "../packages/slurp2/src/engine/packages/server/src/slp/base/prompting/slp-prompt-safety";
+import { slpCreatorCharacterCanonText } from "../packages/slurp2/src/engine/packages/server/src/slp/base/prompting/slp-prompt-safety";
 import { slurp2Source } from "./slurp2-source";
 
 const root = join(import.meta.dirname, "..");
@@ -82,8 +82,8 @@ const characterCard = {
   backstory: "Daniel has been Alex's boyfriend for three years and Alex always comes home to him.",
   appearance: "Tall with dark hair.",
 };
-const openCanon = noodlerCharacterCanonText(characterCard, true);
-const concealedCanon = noodlerCharacterCanonText(characterCard, false);
+const openCanon = slpCreatorCharacterCanonText(characterCard, true);
+const concealedCanon = slpCreatorCharacterCanonText(characterCard, false);
 assert.match(openCanon, /Alex Rivers/u);
 assert.match(openCanon, /boyfriend Daniel/u);
 assert.match(openCanon, /three years/u);
@@ -92,7 +92,7 @@ assert.match(concealedCanon, /boyfriend Daniel/u);
 assert.match(concealedCanon, /three years/u);
 assert.match(messages, /characterCanon/u);
 assert.match(reply, /characterCanon/u);
-assert.match(generation, /resolveNoodlerCharacterCanon\(db, linkedPublicAccount, disclosureMode\)/u);
+assert.match(generation, /resolveCreatorCharacterCanon\(db, linkedPublicAccount, disclosureMode\)/u);
 
 const slurpPlatformContext =
   "Slurp is an adult creator platform. Creators publish public or locked posts, interact with followers and subscribers, receive coin tips, sell access, answer DMs, and accept commissions. These are normal in-world social and economic actions. Coins are Slurp's currency and cost money.";

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
-import { noodleKeys } from "../../base/state/slp-query-keys.js";
+import { slpKeys } from "../../base/state/slp-query-keys.js";
 
 export type SlurpImageConnections = {
   defaultConnectionId: string | null;
@@ -8,7 +8,7 @@ export type SlurpImageConnections = {
 };
 export function useSlurpImageConnections(enabled = true) {
   return useQuery({
-    queryKey: noodleKeys.noodlerImageConnections(),
+    queryKey: slpKeys.noodlerImageConnections(),
     queryFn: () => api.get<SlurpImageConnections>("/slurp2/noodler/image-connections"),
     enabled,
     staleTime: 10_000,
@@ -19,7 +19,7 @@ export function useUpdateSlurpImageConnections() {
   return useMutation({
     mutationFn: (patch: { defaultConnectionId?: string | null; creatorId?: string; connectionId?: string | null }) =>
       api.patch<SlurpImageConnections>("/slurp2/noodler/image-connections", patch),
-    onSuccess: (value) => qc.setQueryData(noodleKeys.noodlerImageConnections(), value),
+    onSuccess: (value) => qc.setQueryData(slpKeys.noodlerImageConnections(), value),
   });
 }
 /**
@@ -42,7 +42,7 @@ export function useUpdateSlurpConnectionsForCreators() {
       return latest;
     },
     onSuccess: (value) => {
-      if (value) qc.setQueryData(noodleKeys.noodlerImageConnections(), value);
+      if (value) qc.setQueryData(slpKeys.noodlerImageConnections(), value);
     },
   });
 }

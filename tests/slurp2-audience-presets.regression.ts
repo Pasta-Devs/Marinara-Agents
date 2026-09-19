@@ -9,7 +9,7 @@ import {
   slurpAudiencePresetPatch,
 } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-tuning.js";
 import { SLURP_REALISTIC_TUNING } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-tuning.js";
-import { populationNoodlerFanIdentityProvider } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-fan-identity-provider.js";
+import { populationCreatorFanIdentityProvider } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-fan-identity-provider.js";
 import { slurp2Source } from "./slurp2-source";
 
 // The storage module pulls in the database layer, so its shipped numbers are read as text.
@@ -46,7 +46,7 @@ assert.equal(lively.simulationTuning?.prompts.fanActivityExtra, "keep me", "a pr
 assert.equal(lively.simulationTuning?.clock.backgroundTimer, true, "a preset must keep the background timer");
 assert.equal(lively.simulationTuning?.preset, "lively");
 
-const [member] = populationNoodlerFanIdentityProvider([
+const [member] = populationCreatorFanIdentityProvider([
   {
     id: "slurp-fan:t",
     handle: "sharp",

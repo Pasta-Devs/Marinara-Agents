@@ -1,7 +1,7 @@
 import { Lock } from "lucide-react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import type { ReactNode } from "react";
-import type { NoodlerPostView } from "@marinara-engine/shared";
+import type { SlpCreatorPostView } from "../../../../../shared/src/slp/slp-social.types.js";
 
 type StoryCreator = {
   profile: {
@@ -13,7 +13,7 @@ type StoryCreator = {
 
 export type SlpStoryTileProps = {
   creator: StoryCreator;
-  post: Pick<NoodlerPostView, "id" | "imageUrl" | "locked">;
+  post: Pick<SlpCreatorPostView, "id" | "imageUrl" | "locked">;
   mediaSrc: string | null;
   fallback: ReactNode;
   isNew: boolean;

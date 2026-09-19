@@ -1,15 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { NoodleIdentityDisclosure, NoodlerRefreshNowOutcome, NoodlerStageProfile } from "@marinara-engine/shared";
-import { NOODLER_BULK_ACCOUNT_MAX, resolveNoodlerOnboardingCompletion } from "@marinara-engine/shared";
+import type {
+  SlpCreatorRefreshNowOutcome,
+  SlpCreatorStageProfile,
+  SlpIdentityDisclosure,
+} from "../../../../../shared/src/slp/slp-social.types.js";
+import { resolveCreatorOnboardingCompletion } from "../../../../../shared/src/slp/slp-creator-onboarding.js";
+import { SLP_CREATOR_BULK_ACCOUNT_MAX } from "../../../../../shared/src/slp/slp-social.schema.js";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { useSlurpConnections } from "../../base/state/slp-host-connections";
 import {
-  useBulkCreateNoodlerStageProfiles,
-  useNoodlerEligibleAccounts,
-  useRefreshTargetedNoodlerCreatorsNow,
+  useBulkCreateCreatorStageProfiles,
+  useCreatorEligibleAccounts,
+  useRefreshTargetedCreatorsNow,
 } from "../creators/slp-creators-contract";
-import { useEnqueueNoodlerFirstPosts, useNoodlerFirstPostStatus } from "./slp-first-post-hooks";
+import { useEnqueueCreatorFirstPosts, useCreatorFirstPostStatus } from "./slp-first-post-hooks";
 import { useUpdateSlurpConnectionsForCreators } from "../media/slp-media-contract";
 import { useSlurpSettings, useUpdateSlurpSettings } from "../settings/slp-settings-contract";
 import { generateClientId } from "../../../lib/utils";
@@ -40,10 +45,10 @@ import {
 export function useSlurpOnboardingWizardModel(props: WizardProps) {
   const { open, selectionOnly = false, onClose, onComplete, onSeeFeed, onSkipped } = props;
   const { t } = useUiTranslation();
-  const eligible = useNoodlerEligibleAccounts("", "all", open);
-  const bulkCreate = useBulkCreateNoodlerStageProfiles();
-  const refreshTargeted = useRefreshTargetedNoodlerCreatorsNow();
-  const enqueueFirstPosts = useEnqueueNoodlerFirstPosts();
+  const eligible = useCreatorEligibleAccounts("", "all", open);
+  const bulkCreate = useBulkCreateCreatorStageProfiles();
+  const refreshTargeted = useRefreshTargetedCreatorsNow();
+  const enqueueFirstPosts = useEnqueueCreatorFirstPosts();
   const assignImageConnections = useUpdateSlurpConnectionsForCreators();
   const updateSlurpSettings = useUpdateSlurpSettings();
   const connectionsQuery = useSlurpConnections(open);
@@ -56,8 +61,8 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
   const [activityChoice, setActivityChoice] = useState<SlurpActivityPreset | null>(SLURP_DEFAULT_ACTIVITY_PRESET);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectionInitialized, setSelectionInitialized] = useState(false);
-  const [disclosure, setDisclosure] = useState<NoodleIdentityDisclosure>("open");
-  const [exceptions, setExceptions] = useState<Record<string, NoodleIdentityDisclosure>>({});
+  const [disclosure, setDisclosure] = useState<SlpIdentityDisclosure>("open");
+  const [exceptions, setExceptions] = useState<Record<string, SlpIdentityDisclosure>>({});
   const [autoPostingEnabled, setAutoPostingEnabled] = useState(true);
   const [postsPerDay, setPostsPerDay] = useState(DEFAULT_POSTS_PER_DAY);
   // Typed value kept apart from the committed one: clamping per keystroke made the first digit
@@ -77,13 +82,13 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
   const [creationReasons, setCreationReasons] = useState<{ accountId: string; reason: string }[]>([]);
   const [generationConnectionId, setGenerationConnectionId] = useState("");
   const [settingsSeeded, setSettingsSeeded] = useState(false);
-  const [outcomes, setOutcomes] = useState<NoodlerRefreshNowOutcome[]>([]);
+  const [outcomes, setOutcomes] = useState<SlpCreatorRefreshNowOutcome[]>([]);
   const [completion, setCompletion] = useState<CompletionKind | null>(null);
   const [executionId, setExecutionId] = useState("");
   const [firstPostsQueued, setFirstPostsQueued] = useState(false);
   const [providerConfirmationOpen, setProviderConfirmationOpen] = useState(false);
   const completionHeadingRef = useRef<HTMLHeadingElement>(null);
-  const demoProfile: NoodlerStageProfile = {
+  const demoProfile: SlpCreatorStageProfile = {
     ...DEMO_PROFILE,
     displayName:
       disclosure === "open"
@@ -127,7 +132,7 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
     setFirstPostsQueued(false);
   }, [open, selectionOnly]);
 
-  const firstPostStatus = useNoodlerFirstPostStatus(executionId, step === 5 && firstPostsQueued);
+  const firstPostStatus = useCreatorFirstPostStatus(executionId, step === 5 && firstPostsQueued);
 
   useEffect(() => {
     if (!open || settingsSeeded || !settingsQuery.data || !connectionsQuery.data) return;
@@ -160,14 +165,14 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
     setSelectionInitialized(true);
   }, [accounts, eligible.hasNextPage, eligible.isLoading, open, selectionInitialized]);
 
-  // One bulk request carries at most NOODLER_BULK_ACCOUNT_MAX accounts, so the selection is
+  // One bulk request carries at most SLP_CREATOR_BULK_ACCOUNT_MAX accounts, so the selection is
   // capped here: rejecting the whole request after the fact loses every choice the user made.
-  const selectionFull = selected.size >= NOODLER_BULK_ACCOUNT_MAX;
+  const selectionFull = selected.size >= SLP_CREATOR_BULK_ACCOUNT_MAX;
   const toggleSelected = (id: string) => {
     setSelected((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id);
-      else if (next.size < NOODLER_BULK_ACCOUNT_MAX) next.add(id);
+      else if (next.size < SLP_CREATOR_BULK_ACCOUNT_MAX) next.add(id);
       return next;
     });
   };
@@ -192,11 +197,11 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
     selectedCount: number;
     createdCount: number;
     createFailures: number;
-    outcomes: NoodlerRefreshNowOutcome[] | null;
+    outcomes: SlpCreatorRefreshNowOutcome[] | null;
   }): CompletionKind =>
-    input.createdCount === 0 && input.createFailures > 0 ? "creationFailed" : resolveNoodlerOnboardingCompletion(input);
+    input.createdCount === 0 && input.createFailures > 0 ? "creationFailed" : resolveCreatorOnboardingCompletion(input);
   const finalizeOutcomes = (
-    next: NoodlerRefreshNowOutcome[],
+    next: SlpCreatorRefreshNowOutcome[],
     createFailures = creationFailures,
     createdCount = createdIds.length,
     settingsSaved = !settingsFailed,

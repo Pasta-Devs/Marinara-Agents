@@ -1,23 +1,23 @@
 import { and, eq, inArray, lt, or } from "../../../../db/file-query.js";
-import { unlinkNoodlerMedia } from "../../../base/media/slp-media.js";
+import { unlinkCreatorMedia } from "../../../base/media/slp-media.js";
 import {
-  noodleAccounts,
-  noodlePosts,
-  noodlerAutomaticAttempts,
-  noodlerPreparedPosts,
-  noodlerReserveState,
+  slpAccounts,
+  slpPosts,
+  slpCreatorAutomaticAttempts,
+  slpCreatorPreparedPosts,
+  slpCreatorReserveState,
 } from "../../../../db/schema/slurp.js";
 import { newId, now } from "../../../../utils/id-generator.js";
 import {
   hasSlurpCreatorPostingIntervalConflict,
   slurpCreatorPostingIntervalMs,
 } from "../../../modules/feed/slp-posting-interval.js";
-import { NOODLER_RESERVE_STATE_ID, ROLLING_DAY_MS } from "../../host/slp-storage-constants.js";
-import { noodlerReservePolicyFingerprint, parseRecord } from "../../../modules/records/slp-storage-model.js";
+import { SLP_CREATOR_RESERVE_STATE_ID, ROLLING_DAY_MS } from "../../host/slp-storage-constants.js";
+import { slpCreatorReservePolicyFingerprint, parseRecord } from "../../../modules/records/slp-storage-model.js";
 import type {
-  NoodlerPreparedPostPayload,
-  NoodlerPreparedPostState,
-  NoodlerPreparedImageState,
+  SlpCreatorPreparedPostPayload,
+  SlpCreatorPreparedPostState,
+  SlpCreatorPreparedImageState,
 } from "../../../modules/records/slp-storage-model.js";
 import { mapAccount } from "../../host/slp-storage-mappers.js";
 import type { SlurpStorageContext } from "../../host/slp-storage-context.js";
@@ -57,7 +57,10 @@ export function createReserveStorage1(context: SlurpStorageContext) {
     }> {
       return db.transaction(async (tx) => {
         const existing = (
-          await tx.select().from(noodlerReserveState).where(eq(noodlerReserveState.id, NOODLER_RESERVE_STATE_ID))
+          await tx
+            .select()
+            .from(slpCreatorReserveState)
+            .where(eq(slpCreatorReserveState.id, SLP_CREATOR_RESERVE_STATE_ID))
         )[0];
         // Imported or hand-edited state can carry timestamps that do not parse. NaN would
         // propagate into every budget and hold comparison, so an unreadable value resets to now.
@@ -74,15 +77,15 @@ export function createReserveStorage1(context: SlurpStorageContext) {
               : existing.preparationNotBefore;
           if (observed !== existing.lastObservedBudgetTime || preparationNotBefore !== existing.preparationNotBefore) {
             await tx
-              .update(noodlerReserveState)
+              .update(slpCreatorReserveState)
               .set({ lastObservedBudgetTime: observed, preparationNotBefore, updatedAt: at.toISOString() })
-              .where(eq(noodlerReserveState.id, NOODLER_RESERVE_STATE_ID));
+              .where(eq(slpCreatorReserveState.id, SLP_CREATOR_RESERVE_STATE_ID));
           }
           return { lastObservedBudgetTime: observed, preparationNotBefore };
         }
         const timestamp = at.toISOString();
-        await tx.insert(noodlerReserveState).values({
-          id: NOODLER_RESERVE_STATE_ID,
+        await tx.insert(slpCreatorReserveState).values({
+          id: SLP_CREATOR_RESERVE_STATE_ID,
           lastObservedBudgetTime: timestamp,
           preparationNotBefore: timestamp,
           createdAt: timestamp,
@@ -98,12 +101,15 @@ export function createReserveStorage1(context: SlurpStorageContext) {
     ): Promise<{ status: "claimed"; claimId: string; claimedAt: string } | { status: "exhausted" | "holding" }> {
       return db.transaction(async (tx) => {
         let state = (
-          await tx.select().from(noodlerReserveState).where(eq(noodlerReserveState.id, NOODLER_RESERVE_STATE_ID))
+          await tx
+            .select()
+            .from(slpCreatorReserveState)
+            .where(eq(slpCreatorReserveState.id, SLP_CREATOR_RESERVE_STATE_ID))
         )[0];
         if (!state) {
           const timestamp = at.toISOString();
-          await tx.insert(noodlerReserveState).values({
-            id: NOODLER_RESERVE_STATE_ID,
+          await tx.insert(slpCreatorReserveState).values({
+            id: SLP_CREATOR_RESERVE_STATE_ID,
             lastObservedBudgetTime: timestamp,
             preparationNotBefore: timestamp,
             createdAt: timestamp,
@@ -118,9 +124,9 @@ export function createReserveStorage1(context: SlurpStorageContext) {
         const effectiveIso = new Date(effectiveMs).toISOString();
         if (effectiveIso !== state.lastObservedBudgetTime) {
           await tx
-            .update(noodlerReserveState)
+            .update(slpCreatorReserveState)
             .set({ lastObservedBudgetTime: effectiveIso, updatedAt: at.toISOString() })
-            .where(eq(noodlerReserveState.id, NOODLER_RESERVE_STATE_ID));
+            .where(eq(slpCreatorReserveState.id, SLP_CREATOR_RESERVE_STATE_ID));
           state = { ...state, lastObservedBudgetTime: effectiveIso };
         }
         const notBefore = Date.parse(state.preparationNotBefore);
@@ -131,8 +137,8 @@ export function createReserveStorage1(context: SlurpStorageContext) {
         // counts them: they can never affect the budget again, and the ledger is scanned
         // on every claim.
         const cutoffIso = new Date(cutoff).toISOString();
-        await tx.delete(noodlerAutomaticAttempts).where(lt(noodlerAutomaticAttempts.claimedAt, cutoffIso));
-        const attempts = (await tx.select().from(noodlerAutomaticAttempts)).filter(
+        await tx.delete(slpCreatorAutomaticAttempts).where(lt(slpCreatorAutomaticAttempts.claimedAt, cutoffIso));
+        const attempts = (await tx.select().from(slpCreatorAutomaticAttempts)).filter(
           // A failed attempt (provider error, moderation reject, timeout) never produced a
           // post, so it must not permanently burn a slot out of the rolling-day budget: image
           // generation fails far more often than text, and without this a handful of image
@@ -141,7 +147,7 @@ export function createReserveStorage1(context: SlurpStorageContext) {
         );
         if (attempts.length >= limit) return { status: "exhausted" };
         const claimId = newId();
-        await tx.insert(noodlerAutomaticAttempts).values({
+        await tx.insert(slpCreatorAutomaticAttempts).values({
           id: claimId,
           kind,
           claimedAt: effectiveIso,
@@ -151,13 +157,13 @@ export function createReserveStorage1(context: SlurpStorageContext) {
       });
     },
     async completeNoodlerAutomaticAttempt(claimId: string, outcome: "completed" | "failed"): Promise<void> {
-      await db.update(noodlerAutomaticAttempts).set({ outcome }).where(eq(noodlerAutomaticAttempts.id, claimId));
+      await db.update(slpCreatorAutomaticAttempts).set({ outcome }).where(eq(slpCreatorAutomaticAttempts.id, claimId));
     },
     async createNoodlerPreparedPost(input: {
       creatorAccountId: string;
       generatedAt: string;
       publishAt: string;
-      payload: NoodlerPreparedPostPayload;
+      payload: SlpCreatorPreparedPostPayload;
       policyFingerprint: string;
     }): Promise<string> {
       const id = newId();
@@ -165,7 +171,7 @@ export function createReserveStorage1(context: SlurpStorageContext) {
       // durable-on-commit table): a direct insert rides the batched flush, and a crash inside
       // that window loses the row while its promoted media file stays on disk.
       await db.transaction(async (tx) =>
-        tx.insert(noodlerPreparedPosts).values({
+        tx.insert(slpCreatorPreparedPosts).values({
           id,
           creatorAccountId: input.creatorAccountId,
           generatedAt: input.generatedAt,
@@ -192,14 +198,11 @@ export function createReserveStorage1(context: SlurpStorageContext) {
       return db.transaction(async (tx) => {
         const settings = await this.getSettings();
         const publishMs = Date.parse(input.publishAt);
-        const posts = await tx
-          .select()
-          .from(noodlePosts)
-          .where(eq(noodlePosts.authorAccountId, input.creatorAccountId));
+        const posts = await tx.select().from(slpPosts).where(eq(slpPosts.authorAccountId, input.creatorAccountId));
         const prepared = await tx
           .select()
-          .from(noodlerPreparedPosts)
-          .where(eq(noodlerPreparedPosts.creatorAccountId, input.creatorAccountId));
+          .from(slpCreatorPreparedPosts)
+          .where(eq(slpCreatorPreparedPosts.creatorAccountId, input.creatorAccountId));
         const activityTimes = [
           ...posts.map((post) => Date.parse(post.createdAt)),
           ...prepared
@@ -207,7 +210,7 @@ export function createReserveStorage1(context: SlurpStorageContext) {
             .map((item) => Date.parse(item.publishAt)),
         ];
         if (hasSlurpCreatorPostingIntervalConflict(activityTimes, publishMs, settings.postsPerDay)) return null;
-        await tx.insert(noodlerPreparedPosts).values({
+        await tx.insert(slpCreatorPreparedPosts).values({
           id,
           creatorAccountId: input.creatorAccountId,
           generatedAt: input.createdAt,
@@ -229,15 +232,15 @@ export function createReserveStorage1(context: SlurpStorageContext) {
       input: {
         generatedAt: string;
         expectedPublishAt: string;
-        payload: NoodlerPreparedPostPayload;
+        payload: SlpCreatorPreparedPostPayload;
         policyFingerprint: string;
       },
     ): Promise<boolean> {
       return db.transaction(async (tx) => {
-        const current = (await tx.select().from(noodlerPreparedPosts).where(eq(noodlerPreparedPosts.id, id)))[0];
+        const current = (await tx.select().from(slpCreatorPreparedPosts).where(eq(slpCreatorPreparedPosts.id, id)))[0];
         if (!current || current.state !== "scheduled" || current.publishAt !== input.expectedPublishAt) return false;
         await tx
-          .update(noodlerPreparedPosts)
+          .update(slpCreatorPreparedPosts)
           .set({
             generatedAt: input.generatedAt,
             payload: JSON.stringify(input.payload),
@@ -248,7 +251,7 @@ export function createReserveStorage1(context: SlurpStorageContext) {
             imageClaimLeaseUntil: null,
             updatedAt: input.generatedAt,
           })
-          .where(eq(noodlerPreparedPosts.id, id));
+          .where(eq(slpCreatorPreparedPosts.id, id));
         return true;
       });
     },
@@ -262,15 +265,15 @@ export function createReserveStorage1(context: SlurpStorageContext) {
       const settings = await this.getSettings();
       let mediaPath: string | null = null;
       const result = await db.transaction(async (tx) => {
-        const current = (await tx.select().from(noodlerPreparedPosts).where(eq(noodlerPreparedPosts.id, id)))[0];
+        const current = (await tx.select().from(slpCreatorPreparedPosts).where(eq(slpCreatorPreparedPosts.id, id)))[0];
         if (!current) return "not_found" as const;
         if (current.state !== "scheduled" && current.state !== "prepared") return "not_editable" as const;
         const [posts, activeSlots] = await Promise.all([
-          tx.select().from(noodlePosts).where(eq(noodlePosts.authorAccountId, current.creatorAccountId)),
+          tx.select().from(slpPosts).where(eq(slpPosts.authorAccountId, current.creatorAccountId)),
           tx
             .select()
-            .from(noodlerPreparedPosts)
-            .where(eq(noodlerPreparedPosts.creatorAccountId, current.creatorAccountId)),
+            .from(slpCreatorPreparedPosts)
+            .where(eq(slpCreatorPreparedPosts.creatorAccountId, current.creatorAccountId)),
         ]);
         const activityTimes = [
           ...posts.map((post) => Date.parse(post.createdAt)),
@@ -284,20 +287,18 @@ export function createReserveStorage1(context: SlurpStorageContext) {
         if (current.state === "prepared") {
           mediaPath = String(parseRecord(parseRecord(current.payload).metadata).noodlerMediaPath ?? "") || null;
         }
-        const accountRow = (
-          await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, current.creatorAccountId))
-        )[0];
+        const accountRow = (await tx.select().from(slpAccounts).where(eq(slpAccounts.id, current.creatorAccountId)))[0];
         if (!accountRow || accountRow.platform !== "slurp") return "not_found" as const;
         const account = mapAccount(accountRow);
         const source = await this.resolveAccountSource(account);
         const timestamp = at.toISOString();
         await tx
-          .update(noodlerPreparedPosts)
+          .update(slpCreatorPreparedPosts)
           .set({
             publishAt: new Date(publishMs).toISOString(),
             generatedAt: timestamp,
             payload: "{}",
-            policyFingerprint: noodlerReservePolicyFingerprint(account, settings, source?.updatedAt ?? null),
+            policyFingerprint: slpCreatorReservePolicyFingerprint(account, settings, source?.updatedAt ?? null),
             state: "scheduled",
             publishedPostId: null,
             imageState: "none",
@@ -305,10 +306,10 @@ export function createReserveStorage1(context: SlurpStorageContext) {
             imageClaimLeaseUntil: null,
             updatedAt: timestamp,
           })
-          .where(eq(noodlerPreparedPosts.id, id));
+          .where(eq(slpCreatorPreparedPosts.id, id));
         return "updated" as const;
       });
-      if (result === "updated") unlinkNoodlerMedia(mediaPath);
+      if (result === "updated") unlinkCreatorMedia(mediaPath);
       return result;
     },
     async listNoodlerPreparedPosts(): Promise<
@@ -317,35 +318,35 @@ export function createReserveStorage1(context: SlurpStorageContext) {
         creatorAccountId: string;
         generatedAt: string;
         publishAt: string;
-        payload: NoodlerPreparedPostPayload;
+        payload: SlpCreatorPreparedPostPayload;
         policyFingerprint: string;
-        state: NoodlerPreparedPostState;
+        state: SlpCreatorPreparedPostState;
         publishedPostId: string | null;
-        imageState: NoodlerPreparedImageState;
+        imageState: SlpCreatorPreparedImageState;
         imageClaimToken: string | null;
         imageClaimLeaseUntil: string | null;
         updatedAt: string;
       }>
     > {
-      const rows = await db.select().from(noodlerPreparedPosts).orderBy(noodlerPreparedPosts.publishAt);
+      const rows = await db.select().from(slpCreatorPreparedPosts).orderBy(slpCreatorPreparedPosts.publishAt);
       return rows.map((row) => ({
         ...row,
         state: (row.state === "scheduled" || row.state === "prepared" || row.state === "published"
           ? row.state
-          : "discarded") as NoodlerPreparedPostState,
+          : "discarded") as SlpCreatorPreparedPostState,
         imageState: (row.imageState === "pending" ||
         row.imageState === "generating" ||
         row.imageState === "attached" ||
         row.imageState === "rejected" ||
         row.imageState === "closed"
           ? row.imageState
-          : "none") as NoodlerPreparedImageState,
-        payload: parseRecord(row.payload) as NoodlerPreparedPostPayload,
+          : "none") as SlpCreatorPreparedImageState,
+        payload: parseRecord(row.payload) as SlpCreatorPreparedPostPayload,
       }));
     },
     /** Existence check for the idle scheduler poll, so it never materializes or parses rows. */
     async hasNoodlerPreparedPosts(): Promise<boolean> {
-      const rows = await db.select({ id: noodlerPreparedPosts.id }).from(noodlerPreparedPosts).limit(1);
+      const rows = await db.select({ id: slpCreatorPreparedPosts.id }).from(slpCreatorPreparedPosts).limit(1);
       return rows.length > 0;
     },
     /**
@@ -354,15 +355,15 @@ export function createReserveStorage1(context: SlurpStorageContext) {
      * A crash between the two leaks a file, which `sweepOrphanedNoodlerMedia` reclaims.
      */
     async discardNoodlerPreparedPost(id: string, at = new Date()): Promise<void> {
-      const current = (await db.select().from(noodlerPreparedPosts).where(eq(noodlerPreparedPosts.id, id)))[0];
+      const current = (await db.select().from(slpCreatorPreparedPosts).where(eq(slpCreatorPreparedPosts.id, id)))[0];
       await db.transaction(async (tx) =>
         tx
-          .update(noodlerPreparedPosts)
+          .update(slpCreatorPreparedPosts)
           .set({ state: "discarded", updatedAt: at.toISOString() })
-          .where(eq(noodlerPreparedPosts.id, id)),
+          .where(eq(slpCreatorPreparedPosts.id, id)),
       );
       if (current)
-        unlinkNoodlerMedia(String(parseRecord(parseRecord(current.payload).metadata).noodlerMediaPath ?? "") || null);
+        unlinkCreatorMedia(String(parseRecord(parseRecord(current.payload).metadata).noodlerMediaPath ?? "") || null);
     },
     async discardPreparedPostsAfterManualPost(creatorAccountId: string, manualCreatedAt: string): Promise<number> {
       const start = Date.parse(manualCreatedAt);
@@ -370,8 +371,8 @@ export function createReserveStorage1(context: SlurpStorageContext) {
       const end = start + slurpCreatorPostingIntervalMs(settings.postsPerDay);
       const rows = await db
         .select()
-        .from(noodlerPreparedPosts)
-        .where(eq(noodlerPreparedPosts.creatorAccountId, creatorAccountId));
+        .from(slpCreatorPreparedPosts)
+        .where(eq(slpCreatorPreparedPosts.creatorAccountId, creatorAccountId));
       const ids = rows
         .filter(
           (row) => row.state === "prepared" && Date.parse(row.publishAt) > start && Date.parse(row.publishAt) <= end,
@@ -380,12 +381,12 @@ export function createReserveStorage1(context: SlurpStorageContext) {
       if (ids.length > 0) {
         await db.transaction(async (tx) =>
           tx
-            .update(noodlerPreparedPosts)
+            .update(slpCreatorPreparedPosts)
             .set({ state: "discarded", updatedAt: now() })
-            .where(inArray(noodlerPreparedPosts.id, ids)),
+            .where(inArray(slpCreatorPreparedPosts.id, ids)),
         );
         for (const row of rows.filter((candidate) => ids.includes(candidate.id))) {
-          unlinkNoodlerMedia(String(parseRecord(parseRecord(row.payload).metadata).noodlerMediaPath ?? "") || null);
+          unlinkCreatorMedia(String(parseRecord(parseRecord(row.payload).metadata).noodlerMediaPath ?? "") || null);
         }
       }
       return ids.length;

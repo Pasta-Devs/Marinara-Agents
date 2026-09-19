@@ -67,7 +67,7 @@ assert.match(home, /creatorByHandle\.get\(normalized\)/u, "known Creator handles
 assert.match(home, /kind === "unlock" \|\| kind === "ppv"[\s\S]*?return null/u, "opaque post IDs must not render");
 assert.match(home, /aria-controls="slurp-wallet-history-panel"/u);
 assert.match(home, /aria-labelledby=\{`slurp-wallet-history-\$\{ledgerMode\}-tab`\}/u);
-assert.match(hooks, /invalidateQueries\(\{ queryKey: \[\.\.\.noodleKeys\.noodlerRoot\(\), "wallet"\] \}\)/u);
+assert.match(hooks, /invalidateQueries\(\{ queryKey: \[\.\.\.slpKeys\.noodlerRoot\(\), "wallet"\] \}\)/u);
 assert.doesNotMatch(home, /recipientPersonaId|withdrawalRecipient/u);
 
 console.log("slurp Inbox and Wallet regression passed");

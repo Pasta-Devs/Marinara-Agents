@@ -1,4 +1,4 @@
-import { NoodleShell } from "../../modules/chrome/SlpShell";
+import { SlpShell } from "../../modules/chrome/SlpShell";
 import { SlurpWalletView } from "./SlpScreenWallet";
 import { SLURP_PLACEHOLDER_BALANCE, EmptyState, DisclosureBadge } from "./SlpHomeHelpers";
 import { SlurpInboxView } from "./SlpScreenMessages";
@@ -35,7 +35,7 @@ export function renderSlurpHomeDestinations({
   } = model;
   if (navigation.mode === "creator" && navigation.view === "wallet") {
     return (
-      <NoodleShell {...shellProps}>
+      <SlpShell {...shellProps}>
         <SlurpWalletView
           personaId={viewerPersonaId}
           fallbackCoins={viewerWalletsQuery.data?.[viewerPersonaId ?? ""]?.coins ?? SLURP_PLACEHOLDER_BALANCE}
@@ -45,13 +45,13 @@ export function renderSlurpHomeDestinations({
           creatorAvatarCrop={myCreatorProfile?.avatarCrop ?? null}
           onBack={exitToCreatorHub}
         />
-      </NoodleShell>
+      </SlpShell>
     );
   }
 
   if (navigation.mode === "creator" && navigation.view === "notifications") {
     return (
-      <NoodleShell {...shellProps} contextualRail="spanning">
+      <SlpShell {...shellProps} contextualRail="spanning">
         <SlurpInboxView
           personaId={viewerPersonaId}
           ownedCreatorAccountIds={myCreatorProfile ? [myCreatorProfile.id] : []}
@@ -60,25 +60,25 @@ export function renderSlurpHomeDestinations({
           onBack={exitToCreatorHub}
           onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
         />
-      </NoodleShell>
+      </SlpShell>
     );
   }
 
   if (navigation.mode === "creator" && navigation.view === "studio") {
     return (
-      <NoodleShell {...shellProps}>
+      <SlpShell {...shellProps}>
         <SlurpStudioView
           personaId={viewerPersonaId}
           onBack={exitToCreatorHub}
           onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
         />
-      </NoodleShell>
+      </SlpShell>
     );
   }
 
   if (navigation.mode === "creator" && navigation.view === "messages") {
     return (
-      <NoodleShell {...shellProps} contextualRail="spanning">
+      <SlpShell {...shellProps} contextualRail="spanning">
         <SlurpInboxView
           personaId={viewerPersonaId}
           ownedCreatorAccountIds={myCreatorProfile ? [myCreatorProfile.id] : []}
@@ -88,13 +88,13 @@ export function renderSlurpHomeDestinations({
           leaveOnExit={Boolean(navigation.returnTo)}
           onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
         />
-      </NoodleShell>
+      </SlpShell>
     );
   }
 
   if (navigation.mode === "creator" && navigation.view === "profiles") {
     return (
-      <NoodleShell {...shellProps}>
+      <SlpShell {...shellProps}>
         <div className="flex h-full min-h-0 flex-col">
           <main className="min-h-0 flex-1 overflow-y-auto">
             <div className="flex min-h-14 flex-wrap items-center gap-3 border-b border-[var(--noodle-divider)] px-4 py-3">
@@ -241,7 +241,7 @@ export function renderSlurpHomeDestinations({
             )}
           </main>
         </div>
-      </NoodleShell>
+      </SlpShell>
     );
   }
   return null;

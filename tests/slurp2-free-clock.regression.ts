@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { tryNoodleOperation } from "../packages/slurp2/src/engine/packages/server/src/slp/base/locking/slp-operation-lock.ts";
+import { trySlpOperation } from "../packages/slurp2/src/engine/packages/server/src/slp/base/locking/slp-operation-lock.ts";
 import {
   SLURP_TUNING_EVENTS_PER_TICK_CEILING,
   SLURP_WORLD_IDLE_POLL_MS,
@@ -17,11 +17,11 @@ async function main() {
   let runs = 0;
   let release!: () => void;
   const gate = new Promise<void>((resolve) => (release = resolve));
-  const first = tryNoodleOperation("slurp-world-tick", async () => {
+  const first = trySlpOperation("slurp-world-tick", async () => {
     runs += 1;
     await gate;
   });
-  const second = await tryNoodleOperation("slurp-world-tick", async () => {
+  const second = await trySlpOperation("slurp-world-tick", async () => {
     runs += 1;
   });
   release();
@@ -29,7 +29,7 @@ async function main() {
   assert.equal(second.acquired, false, "an overlapping tick must be refused");
   assert.equal(runs, 1);
   const operation = read("slurp-world.operation.ts");
-  assert.match(operation, /tryNoodleOperation\("slurp-world-tick"/u, "every caller shares the tick guard");
+  assert.match(operation, /trySlpOperation\("slurp-world-tick"/u, "every caller shares the tick guard");
 
   // Timer: on ticks every wake, off only every idle poll; interval and toggle re-read each wake.
   assert.equal(slurpWorldTimerDue({ backgroundTimer: true }, 1_000, 1_001), true);

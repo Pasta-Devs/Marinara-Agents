@@ -1,19 +1,19 @@
 import { and, eq, isNull, like } from "../../../db/file-query.js";
-import { NoodleInteraction } from "@marinara-engine/shared";
+import { SlpInteraction } from "../../../../../shared/src/slp/slp-social.types.js";
 import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
-import { canViewNoodlerPost, isNoodlerHiddenFromViewer } from "../../base/identity/slp-access.js";
+import { canViewCreatorPost, isCreatorHiddenFromViewer } from "../../base/identity/slp-access.js";
 import {
-  noodleAccounts,
-  noodleAccountSubscriptions,
-  noodleInteractions,
-  noodlePosts,
-  noodlePostUnlocks,
+  slpAccounts,
+  slpAccountSubscriptions,
+  slpInteractions,
+  slpPosts,
+  slpPostUnlocks,
   slurpPopulation,
 } from "../../../db/schema/slurp.js";
 import { newId, now } from "../../../utils/id-generator.js";
 import type {
-  NoodlerRemoveInteractionCommand,
-  NoodlerWorldInteractionInput,
+  SlpCreatorRemoveInteractionCommand,
+  SlpCreatorWorldInteractionInput,
 } from "../../modules/records/slp-storage-model.js";
 import { mapAccount, snapshotForAccount, mapPost, mapInteraction } from "../host/slp-storage-mappers.js";
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
@@ -49,10 +49,10 @@ export function createFeedInteractionStorage4(context: SlurpStorageContext) {
   const storage = {
     async createNoodlerWorldInteraction(
       postId: string,
-      input: NoodlerWorldInteractionInput,
-    ): Promise<{ interaction: NoodleInteraction; created: boolean } | null> {
+      input: SlpCreatorWorldInteractionInput,
+    ): Promise<{ interaction: SlpInteraction; created: boolean } | null> {
       return db.transaction(async (tx) => {
-        const postRow = (await tx.select().from(noodlePosts).where(eq(noodlePosts.id, postId)))[0];
+        const postRow = (await tx.select().from(slpPosts).where(eq(slpPosts.id, postId)))[0];
         if (
           !postRow ||
           (postRow.access !== "public" && postRow.access !== "locked") ||
@@ -62,16 +62,16 @@ export function createFeedInteractionStorage4(context: SlurpStorageContext) {
         const creatorRow = (
           await tx
             .select()
-            .from(noodleAccounts)
-            .where(and(eq(noodleAccounts.id, input.creatorAccountId), eq(noodleAccounts.platform, "slurp")))
+            .from(slpAccounts)
+            .where(and(eq(slpAccounts.id, input.creatorAccountId), eq(slpAccounts.platform, "slurp")))
         )[0];
         if (!creatorRow) return null;
 
         const actorAccountRow = (
           await tx
             .select()
-            .from(noodleAccounts)
-            .where(and(eq(noodleAccounts.id, input.actorId), eq(noodleAccounts.platform, "slurp")))
+            .from(slpAccounts)
+            .where(and(eq(slpAccounts.id, input.actorId), eq(slpAccounts.platform, "slurp")))
         )[0];
         const actorPopulationRow = (
           await tx.select().from(slurpPopulation).where(eq(slurpPopulation.id, input.actorId))
@@ -98,30 +98,30 @@ export function createFeedInteractionStorage4(context: SlurpStorageContext) {
         let parentInteractionId: string | null = null;
         if (input.type === "reply" && input.parentInteractionId) {
           const parentRow = (
-            await tx.select().from(noodleInteractions).where(eq(noodleInteractions.id, input.parentInteractionId))
+            await tx.select().from(slpInteractions).where(eq(slpInteractions.id, input.parentInteractionId))
           )[0];
           const parent = parentRow ? mapInteraction(parentRow) : null;
           if (parent && parent.postId === postId && parent.type === "reply" && parent.actorAccountId !== input.actorId)
             parentInteractionId = parent.id;
         }
         const matchesParent = parentInteractionId
-          ? eq(noodleInteractions.parentInteractionId, parentInteractionId)
-          : isNull(noodleInteractions.parentInteractionId);
+          ? eq(slpInteractions.parentInteractionId, parentInteractionId)
+          : isNull(slpInteractions.parentInteractionId);
         const existing = await tx
           .select()
-          .from(noodleInteractions)
+          .from(slpInteractions)
           .where(
             and(
-              eq(noodleInteractions.postId, postId),
-              eq(noodleInteractions.actorAccountId, input.actorId),
-              eq(noodleInteractions.type, input.type),
+              eq(slpInteractions.postId, postId),
+              eq(slpInteractions.actorAccountId, input.actorId),
+              eq(slpInteractions.type, input.type),
               matchesParent,
             ),
           );
         if (existing[0]) return { interaction: mapInteraction(existing[0]), created: false };
         const id = newId();
         try {
-          await tx.insert(noodleInteractions).values({
+          await tx.insert(slpInteractions).values({
             id,
             postId,
             parentInteractionId,
@@ -145,26 +145,26 @@ export function createFeedInteractionStorage4(context: SlurpStorageContext) {
           const duplicate = (
             await tx
               .select()
-              .from(noodleInteractions)
+              .from(slpInteractions)
               .where(
                 and(
-                  eq(noodleInteractions.postId, postId),
-                  eq(noodleInteractions.actorAccountId, input.actorId),
-                  eq(noodleInteractions.type, input.type),
+                  eq(slpInteractions.postId, postId),
+                  eq(slpInteractions.actorAccountId, input.actorId),
+                  eq(slpInteractions.type, input.type),
                   matchesParent,
                 ),
               )
           )[0];
           return duplicate ? { interaction: mapInteraction(duplicate), created: false } : null;
         }
-        const rows = await tx.select().from(noodleInteractions).where(eq(noodleInteractions.id, id));
+        const rows = await tx.select().from(slpInteractions).where(eq(slpInteractions.id, id));
         return rows[0] ? { interaction: mapInteraction(rows[0]), created: true } : null;
       });
     },
     async deleteNoodlerInteraction(
       postId: string,
-      input: NoodlerRemoveInteractionCommand,
-    ): Promise<NoodleInteraction | null> {
+      input: SlpCreatorRemoveInteractionCommand,
+    ): Promise<SlpInteraction | null> {
       const viewer = await this.getViewer(input.viewerPersonaId);
       const actor = await this.getNoodlerAccountById(input.actorAccountId);
       if (
@@ -177,36 +177,34 @@ export function createFeedInteractionStorage4(context: SlurpStorageContext) {
         return null;
       const parentInteractionId = input.parentInteractionId ?? null;
       return db.transaction(async (tx) => {
-        const postRow = (await tx.select().from(noodlePosts).where(eq(noodlePosts.id, postId)))[0];
+        const postRow = (await tx.select().from(slpPosts).where(eq(slpPosts.id, postId)))[0];
         if (!postRow) return null;
         const authorRow = (
           await tx
             .select()
-            .from(noodleAccounts)
-            .where(and(eq(noodleAccounts.id, postRow.authorAccountId), eq(noodleAccounts.platform, "slurp")))
+            .from(slpAccounts)
+            .where(and(eq(slpAccounts.id, postRow.authorAccountId), eq(slpAccounts.platform, "slurp")))
         )[0];
         if (!authorRow) return null;
         const author = mapAccount(authorRow);
-        if (isNoodlerHiddenFromViewer(author, input.viewerPersonaId)) return null;
+        if (isCreatorHiddenFromViewer(author, input.viewerPersonaId)) return null;
         const ownsAuthor = author.sourceKind === "persona" && author.sourceEntityId === input.viewerPersonaId;
         const subscriptions = await tx
           .select()
-          .from(noodleAccountSubscriptions)
+          .from(slpAccountSubscriptions)
           .where(
             and(
-              eq(noodleAccountSubscriptions.viewerAccountId, input.viewerPersonaId),
-              eq(noodleAccountSubscriptions.creatorAccountId, author.id),
+              eq(slpAccountSubscriptions.viewerAccountId, input.viewerPersonaId),
+              eq(slpAccountSubscriptions.creatorAccountId, author.id),
             ),
           );
         const unlocks = await tx
           .select()
-          .from(noodlePostUnlocks)
-          .where(
-            and(eq(noodlePostUnlocks.viewerAccountId, input.viewerPersonaId), eq(noodlePostUnlocks.postId, postId)),
-          );
+          .from(slpPostUnlocks)
+          .where(and(eq(slpPostUnlocks.viewerAccountId, input.viewerPersonaId), eq(slpPostUnlocks.postId, postId)));
         if (
           !ownsAuthor &&
-          !canViewNoodlerPost({
+          !canViewCreatorPost({
             post: mapPost(postRow),
             subscribed: subscriptions.length > 0,
             unlockedPostIds: new Set(unlocks.map((row) => row.postId)),
@@ -224,21 +222,21 @@ export function createFeedInteractionStorage4(context: SlurpStorageContext) {
         const existing = (
           await tx
             .select()
-            .from(noodleInteractions)
+            .from(slpInteractions)
             .where(
               and(
-                eq(noodleInteractions.postId, postId),
-                eq(noodleInteractions.actorAccountId, actor.id),
-                eq(noodleInteractions.type, input.type),
+                eq(slpInteractions.postId, postId),
+                eq(slpInteractions.actorAccountId, actor.id),
+                eq(slpInteractions.type, input.type),
                 parentInteractionId
-                  ? eq(noodleInteractions.parentInteractionId, parentInteractionId)
-                  : isNull(noodleInteractions.parentInteractionId),
+                  ? eq(slpInteractions.parentInteractionId, parentInteractionId)
+                  : isNull(slpInteractions.parentInteractionId),
               ),
             )
         )[0];
         if (!existing) return null;
         await deleteInteractionChildren(tx, existing.id);
-        await tx.delete(noodleInteractions).where(eq(noodleInteractions.id, existing.id));
+        await tx.delete(slpInteractions).where(eq(slpInteractions.id, existing.id));
         return mapInteraction(existing);
       });
     },

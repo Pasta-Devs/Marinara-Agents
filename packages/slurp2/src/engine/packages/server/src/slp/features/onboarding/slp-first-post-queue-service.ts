@@ -1,9 +1,9 @@
 import type { DB } from "../../../db/connection.js";
 import { and, asc, eq, lte } from "../../../db/file-query.js";
-import { noodlerFirstPostJobs } from "../../../db/schema/slurp.js";
+import { slpCreatorFirstPostJobs } from "../../../db/schema/slurp.js";
 import { logger } from "../../../lib/logger.js";
 import { newId, now } from "../../../utils/id-generator.js";
-import { generateAndApplyNoodlerPost } from "../feed/slp-feed-contract.js";
+import { generateAndApplyCreatorPost } from "../feed/slp-feed-contract.js";
 
 const MAX_ATTEMPTS = 3;
 const RETRY_DELAYS_MS = [15_000, 60_000, 300_000] as const;
@@ -17,7 +17,7 @@ function retryAt(attempt: number): string {
   return new Date(Date.now() + RETRY_DELAYS_MS[Math.min(attempt - 1, RETRY_DELAYS_MS.length - 1)]!).toISOString();
 }
 
-type FirstPostJob = typeof noodlerFirstPostJobs.$inferSelect;
+type FirstPostJob = typeof slpCreatorFirstPostJobs.$inferSelect;
 
 function attempts(value: unknown): number {
   const parsed = Number(value);
@@ -48,11 +48,11 @@ export function createSlurpFirstPostQueue(db: DB) {
     for (const creatorAccountId of [...new Set(accountIds)]) {
       const existing = await db
         .select()
-        .from(noodlerFirstPostJobs)
+        .from(slpCreatorFirstPostJobs)
         .where(
           and(
-            eq(noodlerFirstPostJobs.executionId, executionId),
-            eq(noodlerFirstPostJobs.creatorAccountId, creatorAccountId),
+            eq(slpCreatorFirstPostJobs.executionId, executionId),
+            eq(slpCreatorFirstPostJobs.creatorAccountId, creatorAccountId),
           ),
         );
       if (existing[0]) {
@@ -71,14 +71,17 @@ export function createSlurpFirstPostQueue(db: DB) {
         createdAt,
         updatedAt: createdAt,
       } as const;
-      await db.insert(noodlerFirstPostJobs).values(row);
+      await db.insert(slpCreatorFirstPostJobs).values(row);
       jobs.push(row);
     }
     return jobs.map(mapJob);
   };
 
   const status = async (executionId: string) => {
-    const rows = await db.select().from(noodlerFirstPostJobs).where(eq(noodlerFirstPostJobs.executionId, executionId));
+    const rows = await db
+      .select()
+      .from(slpCreatorFirstPostJobs)
+      .where(eq(slpCreatorFirstPostJobs.executionId, executionId));
     const jobs = rows.map(mapJob);
     return {
       jobs,
@@ -91,19 +94,19 @@ export function createSlurpFirstPostQueue(db: DB) {
   const processOne = async () => {
     const rows = await db
       .select()
-      .from(noodlerFirstPostJobs)
-      .where(and(eq(noodlerFirstPostJobs.status, "queued"), lte(noodlerFirstPostJobs.nextAttemptAt, now())))
-      .orderBy(asc(noodlerFirstPostJobs.createdAt))
+      .from(slpCreatorFirstPostJobs)
+      .where(and(eq(slpCreatorFirstPostJobs.status, "queued"), lte(slpCreatorFirstPostJobs.nextAttemptAt, now())))
+      .orderBy(asc(slpCreatorFirstPostJobs.createdAt))
       .limit(1);
     const job = rows[0];
     if (!job) return false;
     const attempt = attempts(job.attempts) + 1;
     await db
-      .update(noodlerFirstPostJobs)
+      .update(slpCreatorFirstPostJobs)
       .set({ status: "running", attempts: String(attempt), updatedAt: now() })
-      .where(eq(noodlerFirstPostJobs.id, job.id));
+      .where(eq(slpCreatorFirstPostJobs.id, job.id));
     try {
-      const result = await generateAndApplyNoodlerPost(db, {
+      const result = await generateAndApplyCreatorPost(db, {
         mode: "noodler",
         targetAccountId: job.creatorAccountId,
         format: "caption",
@@ -112,41 +115,41 @@ export function createSlurpFirstPostQueue(db: DB) {
       });
       if (result.status === "generated") {
         await db
-          .update(noodlerFirstPostJobs)
+          .update(slpCreatorFirstPostJobs)
           .set({ status: "generated", postId: result.post.id, updatedAt: now() })
-          .where(eq(noodlerFirstPostJobs.id, job.id));
+          .where(eq(slpCreatorFirstPostJobs.id, job.id));
       } else if (RETRYABLE_STATUSES.has(result.status) && attempt < MAX_ATTEMPTS) {
         // "busy" only means another operation held this account's lock for a moment. Recording it
         // as a permanent failure threw away the creator's first post over a transient collision.
         await db
-          .update(noodlerFirstPostJobs)
+          .update(slpCreatorFirstPostJobs)
           .set({ status: "queued", nextAttemptAt: retryAt(attempt), error: result.status, updatedAt: now() })
-          .where(eq(noodlerFirstPostJobs.id, job.id));
+          .where(eq(slpCreatorFirstPostJobs.id, job.id));
       } else if (result.status === "disabled") {
         // A persona-backed Creator never auto-posts. That is the mode, not a failed job, so the
         // wizard must not report it as an error.
         await db
-          .update(noodlerFirstPostJobs)
+          .update(slpCreatorFirstPostJobs)
           .set({ status: "skipped", error: null, updatedAt: now() })
-          .where(eq(noodlerFirstPostJobs.id, job.id));
+          .where(eq(slpCreatorFirstPostJobs.id, job.id));
       } else {
         await db
-          .update(noodlerFirstPostJobs)
+          .update(slpCreatorFirstPostJobs)
           .set({ status: "failed", error: result.status, updatedAt: now() })
-          .where(eq(noodlerFirstPostJobs.id, job.id));
+          .where(eq(slpCreatorFirstPostJobs.id, job.id));
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const retry = attempt < MAX_ATTEMPTS;
       await db
-        .update(noodlerFirstPostJobs)
+        .update(slpCreatorFirstPostJobs)
         .set({
           status: retry ? "queued" : "failed",
           nextAttemptAt: retryAt(attempt),
           error: message.slice(0, 500),
           updatedAt: now(),
         })
-        .where(eq(noodlerFirstPostJobs.id, job.id));
+        .where(eq(slpCreatorFirstPostJobs.id, job.id));
       logger.warn(error, "[slurp] First-post job %s failed%s", job.id, retry ? "; retry queued" : "");
     }
     return true;
@@ -176,13 +179,13 @@ export function createSlurpFirstPostQueue(db: DB) {
         try {
           const stranded = await db
             .select()
-            .from(noodlerFirstPostJobs)
-            .where(eq(noodlerFirstPostJobs.status, "running"));
+            .from(slpCreatorFirstPostJobs)
+            .where(eq(slpCreatorFirstPostJobs.status, "running"));
           for (const job of stranded) {
             await db
-              .update(noodlerFirstPostJobs)
+              .update(slpCreatorFirstPostJobs)
               .set({ status: "queued", nextAttemptAt: now(), updatedAt: now() })
-              .where(eq(noodlerFirstPostJobs.id, job.id));
+              .where(eq(slpCreatorFirstPostJobs.id, job.id));
           }
           if (stranded.length > 0) {
             logger.warn("[slurp] Requeued %d first-post job(s) left running by a restart", stranded.length);

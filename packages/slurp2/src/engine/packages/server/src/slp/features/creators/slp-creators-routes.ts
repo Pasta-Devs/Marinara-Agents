@@ -1,8 +1,8 @@
 import {
-  noodleStageProfileUpdateSchema,
-  noodleAccountSettingsPatchSchema,
-  noodleStageProfileDraftRequestSchema,
-} from "@marinara-engine/shared";
+  slpAccountSettingsPatchSchema,
+  slpStageProfileDraftRequestSchema,
+  slpStageProfileUpdateSchema,
+} from "../../../../../shared/src/slp/slp-social.schema.js";
 import {
   slurpDiscoveryProfileSchema,
   SLURP_DISCOVERY_TAG_LIMIT,
@@ -14,20 +14,20 @@ import { generateSlurpConversationSchedule } from "../messages/slp-messages-cont
 import { slurpPlatformScaleMultiplier } from "../../modules/audience/slp-scale.js";
 import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
 import { slurpCreatorReach } from "../../../../../shared/src/slp/slp-reach.js";
-import { generateNoodlerStageProfileDraft } from "./slp-stage-profile-draft-service.js";
+import { generateCreatorStageProfileDraft } from "./slp-stage-profile-draft-service.js";
 import { logger } from "../../../lib/logger.js";
 import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
-import { tryNoodlerAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
-import { resolveNoodlerSourceSnapshot } from "../../data/creators/slp-source-resolve.js";
-import { slurpDisclosureMode, noodlerDisclosureReviewReasons } from "../../modules/creators/slp-disclosure.js";
+import { tryCreatorAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
+import { resolveCreatorSourceSnapshot } from "../../data/creators/slp-source-resolve.js";
+import { slurpDisclosureMode, slpCreatorDisclosureReviewReasons } from "../../modules/creators/slp-disclosure.js";
 import { stageProfileContainsPublicIdentity, stageProfileContainsSourceDetails } from "../feed/slp-feed-contract.js";
-import { compareNoodlerSourceSnapshots, minimizeNoodlerSourceSnapshot } from "../../base/identity/slp-source.js";
-import { verifyNoodlerSourceRevisionToken } from "../../base/identity/slp-source-revision.js";
+import { compareCreatorSourceSnapshots, minimizeCreatorSourceSnapshot } from "../../base/identity/slp-source.js";
+import { verifyCreatorSourceRevisionToken } from "../../base/identity/slp-source-revision.js";
 import type { FastifyInstance } from "fastify";
 import { slurpDiscoveryTagNameSchema } from "../../modules/requests/slp-request-schemas.js";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
-const noodleStageProfileUpdateRequestSchema = noodleStageProfileUpdateSchema.extend({
+const slpStageProfileUpdateRequestSchema = slpStageProfileUpdateSchema.extend({
   ...slurpDiscoveryProfileSchema.shape,
   location: z.string().trim().max(120).optional(),
   sourceRevisionToken: z
@@ -63,7 +63,7 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
 
   app.patch("/accounts/:id/settings", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const parsed = noodleAccountSettingsPatchSchema.safeParse(req.body);
+    const parsed = slpAccountSettingsPatchSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const account = await noodle.getNoodlerAccountById(id);
     if (!account) return reply.code(404).send({ error: "Creator account not found" });
@@ -200,7 +200,7 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
   });
 
   app.post("/noodler/stage-profile-draft", async (req, reply) => {
-    const parsed = noodleStageProfileDraftRequestSchema.safeParse(req.body);
+    const parsed = slpStageProfileDraftRequestSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const settings = await noodle.getSettings();
     const connection = await resolveSlurpTextConnection(
@@ -209,7 +209,7 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
     );
     if (!connection) return reply.code(404).send({ error: "Slurp generation connection not found" });
     try {
-      return await generateNoodlerStageProfileDraft(app.db, {
+      return await generateCreatorStageProfileDraft(app.db, {
         request: parsed.data,
         connection,
         promptBlocks: settings.promptBlocks,
@@ -228,14 +228,14 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
   });
 
   app.put("/noodler/accounts/:id/stage-profile", async (req, reply) => {
-    const parsed = noodleStageProfileUpdateRequestSchema.safeParse(req.body);
+    const parsed = slpStageProfileUpdateRequestSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
     let discardedPreparedPostCount = 0;
-    const locked = await tryNoodlerAccountOperation(id, async () => {
-      const noodlerAccount = await noodle.getNoodlerAccountById(id);
-      const publicAccount = noodlerAccount ? await noodle.resolveAccountSource(noodlerAccount) : null;
-      const currentSourceSnapshot = publicAccount ? await resolveNoodlerSourceSnapshot(app.db, publicAccount) : null;
+    const locked = await tryCreatorAccountOperation(id, async () => {
+      const slpCreatorAccount = await noodle.getNoodlerAccountById(id);
+      const publicAccount = slpCreatorAccount ? await noodle.resolveAccountSource(slpCreatorAccount) : null;
+      const currentSourceSnapshot = publicAccount ? await resolveCreatorSourceSnapshot(app.db, publicAccount) : null;
       // The shared schema still accepts Secret; Slurp saves it as Hinted.
       parsed.data.disclosureMode = slurpDisclosureMode(parsed.data.disclosureMode);
       if (
@@ -248,18 +248,18 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
       const submittedSnapshotIsCurrent =
         parsed.data.sourceSnapshot &&
         currentSourceSnapshot &&
-        compareNoodlerSourceSnapshots(parsed.data.sourceSnapshot, currentSourceSnapshot).state === "current";
+        compareCreatorSourceSnapshots(parsed.data.sourceSnapshot, currentSourceSnapshot).state === "current";
       const submittedRevisionIsCurrent =
         parsed.data.sourceRevisionToken &&
         currentSourceSnapshot &&
-        verifyNoodlerSourceRevisionToken(parsed.data.sourceRevisionToken, id, currentSourceSnapshot);
+        verifyCreatorSourceRevisionToken(parsed.data.sourceRevisionToken, id, currentSourceSnapshot);
       const sourceRevisionIsCurrent =
         parsed.data.disclosureMode === "open" ? submittedSnapshotIsCurrent : submittedRevisionIsCurrent;
       if (parsed.data.acceptSourceChanges && !sourceRevisionIsCurrent) {
         return { status: "source_revision_conflict" } as const;
       }
-      if (noodlerAccount) {
-        const currentMode = noodlerAccount.settings.privacy.identityDisclosure ?? "open";
+      if (slpCreatorAccount) {
+        const currentMode = slpCreatorAccount.settings.privacy.identityDisclosure ?? "open";
         const [publishedPosts, preparedPosts] = await Promise.all([
           noodle.listAllNoodlerPostsByAccount(id),
           noodle.listNoodlerPreparedPosts(),
@@ -283,7 +283,7 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
               );
             }).length
           : publishedPosts.length;
-        const reviewReasons = noodlerDisclosureReviewReasons({
+        const reviewReasons = slpCreatorDisclosureReviewReasons({
           currentMode,
           nextMode: parsed.data.disclosureMode,
           postCount: identifyingPostCount,
@@ -291,8 +291,8 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
           // Any avatar/banner must trigger review, including ones adopted from the linked
           // source (whose URL lives outside the NoodleR media namespace, so
           // readNoodler*MediaPath would return null and skip the check).
-          hasAvatar: Boolean(noodlerAccount.avatarUrl),
-          hasBanner: Boolean(noodlerAccount.settings.profile.bannerUrl),
+          hasAvatar: Boolean(slpCreatorAccount.avatarUrl),
+          hasBanner: Boolean(slpCreatorAccount.settings.profile.bannerUrl),
           preparedPostCount: preparedForCreator.length,
         });
         const unresolvedReviewReasons = parsed.data.confirmAvatarReview
@@ -308,11 +308,11 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
         // The downgrade throws away unreleased reserve posts; say how many.
         discardedPreparedPostCount = preparedForCreator.length;
       }
-      const currentMode = noodlerAccount?.settings.privacy.identityDisclosure ?? "open";
+      const currentMode = slpCreatorAccount?.settings.privacy.identityDisclosure ?? "open";
       const sourceSnapshot =
         currentSourceSnapshot &&
         (parsed.data.disclosureMode !== currentMode || (parsed.data.acceptSourceChanges && sourceRevisionIsCurrent))
-          ? minimizeNoodlerSourceSnapshot(currentSourceSnapshot, parsed.data.disclosureMode)
+          ? minimizeCreatorSourceSnapshot(currentSourceSnapshot, parsed.data.disclosureMode)
           : undefined;
       const {
         acceptSourceChanges: _acceptSourceChanges,
@@ -362,14 +362,14 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
 
   app.post("/noodler/accounts/:id/source/dismiss", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const locked = await tryNoodlerAccountOperation(id, async () => {
+    const locked = await tryCreatorAccountOperation(id, async () => {
       const account = await noodle.getNoodlerAccountById(id);
       const publicAccount = account ? await noodle.resolveAccountSource(account) : null;
-      const sourceSnapshot = publicAccount ? await resolveNoodlerSourceSnapshot(app.db, publicAccount) : null;
+      const sourceSnapshot = publicAccount ? await resolveCreatorSourceSnapshot(app.db, publicAccount) : null;
       if (!account || !sourceSnapshot) return false;
       await noodle.updateNoodlerSourceSnapshot(
         id,
-        minimizeNoodlerSourceSnapshot(sourceSnapshot, account.settings.privacy.identityDisclosure ?? "open"),
+        minimizeCreatorSourceSnapshot(sourceSnapshot, account.settings.privacy.identityDisclosure ?? "open"),
       );
       return true;
     });
@@ -380,10 +380,10 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
 
   app.post("/noodler/accounts/:id/source/adopt-identity", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const locked = await tryNoodlerAccountOperation(id, async () => {
+    const locked = await tryCreatorAccountOperation(id, async () => {
       const account = await noodle.getNoodlerAccountById(id);
       const publicAccount = account ? await noodle.resolveAccountSource(account) : null;
-      const sourceSnapshot = publicAccount ? await resolveNoodlerSourceSnapshot(app.db, publicAccount) : null;
+      const sourceSnapshot = publicAccount ? await resolveCreatorSourceSnapshot(app.db, publicAccount) : null;
       if (!account || !sourceSnapshot) return "missing" as const;
       return (await noodle.adoptNoodlerPublicIdentity(id, sourceSnapshot))
         ? ("updated" as const)

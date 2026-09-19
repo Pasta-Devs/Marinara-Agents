@@ -1,7 +1,7 @@
 import { ImagePlus, Link, X } from "lucide-react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 
-export function NoodleImageComposer({
+export function SlpImageComposer({
   imageUrl,
   onImageUrlChange,
   onChooseFile,

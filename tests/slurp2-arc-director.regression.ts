@@ -109,6 +109,6 @@ assert.match(storage, /arcDirectorMode: false,/, "Director mode is off by defaul
 const arcs = routes.slice(routes.indexOf('"/noodler/accounts/:id/arcs"'), routes.indexOf("A Creator's arc overrides"));
 assert.match(arcs, /status !== "suggested"/);
 assert.doesNotMatch(arcs, /direction,|twist,/);
-assert.match(arcs, /isNoodlerHiddenFromViewer/);
+assert.match(arcs, /isCreatorHiddenFromViewer/);
 
 console.log("slurp2 arc director regression passed");

@@ -1,4 +1,8 @@
-import { type NoodlerSubscriber, noodlerSubscriptionSchema, noodlerUnlockSchema } from "@marinara-engine/shared";
+import {
+  slpCreatorSubscriptionSchema,
+  slpCreatorUnlockSchema,
+} from "../../../../../shared/src/slp/slp-social.schema.js";
+import { type SlpCreatorSubscriber } from "../../../../../shared/src/slp/slp-social.types.js";
 import { z } from "zod";
 import { slurpDayKey, SLURP_DEV_CHEAT_MAX_COINS } from "../../modules/economy/slp-wallet.js";
 import {
@@ -10,31 +14,31 @@ import {
 } from "../../data/messages/slp-messages-storage-context.js";
 import { reactToSlurpPayment } from "./slp-payment-reaction.js";
 import { slurpPayoutAllowance } from "../../modules/economy/slp-earnings.js";
-import { isNoodlerHiddenFromViewer } from "../../base/identity/slp-access.js";
+import { isCreatorHiddenFromViewer } from "../../base/identity/slp-access.js";
 import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
 import { SLURP_NAMED_CAST_LIMIT } from "../../../../../shared/src/slp/slp-population.js";
-import { noodlerUnlockPriceFromMetadata } from "../../modules/economy/slp-prices.js";
+import { slpCreatorUnlockPriceFromMetadata } from "../../modules/economy/slp-prices.js";
 import type { FastifyInstance } from "fastify";
-import { noodlerPageCursorSchema, NOODLER_FEED_PAGE_SIZE } from "../../modules/requests/slp-request-schemas.js";
+import { slpCreatorPageCursorSchema, SLP_CREATOR_FEED_PAGE_SIZE } from "../../modules/requests/slp-request-schemas.js";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
 /**
  * A subscriber row, widened for the generated audience.
  *
- * `NoodlerSubscriber` lives in the Engine's shared package and describes an account-backed viewer.
+ * `SlpCreatorSubscriber` lives in the Engine's shared package and describes an account-backed viewer.
  * The audience has no account, so the extra fields are added here rather than in the Engine — a
  * package must not need an Engine change to show its own data.
  */
-type SlurpSubscriberRow = NoodlerSubscriber & {
+type SlurpSubscriberRow = SlpCreatorSubscriber & {
   /** True for somebody from the generated population, who has no profile to open. */
   audience?: boolean;
   stage?: string;
   spent?: number;
 };
 
-const noodlerSubscriberPageQuerySchema = noodlerPageCursorSchema.and(
+const slpCreatorSubscriberPageQuerySchema = slpCreatorPageCursorSchema.and(
   z.object({
-    limit: z.coerce.number().int().min(1).max(NOODLER_FEED_PAGE_SIZE).default(NOODLER_FEED_PAGE_SIZE),
+    limit: z.coerce.number().int().min(1).max(SLP_CREATOR_FEED_PAGE_SIZE).default(SLP_CREATOR_FEED_PAGE_SIZE),
   }),
 );
 export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
@@ -216,7 +220,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
   });
 
   app.post("/noodler/accounts/:id/subscribe", async (req, reply) => {
-    const parsed = noodlerSubscriptionSchema.safeParse(req.body);
+    const parsed = slpCreatorSubscriptionSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
     const [viewer, creator] = await Promise.all([
@@ -227,7 +231,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
       !viewer ||
       !creator ||
       creatorBelongsToViewer(creator, viewer) ||
-      isNoodlerHiddenFromViewer(creator, viewer.id)
+      isCreatorHiddenFromViewer(creator, viewer.id)
     ) {
       return reply.code(404).send({ error: "Slurp stage profile not found" });
     }
@@ -245,7 +249,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
   });
 
   app.delete("/noodler/accounts/:id/subscribe", async (req, reply) => {
-    const parsed = noodlerSubscriptionSchema.safeParse(req.query);
+    const parsed = slpCreatorSubscriptionSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
@@ -257,7 +261,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
 
   app.get("/noodler/accounts/:id/subscribers", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const parsed = noodlerSubscriberPageQuerySchema.safeParse(req.query);
+    const parsed = slpCreatorSubscriberPageQuerySchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     if (!(await noodle.getNoodlerAccountById(id))) {
       return reply.code(404).send({ error: "Slurp stage profile not found" });
@@ -325,7 +329,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
   });
 
   app.post("/noodler/posts/:id/unlock", async (req, reply) => {
-    const parsed = noodlerUnlockSchema.safeParse(req.body);
+    const parsed = slpCreatorUnlockSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
     const [viewer, post] = await Promise.all([
@@ -339,7 +343,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
       !creator ||
       post.access !== "locked" ||
       creatorBelongsToViewer(creator, viewer) ||
-      isNoodlerHiddenFromViewer(creator, viewer.id)
+      isCreatorHiddenFromViewer(creator, viewer.id)
     ) {
       return reply.code(404).send({ error: "Slurp post not found" });
     }
@@ -348,7 +352,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
     // the client can tell "top up" apart from "this post is gone".
     if (!unlock) {
       const wallet = await noodle.getWallet(viewer.id);
-      const price = noodlerUnlockPriceFromMetadata(post.metadata);
+      const price = slpCreatorUnlockPriceFromMetadata(post.metadata);
       if (wallet.coins < price) return reply.code(402).send({ error: "Not enough coins", price, coins: wallet.coins });
       return reply.code(400).send({ error: "Could not unlock this post" });
     }
@@ -356,7 +360,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
       viewerAccountId: viewer.id,
       creatorAccountId: creator.id,
       kind: "unlock",
-      amount: noodlerUnlockPriceFromMetadata(post.metadata),
+      amount: slpCreatorUnlockPriceFromMetadata(post.metadata),
     });
     return reply.code(201).send(buildViewerShell(await buildViewerContext(viewer)));
   });

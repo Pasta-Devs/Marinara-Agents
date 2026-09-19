@@ -1,14 +1,14 @@
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { ViewerHub } from "./screens/SlpScreenHub";
-import { SLURP_PLACEHOLDER_BALANCE, errorMessage, EmptyState, NoodlerFrame } from "./screens/SlpHomeHelpers";
+import { SLURP_PLACEHOLDER_BALANCE, errorMessage, EmptyState, SlpCreatorFrame } from "./screens/SlpHomeHelpers";
 import { ImagePromptReviewModal } from "../../components/ui/ImagePromptReviewModal";
 import { ChatImageLightbox } from "../../components/chat/ChatImageLightbox";
 import { SlurpOnboardingWizard } from "../features/onboarding/SlpOnboardingPanel";
 import { SlurpAgeGate, SlurpConfetti } from "../features/onboarding/SlpAgeGate";
 import { SlurpSplash } from "../features/onboarding/SlpSplash";
-import { getNoodleAccentStyle, NOODLE_PERSONA_SWITCHER_PAGE_SIZE, NOODLE_PINK } from "../base/chrome/SlpChrome";
-import { NoodleShell } from "../modules/chrome/SlpShell";
+import { getSlpAccentStyle, SLP_PERSONA_SWITCHER_PAGE_SIZE, SLP_PINK } from "../base/chrome/SlpChrome";
+import { SlpShell } from "../modules/chrome/SlpShell";
 import { SlpBackstageShell } from "../app/backstage/SlpBackstageShell";
 import { SlpBackstageSidebar } from "../features/backstage/SlpBackstageSidebar";
 import { Modal } from "../../components/ui/Modal";
@@ -124,7 +124,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
         : ("spanning" as const),
     homeActive: navigation.mode === "creator" && navigation.view === "hub",
     noodlerUnseenCount,
-    accent: NOODLE_PINK,
+    accent: SLP_PINK,
     personaAccount: shellPersonaAccount,
     // The Slurp identity to show for the active persona, when it runs a Creator profile. Kept
     // separate from `personaAccount` on purpose: that one carries the persona's own account id,
@@ -145,7 +145,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
       }),
     ),
     personaWallets: viewerWalletsQuery.data,
-    onLoadMorePersonaAccounts: () => setPersonaAccountLimit((current) => current + NOODLE_PERSONA_SWITCHER_PAGE_SIZE),
+    onLoadMorePersonaAccounts: () => setPersonaAccountLimit((current) => current + SLP_PERSONA_SWITCHER_PAGE_SIZE),
     onSwitchPersona: switchViewerPersona,
     accountSwitcherOpen,
     onAccountSwitcherOpenChange: setAccountSwitcherOpen,
@@ -203,7 +203,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
 
   if (navigation.mode === "creator-settings") {
     return (
-      <NoodleShell
+      <SlpShell
         {...shellProps}
         desktopSidebar={
           <SlpBackstageSidebar navigation={navigation} onNavigate={onNavigate} onExit={exitToCreatorHub} />
@@ -249,7 +249,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
           }
           onSkipped={() => setOnboardingMode(null)}
         />
-      </NoodleShell>
+      </SlpShell>
     );
   }
 
@@ -267,27 +267,27 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
 
   if (accountsQuery.isLoading) {
     return (
-      <NoodleShell {...shellProps}>
-        <NoodlerFrame onBack={exitToCreatorHub} title={localizeUi("ui.noodle.noodlemodetoggle.noodler")}>
+      <SlpShell {...shellProps}>
+        <SlpCreatorFrame onBack={exitToCreatorHub} title={localizeUi("ui.noodle.noodlemodetoggle.noodler")}>
           <div className="flex justify-center py-16">
             <Loader2 size={24} className="animate-spin text-[var(--noodle-accent)]" />
           </div>
-        </NoodlerFrame>
-      </NoodleShell>
+        </SlpCreatorFrame>
+      </SlpShell>
     );
   }
 
   if (accountsQuery.isError) {
     return (
-      <NoodleShell {...shellProps}>
-        <NoodlerFrame onBack={exitToCreatorHub} title={localizeUi("ui.noodle.noodlemodetoggle.noodler")}>
+      <SlpShell {...shellProps}>
+        <SlpCreatorFrame onBack={exitToCreatorHub} title={localizeUi("ui.noodle.noodlemodetoggle.noodler")}>
           <EmptyState
             title={localizeUi("ui.noodle.noodlerhome.noodlerCouldNotBeLoaded")}
             action={localizeUi("capabilities.actions.tryAgain")}
             onAction={retryAccountsOrReload}
           />
-        </NoodlerFrame>
-      </NoodleShell>
+        </SlpCreatorFrame>
+      </SlpShell>
     );
   }
 
@@ -296,11 +296,11 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
 
   if (navigation.mode === "creator" && navigation.view === "profile") {
     return (
-      <NoodleShell {...shellProps}>
-        <NoodlerFrame onBack={goToHub} title={localizeUi("ui.noodle.noodlehome.profile")}>
+      <SlpShell {...shellProps}>
+        <SlpCreatorFrame onBack={goToHub} title={localizeUi("ui.noodle.noodlehome.profile")}>
           <EmptyState title={localizeUi("ui.noodle.viewerhub.thisPersonaHasNoLinkedNoodlerProfile")} />
-        </NoodlerFrame>
-      </NoodleShell>
+        </SlpCreatorFrame>
+      </SlpShell>
     );
   }
 
@@ -315,7 +315,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
   if (destination) return destination;
 
   return (
-    <NoodleShell {...shellProps} contextualRail="populated" rightRail={feedRightRail}>
+    <SlpShell {...shellProps} contextualRail="populated" rightRail={feedRightRail}>
       <ViewerHub
         personas={personas}
         personasLoading={personasQuery.isLoading}
@@ -387,7 +387,7 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
         title={localizeUi("ui.noodle.noodlemodetoggle.noodler")}
         width="max-w-md"
         panelClassName="noodle-icon-scope"
-        panelStyle={getNoodleAccentStyle(NOODLE_PINK)}
+        panelStyle={getSlpAccentStyle(SLP_PINK)}
         closeDisabled
       >
         <SlurpAgeGate
@@ -401,6 +401,6 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
       <SlurpSplash open={splashOpen} onDismiss={() => setSplashOpen(false)} />
       {gateCelebrating && <SlurpConfetti fixed />}
       {reviewModal}
-    </NoodleShell>
+    </SlpShell>
   );
 }

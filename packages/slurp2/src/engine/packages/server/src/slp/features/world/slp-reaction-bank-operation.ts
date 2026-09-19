@@ -10,7 +10,7 @@ import { createLLMProvider } from "../../../services/llm/provider-registry.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
-import { noodleSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
+import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
 import { slurpAudienceToneInstruction } from "../../../../../shared/src/slp/slp-tone.js";
 import {
   mergeSlurpReactionBankBatch,
@@ -161,7 +161,7 @@ export async function topUpSlurpReactionBank(
       ],
       {
         model: connection.model,
-        ...noodleSamplingOptions(
+        ...slpSamplingOptions(
           resolveStoredChatOptions(connection.defaultParameters, connection.provider, connection.model),
           // Hotter than the batched audience run: the whole job is to be unlike what is stored.
           { temperature: 1, topP: 0.98 },

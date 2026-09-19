@@ -1,9 +1,7 @@
-import {
-  noodleStageProfileDraftResponseSchema,
-  type APIProvider,
-  type NoodleIdentityDisclosure,
-  type NoodleStageProfileDraftRequest,
-} from "@marinara-engine/shared";
+import { type APIProvider } from "@marinara-engine/shared";
+import { type SlpStageProfileDraftRequest } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import { slpStageProfileDraftResponseSchema } from "../../../../../shared/src/slp/slp-social.schema.js";
+import { type SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
 import { isDebugAgentsEnabled } from "../../../config/runtime-config.js";
 import type { DB } from "../../../db/connection.js";
 import { logDebugOverride } from "../../../lib/logger.js";
@@ -13,7 +11,7 @@ import {
   resolveStoredMaxTokens,
 } from "../../../services/generation/generation-parameters.js";
 import { clampGenerationMaxOutputTokens } from "../../../services/generation/output-token-limits.js";
-import { noodleSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
+import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
 import { parseGameJsonish } from "../../../services/game/jsonish.js";
 import { modelAnswerForCorrection, requireModelAnswer } from "../../base/model/slp-model-answer.js";
 import { withConnectionFallbackProvider } from "../../../services/llm/connection-fallback-provider.js";
@@ -22,20 +20,20 @@ import { createLLMProvider } from "../../../services/llm/provider-registry.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
-import { noodleResponseFormat } from "../../base/prompting/slp-response-format.js";
+import { slpResponseFormat } from "../../base/prompting/slp-response-format.js";
 import {
-  buildNoodlerPublicIdentity,
-  protectNoodlerGeneratedIdentity,
+  buildCreatorPublicIdentity,
+  protectCreatorGeneratedIdentity,
   stageProfileContainsPublicIdentity,
 } from "../feed/slp-feed-contract.js";
-import { resolveNoodlerSourceSnapshot } from "../../data/creators/slp-source-resolve.js";
+import { resolveCreatorSourceSnapshot } from "../../data/creators/slp-source-resolve.js";
 import { jsonrepair } from "jsonrepair";
 import {
   repairSlurpStageProfileDraft,
   SLURP_STAGE_PROFILE_LIMITS,
 } from "../../modules/creators/slp-stage-profile-repair.js";
-import { noodlerConcealedSourceText, noodlerSourceText } from "../../base/prompting/slp-prompt-safety.js";
-import { createNoodlerSourceRevisionToken } from "../../base/identity/slp-source-revision.js";
+import { noodlerConcealedSourceText, slpCreatorSourceText } from "../../base/prompting/slp-prompt-safety.js";
+import { createCreatorSourceRevisionToken } from "../../base/identity/slp-source-revision.js";
 import type { SlurpStageProfileInput } from "../../modules/discovery/slp-discovery-profile.js";
 import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "../../base/prompting/slp-prompt-blocks.js";
 
@@ -44,14 +42,14 @@ const CONCEALED_SOURCE_FALLBACK_BRIEF = "General temperament and creative intere
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
-function disclosureRules(mode: NoodleIdentityDisclosure, publicIdentity: { displayName: string; handle: string }) {
+function disclosureRules(mode: SlpIdentityDisclosure, publicIdentity: { displayName: string; handle: string }) {
   if (mode === "open")
     return `This is the same public creator. Use exactly ${publicIdentity.displayName} as displayName and ${publicIdentity.handle} as handle. Write a concise social profile bio that summarizes the linked source. Preserve a direct bio edit from the current draft. Do not invent a stage identity.`;
   return "Create the same person behind a different stage name and handle, as an open secret. Preserve species, body, age range, unusual anatomy, scars, missing or unusual features, clothing preferences, voice, interests, and recurring visual traits. Preserve indirect clues that regular followers may recognize. Never use the exact public name or handle, and never copy canonical biography sentences.";
 }
 
-export function buildNoodlerStageProfileDraftMessages(input: {
-  request: Pick<NoodleStageProfileDraftRequest, "disclosureMode" | "guidance" | "currentDraft">;
+export function buildCreatorStageProfileDraftMessages(input: {
+  request: Pick<SlpStageProfileDraftRequest, "disclosureMode" | "guidance" | "currentDraft">;
   publicAccount: { displayName: string; handle: string; bio: string };
   source: {
     data: string | ({ name?: unknown } & Record<string, unknown>);
@@ -60,19 +58,19 @@ export function buildNoodlerStageProfileDraftMessages(input: {
   allowedTags: readonly string[];
   promptBlocks?: SlurpPromptBlockOverrides;
 }): ChatMessage[] {
-  const identity = buildNoodlerPublicIdentity(input.publicAccount, input.source);
+  const identity = buildCreatorPublicIdentity(input.publicAccount, input.source);
   const protectedDraft = input.request.currentDraft
     ? Object.fromEntries(
         Object.entries(input.request.currentDraft).map(([key, value]) => [
           key,
           typeof value === "string"
-            ? (protectNoodlerGeneratedIdentity(value, input.request.disclosureMode, identity) ?? "")
+            ? (protectCreatorGeneratedIdentity(value, input.request.disclosureMode, identity) ?? "")
             : value,
         ]),
       )
     : null;
   const sourceDetails = input.source
-    ? noodlerSourceText(input.source.data)
+    ? slpCreatorSourceText(input.source.data)
     : "General temperament and creative interests from the source profile.";
   // Anything that is not Open is Hinted: Slurp no longer offers a Secret tier.
   const rawSourceContext =
@@ -89,7 +87,7 @@ export function buildNoodlerStageProfileDraftMessages(input: {
         ].join("\n")
       : [
           "# Source character or persona",
-          // `Public name:` is dropped: noodlerSourceText already opens with `Name:` from the same
+          // `Public name:` is dropped: slpCreatorSourceText already opens with `Name:` from the same
           // card, so the Open block stated the name twice in consecutive lines.
           `Public handle: @${input.publicAccount.handle}`,
           `Public bio: ${input.publicAccount.bio || "No bio provided."}`,
@@ -100,7 +98,7 @@ export function buildNoodlerStageProfileDraftMessages(input: {
       ? rawSourceContext
       : rawSourceContext
           .split("\n")
-          .map((line) => protectNoodlerGeneratedIdentity(line, input.request.disclosureMode, identity) ?? "")
+          .map((line) => protectCreatorGeneratedIdentity(line, input.request.disclosureMode, identity) ?? "")
           .join("\n");
   return [
     {
@@ -162,7 +160,7 @@ export function buildNoodlerStageProfileDraftMessages(input: {
  * The tolerant game parser handles fences, prose, and trailing commas. `jsonrepair` is the last
  * resort for what it cannot read: single-quoted values and unescaped quotes inside a value.
  */
-export function parseNoodlerStageProfileDraft(content: string, allowedTags?: readonly string[]) {
+export function parseCreatorStageProfileDraft(content: string, allowedTags?: readonly string[]) {
   const answer = content.trim();
   if (!answer) return null;
   let value: unknown;
@@ -180,24 +178,24 @@ export function parseNoodlerStageProfileDraft(content: string, allowedTags?: rea
   return repairSlurpStageProfileDraft(value, allowedTags);
 }
 
-export async function generateNoodlerStageProfileDraft(
+export async function generateCreatorStageProfileDraft(
   db: DB,
   input: {
-    request: NoodleStageProfileDraftRequest;
+    request: SlpStageProfileDraftRequest;
     connection: GenerationConnection;
   },
 ): Promise<
   SlurpStageProfileInput & {
-    sourceSnapshot?: Awaited<ReturnType<typeof resolveNoodlerSourceSnapshot>>;
+    sourceSnapshot?: Awaited<ReturnType<typeof resolveCreatorSourceSnapshot>>;
     sourceRevisionToken?: string;
   }
 > {
   const noodle = createSlurpStorage(db);
-  const noodlerAccount = input.request.noodlerAccountId
+  const slpCreatorAccount = input.request.noodlerAccountId
     ? await noodle.getNoodlerAccountById(input.request.noodlerAccountId)
     : null;
-  const publicAccount = noodlerAccount
-    ? await noodle.resolveAccountSource(noodlerAccount)
+  const publicAccount = slpCreatorAccount
+    ? await noodle.resolveAccountSource(slpCreatorAccount)
     : input.request.noodleAccountId
       ? await noodle.resolveSourceByEntityId(input.request.noodleAccountId)
       : null;
@@ -222,10 +220,10 @@ export async function generateNoodlerStageProfileDraft(
               : null,
           )
         : null;
-  const identity = buildNoodlerPublicIdentity(publicAccount, source);
-  const sourceSnapshot = await resolveNoodlerSourceSnapshot(db, publicAccount);
+  const identity = buildCreatorPublicIdentity(publicAccount, source);
+  const sourceSnapshot = await resolveCreatorSourceSnapshot(db, publicAccount);
   const allowedTags = (await noodle.getSettings()).discoveryTags.map((entry) => entry.tag);
-  const messages = buildNoodlerStageProfileDraftMessages({
+  const messages = buildCreatorStageProfileDraftMessages({
     request: input.request,
     publicAccount,
     source,
@@ -265,16 +263,16 @@ export async function generateNoodlerStageProfileDraft(
       maxTokens: resolveStoredMaxTokens(input.connection.defaultParameters, 1200),
       maxTokensOverride: input.connection.maxTokensOverride,
     }),
-    ...noodleSamplingOptions(
+    ...slpSamplingOptions(
       resolveStoredChatOptions(input.connection.defaultParameters, input.connection.provider, input.connection.model),
       { temperature: 0.7, topP: 0.9 },
     ),
     stream: false,
     debugMode,
-    responseFormat: noodleResponseFormat(input.connection.model, "noodler_profile"),
+    responseFormat: slpResponseFormat(input.connection.model, "noodler_profile"),
   } as const;
   const response = await provider.chatComplete(messages, completionOptions);
-  let repaired = parseNoodlerStageProfileDraft(response.content ?? "", allowedTags);
+  let repaired = parseCreatorStageProfileDraft(response.content ?? "", allowedTags);
   let lastAnswer = response.content ?? "";
   // One retry, only when nothing usable came back. A draft with fixable fields is repaired instead,
   // so a long bio or a missing gender no longer costs a second model call or fails the draft.
@@ -294,7 +292,7 @@ export async function generateNoodlerStageProfileDraft(
       ],
       completionOptions,
     );
-    repaired = parseNoodlerStageProfileDraft(retry.content ?? "", allowedTags);
+    repaired = parseCreatorStageProfileDraft(retry.content ?? "", allowedTags);
     lastAnswer = retry.content ?? "";
   }
   if (!repaired) {
@@ -311,7 +309,7 @@ export async function generateNoodlerStageProfileDraft(
   if (input.request.disclosureMode !== "open") {
     for (const field of ["bio", "stagePersonality"] as const) {
       const protectedValue =
-        protectNoodlerGeneratedIdentity(parsedDraft[field], input.request.disclosureMode, identity) ?? "";
+        protectCreatorGeneratedIdentity(parsedDraft[field], input.request.disclosureMode, identity) ?? "";
       if (protectedValue !== parsedDraft[field].trim()) {
         parsedDraft[field] = protectedValue;
         notes.push(`The source name was removed from the ${field === "bio" ? "bio" : "stage personality"}.`);
@@ -339,7 +337,7 @@ export async function generateNoodlerStageProfileDraft(
     ...(input.request.disclosureMode === "open" && sourceSnapshot ? { sourceSnapshot } : {}),
     ...(input.request.disclosureMode !== "open" && input.request.noodlerAccountId && sourceSnapshot
       ? {
-          sourceRevisionToken: createNoodlerSourceRevisionToken(input.request.noodlerAccountId, sourceSnapshot),
+          sourceRevisionToken: createCreatorSourceRevisionToken(input.request.noodlerAccountId, sourceSnapshot),
         }
       : {}),
   };

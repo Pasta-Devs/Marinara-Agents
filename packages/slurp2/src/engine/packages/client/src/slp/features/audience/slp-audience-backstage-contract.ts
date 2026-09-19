@@ -4,7 +4,7 @@ import type { SlpBackstageSection, SlpBackstageTarget } from "../../base/navigat
 import type { SlurpSettings } from "../settings/slp-settings-contract";
 import type { SlurpAudienceCharacterSummary } from "./slp-audience-contract";
 import { useSlurpAudienceCharacterGroups, useSlurpAudienceCharacters } from "./slp-audience-hooks";
-import { useNoodlerFanActivityStatus, useRefreshNoodlerFanActivityNow } from "./slp-fan-activity-hooks";
+import { useCreatorFanActivityStatus, useRefreshCreatorFanActivityNow } from "./slp-fan-activity-hooks";
 
 /** Ambient audience status, the invited-character library and the audience wizard draft. */
 export function useSlpAudienceBackstageState({
@@ -14,10 +14,10 @@ export function useSlpAudienceBackstageState({
   section: SlpBackstageSection;
   target: SlpBackstageTarget;
 }) {
-  const fanStatusQuery = useNoodlerFanActivityStatus(
+  const fanStatusQuery = useCreatorFanActivityStatus(
     section === "overview" || target === "audience" || target === "automation",
   );
-  const refreshFans = useRefreshNoodlerFanActivityNow();
+  const refreshFans = useRefreshCreatorFanActivityNow();
   // Unconditional before the split as well: the single-page host mounted these for every section.
   const audienceCharactersQuery = useSlurpAudienceCharacters();
   const audienceCharacterGroupsQuery = useSlurpAudienceCharacterGroups();

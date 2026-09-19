@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
-import { noodleKeys } from "../../base/state/slp-query-keys.js";
+import { slpKeys } from "../../base/state/slp-query-keys.js";
 
 /**
  * What public posts and locked posts are each for, globally and per Creator.
@@ -19,7 +19,7 @@ export type SlurpPostGuidance = {
 export type SlurpPostAccess = "public" | "locked";
 export function useSlurpPostGuidance(enabled = true) {
   return useQuery({
-    queryKey: noodleKeys.noodlerPostGuidance(),
+    queryKey: slpKeys.noodlerPostGuidance(),
     queryFn: () => api.get<SlurpPostGuidance>("/slurp2/noodler/post-guidance"),
     enabled,
     staleTime: 10_000,
@@ -30,7 +30,7 @@ export function useUpdateSlurpPostGuidance() {
   return useMutation({
     mutationFn: (patch: { creatorId?: string | null; public?: string; locked?: string; menu?: string }) =>
       api.patch<SlurpPostGuidance>("/slurp2/noodler/post-guidance", patch),
-    onSuccess: (value) => qc.setQueryData(noodleKeys.noodlerPostGuidance(), value),
+    onSuccess: (value) => qc.setQueryData(slpKeys.noodlerPostGuidance(), value),
   });
 }
 export function useGenerateSlurpPostGuidance() {

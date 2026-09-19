@@ -1,3 +1,3 @@
-export { createNoodlerNoodleImagesService, generateNoodlerPostImage } from "./slp-images-service.js";
-export { generateNoodlePostImage } from "./slp-public-images-service.js";
-export type { NoodleImagePromptReviewItem, StagedNoodlePostMedia } from "./slp-public-images-service.js";
+export { createCreatorSlpImagesService, generateCreatorPostImage } from "./slp-images-service.js";
+export { generateSlpPostImage } from "./slp-public-images-service.js";
+export type { SlpImagePromptReviewItem, StagedSlpPostMedia } from "./slp-public-images-service.js";

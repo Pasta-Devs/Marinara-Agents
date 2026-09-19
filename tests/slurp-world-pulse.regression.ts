@@ -160,12 +160,12 @@ assert.match(
 );
 assert.match(
   storage,
-  /function noodlerPostPageCondition[\s\S]*?ne\(noodlePosts\.access, "draft"\)/u,
+  /function slpCreatorPostPageCondition[\s\S]*?ne\(slpPosts\.access, "draft"\)/u,
   "draft posts must be excluded before feed pagination",
 );
 assert.match(
   storage,
-  /\.where\(and\(inArray\(noodlePosts\.authorAccountId, visibleAccountIds\), ne\(noodlePosts\.access, "draft"\)\)\)/u,
+  /\.where\(and\(inArray\(slpPosts\.authorAccountId, visibleAccountIds\), ne\(slpPosts\.access, "draft"\)\)\)/u,
   "draft posts must be excluded from unseen signals",
 );
 assert.match(world, /createNoodlerWorldInteraction\(action\.postId/u, "world actions use internal storage");

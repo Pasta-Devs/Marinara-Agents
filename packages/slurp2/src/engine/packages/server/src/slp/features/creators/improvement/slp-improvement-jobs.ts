@@ -11,7 +11,7 @@ import { slurpImprovementJobs, slurpImprovementProposals } from "../../../../db/
 import { eq } from "../../../../db/file-query.js";
 import { now, newId } from "../../../../utils/id-generator.js";
 import { resolveSlurpTextConnection } from "../../../base/identity/slp-connection.js";
-import { generateNoodlerStageProfileDraft } from "../slp-stage-profile-draft-service.js";
+import { generateCreatorStageProfileDraft } from "../slp-stage-profile-draft-service.js";
 import { getErrorMessage } from "../../../modules/creators/slp-public-support.js";
 import { logger } from "../../../../lib/logger.js";
 import type { FastifyInstance } from "fastify";
@@ -159,7 +159,7 @@ export function createSlpImprovementJobs(app: FastifyInstance, deps: SlpRouteDep
           // Reuses the existing stage-profile generator; only allowed fields become proposals.
           const draft =
             needsModel && connection
-              ? await generateNoodlerStageProfileDraft(app.db, {
+              ? await generateCreatorStageProfileDraft(app.db, {
                   request: {
                     noodlerAccountId: profile.id,
                     disclosureMode: profile.disclosureMode ?? "hinted",

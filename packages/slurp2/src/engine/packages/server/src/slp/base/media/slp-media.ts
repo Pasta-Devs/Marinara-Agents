@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from "fs";
 import { basename, dirname, join } from "path";
-import type { NoodlerManagedPost } from "@marinara-engine/shared";
+import type { SlpCreatorManagedPost } from "../../../../../shared/src/slp/slp-social.types.js";
 import { logger } from "../../../lib/logger.js";
 import { DATA_DIR } from "../../../utils/data-dir.js";
 import { assertInsideDir, isAllowedImageBuffer } from "../../../utils/security.js";
@@ -27,13 +27,13 @@ const GALLERY_DIR = join(DATA_DIR, "gallery");
 // while NoodleR is in alpha; if that stops being true, migrate rather than rename again.
 export const NOODLER_MEDIA_PREFIX = "slurp2-media/";
 
-export type NoodlerPostMediaUpload = {
+export type SlpCreatorPostMediaUpload = {
   buffer: Buffer;
   extension: string;
 };
 
 /** Access-checked serving URL for a NoodleR post's generated image. */
-export function noodlerPostMediaUrl(postId: string): string {
+export function slpCreatorPostMediaUrl(postId: string): string {
   return `/api/slurp2/noodler/posts/${encodeURIComponent(postId)}/media`;
 }
 
@@ -56,7 +56,7 @@ export function stageSlurpMessageMedia(upload: SlurpMessageMediaUpload) {
  * gates on the persona, so audience-facing projections must carry it; unrelated (uploaded
  * or external) image URLs are returned untouched.
  */
-export function noodlerPostMediaUrlForPersona(
+export function slpCreatorPostMediaUrlForPersona(
   imageUrl: string | null,
   personaId: string,
   variant: "locked" | "original",
@@ -74,10 +74,10 @@ export function noodlerPostMediaUrlForPersona(
  * Promote uploaded NoodleR media and persist its stable post-owned references as one
  * compensating operation. A null result means the target disappeared before persistence.
  */
-export async function persistNoodlerPostWithUploadedMedia<T>(
+export async function persistCreatorPostWithUploadedMedia<T>(
   accountId: string,
   postId: string,
-  upload: NoodlerPostMediaUpload,
+  upload: SlpCreatorPostMediaUpload,
   persist: (media: { imageUrl: string; noodlerMediaPath: string }) => Promise<T | null>,
 ): Promise<T | null> {
   const stagedMedia = stageImageToDisk(
@@ -88,7 +88,7 @@ export async function persistNoodlerPostWithUploadedMedia<T>(
   try {
     stagedMedia.promote();
     const result = await persist({
-      imageUrl: noodlerPostMediaUrl(postId),
+      imageUrl: slpCreatorPostMediaUrl(postId),
       noodlerMediaPath: stagedMedia.filePath,
     });
     if (result === null) stagedMedia.compensate();
@@ -106,10 +106,11 @@ export async function persistNoodlerPostWithUploadedMedia<T>(
 // rather than merely hidden.
 const TEASER_WIDTH = 64;
 const TEASER_SUFFIX = ".teaser-v4.jpg";
-export const NOODLER_MEDIA_WIDTHS = [96, 320, 480, 640, 960, 1280, 1600] as const;
+export const SLP_CREATOR_MEDIA_WIDTHS = [96, 320, 480, 640, 960, 1280, 1600] as const;
 
-export async function resolveNoodlerMediaVariant(absolutePath: string, width: number | undefined): Promise<string> {
-  if (!width || !NOODLER_MEDIA_WIDTHS.includes(width as (typeof NOODLER_MEDIA_WIDTHS)[number])) return absolutePath;
+export async function resolveCreatorMediaVariant(absolutePath: string, width: number | undefined): Promise<string> {
+  if (!width || !SLP_CREATOR_MEDIA_WIDTHS.includes(width as (typeof SLP_CREATOR_MEDIA_WIDTHS)[number]))
+    return absolutePath;
   const variantPath = `${absolutePath}.w${width}.webp`;
   if (existsSync(variantPath)) return variantPath;
   const sharp = await getSharp();
@@ -140,7 +141,7 @@ export async function resolveNoodlerMediaVariant(absolutePath: string, width: nu
  * original. Null where `sharp` is unavailable (no Android prebuild) or the source cannot be
  * decoded — callers must fail closed and serve nothing rather than the original.
  */
-export async function readNoodlerLockedTeaser(absolutePath: string): Promise<Buffer | null> {
+export async function readCreatorLockedTeaser(absolutePath: string): Promise<Buffer | null> {
   const teaserPath = `${absolutePath}${TEASER_SUFFIX}`;
   if (existsSync(teaserPath)) return readFileSync(teaserPath);
   const sharp = await getSharp();
@@ -171,13 +172,13 @@ export async function readNoodlerLockedTeaser(absolutePath: string): Promise<Buf
   }
 }
 
-export function readNoodlerMediaPath(post: Pick<NoodlerManagedPost, "metadata">): string | null {
+export function readCreatorMediaPath(post: Pick<SlpCreatorManagedPost, "metadata">): string | null {
   const value = (post.metadata as Record<string, unknown> | null | undefined)?.noodlerMediaPath;
   return typeof value === "string" && value.startsWith(NOODLER_MEDIA_PREFIX) ? value : null;
 }
 
 /** Resolve a stored relative NoodleR-media path to an absolute path inside the gallery dir. */
-export function resolveNoodlerMediaAbsolutePath(relativePath: string): string | null {
+export function resolveCreatorMediaAbsolutePath(relativePath: string): string | null {
   if (!relativePath.startsWith(NOODLER_MEDIA_PREFIX)) return null;
   const segments = relativePath.slice(NOODLER_MEDIA_PREFIX.length).split(/[\\/]/u);
   if (segments.length === 0 || segments.some((segment) => !segment || segment === "." || segment === "..")) {
@@ -191,9 +192,9 @@ export function resolveNoodlerMediaAbsolutePath(relativePath: string): string | 
 }
 
 /** Best-effort removal of an owned NoodleR-media file when its post is deleted. */
-export function unlinkNoodlerMedia(relativePath: string | null): boolean {
+export function unlinkCreatorMedia(relativePath: string | null): boolean {
   if (!relativePath) return true;
-  const absolute = resolveNoodlerMediaAbsolutePath(relativePath);
+  const absolute = resolveCreatorMediaAbsolutePath(relativePath);
   if (!absolute) return false;
   try {
     if (existsSync(absolute)) unlinkSync(absolute);
@@ -214,8 +215,8 @@ export function unlinkNoodlerMedia(relativePath: string | null): boolean {
 }
 
 /** Bytes that deleting one original will reclaim, including its cached teaser and width variants. */
-export function estimateNoodlerMediaRemovalBytes(relativePath: string): number {
-  const absolute = resolveNoodlerMediaAbsolutePath(relativePath);
+export function estimateCreatorMediaRemovalBytes(relativePath: string): number {
+  const absolute = resolveCreatorMediaAbsolutePath(relativePath);
   if (!absolute) return 0;
   try {
     let bytes = existsSync(absolute) ? statSync(absolute).size : 0;
@@ -239,8 +240,8 @@ export function estimateNoodlerMediaRemovalBytes(relativePath: string): number {
 }
 
 /** Current size of the complete Slurp-owned media namespace, derivatives included. */
-export function summarizeNoodlerMedia(): { files: number; bytes: number } {
-  const marker = resolveNoodlerMediaAbsolutePath(`${NOODLER_MEDIA_PREFIX}__slurp_summary_root__`);
+export function summarizeCreatorMedia(): { files: number; bytes: number } {
+  const marker = resolveCreatorMediaAbsolutePath(`${NOODLER_MEDIA_PREFIX}__slurp_summary_root__`);
   const root = marker ? dirname(marker) : null;
   if (!root || !existsSync(root)) return { files: 0, bytes: 0 };
   let files = 0;
@@ -264,9 +265,9 @@ export function summarizeNoodlerMedia(): { files: number; bytes: number } {
 }
 
 /** Best-effort removal of a creator's whole owned NoodleR media namespace on account deletion. */
-export function removeNoodlerAccountMedia(accountId: string): void {
+export function removeCreatorAccountMedia(accountId: string): void {
   if (!accountId || accountId === "." || accountId === ".." || /[\\/]/u.test(accountId)) return;
-  const dir = resolveNoodlerMediaAbsolutePath(`${NOODLER_MEDIA_PREFIX}${accountId}`);
+  const dir = resolveCreatorMediaAbsolutePath(`${NOODLER_MEDIA_PREFIX}${accountId}`);
   if (!dir) return;
   try {
     rmSync(dir, { recursive: true, force: true });
@@ -276,8 +277,8 @@ export function removeNoodlerAccountMedia(accountId: string): void {
 }
 
 /** Remove only the Slurp media namespace. Engine and Noodle media stay outside this path. */
-export function removeAllNoodlerMedia(): void {
-  const dir = resolveNoodlerMediaAbsolutePath("slurp2-media");
+export function removeAllCreatorMedia(): void {
+  const dir = resolveCreatorMediaAbsolutePath("slurp2-media");
   if (!dir) return;
   try {
     rmSync(dir, { recursive: true, force: true });
@@ -287,8 +288,8 @@ export function removeAllNoodlerMedia(): void {
 }
 
 /** Every owned media file, as archive-relative paths, for a backup export. */
-export async function listNoodlerMediaFiles(): Promise<Array<{ relativePath: string; absolutePath: string }>> {
-  const marker = resolveNoodlerMediaAbsolutePath(`${NOODLER_MEDIA_PREFIX}__slurp_backup_root__`);
+export async function listCreatorMediaFiles(): Promise<Array<{ relativePath: string; absolutePath: string }>> {
+  const marker = resolveCreatorMediaAbsolutePath(`${NOODLER_MEDIA_PREFIX}__slurp_backup_root__`);
   const root = marker ? dirname(marker) : null;
   if (!root || !existsSync(root)) return [];
   const files: Array<{ relativePath: string; absolutePath: string }> = [];
@@ -315,9 +316,9 @@ export async function listNoodlerMediaFiles(): Promise<Array<{ relativePath: str
  * `<NOODLER_MEDIA_PREFIX><accountId>/<file>`. Anything that escapes that namespace, or that is not
  * an image, is refused: a backup archive is untrusted input even when this package wrote it.
  */
-export function restoreNoodlerMediaFile(archivePath: string, data: Buffer): boolean {
+export function restoreCreatorMediaFile(archivePath: string, data: Buffer): boolean {
   if (!archivePath.startsWith("media/")) return false;
-  const absolute = resolveNoodlerMediaAbsolutePath(`${NOODLER_MEDIA_PREFIX}${archivePath.slice("media/".length)}`);
+  const absolute = resolveCreatorMediaAbsolutePath(`${NOODLER_MEDIA_PREFIX}${archivePath.slice("media/".length)}`);
   if (!absolute) return false;
   if (!isAllowedImageBuffer(data)) return false;
   try {

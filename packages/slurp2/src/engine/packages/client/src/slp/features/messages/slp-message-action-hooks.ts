@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
-import { noodleKeys } from "../../base/state/slp-query-keys.js";
+import { slpKeys } from "../../base/state/slp-query-keys.js";
 import type { SlurpWallet } from "../economy/slp-economy-contract.js";
 import { invalidateSlurpMessages } from "./slp-message-keys.js";
 import type { SlurpMessage, SlurpSendResponse, SlurpThread } from "./slp-messages-contract.js";
@@ -214,7 +214,7 @@ export function useResolveSlurpMessageRequest() {
         `/slurp2/messages/threads/${encodeURIComponent(input.threadId)}/request`,
         input,
       ),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: slpKeys.noodlerRoot() }),
   });
 }
 /** Empty one conversation. Every message goes; what the fan paid for does not. */
@@ -223,7 +223,7 @@ export function useResetSlurpThread() {
   return useMutation({
     mutationFn: (input: { threadId: string; personaId: string }) =>
       api.post<{ thread: SlurpThread }>(`/slurp2/messages/threads/${encodeURIComponent(input.threadId)}/reset`, input),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: slpKeys.noodlerRoot() }),
   });
 }
 /**
@@ -244,7 +244,7 @@ export function useSetSlurpThreadNotes() {
         `/slurp2/messages/threads/${encodeURIComponent(input.threadId)}/notes`,
         { personaId: input.personaId, notes: input.notes },
       ),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: slpKeys.noodlerRoot() }),
   });
 }
 export function useCancelSlurpFollowUp() {
@@ -258,6 +258,6 @@ export function useCancelSlurpFollowUp() {
           personaId: input.personaId,
         },
       ),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: slpKeys.noodlerRoot() }),
   });
 }

@@ -1,23 +1,23 @@
 import type { DB } from "../../../db/connection.js";
 import { selectUnusedSlurpImprovementRows } from "../../modules/creators/improvement/slp-improvement.js";
 import {
-  noodleAccounts,
-  noodleAccountSubscriptions,
-  noodleActivityDigests,
-  noodleInteractions,
-  noodlePosts,
-  noodlePostUnlocks,
-  noodleRefreshRuns,
-  noodlerCreatorReplyClaims,
-  noodlerAutomaticAttempts,
-  noodlerPreparedPosts,
-  noodlerReserveState,
-  noodlerFanActivityState,
+  slpAccounts,
+  slpAccountSubscriptions,
+  slpActivityDigests,
+  slpInteractions,
+  slpPosts,
+  slpPostUnlocks,
+  slpRefreshRuns,
+  slpCreatorCreatorReplyClaims,
+  slpCreatorAutomaticAttempts,
+  slpCreatorPreparedPosts,
+  slpCreatorReserveState,
+  slpCreatorFanActivityState,
   slurpPopulation,
   slurpAudienceTies,
   slurpEvents,
   slurpPendingText,
-  noodlerFirstPostJobs,
+  slpCreatorFirstPostJobs,
   slurpMessageClaims,
   slurpMessages,
   slurpReplyBubbles,
@@ -30,7 +30,7 @@ import {
   slurpImprovementProposals,
 } from "../../../db/schema/slurp.js";
 import { now } from "../../../utils/id-generator.js";
-import { NoodlerPostSortKey } from "../../modules/feed/slp-post-page.js";
+import { SlpCreatorPostSortKey } from "../../modules/feed/slp-post-page.js";
 import { slurpCreatorPostingIntervalMs } from "../../modules/feed/slp-posting-interval.js";
 
 /** Newest candidates the image-retry poll inspects per pass. */
@@ -40,7 +40,7 @@ export const SLURP_SETTINGS_KEY = "slurp2.settings";
 
 export const SLURP_CREATOR_STATE_KEY = "slurp2.creator.state";
 
-export const NOODLE_REFRESH_SCHEDULE_KEY = "slurp2.refresh-schedule";
+export const SLP_REFRESH_SCHEDULE_KEY = "slurp2.refresh-schedule";
 
 export const CREATOR_PRICES_KEY = "slurp2.creator-prices";
 
@@ -55,19 +55,19 @@ export const slurpViewerSettingsKey = (personaId: string) => `slurp2.viewer.${pe
  * a row the same restore just wrote.
  */
 export const SLURP_BACKUP_TABLES = {
-  accounts: noodleAccounts,
-  posts: noodlePosts,
-  subscriptions: noodleAccountSubscriptions,
-  unlocks: noodlePostUnlocks,
-  interactions: noodleInteractions,
-  replyClaims: noodlerCreatorReplyClaims,
-  preparedPosts: noodlerPreparedPosts,
-  attempts: noodlerAutomaticAttempts,
-  reserveState: noodlerReserveState,
-  fanState: noodlerFanActivityState,
-  digests: noodleActivityDigests,
-  refreshRuns: noodleRefreshRuns,
-  firstPostJobs: noodlerFirstPostJobs,
+  accounts: slpAccounts,
+  posts: slpPosts,
+  subscriptions: slpAccountSubscriptions,
+  unlocks: slpPostUnlocks,
+  interactions: slpInteractions,
+  replyClaims: slpCreatorCreatorReplyClaims,
+  preparedPosts: slpCreatorPreparedPosts,
+  attempts: slpCreatorAutomaticAttempts,
+  reserveState: slpCreatorReserveState,
+  fanState: slpCreatorFanActivityState,
+  digests: slpActivityDigests,
+  refreshRuns: slpRefreshRuns,
+  firstPostJobs: slpCreatorFirstPostJobs,
   population: slurpPopulation,
   audienceTies: slurpAudienceTies,
   events: slurpEvents,
@@ -91,7 +91,7 @@ export const SLURP_BACKUP_TABLE_ORDER = Object.keys(SLURP_BACKUP_TABLES) as Slur
 /** Every owned setting key starts here. The export takes the whole namespace by prefix. */
 export const SLURP_SETTINGS_NAMESPACE = "slurp2.";
 
-export const NOODLER_RESERVE_STATE_ID = "noodler-reserve";
+export const SLP_CREATOR_RESERVE_STATE_ID = "noodler-reserve";
 
 export const slurpSettingsUpdateQueue = { current: Promise.resolve() as Promise<unknown> };
 
@@ -100,9 +100,9 @@ export const ROLLING_DAY_MS = 24 * 60 * 60 * 1000;
 export async function planUnusedSlurpData(db: DB) {
   const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
   const [currentPrepared, currentAttempts, currentRuns, improvementJobs, improvementProposals] = await Promise.all([
-    db.select().from(noodlerPreparedPosts),
-    db.select().from(noodlerAutomaticAttempts),
-    db.select().from(noodleRefreshRuns),
+    db.select().from(slpCreatorPreparedPosts),
+    db.select().from(slpCreatorAutomaticAttempts),
+    db.select().from(slpRefreshRuns),
     db.select().from(slurpImprovementJobs),
     db.select().from(slurpImprovementProposals),
   ]);
@@ -137,4 +137,4 @@ export const elapsedPreparedSlotMs = (postsPerDay: number) => slurpCreatorPostin
 /** How long published/discarded prepared rows are kept for crash recovery before pruning. */
 export const TERMINAL_PREPARED_POST_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
-export type NoodlerPostPageCursor = NoodlerPostSortKey;
+export type SlpCreatorPostPageCursor = SlpCreatorPostSortKey;

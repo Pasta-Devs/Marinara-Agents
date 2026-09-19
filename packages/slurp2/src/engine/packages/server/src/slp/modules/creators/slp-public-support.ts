@@ -1,12 +1,12 @@
+import { extractSlpMentionHandles } from "../../../../../shared/src/slp/slp-mentions.js";
 import {
-  extractNoodleMentionHandles,
-  type NoodleAccount,
-  type NoodleAccountProfileSettings,
-  type NoodleInteractionType,
-} from "@marinara-engine/shared";
+  type SlpAccount,
+  type SlpAccountProfileSettings,
+  type SlpInteractionType,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 import { basename } from "path";
-import { parseNoodleAvatarCrop } from "../records/slp-storage-model.js";
-import { normalizeNoodleHandle } from "../../base/identity/slp-handle.js";
+import { parseSlpAvatarCrop } from "../records/slp-storage-model.js";
+import { normalizeSlpHandle } from "../../base/identity/slp-handle.js";
 
 export function parseRecord(value: unknown): Record<string, unknown> {
   if (!value) return {};
@@ -37,7 +37,7 @@ export {
   characterContextFromRow,
   escapePromptAttribute,
   escapePromptText,
-  noodlerCharacterCanonText,
+  slpCreatorCharacterCanonText,
 } from "../../base/prompting/slp-prompt-safety.js";
 
 export function galleryImageUrl(filePath: string, fallbackChatId: string) {
@@ -55,7 +55,7 @@ export function sinceHoursIso(hours: number) {
 }
 
 export function characterAvatarCrop(row: { data: unknown }) {
-  return parseNoodleAvatarCrop(parseRecord(parseRecord(row.data).extensions).avatarCrop);
+  return parseSlpAvatarCrop(parseRecord(parseRecord(row.data).extensions).avatarCrop);
 }
 
 export function characterNameFromRow(row: { data: unknown } | null | undefined) {
@@ -67,22 +67,22 @@ export function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export function mentionedCharacterAccounts(accounts: NoodleAccount[], content: string): NoodleAccount[] {
-  const mentionedHandles = new Set(extractNoodleMentionHandles(content).map(normalizeNoodleHandle));
+export function mentionedCharacterAccounts(accounts: SlpAccount[], content: string): SlpAccount[] {
+  const mentionedHandles = new Set(extractSlpMentionHandles(content).map(normalizeSlpHandle));
   if (mentionedHandles.size === 0) return [];
   return accounts.filter(
-    (account) => account.kind === "character" && mentionedHandles.has(normalizeNoodleHandle(account.handle)),
+    (account) => account.kind === "character" && mentionedHandles.has(normalizeSlpHandle(account.handle)),
   );
 }
 
-export function mentionedAccountMetadata(accounts: NoodleAccount[]) {
+export function mentionedAccountMetadata(accounts: SlpAccount[]) {
   return {
     mentionedAccountIds: accounts.map((account) => account.id),
     mentionedEntityIds: accounts.map((account) => account.entityId),
   };
 }
 
-export function generatedProfileSettings(location: string, bannerUrl: string | null): NoodleAccountProfileSettings {
+export function generatedProfileSettings(location: string, bannerUrl: string | null): SlpAccountProfileSettings {
   return {
     profileGenerated: true,
     location,
@@ -90,13 +90,13 @@ export function generatedProfileSettings(location: string, bannerUrl: string | n
   };
 }
 
-export function interactionDigestVerb(type: NoodleInteractionType) {
+export function interactionDigestVerb(type: SlpInteractionType) {
   if (type === "reply") return "replied on";
   if (type === "vote") return "voted in";
   return "liked";
 }
 
-export function noodleDigestAccountLabel(account: Pick<NoodleAccount, "kind" | "displayName" | "handle">) {
+export function noodleDigestAccountLabel(account: Pick<SlpAccount, "kind" | "displayName" | "handle">) {
   const identity = `${account.displayName} (@${account.handle})`;
   return account.kind === "persona" ? `Persona ${identity}` : identity;
 }

@@ -6,13 +6,13 @@ import { getSharp } from "../../../utils/sharp.js";
 import { logger } from "../../../lib/logger.js";
 import { llmFetch } from "../../../services/llm/base-provider.js";
 import { decodeSafePathSegment, resolveOwnedGalleryPath } from "../../../services/image/gallery-file-lifecycle.js";
-import { resolveNoodlerMediaAbsolutePath } from "./slp-media.js";
+import { resolveCreatorMediaAbsolutePath } from "./slp-media.js";
 
-export const NOODLE_VISION_MAX_IMAGES = 8;
-const NOODLE_VISION_MAX_SOURCE_BYTES = 20 * 1024 * 1024;
-const NOODLE_VISION_MAX_DIMENSION = 1568;
+export const SLP_VISION_MAX_IMAGES = 8;
+const SLP_VISION_MAX_SOURCE_BYTES = 20 * 1024 * 1024;
+const SLP_VISION_MAX_DIMENSION = 1568;
 
-export interface NoodlePromptImageCandidate {
+export interface SlpPromptImageCandidate {
   key: string;
   imageUrl: string;
   postId: string;
@@ -20,11 +20,11 @@ export interface NoodlePromptImageCandidate {
   createdAt: string;
 }
 
-export interface NoodleVisionAttachment extends NoodlePromptImageCandidate {
+export interface SlpVisionAttachment extends SlpPromptImageCandidate {
   dataUrl: string;
 }
 
-export function resolveNoodleImagePath(imageUrl: string): string | null {
+export function resolveSlpImagePath(imageUrl: string): string | null {
   if (!imageUrl.startsWith("/")) return null;
   let pathname: string;
   try {
@@ -70,12 +70,12 @@ function decodeImageDataUrl(imageUrl: string): { buffer: Buffer; expectedExt: st
   const match = imageUrl.match(/^data:image\/(png|jpe?g|webp|gif|avif);base64,([\s\S]+)$/i);
   if (!match?.[1] || !match[2]) return null;
   const buffer = Buffer.from(match[2].replace(/\s+/g, ""), "base64");
-  if (buffer.length > NOODLE_VISION_MAX_SOURCE_BYTES) return null;
+  if (buffer.length > SLP_VISION_MAX_SOURCE_BYTES) return null;
   const subtype = match[1].toLowerCase();
   return { buffer, expectedExt: `.${subtype === "jpeg" ? "jpg" : subtype}` };
 }
 
-async function optimizeNoodleVisionImage(buffer: Buffer, expectedExt?: string): Promise<string | null> {
+async function optimizeSlpVisionImage(buffer: Buffer, expectedExt?: string): Promise<string | null> {
   if (!isAllowedImageBuffer(buffer, expectedExt)) return null;
   const sharp = await getSharp();
   if (!sharp) return null;
@@ -86,8 +86,8 @@ async function optimizeNoodleVisionImage(buffer: Buffer, expectedExt?: string): 
     })
       .rotate()
       .resize({
-        width: NOODLE_VISION_MAX_DIMENSION,
-        height: NOODLE_VISION_MAX_DIMENSION,
+        width: SLP_VISION_MAX_DIMENSION,
+        height: SLP_VISION_MAX_DIMENSION,
         fit: "inside",
         withoutEnlargement: true,
       })
@@ -100,30 +100,30 @@ async function optimizeNoodleVisionImage(buffer: Buffer, expectedExt?: string): 
   }
 }
 
-async function readNoodleVisionImage(imageUrl: string, mediaPath?: string): Promise<string | null> {
+async function readSlpVisionImage(imageUrl: string, mediaPath?: string): Promise<string | null> {
   const dataUrlImage = decodeImageDataUrl(imageUrl);
-  if (dataUrlImage) return optimizeNoodleVisionImage(dataUrlImage.buffer, dataUrlImage.expectedExt);
+  if (dataUrlImage) return optimizeSlpVisionImage(dataUrlImage.buffer, dataUrlImage.expectedExt);
 
-  const filePath = mediaPath ? resolveNoodlerMediaAbsolutePath(mediaPath) : resolveNoodleImagePath(imageUrl);
+  const filePath = mediaPath ? resolveCreatorMediaAbsolutePath(mediaPath) : resolveSlpImagePath(imageUrl);
   if (!filePath) return null;
   const fileStat = await stat(filePath);
-  if (!fileStat.isFile() || fileStat.size > NOODLE_VISION_MAX_SOURCE_BYTES) return null;
-  return optimizeNoodleVisionImage(await readFile(filePath), extname(filePath));
+  if (!fileStat.isFile() || fileStat.size > SLP_VISION_MAX_SOURCE_BYTES) return null;
+  return optimizeSlpVisionImage(await readFile(filePath), extname(filePath));
 }
 
-export async function prepareNoodleVisionAttachments(
-  candidates: Array<NoodlePromptImageCandidate & { mediaPath?: string }>,
-): Promise<NoodleVisionAttachment[]> {
+export async function prepareSlpVisionAttachments(
+  candidates: Array<SlpPromptImageCandidate & { mediaPath?: string }>,
+): Promise<SlpVisionAttachment[]> {
   const ordered = candidates.slice().sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
-  const attachments: NoodleVisionAttachment[] = [];
+  const attachments: SlpVisionAttachment[] = [];
   const seenKeys = new Set<string>();
 
   for (const candidate of ordered) {
-    if (attachments.length >= NOODLE_VISION_MAX_IMAGES) break;
+    if (attachments.length >= SLP_VISION_MAX_IMAGES) break;
     if (seenKeys.has(candidate.key)) continue;
     seenKeys.add(candidate.key);
     try {
-      const dataUrl = await readNoodleVisionImage(candidate.imageUrl, candidate.mediaPath);
+      const dataUrl = await readSlpVisionImage(candidate.imageUrl, candidate.mediaPath);
       if (dataUrl) attachments.push({ ...candidate, dataUrl });
     } catch (error) {
       logger.warn(error, "[noodle/vision] Could not attach timeline image %s", candidate.key);
@@ -132,7 +132,7 @@ export async function prepareNoodleVisionAttachments(
   return attachments;
 }
 
-export function formatNoodleVisionManifest(attachments: NoodleVisionAttachment[]): string {
+export function formatSlpVisionManifest(attachments: SlpVisionAttachment[]): string {
   if (attachments.length === 0) return "";
   return [
     "# Attached Slurp Images",
@@ -216,7 +216,7 @@ export async function slurpModelLacksVision(
   return visionSupportByModel.get(key) === false;
 }
 
-export function isUnsupportedNoodleVisionInputError(error: unknown): boolean {
+export function isUnsupportedSlpVisionInputError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error ?? "");
   return (
     /(?:image|vision|multimodal|image_url).{0,100}(?:not supported|unsupported|does not support|invalid content type)/i.test(

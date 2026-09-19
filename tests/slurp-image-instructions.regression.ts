@@ -6,7 +6,7 @@ import { normalizeImageStyleProfileSettings } from "../sources/engine/packages/s
 import {
   capFallbackImagePrompt,
   MAX_FALLBACK_IMAGE_PROMPT_LENGTH,
-  selectNoodleImageProviderPrompt,
+  selectSlpImageProviderPrompt,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/base/media/slp-image-prompt";
 import { slurp2Source } from "./slurp2-source";
 
@@ -19,12 +19,12 @@ const root = join(import.meta.dirname, "..");
   const reasons: string[] = [];
   const onFallback = (reason: string) => reasons.push(reason);
   assert.equal(
-    selectNoodleImageProviderPrompt({ rewrittenPrompt: null, rawPrompt: longDraft, rewriteAttempted: true, onFallback })
+    selectSlpImageProviderPrompt({ rewrittenPrompt: null, rawPrompt: longDraft, rewriteAttempted: true, onFallback })
       .length,
     1_500,
   );
   assert.equal(
-    selectNoodleImageProviderPrompt({
+    selectSlpImageProviderPrompt({
       rewrittenPrompt: "Personality: guarded",
       rawPrompt: longDraft,
       rewriteAttempted: true,
@@ -33,7 +33,7 @@ const root = join(import.meta.dirname, "..");
     1_500,
   );
   assert.equal(reasons.length, 2);
-  assert.equal(selectNoodleImageProviderPrompt({ rewrittenPrompt: null, rawPrompt: longDraft, onFallback }), longDraft);
+  assert.equal(selectSlpImageProviderPrompt({ rewrittenPrompt: null, rawPrompt: longDraft, onFallback }), longDraft);
   assert.equal(reasons.length, 2);
 }
 
@@ -70,7 +70,7 @@ const emptyPromptPreset = normalizeImageGenerationProfile(
 ).profile;
 // The remaster compiles the rewrite at the call site instead of behind a prepare helper, so the
 // style profile is applied to the interpretation model's output before the provider sees it.
-const rewrittenProviderPrompt = selectNoodleImageProviderPrompt({
+const rewrittenProviderPrompt = selectSlpImageProviderPrompt({
   rewrittenPrompt: compileImagePrompt({
     kind: "illustration",
     prompt: "A person reading beside a window.",
@@ -91,9 +91,9 @@ const directCompiledPrompt = compileImagePrompt({
 assert.match(directCompiledPrompt.negativePrompt, /photorealistic/u);
 
 // Interpretation success sends the rewritten visual prompt only.
-assert.equal(selectNoodleImageProviderPrompt({ rewrittenPrompt, rawPrompt }), rewrittenPrompt);
-assert.equal(selectNoodleImageProviderPrompt({ rewrittenPrompt, rawPrompt }).includes(internalContext), false);
-assert.equal(selectNoodleImageProviderPrompt({ rewrittenPrompt: appearancePrompt, rawPrompt }), appearancePrompt);
+assert.equal(selectSlpImageProviderPrompt({ rewrittenPrompt, rawPrompt }), rewrittenPrompt);
+assert.equal(selectSlpImageProviderPrompt({ rewrittenPrompt, rawPrompt }).includes(internalContext), false);
+assert.equal(selectSlpImageProviderPrompt({ rewrittenPrompt: appearancePrompt, rawPrompt }), appearancePrompt);
 
 for (const leakedRewrite of [
   `A person reading beside a window.\n${internalContext}`,
@@ -104,7 +104,7 @@ for (const leakedRewrite of [
   "A person reading beside a window.\n<art_style_guidance>private style</art_style_guidance>",
 ]) {
   assert.equal(
-    selectNoodleImageProviderPrompt({
+    selectSlpImageProviderPrompt({
       rewrittenPrompt: leakedRewrite,
       rawPrompt,
       privateContext: [internalContext],
@@ -118,7 +118,7 @@ for (const leakedRewrite of [
 // and sent the styleless draft to the provider instead.
 const styledRewrite = `A person reading beside a sunlit window. ${styleGuidance}`;
 assert.equal(
-  selectNoodleImageProviderPrompt({ rewrittenPrompt: styledRewrite, rawPrompt, privateContext: [internalContext] }),
+  selectSlpImageProviderPrompt({ rewrittenPrompt: styledRewrite, rawPrompt, privateContext: [internalContext] }),
   styledRewrite,
 );
 
@@ -126,7 +126,7 @@ assert.equal(
 // a leak. `anime style` in the image instructions used to reject every generation.
 const shortInstructionRewrite = "A person reading beside a window, anime style, warm light.";
 assert.equal(
-  selectNoodleImageProviderPrompt({
+  selectSlpImageProviderPrompt({
     rewrittenPrompt: shortInstructionRewrite,
     rawPrompt,
     guidanceContext: ["anime style"],
@@ -137,7 +137,7 @@ assert.equal(
 // Personality never belongs in a visual prompt, so it stays matched at any length. The block-length
 // floor applies only to guidance the user wrote to steer the image.
 assert.equal(
-  selectNoodleImageProviderPrompt({
+  selectSlpImageProviderPrompt({
     rewrittenPrompt: "A person reading beside a window, sardonic and guarded.",
     rawPrompt,
     privateContext: ["sardonic and guarded"],
@@ -149,7 +149,7 @@ assert.equal(
 const longPrivateBlock =
   "Mention build, clothing, appearance, pose, expression, setting, lighting, mood, and composition.";
 assert.equal(
-  selectNoodleImageProviderPrompt({
+  selectSlpImageProviderPrompt({
     rewrittenPrompt: `A person reading beside a window. ${longPrivateBlock}`,
     rawPrompt,
     guidanceContext: [longPrivateBlock],
@@ -158,7 +158,7 @@ assert.equal(
 );
 
 assert.equal(
-  selectNoodleImageProviderPrompt({
+  selectSlpImageProviderPrompt({
     rewrittenPrompt: "A person reading beside a window with no text.",
     rawPrompt,
     privateContext: ["no text"],
@@ -166,7 +166,7 @@ assert.equal(
   rawPrompt,
 );
 assert.equal(
-  selectNoodleImageProviderPrompt({
+  selectSlpImageProviderPrompt({
     rewrittenPrompt,
     rawPrompt,
     privateContext: ["."],
@@ -176,7 +176,7 @@ assert.equal(
 for (const shortContext of ["a", "1"]) {
   const contextPrompt = `${rewrittenPrompt} ${shortContext}`;
   assert.equal(
-    selectNoodleImageProviderPrompt({
+    selectSlpImageProviderPrompt({
       rewrittenPrompt: contextPrompt,
       rawPrompt,
       privateContext: [shortContext],
@@ -187,7 +187,7 @@ for (const shortContext of ["a", "1"]) {
 
 // Disabled interpretation and rewrite failure both use the raw visual prompt only.
 for (const unavailablePrompt of [null, undefined, ""]) {
-  const providerPrompt = selectNoodleImageProviderPrompt({
+  const providerPrompt = selectSlpImageProviderPrompt({
     rewrittenPrompt: unavailablePrompt,
     rawPrompt,
   });
@@ -209,7 +209,7 @@ for (const source of [images, publicImages]) {
     /privateContext: \[characterPersonality\],\s*guidanceContext: \[configuredImageInstructions, connectionImageInstructions\],/u,
     "art style and image preferences must reach the provider; personality is checked at any length",
   );
-  assert.match(source, /selectNoodleImageProviderPrompt/u);
+  assert.match(source, /selectSlpImageProviderPrompt/u);
   // Both fallback paths — interpretation disabled, and a rejected rewrite — must still carry style.
   assert.match(source, /compiledDraft|compiledPrompt/u);
   // A reviewed prompt is recompiled so the style profile survives the review path.

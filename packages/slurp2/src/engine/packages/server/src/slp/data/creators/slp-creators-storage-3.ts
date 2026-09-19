@@ -1,25 +1,25 @@
 import { and, desc, eq, inArray, or } from "../../../db/file-query.js";
+import { SlpAccountSettingsPatchInput } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
 import {
-  NoodleAccount,
-  NoodleAccountSettings,
-  NoodleAccountSettingsPatchInput,
-  NoodlerSourceSnapshot,
-} from "@marinara-engine/shared";
+  SlpAccount,
+  SlpAccountSettings,
+  SlpCreatorSourceSnapshot,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 import { SlurpStageProfileInput } from "../../modules/discovery/slp-discovery-profile.js";
 import { resolveSlurpCreatorScheduleStatus } from "../../modules/creators/slp-creator-schedule-context.js";
 import {
-  noodleAccounts,
-  noodleAccountSubscriptions,
-  noodleActivityDigests,
-  noodleInteractions,
-  noodlePosts,
-  noodlePostUnlocks,
-  noodlerCreatorReplyClaims,
-  noodlerPreparedPosts,
+  slpAccounts,
+  slpAccountSubscriptions,
+  slpActivityDigests,
+  slpInteractions,
+  slpPosts,
+  slpPostUnlocks,
+  slpCreatorCreatorReplyClaims,
+  slpCreatorPreparedPosts,
   slurpAudienceTies,
   slurpEvents,
   slurpPendingText,
-  noodlerFirstPostJobs,
+  slpCreatorFirstPostJobs,
   slurpMessageClaims,
   slurpMessages,
   slurpReplyBubbles,
@@ -27,24 +27,24 @@ import {
   slurpCommissions,
   slurpImprovementProposals,
 } from "../../../db/schema/slurp.js";
-import { readNoodlerAccountMediaPath, readNoodlerAvatarMediaPath } from "../../base/identity/slp-avatar.js";
+import { readCreatorAccountMediaPath, readCreatorAvatarMediaPath } from "../../base/identity/slp-avatar.js";
 import { newId, now } from "../../../utils/id-generator.js";
 import {
-  compareMinimizedNoodlerSourceSnapshot,
-  minimizeNoodlerSourceSnapshot,
+  compareMinimizedCreatorSourceSnapshot,
+  minimizeCreatorSourceSnapshot,
 } from "../../base/identity/slp-source.js";
-import { resolveNoodlerSourceSnapshot } from "./slp-source-resolve.js";
+import { resolveCreatorSourceSnapshot } from "./slp-source-resolve.js";
 import { withoutHiddenAmbientAccounts } from "../audience/slp-ambient-profiles.js";
 import { slurpViewerSettingsKey } from "../host/slp-storage-constants.js";
 import {
-  emptyNoodleAccountSettings,
+  emptySlpAccountSettings,
   defaultAutoPostingSettings,
-  normalizeNoodleAccountSettings,
+  normalizeSlpAccountSettings,
   normalizeHandle,
 } from "../../modules/records/slp-storage-model.js";
 import type {
   SlurpSourceKind,
-  SlurpNoodleAccountSettings,
+  SlurpSlpAccountSettings,
   SlurpManagedStageProfile,
   SlurpAccount,
 } from "../../modules/records/slp-storage-model.js";
@@ -84,16 +84,16 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
     async listNoodlerAccounts(options: { includeHidden?: boolean } = {}): Promise<SlurpAccount[]> {
       const rows = await db
         .select()
-        .from(noodleAccounts)
-        .where(eq(noodleAccounts.platform, "slurp"))
-        .orderBy(desc(noodleAccounts.updatedAt));
+        .from(slpAccounts)
+        .where(eq(slpAccounts.platform, "slurp"))
+        .orderBy(desc(slpAccounts.updatedAt));
       return this.withoutHiddenAmbientAccounts(rows.map(mapAccount), options.includeHidden);
     },
     async getNoodlerAccountById(id: string, options: { includeHidden?: boolean } = {}): Promise<SlurpAccount | null> {
       const rows = await db
         .select()
-        .from(noodleAccounts)
-        .where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.platform, "slurp")));
+        .from(slpAccounts)
+        .where(and(eq(slpAccounts.id, id), eq(slpAccounts.platform, "slurp")));
       return this.withoutHiddenAmbientAccount(rows[0] ? mapAccount(rows[0]) : null, options.includeHidden);
     },
     async getNoodlerAccountForSource(
@@ -102,10 +102,7 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
     ): Promise<SlurpAccount | null> {
       return this.getSlurpAccountForEntity(sourceKind, sourceEntityId, "creator");
     },
-    async patchViewerSettings(
-      personaId: string,
-      input: NoodleAccountSettingsPatchInput,
-    ): Promise<NoodleAccount | null> {
+    async patchViewerSettings(personaId: string, input: SlpAccountSettingsPatchInput): Promise<SlpAccount | null> {
       return enqueueFinancial(async () => {
         if (input.subtree !== "social") return null;
         const viewer = await this.getViewer(personaId);
@@ -125,7 +122,7 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
       targetAccountId: string,
       followed: boolean,
       followedAt = now(),
-    ): Promise<{ account: NoodleAccount; changed: boolean } | null> {
+    ): Promise<{ account: SlpAccount; changed: boolean } | null> {
       return enqueueFinancial(async () => {
         const viewer = await this.getViewer(personaId);
         if (!viewer) return null;
@@ -136,7 +133,7 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
           return { account: viewer, changed: false };
         if (followed) followingAccountTimestamps[targetAccountId] = followedAt;
         else delete followingAccountTimestamps[targetAccountId];
-        const next: NoodleAccountSettings = {
+        const next: SlpAccountSettings = {
           ...viewer.settings,
           social: {
             ...viewer.settings.social,
@@ -150,52 +147,46 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
         return { account: (await this.getViewer(personaId))!, changed: true };
       });
     },
-    async deleteNoodlerAccount(id: string): Promise<NoodleAccount | null> {
+    async deleteNoodlerAccount(id: string): Promise<SlpAccount | null> {
       const existing = await this.getNoodlerAccountById(id, { includeHidden: true });
       if (!existing) return null;
       await this.leaveCrossovers(id);
-      const postRows = await db.select().from(noodlePosts).where(eq(noodlePosts.authorAccountId, id));
+      const postRows = await db.select().from(slpPosts).where(eq(slpPosts.authorAccountId, id));
       const postIds = postRows.map((post) => post.id);
       const interactionRows =
         postIds.length > 0
-          ? await db.select().from(noodleInteractions).where(inArray(noodleInteractions.postId, postIds))
+          ? await db.select().from(slpInteractions).where(inArray(slpInteractions.postId, postIds))
           : [];
       const interactionIds = interactionRows.map((interaction) => interaction.id);
       await db.transaction(async (tx) => {
         if (postIds.length > 0) {
-          await tx.delete(noodleActivityDigests).where(inArray(noodleActivityDigests.sourcePostId, postIds));
+          await tx.delete(slpActivityDigests).where(inArray(slpActivityDigests.sourcePostId, postIds));
         }
         if (interactionIds.length > 0) {
-          await tx
-            .delete(noodleActivityDigests)
-            .where(inArray(noodleActivityDigests.sourceInteractionId, interactionIds));
+          await tx.delete(slpActivityDigests).where(inArray(slpActivityDigests.sourceInteractionId, interactionIds));
         }
         await tx
-          .delete(noodlePostUnlocks)
+          .delete(slpPostUnlocks)
           .where(
             or(
-              eq(noodlePostUnlocks.viewerAccountId, id),
-              postIds.length > 0
-                ? inArray(noodlePostUnlocks.postId, postIds)
-                : eq(noodlePostUnlocks.postId, "__none__"),
+              eq(slpPostUnlocks.viewerAccountId, id),
+              postIds.length > 0 ? inArray(slpPostUnlocks.postId, postIds) : eq(slpPostUnlocks.postId, "__none__"),
             ),
           );
         await tx
-          .delete(noodleAccountSubscriptions)
-          .where(
-            or(eq(noodleAccountSubscriptions.viewerAccountId, id), eq(noodleAccountSubscriptions.creatorAccountId, id)),
-          );
+          .delete(slpAccountSubscriptions)
+          .where(or(eq(slpAccountSubscriptions.viewerAccountId, id), eq(slpAccountSubscriptions.creatorAccountId, id)));
         await tx
-          .delete(noodlerCreatorReplyClaims)
+          .delete(slpCreatorCreatorReplyClaims)
           .where(
             or(
-              eq(noodlerCreatorReplyClaims.creatorAccountId, id),
+              eq(slpCreatorCreatorReplyClaims.creatorAccountId, id),
               postIds.length > 0
-                ? inArray(noodlerCreatorReplyClaims.postId, postIds)
-                : eq(noodlerCreatorReplyClaims.postId, "__none__"),
+                ? inArray(slpCreatorCreatorReplyClaims.postId, postIds)
+                : eq(slpCreatorCreatorReplyClaims.postId, "__none__"),
             ),
           );
-        await tx.delete(noodlerPreparedPosts).where(eq(noodlerPreparedPosts.creatorAccountId, id));
+        await tx.delete(slpCreatorPreparedPosts).where(eq(slpCreatorPreparedPosts.creatorAccountId, id));
         // Threads on either side of the deleted account, and their messages. Left behind, the
         // inbox would keep listing a creator that no longer exists.
         const threadRows = await tx
@@ -210,13 +201,11 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
           await tx.delete(slurpThreads).where(inArray(slurpThreads.id, threadIds));
         }
         await tx
-          .delete(noodleInteractions)
+          .delete(slpInteractions)
           .where(
             or(
-              eq(noodleInteractions.actorAccountId, id),
-              postIds.length > 0
-                ? inArray(noodleInteractions.postId, postIds)
-                : eq(noodleInteractions.postId, "__none__"),
+              eq(slpInteractions.actorAccountId, id),
+              postIds.length > 0 ? inArray(slpInteractions.postId, postIds) : eq(slpInteractions.postId, "__none__"),
             ),
           );
         // Rows keyed to this Creator that nothing else cleans up. Left behind, a deleted Creator
@@ -225,9 +214,9 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
         await tx.delete(slurpAudienceTies).where(eq(slurpAudienceTies.creatorAccountId, id));
         await tx.delete(slurpPendingText).where(eq(slurpPendingText.creatorAccountId, id));
         await tx.delete(slurpEvents).where(eq(slurpEvents.creatorAccountId, id));
-        await tx.delete(noodlerFirstPostJobs).where(eq(noodlerFirstPostJobs.creatorAccountId, id));
+        await tx.delete(slpCreatorFirstPostJobs).where(eq(slpCreatorFirstPostJobs.creatorAccountId, id));
         await tx.delete(slurpImprovementProposals).where(eq(slurpImprovementProposals.accountId, id));
-        await tx.delete(noodleAccounts).where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.platform, "slurp")));
+        await tx.delete(slpAccounts).where(and(eq(slpAccounts.id, id), eq(slpAccounts.platform, "slurp")));
         await tx._fileStore.flush();
       });
       return existing;
@@ -238,7 +227,7 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
         accounts.map(async (account) => {
           const disclosureMode = account.settings.privacy.identityDisclosure ?? null;
           const publicAccount = await this.resolveAccountSource(account);
-          const currentSource = publicAccount ? await resolveNoodlerSourceSnapshot(db, publicAccount) : null;
+          const currentSource = publicAccount ? await resolveCreatorSourceSnapshot(db, publicAccount) : null;
           const baseline = account.settings.profile.noodlerSourceSnapshot;
           return {
             id: account.id,
@@ -271,8 +260,8 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
               : { state: "not-applicable" as const },
             sourceStatus: !currentSource
               ? { state: "missing" as const }
-              : compareMinimizedNoodlerSourceSnapshot(
-                  baseline ?? minimizeNoodlerSourceSnapshot(currentSource, disclosureMode ?? "open"),
+              : compareMinimizedCreatorSourceSnapshot(
+                  baseline ?? minimizeCreatorSourceSnapshot(currentSource, disclosureMode ?? "open"),
                   currentSource,
                   disclosureMode ?? "open",
                 ),
@@ -291,22 +280,22 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
       sourceEntityId: string,
       stageProfile: SlurpStageProfileInput,
       wizardExecutionId?: string,
-      sourceSnapshot?: NoodlerSourceSnapshot,
+      sourceSnapshot?: SlpCreatorSourceSnapshot,
       avatarUrl?: string | null,
       bannerUrl?: string | null,
-    ): Promise<NoodleAccount | null> {
+    ): Promise<SlpAccount | null> {
       const publicAccount = await this.resolveSource(sourceKind, sourceEntityId);
       if (!publicAccount) return null;
       const timestamp = now();
       const id = newId();
-      const base = emptyNoodleAccountSettings();
-      const accountSettings: SlurpNoodleAccountSettings = {
+      const base = emptySlpAccountSettings();
+      const accountSettings: SlurpSlpAccountSettings = {
         ...base,
         profile: {
           ...(wizardExecutionId && { noodlerWizardExecutionId: wizardExecutionId }),
           ...(sourceSnapshot && { noodlerSourceSnapshot: sourceSnapshot }),
           // Only an OPEN creator may hold the literal source banner (see
-          // resolveNoodlerCreatorArtwork); callers already gate the value on that, this is
+          // resolveCreatorArtwork); callers already gate the value on that, this is
           // belt-and-suspenders against a future caller passing one for hinted/secret.
           ...(stageProfile.disclosureMode === "open" && bannerUrl ? { bannerUrl } : {}),
           gender: stageProfile.gender,
@@ -319,7 +308,7 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
           access: { hiddenFromAccountIds: [] },
         },
       };
-      await db.insert(noodleAccounts).values({
+      await db.insert(slpAccounts).values({
         id,
         kind: publicAccount.kind,
         entityId: publicAccount.entityId,
@@ -344,34 +333,34 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
     async updateNoodlerStageProfile(
       id: string,
       stageProfile: SlurpStageProfileInput,
-      sourceSnapshot?: NoodlerSourceSnapshot,
+      sourceSnapshot?: SlpCreatorSourceSnapshot,
       location?: string,
-    ): Promise<NoodleAccount | null> {
+    ): Promise<SlpAccount | null> {
       return db.transaction(async (tx) => {
         const rows = await tx
           .select()
-          .from(noodleAccounts)
-          .where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.platform, "slurp")));
+          .from(slpAccounts)
+          .where(and(eq(slpAccounts.id, id), eq(slpAccounts.platform, "slurp")));
         const row = rows[0];
         if (!row) return null;
-        const settings = normalizeNoodleAccountSettings(row.settings);
-        // Only OPEN may hold the literal source photo (see resolveNoodlerCreatorArtwork). A
+        const settings = normalizeSlpAccountSettings(row.settings);
+        // Only OPEN may hold the literal source photo (see resolveCreatorArtwork). A
         // downgrade away from open drops an inherited avatar/banner outright, the same way a
         // hinted or secret creator never gets one at creation. A NoodleR-owned generated image
         // (readNoodler*MediaPath resolves it) survives the downgrade — it was never the source's
         // literal photo, so it carries no identity to strip.
         const droppingOpen = stageProfile.disclosureMode !== "open";
         const profile = { ...settings.profile };
-        if (droppingOpen && !readNoodlerAccountMediaPath(id, profile.bannerUrl ?? null)) {
+        if (droppingOpen && !readCreatorAccountMediaPath(id, profile.bannerUrl ?? null)) {
           delete profile.bannerUrl;
         }
         await tx
-          .update(noodleAccounts)
+          .update(slpAccounts)
           .set({
             handle: normalizeHandle(stageProfile.handle, row.entityId),
             displayName: stageProfile.displayName,
             bio: stageProfile.bio,
-            ...(droppingOpen && !readNoodlerAvatarMediaPath(id, row.avatarUrl) ? { avatarUrl: null } : {}),
+            ...(droppingOpen && !readCreatorAvatarMediaPath(id, row.avatarUrl) ? { avatarUrl: null } : {}),
             settings: JSON.stringify({
               ...settings,
               profile: {
@@ -386,53 +375,53 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
                 identityDisclosure: stageProfile.disclosureMode,
                 stagePersonality: stageProfile.stagePersonality,
               },
-            } satisfies SlurpNoodleAccountSettings),
+            } satisfies SlurpSlpAccountSettings),
             updatedAt: now(),
           })
-          .where(eq(noodleAccounts.id, id));
-        const updatedRows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id));
+          .where(eq(slpAccounts.id, id));
+        const updatedRows = await tx.select().from(slpAccounts).where(eq(slpAccounts.id, id));
         return updatedRows[0] ? mapAccount(updatedRows[0]) : null;
       });
     },
-    async updateNoodlerAvatar(id: string, avatarUrl: string | null): Promise<NoodleAccount | null> {
+    async updateNoodlerAvatar(id: string, avatarUrl: string | null): Promise<SlpAccount | null> {
       await db.transaction(async (tx) => {
         const rows = await tx
           .select()
-          .from(noodleAccounts)
-          .where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.platform, "slurp")));
+          .from(slpAccounts)
+          .where(and(eq(slpAccounts.id, id), eq(slpAccounts.platform, "slurp")));
         const row = rows[0];
         if (!row) return;
-        const settings = normalizeNoodleAccountSettings(row.settings);
+        const settings = normalizeSlpAccountSettings(row.settings);
         await tx
-          .update(noodleAccounts)
+          .update(slpAccounts)
           .set({
             avatarUrl,
             settings: JSON.stringify({
               ...settings,
               profile: { ...settings.profile, avatarCrop: null },
-            } satisfies NoodleAccountSettings),
+            } satisfies SlpAccountSettings),
             updatedAt: now(),
           })
-          .where(eq(noodleAccounts.id, id));
+          .where(eq(slpAccounts.id, id));
       });
       return this.getNoodlerAccountById(id);
     },
     /** Creator banner lives in settings.profile, which patchAccountSettings keeps closed for noodler rows. */
-    async updateNoodlerBanner(id: string, bannerUrl: string | null): Promise<NoodleAccount | null> {
+    async updateNoodlerBanner(id: string, bannerUrl: string | null): Promise<SlpAccount | null> {
       return db.transaction(async (tx) => {
-        const row = (await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id)))[0];
+        const row = (await tx.select().from(slpAccounts).where(eq(slpAccounts.id, id)))[0];
         if (!row || row.platform !== "slurp") return null;
-        const settings = normalizeNoodleAccountSettings(row.settings);
+        const settings = normalizeSlpAccountSettings(row.settings);
         const profile = { ...settings.profile };
         if (bannerUrl) profile.bannerUrl = bannerUrl;
         else delete profile.bannerUrl;
         await tx
-          .update(noodleAccounts)
+          .update(slpAccounts)
           .set({
-            settings: JSON.stringify({ ...settings, profile } satisfies NoodleAccountSettings),
+            settings: JSON.stringify({ ...settings, profile } satisfies SlpAccountSettings),
             updatedAt: now(),
           })
-          .where(eq(noodleAccounts.id, id));
+          .where(eq(slpAccounts.id, id));
         return this.getNoodlerAccountById(id);
       });
     },

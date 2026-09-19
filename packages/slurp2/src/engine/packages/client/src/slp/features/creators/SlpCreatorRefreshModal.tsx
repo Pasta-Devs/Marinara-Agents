@@ -4,7 +4,7 @@ import { toast } from "sonner";
 
 import { Modal } from "../../../components/ui/Modal";
 
-import { Avatar, getNoodleAccentStyle, NOODLE_PINK } from "../../base/chrome/SlpChrome";
+import { Avatar, getSlpAccentStyle, SLP_PINK } from "../../base/chrome/SlpChrome";
 
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
 
@@ -33,7 +33,7 @@ export function SlpCreatorRefreshModal(page: SlpBackstagePageProps) {
       width="max-w-xl"
       closeDisabled={refreshCreators.isPending}
       panelClassName="noodle-icon-scope"
-      panelStyle={getNoodleAccentStyle(NOODLE_PINK, {
+      panelStyle={getSlpAccentStyle(SLP_PINK, {
         "--background": "var(--slurp-surface)",
         "--foreground": "var(--slurp-text)",
         "--muted-foreground": "var(--slurp-muted)",

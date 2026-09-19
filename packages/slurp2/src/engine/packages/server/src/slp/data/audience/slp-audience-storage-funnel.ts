@@ -9,7 +9,7 @@ import { tolerateMissingTables } from "../../base/host/slp-host-tables.js";
 import { and, asc, desc, eq, inArray } from "../../../db/file-query.js";
 import { now } from "../../../utils/id-generator.js";
 import type { DB } from "../../../db/connection.js";
-import { noodleAccountSubscriptions, slurpAudienceTies, slurpPopulation } from "../../../db/schema/slurp.js";
+import { slpAccountSubscriptions, slurpAudienceTies, slurpPopulation } from "../../../db/schema/slurp.js";
 import { SLURP_AUDIENCE_ARCS, type SlurpAudienceArc } from "../../modules/projects/slp-audience-arc.js";
 import {
   generateSlurpPopulationMember,
@@ -407,8 +407,8 @@ export function createSlurpPopulationStorage(db: DB) {
         : (
             await db
               .select()
-              .from(noodleAccountSubscriptions)
-              .where(inArray(noodleAccountSubscriptions.creatorAccountId, [...wanted]))
+              .from(slpAccountSubscriptions)
+              .where(inArray(slpAccountSubscriptions.creatorAccountId, [...wanted]))
           ).map((subscription) => `${subscription.viewerAccountId}:${subscription.creatorAccountId}`),
     );
     const rows = await db.select().from(slurpAudienceTies);

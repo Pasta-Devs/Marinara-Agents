@@ -3,7 +3,7 @@
 
 import { Toggle } from "../../modules/settings/SlpSettingsControls";
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
-import { useDeleteNoodlerStageProfile } from "../creators/slp-creators-contract";
+import { useDeleteCreatorStageProfile } from "../creators/slp-creators-contract";
 import { Pencil, RefreshCw, Save, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -25,7 +25,7 @@ export function AmbientProfilesPanel({
   const profilesQuery = useSlurpAmbientProfiles();
   const reroll = useRerollAmbientProfiles();
   const update = useUpdateAmbientProfile();
-  const remove = useDeleteNoodlerStageProfile();
+  const remove = useDeleteCreatorStageProfile();
   const profiles = profilesQuery.data?.items ?? [];
   const [selected, setSelected] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ id: string; displayName: string; handle: string; bio: string } | null>(null);

@@ -1,12 +1,12 @@
 import type { SlurpPromotion } from "./slp-ads-contract";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
-import { noodleKeys } from "../../base/state/slp-query-keys.js";
+import { slpKeys } from "../../base/state/slp-query-keys.js";
 import type { SlurpContentRating } from "../../base/state/slp-state-types.js";
 
 export function useSlurpInlineAds(personaId: string | null, creatorId?: string | null, contextTags: string[] = []) {
   return useQuery({
-    queryKey: noodleKeys.ads(personaId ?? "none", creatorId, contextTags),
+    queryKey: slpKeys.ads(personaId ?? "none", creatorId, contextTags),
     queryFn: () =>
       api.get<{ items: SlurpPromotion[] }>(
         `/slurp2/noodler/viewer/ads?personaId=${encodeURIComponent(personaId!)}${creatorId ? `&creatorId=${encodeURIComponent(creatorId)}` : ""}${contextTags.length ? `&contextTags=${encodeURIComponent(contextTags.join(","))}` : ""}`,
@@ -22,7 +22,7 @@ export function useHideSlurpAd() {
       api.post(`/slurp2/noodler/viewer/ads/${encodeURIComponent(promotionId)}/hide`, { personaId }),
     onSuccess: (_state, input) =>
       qc.invalidateQueries({
-        queryKey: noodleKeys.noodlerViewers(),
+        queryKey: slpKeys.slpCreatorViewers(),
         predicate: (query) => query.queryKey.includes(input.personaId),
       }),
   });
@@ -39,9 +39,9 @@ export function useHideSlurpAdBrand() {
     mutationFn: ({ personaId, brand }: { personaId: string; brand: string }) =>
       api.post(`/slurp2/noodler/viewer/ads/brand/hide`, { personaId, brand }),
     onSuccess: (_state, input) => {
-      void qc.invalidateQueries({ queryKey: noodleKeys.adState(input.personaId) });
+      void qc.invalidateQueries({ queryKey: slpKeys.adState(input.personaId) });
       void qc.invalidateQueries({
-        queryKey: noodleKeys.noodlerViewers(),
+        queryKey: slpKeys.slpCreatorViewers(),
         predicate: (query) => query.queryKey.includes(input.personaId),
       });
     },
@@ -52,12 +52,12 @@ export function useUnhideSlurpAdBrand() {
   return useMutation({
     mutationFn: ({ personaId, brand }: { personaId: string; brand: string }) =>
       api.post(`/slurp2/noodler/viewer/ads/brand/unhide`, { personaId, brand }),
-    onSuccess: (_state, input) => qc.invalidateQueries({ queryKey: noodleKeys.adState(input.personaId) }),
+    onSuccess: (_state, input) => qc.invalidateQueries({ queryKey: slpKeys.adState(input.personaId) }),
   });
 }
 export function useSlurpAdState(personaId: string | null) {
   return useQuery({
-    queryKey: noodleKeys.adState(personaId ?? "none"),
+    queryKey: slpKeys.adState(personaId ?? "none"),
     queryFn: () =>
       api.get<{ hiddenBrands: string[]; hidden: SlurpPromotion[]; seen: SlurpPromotion[] }>(
         `/slurp2/noodler/viewer/ads/state?personaId=${encodeURIComponent(personaId!)}`,
@@ -67,7 +67,7 @@ export function useSlurpAdState(personaId: string | null) {
 }
 export function useSlurpAdPool() {
   return useQuery({
-    queryKey: noodleKeys.adPool(),
+    queryKey: slpKeys.adPool(),
     queryFn: () => api.get<{ items: SlurpPromotion[] }>(`/slurp2/noodler/ads/pool`),
   });
 }
@@ -79,8 +79,8 @@ export function useGenerateSlurpAds() {
         count,
       }),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: noodleKeys.adPool() });
-      void qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() });
+      void qc.invalidateQueries({ queryKey: slpKeys.adPool() });
+      void qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() });
     },
   });
 }
@@ -95,8 +95,8 @@ export function useCreateSlurpAd() {
   return useMutation({
     mutationFn: (input: SlurpAdInput) => api.post<SlurpPromotion>(`/slurp2/noodler/ads/pool`, input),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: noodleKeys.adPool() });
-      void qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() });
+      void qc.invalidateQueries({ queryKey: slpKeys.adPool() });
+      void qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() });
     },
   });
 }
@@ -106,8 +106,8 @@ export function useUpdateSlurpAd() {
     mutationFn: ({ id, ...patch }: Partial<SlurpAdInput> & { id: string; retiredAt?: null }) =>
       api.patch<SlurpPromotion>(`/slurp2/noodler/ads/pool/${encodeURIComponent(id)}`, patch),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: noodleKeys.adPool() });
-      void qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() });
+      void qc.invalidateQueries({ queryKey: slpKeys.adPool() });
+      void qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() });
     },
   });
 }
@@ -116,8 +116,8 @@ export function useDeleteSlurpAd() {
   return useMutation({
     mutationFn: (promotionId: string) => api.delete(`/slurp2/noodler/ads/pool/${encodeURIComponent(promotionId)}`),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: noodleKeys.adPool() });
-      void qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() });
+      void qc.invalidateQueries({ queryKey: slpKeys.adPool() });
+      void qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() });
     },
   });
 }
@@ -127,14 +127,14 @@ export function useGenerateSlurpAdImage() {
     mutationFn: (promotionId: string) =>
       api.post<{ ad: SlurpPromotion }>(`/slurp2/noodler/ads/${encodeURIComponent(promotionId)}/image`, {}),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: noodleKeys.adPool() });
-      void qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() });
+      void qc.invalidateQueries({ queryKey: slpKeys.adPool() });
+      void qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() });
     },
   });
 }
 export function useSlurpAdLorebooks(enabled: boolean) {
   return useQuery({
-    queryKey: [...noodleKeys.adPool(), "lorebooks"],
+    queryKey: [...slpKeys.adPool(), "lorebooks"],
     queryFn: () => api.get<{ items: { id: string; name: string }[] }>(`/slurp2/noodler/ads/lorebooks`),
     enabled,
   });
@@ -147,8 +147,8 @@ export function useSyncSlurpAdLorebook() {
         force,
       }),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: noodleKeys.adPool() });
-      void qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() });
+      void qc.invalidateQueries({ queryKey: slpKeys.adPool() });
+      void qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() });
     },
   });
 }
@@ -158,8 +158,8 @@ export function useImportSlurpAds() {
     mutationFn: (payload: unknown) =>
       api.post<{ imported: number; events: number }>(`/slurp2/noodler/ads/import`, { mode: "merge", payload }),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: noodleKeys.adPool() });
-      void qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() });
+      void qc.invalidateQueries({ queryKey: slpKeys.adPool() });
+      void qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() });
     },
   });
 }
@@ -171,7 +171,7 @@ export function useResetSlurpAds() {
     // ever matched the contextless variant and left every visible feed showing reset ads.
     onSuccess: (_state, personaId) =>
       queryClient.invalidateQueries({
-        queryKey: noodleKeys.noodlerViewers(),
+        queryKey: slpKeys.slpCreatorViewers(),
         predicate: (query) => query.queryKey.includes("ads") && query.queryKey.includes(personaId),
       }),
   });

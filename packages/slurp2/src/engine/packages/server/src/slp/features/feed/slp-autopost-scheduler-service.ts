@@ -2,10 +2,10 @@ import type { FastifyInstance } from "fastify";
 import { logger } from "../../../lib/logger.js";
 import { sweepStagedImages } from "../../../services/image/image-generation.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
-import { reconcileNoodlerReserve, runNoodlerAutoPostPoll } from "./reserve/slp-reserve-operation.js";
-import { tryBackfillNextNoodlerCreatorArtwork } from "../creators/slp-creators-contract.js";
+import { reconcileCreatorReserve, runCreatorAutoPostPoll } from "./reserve/slp-reserve-operation.js";
+import { tryBackfillNextCreatorArtwork } from "../creators/slp-creators-contract.js";
 import { slurpPollBackoffMs } from "../../base/model/slp-poll-backoff.js";
-import { createNoodlerNoodleImagesService } from "../media/slp-media-contract.js";
+import { createCreatorSlpImagesService } from "../media/slp-media-contract.js";
 
 const INITIAL_DELAY_MS = 30_000;
 const POLL_MS = 60_000;
@@ -46,11 +46,11 @@ export async function pauseNoodleAutoPost(): Promise<() => void> {
 }
 
 /** True when nothing can be prepared or published, so the poll only has existing rows to tidy. */
-export function noodlerReservePollIsIdle(settings: { autoPostingScheduleEnabled: boolean }): boolean {
+export function slpCreatorReservePollIsIdle(settings: { autoPostingScheduleEnabled: boolean }): boolean {
   return !settings.autoPostingScheduleEnabled;
 }
 
-export function startNoodleAutoPostScheduler(app: FastifyInstance, registerStop?: (stop: () => Promise<void>) => void) {
+export function startSlpAutoPostScheduler(app: FastifyInstance, registerStop?: (stop: () => Promise<void>) => void) {
   let stopped = false;
   let running: Promise<void> = Promise.resolve();
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -90,19 +90,19 @@ export function startNoodleAutoPostScheduler(app: FastifyInstance, registerStop?
       if (Date.now() >= imageWorkNotBefore) {
         // Artwork is independent of the posting schedule: a creator with no picture needs one even
         // when automatic posting is off, so this runs before the idle check returns.
-        const artwork = await tryBackfillNextNoodlerCreatorArtwork(app.db);
+        const artwork = await tryBackfillNextCreatorArtwork(app.db);
         if (artwork !== "idle" && artwork !== "unavailable")
           logger.info("[noodle-autopost] Filled in a creator %s", artwork);
         // A post whose picture failed published without it. Draw one of them per pass, so the
         // post gets its image back without a separate scheduler.
-        const redrawn = await createNoodlerNoodleImagesService(app.db).retryNextFailedPostImage();
+        const redrawn = await createCreatorSlpImagesService(app.db).retryNextFailedPostImage();
         if (redrawn === "retried") logger.info("[noodle-autopost] Redrew a missing post image");
         const imageWorkFailed = artwork === "unavailable" || redrawn === "failed";
         imageWorkFailures = imageWorkFailed ? imageWorkFailures + 1 : 0;
         imageWorkNotBefore = imageWorkFailed ? Date.now() + slurpPollBackoffMs(POLL_MS, imageWorkFailures) : 0;
       }
-      if (noodlerReservePollIsIdle(settings) && !(await noodle.hasNoodlerPreparedPosts())) return;
-      const outcome = await runNoodlerAutoPostPoll(app.db);
+      if (slpCreatorReservePollIsIdle(settings) && !(await noodle.hasNoodlerPreparedPosts())) return;
+      const outcome = await runCreatorAutoPostPoll(app.db);
       if (outcome.published > 0) logger.info("[noodle-autopost] Published %d due Slurp post(s)", outcome.published);
       if (outcome.reserve === "prepared") logger.info("[noodle-autopost] Prepared one Slurp post");
       if (outcome.reserve === "scheduled") logger.info("[noodle-autopost] Scheduled one on-demand Slurp post");
@@ -130,7 +130,7 @@ export function startNoodleAutoPostScheduler(app: FastifyInstance, registerStop?
     const swept = sweepStagedImages();
     if (swept > 0) logger.info("[noodle-autopost] Reclaimed %d staged image file(s)", swept);
     await createSlurpStorage(app.db).ensureNoodlerReserveState();
-    await reconcileNoodlerReserve(app.db);
+    await reconcileCreatorReserve(app.db);
   })().catch((error) => logger.error(error, "[noodle-autopost] Startup reconciliation failed"));
   activePoll = running;
   schedule(INITIAL_DELAY_MS);

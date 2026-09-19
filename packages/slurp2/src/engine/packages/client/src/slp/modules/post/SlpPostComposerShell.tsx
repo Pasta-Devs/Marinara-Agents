@@ -1,7 +1,7 @@
 // Shared composer chrome: avatar gutter, borderless body, divider, and the
 // tools-left / action-right toolbar row. Noodle fills it with its post composer;
 // NoodleR fills it with the guided-generation composer. Keeps both pixel-aligned.
-export function NoodleComposerShell({
+export function SlpComposerShell({
   header,
   avatar,
   children,

@@ -40,7 +40,7 @@ export function capFallbackImagePrompt(value: string): string {
 }
 
 /** Select only the visual prompt that can be sent to an image provider. */
-export function selectNoodleImageProviderPrompt(input: {
+export function selectSlpImageProviderPrompt(input: {
   rewrittenPrompt: string | null | undefined;
   rawPrompt: string;
   /** Never belongs in a visual prompt at any length, so it is matched whole. */
@@ -87,7 +87,7 @@ export function selectNoodleImageProviderPrompt(input: {
  * Recover the visual idea when a weaker timeline model wraps imagePrompt in
  * JSON or repeats Marinara's legacy prompt-assembly labels inside the field.
  */
-export function normalizeNoodleImagePrompt(value: string | null | undefined): string | null {
+export function normalizeSlpImagePrompt(value: string | null | undefined): string | null {
   if (!value?.trim()) return null;
   const candidate = stripCodeFence(value);
 
@@ -97,7 +97,7 @@ export function normalizeNoodleImagePrompt(value: string | null | undefined): st
       for (const key of ["imagePrompt", "image_prompt", "prompt", "draftPrompt"]) {
         const nested = parsed[key];
         if (typeof nested === "string" && nested.trim() && nested.trim() !== candidate) {
-          return normalizeNoodleImagePrompt(nested);
+          return normalizeSlpImagePrompt(nested);
         }
       }
       return null;
@@ -130,7 +130,7 @@ export function normalizeNoodleImagePrompt(value: string | null | undefined): st
  *
  * Returns `null` when the post has no image, so callers can spread it away.
  */
-export function noodleImageContext(post: { imageUrl?: string | null; imagePrompt?: string | null }): string | null {
+export function slpImageContext(post: { imageUrl?: string | null; imagePrompt?: string | null }): string | null {
   if (!post.imageUrl) return null;
   const prompt = post.imagePrompt?.trim();
   return prompt ? `The post has an attached image showing: ${prompt}` : "The post has an attached image.";

@@ -13,7 +13,7 @@ import { createCharactersStorage } from "../../../services/storage/characters.st
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { createSlurpMessagesStorage, type SlurpMessage } from "../../data/slp-storage.js";
 import { createSlurpEventsStorage } from "../../data/notifications/slp-notification-storage.js";
-import { tryNoodlerAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
+import { tryCreatorAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
 import { generateSlurpMessageReply, SlurpMessageBudgetUnavailableError } from "./slp-message-generation-service.js";
 import { describeSlurpDayVibe } from "../world/slp-world-contract.js";
 import { recoverSlurpMood } from "../../modules/world/slp-mood.js";
@@ -199,7 +199,7 @@ export async function replyToSlurpMessage(
   };
 
   try {
-    const locked = await tryNoodlerAccountOperation(thread.creatorAccountId, async () => {
+    const locked = await tryCreatorAccountOperation(thread.creatorAccountId, async () => {
       const settings = await slurp.getSettings();
       const connection = await resolveSlurpTextConnection(
         createConnectionsStorage(db),

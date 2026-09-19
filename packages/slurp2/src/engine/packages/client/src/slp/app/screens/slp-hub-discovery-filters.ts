@@ -1,5 +1,5 @@
 import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import type { NoodlerConnectionCounts } from "../../features/audience/slp-audience-contract";
+import type { SlpCreatorConnectionCounts } from "../../features/audience/slp-audience-contract";
 import {
   filterAndSortSlurpCreators,
   SLURP_DISCOVERY_TAGS,
@@ -24,7 +24,7 @@ export function useSlurpHubDiscoveryFilters({
   onSearchChange,
 }: {
   discoveredCreators: SlurpViewerCreator[];
-  connectionCounts: NoodlerConnectionCounts | undefined;
+  connectionCounts: SlpCreatorConnectionCounts | undefined;
   search: string;
   searchTerm: string;
   onSearchChange: (value: string) => void;

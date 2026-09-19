@@ -159,3 +159,45 @@ modules, rejected alternative, and migration consequence.
 - **Migration consequence:** no `components/slurp/` path remains, so no source test may read one
   except through `slurp2Source`. New Slurp2 code must live in the `slp` roots or one of the three
    permanent exceptions.
+
+## 2026-09-19 — Slice 12: Slurp2 owns its social vocabulary
+
+- **Problem:** Slurp2 imported 106 Noodle-named symbols from `@marinara-engine/shared`. Two of them
+  named a type Slurp2 already declared itself, so the import resolved to nothing. The names describe
+  Slurp2's own `slurp2_*` rows and its own `/api/slurp2` payloads, yet the package could not build
+  without the Engine's Noodle vocabulary, and its own copy still said NoodleR.
+- **Gate:** Slurp2 never receives Engine-produced Noodle data, so none of those names is an Engine
+  contract. Evidence: `grep -rn "noodle_" packages/slurp2/src` returns nothing, and Slurp2's Drizzle
+  symbols all resolve to its own `slurp2_*` schema; the host activation surface in
+  `slp-server-entry.ts` passes no Noodle-shaped value in or out; Engine
+  `services/import/profile-import-noodle.ts` has exactly one importer, Engine `backup.routes.ts`,
+  which Slurp2 never reaches; Engine backup keys off `noodle_*` names and the `noodle:backup`
+  capability while Slurp2 registers its own `slurp2:backup` no-op pause; and the persona and
+  character source bridge in `slp-source-resolve.ts` crosses on Engine `Character` and `Persona`, a
+  `SlpAccount` appearing only as `Pick<…, "kind" | "entityId">`, a Slurp2 row holding a pointer.
+- **Decision:** (1) The Engine is not changed. Frozen legacy Slurp is never rebuilt, so renaming
+  Engine types would leave it unbuildable and a future security fix to it could not ship. (2) All
+  202 declarations of the Engine's Noodle types, schemas and utilities are copied into
+  `shared/src/slp/` as `slp-social.types.ts`, `slp-social.schema.ts`,
+  `slp-social-generation.schema.ts`, `slp-mentions.ts`, `slp-polls.ts`, `slp-post-images.ts`,
+  `slp-creator-onboarding.ts` and `slp-interactions.ts`, renamed `Noodle` → `Slp` and
+  `Noodler` → `SlpCreator`. (3) `AvatarCrop` and `avatarCropSchema` stay Engine imports: Engine
+  avatar rendering consumes them. (4) No re-export shim and no alias back to the old name.
+- **Classification:** every reclassified name and its replacement is recorded in
+  `slurp2-vocabulary-rename-map.json` (202 entries) and `slurp2-owned-vocabulary.json` (the 190
+  exported ones). The only names Slurp2 may still take from the Engine are `APIProvider`,
+  `AvatarCrop`, `avatarCropSchema`, `normalizeAvatarCrop`, `Persona`, `PROFESSOR_MARI_ID`,
+  `CSRF_HEADER`, `CSRF_HEADER_VALUE`, `LIMITS` and `isOpenAIGpt56Model`. No name was ambiguous.
+- **Affected modules:** the whole `shared/src/slp` root, 127 client and server `slp` files, and two
+  new regressions, `slurp2-owned-vocabulary` and `slurp2-vocabulary-shape`.
+- **Rejected alternative:** renaming the types in Marinara-Engine. It would break the next build of
+  frozen legacy Slurp, which is never rebuilt and so could never ship a security fix again. Also
+  rejected: a re-export shim, which would leave the old vocabulary reachable and never removed.
+- **Migration consequence:** none. Every `slurp2_*` table and column, stored JSON key, storage key,
+  settings key, locale key, route path and the `platform` value `"noodler"` is unchanged, so the
+  change is compile-time only. `slurp2-vocabulary-shape` proves all 202 copied declarations are
+  shape-identical to the Engine originals; it needs `MARINARA_ENGINE_ROOT` and reports a skip
+  without one.
+- **Pending decision:** renaming the `/noodler/*` routes. It is runtime-safe because the client and
+  the server ship in one bundle, but it deliberately rewrites the 179-route inventory baseline, so
+  it needs its own slice.
