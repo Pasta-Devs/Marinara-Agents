@@ -2,16 +2,9 @@ import { Search, X } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import {
-  useReplaceSlurpDiscoveryTag,
-  useSlurpDiscoveryTagUsage,
-} from "./slp-discovery-tag-hooks";
+import { useReplaceSlurpDiscoveryTag, useSlurpDiscoveryTagUsage } from "./slp-discovery-tag-hooks";
 import { showConfirmDialog } from "../../../lib/app-dialogs";
-import {
-  groupSlurpDiscoveryTags,
-  normalizeSlurpDiscoveryTag,
-  SLURP_DISCOVERY_TAG_MAX_LENGTH,
-} from "./slp-discovery";
+import { groupSlurpDiscoveryTags, normalizeSlurpDiscoveryTag, SLURP_DISCOVERY_TAG_MAX_LENGTH } from "./slp-discovery";
 import { cn } from "../../../lib/utils";
 import { SectionTitle } from "../../modules/settings/SlpSettingsControls";
 

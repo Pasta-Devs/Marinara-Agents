@@ -44,7 +44,7 @@ import { ConversationMediaPickerPanel } from "../chat/ConversationMediaPickerPan
 import type { ChatImage } from "../../hooks/use-gallery";
 import { useNearViewportSlurpMediaSrc } from "../../slp/base/media/slp-media-src";
 import { Modal } from "../ui/Modal";
-import { Avatar, ProfileInitial, SlurpMediaImg } from "./SlurpShell";
+import { Avatar, ProfileInitial, SlurpMediaImg } from "../../slp/base/chrome/SlpChrome";
 import { formatTime } from "../../slp/base/ui/slp-date-time";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import {

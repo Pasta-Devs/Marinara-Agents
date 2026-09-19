@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import type { SlurpPromotion } from "../ads/slp-ads-contract";
 import type { SlurpSettings } from "../settings/slp-settings-contract";
 import { SlurpInlineAd } from "../../../components/slurp/SlurpInlineAd";
-import { ProfileInitial } from "../../../components/slurp/SlurpShell";
+import { ProfileInitial } from "../../base/chrome/SlpChrome";
 
 import { cn } from "../../../lib/utils";
 import { humanize } from "./SlpBackstageNavigation";

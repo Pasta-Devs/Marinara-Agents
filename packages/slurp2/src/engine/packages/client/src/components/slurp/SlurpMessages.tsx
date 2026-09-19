@@ -42,7 +42,7 @@ import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
 import { getApiErrorMessage } from "../../lib/api-client";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { cn } from "../../lib/utils";
-import { Avatar } from "./SlurpShell";
+import { Avatar } from "../../slp/base/chrome/SlpChrome";
 import { SlurpEmptyArtwork } from "../../slp/base/chrome/SlpEmptyArtwork";
 import { formatTime } from "../../slp/base/ui/slp-date-time";
 import { SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "../../slp/modules/coin/SlpCoin";

@@ -21,6 +21,6 @@ const png = readFileSync("packages/slurp2/slurp2-logo.png");
 assert.equal(SLURP_LOGO_SRC, `data:image/png;base64,${png.toString("base64")}`, "the inlined logo must match the PNG");
 assert.deepEqual(png, readFileSync("packages/slurp/slurp-logo.png"), "Slurp2 keeps Slurp Legacy's logo");
 
-const shell = readFileSync(join(clientRoot, "components/slurp/SlurpShell.tsx"), "utf8");
+const shell = readFileSync(join(clientRoot, "slp/base/chrome/SlpChrome.tsx"), "utf8");
 assert.match(shell, /export const NOODLE_LOGO_SRC = SLURP_LOGO_SRC;/u);
 console.log("slurp2 logo regression passed");

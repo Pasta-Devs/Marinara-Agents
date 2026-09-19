@@ -6,7 +6,7 @@ import { SlurpCreatorBulkEdit } from "../../../components/slurp/SlurpCreatorBulk
 import { toast } from "sonner";
 import { formatDateTime } from "../../base/ui/slp-date-time";
 import { showConfirmDialog } from "../../../lib/app-dialogs";
-import { Avatar } from "../../../components/slurp/SlurpShell";
+import { Avatar } from "../../base/chrome/SlpChrome";
 
 import { accentButton, focusRing, noteClass, quietButton, selectClass } from "./slp-creator-classes";
 import { CreatorCollabsEditor, CreatorMetricsRow, CreatorMetricsTotals } from "./SlpCreatorMetrics";

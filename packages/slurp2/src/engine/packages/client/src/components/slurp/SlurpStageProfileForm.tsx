@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import type { NoodleIdentityDisclosure, NoodlerStageProfile } from "@marinara-engine/shared";
 import type { SlurpStageProfileInput } from "../../slp/base/state/slp-state-types";
-import { getNoodleAccentStyle, NOODLE_PINK, ProfileInitial } from "./SlurpShell";
+import { getNoodleAccentStyle, NOODLE_PINK, ProfileInitial } from "../../slp/base/chrome/SlpChrome";
 import { SlurpDiscoveryProfileEditor } from "../../slp/features/discovery/SlpDiscoveryProfileEditor";
 import { isSlurpDiscoveryProfileIncomplete } from "../../slp/features/discovery/slp-discovery";
 import { fieldClass, textareaClass } from "./SlurpPostCard";

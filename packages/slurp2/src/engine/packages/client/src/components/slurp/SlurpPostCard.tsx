@@ -46,7 +46,7 @@ import {
 } from "../chat/ConversationMediaPickerPanel";
 import type { ChatImage } from "../../hooks/use-gallery";
 import { useSlurpSettings } from "../../slp/features/settings/slp-settings-hooks";
-import { Avatar, SlurpMediaImg } from "./SlurpShell";
+import { Avatar, SlurpMediaImg } from "../../slp/base/chrome/SlpChrome";
 import { formatTime } from "../../slp/base/ui/slp-date-time";
 import { NoodleImageComposer } from "../../slp/base/media/SlpImageComposer";
 import { NoodlePollComposer } from "../../slp/modules/poll/SlpPollComposer";

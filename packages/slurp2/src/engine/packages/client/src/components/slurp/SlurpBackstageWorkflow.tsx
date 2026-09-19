@@ -49,7 +49,7 @@ import { useResetSlurpArcType } from "../../slp/features/settings/slp-settings-h
 import { Modal } from "../ui/Modal";
 import { SLURP_SETTINGS_SECTIONS } from "../../slp/base/navigation/slp-navigation.types";
 import { type NoodlerManagedStageProfile } from "@marinara-engine/shared";
-import { Avatar, SLURP_ROW_ACTIVE_CLASS, SLURP_ROW_CLASS } from "./SlurpShell";
+import { Avatar, SLURP_ROW_ACTIVE_CLASS, SLURP_ROW_CLASS } from "../../slp/base/chrome/SlpChrome";
 
 export const settingsSections = SLURP_SETTINGS_SECTIONS;
 // Three shipped spice levels. Kept byte-identical to the server presets so the settings surface

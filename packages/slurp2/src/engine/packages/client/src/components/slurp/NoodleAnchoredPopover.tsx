@@ -2,7 +2,7 @@ import { useContext, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "../../lib/utils";
 import { ModalPortalContext } from "../ui/Modal";
-import { getNoodleAccentStyle, NOODLE_ICON_SCOPE_CLASS, useNoodleAccent } from "./SlurpShell";
+import { getNoodleAccentStyle, NOODLE_ICON_SCOPE_CLASS, useNoodleAccent } from "../../slp/base/chrome/SlpChrome";
 
 export function NoodleAnchoredPopover({
   anchorRef,

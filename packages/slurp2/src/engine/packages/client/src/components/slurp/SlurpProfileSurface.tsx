@@ -1,7 +1,7 @@
 import { Heart, MapPin, Sparkles, Upload, Users } from "lucide-react";
 import type { ChangeEvent, CSSProperties, ReactNode, RefObject } from "react";
 import { cn } from "../../lib/utils";
-import { Avatar, SlurpMediaImg } from "./SlurpShell";
+import { Avatar, SlurpMediaImg } from "../../slp/base/chrome/SlpChrome";
 import { SlurpEmptyArtwork } from "../../slp/base/chrome/SlpEmptyArtwork";
 import { useTranslation as useUiTranslation } from "react-i18next";
 

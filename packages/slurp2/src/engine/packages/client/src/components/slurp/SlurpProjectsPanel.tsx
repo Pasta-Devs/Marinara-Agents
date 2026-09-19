@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { SlurpMediaImg } from "./SlurpShell";
+import { SlurpMediaImg } from "../../slp/base/chrome/SlpChrome";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import type {
   SlurpArcEffects,

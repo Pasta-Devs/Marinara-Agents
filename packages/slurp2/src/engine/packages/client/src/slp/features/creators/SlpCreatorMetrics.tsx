@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
 
-import { Avatar } from "../../../components/slurp/SlurpShell";
+import { Avatar } from "../../base/chrome/SlpChrome";
 
 import { noteClass, selectClass } from "./slp-creator-classes";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";

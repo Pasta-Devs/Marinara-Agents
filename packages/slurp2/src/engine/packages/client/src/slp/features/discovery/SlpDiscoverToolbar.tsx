@@ -2,11 +2,7 @@ import { Check, Coins, LayoutGrid, List, Tags, UsersRound, X } from "lucide-reac
 import { useEffect, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { useSlurpSettings } from "../settings/slp-settings-contract";
-import {
-  groupSlurpDiscoveryTags,
-  type SlurpDiscoverLayout,
-  type SlurpDiscoverSort,
-} from "./slp-discovery";
+import { groupSlurpDiscoveryTags, type SlurpDiscoverLayout, type SlurpDiscoverSort } from "./slp-discovery";
 import type { SlurpDiscoveryGender } from "../../base/state/slp-state-types";
 import { cn } from "../../../lib/utils";
 

@@ -42,7 +42,7 @@ import { useUpdateSlurpConnectionsForCreators } from "../../slp/features/media/s
 import { useSlurpSettings, useUpdateSlurpSettings } from "../../slp/features/settings/slp-settings-hooks";
 import { cn, generateClientId } from "../../lib/utils";
 import { Modal } from "../ui/Modal";
-import { Avatar, getNoodleAccentStyle, NOODLE_PINK } from "./SlurpShell";
+import { Avatar, getNoodleAccentStyle, NOODLE_PINK } from "../../slp/base/chrome/SlpChrome";
 import {
   SLURP_ACTIVITY_PRESETS,
   SLURP_DEFAULT_ACTIVITY_PRESET,

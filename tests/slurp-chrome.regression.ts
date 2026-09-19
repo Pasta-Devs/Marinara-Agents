@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { slurp2Source } from "./slurp2-source";
 
-const shell = readFileSync("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpShell.tsx", "utf8");
+const shell = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpShell.tsx");
 
 // The drawer already overlaid the page; the flicker came from the panel sitting at x:100% during
 // its slide-in and widening the page. `clip`, not `hidden` — `hidden` would make this a scroll

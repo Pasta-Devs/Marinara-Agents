@@ -11,7 +11,7 @@ import {
 import type { SlurpImprovementProposal } from "../../slp/features/maintenance/slp-improvement-hooks";
 import type { SlurpSettings } from "../../slp/features/settings/slp-settings-contract";
 import { toast } from "sonner";
-import { Avatar } from "./SlurpShell";
+import { Avatar } from "../../slp/base/chrome/SlpChrome";
 import { SlpSettingScopeBadge } from "../../slp/modules/settings/SlpSettingsKit";
 
 // Lanes with a server generator. The server rejects the rest until they exist.
