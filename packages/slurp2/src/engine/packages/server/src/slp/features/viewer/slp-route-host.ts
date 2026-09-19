@@ -4,7 +4,7 @@ import { createConnectionsStorage } from "../../../services/storage/connections.
 import { createNoodlerNoodleImagesService } from "../media/slp-media-contract.js";
 import { createGarnishAds } from "../ads/slp-ads-contract.js";
 import { createSlurpFirstPostQueue } from "../onboarding/slp-onboarding-contract.js";
-import type { NoodleAccount } from "@marinara-engine/shared";
+import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import { buildNoodlerPublicIdentity } from "../feed/slp-feed-contract.js";
 import type { FastifyInstance } from "fastify";
 import { type NoodlerViewerSignalResponse } from "../../modules/requests/slp-request-schemas.js";
@@ -19,7 +19,7 @@ export function createSlpRouteHost<T>(app: FastifyInstance, noodle: T) {
   const firstPostQueue = createSlurpFirstPostQueue(app.db);
   const noodlerViewerSignalCache = new Map<string, { generationKey: string; value: NoodlerViewerSignalResponse }>();
 
-  async function resolveNoodlerPublicIdentity(publicAccount: NoodleAccount) {
+  async function resolveNoodlerPublicIdentity(publicAccount: SlpAccount) {
     const source =
       publicAccount.kind === "character"
         ? await characters.getById(publicAccount.entityId)

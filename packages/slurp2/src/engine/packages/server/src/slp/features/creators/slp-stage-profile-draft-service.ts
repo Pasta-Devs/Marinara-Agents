@@ -1,9 +1,7 @@
-import {
-  noodleStageProfileDraftResponseSchema,
-  type APIProvider,
-  type NoodleIdentityDisclosure,
-  type NoodleStageProfileDraftRequest,
-} from "@marinara-engine/shared";
+import { type APIProvider } from "@marinara-engine/shared";
+import { type SlpStageProfileDraftRequest } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import { slpStageProfileDraftResponseSchema } from "../../../../../shared/src/slp/slp-social.schema.js";
+import { type SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
 import { isDebugAgentsEnabled } from "../../../config/runtime-config.js";
 import type { DB } from "../../../db/connection.js";
 import { logDebugOverride } from "../../../lib/logger.js";
@@ -44,14 +42,14 @@ const CONCEALED_SOURCE_FALLBACK_BRIEF = "General temperament and creative intere
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
-function disclosureRules(mode: NoodleIdentityDisclosure, publicIdentity: { displayName: string; handle: string }) {
+function disclosureRules(mode: SlpIdentityDisclosure, publicIdentity: { displayName: string; handle: string }) {
   if (mode === "open")
     return `This is the same public creator. Use exactly ${publicIdentity.displayName} as displayName and ${publicIdentity.handle} as handle. Write a concise social profile bio that summarizes the linked source. Preserve a direct bio edit from the current draft. Do not invent a stage identity.`;
   return "Create the same person behind a different stage name and handle, as an open secret. Preserve species, body, age range, unusual anatomy, scars, missing or unusual features, clothing preferences, voice, interests, and recurring visual traits. Preserve indirect clues that regular followers may recognize. Never use the exact public name or handle, and never copy canonical biography sentences.";
 }
 
 export function buildNoodlerStageProfileDraftMessages(input: {
-  request: Pick<NoodleStageProfileDraftRequest, "disclosureMode" | "guidance" | "currentDraft">;
+  request: Pick<SlpStageProfileDraftRequest, "disclosureMode" | "guidance" | "currentDraft">;
   publicAccount: { displayName: string; handle: string; bio: string };
   source: {
     data: string | ({ name?: unknown } & Record<string, unknown>);
@@ -183,7 +181,7 @@ export function parseNoodlerStageProfileDraft(content: string, allowedTags?: rea
 export async function generateNoodlerStageProfileDraft(
   db: DB,
   input: {
-    request: NoodleStageProfileDraftRequest;
+    request: SlpStageProfileDraftRequest;
     connection: GenerationConnection;
   },
 ): Promise<

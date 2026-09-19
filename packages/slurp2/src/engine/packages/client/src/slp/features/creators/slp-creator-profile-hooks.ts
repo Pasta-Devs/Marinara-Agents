@@ -1,12 +1,14 @@
 import { useTranslation as useUiTranslation } from "react-i18next";
 import type {
-  NoodleAccount,
-  NoodleBulkNoodlerAccountCreateInput,
-  NoodleStageProfileDraftRequest,
-  NoodlerManagedStageProfile,
-  NoodlerSourceSnapshot,
-  NoodlerStageProfile,
-} from "@marinara-engine/shared";
+  SlpBulkCreatorAccountCreateInput,
+  SlpStageProfileDraftRequest,
+} from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import type {
+  SlpAccount,
+  SlpCreatorManagedStageProfile,
+  SlpCreatorSourceSnapshot,
+  SlpCreatorStageProfile,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "../../../lib/api-client.js";
@@ -41,7 +43,7 @@ export function useBulkCreateNoodlerStageProfiles() {
   const { t: localizeUi } = useUiTranslation();
   return useMutation({
     mutationFn: (
-      input: NoodleBulkNoodlerAccountCreateInput & {
+      input: SlpBulkCreatorAccountCreateInput & {
         connectionId?: string | null;
       },
     ) =>
@@ -83,7 +85,7 @@ export function useUpdateNoodlerStageProfile() {
     }: {
       accountId: string;
       acceptSourceChanges?: boolean;
-      sourceSnapshot?: NoodlerSourceSnapshot;
+      sourceSnapshot?: SlpCreatorSourceSnapshot;
       sourceRevisionToken?: string;
       confirmAvatarReview?: boolean;
     } & SlurpStageProfileInput) =>
@@ -103,7 +105,7 @@ export function useUpdateNoodlerProfileLocation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: { accountId: string; personaId: string; location: string }) =>
-      api.patch<NoodlerStageProfile>(`/slurp2/accounts/${encodeURIComponent(input.accountId)}/profile`, {
+      api.patch<SlpCreatorStageProfile>(`/slurp2/accounts/${encodeURIComponent(input.accountId)}/profile`, {
         personaId: input.personaId,
         profile: { location: input.location },
       }),
@@ -111,7 +113,7 @@ export function useUpdateNoodlerProfileLocation() {
   });
 }
 function useNoodlerAvatarMutation<TInput extends { accountId: string }>(
-  mutationFn: (input: TInput) => Promise<NoodlerStageProfile>,
+  mutationFn: (input: TInput) => Promise<SlpCreatorStageProfile>,
 ) {
   const qc = useQueryClient();
   return useMutation({
@@ -129,7 +131,7 @@ export function useUploadNoodlerAvatar() {
     const form = new FormData();
     form.append("payload", "{}");
     form.append("file", file);
-    return api.upload<NoodlerStageProfile>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/avatar`, form);
+    return api.upload<SlpCreatorStageProfile>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/avatar`, form);
   });
 }
 export function useUploadNoodlerBanner() {
@@ -137,13 +139,13 @@ export function useUploadNoodlerBanner() {
     const form = new FormData();
     form.append("payload", "{}");
     form.append("file", file);
-    return api.upload<NoodlerStageProfile>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/banner`, form);
+    return api.upload<SlpCreatorStageProfile>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/banner`, form);
   });
 }
 export function useGenerateNoodlerArtwork() {
   return useNoodlerAvatarMutation(
     ({ accountId, kind, guidance }: { accountId: string; kind: "avatar" | "banner"; guidance?: string }) =>
-      api.post<NoodlerStageProfile>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/artwork/generate`, {
+      api.post<SlpCreatorStageProfile>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/artwork/generate`, {
         kind,
         guidance,
       }),
@@ -151,19 +153,19 @@ export function useGenerateNoodlerArtwork() {
 }
 export function useUseNoodlerSourceAvatar() {
   return useNoodlerAvatarMutation(({ accountId }) =>
-    api.patch<NoodlerStageProfile>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/avatar/source`, {}),
+    api.patch<SlpCreatorStageProfile>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/avatar/source`, {}),
   );
 }
 export function useRemoveNoodlerAvatar() {
   return useNoodlerAvatarMutation(({ accountId }) =>
-    api.delete<NoodlerStageProfile>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/avatar`),
+    api.delete<SlpCreatorStageProfile>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/avatar`),
   );
 }
 function useNoodlerSourceAction(action: "dismiss" | "adopt-identity") {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (accountId: string) =>
-      api.post<NoodlerManagedStageProfile>(
+      api.post<SlpCreatorManagedStageProfile>(
         `/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/source/${action}`,
         {},
       ),
@@ -185,7 +187,7 @@ export function useDeleteNoodlerStageProfile() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (accountId: string) =>
-      api.delete<NoodleAccount>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}`),
+      api.delete<SlpAccount>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}`),
     onSuccess: (_account, accountId) => {
       qc.removeQueries({ queryKey: noodleKeys.noodlerPosts(accountId) });
       return Promise.all([
@@ -200,14 +202,14 @@ export function useDeleteNoodlerStageProfile() {
 }
 export function useGenerateNoodlerStageProfileDraft() {
   return useMutation({
-    mutationFn: (input: NoodleStageProfileDraftRequest) => {
+    mutationFn: (input: SlpStageProfileDraftRequest) => {
       const controller = new AbortController();
       // ponytail: fixed 60s ceiling, no per-provider tuning — raise if real drafts routinely take longer
       const timer = setTimeout(() => controller.abort(), 60_000);
       return api
         .post<
           SlurpStageProfileInput & {
-            sourceSnapshot?: NoodlerSourceSnapshot;
+            sourceSnapshot?: SlpCreatorSourceSnapshot;
             sourceRevisionToken?: string;
             /** What the server repaired or still needs. Shown once, never saved. */
             notes?: string[];

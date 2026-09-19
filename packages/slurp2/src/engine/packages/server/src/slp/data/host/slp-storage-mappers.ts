@@ -1,20 +1,19 @@
+import { normalizeAvatarCrop } from "@marinara-engine/shared";
+import { createSlpPoll, readSlpPollFromMetadata } from "../../../../../shared/src/slp/slp-polls.js";
+import { SlpPollInput } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
 import {
-  createNoodlePoll,
-  normalizeAvatarCrop,
-  readNoodlePollFromMetadata,
-  NoodleAccount,
-  NoodleAccountSettings,
-  NoodleAccountSubscription,
-  NoodleAuthorSnapshot,
-  NoodleDigestEntry,
-  NoodleInteraction,
-  NoodleInteractionType,
-  NoodlePost,
-  NoodlePollInput,
-  NoodlePostUnlock,
-  NoodlerManagedPost,
-  NoodleRefreshRun,
-} from "@marinara-engine/shared";
+  SlpAccount,
+  SlpAccountSettings,
+  SlpAccountSubscription,
+  SlpAuthorSnapshot,
+  SlpCreatorManagedPost,
+  SlpDigestEntry,
+  SlpInteraction,
+  SlpInteractionType,
+  SlpPost,
+  SlpPostUnlock,
+  SlpRefreshRun,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 import {
   parseRecord,
   emptyNoodleAccountSettings,
@@ -61,7 +60,7 @@ export function mapAccount(row: AccountRow): SlurpAccount {
 
 export function mapViewer(
   personaId: string,
-  settings: NoodleAccountSettings,
+  settings: SlpAccountSettings,
   persona: {
     name: string;
     convoDisplayName?: string | null;
@@ -70,7 +69,7 @@ export function mapViewer(
     createdAt?: string;
     updatedAt?: string;
   },
-): NoodleAccount {
+): SlpAccount {
   return {
     id: personaId,
     kind: "persona",
@@ -93,7 +92,7 @@ export function sourceAccountFromEntity(
   kind: SlurpSourceKind,
   sourceEntityId: string,
   source: Record<string, unknown>,
-): NoodleAccount {
+): SlpAccount {
   const data = kind === "character" ? parseRecord(source.data) : source;
   const displayName = String(
     kind === "persona" ? source.convoDisplayName || source.name || "User" : data.name || "Character",
@@ -123,7 +122,7 @@ export function sourceAccountFromEntity(
  * byte-identical to this, so a caller that plans activity for an account-backed audience member has
  * to build the snapshot from here rather than assembling its own and hoping the fields match.
  */
-export function snapshotForAccount(account: NoodleAccount): NoodleAuthorSnapshot {
+export function snapshotForAccount(account: SlpAccount): SlpAuthorSnapshot {
   return {
     id: account.id,
     kind: account.kind,
@@ -135,7 +134,7 @@ export function snapshotForAccount(account: NoodleAccount): NoodleAuthorSnapshot
   };
 }
 
-export function mapPost(row: PostRow): NoodlePost {
+export function mapPost(row: PostRow): SlpPost {
   return {
     id: row.id,
     authorAccountId: row.authorAccountId,
@@ -153,7 +152,7 @@ export function mapPost(row: PostRow): NoodlePost {
   };
 }
 
-export function mapManagedPost(row: PostRow): NoodlerManagedPost {
+export function mapManagedPost(row: PostRow): SlpCreatorManagedPost {
   return {
     ...mapPost(row),
     title: row.title?.trim() || null,
@@ -162,11 +161,11 @@ export function mapManagedPost(row: PostRow): NoodlerManagedPost {
 
 export function updatePollMetadata(
   metadata: Record<string, unknown>,
-  pollUpdate: NoodlePollInput | null | undefined,
+  pollUpdate: SlpPollInput | null | undefined,
 ): Record<string, unknown> {
   if (pollUpdate === undefined) return { ...metadata };
-  const currentPoll = readNoodlePollFromMetadata(metadata);
-  const generatedPoll = pollUpdate ? createNoodlePoll(pollUpdate) : null;
+  const currentPoll = readSlpPollFromMetadata(metadata);
+  const generatedPoll = pollUpdate ? createSlpPoll(pollUpdate) : null;
   const historicalOptionIds = Array.isArray(metadata.pollOptionIds)
     ? metadata.pollOptionIds.filter((id): id is string => typeof id === "string")
     : [];
@@ -218,7 +217,7 @@ export function updatePollMetadata(
   return nextMetadata;
 }
 
-export function mapSubscription(row: SubscriptionRow): NoodleAccountSubscription {
+export function mapSubscription(row: SubscriptionRow): SlpAccountSubscription {
   return {
     id: row.id,
     viewerAccountId: row.viewerAccountId,
@@ -227,7 +226,7 @@ export function mapSubscription(row: SubscriptionRow): NoodleAccountSubscription
   };
 }
 
-export function mapPostUnlock(row: PostUnlockRow): NoodlePostUnlock {
+export function mapPostUnlock(row: PostUnlockRow): SlpPostUnlock {
   return { id: row.id, viewerAccountId: row.viewerAccountId, postId: row.postId, createdAt: row.createdAt };
 }
 
@@ -239,7 +238,7 @@ export function imageClaimIsAvailable(row: PostRow, at: string) {
   );
 }
 
-export function mapInteraction(row: InteractionRow): NoodleInteraction {
+export function mapInteraction(row: InteractionRow): SlpInteraction {
   return {
     id: row.id,
     postId: row.postId,
@@ -247,7 +246,7 @@ export function mapInteraction(row: InteractionRow): NoodleInteraction {
     actorAccountId: row.actorAccountId,
     type:
       row.type === "repost" || row.type === "reply" || row.type === "like" || row.type === "vote"
-        ? (row.type as NoodleInteractionType)
+        ? (row.type as SlpInteractionType)
         : "like",
     content: row.content ?? null,
     imageUrl: row.imageUrl ?? null,
@@ -256,7 +255,7 @@ export function mapInteraction(row: InteractionRow): NoodleInteraction {
   };
 }
 
-export function mapDigest(row: DigestRow): NoodleDigestEntry {
+export function mapDigest(row: DigestRow): SlpDigestEntry {
   return {
     id: row.id,
     accountIds: parseStringArray(row.accountIds),
@@ -268,7 +267,7 @@ export function mapDigest(row: DigestRow): NoodleDigestEntry {
   };
 }
 
-export function mapRefreshRun(row: RefreshRunRow): NoodleRefreshRun {
+export function mapRefreshRun(row: RefreshRunRow): SlpRefreshRun {
   return {
     id: row.id,
     status: row.status === "completed" || row.status === "failed" ? row.status : "running",

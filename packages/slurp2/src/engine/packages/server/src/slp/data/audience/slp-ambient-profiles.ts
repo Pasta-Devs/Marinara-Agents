@@ -1,9 +1,9 @@
-import type { NoodleAccount } from "@marinara-engine/shared";
+import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { createSlurpStorage } from "../slp-storage.js";
 
 /**
  * Seed copy for the ambient roster. The entity ids are the stable Engine ids
- * (AMBIENT_NOODLE_ENTITY_IDS); `legacyName`/`legacyBio` are the old carried-over copy, renamed in place.
+ * (AMBIENT_SLP_ENTITY_IDS); `legacyName`/`legacyBio` are the old carried-over copy, renamed in place.
  */
 export const AMBIENT_NOODLE_PROFILES = [
   {
@@ -53,12 +53,12 @@ export const AMBIENT_NOODLE_PROFILES = [
 const AMBIENT_NOODLE_ENTITY_ID_SET = new Set<string>(AMBIENT_NOODLE_PROFILES.map((profile) => profile.entityId));
 let ambientSeedQueue: Promise<void> = Promise.resolve();
 
-export function isAmbientNoodleAccount(account: Pick<NoodleAccount, "kind" | "entityId">): boolean {
+export function isAmbientNoodleAccount(account: Pick<SlpAccount, "kind" | "entityId">): boolean {
   return account.kind === "random_user" && AMBIENT_NOODLE_ENTITY_ID_SET.has(account.entityId);
 }
 
 /** Ambient roster accounts are hidden, not deleted, while ambient profiles are switched off. */
-export function withoutHiddenAmbientAccounts<T extends Pick<NoodleAccount, "kind" | "entityId">>(
+export function withoutHiddenAmbientAccounts<T extends Pick<SlpAccount, "kind" | "entityId">>(
   accounts: T[],
   allowRandomUsers: boolean,
 ): T[] {
@@ -81,17 +81,14 @@ export async function dismissAmbientNoodleAccount(noodle: AmbientSeedStorage, en
  * Create the missing, non-dismissed roster accounts. Switched off, nothing is created or deleted:
  * existing rows are returned as-is (storage hides them from every listing) so edits survive.
  */
-export async function ensureAmbientNoodleAccounts(
-  noodle: AmbientSeedStorage,
-  invited: boolean,
-): Promise<NoodleAccount[]> {
+export async function ensureAmbientNoodleAccounts(noodle: AmbientSeedStorage, invited: boolean): Promise<SlpAccount[]> {
   let resolveTurn!: () => void;
   const previousTurn = ambientSeedQueue;
   ambientSeedQueue = new Promise<void>((resolve) => {
     resolveTurn = resolve;
   });
   await previousTurn;
-  const accounts: NoodleAccount[] = [];
+  const accounts: SlpAccount[] = [];
   try {
     const dismissed = new Set((await noodle.getSettings()).dismissedAmbientProfileIds);
     for (const { legacyName, legacyBio, ...profile } of AMBIENT_NOODLE_PROFILES) {

@@ -1,12 +1,10 @@
 import { and, eq, inArray, isNotNull, isNull, lt, or } from "../../../db/file-query.js";
 import {
-  NoodleCreatePostInput,
-  NoodlePost,
-  NoodlePostUpdateInput,
-  NoodlePostSource,
-  NoodlerPostUpdateInput,
-  NoodlerManagedPost,
-} from "@marinara-engine/shared";
+  SlpCreatePostInput,
+  SlpCreatorPostUpdateInput,
+  SlpPostUpdateInput,
+} from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import { SlpCreatorManagedPost, SlpPost, SlpPostSource } from "../../../../../shared/src/slp/slp-social.types.js";
 import {
   noodleAccounts,
   noodleActivityDigests,
@@ -57,12 +55,12 @@ export function createFeedPostStorage2(context: SlurpStorageContext) {
   } = context;
   const storage = {
     async createPost(
-      input: Omit<NoodleCreatePostInput, "authorKind" | "authorEntityId"> & {
+      input: Omit<SlpCreatePostInput, "authorKind" | "authorEntityId"> & {
         authorAccountId: string;
-        source?: NoodlePostSource;
+        source?: SlpPostSource;
         metadata?: Record<string, unknown>;
       },
-    ): Promise<NoodlePost | null> {
+    ): Promise<SlpPost | null> {
       const account = await this.getAccountById(input.authorAccountId);
       if (!account) return null;
       const timestamp = now();
@@ -85,7 +83,7 @@ export function createFeedPostStorage2(context: SlurpStorageContext) {
       });
       return (await this.getPostById(id))!;
     },
-    async getPostById(id: string): Promise<NoodlePost | null> {
+    async getPostById(id: string): Promise<SlpPost | null> {
       const rows = await db.select().from(noodlePosts).where(eq(noodlePosts.id, id));
       const row = rows[0];
       if (!row || !(await this.getAccountById(row.authorAccountId))) return null;
@@ -94,7 +92,7 @@ export function createFeedPostStorage2(context: SlurpStorageContext) {
     async updatePostMedia(
       id: string,
       input: { imageUrl?: string | null; imagePrompt?: string | null; metadata?: Record<string, unknown> },
-    ): Promise<NoodlePost | null> {
+    ): Promise<SlpPost | null> {
       const existing = await this.getPostById(id);
       if (!existing) return null;
       await db
@@ -114,7 +112,7 @@ export function createFeedPostStorage2(context: SlurpStorageContext) {
         .where(eq(noodlePosts.id, id));
       return this.getPostById(id);
     },
-    async claimPostImage(id: string, token: string, leaseUntil: string, at = now()): Promise<NoodlePost | null> {
+    async claimPostImage(id: string, token: string, leaseUntil: string, at = now()): Promise<SlpPost | null> {
       return db.transaction(async (tx) => {
         const rows = await tx.select().from(noodlePosts).where(eq(noodlePosts.id, id));
         const row = rows[0];
@@ -228,7 +226,7 @@ export function createFeedPostStorage2(context: SlurpStorageContext) {
         return true;
       });
     },
-    async updatePost(id: string, input: NoodlePostUpdateInput): Promise<NoodlePost | null> {
+    async updatePost(id: string, input: SlpPostUpdateInput): Promise<SlpPost | null> {
       const updated = await db.transaction(async (tx) => {
         const postRows = await tx.select().from(noodlePosts).where(eq(noodlePosts.id, id));
         const existing = postRows[0];
@@ -264,7 +262,7 @@ export function createFeedPostStorage2(context: SlurpStorageContext) {
       if (!updated) return null;
       return this.getPostById(id);
     },
-    async deletePost(id: string): Promise<NoodlePost | null> {
+    async deletePost(id: string): Promise<SlpPost | null> {
       const existing = await this.getPostById(id);
       if (!existing) return null;
       const interactions = await db.select().from(noodleInteractions).where(eq(noodleInteractions.postId, id));
@@ -312,9 +310,9 @@ export function createFeedPostStorage2(context: SlurpStorageContext) {
     },
     async updateNoodlerPost(
       id: string,
-      input: NoodlerPostUpdateInput,
+      input: SlpCreatorPostUpdateInput,
       media?: { imageUrl: string; noodlerMediaPath: string },
-    ): Promise<NoodlerManagedPost | null> {
+    ): Promise<SlpCreatorManagedPost | null> {
       const imageChanged = Boolean(media || input.removeImage);
       const updated = await db.transaction(async (tx) => {
         const postRows = await tx.select().from(noodlePosts).where(eq(noodlePosts.id, id));
@@ -367,7 +365,7 @@ export function createFeedPostStorage2(context: SlurpStorageContext) {
       if (!updated) return null;
       return this.getNoodlerPostById(id);
     },
-    async deleteNoodlerPost(id: string): Promise<NoodlerManagedPost | null> {
+    async deleteNoodlerPost(id: string): Promise<SlpCreatorManagedPost | null> {
       const existing = await this.getNoodlerPostById(id);
       if (!existing) return null;
       const interactionRows = await db.select().from(noodleInteractions).where(eq(noodleInteractions.postId, id));

@@ -1,5 +1,6 @@
 import { and, eq, like, or } from "../../../db/file-query.js";
-import { PROFESSOR_MARI_ID, NoodleAccount } from "@marinara-engine/shared";
+import { PROFESSOR_MARI_ID } from "@marinara-engine/shared";
+import { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import {
   replaceSlurpDiscoveryTag,
   SlurpDiscoveryGender,
@@ -85,7 +86,7 @@ export function createCreatorsStorage1(context: SlurpStorageContext) {
     deleteStoredInteraction,
   } = context;
   const storage = {
-    async resolveSource(sourceKind: SlurpSourceKind, sourceEntityId: string): Promise<NoodleAccount | null> {
+    async resolveSource(sourceKind: SlurpSourceKind, sourceEntityId: string): Promise<SlpAccount | null> {
       const source =
         sourceKind === "character"
           ? await characters.getById(sourceEntityId)
@@ -94,7 +95,7 @@ export function createCreatorsStorage1(context: SlurpStorageContext) {
         ? sourceAccountFromEntity(sourceKind, sourceEntityId, source as unknown as Record<string, unknown>)
         : null;
     },
-    async resolveSourceByEntityId(sourceEntityId: string): Promise<NoodleAccount | null> {
+    async resolveSourceByEntityId(sourceEntityId: string): Promise<SlpAccount | null> {
       // Every new Creator and every stage-profile draft resolves its source here, so this is the one
       // gate for Professor Mari. An existing Mari Creator resolves through `resolveAccountSource`.
       if (sourceEntityId === PROFESSOR_MARI_ID && !(await this.getSettings()).professorMariCreatorSource) return null;
@@ -108,7 +109,7 @@ export function createCreatorsStorage1(context: SlurpStorageContext) {
         ? sourceAccountFromEntity("persona", sourceEntityId, persona as unknown as Record<string, unknown>)
         : null;
     },
-    async listEligibleSources(): Promise<NoodleAccount[]> {
+    async listEligibleSources(): Promise<SlpAccount[]> {
       const [characterRows, personaRows, settings] = await Promise.all([
         characters.list(),
         characters.listPersonas(),
@@ -126,7 +127,7 @@ export function createCreatorsStorage1(context: SlurpStorageContext) {
     async resolveAccountSource(account: Pick<SlurpAccount, "sourceKind" | "sourceEntityId">) {
       return this.resolveSource(account.sourceKind, account.sourceEntityId);
     },
-    async getViewer(personaId: string): Promise<NoodleAccount | null> {
+    async getViewer(personaId: string): Promise<SlpAccount | null> {
       const persona = await characters.getPersona(personaId);
       if (!persona) return null;
       const raw = await settingsStore.get(slurpViewerSettingsKey(personaId));

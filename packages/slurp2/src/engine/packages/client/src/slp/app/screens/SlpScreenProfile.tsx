@@ -5,7 +5,7 @@ import { SlpProfilePostCards } from "./SlpProfilePostCards";
 import { SlpProfileLeadingActions } from "./SlpProfileLeadingActions";
 import { ChevronDown, ChevronLeft, Sparkles } from "lucide-react";
 import { Fragment } from "react";
-import type { NoodlerPostView, NoodlerStageProfile } from "@marinara-engine/shared";
+import type { SlpCreatorPostView, SlpCreatorStageProfile } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpPromotion } from "../../features/ads/slp-ads-contract";
 import { toast } from "sonner";
 import { type NoodlePostCardModel } from "../../modules/post/SlpPostCard";
@@ -126,7 +126,7 @@ export function SlurpMediaWall({
   onAdHide,
   adLabels,
 }: {
-  items: { post: NoodlerPostView & { locked?: boolean }; creator: { profile: NoodlerStageProfile } }[];
+  items: { post: SlpCreatorPostView & { locked?: boolean }; creator: { profile: SlpCreatorStageProfile } }[];
   onOpenPost: (postId: string) => void;
   onLoadMore?: () => void;
   total: number;

@@ -1,11 +1,11 @@
+import { type APIProvider } from "@marinara-engine/shared";
+import { SLP_CREATOR_REPLY_CONTENT_MAX_LENGTH } from "../../../../../shared/src/slp/slp-social.schema.js";
 import {
-  NOODLER_REPLY_CONTENT_MAX_LENGTH,
-  type APIProvider,
-  type NoodleAccount,
-  type NoodleIdentityDisclosure,
-  type NoodleInteraction,
-  type NoodlerManagedPost,
-} from "@marinara-engine/shared";
+  type SlpAccount,
+  type SlpCreatorManagedPost,
+  type SlpIdentityDisclosure,
+  type SlpInteraction,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 import { isDebugAgentsEnabled } from "../../../config/runtime-config.js";
 import { resolveSlurpCreatorMenu } from "../../data/settings/slp-post-guidance-storage.js";
 import { slurpPlatformEventInstruction } from "../../../../../shared/src/slp/slp-platform-events.js";
@@ -49,18 +49,18 @@ type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof cre
 /**
  * Whoever wrote the comment.
  *
- * Narrowed from `NoodleAccount` to the three fields the prompt actually reads, so a generated
+ * Narrowed from `SlpAccount` to the three fields the prompt actually reads, so a generated
  * population member can be the commenter without a fake account row being minted to satisfy a
  * type. Real accounts satisfy this structurally, so every existing caller is unaffected.
  */
 export type NoodlerReplyCommenter = { id: string; displayName: string; handle: string };
 
 export function buildNoodlerCreatorReplyMessages(input: {
-  creator: NoodleAccount;
+  creator: SlpAccount;
   viewer: NoodlerReplyCommenter;
-  post: NoodlerManagedPost;
-  parent: NoodleInteraction;
-  disclosureMode: NoodleIdentityDisclosure;
+  post: SlpCreatorManagedPost;
+  parent: SlpInteraction;
+  disclosureMode: SlpIdentityDisclosure;
   publicIdentity: PublicIdentity | null;
   generationGuidance: string;
   scheduleContext?: string;
@@ -171,10 +171,10 @@ export function buildNoodlerCreatorReplyMessages(input: {
 
 export async function generateNoodlerCreatorReply(input: {
   db: DB;
-  creator: NoodleAccount;
+  creator: SlpAccount;
   viewer: NoodlerReplyCommenter;
-  post: NoodlerManagedPost;
-  parent: NoodleInteraction;
+  post: SlpCreatorManagedPost;
+  parent: SlpInteraction;
   connection: GenerationConnection;
   /** Only the player reply operation may opt in after its viewer access claim succeeds. */
   allowLockedImageContext?: boolean;
@@ -269,7 +269,7 @@ export async function generateNoodlerCreatorReply(input: {
     generated.content,
     disclosureMode,
     publicIdentity,
-    NOODLER_REPLY_CONTENT_MAX_LENGTH,
+    SLP_CREATOR_REPLY_CONTENT_MAX_LENGTH,
   );
   if (!protectedContent) throw new Error("Slurp creator reply generation returned no usable content.");
   return { content: protectedContent, moodShift: generated.moodShift };

@@ -1,5 +1,5 @@
 import { and, desc, eq } from "../../../db/file-query.js";
-import { NoodlePostUnlock, NoodlerManagedPost } from "@marinara-engine/shared";
+import { SlpCreatorManagedPost, SlpPostUnlock } from "../../../../../shared/src/slp/slp-social.types.js";
 import {
   earn as earnCreatorIncome,
   readSlurpEarnings,
@@ -43,7 +43,7 @@ export function createEconomyTailStorage1(context: SlurpStorageContext) {
   } = context;
   const storage = {
     /** One project's own posts, newest first, for the Studio and for generation continuity. */
-    async listPostsByProject(projectId: string, limit = 8): Promise<NoodlerManagedPost[]> {
+    async listPostsByProject(projectId: string, limit = 8): Promise<SlpCreatorManagedPost[]> {
       const rows = await db
         .select()
         .from(noodlePosts)
@@ -68,7 +68,7 @@ export function createEconomyTailStorage1(context: SlurpStorageContext) {
       });
       await run;
     },
-    async listPostUnlocksForViewer(viewerAccountId: string): Promise<NoodlePostUnlock[]> {
+    async listPostUnlocksForViewer(viewerAccountId: string): Promise<SlpPostUnlock[]> {
       const rows = await db
         .select()
         .from(noodlePostUnlocks)

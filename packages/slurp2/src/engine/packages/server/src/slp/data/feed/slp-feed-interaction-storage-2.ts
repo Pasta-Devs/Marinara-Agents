@@ -1,10 +1,6 @@
 import { and, eq, gt } from "../../../db/file-query.js";
-import {
-  DEFAULT_NOODLER_CREATOR_REPLIES_PER_24_HOURS,
-  NoodleAccount,
-  NoodleInteraction,
-  NoodlerManagedPost,
-} from "@marinara-engine/shared";
+import { DEFAULT_SLP_CREATOR_REPLIES_PER_24_HOURS } from "../../../../../shared/src/slp/slp-social.schema.js";
+import { SlpAccount, SlpCreatorManagedPost, SlpInteraction } from "../../../../../shared/src/slp/slp-social.types.js";
 import { spend } from "../../modules/economy/slp-wallet.js";
 import { canViewNoodlerPost, isNoodlerHiddenFromViewer } from "../../base/identity/slp-access.js";
 import {
@@ -68,14 +64,14 @@ export function createFeedInteractionStorage2(context: SlurpStorageContext) {
       creatorAccountId: string,
       parentInteractionId: string,
       at = now(),
-      ceiling = DEFAULT_NOODLER_CREATOR_REPLIES_PER_24_HOURS,
+      ceiling = DEFAULT_SLP_CREATOR_REPLIES_PER_24_HOURS,
     ): Promise<
       | {
           status: "claimed";
           claimId: string;
-          creator: NoodleAccount;
-          post: NoodlerManagedPost;
-          parent: NoodleInteraction;
+          creator: SlpAccount;
+          post: SlpCreatorManagedPost;
+          parent: SlpInteraction;
           commenter: { id: string; handle: string; displayName: string };
         }
       | { status: "ineligible" }
@@ -179,7 +175,7 @@ export function createFeedInteractionStorage2(context: SlurpStorageContext) {
         await tx.delete(noodlerCreatorReplyClaims).where(eq(noodlerCreatorReplyClaims.id, claimId));
       });
     },
-    async finalizeNoodlerCreatorReplyClaim(claimId: string, content: string): Promise<NoodleInteraction | null> {
+    async finalizeNoodlerCreatorReplyClaim(claimId: string, content: string): Promise<SlpInteraction | null> {
       return db.transaction(async (tx) => {
         const claimRows = await tx
           .select()

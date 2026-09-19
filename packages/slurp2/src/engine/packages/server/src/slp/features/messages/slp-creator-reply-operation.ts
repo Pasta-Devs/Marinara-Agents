@@ -1,4 +1,4 @@
-import type { NoodlerCreatorReplyResult } from "@marinara-engine/shared";
+import type { SlpCreatorReplyResult } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { DB } from "../../../db/connection.js";
 import { logger } from "../../../lib/logger.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
@@ -17,7 +17,7 @@ export async function generateAndApplyNoodlerCreatorReply(
     viewerActorAccountId: string;
     debugMode?: boolean;
   },
-): Promise<NoodlerCreatorReplyResult> {
+): Promise<SlpCreatorReplyResult> {
   const noodle = createSlurpStorage(db);
   const releaseClaim = async (claimId: string) => {
     try {

@@ -1,4 +1,4 @@
-import type { NoodleAuthorSnapshot } from "@marinara-engine/shared";
+import type { SlpAuthorSnapshot } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { DB } from "../../../db/connection.js";
 import { eq } from "../../../db/file-query.js";
 import { noodlerFanActivityState } from "../../../db/schema/slurp.js";
@@ -264,7 +264,7 @@ async function applyAcceptedActivities(
       id: activity.id,
       creatorAccountId: activity.creatorId,
       actorId: activity.actorId,
-      actorSnapshot: activity.snapshot as NoodleAuthorSnapshot,
+      actorSnapshot: activity.snapshot as SlpAuthorSnapshot,
       runId: run.id,
       type: activity.type as "like" | "reply",
       content: activity.content,

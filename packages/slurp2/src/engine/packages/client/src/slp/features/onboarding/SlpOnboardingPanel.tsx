@@ -14,13 +14,13 @@ import {
   SlidersHorizontal,
   Sparkles,
 } from "lucide-react";
+import type { SlpCreatorOnboardingCompletion } from "../../../../../shared/src/slp/slp-creator-onboarding.js";
 import type {
-  NoodleIdentityDisclosure,
-  NoodlerOnboardingCompletion,
-  NoodlerPostView,
-  NoodlerStageProfile,
-} from "@marinara-engine/shared";
-import { NOODLER_POSTS_PER_DAY_MAX } from "@marinara-engine/shared";
+  SlpCreatorPostView,
+  SlpCreatorStageProfile,
+  SlpIdentityDisclosure,
+} from "../../../../../shared/src/slp/slp-social.types.js";
+import { SLP_CREATOR_POSTS_PER_DAY_MAX } from "../../../../../shared/src/slp/slp-social.schema.js";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { cn } from "../../../lib/utils";
 import { Modal } from "../../../components/ui/Modal";
@@ -41,18 +41,18 @@ export type SetupLane = "easy" | "customize" | null;
 export const LAST_INTRO = 4;
 /** "creationFailed" is local to the wizard: the shared resolver reports it as "failed", which
  * reads as a first-post problem even when no creator was ever set up. */
-export type CompletionKind = NoodlerOnboardingCompletion | "creationFailed";
+export type CompletionKind = SlpCreatorOnboardingCompletion | "creationFailed";
 
 export const clampPostsPerDay = (raw: string) =>
-  Math.max(1, Math.min(NOODLER_POSTS_PER_DAY_MAX, Math.round(Number(raw)) || 1));
+  Math.max(1, Math.min(SLP_CREATOR_POSTS_PER_DAY_MAX, Math.round(Number(raw)) || 1));
 
-export const DISCLOSURES: NoodleIdentityDisclosure[] = ["open", "hinted"];
+export const DISCLOSURES: SlpIdentityDisclosure[] = ["open", "hinted"];
 export const DEFAULT_ACTIVITY_PATCH = slurpActivityPresetPatch(SLURP_DEFAULT_ACTIVITY_PRESET);
 export const DEFAULT_POSTS_PER_DAY = DEFAULT_ACTIVITY_PATCH.postsPerDay!;
 
 // The intro uses the real locked post card for a staged walkthrough. Mari is demonstrating
 // the interaction, so the example stays independent from the identity choice above.
-export const DEMO_PROFILE: NoodlerStageProfile = {
+export const DEMO_PROFILE: SlpCreatorStageProfile = {
   id: "onboarding-demo",
   sourceAccountId: null,
   handle: "professor_mari",
@@ -66,8 +66,8 @@ export const DEMO_PROFILE: NoodlerStageProfile = {
   createdAt: "",
   updatedAt: "",
 };
-const DEMO_POST: Pick<NoodlerPostView, "id" | "access" | "createdAt" | "title" | "imageUrl"> &
-  Partial<Pick<NoodlerPostView, "likeCount" | "replyCount">> = {
+const DEMO_POST: Pick<SlpCreatorPostView, "id" | "access" | "createdAt" | "title" | "imageUrl"> &
+  Partial<Pick<SlpCreatorPostView, "likeCount" | "replyCount">> = {
   id: "onboarding-demo-post",
   access: "locked",
   createdAt: new Date().toISOString(),
@@ -89,7 +89,7 @@ export interface WizardProps {
   onSkipped?: () => void;
 }
 
-export function disclosureLabel(value: NoodleIdentityDisclosure, t: ReturnType<typeof useUiTranslation>["t"]) {
+export function disclosureLabel(value: SlpIdentityDisclosure, t: ReturnType<typeof useUiTranslation>["t"]) {
   return t(`ui.noodle.noodlerwizard.disclosure.${value}.title`);
 }
 

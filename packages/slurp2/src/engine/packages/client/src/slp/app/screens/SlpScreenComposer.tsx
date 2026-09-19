@@ -1,15 +1,15 @@
 import {
-  NOODLER_POST_CONTENT_MAX_LENGTH,
-  NOODLER_POST_GUIDE_MAX_LENGTH,
-  NOODLER_POST_TITLE_MAX_LENGTH,
-  noodlePollInputSchema,
-} from "@marinara-engine/shared";
+  SLP_CREATOR_POST_CONTENT_MAX_LENGTH,
+  SLP_CREATOR_POST_GUIDE_MAX_LENGTH,
+  SLP_CREATOR_POST_TITLE_MAX_LENGTH,
+  slpPollInputSchema,
+} from "../../../../../shared/src/slp/slp-social.schema.js";
+import type { SlpPollInput } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
 import type {
-  NoodlePollInput,
-  NoodlePostImageCrop,
-  NoodlerManagedPost,
-  NoodlerPostView,
-} from "@marinara-engine/shared";
+  SlpCreatorManagedPost,
+  SlpCreatorPostView,
+  SlpPostImageCrop,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpManagedStageProfile } from "../../base/state/slp-state-types";
 import type { NoodlerContentFormat, SlurpProfilePost } from "../../features/feed/slp-feed-contract";
 import { useSlurpSettings } from "../../features/settings/slp-settings-hooks";
@@ -93,7 +93,7 @@ export function NoodlerPostComposer({
   const [postError, setPostError] = useState<string | null>(null);
   const [guideError, setGuideError] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<NoodlerComposerTool | null>(null);
-  const [pollEditorValue, setPollEditorValue] = useState<NoodlePollInput | null>(null);
+  const [pollEditorValue, setPollEditorValue] = useState<SlpPollInput | null>(null);
   const [mediaPickerTab, setMediaPickerTab] = useState<ConversationMediaPickerTabId>("emoji");
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [pendingImage, setPendingImage] = useState<PendingNoodlerImage | null>(null);
@@ -108,7 +108,7 @@ export function NoodlerPostComposer({
   const { title, body, access, image, poll, postType, linkedPostId, unlockPrice, generateImage } = draft;
   const linkablePosts = availablePosts
     .map((entry) => ("managed" in entry ? entry.managed : entry.viewerPost))
-    .filter((post): post is NoodlerManagedPost | NoodlerPostView => Boolean(post) && !isSlurpStory(post));
+    .filter((post): post is SlpCreatorManagedPost | SlpCreatorPostView => Boolean(post) && !isSlurpStory(post));
   // Format is an internal tag for the AI/length policy, not a choice we make the
   // human author pick. Derive it from what they actually did: a title makes it an
   // announcement (long_form when long); otherwise a caption (long_form when long).
@@ -124,7 +124,7 @@ export function NoodlerPostComposer({
   const composerBusy = submitting || manualPending || guidePending;
   composerBusyRef.current = composerBusy;
   const guide = serializeNoodlerPostGuide(title, body);
-  const pollIsValid = poll ? noodlePollInputSchema.safeParse(poll).success : false;
+  const pollIsValid = poll ? slpPollInputSchema.safeParse(poll).success : false;
 
   useEffect(() => {
     if (composerBusy) {
@@ -196,7 +196,7 @@ export function NoodlerPostComposer({
       setAttachmentError(errorMessage(error, "Enter a valid image URL."));
     }
   };
-  const applyImageCrop = async (crop: NoodlePostImageCrop) => {
+  const applyImageCrop = async (crop: SlpPostImageCrop) => {
     if (composerBusyRef.current) return;
     const pending = pendingImage;
     if (!pending) return;
@@ -225,7 +225,7 @@ export function NoodlerPostComposer({
   };
 
   const applyPollDraft = () => {
-    const parsed = noodlePollInputSchema.safeParse(pollEditorValue);
+    const parsed = slpPollInputSchema.safeParse(pollEditorValue);
     if (!parsed.success) return;
     if (
       updateDraft({
@@ -298,8 +298,8 @@ export function NoodlerPostComposer({
       setGuideError(localizeUi("ui.noodle.noodlerpostcomposer.pollNeedsQuestionAndOptions"));
       return;
     }
-    if (guide.length > NOODLER_POST_GUIDE_MAX_LENGTH) {
-      setGuideError(localizeUi("ui.slurp.composer.guideTooLong", { count: NOODLER_POST_GUIDE_MAX_LENGTH }));
+    if (guide.length > SLP_CREATOR_POST_GUIDE_MAX_LENGTH) {
+      setGuideError(localizeUi("ui.slurp.composer.guideTooLong", { count: SLP_CREATOR_POST_GUIDE_MAX_LENGTH }));
       return;
     }
     try {
@@ -627,7 +627,7 @@ export function NoodlerPostComposer({
           <input
             value={title}
             onChange={(event) => updateDraft({ title: event.target.value })}
-            maxLength={NOODLER_POST_TITLE_MAX_LENGTH}
+            maxLength={SLP_CREATOR_POST_TITLE_MAX_LENGTH}
             disabled={composerBusy}
             placeholder={localizeUi("ui.noodle.noodlerpostcomposer.postTitleOptional")}
             className="h-9 w-full border-0 bg-transparent text-base font-bold text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]"
@@ -637,7 +637,7 @@ export function NoodlerPostComposer({
       <textarea
         value={body}
         onChange={(event) => updateDraft({ body: event.target.value })}
-        maxLength={NOODLER_POST_CONTENT_MAX_LENGTH}
+        maxLength={SLP_CREATOR_POST_CONTENT_MAX_LENGTH}
         disabled={composerBusy}
         aria-label={localizeUi("ui.noodle.noodlerpostcomposer.postBody")}
         placeholder={localizeUi(

@@ -1,6 +1,10 @@
 // Split from noodle-noodler-source.ts so the identity-minimization helpers stay a
 // pure module that regressions can import without an Engine database.
-import type { NoodleAccount, NoodleIdentityDisclosure, NoodlerSourceSnapshot } from "@marinara-engine/shared";
+import type {
+  SlpAccount,
+  SlpCreatorSourceSnapshot,
+  SlpIdentityDisclosure,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 import type { DB } from "../../../db/connection.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { parseRecord } from "../../modules/creators/slp-public-support.js";
@@ -39,8 +43,8 @@ export async function resolveSlurpCharacterFanVoice(
 
 export async function resolveNoodlerCharacterCanon(
   db: DB,
-  publicAccount: Pick<NoodleAccount, "kind" | "entityId"> | null,
-  disclosureMode: NoodleIdentityDisclosure,
+  publicAccount: Pick<SlpAccount, "kind" | "entityId"> | null,
+  disclosureMode: SlpIdentityDisclosure,
 ): Promise<string> {
   if (!publicAccount) return "";
   const characters = createCharactersStorage(db);
@@ -69,8 +73,8 @@ export async function resolveNoodlerCharacterCanon(
 
 export async function resolveNoodlerSourceSnapshot(
   db: DB,
-  publicAccount: Pick<NoodleAccount, "kind" | "entityId" | "displayName" | "handle">,
-): Promise<NoodlerSourceSnapshot | null> {
+  publicAccount: Pick<SlpAccount, "kind" | "entityId" | "displayName" | "handle">,
+): Promise<SlpCreatorSourceSnapshot | null> {
   const characters = createCharactersStorage(db);
   if (publicAccount.kind === "character") {
     const source = await characters.getById(publicAccount.entityId);

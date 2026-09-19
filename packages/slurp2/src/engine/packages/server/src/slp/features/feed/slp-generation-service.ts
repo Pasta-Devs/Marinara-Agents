@@ -1,10 +1,7 @@
-import {
-  NOODLER_POST_TITLE_MAX_LENGTH,
-  createNoodlePoll,
-  type APIProvider,
-  type NoodleAccount,
-  type NoodlerManagedPost,
-} from "@marinara-engine/shared";
+import { type APIProvider } from "@marinara-engine/shared";
+import { createSlpPoll } from "../../../../../shared/src/slp/slp-polls.js";
+import { SLP_CREATOR_POST_TITLE_MAX_LENGTH } from "../../../../../shared/src/slp/slp-social.schema.js";
+import { type SlpAccount, type SlpCreatorManagedPost } from "../../../../../shared/src/slp/slp-social.types.js";
 import { isDebugAgentsEnabled } from "../../../config/runtime-config.js";
 import { newId } from "../../../utils/id-generator.js";
 import type { DB } from "../../../db/connection.js";
@@ -81,7 +78,7 @@ export {
 } from "../../base/identity/slp-identity-protection.js";
 
 export type GeneratedNoodlerPostResult = {
-  post: NoodlerManagedPost;
+  post: SlpCreatorManagedPost;
   imagePromptReview: NoodleImagePromptReviewItem | null;
 };
 
@@ -99,7 +96,7 @@ export type PreparedNoodlerPostResult = {
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
 export type NoodlerPostGenerationInput = {
-  account: NoodleAccount;
+  account: SlpAccount;
   request: FormattedNoodlerGenerationRequest;
   connection: GenerationConnection;
   media?: NoodlerPostMediaUpload;
@@ -366,7 +363,7 @@ export async function generateNoodlerPost(
         generated.title,
         disclosureMode,
         publicIdentity,
-        NOODLER_POST_TITLE_MAX_LENGTH,
+        SLP_CREATOR_POST_TITLE_MAX_LENGTH,
       ) ?? noodlerTitleFromContent(protectedContent),
     content: protectedContent,
   };
@@ -394,7 +391,7 @@ export async function generateNoodlerPost(
   // An open arc choice is posted as a real poll, attached here rather than parsed from the text.
   const arcChoice = project && !project.pollPostId ? (project.choices[project.chapter] ?? null) : null;
   const arcPoll = arcChoice
-    ? createNoodlePoll({
+    ? createSlpPoll({
         question: protectBoundedNoodlerGeneratedText(arcChoice.question, disclosureMode, publicIdentity, 240),
         options: arcChoice.options.map((option) =>
           protectBoundedNoodlerGeneratedText(option.label, disclosureMode, publicIdentity, 120),
@@ -423,7 +420,7 @@ export async function generateNoodlerPost(
           )
         : {}),
       ...(input.request.executionId ? { noodlerWizardExecutionId: input.request.executionId } : {}),
-      ...(input.request.poll ? { poll: createNoodlePoll(input.request.poll) } : arcPoll ? { poll: arcPoll } : {}),
+      ...(input.request.poll ? { poll: createSlpPoll(input.request.poll) } : arcPoll ? { poll: arcPoll } : {}),
       ...(input.request.imageCrop ? { imageCrop: input.request.imageCrop } : {}),
     },
   };
@@ -451,7 +448,7 @@ export async function generateNoodlerPost(
       imageUrl?: string | null;
       metadata?: Record<string, unknown>;
     } = {},
-  ): Promise<NoodlerManagedPost> => {
+  ): Promise<SlpCreatorManagedPost> => {
     const main = {
       ...baseInput,
       ...extra,

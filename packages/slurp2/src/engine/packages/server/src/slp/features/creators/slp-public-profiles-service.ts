@@ -1,5 +1,6 @@
 import { basename } from "path";
-import { type APIProvider, type NoodleAccount, type NoodleIdentityDisclosure } from "@marinara-engine/shared";
+import { type APIProvider } from "@marinara-engine/shared";
+import { type SlpAccount, type SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
 import { logger, logDebugOverride } from "../../../lib/logger.js";
 import { clampGenerationMaxOutputTokens } from "../../../services/generation/output-token-limits.js";
 import { noodleSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
@@ -54,8 +55,8 @@ export async function pickRandomCharacterBannerUrl(
 export async function resolveNoodlerCreatorArtwork(input: {
   characters: ReturnType<typeof createCharactersStorage>;
   characterGallery: ReturnType<typeof createCharacterGalleryStorage>;
-  publicAccount: Pick<NoodleAccount, "kind" | "entityId" | "avatarUrl">;
-  disclosureMode: NoodleIdentityDisclosure;
+  publicAccount: Pick<SlpAccount, "kind" | "entityId" | "avatarUrl">;
+  disclosureMode: SlpIdentityDisclosure;
 }): Promise<{ avatarUrl: string | null; bannerUrl: string | null }> {
   if (input.disclosureMode !== "open") return { avatarUrl: null, bannerUrl: null };
   if (input.publicAccount.kind !== "character") {
@@ -74,7 +75,7 @@ function profileSetupMaxTokens(characterCount: number) {
 }
 
 export function buildNoodleProfileTargetBlock(
-  account: Pick<NoodleAccount, "entityId" | "displayName" | "handle">,
+  account: Pick<SlpAccount, "entityId" | "displayName" | "handle">,
   row: { id: string; data: unknown },
 ) {
   return [
@@ -90,7 +91,7 @@ export async function generateMissingNoodleProfiles(input: {
   noodle: ReturnType<typeof createSlurpStorage>;
   characters: ReturnType<typeof createCharactersStorage>;
   characterGallery: ReturnType<typeof createCharacterGalleryStorage>;
-  accounts: NoodleAccount[];
+  accounts: SlpAccount[];
   provider: BaseLLMProvider;
   connection: {
     provider: string;
@@ -102,7 +103,7 @@ export async function generateMissingNoodleProfiles(input: {
   promptBlocks?: SlurpPromptBlockOverrides;
 }) {
   const targets: Array<{
-    account: NoodleAccount;
+    account: SlpAccount;
     row: { id: string; data: unknown; avatarPath?: string | null };
     bannerUrl: string | null;
   }> = [];

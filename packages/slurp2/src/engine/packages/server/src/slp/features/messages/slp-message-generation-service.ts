@@ -6,7 +6,8 @@
  * prompt is told — the history, the rapport, and whether the creator is even awake — so the
  * machinery around it is reused rather than rebuilt.
  */
-import { type APIProvider, type NoodleAccount } from "@marinara-engine/shared";
+import { type APIProvider } from "@marinara-engine/shared";
+import { type SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import { isDebugAgentsEnabled } from "../../../config/runtime-config.js";
 import { resolveSlurpCreatorMenu } from "../../data/settings/slp-post-guidance-storage.js";
 import { slurpPlatformEventInstruction } from "../../../../../shared/src/slp/slp-platform-events.js";
@@ -103,8 +104,8 @@ const HISTORY_TURNS = 16;
 const RECENT_POSTS = 4;
 
 export function buildSlurpMessageChat(input: {
-  creator: NoodleAccount;
-  viewer: NoodleAccount;
+  creator: SlpAccount;
+  viewer: SlpAccount;
   /** How this fan's Fan Type writes, when the fan is a generated audience member. */
   fanVoice?: string;
   /** Short shared history derived from the audience tie. */
@@ -352,10 +353,10 @@ export function buildSlurpMessageChat(input: {
 
 export type SlurpMessagePromptInput = {
   db: DB;
-  // A `SlurpAccount`, not a bare `NoodleAccount`: resolving the creator's Engine source for the
+  // A `SlurpAccount`, not a bare `SlpAccount`: resolving the creator's Engine source for the
   // schedule needs the source columns, and only the Slurp account carries them.
   creator: SlurpAccount;
-  viewer: NoodleAccount;
+  viewer: SlpAccount;
   history: SlurpMessage[];
   rapport: SlurpRapport;
   subscribed: boolean;

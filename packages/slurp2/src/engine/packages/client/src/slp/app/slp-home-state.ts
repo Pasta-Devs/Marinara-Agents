@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useSlurpHomePostActions } from "./slp-home-post-actions";
-import { NOODLER_POST_TITLE_MAX_LENGTH } from "@marinara-engine/shared";
+import { SLP_CREATOR_POST_TITLE_MAX_LENGTH } from "../../../../shared/src/slp/slp-social.schema.js";
 import type {
-  NoodleAccount,
-  NoodlerManagedPost,
-  NoodleIdentityDisclosure,
-  NoodlerSourceSnapshot,
-} from "@marinara-engine/shared";
+  SlpAccount,
+  SlpCreatorManagedPost,
+  SlpCreatorSourceSnapshot,
+  SlpIdentityDisclosure,
+} from "../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpStageProfileInput } from "../base/state/slp-state-types";
 import { useNoodlerConnectionCounts } from "../features/audience/slp-audience-hooks";
 import {
@@ -117,7 +117,7 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
         avatarUrl: persona.avatarPath,
         avatarCrop: persona.avatarCrop,
         settings: { social: {} },
-      }) as NoodleAccount,
+      }) as SlpAccount,
   );
   const shellPersonaAccount = viewerAccounts.find((account) => account.entityId === viewerPersonaId) ?? null;
   const myCreatorProfile =
@@ -139,7 +139,7 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
               updatedAt: myCreatorProfile.updatedAt,
             }
           : {}),
-      } as NoodleAccount)
+      } as SlpAccount)
     : null;
   const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
@@ -148,7 +148,7 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
   const [personaAccountLimit, setPersonaAccountLimit] = useState(NOODLE_PERSONA_SWITCHER_PAGE_SIZE);
   const accountSwitcherRef = useRef<HTMLDivElement | null>(null);
   const visiblePersonaAccounts = viewerAccounts.slice(0, personaAccountLimit);
-  const switchViewerPersona = (account: NoodleAccount, mobile: boolean) => {
+  const switchViewerPersona = (account: SlpAccount, mobile: boolean) => {
     postCardController.reset();
     setEditingReplyId(null);
     setEditingReplyContent("");
@@ -316,7 +316,7 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
   } | null>(null);
   const [creationStep, setCreationStep] = useState<"source" | "disclosure" | "draft" | "automatic" | null>(null);
   const [autoPostSetupId, setAutoPostSetupId] = useState<string | null>(null);
-  const [creationDisclosure, setCreationDisclosure] = useState<NoodleIdentityDisclosure>("open");
+  const [creationDisclosure, setCreationDisclosure] = useState<SlpIdentityDisclosure>("open");
   const [draftGuidance, setDraftGuidance] = useState("");
   const [draftConnectionId, setDraftConnectionId] = useState("");
   const [previousDraft, setPreviousDraft] = useState<SlurpStageProfileInput | null>(null);
@@ -324,7 +324,7 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
   const [composerOpenSignal, setComposerOpenSignal] = useState(0);
   const profileReturnToSettingsRef = useRef<SlurpNavigationState | null>(null);
   const [acceptSourceChangesForProfileId, setAcceptSourceChangesForProfileId] = useState<string | null>(null);
-  const [draftSourceSnapshot, setDraftSourceSnapshot] = useState<NoodlerSourceSnapshot | null>(null);
+  const [draftSourceSnapshot, setDraftSourceSnapshot] = useState<SlpCreatorSourceSnapshot | null>(null);
   const [draftSourceRevisionToken, setDraftSourceRevisionToken] = useState<string | null>(null);
   const profileDraftGenerationIdRef = useRef(0);
   const confirmProviderDisclosure = async () => {
@@ -497,7 +497,7 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
       (type === "reply" && (createInteraction.isPending || triggerCreatorReply.isPending)) ||
       (type === "vote" && createInteraction.isPending),
     updatePostPending: updatePost.isPending || replacePostImage.isPending,
-    titleMaxLength: NOODLER_POST_TITLE_MAX_LENGTH,
+    titleMaxLength: SLP_CREATOR_POST_TITLE_MAX_LENGTH,
     allowPollOnlyEdits: true,
     replyManagement: {
       editingReplyId,
@@ -521,7 +521,10 @@ export function useSlurpHomeBaseState({ navigation, onNavigate, onLeave }: Slurp
   });
   const generatePostImage = useGenerateNoodlerPostImage();
   const [generatingPostImageId, setGeneratingPostImageId] = useState<string | null>(null);
-  const handleGeneratePostImage = (post: Pick<NoodlerManagedPost, "id" | "authorAccountId">, imagePrompt?: string) => {
+  const handleGeneratePostImage = (
+    post: Pick<SlpCreatorManagedPost, "id" | "authorAccountId">,
+    imagePrompt?: string,
+  ) => {
     setGeneratingPostImageId(post.id);
     generatePostImage.mutate(
       { id: post.id, accountId: post.authorAccountId, imagePrompt },

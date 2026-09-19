@@ -1,10 +1,12 @@
 import {
-  noodleGeneratedFanActivitySchema,
-  type NoodleAccount,
-  type NoodleGeneratedFanRefresh,
-  type NoodleInteraction,
-  type NoodlerFanArchetypeWeights,
-} from "@marinara-engine/shared";
+  slpGeneratedFanActivitySchema,
+  type SlpGeneratedFanRefresh,
+} from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import {
+  type SlpAccount,
+  type SlpCreatorFanArchetypeWeights,
+  type SlpInteraction,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 import type { DB } from "../../../db/connection.js";
 import { logger, logDebugOverride } from "../../../lib/logger.js";
 import { resolveBaseUrl } from "../../../services/generation/connection-base-url.js";
@@ -56,12 +58,12 @@ const MAX_POST_COMMENTS_IN_PROMPT = 6;
 
 export interface ResolvedNoodlerFanActivityPolicy {
   enabled: boolean;
-  archetypeWeights: NoodlerFanArchetypeWeights;
+  archetypeWeights: SlpCreatorFanArchetypeWeights;
 }
 
 export function resolveNoodlerFanActivityPolicy(
   settings: Pick<SlurpSettings, "fanArchetypeWeights" | "fanActivityEnabled">,
-  creator: NoodleAccount,
+  creator: SlpAccount,
 ): ResolvedNoodlerFanActivityPolicy {
   const override = creator.settings.scheduler.fanActivity;
   const archetypeWeights = { ...settings.fanArchetypeWeights, ...override?.archetypeWeights };
@@ -72,7 +74,7 @@ export function resolveNoodlerFanActivityPolicy(
 }
 
 export interface NoodlerFanCreatorCandidate {
-  creator: NoodleAccount;
+  creator: SlpAccount;
   policy: ResolvedNoodlerFanActivityPolicy;
   posts: Array<
     SlurpImageContextPost & {
@@ -96,16 +98,16 @@ export interface NoodlerFanCreatorCandidate {
   arc?: string | null;
 }
 
-function weightedIdentitySequence(identities: NoodlerFanIdentity[], weights: NoodlerFanArchetypeWeights) {
+function weightedIdentitySequence(identities: NoodlerFanIdentity[], weights: SlpCreatorFanArchetypeWeights) {
   return identities
     .map((identity) => ({ identity, weight: Math.max(0, weights[identity.archetype]) }))
     .filter(({ weight }) => weight > 0);
 }
 
 export function selectNoodlerFanActivities(input: {
-  activities: (NoodleGeneratedFanRefresh["activities"][number] & { parentInteractionId?: string | null })[];
+  activities: (SlpGeneratedFanRefresh["activities"][number] & { parentInteractionId?: string | null })[];
   creators: readonly NoodlerFanCreatorCandidate[];
-  existingInteractions: readonly Pick<NoodleInteraction, "postId" | "actorAccountId" | "type" | "content">[];
+  existingInteractions: readonly Pick<SlpInteraction, "postId" | "actorAccountId" | "type" | "content">[];
   quotas: { like: number; reply: number };
 }): NoodleFanActivityToStore[] {
   const creatorById = new Map(input.creators.map((candidate) => [candidate.creator.id, candidate]));
@@ -322,7 +324,7 @@ async function generateFanActivity(input: {
   >;
   creators: NoodlerFanCreatorCandidate[];
   debugMode: boolean;
-}): Promise<NoodleGeneratedFanRefresh> {
+}): Promise<SlpGeneratedFanRefresh> {
   const provider = createLLMProvider(
     input.connection.provider,
     resolveBaseUrl(input.connection),
@@ -405,12 +407,12 @@ export function parseGeneratedFanActivityResponse(
   value: unknown,
   creatorAccountIdByPostId: ReadonlyMap<string, string> = new Map(),
 ): {
-  value: NoodleGeneratedFanRefresh;
+  value: SlpGeneratedFanRefresh;
   rejected: number;
 } {
   const normalized = normalizeSlurpFanActivityRows(value, creatorAccountIdByPostId);
   const accepted = normalized.rows.flatMap((row) => {
-    const parsed = noodleGeneratedFanActivitySchema.safeParse(row);
+    const parsed = slpGeneratedFanActivitySchema.safeParse(row);
     // The shared schema strips fields it does not know, and this package cannot change it, so the
     // parent is read back off the normalised row rather than through the parse result.
     return parsed.success
@@ -440,7 +442,7 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
     await Promise.all(
       input.creatorIds.slice(0, NOODLE_FAN_ACTIVITY_MAX_CREATORS_PER_RUN).map((id) => noodle.getNoodlerAccountById(id)),
     )
-  ).filter((creator): creator is NoodleAccount => creator !== null);
+  ).filter((creator): creator is SlpAccount => creator !== null);
   const postsByCreator = await noodle.listNoodlerPostsByAccounts(
     creators.map((creator) => creator.id),
     MAX_FAN_POSTS_PER_CREATOR,

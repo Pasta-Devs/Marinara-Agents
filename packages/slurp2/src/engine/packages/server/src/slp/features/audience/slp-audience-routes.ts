@@ -10,7 +10,8 @@ import {
 } from "../../../../../shared/src/slp/slp-fan-types.js";
 import { ensureAmbientNoodleAccounts, isAmbientNoodleAccount } from "../../data/audience/slp-ambient-profiles.js";
 import { tryNoodleOperation } from "../../base/locking/slp-operation-lock.js";
-import { noodleAmbientProfileRerollSchema, type NoodleAccount } from "@marinara-engine/shared";
+import { slpAmbientProfileRerollSchema } from "../../../../../shared/src/slp/slp-social.schema.js";
+import { type SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
 import { rerollAmbientNoodleProfiles } from "./slp-ambient-profile-generation-service.js";
 import {
@@ -169,7 +170,7 @@ export async function slpAudienceRoutes(app: FastifyInstance, deps: SlpRouteDeps
    * profile edit rewriting the same accounts would interleave.
    */
   app.post("/ambient-profiles/reroll", async (req, reply) => {
-    const parsed = noodleAmbientProfileRerollSchema.safeParse(req.body ?? {});
+    const parsed = slpAmbientProfileRerollSchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const settings = await noodle.getSettings();
     const connection = await resolveSlurpTextConnection(connections, settings.generationConnectionId);
@@ -178,7 +179,7 @@ export async function slpAudienceRoutes(app: FastifyInstance, deps: SlpRouteDeps
       await ensureAmbientNoodleAccounts(noodle, settings.allowRandomUsers);
       const accounts = (
         await Promise.all(parsed.data.accountIds.map((id) => noodle.getAccountById(id, { includeHidden: true })))
-      ).filter((account): account is NoodleAccount => account !== null);
+      ).filter((account): account is SlpAccount => account !== null);
       if (accounts.length !== parsed.data.accountIds.length || accounts.some((a) => !isAmbientNoodleAccount(a))) {
         return { status: "invalid" } as const;
       }

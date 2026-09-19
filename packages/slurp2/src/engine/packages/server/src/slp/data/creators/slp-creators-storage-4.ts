@@ -1,14 +1,16 @@
 import { and, eq, like, or } from "../../../db/file-query.js";
+import { AvatarCrop } from "@marinara-engine/shared";
 import {
-  NoodleAccount,
-  NoodleAccountKind,
-  NoodleAccountProfileUpdateInput,
-  NoodleAccountSettings,
-  NoodleAccountSettingsPatchInput,
-  NoodleAccountUpdateInput,
-  AvatarCrop,
-  NoodlerSourceSnapshot,
-} from "@marinara-engine/shared";
+  SlpAccountProfileUpdateInput,
+  SlpAccountSettingsPatchInput,
+  SlpAccountUpdateInput,
+} from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import {
+  SlpAccount,
+  SlpAccountKind,
+  SlpAccountSettings,
+  SlpCreatorSourceSnapshot,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 import { withoutNoodlerSelfHiddenAccountId } from "../../base/identity/slp-access.js";
 import { noodleAccounts, noodlePosts, noodlerPreparedPosts } from "../../../db/schema/slurp.js";
 import { newId, now } from "../../../utils/id-generator.js";
@@ -54,8 +56,8 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
   const storage = {
     async updateNoodlerSourceSnapshot(
       id: string,
-      sourceSnapshot: NoodlerSourceSnapshot,
-    ): Promise<NoodleAccount | null> {
+      sourceSnapshot: SlpCreatorSourceSnapshot,
+    ): Promise<SlpAccount | null> {
       return db.transaction(async (tx) => {
         const row = (await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id)))[0];
         if (!row || row.platform !== "slurp") return null;
@@ -73,7 +75,7 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
             settings: JSON.stringify({
               ...settings,
               profile: { ...settings.profile, noodlerSourceSnapshot: sourceSnapshot },
-            } satisfies NoodleAccountSettings),
+            } satisfies SlpAccountSettings),
             updatedAt: now(),
           })
           .where(eq(noodleAccounts.id, id));
@@ -81,7 +83,7 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
         return updated ? mapAccount(updated) : null;
       });
     },
-    async adoptNoodlerPublicIdentity(id: string, currentSource: NoodlerSourceSnapshot): Promise<NoodleAccount | null> {
+    async adoptNoodlerPublicIdentity(id: string, currentSource: SlpCreatorSourceSnapshot): Promise<SlpAccount | null> {
       return db.transaction(async (tx) => {
         const row = (await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id)))[0];
         if (!row || row.platform !== "slurp") return null;
@@ -103,7 +105,7 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
                   publicHandle: currentSource.publicHandle,
                 },
               },
-            } satisfies NoodleAccountSettings),
+            } satisfies SlpAccountSettings),
             updatedAt: now(),
           })
           .where(eq(noodleAccounts.id, id));
@@ -112,7 +114,7 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
       });
     },
     async upsertAccountFromProfile(input: {
-      kind: NoodleAccountKind;
+      kind: SlpAccountKind;
       entityId: string;
       displayName: string;
       avatarUrl?: string | null;
@@ -121,7 +123,7 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
       invited?: boolean;
       /** Keep entity-owned identity fields current without replacing generated profile copy. */
       syncIdentity?: boolean;
-    }): Promise<NoodleAccount> {
+    }): Promise<SlpAccount> {
       await reconcilePublicHandles();
       const existing = await this.getSlurpAccountForEntity(
         input.kind,
@@ -191,7 +193,7 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
       });
       return (await this.getAccountById(id, { includeHidden: true }))!;
     },
-    async updateAccount(id: string, input: NoodleAccountUpdateInput): Promise<NoodleAccount | null> {
+    async updateAccount(id: string, input: SlpAccountUpdateInput): Promise<SlpAccount | null> {
       await reconcilePublicHandles();
       return db.transaction(async (tx) => {
         const rows = await tx
@@ -215,7 +217,7 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
         return updatedRows[0] ? mapAccount(updatedRows[0]) : null;
       });
     },
-    async updateAccountProfile(id: string, input: NoodleAccountProfileUpdateInput): Promise<NoodleAccount | null> {
+    async updateAccountProfile(id: string, input: SlpAccountProfileUpdateInput): Promise<SlpAccount | null> {
       await reconcilePublicHandles();
       return db.transaction(async (tx) => {
         const rows = await tx
@@ -225,7 +227,7 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
         const row = rows[0];
         if (!row) return null;
         const settings = normalizeNoodleAccountSettings(row.settings);
-        const nextSettings: NoodleAccountSettings = {
+        const nextSettings: SlpAccountSettings = {
           ...settings,
           profile: { ...settings.profile, ...input.profile },
         };
@@ -244,7 +246,7 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
         return updatedRows[0] ? mapAccount(updatedRows[0]) : null;
       });
     },
-    async patchAccountSettings(id: string, input: NoodleAccountSettingsPatchInput): Promise<NoodleAccount | null> {
+    async patchAccountSettings(id: string, input: SlpAccountSettingsPatchInput): Promise<SlpAccount | null> {
       return db.transaction(async (tx) => {
         const rows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id));
         const row = rows[0];
@@ -259,7 +261,7 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
           return null;
         }
         const current = normalizeNoodleAccountSettings(row.settings);
-        let next: NoodleAccountSettings;
+        let next: SlpAccountSettings;
         if (input.subtree === "social") {
           // Feed-visit timestamps only ever move forward. Two visits can be in flight at once
           // (both surfaces record on mount), and the later request is not always the later
@@ -329,7 +331,7 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
       });
     },
     /** Every NoodleR creator account with automatic posting enabled, settings attached. */
-    async listAutoPostEnabledAccounts(): Promise<NoodleAccount[]> {
+    async listAutoPostEnabledAccounts(): Promise<SlpAccount[]> {
       const rows = await db.select().from(noodleAccounts).where(eq(noodleAccounts.platform, "slurp"));
       const enabled = rows
         .map(mapAccount)
@@ -352,7 +354,7 @@ export function createCreatorsStorage4(context: SlurpStorageContext) {
           return null;
         }),
       );
-      return checked.filter((account): account is NoodleAccount => account !== null);
+      return checked.filter((account): account is SlpAccount => account !== null);
     },
     /**
      * Latest real posting activity per creator: the newest published post or prepared slot.

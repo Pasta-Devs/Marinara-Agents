@@ -1,9 +1,9 @@
+import type { SlpStageProfileInput } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
 import type {
-  NoodleBootstrap,
-  NoodleStageProfileInput,
-  NoodlerManagedStageProfile,
-  NoodlerViewerScope,
-} from "@marinara-engine/shared";
+  SlpBootstrap,
+  SlpCreatorManagedStageProfile,
+  SlpCreatorViewerScope,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 import type { ImagePromptReviewItem } from "../../../components/ui/ImagePromptReviewModal.js";
 
 export type SlurpPromptBlockOverride = {
@@ -12,18 +12,18 @@ export type SlurpPromptBlockOverride = {
   text?: string;
 };
 export type SlurpDiscoveryGender = "male" | "female" | "other";
-export type SlurpStageProfileInput = NoodleStageProfileInput & {
+export type SlurpStageProfileInput = SlpStageProfileInput & {
   gender: SlurpDiscoveryGender | null;
   tags: string[];
 };
-export type SlurpManagedStageProfile = NoodlerManagedStageProfile & {
+export type SlurpManagedStageProfile = SlpCreatorManagedStageProfile & {
   gender: SlurpDiscoveryGender | null;
   tags: string[];
 };
-export type SlurpViewerScope = Omit<NoodlerViewerScope, "creators"> & {
+export type SlurpViewerScope = Omit<SlpCreatorViewerScope, "creators"> & {
   creators: Array<
-    Omit<NoodlerViewerScope["creators"][number], "profile"> & {
-      profile: NoodlerViewerScope["creators"][number]["profile"] & {
+    Omit<SlpCreatorViewerScope["creators"][number], "profile"> & {
+      profile: SlpCreatorViewerScope["creators"][number]["profile"] & {
         gender: SlurpDiscoveryGender | null;
         tags: string[];
       };
@@ -31,7 +31,7 @@ export type SlurpViewerScope = Omit<NoodlerViewerScope, "creators"> & {
   >;
 };
 export type NoodleRefreshResult = {
-  bootstrap: NoodleBootstrap;
+  bootstrap: SlpBootstrap;
   imagePromptReviewItems: ImagePromptReviewItem[];
 };
 export type SlurpContentRating = "tame" | "suggestive" | "explicit";

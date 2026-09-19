@@ -1,4 +1,8 @@
-import type { NoodleIdentityDisclosure, NoodleStageProfileInput, NoodlerSourceSnapshot } from "@marinara-engine/shared";
+import type { SlpStageProfileInput } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import type {
+  SlpCreatorSourceSnapshot,
+  SlpIdentityDisclosure,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 
 /**
  * The privacy core of Slurp's disclosure tiers, kept in a leaf module on purpose.
@@ -37,7 +41,7 @@ export function protectedIdentityValues(publicIdentity: PublicIdentity): string[
 
 export function protectNoodlerGeneratedIdentity(
   value: string | null | undefined,
-  mode: NoodleIdentityDisclosure,
+  mode: SlpIdentityDisclosure,
   publicIdentity: PublicIdentity | null,
 ): string | null {
   if (!value?.trim()) return null;
@@ -59,7 +63,7 @@ export function protectNoodlerGeneratedIdentity(
 }
 
 export function stageProfileContainsPublicIdentity(
-  profile: NoodleStageProfileInput & { tags?: readonly string[] },
+  profile: SlpStageProfileInput & { tags?: readonly string[] },
   publicIdentity: PublicIdentity,
 ): boolean {
   if (profile.disclosureMode === "open") return false;
@@ -83,8 +87,8 @@ export function normalizedDisclosureWords(value: string): string[] {
 }
 
 export function stageProfileContainsSourceDetails(
-  profile: NoodleStageProfileInput & { tags?: readonly string[] },
-  source: NoodlerSourceSnapshot,
+  profile: SlpStageProfileInput & { tags?: readonly string[] },
+  source: SlpCreatorSourceSnapshot,
 ): boolean {
   if (profile.disclosureMode === "open") return false;
   const profileText = [

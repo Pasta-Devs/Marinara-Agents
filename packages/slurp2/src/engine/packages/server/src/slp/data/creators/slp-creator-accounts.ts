@@ -1,4 +1,5 @@
-import { PROFESSOR_MARI_ID, type NoodleAccount } from "@marinara-engine/shared";
+import { PROFESSOR_MARI_ID } from "@marinara-engine/shared";
+import { type SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { createSlurpStorage, type SlurpBootstrap } from "../slp-storage.js";
 import { parseNoodleAvatarCrop } from "../../modules/records/slp-storage-model.js";
@@ -157,11 +158,11 @@ export async function resolvePersonaAccount(
  * re-create path that mints a fresh ID, such as a profile import (`characters.create` calls newId).
  */
 export async function filterResolvableNoodleParticipants(
-  accounts: NoodleAccount[],
+  accounts: SlpAccount[],
   characters: ReturnType<typeof createCharactersStorage>,
-): Promise<{ resolvable: NoodleAccount[]; staleAccounts: NoodleAccount[] }> {
-  const resolvable: NoodleAccount[] = [];
-  const staleAccounts: NoodleAccount[] = [];
+): Promise<{ resolvable: SlpAccount[]; staleAccounts: SlpAccount[] }> {
+  const resolvable: SlpAccount[] = [];
+  const staleAccounts: SlpAccount[] = [];
   const hasCharacterAccount = accounts.some((account) => account.kind === "character");
   const liveCharacterIds = hasCharacterAccount
     ? new Set((await characters.list()).map((row) => row.id))

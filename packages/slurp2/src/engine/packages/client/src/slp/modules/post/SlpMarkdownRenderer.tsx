@@ -1,5 +1,6 @@
 import { Fragment, useMemo, useRef } from "react";
-import { findNoodleTextMentions, type NoodleAccount } from "@marinara-engine/shared";
+import { findSlpTextMentions } from "../../../../../shared/src/slp/slp-mentions.js";
+import { type SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import { cn } from "../../../lib/utils";
 import { renderInlineWithCustomEmojis } from "../../../lib/custom-emoji-render";
 import { useTranslation as useUiTranslation } from "react-i18next";
@@ -29,8 +30,8 @@ export function NoodleTextContent({
   className,
 }: {
   content: string;
-  accountByHandle: Map<string, NoodleAccount>;
-  onOpenProfile: (account: NoodleAccount) => void;
+  accountByHandle: Map<string, SlpAccount>;
+  onOpenProfile: (account: SlpAccount) => void;
   className?: string;
 }) {
   const { t: localizeUi, i18n } = useUiTranslation();
@@ -50,8 +51,8 @@ export function NoodleTextContent({
 }
 
 type NoodleMarkdownContext = {
-  accountByHandle: Map<string, NoodleAccount>;
-  onOpenProfile: (account: NoodleAccount) => void;
+  accountByHandle: Map<string, SlpAccount>;
+  onOpenProfile: (account: SlpAccount) => void;
   mentionLabel: (handle: string) => string;
 };
 
@@ -334,7 +335,7 @@ function readNoodleMarkdownLabel(text: string, start: number, image: boolean): {
 }
 
 function renderNoodleMentionText(text: string, context: NoodleMarkdownContext, keyPrefix: string): React.ReactNode[] {
-  const mentions = findNoodleTextMentions(text);
+  const mentions = findSlpTextMentions(text);
   if (mentions.length === 0) return [text];
 
   const parts: React.ReactNode[] = [];

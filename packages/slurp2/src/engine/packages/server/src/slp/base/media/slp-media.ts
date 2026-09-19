@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from "fs";
 import { basename, dirname, join } from "path";
-import type { NoodlerManagedPost } from "@marinara-engine/shared";
+import type { SlpCreatorManagedPost } from "../../../../../shared/src/slp/slp-social.types.js";
 import { logger } from "../../../lib/logger.js";
 import { DATA_DIR } from "../../../utils/data-dir.js";
 import { assertInsideDir, isAllowedImageBuffer } from "../../../utils/security.js";
@@ -171,7 +171,7 @@ export async function readNoodlerLockedTeaser(absolutePath: string): Promise<Buf
   }
 }
 
-export function readNoodlerMediaPath(post: Pick<NoodlerManagedPost, "metadata">): string | null {
+export function readNoodlerMediaPath(post: Pick<SlpCreatorManagedPost, "metadata">): string | null {
   const value = (post.metadata as Record<string, unknown> | null | undefined)?.noodlerMediaPath;
   return typeof value === "string" && value.startsWith(NOODLER_MEDIA_PREFIX) ? value : null;
 }

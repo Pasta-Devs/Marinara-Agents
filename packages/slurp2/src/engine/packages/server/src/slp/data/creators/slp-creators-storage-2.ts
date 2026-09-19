@@ -1,5 +1,5 @@
 import { and, desc, eq, inArray, or } from "../../../db/file-query.js";
-import { NoodleAccount, NoodleAccountKind } from "@marinara-engine/shared";
+import { SlpAccount, SlpAccountKind } from "../../../../../shared/src/slp/slp-social.types.js";
 import { slurpProjectsKey } from "../../modules/projects/slp-project.js";
 import { slurpArcAutoKey, slurpArcConfigKey } from "../../modules/projects/slp-arc-library.js";
 import { unlinkNoodlerMedia } from "../../base/media/slp-media.js";
@@ -274,11 +274,11 @@ export function createCreatorsStorage2(context: SlurpStorageContext) {
      * path lists accounts through here, so feeds, search and activity drop them in one place.
      * `includeHidden` is for integrity guards and handle allocation, which must still see them.
      */
-    async withoutHiddenAmbientAccounts<T extends NoodleAccount>(accounts: T[], includeHidden = false): Promise<T[]> {
+    async withoutHiddenAmbientAccounts<T extends SlpAccount>(accounts: T[], includeHidden = false): Promise<T[]> {
       if (includeHidden) return accounts;
       return withoutHiddenAmbientAccounts(accounts, (await this.getSettings()).allowRandomUsers);
     },
-    async listAccounts(options: { includeHidden?: boolean } = {}): Promise<NoodleAccount[]> {
+    async listAccounts(options: { includeHidden?: boolean } = {}): Promise<SlpAccount[]> {
       await reconcilePublicHandles();
       const rows = await db
         .select()
@@ -288,14 +288,14 @@ export function createCreatorsStorage2(context: SlurpStorageContext) {
       return this.withoutHiddenAmbientAccounts(rows.map(mapAccount), options.includeHidden);
     },
     /** Single-row sibling of `withoutHiddenAmbientAccounts`, so id reads hide what lists hide. */
-    async withoutHiddenAmbientAccount<T extends NoodleAccount>(
+    async withoutHiddenAmbientAccount<T extends SlpAccount>(
       account: T | null,
       includeHidden = false,
     ): Promise<T | null> {
       if (!account) return null;
       return (await this.withoutHiddenAmbientAccounts([account], includeHidden))[0] ?? null;
     },
-    async getAccountById(id: string, options: { includeHidden?: boolean } = {}): Promise<NoodleAccount | null> {
+    async getAccountById(id: string, options: { includeHidden?: boolean } = {}): Promise<SlpAccount | null> {
       const rows = await db
         .select()
         .from(noodleAccounts)
@@ -307,7 +307,7 @@ export function createCreatorsStorage2(context: SlurpStorageContext) {
      * posts/interactions/subscriptions. Dependent rows go via the file-store cascade;
      * activity digests have no cascade, so they are cleared explicitly.
      */
-    async deleteAccountByEntity(kind: NoodleAccountKind, entityId: string): Promise<NoodleAccount | null> {
+    async deleteAccountByEntity(kind: SlpAccountKind, entityId: string): Promise<SlpAccount | null> {
       const existing = await this.getSlurpAccountForEntity(kind, entityId);
       if (!existing) return null;
       const postIds = (await db.select().from(noodlePosts).where(eq(noodlePosts.authorAccountId, existing.id))).map(
@@ -400,7 +400,7 @@ export function createCreatorsStorage2(context: SlurpStorageContext) {
       return existing;
     },
     async getSlurpAccountForEntity(
-      kind: NoodleAccountKind,
+      kind: SlpAccountKind,
       entityId: string,
       role: SlurpAccountRole = "creator",
     ): Promise<SlurpAccount | null> {
@@ -422,7 +422,7 @@ export function createCreatorsStorage2(context: SlurpStorageContext) {
           ) ?? null
       );
     },
-    async getAccountsByEntities(kind: NoodleAccountKind, entityIds: string[]): Promise<SlurpAccount[]> {
+    async getAccountsByEntities(kind: SlpAccountKind, entityIds: string[]): Promise<SlurpAccount[]> {
       if (entityIds.length === 0) return [];
       const rows = await db
         .select()

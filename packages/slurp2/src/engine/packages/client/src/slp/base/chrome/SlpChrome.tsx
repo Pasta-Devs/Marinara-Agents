@@ -7,7 +7,8 @@
 import { UserRound } from "lucide-react";
 import { useReducedMotion } from "framer-motion";
 import { createContext, type CSSProperties, useContext, useEffect, useState } from "react";
-import type { AvatarCrop, NoodleAccount } from "@marinara-engine/shared";
+import type { AvatarCrop } from "@marinara-engine/shared";
+import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import { cn, getAvatarCropStyle } from "../../../lib/utils";
 import { useSlurpMediaSrc } from "../media/slp-media-src";
 import { useTranslation as useUiTranslation } from "react-i18next";
@@ -200,7 +201,7 @@ export function Avatar({
   size = "md",
   solid = false,
 }: {
-  account: Pick<NoodleAccount, "displayName" | "avatarUrl"> & {
+  account: Pick<SlpAccount, "displayName" | "avatarUrl"> & {
     avatarCrop?: AvatarCrop | null;
   };
   size?: "xs" | "sm" | "md" | "lg" | "xl";

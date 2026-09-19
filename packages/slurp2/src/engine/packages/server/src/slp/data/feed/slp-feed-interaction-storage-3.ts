@@ -1,5 +1,5 @@
 import { and, eq, isNull, like, or } from "../../../db/file-query.js";
-import { NoodleAuthorSnapshot, NoodleInteraction } from "@marinara-engine/shared";
+import { SlpAuthorSnapshot, SlpInteraction } from "../../../../../shared/src/slp/slp-social.types.js";
 import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
 import {
   NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR,
@@ -56,7 +56,7 @@ export function createFeedInteractionStorage3(context: SlurpStorageContext) {
     async createNoodlerInteraction(
       postId: string,
       input: NoodlerCreateInteractionCommand,
-    ): Promise<NoodleInteraction | null> {
+    ): Promise<SlpInteraction | null> {
       const parentInteractionId = input.parentInteractionId ?? null;
       const viewer = await this.getViewer(input.viewerPersonaId);
       const actor = await this.getNoodlerAccountById(input.actorAccountId);
@@ -200,14 +200,14 @@ export function createFeedInteractionStorage3(context: SlurpStorageContext) {
         id: string;
         creatorAccountId: string;
         actorId: string;
-        actorSnapshot: NoodleAuthorSnapshot;
+        actorSnapshot: SlpAuthorSnapshot;
         runId: string;
         type: "like" | "reply" | "repost";
         content: string | null;
         /** The comment being answered. Null, or an unusable id, means answering the post. */
         parentInteractionId?: string | null;
       },
-    ): Promise<{ interaction: NoodleInteraction; created: boolean } | null> {
+    ): Promise<{ interaction: SlpInteraction; created: boolean } | null> {
       return db.transaction(async (tx) => {
         const postRows = await tx.select().from(noodlePosts).where(eq(noodlePosts.id, postId));
         const postRow = postRows[0];

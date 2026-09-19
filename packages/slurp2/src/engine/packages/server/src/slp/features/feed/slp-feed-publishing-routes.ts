@@ -1,4 +1,5 @@
-import { noodlerTargetedRefreshSchema, noodlerGenerationRequestSchema } from "@marinara-engine/shared";
+import { slpCreatorGenerationRequestSchema } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import { slpCreatorTargetedRefreshSchema } from "../../../../../shared/src/slp/slp-social.schema.js";
 import { z } from "zod";
 import { getSlurpPostGuidance, updateSlurpPostGuidance } from "../../data/settings/slp-post-guidance-storage.js";
 import { SLURP_BUILT_IN_POST_GUIDANCE, SLURP_POST_GUIDANCE_MAX_LENGTH } from "../../modules/feed/slp-post-guidance.js";
@@ -26,7 +27,7 @@ import {
 } from "../../base/host/slp-multipart.js";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
-const slurpTargetedRefreshSchema = noodlerTargetedRefreshSchema.extend({
+const slurpTargetedRefreshSchema = slpCreatorTargetedRefreshSchema.extend({
   access: z.enum(["public", "locked"]).optional(),
 });
 // The packaged shared bundle wraps this schema in a refinement, so `.extend` is not always
@@ -34,9 +35,9 @@ const slurpTargetedRefreshSchema = noodlerTargetedRefreshSchema.extend({
 // Same trick as the post-create schema below: the packaged shared bundle may wrap the generation
 // schema, so extend the underlying object rather than the export.
 const slurpNoodlerGenerationRequestSchema = (
-  noodlerGenerationRequestSchema instanceof z.ZodEffects
-    ? noodlerGenerationRequestSchema.innerType()
-    : noodlerGenerationRequestSchema
+  slpCreatorGenerationRequestSchema instanceof z.ZodEffects
+    ? slpCreatorGenerationRequestSchema.innerType()
+    : slpCreatorGenerationRequestSchema
 ).extend({ postType: slurpPostTypeSchema.default("post"), generateImage: z.boolean().optional() });
 
 const noodleImagePromptConfirmationSchema = z.object({

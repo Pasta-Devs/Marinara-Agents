@@ -1,12 +1,9 @@
 import { Fragment } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { Heart, MessageCircle, Pencil, Trash2 } from "lucide-react";
-import {
-  canManageNoodleReply,
-  type NoodleAccount,
-  type NoodleInteraction,
-  type NoodlePostCardModel,
-} from "@marinara-engine/shared";
+import { canManageSlpReply } from "../../../../../shared/src/slp/slp-interactions.js";
+import { type SlpAccount, type SlpInteraction } from "../../../../../shared/src/slp/slp-social.types.js";
+import { type NoodlePostCardModel } from "./SlpPostCard";
 import type { ChatImage } from "../../../hooks/use-gallery";
 import { cn } from "../../../lib/utils";
 import { Avatar, SlurpMediaImg } from "../../base/chrome/SlpChrome";
@@ -15,29 +12,29 @@ import { createNoodleLightboxImage, noodleCommentActionClass, textareaClass } fr
 import { NoodleTextContent } from "./SlpMarkdownRenderer";
 
 export interface SlpReplyRowProps {
-  reply: NoodleInteraction;
+  reply: SlpInteraction;
   nested: boolean;
   post: NoodlePostCardModel;
-  accountById: Map<string, NoodleAccount>;
-  accountByHandle: Map<string, NoodleAccount>;
-  personaAccount: NoodleAccount | null;
+  accountById: Map<string, SlpAccount>;
+  accountByHandle: Map<string, SlpAccount>;
+  personaAccount: SlpAccount | null;
   highlightedInteractionId: string | null;
-  openProfile: (account: NoodleAccount | null) => void;
+  openProfile: (account: SlpAccount | null) => void;
   replyPostId: string | null;
   replyParentInteractionId: string | null;
-  replyById: Map<string, NoodleInteraction>;
-  replyLikesByParentId: Map<string, NoodleInteraction[]>;
+  replyById: Map<string, SlpInteraction>;
+  replyLikesByParentId: Map<string, SlpInteraction[]>;
   editingReplyId: string | null;
   editingReplyContent: string;
   setEditingReplyContent: React.Dispatch<React.SetStateAction<string>>;
   cancelEditingReply: () => void;
   updateInteraction: { isPending: boolean };
   deleteInteraction: { isPending: boolean };
-  startEditingReply: (reply: NoodleInteraction) => void;
-  saveEditedReply: (post: NoodlePostCardModel, reply: NoodleInteraction) => void;
-  deleteNoodleReply: (post: NoodlePostCardModel, reply: NoodleInteraction) => void;
-  canManageReplyOverride?: (reply: NoodleInteraction) => boolean;
-  reactToReply: (post: NoodlePostCardModel, target: NoodleInteraction, active: boolean) => void;
+  startEditingReply: (reply: SlpInteraction) => void;
+  saveEditedReply: (post: NoodlePostCardModel, reply: SlpInteraction) => void;
+  deleteNoodleReply: (post: NoodlePostCardModel, reply: SlpInteraction) => void;
+  canManageReplyOverride?: (reply: SlpInteraction) => boolean;
+  reactToReply: (post: NoodlePostCardModel, target: SlpInteraction, active: boolean) => void;
   reactionPendingFor: (postId: string, type: "like", parentInteractionId?: string | null) => boolean;
   openReplyComposer: (postId: string, parentInteractionId?: string | null) => void;
   setImageLightbox: React.Dispatch<React.SetStateAction<ChatImage | null>>;
@@ -87,7 +84,7 @@ export function SlpReplyRow({
     ? canManageReplyOverride(reply)
     : Boolean(
         personaAccount &&
-        canManageNoodleReply({
+        canManageSlpReply({
           actorKind: actorAccount?.kind ?? reply.actorSnapshot?.kind,
           actorAccountId: reply.actorAccountId,
           personaAccountId: personaAccount.id,

@@ -1,4 +1,4 @@
-import { type NoodleAccount, type NoodleIdentityDisclosure } from "@marinara-engine/shared";
+import { type SlpAccount, type SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { DB } from "../../../db/connection.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
@@ -12,10 +12,7 @@ export const NOODLER_UNTRUSTED_CONTENT_INSTRUCTION =
  * The single NoodleR identity-disclosure policy shown to the model. Post and creator-reply
  * generation share it so their privacy wording cannot drift apart in a later change.
  */
-export function noodlerIdentityInstruction(
-  mode: NoodleIdentityDisclosure,
-  publicIdentity: PublicIdentity | null,
-): string {
+export function noodlerIdentityInstruction(mode: SlpIdentityDisclosure, publicIdentity: PublicIdentity | null): string {
   if (mode === "open" && publicIdentity) {
     return `Disclosure is open. This is the same public creator. Use the linked identity ${publicIdentity.displayName} (@${publicIdentity.handle}) directly when relevant.`;
   }
@@ -28,7 +25,7 @@ export function noodlerIdentityInstruction(
 }
 
 export function buildNoodlerPublicIdentity(
-  publicAccount: Pick<NoodleAccount, "displayName" | "handle">,
+  publicAccount: Pick<SlpAccount, "displayName" | "handle">,
   sourceCharacter: { data: string | { name?: unknown } } | null,
 ): PublicIdentity {
   let sourceData: unknown = sourceCharacter?.data;
@@ -53,7 +50,7 @@ export function buildNoodlerPublicIdentity(
 /** Identity for a linked public account the caller has already read. */
 export async function noodlerPublicIdentityFor(
   db: DB,
-  publicAccount: NoodleAccount | null,
+  publicAccount: SlpAccount | null,
 ): Promise<PublicIdentity | null> {
   if (!publicAccount) return null;
   const characters = createCharactersStorage(db);
@@ -78,7 +75,7 @@ export async function resolveNoodlerPublicIdentity(
 
 export function protectBoundedNoodlerGeneratedText(
   value: string | null | undefined,
-  mode: NoodleIdentityDisclosure,
+  mode: SlpIdentityDisclosure,
   publicIdentity: PublicIdentity | null,
   maxLength: number,
 ): string | null {

@@ -1,4 +1,4 @@
-import type { NoodleAuthorSnapshot } from "@marinara-engine/shared";
+import type { SlpAuthorSnapshot } from "../../../../../shared/src/slp/slp-social.types.js";
 
 export const NOODLE_FAN_ACTIVITY_DAY_PLAN_VERSION = 1 as const;
 export const NOODLE_FAN_ACTIVITY_RUNS_PER_DAY = 8 as const;
@@ -19,7 +19,7 @@ export interface NoodleFanAcceptedActivity {
   /** The comment this one answers. Null when it answers the post itself. */
   parentInteractionId: string | null;
   actorId: string;
-  snapshot: NoodleAuthorSnapshot;
+  snapshot: SlpAuthorSnapshot;
   applied: boolean;
 }
 
@@ -50,7 +50,7 @@ export interface NoodleFanActivityToStore {
   /** The comment this one answers, when it answers one rather than the post. */
   parentInteractionId?: string | null;
   actorId: string;
-  snapshot: NoodleAuthorSnapshot;
+  snapshot: SlpAuthorSnapshot;
 }
 
 function isTimestamp(value: unknown): value is string {
@@ -80,7 +80,7 @@ function creatorList(creatorIds: string[]): string[] {
   return [...new Set(creatorIds.filter((id) => typeof id === "string" && id.length > 0))].sort();
 }
 
-function validAuthorSnapshot(value: unknown): value is NoodleAuthorSnapshot {
+function validAuthorSnapshot(value: unknown): value is SlpAuthorSnapshot {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
   return (

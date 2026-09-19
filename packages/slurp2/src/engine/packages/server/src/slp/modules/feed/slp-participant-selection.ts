@@ -1,10 +1,6 @@
-import {
-  extractNoodleMentionHandles,
-  PROFESSOR_MARI_ID,
-  type NoodleAccount,
-  type NoodleInteraction,
-  type NoodlePost,
-} from "@marinara-engine/shared";
+import { PROFESSOR_MARI_ID } from "@marinara-engine/shared";
+import { extractSlpMentionHandles } from "../../../../../shared/src/slp/slp-mentions.js";
+import { type SlpAccount, type SlpInteraction, type SlpPost } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpSettings } from "../settings/slp-settings.js";
 
 type RandomSource = () => number;
@@ -21,17 +17,17 @@ function shuffleWith<T>(items: readonly T[], random: RandomSource): T[] {
 }
 
 export function collectNoodlePriorityAccountIds(input: {
-  accounts: NoodleAccount[];
-  posts: NoodlePost[];
-  interactions: NoodleInteraction[];
-  personaAccount: NoodleAccount | null;
+  accounts: SlpAccount[];
+  posts: SlpPost[];
+  interactions: SlpInteraction[];
+  personaAccount: SlpAccount | null;
 }): Set<string> {
   const priority = new Set<string>();
   if (!input.personaAccount) return priority;
   const accountByHandle = new Map(input.accounts.map((account) => [account.handle.toLowerCase(), account]));
   const interactionById = new Map(input.interactions.map((interaction) => [interaction.id, interaction]));
   const addMentionedAccounts = (content: string | null | undefined) => {
-    for (const handle of extractNoodleMentionHandles(content ?? "")) {
+    for (const handle of extractSlpMentionHandles(content ?? "")) {
       const account = accountByHandle.get(handle);
       if (account && account.kind !== "persona") priority.add(account.id);
     }
@@ -49,7 +45,7 @@ export function collectNoodlePriorityAccountIds(input: {
       if (parent && parent.actorAccountId !== input.personaAccount.id) priority.add(parent.actorAccountId);
       continue;
     }
-    if (extractNoodleMentionHandles(interaction.content ?? "").includes(input.personaAccount.handle.toLowerCase())) {
+    if (extractSlpMentionHandles(interaction.content ?? "").includes(input.personaAccount.handle.toLowerCase())) {
       priority.add(interaction.actorAccountId);
     }
   }
@@ -57,14 +53,14 @@ export function collectNoodlePriorityAccountIds(input: {
 }
 
 export function chooseNoodleParticipantAccounts(input: {
-  accounts: NoodleAccount[];
+  accounts: SlpAccount[];
   settings: SlurpSettings;
   selectedGroupCharacterIds: ReadonlySet<string>;
   followedAccountIds?: ReadonlySet<string>;
   recentlyActiveAccountIds?: ReadonlySet<string>;
   priorityAccountIds?: ReadonlySet<string>;
   random?: RandomSource;
-}): NoodleAccount[] {
+}): SlpAccount[] {
   const random = input.random ?? Math.random;
   const followedAccountIds = input.followedAccountIds ?? new Set<string>();
   const recentlyActiveAccountIds = input.recentlyActiveAccountIds ?? new Set<string>();
@@ -83,7 +79,7 @@ export function chooseNoodleParticipantAccounts(input: {
   const count =
     input.settings.participantSelectionMode === "exact" ? max : min + Math.floor(random() * Math.max(1, max - min + 1));
 
-  const ordered = (pool: NoodleAccount[]) => {
+  const ordered = (pool: SlpAccount[]) => {
     const priority = pool.filter((account) => priorityAccountIds.has(account.id));
     const ordinary = pool.filter((account) => !priorityAccountIds.has(account.id));
     const inactiveFollowed = ordinary.filter(

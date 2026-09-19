@@ -1,7 +1,10 @@
-import type { NoodleIdentityDisclosure, NoodlerManagedStageProfile } from "@marinara-engine/shared";
+import type {
+  SlpCreatorManagedStageProfile,
+  SlpIdentityDisclosure,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpDiscoveryGender } from "../discovery/slp-discovery-profile.js";
 
-type SlurpManagedStageProfile = NoodlerManagedStageProfile & {
+type SlurpManagedStageProfile = SlpCreatorManagedStageProfile & {
   gender: SlurpDiscoveryGender | null;
   tags: string[];
 };
@@ -11,18 +14,18 @@ type SlurpManagedStageProfile = NoodlerManagedStageProfile & {
  * carries `secret`, so a stored or submitted Secret Creator becomes Hinted, the closest tier that
  * still keeps the source name and handle protected.
  */
-export function slurpDisclosureMode<T extends NoodleIdentityDisclosure | null | undefined>(mode: T) {
+export function slurpDisclosureMode<T extends SlpIdentityDisclosure | null | undefined>(mode: T) {
   return (mode === "secret" ? "hinted" : mode) as T extends "secret" ? "hinted" : T;
 }
 
-const DISCLOSURE_RANK: Record<NoodleIdentityDisclosure, number> = {
+const DISCLOSURE_RANK: Record<SlpIdentityDisclosure, number> = {
   secret: 0,
   hinted: 1,
   open: 2,
 };
 
 // Explicit allow-list: the audience projection names every field it exposes, so a
-// new field on NoodlerManagedStageProfile is private until it is added here.
+// new field on SlpCreatorManagedStageProfile is private until it is added here.
 const AUDIENCE_FIELDS = [
   "id",
   "handle",
@@ -46,10 +49,7 @@ export type NoodlerAudienceProfile = Pick<
   (typeof AUDIENCE_FIELDS)[number] | "slurpSourceAccountId" | "publicIdentity"
 >;
 
-export function isNoodlerDisclosureDowngrade(
-  current: NoodleIdentityDisclosure,
-  next: NoodleIdentityDisclosure,
-): boolean {
+export function isNoodlerDisclosureDowngrade(current: SlpIdentityDisclosure, next: SlpIdentityDisclosure): boolean {
   return DISCLOSURE_RANK[next] < DISCLOSURE_RANK[current];
 }
 
@@ -73,8 +73,8 @@ export type NoodlerDisclosureReviewReason = {
 };
 
 export function noodlerDisclosureReviewReasons(input: {
-  currentMode: NoodleIdentityDisclosure;
-  nextMode: NoodleIdentityDisclosure;
+  currentMode: SlpIdentityDisclosure;
+  nextMode: SlpIdentityDisclosure;
   postCount: number;
   mediaCount: number;
   hasAvatar: boolean;

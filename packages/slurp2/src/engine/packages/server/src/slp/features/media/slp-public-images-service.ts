@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from "fs";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
-import { PROFESSOR_MARI_ID, type NoodleAccount, type NoodleBootstrap } from "@marinara-engine/shared";
+import { PROFESSOR_MARI_ID } from "@marinara-engine/shared";
+import { type SlpAccount, type SlpBootstrap } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { DB } from "../../../db/connection.js";
 import type { SlurpSettings } from "../../modules/settings/slp-settings.js";
 import { logger, logDebugOverride } from "../../../lib/logger.js";
@@ -112,8 +113,8 @@ export function characterNoodleImageContextFromRow(row: { data: unknown }, apply
 }
 
 export async function generateNoodlePostImage(input: {
-  account: NoodleAccount;
-  referenceAccounts: NoodleAccount[];
+  account: SlpAccount;
+  referenceAccounts: SlpAccount[];
   postContent: string;
   draftPrompt: string;
   settings: SlurpSettings;
@@ -411,9 +412,7 @@ export function createPublicNoodleImagesService(db: DB) {
     async generateReviewedImages(input: {
       prompts: ReviewedNoodleImagePrompt[];
       debugMode: boolean;
-    }): Promise<
-      { ok: true; bootstrap: NoodleBootstrap } | { ok: false; error: "missing_connection"; message: string }
-    > {
+    }): Promise<{ ok: true; bootstrap: SlpBootstrap } | { ok: false; error: "missing_connection"; message: string }> {
       const settings = await noodle.getSettings();
 
       for (const promptOverride of input.prompts) {

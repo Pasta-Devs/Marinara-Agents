@@ -1,4 +1,5 @@
-import type { APIProvider, NoodleAccount } from "@marinara-engine/shared";
+import type { APIProvider } from "@marinara-engine/shared";
+import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { DB } from "../../../db/connection.js";
 import { logger, logDebugOverride } from "../../../lib/logger.js";
 import { parseGameJsonish } from "../../../services/game/jsonish.js";
@@ -12,7 +13,7 @@ import type { ChatMessage } from "../../../services/llm/base-provider.js";
 import { createLLMProvider } from "../../../services/llm/provider-registry.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
-import { noodleGeneratedNoodlerPostSchema } from "@marinara-engine/shared";
+import { slpGeneratedCreatorPostSchema } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
 import { noodleResponseFormat } from "../../base/prompting/slp-response-format.js";
 import { noodlerSourceText } from "../../base/prompting/slp-prompt-safety.js";
 import { NOODLER_UNTRUSTED_CONTENT_INSTRUCTION } from "./slp-public-identity.js";
@@ -35,12 +36,12 @@ export type InvitedNoodlePostDraft = {
 
 function parseDraft(content: string) {
   const parsed = parseGameJsonish(requireModelAnswer(content, "an invited post draft"));
-  return noodleGeneratedNoodlerPostSchema.parse(Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed);
+  return slpGeneratedCreatorPostSchema.parse(Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed);
 }
 
 export async function generateInvitedNoodlePostDraft(
   db: DB,
-  account: NoodleAccount,
+  account: SlpAccount,
   connection: NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>,
   request: InvitedNoodlePostDraftRequest,
 ): Promise<InvitedNoodlePostDraft> {

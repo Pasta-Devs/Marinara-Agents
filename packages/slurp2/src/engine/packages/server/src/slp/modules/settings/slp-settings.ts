@@ -1,4 +1,4 @@
-import { NoodleBootstrap } from "@marinara-engine/shared";
+import { SlpBootstrap } from "../../../../../shared/src/slp/slp-social.types.js";
 import { z } from "zod";
 import { SLURP_DISCOVERY_TAG_MAX_LENGTH, SLURP_DISCOVERY_TAG_SEED } from "../discovery/slp-discovery-profile.js";
 import {
@@ -60,7 +60,7 @@ import { SLURP_MODIFIER_KINDS } from "../creators/slp-creator-state.js";
 import { SLURP_DEFAULT_REPLY_DELAYS } from "../messages/slp-messaging.js";
 import { parseRecord } from "../records/slp-storage-model.js";
 import type { SlurpAccount } from "../records/slp-storage-model.js";
-export const noodlerFanArchetypeWeightsSchema = z
+export const slpCreatorFanArchetypeWeightsSchema = z
   .object({
     ordinary: z.number().finite().min(0),
     eccentric: z.number().finite().min(0),
@@ -301,7 +301,7 @@ export const slurpSettingsSchema = z.object({
   fanActivityRunsPerDay: z.number().int().min(1).max(96),
   fanLikesPerRefresh: z.number().int().min(0).max(24),
   fanRepliesPerRefresh: z.number().int().min(0).max(12),
-  fanArchetypeWeights: noodlerFanArchetypeWeightsSchema,
+  fanArchetypeWeights: slpCreatorFanArchetypeWeightsSchema,
   /**
    * Wallet economy. Off by default: an existing install keeps the presentation-only prices it
    * has always had, and nothing starts refusing an unlock because a stored balance ran dry.
@@ -374,7 +374,7 @@ export type { SlurpPromptBlockOverrides };
 
 export type SlurpSettingsUpdateInput = Partial<SlurpSettings>;
 
-export type SlurpBootstrap = Omit<NoodleBootstrap, "settings"> & { settings: SlurpSettings };
+export type SlurpBootstrap = Omit<SlpBootstrap, "settings"> & { settings: SlurpSettings };
 
 // Package-owned default for the editable Slurp generation guidance. This is the
 // single tone prompt: creator personality, mood balance, and the adult flirty lean

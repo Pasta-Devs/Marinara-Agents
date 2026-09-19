@@ -1,5 +1,6 @@
 import { and, desc, eq, gt, inArray, or } from "../../../db/file-query.js";
-import { DEFAULT_NOODLER_CREATOR_REPLIES_PER_24_HOURS, NoodleInteraction, NoodlePost } from "@marinara-engine/shared";
+import { DEFAULT_SLP_CREATOR_REPLIES_PER_24_HOURS } from "../../../../../shared/src/slp/slp-social.schema.js";
+import { SlpInteraction, SlpPost } from "../../../../../shared/src/slp/slp-social.types.js";
 import { NOODLER_FAN_IDENTITY_PREFIX } from "../../modules/audience/slp-fan-identity-provider.js";
 import { canViewNoodlerPost, isNoodlerHiddenFromViewer } from "../../base/identity/slp-access.js";
 import {
@@ -51,11 +52,11 @@ export function createFeedInteractionStorage1(context: SlurpStorageContext) {
     deleteStoredInteraction,
   } = context;
   const storage = {
-    async listInteractions(postIds: string[] = []): Promise<NoodleInteraction[]> {
+    async listInteractions(postIds: string[] = []): Promise<SlpInteraction[]> {
       if (postIds.length === 0) return [];
       const publicPostIds = new Set(
         (await Promise.all(postIds.map((postId) => this.getPostById(postId))))
-          .filter((post): post is NoodlePost => post !== null)
+          .filter((post): post is SlpPost => post !== null)
           .map((post) => post.id),
       );
       if (publicPostIds.size === 0) return [];
@@ -67,7 +68,7 @@ export function createFeedInteractionStorage1(context: SlurpStorageContext) {
         .orderBy(noodleInteractions.createdAt);
       return rows.filter((row) => slurpSourceAccountIds.has(row.actorAccountId)).map(mapInteraction);
     },
-    async listRepliesByActorSince(actorAccountId: string, since: string, limit = 100): Promise<NoodleInteraction[]> {
+    async listRepliesByActorSince(actorAccountId: string, since: string, limit = 100): Promise<SlpInteraction[]> {
       if (!(await this.getAccountById(actorAccountId))) return [];
       const slurpSourceAccountIds = (await this.listAccounts()).map((account) => account.id);
       if (slurpSourceAccountIds.length === 0) return [];
@@ -93,7 +94,7 @@ export function createFeedInteractionStorage1(context: SlurpStorageContext) {
         .limit(Math.max(1, Math.min(200, Math.floor(limit))));
       return rows.filter((row) => publicPostIds.has(row.postId)).map(mapInteraction);
     },
-    async getInteractionById(id: string): Promise<NoodleInteraction | null> {
+    async getInteractionById(id: string): Promise<SlpInteraction | null> {
       const rows = await db.select().from(noodleInteractions).where(eq(noodleInteractions.id, id));
       const row = rows[0];
       if (!row) return null;
@@ -103,7 +104,7 @@ export function createFeedInteractionStorage1(context: SlurpStorageContext) {
     async updateInteraction(
       id: string,
       input: { content?: string | null; imageUrl?: string | null },
-    ): Promise<NoodleInteraction | null> {
+    ): Promise<SlpInteraction | null> {
       const existing = await this.getInteractionById(id);
       if (!existing) return null;
       await db
@@ -115,7 +116,7 @@ export function createFeedInteractionStorage1(context: SlurpStorageContext) {
         .where(eq(noodleInteractions.id, id));
       return this.getInteractionById(id);
     },
-    async deleteInteractionById(id: string): Promise<NoodleInteraction[]> {
+    async deleteInteractionById(id: string): Promise<SlpInteraction[]> {
       const existing = await this.getInteractionById(id);
       if (!existing) return [];
       const rows = await db.select().from(noodleInteractions).where(eq(noodleInteractions.postId, existing.postId));
@@ -176,7 +177,7 @@ export function createFeedInteractionStorage1(context: SlurpStorageContext) {
       });
       return deletedRows.map(mapInteraction);
     },
-    async createInteraction(postId: string, input: PublicCreateInteractionCommand): Promise<NoodleInteraction | null> {
+    async createInteraction(postId: string, input: PublicCreateInteractionCommand): Promise<SlpInteraction | null> {
       const parentInteractionId = input.parentInteractionId ?? null;
       if (input.type === "vote") {
         if (parentInteractionId) return null;
@@ -208,7 +209,7 @@ export function createFeedInteractionStorage1(context: SlurpStorageContext) {
         parentInteractionId,
       });
     },
-    async deleteInteraction(postId: string, input: PublicRemoveInteractionCommand): Promise<NoodleInteraction | null> {
+    async deleteInteraction(postId: string, input: PublicRemoveInteractionCommand): Promise<SlpInteraction | null> {
       const post = await this.getPostById(postId);
       if (!post) return null;
       return deleteStoredInteraction(postId, input, "protect-public-digests");
@@ -216,7 +217,7 @@ export function createFeedInteractionStorage1(context: SlurpStorageContext) {
     // Callers pass post IDs already resolved from NoodleR-account queries
     // (listNoodlerPostsByAccounts), so this trusts them and issues a single bulk
     // read instead of re-validating each ID with getNoodlerPostById (2N reads).
-    async getNoodlerInteractionById(id: string): Promise<NoodleInteraction | null> {
+    async getNoodlerInteractionById(id: string): Promise<SlpInteraction | null> {
       const rows = await db.select().from(noodleInteractions).where(eq(noodleInteractions.id, id));
       return rows[0] ? mapInteraction(rows[0]) : null;
     },
@@ -224,7 +225,7 @@ export function createFeedInteractionStorage1(context: SlurpStorageContext) {
     async rewriteNoodlerInteractionContent(id: string, content: string): Promise<void> {
       await db.update(noodleInteractions).set({ content }).where(eq(noodleInteractions.id, id));
     },
-    async listNoodlerInteractions(noodlerPostIds: string[] = []): Promise<NoodleInteraction[]> {
+    async listNoodlerInteractions(noodlerPostIds: string[] = []): Promise<SlpInteraction[]> {
       if (noodlerPostIds.length === 0) return [];
       const rows = await db
         .select()
@@ -246,7 +247,7 @@ export function createFeedInteractionStorage1(context: SlurpStorageContext) {
       viewerPersonaId: string,
       viewerActorAccountId: string,
       at = now(),
-      ceiling = DEFAULT_NOODLER_CREATOR_REPLIES_PER_24_HOURS,
+      ceiling = DEFAULT_SLP_CREATOR_REPLIES_PER_24_HOURS,
     ): Promise<NoodlerCreatorReplyClaimResult> {
       const viewer = await this.getViewer(viewerPersonaId);
       if (!viewer) return { status: "ineligible" };

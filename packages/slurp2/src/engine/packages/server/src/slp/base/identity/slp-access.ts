@@ -1,6 +1,6 @@
-import type { NoodleAccount, NoodlePost } from "@marinara-engine/shared";
+import type { SlpAccount, SlpPost } from "../../../../../shared/src/slp/slp-social.types.js";
 
-type NoodlerAccessAccount = NoodleAccount & { sourceEntityId?: string | null };
+type NoodlerAccessAccount = SlpAccount & { sourceEntityId?: string | null };
 
 export function withoutNoodlerSelfHiddenAccountId(
   hiddenFromAccountIds: readonly string[],
@@ -17,7 +17,7 @@ export function isNoodlerHiddenFromViewer(account: NoodlerAccessAccount, viewerA
 }
 
 export function canViewNoodlerPost(input: {
-  post: Pick<NoodlePost, "id" | "access">;
+  post: Pick<SlpPost, "id" | "access">;
   subscribed: boolean;
   unlockedPostIds: ReadonlySet<string>;
 }): boolean {

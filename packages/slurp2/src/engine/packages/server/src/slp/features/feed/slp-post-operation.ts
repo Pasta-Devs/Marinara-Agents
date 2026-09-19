@@ -1,12 +1,14 @@
+import { createSlpPoll } from "../../../../../shared/src/slp/slp-polls.js";
 import {
-  createNoodlePoll,
-  type NoodlerGenerationRequest,
-  type NoodlerPostCreateInput,
-  type NoodlerPostUpdateInput,
-  type NoodlerManagedPost,
-  type NoodlePostAccess,
-  type NoodlerRefreshNowOutcome,
-} from "@marinara-engine/shared";
+  type SlpCreatorGenerationRequest,
+  type SlpCreatorPostCreateInput,
+  type SlpCreatorPostUpdateInput,
+} from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import {
+  type SlpCreatorManagedPost,
+  type SlpCreatorRefreshNowOutcome,
+  type SlpPostAccess,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 import { createSlurpMessagesStorage } from "../../data/slp-storage.js";
 import type { NoodleImagePromptReviewItem } from "../media/slp-media-contract.js";
 import type { DB } from "../../../db/connection.js";
@@ -32,7 +34,7 @@ import { settleAgentJobsWithConcurrencyLimit } from "../../../services/agents/ag
 export type GenerateAndApplyNoodlerPostResult =
   | {
       status: "generated";
-      post: NoodlerManagedPost;
+      post: SlpCreatorManagedPost;
       imagePromptReview: NoodleImagePromptReviewItem | null;
     }
   | { status: "disabled" }
@@ -42,13 +44,13 @@ export type GenerateAndApplyNoodlerPostResult =
   | { status: "noodler_account_not_found" };
 
 export type CreateNoodlerPostResult =
-  | { status: "created"; post: NoodlerManagedPost }
+  | { status: "created"; post: SlpCreatorManagedPost }
   | { status: "disabled" }
   | { status: "busy" }
   | { status: "noodler_account_not_found" };
 
 export type UpdateNoodlerPostResult =
-  | { status: "updated"; post: NoodlerManagedPost }
+  | { status: "updated"; post: SlpCreatorManagedPost }
   | { status: "disabled" }
   | { status: "busy" }
   | { status: "forbidden" }
@@ -78,7 +80,7 @@ async function invalidateNearFutureReserve(
  */
 export async function generateAndApplyNoodlerPost(
   db: DB,
-  request: NoodlerGenerationRequest & { format?: NoodlerContentFormat },
+  request: SlpCreatorGenerationRequest & { format?: NoodlerContentFormat },
   media?: NoodlerPostMediaUpload,
   admissionMode?: ConnectionAdmissionMode,
   options: { allowStory?: boolean } = {},
@@ -147,7 +149,8 @@ const MAX_CONCURRENT_MANUAL_REFRESH = 3;
 const MANUAL_REFRESH_BUSY_WAIT_MS = 180_000;
 const MANUAL_REFRESH_BUSY_POLL_MS = 2_000;
 
-export type NoodlerRefreshNowResult = { status: "disabled" } | { status: "ok"; outcomes: NoodlerRefreshNowOutcome[] };
+export type NoodlerRefreshNowResult =
+  { status: "disabled" } | { status: "ok"; outcomes: SlpCreatorRefreshNowOutcome[] };
 
 /**
  * Global "Refresh NoodleR now": explicit user-authorized work, separate from the automatic
@@ -167,7 +170,7 @@ export async function refreshAllNoodlerCreatorsNow(db: DB): Promise<NoodlerRefre
   const settled = await settleAgentJobsWithConcurrencyLimit(
     prioritized,
     MAX_CONCURRENT_MANUAL_REFRESH,
-    async (account): Promise<NoodlerRefreshNowOutcome> => {
+    async (account): Promise<SlpCreatorRefreshNowOutcome> => {
       const result = await generateAndApplyNoodlerPost(db, {
         mode: "noodler",
         targetAccountId: account.id,
@@ -181,7 +184,7 @@ export async function refreshAllNoodlerCreatorsNow(db: DB): Promise<NoodlerRefre
     },
   );
 
-  const outcomes = settled.map((entry, index): NoodlerRefreshNowOutcome => {
+  const outcomes = settled.map((entry, index): SlpCreatorRefreshNowOutcome => {
     if (entry.status === "fulfilled") return entry.value;
     logger.error(entry.reason, "[slurp] Global refresh failed for creator %s", prioritized[index]!.id);
     return { accountId: prioritized[index]!.id, status: "error" };
@@ -193,7 +196,7 @@ export async function refreshTargetedNoodlerCreatorsNow(
   db: DB,
   accountIds: string[],
   executionId?: string,
-  access: NoodlePostAccess = "locked",
+  access: SlpPostAccess = "locked",
 ): Promise<NoodlerRefreshNowResult> {
   const noodle = createSlurpStorage(db);
 
@@ -209,7 +212,7 @@ export async function refreshTargetedNoodlerCreatorsNow(
   const settled = await settleAgentJobsWithConcurrencyLimit(
     eligibleTargetAccountIds,
     MAX_CONCURRENT_MANUAL_REFRESH,
-    async (accountId): Promise<NoodlerRefreshNowOutcome & { postId?: string }> => {
+    async (accountId): Promise<SlpCreatorRefreshNowOutcome & { postId?: string }> => {
       const run = () =>
         generateAndApplyNoodlerPost(
           db,
@@ -238,7 +241,7 @@ export async function refreshTargetedNoodlerCreatorsNow(
       return { accountId, status, ...(result.status === "generated" ? { postId: result.post.id } : {}) };
     },
   );
-  const outcomes = settled.map((entry, index): NoodlerRefreshNowOutcome => {
+  const outcomes = settled.map((entry, index): SlpCreatorRefreshNowOutcome => {
     const accountId = eligibleTargetAccountIds[index]!;
     if (entry.status === "fulfilled") return entry.value;
     logger.error(entry.reason, "[slurp] Targeted refresh failed for creator %s", accountId);
@@ -252,7 +255,7 @@ export async function refreshTargetedNoodlerCreatorsNow(
 
 export async function createNoodlerPost(
   db: DB,
-  input: NoodlerPostCreateInput & {
+  input: SlpCreatorPostCreateInput & {
     format?: NoodlerContentFormat;
     postType?: "post" | "story";
     linkedPostId?: string | null;
@@ -290,7 +293,7 @@ export async function createNoodlerPost(
             ...(input.postType === "story" && input.linkedPostId ? { noodlerLinkedPostId: input.linkedPostId } : {}),
             // Stored at creation so an unlock price stays put across refreshes and edits.
             ...(input.access === "locked" ? noodlerUnlockPriceMetadata(unlockPrice) : {}),
-            ...(input.poll ? { poll: createNoodlePoll(input.poll) } : {}),
+            ...(input.poll ? { poll: createSlpPoll(input.poll) } : {}),
             ...(input.imageCrop ? { imageCrop: input.imageCrop } : {}),
             ...(persistedMedia ? { noodlerMediaPath: persistedMedia.noodlerMediaPath } : {}),
           },
@@ -320,7 +323,7 @@ export async function updateNoodlerPostWithMedia(
   db: DB,
   id: string,
   accountId: string,
-  input: NoodlerPostUpdateInput,
+  input: SlpCreatorPostUpdateInput,
   media: NoodlerPostMediaUpload,
 ): Promise<UpdateNoodlerPostResult> {
   const noodle = createSlurpStorage(db);

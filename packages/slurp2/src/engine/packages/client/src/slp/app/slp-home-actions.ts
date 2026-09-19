@@ -1,4 +1,4 @@
-import type { NoodleIdentityDisclosure } from "@marinara-engine/shared";
+import type { SlpIdentityDisclosure } from "../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpManagedStageProfile, SlurpStageProfileInput } from "../base/state/slp-state-types";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { type NoodlerPostSubmission, errorMessage, serializeNoodlerPostGuide } from "./screens/SlpHomeHelpers";
@@ -134,7 +134,7 @@ function useSlurpHomeActions(state: SlurpHomeBaseState) {
     await prepareNavigationAwayFromProfileEditor();
   };
 
-  const changeDisclosure = (value: NoodleIdentityDisclosure) => {
+  const changeDisclosure = (value: SlpIdentityDisclosure) => {
     setCreationDisclosure(value);
     setProfileDraftDirty(true);
     setProfileDraft((current) => (current ? { ...current, disclosureMode: value } : current));
@@ -142,7 +142,7 @@ function useSlurpHomeActions(state: SlurpHomeBaseState) {
 
   const generateDraft = async (options?: {
     noodlerAccountId?: string;
-    disclosureMode?: NoodleIdentityDisclosure;
+    disclosureMode?: SlpIdentityDisclosure;
     guidance?: string;
     currentDraft?: SlurpStageProfileInput;
   }) => {

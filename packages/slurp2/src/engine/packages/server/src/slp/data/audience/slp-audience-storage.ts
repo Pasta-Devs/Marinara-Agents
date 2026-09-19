@@ -1,5 +1,5 @@
 import { and, eq, or } from "../../../db/file-query.js";
-import { NoodleAccount, NoodleAccountSettings } from "@marinara-engine/shared";
+import { SlpAccount, SlpAccountSettings } from "../../../../../shared/src/slp/slp-social.types.js";
 import { noodleAccounts } from "../../../db/schema/slurp.js";
 import { now } from "../../../utils/id-generator.js";
 import {
@@ -47,7 +47,7 @@ export function createAudienceStorage1(context: SlurpStorageContext) {
       targetAccountId: string,
       followed: boolean,
       followedAt = new Date().toISOString(),
-    ): Promise<{ account: NoodleAccount; changed: boolean } | null> {
+    ): Promise<{ account: SlpAccount; changed: boolean } | null> {
       return db.transaction(async (tx) => {
         const rows = await tx
           .select()
@@ -65,7 +65,7 @@ export function createAudienceStorage1(context: SlurpStorageContext) {
         }
         if (followed) followingAccountTimestamps[targetAccountId] = followedAt;
         else delete followingAccountTimestamps[targetAccountId];
-        const next: NoodleAccountSettings = {
+        const next: SlpAccountSettings = {
           ...current,
           social: {
             ...current.social,
@@ -83,7 +83,7 @@ export function createAudienceStorage1(context: SlurpStorageContext) {
         return updatedRows[0] ? { account: mapAccount(updatedRows[0]), changed: true } : null;
       });
     },
-    async setCharacterInvited(characterId: string, invited: boolean): Promise<NoodleAccount | null> {
+    async setCharacterInvited(characterId: string, invited: boolean): Promise<SlpAccount | null> {
       const existing = await this.getSlurpAccountForEntity("character", characterId);
       if (!existing) return null;
       return this.updateAccount(existing.id, { invited });
@@ -121,9 +121,9 @@ export function createAudienceStorage1(context: SlurpStorageContext) {
      * A character with no card left is skipped rather than provisioned, so deleting a character
      * quietly retires its fan instead of leaving a nameless account behind.
      */
-    async ensureAudienceCharacterAccounts(): Promise<NoodleAccount[]> {
+    async ensureAudienceCharacterAccounts(): Promise<SlpAccount[]> {
       const characterIds = await this.listAudienceCharacterIds();
-      const accounts: NoodleAccount[] = [];
+      const accounts: SlpAccount[] = [];
       for (const characterId of characterIds) {
         const source = await characters.getById(characterId).catch(() => null);
         if (!source) continue;

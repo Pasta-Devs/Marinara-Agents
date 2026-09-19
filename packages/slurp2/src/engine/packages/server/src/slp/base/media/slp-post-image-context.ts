@@ -1,4 +1,4 @@
-import type { NoodlerManagedPost } from "@marinara-engine/shared";
+import type { SlpCreatorManagedPost } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { DB } from "../../../db/connection.js";
 import { resolveBaseUrl } from "../../../services/generation/connection-base-url.js";
 import {
@@ -19,7 +19,7 @@ import {
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
 export type SlurpImageContextPost = Pick<
-  NoodlerManagedPost,
+  SlpCreatorManagedPost,
   "id" | "access" | "imageUrl" | "imagePrompt" | "metadata" | "createdAt"
 >;
 

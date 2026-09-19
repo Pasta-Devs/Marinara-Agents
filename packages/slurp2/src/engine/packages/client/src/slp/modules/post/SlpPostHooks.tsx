@@ -1,11 +1,9 @@
 import { useState, useRef, type ChangeEvent } from "react";
-import {
-  noodlePollInputSchema,
-  readNoodlePostImageCrop,
-  readNoodlePollFromMetadata,
-  type NoodlePostImageCrop,
-  type NoodlePollInput,
-} from "@marinara-engine/shared";
+import { readSlpPollFromMetadata } from "../../../../../shared/src/slp/slp-polls.js";
+import { readSlpPostImageCrop } from "../../../../../shared/src/slp/slp-post-images.js";
+import { type SlpPollInput } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import { slpPollInputSchema } from "../../../../../shared/src/slp/slp-social.schema.js";
+import { type SlpPostImageCrop } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { ConversationMediaPickerTabId } from "../../../components/chat/ConversationMediaPickerPanel";
 import type { ChatImage } from "../../../hooks/use-gallery";
 import type {
@@ -52,7 +50,7 @@ export function useNoodlePostImageEditor(loadPostImage?: (post: NoodlePostCardMo
         if (revisionRef.current === revision) {
           setCropSource({
             source,
-            crop: update?.kind === "crop" ? update.crop : readNoodlePostImageCrop(post.metadata),
+            crop: update?.kind === "crop" ? update.crop : readSlpPostImageCrop(post.metadata),
             mode: "existing",
           });
         }
@@ -77,7 +75,7 @@ export function useNoodlePostImageEditor(loadPostImage?: (post: NoodlePostCardMo
     setCropSource({ source: file, crop: null, mode: "replace" });
     setError(null);
   };
-  const applyCrop = async (crop: NoodlePostImageCrop) => {
+  const applyCrop = async (crop: SlpPostImageCrop) => {
     if (!cropSource) return;
     setUpdate(
       cropSource.mode === "replace" ? { kind: "replace", file: cropSource.source, crop } : { kind: "crop", crop },
@@ -121,7 +119,7 @@ export function useNoodlePostCardController(options: NoodlePostCardControllerOpt
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editingPostContent, setEditingPostContent] = useState("");
   const [editingPostTitle, setEditingPostTitle] = useState("");
-  const [editingPostPoll, setEditingPostPoll] = useState<NoodlePollInput | null>(null);
+  const [editingPostPoll, setEditingPostPoll] = useState<SlpPollInput | null>(null);
   const [replyPostId, setReplyPostId] = useState<string | null>(null);
   const [replyParentInteractionId, setReplyParentInteractionId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState("");
@@ -178,7 +176,7 @@ export function useNoodlePostCardController(options: NoodlePostCardControllerOpt
     setEditingPostId(post.id);
     setEditingPostTitle(post.title ?? "");
     setEditingPostContent(post.content);
-    const poll = readNoodlePollFromMetadata(post.metadata);
+    const poll = readSlpPollFromMetadata(post.metadata);
     setEditingPostPoll(
       poll
         ? {
@@ -191,8 +189,8 @@ export function useNoodlePostCardController(options: NoodlePostCardControllerOpt
   };
   const saveEditedPost = (post: NoodlePostCardModel) => {
     const content = editingPostContent.trim();
-    const existingPoll = readNoodlePollFromMetadata(post.metadata);
-    const validPoll = existingPoll ? noodlePollInputSchema.safeParse(editingPostPoll).success : false;
+    const existingPoll = readSlpPollFromMetadata(post.metadata);
+    const validPoll = existingPoll ? slpPollInputSchema.safeParse(editingPostPoll).success : false;
     if (!content && !(options.allowPollOnlyEdits && validPoll)) return;
     void options
       .savePost(post, {

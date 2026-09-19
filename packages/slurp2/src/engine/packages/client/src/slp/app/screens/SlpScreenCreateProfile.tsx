@@ -1,6 +1,6 @@
 import { Check, ChevronRight, Loader2, Search } from "lucide-react";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import type { NoodleIdentityDisclosure } from "@marinara-engine/shared";
+import type { SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
 import { disclosureOptions, WizardFooter } from "../../features/creators/SlpStageProfileForm";
 import { fieldClass, SourceAccountAvatar } from "./SlpHomeHelpers";
 
@@ -177,8 +177,8 @@ export function DisclosureStep({
   onContinue,
 }: {
   source: { displayName: string; handle: string } | null;
-  value: NoodleIdentityDisclosure;
-  onChange: (value: NoodleIdentityDisclosure) => void;
+  value: SlpIdentityDisclosure;
+  onChange: (value: SlpIdentityDisclosure) => void;
   onBack: () => void;
   onContinue: () => void;
 }) {

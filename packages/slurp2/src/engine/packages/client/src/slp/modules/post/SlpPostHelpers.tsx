@@ -1,5 +1,9 @@
 import { useState } from "react";
-import { type NoodleAccount, type NoodleInteraction, type NoodleInteractionType } from "@marinara-engine/shared";
+import {
+  type SlpAccount,
+  type SlpInteraction,
+  type SlpInteractionType,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 import { cn } from "../../../lib/utils";
 import { NoodleTextContent } from "./SlpMarkdownRenderer";
 import type { ConversationMediaPickerTab } from "../../../components/chat/ConversationMediaPickerPanel";
@@ -27,8 +31,8 @@ export const noodleIconButtonClass =
 export const noodleCommentActionClass =
   "inline-flex h-7 items-center justify-center gap-1 rounded-full !text-[var(--noodle-accent-foreground)] transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70 disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:!text-[var(--noodle-accent-foreground)]";
 /** Groups depth-first replies into top-level threads. Deeper replies stay flat inside their thread. */
-export function slurpReplyThreads(orderedReplies: NoodleInteraction[], replyById: Map<string, NoodleInteraction>) {
-  const threads: { root: NoodleInteraction; children: NoodleInteraction[] }[] = [];
+export function slurpReplyThreads(orderedReplies: SlpInteraction[], replyById: Map<string, SlpInteraction>) {
+  const threads: { root: SlpInteraction; children: SlpInteraction[] }[] = [];
   for (const reply of orderedReplies) {
     const parentId = reply.parentInteractionId;
     if (!parentId || !replyById.has(parentId) || threads.length === 0) threads.push({ root: reply, children: [] });
@@ -95,9 +99,9 @@ export function NoodleMentionSuggestions({
 }: {
   activeMention: ActiveComposerMention | null;
   activeIndex: number;
-  accounts: NoodleAccount[];
+  accounts: SlpAccount[];
   listboxId: string;
-  onSelect: (account: NoodleAccount) => void;
+  onSelect: (account: SlpAccount) => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
   if (!activeMention) return null;
@@ -140,7 +144,7 @@ export function NoodleMentionSuggestions({
   );
 }
 
-export function countInteractions(interactions: NoodleInteraction[], type: NoodleInteractionType) {
+export function countInteractions(interactions: SlpInteraction[], type: SlpInteractionType) {
   return interactions.filter((interaction) => interaction.type === type).length;
 }
 

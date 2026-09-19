@@ -1,5 +1,5 @@
 import { useTranslation as useUiTranslation } from "react-i18next";
-import type { NoodlerRefreshNowOutcome } from "@marinara-engine/shared";
+import type { SlpCreatorRefreshNowOutcome } from "../../../../../shared/src/slp/slp-social.types.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "../../../lib/api-client.js";
@@ -32,7 +32,7 @@ export function useRefreshTargetedNoodlerCreatorsNow(onRemaining?: (remaining: n
       refreshSlurpCreatorBatch(
         input.accountIds,
         (accountId) =>
-          api.post<{ outcomes: NoodlerRefreshNowOutcome[] }>("/slurp2/noodler/auto-post/refresh-targeted", {
+          api.post<{ outcomes: SlpCreatorRefreshNowOutcome[] }>("/slurp2/noodler/auto-post/refresh-targeted", {
             ...input,
             accountIds: [accountId],
           }),

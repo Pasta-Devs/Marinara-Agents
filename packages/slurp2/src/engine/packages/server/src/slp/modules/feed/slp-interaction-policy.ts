@@ -1,15 +1,11 @@
-import {
-  noodleTextMentionsHandle,
-  type NoodleAccount,
-  type NoodleInteraction,
-  type NoodlePost,
-} from "@marinara-engine/shared";
+import { slpTextMentionsHandle } from "../../../../../shared/src/slp/slp-mentions.js";
+import { type SlpAccount, type SlpInteraction, type SlpPost } from "../../../../../shared/src/slp/slp-social.types.js";
 
 export function canCreateGeneratedNoodleInteraction(input: {
-  actor: NoodleAccount;
-  targetPost: NoodlePost;
-  parentInteraction: NoodleInteraction | null;
-  existingInteractions: readonly NoodleInteraction[];
+  actor: SlpAccount;
+  targetPost: SlpPost;
+  parentInteraction: SlpInteraction | null;
+  existingInteractions: readonly SlpInteraction[];
 }): boolean {
   const { actor, targetPost, parentInteraction, existingInteractions } = input;
   if (parentInteraction?.actorAccountId === actor.id) return false;
@@ -18,9 +14,9 @@ export function canCreateGeneratedNoodleInteraction(input: {
     (interaction) => interaction.postId === targetPost.id && interaction.actorAccountId === actor.id,
   );
   if (actorInteractions.length === 0) return true;
-  if (noodleTextMentionsHandle(targetPost.content, actor.handle)) return true;
+  if (slpTextMentionsHandle(targetPost.content, actor.handle)) return true;
   if (!parentInteraction) return false;
-  if (noodleTextMentionsHandle(parentInteraction.content, actor.handle)) return true;
+  if (slpTextMentionsHandle(parentInteraction.content, actor.handle)) return true;
 
   return actorInteractions.some((interaction) => parentInteraction.parentInteractionId === interaction.id);
 }

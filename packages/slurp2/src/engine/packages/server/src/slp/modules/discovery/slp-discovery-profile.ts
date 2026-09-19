@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { NoodleStageProfileInput } from "@marinara-engine/shared";
+import type { SlpStageProfileInput } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
 
 export const SLURP_DISCOVERY_GENDERS = ["male", "female", "other"] as const;
 export type SlurpDiscoveryGender = (typeof SLURP_DISCOVERY_GENDERS)[number];
@@ -22,7 +22,7 @@ export const SLURP_DISCOVERY_MIN_TAGS = 3;
 export const SLURP_DISCOVERY_TAG_LIMIT = 8;
 export const SLURP_DISCOVERY_TAG_MAX_LENGTH = 24;
 
-export type SlurpStageProfileInput = NoodleStageProfileInput & {
+export type SlurpStageProfileInput = SlpStageProfileInput & {
   gender: SlurpDiscoveryGender | null;
   tags: string[];
 };

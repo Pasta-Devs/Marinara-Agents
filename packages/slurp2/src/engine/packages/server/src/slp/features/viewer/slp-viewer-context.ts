@@ -1,5 +1,9 @@
 import { resolvePersonaAccount } from "../../data/creators/slp-creator-accounts.js";
-import type { NoodleAccount, NoodlerPostView, NoodlerManagedPost } from "@marinara-engine/shared";
+import type {
+  SlpAccount,
+  SlpCreatorManagedPost,
+  SlpCreatorPostView,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 import { projectNoodlerAudienceProfile } from "../../modules/creators/slp-disclosure.js";
 import { isSlurpViewerActorAccount } from "../../modules/settings/slp-settings.js";
 import { isNoodlerHiddenFromViewer, canViewNoodlerPost } from "../../base/identity/slp-access.js";
@@ -43,7 +47,7 @@ export function createSlpViewerContext(
 
   function creatorBelongsToViewer(
     account: Awaited<ReturnType<typeof noodle.getNoodlerAccountById>>,
-    viewer: NoodleAccount,
+    viewer: SlpAccount,
   ) {
     return Boolean(account && account.sourceKind === "persona" && account.sourceEntityId === viewer.entityId);
   }
@@ -112,7 +116,7 @@ export function createSlpViewerContext(
         goal: context.goalByAccountId.get(account.id) ?? null,
         // Feed posts live in a separate keyset-paged query. Keeping this field preserves the
         // shared Engine contract for older consumers without hydrating any post history here.
-        posts: [] as NoodlerPostView[],
+        posts: [] as SlpCreatorPostView[],
       })),
     };
   }
@@ -121,7 +125,7 @@ export function createSlpViewerContext(
    * The shared Engine view type has no price field, and adding one there would force an
    * engine.min bump for a presentation detail. The package widens it locally instead.
    */
-  type NoodlerPricedPostView = NoodlerPostView & {
+  type NoodlerPricedPostView = SlpCreatorPostView & {
     unlockPrice: number | null;
     /** Social proof on the paywall. Null for a post the viewer can already read. */
     unlockCount: number | null;
@@ -131,7 +135,7 @@ export function createSlpViewerContext(
 
   async function projectViewerPosts(
     context: ViewerContext,
-    posts: NoodlerManagedPost[],
+    posts: SlpCreatorManagedPost[],
   ): Promise<Map<string, NoodlerPricedPostView>> {
     const viewablePostIds = new Set(
       posts
@@ -149,7 +153,7 @@ export function createSlpViewerContext(
         })
         .map((post) => post.id),
     );
-    const interactionsByPostId = new Map<string, NoodlerPostView["interactions"]>();
+    const interactionsByPostId = new Map<string, SlpCreatorPostView["interactions"]>();
     const interactions = posts.length > 0 ? await noodle.listNoodlerInteractions(posts.map((post) => post.id)) : [];
     for (const interaction of interactions) {
       const existing = interactionsByPostId.get(interaction.postId) ?? [];

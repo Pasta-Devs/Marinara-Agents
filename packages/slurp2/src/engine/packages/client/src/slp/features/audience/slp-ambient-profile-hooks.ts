@@ -1,4 +1,4 @@
-import type { NoodleAccount } from "@marinara-engine/shared";
+import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
 import { noodleKeys } from "../../base/state/slp-query-keys.js";
@@ -32,7 +32,7 @@ export function useUpdateAmbientProfile() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...body }: { id: string; displayName: string; handle: string; bio: string }) =>
-      api.patch<NoodleAccount>(`/slurp2/ambient-profiles/${encodeURIComponent(id)}`, body),
+      api.patch<SlpAccount>(`/slurp2/ambient-profiles/${encodeURIComponent(id)}`, body),
     onSuccess: () =>
       Promise.all([
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),

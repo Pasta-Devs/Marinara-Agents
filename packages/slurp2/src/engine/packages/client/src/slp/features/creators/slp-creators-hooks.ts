@@ -1,4 +1,4 @@
-import type { NoodleAccount } from "@marinara-engine/shared";
+import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
 import { noodleKeys } from "../../base/state/slp-query-keys.js";
@@ -58,7 +58,7 @@ export function useNoodlerEligibleAccounts(
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
       api.get<{
-        items: NoodleAccount[];
+        items: SlpAccount[];
         limit: number;
         offset: number;
         hasMore: boolean;

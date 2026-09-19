@@ -1,15 +1,15 @@
 import {
-  noodleGeneratedDigestSchema,
-  noodleGeneratedFollowSchema,
-  noodleGeneratedInteractionSchema,
-  noodleGeneratedPostSchema,
-  noodleGeneratedRefreshSchema,
-  type NoodleGeneratedRefresh,
-} from "@marinara-engine/shared";
+  slpGeneratedDigestSchema,
+  slpGeneratedFollowSchema,
+  slpGeneratedInteractionSchema,
+  slpGeneratedPostSchema,
+  slpGeneratedRefreshSchema,
+  type SlpGeneratedRefresh,
+} from "../../../../../shared/src/slp/slp-social-generation.schema.js";
 import { parseGameJsonishSequence } from "../../../services/game/jsonish.js";
 import { normalizeNoodleHandle } from "../../base/identity/slp-handle.js";
 
-type RefreshCollection = keyof NoodleGeneratedRefresh;
+type RefreshCollection = keyof SlpGeneratedRefresh;
 
 export type RejectedNoodleGeneratedRefreshItem = {
   collection: RefreshCollection;
@@ -23,7 +23,7 @@ export type RejectedNoodleGeneratedRefreshItem = {
  * must never author posts or interactions on the user's behalf.
  */
 export function validateNoodleGeneratedRefresh(
-  refresh: NoodleGeneratedRefresh,
+  refresh: SlpGeneratedRefresh,
   allowedActorHandles: ReadonlySet<string>,
   knownHandles: ReadonlySet<string>,
 ): string | null {
@@ -55,8 +55,8 @@ function normalizedGeneratedContentKey(handle: string, content: string): string 
  * interactions. Filtering before media preparation ensures a copy never
  * reaches image generation or persistence.
  */
-export function deduplicateGeneratedNoodleContent(generated: NoodleGeneratedRefresh): {
-  generated: NoodleGeneratedRefresh;
+export function deduplicateGeneratedNoodleContent(generated: SlpGeneratedRefresh): {
+  generated: SlpGeneratedRefresh;
   removedCount: number;
 } {
   const seenContent = new Set<string>();
@@ -72,7 +72,7 @@ export function deduplicateGeneratedNoodleContent(generated: NoodleGeneratedRefr
     return true;
   };
 
-  const posts: NoodleGeneratedRefresh["posts"] = [];
+  const posts: SlpGeneratedRefresh["posts"] = [];
   for (const post of generated.posts) {
     const key = normalizedGeneratedContentKey(post.authorHandle, post.content);
     if (keepFirst(key)) {
@@ -110,10 +110,10 @@ export function deduplicateGeneratedNoodleContent(generated: NoodleGeneratedRefr
 }
 
 const collectionSchemas = {
-  posts: noodleGeneratedPostSchema,
-  interactions: noodleGeneratedInteractionSchema,
-  follows: noodleGeneratedFollowSchema,
-  digests: noodleGeneratedDigestSchema,
+  posts: slpGeneratedPostSchema,
+  interactions: slpGeneratedInteractionSchema,
+  follows: slpGeneratedFollowSchema,
+  digests: slpGeneratedDigestSchema,
 } as const;
 
 /**
@@ -121,11 +121,11 @@ const collectionSchemas = {
  * single malformed interaction must not discard otherwise valid activity.
  */
 export function parseNoodleGeneratedRefresh(value: unknown): {
-  refresh: NoodleGeneratedRefresh;
+  refresh: SlpGeneratedRefresh;
   rejected: RejectedNoodleGeneratedRefreshItem[];
 } {
   if (Array.isArray(value)) {
-    const refresh: NoodleGeneratedRefresh = { posts: [], interactions: [], follows: [], digests: [] };
+    const refresh: SlpGeneratedRefresh = { posts: [], interactions: [], follows: [], digests: [] };
     const rejected: RejectedNoodleGeneratedRefreshItem[] = [];
     value.forEach((row, index) => {
       let parsedRow = false;
@@ -145,11 +145,11 @@ export function parseNoodleGeneratedRefresh(value: unknown): {
   const record =
     value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
   if (!record) {
-    noodleGeneratedRefreshSchema.parse(value);
+    slpGeneratedRefreshSchema.parse(value);
     return { refresh: { posts: [], interactions: [], follows: [], digests: [] }, rejected: [] };
   }
 
-  const refresh: NoodleGeneratedRefresh = { posts: [], interactions: [], follows: [], digests: [] };
+  const refresh: SlpGeneratedRefresh = { posts: [], interactions: [], follows: [], digests: [] };
   const rejected: RejectedNoodleGeneratedRefreshItem[] = [];
 
   for (const collection of Object.keys(collectionSchemas) as RefreshCollection[]) {
@@ -180,7 +180,7 @@ export function parseNoodleGeneratedRefresh(value: unknown): {
  * digests) even though the prompt requests a single enclosing object.
  */
 export function parseNoodleGeneratedRefreshResponse(raw: string): {
-  refresh: NoodleGeneratedRefresh;
+  refresh: SlpGeneratedRefresh;
   rejected: RejectedNoodleGeneratedRefreshItem[];
 } {
   const parsedValues = parseGameJsonishSequence(raw);
@@ -199,7 +199,7 @@ export function parseNoodleGeneratedRefreshResponse(raw: string): {
     return parseNoodleGeneratedRefresh(value);
   }
 
-  const refresh: NoodleGeneratedRefresh = { posts: [], interactions: [], follows: [], digests: [] };
+  const refresh: SlpGeneratedRefresh = { posts: [], interactions: [], follows: [], digests: [] };
   const rejected: RejectedNoodleGeneratedRefreshItem[] = [];
   const sourceOffsets: Record<RefreshCollection, number> = { posts: 0, interactions: 0, follows: 0, digests: 0 };
 

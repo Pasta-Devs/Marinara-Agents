@@ -1,14 +1,14 @@
-import type { NoodleAccount, NoodlerSubscriber } from "@marinara-engine/shared";
+import type { SlpAccount, SlpCreatorSubscriber } from "../../../../../shared/src/slp/slp-social.types.js";
 
 /** Fan and follower totals keyed by creator account id. */
 export type NoodlerConnectionCounts = Record<string, { fans: number; followers: number }>;
 /**
  * A subscriber row, widened for the generated audience.
  *
- * `NoodlerSubscriber` describes an account-backed viewer. Somebody from the population has no
+ * `SlpCreatorSubscriber` describes an account-backed viewer. Somebody from the population has no
  * account and no profile to open, so the extra fields say which kind of person a row is.
  */
-export type SlurpSubscriberEntry = NoodlerSubscriber & {
+export type SlurpSubscriberEntry = SlpCreatorSubscriber & {
   audience?: boolean;
   stage?: string;
   spent?: number;
@@ -49,6 +49,6 @@ export type SlurpAmbientProfile = {
   avatarUrl: string | null;
 };
 export type NoodleAmbientProfileRerollResult = {
-  accounts: NoodleAccount[];
+  accounts: SlpAccount[];
   outcomes: Array<{ accountId: string; status: string; reason?: string }>;
 };

@@ -1,5 +1,5 @@
 import { and, eq, or } from "../../../db/file-query.js";
-import { NoodlePostUnlock } from "@marinara-engine/shared";
+import { SlpPostUnlock } from "../../../../../shared/src/slp/slp-social.types.js";
 import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
 import { noodlerUnlockPriceFromMetadata } from "../../modules/economy/slp-prices.js";
 import {
@@ -62,7 +62,7 @@ export function createEconomyStorage2(context: SlurpStorageContext) {
      * survives a refresh.
      *
      */
-    async unlockPost(viewerAccountId: string, postId: string): Promise<NoodlePostUnlock | null> {
+    async unlockPost(viewerAccountId: string, postId: string): Promise<SlpPostUnlock | null> {
       return enqueueFinancial(async () => {
         const viewer = await this.getViewer(viewerAccountId);
         if (!viewer) return null;

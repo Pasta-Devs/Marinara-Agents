@@ -1,10 +1,6 @@
-import {
-  createNoodlePoll,
-  readNoodlePollFromMetadata,
-  type NoodleAccount,
-  type NoodleGeneratedRefresh,
-  type NoodleInteractionType,
-} from "@marinara-engine/shared";
+import { createSlpPoll, readSlpPollFromMetadata } from "../../../../../shared/src/slp/slp-polls.js";
+import { type SlpGeneratedRefresh } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import { type SlpAccount, type SlpInteractionType } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { DB } from "../../../db/connection.js";
 import { logger } from "../../../lib/logger.js";
 import { createCharacterGalleryStorage } from "../../../services/storage/character-gallery.storage.js";
@@ -51,12 +47,12 @@ type PreparedPostMedia = {
 };
 
 export type PreparedGeneratedNoodleMedia = {
-  posts: Map<NoodleGeneratedRefresh["posts"][number], PreparedPostMedia>;
+  posts: Map<SlpGeneratedRefresh["posts"][number], PreparedPostMedia>;
   stagedMedia: StagedNoodlePostMedia[];
 };
 
 export async function pickGalleryAttachmentForAccount(input: {
-  account: NoodleAccount;
+  account: SlpAccount;
   chats: ReturnType<typeof createChatsStorage>;
   gallery: ReturnType<typeof createGalleryStorage>;
   characterGallery: ReturnType<typeof createCharacterGalleryStorage>;
@@ -98,9 +94,9 @@ export async function prepareGeneratedNoodleMedia(input: {
   gallery: ReturnType<typeof createGalleryStorage>;
   characterGallery: ReturnType<typeof createCharacterGalleryStorage>;
   promptOverrides: ReturnType<typeof createPromptOverridesStorage>;
-  generated: NoodleGeneratedRefresh;
-  selectedParticipants: NoodleAccount[];
-  personaAccount: NoodleAccount | null;
+  generated: SlpGeneratedRefresh;
+  selectedParticipants: SlpAccount[];
+  personaAccount: SlpAccount | null;
   settings: SlurpSettings;
   imageConnection: ImageConnection | null;
   debugMode: boolean;
@@ -110,7 +106,7 @@ export async function prepareGeneratedNoodleMedia(input: {
   const activeAccounts = [...(input.personaAccount ? [input.personaAccount] : []), ...input.selectedParticipants];
   const handleToAccount = new Map(activeAccounts.map((account) => [normalizeNoodleHandle(account.handle), account]));
   const activeCharacterReferenceAccounts = activeAccounts.filter((account) => account.kind === "character");
-  const posts = new Map<NoodleGeneratedRefresh["posts"][number], PreparedPostMedia>();
+  const posts = new Map<SlpGeneratedRefresh["posts"][number], PreparedPostMedia>();
   const stagedMedia: StagedNoodlePostMedia[] = [];
   let remainingImagePrompts = input.settings.enableImagePrompts ? input.settings.maxImagesPerRefresh : 0;
 
@@ -192,9 +188,9 @@ export async function prepareGeneratedNoodleMedia(input: {
 export async function persistGeneratedNoodleActivity(input: {
   noodle: ReturnType<typeof createSlurpStorage>;
   characterGallery: ReturnType<typeof createCharacterGalleryStorage>;
-  generated: NoodleGeneratedRefresh;
-  selectedParticipants: NoodleAccount[];
-  personaAccount: NoodleAccount | null;
+  generated: SlpGeneratedRefresh;
+  selectedParticipants: SlpAccount[];
+  personaAccount: SlpAccount | null;
   settings: SlurpSettings;
   runId: string;
   recalledPostIds: string[];
@@ -231,7 +227,7 @@ export async function persistGeneratedNoodleActivity(input: {
     if (!preparedMedia) continue;
     const mediaMetadata = { ...preparedMedia.metadata };
     const mentionedAccounts = mentionedCharacterAccounts(activeAccounts, generatedPost.content);
-    const poll = generatedPost.poll ? createNoodlePoll(generatedPost.poll) : null;
+    const poll = generatedPost.poll ? createSlpPoll(generatedPost.poll) : null;
     const post = await input.noodle.createPost({
       authorAccountId: account.id,
       content: generatedPost.content,
@@ -273,7 +269,7 @@ export async function persistGeneratedNoodleActivity(input: {
     });
   }
 
-  const quotas: Record<NoodleInteractionType, number> = {
+  const quotas: Record<SlpInteractionType, number> = {
     like: input.settings.maxLikesPerRefresh,
     reply: input.settings.maxRepliesPerRefresh,
     vote: input.settings.maxLikesPerRefresh,
@@ -313,7 +309,7 @@ export async function persistGeneratedNoodleActivity(input: {
       })
     )
       continue;
-    const poll = readNoodlePollFromMetadata(targetPost.metadata);
+    const poll = readSlpPollFromMetadata(targetPost.metadata);
     const selectedPollOption =
       generatedInteraction.type === "vote" ? poll?.options[generatedInteraction.pollOptionIndex ?? -1] : undefined;
     if (generatedInteraction.type === "vote" && !selectedPollOption) continue;
@@ -376,9 +372,9 @@ export async function persistGeneratedNoodleActivity(input: {
 
 export async function commitGeneratedNoodleActivity(input: {
   db: DB;
-  generated: NoodleGeneratedRefresh;
-  selectedParticipants: NoodleAccount[];
-  personaAccount: NoodleAccount | null;
+  generated: SlpGeneratedRefresh;
+  selectedParticipants: SlpAccount[];
+  personaAccount: SlpAccount | null;
   settings: SlurpSettings;
   runId: string;
   result: string;

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
+import type { SlpCreatorManagedStageProfile } from "../../../../../shared/src/slp/slp-social.types.js";
 import { showConfirmDialog } from "../../../lib/app-dialogs";
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import type { SlpBackstageSection } from "../../base/navigation/slp-backstage-target";
@@ -52,7 +52,7 @@ export function useSlpCreatorsBackstageState({
   const [creatorTab, setCreatorTab] = useState<SlpCreatorTab>("profile");
   const [expandedCreatorId, setExpandedCreatorId] = useState<string | null>(null);
 
-  const personaCreator = (creator: NoodlerManagedStageProfile) =>
+  const personaCreator = (creator: SlpCreatorManagedStageProfile) =>
     Boolean(creator.sourceAccountId && personaSourceIds.has(creator.sourceAccountId));
   const creators = accountsQuery.data ?? [];
   const automationCreators = creators.filter((creator) => !personaCreator(creator));
@@ -70,7 +70,7 @@ export function useSlpCreatorsBackstageState({
     }
   }, [accountsQuery.data, selectedCreatorId]);
 
-  const confirmDeleteCreator = async (creator: NoodlerManagedStageProfile) => {
+  const confirmDeleteCreator = async (creator: SlpCreatorManagedStageProfile) => {
     try {
       const confirmed = await showConfirmDialog({
         title: t("ui.slurp.settings.creators.deleteTitle"),

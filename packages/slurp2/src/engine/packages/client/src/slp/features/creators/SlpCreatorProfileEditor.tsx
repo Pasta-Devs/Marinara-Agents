@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import type { NoodleIdentityDisclosure, NoodlerManagedStageProfile } from "@marinara-engine/shared";
+import type {
+  SlpCreatorManagedStageProfile,
+  SlpIdentityDisclosure,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpStageProfileInput } from "../../base/state/slp-state-types";
 import {
   useRemoveNoodlerAvatar,
@@ -25,7 +28,7 @@ export function SlurpCreatorProfileEditor({
   creator,
   onRedraft,
 }: {
-  creator: NoodlerManagedStageProfile;
+  creator: SlpCreatorManagedStageProfile;
   onRedraft: () => void;
 }) {
   const { t } = useTranslation();
@@ -69,7 +72,7 @@ export function SlurpCreatorProfileEditor({
       draft={draft}
       source={null}
       disclosureMode={draft.disclosureMode}
-      onDisclosureChange={(value: NoodleIdentityDisclosure) =>
+      onDisclosureChange={(value: SlpIdentityDisclosure) =>
         setDraft((current) => ({ ...current, disclosureMode: value }))
       }
       guidance=""

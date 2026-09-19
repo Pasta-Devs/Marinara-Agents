@@ -1,4 +1,4 @@
-import type { NoodleRefreshSchedulerStatus } from "@marinara-engine/shared";
+import type { SlpRefreshSchedulerStatus } from "../../../../../shared/src/slp/slp-social.types.js";
 
 export const NOODLE_REFRESH_SCHEDULE_VERSION = 1 as const;
 
@@ -281,11 +281,11 @@ export function clearNoodleRefreshFailure(schedule: PersistedNoodleRefreshSchedu
 export function noodleRefreshSchedulerStatus(
   schedule: PersistedNoodleRefreshSchedule,
   at: Date,
-): NoodleRefreshSchedulerStatus {
+): SlpRefreshSchedulerStatus {
   const nextRefreshAt = nextNoodleRefreshTime(schedule);
   const retryAt = schedule.nextAttemptAt ? Date.parse(schedule.nextAttemptAt) : null;
   const due = dueNoodleRefreshTimes(schedule, at).length > 0;
-  const state: NoodleRefreshSchedulerStatus["state"] =
+  const state: SlpRefreshSchedulerStatus["state"] =
     schedule.refreshesPerDay === 0
       ? "disabled"
       : schedule.lastError && retryAt !== null && retryAt > at.getTime()

@@ -6,7 +6,8 @@
  * fields; guidance is one paragraph, and asking a small local model for JSON around one string is
  * a second way for the call to fail.
  */
-import type { APIProvider, NoodleIdentityDisclosure } from "@marinara-engine/shared";
+import type { APIProvider } from "@marinara-engine/shared";
+import type { SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
 import { isDebugAgentsEnabled } from "../../../config/runtime-config.js";
 import type { DB } from "../../../db/connection.js";
 import { logDebugOverride } from "../../../lib/logger.js";
@@ -112,7 +113,7 @@ export async function generateSlurpPostGuidanceDraft(
   const noodle = createSlurpStorage(db);
   const account = input.creatorId ? await noodle.getNoodlerAccountById(input.creatorId) : null;
   if (input.creatorId && !account) throw new Error("Slurp stage profile not found.");
-  const disclosureMode: NoodleIdentityDisclosure = account?.settings.privacy.identityDisclosure ?? "open";
+  const disclosureMode: SlpIdentityDisclosure = account?.settings.privacy.identityDisclosure ?? "open";
   const publicAccount = account ? await noodle.resolveAccountSource(account) : null;
   // Concealed Creators get the same seed the stage profile draft uses; what may be *said* about
   // them is limited by the protection pass below, not by hiding the card from the writer.

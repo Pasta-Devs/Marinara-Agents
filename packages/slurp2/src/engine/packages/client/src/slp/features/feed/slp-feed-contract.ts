@@ -1,9 +1,13 @@
-import type { NoodlePostImageCrop, NoodlerManagedPost, NoodlerPostView } from "@marinara-engine/shared";
+import type {
+  SlpCreatorManagedPost,
+  SlpCreatorPostView,
+  SlpPostImageCrop,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 export type { SlurpReserveStatus, SlurpScheduleSlot } from "../../base/state/slp-state-types.js";
 import type { ImagePromptReviewItem } from "../../../components/ui/ImagePromptReviewModal.js";
 
 export type SlurpProfilePost =
-  { managed: NoodlerManagedPost; viewerPost: NoodlerPostView | null } | { viewerPost: NoodlerPostView };
+  { managed: SlpCreatorManagedPost; viewerPost: SlpCreatorPostView | null } | { viewerPost: SlpCreatorPostView };
 export type NoodlePostDraft = {
   title: string | null;
   content: string;
@@ -16,11 +20,11 @@ export type NoodlePostDraftRequest = {
   guidance?: string;
   connectionId?: string;
 };
-export type GeneratedNoodlerNoodlePost = NoodlerManagedPost & {
+export type GeneratedNoodlerNoodlePost = SlpCreatorManagedPost & {
   imagePromptReview?: ImagePromptReviewItem;
 };
 export type NoodlerPostDraftImage = {
   source: File | string;
-  crop: NoodlePostImageCrop | null;
+  crop: SlpPostImageCrop | null;
 };
 export type NoodlerContentFormat = "caption" | "announcement" | "long_form";

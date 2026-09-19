@@ -1,6 +1,6 @@
 // Shell contract, split out of components/slurp/SlurpShell.tsx in Slice 10.
 import type { ReactNode, RefObject } from "react";
-import type { NoodleAccount } from "@marinara-engine/shared";
+import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 
 export type NoodleShellView =
   "home" | "noodler" | "search" | "profile" | "messages" | "notifications" | "studio" | "wallet" | "settings" | null;
@@ -15,7 +15,7 @@ export interface NoodleShellProps {
   homeActive?: boolean;
   /** Posts published since this viewer persona last had the NoodleR or Slurp feed shown to it. */
   noodlerUnseenCount?: number;
-  personaAccount: NoodleAccount | null;
+  personaAccount: SlpAccount | null;
   /**
    * The active persona's Creator identity, when it runs one. Shown as the main identity on the
    * switcher card, with the persona kept beside it as a small circle, because a persona that has
@@ -24,16 +24,16 @@ export interface NoodleShellProps {
    * Deliberately not folded into `personaAccount`: that account's id drives the switcher list
    * filter and the isCreator check, and this one carries the Creator's id instead.
    */
-  creatorIdentity?: NoodleAccount | null;
-  sortedPersonaAccounts: NoodleAccount[];
-  visiblePersonaAccounts: NoodleAccount[];
+  creatorIdentity?: SlpAccount | null;
+  sortedPersonaAccounts: SlpAccount[];
+  visiblePersonaAccounts: SlpAccount[];
   linkedNoodleAccountIds?: ReadonlySet<string>;
   /** Fan and follower totals keyed by persona id. Personas without a Creator profile are absent. */
   personaConnectionCounts?: Record<string, { fans: number; followers: number }>;
   /** Wallet balances keyed by persona id. */
   personaWallets?: Record<string, { coins: number }>;
   onLoadMorePersonaAccounts: () => void;
-  onSwitchPersona: (account: NoodleAccount, mobile: boolean) => void;
+  onSwitchPersona: (account: SlpAccount, mobile: boolean) => void;
   accountSwitcherOpen: boolean;
   onAccountSwitcherOpenChange: (open: boolean) => void;
   accountSwitcherRef: RefObject<HTMLDivElement | null>;

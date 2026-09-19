@@ -1,4 +1,4 @@
-import type { NoodleAccount } from "@marinara-engine/shared";
+import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import { isNoodlerHiddenFromViewer } from "../../base/identity/slp-access.js";
 
 export function normalizeNoodlerSeenAt(seenAt: string | null | undefined): string | null {
@@ -11,7 +11,7 @@ export function normalizeNoodlerSeenAt(seenAt: string | null | undefined): strin
  * The unseen badge sees the same creators as the full viewer projection, except the viewer's own
  * Creator profile. Locked posts still count as news, matching the existing viewer-feed contract.
  */
-export function noodlerUnseenCreatorAccountIds(accounts: NoodleAccount[], viewerAccountId: string): string[] {
+export function noodlerUnseenCreatorAccountIds(accounts: SlpAccount[], viewerAccountId: string): string[] {
   return accounts
     .filter(
       (account) =>

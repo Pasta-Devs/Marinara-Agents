@@ -1,4 +1,7 @@
-import { noodleBulkNoodlerAccountCreateSchema, noodleStageProfileSchema } from "@marinara-engine/shared";
+import {
+  slpBulkCreatorAccountCreateSchema,
+  slpStageProfileSchema,
+} from "../../../../../shared/src/slp/slp-social.schema.js";
 import { z } from "zod";
 import {
   slurpDiscoveryProfileSchema,
@@ -17,11 +20,11 @@ import { generateNoodlerStageProfileDraft } from "../creators/slp-creators-contr
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
-const slurpBulkNoodlerAccountCreateSchema = noodleBulkNoodlerAccountCreateSchema.extend({
+const slurpBulkNoodlerAccountCreateSchema = slpBulkCreatorAccountCreateSchema.extend({
   connectionId: z.string().min(1).nullable().optional(),
 });
 
-const slurpStageProfileSchema = noodleStageProfileSchema.extend(slurpDiscoveryProfileSchema.shape);
+const slurpStageProfileSchema = slpStageProfileSchema.extend(slurpDiscoveryProfileSchema.shape);
 // Older clients could skip gender and tags; a new Creator needs both so Discover can find them.
 const SLURP_NEW_CREATOR_DISCOVERY_MESSAGE = "A new Creator needs a gender and at least 3 tags.";
 const slurpNoodlerAccountCreateSchema = z

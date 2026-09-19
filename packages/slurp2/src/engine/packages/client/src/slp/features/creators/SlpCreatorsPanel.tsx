@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import { CalendarClock, CheckCircle2, ListChecks, Loader2, Search, Sparkles, Trash2, UsersRound } from "lucide-react";
-import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
+import type { SlpCreatorManagedStageProfile } from "../../../../../shared/src/slp/slp-social.types.js";
 import { Field, SettingsGroup, Toggle } from "../../modules/settings/SlpSettingsControls";
 import { SlurpCreatorBulkEdit } from "./SlpCreatorBulkEdit";
 import { toast } from "sonner";
@@ -23,7 +23,7 @@ import { useSlurpPostGuidance } from "../settings/slp-post-guidance-contract";
 const CREATOR_FILTERS: readonly SlpCreatorFilter[] = ["all", "active", "paused", "attention"];
 const CREATOR_TABS: readonly SlpCreatorTab[] = ["profile", "publishing", "images", "messages", "danger"];
 
-function needsAttention(creator: NoodlerManagedStageProfile) {
+function needsAttention(creator: SlpCreatorManagedStageProfile) {
   return creator.sourceStatus.state === "missing" || creator.sourceStatus.state === "changed";
 }
 

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import type { NoodleAccount, NoodleInteraction, NoodlePollInput } from "@marinara-engine/shared";
+import type { SlpPollInput } from "../../../../shared/src/slp/slp-social-generation.schema.js";
+import type { SlpAccount, SlpInteraction } from "../../../../shared/src/slp/slp-social.types.js";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { errorMessage } from "./screens/SlpHomeHelpers";
 import type { NoodlePostCardModel, NoodlePostImageUpdate } from "../modules/post/SlpPostCard";
@@ -40,7 +41,7 @@ export function useSlurpHomePostActions({
 }: {
   localizeUi: (key: string, options?: Record<string, unknown>) => string;
   viewerPersonaId: string | null;
-  viewerActorAccount: NoodleAccount | null;
+  viewerActorAccount: SlpAccount | null;
   confirmProviderDisclosure: () => Promise<boolean>;
   createInteraction: ReturnType<typeof useCreateNoodlerInteraction>;
   removeInteraction: ReturnType<typeof useRemoveNoodlerInteraction>;
@@ -67,7 +68,7 @@ export function useSlurpHomePostActions({
       removeInteraction.mutate({ postId: post.id, personaId: viewerPersonaId, actorAccountId, type }, { onError });
     else createInteraction.mutate({ postId: post.id, personaId: viewerPersonaId, actorAccountId, type }, { onError });
   };
-  const reactToReply = (post: NoodlePostCardModel, reply: NoodleInteraction, active: boolean) => {
+  const reactToReply = (post: NoodlePostCardModel, reply: SlpInteraction, active: boolean) => {
     if (!viewerPersonaId) return;
     const payload = {
       postId: post.id,
@@ -136,7 +137,7 @@ export function useSlurpHomePostActions({
       title: string | null;
       content: string;
       image: NoodlePostImageUpdate | null;
-      poll?: NoodlePollInput | null;
+      poll?: SlpPollInput | null;
     },
   ) => {
     try {
@@ -184,7 +185,7 @@ export function useSlurpHomePostActions({
   };
   const [editingReplyId, setEditingReplyId] = useState<string | null>(null);
   const [editingReplyContent, setEditingReplyContent] = useState("");
-  const startEditingReply = (reply: NoodleInteraction) => {
+  const startEditingReply = (reply: SlpInteraction) => {
     setEditingReplyId(reply.id);
     setEditingReplyContent(reply.content ?? "");
   };
@@ -192,7 +193,7 @@ export function useSlurpHomePostActions({
     setEditingReplyId(null);
     setEditingReplyContent("");
   };
-  const saveEditedReply = (post: NoodlePostCardModel, reply: NoodleInteraction) => {
+  const saveEditedReply = (post: NoodlePostCardModel, reply: SlpInteraction) => {
     if (!viewerPersonaId) return;
     const content = editingReplyContent.trim();
     if (!content && !reply.imageUrl) {
@@ -212,7 +213,7 @@ export function useSlurpHomePostActions({
       },
     );
   };
-  const deleteNoodleReply = async (post: NoodlePostCardModel, reply: NoodleInteraction) => {
+  const deleteNoodleReply = async (post: NoodlePostCardModel, reply: SlpInteraction) => {
     const confirmed = await showConfirmDialog({
       title: localizeUi("ui.slurp.comment.deleteTitle"),
       message: localizeUi("ui.noodle.noodlehome.thisRemovesTheCommentAndAnyRepliesOrLikes"),

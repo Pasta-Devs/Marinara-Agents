@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
+import type { SlpCreatorManagedStageProfile } from "../../../../../shared/src/slp/slp-social.types.js";
 import { SLURP_ACTIVITY_PRESETS, slurpActivityPresetForSettings } from "../../modules/creator/slp-activity-presets";
 import type { SlpBackstageSection } from "../../base/navigation/slp-backstage-target";
 import type { SlurpSettings } from "../settings/slp-settings-contract";
@@ -19,7 +19,7 @@ export function useSlpFeedBackstageState({
 }: {
   section: SlpBackstageSection;
   scheduleCreatorId: string | null;
-  automationCreators: NoodlerManagedStageProfile[];
+  automationCreators: SlpCreatorManagedStageProfile[];
   settings: SlurpSettings | undefined;
 }) {
   const { t } = useTranslation();

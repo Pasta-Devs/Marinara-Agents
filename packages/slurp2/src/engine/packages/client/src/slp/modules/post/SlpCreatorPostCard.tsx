@@ -8,13 +8,10 @@
 import { AtSign, ChevronDown, Heart, Flame, TrendingUp, MessageCircle, RefreshCw } from "lucide-react";
 import { Fragment, useMemo, useRef, useState } from "react";
 import { slurpPostWentViral, slurpReachWeek } from "../../../../../shared/src/slp/slp-reach.js";
-import {
-  noodlePollInputSchema,
-  readNoodlePollFromMetadata,
-  readNoodlePostImageCrop,
-  type NoodleAccount,
-  type NoodleInteraction,
-} from "@marinara-engine/shared";
+import { readSlpPollFromMetadata } from "../../../../../shared/src/slp/slp-polls.js";
+import { readSlpPostImageCrop } from "../../../../../shared/src/slp/slp-post-images.js";
+import { slpPollInputSchema } from "../../../../../shared/src/slp/slp-social.schema.js";
+import { type SlpAccount, type SlpInteraction } from "../../../../../shared/src/slp/slp-social.types.js";
 import { cn } from "../../../lib/utils";
 import type { ChatImage } from "../../../hooks/use-gallery";
 import { useNearViewportSlurpMediaSrc } from "../../base/media/slp-media-src";
@@ -90,8 +87,8 @@ export function SlurpCreatorPostCard({
     replyManagement,
     mentions,
   } = ctx;
-  const accountById = ctx.accountById ?? new Map<string, NoodleAccount>();
-  const accountByHandle = ctx.accountByHandle ?? new Map<string, NoodleAccount>();
+  const accountById = ctx.accountById ?? new Map<string, SlpAccount>();
+  const accountByHandle = ctx.accountByHandle ?? new Map<string, SlpAccount>();
   const authorAccount = accountById.get(post.authorAccountId) ?? null;
   const author = authorAccount ?? post.authorSnapshot;
   // Card-owned defaults for absent capability groups. Hosts pass only the capabilities they
@@ -101,7 +98,7 @@ export function SlurpCreatorPostCard({
   // keep the () => {} fallbacks callable with their real signatures.
   const fallbackDivRef = useRef<HTMLDivElement | null>(null);
   const fallbackFileRef = useRef<HTMLInputElement | null>(null);
-  const openProfile: (account: NoodleAccount | null) => void = ctx.openProfile ?? (() => {});
+  const openProfile: (account: SlpAccount | null) => void = ctx.openProfile ?? (() => {});
   const canOpenAuthorProfile = Boolean(authorAccount || ctx.openAuthorProfile);
   const openPostAuthor = () => {
     if (authorAccount) openProfile(authorAccount);
@@ -127,11 +124,11 @@ export function SlurpCreatorPostCard({
   const editingReplyContent = replyManagement?.editingReplyContent ?? "";
   const setEditingReplyContent: React.Dispatch<React.SetStateAction<string>> =
     replyManagement?.setEditingReplyContent ?? (() => {});
-  const startEditingReply: (reply: NoodleInteraction) => void = replyManagement?.startEditingReply ?? (() => {});
+  const startEditingReply: (reply: SlpInteraction) => void = replyManagement?.startEditingReply ?? (() => {});
   const cancelEditingReply: () => void = replyManagement?.cancelEditingReply ?? (() => {});
-  const saveEditedReply: (post: NoodlePostCardModel, reply: NoodleInteraction) => void =
+  const saveEditedReply: (post: NoodlePostCardModel, reply: SlpInteraction) => void =
     replyManagement?.saveEditedReply ?? (() => {});
-  const deleteNoodleReply: (post: NoodlePostCardModel, reply: NoodleInteraction) => void =
+  const deleteNoodleReply: (post: NoodlePostCardModel, reply: SlpInteraction) => void =
     replyManagement?.deleteNoodleReply ?? (() => {});
   const updateInteraction = replyManagement?.updateInteraction ?? {
     isPending: false,
@@ -143,11 +140,11 @@ export function SlurpCreatorPostCard({
   const activeReplyMention = mentions?.activeReplyMention ?? null;
   const activeReplyMentionIndex = mentions?.activeReplyMentionIndex ?? 0;
   const replyMentionSuggestions = mentions?.replyMentionSuggestions ?? [];
-  const selectReplyMention: (account: NoodleAccount) => void = mentions?.selectReplyMention ?? (() => {});
+  const selectReplyMention: (account: SlpAccount) => void = mentions?.selectReplyMention ?? (() => {});
 
   const { imageEditing, pollEditing } = ctx;
   const isEditingPost = Boolean(ctx.postManagement) && editingPostId === post.id;
-  const imageCrop = readNoodlePostImageCrop(post.metadata);
+  const imageCrop = readSlpPostImageCrop(post.metadata);
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
   const [commentsExpanded, setCommentsExpanded] = useState(false);
   const [expandedThreadIds, setExpandedThreadIds] = useState<ReadonlySet<string>>(new Set());
@@ -180,7 +177,7 @@ export function SlurpCreatorPostCard({
     post.imageUrl && (postImageSrc === null || postImageSrc !== failedImageUrl) ? post : { ...post, imageUrl: null };
   const postInteractions = post.interactions;
   const rootPostInteractions = postInteractions.filter((interaction) => !interaction.parentInteractionId);
-  const poll = readNoodlePollFromMetadata(post.metadata);
+  const poll = readSlpPollFromMetadata(post.metadata);
   const postKind = post.imageUrl ? "media" : poll ? "poll" : "text";
   const pollVotes = poll
     ? rootPostInteractions.filter(
@@ -199,8 +196,8 @@ export function SlurpCreatorPostCard({
   const { replies, replyById, orderedReplies, replyLikesByParentId } = useMemo(() => {
     const nextReplies = postInteractions.filter((interaction) => interaction.type === "reply");
     const nextReplyById = new Map(nextReplies.map((reply) => [reply.id, reply]));
-    const childrenByParentId = new Map<string, NoodleInteraction[]>();
-    const nextReplyLikesByParentId = new Map<string, NoodleInteraction[]>();
+    const childrenByParentId = new Map<string, SlpInteraction[]>();
+    const nextReplyLikesByParentId = new Map<string, SlpInteraction[]>();
     for (const interaction of postInteractions) {
       if (interaction.type === "reply" && interaction.parentInteractionId) {
         const children = childrenByParentId.get(interaction.parentInteractionId) ?? [];
@@ -213,9 +210,9 @@ export function SlurpCreatorPostCard({
         nextReplyLikesByParentId.set(interaction.parentInteractionId, likes);
       }
     }
-    const nextOrderedReplies: NoodleInteraction[] = [];
+    const nextOrderedReplies: SlpInteraction[] = [];
     const visitedReplyIds = new Set<string>();
-    const appendReplyBranch = (reply: NoodleInteraction) => {
+    const appendReplyBranch = (reply: SlpInteraction) => {
       if (visitedReplyIds.has(reply.id)) return;
       visitedReplyIds.add(reply.id);
       nextOrderedReplies.push(reply);
@@ -258,7 +255,7 @@ export function SlurpCreatorPostCard({
   const postReplyPending = createInteractionPendingFor(post.id, "reply", replyParentInteractionId);
   const pollVotePending = createInteractionPendingFor(post.id, "vote");
   const editingExistingPoll = Boolean(poll && pollEditing);
-  const editingPollIsValid = !editingExistingPoll || noodlePollInputSchema.safeParse(pollEditing?.value).success;
+  const editingPollIsValid = !editingExistingPoll || slpPollInputSchema.safeParse(pollEditing?.value).success;
   const saveEditDisabled =
     (!editingPostContent.trim() && !(ctx.allowPollOnlyEdits && editingPollIsValid && editingExistingPoll)) ||
     !editingPollIsValid ||
@@ -322,7 +319,7 @@ export function SlurpCreatorPostCard({
       setMediaPickerTab={setMediaPickerTab}
     />
   );
-  const renderReplyRow = (reply: NoodleInteraction, nested: boolean) => (
+  const renderReplyRow = (reply: SlpInteraction, nested: boolean) => (
     <SlpReplyRow
       reply={reply}
       nested={nested}

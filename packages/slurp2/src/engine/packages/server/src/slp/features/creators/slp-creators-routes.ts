@@ -1,8 +1,8 @@
 import {
-  noodleStageProfileUpdateSchema,
-  noodleAccountSettingsPatchSchema,
-  noodleStageProfileDraftRequestSchema,
-} from "@marinara-engine/shared";
+  slpAccountSettingsPatchSchema,
+  slpStageProfileDraftRequestSchema,
+  slpStageProfileUpdateSchema,
+} from "../../../../../shared/src/slp/slp-social.schema.js";
 import {
   slurpDiscoveryProfileSchema,
   SLURP_DISCOVERY_TAG_LIMIT,
@@ -27,7 +27,7 @@ import type { FastifyInstance } from "fastify";
 import { slurpDiscoveryTagNameSchema } from "../../modules/requests/slp-request-schemas.js";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
-const noodleStageProfileUpdateRequestSchema = noodleStageProfileUpdateSchema.extend({
+const noodleStageProfileUpdateRequestSchema = slpStageProfileUpdateSchema.extend({
   ...slurpDiscoveryProfileSchema.shape,
   location: z.string().trim().max(120).optional(),
   sourceRevisionToken: z
@@ -63,7 +63,7 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
 
   app.patch("/accounts/:id/settings", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const parsed = noodleAccountSettingsPatchSchema.safeParse(req.body);
+    const parsed = slpAccountSettingsPatchSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const account = await noodle.getNoodlerAccountById(id);
     if (!account) return reply.code(404).send({ error: "Creator account not found" });
@@ -200,7 +200,7 @@ export async function slpCreatorsRoutes(app: FastifyInstance, deps: SlpRouteDeps
   });
 
   app.post("/noodler/stage-profile-draft", async (req, reply) => {
-    const parsed = noodleStageProfileDraftRequestSchema.safeParse(req.body);
+    const parsed = slpStageProfileDraftRequestSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const settings = await noodle.getSettings();
     const connection = await resolveSlurpTextConnection(

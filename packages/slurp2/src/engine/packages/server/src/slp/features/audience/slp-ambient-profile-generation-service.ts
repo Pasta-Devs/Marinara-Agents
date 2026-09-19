@@ -1,9 +1,9 @@
+import { type APIProvider } from "@marinara-engine/shared";
 import {
-  type APIProvider,
-  type NoodleAccount,
-  type NoodleAmbientProfileRerollOutcome,
-  type NoodleGeneratedProfile,
-} from "@marinara-engine/shared";
+  type SlpAmbientProfileRerollOutcome,
+  type SlpGeneratedProfile,
+} from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import { type SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import { logDebugOverride, logger } from "../../../lib/logger.js";
 import { resolveBaseUrl } from "../../../services/generation/connection-base-url.js";
 import {
@@ -29,7 +29,7 @@ import { noodleResponseFormat, NOODLE_JSON_OUTPUT_HEADING } from "../../base/pro
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
-export type AmbientProfileRerollOutcome = NoodleAmbientProfileRerollOutcome;
+export type AmbientProfileRerollOutcome = SlpAmbientProfileRerollOutcome;
 
 function normalizedPublicHandle(handle: string): string {
   return (
@@ -52,7 +52,7 @@ export function nextAvailableAmbientHandle(handle: string, reserved: Set<string>
   return candidate;
 }
 
-export function ambientGeneratedProfileChanged(account: NoodleAccount, profile: NoodleGeneratedProfile): boolean {
+export function ambientGeneratedProfileChanged(account: SlpAccount, profile: SlpGeneratedProfile): boolean {
   return (
     account.displayName.trim().toLocaleLowerCase() !== profile.name.trim().toLocaleLowerCase() ||
     normalizedPublicHandle(account.handle) !== normalizedPublicHandle(profile.handle)
@@ -60,8 +60,8 @@ export function ambientGeneratedProfileChanged(account: NoodleAccount, profile: 
 }
 
 export function allocateAmbientProfileHandles(
-  accounts: NoodleAccount[],
-  profiles: ReadonlyMap<string, NoodleGeneratedProfile>,
+  accounts: SlpAccount[],
+  profiles: ReadonlyMap<string, SlpGeneratedProfile>,
   occupiedHandles: Iterable<string>,
 ): Map<string, string> {
   const reserved = new Set(Array.from(occupiedHandles, normalizedPublicHandle));
@@ -83,11 +83,11 @@ export function allocateAmbientProfileHandles(
 export async function rerollAmbientNoodleProfiles(input: {
   db: DB;
   noodle: ReturnType<typeof createSlurpStorage>;
-  accounts: NoodleAccount[];
+  accounts: SlpAccount[];
   connection: GenerationConnection;
   debugMode: boolean;
   promptBlocks?: SlurpPromptBlockOverrides;
-}): Promise<{ accounts: NoodleAccount[]; outcomes: AmbientProfileRerollOutcome[] }> {
+}): Promise<{ accounts: SlpAccount[]; outcomes: AmbientProfileRerollOutcome[] }> {
   const connections = createConnectionsStorage(input.db);
   const fallbackConnection = await connections.getFallbackForMain();
   const provider = withConnectionFallbackProvider({
@@ -206,7 +206,7 @@ export async function rerollAmbientNoodleProfiles(input: {
     generatedByEntityId,
     (await input.noodle.listAccounts({ includeHidden: true })).map((account) => account.handle),
   );
-  const accounts: NoodleAccount[] = [];
+  const accounts: SlpAccount[] = [];
   const outcomes: AmbientProfileRerollOutcome[] = [];
   for (const account of input.accounts) {
     const profile = generatedByEntityId.get(account.entityId);

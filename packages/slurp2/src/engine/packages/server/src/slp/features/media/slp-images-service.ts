@@ -1,4 +1,4 @@
-import type { NoodleAccount, NoodleIdentityDisclosure } from "@marinara-engine/shared";
+import type { SlpAccount, SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { DB } from "../../../db/connection.js";
 import { logger, logDebugOverride } from "../../../lib/logger.js";
 import { newId } from "../../../utils/id-generator.js";
@@ -49,9 +49,9 @@ type ImageConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createCo
  * URL from the persisted post id.
  */
 export async function generateNoodlerPostImage(input: {
-  account: NoodleAccount;
-  linkedPublicAccount: NoodleAccount | null;
-  disclosureMode: NoodleIdentityDisclosure;
+  account: SlpAccount;
+  linkedPublicAccount: SlpAccount | null;
+  disclosureMode: SlpIdentityDisclosure;
   postContent: string;
   draftPrompt: string;
   settings: Pick<

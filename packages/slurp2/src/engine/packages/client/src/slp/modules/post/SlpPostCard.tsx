@@ -11,13 +11,10 @@ import {
   Trash2,
 } from "lucide-react";
 import { Fragment, useRef, useState } from "react";
-import {
-  noodlePollInputSchema,
-  readNoodlePollFromMetadata,
-  readNoodlePostImageCrop,
-  type NoodleAccount,
-  type NoodleInteraction,
-} from "@marinara-engine/shared";
+import { readSlpPollFromMetadata } from "../../../../../shared/src/slp/slp-polls.js";
+import { readSlpPostImageCrop } from "../../../../../shared/src/slp/slp-post-images.js";
+import { slpPollInputSchema } from "../../../../../shared/src/slp/slp-social.schema.js";
+import { type SlpAccount, type SlpInteraction } from "../../../../../shared/src/slp/slp-social.types.js";
 import { toast } from "sonner";
 import { api } from "../../../lib/api-client";
 import { cn } from "../../../lib/utils";
@@ -120,11 +117,11 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
     replyManagement,
     mentions,
   } = ctx;
-  const accountById = ctx.accountById ?? new Map<string, NoodleAccount>();
-  const accountByHandle = ctx.accountByHandle ?? new Map<string, NoodleAccount>();
+  const accountById = ctx.accountById ?? new Map<string, SlpAccount>();
+  const accountByHandle = ctx.accountByHandle ?? new Map<string, SlpAccount>();
   const authorAccount = accountById.get(post.authorAccountId) ?? null;
   const author = authorAccount ?? post.authorSnapshot;
-  const imageCrop = readNoodlePostImageCrop(post.metadata);
+  const imageCrop = readSlpPostImageCrop(post.metadata);
 
   // Card-owned defaults for absent capability groups. Hosts pass only the capabilities they
   // support; the card fills the
@@ -133,7 +130,7 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
   // keep the () => {} fallbacks callable with their real signatures.
   const fallbackDivRef = useRef<HTMLDivElement | null>(null);
   const fallbackFileRef = useRef<HTMLInputElement | null>(null);
-  const openProfile: (account: NoodleAccount | null) => void = ctx.openProfile ?? (() => {});
+  const openProfile: (account: SlpAccount | null) => void = ctx.openProfile ?? (() => {});
   const canOpenAuthorProfile = Boolean(authorAccount || ctx.openAuthorProfile);
   const openPostAuthor = () => {
     if (authorAccount) openProfile(authorAccount);
@@ -159,11 +156,11 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
   const editingReplyContent = replyManagement?.editingReplyContent ?? "";
   const setEditingReplyContent: React.Dispatch<React.SetStateAction<string>> =
     replyManagement?.setEditingReplyContent ?? (() => {});
-  const startEditingReply: (reply: NoodleInteraction) => void = replyManagement?.startEditingReply ?? (() => {});
+  const startEditingReply: (reply: SlpInteraction) => void = replyManagement?.startEditingReply ?? (() => {});
   const cancelEditingReply: () => void = replyManagement?.cancelEditingReply ?? (() => {});
-  const saveEditedReply: (post: NoodlePostCardModel, reply: NoodleInteraction) => void =
+  const saveEditedReply: (post: NoodlePostCardModel, reply: SlpInteraction) => void =
     replyManagement?.saveEditedReply ?? (() => {});
-  const deleteNoodleReply: (post: NoodlePostCardModel, reply: NoodleInteraction) => void =
+  const deleteNoodleReply: (post: NoodlePostCardModel, reply: SlpInteraction) => void =
     replyManagement?.deleteNoodleReply ?? (() => {});
   const updateInteraction = replyManagement?.updateInteraction ?? {
     isPending: false,
@@ -175,11 +172,11 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
   const activeReplyMention = mentions?.activeReplyMention ?? null;
   const activeReplyMentionIndex = mentions?.activeReplyMentionIndex ?? 0;
   const replyMentionSuggestions = mentions?.replyMentionSuggestions ?? [];
-  const selectReplyMention: (account: NoodleAccount) => void = mentions?.selectReplyMention ?? (() => {});
+  const selectReplyMention: (account: SlpAccount) => void = mentions?.selectReplyMention ?? (() => {});
 
   const postInteractions = post.interactions;
   const rootPostInteractions = postInteractions.filter((interaction) => !interaction.parentInteractionId);
-  const poll = readNoodlePollFromMetadata(post.metadata);
+  const poll = readSlpPollFromMetadata(post.metadata);
   const pollVotes = poll
     ? rootPostInteractions.filter(
         (interaction) =>
@@ -196,9 +193,9 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
     : false;
   const replies = postInteractions.filter((interaction) => interaction.type === "reply");
   const replyById = new Map(replies.map((reply) => [reply.id, reply]));
-  const orderedReplies: NoodleInteraction[] = [];
+  const orderedReplies: SlpInteraction[] = [];
   const visitedReplyIds = new Set<string>();
-  const appendReplyBranch = (reply: NoodleInteraction) => {
+  const appendReplyBranch = (reply: SlpInteraction) => {
     if (visitedReplyIds.has(reply.id)) return;
     visitedReplyIds.add(reply.id);
     orderedReplies.push(reply);
@@ -276,7 +273,7 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
     />
   );
   const editingExistingPoll = Boolean(poll && pollEditing);
-  const editingPollIsValid = !editingExistingPoll || noodlePollInputSchema.safeParse(pollEditing?.value).success;
+  const editingPollIsValid = !editingExistingPoll || slpPollInputSchema.safeParse(pollEditing?.value).success;
   const postEditActions = (
     <>
       <button
@@ -302,7 +299,7 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
       </button>
     </>
   );
-  const renderReplyRow = (reply: NoodleInteraction, nested: boolean) => (
+  const renderReplyRow = (reply: SlpInteraction, nested: boolean) => (
     <SlpPostReplyRow
       reply={reply}
       nested={nested}

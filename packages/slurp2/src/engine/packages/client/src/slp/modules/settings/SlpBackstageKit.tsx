@@ -7,7 +7,7 @@ import { cn } from "../../../lib/utils";
 import { Avatar } from "../../base/chrome/SlpChrome";
 import type { SlurpReserveStatus, SlurpScheduleSlot } from "../../base/state/slp-state-types";
 import { formatClockTime, formatDateTime } from "../../base/ui/slp-date-time";
-import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
+import type { SlpCreatorManagedStageProfile } from "../../../../../shared/src/slp/slp-social.types.js";
 import {
   Activity,
   AlertTriangle,
@@ -133,7 +133,7 @@ export function OverviewCard({
   title: string;
   status: string;
   details: string[];
-  avatars?: NoodlerManagedStageProfile[];
+  avatars?: SlpCreatorManagedStageProfile[];
   avatarTotal?: number;
   onClick: () => void;
   tone: "pink" | "violet" | "blue" | "coral";

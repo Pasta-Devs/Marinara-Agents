@@ -1,5 +1,5 @@
 import { and, desc, eq, gt, inArray, or } from "../../../db/file-query.js";
-import { NoodleDigestEntry, NoodleRefreshAttempt, NoodleRefreshRun } from "@marinara-engine/shared";
+import { SlpDigestEntry, SlpRefreshAttempt, SlpRefreshRun } from "../../../../../shared/src/slp/slp-social.types.js";
 import { noodleActivityDigests, noodleInteractions, noodlePosts, noodleRefreshRuns } from "../../../db/schema/slurp.js";
 import { newId, now } from "../../../utils/id-generator.js";
 import { parseRecord, parseRefreshAttempts, parseStringArray } from "../../modules/records/slp-storage-model.js";
@@ -41,7 +41,7 @@ export function createFeedRefreshStorage1(context: SlurpStorageContext) {
       sourceRunId?: string | null;
       sourcePostId?: string | null;
       sourceInteractionId?: string | null;
-    }): Promise<NoodleDigestEntry> {
+    }): Promise<SlpDigestEntry> {
       const id = newId();
       const uniqueAccountIds = Array.from(new Set(input.accountIds.filter(Boolean)));
       const slurpSourceAccountIds = new Set(
@@ -78,10 +78,7 @@ export function createFeedRefreshStorage1(context: SlurpStorageContext) {
       const rows = await db.select().from(noodleActivityDigests).where(eq(noodleActivityDigests.id, id));
       return mapDigest(rows[0]!);
     },
-    async updateDigest(
-      id: string,
-      input: { accountIds: string[]; content: string },
-    ): Promise<NoodleDigestEntry | null> {
+    async updateDigest(id: string, input: { accountIds: string[]; content: string }): Promise<SlpDigestEntry | null> {
       const uniqueAccountIds = Array.from(new Set(input.accountIds.filter(Boolean)));
       const existingRows = await db.select().from(noodleActivityDigests).where(eq(noodleActivityDigests.id, id));
       const existing = existingRows[0];
@@ -105,7 +102,7 @@ export function createFeedRefreshStorage1(context: SlurpStorageContext) {
       const rows = await db.select().from(noodleActivityDigests).where(eq(noodleActivityDigests.id, id));
       return rows[0] ? mapDigest(rows[0]) : null;
     },
-    async listDigests(options: { limit?: number; since?: string } = {}): Promise<NoodleDigestEntry[]> {
+    async listDigests(options: { limit?: number; since?: string } = {}): Promise<SlpDigestEntry[]> {
       const limit = Math.max(1, Math.min(200, Math.floor(options.limit ?? 80)));
       const fetchLimit = 200;
       const rows = options.since
@@ -162,7 +159,7 @@ export function createFeedRefreshStorage1(context: SlurpStorageContext) {
         .slice(0, limit)
         .map(mapDigest);
     },
-    async createRefreshRun(input: { activeAccountIds: string[]; prompt: string }): Promise<NoodleRefreshRun> {
+    async createRefreshRun(input: { activeAccountIds: string[]; prompt: string }): Promise<SlpRefreshRun> {
       const timestamp = now();
       const id = newId();
       await db.insert(noodleRefreshRuns).values({
@@ -179,7 +176,7 @@ export function createFeedRefreshStorage1(context: SlurpStorageContext) {
       const rows = await db.select().from(noodleRefreshRuns).where(eq(noodleRefreshRuns.id, id));
       return mapRefreshRun(rows[0]!);
     },
-    async listRefreshRuns(options: { limit?: number; status?: NoodleRefreshRun["status"] } = {}) {
+    async listRefreshRuns(options: { limit?: number; status?: SlpRefreshRun["status"] } = {}) {
       const limit = Math.max(1, Math.min(20, Math.floor(options.limit ?? 5)));
       const baseQuery = db.select().from(noodleRefreshRuns);
       const rows = options.status
@@ -190,7 +187,7 @@ export function createFeedRefreshStorage1(context: SlurpStorageContext) {
         : await baseQuery.orderBy(desc(noodleRefreshRuns.createdAt)).limit(limit);
       return rows.map(mapRefreshRun);
     },
-    async recordRefreshAttempt(id: string, attempt: NoodleRefreshAttempt): Promise<NoodleRefreshRun | null> {
+    async recordRefreshAttempt(id: string, attempt: SlpRefreshAttempt): Promise<SlpRefreshRun | null> {
       const rows = await db.select().from(noodleRefreshRuns).where(eq(noodleRefreshRuns.id, id));
       const current = rows[0];
       if (!current) return null;
@@ -207,7 +204,7 @@ export function createFeedRefreshStorage1(context: SlurpStorageContext) {
     async finishRefreshRun(
       id: string,
       patch: { status: "completed" | "failed"; result?: string | null; error?: string | null },
-    ): Promise<NoodleRefreshRun | null> {
+    ): Promise<SlpRefreshRun | null> {
       await db
         .update(noodleRefreshRuns)
         .set({

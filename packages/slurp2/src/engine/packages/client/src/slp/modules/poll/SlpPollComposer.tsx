@@ -1,11 +1,12 @@
 import { Plus, Send, Smile, Trash2, X } from "lucide-react";
 import { type ReactNode, useRef, useState } from "react";
-import { noodlePollInputSchema, type NoodlePollInput } from "@marinara-engine/shared";
+import { type SlpPollInput } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import { slpPollInputSchema } from "../../../../../shared/src/slp/slp-social.schema.js";
 import { ConversationMediaPickerPanel } from "../../../components/chat/ConversationMediaPickerPanel";
 import { NoodleAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
 import { useTranslation as useUiTranslation } from "react-i18next";
 
-const EMPTY_POLL: NoodlePollInput = { question: "", options: ["", ""] };
+const EMPTY_POLL: SlpPollInput = { question: "", options: ["", ""] };
 const EMOJI_GRAPHEME_PATTERN = /[\p{Extended_Pictographic}\p{Regional_Indicator}\u20e3]/u;
 const graphemeSegmenter = new Intl.Segmenter(undefined, {
   granularity: "grapheme",
@@ -36,8 +37,8 @@ export function NoodlePollComposer({
   modalOwned = false,
   action,
 }: {
-  value: NoodlePollInput | null;
-  onChange: (poll: NoodlePollInput) => void;
+  value: SlpPollInput | null;
+  onChange: (poll: SlpPollInput) => void;
   onClose: () => void;
   onSubmit: () => void;
   submitLabel: string;
@@ -194,7 +195,7 @@ export function NoodlePollComposer({
             <button
               type="button"
               onClick={onSubmit}
-              disabled={disabled || submitDisabled || !noodlePollInputSchema.safeParse(value).success}
+              disabled={disabled || submitDisabled || !slpPollInputSchema.safeParse(value).success}
               className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[var(--noodle-accent)] px-5 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 [&_svg]:!text-zinc-950"
             >
               <Send size={14} />

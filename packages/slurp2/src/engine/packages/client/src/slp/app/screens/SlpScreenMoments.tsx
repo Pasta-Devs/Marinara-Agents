@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight, Clock3, Eye, Heart, Link, Lock, Maximize2, Minimize2, Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import type { NoodlerPostView } from "@marinara-engine/shared";
+import type { SlpCreatorPostView } from "../../../../../shared/src/slp/slp-social.types.js";
 import { useRecordSlurpStoryView, useSlurpStoryViews } from "../../features/messages/slp-messages-hooks";
 import { cn } from "../../../lib/utils";
 import type { NoodlePostCardCtx } from "../../modules/post/SlpPostCard";
@@ -23,7 +23,7 @@ import {
 
 type SlurpMoment = {
   creator: SlurpViewerCreator;
-  post: NoodlerPostView;
+  post: SlpCreatorPostView;
 };
 
 // ---------------------------------------------------------------------------

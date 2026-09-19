@@ -1,10 +1,10 @@
 import { and, desc, eq, inArray, or } from "../../../db/file-query.js";
+import { SlpAccountSettingsPatchInput } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
 import {
-  NoodleAccount,
-  NoodleAccountSettings,
-  NoodleAccountSettingsPatchInput,
-  NoodlerSourceSnapshot,
-} from "@marinara-engine/shared";
+  SlpAccount,
+  SlpAccountSettings,
+  SlpCreatorSourceSnapshot,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 import { SlurpStageProfileInput } from "../../modules/discovery/slp-discovery-profile.js";
 import { resolveSlurpCreatorScheduleStatus } from "../../modules/creators/slp-creator-schedule-context.js";
 import {
@@ -102,10 +102,7 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
     ): Promise<SlurpAccount | null> {
       return this.getSlurpAccountForEntity(sourceKind, sourceEntityId, "creator");
     },
-    async patchViewerSettings(
-      personaId: string,
-      input: NoodleAccountSettingsPatchInput,
-    ): Promise<NoodleAccount | null> {
+    async patchViewerSettings(personaId: string, input: SlpAccountSettingsPatchInput): Promise<SlpAccount | null> {
       return enqueueFinancial(async () => {
         if (input.subtree !== "social") return null;
         const viewer = await this.getViewer(personaId);
@@ -125,7 +122,7 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
       targetAccountId: string,
       followed: boolean,
       followedAt = now(),
-    ): Promise<{ account: NoodleAccount; changed: boolean } | null> {
+    ): Promise<{ account: SlpAccount; changed: boolean } | null> {
       return enqueueFinancial(async () => {
         const viewer = await this.getViewer(personaId);
         if (!viewer) return null;
@@ -136,7 +133,7 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
           return { account: viewer, changed: false };
         if (followed) followingAccountTimestamps[targetAccountId] = followedAt;
         else delete followingAccountTimestamps[targetAccountId];
-        const next: NoodleAccountSettings = {
+        const next: SlpAccountSettings = {
           ...viewer.settings,
           social: {
             ...viewer.settings.social,
@@ -150,7 +147,7 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
         return { account: (await this.getViewer(personaId))!, changed: true };
       });
     },
-    async deleteNoodlerAccount(id: string): Promise<NoodleAccount | null> {
+    async deleteNoodlerAccount(id: string): Promise<SlpAccount | null> {
       const existing = await this.getNoodlerAccountById(id, { includeHidden: true });
       if (!existing) return null;
       await this.leaveCrossovers(id);
@@ -291,10 +288,10 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
       sourceEntityId: string,
       stageProfile: SlurpStageProfileInput,
       wizardExecutionId?: string,
-      sourceSnapshot?: NoodlerSourceSnapshot,
+      sourceSnapshot?: SlpCreatorSourceSnapshot,
       avatarUrl?: string | null,
       bannerUrl?: string | null,
-    ): Promise<NoodleAccount | null> {
+    ): Promise<SlpAccount | null> {
       const publicAccount = await this.resolveSource(sourceKind, sourceEntityId);
       if (!publicAccount) return null;
       const timestamp = now();
@@ -344,9 +341,9 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
     async updateNoodlerStageProfile(
       id: string,
       stageProfile: SlurpStageProfileInput,
-      sourceSnapshot?: NoodlerSourceSnapshot,
+      sourceSnapshot?: SlpCreatorSourceSnapshot,
       location?: string,
-    ): Promise<NoodleAccount | null> {
+    ): Promise<SlpAccount | null> {
       return db.transaction(async (tx) => {
         const rows = await tx
           .select()
@@ -394,7 +391,7 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
         return updatedRows[0] ? mapAccount(updatedRows[0]) : null;
       });
     },
-    async updateNoodlerAvatar(id: string, avatarUrl: string | null): Promise<NoodleAccount | null> {
+    async updateNoodlerAvatar(id: string, avatarUrl: string | null): Promise<SlpAccount | null> {
       await db.transaction(async (tx) => {
         const rows = await tx
           .select()
@@ -410,7 +407,7 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
             settings: JSON.stringify({
               ...settings,
               profile: { ...settings.profile, avatarCrop: null },
-            } satisfies NoodleAccountSettings),
+            } satisfies SlpAccountSettings),
             updatedAt: now(),
           })
           .where(eq(noodleAccounts.id, id));
@@ -418,7 +415,7 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
       return this.getNoodlerAccountById(id);
     },
     /** Creator banner lives in settings.profile, which patchAccountSettings keeps closed for noodler rows. */
-    async updateNoodlerBanner(id: string, bannerUrl: string | null): Promise<NoodleAccount | null> {
+    async updateNoodlerBanner(id: string, bannerUrl: string | null): Promise<SlpAccount | null> {
       return db.transaction(async (tx) => {
         const row = (await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id)))[0];
         if (!row || row.platform !== "slurp") return null;
@@ -429,7 +426,7 @@ export function createCreatorsStorage3(context: SlurpStorageContext) {
         await tx
           .update(noodleAccounts)
           .set({
-            settings: JSON.stringify({ ...settings, profile } satisfies NoodleAccountSettings),
+            settings: JSON.stringify({ ...settings, profile } satisfies SlpAccountSettings),
             updatedAt: now(),
           })
           .where(eq(noodleAccounts.id, id));

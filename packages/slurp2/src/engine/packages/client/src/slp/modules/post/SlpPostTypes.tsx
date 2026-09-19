@@ -1,19 +1,19 @@
 import type { ChangeEvent, RefObject } from "react";
+import type { SlpTextMention } from "../../../../../shared/src/slp/slp-mentions.js";
+import type { SlpPollInput } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
 import type {
-  NoodleAccount,
-  NoodleAuthorSnapshot,
-  NoodleInteraction,
-  NoodleInteractionType,
-  NoodlePollInput,
-  NoodlePost,
-  NoodlePostImageCrop,
-  NoodleTextMention,
-} from "@marinara-engine/shared";
+  SlpAccount,
+  SlpAuthorSnapshot,
+  SlpInteraction,
+  SlpInteractionType,
+  SlpPost,
+  SlpPostImageCrop,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 import type { ConversationMediaPickerTabId } from "../../../components/chat/ConversationMediaPickerPanel";
 import type { ChatImage } from "../../../hooks/use-gallery";
 
 export type ReplyComposerTool = "image" | "media";
-export type ActiveComposerMention = NoodleTextMention & { query: string };
+export type ActiveComposerMention = SlpTextMention & { query: string };
 
 /**
  * Reply image attach/upload/lightbox. Hosts that persist reply images pass this; hosts that
@@ -37,32 +37,32 @@ export interface NoodlePostCardReplyManagementCap {
   editingReplyId: string | null;
   editingReplyContent: string;
   setEditingReplyContent: React.Dispatch<React.SetStateAction<string>>;
-  startEditingReply: (reply: NoodleInteraction) => void;
+  startEditingReply: (reply: SlpInteraction) => void;
   cancelEditingReply: () => void;
-  saveEditedReply: (post: NoodlePostCardModel, reply: NoodleInteraction) => void;
-  deleteNoodleReply: (post: NoodlePostCardModel, reply: NoodleInteraction) => void;
+  saveEditedReply: (post: NoodlePostCardModel, reply: SlpInteraction) => void;
+  deleteNoodleReply: (post: NoodlePostCardModel, reply: SlpInteraction) => void;
   updateInteraction: { isPending: boolean };
   deleteInteraction: { isPending: boolean };
   /** Gate reply Edit/Delete. Omit for the default author-based check. */
-  canManageReply?: (reply: NoodleInteraction) => boolean;
+  canManageReply?: (reply: SlpInteraction) => boolean;
 }
 
 /** @mention autocomplete in the reply composer. Omit on hosts without mentions (NoodleR). */
 export interface NoodlePostCardMentionsCap {
   activeReplyMention: ActiveComposerMention | null;
   activeReplyMentionIndex: number;
-  replyMentionSuggestions: NoodleAccount[];
-  selectReplyMention: (account: NoodleAccount) => void;
+  replyMentionSuggestions: SlpAccount[];
+  selectReplyMention: (account: SlpAccount) => void;
 }
 
-type NoodlePostCardAuthor = Pick<NoodleAuthorSnapshot, "id" | "handle" | "displayName" | "avatarUrl" | "avatarCrop">;
+type NoodlePostCardAuthor = Pick<SlpAuthorSnapshot, "id" | "handle" | "displayName" | "avatarUrl" | "avatarCrop">;
 export type NoodlePostCardModel = Pick<
-  NoodlePost,
+  SlpPost,
   "id" | "authorAccountId" | "content" | "imageUrl" | "imagePrompt" | "metadata" | "createdAt" | "access"
 > & {
   title: string | null;
   authorSnapshot: NoodlePostCardAuthor | null;
-  interactions: NoodleInteraction[];
+  interactions: SlpInteraction[];
   /**
    * The platform total, where the caller has one. The rows carry the names; this carries the size.
    * Optional because a managed post inside the composer has no projection behind it.
@@ -77,17 +77,17 @@ export interface NoodlePostCardTitleEditingCap {
 }
 
 export type NoodlePostImageUpdate =
-  | { kind: "replace"; file: File; crop: NoodlePostImageCrop }
-  | { kind: "crop"; crop: NoodlePostImageCrop }
+  | { kind: "replace"; file: File; crop: SlpPostImageCrop }
+  | { kind: "crop"; crop: SlpPostImageCrop }
   | { kind: "remove" };
 
 export type NoodlePostImageCropSource =
   | {
       source: File | string;
-      crop: NoodlePostImageCrop | null;
+      crop: SlpPostImageCrop | null;
       mode: "existing";
     }
-  | { source: File; crop: NoodlePostImageCrop | null; mode: "replace" };
+  | { source: File; crop: SlpPostImageCrop | null; mode: "replace" };
 
 export interface NoodlePostCardImageEditingCap {
   update: NoodlePostImageUpdate | null;
@@ -97,16 +97,16 @@ export interface NoodlePostCardImageEditingCap {
   fileInputRef: RefObject<HTMLInputElement | null>;
   beginCrop: (post: NoodlePostCardModel) => void;
   selectReplacement: (event: ChangeEvent<HTMLInputElement>) => void;
-  applyCrop: (crop: NoodlePostImageCrop) => Promise<void>;
+  applyCrop: (crop: SlpPostImageCrop) => Promise<void>;
   cancelCrop: () => void;
   remove: () => void;
   restore: () => void;
 }
 
 export interface NoodlePostCardCtx {
-  accountById?: Map<string, NoodleAccount>;
-  accountByHandle?: Map<string, NoodleAccount>;
-  personaAccount: NoodleAccount | null;
+  accountById?: Map<string, SlpAccount>;
+  accountByHandle?: Map<string, SlpAccount>;
+  personaAccount: SlpAccount | null;
   postMenuId: string | null;
   setPostMenuId: React.Dispatch<React.SetStateAction<string | null>>;
   editingPostId: string | null;
@@ -130,7 +130,7 @@ export interface NoodlePostCardCtx {
   cancelEditingPost: () => void;
   saveEditedPost: (post: NoodlePostCardModel) => void;
   reactToPost: (post: NoodlePostCardModel, type: "like", active?: boolean) => void;
-  reactToReply: (post: NoodlePostCardModel, target: NoodleInteraction, active: boolean) => void;
+  reactToReply: (post: NoodlePostCardModel, target: SlpInteraction, active: boolean) => void;
   openReplyComposer: (postId: string, parentInteractionId?: string | null) => void;
   handleReplyChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
   /** Reply composer keydown (mention nav / submit shortcuts). Omit on hosts without them. */
@@ -143,7 +143,7 @@ export interface NoodlePostCardCtx {
   reactionPendingFor: (postId: string, type: "like", parentInteractionId?: string | null) => boolean;
   createInteractionPendingFor: (
     postId: string,
-    type: NoodleInteractionType,
+    type: SlpInteractionType,
     parentInteractionId?: string | null,
   ) => boolean;
   updatePostPending: boolean;
@@ -153,13 +153,13 @@ export interface NoodlePostCardCtx {
   titleEditing?: NoodlePostCardTitleEditingCap;
   /** Existing-poll editing. Poll-less posts do not expose an add-poll path here. */
   pollEditing?: {
-    value: NoodlePollInput | null;
-    setValue: React.Dispatch<React.SetStateAction<NoodlePollInput | null>>;
+    value: SlpPollInput | null;
+    setValue: React.Dispatch<React.SetStateAction<SlpPollInput | null>>;
   };
   /** Allow an empty edited body when the existing post has a poll. */
   allowPollOnlyEdits?: boolean;
   /** Navigate to an author/mention profile. Omit on hosts without profile navigation (NoodleR). */
-  openProfile?: (account: NoodleAccount | null) => void;
+  openProfile?: (account: SlpAccount | null) => void;
   /** Navigate by NoodleR author ID when no Noodle account object exists. */
   openAuthorProfile?: (accountId: string) => void;
   /** Open the whole post in the media dialog. Absent → the image opens a plain lightbox. */
@@ -192,19 +192,19 @@ export interface NoodlePostCardControllerOptions {
   postManagement: boolean;
   /** The Show more threshold from settings; the card cannot read settings itself. */
   postShowMoreLength?: number;
-  personaAccount: NoodleAccount | null;
+  personaAccount: SlpAccount | null;
   savePost: (
     post: NoodlePostCardModel,
     input: {
       title: string | null;
       content: string;
       image: NoodlePostImageUpdate | null;
-      poll?: NoodlePollInput | null;
+      poll?: SlpPollInput | null;
     },
   ) => Promise<void>;
   deletePost: (post: NoodlePostCardModel) => void;
   reactToPost: (post: NoodlePostCardModel, type: "like", active?: boolean) => void;
-  reactToReply: (post: NoodlePostCardModel, target: NoodleInteraction, active: boolean) => void;
+  reactToReply: (post: NoodlePostCardModel, target: SlpInteraction, active: boolean) => void;
   submitReply: (
     post: NoodlePostCardModel,
     input: {
@@ -222,7 +222,7 @@ export interface NoodlePostCardControllerOptions {
   reactionPendingFor: (postId: string, type: "like", parentInteractionId?: string | null) => boolean;
   createInteractionPendingFor: (
     postId: string,
-    type: NoodleInteractionType,
+    type: SlpInteractionType,
     parentInteractionId?: string | null,
   ) => boolean;
   updatePostPending: boolean;

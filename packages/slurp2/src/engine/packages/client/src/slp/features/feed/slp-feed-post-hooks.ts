@@ -1,10 +1,9 @@
 import type {
-  NoodlePostImageCrop,
-  NoodlerGenerationRequest,
-  NoodlerManagedPost,
-  NoodlerPostCreateInput,
-  NoodlerPostUpdateInput,
-} from "@marinara-engine/shared";
+  SlpCreatorGenerationRequest,
+  SlpCreatorPostCreateInput,
+  SlpCreatorPostUpdateInput,
+} from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import type { SlpCreatorManagedPost, SlpPostImageCrop } from "../../../../../shared/src/slp/slp-social.types.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ImagePromptOverride } from "../../../components/ui/ImagePromptReviewModal.js";
 import { api } from "../../../lib/api-client.js";
@@ -67,7 +66,7 @@ export function useGenerateNoodlePostDraft() {
 type NoodlerFormatRequest = {
   format?: NoodlerContentFormat;
 };
-type NoodlerCreatePostRequest = Omit<NoodlerPostCreateInput, "uploadedImageUrl" | "imageCrop"> & {
+type NoodlerCreatePostRequest = Omit<SlpCreatorPostCreateInput, "uploadedImageUrl" | "imageCrop"> & {
   image?: NoodlerPostDraftImage | null;
   postType?: "post" | "story";
   linkedPostId?: string | null;
@@ -76,7 +75,7 @@ type NoodlerCreatePostRequest = Omit<NoodlerPostCreateInput, "uploadedImageUrl" 
   /** Image directions to keep on the post, so its image can be rendered afterwards. */
   imagePrompt?: string | null;
 } & NoodlerFormatRequest;
-type NoodlerGeneratePostRequest = Omit<NoodlerGenerationRequest, "uploadedImageUrl" | "imageCrop"> & {
+type NoodlerGeneratePostRequest = Omit<SlpCreatorGenerationRequest, "uploadedImageUrl" | "imageCrop"> & {
   image?: NoodlerPostDraftImage | null;
   /** Ask generation for a Story instead of waiting for the rotation to pick one. */
   postType?: "post" | "story";
@@ -142,7 +141,7 @@ export function useCreateNoodlerPost() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ image, ...input }: NoodlerCreatePostRequest) =>
-      postNoodlerRequestWithImage<NoodlerManagedPost>("/slurp2/noodler/posts", input, image),
+      postNoodlerRequestWithImage<SlpCreatorManagedPost>("/slurp2/noodler/posts", input, image),
     onSuccess: (_post, input) =>
       Promise.all([
         qc.invalidateQueries({
@@ -180,8 +179,8 @@ export function useLoadNoodlerPostImage() {
 export function useUpdateNoodlerPost() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, accountId, ...input }: { id: string; accountId: string } & NoodlerPostUpdateInput) =>
-      api.patch<NoodlerManagedPost>(`/slurp2/noodler/posts/${encodeURIComponent(id)}`, { ...input, accountId }),
+    mutationFn: ({ id, accountId, ...input }: { id: string; accountId: string } & SlpCreatorPostUpdateInput) =>
+      api.patch<SlpCreatorManagedPost>(`/slurp2/noodler/posts/${encodeURIComponent(id)}`, { ...input, accountId }),
     onSuccess: (_post, input) => {
       return Promise.all([
         qc.invalidateQueries({
@@ -205,12 +204,12 @@ export function useReplaceNoodlerPostImage() {
       id: string;
       accountId: string;
       file: File;
-      crop: NoodlePostImageCrop;
-    } & Omit<NoodlerPostUpdateInput, "imageCrop" | "removeImage">) => {
+      crop: SlpPostImageCrop;
+    } & Omit<SlpCreatorPostUpdateInput, "imageCrop" | "removeImage">) => {
       const form = new FormData();
       form.append("payload", JSON.stringify({ ...input, imageCrop: crop, accountId }));
       form.append("file", file);
-      return api.upload<NoodlerManagedPost>(`/slurp2/noodler/posts/${encodeURIComponent(id)}/media`, form);
+      return api.upload<SlpCreatorManagedPost>(`/slurp2/noodler/posts/${encodeURIComponent(id)}/media`, form);
     },
     onSuccess: (_post, input) =>
       Promise.all([
@@ -225,7 +224,7 @@ export function useGenerateNoodlerPostImage() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, accountId, imagePrompt }: { id: string; accountId: string; imagePrompt?: string }) =>
-      api.post<NoodlerManagedPost>(`/slurp2/noodler/posts/${encodeURIComponent(id)}/image/generate`, {
+      api.post<SlpCreatorManagedPost>(`/slurp2/noodler/posts/${encodeURIComponent(id)}/image/generate`, {
         accountId,
         ...(imagePrompt ? { imagePrompt } : {}),
         replace: true,
@@ -242,7 +241,7 @@ export function useDeleteNoodlerPost() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, accountId }: { id: string; accountId: string }) =>
-      api.delete<NoodlerManagedPost>(
+      api.delete<SlpCreatorManagedPost>(
         `/slurp2/noodler/posts/${encodeURIComponent(id)}?accountId=${encodeURIComponent(accountId)}`,
       ),
     onSuccess: (_post, input) => {

@@ -1,5 +1,5 @@
 import { and, desc, eq, lt, or } from "../../../db/file-query.js";
-import { NoodleAccountSettings, NoodleAccountSubscription } from "@marinara-engine/shared";
+import { SlpAccountSettings, SlpAccountSubscription } from "../../../../../shared/src/slp/slp-social.types.js";
 import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
 import { readSlurpWallet, slurpWalletKey, spend, subscriptionPaidThrough } from "../../modules/economy/slp-wallet.js";
 import { createSlpActiveModifierProvider } from "../../base/modifiers/slp-active-modifier-provider.js";
@@ -58,7 +58,7 @@ export function createEconomyStorage1(context: SlurpStorageContext) {
      * "no" for a hidden or self-owned creator. Re-subscribing to a creator that is already paid
      * up charges nothing, so the route stays idempotent.
      */
-    async subscribe(viewerAccountId: string, creatorAccountId: string): Promise<NoodleAccountSubscription | null> {
+    async subscribe(viewerAccountId: string, creatorAccountId: string): Promise<SlpAccountSubscription | null> {
       if (viewerAccountId === creatorAccountId) return null;
       const settings = await this.getSettings();
       return enqueueFinancial(async () => {
@@ -229,7 +229,7 @@ export function createEconomyStorage1(context: SlurpStorageContext) {
             const followingAccountIds = viewer.settings.social.followingAccountIds ?? [];
             const followingAccountTimestamps = { ...viewer.settings.social.followingAccountTimestamps };
             followingAccountTimestamps[creatorAccountId] ??= timestamp;
-            const nextViewerSettings: NoodleAccountSettings = {
+            const nextViewerSettings: SlpAccountSettings = {
               ...viewer.settings,
               ...(settings.walletEnabled ? { wallet: { coins: walletAfterCharge.coins } } : {}),
               social: {
@@ -337,14 +337,14 @@ export function createEconomyStorage1(context: SlurpStorageContext) {
         .lapseTie(viewerAccountId, creatorAccountId, stillFollowing ? "follower" : "lapsed")
         .catch(() => undefined);
     },
-    async listSubscriptionsForViewer(viewerAccountId: string): Promise<NoodleAccountSubscription[]> {
+    async listSubscriptionsForViewer(viewerAccountId: string): Promise<SlpAccountSubscription[]> {
       const rows = await db
         .select()
         .from(noodleAccountSubscriptions)
         .where(eq(noodleAccountSubscriptions.viewerAccountId, viewerAccountId));
       return rows.map(mapSubscription);
     },
-    async listSubscriptionsForCreator(creatorAccountId: string): Promise<NoodleAccountSubscription[]> {
+    async listSubscriptionsForCreator(creatorAccountId: string): Promise<SlpAccountSubscription[]> {
       const rows = await db
         .select()
         .from(noodleAccountSubscriptions)

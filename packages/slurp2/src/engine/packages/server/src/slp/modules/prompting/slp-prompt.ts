@@ -1,13 +1,13 @@
 // ──────────────────────────────────────────────
 // Noodle Prompt Instructions
 // ──────────────────────────────────────────────
+import { LIMITS } from "@marinara-engine/shared";
+import { readSlpPollFromMetadata } from "../../../../../shared/src/slp/slp-polls.js";
 import {
-  LIMITS,
-  readNoodlePollFromMetadata,
-  type NoodleAccountKind,
-  type NoodleInteraction,
-  type NoodlePost,
-} from "@marinara-engine/shared";
+  type SlpAccountKind,
+  type SlpInteraction,
+  type SlpPost,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpSettings } from "../settings/slp-settings.js";
 import type { NoodlePromptImageCandidate } from "../../base/media/slp-vision.js";
 
@@ -89,7 +89,7 @@ export const NOODLE_RANDOM_USER_TREATMENT_INSTRUCTION =
  * instructions only — schema-critical output-format rules (structured action limits, target
  * field rules, handle preservation, persona authorship, adult platform policy, "Return JSON
  * only") stay hardcoded in buildRefreshPrompt() outside this override, so a user rewriting their
- * voice/tone text cannot accidentally break the noodleGeneratedRefreshSchema output contract.
+ * voice/tone text cannot accidentally break the slpGeneratedRefreshSchema output contract.
  *
  * `enhanced` mirrors the Noodle setting `enableEnhancedTimelineWriting` (off by default): off
  * reproduces the original single-line tone instruction with no congruency instruction; on adds
@@ -118,11 +118,11 @@ type NoodleTimelineFeatureSettings = Pick<
 
 type RandomSource = () => number;
 type NoodlePromptPost = Pick<
-  NoodlePost,
+  SlpPost,
   "id" | "authorAccountId" | "authorSnapshot" | "content" | "imageUrl" | "imagePrompt" | "metadata" | "createdAt"
 >;
 type NoodlePromptInteraction = Pick<
-  NoodleInteraction,
+  SlpInteraction,
   | "id"
   | "postId"
   | "parentInteractionId"
@@ -136,7 +136,7 @@ type NoodlePromptInteraction = Pick<
 
 const NOODLE_PROMPT_REPLIES_PER_POST = 12;
 
-function formatNoodlePromptAccount(snapshot: NoodlePost["authorSnapshot"], fallbackAccountId: string): string {
+function formatNoodlePromptAccount(snapshot: SlpPost["authorSnapshot"], fallbackAccountId: string): string {
   if (!snapshot) return `accountKey=${fallbackAccountId}`;
   return `${snapshot.displayName} (@${snapshot.handle}; ${snapshot.kind} accountKey=${snapshot.kind}:${snapshot.entityId})`;
 }
@@ -149,12 +149,12 @@ export function noodleReplyImageKey(interactionId: string): string {
   return `noodle-reply-image:${interactionId}`;
 }
 
-export function canGenerateNoodleActivityForAccountKind(kind: NoodleAccountKind): boolean {
+export function canGenerateNoodleActivityForAccountKind(kind: SlpAccountKind): boolean {
   return kind === "character" || kind === "random_user";
 }
 
 export function noodlePersonaCommentPostIds(
-  interactions: Array<Pick<NoodleInteraction, "postId" | "actorAccountId" | "type">>,
+  interactions: Array<Pick<SlpInteraction, "postId" | "actorAccountId" | "type">>,
   personaAccountId?: string,
 ): string[] {
   if (!personaAccountId) return [];
@@ -234,7 +234,7 @@ export function formatNoodleTimelineForPrompt(
     .reverse()
     .map((post) => {
       const author = formatNoodlePromptAccount(post.authorSnapshot, post.authorAccountId);
-      const poll = readNoodlePollFromMetadata(post.metadata);
+      const poll = readSlpPollFromMetadata(post.metadata);
       const pollSummary = poll
         ? ` [poll: ${poll.question}; ${poll.options
             .map((option, index) => {

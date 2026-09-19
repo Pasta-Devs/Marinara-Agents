@@ -3,18 +3,18 @@ import { AnimatePresence } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
 import { DEFAULT_SLURP_SUBSCRIPTION_PRICE } from "../../modules/coin/SlpCoin";
 import { HelpTooltip } from "../../../components/ui/HelpTooltip";
-import { type NoodleIdentityDisclosure } from "@marinara-engine/shared";
+import { type SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
 import { PostImageFrame } from "../../base/media/SlpPostImageCropEditor";
 import { useMemo } from "react";
 import { useNoodlerViewer } from "../../features/feed/slp-feed-viewer-hooks";
+import type { SlpPollInput } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
 import type {
-  NoodlePostAccess,
-  NoodlerPostView,
-  NoodlePollInput,
-  NoodlerStageProfile,
-  NoodlerPostDraftImage,
-  NoodlerManagedPost,
-} from "@marinara-engine/shared";
+  SlpCreatorManagedPost,
+  SlpCreatorPostView,
+  SlpCreatorStageProfile,
+  SlpPostAccess,
+} from "../../../../../shared/src/slp/slp-social.types.js";
+import type { NoodlerPostDraftImage } from "../../features/feed/slp-feed-contract";
 import type { SlurpStageProfileInput } from "../../base/state/slp-state-types";
 import type { NoodlePostCardModel } from "../../modules/post/SlpPostCard";
 
@@ -26,7 +26,7 @@ export interface NoodlerPostSubmission {
   profileId: string;
   title: string;
   body: string;
-  access: NoodlePostAccess;
+  access: SlpPostAccess;
   image: NoodlerPostDraftImage | null;
   poll: { question: string; options: string[] } | null;
   format: NoodlerContentFormat;
@@ -40,9 +40,9 @@ export interface NoodlerPostSubmission {
 export interface NoodlerPostDraft {
   title: string;
   body: string;
-  access: NoodlePostAccess;
+  access: SlpPostAccess;
   image: NoodlerPostDraftImage | null;
-  poll: NoodlePollInput | null;
+  poll: SlpPollInput | null;
   postType: "post" | "story";
   linkedPostId: string | null;
   /** Price for this locked post. Null uses the Creator's price. */
@@ -109,8 +109,10 @@ export function isEmptyNoodlerPostDraft(draft: NoodlerPostDraft): boolean {
   );
 }
 
-export function isSlurpStory(post: NoodlerPostView | NoodlerManagedPost): boolean {
-  return (post as NoodlerPostView & { story?: boolean }).story === true || post.metadata?.noodlerPostType === "story";
+export function isSlurpStory(post: SlpCreatorPostView | SlpCreatorManagedPost): boolean {
+  return (
+    (post as SlpCreatorPostView & { story?: boolean }).story === true || post.metadata?.noodlerPostType === "story"
+  );
 }
 
 export function slurpSubscriptionPriceOf(profile: unknown): number {
@@ -118,8 +120,8 @@ export function slurpSubscriptionPriceOf(profile: unknown): number {
   return typeof price === "number" && price >= 0 ? price : DEFAULT_SLURP_SUBSCRIPTION_PRICE;
 }
 
-export function linkedPostIdForStory(post: NoodlerPostView): string | null {
-  const linkedPostId = (post as NoodlerPostView & { linkedPostId?: unknown }).linkedPostId;
+export function linkedPostIdForStory(post: SlpCreatorPostView): string | null {
+  const linkedPostId = (post as SlpCreatorPostView & { linkedPostId?: unknown }).linkedPostId;
   return typeof linkedPostId === "string" && linkedPostId.length > 0 ? linkedPostId : null;
 }
 
@@ -129,7 +131,7 @@ export function parsePrice(value: string): number | null {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
-export function toNoodlePostCardModel(view: NoodlerPostView, profile: NoodlerStageProfile): NoodlePostCardModel {
+export function toNoodlePostCardModel(view: SlpCreatorPostView, profile: SlpCreatorStageProfile): NoodlePostCardModel {
   return {
     id: view.id,
     authorAccountId: view.authorAccountId,
@@ -152,7 +154,10 @@ export function toNoodlePostCardModel(view: NoodlerPostView, profile: NoodlerSta
   };
 }
 
-export function toManagedPostCardModel(post: NoodlerManagedPost, profile: NoodlerStageProfile): NoodlePostCardModel {
+export function toManagedPostCardModel(
+  post: SlpCreatorManagedPost,
+  profile: SlpCreatorStageProfile,
+): NoodlePostCardModel {
   return {
     id: post.id,
     authorAccountId: post.authorAccountId,
@@ -289,7 +294,7 @@ export function NoodlerDraftImageFrame({ image }: { image: NoodlerPostDraftImage
   );
 }
 
-export function DisclosureBadge({ mode, detail }: { mode: NoodleIdentityDisclosure | null; detail?: ReactNode }) {
+export function DisclosureBadge({ mode, detail }: { mode: SlpIdentityDisclosure | null; detail?: ReactNode }) {
   const { t: localizeUi } = useUiTranslation();
   const label = mode
     ? localizeUi(`ui.noodle.disclosure.${mode}.shortLabel`)

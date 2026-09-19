@@ -14,7 +14,7 @@ import {
   Upload,
   UserRound,
 } from "lucide-react";
-import type { NoodleIdentityDisclosure, NoodlerStageProfile } from "@marinara-engine/shared";
+import type { SlpCreatorStageProfile, SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpStageProfileInput } from "../../base/state/slp-state-types";
 import { getNoodleAccentStyle, NOODLE_PINK, ProfileInitial } from "../../base/chrome/SlpChrome";
 import { isSlurpDiscoveryProfileIncomplete, SlurpDiscoveryProfileEditor } from "../discovery/slp-discovery-contract";
@@ -28,7 +28,7 @@ import { cn } from "../../../lib/utils";
 
 const STAGE_PERSONALITY_MAX_LENGTH = 1000;
 
-const DISCLOSURE_RANK: Record<NoodleIdentityDisclosure, number> = { secret: 0, hinted: 1, open: 2 };
+const DISCLOSURE_RANK: Record<SlpIdentityDisclosure, number> = { secret: 0, hinted: 1, open: 2 };
 
 /**
  * A privacy downgrade on a Creator that carries its own uploaded avatar has to be confirmed: the
@@ -41,8 +41,8 @@ export async function confirmSlurpAvatarReview({
   localize,
   confirm,
 }: {
-  existing: { id: string; avatarUrl?: string | null; disclosureMode?: NoodleIdentityDisclosure | null } | null;
-  nextDisclosure: NoodleIdentityDisclosure;
+  existing: { id: string; avatarUrl?: string | null; disclosureMode?: SlpIdentityDisclosure | null } | null;
+  nextDisclosure: SlpIdentityDisclosure;
   localize: ReturnType<typeof useUiTranslation>["t"];
   confirm: (input: { title: string; message: string; confirmLabel: string }) => Promise<boolean>;
 }): Promise<{ proceed: boolean; confirmAvatarReview: boolean }> {
@@ -83,7 +83,7 @@ export function appendAudienceStance(current: string, sentence: string): string 
 }
 
 export type DisclosureOption = {
-  value: NoodleIdentityDisclosure;
+  value: SlpIdentityDisclosure;
   label: string;
   shortLabel: string;
   detail: string;
@@ -256,8 +256,8 @@ export function StageProfileForm({
 }: {
   draft: SlurpStageProfileInput;
   source: { displayName: string; handle: string; avatarUrl?: string | null } | null;
-  disclosureMode: NoodleIdentityDisclosure;
-  onDisclosureChange: (value: NoodleIdentityDisclosure) => void;
+  disclosureMode: SlpIdentityDisclosure;
+  onDisclosureChange: (value: SlpIdentityDisclosure) => void;
   guidance: string;
   onGuidanceChange: (value: string) => void;
   connections: Array<{ id: string; name: string; model?: string }>;
@@ -272,7 +272,7 @@ export function StageProfileForm({
   accentId: string;
   isEditing: boolean;
   isPending: boolean;
-  avatar: NoodlerStageProfile | null;
+  avatar: SlpCreatorStageProfile | null;
   sourceAvatarUrl: string | null;
   avatarPending: boolean;
   onUploadAvatar: (file: File) => void;

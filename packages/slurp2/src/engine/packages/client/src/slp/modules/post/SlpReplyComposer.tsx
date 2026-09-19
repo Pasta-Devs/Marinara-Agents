@@ -1,4 +1,5 @@
-import type { NoodleAccount, NoodlePostCardModel } from "@marinara-engine/shared";
+import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
+import type { NoodlePostCardModel } from "./SlpPostCard";
 import { cn } from "../../../lib/utils";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import {
@@ -30,8 +31,8 @@ export interface SlpReplyComposerProps {
   setReplyText: React.Dispatch<React.SetStateAction<string>>;
   activeReplyMention: string | null;
   activeReplyMentionIndex: number;
-  replyMentionSuggestions: NoodleAccount[];
-  selectReplyMention: (account: NoodleAccount) => void;
+  replyMentionSuggestions: SlpAccount[];
+  selectReplyMention: (account: SlpAccount) => void;
   replyImageUrl: string;
   setReplyImageUrl: React.Dispatch<React.SetStateAction<string>>;
   setImageLightbox: React.Dispatch<React.SetStateAction<unknown>>;

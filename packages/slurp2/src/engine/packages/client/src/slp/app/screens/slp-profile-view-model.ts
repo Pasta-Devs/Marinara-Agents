@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { NoodleAccount } from "@marinara-engine/shared";
+import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpManagedStageProfile, SlurpStageProfileInput } from "../../base/state/slp-state-types";
 import { useNoodlerFollowers, useNoodlerSubscribers } from "../../features/audience/slp-audience-hooks";
 import { useUpdateNoodlerFanActivity } from "../../features/audience/slp-fan-activity-hooks";
@@ -40,11 +40,11 @@ export interface StageProfileViewProps {
   profileSavePending: boolean;
   posts: SlurpProfilePost[];
   viewerCreator: NonNullable<ReturnType<typeof useNoodlerViewer>["data"]>["creators"][number] | null;
-  viewerAccount: NoodleAccount | null;
-  viewerActorAccount: NoodleAccount | null;
+  viewerAccount: SlpAccount | null;
+  viewerActorAccount: SlpAccount | null;
   slurpSettings: ReturnType<typeof useSlurpSettings>["data"] | null;
   postCardCtx: NoodlePostCardCtx;
-  viewerAccounts: NoodleAccount[];
+  viewerAccounts: SlpAccount[];
   connectionCounts: Record<string, { fans: number; followers: number }>;
   viewerIsLoading: boolean;
   viewerIsError: boolean;

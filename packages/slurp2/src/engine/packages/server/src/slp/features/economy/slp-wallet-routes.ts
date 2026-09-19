@@ -1,4 +1,8 @@
-import { type NoodlerSubscriber, noodlerSubscriptionSchema, noodlerUnlockSchema } from "@marinara-engine/shared";
+import {
+  slpCreatorSubscriptionSchema,
+  slpCreatorUnlockSchema,
+} from "../../../../../shared/src/slp/slp-social.schema.js";
+import { type SlpCreatorSubscriber } from "../../../../../shared/src/slp/slp-social.types.js";
 import { z } from "zod";
 import { slurpDayKey, SLURP_DEV_CHEAT_MAX_COINS } from "../../modules/economy/slp-wallet.js";
 import {
@@ -21,11 +25,11 @@ import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 /**
  * A subscriber row, widened for the generated audience.
  *
- * `NoodlerSubscriber` lives in the Engine's shared package and describes an account-backed viewer.
+ * `SlpCreatorSubscriber` lives in the Engine's shared package and describes an account-backed viewer.
  * The audience has no account, so the extra fields are added here rather than in the Engine — a
  * package must not need an Engine change to show its own data.
  */
-type SlurpSubscriberRow = NoodlerSubscriber & {
+type SlurpSubscriberRow = SlpCreatorSubscriber & {
   /** True for somebody from the generated population, who has no profile to open. */
   audience?: boolean;
   stage?: string;
@@ -216,7 +220,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
   });
 
   app.post("/noodler/accounts/:id/subscribe", async (req, reply) => {
-    const parsed = noodlerSubscriptionSchema.safeParse(req.body);
+    const parsed = slpCreatorSubscriptionSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
     const [viewer, creator] = await Promise.all([
@@ -245,7 +249,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
   });
 
   app.delete("/noodler/accounts/:id/subscribe", async (req, reply) => {
-    const parsed = noodlerSubscriptionSchema.safeParse(req.query);
+    const parsed = slpCreatorSubscriptionSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     if (!viewer) return reply.code(404).send({ error: "Slurp persona not found" });
@@ -325,7 +329,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
   });
 
   app.post("/noodler/posts/:id/unlock", async (req, reply) => {
-    const parsed = noodlerUnlockSchema.safeParse(req.body);
+    const parsed = slpCreatorUnlockSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
     const [viewer, post] = await Promise.all([

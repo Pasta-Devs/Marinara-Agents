@@ -1,9 +1,12 @@
 import { clampPostsPerDay, DISCLOSURES, disclosureLabel, StepHeading } from "./SlpOnboardingPanel";
 import { Check, Clock, Eye, Image as ImageIcon, RefreshCw, SlidersHorizontal, Users } from "lucide-react";
-import { NOODLER_BULK_ACCOUNT_MAX, NOODLER_POSTS_PER_DAY_MAX } from "@marinara-engine/shared";
+import {
+  SLP_CREATOR_BULK_ACCOUNT_MAX,
+  SLP_CREATOR_POSTS_PER_DAY_MAX,
+} from "../../../../../shared/src/slp/slp-social.schema.js";
 import { cn } from "../../../lib/utils";
 import { Avatar } from "../../base/chrome/SlpChrome";
-import type { NoodleIdentityDisclosure } from "@marinara-engine/shared";
+import type { SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpOnboardingWizardModel } from "./slp-onboarding-wizard-model";
 
 /** The wizard body: pick the creators, tune them, run the setup, and read what came back. */
@@ -106,7 +109,9 @@ export function SlpOnboardingSteps({ model }: { model: SlurpOnboardingWizardMode
                 onClick={() =>
                   setSelected(
                     new Set(
-                      selected.size > 0 ? [] : accounts.slice(0, NOODLER_BULK_ACCOUNT_MAX).map((account) => account.id),
+                      selected.size > 0
+                        ? []
+                        : accounts.slice(0, SLP_CREATOR_BULK_ACCOUNT_MAX).map((account) => account.id),
                     ),
                   )
                 }
@@ -193,7 +198,7 @@ export function SlpOnboardingSteps({ model }: { model: SlurpOnboardingWizardMode
           {selectionFull && (
             <p aria-live="polite" className="text-xs font-semibold text-[var(--slurp-muted)]">
               {t("ui.noodle.noodlerwizard.selectionLimit", {
-                count: NOODLER_BULK_ACCOUNT_MAX,
+                count: SLP_CREATOR_BULK_ACCOUNT_MAX,
               })}
             </p>
           )}
@@ -243,7 +248,7 @@ export function SlpOnboardingSteps({ model }: { model: SlurpOnboardingWizardMode
                         onChange={(event) =>
                           setExceptions((current) => ({
                             ...current,
-                            [account.id]: event.target.value as NoodleIdentityDisclosure,
+                            [account.id]: event.target.value as SlpIdentityDisclosure,
                           }))
                         }
                         style={{ colorScheme: "dark" }}
@@ -295,7 +300,7 @@ export function SlpOnboardingSteps({ model }: { model: SlurpOnboardingWizardMode
                   <input
                     type="number"
                     min={1}
-                    max={NOODLER_POSTS_PER_DAY_MAX}
+                    max={SLP_CREATOR_POSTS_PER_DAY_MAX}
                     value={postsPerDayDraft}
                     onChange={(event) => setPostsPerDayDraft(event.target.value)}
                     onBlur={() => {
@@ -426,7 +431,7 @@ export function SlpOnboardingSteps({ model }: { model: SlurpOnboardingWizardMode
                 <span className="text-sm font-semibold">{t("ui.noodle.noodlerwizard.identity")}</span>
                 <select
                   value={disclosure}
-                  onChange={(event) => setDisclosure(event.target.value as NoodleIdentityDisclosure)}
+                  onChange={(event) => setDisclosure(event.target.value as SlpIdentityDisclosure)}
                   style={{ colorScheme: "dark" }}
                   className="h-9 min-w-0 max-w-[65%] rounded-lg border border-[var(--noodle-accent)]/45 bg-[var(--slurp-surface)] px-2 text-sm text-[var(--slurp-text)]"
                 >
@@ -455,7 +460,7 @@ export function SlpOnboardingSteps({ model }: { model: SlurpOnboardingWizardMode
                       <input
                         type="number"
                         min={1}
-                        max={NOODLER_POSTS_PER_DAY_MAX}
+                        max={SLP_CREATOR_POSTS_PER_DAY_MAX}
                         value={postsPerDayDraft}
                         onChange={(event) => setPostsPerDayDraft(event.target.value)}
                         onBlur={() => {

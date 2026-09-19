@@ -1,4 +1,5 @@
-import type { NoodleAccount, NoodleAccountSettingsPatchInput, NoodlerManagedPost } from "@marinara-engine/shared";
+import type { SlpAccountSettingsPatchInput } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import type { SlpAccount, SlpCreatorManagedPost } from "../../../../../shared/src/slp/slp-social.types.js";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
 import { noodleKeys } from "../../base/state/slp-query-keys.js";
@@ -8,10 +9,10 @@ export function useUpdateNoodlerAccess() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ accountId, ...access }: { accountId: string; hiddenFromAccountIds: string[] }) =>
-      api.patch<NoodleAccount>(`/slurp2/accounts/${encodeURIComponent(accountId)}/settings`, {
+      api.patch<SlpAccount>(`/slurp2/accounts/${encodeURIComponent(accountId)}/settings`, {
         subtree: "privacy",
         patch: { access },
-      } satisfies NoodleAccountSettingsPatchInput),
+      } satisfies SlpAccountSettingsPatchInput),
     onSuccess: () => {
       return Promise.all([
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
@@ -24,10 +25,10 @@ export function useUpdateNoodlerAutoPosting() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ accountId, ...autoPosting }: { accountId: string; enabled?: boolean; imagesEnabled?: boolean }) =>
-      api.patch<NoodleAccount>(`/slurp2/accounts/${encodeURIComponent(accountId)}/settings`, {
+      api.patch<SlpAccount>(`/slurp2/accounts/${encodeURIComponent(accountId)}/settings`, {
         subtree: "scheduler",
         patch: { autoPosting },
-      } satisfies NoodleAccountSettingsPatchInput),
+      } satisfies SlpAccountSettingsPatchInput),
     // Auto-post state lives only under noodlerAccounts(); the /slurp bootstrap has none of it.
     onSuccess: () =>
       Promise.all([
@@ -61,7 +62,7 @@ export function useRunNoodlerAutoPostNow() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (accountId: string) =>
-      api.post<NoodlerManagedPost>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/auto-post/run-now`),
+      api.post<SlpCreatorManagedPost>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/auto-post/run-now`),
     onSuccess: (_post, accountId) =>
       Promise.all([
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerPosts(accountId) }),

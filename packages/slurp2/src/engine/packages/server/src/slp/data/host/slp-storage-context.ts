@@ -1,5 +1,6 @@
 import { and, eq, inArray, isNull, or } from "../../../db/file-query.js";
-import { readNoodlePollFromMetadata, NoodleAccount, NoodleInteraction, NoodlePlatform } from "@marinara-engine/shared";
+import { readSlpPollFromMetadata } from "../../../../../shared/src/slp/slp-polls.js";
+import { SlpAccount, SlpInteraction, SlpPlatform } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { DB } from "../../../db/connection.js";
 import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
 import {
@@ -185,7 +186,7 @@ export function createSlurpStorageContext(db: DB) {
   };
 
   /**
-   * Write the wallet, mirroring the balance onto `NoodleAccountSettings.wallet.coins` so the
+   * Write the wallet, mirroring the balance onto `SlpAccountSettings.wallet.coins` so the
    * balance the sidebar and header already read stays the authoritative number.
    */
   const writeWallet = async (viewerAccountId: string, wallet: SlurpWallet) => {
@@ -346,10 +347,7 @@ export function createSlurpStorageContext(db: DB) {
     return publicHandleReconciliation;
   };
 
-  const insertInteraction = async (
-    postId: string,
-    input: InsertInteractionCommand,
-  ): Promise<NoodleInteraction | null> => {
+  const insertInteraction = async (postId: string, input: InsertInteractionCommand): Promise<SlpInteraction | null> => {
     const readExistingToggleInteraction = async () => {
       if (!isToggleInteractionType(input.type)) return null;
       const existing = await db
@@ -407,7 +405,7 @@ export function createSlurpStorageContext(db: DB) {
       viewerPersonaId: string;
       type: "like" | "repost" | "vote";
       parentInteractionId: string | null;
-      actor: NoodleAccount;
+      actor: SlpAccount;
     },
   ) => {
     if (input.actorAccountId === input.viewerPersonaId) return;
@@ -451,12 +449,12 @@ export function createSlurpStorageContext(db: DB) {
 
   const upsertPollVote = async (
     postId: string,
-    actor: NoodleAccount,
+    actor: SlpAccount,
     viewerPersonaId: string,
     optionId: string,
-    authorPlatform: NoodlePlatform,
+    authorPlatform: SlpPlatform,
     imageUrl: string | null,
-  ): Promise<NoodleInteraction | null> => {
+  ): Promise<SlpInteraction | null> => {
     return db.transaction(async (tx) => {
       const [postRows, actorRows] = await Promise.all([
         tx.select().from(noodlePosts).where(eq(noodlePosts.id, postId)),
@@ -471,7 +469,7 @@ export function createSlurpStorageContext(db: DB) {
         .select()
         .from(noodleAccounts)
         .where(and(eq(noodleAccounts.id, currentPost.authorAccountId), eq(noodleAccounts.platform, authorPlatform)));
-      const currentPoll = readNoodlePollFromMetadata(parseRecord(currentPost.metadata));
+      const currentPoll = readSlpPollFromMetadata(parseRecord(currentPost.metadata));
       if (!authorRows[0] || !currentPoll?.options.some((option) => option.id === optionId)) return null;
 
       const currentActor = actorRows[0] ? mapAccount(actorRows[0]) : actor;
@@ -618,7 +616,7 @@ export function createSlurpStorageContext(db: DB) {
     postId: string,
     input: DeleteStoredInteractionCommand,
     digestDeletionPolicy: "protect-public-digests" | "delete-directly",
-  ): Promise<NoodleInteraction | null> => {
+  ): Promise<SlpInteraction | null> => {
     const parentInteractionId = input.parentInteractionId ?? null;
     const rows = await db
       .select()

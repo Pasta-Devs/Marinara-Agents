@@ -1,5 +1,5 @@
 import { and, desc, eq, gt, inArray, isNotNull, isNull, lt, ne, or } from "../../../db/file-query.js";
-import { NoodlePost, NoodlerManagedPost } from "@marinara-engine/shared";
+import { SlpCreatorManagedPost, SlpPost } from "../../../../../shared/src/slp/slp-social.types.js";
 import { logger } from "../../../lib/logger.js";
 import { noodleInteractions, noodlePosts } from "../../../db/schema/slurp.js";
 import { newId, now } from "../../../utils/id-generator.js";
@@ -47,7 +47,7 @@ export function createFeedPostStorage1(context: SlurpStorageContext) {
     deleteStoredInteraction,
   } = context;
   const storage = {
-    async listPosts(options: { limit?: number; since?: string } = {}): Promise<NoodlePost[]> {
+    async listPosts(options: { limit?: number; since?: string } = {}): Promise<SlpPost[]> {
       const limit = Math.max(1, Math.min(300, Math.floor(options.limit ?? 120)));
       const slurpSourceAccountIds = (await this.listAccounts()).map((account) => account.id);
       if (slurpSourceAccountIds.length === 0) return [];
@@ -71,7 +71,7 @@ export function createFeedPostStorage1(context: SlurpStorageContext) {
             .limit(limit);
       return rows.map((row) => mapPost(row));
     },
-    async listPostsBefore(before: string): Promise<NoodlePost[]> {
+    async listPostsBefore(before: string): Promise<SlpPost[]> {
       const slurpSourceAccountIds = (await this.listAccounts()).map((account) => account.id);
       if (slurpSourceAccountIds.length === 0) return [];
       const rows = await db
@@ -81,7 +81,7 @@ export function createFeedPostStorage1(context: SlurpStorageContext) {
         .orderBy(desc(noodlePosts.createdAt));
       return rows.map((row) => mapPost(row));
     },
-    async listNoodlerPostsByAccount(accountId: string, limit = 8): Promise<NoodlerManagedPost[]> {
+    async listNoodlerPostsByAccount(accountId: string, limit = 8): Promise<SlpCreatorManagedPost[]> {
       const account = await this.getNoodlerAccountById(accountId);
       if (!account) return [];
       const rows = await db
@@ -96,7 +96,7 @@ export function createFeedPostStorage1(context: SlurpStorageContext) {
      * Slurp creator posts that published without their picture and still have a prompt to draw
      * from. The pending-review marker is excluded: those wait for the user, not for a retry.
      */
-    async listNoodlerPostsAwaitingImageRetry(limit = 1, at = now()): Promise<NoodlerManagedPost[]> {
+    async listNoodlerPostsAwaitingImageRetry(limit = 1, at = now()): Promise<SlpCreatorManagedPost[]> {
       const accountIds = new Set((await this.listNoodlerAccounts()).map((account) => account.id));
       if (accountIds.size === 0) return [];
       // Bounded: the metadata filters below live in a JSON column, so they cannot be pushed into
@@ -109,7 +109,7 @@ export function createFeedPostStorage1(context: SlurpStorageContext) {
         .where(and(isNull(noodlePosts.imageUrl), isNotNull(noodlePosts.imagePrompt)))
         .orderBy(desc(noodlePosts.createdAt))
         .limit(IMAGE_RETRY_SCAN_LIMIT);
-      const eligible: NoodlerManagedPost[] = [];
+      const eligible: SlpCreatorManagedPost[] = [];
       for (const row of rows) {
         if (!accountIds.has(row.authorAccountId) || !imageClaimIsAvailable(row, at)) continue;
         const metadata = parseRecord(row.metadata);
@@ -123,7 +123,7 @@ export function createFeedPostStorage1(context: SlurpStorageContext) {
     // Unbounded — used by the disclosure-downgrade review, which must inspect every
     // published post (the clamped list above would undercount and let old
     // identifying posts slip through a privacy downgrade).
-    async listAllNoodlerPostsByAccount(accountId: string): Promise<NoodlerManagedPost[]> {
+    async listAllNoodlerPostsByAccount(accountId: string): Promise<SlpCreatorManagedPost[]> {
       const account = await this.getNoodlerAccountById(accountId);
       if (!account) return [];
       const rows = await db
@@ -139,7 +139,7 @@ export function createFeedPostStorage1(context: SlurpStorageContext) {
      * afterwards returns nothing when the newest post happens to be a draft, which reads as a
      * Creator who has never posted.
      */
-    async getNoodlerLatestPublishedPost(accountId: string): Promise<NoodlerManagedPost | null> {
+    async getNoodlerLatestPublishedPost(accountId: string): Promise<SlpCreatorManagedPost | null> {
       const rows = await db
         .select()
         .from(noodlePosts)
@@ -156,9 +156,9 @@ export function createFeedPostStorage1(context: SlurpStorageContext) {
        * across all accounts, in the query rather than after it.
        */
       options: { since?: string; maxRows?: number } = {},
-    ): Promise<Map<string, NoodlerManagedPost[]>> {
+    ): Promise<Map<string, SlpCreatorManagedPost[]>> {
       const boundedLimit = Math.max(1, Math.min(50, Math.floor(limit)));
-      const result = new Map<string, NoodlerManagedPost[]>();
+      const result = new Map<string, SlpCreatorManagedPost[]>();
       if (accountIds.length === 0) return result;
       const byAuthor = inArray(noodlePosts.authorAccountId, accountIds);
       const withSince = options.since ? and(byAuthor, gt(noodlePosts.createdAt, options.since)) : byAuthor;
@@ -316,26 +316,29 @@ export function createFeedPostStorage1(context: SlurpStorageContext) {
         and(inArray(noodlePosts.authorAccountId, accountIds), gt(noodlePosts.createdAt, since)),
       );
     },
-    async getNoodlerPostById(id: string): Promise<NoodlerManagedPost | null> {
+    async getNoodlerPostById(id: string): Promise<SlpCreatorManagedPost | null> {
       const rows = await db.select().from(noodlePosts).where(eq(noodlePosts.id, id));
       const row = rows[0];
       if (!row || !(await this.getNoodlerAccountById(row.authorAccountId))) return null;
       return mapManagedPost(row);
     },
-    async getNoodlerPostByWizardExecution(accountId: string, executionId: string): Promise<NoodlerManagedPost | null> {
+    async getNoodlerPostByWizardExecution(
+      accountId: string,
+      executionId: string,
+    ): Promise<SlpCreatorManagedPost | null> {
       const account = await this.getNoodlerAccountById(accountId);
       if (!account) return null;
       const rows = await db.select().from(noodlePosts).where(eq(noodlePosts.authorAccountId, accountId));
       const row = rows.find((candidate) => parseRecord(candidate.metadata).noodlerWizardExecutionId === executionId);
       return row ? mapManagedPost(row) : null;
     },
-    async createNoodlerPost(input: NoodlerPostPersistenceInput): Promise<NoodlerManagedPost | null> {
+    async createNoodlerPost(input: NoodlerPostPersistenceInput): Promise<SlpCreatorManagedPost | null> {
       const posts = await this.createNoodlerPosts([input]);
       return posts?.[0] ?? null;
     },
     // One transaction for the whole batch: a post and its linked follow-up are
     // either both stored or neither is, with no compensating delete to get wrong.
-    async createNoodlerPosts(inputs: NoodlerPostPersistenceInput[]): Promise<NoodlerManagedPost[] | null> {
+    async createNoodlerPosts(inputs: NoodlerPostPersistenceInput[]): Promise<SlpCreatorManagedPost[] | null> {
       const accounts = await Promise.all(inputs.map((input) => this.getNoodlerAccountById(input.authorAccountId)));
       if (accounts.some((account) => !account)) return null;
       const timestamp = now();
@@ -370,7 +373,7 @@ export function createFeedPostStorage1(context: SlurpStorageContext) {
           );
         const byId = new Map(stored.map((row) => [row.id, mapManagedPost(row)]));
         const managed = rows.map((row) => byId.get(row.id));
-        return managed.every((post) => post) ? (managed as NoodlerManagedPost[]) : null;
+        return managed.every((post) => post) ? (managed as SlpCreatorManagedPost[]) : null;
       });
       // Outside the transaction and never able to fail it: a post that is already stored must not
       // be reported as an error because a settings write for a mood number did not land.

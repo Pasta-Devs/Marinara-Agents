@@ -1,5 +1,5 @@
 import { and, eq, isNull, like } from "../../../db/file-query.js";
-import { NoodleInteraction } from "@marinara-engine/shared";
+import { SlpInteraction } from "../../../../../shared/src/slp/slp-social.types.js";
 import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
 import { canViewNoodlerPost, isNoodlerHiddenFromViewer } from "../../base/identity/slp-access.js";
 import {
@@ -50,7 +50,7 @@ export function createFeedInteractionStorage4(context: SlurpStorageContext) {
     async createNoodlerWorldInteraction(
       postId: string,
       input: NoodlerWorldInteractionInput,
-    ): Promise<{ interaction: NoodleInteraction; created: boolean } | null> {
+    ): Promise<{ interaction: SlpInteraction; created: boolean } | null> {
       return db.transaction(async (tx) => {
         const postRow = (await tx.select().from(noodlePosts).where(eq(noodlePosts.id, postId)))[0];
         if (
@@ -164,7 +164,7 @@ export function createFeedInteractionStorage4(context: SlurpStorageContext) {
     async deleteNoodlerInteraction(
       postId: string,
       input: NoodlerRemoveInteractionCommand,
-    ): Promise<NoodleInteraction | null> {
+    ): Promise<SlpInteraction | null> {
       const viewer = await this.getViewer(input.viewerPersonaId);
       const actor = await this.getNoodlerAccountById(input.actorAccountId);
       if (

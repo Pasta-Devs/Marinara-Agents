@@ -12,7 +12,7 @@ import {
   Share2,
 } from "lucide-react";
 import { useState } from "react";
-import type { NoodlerPostView, NoodlerStageProfile } from "@marinara-engine/shared";
+import type { SlpCreatorPostView, SlpCreatorStageProfile } from "../../../../../shared/src/slp/slp-social.types.js";
 import { cn } from "../../../lib/utils";
 import { useNearViewportSlurpMediaSrc } from "../../base/media/slp-media-src";
 import { Modal } from "../../../components/ui/Modal";
@@ -40,9 +40,9 @@ export function LockedSlurpPostCard({
   onOpenProfile,
   demo,
 }: {
-  post: Pick<NoodlerPostView, "id" | "access" | "createdAt" | "title" | "imageUrl"> &
-    Partial<Pick<NoodlerPostView, "likeCount" | "replyCount" | "hasImage" | "imagePrompt">>; // controller-locked managed posts carry no counts
-  profile: NoodlerStageProfile;
+  post: Pick<SlpCreatorPostView, "id" | "access" | "createdAt" | "title" | "imageUrl"> &
+    Partial<Pick<SlpCreatorPostView, "likeCount" | "replyCount" | "hasImage" | "imagePrompt">>; // controller-locked managed posts carry no counts
+  profile: SlpCreatorStageProfile;
   subscriptionPrice?: number | null;
   controllerOnly?: boolean;
   subscribed: boolean;
