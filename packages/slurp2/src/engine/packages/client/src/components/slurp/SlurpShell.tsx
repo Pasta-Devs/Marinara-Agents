@@ -34,7 +34,7 @@ import { cn, getAvatarCropStyle } from "../../lib/utils";
 import { useDialogFocusScope } from "../../hooks/use-dialog-focus-scope";
 import { useSlurpMediaSrc } from "../../slp/base/media/slp-media-src";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import { SlurpCoinAmount } from "./SlurpCoin";
+import { SlurpCoinAmount } from "../../slp/modules/coin/SlpCoin";
 import { SLURP_LOGO_SRC } from "./slurp-logo";
 
 export const NOODLE_BLUE = "#7EA7FF";

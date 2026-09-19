@@ -8,7 +8,7 @@ import english from "./locales/en.json";
 import german from "./locales/de.json";
 import korean from "./locales/ko.json";
 import polish from "./locales/pl.json";
-import { SlurpHome } from "../components/slurp/SlurpHome";
+import { SlpApp } from "./app/SlpApp";
 import { ApiError } from "../lib/api-client";
 import { useSlurpUIStore } from "./base/state/slp-package-store";
 import { configureSlurpPackageState } from "./base/state/slp-package-store";
@@ -156,7 +156,7 @@ function SlurpPackageRoot({ element }: { element: CapabilityElement }) {
         <ModalPortalContext.Provider value={element.__portal ?? element}>
           <div className="h-full min-h-0 overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
             <SlurpErrorBoundary>
-              <SlurpHome navigation={navigation} onNavigate={setNavigation} onLeave={onLeave} />
+              <SlpApp navigation={navigation} onNavigate={setNavigation} onLeave={onLeave} />
               <AppDialogRenderer />
               <Toaster richColors />
             </SlurpErrorBoundary>

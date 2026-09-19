@@ -46,6 +46,27 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
   4 ahead / 39 behind Engine `origin/staging` after a fresh fetch. Used unchanged, as in Slice 7, so build deltas stay
   comparable across slices.
 
+- Slice 8 implementation discovery: the first extraction moved coin and poll presentation to
+  `client/src/slp/modules/coin/SlpCoin.tsx` and `client/src/slp/modules/poll/SlpPollComposer.tsx`,
+  moved Story tile presentation to `client/src/slp/modules/story/SlpStoryTile.tsx`, and added
+  `app/SlpApp.tsx` plus `app/SlpRouter.tsx`. The full Home and Messages hosts remain legacy files
+  while their stateful behavior is preserved; no Backstage panel was moved.
+- Slice 8 focused results so far: architecture regression passes; `node scripts/typecheck-packages.mjs
+  slurp2` passes; `slurp2-client-hooks`, `slurp-media-surfaces`, `slurp-inbox-wallet`,
+  `slurp-share-card`, `slurp2-post-guidance`, `slurp-relationship-panel` (baseline route-count
+  mismatch), `slurp-chat-media`, `slurp-messaging-surface`, `slurp2-messaging-fixes`, and
+  `slurp2-prompt-errors` pass. `slurp-stories-shelf` and `slurp-feed-layout` fail with the same
+  source-shape assertions on `origin/modular-simping` and are recorded as pre-existing baseline
+  failures, not Slice 8 regressions.
+- Scope gap: `SlurpHome.tsx` remains the stateful host and `SlurpMessages.tsx` remains the stateful
+  Messages host. `SlpApp` and `SlpRouter` compose the current host, but they are not a complete
+  Home screen split. Creator presentation remains feature-owned because the current card owns media
+  hooks and subscription confirmation. The PR must remain draft until these missing Slice 8
+  deliverables are implemented.
+- Browser proof: `MARINARA_ENGINE_ROOT=/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish npm run
+  test:browser:slurp2` launched the Engine services, but all 14 desktop/mobile cases were blocked
+  by Chromium missing `libnspr4.so`. No browser or lifecycle result is claimed.
+
 ## Slice ledger
 
 | Slice | Name                                   | State            | Issue / PR       | Package version | Evidence / handoff                                               |
@@ -57,7 +78,7 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 |     5 | Server services, contracts, workflows  | merged           | #924 / #925      | 0.0.28          | Merged into `modular-simping` at `c945b4a0`                      |
 |     6 | Event and modifier seam                | ready for review | #926 / #927      | 0.0.29          | 0 new regression failures; 4 mutants caught; unit rebuilt        |
  |     7 | Client state and hooks                 | merged           | #928 / #929      | 0.0.30          | Merged into `modular-simping` at `4776370a`; focused gate passes |
- |     8 | Client app and reusable modules        | in progress      | #931 / draft PR pending | 0.0.31       | Gate passed; implementation in progress                           |
+|     8 | Client app and reusable modules        | in progress      | #931 / #932      | 0.0.31       | Partial: app boundary and coin/poll/story modules; Home/Messages split remains |
 |     9 | Backstage                              | not started      | —                | —               | —                                                                |
 |    10 | Final architecture and package proof   | not started      | —                | —               | —                                                                |
 
