@@ -24,6 +24,12 @@
     "conversation-calls": {
       "versions": [
         {
+          "version": "1.0.17",
+          "date": "2026-09-19",
+          "notes": "- Keep calls responsive when Safari blocks voice playback: wait for a new touch or key press, and let stopping a call cancel pending playback.",
+          "highlight": false
+        },
+        {
           "version": "1.0.16",
           "date": "2026-09-13",
           "notes": "- SwarmUI video connections now generate character call clips using their saved workflow, resolution, frame rate, and LoRAs. Backup SwarmUI connections keep their own workflow settings.",
@@ -93,6 +99,12 @@
     },
     "long-term-memory": {
       "versions": [
+        {
+          "version": "1.3.4",
+          "date": "2026-09-18",
+          "notes": "- Kept a source note's extraction context unbound until its extraction succeeds, so a failed or cancelled preparation no longer rewrites the source note.\n- Rejected concurrent source-context changes again at the final commit, so a late writer cannot be overwritten after extraction validation.\n- Marked extractions whose only non-kept candidates were duplicates as current, so re-running them no longer churns.\n- Kept error-diagnostic extractions from being marked current, including direct Game Mode preparation with requested context bound to draft and persistence metadata.",
+          "highlight": false
+        },
         {
           "version": "1.3.3",
           "date": "2026-09-18",

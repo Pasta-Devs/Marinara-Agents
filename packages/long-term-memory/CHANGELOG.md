@@ -1,5 +1,12 @@
 # Long-Term Memory changelog
 
+## 1.3.4 — 2026-09-18
+
+- Kept a source note's extraction context unbound until its extraction succeeds, so a failed or cancelled preparation no longer rewrites the source note.
+- Rejected concurrent source-context changes again at the final commit, so a late writer cannot be overwritten after extraction validation.
+- Marked extractions whose only non-kept candidates were duplicates as current, so re-running them no longer churns.
+- Kept error-diagnostic extractions from being marked current, including direct Game Mode preparation with requested context bound to draft and persistence metadata.
+
 ## 1.3.3 — 2026-09-18
 
 - Kept static character and world facts static when their wording contains incidental narrative verbs, and stopped rejecting character facts that establish lasting status or affiliation.

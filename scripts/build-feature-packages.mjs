@@ -464,7 +464,7 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.3.3",
+    version: "1.3.4",
     minEngineVersion: "2.4.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
@@ -561,7 +561,7 @@ const features = [
   {
     id: "conversation-calls",
     name: "Calls",
-    version: "1.0.16",
+    version: "1.0.17",
     minEngineVersion: "2.4.1",
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],
