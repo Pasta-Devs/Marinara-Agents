@@ -25,7 +25,7 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 - Active slice: 11 (ownership completion and typecheck proof), issue #941, branch
   `slurp2-slice11-ownership-completion` from `origin/modular-simping` `09066008` (the merged Slice 10
   commit).
-- Draft PR: opened against `modular-simping` (see Slice 11 result); it stays draft and unmerged.
+- Draft PR: #947 against `modular-simping`; it stays draft and unmerged.
 - Slice 10 merge gate: **satisfied.** PR #940 is `MERGED` into `modular-simping` at `09066008`.
 - Slice 11 base: `09066008ec07ef900663f2a24f47b295ba9206cf`; `git status --short` was empty before
   implementation.
@@ -67,7 +67,7 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 State: **ready for review.** Implementation and validation are complete; the gaps below are
 recorded, not claimed.
 
-- Branch `slurp2-slice11-ownership-completion`, base `09066008`, issue #941, draft PR against
+- Branch `slurp2-slice11-ownership-completion`, base `09066008`, issue #941, draft PR #947 against
   `modular-simping`. Nothing was pushed to `modular-simping`; nothing was merged.
 - Package version **0.0.34**, one `packages/slurp2/CHANGELOG.md` entry. Artifact
   `artifacts/slurp2-0.0.34.zip`, sha256
@@ -1314,7 +1314,7 @@ manifest.json}`, added `artifacts/slurp2-0.0.24.zip`, and updated `catalog/{,v2/
 
 ## Next action
 
-Review and merge the Slice 11 draft PR into `modular-simping` (issue #941). Then open the final
+Review and merge Slice 11 draft PR #947 into `modular-simping` (issue #941). Then open the final
 release PR that merges `modular-simping` into `staging` as Slurp2 `0.1.0`: one changelog entry, the
 integration-only `0.0.x` ZIPs removed, one rebuild, and the full live lifecycle proof on
 `dev-marinara2` once that box is reachable.
