@@ -1206,7 +1206,7 @@
         },
         { "list": "counters", "values": { "name": "Second Wind", "max": 1, "recharge": "short" } }
       ],
-      "mechanics": { "kind": "heal", "amount": { "dice": "1d10" }, "targets": "self" }
+      "mechanics": { "kind": "heal", "amount": { "dice": "1d10" }, "targets": "self", "budget": "bonus" }
     },
     {
       "id": "hunter-defensive-tactics",

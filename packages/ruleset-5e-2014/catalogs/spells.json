@@ -68,7 +68,7 @@
           }
         }
       ],
-      "mechanics": { "kind": "utility", "range": 30, "cost": [{ "pool": "slots_2", "amount": 1 }] }
+      "mechanics": { "kind": "utility", "range": 30, "targetCount": 3, "cost": [{ "pool": "slots_2", "amount": 1 }] }
     },
     {
       "id": "alarm",
@@ -509,6 +509,7 @@
       "mechanics": {
         "kind": "utility",
         "range": 30,
+        "targetCount": 3,
         "cost": [{ "pool": "slots_1", "amount": 1 }],
         "concentration": true
       }
@@ -690,6 +691,7 @@
       "mechanics": {
         "kind": "utility",
         "range": 30,
+        "targetCount": 3,
         "cost": [{ "pool": "slots_1", "amount": 1 }],
         "concentration": true
       }
@@ -809,7 +811,8 @@
         "kind": "utility",
         "range": 0,
         "cost": [{ "pool": "slots_2", "amount": 1 }],
-        "concentration": true
+        "concentration": true,
+        "budget": "bonus"
       }
     },
     {
@@ -946,7 +949,13 @@
           }
         }
       ],
-      "mechanics": { "kind": "utility", "range": 30, "cost": [{ "pool": "slots_1", "amount": 1 }] }
+      "mechanics": {
+        "kind": "debuff",
+        "range": 30,
+        "save": { "save": "wis_save", "onSuccess": "negates" },
+        "applies": [{ "condition": "charmed", "duration": { "rounds": 600 } }],
+        "cost": [{ "pool": "slots_1", "amount": 1 }]
+      }
     },
     {
       "id": "chill-touch",
@@ -971,7 +980,16 @@
         "range": 120,
         "amount": { "dice": "1d8" },
         "damageType": "necrotic",
-        "attackRoll": true
+        "attackRoll": true,
+        "scales": {
+          "from": { "field": "level" },
+          "table": [
+            [1, 0],
+            [5, 1],
+            [11, 2],
+            [17, 3]
+          ]
+        }
       }
     },
     {
@@ -1563,7 +1581,13 @@
           }
         }
       ],
-      "mechanics": { "kind": "utility", "range": 60, "cost": [{ "pool": "slots_3", "amount": 1 }], "reaction": true }
+      "mechanics": {
+        "kind": "utility",
+        "range": 60,
+        "cost": [{ "pool": "slots_3", "amount": 1 }],
+        "reaction": true,
+        "budget": "reaction"
+      }
     },
     {
       "id": "create-food-and-water",
@@ -2106,7 +2130,8 @@
         "kind": "utility",
         "range": 0,
         "cost": [{ "pool": "slots_1", "amount": 1 }],
-        "concentration": true
+        "concentration": true,
+        "budget": "bonus"
       }
     },
     {
@@ -2127,7 +2152,7 @@
           }
         }
       ],
-      "mechanics": { "kind": "utility", "range": 30, "cost": [{ "pool": "slots_7", "amount": 1 }] }
+      "mechanics": { "kind": "utility", "range": 30, "cost": [{ "pool": "slots_7", "amount": 1 }], "budget": "bonus" }
     },
     {
       "id": "dominate-beast",
@@ -2148,9 +2173,10 @@
         }
       ],
       "mechanics": {
-        "kind": "utility",
+        "kind": "debuff",
         "range": 60,
         "save": { "save": "wis_save", "onSuccess": "negates" },
+        "applies": [{ "condition": "charmed", "duration": { "rounds": 10 } }],
         "cost": [{ "pool": "slots_4", "amount": 1 }],
         "concentration": true
       }
@@ -2174,9 +2200,10 @@
         }
       ],
       "mechanics": {
-        "kind": "utility",
+        "kind": "debuff",
         "range": 60,
         "save": { "save": "wis_save", "onSuccess": "negates" },
+        "applies": [{ "condition": "charmed", "duration": { "rounds": 600 } }],
         "cost": [{ "pool": "slots_8", "amount": 1 }],
         "concentration": true
       }
@@ -2204,9 +2231,10 @@
         }
       ],
       "mechanics": {
-        "kind": "utility",
+        "kind": "debuff",
         "range": 60,
         "save": { "save": "wis_save", "onSuccess": "negates" },
+        "applies": [{ "condition": "charmed", "duration": { "rounds": 10 } }],
         "cost": [{ "pool": "slots_5", "amount": 1 }],
         "concentration": true
       }
@@ -2378,9 +2406,10 @@
         }
       ],
       "mechanics": {
-        "kind": "utility",
+        "kind": "debuff",
         "range": 90,
         "save": { "save": "str_save", "onSuccess": "negates" },
+        "applies": [{ "condition": "restrained", "duration": { "rounds": 10 } }],
         "cost": [{ "pool": "slots_1", "amount": 1 }],
         "concentration": true
       }
@@ -2451,7 +2480,8 @@
         "kind": "utility",
         "range": 0,
         "cost": [{ "pool": "slots_1", "amount": 1 }],
-        "concentration": true
+        "concentration": true,
+        "budget": "bonus"
       }
     },
     {
@@ -2569,7 +2599,13 @@
           }
         }
       ],
-      "mechanics": { "kind": "utility", "range": 0, "cost": [{ "pool": "slots_1", "amount": 1 }] }
+      "mechanics": {
+        "kind": "buff",
+        "range": 0,
+        "targets": "self",
+        "temporary": { "dice": "1d4+4" },
+        "cost": [{ "pool": "slots_1", "amount": 1 }]
+      }
     },
     {
       "id": "fear",
@@ -2590,10 +2626,11 @@
         }
       ],
       "mechanics": {
-        "kind": "utility",
+        "kind": "debuff",
         "range": 0,
         "area": { "shape": "cone", "size": 30 },
         "save": { "save": "wis_save", "onSuccess": "negates" },
+        "applies": [{ "condition": "frightened", "duration": { "rounds": 10 } }],
         "cost": [{ "pool": "slots_3", "amount": 1 }],
         "concentration": true
       }
@@ -2616,7 +2653,13 @@
           }
         }
       ],
-      "mechanics": { "kind": "utility", "range": 60, "cost": [{ "pool": "slots_1", "amount": 1 }], "reaction": true }
+      "mechanics": {
+        "kind": "utility",
+        "range": 60,
+        "cost": [{ "pool": "slots_1", "amount": 1 }],
+        "reaction": true,
+        "budget": "reaction"
+      }
     },
     {
       "id": "feeblemind",
@@ -2779,7 +2822,16 @@
         "range": 120,
         "amount": { "dice": "1d10" },
         "damageType": "fire",
-        "attackRoll": true
+        "attackRoll": true,
+        "scales": {
+          "from": { "field": "level" },
+          "table": [
+            [1, 0],
+            [5, 1],
+            [11, 2],
+            [17, 3]
+          ]
+        }
       }
     },
     {
@@ -2884,7 +2936,8 @@
         "damageType": "fire",
         "attackRoll": true,
         "cost": [{ "pool": "slots_2", "amount": 1 }],
-        "concentration": true
+        "concentration": true,
+        "budget": "bonus"
       }
     },
     {
@@ -2964,8 +3017,12 @@
         }
       ],
       "mechanics": {
-        "kind": "utility",
+        "kind": "debuff",
         "range": 60,
+        "save": { "save": "con_save", "onSuccess": "negates" },
+        "applies": [
+          { "condition": "restrained", "duration": "until-save", "saveEnds": { "save": "con_save", "at": "turn-end" } }
+        ],
         "cost": [{ "pool": "slots_6", "amount": 1 }],
         "concentration": true
       }
@@ -3391,9 +3448,10 @@
         }
       ],
       "mechanics": {
-        "kind": "utility",
+        "kind": "debuff",
         "range": 60,
         "save": { "save": "dex_save", "onSuccess": "negates" },
+        "applies": [{ "condition": "prone", "duration": "instant" }],
         "cost": [{ "pool": "slots_1", "amount": 1 }]
       }
     },
@@ -3711,7 +3769,8 @@
         "targets": "ally",
         "amount": { "dice": "1d4" },
         "cost": [{ "pool": "slots_1", "amount": 1 }],
-        "perCostStep": { "dice": "1d4" }
+        "perCostStep": { "dice": "1d4" },
+        "budget": "bonus"
       }
     },
     {
@@ -3768,7 +3827,8 @@
         "save": { "save": "dex_save", "onSuccess": "half" },
         "cost": [{ "pool": "slots_1", "amount": 1 }],
         "perCostStep": { "dice": "1d10" },
-        "reaction": true
+        "reaction": true,
+        "budget": "reaction"
       }
     },
     {
@@ -3835,9 +3895,17 @@
         }
       ],
       "mechanics": {
-        "kind": "utility",
+        "kind": "debuff",
         "range": 30,
         "save": { "save": "wis_save", "onSuccess": "negates" },
+        "applies": [
+          { "condition": "prone", "duration": "until-save", "saveEnds": { "save": "wis_save", "at": "turn-end" } },
+          {
+            "condition": "incapacitated",
+            "duration": "until-save",
+            "saveEnds": { "save": "wis_save", "at": "turn-end" }
+          }
+        ],
         "cost": [{ "pool": "slots_1", "amount": 1 }],
         "concentration": true
       }
@@ -3865,8 +3933,12 @@
         }
       ],
       "mechanics": {
-        "kind": "utility",
+        "kind": "debuff",
         "range": 90,
+        "save": { "save": "wis_save", "onSuccess": "negates" },
+        "applies": [
+          { "condition": "paralyzed", "duration": "until-save", "saveEnds": { "save": "wis_save", "at": "turn-end" } }
+        ],
         "cost": [{ "pool": "slots_5", "amount": 1 }],
         "concentration": true
       }
@@ -3894,9 +3966,12 @@
         }
       ],
       "mechanics": {
-        "kind": "utility",
+        "kind": "debuff",
         "range": 60,
         "save": { "save": "wis_save", "onSuccess": "negates" },
+        "applies": [
+          { "condition": "paralyzed", "duration": "until-save", "saveEnds": { "save": "wis_save", "at": "turn-end" } }
+        ],
         "cost": [{ "pool": "slots_2", "amount": 1 }],
         "concentration": true
       }
@@ -3949,7 +4024,8 @@
         "kind": "utility",
         "range": 90,
         "cost": [{ "pool": "slots_1", "amount": 1 }],
-        "concentration": true
+        "concentration": true,
+        "budget": "bonus"
       }
     },
     {
@@ -3971,9 +4047,14 @@
         }
       ],
       "mechanics": {
-        "kind": "utility",
+        "kind": "debuff",
         "range": 120,
         "area": { "shape": "burst", "size": 30 },
+        "save": { "save": "wis_save", "onSuccess": "negates" },
+        "applies": [
+          { "condition": "charmed", "duration": { "rounds": 10 } },
+          { "condition": "incapacitated", "duration": { "rounds": 10 } }
+        ],
         "cost": [{ "pool": "slots_3", "amount": 1 }],
         "concentration": true
       }
@@ -4568,7 +4649,15 @@
           }
         }
       ],
-      "mechanics": { "kind": "utility", "range": 120, "cost": [{ "pool": "slots_1", "amount": 1 }] }
+      "mechanics": {
+        "kind": "attack",
+        "range": 120,
+        "amount": { "dice": "1d4+1" },
+        "damageType": "force",
+        "autoHit": true,
+        "targetCount": 3,
+        "cost": [{ "pool": "slots_1", "amount": 1 }]
+      }
     },
     {
       "id": "magic-mouth",
@@ -4612,7 +4701,8 @@
         "kind": "utility",
         "range": 0,
         "cost": [{ "pool": "slots_2", "amount": 1 }],
-        "concentration": true
+        "concentration": true,
+        "budget": "bonus"
       }
     },
     {
@@ -4732,8 +4822,10 @@
         "range": 60,
         "targets": "ally",
         "amount": { "dice": "1d4" },
+        "targetCount": 6,
         "cost": [{ "pool": "slots_3", "amount": 1 }],
-        "perCostStep": { "dice": "1d4" }
+        "perCostStep": { "dice": "1d4" },
+        "budget": "bonus"
       }
     },
     {
@@ -4754,7 +4846,7 @@
           }
         }
       ],
-      "mechanics": { "kind": "utility", "range": 60, "cost": [{ "pool": "slots_6", "amount": 1 }] }
+      "mechanics": { "kind": "utility", "range": 60, "targetCount": 12, "cost": [{ "pool": "slots_6", "amount": 1 }] }
     },
     {
       "id": "maze",
@@ -4995,7 +5087,7 @@
           }
         }
       ],
-      "mechanics": { "kind": "utility", "range": 0, "cost": [{ "pool": "slots_2", "amount": 1 }] }
+      "mechanics": { "kind": "utility", "range": 0, "cost": [{ "pool": "slots_2", "amount": 1 }], "budget": "bonus" }
     },
     {
       "id": "modify-memory",
@@ -5160,9 +5252,10 @@
         }
       ],
       "mechanics": {
-        "kind": "utility",
+        "kind": "debuff",
         "range": 120,
         "save": { "save": "wis_save", "onSuccess": "negates" },
+        "applies": [{ "condition": "frightened", "duration": { "rounds": 10 } }],
         "cost": [{ "pool": "slots_4", "amount": 1 }],
         "concentration": true
       }
@@ -5379,6 +5472,7 @@
         "range": 30,
         "targets": "ally",
         "amount": { "dice": "2d8" },
+        "targetCount": 6,
         "cost": [{ "pool": "slots_2", "amount": 1 }],
         "perCostStep": { "dice": "1d8" }
       }
@@ -5501,7 +5595,16 @@
         "range": 0,
         "amount": { "dice": "1d8" },
         "damageType": "fire",
-        "attackRoll": true
+        "attackRoll": true,
+        "scales": {
+          "from": { "field": "level" },
+          "table": [
+            [1, 0],
+            [5, 1],
+            [11, 2],
+            [17, 3]
+          ]
+        }
       }
     },
     {
@@ -5713,7 +5816,16 @@
         "range": 60,
         "amount": { "dice": "1d8" },
         "damageType": "cold",
-        "attackRoll": true
+        "attackRoll": true,
+        "scales": {
+          "from": { "field": "level" },
+          "table": [
+            [1, 0],
+            [5, 1],
+            [11, 2],
+            [17, 3]
+          ]
+        }
       }
     },
     {
@@ -5951,7 +6063,7 @@
           }
         }
       ],
-      "mechanics": { "kind": "utility", "range": 30, "cost": [{ "pool": "slots_1", "amount": 1 }] }
+      "mechanics": { "kind": "utility", "range": 30, "cost": [{ "pool": "slots_1", "amount": 1 }], "budget": "bonus" }
     },
     {
       "id": "scorching-ray",
@@ -5977,6 +6089,7 @@
         "amount": { "dice": "2d6" },
         "damageType": "fire",
         "attackRoll": true,
+        "targetCount": 3,
         "cost": [{ "pool": "slots_2", "amount": 1 }]
       }
     },
@@ -6176,7 +6289,13 @@
           }
         }
       ],
-      "mechanics": { "kind": "utility", "range": 0, "cost": [{ "pool": "slots_1", "amount": 1 }], "reaction": true }
+      "mechanics": {
+        "kind": "utility",
+        "range": 0,
+        "cost": [{ "pool": "slots_1", "amount": 1 }],
+        "reaction": true,
+        "budget": "reaction"
+      }
     },
     {
       "id": "shield-of-faith",
@@ -6200,7 +6319,8 @@
         "kind": "utility",
         "range": 60,
         "cost": [{ "pool": "slots_1", "amount": 1 }],
-        "concentration": true
+        "concentration": true,
+        "budget": "bonus"
       }
     },
     {
@@ -6221,7 +6341,7 @@
           }
         }
       ],
-      "mechanics": { "kind": "utility", "range": 0 }
+      "mechanics": { "kind": "utility", "range": 0, "budget": "bonus" }
     },
     {
       "id": "shocking-grasp",
@@ -6246,7 +6366,16 @@
         "range": 0,
         "amount": { "dice": "1d8" },
         "damageType": "lightning",
-        "attackRoll": true
+        "attackRoll": true,
+        "scales": {
+          "from": { "field": "level" },
+          "table": [
+            [1, 0],
+            [5, 1],
+            [11, 2],
+            [17, 3]
+          ]
+        }
       }
     },
     {
@@ -6390,6 +6519,7 @@
         "range": 120,
         "area": { "shape": "burst", "size": 40 },
         "save": { "save": "wis_save", "onSuccess": "negates" },
+        "targetCount": 6,
         "cost": [{ "pool": "slots_3", "amount": 1 }],
         "concentration": true
       }
@@ -6572,7 +6702,13 @@
           }
         }
       ],
-      "mechanics": { "kind": "utility", "range": 60, "attackRoll": true, "cost": [{ "pool": "slots_2", "amount": 1 }] }
+      "mechanics": {
+        "kind": "utility",
+        "range": 60,
+        "attackRoll": true,
+        "cost": [{ "pool": "slots_2", "amount": 1 }],
+        "budget": "bonus"
+      }
     },
     {
       "id": "stinking-cloud",
@@ -6725,6 +6861,8 @@
         "range": 0,
         "amount": { "dice": "6d8" },
         "damageType": "radiant",
+        "save": { "save": "con_save", "onSuccess": "half" },
+        "applies": [{ "condition": "blinded", "duration": { "rounds": 1 } }],
         "cost": [{ "pool": "slots_6", "amount": 1 }],
         "concentration": true
       }
@@ -7420,10 +7558,11 @@
         }
       ],
       "mechanics": {
-        "kind": "utility",
+        "kind": "debuff",
         "range": 120,
         "area": { "shape": "burst", "size": 30 },
         "save": { "save": "wis_save", "onSuccess": "negates" },
+        "applies": [{ "condition": "frightened", "duration": { "rounds": 10 } }],
         "cost": [{ "pool": "slots_9", "amount": 1 }],
         "concentration": true
       }
