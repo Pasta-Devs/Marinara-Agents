@@ -189,6 +189,15 @@ That also means the SRD's own oddities ship as printed. The **Ancient Green Drag
 22 (4d6 + 8) where every other ancient dragon claws for 2d6 + 8, because that is what SRD 5.1 prints
 for that one dragon. It is not a converter bug and it is not to be "corrected".
 
+**A Multiattack becomes one action that strikes several times.** The SRD writes it as prose, and the
+build reads the shapes that prose uses rather than knowing any creature by name. Where the sentence
+offers a choice, each alternative is its own action, named so a Game Master can tell them apart:
+the Medusa carries **Multiattack (melee)** (snake hair once, shortsword twice) beside **Multiattack
+(ranged)** (longbow twice). Three creatures keep their single attacks, because a sequence cannot say
+what they do: the **Grick** (its beak only follows a tentacle that hit), the **Violet Fungus** (1d4
+attacks) and the **Gibbering Mouther** (one bite plus an optional spittle). Their printed sentence is
+a trait, as is anything any other Multiattack says beyond its strikes.
+
 Four creatures are left out, because the Engine's format needs a creature to have at least one
 action a fight can resolve and these have none: **Donkey**, **Frog**, **Sea Horse** (the source
 gives them no action at all) and **Shrieker** (its only action is a noise).

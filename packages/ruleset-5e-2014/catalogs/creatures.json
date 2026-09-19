@@ -3374,7 +3374,10 @@
             "id": "multiattack",
             "name": "Multiattack",
             "budget": "action",
-            "sequence": [{ "action": "bite", "times": 1 }]
+            "sequence": [
+              { "action": "bite", "times": 1 },
+              { "action": "constrict", "times": 1 }
+            ]
           },
           {
             "id": "bite",
@@ -4117,13 +4120,19 @@
         ],
         "actions": [
           {
-            "id": "multiattack",
-            "name": "Multiattack",
+            "id": "multiattack_pike",
+            "name": "Multiattack (pike)",
             "budget": "action",
             "sequence": [
               { "action": "pike", "times": 1 },
               { "action": "hooves", "times": 1 }
             ]
+          },
+          {
+            "id": "multiattack_longbow",
+            "name": "Multiattack (longbow)",
+            "budget": "action",
+            "sequence": [{ "action": "longbow", "times": 2 }]
           },
           {
             "id": "pike",
@@ -4242,6 +4251,16 @@
           { "name": "Speed", "text": "30 ft., fly 60 ft." }
         ],
         "actions": [
+          {
+            "id": "multiattack",
+            "name": "Multiattack",
+            "budget": "action",
+            "sequence": [
+              { "action": "bite", "times": 1 },
+              { "action": "horns", "times": 1 },
+              { "action": "claws", "times": 1 }
+            ]
+          },
           {
             "id": "bite",
             "name": "Bite",
@@ -5485,6 +5504,18 @@
         ],
         "actions": [
           {
+            "id": "multiattack_longsword",
+            "name": "Multiattack (longsword)",
+            "budget": "action",
+            "sequence": [{ "action": "longsword", "times": 3 }]
+          },
+          {
+            "id": "multiattack_longbow",
+            "name": "Multiattack (longbow)",
+            "budget": "action",
+            "sequence": [{ "action": "longbow", "times": 3 }]
+          },
+          {
             "id": "bite",
             "name": "Bite",
             "budget": "action",
@@ -6029,7 +6060,6 @@
             "name": "Variant: Rope of Entanglement",
             "text": "Some erinyes carry a rope of entanglement (detailed in the Dungeon Master's Guide). When such an erinyes uses its Multiattack, the erinyes can use the rope in place of two of the attacks."
           },
-          { "name": "Multiattack", "text": "The erinyes makes three attacks" },
           {
             "name": "Nonmagical attacks",
             "text": "cold; bludgeoning, piercing, and slashing from nonmagical attacks not made with silvered weapons A fight has no way to ask whether a weapon is magical, so this qualifier is not applied."
@@ -6045,6 +6075,18 @@
           }
         ],
         "actions": [
+          {
+            "id": "multiattack_melee",
+            "name": "Multiattack (melee)",
+            "budget": "action",
+            "sequence": [{ "action": "longsword", "times": 3 }]
+          },
+          {
+            "id": "multiattack_ranged",
+            "name": "Multiattack (ranged)",
+            "budget": "action",
+            "sequence": [{ "action": "longbow", "times": 3 }]
+          },
           {
             "id": "longsword",
             "name": "Longsword",
@@ -8103,12 +8145,6 @@
         ],
         "actions": [
           {
-            "id": "multiattack",
-            "name": "Multiattack",
-            "budget": "action",
-            "sequence": [{ "action": "bites", "times": 1 }]
-          },
-          {
             "id": "bites",
             "name": "Bites",
             "budget": "action",
@@ -8222,6 +8258,18 @@
           }
         ],
         "actions": [
+          {
+            "id": "multiattack_melee",
+            "name": "Multiattack (melee)",
+            "budget": "action",
+            "sequence": [{ "action": "spear", "times": 3 }]
+          },
+          {
+            "id": "multiattack_ranged",
+            "name": "Multiattack (ranged)",
+            "budget": "action",
+            "sequence": [{ "action": "spear", "times": 2 }]
+          },
           {
             "id": "spear",
             "name": "Spear",
@@ -9552,7 +9600,6 @@
         "abilities": { "str": 20, "dex": 12, "con": 20, "int": 2, "wis": 10, "cha": 7 },
         "tier": "cr_8",
         "traits": [
-          { "name": "Multiattack", "text": "The hydra makes as many bite attacks as it has heads." },
           { "name": "Speed", "text": "30 ft., swim 30 ft." },
           { "name": "Hold Breath", "text": "The hydra can hold its breath for 1 hour." },
           {
@@ -9566,6 +9613,12 @@
           { "name": "Wakeful", "text": "While the hydra sleeps, at least one of its heads is awake." }
         ],
         "actions": [
+          {
+            "id": "multiattack",
+            "name": "Multiattack",
+            "budget": "action",
+            "sequence": [{ "action": "bite", "times": 5 }]
+          },
           {
             "id": "bite",
             "name": "Bite",
@@ -9906,7 +9959,6 @@
         "conditionImmunities": ["charmed", "frightened", "paralyzed", "petrified", "poisoned"],
         "tier": "cr_16",
         "traits": [
-          { "name": "Multiattack", "text": "The golem makes two melee attacks." },
           {
             "name": "Immune to exhaustion",
             "text": "The Iron Golem is immune to exhaustion, which this sheet counts on a track rather than as a condition."
@@ -9927,6 +9979,12 @@
           { "name": "Magic Weapons", "text": "The golem's weapon attacks are magical." }
         ],
         "actions": [
+          {
+            "id": "multiattack",
+            "name": "Multiattack",
+            "budget": "action",
+            "sequence": [{ "action": "sword", "times": 2 }]
+          },
           {
             "id": "slam",
             "name": "Slam",
@@ -10050,10 +10108,15 @@
             "name": "Leadership",
             "text": "For 1 minute, the knight can utter a special command or warning whenever a nonhostile creature that it can see within 30 ft. of it makes an attack roll or a saving throw. The creature can add a d4 to its roll provided it can hear and understand the knight. A creature can benefit from only one Leadership die at a time. This effect ends if the knight is incapacitated."
           },
-          { "name": "Multiattack", "text": "The knight makes two melee attacks." },
           { "name": "Brave", "text": "The knight has advantage on saving throws against being frightened." }
         ],
         "actions": [
+          {
+            "id": "multiattack",
+            "name": "Multiattack",
+            "budget": "action",
+            "sequence": [{ "action": "greatsword", "times": 2 }]
+          },
           {
             "id": "greatsword",
             "name": "Greatsword",
@@ -10544,14 +10607,19 @@
         "abilities": { "str": 15, "dex": 10, "con": 13, "int": 7, "wis": 12, "cha": 7 },
         "tier": "cr_1_2",
         "traits": [
-          {
-            "name": "Multiattack",
-            "text": "The lizardfolk makes two melee attacks, each one with a different weapon."
-          },
           { "name": "Speed", "text": "30 ft., swim 30 ft." },
           { "name": "Hold Breath", "text": "The lizardfolk can hold its breath for 15 minutes." }
         ],
         "actions": [
+          {
+            "id": "multiattack",
+            "name": "Multiattack",
+            "budget": "action",
+            "sequence": [
+              { "action": "bite", "times": 1 },
+              { "action": "heavy_club", "times": 1 }
+            ]
+          },
           {
             "id": "bite",
             "name": "Bite",
@@ -10814,13 +10882,19 @@
         ],
         "actions": [
           {
-            "id": "multiattack",
-            "name": "Multiattack",
+            "id": "multiattack_bite",
+            "name": "Multiattack (bite)",
             "budget": "action",
             "sequence": [
               { "action": "bite", "times": 1 },
               { "action": "claw", "times": 2 }
             ]
+          },
+          {
+            "id": "multiattack_tail_spike",
+            "name": "Multiattack (tail spike)",
+            "budget": "action",
+            "sequence": [{ "action": "tail_spike", "times": 3 }]
           },
           {
             "id": "bite",
@@ -10976,6 +11050,21 @@
           }
         ],
         "actions": [
+          {
+            "id": "multiattack_melee",
+            "name": "Multiattack (melee)",
+            "budget": "action",
+            "sequence": [
+              { "action": "snake_hair", "times": 1 },
+              { "action": "shortsword", "times": 2 }
+            ]
+          },
+          {
+            "id": "multiattack_ranged",
+            "name": "Multiattack (ranged)",
+            "budget": "action",
+            "sequence": [{ "action": "longbow", "times": 2 }]
+          },
           {
             "id": "snake_hair",
             "name": "Snake Hair",
@@ -11323,10 +11412,6 @@
             "text": "Hit: 10 (2d6 + 3) bludgeoning damage plus 10 (3d6) necrotic damage. If the target is a creature, it must succeed on a DC 12 Constitution saving throw or be cursed with mummy rot. The cursed target can't regain hit points, and its hit point maximum decreases by 10 (3d6) for every 24 hours that elapse. See the SRD for the full text."
           },
           {
-            "name": "Multiattack",
-            "text": "The mummy can use its Dreadful Glare and makes one attack with its rotting fist."
-          },
-          {
             "name": "Immune to exhaustion",
             "text": "The Mummy is immune to exhaustion, which this sheet counts on a track rather than as a condition."
           },
@@ -11336,6 +11421,15 @@
           }
         ],
         "actions": [
+          {
+            "id": "multiattack",
+            "name": "Multiattack",
+            "budget": "action",
+            "sequence": [
+              { "action": "dreadful_glare", "times": 1 },
+              { "action": "rotting_fist", "times": 1 }
+            ]
+          },
           {
             "id": "rotting_fist",
             "name": "Rotting Fist",
@@ -11393,10 +11487,6 @@
             "text": "The mummy lord magically transforms into a whirlwind of sand, moves up to 60 feet, and reverts to its normal form. While in whirlwind form, the mummy lord is immune to all damage, and it can't be grappled, petrified, knocked prone, restrained, or stunned. Equipment worn or carried by the mummy lord remain in its possession."
           },
           {
-            "name": "Multiattack",
-            "text": "The mummy can use its Dreadful Glare and makes one attack with its rotting fist."
-          },
-          {
             "name": "Immune to exhaustion",
             "text": "The Mummy Lord is immune to exhaustion, which this sheet counts on a track rather than as a condition."
           },
@@ -11407,10 +11497,23 @@
           {
             "name": "Magic Resistance",
             "text": "The mummy lord has advantage on saving throws against spells and other magical effects."
+          },
+          {
+            "name": "Rejuvenation",
+            "text": "A destroyed mummy lord gains a new body in 24 hours if its heart is intact, regaining all its hit points and becoming active again. The new body appears within 5 feet of the mummy lord's heart."
           }
         ],
         "signaturePoints": 3,
         "actions": [
+          {
+            "id": "multiattack",
+            "name": "Multiattack",
+            "budget": "action",
+            "sequence": [
+              { "action": "dreadful_glare", "times": 1 },
+              { "action": "rotting_fist", "times": 1 }
+            ]
+          },
           {
             "id": "rotting_fist",
             "name": "Rotting Fist",
@@ -11486,6 +11589,15 @@
           }
         ],
         "actions": [
+          {
+            "id": "multiattack",
+            "name": "Multiattack",
+            "budget": "action",
+            "sequence": [
+              { "action": "bite", "times": 1 },
+              { "action": "claw", "times": 2 }
+            ]
+          },
           {
             "id": "bite",
             "name": "Bite",
@@ -11869,6 +11981,18 @@
           }
         ],
         "actions": [
+          {
+            "id": "multiattack_claw",
+            "name": "Multiattack (claw)",
+            "budget": "action",
+            "sequence": [{ "action": "claw", "times": 2 }]
+          },
+          {
+            "id": "multiattack_glaive",
+            "name": "Multiattack (glaive)",
+            "budget": "action",
+            "sequence": [{ "action": "glaive", "times": 2 }]
+          },
           {
             "id": "claw",
             "name": "Claw",
@@ -13204,6 +13328,15 @@
         ],
         "actions": [
           {
+            "id": "multiattack",
+            "name": "Multiattack",
+            "budget": "action",
+            "sequence": [
+              { "action": "tendril", "times": 4 },
+              { "action": "bite", "times": 1 }
+            ]
+          },
+          {
             "id": "bite",
             "name": "Bite",
             "budget": "action",
@@ -13609,6 +13742,18 @@
           }
         ],
         "actions": [
+          {
+            "id": "multiattack_melee",
+            "name": "Multiattack (melee)",
+            "budget": "action",
+            "sequence": [{ "action": "shortsword", "times": 2 }]
+          },
+          {
+            "id": "multiattack_ranged",
+            "name": "Multiattack (ranged)",
+            "budget": "action",
+            "sequence": [{ "action": "longbow", "times": 2 }]
+          },
           {
             "id": "shortsword",
             "name": "Shortsword",
@@ -14237,7 +14382,6 @@
         "abilities": { "str": 10, "dex": 15, "con": 10, "int": 12, "wis": 14, "cha": 16 },
         "tier": "cr_1",
         "traits": [
-          { "name": "Multiattack", "text": "The spy makes two melee attacks." },
           {
             "name": "Cunning Action",
             "text": "On each of its turns, the spy can use a bonus action to take the Dash, Disengage, or Hide action."
@@ -14248,6 +14392,12 @@
           }
         ],
         "actions": [
+          {
+            "id": "multiattack",
+            "name": "Multiattack",
+            "budget": "action",
+            "sequence": [{ "action": "shortsword", "times": 2 }]
+          },
           {
             "id": "shortsword",
             "name": "Shortsword",
@@ -15390,13 +15540,18 @@
         "abilities": { "str": 15, "dex": 11, "con": 14, "int": 10, "wis": 10, "cha": 11 },
         "tier": "cr_1_2",
         "traits": [
-          { "name": "Multiattack", "text": "The thug makes two melee attacks." },
           {
             "name": "Pack Tactics",
             "text": "The thug has advantage on an attack roll against a creature if at least one of the thug's allies is within 5 ft. of the creature and the ally isn't incapacitated."
           }
         ],
         "actions": [
+          {
+            "id": "multiattack",
+            "name": "Multiattack",
+            "budget": "action",
+            "sequence": [{ "action": "mace", "times": 2 }]
+          },
           {
             "id": "mace",
             "name": "Mace",
@@ -15827,6 +15982,15 @@
         "signaturePoints": 3,
         "actions": [
           {
+            "id": "multiattack",
+            "name": "Multiattack",
+            "budget": "action",
+            "sequence": [
+              { "action": "bite", "times": 1 },
+              { "action": "unarmed_strike", "times": 1 }
+            ]
+          },
+          {
             "id": "unarmed_strike",
             "name": "Unarmed Strike",
             "budget": "action",
@@ -15904,6 +16068,15 @@
           }
         ],
         "actions": [
+          {
+            "id": "multiattack",
+            "name": "Multiattack",
+            "budget": "action",
+            "sequence": [
+              { "action": "bite", "times": 1 },
+              { "action": "claws", "times": 1 }
+            ]
+          },
           {
             "id": "bite",
             "name": "Bite",
@@ -16450,6 +16623,15 @@
         ],
         "actions": [
           {
+            "id": "multiattack",
+            "name": "Multiattack",
+            "budget": "action",
+            "sequence": [
+              { "action": "tusks", "times": 1 },
+              { "action": "maul", "times": 1 }
+            ]
+          },
+          {
             "id": "maul",
             "name": "Maul",
             "budget": "action",
@@ -16506,6 +16688,15 @@
           }
         ],
         "actions": [
+          {
+            "id": "multiattack",
+            "name": "Multiattack",
+            "budget": "action",
+            "sequence": [
+              { "action": "bite", "times": 1 },
+              { "action": "shortsword", "times": 1 }
+            ]
+          },
           {
             "id": "bite",
             "name": "Bite",
@@ -16574,10 +16765,16 @@
         ],
         "actions": [
           {
-            "id": "multiattack",
-            "name": "Multiattack",
+            "id": "multiattack_scimitar",
+            "name": "Multiattack (scimitar)",
             "budget": "action",
             "sequence": [{ "action": "scimitar", "times": 2 }]
+          },
+          {
+            "id": "multiattack_longbow",
+            "name": "Multiattack (longbow)",
+            "budget": "action",
+            "sequence": [{ "action": "longbow", "times": 2 }]
           },
           {
             "id": "bite",
@@ -16654,6 +16851,21 @@
           }
         ],
         "actions": [
+          {
+            "id": "multiattack_humanoid_form",
+            "name": "Multiattack (humanoid form)",
+            "budget": "action",
+            "sequence": [{ "action": "spear", "times": 2 }]
+          },
+          {
+            "id": "multiattack_hybrid_form",
+            "name": "Multiattack (hybrid form)",
+            "budget": "action",
+            "sequence": [
+              { "action": "bite", "times": 1 },
+              { "action": "claws", "times": 1 }
+            ]
+          },
           {
             "id": "bite",
             "name": "Bite",
@@ -16764,10 +16976,16 @@
         ],
         "actions": [
           {
-            "id": "multiattack",
-            "name": "Multiattack",
+            "id": "multiattack_longsword",
+            "name": "Multiattack (longsword)",
             "budget": "action",
             "sequence": [{ "action": "longsword", "times": 2 }]
+          },
+          {
+            "id": "multiattack_longbow",
+            "name": "Multiattack (longbow)",
+            "budget": "action",
+            "sequence": [{ "action": "longbow", "times": 2 }]
           },
           {
             "id": "life_drain",

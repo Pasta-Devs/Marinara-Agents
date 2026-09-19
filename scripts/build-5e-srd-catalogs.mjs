@@ -1507,21 +1507,68 @@ function areaTargets(text) {
 
 // ── Multiattack ──
 //
-// The SRD writes a Multiattack as prose, so these are the shapes it actually uses, in the order they
-// are tried. Anything else falls back to the creature's own single attacks and is listed in the
-// build report; an optional rider ("can use its Frightful Presence") is never folded into the
-// sequence, and the whole printed sentence rides along as a trait so the Game Master still has it.
+// The SRD writes a Multiattack as prose. These are the SHAPES that prose really uses, tried in
+// order, and every one of them is general: nothing here knows a creature by name. A sentence whose
+// shape is not among them falls back to the creature's own single attacks and is listed in the
+// build report, and whatever the sentence says beyond its strikes always stays a trait.
+//
+// A sentence may offer alternatives ("three melee attacks or two ranged attacks"), and each becomes
+// its own sequence action, named so a Game Master can tell them apart.
 
 const COUNT_WORD = Object.keys(COUNT_WORDS).join("|");
-const MULTI_NAMED_PARTS = new RegExp(
-  String.raw`\b(?:makes|make)\s+(?:${COUNT_WORD})\s+(?:melee\s+|ranged\s+|weapon\s+)?attacks?\s*[:,-]\s*(.+)$`,
+// "two with its claws", and the SRD's other way of saying it: "one to constrict".
+const MULTI_PART = new RegExp(
+  String.raw`^\s*(${COUNT_WORD})\s+(?:with\s+(?:its|his|her|their)|to)\s+([a-z' ]+?)\s*$`,
   "iu",
 );
-const MULTI_PART = new RegExp(String.raw`^\s*(${COUNT_WORD})\s+with\s+(?:its|his|her|their)\s+([a-z' ]+?)\s*$`, "iu");
-const MULTI_SIMPLE = new RegExp(String.raw`\b(?:makes|make)\s+(${COUNT_WORD})\s+([a-z' ]*?)\s*attacks?\b`, "iu");
-// Where a Multiattack stops being a sequence and starts offering the creature a choice. Everything
-// from here on is a rider, and riders never join the sequence.
+const MULTI_WITH_WEAPON = new RegExp(
+  String.raw`\b(?:makes?|make)\s+(${COUNT_WORD})\s+attacks?\s+with\s+(?:its|his|her|their)\s+([a-z' ]+?)(?=[,.;]|\s+and\b|\s+or\b|$)`,
+  "giu",
+);
+const MULTI_COUNTED = new RegExp(String.raw`\b(${COUNT_WORD})\s+([a-z' ]*?)\s*attacks?\b`, "iu");
+const MULTI_NAMED_PARTS = new RegExp(
+  String.raw`\b(?:makes?|make)\s+(?:either\s+)?(?:${COUNT_WORD})\s+(?:melee\s+|ranged\s+|weapon\s+)?attacks?\s*[:,-]\s*(.+)$`,
+  "iu",
+);
+// "makes three attacks, either with its longsword or its longbow": one count, two weapons, and the
+// creature picks. Read before the sentence is split on "or", which would cut it in half.
+const MULTI_EITHER_WITH = new RegExp(
+  String.raw`\b(?:makes?|make)\s+(${COUNT_WORD})\s+attacks?,?\s+either\s+with\s+(?:its|his|her|their)\s+([a-z' ]+?)\s+or\s+(?:with\s+)?(?:its|his|her|their)\s+([a-z' ]+?)(?=[,.;]|$)`,
+  "iu",
+);
+// "makes two attacks, only one of which can be a bite attack": one named strike, and anything else
+// for the rest.
+const MULTI_ONLY_ONE = new RegExp(
+  String.raw`only\s+one\s+of\s+which\s+can\s+be\s+(?:a|an|with)?\s*(?:its|his|her|their)?\s*([a-z' ]+?)(?:\s+attack)?(?=[,.;]|$)`,
+  "iu",
+);
+// "makes as many bite attacks as it has heads", with the count printed in a trait of its own.
+const MULTI_AS_MANY = new RegExp(String.raw`as\s+many\s+([a-z' ]+?)\s+attacks?\s+as\s+it\s+has\s+(\w+)`, "iu");
+const MULTI_HEAD_COUNT = new RegExp(String.raw`\bhas\s+(${COUNT_WORD})\s+(\w+)`, "iu");
+// "can use its Dreadful Glare and makes one attack with its rotting fist": joined by "and" in the
+// same clause, so it is part of the round. An opener in its own sentence, or hedged with "if it
+// can", is an option the creature may take instead, and stays a trait.
+const MULTI_AND_USES = /\b(?:can\s+use|uses)\s+(?:its|his|her|their)\s+([a-z' ]+?)\s+and\s+(?:makes?|make)\b/iu;
+const MULTI_DIFFERENT = /each\s+one\s+with\s+a\s+different\s+weapon/iu;
+const MULTI_PARENTHETICAL = /\(([^)]{1,40})\)/gu;
+const MULTI_SENTENCE_WITH_MAKES = /(?:^|(?<=[.;]\s))[^.;]*\b(?:makes?|make)\b[^.;]*/iu;
+// Where a printed Multiattack says more than its strikes, which is what decides whether the whole
+// sentence still has to ride along as a trait.
 const MULTI_RIDER = /\b(?:or|alternatively|instead|it can|if |while |each of which|only one of which)\b/iu;
+
+/** The numbers a creature's own traits print of itself, keyed by the thing counted: "The hydra has
+ *  five heads" is what makes "as many bite attacks as it has heads" a number. Read from the traits
+ *  rather than typed here, so a creature that prints a different count gets that count. */
+function headCounts(traits) {
+  const counts = new Map();
+  for (const source of traits) {
+    const match = MULTI_HEAD_COUNT.exec(plainText(source.fields.desc));
+    if (!match) continue;
+    const thing = oneLine(match[2]).toLowerCase().replace(/s$/u, "");
+    if (!counts.has(thing)) counts.set(thing, COUNT_WORDS[match[1].toLowerCase()]);
+  }
+  return counts;
+}
 
 /** Which of this creature's own actions a printed part names ("two with its claws"). */
 function namedAttack(word, attacks) {
@@ -1537,34 +1584,205 @@ function namedAttack(word, attacks) {
   );
 }
 
-/** The sequence a Multiattack's prose states, or null when the shape is not one of the ones above.
- *  The parts are read one by one, so a sentence naming something this block does not have is not a
- *  sequence at all rather than a shortened one. */
-function multiattackSequence(text, attacks) {
-  const sentence = text.split(MULTI_RIDER)[0];
-  const named = MULTI_NAMED_PARTS.exec(sentence);
-  if (named) {
+/** What one action does on average, for picking the best of a kind. */
+function strikeAverage(action) {
+  return averageOfDamage(action);
+}
+
+/** The heaviest attack of a list, with the block's own printed order breaking a tie so a rebuild
+ *  always picks the same one. */
+function bestStrike(list) {
+  let best = null;
+  for (const action of list) {
+    if (!best || strikeAverage(action) > strikeAverage(best)) best = action;
+  }
+  return best;
+}
+
+/** The strikes of one block, split by the kind of attack they are. A thrown weapon reaches and
+ *  throws, so it counts as both, exactly as the SRD's own "melee or ranged" line says. */
+function strikesOf(attacks) {
+  const strikes = attacks.filter((action) => action.toHit !== undefined && action.damage);
+  return {
+    all: attacks,
+    strikes,
+    melee: strikes.filter((action) => action.reach !== undefined),
+    ranged: strikes.filter((action) => action.range !== undefined),
+  };
+}
+
+/** What to call an alternative that names several actions: the first one it strikes with, which is
+ *  what a Game Master reads it by ("Multiattack (pike)" beside "Multiattack (longbow)"). */
+function leadingName(steps, block) {
+  const first = block.all.find((action) => action.id === steps[0]?.action);
+  return first ? first.name.toLowerCase() : undefined;
+}
+
+/** The strikes one alternative of a printed sentence asks for, or null when its shape is not one of
+ *  the ones below. `suffix` names the alternative when there is more than one. */
+function multiattackChunk(chunk, block, headCounts) {
+  const labels = [...chunk.matchAll(MULTI_PARENTHETICAL)].map((match) => oneLine(match[1]).toLowerCase());
+  const text = chunk.replace(MULTI_PARENTHETICAL, " ");
+  // What to call this alternative: the form the SRD names in brackets, then the kind of attacks it
+  // asks for, then whatever the branch itself worked out.
+  const kindWord = /\b(melee|ranged)\b/iu.exec(text)?.[1].toLowerCase();
+  const suffixFrom = (fallback) => labels[0] ?? kindWord ?? fallback;
+
+  // "as many bite attacks as it has heads", with the number printed in a trait.
+  const asMany = MULTI_AS_MANY.exec(text);
+  if (asMany) {
+    const attack = namedAttack(asMany[1], block.all);
+    const times = headCounts.get(oneLine(asMany[2]).toLowerCase().replace(/s$/u, ""));
+    if (!attack || !times) return null;
+    return { shape: "as many as it has", steps: [{ action: attack.id, times }], suffix: suffixFrom(undefined) };
+  }
+
+  // "only one of which can be a bite attack": the named strike once, and the best of the rest once.
+  const onlyOne = MULTI_ONLY_ONE.exec(text);
+  if (onlyOne) {
+    const limited = namedAttack(onlyOne[1], block.strikes);
+    if (!limited) return null;
+    const other = bestStrike(block.strikes.filter((action) => action.id !== limited.id));
+    if (!other) return null;
+    return {
+      shape: "only one of which",
+      steps: [
+        { action: limited.id, times: 1 },
+        { action: other.id, times: 1 },
+      ],
+      suffix: suffixFrom(undefined),
+    };
+  }
+
+  // "one with its bite and two with its claws", the SRD's most common shape. The parts are read out
+  // of whatever follows the count, and out of the chunk itself when an alternative carries the parts
+  // without repeating the "makes two attacks" in front of them.
+  const named = MULTI_NAMED_PARTS.exec(text);
+  {
     const steps = [];
-    for (const fragment of named[1].split(/,|\band\b/iu)) {
-      const part = MULTI_PART.exec(fragment.replace(/[.;]/gu, " "));
+    for (const fragment of (named ? named[1] : text).split(/,|\band\b/iu)) {
+      // The SRD sets an aside in dashes ("three melee attacks - one with its snake hair - or ..."),
+      // which belong to the sentence rather than to the part.
+      const part = MULTI_PART.exec(fragment.replace(/[-.;]+/gu, " "));
       if (!part) continue;
-      const attack = namedAttack(part[2], attacks);
+      const attack = namedAttack(part[2], block.all);
       if (!attack) return null;
       steps.push({ action: attack.id, times: COUNT_WORDS[part[1].toLowerCase()] });
     }
-    if (steps.length > 0) return steps;
+    if (steps.length > 0) {
+      return { shape: "named parts", steps, suffix: suffixFrom(leadingName(steps, block)) };
+    }
   }
-  const simple = MULTI_SIMPLE.exec(sentence);
-  if (!simple) return null;
-  const times = COUNT_WORDS[simple[1].toLowerCase()];
-  const word = oneLine(simple[2]).toLowerCase();
-  // "makes two melee attacks" names no weapon, so it only means something when the creature has
-  // exactly one attack to make; with two it is the creature's choice, which is not a sequence.
-  if (!word || word === "melee" || word === "ranged" || word === "weapon") {
-    return attacks.length === 1 ? [{ action: attacks[0].id, times }] : null;
+
+  // "makes four attacks with its tendrils ... and makes one attack with its bite".
+  MULTI_WITH_WEAPON.lastIndex = 0;
+  const withWeapon = [...text.matchAll(MULTI_WITH_WEAPON)];
+  if (withWeapon.length > 0) {
+    const steps = [];
+    for (const match of withWeapon) {
+      const attack = namedAttack(match[2], block.all);
+      if (!attack) return null;
+      steps.push({ action: attack.id, times: COUNT_WORDS[match[1].toLowerCase()] });
+    }
+    return { shape: "with its weapon", steps, suffix: suffixFrom(leadingName(steps, block)) };
   }
-  const attack = namedAttack(word, attacks);
-  return attack ? [{ action: attack.id, times }] : null;
+
+  // "three melee attacks", "two ranged attacks", "two scimitar attacks", "three attacks".
+  const counted = MULTI_COUNTED.exec(text);
+  if (!counted) return null;
+  const times = COUNT_WORDS[counted[1].toLowerCase()];
+  const word = oneLine(counted[2]).toLowerCase();
+  const kind = word === "melee" || word === "ranged" ? word : undefined;
+  const namedKind = !kind && word && word !== "weapon" ? namedAttack(word, block.all) : null;
+  if (namedKind) {
+    return {
+      shape: "counted weapon",
+      steps: [{ action: namedKind.id, times }],
+      suffix: suffixFrom(namedKind.name.toLowerCase()),
+    };
+  }
+  if (word && !kind && word !== "weapon") return null;
+  const pool = kind === "ranged" ? block.ranged : block.melee;
+  // "each one with a different weapon": as many DIFFERENT strikes as the count asks for.
+  if (MULTI_DIFFERENT.test(text)) {
+    const ordered = [...pool].sort((left, right) => strikeAverage(right) - strikeAverage(left));
+    const steps = ordered.slice(0, times).map((action) => ({ action: action.id, times: 1 }));
+    if (steps.length < times) return null;
+    return { shape: "a different weapon each", steps, suffix: suffixFrom(kind) };
+  }
+  const best = bestStrike(pool);
+  if (!best) return null;
+  return {
+    shape: kind ? `counted ${kind}` : "counted attacks",
+    steps: [{ action: best.id, times }],
+    suffix: suffixFrom(kind ?? best.name.toLowerCase()),
+    bare: !kind,
+  };
+}
+
+/** Every sequence a Multiattack's printed prose states, in the order it states them.
+ *
+ *  `attacks` are the block's own resolvable actions, with sequences and points-bought actions
+ *  already out: a sequence may never name either. `headCounts` are the numbers a creature's traits
+ *  print of itself ("The hydra has five heads"). */
+function multiattackSequences(text, attacks, headCounts) {
+  const block = strikesOf(attacks);
+  if (block.strikes.length === 0) return { sequences: [], opening: false };
+  const sentence = MULTI_SENTENCE_WITH_MAKES.exec(text)?.[0] ?? text;
+
+  // An action joined to the strikes by "and" in the same clause happens in the same round. One in a
+  // sentence of its own, or hedged with "if it can", is an option and stays a trait.
+  const opener = MULTI_AND_USES.exec(sentence);
+  const opening = opener ? namedAttack(opener[1], attacks) : null;
+
+  // "three attacks, either with its longsword or its longbow" is one count and two weapons; it has
+  // to be read before the sentence is split on "or".
+  const either = MULTI_EITHER_WITH.exec(sentence);
+  const chunks = either
+    ? [either[2], either[3]].map((weapon) => `makes ${either[1]} attacks with its ${weapon}`)
+    : sentence.split(/\bor\b/iu);
+
+  const built = [];
+  for (const chunk of chunks) {
+    const parsed = multiattackChunk(chunk, block, headCounts);
+    if (!parsed) continue;
+    built.push(parsed);
+  }
+  if (built.length === 0) return { sequences: [], opening: false };
+
+  // A bare "makes three attacks" with no weapon named and no "melee" in the sentence lets a creature
+  // that also shoots use its bow, which is what the SRD means by an attack.
+  if (built.length === 1 && built[0].bare && block.ranged.length > 0) {
+    const shooter = bestStrike(block.ranged);
+    const puncher = built[0].steps[0];
+    if (shooter && shooter.id !== puncher.action) {
+      built[0].suffix = "melee";
+      built.push({
+        shape: "counted attacks",
+        steps: [{ action: shooter.id, times: puncher.times }],
+        suffix: "ranged",
+      });
+    }
+  }
+
+  if (opening) {
+    for (const sequence of built) sequence.steps.unshift({ action: opening.id, times: 1 });
+  }
+
+  // A sequence that resolves one strike once is the strike itself, not a multiattack.
+  const kept = built.filter((sequence) => sequence.steps.reduce((total, step) => total + step.times, 0) > 1);
+  if (kept.length === 0) return { sequences: [], opening: false };
+
+  const ids = new Set(attacks.map((action) => action.id));
+  for (const sequence of kept) {
+    for (const step of sequence.steps) {
+      if (!ids.has(step.action)) fail(`a multiattack names "${step.action}", which is not an action of this block`);
+      if (!Number.isInteger(step.times) || step.times < 1 || step.times > 10) {
+        fail(`a multiattack repeats "${step.action}" ${step.times} times, which is not 1 to 10`);
+      }
+    }
+  }
+  return { sequences: kept, opening: !!opening };
 }
 
 // ── One creature ──
@@ -1706,16 +1924,35 @@ function creatureEntry(record, sources, report) {
 
   if (multiattack) {
     const text = plainText(multiattack.fields.desc);
-    const sequence = multiattackSequence(text, strikes);
-    if (sequence) {
-      built.unshift({ id: actionId(multiattack.pk, pk), name: "Multiattack", budget: BUDGET_ACTION, sequence });
-      report.multiattacksParsed += 1;
-    } else {
-      report.multiattacksFallenBack.push(pk);
-    }
+    // A sequence may never name another sequence, and never an action bought with points.
+    const namable = built.filter((action) => !action.sequence && !action.signature);
+    const parsed = multiattackSequences(text, namable, headCounts(sources.traits.get(pk) ?? []));
+    // A creature already at the action cap keeps its single attacks and drops the LAST alternative,
+    // because the first sequence a sentence states is the one it leads with.
+    const room = Math.max(0, CREATURE_MAX_ACTIONS - built.length);
+    const kept = parsed.sequences.slice(0, room);
+    if (kept.length < parsed.sequences.length) report.multiattackAlternativesDropped.push(pk);
+    const id = actionId(multiattack.pk, pk);
+    // Unshifted back to front, so the block prints the alternatives in the order the sentence does.
+    [...kept].reverse().forEach((sequence, index) => {
+      const at = kept.length - 1 - index;
+      const suffix = kept.length > 1 ? sequence.suffix || `${at + 1}` : undefined;
+      built.unshift({
+        id: suffix ? `${id}_${suffix.replace(/[^a-z0-9]+/giu, "_").replace(/^_+|_+$/gu, "")}`.slice(0, 40) : id,
+        name: suffix ? `Multiattack (${suffix})` : "Multiattack",
+        budget: BUDGET_ACTION,
+        sequence: sequence.steps,
+      });
+      report.multiattackShapes.set(sequence.shape, (report.multiattackShapes.get(sequence.shape) ?? 0) + 1);
+    });
+    if (kept.length > 0) report.multiattacksParsed += 1;
+    else report.multiattacksFallenBack.push(`${pk}: ${text}`);
     // A sequence carries the strikes and never the riders and alternatives the same sentence states,
-    // so the printed sentence rides along as a trait unless the sequence is the whole of it.
-    if (!sequence || MULTI_RIDER.test(text) || /[.;]\s+\S/u.test(text)) {
+    // so the printed sentence rides along as a trait unless the sequence is the whole of it. A
+    // sentence that also SPENDS something ("uses Reel") only counts as carried when that use was
+    // folded into the round.
+    const spends = /\buses?\b/iu.test(text) && !parsed.opening;
+    if (kept.length === 0 || spends || MULTI_RIDER.test(text) || /[.;]\s+\S/u.test(text)) {
       notes.push(trait("what a multiattack says beyond its strikes", "Multiattack", text));
     } else report.multiattacksFullyCarried += 1;
   }
@@ -2336,6 +2573,8 @@ const weapons = buildWeaponEntries(weaponRecords, propertiesByWeapon);
 const report = {
   skipped: [],
   multiattacksParsed: 0,
+  multiattackShapes: new Map(),
+  multiattackAlternativesDropped: [],
   multiattacksFullyCarried: 0,
   multiattacksFallenBack: [],
   foldedRiders: 0,
@@ -2552,10 +2791,18 @@ console.log(
 );
 for (const entry of report.skipped) console.log(`    left out: ${entry.id} — ${entry.reason}`);
 console.log(
-  `  multiattack: ${report.multiattacksParsed} parsed into a sequence (${report.multiattacksFullyCarried} of them say nothing the sequence leaves out), ` +
-    `${report.multiattacksFallenBack.length} fell back to single attacks`,
+  `  multiattack: ${report.multiattacksParsed} parsed into a sequence (${report.multiattacksFullyCarried} of them say nothing the ` +
+    `sequence leaves out), ${report.multiattacksFallenBack.length} fell back to single attacks`,
 );
-console.log(`    fell back: ${list(report.multiattacksFallenBack, 12)}`);
+for (const [shape, count] of [...report.multiattackShapes].sort((left, right) => right[1] - left[1])) {
+  console.log(`    ${String(count).padStart(4)}  sequences from "${shape}"`);
+}
+for (const entry of report.multiattacksFallenBack) console.log(`    fell back: ${entry}`);
+if (report.multiattackAlternativesDropped.length > 0) {
+  console.log(
+    `    ${report.multiattackAlternativesDropped.length} creature(s) at the action cap dropped their last alternative: ${list(report.multiattackAlternativesDropped)}`,
+  );
+}
 console.log(`  ${report.legendaryReusingAnAttack} legendary action(s) reuse an attack the block already prints`);
 console.log(
   `  ${report.optionBlocksSplit} printed action(s) hold several options; the first is the action, the rest are traits`,
