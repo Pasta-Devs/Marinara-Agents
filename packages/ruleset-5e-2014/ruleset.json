@@ -2,7 +2,7 @@
   "$comment": "First-party 5e ruleset on SRD 5.1. Every id here is this file's own choice: the Engine never looks for 'level', 'dex' or 'slots'. A $comment key is allowed on any object and ignored.",
   "schemaVersion": 1,
   "id": "5e-2014",
-  "version": 3,
+  "version": 4,
   "name": "5e (SRD 5.1)",
   "edition": "System Reference Document 5.1, 2014 rules",
   "license": {
@@ -618,6 +618,27 @@
           "field": "spellcasting_ability",
           "equals": "none"
         }
+      },
+      {
+        "$comment": "Class resource maximums the SRD ties to an ability score rather than to a class table. A catalog entry's scaled column reads them, so the sheet keeps the counter it picked. They carry no section, so they sit beside the Class resources list, and no hide rule, because the sheet has no field that says which class you are and a hide rule can only compare one to a value.",
+        "id": "bardic_inspiration_uses",
+        "label": "Bardic Inspiration uses",
+        "op": "max",
+        "of": [{ "const": 1 }, { "abilityMod": "cha" }]
+      },
+      {
+        "id": "divine_sense_uses",
+        "label": "Divine Sense uses",
+        "op": "sum",
+        "of": [{ "const": 1 }, { "abilityMod": "cha" }]
+      },
+      {
+        "$comment": "Lay on Hands is a pool of hit points, not a count of uses, so it is the one class resource whose maximum is a multiple of the level.",
+        "id": "lay_on_hands_pool",
+        "label": "Lay on Hands pool",
+        "op": "scale",
+        "of": { "field": "level" },
+        "multiplier": 5
       }
     ],
     "lists": [
