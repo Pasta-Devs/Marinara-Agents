@@ -28,22 +28,22 @@ import {
 import { slurpDiscoveryFields, SlurpDiscoveryGender } from "../discovery/slp-discovery-profile.js";
 import { SLURP_DEFAULT_ECONOMY } from "../economy/slp-wallet.js";
 import type {
-  noodleAccounts,
-  noodleAccountSubscriptions,
-  noodleActivityDigests,
-  noodleInteractions,
-  noodlePosts,
-  noodlePostUnlocks,
-  noodleRefreshRuns,
+  slpAccounts,
+  slpAccountSubscriptions,
+  slpActivityDigests,
+  slpInteractions,
+  slpPosts,
+  slpPostUnlocks,
+  slpRefreshRuns,
 } from "../../../db/schema/slurp.js";
-import type { NoodlerPostSortKey } from "../feed/slp-post-page.js";
+import type { SlpCreatorPostSortKey } from "../feed/slp-post-page.js";
 import type { SlurpSettings } from "../settings/slp-settings.js";
 
-export type NoodlerPostPageCursor = NoodlerPostSortKey;
+export type SlpCreatorPostPageCursor = SlpCreatorPostSortKey;
 
 export type SlurpSourceKind = "character" | "persona";
 
-export type SlurpNoodleAccountSettings = Omit<SlpAccountSettings, "profile"> & {
+export type SlurpSlpAccountSettings = Omit<SlpAccountSettings, "profile"> & {
   profile: SlpAccountSettings["profile"] & {
     gender: SlurpDiscoveryGender | null;
     tags: string[];
@@ -56,12 +56,12 @@ export type SlurpManagedStageProfile = SlpCreatorManagedStageProfile & {
 };
 
 export type SlurpAccount = Omit<SlpAccount, "settings"> & {
-  settings: SlurpNoodleAccountSettings;
+  settings: SlurpSlpAccountSettings;
   sourceKind: SlurpSourceKind;
   sourceEntityId: string;
 };
 
-export type NoodlerPostPageOptions = {
+export type SlpCreatorPostPageOptions = {
   accountIds: string[];
   creatorSearchAccountIds?: string[];
   readableContentAccountIds?: string[];
@@ -69,11 +69,11 @@ export type NoodlerPostPageOptions = {
   search?: string;
   mediaOnly?: boolean;
   readableOnly?: boolean;
-  cursor?: NoodlerPostPageCursor | null;
+  cursor?: SlpCreatorPostPageCursor | null;
   limit: number;
 };
 
-export type NoodlerPreparedPostPayload = {
+export type SlpCreatorPreparedPostPayload = {
   title: string | null;
   content: string;
   access: SlpPostAccess;
@@ -84,9 +84,9 @@ export type NoodlerPreparedPostPayload = {
   metadata: Record<string, unknown>;
 };
 
-export type NoodlerPreparedPostState = "scheduled" | "prepared" | "published" | "discarded";
+export type SlpCreatorPreparedPostState = "scheduled" | "prepared" | "published" | "discarded";
 
-export type NoodlerPreparedImageState = "none" | "pending" | "generating" | "attached" | "rejected" | "closed";
+export type SlpCreatorPreparedImageState = "none" | "pending" | "generating" | "attached" | "rejected" | "closed";
 
 export type SlurpScheduleSlot = {
   id: string;
@@ -109,7 +109,7 @@ export type SlurpReserveStatus = {
   }>;
 };
 
-export function noodlerReservePolicyFingerprint(
+export function slpCreatorReservePolicyFingerprint(
   account: SlurpAccount,
   settings?: Pick<
     SlurpSettings,
@@ -155,7 +155,7 @@ export function noodlerReservePolicyFingerprint(
  * post fails its own policy check on the next reconcile and is discarded. Lives here because this
  * module owns the fingerprint format.
  */
-export function remapNoodlerReservePolicyFingerprint(
+export function remapCreatorReservePolicyFingerprint(
   fingerprint: unknown,
   accountMap: ReadonlyMap<string, string>,
 ): unknown {
@@ -173,19 +173,19 @@ export function remapNoodlerReservePolicyFingerprint(
   }
 }
 
-export type AccountRow = typeof noodleAccounts.$inferSelect;
+export type AccountRow = typeof slpAccounts.$inferSelect;
 
-export type PostRow = typeof noodlePosts.$inferSelect;
+export type PostRow = typeof slpPosts.$inferSelect;
 
-export type InteractionRow = typeof noodleInteractions.$inferSelect;
+export type InteractionRow = typeof slpInteractions.$inferSelect;
 
-export type DigestRow = typeof noodleActivityDigests.$inferSelect;
+export type DigestRow = typeof slpActivityDigests.$inferSelect;
 
-export type RefreshRunRow = typeof noodleRefreshRuns.$inferSelect;
+export type RefreshRunRow = typeof slpRefreshRuns.$inferSelect;
 
-export type SubscriptionRow = typeof noodleAccountSubscriptions.$inferSelect;
+export type SubscriptionRow = typeof slpAccountSubscriptions.$inferSelect;
 
-export type PostUnlockRow = typeof noodlePostUnlocks.$inferSelect;
+export type PostUnlockRow = typeof slpPostUnlocks.$inferSelect;
 
 export type PublicCreateInteractionCommand = Omit<SlpCreateInteractionInput, "actorKind" | "actorEntityId"> & {
   actorAccountId: string;
@@ -195,12 +195,12 @@ export type PublicRemoveInteractionCommand = Omit<SlpRemoveInteractionInput, "ac
   actorAccountId: string;
 };
 
-export type NoodlerCreateInteractionCommand = Omit<SlpCreatorCreateInteractionInput, "personaId"> & {
+export type SlpCreatorCreateInteractionCommand = Omit<SlpCreatorCreateInteractionInput, "personaId"> & {
   actorAccountId: string;
   viewerPersonaId: string;
 };
 
-export type NoodlerRemoveInteractionCommand = Omit<SlpCreatorRemoveInteractionInput, "personaId"> & {
+export type SlpCreatorRemoveInteractionCommand = Omit<SlpCreatorRemoveInteractionInput, "personaId"> & {
   actorAccountId: string;
   viewerPersonaId: string;
 };
@@ -221,14 +221,14 @@ export type InsertInteractionCommand = {
 
 export type SlurpAccountRole = "creator" | "viewer";
 
-export type NoodlerWorldInteractionInput = {
+export type SlpCreatorWorldInteractionInput = {
   creatorAccountId: string;
   actorId: string;
   type: "like" | "reply" | "repost";
   content: string | null;
 };
 
-export type NoodlerPostPersistenceInput = {
+export type SlpCreatorPostPersistenceInput = {
   /** Optional caller-supplied id so a serving URL can be derived before the row is inserted. */
   id?: string;
   authorAccountId: string;
@@ -244,7 +244,7 @@ export type NoodlerPostPersistenceInput = {
   projectChapter?: string | null;
 };
 
-export type NoodlerCreatorReplyClaimResult =
+export type SlpCreatorReplyClaimResult =
   | {
       status: "claimed";
       claimId: string;
@@ -270,7 +270,7 @@ export function parseRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
-export function emptyNoodleAccountSettings(): SlurpNoodleAccountSettings {
+export function emptySlpAccountSettings(): SlurpSlpAccountSettings {
   return {
     profile: { gender: null, tags: [] },
     social: {},
@@ -332,7 +332,7 @@ export function validPrivacyField(key: string, value: unknown): SlpAccountSettin
   return parsed.success ? parsed.data : empty;
 }
 
-export function normalizeNoodleAccountSettings(value: unknown): SlurpNoodleAccountSettings {
+export function normalizeSlpAccountSettings(value: unknown): SlurpSlpAccountSettings {
   const raw = parseRecord(value);
   const rawProfile = parseRecord(raw.profile);
   const rawSocial = parseRecord(raw.social);
@@ -343,13 +343,13 @@ export function normalizeNoodleAccountSettings(value: unknown): SlurpNoodleAccou
   const rawLocation = nestedOrLegacy(rawProfile, raw, "location");
   const rawProfileGenerated = nestedOrLegacy(rawProfile, raw, "profileGenerated");
   const rawProfileManuallyEdited = nestedOrLegacy(rawProfile, raw, "profileManuallyEdited");
-  const rawNoodlerWizardExecutionId = rawProfile.noodlerWizardExecutionId;
-  const rawNoodlerSourceSnapshot = rawProfile.noodlerSourceSnapshot;
+  const rawCreatorWizardExecutionId = rawProfile.noodlerWizardExecutionId;
+  const rawCreatorSourceSnapshot = rawProfile.noodlerSourceSnapshot;
   const rawFollowingAccountIds = nestedOrLegacy(rawSocial, raw, "followingAccountIds");
   const rawFollowingAccountTimestamps = nestedOrLegacy(rawSocial, raw, "followingAccountTimestamps");
   const rawNotificationsReadAt = nestedOrLegacy(rawSocial, raw, "notificationsReadAt");
-  const rawNoodlerFeedSeenAt = nestedOrLegacy(rawSocial, raw, "noodlerFeedSeenAt");
-  const rawNoodleFeedSeenAt = nestedOrLegacy(rawSocial, raw, "noodleFeedSeenAt");
+  const rawCreatorFeedSeenAt = nestedOrLegacy(rawSocial, raw, "noodlerFeedSeenAt");
+  const rawSlpFeedSeenAt = nestedOrLegacy(rawSocial, raw, "noodleFeedSeenAt");
   const rawIdentityDisclosure = nestedOrLegacy(rawPrivacy, raw, "identityDisclosure");
   const rawStagePersonality = nestedOrLegacy(rawPrivacy, raw, "stagePersonality");
   const rawAccess = parseRecord(rawPrivacy.access);
@@ -364,9 +364,9 @@ export function normalizeNoodleAccountSettings(value: unknown): SlurpNoodleAccou
       validProfileField("profileGenerated", normalizePersistedBoolean(rawProfileGenerated))),
     ...(rawProfileManuallyEdited !== undefined &&
       validProfileField("profileManuallyEdited", normalizePersistedBoolean(rawProfileManuallyEdited))),
-    ...(rawNoodlerWizardExecutionId !== undefined &&
-      validProfileField("noodlerWizardExecutionId", rawNoodlerWizardExecutionId)),
-    ...(rawNoodlerSourceSnapshot !== undefined && validProfileField("noodlerSourceSnapshot", rawNoodlerSourceSnapshot)),
+    ...(rawCreatorWizardExecutionId !== undefined &&
+      validProfileField("noodlerWizardExecutionId", rawCreatorWizardExecutionId)),
+    ...(rawCreatorSourceSnapshot !== undefined && validProfileField("noodlerSourceSnapshot", rawCreatorSourceSnapshot)),
     ...discovery,
   };
   const followingAccountTimestamps = Object.fromEntries(
@@ -381,8 +381,8 @@ export function normalizeNoodleAccountSettings(value: unknown): SlurpNoodleAccou
     ...(rawFollowingAccountTimestamps !== undefined &&
       validSocialField("followingAccountTimestamps", followingAccountTimestamps)),
     ...(rawNotificationsReadAt !== undefined && validSocialField("notificationsReadAt", rawNotificationsReadAt)),
-    ...(rawNoodlerFeedSeenAt !== undefined && validSocialField("noodlerFeedSeenAt", rawNoodlerFeedSeenAt)),
-    ...(rawNoodleFeedSeenAt !== undefined && validSocialField("noodleFeedSeenAt", rawNoodleFeedSeenAt)),
+    ...(rawCreatorFeedSeenAt !== undefined && validSocialField("noodlerFeedSeenAt", rawCreatorFeedSeenAt)),
+    ...(rawSlpFeedSeenAt !== undefined && validSocialField("noodleFeedSeenAt", rawSlpFeedSeenAt)),
   };
   const privacy = {
     // Slurp no longer offers Secret. A stored Secret Creator reads as Hinted, the closest tier that
@@ -440,7 +440,7 @@ export function parseRefreshAttempts(value: unknown): SlpRefreshAttempt[] {
   });
 }
 
-export function parseNoodleAvatarCrop(value: unknown): AvatarCrop | null {
+export function parseSlpAvatarCrop(value: unknown): AvatarCrop | null {
   return normalizeAvatarCrop(value);
 }
 

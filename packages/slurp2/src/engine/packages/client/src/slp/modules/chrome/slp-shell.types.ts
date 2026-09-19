@@ -2,15 +2,15 @@
 import type { ReactNode, RefObject } from "react";
 import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 
-export type NoodleShellView =
+export type SlpShellView =
   "home" | "noodler" | "search" | "profile" | "messages" | "notifications" | "studio" | "wallet" | "settings" | null;
-type NoodleShellMode = "noodle" | "noodler" | "slurp";
-export type NoodleShellContextualRail = "populated" | "blank" | "spanning";
+type SlpShellMode = "noodle" | "noodler" | "slurp";
+export type SlpShellContextualRail = "populated" | "blank" | "spanning";
 
-export interface NoodleShellProps {
-  activeView: NoodleShellView;
+export interface SlpShellProps {
+  activeView: SlpShellView;
   /** App identity is independent from the selected vertical-nav destination. */
-  appMode?: NoodleShellMode;
+  appMode?: SlpShellMode;
   /** Overrides whether the Home/Hub destination is selected when app mode and subview are separate. */
   homeActive?: boolean;
   /** Posts published since this viewer persona last had the NoodleR or Slurp feed shown to it. */
@@ -78,10 +78,10 @@ export interface NoodleShellProps {
   /** Optional right-hand rail (search box, suggestions, etc). Omitted entirely on surfaces that don't need one. */
   rightRail?: ReactNode;
   /** Wide-screen Slurp geometry: show a populated rail, reserve an empty rail, or let content span both columns. */
-  contextualRail?: NoodleShellContextualRail;
+  contextualRail?: SlpShellContextualRail;
   /** Theme-dependent overlays (lightboxes and modals) that must render inside the token scope. */
   overlays?: ReactNode;
-  /** Accent hex driving `--noodle-accent` for every reused surface. NoodleR passes NOODLE_PINK; defaults to Noodle blue. */
+  /** Accent hex driving `--noodle-accent` for every reused surface. NoodleR passes SLP_PINK; defaults to Noodle blue. */
   accent?: string;
   children: ReactNode;
 }

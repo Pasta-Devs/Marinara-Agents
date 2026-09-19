@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
-import { noodleKeys } from "../../base/state/slp-query-keys.js";
+import { slpKeys } from "../../base/state/slp-query-keys.js";
 
 export type SlurpImprovementProposal = {
   id: string;
@@ -28,7 +28,7 @@ export type SlurpImprovementJob = {
 };
 export function useSlurpImprovementJobs(enabled: boolean) {
   return useQuery({
-    queryKey: [...noodleKeys.settings(), "improvement-jobs"] as const,
+    queryKey: [...slpKeys.settings(), "improvement-jobs"] as const,
     queryFn: () => api.get<{ items: SlurpImprovementJob[] }>("/slurp2/backstage/improvement-jobs"),
     enabled,
     refetchInterval: (query) =>
@@ -45,7 +45,7 @@ export function useCreateSlurpImprovementJob() {
       modules: string[];
       connectionId?: string;
     }) => api.post<SlurpImprovementJob>("/slurp2/backstage/improvement-jobs", input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: [...noodleKeys.settings(), "improvement-jobs"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...slpKeys.settings(), "improvement-jobs"] }),
   });
 }
 export function useApplySlurpImprovementProposals() {
@@ -58,9 +58,9 @@ export function useApplySlurpImprovementProposals() {
       ),
     onSuccess: () =>
       Promise.all([
-        qc.invalidateQueries({ queryKey: [...noodleKeys.settings(), "improvement-jobs"] }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.settings() }),
+        qc.invalidateQueries({ queryKey: [...slpKeys.settings(), "improvement-jobs"] }),
+        qc.invalidateQueries({ queryKey: slpKeys.noodlerAccounts() }),
+        qc.invalidateQueries({ queryKey: slpKeys.settings() }),
       ]),
   });
 }
@@ -69,7 +69,7 @@ export function useSetSlurpImprovementJobState() {
   return useMutation({
     mutationFn: ({ jobId, action }: { jobId: string; action: "cancel" | "resume" | "retry" }) =>
       api.post<SlurpImprovementJob>(`/slurp2/backstage/improvement-jobs/${encodeURIComponent(jobId)}/${action}`, {}),
-    onSuccess: () => qc.invalidateQueries({ queryKey: [...noodleKeys.settings(), "improvement-jobs"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...slpKeys.settings(), "improvement-jobs"] }),
   });
 }
 export function useDismissSlurpImprovementProposals() {
@@ -79,6 +79,6 @@ export function useDismissSlurpImprovementProposals() {
       api.post<{ dismissed: number }>(`/slurp2/backstage/improvement-jobs/${encodeURIComponent(jobId)}/dismiss`, {
         proposalIds,
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: [...noodleKeys.settings(), "improvement-jobs"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...slpKeys.settings(), "improvement-jobs"] }),
   });
 }

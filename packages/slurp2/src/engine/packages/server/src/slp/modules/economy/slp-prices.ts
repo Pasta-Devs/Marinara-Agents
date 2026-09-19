@@ -8,11 +8,11 @@
  * noodle.storage.ts pulls in the file-native DB layer and cannot be imported standalone.
  */
 
-export const NOODLER_UNLOCK_COST = 1;
-export const NOODLER_SUBSCRIPTION_COST = 5;
+export const SLP_CREATOR_UNLOCK_COST = 1;
+export const SLP_CREATOR_SUBSCRIPTION_COST = 5;
 
 /** Post metadata key holding a post's own unlock price, so an edited price survives a refresh. */
-const NOODLER_UNLOCK_PRICE_METADATA_KEY = "noodlerUnlockPrice";
+const SLP_CREATOR_UNLOCK_PRICE_METADATA_KEY = "noodlerUnlockPrice";
 
 /**
  * A post's unlock price. Stored on the post at creation; posts written before the field existed
@@ -20,12 +20,12 @@ const NOODLER_UNLOCK_PRICE_METADATA_KEY = "noodlerUnlockPrice";
  * Imported or hand-edited state can carry anything, so a non-integer or negative value falls
  * back rather than rendering as NaN.
  */
-export function noodlerUnlockPriceFromMetadata(metadata: Record<string, unknown> | null | undefined): number {
-  const stored = metadata?.[NOODLER_UNLOCK_PRICE_METADATA_KEY];
-  return typeof stored === "number" && Number.isInteger(stored) && stored >= 0 ? stored : NOODLER_UNLOCK_COST;
+export function slpCreatorUnlockPriceFromMetadata(metadata: Record<string, unknown> | null | undefined): number {
+  const stored = metadata?.[SLP_CREATOR_UNLOCK_PRICE_METADATA_KEY];
+  return typeof stored === "number" && Number.isInteger(stored) && stored >= 0 ? stored : SLP_CREATOR_UNLOCK_COST;
 }
 
 /** Metadata patch that stores the current default price on a newly created locked post. */
-export function noodlerUnlockPriceMetadata(price: number = NOODLER_UNLOCK_COST): Record<string, unknown> {
-  return { [NOODLER_UNLOCK_PRICE_METADATA_KEY]: price };
+export function slpCreatorUnlockPriceMetadata(price: number = SLP_CREATOR_UNLOCK_COST): Record<string, unknown> {
+  return { [SLP_CREATOR_UNLOCK_PRICE_METADATA_KEY]: price };
 }

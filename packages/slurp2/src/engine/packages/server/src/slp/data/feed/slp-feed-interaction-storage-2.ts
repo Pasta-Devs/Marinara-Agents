@@ -2,14 +2,14 @@ import { and, eq, gt } from "../../../db/file-query.js";
 import { DEFAULT_SLP_CREATOR_REPLIES_PER_24_HOURS } from "../../../../../shared/src/slp/slp-social.schema.js";
 import { SlpAccount, SlpCreatorManagedPost, SlpInteraction } from "../../../../../shared/src/slp/slp-social.types.js";
 import { spend } from "../../modules/economy/slp-wallet.js";
-import { canViewNoodlerPost, isNoodlerHiddenFromViewer } from "../../base/identity/slp-access.js";
+import { canViewCreatorPost, isCreatorHiddenFromViewer } from "../../base/identity/slp-access.js";
 import {
-  noodleAccounts,
-  noodleAccountSubscriptions,
-  noodleInteractions,
-  noodlePosts,
-  noodlePostUnlocks,
-  noodlerCreatorReplyClaims,
+  slpAccounts,
+  slpAccountSubscriptions,
+  slpInteractions,
+  slpPosts,
+  slpPostUnlocks,
+  slpCreatorCreatorReplyClaims,
   slurpPopulation,
 } from "../../../db/schema/slurp.js";
 import { newId, now } from "../../../utils/id-generator.js";
@@ -80,7 +80,7 @@ export function createFeedInteractionStorage2(context: SlurpStorageContext) {
     > {
       return db.transaction(async (tx) => {
         const parentRow = (
-          await tx.select().from(noodleInteractions).where(eq(noodleInteractions.id, parentInteractionId))
+          await tx.select().from(slpInteractions).where(eq(slpInteractions.id, parentInteractionId))
         )[0];
         if (!parentRow || parentRow.type !== "reply" || !parentRow.content?.trim()) return { status: "ineligible" };
         if (parentRow.actorAccountId === creatorAccountId) return { status: "ineligible" };
@@ -93,15 +93,15 @@ export function createFeedInteractionStorage2(context: SlurpStorageContext) {
         const creatorRow = (
           await tx
             .select()
-            .from(noodleAccounts)
-            .where(and(eq(noodleAccounts.id, creatorAccountId), eq(noodleAccounts.platform, "slurp")))
+            .from(slpAccounts)
+            .where(and(eq(slpAccounts.id, creatorAccountId), eq(slpAccounts.platform, "slurp")))
         )[0];
         if (!creatorRow) return { status: "ineligible" };
         const postRow = (
           await tx
             .select()
-            .from(noodlePosts)
-            .where(and(eq(noodlePosts.id, String(parentRow.postId)), eq(noodlePosts.authorAccountId, creatorAccountId)))
+            .from(slpPosts)
+            .where(and(eq(slpPosts.id, String(parentRow.postId)), eq(slpPosts.authorAccountId, creatorAccountId)))
         )[0];
         if (!postRow) return { status: "ineligible" };
 
@@ -109,11 +109,11 @@ export function createFeedInteractionStorage2(context: SlurpStorageContext) {
         const existing = (
           await tx
             .select()
-            .from(noodlerCreatorReplyClaims)
+            .from(slpCreatorCreatorReplyClaims)
             .where(
               and(
-                eq(noodlerCreatorReplyClaims.parentInteractionId, parentInteractionId),
-                eq(noodlerCreatorReplyClaims.creatorAccountId, creatorAccountId),
+                eq(slpCreatorCreatorReplyClaims.parentInteractionId, parentInteractionId),
+                eq(slpCreatorCreatorReplyClaims.creatorAccountId, creatorAccountId),
               ),
             )
         )[0];
@@ -123,12 +123,12 @@ export function createFeedInteractionStorage2(context: SlurpStorageContext) {
         const strandedReply = (
           await tx
             .select()
-            .from(noodleInteractions)
+            .from(slpInteractions)
             .where(
               and(
-                eq(noodleInteractions.parentInteractionId, parentInteractionId),
-                eq(noodleInteractions.actorAccountId, creatorAccountId),
-                eq(noodleInteractions.type, "reply"),
+                eq(slpInteractions.parentInteractionId, parentInteractionId),
+                eq(slpInteractions.actorAccountId, creatorAccountId),
+                eq(slpInteractions.type, "reply"),
               ),
             )
         )[0];
@@ -136,12 +136,12 @@ export function createFeedInteractionStorage2(context: SlurpStorageContext) {
 
         const recentClaims = await tx
           .select()
-          .from(noodlerCreatorReplyClaims)
-          .where(gt(noodlerCreatorReplyClaims.claimedAt, cutoff));
+          .from(slpCreatorCreatorReplyClaims)
+          .where(gt(slpCreatorCreatorReplyClaims.claimedAt, cutoff));
         if (recentClaims.length >= ceiling) return { status: "exhausted" };
 
         const claimId = newId();
-        await tx.insert(noodlerCreatorReplyClaims).values({
+        await tx.insert(slpCreatorCreatorReplyClaims).values({
           id: claimId,
           postId: String(postRow.id),
           parentInteractionId,
@@ -170,33 +170,36 @@ export function createFeedInteractionStorage2(context: SlurpStorageContext) {
      */
     async releaseNoodlerCreatorReplyClaim(claimId: string): Promise<void> {
       await db.transaction(async (tx) => {
-        const rows = await tx.select().from(noodlerCreatorReplyClaims).where(eq(noodlerCreatorReplyClaims.id, claimId));
+        const rows = await tx
+          .select()
+          .from(slpCreatorCreatorReplyClaims)
+          .where(eq(slpCreatorCreatorReplyClaims.id, claimId));
         if (!rows[0] || rows[0].replyInteractionId) return;
-        await tx.delete(noodlerCreatorReplyClaims).where(eq(noodlerCreatorReplyClaims.id, claimId));
+        await tx.delete(slpCreatorCreatorReplyClaims).where(eq(slpCreatorCreatorReplyClaims.id, claimId));
       });
     },
     async finalizeNoodlerCreatorReplyClaim(claimId: string, content: string): Promise<SlpInteraction | null> {
       return db.transaction(async (tx) => {
         const claimRows = await tx
           .select()
-          .from(noodlerCreatorReplyClaims)
-          .where(eq(noodlerCreatorReplyClaims.id, claimId));
+          .from(slpCreatorCreatorReplyClaims)
+          .where(eq(slpCreatorCreatorReplyClaims.id, claimId));
         const claim = claimRows[0];
         if (!claim) return null;
         if (claim.replyInteractionId) {
           const existing = await tx
             .select()
-            .from(noodleInteractions)
-            .where(eq(noodleInteractions.id, claim.replyInteractionId));
+            .from(slpInteractions)
+            .where(eq(slpInteractions.id, claim.replyInteractionId));
           return existing[0] ? mapInteraction(existing[0]) : null;
         }
         const [creatorRows, parentRows, postRows] = await Promise.all([
           tx
             .select()
-            .from(noodleAccounts)
-            .where(and(eq(noodleAccounts.id, claim.creatorAccountId), eq(noodleAccounts.platform, "slurp"))),
-          tx.select().from(noodleInteractions).where(eq(noodleInteractions.id, claim.parentInteractionId)),
-          tx.select().from(noodlePosts).where(eq(noodlePosts.id, claim.postId)),
+            .from(slpAccounts)
+            .where(and(eq(slpAccounts.id, claim.creatorAccountId), eq(slpAccounts.platform, "slurp"))),
+          tx.select().from(slpInteractions).where(eq(slpInteractions.id, claim.parentInteractionId)),
+          tx.select().from(slpPosts).where(eq(slpPosts.id, claim.postId)),
         ]);
         const creatorRow = creatorRows[0];
         const parentRow = parentRows[0];
@@ -214,33 +217,31 @@ export function createFeedInteractionStorage2(context: SlurpStorageContext) {
         const creator = mapAccount(creatorRow);
         const parentActorRows = await tx
           .select()
-          .from(noodleAccounts)
-          .where(and(eq(noodleAccounts.id, parentRow.actorAccountId), eq(noodleAccounts.platform, "slurp")));
+          .from(slpAccounts)
+          .where(and(eq(slpAccounts.id, parentRow.actorAccountId), eq(slpAccounts.platform, "slurp")));
         const viewerPersonaId =
           parentActorRows[0]?.sourceKind === "persona"
             ? (parentActorRows[0].sourceEntityId ?? parentRow.actorAccountId)
             : parentRow.actorAccountId;
-        if (isNoodlerHiddenFromViewer(creator, viewerPersonaId)) return null;
+        if (isCreatorHiddenFromViewer(creator, viewerPersonaId)) return null;
         const post = mapManagedPost(postRow);
         const [subscriptions, unlocks] = await Promise.all([
           tx
             .select()
-            .from(noodleAccountSubscriptions)
+            .from(slpAccountSubscriptions)
             .where(
               and(
-                eq(noodleAccountSubscriptions.viewerAccountId, viewerPersonaId),
-                eq(noodleAccountSubscriptions.creatorAccountId, creatorRow.id),
+                eq(slpAccountSubscriptions.viewerAccountId, viewerPersonaId),
+                eq(slpAccountSubscriptions.creatorAccountId, creatorRow.id),
               ),
             ),
           tx
             .select()
-            .from(noodlePostUnlocks)
-            .where(
-              and(eq(noodlePostUnlocks.viewerAccountId, viewerPersonaId), eq(noodlePostUnlocks.postId, postRow.id)),
-            ),
+            .from(slpPostUnlocks)
+            .where(and(eq(slpPostUnlocks.viewerAccountId, viewerPersonaId), eq(slpPostUnlocks.postId, postRow.id))),
         ]);
         if (
-          !canViewNoodlerPost({
+          !canViewCreatorPost({
             post,
             subscribed: subscriptions.length > 0,
             unlockedPostIds: new Set(unlocks.map((unlock) => unlock.postId)),
@@ -254,24 +255,24 @@ export function createFeedInteractionStorage2(context: SlurpStorageContext) {
         const orphanedReply = (
           await tx
             .select()
-            .from(noodleInteractions)
+            .from(slpInteractions)
             .where(
               and(
-                eq(noodleInteractions.parentInteractionId, parentRow.id),
-                eq(noodleInteractions.actorAccountId, creatorRow.id),
-                eq(noodleInteractions.type, "reply"),
+                eq(slpInteractions.parentInteractionId, parentRow.id),
+                eq(slpInteractions.actorAccountId, creatorRow.id),
+                eq(slpInteractions.type, "reply"),
               ),
             )
         )[0];
         if (orphanedReply) {
           await tx
-            .update(noodlerCreatorReplyClaims)
+            .update(slpCreatorCreatorReplyClaims)
             .set({ replyInteractionId: orphanedReply.id })
-            .where(eq(noodlerCreatorReplyClaims.id, claimId));
+            .where(eq(slpCreatorCreatorReplyClaims.id, claimId));
           return mapInteraction(orphanedReply);
         }
         const replyId = newId();
-        await tx.insert(noodleInteractions).values({
+        await tx.insert(slpInteractions).values({
           id: replyId,
           postId: postRow.id,
           parentInteractionId: parentRow.id,
@@ -283,10 +284,10 @@ export function createFeedInteractionStorage2(context: SlurpStorageContext) {
           createdAt: now(),
         });
         await tx
-          .update(noodlerCreatorReplyClaims)
+          .update(slpCreatorCreatorReplyClaims)
           .set({ replyInteractionId: replyId })
-          .where(eq(noodlerCreatorReplyClaims.id, claimId));
-        const rows = await tx.select().from(noodleInteractions).where(eq(noodleInteractions.id, replyId));
+          .where(eq(slpCreatorCreatorReplyClaims.id, claimId));
+        const rows = await tx.select().from(slpInteractions).where(eq(slpInteractions.id, replyId));
         return rows[0] ? mapInteraction(rows[0]) : null;
       });
     },

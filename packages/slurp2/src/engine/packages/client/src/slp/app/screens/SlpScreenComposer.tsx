@@ -11,12 +11,12 @@ import type {
   SlpPostImageCrop,
 } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpManagedStageProfile } from "../../base/state/slp-state-types";
-import type { NoodlerContentFormat, SlurpProfilePost } from "../../features/feed/slp-feed-contract";
+import type { SlpCreatorContentFormat, SlurpProfilePost } from "../../features/feed/slp-feed-contract";
 import { useSlurpSettings } from "../../features/settings/slp-settings-hooks";
-import { NoodleComposerShell, NoodleComposerToolRow } from "../../modules/post/SlpPostCard";
-import { NoodleAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
-import { NoodleImageComposer } from "../../base/media/SlpImageComposer";
-import { NoodlePollComposer } from "../../modules/poll/SlpPollComposer";
+import { SlpComposerShell, SlpComposerToolRow } from "../../modules/post/SlpPostCard";
+import { SlpAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
+import { SlpImageComposer } from "../../base/media/SlpImageComposer";
+import { SlpPollComposer } from "../../modules/poll/SlpPollComposer";
 import { PostImageCropEditor } from "../../base/media/SlpPostImageCropEditor";
 import {
   ConversationMediaPickerPanel,
@@ -29,21 +29,21 @@ import { ChevronDown, Lock, Loader2, Pencil, Send, Sparkles, Trash2 } from "luci
 import { cn } from "../../../lib/utils";
 import {
   errorMessage,
-  isEmptyNoodlerPostDraft,
+  isEmptyCreatorPostDraft,
   isSlurpStory,
-  serializeNoodlerPostGuide,
-  type NoodlerPostDraft,
-  type NoodlerPostSubmission,
-  type PendingNoodlerImage,
-  NoodlerDraftImageFrame,
+  serializeCreatorPostGuide,
+  type SlpCreatorPostDraft,
+  type SlpCreatorPostSubmission,
+  type PendingCreatorImage,
+  SlpCreatorDraftImageFrame,
 } from "./SlpHomeHelpers";
-export type { PendingNoodlerImage } from "./SlpHomeHelpers";
+export type { PendingCreatorImage } from "./SlpHomeHelpers";
 
 // ---------------------------------------------------------------------------
 // Local types
 // ---------------------------------------------------------------------------
 
-export type NoodlerComposerTool = "image" | "poll" | "media" | "access";
+export type SlpCreatorComposerTool = "image" | "poll" | "media" | "access";
 
 // ---------------------------------------------------------------------------
 // Component
@@ -68,12 +68,12 @@ export function NoodlerPostComposer({
   collapsible?: boolean;
   /** Increments when something outside asks for the composer, so a collapsed one reopens. */
   openSignal?: number;
-  draft: NoodlerPostDraft;
-  onDraftChange: (patch: Partial<NoodlerPostDraft>) => void;
+  draft: SlpCreatorPostDraft;
+  onDraftChange: (patch: Partial<SlpCreatorPostDraft>) => void;
   onClearDraft: () => void;
   onDiscardDraft: () => void;
-  onManualPost: (input: NoodlerPostSubmission) => Promise<void>;
-  onGuidedPost: (input: NoodlerPostSubmission) => Promise<void>;
+  onManualPost: (input: SlpCreatorPostSubmission) => Promise<void>;
+  onGuidedPost: (input: SlpCreatorPostSubmission) => Promise<void>;
   manualPending: boolean;
   guidePending: boolean;
 }) {
@@ -92,11 +92,11 @@ export function NoodlerPostComposer({
   }, [openSignal]);
   const [postError, setPostError] = useState<string | null>(null);
   const [guideError, setGuideError] = useState<string | null>(null);
-  const [activeTool, setActiveTool] = useState<NoodlerComposerTool | null>(null);
+  const [activeTool, setActiveTool] = useState<SlpCreatorComposerTool | null>(null);
   const [pollEditorValue, setPollEditorValue] = useState<SlpPollInput | null>(null);
   const [mediaPickerTab, setMediaPickerTab] = useState<ConversationMediaPickerTabId>("emoji");
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  const [pendingImage, setPendingImage] = useState<PendingNoodlerImage | null>(null);
+  const [pendingImage, setPendingImage] = useState<PendingCreatorImage | null>(null);
   const [imageUrlDraft, setImageUrlDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const imageFileRef = useRef<HTMLInputElement | null>(null);
@@ -112,7 +112,7 @@ export function NoodlerPostComposer({
   // Format is an internal tag for the AI/length policy, not a choice we make the
   // human author pick. Derive it from what they actually did: a title makes it an
   // announcement (long_form when long); otherwise a caption (long_form when long).
-  const derivedFormat = (): NoodlerContentFormat =>
+  const derivedFormat = (): SlpCreatorContentFormat =>
     title.trim()
       ? body.trim().length > 1000
         ? "long_form"
@@ -120,10 +120,10 @@ export function NoodlerPostComposer({
       : body.trim().length > 500
         ? "long_form"
         : "caption";
-  const hasDraft = pendingImage !== null || !isEmptyNoodlerPostDraft(draft);
+  const hasDraft = pendingImage !== null || !isEmptyCreatorPostDraft(draft);
   const composerBusy = submitting || manualPending || guidePending;
   composerBusyRef.current = composerBusy;
-  const guide = serializeNoodlerPostGuide(title, body);
+  const guide = serializeCreatorPostGuide(title, body);
   const pollIsValid = poll ? slpPollInputSchema.safeParse(poll).success : false;
 
   useEffect(() => {
@@ -132,7 +132,7 @@ export function NoodlerPostComposer({
     }
   }, [composerBusy]);
 
-  const updateDraft = (patch: Partial<NoodlerPostDraft>) => {
+  const updateDraft = (patch: Partial<SlpCreatorPostDraft>) => {
     if (composerBusyRef.current) return false;
     onDraftChange(patch);
     return true;
@@ -206,7 +206,7 @@ export function NoodlerPostComposer({
     setActiveTool(null);
   };
 
-  const toggleTool = (tool: NoodlerComposerTool) => {
+  const toggleTool = (tool: SlpCreatorComposerTool) => {
     if (composerBusyRef.current) return;
     if (postType === "story" && tool === "poll") return;
     if (activeTool === tool) {
@@ -237,7 +237,7 @@ export function NoodlerPostComposer({
     }
   };
 
-  const submission = (): NoodlerPostSubmission => ({
+  const submission = (): SlpCreatorPostSubmission => ({
     profileId: profile.id,
     title,
     body: body.trim() || (image && !poll ? "Shared an image." : ""),
@@ -342,7 +342,7 @@ export function NoodlerPostComposer({
   }
 
   return (
-    <NoodleComposerShell
+    <SlpComposerShell
       dataComponent="SlurpHome.NoodlerPostComposer"
       header={
         <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2">
@@ -397,7 +397,7 @@ export function NoodlerPostComposer({
       }
       avatar={<ProfileInitial profile={profile} />}
       tools={
-        <NoodleComposerToolRow
+        <SlpComposerToolRow
           image={{
             ref: imageToolRef,
             active: activeTool === "image" || Boolean(image),
@@ -496,7 +496,7 @@ export function NoodlerPostComposer({
       popovers={
         <>
           {activeTool === "media" && !composerBusy && (
-            <NoodleAnchoredPopover anchorRef={mediaToolRef} wide>
+            <SlpAnchoredPopover anchorRef={mediaToolRef} wide>
               <ConversationMediaPickerPanel
                 tabs={[{ id: "emoji", label: localizeUi("ui.noodle.media.tabs.emoji") }]}
                 activeTab={mediaPickerTab}
@@ -509,11 +509,11 @@ export function NoodlerPostComposer({
                 onStickerSelect={(name) => updateDraft({ body: `${body}sticker:${name}:` })}
                 className="w-full !border-[var(--marinara-chat-chrome-panel-border)] !bg-[var(--background)] !text-[var(--foreground)] shadow-2xl shadow-black/35"
               />
-            </NoodleAnchoredPopover>
+            </SlpAnchoredPopover>
           )}
           {activeTool === "image" && !composerBusy && (
-            <NoodleAnchoredPopover anchorRef={imageToolRef} wide>
-              <NoodleImageComposer
+            <SlpAnchoredPopover anchorRef={imageToolRef} wide>
+              <SlpImageComposer
                 imageUrl={imageUrlDraft}
                 onImageUrlChange={setImageUrlDraft}
                 onChooseFile={() => {
@@ -525,11 +525,11 @@ export function NoodlerPostComposer({
                 hasImage={Boolean(image)}
                 urlActionLabel={localizeUi("ui.noodle.noodlerpostcomposer.importUrl")}
               />
-            </NoodleAnchoredPopover>
+            </SlpAnchoredPopover>
           )}
           {activeTool === "poll" && !composerBusy && (
-            <NoodleAnchoredPopover anchorRef={pollToolRef} wide>
-              <NoodlePollComposer
+            <SlpAnchoredPopover anchorRef={pollToolRef} wide>
+              <SlpPollComposer
                 value={pollEditorValue}
                 onChange={setPollEditorValue}
                 onClose={() => {
@@ -544,10 +544,10 @@ export function NoodlerPostComposer({
                 }
                 disabled={composerBusy}
               />
-            </NoodleAnchoredPopover>
+            </SlpAnchoredPopover>
           )}
           {activeTool === "access" && !composerBusy && (
-            <NoodleAnchoredPopover anchorRef={accessToolRef}>
+            <SlpAnchoredPopover anchorRef={accessToolRef}>
               <div className="marinara-chat-popover space-y-3 rounded-xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] p-3 text-[var(--foreground)] shadow-2xl shadow-black/35">
                 <p className="text-xs font-bold">{localizeUi("ui.noodle.noodlerpostcomposer.whoCanSeeThisPost")}</p>
                 <div className="grid grid-cols-2 gap-1 rounded-lg bg-[var(--accent)] p-1">
@@ -594,7 +594,7 @@ export function NoodlerPostComposer({
                   </label>
                 )}
               </div>
-            </NoodleAnchoredPopover>
+            </SlpAnchoredPopover>
           )}
         </>
       }
@@ -679,7 +679,7 @@ export function NoodlerPostComposer({
       )}
       {image && !pendingImage && (
         <div className="mb-3 overflow-hidden rounded-xl border border-[var(--noodle-divider)] bg-[var(--noodle-accent)]/10">
-          <NoodlerDraftImageFrame image={image} />
+          <SlpCreatorDraftImageFrame image={image} />
           <div className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-[var(--noodle-accent)]">
             <span>{localizeUi("ui.noodle.noodlehome.attachedImage")}</span>
             <div className="flex items-center gap-1">
@@ -733,6 +733,6 @@ export function NoodlerPostComposer({
           </div>
         </div>
       )}
-    </NoodleComposerShell>
+    </SlpComposerShell>
   );
 }

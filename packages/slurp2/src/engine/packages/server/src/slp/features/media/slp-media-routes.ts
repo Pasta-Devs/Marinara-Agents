@@ -1,19 +1,19 @@
 import {
-  resolveNoodlerAvatarAbsolutePath,
-  resolveNoodlerBannerAbsolutePath,
-  stageNoodlerAvatar,
-  unlinkNoodlerAvatar,
-  stageNoodlerBanner,
-  unlinkNoodlerBanner,
+  resolveCreatorAvatarAbsolutePath,
+  resolveCreatorBannerAbsolutePath,
+  stageCreatorAvatar,
+  unlinkCreatorAvatar,
+  stageCreatorBanner,
+  unlinkCreatorBanner,
 } from "../../base/identity/slp-avatar.js";
 import { basename, dirname } from "path";
 import { existsSync } from "fs";
 import { z } from "zod";
-import { resolveNoodlerMediaVariant } from "../../base/media/slp-media.js";
-import { tryNoodlerAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
-import { generateNoodlerCreatorArtwork } from "../creators/slp-creators-contract.js";
+import { resolveCreatorMediaVariant } from "../../base/media/slp-media.js";
+import { tryCreatorAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
+import { generateCreatorArtwork } from "../creators/slp-creators-contract.js";
 import type { FastifyInstance } from "fastify";
-import { readNoodlerMultipart, sendNoodlerMediaError } from "../../base/host/slp-multipart.js";
+import { readCreatorMultipart, sendCreatorMediaError } from "../../base/host/slp-multipart.js";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
 export async function slpMediaRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
@@ -23,9 +23,9 @@ export async function slpMediaRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
     const account = await noodle.getNoodlerAccountById(id);
     const candidates = account
       ? [
-          resolveNoodlerAvatarAbsolutePath(id, account.avatarUrl),
+          resolveCreatorAvatarAbsolutePath(id, account.avatarUrl),
           // Banners generated before the banner route existed were stored under this prefix.
-          resolveNoodlerBannerAbsolutePath(id, account.settings.profile.bannerUrl ?? null),
+          resolveCreatorBannerAbsolutePath(id, account.settings.profile.bannerUrl ?? null),
         ]
       : [];
     const absolute = candidates.find(
@@ -39,7 +39,7 @@ export async function slpMediaRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
       .int()
       .optional()
       .safeParse((req.query as { width?: string }).width);
-    const served = await resolveNoodlerMediaVariant(absolute, width.success ? width.data : undefined);
+    const served = await resolveCreatorMediaVariant(absolute, width.success ? width.data : undefined);
     return reply
       .header("Cache-Control", "private, max-age=31536000, immutable")
       .sendFile(basename(served), dirname(served));
@@ -48,7 +48,7 @@ export async function slpMediaRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   app.get("/noodler/accounts/:id/banner/:fileName", async (req, reply) => {
     const { id, fileName } = req.params as { id: string; fileName: string };
     const account = await noodle.getNoodlerAccountById(id);
-    const absolute = account ? resolveNoodlerBannerAbsolutePath(id, account.settings.profile.bannerUrl ?? null) : null;
+    const absolute = account ? resolveCreatorBannerAbsolutePath(id, account.settings.profile.bannerUrl ?? null) : null;
     if (!absolute || basename(absolute) !== fileName || !existsSync(absolute)) {
       return reply.code(404).send({ error: "Not Found" });
     }
@@ -57,7 +57,7 @@ export async function slpMediaRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
       .int()
       .optional()
       .safeParse((req.query as { width?: string }).width);
-    const served = await resolveNoodlerMediaVariant(absolute, width.success ? width.data : undefined);
+    const served = await resolveCreatorMediaVariant(absolute, width.success ? width.data : undefined);
     return reply
       .header("Cache-Control", "private, max-age=31536000, immutable")
       .sendFile(basename(served), dirname(served));
@@ -66,11 +66,11 @@ export async function slpMediaRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   app.post("/noodler/accounts/:id/avatar", async (req, reply) => {
     const { id } = req.params as { id: string };
     try {
-      const { media } = await readNoodlerMultipart(req);
-      const locked = await tryNoodlerAccountOperation(id, async () => {
+      const { media } = await readCreatorMultipart(req);
+      const locked = await tryCreatorAccountOperation(id, async () => {
         const account = await noodle.getNoodlerAccountById(id);
         if (!account) return null;
-        const staged = stageNoodlerAvatar(id, media);
+        const staged = stageCreatorAvatar(id, media);
         try {
           staged.promote();
           const updated = await noodle.updateNoodlerAvatar(id, staged.avatarUrl);
@@ -78,7 +78,7 @@ export async function slpMediaRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
             staged.compensate();
             return null;
           }
-          unlinkNoodlerAvatar(id, account.avatarUrl);
+          unlinkCreatorAvatar(id, account.avatarUrl);
           return (await noodle.listNoodlerStageProfiles()).find((profile) => profile.id === id) ?? null;
         } catch (error) {
           staged.compensate();
@@ -90,20 +90,20 @@ export async function slpMediaRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
       if (!locked.value) return reply.code(404).send({ error: "Slurp stage profile not found" });
       return locked.value;
     } catch (error) {
-      return sendNoodlerMediaError(reply, error);
+      return sendCreatorMediaError(reply, error);
     }
   });
 
   app.patch("/noodler/accounts/:id/avatar/source", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const locked = await tryNoodlerAccountOperation(id, async () => {
+    const locked = await tryCreatorAccountOperation(id, async () => {
       const account = await noodle.getNoodlerAccountById(id);
       if (!account || (account.settings.privacy.identityDisclosure ?? "open") !== "open") return null;
       const source = await noodle.resolveAccountSource(account);
       if (!source?.avatarUrl) return false;
       const oldAvatarUrl = account.avatarUrl;
       const updated = await noodle.updateNoodlerAvatar(id, source.avatarUrl);
-      if (updated) unlinkNoodlerAvatar(id, oldAvatarUrl);
+      if (updated) unlinkCreatorAvatar(id, oldAvatarUrl);
       return (await noodle.listNoodlerStageProfiles()).find((profile) => profile.id === id) ?? null;
     });
     if (!locked.acquired)
@@ -115,11 +115,11 @@ export async function slpMediaRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
 
   app.delete("/noodler/accounts/:id/avatar", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const locked = await tryNoodlerAccountOperation(id, async () => {
+    const locked = await tryCreatorAccountOperation(id, async () => {
       const account = await noodle.getNoodlerAccountById(id);
       if (!account) return null;
       const updated = await noodle.updateNoodlerAvatar(id, null);
-      if (updated) unlinkNoodlerAvatar(id, account.avatarUrl);
+      if (updated) unlinkCreatorAvatar(id, account.avatarUrl);
       return (await noodle.listNoodlerStageProfiles()).find((profile) => profile.id === id) ?? null;
     });
     if (!locked.acquired)
@@ -131,11 +131,11 @@ export async function slpMediaRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   app.post("/noodler/accounts/:id/banner", async (req, reply) => {
     const { id } = req.params as { id: string };
     try {
-      const { media } = await readNoodlerMultipart(req);
-      const locked = await tryNoodlerAccountOperation(id, async () => {
+      const { media } = await readCreatorMultipart(req);
+      const locked = await tryCreatorAccountOperation(id, async () => {
         const account = await noodle.getNoodlerAccountById(id);
         if (!account) return null;
-        const staged = stageNoodlerBanner(id, media);
+        const staged = stageCreatorBanner(id, media);
         try {
           staged.promote();
           const updated = await noodle.updateNoodlerBanner(id, staged.bannerUrl);
@@ -143,7 +143,7 @@ export async function slpMediaRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
             staged.compensate();
             return null;
           }
-          unlinkNoodlerBanner(id, account.settings.profile.bannerUrl ?? null);
+          unlinkCreatorBanner(id, account.settings.profile.bannerUrl ?? null);
           return (await noodle.listNoodlerStageProfiles()).find((profile) => profile.id === id) ?? null;
         } catch (error) {
           staged.compensate();
@@ -155,7 +155,7 @@ export async function slpMediaRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
       if (!locked.value) return reply.code(404).send({ error: "Creator profile not found" });
       return locked.value;
     } catch (error) {
-      return sendNoodlerMediaError(reply, error);
+      return sendCreatorMediaError(reply, error);
     }
   });
 
@@ -168,7 +168,7 @@ export async function slpMediaRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
       })
       .safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
-    const result = await generateNoodlerCreatorArtwork(app.db, {
+    const result = await generateCreatorArtwork(app.db, {
       accountId: id,
       ...parsed.data,
     });

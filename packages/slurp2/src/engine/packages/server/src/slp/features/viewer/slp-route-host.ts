@@ -1,23 +1,23 @@
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { createCharacterGalleryStorage } from "../../../services/storage/character-gallery.storage.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
-import { createNoodlerNoodleImagesService } from "../media/slp-media-contract.js";
+import { createCreatorSlpImagesService } from "../media/slp-media-contract.js";
 import { createGarnishAds } from "../ads/slp-ads-contract.js";
 import { createSlurpFirstPostQueue } from "../onboarding/slp-onboarding-contract.js";
 import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
-import { buildNoodlerPublicIdentity } from "../feed/slp-feed-contract.js";
+import { buildCreatorPublicIdentity } from "../feed/slp-feed-contract.js";
 import type { FastifyInstance } from "fastify";
-import { type NoodlerViewerSignalResponse } from "../../modules/requests/slp-request-schemas.js";
+import { type SlpCreatorViewerSignalResponse } from "../../modules/requests/slp-request-schemas.js";
 
 /** Storage and service handles every Slurp route shares. Created once per route mount. */
 export function createSlpRouteHost<T>(app: FastifyInstance, noodle: T) {
   const characters = createCharactersStorage(app.db);
   const characterGallery = createCharacterGalleryStorage(app.db);
   const connections = createConnectionsStorage(app.db);
-  const noodlerImages = createNoodlerNoodleImagesService(app.db);
+  const slpCreatorImages = createCreatorSlpImagesService(app.db);
   const ads = createGarnishAds(app.db);
   const firstPostQueue = createSlurpFirstPostQueue(app.db);
-  const noodlerViewerSignalCache = new Map<string, { generationKey: string; value: NoodlerViewerSignalResponse }>();
+  const noodlerViewerSignalCache = new Map<string, { generationKey: string; value: SlpCreatorViewerSignalResponse }>();
 
   async function resolveNoodlerPublicIdentity(publicAccount: SlpAccount) {
     const source =
@@ -28,7 +28,7 @@ export function createSlpRouteHost<T>(app: FastifyInstance, noodle: T) {
               .getPersona(publicAccount.entityId)
               .then((persona) => (persona ? { data: { name: persona.name } } : null))
           : null;
-    return buildNoodlerPublicIdentity(publicAccount, source);
+    return buildCreatorPublicIdentity(publicAccount, source);
   }
 
   return {
@@ -36,7 +36,7 @@ export function createSlpRouteHost<T>(app: FastifyInstance, noodle: T) {
     characters,
     characterGallery,
     connections,
-    noodlerImages,
+    slpCreatorImages,
     ads,
     firstPostQueue,
     noodlerViewerSignalCache,

@@ -1,27 +1,27 @@
 import { basename } from "node:path";
-import type { NoodlerPostMediaUpload } from "../media/slp-media.js";
-import { NOODLER_MEDIA_PREFIX, resolveNoodlerMediaAbsolutePath, unlinkNoodlerMedia } from "../media/slp-media.js";
+import type { SlpCreatorPostMediaUpload } from "../media/slp-media.js";
+import { NOODLER_MEDIA_PREFIX, resolveCreatorMediaAbsolutePath, unlinkCreatorMedia } from "../media/slp-media.js";
 import { stageImageToDisk } from "../../../services/image/image-generation.js";
 
 const NOODLER_AVATAR_URL_PREFIX = "/api/slurp2/noodler/accounts/";
 
-function noodlerAccountMediaUrl(accountId: string, kind: "avatar" | "banner", mediaPath: string): string {
+function slpCreatorAccountMediaUrl(accountId: string, kind: "avatar" | "banner", mediaPath: string): string {
   return `${NOODLER_AVATAR_URL_PREFIX}${encodeURIComponent(accountId)}/${kind}/${encodeURIComponent(basename(mediaPath))}`;
 }
 
-export function noodlerAvatarUrl(accountId: string, mediaPath: string): string {
-  return noodlerAccountMediaUrl(accountId, "avatar", mediaPath);
+export function slpCreatorAvatarUrl(accountId: string, mediaPath: string): string {
+  return slpCreatorAccountMediaUrl(accountId, "avatar", mediaPath);
 }
 
-export function noodlerBannerUrl(accountId: string, mediaPath: string): string {
-  return noodlerAccountMediaUrl(accountId, "banner", mediaPath);
+export function slpCreatorBannerUrl(accountId: string, mediaPath: string): string {
+  return slpCreatorAccountMediaUrl(accountId, "banner", mediaPath);
 }
 
 /**
  * Accepts either the avatar or the banner prefix: both files live in the same account media
  * folder, and early generated banners were stored under the avatar prefix.
  */
-export function readNoodlerAccountMediaPath(accountId: string, url: string | null): string | null {
+export function readCreatorAccountMediaPath(accountId: string, url: string | null): string | null {
   if (!url) return null;
   const base = `${NOODLER_AVATAR_URL_PREFIX}${encodeURIComponent(accountId)}/`;
   const prefix = ["avatar/", "banner/"].map((kind) => `${base}${kind}`).find((candidate) => url.startsWith(candidate));
@@ -37,50 +37,50 @@ export function readNoodlerAccountMediaPath(accountId: string, url: string | nul
   return `${NOODLER_MEDIA_PREFIX}${accountId}/${fileName}`;
 }
 
-export function readNoodlerAvatarMediaPath(accountId: string, avatarUrl: string | null): string | null {
-  return readNoodlerAccountMediaPath(accountId, avatarUrl);
+export function readCreatorAvatarMediaPath(accountId: string, avatarUrl: string | null): string | null {
+  return readCreatorAccountMediaPath(accountId, avatarUrl);
 }
 
-export function resolveNoodlerBannerAbsolutePath(accountId: string, bannerUrl: string | null): string | null {
-  const mediaPath = readNoodlerAccountMediaPath(accountId, bannerUrl);
-  return mediaPath ? resolveNoodlerMediaAbsolutePath(mediaPath) : null;
+export function resolveCreatorBannerAbsolutePath(accountId: string, bannerUrl: string | null): string | null {
+  const mediaPath = readCreatorAccountMediaPath(accountId, bannerUrl);
+  return mediaPath ? resolveCreatorMediaAbsolutePath(mediaPath) : null;
 }
 
-export function resolveNoodlerAvatarAbsolutePath(accountId: string, avatarUrl: string | null): string | null {
-  const mediaPath = readNoodlerAvatarMediaPath(accountId, avatarUrl);
-  return mediaPath ? resolveNoodlerMediaAbsolutePath(mediaPath) : null;
+export function resolveCreatorAvatarAbsolutePath(accountId: string, avatarUrl: string | null): string | null {
+  const mediaPath = readCreatorAvatarMediaPath(accountId, avatarUrl);
+  return mediaPath ? resolveCreatorMediaAbsolutePath(mediaPath) : null;
 }
 
-export function stageNoodlerAvatar(accountId: string, upload: NoodlerPostMediaUpload) {
+export function stageCreatorAvatar(accountId: string, upload: SlpCreatorPostMediaUpload) {
   const staged = stageImageToDisk(
     `${NOODLER_MEDIA_PREFIX}${accountId}`,
     upload.buffer.toString("base64"),
     upload.extension,
   );
   return {
-    avatarUrl: noodlerAvatarUrl(accountId, staged.filePath),
+    avatarUrl: slpCreatorAvatarUrl(accountId, staged.filePath),
     promote: staged.promote,
     compensate: staged.compensate,
   };
 }
 
-export function stageNoodlerBanner(accountId: string, upload: NoodlerPostMediaUpload) {
+export function stageCreatorBanner(accountId: string, upload: SlpCreatorPostMediaUpload) {
   const staged = stageImageToDisk(
     `${NOODLER_MEDIA_PREFIX}${accountId}`,
     upload.buffer.toString("base64"),
     upload.extension,
   );
   return {
-    bannerUrl: noodlerBannerUrl(accountId, staged.filePath),
+    bannerUrl: slpCreatorBannerUrl(accountId, staged.filePath),
     promote: staged.promote,
     compensate: staged.compensate,
   };
 }
 
-export function unlinkNoodlerAvatar(accountId: string, avatarUrl: string | null): void {
-  unlinkNoodlerMedia(readNoodlerAvatarMediaPath(accountId, avatarUrl));
+export function unlinkCreatorAvatar(accountId: string, avatarUrl: string | null): void {
+  unlinkCreatorMedia(readCreatorAvatarMediaPath(accountId, avatarUrl));
 }
 
-export function unlinkNoodlerBanner(accountId: string, bannerUrl: string | null): void {
-  unlinkNoodlerMedia(readNoodlerAccountMediaPath(accountId, bannerUrl));
+export function unlinkCreatorBanner(accountId: string, bannerUrl: string | null): void {
+  unlinkCreatorMedia(readCreatorAccountMediaPath(accountId, bannerUrl));
 }

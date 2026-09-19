@@ -3,7 +3,7 @@ import { replyToSlurpMessage } from "./slp-message-operation.js";
 import { logger } from "../../../lib/logger.js";
 import { parseSlurpCheatDirective } from "../../modules/messages/slp-cheat-directive.js";
 import { SLURP_DEV_CHEAT_MAX_COINS } from "../../modules/economy/slp-wallet.js";
-import { generateNoodlerCreatorArtwork } from "../creators/slp-creators-contract.js";
+import { generateCreatorArtwork } from "../creators/slp-creators-contract.js";
 import { createScheduledFollowUps } from "../../modules/messages/slp-follow-up.js";
 import { createSlurpReplyQueueStorage } from "../../data/messages/slp-reply-queue-storage.js";
 import { reactToSlurpPayment } from "../economy/slp-economy-contract.js";
@@ -138,7 +138,7 @@ export async function slpMessagesSendRoutes(app: FastifyInstance, messaging: Slp
     if (directive.kind === "force_creator_photo") {
       if (!(await ownsCreator(parsed.data.personaId, parsed.data.creatorAccountId)))
         return reply.code(403).send({ status: "rejected", reason: "not_owner" });
-      const result = await generateNoodlerCreatorArtwork(app.db, {
+      const result = await generateCreatorArtwork(app.db, {
         accountId: parsed.data.creatorAccountId,
         kind: "avatar",
         guidance: directive.guidance,

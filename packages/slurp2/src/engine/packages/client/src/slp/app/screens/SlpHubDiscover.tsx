@@ -1,5 +1,5 @@
 import { ChevronLeft, Search, X } from "lucide-react";
-import { EmptyState, LoadMoreFeedButton, NOODLER_FEED_WINDOW_SIZE } from "./SlpHomeHelpers";
+import { EmptyState, LoadMoreFeedButton, SLP_CREATOR_FEED_WINDOW_SIZE } from "./SlpHomeHelpers";
 import { HIDE_ON_SCROLL_CLASS } from "../../base/chrome/SlpChrome";
 import { SlurpCreatorProfileCard } from "../../modules/creator/SlpCreatorProfileCard";
 import { SlurpDiscoverToolbar } from "../../features/discovery/SlpDiscoverToolbar";
@@ -142,7 +142,7 @@ export function SlpHubDiscover({
                   visible={visibleSearchResults.length}
                   total={searchResults.length}
                   onLoadMore={() =>
-                    setVisibleFeedCount((count) => Math.min(searchResults.length, count + NOODLER_FEED_WINDOW_SIZE))
+                    setVisibleFeedCount((count) => Math.min(searchResults.length, count + SLP_CREATOR_FEED_WINDOW_SIZE))
                   }
                 />
               )}

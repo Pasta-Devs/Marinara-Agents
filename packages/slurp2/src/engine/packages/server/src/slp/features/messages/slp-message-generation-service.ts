@@ -16,7 +16,7 @@ import { logDebugOverride } from "../../../lib/logger.js";
 import { resolveBaseUrl } from "../../../services/generation/connection-base-url.js";
 import { clampGenerationMaxOutputTokens } from "../../../services/generation/output-token-limits.js";
 import { resolveStoredChatOptions } from "../../../services/generation/generation-parameters.js";
-import { noodleSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
+import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
 import { parseGameJsonish } from "../../../services/game/jsonish.js";
 import { requireModelAnswer } from "../../base/model/slp-model-answer.js";
 import { withConnectionFallbackProvider } from "../../../services/llm/connection-fallback-provider.js";
@@ -29,12 +29,12 @@ import { type SlurpAccount } from "../../modules/records/slp-storage-model.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import {
   NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
-  noodlerIdentityInstruction,
-  protectBoundedNoodlerGeneratedText,
-  protectNoodlerGeneratedIdentity,
+  slpCreatorIdentityInstruction,
+  protectBoundedCreatorGeneratedText,
+  protectCreatorGeneratedIdentity,
   resolveNoodlerPublicIdentity,
 } from "../feed/slp-feed-contract.js";
-import { noodleResponseFormat } from "../../base/prompting/slp-response-format.js";
+import { slpResponseFormat } from "../../base/prompting/slp-response-format.js";
 import { resolveSlurpCreatorScheduleContext } from "../creators/slp-creators-contract.js";
 import {
   resolveSlurpCreatorAvailability,
@@ -75,7 +75,7 @@ import { prepareSlurpPostImageContexts, slurpImageCaptioning } from "../../base/
 import { createSlurpMessagesStorage, type SlurpMessage } from "../../data/slp-storage.js";
 import type { SlurpDmPolicy } from "../../modules/messages/slp-messaging.js";
 import { isSlurpCharacterFanAccount } from "../../../../../shared/src/slp/slp-audience-characters.js";
-import { resolveNoodlerCharacterCanon, resolveSlurpCharacterFanVoice } from "../../data/creators/slp-source-resolve.js";
+import { resolveCreatorCharacterCanon, resolveSlurpCharacterFanVoice } from "../../data/creators/slp-source-resolve.js";
 import {
   claimSlurpModelBudget,
   getSlurpModelBudgetLedger,
@@ -125,8 +125,8 @@ export function buildSlurpMessageChat(input: {
   characterCanon?: string;
   generationGuidance: string;
   scheduleContext?: string;
-  disclosureMode: Parameters<typeof noodlerIdentityInstruction>[0];
-  publicIdentity: Parameters<typeof noodlerIdentityInstruction>[1];
+  disclosureMode: Parameters<typeof slpCreatorIdentityInstruction>[0];
+  publicIdentity: Parameters<typeof slpCreatorIdentityInstruction>[1];
   /** What the creator has posted lately, so "loved your new set" can be answered. */
   recentPosts: Array<{ id: string; title: string | null; content: string; access: string; imageUrl: string | null }>;
   /** What the pictures in the conversation show, keyed by message id. */
@@ -140,7 +140,7 @@ export function buildSlurpMessageChat(input: {
   promptBlocks?: SlurpPromptBlockOverrides;
 }): ChatMessage[] {
   const protect = (value: string | null | undefined) =>
-    protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
+    protectCreatorGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
   const known = input.notes && input.notes.length > 0 ? notesForPrompt(input.notes) : null;
   const system = composeSlurpPromptBlocks(
     "dmReply",
@@ -171,7 +171,7 @@ export function buildSlurpMessageChat(input: {
       {
         id: "identity",
         kind: "required" as const,
-        text: noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
+        text: slpCreatorIdentityInstruction(input.disclosureMode, input.publicIdentity),
       },
       {
         id: "canon",
@@ -393,8 +393,8 @@ export type SlurpMessagePromptInput = {
 export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): Promise<{
   messages: ChatMessage[];
   stance: SlurpStance;
-  disclosureMode: Parameters<typeof noodlerIdentityInstruction>[0];
-  publicIdentity: Parameters<typeof noodlerIdentityInstruction>[1];
+  disclosureMode: Parameters<typeof slpCreatorIdentityInstruction>[0];
+  publicIdentity: Parameters<typeof slpCreatorIdentityInstruction>[1];
 }> {
   const slurp = createSlurpStorage(input.db);
   const disclosureMode = input.creator.settings.privacy.identityDisclosure ?? "open";
@@ -419,7 +419,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
         settings,
       )
     : { online: true, activity: null, minutesUntilOnline: 0 };
-  const characterCanon = await resolveNoodlerCharacterCanon(input.db, source, disclosureMode);
+  const characterCanon = await resolveCreatorCharacterCanon(input.db, source, disclosureMode);
   // The fan's direction, and what the creator has posted lately. Both were already stored and
   // neither reached the one prompt where a fan is most likely to mention them.
   const tie = await createSlurpPopulationStorage(input.db)
@@ -457,7 +457,7 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
   // The arc the feed is posting about, so a DM and the feed come from the same life. Protected like
   // every other supplied value: a Secret Creator's arc title can name a real place.
   const creatorArc = settings.arcAffectsMood
-    ? (protectNoodlerGeneratedIdentity(
+    ? (protectCreatorGeneratedIdentity(
         slurpArcLifeLine(await slurp.listProjects(input.creator.id).catch(() => [])),
         disclosureMode,
         publicIdentity,
@@ -549,11 +549,11 @@ export async function buildSlurpMessagePrompt(input: SlurpMessagePromptInput): P
 
 function protectNoteOperation(
   operation: SlurpNoteOperation,
-  disclosureMode: Parameters<typeof noodlerIdentityInstruction>[0],
-  publicIdentity: Parameters<typeof noodlerIdentityInstruction>[1],
+  disclosureMode: Parameters<typeof slpCreatorIdentityInstruction>[0],
+  publicIdentity: Parameters<typeof slpCreatorIdentityInstruction>[1],
 ): SlurpNoteOperation | null {
   if (operation.op === "forget" || operation.op === "keep") return operation;
-  const text = protectBoundedNoodlerGeneratedText(
+  const text = protectBoundedCreatorGeneratedText(
     operation.text,
     disclosureMode,
     publicIdentity,
@@ -595,7 +595,7 @@ export async function generateSlurpMessageReply(input: SlurpMessagePromptInput):
   const debugMode = input.debugMode === true || isDebugAgentsEnabled();
   const response = await provider.chatComplete(messages, {
     model: input.connection.model,
-    ...noodleSamplingOptions(
+    ...slpSamplingOptions(
       resolveStoredChatOptions(input.connection.defaultParameters, input.connection.provider, input.connection.model),
       { temperature: 0.95, topP: 0.95 },
     ),
@@ -607,7 +607,7 @@ export async function generateSlurpMessageReply(input: SlurpMessagePromptInput):
     }),
     stream: false,
     debugMode,
-    responseFormat: noodleResponseFormat(input.connection.model, "noodler_dm"),
+    responseFormat: slpResponseFormat(input.connection.model, "noodler_dm"),
   });
   const content = response.content ?? "";
   logDebugOverride(
@@ -617,7 +617,7 @@ export async function generateSlurpMessageReply(input: SlurpMessagePromptInput):
   );
   const parsed = parseGameJsonish(requireModelAnswer(content, "a direct message"));
   const generated = readSlurpDmReply(Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed);
-  const protectedContent = protectBoundedNoodlerGeneratedText(
+  const protectedContent = protectBoundedCreatorGeneratedText(
     generated.content,
     disclosureMode,
     publicIdentity,

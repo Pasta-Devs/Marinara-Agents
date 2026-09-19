@@ -23,7 +23,7 @@ import {
 import { useSlurpThreads } from "../../features/messages/slp-messages-hooks";
 import { cn } from "../../../lib/utils";
 import { Avatar } from "../../base/chrome/SlpChrome";
-import { NoodlerFrame } from "./SlpHomeHelpers";
+import { SlpCreatorFrame } from "./SlpHomeHelpers";
 import { formatTime } from "../../base/ui/slp-date-time";
 import { SlurpMessagesView } from "../../features/messages/SlpMessages";
 
@@ -345,7 +345,7 @@ function SlurpInboxView({
   }, [composeWithCreatorAccountId]);
 
   return (
-    <NoodlerFrame
+    <SlpCreatorFrame
       onBack={workspaceOpen ? closeWorkspace : onBack}
       title={localizeUi(workspaceOpen ? "ui.slurp.inbox.messagesTitle" : "ui.slurp.navigation.messages", {
         defaultValue: workspaceOpen ? "Messages" : "Inbox",
@@ -377,7 +377,7 @@ function SlurpInboxView({
           />
         )}
       </div>
-    </NoodlerFrame>
+    </SlpCreatorFrame>
   );
 }
 
@@ -718,9 +718,9 @@ function SlurpNotificationsView({
   );
   if (embedded) return content;
   return (
-    <NoodlerFrame onBack={onBack} title={localizeUi("ui.slurp.navigation.notifications")} action={<span />}>
+    <SlpCreatorFrame onBack={onBack} title={localizeUi("ui.slurp.navigation.notifications")} action={<span />}>
       {content}
-    </NoodlerFrame>
+    </SlpCreatorFrame>
   );
 }
 

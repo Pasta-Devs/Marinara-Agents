@@ -1,9 +1,9 @@
 import type { SlpRefreshSchedulerStatus } from "../../../../../shared/src/slp/slp-social.types.js";
 
-export const NOODLE_REFRESH_SCHEDULE_VERSION = 1 as const;
+export const SLP_REFRESH_SCHEDULE_VERSION = 1 as const;
 
-export interface PersistedNoodleRefreshSchedule {
-  version: typeof NOODLE_REFRESH_SCHEDULE_VERSION;
+export interface PersistedSlpRefreshSchedule {
+  version: typeof SLP_REFRESH_SCHEDULE_VERSION;
   scheduleDate: string;
   timezone: string;
   refreshesPerDay: number;
@@ -48,7 +48,7 @@ export function localScheduleTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "local";
 }
 
-export function generateNoodleRefreshTimes(
+export function generateSlpRefreshTimes(
   date: Date,
   refreshesPerDay: number,
   random: RandomSource = Math.random,
@@ -69,10 +69,10 @@ export function generateNoodleRefreshTimes(
   });
 }
 
-export function parsePersistedNoodleRefreshSchedule(value: unknown): PersistedNoodleRefreshSchedule | null {
+export function parsePersistedSlpRefreshSchedule(value: unknown): PersistedSlpRefreshSchedule | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  if (record.version !== NOODLE_REFRESH_SCHEDULE_VERSION) return null;
+  if (record.version !== SLP_REFRESH_SCHEDULE_VERSION) return null;
   if (typeof record.scheduleDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/u.test(record.scheduleDate)) return null;
   if (typeof record.timezone !== "string" || !record.timezone) return null;
   const refreshesPerDay = integerInRange(record.refreshesPerDay, 0, 24);
@@ -90,7 +90,7 @@ export function parsePersistedNoodleRefreshSchedule(value: unknown): PersistedNo
   if (scheduledTimes.length !== refreshesPerDay) return null;
 
   return {
-    version: NOODLE_REFRESH_SCHEDULE_VERSION,
+    version: SLP_REFRESH_SCHEDULE_VERSION,
     scheduleDate: record.scheduleDate,
     timezone: record.timezone,
     refreshesPerDay,
@@ -105,12 +105,12 @@ export function parsePersistedNoodleRefreshSchedule(value: unknown): PersistedNo
   };
 }
 
-export function reconcileNoodleRefreshSchedule(
-  current: PersistedNoodleRefreshSchedule | null,
+export function reconcileSlpRefreshSchedule(
+  current: PersistedSlpRefreshSchedule | null,
   refreshesPerDay: number,
   at: Date,
   random: RandomSource = Math.random,
-): PersistedNoodleRefreshSchedule {
+): PersistedSlpRefreshSchedule {
   const count = Math.max(0, Math.min(24, Math.floor(refreshesPerDay)));
   const scheduleDate = localScheduleDate(at);
   const timezone = localScheduleTimezone();
@@ -125,10 +125,10 @@ export function reconcileNoodleRefreshSchedule(
   }
 
   const sameLocalDay = current?.scheduleDate === scheduleDate && current.timezone === timezone;
-  const scheduledTimes = generateNoodleRefreshTimes(at, count, random);
+  const scheduledTimes = generateSlpRefreshTimes(at, count, random);
   const preservedCompletedCount = sameLocalDay ? Math.min(current?.completedTimes.length ?? 0, count) : 0;
   return {
-    version: NOODLE_REFRESH_SCHEDULE_VERSION,
+    version: SLP_REFRESH_SCHEDULE_VERSION,
     scheduleDate,
     timezone,
     refreshesPerDay: count,
@@ -143,13 +143,13 @@ export function reconcileNoodleRefreshSchedule(
   };
 }
 
-export function dueNoodleRefreshTimes(schedule: PersistedNoodleRefreshSchedule, at: Date): string[] {
+export function dueSlpRefreshTimes(schedule: PersistedSlpRefreshSchedule, at: Date): string[] {
   const completed = new Set(schedule.completedTimes);
   const now = at.getTime();
   return schedule.scheduledTimes.filter((time) => !completed.has(time) && Date.parse(time) <= now);
 }
 
-export function nextNoodleRefreshTime(schedule: PersistedNoodleRefreshSchedule): string | null {
+export function nextSlpRefreshTime(schedule: PersistedSlpRefreshSchedule): string | null {
   const completed = new Set(schedule.completedTimes);
   return schedule.scheduledTimes.find((time) => !completed.has(time)) ?? null;
 }
@@ -159,12 +159,12 @@ function localClockTime(value: string): string {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
-export function rescheduleNoodleRefreshTime(
-  schedule: PersistedNoodleRefreshSchedule,
+export function rescheduleSlpRefreshTime(
+  schedule: PersistedSlpRefreshSchedule,
   scheduledTime: string,
   time: string,
   at: Date,
-): PersistedNoodleRefreshSchedule {
+): PersistedSlpRefreshSchedule {
   if (!schedule.scheduledTimes.includes(scheduledTime)) {
     throw new Error("That automatic refresh slot no longer exists.");
   }
@@ -215,10 +215,7 @@ export function rescheduleNoodleRefreshTime(
   };
 }
 
-export function markNoodleRefreshAttempt(
-  schedule: PersistedNoodleRefreshSchedule,
-  at: Date,
-): PersistedNoodleRefreshSchedule {
+export function markSlpRefreshAttempt(schedule: PersistedSlpRefreshSchedule, at: Date): PersistedSlpRefreshSchedule {
   return {
     ...schedule,
     lastAttemptAt: at.toISOString(),
@@ -226,11 +223,11 @@ export function markNoodleRefreshAttempt(
   };
 }
 
-export function markNoodleRefreshSuccess(
-  schedule: PersistedNoodleRefreshSchedule,
+export function markSlpRefreshSuccess(
+  schedule: PersistedSlpRefreshSchedule,
   consumedTimes: string[],
   at: Date,
-): PersistedNoodleRefreshSchedule {
+): PersistedSlpRefreshSchedule {
   const scheduled = new Set(schedule.scheduledTimes);
   const alreadyCompleted = new Set(schedule.completedTimes);
   const matchedTimes = consumedTimes.filter((time) => scheduled.has(time));
@@ -254,12 +251,12 @@ export function markNoodleRefreshSuccess(
   };
 }
 
-export function markNoodleRefreshFailure(
-  schedule: PersistedNoodleRefreshSchedule,
+export function markSlpRefreshFailure(
+  schedule: PersistedSlpRefreshSchedule,
   error: string,
   at: Date,
   retryDelayMs: number,
-): PersistedNoodleRefreshSchedule {
+): PersistedSlpRefreshSchedule {
   return {
     ...schedule,
     failureAttempts: schedule.failureAttempts + 1,
@@ -269,7 +266,7 @@ export function markNoodleRefreshFailure(
   };
 }
 
-export function clearNoodleRefreshFailure(schedule: PersistedNoodleRefreshSchedule): PersistedNoodleRefreshSchedule {
+export function clearSlpRefreshFailure(schedule: PersistedSlpRefreshSchedule): PersistedSlpRefreshSchedule {
   return {
     ...schedule,
     failureAttempts: 0,
@@ -278,13 +275,10 @@ export function clearNoodleRefreshFailure(schedule: PersistedNoodleRefreshSchedu
   };
 }
 
-export function noodleRefreshSchedulerStatus(
-  schedule: PersistedNoodleRefreshSchedule,
-  at: Date,
-): SlpRefreshSchedulerStatus {
-  const nextRefreshAt = nextNoodleRefreshTime(schedule);
+export function slpRefreshSchedulerStatus(schedule: PersistedSlpRefreshSchedule, at: Date): SlpRefreshSchedulerStatus {
+  const nextRefreshAt = nextSlpRefreshTime(schedule);
   const retryAt = schedule.nextAttemptAt ? Date.parse(schedule.nextAttemptAt) : null;
-  const due = dueNoodleRefreshTimes(schedule, at).length > 0;
+  const due = dueSlpRefreshTimes(schedule, at).length > 0;
   const state: SlpRefreshSchedulerStatus["state"] =
     schedule.refreshesPerDay === 0
       ? "disabled"

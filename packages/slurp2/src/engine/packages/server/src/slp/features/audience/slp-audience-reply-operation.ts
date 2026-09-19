@@ -22,8 +22,8 @@ import { createConnectionsStorage } from "../../../services/storage/connections.
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
-import { tryNoodlerAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
-import { generateNoodlerCreatorReply } from "../messages/slp-messages-contract.js";
+import { tryCreatorAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
+import { generateCreatorReply } from "../messages/slp-messages-contract.js";
 import { slurpCreatorReplyChance } from "../../../../../shared/src/slp/slp-world.js";
 
 /**
@@ -99,11 +99,11 @@ export async function drainSlurpAudienceReplies(db: DB, limit = MAX_PER_DRAIN): 
       if (claim.status === "exhausted") return written;
       if (claim.status !== "claimed") continue;
 
-      const locked = await tryNoodlerAccountOperation(creator.id, async () => {
+      const locked = await tryCreatorAccountOperation(creator.id, async () => {
         try {
           // Destructured and dropped: this reply answers a generated audience member, and their
           // feelings are not a relationship the player has. Only a real viewer moves a mood.
-          const { content } = await generateNoodlerCreatorReply({
+          const { content } = await generateCreatorReply({
             db,
             creator: claim.creator,
             viewer: claim.commenter,

@@ -22,8 +22,8 @@ import { createAppSettingsStorage } from "../../../services/storage/app-settings
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { createSlurpMessagesStorage } from "../../data/slp-storage.js";
 import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
-import { isAmbientNoodleAccount } from "../../data/audience/slp-ambient-profiles.js";
-import { tryNoodleOperation } from "../../base/locking/slp-operation-lock.js";
+import { isAmbientSlpAccount } from "../../data/audience/slp-ambient-profiles.js";
+import { trySlpOperation } from "../../base/locking/slp-operation-lock.js";
 import { readSlurpAudienceTone } from "../../../../../shared/src/slp/slp-tone.js";
 import { slurpCapTickEvents, slurpRhythmMultiplier } from "../../../../../shared/src/slp/slp-tuning.js";
 import { slurpCreatorReach } from "../../../../../shared/src/slp/slp-reach.js";
@@ -62,7 +62,7 @@ import {
 } from "../../../../../shared/src/slp/slp-world.js";
 import { SLURP_POST_LANDED_REACTIONS } from "../../modules/creators/slp-creator-state.js";
 import { planSlurpWorldPulse } from "../../../../../shared/src/slp/slp-world-pulse.js";
-import { noodlerUnlockPriceFromMetadata } from "../../modules/economy/slp-prices.js";
+import { slpCreatorUnlockPriceFromMetadata } from "../../modules/economy/slp-prices.js";
 import { localDayKey, applyAction, applyPulse } from "./slp-world-actions.js";
 import {
   PULSE_KEY,
@@ -111,7 +111,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
   const lease = await claimWorldTick(db, new Date());
   if (!lease) return { status: "busy", actions: 0 };
   try {
-    const operation = await tryNoodleOperation("slurp-world-tick", async () => {
+    const operation = await trySlpOperation("slurp-world-tick", async () => {
       const since = await readLastTick(db);
       if (!since) {
         await writeLastTick(db, until);
@@ -171,7 +171,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
           population.ensure(`world:${localDayKey(until)}:${index}`, until, settings.fanTypes),
         ),
       );
-      const ambientIds = allAccounts.filter((account) => isAmbientNoodleAccount(account)).map((account) => account.id);
+      const ambientIds = allAccounts.filter((account) => isAmbientSlpAccount(account)).map((account) => account.id);
       const ambient = settings.allowRandomUsers ? ambientIds : [];
       // Who is actually around at this hour. `activeHour` has been stored on every member since the
       // population shipped and read by nothing, so a night owl and an early riser were equally likely
@@ -545,7 +545,7 @@ export async function advanceSlurpWorld(db: DB, until = new Date()): Promise<Slu
           ),
           lockedPosts: (postsByAccount.get(account.id) ?? [])
             .filter((post) => post.access === "locked")
-            .map((post) => ({ id: post.id, price: noodlerUnlockPriceFromMetadata(post.metadata) })),
+            .map((post) => ({ id: post.id, price: slpCreatorUnlockPriceFromMetadata(post.metadata) })),
           // A queue nobody answered gets no more. Asking again while three requests sit unread is
           // how an obligation layer turns into a chore.
           // Unanswered conversations count with unanswered commissions. Both are somebody waiting on

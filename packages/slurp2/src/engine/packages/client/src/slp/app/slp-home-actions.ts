@@ -1,7 +1,7 @@
 import type { SlpIdentityDisclosure } from "../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpManagedStageProfile, SlurpStageProfileInput } from "../base/state/slp-state-types";
 import { showConfirmDialog } from "../../lib/app-dialogs";
-import { type NoodlerPostSubmission, errorMessage, serializeNoodlerPostGuide } from "./screens/SlpHomeHelpers";
+import { type SlpCreatorPostSubmission, errorMessage, serializeCreatorPostGuide } from "./screens/SlpHomeHelpers";
 import type { ImagePromptOverride } from "../../components/ui/ImagePromptReviewModal";
 import { confirmSlurpAvatarReview } from "../features/creators/SlpStageProfileForm";
 import { ApiError } from "../../lib/api-client";
@@ -316,7 +316,7 @@ function useSlurpHomeActions(state: SlurpHomeBaseState) {
     linkedPostId,
     unlockPrice,
     generateImage,
-  }: NoodlerPostSubmission) => {
+  }: SlpCreatorPostSubmission) => {
     const wantsImage = generateImage && !image;
     const created = await createPost.mutateAsync({
       unlockPrice: access === "locked" ? unlockPrice : null,
@@ -356,9 +356,9 @@ function useSlurpHomeActions(state: SlurpHomeBaseState) {
     format,
     postType,
     generateImage,
-  }: NoodlerPostSubmission) => {
+  }: SlpCreatorPostSubmission) => {
     if (!(await confirmProviderDisclosure())) return;
-    const guide = serializeNoodlerPostGuide(title, body);
+    const guide = serializeCreatorPostGuide(title, body);
     const result = await generatePost.mutateAsync({
       mode: "noodler",
       targetAccountId: profileId,

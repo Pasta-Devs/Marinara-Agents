@@ -14,7 +14,7 @@ import { api } from "../../../lib/api-client.js";
 import { useSlurpUIStore } from "../../base/state/slp-package-store.js";
 import type { SlurpPageCursor } from "../../base/state/slp-page-cursor.js";
 import { cursorQuery } from "../../base/state/slp-page-cursor.js";
-import { noodleKeys } from "../../base/state/slp-query-keys.js";
+import { slpKeys } from "../../base/state/slp-query-keys.js";
 import type { SlurpViewerScope } from "../../base/state/slp-state-types.js";
 
 function mergeSlurpViewerShell(
@@ -31,9 +31,9 @@ function mergeSlurpViewerShell(
     })),
   };
 }
-export function useNoodlerViewer(personaId: string | null, enabled = true) {
+export function useCreatorViewer(personaId: string | null, enabled = true) {
   return useQuery({
-    queryKey: noodleKeys.viewer(personaId ?? "none"),
+    queryKey: slpKeys.viewer(personaId ?? "none"),
     queryFn: async ({ signal }) => {
       const encodedPersonaId = encodeURIComponent(personaId!);
       type ViewerPost = SlurpViewerScope["creators"][number]["posts"][number] & { story?: boolean };
@@ -94,11 +94,11 @@ export function useNoodlerViewer(personaId: string | null, enabled = true) {
  * from NoodleR.
  */
 /** Poll the badge without downloading the complete viewer feed or historical media metadata. */
-export function useNoodlerUnseenCount(personaId: string | null, enabled = true) {
+export function useCreatorUnseenCount(personaId: string | null, enabled = true) {
   const qc = useQueryClient();
   const previousCount = useRef<number | null>(null);
   const { data } = useQuery({
-    queryKey: noodleKeys.noodlerUnseenCount(personaId ?? "none"),
+    queryKey: slpKeys.noodlerUnseenCount(personaId ?? "none"),
     queryFn: () =>
       api.get<{ count: number }>(`/slurp2/noodler/viewer/unseen-count?personaId=${encodeURIComponent(personaId!)}`),
     enabled: enabled && Boolean(personaId),
@@ -119,23 +119,23 @@ export function useNoodlerUnseenCount(personaId: string | null, enabled = true) 
       previousCount.current = count;
       return;
     }
-    if (count > previousCount.current) void qc.invalidateQueries({ queryKey: noodleKeys.viewer(personaId) });
+    if (count > previousCount.current) void qc.invalidateQueries({ queryKey: slpKeys.viewer(personaId) });
     previousCount.current = count;
   }, [count, enabled, personaId, qc]);
   return count;
 }
-export function useMarkNoodlerFeedSeen() {
+export function useMarkCreatorFeedSeen() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (personaId: string) => api.post<SlpAccount>("/slurp2/noodler/viewer/mark-seen", { personaId }),
     onSuccess: (_viewer, personaId) =>
       Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.viewer(personaId) }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerUnseenCount(personaId) }),
+        qc.invalidateQueries({ queryKey: slpKeys.viewer(personaId) }),
+        qc.invalidateQueries({ queryKey: slpKeys.noodlerUnseenCount(personaId) }),
       ]),
   });
 }
-export function useToggleNoodlerSubscription() {
+export function useToggleCreatorSubscription() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -160,23 +160,23 @@ export function useToggleNoodlerSubscription() {
     // The mutation returns a shell without posts. Keep the current feed visible until refetch.
     onSuccess: async (scope, input) => {
       // Cancel any in-flight viewer poll first, or it can land after us and restore the stale scope.
-      await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
-      qc.setQueryData<SlpCreatorViewerScope | undefined>(noodleKeys.viewer(input.personaId), (current) =>
+      await qc.cancelQueries({ queryKey: slpKeys.viewer(input.personaId) });
+      qc.setQueryData<SlpCreatorViewerScope | undefined>(slpKeys.viewer(input.personaId), (current) =>
         mergeSlurpViewerShell(current, scope),
       );
       return Promise.all([
-        qc.refetchQueries({ queryKey: noodleKeys.viewer(input.personaId), type: "active" }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerPosts(input.creatorAccountId) }),
+        qc.refetchQueries({ queryKey: slpKeys.viewer(input.personaId), type: "active" }),
+        qc.invalidateQueries({ queryKey: slpKeys.noodlerPosts(input.creatorAccountId) }),
         qc.invalidateQueries({
-          queryKey: noodleKeys.noodlerSubscribers(input.creatorAccountId),
+          queryKey: slpKeys.noodlerSubscribers(input.creatorAccountId),
         }),
-        qc.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "wallet", input.personaId] }),
-        qc.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "viewer-wallets"] }),
+        qc.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "wallet", input.personaId] }),
+        qc.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "viewer-wallets"] }),
       ]);
     },
   });
 }
-export function useToggleNoodlerFollow() {
+export function useToggleCreatorFollow() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -193,34 +193,34 @@ export function useToggleNoodlerFollow() {
         followed,
       }),
     onSuccess: async (scope, input) => {
-      await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
-      qc.setQueryData<SlpCreatorViewerScope | undefined>(noodleKeys.viewer(input.personaId), (current) =>
+      await qc.cancelQueries({ queryKey: slpKeys.viewer(input.personaId) });
+      qc.setQueryData<SlpCreatorViewerScope | undefined>(slpKeys.viewer(input.personaId), (current) =>
         mergeSlurpViewerShell(current, scope),
       );
-      await qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) });
+      await qc.invalidateQueries({ queryKey: slpKeys.viewer(input.personaId) });
     },
   });
 }
-export function useUnlockNoodlerPost() {
+export function useUnlockCreatorPost() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ postId, personaId }: { postId: string; personaId: string }) =>
       api.post<SlpCreatorViewerScope>(`/slurp2/noodler/posts/${encodeURIComponent(postId)}/unlock`, { personaId }),
     onSuccess: async (scope, input) => {
       // Cancel any in-flight viewer poll first, or it can land after us and restore the locked scope.
-      await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
-      qc.setQueryData<SlpCreatorViewerScope | undefined>(noodleKeys.viewer(input.personaId), (current) =>
+      await qc.cancelQueries({ queryKey: slpKeys.viewer(input.personaId) });
+      qc.setQueryData<SlpCreatorViewerScope | undefined>(slpKeys.viewer(input.personaId), (current) =>
         mergeSlurpViewerShell(current, scope),
       );
       await Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
-        qc.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "wallet", input.personaId] }),
-        qc.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "viewer-wallets"] }),
+        qc.invalidateQueries({ queryKey: slpKeys.viewer(input.personaId) }),
+        qc.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "wallet", input.personaId] }),
+        qc.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "viewer-wallets"] }),
       ]);
     },
   });
 }
-export function useCreateNoodlerInteraction() {
+export function useCreateCreatorInteraction() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -231,9 +231,9 @@ export function useCreateNoodlerInteraction() {
       api.post<SlpInteraction>(`/slurp2/noodler/posts/${encodeURIComponent(postId)}/interactions`, input),
     onMutate: async (input) => {
       if (input.type !== "like") return undefined;
-      await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
-      const previous = qc.getQueryData<SlpCreatorViewerScope>(noodleKeys.viewer(input.personaId));
-      qc.setQueryData<SlpCreatorViewerScope | undefined>(noodleKeys.viewer(input.personaId), (current) => {
+      await qc.cancelQueries({ queryKey: slpKeys.viewer(input.personaId) });
+      const previous = qc.getQueryData<SlpCreatorViewerScope>(slpKeys.viewer(input.personaId));
+      qc.setQueryData<SlpCreatorViewerScope | undefined>(slpKeys.viewer(input.personaId), (current) => {
         if (!current) return current;
         return {
           ...current,
@@ -261,12 +261,12 @@ export function useCreateNoodlerInteraction() {
       return { previous };
     },
     onError: (_error, input, context) => {
-      if (context?.previous) qc.setQueryData(noodleKeys.viewer(input.personaId), context.previous);
+      if (context?.previous) qc.setQueryData(slpKeys.viewer(input.personaId), context.previous);
     },
-    onSettled: (_result, _error, input) => qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
+    onSettled: (_result, _error, input) => qc.invalidateQueries({ queryKey: slpKeys.viewer(input.personaId) }),
   });
 }
-export function useTriggerNoodlerCreatorReply() {
+export function useTriggerCreatorReply() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ postId, interactionId, personaId }: { postId: string; interactionId: string; personaId: string }) =>
@@ -274,10 +274,10 @@ export function useTriggerNoodlerCreatorReply() {
         `/slurp2/noodler/posts/${encodeURIComponent(postId)}/interactions/${encodeURIComponent(interactionId)}/creator-reply`,
         { personaId, debugMode: useSlurpUIStore.getState().debugMode },
       ),
-    onSettled: (_result, _error, input) => qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
+    onSettled: (_result, _error, input) => qc.invalidateQueries({ queryKey: slpKeys.viewer(input.personaId) }),
   });
 }
-export function useRemoveNoodlerInteraction() {
+export function useRemoveCreatorInteraction() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -294,9 +294,9 @@ export function useRemoveNoodlerInteraction() {
     },
     onMutate: async (input) => {
       if (input.type !== "like") return undefined;
-      await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
-      const previous = qc.getQueryData<SlpCreatorViewerScope>(noodleKeys.viewer(input.personaId));
-      qc.setQueryData<SlpCreatorViewerScope | undefined>(noodleKeys.viewer(input.personaId), (current) => {
+      await qc.cancelQueries({ queryKey: slpKeys.viewer(input.personaId) });
+      const previous = qc.getQueryData<SlpCreatorViewerScope>(slpKeys.viewer(input.personaId));
+      qc.setQueryData<SlpCreatorViewerScope | undefined>(slpKeys.viewer(input.personaId), (current) => {
         if (!current) return current;
         return {
           ...current,
@@ -323,12 +323,12 @@ export function useRemoveNoodlerInteraction() {
       return { previous };
     },
     onError: (_error, input, context) => {
-      if (context?.previous) qc.setQueryData(noodleKeys.viewer(input.personaId), context.previous);
+      if (context?.previous) qc.setQueryData(slpKeys.viewer(input.personaId), context.previous);
     },
-    onSettled: (_result, _error, input) => qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
+    onSettled: (_result, _error, input) => qc.invalidateQueries({ queryKey: slpKeys.viewer(input.personaId) }),
   });
 }
-export function useUpdateNoodlerInteraction() {
+export function useUpdateCreatorInteraction() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -347,16 +347,16 @@ export function useUpdateNoodlerInteraction() {
         `/slurp2/noodler/posts/${encodeURIComponent(postId)}/interactions/${encodeURIComponent(interactionId)}`,
         { personaId, ...input },
       ),
-    onSuccess: (_interaction, input) => qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
+    onSuccess: (_interaction, input) => qc.invalidateQueries({ queryKey: slpKeys.viewer(input.personaId) }),
   });
 }
-export function useDeleteNoodlerInteraction() {
+export function useDeleteCreatorInteraction() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ postId, interactionId, personaId }: { postId: string; interactionId: string; personaId: string }) =>
       api.delete<SlpInteraction[]>(
         `/slurp2/noodler/posts/${encodeURIComponent(postId)}/interactions/${encodeURIComponent(interactionId)}?personaId=${encodeURIComponent(personaId)}`,
       ),
-    onSuccess: (_deleted, input) => qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
+    onSuccess: (_deleted, input) => qc.invalidateQueries({ queryKey: slpKeys.viewer(input.personaId) }),
   });
 }

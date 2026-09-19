@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { resetSlurpBackupState } from "../packages/slurp2/src/engine/packages/server/src/slp/base/locking/slp-backup-state";
-import { tryNoodlerAccountOperation } from "../packages/slurp2/src/engine/packages/server/src/slp/base/locking/slp-account-operation-lock";
+import { tryCreatorAccountOperation } from "../packages/slurp2/src/engine/packages/server/src/slp/base/locking/slp-account-operation-lock";
 import {
   claimSlurpBackup,
-  resetNoodleOperationsForTests,
-  tryNoodleOperation,
+  resetSlpOperationsForTests,
+  trySlpOperation,
   trySlurpDataDeletion,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/base/locking/slp-operation-lock";
 import { slurp2Source } from "./slurp2-source";
@@ -35,7 +35,7 @@ const english = read(`${client}/localization/locales/en.json`);
 assert.match(home, /items\[Math\.floor\(index \/ inlineAdEvery\) % items\.length\]/u);
 assert.match(home, /const emptyWallAd = adForIndex\?\.\(0\)[\s\S]*?<SlurpInlineAdTile/u);
 assert.match(home, /side=\{<SlurpCreatorPostCard[\s\S]*?imageUrl: null[\s\S]*?surface="profile"/u);
-assert.match(postCard, /export function createNoodleLightboxImage\(id: string, url: string, prompt = ""\)/u);
+assert.match(postCard, /export function createSlpLightboxImage\(id: string, url: string, prompt = ""\)/u);
 assert.match(postCard, /chatId: "noodle",[\s\S]{0,120}prompt,/u);
 assert.doesNotMatch(inlineAd, /if \(!promotion\.imageUrl\) return null/u);
 assert.match(coin, /DEFAULT_SLURP_SUBSCRIPTION_PRICE = 12/u);
@@ -78,7 +78,7 @@ for (const source of [followUps, messages, messageRoutes]) {
   assert.match(source, /latestPost\?\.createdAt \?\? null/u);
   assert.doesNotMatch(source, /listNoodlerPostsByAccount\(creator\.id, 1\)/u);
 }
-assert.match(storage, /getNoodlerLatestPublishedPost[\s\S]*?ne\(noodlePosts\.access, "draft"\)[\s\S]*?\.limit\(1\)/u);
+assert.match(storage, /getNoodlerLatestPublishedPost[\s\S]*?ne\(slpPosts\.access, "draft"\)[\s\S]*?\.limit\(1\)/u);
 
 function latch() {
   let release!: () => void;
@@ -94,10 +94,10 @@ function latch() {
 
 async function main() {
   resetSlurpBackupState();
-  resetNoodleOperationsForTests();
+  resetSlpOperationsForTests();
 
   const worldLatch = latch();
-  const worldRun = tryNoodleOperation("slurp-world-tick", async () => {
+  const worldRun = trySlpOperation("slurp-world-tick", async () => {
     worldLatch.started();
     await worldLatch.wait;
   });
@@ -109,8 +109,8 @@ async function main() {
 
   const releaseBackup = claimSlurpBackup();
   assert.ok(releaseBackup);
-  assert.deepEqual(await tryNoodlerAccountOperation("creator", async () => undefined), { acquired: false });
-  assert.deepEqual(await tryNoodleOperation("slurp-world-tick", async () => undefined), { acquired: false });
+  assert.deepEqual(await tryCreatorAccountOperation("creator", async () => undefined), { acquired: false });
+  assert.deepEqual(await trySlpOperation("slurp-world-tick", async () => undefined), { acquired: false });
   releaseBackup();
 
   const deletionLatch = latch();
@@ -119,13 +119,13 @@ async function main() {
     await deletionLatch.wait;
   });
   await deletionLatch.ready;
-  assert.deepEqual(await tryNoodlerAccountOperation("creator", async () => undefined), { acquired: false });
-  assert.deepEqual(await tryNoodleOperation("slurp-world-tick", async () => undefined), { acquired: false });
+  assert.deepEqual(await tryCreatorAccountOperation("creator", async () => undefined), { acquired: false });
+  assert.deepEqual(await trySlpOperation("slurp-world-tick", async () => undefined), { acquired: false });
   deletionLatch.release();
   await deletionRun;
 
   const accountLatch = latch();
-  const accountRun = tryNoodlerAccountOperation("creator", async () => {
+  const accountRun = tryCreatorAccountOperation("creator", async () => {
     accountLatch.started();
     await accountLatch.wait;
   });

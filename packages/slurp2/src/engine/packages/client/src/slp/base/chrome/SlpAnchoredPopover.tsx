@@ -2,9 +2,9 @@ import { useContext, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "../../../lib/utils";
 import { ModalPortalContext } from "../../../components/ui/Modal";
-import { getNoodleAccentStyle, NOODLE_ICON_SCOPE_CLASS, useNoodleAccent } from "./SlpChrome";
+import { getSlpAccentStyle, NOODLE_ICON_SCOPE_CLASS, useSlpAccent } from "./SlpChrome";
 
-export function NoodleAnchoredPopover({
+export function SlpAnchoredPopover({
   anchorRef,
   children,
   wide,
@@ -20,7 +20,7 @@ export function NoodleAnchoredPopover({
     left: number;
     top: number;
   } | null>(null);
-  const accent = useNoodleAccent();
+  const accent = useSlpAccent();
   // The package stylesheet is @scope-d to the package root and its portal; document.body is outside
   // both, so a popover portalled there rendered without any of its classes (a see-through menu).
   const portalContainer = useContext(ModalPortalContext);
@@ -69,7 +69,7 @@ export function NoodleAnchoredPopover({
         NOODLE_ICON_SCOPE_CLASS,
         wide ? "w-[18rem] sm:w-[24rem]" : "w-[19rem]",
       )}
-      style={getNoodleAccentStyle(accent, {
+      style={getSlpAccentStyle(accent, {
         left: position?.left ?? -9999,
         top: position?.top ?? -9999,
         opacity: position ? 1 : 0,

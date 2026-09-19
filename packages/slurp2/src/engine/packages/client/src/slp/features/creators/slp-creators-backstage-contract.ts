@@ -6,15 +6,12 @@ import { showConfirmDialog } from "../../../lib/app-dialogs";
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import type { SlpBackstageSection } from "../../base/navigation/slp-backstage-target";
 import {
-  useAdoptNoodlerSourceIdentity,
-  useDeleteNoodlerStageProfile,
-  useDismissNoodlerSourceChanges,
+  useAdoptCreatorSourceIdentity,
+  useDeleteCreatorStageProfile,
+  useDismissCreatorSourceChanges,
 } from "./slp-creator-profile-hooks";
-import {
-  useRefreshNoodlerConversationSchedule,
-  useRefreshTargetedNoodlerCreatorsNow,
-} from "./slp-creator-refresh-hooks";
-import { useBulkUpdateSlurpCreators, useNoodlerAccounts } from "./slp-creators-hooks";
+import { useRefreshCreatorConversationSchedule, useRefreshTargetedCreatorsNow } from "./slp-creator-refresh-hooks";
+import { useBulkUpdateSlurpCreators, useCreatorAccounts } from "./slp-creators-hooks";
 
 export type SlpCreatorFilter = "all" | "active" | "paused" | "attention";
 export type SlpCreatorTab = "profile" | "publishing" | "images" | "messages" | "danger";
@@ -34,14 +31,14 @@ export function useSlpCreatorsBackstageState({
   setRefreshRemaining: (remaining: number) => void;
 }) {
   const { t } = useTranslation();
-  const accountsQuery = useNoodlerAccounts(
+  const accountsQuery = useCreatorAccounts(
     section === "overview" || section === "creators" || section === "automation",
   );
-  const refreshCreators = useRefreshTargetedNoodlerCreatorsNow(setRefreshRemaining);
-  const refreshConversationSchedule = useRefreshNoodlerConversationSchedule();
-  const deleteCreator = useDeleteNoodlerStageProfile();
-  const adoptSourceIdentity = useAdoptNoodlerSourceIdentity();
-  const dismissSourceChanges = useDismissNoodlerSourceChanges();
+  const refreshCreators = useRefreshTargetedCreatorsNow(setRefreshRemaining);
+  const refreshConversationSchedule = useRefreshCreatorConversationSchedule();
+  const deleteCreator = useDeleteCreatorStageProfile();
+  const adoptSourceIdentity = useAdoptCreatorSourceIdentity();
+  const dismissSourceChanges = useDismissCreatorSourceChanges();
   const bulkUpdateCreators = useBulkUpdateSlurpCreators();
   const [scheduleCreatorId, setScheduleCreatorId] = useState<string | null>(null);
   const [selectedCreatorId, setSelectedCreatorId] = useState<string | null>(null);

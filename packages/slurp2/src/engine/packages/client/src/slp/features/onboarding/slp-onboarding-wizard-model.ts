@@ -10,11 +10,11 @@ import { useTranslation as useUiTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { useSlurpConnections } from "../../base/state/slp-host-connections";
 import {
-  useBulkCreateNoodlerStageProfiles,
-  useNoodlerEligibleAccounts,
-  useRefreshTargetedNoodlerCreatorsNow,
+  useBulkCreateCreatorStageProfiles,
+  useCreatorEligibleAccounts,
+  useRefreshTargetedCreatorsNow,
 } from "../creators/slp-creators-contract";
-import { useEnqueueNoodlerFirstPosts, useNoodlerFirstPostStatus } from "./slp-first-post-hooks";
+import { useEnqueueCreatorFirstPosts, useCreatorFirstPostStatus } from "./slp-first-post-hooks";
 import { useUpdateSlurpConnectionsForCreators } from "../media/slp-media-contract";
 import { useSlurpSettings, useUpdateSlurpSettings } from "../settings/slp-settings-contract";
 import { generateClientId } from "../../../lib/utils";
@@ -45,10 +45,10 @@ import {
 export function useSlurpOnboardingWizardModel(props: WizardProps) {
   const { open, selectionOnly = false, onClose, onComplete, onSeeFeed, onSkipped } = props;
   const { t } = useUiTranslation();
-  const eligible = useNoodlerEligibleAccounts("", "all", open);
-  const bulkCreate = useBulkCreateNoodlerStageProfiles();
-  const refreshTargeted = useRefreshTargetedNoodlerCreatorsNow();
-  const enqueueFirstPosts = useEnqueueNoodlerFirstPosts();
+  const eligible = useCreatorEligibleAccounts("", "all", open);
+  const bulkCreate = useBulkCreateCreatorStageProfiles();
+  const refreshTargeted = useRefreshTargetedCreatorsNow();
+  const enqueueFirstPosts = useEnqueueCreatorFirstPosts();
   const assignImageConnections = useUpdateSlurpConnectionsForCreators();
   const updateSlurpSettings = useUpdateSlurpSettings();
   const connectionsQuery = useSlurpConnections(open);
@@ -132,7 +132,7 @@ export function useSlurpOnboardingWizardModel(props: WizardProps) {
     setFirstPostsQueued(false);
   }, [open, selectionOnly]);
 
-  const firstPostStatus = useNoodlerFirstPostStatus(executionId, step === 5 && firstPostsQueued);
+  const firstPostStatus = useCreatorFirstPostStatus(executionId, step === 5 && firstPostsQueued);
 
   useEffect(() => {
     if (!open || settingsSeeded || !settingsQuery.data || !connectionsQuery.data) return;

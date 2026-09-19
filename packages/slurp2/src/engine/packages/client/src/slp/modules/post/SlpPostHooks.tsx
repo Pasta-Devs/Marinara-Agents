@@ -7,17 +7,17 @@ import { type SlpPostImageCrop } from "../../../../../shared/src/slp/slp-social.
 import type { ConversationMediaPickerTabId } from "../../../components/chat/ConversationMediaPickerPanel";
 import type { ChatImage } from "../../../hooks/use-gallery";
 import type {
-  NoodlePostCardCtx,
-  NoodlePostCardControllerOptions,
-  NoodlePostCardModel,
-  NoodlePostImageCropSource,
-  NoodlePostImageUpdate,
+  SlpPostCardCtx,
+  SlpPostCardControllerOptions,
+  SlpPostCardModel,
+  SlpPostImageCropSource,
+  SlpPostImageUpdate,
   ReplyComposerTool,
 } from "./SlpPostTypes";
 
-export function useNoodlePostImageEditor(loadPostImage?: (post: NoodlePostCardModel) => Promise<File | string>) {
-  const [update, setUpdate] = useState<NoodlePostImageUpdate | null>(null);
-  const [cropSource, setCropSource] = useState<NoodlePostImageCropSource | null>(null);
+export function useSlpPostImageEditor(loadPostImage?: (post: SlpPostCardModel) => Promise<File | string>) {
+  const [update, setUpdate] = useState<SlpPostImageUpdate | null>(null);
+  const [cropSource, setCropSource] = useState<SlpPostImageCropSource | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -30,7 +30,7 @@ export function useNoodlePostImageEditor(loadPostImage?: (post: NoodlePostCardMo
     setLoading(false);
     setError(null);
   };
-  const beginCrop = (post: NoodlePostCardModel) => {
+  const beginCrop = (post: SlpPostCardModel) => {
     if (!loadPostImage || loading) return;
     if (update?.kind === "replace") {
       setCropSource({
@@ -113,7 +113,7 @@ export function useNoodlePostImageEditor(loadPostImage?: (post: NoodlePostCardMo
   };
 }
 
-export function useNoodlePostCardController(options: NoodlePostCardControllerOptions) {
+export function useSlpPostCardController(options: SlpPostCardControllerOptions) {
   const [postMenuId, setPostMenuId] = useState<string | null>(null);
   const [imageLightbox, setImageLightbox] = useState<ChatImage | null>(null);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
@@ -131,7 +131,7 @@ export function useNoodlePostCardController(options: NoodlePostCardControllerOpt
   const replyComposerRef = useRef<HTMLTextAreaElement | null>(null);
   const replyValueRef = useRef("");
   const replyMediaToolRef = useRef<HTMLDivElement | null>(null);
-  const imageEditor = useNoodlePostImageEditor(options.imageEditing?.loadPostImage);
+  const imageEditor = useSlpPostImageEditor(options.imageEditing?.loadPostImage);
 
   const clearReplyComposer = () => {
     setReplyPostId(null);
@@ -171,7 +171,7 @@ export function useNoodlePostCardController(options: NoodlePostCardControllerOpt
     setReplyHasText(next.trim().length > 0);
     if (replyComposerRef.current) replyComposerRef.current.value = next;
   };
-  const startEditingPost = (post: NoodlePostCardModel) => {
+  const startEditingPost = (post: SlpPostCardModel) => {
     setPostMenuId(null);
     setEditingPostId(post.id);
     setEditingPostTitle(post.title ?? "");
@@ -187,7 +187,7 @@ export function useNoodlePostCardController(options: NoodlePostCardControllerOpt
     );
     imageEditor.reset();
   };
-  const saveEditedPost = (post: NoodlePostCardModel) => {
+  const saveEditedPost = (post: SlpPostCardModel) => {
     const content = editingPostContent.trim();
     const existingPoll = readSlpPollFromMetadata(post.metadata);
     const validPoll = existingPoll ? slpPollInputSchema.safeParse(editingPostPoll).success : false;
@@ -202,7 +202,7 @@ export function useNoodlePostCardController(options: NoodlePostCardControllerOpt
       .then(cancelEditingPost)
       .catch(() => {});
   };
-  const submitReply = (post: NoodlePostCardModel) => {
+  const submitReply = (post: SlpPostCardModel) => {
     const content = replyValueRef.current.trim();
     if (!content) return;
     void options
@@ -215,12 +215,12 @@ export function useNoodlePostCardController(options: NoodlePostCardControllerOpt
       .then(clearReplyComposer)
       .catch(() => {});
   };
-  const deletePost = (post: NoodlePostCardModel) => {
+  const deletePost = (post: SlpPostCardModel) => {
     setPostMenuId(null);
     options.deletePost(post);
   };
 
-  const ctx: NoodlePostCardCtx = {
+  const ctx: SlpPostCardCtx = {
     setImageLightbox,
     personaAccount: options.personaAccount,
     postManagement: options.postManagement,

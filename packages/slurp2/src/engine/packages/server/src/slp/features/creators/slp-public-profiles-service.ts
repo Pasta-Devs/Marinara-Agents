@@ -3,7 +3,7 @@ import { type APIProvider } from "@marinara-engine/shared";
 import { type SlpAccount, type SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
 import { logger, logDebugOverride } from "../../../lib/logger.js";
 import { clampGenerationMaxOutputTokens } from "../../../services/generation/output-token-limits.js";
-import { noodleSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
+import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
 import {
   resolveStoredChatOptions,
   resolveStoredMaxTokens,
@@ -14,12 +14,12 @@ import type { BaseLLMProvider, ChatMessage } from "../../../services/llm/base-pr
 import { createCharacterGalleryStorage } from "../../../services/storage/character-gallery.storage.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
-import { parseNoodleGeneratedProfiles } from "../../modules/creators/slp-generated-profiles.js";
+import { parseSlpGeneratedProfiles } from "../../modules/creators/slp-generated-profiles.js";
 import { allocateAmbientProfileHandles } from "../audience/slp-audience-contract.js";
-import { noodleAccountsNeedingProfiles } from "../../modules/creators/slp-profile-selection.js";
-import { normalizeNoodleHandle } from "../../base/identity/slp-handle.js";
+import { slpAccountsNeedingProfiles } from "../../modules/creators/slp-profile-selection.js";
+import { normalizeSlpHandle } from "../../base/identity/slp-handle.js";
 import { NOODLE_ADULT_PLATFORM_POLICY } from "../../modules/prompting/slp-prompt.js";
-import { NOODLE_JSON_OUTPUT_HEADING, noodleResponseFormat } from "../../base/prompting/slp-response-format.js";
+import { NOODLE_JSON_OUTPUT_HEADING, slpResponseFormat } from "../../base/prompting/slp-response-format.js";
 import {
   characterContextFromRow,
   escapePromptAttribute,
@@ -52,7 +52,7 @@ export async function pickRandomCharacterBannerUrl(
  * Only OPEN inherits the literal source photo. Hinted and secret create new artwork instead:
  * hinted may use appearance references, while secret receives only redacted appearance text.
  */
-export async function resolveNoodlerCreatorArtwork(input: {
+export async function resolveCreatorArtwork(input: {
   characters: ReturnType<typeof createCharactersStorage>;
   characterGallery: ReturnType<typeof createCharacterGalleryStorage>;
   publicAccount: Pick<SlpAccount, "kind" | "entityId" | "avatarUrl">;
@@ -74,7 +74,7 @@ function profileSetupMaxTokens(characterCount: number) {
   return 1024 + Math.max(0, characterCount) * 1024;
 }
 
-export function buildNoodleProfileTargetBlock(
+export function buildSlpProfileTargetBlock(
   account: Pick<SlpAccount, "entityId" | "displayName" | "handle">,
   row: { id: string; data: unknown },
 ) {
@@ -87,7 +87,7 @@ export function buildNoodleProfileTargetBlock(
   ].join("\n");
 }
 
-export async function generateMissingNoodleProfiles(input: {
+export async function generateMissingSlpProfiles(input: {
   noodle: ReturnType<typeof createSlurpStorage>;
   characters: ReturnType<typeof createCharactersStorage>;
   characterGallery: ReturnType<typeof createCharacterGalleryStorage>;
@@ -107,7 +107,7 @@ export async function generateMissingNoodleProfiles(input: {
     row: { id: string; data: unknown; avatarPath?: string | null };
     bannerUrl: string | null;
   }> = [];
-  for (const account of noodleAccountsNeedingProfiles(input.accounts)) {
+  for (const account of slpAccountsNeedingProfiles(input.accounts)) {
     const row = await input.characters.getById(account.entityId);
     if (!row) continue;
     const bannerUrl = await pickRandomCharacterBannerUrl(input.characterGallery, account.entityId);
@@ -115,7 +115,7 @@ export async function generateMissingNoodleProfiles(input: {
   }
   if (targets.length === 0) return;
 
-  const characterBlocks = targets.map(({ account, row }) => buildNoodleProfileTargetBlock(account, row)).join("\n\n");
+  const characterBlocks = targets.map(({ account, row }) => buildSlpProfileTargetBlock(account, row)).join("\n\n");
   const outputFormat = [
     NOODLE_JSON_OUTPUT_HEADING,
     JSON.stringify(
@@ -176,18 +176,18 @@ export async function generateMissingNoodleProfiles(input: {
   const completionOptions = {
     model: input.connection.model,
     maxTokens,
-    ...noodleSamplingOptions(
+    ...slpSamplingOptions(
       resolveStoredChatOptions(input.connection.defaultParameters, input.connection.provider, input.connection.model),
       { temperature: 0.55, topP: 0.9 },
     ),
     stream: false,
     debugMode: input.debugMode,
-    responseFormat: noodleResponseFormat(input.connection.model, "profiles"),
+    responseFormat: slpResponseFormat(input.connection.model, "profiles"),
   } as const;
   const result = await input.provider.chatComplete(messages, completionOptions);
-  let generated: ReturnType<typeof parseNoodleGeneratedProfiles>;
+  let generated: ReturnType<typeof parseSlpGeneratedProfiles>;
   try {
-    generated = parseNoodleGeneratedProfiles(
+    generated = parseSlpGeneratedProfiles(
       parseGameJsonish(requireModelAnswer(result.content ?? "", "public profiles")),
     );
   } catch (error) {
@@ -209,9 +209,7 @@ export async function generateMissingNoodleProfiles(input: {
       ],
       completionOptions,
     );
-    generated = parseNoodleGeneratedProfiles(
-      parseGameJsonish(requireModelAnswer(retry.content ?? "", "public profiles")),
-    );
+    generated = parseSlpGeneratedProfiles(parseGameJsonish(requireModelAnswer(retry.content ?? "", "public profiles")));
   }
   if (generated.profiles.length === 0) {
     throw new Error("Profile generation returned no usable profiles after correction.");
@@ -232,7 +230,7 @@ export async function generateMissingNoodleProfiles(input: {
     const profile = profileByEntityId.get(target.account.entityId);
     if (!profile) continue;
     await input.noodle.updateAccountProfile(target.account.id, {
-      handle: allocatedHandles.get(target.account.id) ?? normalizeNoodleHandle(target.account.handle),
+      handle: allocatedHandles.get(target.account.id) ?? normalizeSlpHandle(target.account.handle),
       displayName: profile.name,
       bio: profile.bio,
       avatarUrl: target.row.avatarPath ?? target.account.avatarUrl,

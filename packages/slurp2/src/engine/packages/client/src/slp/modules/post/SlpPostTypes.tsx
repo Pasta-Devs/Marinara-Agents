@@ -20,7 +20,7 @@ export type ActiveComposerMention = SlpTextMention & { query: string };
  * don't (NoodleR) omit it — the card then hides the attach-image tool, upload, GIF tab, and
  * lightbox instead of the host having to pass discarded setters and dangling refs.
  */
-export interface NoodlePostCardMediaCap {
+export interface SlpPostCardMediaCap {
   setImageLightbox: React.Dispatch<React.SetStateAction<ChatImage | null>>;
   replyImageUrl: string;
   setReplyImageUrl: React.Dispatch<React.SetStateAction<string>>;
@@ -33,14 +33,14 @@ export interface NoodlePostCardMediaCap {
 }
 
 /** Editing/deleting replies. Omit on hosts without a reply-management path (NoodleR). */
-export interface NoodlePostCardReplyManagementCap {
+export interface SlpPostCardReplyManagementCap {
   editingReplyId: string | null;
   editingReplyContent: string;
   setEditingReplyContent: React.Dispatch<React.SetStateAction<string>>;
   startEditingReply: (reply: SlpInteraction) => void;
   cancelEditingReply: () => void;
-  saveEditedReply: (post: NoodlePostCardModel, reply: SlpInteraction) => void;
-  deleteNoodleReply: (post: NoodlePostCardModel, reply: SlpInteraction) => void;
+  saveEditedReply: (post: SlpPostCardModel, reply: SlpInteraction) => void;
+  deleteNoodleReply: (post: SlpPostCardModel, reply: SlpInteraction) => void;
   updateInteraction: { isPending: boolean };
   deleteInteraction: { isPending: boolean };
   /** Gate reply Edit/Delete. Omit for the default author-based check. */
@@ -48,20 +48,20 @@ export interface NoodlePostCardReplyManagementCap {
 }
 
 /** @mention autocomplete in the reply composer. Omit on hosts without mentions (NoodleR). */
-export interface NoodlePostCardMentionsCap {
+export interface SlpPostCardMentionsCap {
   activeReplyMention: ActiveComposerMention | null;
   activeReplyMentionIndex: number;
   replyMentionSuggestions: SlpAccount[];
   selectReplyMention: (account: SlpAccount) => void;
 }
 
-type NoodlePostCardAuthor = Pick<SlpAuthorSnapshot, "id" | "handle" | "displayName" | "avatarUrl" | "avatarCrop">;
-export type NoodlePostCardModel = Pick<
+type SlpPostCardAuthor = Pick<SlpAuthorSnapshot, "id" | "handle" | "displayName" | "avatarUrl" | "avatarCrop">;
+export type SlpPostCardModel = Pick<
   SlpPost,
   "id" | "authorAccountId" | "content" | "imageUrl" | "imagePrompt" | "metadata" | "createdAt" | "access"
 > & {
   title: string | null;
-  authorSnapshot: NoodlePostCardAuthor | null;
+  authorSnapshot: SlpPostCardAuthor | null;
   interactions: SlpInteraction[];
   /**
    * The platform total, where the caller has one. The rows carry the names; this carries the size.
@@ -70,18 +70,18 @@ export type NoodlePostCardModel = Pick<
   likeCount?: number;
 };
 
-export interface NoodlePostCardTitleEditingCap {
+export interface SlpPostCardTitleEditingCap {
   editingPostTitle: string;
   setEditingPostTitle: React.Dispatch<React.SetStateAction<string>>;
   maxLength: number;
 }
 
-export type NoodlePostImageUpdate =
+export type SlpPostImageUpdate =
   | { kind: "replace"; file: File; crop: SlpPostImageCrop }
   | { kind: "crop"; crop: SlpPostImageCrop }
   | { kind: "remove" };
 
-export type NoodlePostImageCropSource =
+export type SlpPostImageCropSource =
   | {
       source: File | string;
       crop: SlpPostImageCrop | null;
@@ -89,13 +89,13 @@ export type NoodlePostImageCropSource =
     }
   | { source: File; crop: SlpPostImageCrop | null; mode: "replace" };
 
-export interface NoodlePostCardImageEditingCap {
-  update: NoodlePostImageUpdate | null;
-  cropSource: NoodlePostImageCropSource | null;
+export interface SlpPostCardImageEditingCap {
+  update: SlpPostImageUpdate | null;
+  cropSource: SlpPostImageCropSource | null;
   loading: boolean;
   error: string | null;
   fileInputRef: RefObject<HTMLInputElement | null>;
-  beginCrop: (post: NoodlePostCardModel) => void;
+  beginCrop: (post: SlpPostCardModel) => void;
   selectReplacement: (event: ChangeEvent<HTMLInputElement>) => void;
   applyCrop: (crop: SlpPostImageCrop) => Promise<void>;
   cancelCrop: () => void;
@@ -103,7 +103,7 @@ export interface NoodlePostCardImageEditingCap {
   restore: () => void;
 }
 
-export interface NoodlePostCardCtx {
+export interface SlpPostCardCtx {
   accountById?: Map<string, SlpAccount>;
   accountByHandle?: Map<string, SlpAccount>;
   personaAccount: SlpAccount | null;
@@ -125,18 +125,18 @@ export interface NoodlePostCardCtx {
   replyComposerRef: RefObject<HTMLTextAreaElement | null>;
   replyValueRef: RefObject<string>;
   replyMediaToolRef: RefObject<HTMLDivElement | null>;
-  startEditingPost: (post: NoodlePostCardModel) => void;
-  deleteNoodlePost: (post: NoodlePostCardModel) => void;
+  startEditingPost: (post: SlpPostCardModel) => void;
+  deleteNoodlePost: (post: SlpPostCardModel) => void;
   cancelEditingPost: () => void;
-  saveEditedPost: (post: NoodlePostCardModel) => void;
-  reactToPost: (post: NoodlePostCardModel, type: "like", active?: boolean) => void;
-  reactToReply: (post: NoodlePostCardModel, target: SlpInteraction, active: boolean) => void;
+  saveEditedPost: (post: SlpPostCardModel) => void;
+  reactToPost: (post: SlpPostCardModel, type: "like", active?: boolean) => void;
+  reactToReply: (post: SlpPostCardModel, target: SlpInteraction, active: boolean) => void;
   openReplyComposer: (postId: string, parentInteractionId?: string | null) => void;
   handleReplyChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
   /** Reply composer keydown (mention nav / submit shortcuts). Omit on hosts without them. */
   handleReplyKeyDown?: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   clearReplyComposer: () => void;
-  submitReply: (post: NoodlePostCardModel) => void;
+  submitReply: (post: SlpPostCardModel) => void;
   /** Present only when the host enables creatorReplyRequest. */
   creatorReplyRequest?: { asked: boolean; setAsked: (asked: boolean) => void };
   appendToReply: (text: string) => void;
@@ -150,7 +150,7 @@ export interface NoodlePostCardCtx {
   /** Human controller edit/delete capability. Viewer-only projections set this false. */
   postManagement: boolean;
   /** NoodleR title editing. Noodle posts omit this capability and remain titleless. */
-  titleEditing?: NoodlePostCardTitleEditingCap;
+  titleEditing?: SlpPostCardTitleEditingCap;
   /** Existing-poll editing. Poll-less posts do not expose an add-poll path here. */
   pollEditing?: {
     value: SlpPollInput | null;
@@ -165,48 +165,48 @@ export interface NoodlePostCardCtx {
   /** Open the whole post in the media dialog. Absent → the image opens a plain lightbox. */
   openPost?: (postId: string) => void;
   /** Vote in a post's poll. Pollless posts never call it. */
-  voteInPoll?: (post: NoodlePostCardModel, optionId: string, selectedOptionId: string | null) => void;
+  voteInPoll?: (post: SlpPostCardModel, optionId: string, selectedOptionId: string | null) => void;
   /** Preserve the public timeline's legacy body/poll duplicate suppression. */
   deduplicatePollBody?: boolean;
   /** Post image crop, replacement, and removal capability. */
-  imageEditing?: NoodlePostCardImageEditingCap;
+  imageEditing?: SlpPostCardImageEditingCap;
   /** Generate a missing post image from its saved prompt. */
-  generatePostImage?: (post: Pick<NoodlePostCardModel, "id" | "authorAccountId">, imagePrompt?: string) => void;
+  generatePostImage?: (post: Pick<SlpPostCardModel, "id" | "authorAccountId">, imagePrompt?: string) => void;
   generatingPostImageId?: string | null;
   /** Reply image/upload capability. Absent → the card hides all reply-image affordances. */
-  media?: NoodlePostCardMediaCap;
+  media?: SlpPostCardMediaCap;
   /**
    * Opening an image fullscreen is not the same capability as attaching one to a reply, so
    * hosts without the reply-image cap (NoodleR) still get a lightbox by passing this.
    */
   setImageLightbox?: React.Dispatch<React.SetStateAction<ChatImage | null>>;
   /** Reply edit/delete capability. Absent → reply management UI stays hidden. */
-  replyManagement?: NoodlePostCardReplyManagementCap;
+  replyManagement?: SlpPostCardReplyManagementCap;
   /** @mention autocomplete capability. Absent → no mention suggestions. */
-  mentions?: NoodlePostCardMentionsCap;
+  mentions?: SlpPostCardMentionsCap;
   /** Character limit for the Show more clamp in SlurpClampedText. Host reads from settings. */
   postShowMoreLength?: number;
 }
 
-export interface NoodlePostCardControllerOptions {
+export interface SlpPostCardControllerOptions {
   postManagement: boolean;
   /** The Show more threshold from settings; the card cannot read settings itself. */
   postShowMoreLength?: number;
   personaAccount: SlpAccount | null;
   savePost: (
-    post: NoodlePostCardModel,
+    post: SlpPostCardModel,
     input: {
       title: string | null;
       content: string;
-      image: NoodlePostImageUpdate | null;
+      image: SlpPostImageUpdate | null;
       poll?: SlpPollInput | null;
     },
   ) => Promise<void>;
-  deletePost: (post: NoodlePostCardModel) => void;
-  reactToPost: (post: NoodlePostCardModel, type: "like", active?: boolean) => void;
-  reactToReply: (post: NoodlePostCardModel, target: SlpInteraction, active: boolean) => void;
+  deletePost: (post: SlpPostCardModel) => void;
+  reactToPost: (post: SlpPostCardModel, type: "like", active?: boolean) => void;
+  reactToReply: (post: SlpPostCardModel, target: SlpInteraction, active: boolean) => void;
   submitReply: (
-    post: NoodlePostCardModel,
+    post: SlpPostCardModel,
     input: {
       content: string;
       parentInteractionId: string | null;
@@ -229,9 +229,9 @@ export interface NoodlePostCardControllerOptions {
   titleMaxLength?: number;
   allowPollOnlyEdits?: boolean;
   openAuthorProfile?: (accountId: string) => void;
-  voteInPoll?: (post: NoodlePostCardModel, optionId: string, selectedOptionId: string | null) => void;
+  voteInPoll?: (post: SlpPostCardModel, optionId: string, selectedOptionId: string | null) => void;
   deduplicatePollBody?: boolean;
   imageEditing?: {
-    loadPostImage: (post: NoodlePostCardModel) => Promise<File | string>;
+    loadPostImage: (post: SlpPostCardModel) => Promise<File | string>;
   };
 }

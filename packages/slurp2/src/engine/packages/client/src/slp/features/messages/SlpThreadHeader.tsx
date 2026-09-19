@@ -2,7 +2,7 @@ import { cn } from "../../../lib/utils";
 import { ArrowLeft, Brain, BriefcaseBusiness, Check, ChevronDown, Info, MoreVertical, Search, X } from "lucide-react";
 import { Avatar } from "../../base/chrome/SlpChrome";
 import { SlurpRapportBadge, SlurpTierLadder } from "./SlpMessageInsights";
-import { NoodleAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
+import { SlpAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
 import { HeaderIconButton } from "./SlpThreadChrome";
 import { SlurpCoinAmount } from "../../modules/coin/SlpCoin";
 import type { SlurpThreadViewModel } from "./slp-thread-actions";
@@ -131,7 +131,7 @@ export function SlpThreadHeader({ model }: { model: SlurpThreadViewModel }) {
           </button>
         )}
         {tierOpen && thread?.rapport && (
-          <NoodleAnchoredPopover anchorRef={tierTriggerRef}>
+          <SlpAnchoredPopover anchorRef={tierTriggerRef}>
             <div
               ref={tierPopoverRef}
               role="dialog"
@@ -153,7 +153,7 @@ export function SlpThreadHeader({ model }: { model: SlurpThreadViewModel }) {
               </p>
               <SlurpTierLadder tier={thread.rapport.tier} className="mt-4" />
             </div>
-          </NoodleAnchoredPopover>
+          </SlpAnchoredPopover>
         )}
         {/* Four icons of the same size and weight, because none of them outranks the others. The
         details button was the odd one out as a word, and read as the only real control. */}
@@ -219,7 +219,7 @@ export function SlpThreadHeader({ model }: { model: SlurpThreadViewModel }) {
           </button>
         )}
         {headerMenuOpen && (
-          <NoodleAnchoredPopover anchorRef={headerMenuTriggerRef}>
+          <SlpAnchoredPopover anchorRef={headerMenuTriggerRef}>
             <div
               ref={headerMenuRef}
               role="menu"
@@ -274,7 +274,7 @@ export function SlpThreadHeader({ model }: { model: SlurpThreadViewModel }) {
                   </button>
                 ))}
             </div>
-          </NoodleAnchoredPopover>
+          </SlpAnchoredPopover>
         )}
       </div>
 

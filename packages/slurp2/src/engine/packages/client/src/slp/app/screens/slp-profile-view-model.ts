@@ -1,35 +1,35 @@
 import { useEffect, useRef, useState } from "react";
 import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpManagedStageProfile, SlurpStageProfileInput } from "../../base/state/slp-state-types";
-import { useNoodlerFollowers, useNoodlerSubscribers } from "../../features/audience/slp-audience-hooks";
-import { useUpdateNoodlerFanActivity } from "../../features/audience/slp-fan-activity-hooks";
+import { useCreatorFollowers, useCreatorSubscribers } from "../../features/audience/slp-audience-hooks";
+import { useUpdateCreatorFanActivity } from "../../features/audience/slp-fan-activity-hooks";
 import {
-  useGenerateNoodlerArtwork,
-  useUploadNoodlerAvatar,
-  useUploadNoodlerBanner,
+  useGenerateCreatorArtwork,
+  useUploadCreatorAvatar,
+  useUploadCreatorBanner,
 } from "../../features/creators/slp-creator-profile-hooks";
 import { useTipSlurpCreator } from "../../features/economy/slp-economy-hooks";
 import type { SlurpProfilePost } from "../../features/feed/slp-feed-contract";
-import { useUpdateNoodlerAutoPosting } from "../../features/feed/slp-feed-schedule-hooks";
-import { useNoodlerViewer } from "../../features/feed/slp-feed-viewer-hooks";
+import { useUpdateCreatorAutoPosting } from "../../features/feed/slp-feed-schedule-hooks";
+import { useCreatorViewer } from "../../features/feed/slp-feed-viewer-hooks";
 import { useSlurpCompose } from "../../features/messages/slp-messages-hooks";
 import { useSlurpArcs } from "../../features/projects/slp-projects-hooks";
 import { useSlurpSettings } from "../../features/settings/slp-settings-hooks";
-import { type NoodlePostCardCtx } from "../../modules/post/SlpPostCard";
+import { type SlpPostCardCtx } from "../../modules/post/SlpPostCard";
 import { useSlurpMediaSrc } from "../../base/media/slp-media-src";
 import { slurpCreatorStatus } from "../../modules/creator/slp-creator-status";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { profileAccent } from "../../features/creators/SlpStageProfileForm";
 import {
   isSlurpStory,
-  noodlerGoalOf,
+  slpCreatorGoalOf,
   toManagedPostCardModel,
-  toNoodlePostCardModel,
-  type NoodlerPostDraft,
-  type NoodlerPostSubmission,
+  toSlpPostCardModel,
+  type SlpCreatorPostDraft,
+  type SlpCreatorPostSubmission,
 } from "./SlpHomeHelpers";
 
-import type { NoodlerProfileTab, SlurpProfileImagePost } from "./SlpScreenProfile";
+import type { SlpCreatorProfileTab, SlurpProfileImagePost } from "./SlpScreenProfile";
 
 export interface StageProfileViewProps {
   profile: SlurpManagedStageProfile;
@@ -39,18 +39,18 @@ export interface StageProfileViewProps {
   onSaveEdit: (location?: string) => void;
   profileSavePending: boolean;
   posts: SlurpProfilePost[];
-  viewerCreator: NonNullable<ReturnType<typeof useNoodlerViewer>["data"]>["creators"][number] | null;
+  viewerCreator: NonNullable<ReturnType<typeof useCreatorViewer>["data"]>["creators"][number] | null;
   viewerAccount: SlpAccount | null;
   viewerActorAccount: SlpAccount | null;
   slurpSettings: ReturnType<typeof useSlurpSettings>["data"] | null;
-  postCardCtx: NoodlePostCardCtx;
+  postCardCtx: SlpPostCardCtx;
   viewerAccounts: SlpAccount[];
   connectionCounts: Record<string, { fans: number; followers: number }>;
   viewerIsLoading: boolean;
   viewerIsError: boolean;
   onRetryViewer: () => void;
-  draft: NoodlerPostDraft;
-  onDraftChange: (patch: Partial<NoodlerPostDraft>) => void;
+  draft: SlpCreatorPostDraft;
+  onDraftChange: (patch: Partial<SlpCreatorPostDraft>) => void;
   onClearDraft: () => void;
   onDiscardDraft: () => void;
   isLoading: boolean;
@@ -58,8 +58,8 @@ export interface StageProfileViewProps {
   onRetry: () => void;
   onEdit: () => void;
   onBack: () => void;
-  onManualPost: (input: NoodlerPostSubmission) => Promise<void>;
-  onGuidedPost: (input: NoodlerPostSubmission) => Promise<void>;
+  onManualPost: (input: SlpCreatorPostSubmission) => Promise<void>;
+  onGuidedPost: (input: SlpCreatorPostSubmission) => Promise<void>;
   manualPending: boolean;
   guidePending: boolean;
   onRunNow: (accountId: string) => void;
@@ -110,8 +110,8 @@ export function useStageProfileViewModel(props: StageProfileViewProps) {
   useEffect(() => {
     if (composerOpenSignal > 0) setCreatorToolsOpen(true);
   }, [composerOpenSignal]);
-  const updateAutoPosting = useUpdateNoodlerAutoPosting();
-  const updateFanActivity = useUpdateNoodlerFanActivity();
+  const updateAutoPosting = useUpdateCreatorAutoPosting();
+  const updateFanActivity = useUpdateCreatorFanActivity();
   const tipCreator = useTipSlurpCreator();
   const [tipOpen, setTipOpen] = useState(false);
   // The compose query is the viewer-facing source for action prices and messaging policy.
@@ -126,9 +126,9 @@ export function useStageProfileViewModel(props: StageProfileViewProps) {
     locationProfileId.current = profile.id;
     setLocationDraft((profile as SlurpManagedStageProfile & { location?: string }).location ?? "");
   }, [profile.id, profile]);
-  const uploadProfileAvatar = useUploadNoodlerAvatar();
-  const uploadProfileBanner = useUploadNoodlerBanner();
-  const generateProfileArtwork = useGenerateNoodlerArtwork();
+  const uploadProfileAvatar = useUploadCreatorAvatar();
+  const uploadProfileBanner = useUploadCreatorBanner();
+  const generateProfileArtwork = useGenerateCreatorArtwork();
   const profileAvatarFileRef = useRef<HTMLInputElement | null>(null);
   const profileBannerFileRef = useRef<HTMLInputElement | null>(null);
   const [artworkKind, setArtworkKind] = useState<"avatar" | "banner" | null>(null);
@@ -142,10 +142,10 @@ export function useStageProfileViewModel(props: StageProfileViewProps) {
       }
     : null;
   const autoPosting = profile.autoPosting;
-  const [activeTab, setActiveTab] = useState<NoodlerProfileTab>("posts");
+  const [activeTab, setActiveTab] = useState<SlpCreatorProfileTab>("posts");
   const [revealedManagedPostIds, setRevealedManagedPostIds] = useState<Set<string>>(() => new Set());
-  const subscribersQuery = useNoodlerSubscribers(profile.id);
-  const followersQuery = useNoodlerFollowers(profile.id);
+  const subscribersQuery = useCreatorSubscribers(profile.id);
+  const followersQuery = useCreatorFollowers(profile.id);
   const subscribers = subscribersQuery.data?.pages.flatMap((page) => page.items) ?? [];
   const subscriberTotal = subscribersQuery.data?.pages[0]?.total ?? subscribers.length;
   const followerTotal = connectionCounts[profile.id]?.followers ?? 0;
@@ -168,7 +168,7 @@ export function useStageProfileViewModel(props: StageProfileViewProps) {
   const managedCreator = true;
   // The goal the audience sees. It rides on the viewer scope beside `subscriptionPrice`, because
   // the audience profile projection is a strict allowlist and must stay that way.
-  const goalForViewer = noodlerGoalOf(viewerCreator);
+  const goalForViewer = slpCreatorGoalOf(viewerCreator);
   const arcsQuery = useSlurpArcs(viewerAccount?.entityId ?? null, profile.id);
   const editing = Boolean(profileDraft);
   const editDraft = profileDraft ?? {
@@ -188,7 +188,7 @@ export function useStageProfileViewModel(props: StageProfileViewProps) {
     if (!managedPost) {
       return entryViewerPost.locked
         ? [{ kind: "locked" as const, post: entryViewerPost }]
-        : [{ kind: "card" as const, model: toNoodlePostCardModel(entryViewerPost, profile) }];
+        : [{ kind: "card" as const, model: toSlpPostCardModel(entryViewerPost, profile) }];
     }
     const viewerPost = viewerPostById.get(managedPost.id) ?? entryViewerPost;
     if (revealedManagedPostIds.has(managedPost.id)) {
@@ -209,7 +209,7 @@ export function useStageProfileViewModel(props: StageProfileViewProps) {
     }
     return viewerPost.locked
       ? [{ kind: "locked" as const, post: { ...viewerPost, imagePrompt: managedPost.imagePrompt } }]
-      : [{ kind: "card" as const, model: toNoodlePostCardModel(viewerPost, profile) }];
+      : [{ kind: "card" as const, model: toSlpPostCardModel(viewerPost, profile) }];
   });
   const visiblePosts = projectedPosts.filter((item) => {
     const post = item.kind === "locked" || item.kind === "controller-locked" ? item.post : item.model;

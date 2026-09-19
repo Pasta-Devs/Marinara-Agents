@@ -9,19 +9,19 @@ import type { ImagePromptOverride } from "../../../components/ui/ImagePromptRevi
 import { api } from "../../../lib/api-client.js";
 import { useSlurpUIStore } from "../../base/state/slp-package-store.js";
 import type { SlurpPageCursor } from "../../base/state/slp-page-cursor.js";
-import { noodleKeys } from "../../base/state/slp-query-keys.js";
+import { slpKeys } from "../../base/state/slp-query-keys.js";
 import type {
-  GeneratedNoodlerNoodlePost,
-  NoodlePostDraft,
-  NoodlePostDraftRequest,
-  NoodlerContentFormat,
-  NoodlerPostDraftImage,
+  GeneratedCreatorSlpPost,
+  SlpPostDraft,
+  SlpPostDraftRequest,
+  SlpCreatorContentFormat,
+  SlpCreatorPostDraftImage,
   SlurpProfilePost,
 } from "./slp-feed-contract.js";
 
-export function useNoodlerPosts(accountId: string | null, personaId: string | null) {
+export function useCreatorPosts(accountId: string | null, personaId: string | null) {
   return useQuery({
-    queryKey: [...noodleKeys.noodlerPosts(accountId ?? "none"), personaId ?? "none"],
+    queryKey: [...slpKeys.noodlerPosts(accountId ?? "none"), personaId ?? "none"],
     queryFn: async ({ signal }) => {
       const items: SlurpProfilePost[] = [];
       let cursor: SlurpPageCursor | null = null;
@@ -57,33 +57,33 @@ export function useNoodlerPosts(accountId: string | null, personaId: string | nu
  * Pairs with `POST /accounts/:id/post-draft`, which the standalone Noodle/Slurp split dropped
  * while keeping the generator behind it.
  */
-export function useGenerateNoodlePostDraft() {
+export function useGenerateSlpPostDraft() {
   return useMutation({
-    mutationFn: ({ accountId, ...body }: NoodlePostDraftRequest) =>
-      api.post<NoodlePostDraft>(`/slurp2/accounts/${encodeURIComponent(accountId)}/post-draft`, body),
+    mutationFn: ({ accountId, ...body }: SlpPostDraftRequest) =>
+      api.post<SlpPostDraft>(`/slurp2/accounts/${encodeURIComponent(accountId)}/post-draft`, body),
   });
 }
-type NoodlerFormatRequest = {
-  format?: NoodlerContentFormat;
+type SlpCreatorFormatRequest = {
+  format?: SlpCreatorContentFormat;
 };
-type NoodlerCreatePostRequest = Omit<SlpCreatorPostCreateInput, "uploadedImageUrl" | "imageCrop"> & {
-  image?: NoodlerPostDraftImage | null;
+type SlpCreatorCreatePostRequest = Omit<SlpCreatorPostCreateInput, "uploadedImageUrl" | "imageCrop"> & {
+  image?: SlpCreatorPostDraftImage | null;
   postType?: "post" | "story";
   linkedPostId?: string | null;
   /** Price for this locked post. Null uses the Creator's price. */
   unlockPrice?: number | null;
   /** Image directions to keep on the post, so its image can be rendered afterwards. */
   imagePrompt?: string | null;
-} & NoodlerFormatRequest;
-type NoodlerGeneratePostRequest = Omit<SlpCreatorGenerationRequest, "uploadedImageUrl" | "imageCrop"> & {
-  image?: NoodlerPostDraftImage | null;
+} & SlpCreatorFormatRequest;
+type SlpCreatorGeneratePostRequest = Omit<SlpCreatorGenerationRequest, "uploadedImageUrl" | "imageCrop"> & {
+  image?: SlpCreatorPostDraftImage | null;
   /** Ask generation for a Story instead of waiting for the rotation to pick one. */
   postType?: "post" | "story";
-} & NoodlerFormatRequest;
-function postNoodlerRequestWithImage<T>(
+} & SlpCreatorFormatRequest;
+function postCreatorRequestWithImage<T>(
   path: string,
   input: Record<string, unknown>,
-  image?: NoodlerPostDraftImage | null,
+  image?: SlpCreatorPostDraftImage | null,
 ): Promise<T> {
   if (!image) return api.post<T>(path, input);
   const payload = {
@@ -98,11 +98,11 @@ function postNoodlerRequestWithImage<T>(
   }
   return api.post<T>(path, { ...payload, uploadedImageUrl: image.source });
 }
-export function useGenerateNoodlerNoodlePost() {
+export function useGenerateCreatorSlpPost() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ image, ...input }: NoodlerGeneratePostRequest) =>
-      postNoodlerRequestWithImage<GeneratedNoodlerNoodlePost>(
+    mutationFn: ({ image, ...input }: SlpCreatorGeneratePostRequest) =>
+      postCreatorRequestWithImage<GeneratedCreatorSlpPost>(
         "/slurp2/refresh",
         {
           ...input,
@@ -114,13 +114,13 @@ export function useGenerateNoodlerNoodlePost() {
     onSuccess: (_post, input) =>
       Promise.all([
         qc.invalidateQueries({
-          queryKey: noodleKeys.noodlerPosts(input.targetAccountId),
+          queryKey: slpKeys.noodlerPosts(input.targetAccountId),
         }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
+        qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() }),
       ]),
   });
 }
-export function useConfirmNoodlerImagePrompts() {
+export function useConfirmCreatorImagePrompts() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: { targetAccountId: string; prompts: ImagePromptOverride[] }) =>
@@ -131,23 +131,23 @@ export function useConfirmNoodlerImagePrompts() {
     onSuccess: (_result, input) =>
       Promise.all([
         qc.invalidateQueries({
-          queryKey: noodleKeys.noodlerPosts(input.targetAccountId),
+          queryKey: slpKeys.noodlerPosts(input.targetAccountId),
         }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
+        qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() }),
       ]),
   });
 }
-export function useCreateNoodlerPost() {
+export function useCreateCreatorPost() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ image, ...input }: NoodlerCreatePostRequest) =>
-      postNoodlerRequestWithImage<SlpCreatorManagedPost>("/slurp2/noodler/posts", input, image),
+    mutationFn: ({ image, ...input }: SlpCreatorCreatePostRequest) =>
+      postCreatorRequestWithImage<SlpCreatorManagedPost>("/slurp2/noodler/posts", input, image),
     onSuccess: (_post, input) =>
       Promise.all([
         qc.invalidateQueries({
-          queryKey: noodleKeys.noodlerPosts(input.targetAccountId),
+          queryKey: slpKeys.noodlerPosts(input.targetAccountId),
         }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
+        qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() }),
       ]),
   });
 }
@@ -158,7 +158,7 @@ function imageFileExtension(contentType: string): string {
   if (contentType === "image/avif") return "avif";
   return "jpg";
 }
-export function useLoadNoodlerPostImage() {
+export function useLoadCreatorPostImage() {
   return useMutation({
     mutationFn: async ({ imageUrl }: { imageUrl: string }) => {
       const url = new URL(imageUrl, window.location.origin);
@@ -176,7 +176,7 @@ export function useLoadNoodlerPostImage() {
     },
   });
 }
-export function useUpdateNoodlerPost() {
+export function useUpdateCreatorPost() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, accountId, ...input }: { id: string; accountId: string } & SlpCreatorPostUpdateInput) =>
@@ -184,14 +184,14 @@ export function useUpdateNoodlerPost() {
     onSuccess: (_post, input) => {
       return Promise.all([
         qc.invalidateQueries({
-          queryKey: noodleKeys.noodlerPosts(input.accountId),
+          queryKey: slpKeys.noodlerPosts(input.accountId),
         }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
+        qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() }),
       ]);
     },
   });
 }
-export function useReplaceNoodlerPostImage() {
+export function useReplaceCreatorPostImage() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -214,13 +214,13 @@ export function useReplaceNoodlerPostImage() {
     onSuccess: (_post, input) =>
       Promise.all([
         qc.invalidateQueries({
-          queryKey: noodleKeys.noodlerPosts(input.accountId),
+          queryKey: slpKeys.noodlerPosts(input.accountId),
         }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
+        qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() }),
       ]),
   });
 }
-export function useGenerateNoodlerPostImage() {
+export function useGenerateCreatorPostImage() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, accountId, imagePrompt }: { id: string; accountId: string; imagePrompt?: string }) =>
@@ -232,12 +232,12 @@ export function useGenerateNoodlerPostImage() {
       }),
     onSuccess: (_post, input) =>
       Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerPosts(input.accountId) }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
+        qc.invalidateQueries({ queryKey: slpKeys.noodlerPosts(input.accountId) }),
+        qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() }),
       ]),
   });
 }
-export function useDeleteNoodlerPost() {
+export function useDeleteCreatorPost() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, accountId }: { id: string; accountId: string }) =>
@@ -247,9 +247,9 @@ export function useDeleteNoodlerPost() {
     onSuccess: (_post, input) => {
       return Promise.all([
         qc.invalidateQueries({
-          queryKey: noodleKeys.noodlerPosts(input.accountId),
+          queryKey: slpKeys.noodlerPosts(input.accountId),
         }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
+        qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() }),
       ]);
     },
   });

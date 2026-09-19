@@ -5,30 +5,30 @@ import { AUTOMATIC_GENERATION_HEADER } from "../../../services/generation/connec
 import { createGarnishAds } from "../ads/slp-ads-contract.js";
 import { syncGarnishAdsWithLorebook } from "../ads/slp-ads-contract.js";
 import {
-  dueNoodleRefreshTimes,
-  markNoodleRefreshAttempt,
-  markNoodleRefreshFailure,
-  markNoodleRefreshSuccess,
-  nextNoodleRefreshTime,
-  type PersistedNoodleRefreshSchedule,
+  dueSlpRefreshTimes,
+  markSlpRefreshAttempt,
+  markSlpRefreshFailure,
+  markSlpRefreshSuccess,
+  nextSlpRefreshTime,
+  type PersistedSlpRefreshSchedule,
 } from "../../modules/feed/slp-refresh-schedule.js";
 
-const NOODLE_SCHEDULER_INITIAL_DELAY_MS = 20_000;
-const NOODLE_SCHEDULER_MAX_POLL_MS = 60_000;
+const SLP_SCHEDULER_INITIAL_DELAY_MS = 20_000;
+const SLP_SCHEDULER_MAX_POLL_MS = 60_000;
 // Nothing is scheduled while automatic refresh is off, so the poll only needs to notice that the
 // setting changed. A minute-by-minute wake for that costs battery on phone installs for nothing.
-const NOODLE_SCHEDULER_DISABLED_POLL_MS = 15 * 60_000;
-const NOODLE_SCHEDULER_CONFIGURATION_RETRY_MS = 15 * 60_000;
-const NOODLE_SCHEDULER_BUSY_RETRY_MS = 60_000;
-const NOODLE_SCHEDULER_RATE_LIMIT_RETRY_MS = 5 * 60_000;
-const NOODLE_SCHEDULER_FAILURE_BASE_RETRY_MS = 5 * 60_000;
-const NOODLE_SCHEDULER_FAILURE_MAX_RETRY_MS = 60 * 60_000;
-const NOODLE_SCHEDULER_CONFIGURATION_STATUS_CODES = new Set([400, 401, 403, 404, 405, 410, 422]);
+const SLP_SCHEDULER_DISABLED_POLL_MS = 15 * 60_000;
+const SLP_SCHEDULER_CONFIGURATION_RETRY_MS = 15 * 60_000;
+const SLP_SCHEDULER_BUSY_RETRY_MS = 60_000;
+const SLP_SCHEDULER_RATE_LIMIT_RETRY_MS = 5 * 60_000;
+const SLP_SCHEDULER_FAILURE_BASE_RETRY_MS = 5 * 60_000;
+const SLP_SCHEDULER_FAILURE_MAX_RETRY_MS = 60 * 60_000;
+const SLP_SCHEDULER_CONFIGURATION_STATUS_CODES = new Set([400, 401, 403, 404, 405, 410, 422]);
 let refreshPauseDepth = 0;
 let activeRefreshPoll: Promise<void> | null = null;
 
 /** Same contract as `pauseNoodleAutoPost`, for the refresh poll. */
-export async function pauseNoodleRefreshScheduler(): Promise<() => void> {
+export async function pauseSlpRefreshScheduler(): Promise<() => void> {
   refreshPauseDepth += 1;
   await activeRefreshPoll?.catch(() => {});
   let released = false;
@@ -49,31 +49,31 @@ function responseError(payload: string): string {
   return payload.trim().slice(0, 500) || "Automatic Slurp refresh failed";
 }
 
-export function noodleRefreshRetryDelayMs(statusCode: number, failureAttempts: number): number {
-  if (statusCode === 409) return NOODLE_SCHEDULER_BUSY_RETRY_MS;
-  if (statusCode === 429) return NOODLE_SCHEDULER_RATE_LIMIT_RETRY_MS;
-  if (NOODLE_SCHEDULER_CONFIGURATION_STATUS_CODES.has(statusCode)) {
-    return NOODLE_SCHEDULER_CONFIGURATION_RETRY_MS;
+export function slpRefreshRetryDelayMs(statusCode: number, failureAttempts: number): number {
+  if (statusCode === 409) return SLP_SCHEDULER_BUSY_RETRY_MS;
+  if (statusCode === 429) return SLP_SCHEDULER_RATE_LIMIT_RETRY_MS;
+  if (SLP_SCHEDULER_CONFIGURATION_STATUS_CODES.has(statusCode)) {
+    return SLP_SCHEDULER_CONFIGURATION_RETRY_MS;
   }
   return Math.min(
-    NOODLE_SCHEDULER_FAILURE_MAX_RETRY_MS,
-    NOODLE_SCHEDULER_FAILURE_BASE_RETRY_MS * 2 ** Math.max(0, failureAttempts),
+    SLP_SCHEDULER_FAILURE_MAX_RETRY_MS,
+    SLP_SCHEDULER_FAILURE_BASE_RETRY_MS * 2 ** Math.max(0, failureAttempts),
   );
 }
 
-export function nextNoodleSchedulerPollDelayMs(schedule: PersistedNoodleRefreshSchedule, at: Date): number {
-  if (schedule.refreshesPerDay === 0) return NOODLE_SCHEDULER_DISABLED_POLL_MS;
+export function nextSlpSchedulerPollDelayMs(schedule: PersistedSlpRefreshSchedule, at: Date): number {
+  if (schedule.refreshesPerDay === 0) return SLP_SCHEDULER_DISABLED_POLL_MS;
   const now = at.getTime();
   const retryAt = schedule.nextAttemptAt ? Date.parse(schedule.nextAttemptAt) : Number.NaN;
   if (Number.isFinite(retryAt) && retryAt > now) {
-    return Math.max(1_000, Math.min(NOODLE_SCHEDULER_MAX_POLL_MS, retryAt - now));
+    return Math.max(1_000, Math.min(SLP_SCHEDULER_MAX_POLL_MS, retryAt - now));
   }
-  const nextRefreshAt = nextNoodleRefreshTime(schedule);
-  if (!nextRefreshAt) return NOODLE_SCHEDULER_MAX_POLL_MS;
-  return Math.max(1_000, Math.min(NOODLE_SCHEDULER_MAX_POLL_MS, Date.parse(nextRefreshAt) - now));
+  const nextRefreshAt = nextSlpRefreshTime(schedule);
+  if (!nextRefreshAt) return SLP_SCHEDULER_MAX_POLL_MS;
+  return Math.max(1_000, Math.min(SLP_SCHEDULER_MAX_POLL_MS, Date.parse(nextRefreshAt) - now));
 }
 
-export function startNoodleRefreshScheduler(
+export function startSlpRefreshScheduler(
   app: FastifyInstance,
   registerStop?: (stop: () => Promise<void>) => void,
   runInternalRoute?: (options: InjectOptions | string) => ReturnType<FastifyInstance["inject"]>,
@@ -100,20 +100,15 @@ export function startNoodleRefreshScheduler(
     timer.unref?.();
   };
 
-  const persistFailure = async (
-    schedule: PersistedNoodleRefreshSchedule,
-    error: string,
-    statusCode: number,
-    at: Date,
-  ) => {
-    const failed = markNoodleRefreshFailure(
+  const persistFailure = async (schedule: PersistedSlpRefreshSchedule, error: string, statusCode: number, at: Date) => {
+    const failed = markSlpRefreshFailure(
       schedule,
       error,
       at,
-      noodleRefreshRetryDelayMs(statusCode, schedule.failureAttempts),
+      slpRefreshRetryDelayMs(statusCode, schedule.failureAttempts),
     );
     await noodle.saveRefreshSchedule(failed);
-    if (NOODLE_SCHEDULER_CONFIGURATION_STATUS_CODES.has(statusCode)) {
+    if (SLP_SCHEDULER_CONFIGURATION_STATUS_CODES.has(statusCode)) {
       logger.debug("[noodle-scheduler] Automatic refresh is waiting for valid configuration: %s", error);
     } else {
       logger.warn(
@@ -130,11 +125,11 @@ export function startNoodleRefreshScheduler(
     if (stopped || polling) return;
     // A backup or restore owns the data while it runs; come back once it has released.
     if (refreshPauseDepth > 0) {
-      scheduleNext(NOODLE_SCHEDULER_BUSY_RETRY_MS);
+      scheduleNext(SLP_SCHEDULER_BUSY_RETRY_MS);
       return;
     }
     polling = true;
-    let nextDelay = NOODLE_SCHEDULER_MAX_POLL_MS;
+    let nextDelay = SLP_SCHEDULER_MAX_POLL_MS;
     try {
       const now = new Date();
       const settings = await noodle.getSettings();
@@ -148,17 +143,17 @@ export function startNoodleRefreshScheduler(
       let schedule = await noodle.ensureRefreshSchedule(now, settings);
       const retryAt = schedule.nextAttemptAt ? Date.parse(schedule.nextAttemptAt) : Number.NaN;
       if (Number.isFinite(retryAt) && retryAt > now.getTime()) {
-        nextDelay = nextNoodleSchedulerPollDelayMs(schedule, now);
+        nextDelay = nextSlpSchedulerPollDelayMs(schedule, now);
         return;
       }
 
-      const dueTimes = dueNoodleRefreshTimes(schedule, now);
+      const dueTimes = dueSlpRefreshTimes(schedule, now);
       if (settings.refreshesPerDay === 0 || dueTimes.length === 0) {
-        nextDelay = nextNoodleSchedulerPollDelayMs(schedule, now);
+        nextDelay = nextSlpSchedulerPollDelayMs(schedule, now);
         return;
       }
 
-      schedule = markNoodleRefreshAttempt(schedule, now);
+      schedule = markSlpRefreshAttempt(schedule, now);
       await noodle.saveRefreshSchedule(schedule);
 
       const request = {
@@ -171,9 +166,9 @@ export function startNoodleRefreshScheduler(
       const completedAt = new Date();
       const latest = await noodle.ensureRefreshSchedule(completedAt);
       if (response.statusCode >= 200 && response.statusCode < 300) {
-        const latestDueTimes = dueNoodleRefreshTimes(latest, completedAt);
+        const latestDueTimes = dueSlpRefreshTimes(latest, completedAt);
         const consumedTimes = dueTimes.filter((time) => latest.scheduledTimes.includes(time));
-        const completed = markNoodleRefreshSuccess(
+        const completed = markSlpRefreshSuccess(
           latest,
           consumedTimes.length > 0 ? consumedTimes : latestDueTimes,
           completedAt,
@@ -184,19 +179,19 @@ export function startNoodleRefreshScheduler(
           Math.max(consumedTimes.length, latestDueTimes.length),
           Math.max(consumedTimes.length, latestDueTimes.length) === 1 ? "" : "s",
         );
-        nextDelay = nextNoodleSchedulerPollDelayMs(completed, completedAt);
+        nextDelay = nextSlpSchedulerPollDelayMs(completed, completedAt);
         return;
       }
 
       const failed = await persistFailure(latest, responseError(response.payload), response.statusCode, completedAt);
-      nextDelay = nextNoodleSchedulerPollDelayMs(failed, completedAt);
+      nextDelay = nextSlpSchedulerPollDelayMs(failed, completedAt);
     } catch (error) {
       const at = new Date();
       const message = error instanceof Error ? error.message : String(error);
       try {
         const schedule = await noodle.ensureRefreshSchedule(at);
         const failed = await persistFailure(schedule, message, 500, at);
-        nextDelay = nextNoodleSchedulerPollDelayMs(failed, at);
+        nextDelay = nextSlpSchedulerPollDelayMs(failed, at);
       } catch (persistError) {
         logger.error(persistError, "[noodle-scheduler] Failed to persist scheduler failure state");
       }
@@ -213,7 +208,7 @@ export function startNoodleRefreshScheduler(
     await active?.catch(() => {});
   };
   registerStop?.(stop);
-  scheduleNext(NOODLE_SCHEDULER_INITIAL_DELAY_MS);
+  scheduleNext(SLP_SCHEDULER_INITIAL_DELAY_MS);
   app.addHook("onClose", async () => {
     stopped = true;
     if (timer) clearTimeout(timer);

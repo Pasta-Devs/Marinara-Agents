@@ -12,10 +12,10 @@ import type {
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "../../../lib/api-client.js";
-import { noodleKeys } from "../../base/state/slp-query-keys.js";
+import { slpKeys } from "../../base/state/slp-query-keys.js";
 import type { SlurpManagedStageProfile, SlurpStageProfileInput } from "../../base/state/slp-state-types.js";
 
-export function useCreateNoodlerStageProfile() {
+export function useCreateCreatorStageProfile() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -30,15 +30,15 @@ export function useCreateNoodlerStageProfile() {
       }),
     onSuccess: () =>
       Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
+        qc.invalidateQueries({ queryKey: slpKeys.noodlerAccounts() }),
         qc.invalidateQueries({
-          queryKey: noodleKeys.noodlerEligibleAccountsRoot(),
+          queryKey: slpKeys.noodlerEligibleAccountsRoot(),
         }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
+        qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() }),
       ]),
   });
 }
-export function useBulkCreateNoodlerStageProfiles() {
+export function useBulkCreateCreatorStageProfiles() {
   const qc = useQueryClient();
   const { t: localizeUi } = useUiTranslation();
   return useMutation({
@@ -66,16 +66,16 @@ export function useBulkCreateNoodlerStageProfiles() {
         toast.success(localizeUi("ui.noodle.noodlerbulkcreatepanel.createdValue1SkippedValue2", counts));
       }
       return Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
+        qc.invalidateQueries({ queryKey: slpKeys.noodlerAccounts() }),
         qc.invalidateQueries({
-          queryKey: noodleKeys.noodlerEligibleAccountsRoot(),
+          queryKey: slpKeys.noodlerEligibleAccountsRoot(),
         }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
+        qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() }),
       ]);
     },
   });
 }
-export function useUpdateNoodlerStageProfile() {
+export function useUpdateCreatorStageProfile() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -95,13 +95,13 @@ export function useUpdateNoodlerStageProfile() {
       }),
     onSuccess: () =>
       Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerReserveStatus() }),
+        qc.invalidateQueries({ queryKey: slpKeys.noodlerAccounts() }),
+        qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() }),
+        qc.invalidateQueries({ queryKey: slpKeys.noodlerReserveStatus() }),
       ]),
   });
 }
-export function useUpdateNoodlerProfileLocation() {
+export function useUpdateCreatorProfileLocation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: { accountId: string; personaId: string; location: string }) =>
@@ -109,10 +109,10 @@ export function useUpdateNoodlerProfileLocation() {
         personaId: input.personaId,
         profile: { location: input.location },
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: slpKeys.noodlerAccounts() }),
   });
 }
-function useNoodlerAvatarMutation<TInput extends { accountId: string }>(
+function useCreatorAvatarMutation<TInput extends { accountId: string }>(
   mutationFn: (input: TInput) => Promise<SlpCreatorStageProfile>,
 ) {
   const qc = useQueryClient();
@@ -120,30 +120,30 @@ function useNoodlerAvatarMutation<TInput extends { accountId: string }>(
     mutationFn,
     onSuccess: () =>
       Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerReserveStatus() }),
+        qc.invalidateQueries({ queryKey: slpKeys.noodlerAccounts() }),
+        qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() }),
+        qc.invalidateQueries({ queryKey: slpKeys.noodlerReserveStatus() }),
       ]),
   });
 }
-export function useUploadNoodlerAvatar() {
-  return useNoodlerAvatarMutation(({ accountId, file }: { accountId: string; file: File }) => {
+export function useUploadCreatorAvatar() {
+  return useCreatorAvatarMutation(({ accountId, file }: { accountId: string; file: File }) => {
     const form = new FormData();
     form.append("payload", "{}");
     form.append("file", file);
     return api.upload<SlpCreatorStageProfile>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/avatar`, form);
   });
 }
-export function useUploadNoodlerBanner() {
-  return useNoodlerAvatarMutation(({ accountId, file }: { accountId: string; file: File }) => {
+export function useUploadCreatorBanner() {
+  return useCreatorAvatarMutation(({ accountId, file }: { accountId: string; file: File }) => {
     const form = new FormData();
     form.append("payload", "{}");
     form.append("file", file);
     return api.upload<SlpCreatorStageProfile>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/banner`, form);
   });
 }
-export function useGenerateNoodlerArtwork() {
-  return useNoodlerAvatarMutation(
+export function useGenerateCreatorArtwork() {
+  return useCreatorAvatarMutation(
     ({ accountId, kind, guidance }: { accountId: string; kind: "avatar" | "banner"; guidance?: string }) =>
       api.post<SlpCreatorStageProfile>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/artwork/generate`, {
         kind,
@@ -151,17 +151,17 @@ export function useGenerateNoodlerArtwork() {
       }),
   );
 }
-export function useUseNoodlerSourceAvatar() {
-  return useNoodlerAvatarMutation(({ accountId }) =>
+export function useUseCreatorSourceAvatar() {
+  return useCreatorAvatarMutation(({ accountId }) =>
     api.patch<SlpCreatorStageProfile>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/avatar/source`, {}),
   );
 }
-export function useRemoveNoodlerAvatar() {
-  return useNoodlerAvatarMutation(({ accountId }) =>
+export function useRemoveCreatorAvatar() {
+  return useCreatorAvatarMutation(({ accountId }) =>
     api.delete<SlpCreatorStageProfile>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/avatar`),
   );
 }
-function useNoodlerSourceAction(action: "dismiss" | "adopt-identity") {
+function useCreatorSourceAction(action: "dismiss" | "adopt-identity") {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (accountId: string) =>
@@ -171,36 +171,36 @@ function useNoodlerSourceAction(action: "dismiss" | "adopt-identity") {
       ),
     onSuccess: () =>
       Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerReserveStatus() }),
+        qc.invalidateQueries({ queryKey: slpKeys.noodlerAccounts() }),
+        qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() }),
+        qc.invalidateQueries({ queryKey: slpKeys.noodlerReserveStatus() }),
       ]),
   });
 }
-export function useDismissNoodlerSourceChanges() {
-  return useNoodlerSourceAction("dismiss");
+export function useDismissCreatorSourceChanges() {
+  return useCreatorSourceAction("dismiss");
 }
-export function useAdoptNoodlerSourceIdentity() {
-  return useNoodlerSourceAction("adopt-identity");
+export function useAdoptCreatorSourceIdentity() {
+  return useCreatorSourceAction("adopt-identity");
 }
-export function useDeleteNoodlerStageProfile() {
+export function useDeleteCreatorStageProfile() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (accountId: string) =>
       api.delete<SlpAccount>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId)}`),
     onSuccess: (_account, accountId) => {
-      qc.removeQueries({ queryKey: noodleKeys.noodlerPosts(accountId) });
+      qc.removeQueries({ queryKey: slpKeys.noodlerPosts(accountId) });
       return Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
+        qc.invalidateQueries({ queryKey: slpKeys.noodlerAccounts() }),
         qc.invalidateQueries({
-          queryKey: noodleKeys.noodlerEligibleAccountsRoot(),
+          queryKey: slpKeys.noodlerEligibleAccountsRoot(),
         }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
+        qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() }),
       ]);
     },
   });
 }
-export function useGenerateNoodlerStageProfileDraft() {
+export function useGenerateCreatorStageProfileDraft() {
   return useMutation({
     mutationFn: (input: SlpStageProfileDraftRequest) => {
       const controller = new AbortController();

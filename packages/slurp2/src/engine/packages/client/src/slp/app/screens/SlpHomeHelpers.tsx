@@ -1,4 +1,4 @@
-import type { NoodlerContentFormat } from "../../features/feed/slp-feed-contract";
+import type { SlpCreatorContentFormat } from "../../features/feed/slp-feed-contract";
 import { AnimatePresence } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
 import { DEFAULT_SLURP_SUBSCRIPTION_PRICE } from "../../modules/coin/SlpCoin";
@@ -6,7 +6,7 @@ import { HelpTooltip } from "../../../components/ui/HelpTooltip";
 import { type SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
 import { PostImageFrame } from "../../base/media/SlpPostImageCropEditor";
 import { useMemo } from "react";
-import { useNoodlerViewer } from "../../features/feed/slp-feed-viewer-hooks";
+import { useCreatorViewer } from "../../features/feed/slp-feed-viewer-hooks";
 import type { SlpPollInput } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
 import type {
   SlpCreatorManagedPost,
@@ -14,22 +14,22 @@ import type {
   SlpCreatorStageProfile,
   SlpPostAccess,
 } from "../../../../../shared/src/slp/slp-social.types.js";
-import type { NoodlerPostDraftImage } from "../../features/feed/slp-feed-contract";
+import type { SlpCreatorPostDraftImage } from "../../features/feed/slp-feed-contract";
 import type { SlurpStageProfileInput } from "../../base/state/slp-state-types";
-import type { NoodlePostCardModel } from "../../modules/post/SlpPostCard";
+import type { SlpPostCardModel } from "../../modules/post/SlpPostCard";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export interface NoodlerPostSubmission {
+export interface SlpCreatorPostSubmission {
   profileId: string;
   title: string;
   body: string;
   access: SlpPostAccess;
-  image: NoodlerPostDraftImage | null;
+  image: SlpCreatorPostDraftImage | null;
   poll: { question: string; options: string[] } | null;
-  format: NoodlerContentFormat;
+  format: SlpCreatorContentFormat;
   postType: "post" | "story";
   linkedPostId: string | null;
   unlockPrice: number | null;
@@ -37,11 +37,11 @@ export interface NoodlerPostSubmission {
   generateImage: boolean;
 }
 
-export interface NoodlerPostDraft {
+export interface SlpCreatorPostDraft {
   title: string;
   body: string;
   access: SlpPostAccess;
-  image: NoodlerPostDraftImage | null;
+  image: SlpCreatorPostDraftImage | null;
   poll: SlpPollInput | null;
   postType: "post" | "story";
   linkedPostId: string | null;
@@ -50,22 +50,22 @@ export interface NoodlerPostDraft {
   generateImage: boolean;
 }
 
-export interface PendingNoodlerImage {
+export interface PendingCreatorImage {
   source: File | string;
 }
 
-export type { NoodlerContentFormat, NoodlerPostDraftImage } from "../../features/feed/slp-feed-contract";
-export type SlurpViewerCreator = NonNullable<ReturnType<typeof useNoodlerViewer>["data"]>["creators"][number];
+export type { SlpCreatorContentFormat, SlpCreatorPostDraftImage } from "../../features/feed/slp-feed-contract";
+export type SlurpViewerCreator = NonNullable<ReturnType<typeof useCreatorViewer>["data"]>["creators"][number];
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-export const NOODLER_FEED_WINDOW_SIZE = 20;
+export const SLP_CREATOR_FEED_WINDOW_SIZE = 20;
 export const SLURP_PLACEHOLDER_BALANCE = 1111;
 export const STAGE_PERSONALITY_MAX_LENGTH = 1000;
 
-export const EMPTY_NOODLER_POST_DRAFT: NoodlerPostDraft = {
+export const EMPTY_SLP_CREATOR_POST_DRAFT: SlpCreatorPostDraft = {
   title: "",
   body: "",
   access: "public",
@@ -96,16 +96,16 @@ export const textareaClass =
 // Utility functions
 // ---------------------------------------------------------------------------
 
-export function isEmptyNoodlerPostDraft(draft: NoodlerPostDraft): boolean {
+export function isEmptyCreatorPostDraft(draft: SlpCreatorPostDraft): boolean {
   return (
-    draft.title === EMPTY_NOODLER_POST_DRAFT.title &&
-    draft.body === EMPTY_NOODLER_POST_DRAFT.body &&
-    draft.access === EMPTY_NOODLER_POST_DRAFT.access &&
+    draft.title === EMPTY_SLP_CREATOR_POST_DRAFT.title &&
+    draft.body === EMPTY_SLP_CREATOR_POST_DRAFT.body &&
+    draft.access === EMPTY_SLP_CREATOR_POST_DRAFT.access &&
     !draft.image &&
     !draft.poll &&
-    draft.postType === EMPTY_NOODLER_POST_DRAFT.postType &&
-    draft.linkedPostId === EMPTY_NOODLER_POST_DRAFT.linkedPostId &&
-    draft.generateImage === EMPTY_NOODLER_POST_DRAFT.generateImage
+    draft.postType === EMPTY_SLP_CREATOR_POST_DRAFT.postType &&
+    draft.linkedPostId === EMPTY_SLP_CREATOR_POST_DRAFT.linkedPostId &&
+    draft.generateImage === EMPTY_SLP_CREATOR_POST_DRAFT.generateImage
   );
 }
 
@@ -131,7 +131,7 @@ export function parsePrice(value: string): number | null {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
-export function toNoodlePostCardModel(view: SlpCreatorPostView, profile: SlpCreatorStageProfile): NoodlePostCardModel {
+export function toSlpPostCardModel(view: SlpCreatorPostView, profile: SlpCreatorStageProfile): SlpPostCardModel {
   return {
     id: view.id,
     authorAccountId: view.authorAccountId,
@@ -154,10 +154,7 @@ export function toNoodlePostCardModel(view: SlpCreatorPostView, profile: SlpCrea
   };
 }
 
-export function toManagedPostCardModel(
-  post: SlpCreatorManagedPost,
-  profile: SlpCreatorStageProfile,
-): NoodlePostCardModel {
+export function toManagedPostCardModel(post: SlpCreatorManagedPost, profile: SlpCreatorStageProfile): SlpPostCardModel {
   return {
     id: post.id,
     authorAccountId: post.authorAccountId,
@@ -179,7 +176,7 @@ export function toManagedPostCardModel(
   };
 }
 
-export function serializeNoodlerPostGuide(title: string, body: string) {
+export function serializeCreatorPostGuide(title: string, body: string) {
   const sections: string[] = [];
   if (title.trim()) sections.push(`Title:\n${title.trim()}`);
   if (body.trim()) sections.push(`Body:\n${body.trim()}`);
@@ -190,7 +187,7 @@ export function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-export function noodlerGoalOf(
+export function slpCreatorGoalOf(
   scope: unknown,
 ): { label: string; raised: number; target: number; progress: number; met: boolean } | null {
   const goal = (scope as { goal?: unknown } | null)?.goal;
@@ -218,11 +215,11 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { SlurpSparkleVeil } from "../../base/chrome/SlpSparkleVeil";
 import { cn } from "../../../lib/utils";
-import { getNoodleAccentStyle, NOODLE_PINK, ProfileInitial } from "../../base/chrome/SlpChrome";
+import { getSlpAccentStyle, SLP_PINK, ProfileInitial } from "../../base/chrome/SlpChrome";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { useSlurpMediaSrc } from "../../base/media/slp-media-src";
 import { Modal } from "../../../components/ui/Modal";
-import type { NoodlePostCardCtx } from "../../modules/post/SlpPostCard";
+import type { SlpPostCardCtx } from "../../modules/post/SlpPostCard";
 import { SlurpCreatorPostCard } from "../../modules/post/SlpCreatorPostCard";
 
 /** Keeps a feed slot mounted while its locked and revealed card shapes trade places. */
@@ -272,7 +269,7 @@ export function SlurpAccessTransition({
   );
 }
 
-export function NoodlerDraftImageFrame({ image }: { image: NoodlerPostDraftImage }) {
+export function SlpCreatorDraftImageFrame({ image }: { image: SlpCreatorPostDraftImage }) {
   const { t: localizeUi } = useUiTranslation();
   const sourceUrl = useMemo(
     () => (typeof image.source === "string" ? image.source : URL.createObjectURL(image.source)),
@@ -347,7 +344,7 @@ export function EmptyState({
   );
 }
 
-export function NoodlerFrame({
+export function SlpCreatorFrame({
   children,
   onBack,
   title,
@@ -500,7 +497,7 @@ export function SlurpMediaDialog({
           // The Modal header is hidden: a Story draws its own close button over the picture, top right.
           "bg-black [&>div:first-child]:hidden",
       )}
-      panelStyle={getNoodleAccentStyle(NOODLE_PINK)}
+      panelStyle={getSlpAccentStyle(SLP_PINK)}
     >
       <div
         className={cn(
@@ -536,8 +533,8 @@ export function SlurpPostDialog({
   ctx,
   onClose,
 }: {
-  post: NoodlePostCardModel & { imageUrl: string };
-  ctx: NoodlePostCardCtx;
+  post: SlpPostCardModel & { imageUrl: string };
+  ctx: SlpPostCardCtx;
   onClose: () => void;
 }) {
   const { t: localizeUi } = useUiTranslation();

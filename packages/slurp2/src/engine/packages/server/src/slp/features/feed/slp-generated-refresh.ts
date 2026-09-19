@@ -7,11 +7,11 @@ import {
   type SlpGeneratedRefresh,
 } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
 import { parseGameJsonishSequence } from "../../../services/game/jsonish.js";
-import { normalizeNoodleHandle } from "../../base/identity/slp-handle.js";
+import { normalizeSlpHandle } from "../../base/identity/slp-handle.js";
 
 type RefreshCollection = keyof SlpGeneratedRefresh;
 
-export type RejectedNoodleGeneratedRefreshItem = {
+export type RejectedSlpGeneratedRefreshItem = {
   collection: RefreshCollection;
   index: number;
   issueCount: number;
@@ -22,7 +22,7 @@ export type RejectedNoodleGeneratedRefreshItem = {
  * selected for this run. The persona may be a follow target, but generations
  * must never author posts or interactions on the user's behalf.
  */
-export function validateNoodleGeneratedRefresh(
+export function validateSlpGeneratedRefresh(
   refresh: SlpGeneratedRefresh,
   allowedActorHandles: ReadonlySet<string>,
   knownHandles: ReadonlySet<string>,
@@ -32,21 +32,19 @@ export function validateNoodleGeneratedRefresh(
   if (!hasActivity) return "the response contained no timeline activity";
 
   const hasUsableAttribution =
-    refresh.posts.some((post) => allowedActorHandles.has(normalizeNoodleHandle(post.authorHandle))) ||
-    refresh.interactions.some((interaction) =>
-      allowedActorHandles.has(normalizeNoodleHandle(interaction.actorHandle)),
-    ) ||
+    refresh.posts.some((post) => allowedActorHandles.has(normalizeSlpHandle(post.authorHandle))) ||
+    refresh.interactions.some((interaction) => allowedActorHandles.has(normalizeSlpHandle(interaction.actorHandle))) ||
     refresh.follows.some(
       (follow) =>
-        allowedActorHandles.has(normalizeNoodleHandle(follow.actorHandle)) &&
-        knownHandles.has(normalizeNoodleHandle(follow.targetHandle)),
+        allowedActorHandles.has(normalizeSlpHandle(follow.actorHandle)) &&
+        knownHandles.has(normalizeSlpHandle(follow.targetHandle)),
     );
   return hasUsableAttribution ? null : "the response used no selected participant handle";
 }
 
 function normalizedGeneratedContentKey(handle: string, content: string): string {
   const normalizedContent = content.normalize("NFKC").trim().replace(/\s+/gu, " ").toLowerCase();
-  return `${normalizeNoodleHandle(handle)}\u0000${normalizedContent}`;
+  return `${normalizeSlpHandle(handle)}\u0000${normalizedContent}`;
 }
 
 /**
@@ -55,7 +53,7 @@ function normalizedGeneratedContentKey(handle: string, content: string): string 
  * interactions. Filtering before media preparation ensures a copy never
  * reaches image generation or persistence.
  */
-export function deduplicateGeneratedNoodleContent(generated: SlpGeneratedRefresh): {
+export function deduplicateGeneratedSlpContent(generated: SlpGeneratedRefresh): {
   generated: SlpGeneratedRefresh;
   removedCount: number;
 } {
@@ -120,13 +118,13 @@ const collectionSchemas = {
  * Validate generated timeline rows independently. LLM output is untrusted and a
  * single malformed interaction must not discard otherwise valid activity.
  */
-export function parseNoodleGeneratedRefresh(value: unknown): {
+export function parseSlpGeneratedRefresh(value: unknown): {
   refresh: SlpGeneratedRefresh;
-  rejected: RejectedNoodleGeneratedRefreshItem[];
+  rejected: RejectedSlpGeneratedRefreshItem[];
 } {
   if (Array.isArray(value)) {
     const refresh: SlpGeneratedRefresh = { posts: [], interactions: [], follows: [], digests: [] };
-    const rejected: RejectedNoodleGeneratedRefreshItem[] = [];
+    const rejected: RejectedSlpGeneratedRefreshItem[] = [];
     value.forEach((row, index) => {
       let parsedRow = false;
       for (const collection of Object.keys(collectionSchemas) as RefreshCollection[]) {
@@ -150,7 +148,7 @@ export function parseNoodleGeneratedRefresh(value: unknown): {
   }
 
   const refresh: SlpGeneratedRefresh = { posts: [], interactions: [], follows: [], digests: [] };
-  const rejected: RejectedNoodleGeneratedRefreshItem[] = [];
+  const rejected: RejectedSlpGeneratedRefreshItem[] = [];
 
   for (const collection of Object.keys(collectionSchemas) as RefreshCollection[]) {
     const rows = record[collection];
@@ -179,9 +177,9 @@ export function parseNoodleGeneratedRefresh(value: unknown): {
  * sometimes emit one object per collection (posts, interactions, follows,
  * digests) even though the prompt requests a single enclosing object.
  */
-export function parseNoodleGeneratedRefreshResponse(raw: string): {
+export function parseSlpGeneratedRefreshResponse(raw: string): {
   refresh: SlpGeneratedRefresh;
-  rejected: RejectedNoodleGeneratedRefreshItem[];
+  rejected: RejectedSlpGeneratedRefreshItem[];
 } {
   const parsedValues = parseGameJsonishSequence(raw);
   if (parsedValues.length === 1) {
@@ -194,17 +192,17 @@ export function parseNoodleGeneratedRefreshResponse(raw: string): {
       !Array.isArray(value[0]) &&
       Object.keys(collectionSchemas).some((collection) => collection in value[0])
     ) {
-      return parseNoodleGeneratedRefresh(value[0]);
+      return parseSlpGeneratedRefresh(value[0]);
     }
-    return parseNoodleGeneratedRefresh(value);
+    return parseSlpGeneratedRefresh(value);
   }
 
   const refresh: SlpGeneratedRefresh = { posts: [], interactions: [], follows: [], digests: [] };
-  const rejected: RejectedNoodleGeneratedRefreshItem[] = [];
+  const rejected: RejectedSlpGeneratedRefreshItem[] = [];
   const sourceOffsets: Record<RefreshCollection, number> = { posts: 0, interactions: 0, follows: 0, digests: 0 };
 
   for (const value of parsedValues) {
-    const parsed = parseNoodleGeneratedRefresh(value);
+    const parsed = parseSlpGeneratedRefresh(value);
     for (const collection of Object.keys(collectionSchemas) as RefreshCollection[]) {
       (refresh[collection] as unknown[]).push(...parsed.refresh[collection]);
       const collectionRejected = parsed.rejected.filter((item) => item.collection === collection);

@@ -1,13 +1,13 @@
 import type { DB } from "../../../../db/connection.js";
 import { createConnectionsStorage } from "../../../../services/storage/connections.storage.js";
 import { resolveSlurpTextConnection } from "../../../base/identity/slp-connection.js";
-import { resolveNoodlerImageConnectionId } from "../../../base/media/slp-image-connections.js";
+import { resolveCreatorImageConnectionId } from "../../../base/media/slp-image-connections.js";
 import { createSlurpStorage } from "../../../data/slp-storage.js";
-import { noodlerReservePolicyFingerprint } from "../../../modules/records/slp-storage-model.js";
+import { slpCreatorReservePolicyFingerprint } from "../../../modules/records/slp-storage-model.js";
 import { hasSlurpCreatorPostingIntervalConflict } from "../../../modules/feed/slp-posting-interval.js";
-import { generateNoodlerPost, resolveSlurpAutomaticPostAccess } from "../slp-generation-service.js";
-import { generateNoodlerPostImage } from "../../media/slp-media-contract.js";
-import { tryNoodlerAccountOperation } from "../../../base/locking/slp-account-operation-lock.js";
+import { generateCreatorPost, resolveSlurpAutomaticPostAccess } from "../slp-generation-service.js";
+import { generateCreatorPostImage } from "../../media/slp-media-contract.js";
+import { tryCreatorAccountOperation } from "../../../base/locking/slp-account-operation-lock.js";
 import { createCharactersStorage } from "../../../../services/storage/characters.storage.js";
 import { createPromptOverridesStorage } from "../../../../services/storage/prompt-overrides.storage.js";
 import {
@@ -26,7 +26,7 @@ import { pickGalleryAttachmentForAccount } from "../slp-generated-activity-servi
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-class NoodlerAttemptUnavailableError extends Error {
+class SlpCreatorAttemptUnavailableError extends Error {
   constructor(readonly status: "exhausted" | "holding") {
     super(`Automatic Slurp attempt ${status}.`);
   }
@@ -39,12 +39,12 @@ function plannedPublicationTimes(now: Date, postsPerDay: number): string[] {
   );
 }
 
-export function isNoodlerNightQuietTime(at: Date): boolean {
+export function isCreatorNightQuietTime(at: Date): boolean {
   const hour = at.getHours();
   return hour >= 23 || hour < 7;
 }
 
-export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Promise<SlurpReservePollOutcome> {
+export async function prepareNextCreatorReservePost(db: DB, at = new Date()): Promise<SlurpReservePollOutcome> {
   const noodle = createSlurpStorage(db);
   const settings = await noodle.getSettings();
   if (!settings.autoPostingScheduleEnabled || settings.postsPerDay <= 0) return "disabled";
@@ -92,7 +92,7 @@ export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Pr
       ) ?? null;
     if (!publishAt) return "covered";
     let eligibleAccounts = accounts;
-    if (settings.nightQuiet && isNoodlerNightQuietTime(new Date(publishAt))) {
+    if (settings.nightQuiet && isCreatorNightQuietTime(new Date(publishAt))) {
       eligibleAccounts = accounts.filter((candidate) => candidate.kind !== "character");
     }
     if (eligibleAccounts.length === 0) return "ineligible";
@@ -129,7 +129,7 @@ export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Pr
     slotId = await noodle.createNoodlerScheduledPost({
       creatorAccountId: account.id,
       publishAt,
-      policyFingerprint: noodlerReservePolicyFingerprint(account, settings, source?.updatedAt ?? null),
+      policyFingerprint: slpCreatorReservePolicyFingerprint(account, settings, source?.updatedAt ?? null),
       createdAt: at.toISOString(),
     });
     if (!slotId) return "holding";
@@ -140,11 +140,11 @@ export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Pr
   const selectedSlotId = slotId;
   const selectedPublishAt = publishAt;
 
-  const locked = await tryNoodlerAccountOperation(selectedAccount.id, async () => {
+  const locked = await tryCreatorAccountOperation(selectedAccount.id, async () => {
     const connection = await resolveSlurpTextConnection(createConnectionsStorage(db), settings.generationConnectionId);
     if (!connection) return "ineligible" as const;
     try {
-      let payload = await generateNoodlerPost(db, {
+      let payload = await generateCreatorPost(db, {
         account: selectedAccount,
         connection,
         prepareOnly: true,
@@ -152,7 +152,7 @@ export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Pr
           kind: "background",
           beforeAttempt: async () => {
             const claim = await noodle.claimNoodlerAutomaticAttempt("text", settings.postsPerDay, at);
-            if (claim.status !== "claimed") throw new NoodlerAttemptUnavailableError(claim.status);
+            if (claim.status !== "claimed") throw new SlpCreatorAttemptUnavailableError(claim.status);
             return (outcome) => noodle.completeNoodlerAutomaticAttempt(claim.claimId, outcome);
           },
         },
@@ -171,7 +171,7 @@ export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Pr
       });
       let stagedMedia: { promote: () => void; compensate: () => void } | null = null;
       if (selectedAccount.settings.scheduler.autoPosting?.imagesEnabled && payload.imagePrompt) {
-        const imageConnectionId = await resolveNoodlerImageConnectionId(db, selectedAccount.id);
+        const imageConnectionId = await resolveCreatorImageConnectionId(db, selectedAccount.id);
         // Fall back to the default image connection when a creator's mapped
         // override was deleted (getWithKey returns null), instead of silently
         // skipping scheduled image generation.
@@ -181,7 +181,7 @@ export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Pr
         if (imageConnection) {
           try {
             const linkedPublicAccount = await noodle.resolveAccountSource(selectedAccount);
-            const image = await generateNoodlerPostImage({
+            const image = await generateCreatorPostImage({
               account: selectedAccount,
               linkedPublicAccount,
               disclosureMode: selectedAccount.settings.privacy.identityDisclosure ?? "open",
@@ -212,7 +212,8 @@ export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Pr
           } catch (error) {
             if (
               error instanceof BackgroundConnectionBusyError ||
-              (error instanceof ConnectionAttemptRejectedError && error.cause instanceof NoodlerAttemptUnavailableError)
+              (error instanceof ConnectionAttemptRejectedError &&
+                error.cause instanceof SlpCreatorAttemptUnavailableError)
             ) {
               payload = {
                 ...payload,
@@ -273,7 +274,7 @@ export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Pr
           generatedAt: completedAt.toISOString(),
           expectedPublishAt: selectedPublishAt,
           payload,
-          policyFingerprint: noodlerReservePolicyFingerprint(
+          policyFingerprint: slpCreatorReservePolicyFingerprint(
             selectedAccount,
             settings,
             (await noodle.resolveAccountSource(selectedAccount))?.updatedAt ?? null,
@@ -294,7 +295,7 @@ export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Pr
       return "prepared" as const;
     } catch (error) {
       if (error instanceof BackgroundConnectionBusyError) return "busy" as const;
-      if (error instanceof ConnectionAttemptRejectedError && error.cause instanceof NoodlerAttemptUnavailableError) {
+      if (error instanceof ConnectionAttemptRejectedError && error.cause instanceof SlpCreatorAttemptUnavailableError) {
         return error.cause.status;
       }
       throw error;
@@ -303,23 +304,23 @@ export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Pr
   return locked.acquired ? locked.value : "busy";
 }
 
-export async function reconcileNoodlerReserve(db: DB, at = new Date()): Promise<number> {
+export async function reconcileCreatorReserve(db: DB, at = new Date()): Promise<number> {
   const noodle = createSlurpStorage(db);
   await noodle.reconcileNoodlerPreparedPosts(at);
   return noodle.publishDueNoodlerPreparedPosts(at);
 }
 
-export async function runNoodlerAutoPostPoll(
+export async function runCreatorAutoPostPoll(
   db: DB,
   at = new Date(),
-): Promise<{ published: number; reserve: Awaited<ReturnType<typeof prepareNextNoodlerReservePost>> }> {
+): Promise<{ published: number; reserve: Awaited<ReturnType<typeof prepareNextCreatorReservePost>> }> {
   const noodle = createSlurpStorage(db);
   return runSlurpAutoPostPollOperations({
     reconcile: async () => {
       await noodle.reconcileNoodlerPreparedPosts(at);
     },
     publishDue: () => noodle.publishDueNoodlerPreparedPosts(at),
-    prepare: () => prepareNextNoodlerReservePost(db, at),
+    prepare: () => prepareNextCreatorReservePost(db, at),
     generationMode: async () => (await noodle.getSettings()).autoPostGenerationMode,
   });
 }

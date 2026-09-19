@@ -7,11 +7,11 @@ import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.j
 import { generateSlurpPostGuidanceDraft } from "./slp-post-guidance-draft-service.js";
 import { logger } from "../../../lib/logger.js";
 import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
-import { getNoodlerImageConnections, updateNoodlerImageConnections } from "../../base/media/slp-image-connections.js";
+import { getCreatorImageConnections, updateCreatorImageConnections } from "../../base/media/slp-image-connections.js";
 import {
-  generateAndApplyNoodlerPost,
-  refreshAllNoodlerCreatorsNow,
-  refreshTargetedNoodlerCreatorsNow,
+  generateAndApplyCreatorPost,
+  refreshAllCreatorsNow,
+  refreshTargetedCreatorsNow,
 } from "./slp-post-operation.js";
 import { resolveSlurpAutomaticPostAccess } from "./slp-generation-service.js";
 import {
@@ -21,9 +21,9 @@ import {
 import type { FastifyInstance } from "fastify";
 import { slurpPostTypeSchema } from "../../modules/requests/slp-request-schemas.js";
 import {
-  type DecodedNoodlerMediaRequest,
-  decodeNoodlerMediaRequest,
-  sendNoodlerMediaError,
+  type DecodedCreatorMediaRequest,
+  decodeCreatorMediaRequest,
+  sendCreatorMediaError,
 } from "../../base/host/slp-multipart.js";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
@@ -34,13 +34,13 @@ const slurpTargetedRefreshSchema = slpCreatorTargetedRefreshSchema.extend({
 // available. Extend the underlying object and re-run the full base schema in a refinement.
 // Same trick as the post-create schema below: the packaged shared bundle may wrap the generation
 // schema, so extend the underlying object rather than the export.
-const slurpNoodlerGenerationRequestSchema = (
+const slurpCreatorGenerationRequestSchema = (
   slpCreatorGenerationRequestSchema instanceof z.ZodEffects
     ? slpCreatorGenerationRequestSchema.innerType()
     : slpCreatorGenerationRequestSchema
 ).extend({ postType: slurpPostTypeSchema.default("post"), generateImage: z.boolean().optional() });
 
-const noodleImagePromptConfirmationSchema = z.object({
+const slpImagePromptConfirmationSchema = z.object({
   prompts: z
     .array(
       z.object({
@@ -53,7 +53,7 @@ const noodleImagePromptConfirmationSchema = z.object({
   debugMode: z.boolean().optional(),
 });
 export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
-  const { connections, noodle, noodlerImages } = deps;
+  const { connections, noodle, slpCreatorImages } = deps;
   app.get("/noodler/auto-post/status", async (_req, reply) => {
     return noodle.getNoodlerReserveStatus();
   });
@@ -159,7 +159,7 @@ export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRou
     }
   });
 
-  app.get("/noodler/image-connections", async () => getNoodlerImageConnections(app.db));
+  app.get("/noodler/image-connections", async () => getCreatorImageConnections(app.db));
 
   app.patch("/noodler/image-connections", async (req, reply) => {
     const body = z
@@ -187,7 +187,7 @@ export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRou
         return reply.code(404).send({ error: "Slurp image connection not found" });
       }
     }
-    return updateNoodlerImageConnections(app.db, (current) => {
+    return updateCreatorImageConnections(app.db, (current) => {
       const creatorConnectionIds = { ...current.creatorConnectionIds };
       if (creatorId) {
         if (connectionId) creatorConnectionIds[creatorId] = connectionId;
@@ -206,7 +206,7 @@ export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRou
   app.post("/noodler/accounts/:id/auto-post/run-now", async (req, reply) => {
     const { id } = req.params as { id: string };
     try {
-      const result = await generateAndApplyNoodlerPost(app.db, {
+      const result = await generateAndApplyCreatorPost(app.db, {
         mode: "noodler",
         targetAccountId: id,
         access: await resolveSlurpAutomaticPostAccess(noodle, id),
@@ -239,7 +239,7 @@ export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRou
   // scheduled soonest), consuming each selected creator's near-future slot the same way
   // an automatic run would. One creator's failure does not affect the others.
   app.post("/noodler/auto-post/refresh-now", async (_req, reply) => {
-    const result = await refreshAllNoodlerCreatorsNow(app.db);
+    const result = await refreshAllCreatorsNow(app.db);
     if (result.status === "disabled") return reply.code(404).send({ error: "Not Found" });
     return { outcomes: result.outcomes };
   });
@@ -247,7 +247,7 @@ export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRou
   app.post("/noodler/auto-post/refresh-targeted", async (req, reply) => {
     const parsed = slurpTargetedRefreshSchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
-    const result = await refreshTargetedNoodlerCreatorsNow(
+    const result = await refreshTargetedCreatorsNow(
       app.db,
       parsed.data.accountIds,
       parsed.data.executionId,
@@ -258,9 +258,9 @@ export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRou
   });
 
   app.post("/noodler/refresh/images", async (req, reply) => {
-    const parsed = noodleImagePromptConfirmationSchema.safeParse(req.body);
+    const parsed = slpImagePromptConfirmationSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
-    const result = await noodlerImages.generateReviewedImages({
+    const result = await slpCreatorImages.generateReviewedImages({
       prompts: parsed.data.prompts,
       debugMode: parsed.data.debugMode === true,
     });
@@ -269,19 +269,19 @@ export async function slpFeedPublishingRoutes(app: FastifyInstance, deps: SlpRou
   });
 
   app.post("/refresh", async (req, reply) => {
-    let decoded: DecodedNoodlerMediaRequest<z.output<typeof slurpNoodlerGenerationRequestSchema>>;
+    let decoded: DecodedCreatorMediaRequest<z.output<typeof slurpCreatorGenerationRequestSchema>>;
     try {
-      decoded = await decodeNoodlerMediaRequest(req, {
-        withMedia: slurpNoodlerGenerationRequestSchema,
-        withoutMedia: slurpNoodlerGenerationRequestSchema,
+      decoded = await decodeCreatorMediaRequest(req, {
+        withMedia: slurpCreatorGenerationRequestSchema,
+        withoutMedia: slurpCreatorGenerationRequestSchema,
       });
     } catch (error) {
-      return sendNoodlerMediaError(reply, error);
+      return sendCreatorMediaError(reply, error);
     }
     if (!decoded.success) return reply.code(400).send({ error: decoded.error.flatten() });
     if (decoded.data.mode !== "noodler") return reply.code(404).send({ error: "Not Found" });
     try {
-      const result = await generateAndApplyNoodlerPost(
+      const result = await generateAndApplyCreatorPost(
         app.db,
         decoded.data,
         decoded.media,

@@ -1,9 +1,9 @@
 // ──────────────────────────────────────────────
 // Slurp post card — the membership-style, media-forward variant of the post card
 // used by the Slurp creator feed. Shares all leaf helpers, the ctx contract,
-// and the reply/edit/poll machinery's building blocks with NoodlePostCard; only the
+// and the reply/edit/poll machinery's building blocks with SlpPostCard; only the
 // layout (two-line header, filled access pill, full-width body, image-on-top) differs.
-// The public Noodle feed keeps the original NoodlePostCard.
+// The public Noodle feed keeps the original SlpPostCard.
 // ──────────────────────────────────────────────
 import { AtSign, ChevronDown, Heart, Flame, TrendingUp, MessageCircle, RefreshCw } from "lucide-react";
 import { Fragment, useMemo, useRef, useState } from "react";
@@ -22,17 +22,17 @@ import { formatTime } from "../../base/ui/slp-date-time";
 import { fieldClass, labelClass, textareaClass } from "./SlpPostHelpers";
 import {
   countInteractions,
-  createNoodleLightboxImage,
-  noodleIconButtonClass,
+  createSlpLightboxImage,
+  slpIconButtonClass,
   SlurpClampedText,
   slurpReplyThreads,
-  type NoodlePostCardCtx,
-  type NoodlePostCardModel,
+  type SlpPostCardCtx,
+  type SlpPostCardModel,
 } from "./SlpPostCard";
 import { SlurpLikedBy } from "../audience/SlpFanCard";
-import { NoodlePollComposer } from "../poll/SlpPollComposer";
+import { SlpPollComposer } from "../poll/SlpPollComposer";
 import { PostImageFrame } from "../../base/media/SlpPostImageCropEditor";
-import { NoodlePollCard } from "./SlpPollCard";
+import { SlpPollCard } from "./SlpPollCard";
 import { PostImageEditControls } from "./SlpPostImageEditControls";
 import { SlpCreatorPostMenu } from "./SlpCreatorPostMenu";
 import { SlpReplyRow } from "./SlpReplyRow";
@@ -45,8 +45,8 @@ export function SlurpCreatorPostCard({
   ctx,
   surface = "feed",
 }: {
-  post: NoodlePostCardModel;
-  ctx: NoodlePostCardCtx;
+  post: SlpPostCardModel;
+  ctx: SlpPostCardCtx;
   surface?: "feed" | "profile";
 }) {
   const { t: localizeUi, i18n } = useUiTranslation();
@@ -106,7 +106,7 @@ export function SlurpCreatorPostCard({
   };
   const handleReplyKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void =
     ctx.handleReplyKeyDown ?? (() => {});
-  const voteInPoll: (post: NoodlePostCardModel, optionId: string, selectedOptionId: string | null) => void =
+  const voteInPoll: (post: SlpPostCardModel, optionId: string, selectedOptionId: string | null) => void =
     ctx.voteInPoll ?? (() => {});
   const disableReplyImage = !media;
   const setImageLightbox: React.Dispatch<React.SetStateAction<ChatImage | null>> =
@@ -126,9 +126,9 @@ export function SlurpCreatorPostCard({
     replyManagement?.setEditingReplyContent ?? (() => {});
   const startEditingReply: (reply: SlpInteraction) => void = replyManagement?.startEditingReply ?? (() => {});
   const cancelEditingReply: () => void = replyManagement?.cancelEditingReply ?? (() => {});
-  const saveEditedReply: (post: NoodlePostCardModel, reply: SlpInteraction) => void =
+  const saveEditedReply: (post: SlpPostCardModel, reply: SlpInteraction) => void =
     replyManagement?.saveEditedReply ?? (() => {});
-  const deleteNoodleReply: (post: NoodlePostCardModel, reply: SlpInteraction) => void =
+  const deleteNoodleReply: (post: SlpPostCardModel, reply: SlpInteraction) => void =
     replyManagement?.deleteNoodleReply ?? (() => {});
   const updateInteraction = replyManagement?.updateInteraction ?? {
     isPending: false,
@@ -453,7 +453,7 @@ export function SlurpCreatorPostCard({
             onClick={() => {
               if (!displayedImageUrl) return;
               if (ctx.openPost) ctx.openPost(post.id);
-              else setImageLightbox(createNoodleLightboxImage(post.id, displayedImageUrl, post.imagePrompt ?? ""));
+              else setImageLightbox(createSlpLightboxImage(post.id, displayedImageUrl, post.imagePrompt ?? ""));
             }}
             disabled={!displayedImageUrl}
             className={cn(
@@ -610,7 +610,7 @@ export function SlurpCreatorPostCard({
               />
             )}
             {editingExistingPoll && pollEditing && (
-              <NoodlePollComposer
+              <SlpPollComposer
                 value={pollEditing.value}
                 onChange={pollEditing.setValue}
                 onClose={cancelEditingPost}
@@ -646,7 +646,7 @@ export function SlurpCreatorPostCard({
           </>
         )}
         {poll && !isEditingPost && (
-          <NoodlePollCard
+          <SlpPollCard
             poll={poll}
             votes={pollVotes}
             accountById={accountById}
@@ -660,7 +660,7 @@ export function SlurpCreatorPostCard({
         <div className="mt-5 flex items-center gap-2 border-t border-[var(--noodle-divider)] pt-3 tabular-nums">
           <button
             type="button"
-            className={cn(noodleIconButtonClass, "rounded-lg", likedByPersona && "bg-[var(--noodle-accent)]/10")}
+            className={cn(slpIconButtonClass, "rounded-lg", likedByPersona && "bg-[var(--noodle-accent)]/10")}
             disabled={!personaAccount || postLikePending}
             onClick={() => reactToPost(post, "like", likedByPersona)}
             title={
@@ -685,7 +685,7 @@ export function SlurpCreatorPostCard({
           </button>
           <button
             type="button"
-            className={cn(noodleIconButtonClass, "rounded-lg hover:text-[var(--noodle-accent)]")}
+            className={cn(slpIconButtonClass, "rounded-lg hover:text-[var(--noodle-accent)]")}
             disabled={!personaAccount}
             onClick={() => openReplyComposer(post.id)}
             title={localizeUi("ui.noodle.noodlepostcard.reply")}

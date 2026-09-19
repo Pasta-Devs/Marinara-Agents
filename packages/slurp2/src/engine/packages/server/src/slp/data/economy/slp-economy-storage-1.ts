@@ -7,18 +7,13 @@ import { slurpSubscriptionCharge } from "../../modules/economy/slp-creator-prici
 import { slurpPlatformEventModifierSource } from "../../../../../shared/src/slp/slp-platform-events.js";
 import { createSlurpPopulationStorage } from "../audience/slp-audience-storage-funnel.js";
 import { slurpEarningsKey } from "../../modules/economy/slp-earnings.js";
-import { isNoodlerHiddenFromViewer } from "../../base/identity/slp-access.js";
-import {
-  noodleAccounts,
-  noodleAccountSubscriptions,
-  noodlePosts,
-  noodlePostUnlocks,
-} from "../../../db/schema/slurp.js";
+import { isCreatorHiddenFromViewer } from "../../base/identity/slp-access.js";
+import { slpAccounts, slpAccountSubscriptions, slpPosts, slpPostUnlocks } from "../../../db/schema/slurp.js";
 import { newId, now } from "../../../utils/id-generator.js";
 import { createAppSettingsStorage } from "../../../services/storage/app-settings.storage.js";
 import { slurpViewerSettingsKey } from "../host/slp-storage-constants.js";
-import type { NoodlerPostPageCursor } from "../host/slp-storage-constants.js";
-import { normalizeNoodleAccountSettings } from "../../modules/records/slp-storage-model.js";
+import type { SlpCreatorPostPageCursor } from "../host/slp-storage-constants.js";
+import { normalizeSlpAccountSettings } from "../../modules/records/slp-storage-model.js";
 import { mapAccount, mapSubscription } from "../host/slp-storage-mappers.js";
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
 
@@ -66,22 +61,22 @@ export function createEconomyStorage1(context: SlurpStorageContext) {
         if (!viewer) return null;
         const creatorRows = await db
           .select()
-          .from(noodleAccounts)
-          .where(and(eq(noodleAccounts.id, creatorAccountId), eq(noodleAccounts.platform, "slurp")));
+          .from(slpAccounts)
+          .where(and(eq(slpAccounts.id, creatorAccountId), eq(slpAccounts.platform, "slurp")));
         const creator = creatorRows[0] ? mapAccount(creatorRows[0]) : null;
         if (
           !creator ||
           (creator.sourceKind === "persona" && creator.sourceEntityId === viewerAccountId) ||
-          isNoodlerHiddenFromViewer(creator, viewerAccountId)
+          isCreatorHiddenFromViewer(creator, viewerAccountId)
         )
           return null;
         const existing = await db
           .select()
-          .from(noodleAccountSubscriptions)
+          .from(slpAccountSubscriptions)
           .where(
             and(
-              eq(noodleAccountSubscriptions.viewerAccountId, viewerAccountId),
-              eq(noodleAccountSubscriptions.creatorAccountId, creatorAccountId),
+              eq(slpAccountSubscriptions.viewerAccountId, viewerAccountId),
+              eq(slpAccountSubscriptions.creatorAccountId, creatorAccountId),
             ),
           );
         // `now()` returns an ISO string. Every use below wants a Date — `at.getTime()`, `spend`,
@@ -103,7 +98,7 @@ export function createEconomyStorage1(context: SlurpStorageContext) {
           if (!followingAccountIds.includes(creatorAccountId)) {
             const followingAccountTimestamps = { ...viewer.settings.social.followingAccountTimestamps };
             followingAccountTimestamps[creatorAccountId] ??= existing[0].createdAt;
-            const currentSettings = normalizeNoodleAccountSettings(
+            const currentSettings = normalizeSlpAccountSettings(
               await settingsStore.get(slurpViewerSettingsKey(viewerAccountId)),
             );
             await createAppSettingsStorage(db).set(
@@ -240,7 +235,7 @@ export function createEconomyStorage1(context: SlurpStorageContext) {
                 followingAccountTimestamps,
               },
             };
-            await tx.insert(noodleAccountSubscriptions).values({
+            await tx.insert(slpAccountSubscriptions).values({
               id: subscriptionId,
               viewerAccountId,
               creatorAccountId,
@@ -279,7 +274,7 @@ export function createEconomyStorage1(context: SlurpStorageContext) {
             [
               () => (settings.walletEnabled ? writeWallet(viewerAccountId, previousWallet) : Promise.resolve()),
               () => restoreSetting(earningsKey, previousEarnings),
-              () => db.delete(noodleAccountSubscriptions).where(eq(noodleAccountSubscriptions.id, subscriptionId)),
+              () => db.delete(slpAccountSubscriptions).where(eq(slpAccountSubscriptions.id, subscriptionId)),
               () =>
                 createAppSettingsStorage(db).set(
                   slurpViewerSettingsKey(viewerAccountId),
@@ -320,11 +315,11 @@ export function createEconomyStorage1(context: SlurpStorageContext) {
         await writeWallet(viewerAccountId, { ...wallet, subscriptions });
       }
       await db
-        .delete(noodleAccountSubscriptions)
+        .delete(slpAccountSubscriptions)
         .where(
           and(
-            eq(noodleAccountSubscriptions.viewerAccountId, viewerAccountId),
-            eq(noodleAccountSubscriptions.creatorAccountId, creatorAccountId),
+            eq(slpAccountSubscriptions.viewerAccountId, viewerAccountId),
+            eq(slpAccountSubscriptions.creatorAccountId, creatorAccountId),
           ),
         );
       // Losing a subscriber is news. A world that only reports good outcomes has no stakes.
@@ -340,49 +335,49 @@ export function createEconomyStorage1(context: SlurpStorageContext) {
     async listSubscriptionsForViewer(viewerAccountId: string): Promise<SlpAccountSubscription[]> {
       const rows = await db
         .select()
-        .from(noodleAccountSubscriptions)
-        .where(eq(noodleAccountSubscriptions.viewerAccountId, viewerAccountId));
+        .from(slpAccountSubscriptions)
+        .where(eq(slpAccountSubscriptions.viewerAccountId, viewerAccountId));
       return rows.map(mapSubscription);
     },
     async listSubscriptionsForCreator(creatorAccountId: string): Promise<SlpAccountSubscription[]> {
       const rows = await db
         .select()
-        .from(noodleAccountSubscriptions)
-        .where(eq(noodleAccountSubscriptions.creatorAccountId, creatorAccountId))
-        .orderBy(desc(noodleAccountSubscriptions.createdAt));
+        .from(slpAccountSubscriptions)
+        .where(eq(slpAccountSubscriptions.creatorAccountId, creatorAccountId))
+        .orderBy(desc(slpAccountSubscriptions.createdAt));
       return rows.map(mapSubscription);
     },
     async listSubscriptionsForCreatorPage(
       creatorAccountId: string,
-      cursor: NoodlerPostPageCursor | null,
+      cursor: SlpCreatorPostPageCursor | null,
       limit: number,
     ) {
       const boundedLimit = Math.max(1, Math.min(20, Math.floor(limit)));
-      const base = eq(noodleAccountSubscriptions.creatorAccountId, creatorAccountId);
+      const base = eq(slpAccountSubscriptions.creatorAccountId, creatorAccountId);
       const rows = await db
         .select()
-        .from(noodleAccountSubscriptions)
+        .from(slpAccountSubscriptions)
         .where(
           and(
             base,
             cursor
               ? or(
-                  lt(noodleAccountSubscriptions.createdAt, cursor.createdAt),
+                  lt(slpAccountSubscriptions.createdAt, cursor.createdAt),
                   and(
-                    eq(noodleAccountSubscriptions.createdAt, cursor.createdAt),
-                    lt(noodleAccountSubscriptions.id, cursor.id),
+                    eq(slpAccountSubscriptions.createdAt, cursor.createdAt),
+                    lt(slpAccountSubscriptions.id, cursor.id),
                   ),
                 )
               : undefined,
           ),
         )
-        .orderBy(desc(noodleAccountSubscriptions.createdAt), desc(noodleAccountSubscriptions.id))
+        .orderBy(desc(slpAccountSubscriptions.createdAt), desc(slpAccountSubscriptions.id))
         .limit(boundedLimit + 1);
       const items = rows.slice(0, boundedLimit).map(mapSubscription);
       const last = rows.slice(0, boundedLimit).at(-1);
       return {
         items,
-        total: db.count(noodleAccountSubscriptions, base),
+        total: db.count(slpAccountSubscriptions, base),
         nextCursor: rows.length > boundedLimit && last ? { createdAt: last.createdAt, id: last.id } : null,
       };
     },
@@ -396,11 +391,11 @@ export function createEconomyStorage1(context: SlurpStorageContext) {
       creatorAccountId: string,
       postId: string,
     ): Promise<boolean> {
-      const rows = await db.select().from(noodlePosts).where(eq(noodlePosts.id, postId));
+      const rows = await db.select().from(slpPosts).where(eq(slpPosts.id, postId));
       const post = rows[0];
       if (!post || post.authorAccountId !== creatorAccountId || post.access !== "locked") return false;
       try {
-        await db.insert(noodlePostUnlocks).values({ id: newId(), viewerAccountId, postId, createdAt: now() });
+        await db.insert(slpPostUnlocks).values({ id: newId(), viewerAccountId, postId, createdAt: now() });
         return true;
       } catch (error) {
         if (isSlurpFileUniqueConstraintError(error, "slurp2_post_unlocks", ["viewerAccountId", "postId"])) return false;

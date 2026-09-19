@@ -24,7 +24,7 @@ import { SLP_CREATOR_POSTS_PER_DAY_MAX } from "../../../../../shared/src/slp/slp
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { cn } from "../../../lib/utils";
 import { Modal } from "../../../components/ui/Modal";
-import { Avatar, getNoodleAccentStyle, NOODLE_PINK } from "../../base/chrome/SlpChrome";
+import { Avatar, getSlpAccentStyle, SLP_PINK } from "../../base/chrome/SlpChrome";
 import {
   SLURP_ACTIVITY_PRESETS,
   SLURP_DEFAULT_ACTIVITY_PRESET,
@@ -145,7 +145,7 @@ export function SlurpOnboardingWizard(props: WizardProps) {
         width="max-w-3xl"
         mobileFullscreen
         contentClassName="max-sm:flex max-sm:flex-col max-sm:overflow-hidden max-sm:px-4 max-sm:py-2"
-        panelStyle={getNoodleAccentStyle(NOODLE_PINK, {
+        panelStyle={getSlpAccentStyle(SLP_PINK, {
           // The wizard used to hardcode a dark palette, so it stayed dark in light mode.
           // These all resolve through light-dark() now.
           "--background": "var(--slurp-surface)",
@@ -590,7 +590,7 @@ export function SlurpOnboardingWizard(props: WizardProps) {
         title={t("ui.slurp.providerDisclosure.title")}
         width="max-w-md"
         panelClassName="noodle-icon-scope"
-        panelStyle={getNoodleAccentStyle(NOODLE_PINK, {
+        panelStyle={getSlpAccentStyle(SLP_PINK, {
           "--background": "var(--slurp-surface)",
           "--foreground": "var(--slurp-text)",
           "--muted-foreground": "var(--slurp-muted)",

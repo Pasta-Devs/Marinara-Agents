@@ -1,7 +1,7 @@
 import { slpTextMentionsHandle } from "../../../../../shared/src/slp/slp-mentions.js";
 import { type SlpAccount, type SlpInteraction, type SlpPost } from "../../../../../shared/src/slp/slp-social.types.js";
 
-export function canCreateGeneratedNoodleInteraction(input: {
+export function canCreateGeneratedSlpInteraction(input: {
   actor: SlpAccount;
   targetPost: SlpPost;
   parentInteraction: SlpInteraction | null;

@@ -7,7 +7,7 @@ import { slurpFanVoiceForPrompt } from "../../../../../shared/src/slp/slp-fan-ty
 
 export const NOODLER_FAN_IDENTITY_PREFIX = "noodler-fan:";
 
-export interface NoodlerFanIdentity {
+export interface SlpCreatorFanIdentity {
   id: string;
   archetype: SlpCreatorFanArchetype;
   snapshot: SlpAuthorSnapshot;
@@ -38,7 +38,7 @@ export interface NoodlerFanIdentity {
   };
 }
 
-export interface NoodlerFanIdentityProvider {
+export interface SlpCreatorFanIdentityProvider {
   /**
    * `creatorAccountId` is what makes the relationship line true.
    *
@@ -46,7 +46,7 @@ export interface NoodlerFanIdentityProvider {
    * described by their history with the *first* creator of the run while commenting on the
    * seventh, so the prompt did not lack the fact — it stated a false one.
    */
-  resolve(weights: SlpCreatorFanArchetypeWeights, creatorAccountId: string): NoodlerFanIdentity[];
+  resolve(weights: SlpCreatorFanArchetypeWeights, creatorAccountId: string): SlpCreatorFanIdentity[];
 }
 
 const IDENTITIES: Array<[SlpCreatorFanArchetype, string, string]> = [
@@ -58,7 +58,7 @@ const IDENTITIES: Array<[SlpCreatorFanArchetype, string, string]> = [
   ["freeResource", "free-feed follower", "free_feed_follower"],
 ];
 
-export const syntheticNoodlerFanIdentityProvider: NoodlerFanIdentityProvider = {
+export const syntheticCreatorFanIdentityProvider: SlpCreatorFanIdentityProvider = {
   resolve(weights) {
     return IDENTITIES.filter(([archetype]) => weights[archetype] > 0).map(([archetype, displayName, handle]) => {
       const id = `${NOODLER_FAN_IDENTITY_PREFIX}${archetype}`;
@@ -90,7 +90,7 @@ export const syntheticNoodlerFanIdentityProvider: NoodlerFanIdentityProvider = {
  * synchronous, so members are drawn from a pool the caller prepared — materialising a row is a
  * database write and belongs to the caller, not to a `resolve`.
  */
-export type NoodlerFanCastMember = {
+export type SlpCreatorFanCastMember = {
   id: string;
   handle: string;
   displayName: string;
@@ -113,15 +113,15 @@ export type NoodlerFanCastMember = {
 };
 
 /** One member's history with one creator, keyed by creator then by member. */
-export type NoodlerFanTieLookup = ReadonlyMap<
+export type SlpCreatorFanTieLookup = ReadonlyMap<
   string,
   ReadonlyMap<string, { stage: string; spent: number; knownForDays: number; audienceArc: string; memory?: string }>
 >;
 
-export function populationNoodlerFanIdentityProvider(
-  members: readonly NoodlerFanCastMember[],
-  tiesByCreator: NoodlerFanTieLookup = new Map(),
-): NoodlerFanIdentityProvider {
+export function populationCreatorFanIdentityProvider(
+  members: readonly SlpCreatorFanCastMember[],
+  tiesByCreator: SlpCreatorFanTieLookup = new Map(),
+): SlpCreatorFanIdentityProvider {
   return {
     resolve(weights, creatorAccountId) {
       const ties = tiesByCreator.get(creatorAccountId);

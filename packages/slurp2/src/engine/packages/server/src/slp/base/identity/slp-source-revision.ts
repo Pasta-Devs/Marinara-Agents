@@ -20,19 +20,19 @@ function sourceRevisionPayload(noodlerAccountId: string, snapshot: SlpCreatorSou
   ]);
 }
 
-export function createNoodlerSourceRevisionToken(noodlerAccountId: string, snapshot: SlpCreatorSourceSnapshot): string {
+export function createCreatorSourceRevisionToken(noodlerAccountId: string, snapshot: SlpCreatorSourceSnapshot): string {
   return createHmac("sha256", sourceRevisionKey)
     .update(sourceRevisionPayload(noodlerAccountId, snapshot))
     .digest("base64url");
 }
 
-export function verifyNoodlerSourceRevisionToken(
+export function verifyCreatorSourceRevisionToken(
   token: string,
   noodlerAccountId: string,
   snapshot: SlpCreatorSourceSnapshot,
 ): boolean {
   if (!/^[A-Za-z0-9_-]{43}$/u.test(token)) return false;
-  const expected = Buffer.from(createNoodlerSourceRevisionToken(noodlerAccountId, snapshot), "utf8");
+  const expected = Buffer.from(createCreatorSourceRevisionToken(noodlerAccountId, snapshot), "utf8");
   const submitted = Buffer.from(token, "utf8");
   return submitted.length === expected.length && timingSafeEqual(submitted, expected);
 }

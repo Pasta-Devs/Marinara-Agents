@@ -24,10 +24,10 @@ import { createConnectionsStorage } from "../../../services/storage/connections.
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { createPromptOverridesStorage } from "../../../services/storage/prompt-overrides.storage.js";
 import { loadPrompt, NOODLE_IMAGE_POST } from "../../../services/prompt-overrides/index.js";
-import { generateNoodleImageWithRetry } from "../../base/media/slp-image-retry.js";
-import { rewriteNoodleImagePrompt } from "../../base/media/slp-image-prompt-rewrite.js";
-import { selectNoodleImageProviderPrompt } from "../../base/media/slp-image-prompt.js";
-import { resolveNoodlerImageConnectionId } from "../../base/media/slp-image-connections.js";
+import { generateSlpImageWithRetry } from "../../base/media/slp-image-retry.js";
+import { rewriteSlpImagePrompt } from "../../base/media/slp-image-prompt-rewrite.js";
+import { selectSlpImageProviderPrompt } from "../../base/media/slp-image-prompt.js";
+import { resolveCreatorImageConnectionId } from "../../base/media/slp-image-connections.js";
 import type { ConnectionAdmissionMode } from "../../../services/generation/connection-admission.js";
 import {
   characterGalleryImageUrl,
@@ -36,11 +36,11 @@ import {
   getErrorMessage,
   parseRecord,
 } from "../../modules/creators/slp-public-support.js";
-import { bootstrapVisibleNoodle } from "../../data/creators/slp-creator-accounts.js";
+import { bootstrapVisibleSlp } from "../../data/creators/slp-creator-accounts.js";
 
 type ImageConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
-export type NoodleImagePromptReviewItem = {
+export type SlpImagePromptReviewItem = {
   id: string;
   kind: "illustration";
   title: string;
@@ -50,9 +50,9 @@ export type NoodleImagePromptReviewItem = {
   height: number;
 };
 
-export type ReviewedNoodleImagePrompt = Pick<NoodleImagePromptReviewItem, "id" | "prompt" | "negativePrompt">;
+export type ReviewedSlpImagePrompt = Pick<SlpImagePromptReviewItem, "id" | "prompt" | "negativePrompt">;
 
-export type StagedNoodlePostMedia = {
+export type StagedSlpPostMedia = {
   file: StagedGalleryImage;
   characterGalleryInput?: {
     characterId: string;
@@ -65,8 +65,8 @@ export type StagedNoodlePostMedia = {
   };
 };
 
-const NOODLE_SERVICE_DIR = dirname(fileURLToPath(import.meta.url));
-const CLIENT_PUBLIC_DIR = resolve(NOODLE_SERVICE_DIR, "../../../../client/public");
+const SLP_SERVICE_DIR = dirname(fileURLToPath(import.meta.url));
+const CLIENT_PUBLIC_DIR = resolve(SLP_SERVICE_DIR, "../../../../client/public");
 const PROFESSOR_MARI_REFERENCE_ASSETS = [
   "sprites/mari/Mari_profile.png",
   "sprites/mari/chibi-professor-mari.png",
@@ -99,7 +99,7 @@ export function characterAppearanceFromRow(row: { data: unknown }) {
  * `applyInstructions` is Slurp's own per-character choice. Until a character has one, the Engine's
  * Noodle-named checkbox still decides, so an upgrade changes nothing for anybody.
  */
-export function characterNoodleImageContextFromRow(row: { data: unknown }, applyInstructions?: boolean) {
+export function characterSlpImageContextFromRow(row: { data: unknown }, applyInstructions?: boolean) {
   const data = parseRecord(row.data);
   const extensions = parseRecord(data.extensions);
   return {
@@ -112,7 +112,7 @@ export function characterNoodleImageContextFromRow(row: { data: unknown }, apply
   };
 }
 
-export async function generateNoodlePostImage(input: {
+export async function generateSlpPostImage(input: {
   account: SlpAccount;
   referenceAccounts: SlpAccount[];
   postContent: string;
@@ -146,7 +146,7 @@ export async function generateNoodlePostImage(input: {
   if (input.account.kind === "character") {
     const character = await input.characters.getById(input.account.entityId);
     if (character) {
-      const imageContext = characterNoodleImageContextFromRow(
+      const imageContext = characterSlpImageContextFromRow(
         character,
         input.settings.characterImageInstructions[character.id],
       );
@@ -259,7 +259,7 @@ export async function generateNoodlePostImage(input: {
     !input.promptOverride,
   );
   const rewrittenPrompt = rewriteAttempted
-    ? await rewriteNoodleImagePrompt({
+    ? await rewriteSlpImagePrompt({
         db: input.db,
         prompt: rawFinalPrompt,
         interpretationInstruction: input.settings.imagePromptInterpretation,
@@ -283,7 +283,7 @@ export async function generateNoodlePostImage(input: {
         imageDefaults,
       })
     : null;
-  const finalPrompt = selectNoodleImageProviderPrompt({
+  const finalPrompt = selectSlpImageProviderPrompt({
     rewrittenPrompt: compiledRewrittenPrompt?.prompt || rewrittenPrompt,
     rawPrompt: rawProviderPrompt,
     rewriteAttempted,
@@ -332,7 +332,7 @@ export async function generateNoodlePostImage(input: {
     };
   }
 
-  const image = await generateNoodleImageWithRetry(
+  const image = await generateSlpImageWithRetry(
     () =>
       generateImage(imageSource, imageBaseUrl, input.imageConnection.apiKey || "", imageServiceHint, {
         prompt: finalPrompt,
@@ -385,7 +385,7 @@ export async function generateNoodlePostImage(input: {
           width: input.settings.imageWidth,
           height: input.settings.imageHeight,
         },
-      } satisfies StagedNoodlePostMedia,
+      } satisfies StagedSlpPostMedia,
     };
   }
   return {
@@ -397,11 +397,11 @@ export async function generateNoodlePostImage(input: {
       imageStyleProfileId: compiledPrompt.profile.id,
     },
     preview: null,
-    stagedMedia: { file } satisfies StagedNoodlePostMedia,
+    stagedMedia: { file } satisfies StagedSlpPostMedia,
   };
 }
 
-export function createPublicNoodleImagesService(db: DB) {
+export function createPublicSlpImagesService(db: DB) {
   const noodle = createSlurpStorage(db);
   const characters = createCharactersStorage(db);
   const connections = createConnectionsStorage(db);
@@ -410,7 +410,7 @@ export function createPublicNoodleImagesService(db: DB) {
 
   return {
     async generateReviewedImages(input: {
-      prompts: ReviewedNoodleImagePrompt[];
+      prompts: ReviewedSlpImagePrompt[];
       debugMode: boolean;
     }): Promise<{ ok: true; bootstrap: SlpBootstrap } | { ok: false; error: "missing_connection"; message: string }> {
       const settings = await noodle.getSettings();
@@ -424,7 +424,7 @@ export function createPublicNoodleImagesService(db: DB) {
           await noodle.releasePostImageClaim(post.id, claimToken);
           continue;
         }
-        const selectedConnectionId = await resolveNoodlerImageConnectionId(db, account.id);
+        const selectedConnectionId = await resolveCreatorImageConnectionId(db, account.id);
         const imageConnection =
           (selectedConnectionId ? await connections.getWithKey(selectedConnectionId) : null) ??
           (await connections.getDefaultForImageGeneration());
@@ -452,9 +452,9 @@ export function createPublicNoodleImagesService(db: DB) {
         };
         const renewalTimer = setInterval(() => void renewClaim(), REVIEWED_IMAGE_CLAIM_RENEW_MS);
         renewalTimer.unref?.();
-        let generatedImage: Awaited<ReturnType<typeof generateNoodlePostImage>>;
+        let generatedImage: Awaited<ReturnType<typeof generateSlpPostImage>>;
         try {
-          generatedImage = await generateNoodlePostImage({
+          generatedImage = await generateSlpPostImage({
             account,
             referenceAccounts: [account],
             postContent: post.content,
@@ -494,12 +494,12 @@ export function createPublicNoodleImagesService(db: DB) {
         try {
           generatedImage.stagedMedia?.file.promote();
           await db.transaction(async (tx) => {
-            const txNoodle = createSlurpStorage(tx);
+            const txSlp = createSlurpStorage(tx);
             const txCharacterGallery = createCharacterGalleryStorage(tx);
             const galleryImage = generatedImage.stagedMedia?.characterGalleryInput
               ? await txCharacterGallery.create(generatedImage.stagedMedia.characterGalleryInput)
               : null;
-            const finalized = await txNoodle.finalizePostImageClaim(post.id, claimToken, {
+            const finalized = await txSlp.finalizePostImageClaim(post.id, claimToken, {
               imageUrl: generatedImage.imageUrl,
               metadata: {
                 ...generatedImage.metadata,
@@ -522,7 +522,7 @@ export function createPublicNoodleImagesService(db: DB) {
       }
       return {
         ok: true,
-        bootstrap: await bootstrapVisibleNoodle(noodle, characters),
+        bootstrap: await bootstrapVisibleSlp(noodle, characters),
       };
     },
   };

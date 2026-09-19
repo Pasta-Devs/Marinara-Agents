@@ -5,7 +5,7 @@ import { cn } from "../../../lib/utils";
 import { Avatar } from "../../base/chrome/SlpChrome";
 import { useTranslation as useUiTranslation } from "react-i18next";
 
-export function NoodlePollCard({
+export function SlpPollCard({
   poll,
   votes,
   accountById,

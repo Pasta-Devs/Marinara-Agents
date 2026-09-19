@@ -38,9 +38,9 @@ export type SlurpCreatorMetrics = {
 };
 
 // Audience's ambient-profile panel deletes a managed stage profile, which Creators owns.
-export { useDeleteNoodlerStageProfile } from "./slp-creator-profile-hooks.js";
+export { useDeleteCreatorStageProfile } from "./slp-creator-profile-hooks.js";
 
 // Onboarding creates creators in bulk and refreshes just the ones it made.
-export { useBulkCreateNoodlerStageProfiles } from "./slp-creator-profile-hooks.js";
-export { useRefreshTargetedNoodlerCreatorsNow } from "./slp-creator-refresh-hooks.js";
-export { useNoodlerEligibleAccounts } from "./slp-creators-hooks.js";
+export { useBulkCreateCreatorStageProfiles } from "./slp-creator-profile-hooks.js";
+export { useRefreshTargetedCreatorsNow } from "./slp-creator-refresh-hooks.js";
+export { useCreatorEligibleAccounts } from "./slp-creators-hooks.js";

@@ -1,37 +1,37 @@
 import type { SlpAuthorSnapshot } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { DB } from "../../../db/connection.js";
 import { eq } from "../../../db/file-query.js";
-import { noodlerFanActivityState } from "../../../db/schema/slurp.js";
+import { slpCreatorFanActivityState } from "../../../db/schema/slurp.js";
 import { now } from "../../../utils/id-generator.js";
 import { tryBackgroundConnection } from "../../../services/generation/connection-admission.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { snapshotForAccount } from "../../data/host/slp-storage-mappers.js";
 import { type SlurpSettings } from "../../modules/settings/slp-settings.js";
 import {
-  claimManualNoodleFanActivityRun,
-  claimNoodleFanActivityRun,
-  dueNoodleFanActivityRun,
-  finishNoodleFanActivityRun,
-  markNoodleFanActivityApplied,
-  parsePersistedNoodleFanActivityDayPlan,
-  reconcileNoodleFanActivityDayPlan,
-  storeNoodleFanAcceptedActivities,
-  type NoodleFanActivityDayPlanRun,
-  type PersistedNoodleFanActivityDayPlan,
+  claimManualSlpFanActivityRun,
+  claimSlpFanActivityRun,
+  dueSlpFanActivityRun,
+  finishSlpFanActivityRun,
+  markSlpFanActivityApplied,
+  parsePersistedSlpFanActivityDayPlan,
+  reconcileSlpFanActivityDayPlan,
+  storeSlpFanAcceptedActivities,
+  type SlpFanActivityDayPlanRun,
+  type PersistedSlpFanActivityDayPlan,
 } from "../../modules/audience/slp-fan-activity-day-plan.js";
 import {
-  generateNoodlerFanActivityBatch,
-  prepareNoodlerFanCreatorCandidates,
-  resolveNoodlerFanActivityPolicy,
-  resolveNoodlerFanConnection,
+  generateCreatorFanActivityBatch,
+  prepareCreatorFanCreatorCandidates,
+  resolveCreatorFanActivityPolicy,
+  resolveCreatorFanConnection,
 } from "./slp-fan-activity-service.js";
-import { tryNoodleOperation } from "../../base/locking/slp-operation-lock.js";
+import { trySlpOperation } from "../../base/locking/slp-operation-lock.js";
 import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
 import { isSlurpPopulationMemberId } from "../../../../../shared/src/slp/slp-population.js";
 import {
   NOODLER_FAN_IDENTITY_PREFIX,
-  populationNoodlerFanIdentityProvider,
-  type NoodlerFanCastMember,
+  populationCreatorFanIdentityProvider,
+  type SlpCreatorFanCastMember,
 } from "../../modules/audience/slp-fan-identity-provider.js";
 import {
   SLURP_FAN_VOICE_PROMPT_MAX,
@@ -62,11 +62,11 @@ const FAN_RUN_NEWCOMERS = 2;
 const FAN_PLAN_RETENTION_DAYS = 7;
 const FAN_ACTIVITY_RECOVERY_MAX_AGE_MS = 15 * 60 * 1000;
 
-export function noodlerFanActivityRunLimit(settings: Pick<SlurpSettings, "fanActivityRunsPerDay" | "modelBudget">) {
+export function slpCreatorFanActivityRunLimit(settings: Pick<SlurpSettings, "fanActivityRunsPerDay" | "modelBudget">) {
   return Math.min(settings.fanActivityRunsPerDay, settings.modelBudget.jobs.thread.maxPerDay);
 }
 
-export type NoodlerFanRunResult = {
+export type SlpCreatorFanRunResult = {
   status:
     | "generated"
     | "resumed"
@@ -104,7 +104,7 @@ async function drawAudienceCharacterCast(
   db: DB,
   settings: SlurpSettings,
   runId: string,
-): Promise<NoodlerFanCastMember[]> {
+): Promise<SlpCreatorFanCastMember[]> {
   const limit = settings.audienceCharacterLimit ?? 0;
   if (limit <= 0) return [];
   const noodle = createSlurpStorage(db);
@@ -160,10 +160,10 @@ async function drawAudienceCharacterCast(
 }
 
 async function readPlans(db: DB, at = new Date(), prune = true) {
-  const rows = await db.select().from(noodlerFanActivityState);
+  const rows = await db.select().from(slpCreatorFanActivityState);
   const plans = rows.flatMap((row) => {
     try {
-      const plan = parsePersistedNoodleFanActivityDayPlan(JSON.parse(row.plan));
+      const plan = parsePersistedSlpFanActivityDayPlan(JSON.parse(row.plan));
       return plan ? [plan] : [];
     } catch {
       return [];
@@ -177,7 +177,7 @@ async function readPlans(db: DB, at = new Date(), prune = true) {
     const planTime = new Date(year!, month! - 1, day!).getTime();
     const hasRecoverableRun = plan.runs.some((run) => run.status === "applying" || run.status === "generating");
     if (planTime < cutoff && !hasRecoverableRun) {
-      await db.delete(noodlerFanActivityState).where(eq(noodlerFanActivityState.id, planRowId(plan)));
+      await db.delete(slpCreatorFanActivityState).where(eq(slpCreatorFanActivityState.id, planRowId(plan)));
     } else {
       retained.push(plan);
     }
@@ -194,21 +194,21 @@ function localPlanDate(at: Date) {
   return `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, "0")}-${String(at.getDate()).padStart(2, "0")}`;
 }
 
-function planRowId(plan: PersistedNoodleFanActivityDayPlan) {
+function planRowId(plan: PersistedSlpFanActivityDayPlan) {
   return `${FAN_PLAN_ROW_PREFIX}${plan.localDate}:${plan.timezone}`;
 }
 
-async function writePlan(db: DB, plan: PersistedNoodleFanActivityDayPlan) {
+async function writePlan(db: DB, plan: PersistedSlpFanActivityDayPlan) {
   const id = planRowId(plan);
   await db.transaction(async (tx) => {
-    const rows = await tx.select().from(noodlerFanActivityState).where(eq(noodlerFanActivityState.id, id));
+    const rows = await tx.select().from(slpCreatorFanActivityState).where(eq(slpCreatorFanActivityState.id, id));
     if (rows[0]) {
       await tx
-        .update(noodlerFanActivityState)
+        .update(slpCreatorFanActivityState)
         .set({ plan: JSON.stringify(plan), updatedAt: now() })
-        .where(eq(noodlerFanActivityState.id, id));
+        .where(eq(slpCreatorFanActivityState.id, id));
     } else {
-      await tx.insert(noodlerFanActivityState).values({ id, plan: JSON.stringify(plan), updatedAt: now() });
+      await tx.insert(slpCreatorFanActivityState).values({ id, plan: JSON.stringify(plan), updatedAt: now() });
     }
   });
 }
@@ -228,14 +228,14 @@ async function reconcilePlan(db: DB, settings: SlurpSettings, at: Date) {
   const creators = await noodle.listNoodlerAccounts();
   const eligibleIds = settings.fanActivityEnabled
     ? creators
-        .filter((creator) => resolveNoodlerFanActivityPolicy(settings, creator).enabled)
+        .filter((creator) => resolveCreatorFanActivityPolicy(settings, creator).enabled)
         .map((creator) => creator.id)
     : [];
-  const plan = reconcileNoodleFanActivityDayPlan(
+  const plan = reconcileSlpFanActivityDayPlan(
     await readCurrentPlan(db, at),
     eligibleIds,
     at,
-    noodlerFanActivityRunLimit(settings),
+    slpCreatorFanActivityRunLimit(settings),
   );
   await writePlan(db, plan);
   return plan;
@@ -243,8 +243,8 @@ async function reconcilePlan(db: DB, settings: SlurpSettings, at: Date) {
 
 async function applyAcceptedActivities(
   db: DB,
-  plan: PersistedNoodleFanActivityDayPlan,
-  run: NoodleFanActivityDayPlanRun,
+  plan: PersistedSlpFanActivityDayPlan,
+  run: SlpFanActivityDayPlanRun,
   settings: SlurpSettings,
   finishedAt: Date,
 ) {
@@ -256,8 +256,8 @@ async function applyAcceptedActivities(
   for (const activity of run.acceptedActivities) {
     if (activity.applied) continue;
     const creator = await noodle.getNoodlerAccountById(activity.creatorId);
-    if (!creator || !resolveNoodlerFanActivityPolicy(settings, creator).enabled) {
-      current = markNoodleFanActivityApplied(current, run.id, activity.id);
+    if (!creator || !resolveCreatorFanActivityPolicy(settings, creator).enabled) {
+      current = markSlpFanActivityApplied(current, run.id, activity.id);
       continue;
     }
     const result = await noodle.createNoodlerFanInteraction(activity.targetPostId, {
@@ -293,31 +293,31 @@ async function applyAcceptedActivities(
         }
       }
     }
-    current = markNoodleFanActivityApplied(current, run.id, activity.id);
+    current = markSlpFanActivityApplied(current, run.id, activity.id);
   }
-  current = finishNoodleFanActivityRun(current, run.id, "completed", finishedAt);
+  current = finishSlpFanActivityRun(current, run.id, "completed", finishedAt);
   await writePlan(db, current);
   return created;
 }
 
-export async function runNoodlerFanActivity(input: {
+export async function runCreatorFanActivity(input: {
   db: DB;
   mode: "automatic" | "manual";
   at?: Date;
   debugMode?: boolean;
-}): Promise<NoodlerFanRunResult> {
-  const operation = await tryNoodleOperation<NoodlerFanRunResult>("noodler-fan-activity", async () => {
+}): Promise<SlpCreatorFanRunResult> {
+  const operation = await trySlpOperation<SlpCreatorFanRunResult>("noodler-fan-activity", async () => {
     const at = input.at ?? new Date();
     const noodle = createSlurpStorage(input.db);
     const settings = await noodle.getSettings();
     const recoverable = await findRecoverablePlan(input.db);
     if (recoverable?.interrupted) {
-      const abandoned = finishNoodleFanActivityRun(recoverable.plan, recoverable.run.id, "abandoned", at);
+      const abandoned = finishSlpFanActivityRun(recoverable.plan, recoverable.run.id, "abandoned", at);
       await writePlan(input.db, abandoned);
     } else if (recoverable) {
       const claimedAt = Date.parse(recoverable.run.claimedAt ?? "");
       if (!Number.isFinite(claimedAt) || at.getTime() - claimedAt > FAN_ACTIVITY_RECOVERY_MAX_AGE_MS) {
-        const abandoned = finishNoodleFanActivityRun(recoverable.plan, recoverable.run.id, "abandoned", at);
+        const abandoned = finishSlpFanActivityRun(recoverable.plan, recoverable.run.id, "abandoned", at);
         await writePlan(input.db, abandoned);
       } else {
         return {
@@ -330,21 +330,21 @@ export async function runNoodlerFanActivity(input: {
     if (!settings.fanActivityEnabled) return { status: "disabled", created: 0 };
     let plan = await reconcilePlan(input.db, settings, at);
 
-    const connection = await resolveNoodlerFanConnection(input.db, settings);
+    const connection = await resolveCreatorFanConnection(input.db, settings);
     if (!connection) return { status: "connection_required", created: 0 };
     const admission = tryBackgroundConnection(connection.id, at);
     if (!admission.acquired) return { status: "busy", created: 0 };
 
     try {
-      let run: NoodleFanActivityDayPlanRun | null;
+      let run: SlpFanActivityDayPlanRun | null;
       if (input.mode === "manual") {
-        const claimed = claimManualNoodleFanActivityRun(plan, at);
+        const claimed = claimManualSlpFanActivityRun(plan, at);
         plan = claimed.plan;
         run = claimed.run;
       } else {
-        run = dueNoodleFanActivityRun(plan, at);
+        run = dueSlpFanActivityRun(plan, at);
         if (!run) return { status: "not_due", created: 0 };
-        plan = claimNoodleFanActivityRun(plan, run.id, at);
+        plan = claimSlpFanActivityRun(plan, run.id, at);
         run = plan.runs.find((candidate) => candidate.id === run!.id)!;
       }
       const workerContext = input.mode === "manual" ? "present" : "background";
@@ -415,33 +415,33 @@ export async function runNoodlerFanActivity(input: {
         ),
       );
 
-      const creators = await prepareNoodlerFanCreatorCandidates({
+      const creators = await prepareCreatorFanCreatorCandidates({
         db: input.db,
         settings,
         creatorIds: run.creatorIds,
-        identityProvider: populationNoodlerFanIdentityProvider(cast, tiesByCreator),
+        identityProvider: populationCreatorFanIdentityProvider(cast, tiesByCreator),
       });
       if (creators.length === 0) {
-        plan = finishNoodleFanActivityRun(plan, run.id, "skipped", at);
+        plan = finishSlpFanActivityRun(plan, run.id, "skipped", at);
         await writePlan(input.db, plan);
         return { status: "no_eligible_posts", created: 0, runId: run.id };
       }
 
       try {
-        const accepted = await generateNoodlerFanActivityBatch({
+        const accepted = await generateCreatorFanActivityBatch({
           db: input.db,
           settings,
           connection,
           creators,
           debugMode: input.debugMode,
         });
-        plan = storeNoodleFanAcceptedActivities(plan, run.id, accepted);
+        plan = storeSlpFanAcceptedActivities(plan, run.id, accepted);
         await writePlan(input.db, plan);
         const storedRun = plan.runs.find((candidate) => candidate.id === run!.id)!;
         const created = await applyAcceptedActivities(input.db, plan, storedRun, settings, at);
         return { status: "generated", created, runId: run.id };
       } catch (error) {
-        plan = finishNoodleFanActivityRun(plan, run.id, "abandoned", at);
+        plan = finishSlpFanActivityRun(plan, run.id, "abandoned", at);
         await writePlan(input.db, plan);
         throw error;
       }
@@ -452,7 +452,7 @@ export async function runNoodlerFanActivity(input: {
   return operation.acquired ? operation.value : { status: "busy", created: 0 };
 }
 
-export async function getNoodlerFanActivityStatus(db: DB, at = new Date()) {
+export async function getCreatorFanActivityStatus(db: DB, at = new Date()) {
   const plan = await readCurrentPlan(db, at);
   const settings = await createSlurpStorage(db).getSettings();
   const automaticRuns = plan?.runs.filter((run) => !run.manual) ?? [];
@@ -468,7 +468,7 @@ export async function getNoodlerFanActivityStatus(db: DB, at = new Date()) {
   return {
     localDate: plan?.localDate ?? localPlanDate(at),
     usedRuns: automaticRuns.filter((run) => run.status !== "scheduled").length,
-    runLimit: noodlerFanActivityRunLimit(settings),
+    runLimit: slpCreatorFanActivityRunLimit(settings),
     lastRun,
   };
 }

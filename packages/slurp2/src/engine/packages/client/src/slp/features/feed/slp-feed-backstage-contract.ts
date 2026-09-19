@@ -5,9 +5,9 @@ import { SLURP_ACTIVITY_PRESETS, slurpActivityPresetForSettings } from "../../mo
 import type { SlpBackstageSection } from "../../base/navigation/slp-backstage-target";
 import type { SlurpSettings } from "../settings/slp-settings-contract";
 import {
-  useNoodlerReserveStatus,
-  useUpdateNoodlerAutoPosting,
-  useUpdateNoodlerScheduleSlot,
+  useCreatorReserveStatus,
+  useUpdateCreatorAutoPosting,
+  useUpdateCreatorScheduleSlot,
 } from "./slp-feed-schedule-hooks";
 
 /** Publishing schedule, pace and the automation-page wizard state Backstage drives. */
@@ -23,9 +23,9 @@ export function useSlpFeedBackstageState({
   settings: SlurpSettings | undefined;
 }) {
   const { t } = useTranslation();
-  const reserveStatusQuery = useNoodlerReserveStatus(section === "overview" || section === "creators");
-  const updateAuto = useUpdateNoodlerAutoPosting();
-  const updateScheduleSlot = useUpdateNoodlerScheduleSlot();
+  const reserveStatusQuery = useCreatorReserveStatus(section === "overview" || section === "creators");
+  const updateAuto = useUpdateCreatorAutoPosting();
+  const updateScheduleSlot = useUpdateCreatorScheduleSlot();
   const [customPaceOpen, setCustomPaceOpen] = useState(false);
   const [paceWizardOpen, setPaceWizardOpen] = useState(false);
   const [schedulesRefreshing, setSchedulesRefreshing] = useState(false);

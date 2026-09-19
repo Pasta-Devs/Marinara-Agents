@@ -2,9 +2,9 @@ import { PROFESSOR_MARI_ID } from "@marinara-engine/shared";
 import { type SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { createSlurpStorage, type SlurpBootstrap } from "../slp-storage.js";
-import { parseNoodleAvatarCrop } from "../../modules/records/slp-storage-model.js";
+import { parseSlpAvatarCrop } from "../../modules/records/slp-storage-model.js";
 import { type SlurpSettings } from "../../modules/settings/slp-settings.js";
-import { isNoodleProfileGenerated } from "../../modules/creators/slp-profile-selection.js";
+import { isSlpProfileGenerated } from "../../modules/creators/slp-profile-selection.js";
 import { ensureAmbientNoodleAccounts } from "../audience/slp-ambient-profiles.js";
 import {
   characterAvatarCrop,
@@ -12,7 +12,7 @@ import {
   generatedProfileSettings,
 } from "../../modules/creators/slp-public-support.js";
 
-const PROFESSOR_MARI_NOODLE_BIO =
+const PROFESSOR_MARI_SLP_BIO =
   "She/Her | 18+ | Skill Issue | Your Assistant After Hours (hey, I get to do fun stuff, too!) | Simp for Il Dottore 24/7 | LLMs Fan";
 
 export async function ensureProfessorMariAccount(
@@ -26,20 +26,18 @@ export async function ensureProfessorMariAccount(
     displayName: row ? characterNameFromRow(row) : "Professor Mari",
     avatarUrl: row?.avatarPath ?? "/sprites/mari/Mari_profile.png",
     avatarCrop: row ? characterAvatarCrop(row) : null,
-    bio: PROFESSOR_MARI_NOODLE_BIO,
+    bio: PROFESSOR_MARI_SLP_BIO,
     invited: true,
     syncIdentity: true,
   });
   if (
     account.settings.profile.profileManuallyEdited !== true &&
-    (account.bio !== PROFESSOR_MARI_NOODLE_BIO ||
-      !isNoodleProfileGenerated(account) ||
-      !account.settings.profile.location)
+    (account.bio !== PROFESSOR_MARI_SLP_BIO || !isSlpProfileGenerated(account) || !account.settings.profile.location)
   ) {
     await noodle.updateAccountProfile(account.id, {
       handle: account.handle || "professor_mari",
       displayName: account.displayName || "Professor Mari",
-      bio: PROFESSOR_MARI_NOODLE_BIO,
+      bio: PROFESSOR_MARI_SLP_BIO,
       avatarUrl: account.avatarUrl || row?.avatarPath || "/sprites/mari/Mari_profile.png",
       profile: generatedProfileSettings("Marinara Engine", null),
     });
@@ -59,7 +57,7 @@ export async function ensurePersonaAccounts(
       entityId: persona.id,
       displayName: persona.convoDisplayName || persona.name || "User",
       avatarUrl: persona.avatarPath ?? null,
-      avatarCrop: parseNoodleAvatarCrop(persona.avatarCrop),
+      avatarCrop: parseSlpAvatarCrop(persona.avatarCrop),
       bio: persona.aboutMe || persona.description || "",
       invited: true,
     });
@@ -82,7 +80,7 @@ function filterStalePersonaAccounts(bootstrap: SlurpBootstrap, livePersonaIds: S
   };
 }
 
-function filterExcludedNoodleAccounts(bootstrap: SlurpBootstrap, settings: SlurpSettings): SlurpBootstrap {
+function filterExcludedSlpAccounts(bootstrap: SlurpBootstrap, settings: SlurpSettings): SlurpBootstrap {
   if (settings.allowProfessorMari) return bootstrap;
   return {
     ...bootstrap,
@@ -92,7 +90,7 @@ function filterExcludedNoodleAccounts(bootstrap: SlurpBootstrap, settings: Slurp
   };
 }
 
-export async function bootstrapVisibleNoodle(
+export async function bootstrapVisibleSlp(
   noodle: ReturnType<typeof createSlurpStorage>,
   characters: ReturnType<typeof createCharactersStorage>,
 ) {
@@ -120,7 +118,7 @@ export async function bootstrapVisibleNoodle(
       syncIdentity: true,
     });
   }
-  return filterExcludedNoodleAccounts(filterStalePersonaAccounts(await noodle.bootstrap(), livePersonaIds), settings);
+  return filterExcludedSlpAccounts(filterStalePersonaAccounts(await noodle.bootstrap(), livePersonaIds), settings);
 }
 
 export async function resolvePersonaAccount(
@@ -137,7 +135,7 @@ export async function resolvePersonaAccount(
     entityId: persona.id,
     displayName: persona.convoDisplayName || persona.name || "User",
     avatarUrl: persona.avatarPath ?? null,
-    avatarCrop: parseNoodleAvatarCrop(persona.avatarCrop),
+    avatarCrop: parseSlpAvatarCrop(persona.avatarCrop),
     bio: persona.aboutMe || persona.description || "",
     invited: true,
   });
@@ -157,7 +155,7 @@ export async function resolvePersonaAccount(
  * character (`characters.remove` does not touch slurp2_accounts, and there is no cascade), or any
  * re-create path that mints a fresh ID, such as a profile import (`characters.create` calls newId).
  */
-export async function filterResolvableNoodleParticipants(
+export async function filterResolvableSlpParticipants(
   accounts: SlpAccount[],
   characters: ReturnType<typeof createCharactersStorage>,
 ): Promise<{ resolvable: SlpAccount[]; staleAccounts: SlpAccount[] }> {

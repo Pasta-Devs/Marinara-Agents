@@ -1,6 +1,6 @@
 import { and, eq, or } from "../../../db/file-query.js";
 import { SlpAccount, SlpAccountSettings } from "../../../../../shared/src/slp/slp-social.types.js";
-import { noodleAccounts } from "../../../db/schema/slurp.js";
+import { slpAccounts } from "../../../db/schema/slurp.js";
 import { now } from "../../../utils/id-generator.js";
 import {
   resolveSlurpAudienceCharacterIds,
@@ -8,7 +8,7 @@ import {
   slurpCharacterIdFromFanEntityId,
   SlurpAudienceCharacterGroup,
 } from "../../../../../shared/src/slp/slp-audience-characters.js";
-import { normalizeNoodleAccountSettings } from "../../modules/records/slp-storage-model.js";
+import { normalizeSlpAccountSettings } from "../../modules/records/slp-storage-model.js";
 import type { SlurpAccount } from "../../modules/records/slp-storage-model.js";
 import { mapAccount, sourceAccountFromEntity } from "../host/slp-storage-mappers.js";
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
@@ -51,11 +51,11 @@ export function createAudienceStorage1(context: SlurpStorageContext) {
       return db.transaction(async (tx) => {
         const rows = await tx
           .select()
-          .from(noodleAccounts)
-          .where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.platform, "slurp")));
+          .from(slpAccounts)
+          .where(and(eq(slpAccounts.id, id), eq(slpAccounts.platform, "slurp")));
         const row = rows[0];
         if (!row) return null;
-        const current = normalizeNoodleAccountSettings(row.settings);
+        const current = normalizeSlpAccountSettings(row.settings);
         const followingAccountIds = current.social.followingAccountIds ?? [];
         const isFollowing = followingAccountIds.includes(targetAccountId);
         const followingAccountTimestamps = { ...current.social.followingAccountTimestamps };
@@ -76,10 +76,10 @@ export function createAudienceStorage1(context: SlurpStorageContext) {
           },
         };
         await tx
-          .update(noodleAccounts)
+          .update(slpAccounts)
           .set({ settings: JSON.stringify(next), updatedAt: now() })
-          .where(eq(noodleAccounts.id, id));
-        const updatedRows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id));
+          .where(eq(slpAccounts.id, id));
+        const updatedRows = await tx.select().from(slpAccounts).where(eq(slpAccounts.id, id));
         return updatedRows[0] ? { account: mapAccount(updatedRows[0]), changed: true } : null;
       });
     },
@@ -158,8 +158,8 @@ export function createAudienceStorage1(context: SlurpStorageContext) {
       if (invitedIds.size === 0) return [];
       const rows = await db
         .select()
-        .from(noodleAccounts)
-        .where(and(eq(noodleAccounts.kind, "random_user"), eq(noodleAccounts.platform, "slurp")));
+        .from(slpAccounts)
+        .where(and(eq(slpAccounts.kind, "random_user"), eq(slpAccounts.platform, "slurp")));
       const accounts: SlurpAccount[] = rows.map(mapAccount);
       return accounts.flatMap((account) => {
         const characterId = slurpCharacterIdFromFanEntityId(account.entityId);
@@ -169,14 +169,10 @@ export function createAudienceStorage1(context: SlurpStorageContext) {
     /** Mark every currently invited character account as uninvited. */
     async clearCharacterInvites(): Promise<void> {
       await db
-        .update(noodleAccounts)
+        .update(slpAccounts)
         .set({ invited: "false", updatedAt: now() })
         .where(
-          and(
-            eq(noodleAccounts.kind, "character"),
-            eq(noodleAccounts.invited, "true"),
-            eq(noodleAccounts.platform, "slurp"),
-          ),
+          and(eq(slpAccounts.kind, "character"), eq(slpAccounts.invited, "true"), eq(slpAccounts.platform, "slurp")),
         );
     },
   } satisfies ThisType<Record<string, any>>;

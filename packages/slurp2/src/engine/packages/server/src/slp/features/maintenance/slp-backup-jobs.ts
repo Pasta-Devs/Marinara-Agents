@@ -4,8 +4,8 @@ import { join } from "path";
 import { randomUUID } from "node:crypto";
 import { claimSlurpBackup } from "../../base/locking/slp-operation-lock.js";
 import { pauseNoodleAutoPost } from "../feed/slp-feed-contract.js";
-import { pauseNoodleRefreshScheduler } from "../feed/slp-feed-contract.js";
-import { listNoodlerMediaFiles, removeAllNoodlerMedia, restoreNoodlerMediaFile } from "../../base/media/slp-media.js";
+import { pauseSlpRefreshScheduler } from "../feed/slp-feed-contract.js";
+import { listCreatorMediaFiles, removeAllCreatorMedia, restoreCreatorMediaFile } from "../../base/media/slp-media.js";
 import { type StoredZipEntry, jsonEntry, writeStoredZip, readStoredZip } from "../../modules/maintenance/slp-backup.js";
 import { createWriteStream } from "fs";
 import { finished } from "node:stream/promises";
@@ -131,7 +131,7 @@ export function createSlpBackupJobs(app: FastifyInstance, deps: SlpRouteDeps) {
       return;
     }
     const releaseScheduler = await pauseNoodleAutoPost();
-    const releaseRefreshScheduler = await pauseNoodleRefreshScheduler();
+    const releaseRefreshScheduler = await pauseSlpRefreshScheduler();
     try {
       await body();
     } catch (error) {
@@ -154,7 +154,7 @@ export function createSlpBackupJobs(app: FastifyInstance, deps: SlpRouteDeps) {
       job.creators = backup.tables.accounts.length;
       job.posts = backup.tables.posts.length;
       job.interactions = backup.tables.interactions.length;
-      const mediaFiles = await listNoodlerMediaFiles();
+      const mediaFiles = await listCreatorMediaFiles();
       job.mediaFiles = mediaFiles.length;
       job.stage = "writing-archive";
       job.state = "writing";
@@ -286,9 +286,9 @@ export function createSlpBackupJobs(app: FastifyInstance, deps: SlpRouteDeps) {
       job.mediaFiles = mediaEntries.length;
       // Media is replaced wholesale alongside the rows it belongs to, so a restore cannot leave
       // images from the previous data set attached to posts that no longer exist.
-      removeAllNoodlerMedia();
+      removeAllCreatorMedia();
       for (const [name, data] of mediaEntries) {
-        if (restoreNoodlerMediaFile(name, data)) {
+        if (restoreCreatorMediaFile(name, data)) {
           job.mediaCompleted += 1;
           job.mediaBytes += data.length;
         } else {

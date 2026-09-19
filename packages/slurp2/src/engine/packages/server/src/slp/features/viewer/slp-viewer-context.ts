@@ -4,11 +4,11 @@ import type {
   SlpCreatorManagedPost,
   SlpCreatorPostView,
 } from "../../../../../shared/src/slp/slp-social.types.js";
-import { projectNoodlerAudienceProfile } from "../../modules/creators/slp-disclosure.js";
+import { projectCreatorAudienceProfile } from "../../modules/creators/slp-disclosure.js";
 import { isSlurpViewerActorAccount } from "../../modules/settings/slp-settings.js";
-import { isNoodlerHiddenFromViewer, canViewNoodlerPost } from "../../base/identity/slp-access.js";
+import { isCreatorHiddenFromViewer, canViewCreatorPost } from "../../base/identity/slp-access.js";
 import { slurpGoalProgress } from "../../modules/projects/slp-goal.js";
-import { NOODLER_SUBSCRIPTION_COST, noodlerUnlockPriceFromMetadata } from "../../modules/economy/slp-prices.js";
+import { SLP_CREATOR_SUBSCRIPTION_COST, slpCreatorUnlockPriceFromMetadata } from "../../modules/economy/slp-prices.js";
 import { slurpPlatformScaleMultiplier } from "../../modules/audience/slp-scale.js";
 import {
   slurpCreatorReach,
@@ -17,7 +17,7 @@ import {
   slurpPostUnlockCount,
 } from "../../../../../shared/src/slp/slp-reach.js";
 import { NOODLER_FAN_IDENTITY_PREFIX } from "../../modules/audience/slp-fan-identity-provider.js";
-import { NOODLER_MEDIA_URL_PREFIX, noodlerPostMediaUrlForPersona } from "../../base/media/slp-media.js";
+import { NOODLER_MEDIA_URL_PREFIX, slpCreatorPostMediaUrlForPersona } from "../../base/media/slp-media.js";
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteHost } from "./slp-route-host.js";
 
@@ -63,11 +63,11 @@ export function createSlpViewerContext(
     // A subscriber always follows: the Following feed and every `followed` flag read this one set.
     const followedIds = new Set([...(viewer.settings.social.followingAccountIds ?? []), ...subscribedIds]);
     const unlockedIds = new Set(unlocks.map((item) => item.postId));
-    const profileById = new Map(profiles.map((profile) => [profile.id, projectNoodlerAudienceProfile(profile)]));
+    const profileById = new Map(profiles.map((profile) => [profile.id, projectCreatorAudienceProfile(profile)]));
     const visibleAccounts = accounts.filter(
       (account) =>
         !isSlurpViewerActorAccount(account) &&
-        (creatorBelongsToViewer(account, viewer) || !isNoodlerHiddenFromViewer(account, viewer.id)),
+        (creatorBelongsToViewer(account, viewer) || !isCreatorHiddenFromViewer(account, viewer.id)),
     );
     // A tip goal exists to give a fan a reason to tip, and it was only ever visible to the Creator
     // who set it. It belongs on the profile the fan is looking at.
@@ -112,7 +112,7 @@ export function createSlpViewerContext(
         subscribed: context.subscribedIds.has(account.id),
         followed: context.followedIds.has(account.id),
         // The creator's own weekly price when it has set one, else the Slurp-wide default.
-        subscriptionPrice: context.subscriptionPrices[account.id] ?? NOODLER_SUBSCRIPTION_COST,
+        subscriptionPrice: context.subscriptionPrices[account.id] ?? SLP_CREATOR_SUBSCRIPTION_COST,
         goal: context.goalByAccountId.get(account.id) ?? null,
         // Feed posts live in a separate keyset-paged query. Keeping this field preserves the
         // shared Engine contract for older consumers without hydrating any post history here.
@@ -125,7 +125,7 @@ export function createSlpViewerContext(
    * The shared Engine view type has no price field, and adding one there would force an
    * engine.min bump for a presentation detail. The package widens it locally instead.
    */
-  type NoodlerPricedPostView = SlpCreatorPostView & {
+  type SlpCreatorPricedPostView = SlpCreatorPostView & {
     unlockPrice: number | null;
     /** Social proof on the paywall. Null for a post the viewer can already read. */
     unlockCount: number | null;
@@ -136,7 +136,7 @@ export function createSlpViewerContext(
   async function projectViewerPosts(
     context: ViewerContext,
     posts: SlpCreatorManagedPost[],
-  ): Promise<Map<string, NoodlerPricedPostView>> {
+  ): Promise<Map<string, SlpCreatorPricedPostView>> {
     const viewablePostIds = new Set(
       posts
         .filter((post) => {
@@ -144,7 +144,7 @@ export function createSlpViewerContext(
           return Boolean(
             account &&
             (creatorBelongsToViewer(account, context.viewer) ||
-              canViewNoodlerPost({
+              canViewCreatorPost({
                 post,
                 subscribed: context.subscribedIds.has(account.id),
                 unlockedPostIds: context.unlockedIds,
@@ -188,7 +188,7 @@ export function createSlpViewerContext(
       }),
     );
     return new Map(
-      posts.map((post): [string, NoodlerPricedPostView] => {
+      posts.map((post): [string, SlpCreatorPricedPostView] => {
         const locked = !viewablePostIds.has(post.id);
         const allInteractions = (interactionsByPostId.get(post.id) ?? []).filter(
           (interaction) => interaction.type !== "story_view",
@@ -209,7 +209,7 @@ export function createSlpViewerContext(
             imageUrl:
               locked && !post.imageUrl?.startsWith(NOODLER_MEDIA_URL_PREFIX)
                 ? null
-                : noodlerPostMediaUrlForPersona(
+                : slpCreatorPostMediaUrlForPersona(
                     post.imageUrl,
                     context.viewer.entityId,
                     locked ? "locked" : "original",
@@ -219,7 +219,7 @@ export function createSlpViewerContext(
             metadata: locked ? null : post.metadata,
             // A locked post withholds its metadata, so the price travels as its own field. It is
             // The post's own price, which the unlock route charges when the wallet is enabled.
-            unlockPrice: locked ? noodlerUnlockPriceFromMetadata(post.metadata) : null,
+            unlockPrice: locked ? slpCreatorUnlockPriceFromMetadata(post.metadata) : null,
             story: post.metadata.noodlerPostType === "story",
             linkedPostId:
               post.metadata.noodlerPostType === "story" && typeof post.metadata.noodlerLinkedPostId === "string"

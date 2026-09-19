@@ -1,17 +1,17 @@
 import type { FastifyInstance } from "fastify";
 import { logger } from "../../../lib/logger.js";
-import { runNoodlerFanActivity, type NoodlerFanRunResult } from "./slp-fan-activity-operation.js";
+import { runCreatorFanActivity, type SlpCreatorFanRunResult } from "./slp-fan-activity-operation.js";
 import { slurpPollBackoffMs } from "../../base/model/slp-poll-backoff.js";
 
 const INITIAL_DELAY_MS = 45_000;
 const POLL_MS = 60_000;
 
-export function startNoodlerFanActivityScheduler(
+export function startCreatorFanActivityScheduler(
   app: FastifyInstance,
   registerStop?: (stop: () => Promise<void>) => void,
 ) {
   let stopped = false;
-  let active: Promise<NoodlerFanRunResult> | null = null;
+  let active: Promise<SlpCreatorFanRunResult> | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let consecutiveFailures = 0;
   const schedule = (delay: number) => {
@@ -21,7 +21,7 @@ export function startNoodlerFanActivityScheduler(
   };
   const poll = async () => {
     if (stopped || active) return;
-    active = runNoodlerFanActivity({
+    active = runCreatorFanActivity({
       db: app.db,
       mode: "automatic",
     });

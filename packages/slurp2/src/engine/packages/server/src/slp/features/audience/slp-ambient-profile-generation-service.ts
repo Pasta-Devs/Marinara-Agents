@@ -11,7 +11,7 @@ import {
   resolveStoredMaxTokens,
 } from "../../../services/generation/generation-parameters.js";
 import { clampGenerationMaxOutputTokens } from "../../../services/generation/output-token-limits.js";
-import { noodleSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
+import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
 import { parseGameJsonish } from "../../../services/game/jsonish.js";
 import { requireModelAnswer } from "../../base/model/slp-model-answer.js";
 import { withConnectionFallbackProvider } from "../../../services/llm/connection-fallback-provider.js";
@@ -22,10 +22,10 @@ import { createSlurpStorage } from "../../data/slp-storage.js";
 import { type SlurpPromptBlockOverrides } from "../../modules/settings/slp-settings.js";
 import { composeSlurpPromptBlocks } from "../../base/prompting/slp-prompt-blocks.js";
 import type { DB } from "../../../db/connection.js";
-import { parseNoodleGeneratedProfiles } from "../../modules/creators/slp-generated-profiles.js";
-import { normalizeNoodleHandle } from "../../base/identity/slp-handle.js";
+import { parseSlpGeneratedProfiles } from "../../modules/creators/slp-generated-profiles.js";
+import { normalizeSlpHandle } from "../../base/identity/slp-handle.js";
 import { generatedProfileSettings } from "../../modules/creators/slp-public-support.js";
-import { noodleResponseFormat, NOODLE_JSON_OUTPUT_HEADING } from "../../base/prompting/slp-response-format.js";
+import { slpResponseFormat, NOODLE_JSON_OUTPUT_HEADING } from "../../base/prompting/slp-response-format.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -33,7 +33,7 @@ export type AmbientProfileRerollOutcome = SlpAmbientProfileRerollOutcome;
 
 function normalizedPublicHandle(handle: string): string {
   return (
-    normalizeNoodleHandle(handle)
+    normalizeSlpHandle(handle)
       .replace(/[^a-z0-9_]+/gu, "_")
       .replace(/^_+|_+$/gu, "")
       .slice(0, 36) || "ambient_user"
@@ -80,7 +80,7 @@ export function allocateAmbientProfileHandles(
   return allocated;
 }
 
-export async function rerollAmbientNoodleProfiles(input: {
+export async function rerollAmbientSlpProfiles(input: {
   db: DB;
   noodle: ReturnType<typeof createSlurpStorage>;
   accounts: SlpAccount[];
@@ -180,20 +180,18 @@ export async function rerollAmbientNoodleProfiles(input: {
       maxTokens: resolveStoredMaxTokens(input.connection.defaultParameters, 1024 + input.accounts.length * 512),
       maxTokensOverride: input.connection.maxTokensOverride,
     }),
-    ...noodleSamplingOptions(
+    ...slpSamplingOptions(
       resolveStoredChatOptions(input.connection.defaultParameters, input.connection.provider, input.connection.model),
       { temperature: 0.95, topP: 0.95 },
     ),
     stream: false,
     debugMode: input.debugMode,
-    responseFormat: noodleResponseFormat(input.connection.model, "profiles"),
+    responseFormat: slpResponseFormat(input.connection.model, "profiles"),
   });
   // A wholly malformed response throws; report it per account instead of failing the whole request.
-  let parsed: ReturnType<typeof parseNoodleGeneratedProfiles> = { profiles: [], rejected: [] };
+  let parsed: ReturnType<typeof parseSlpGeneratedProfiles> = { profiles: [], rejected: [] };
   try {
-    parsed = parseNoodleGeneratedProfiles(
-      parseGameJsonish(requireModelAnswer(result.content ?? "", "Ambient profiles")),
-    );
+    parsed = parseSlpGeneratedProfiles(parseGameJsonish(requireModelAnswer(result.content ?? "", "Ambient profiles")));
   } catch (error) {
     logger.warn(error, "[slurp] Ambient profile reroll returned an unusable response");
   }

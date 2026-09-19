@@ -3,9 +3,9 @@ import type { SlpAccount, SlpCreatorFanActivitySettings } from "../../../../../s
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
 import { useSlurpUIStore } from "../../base/state/slp-package-store.js";
-import { noodleKeys } from "../../base/state/slp-query-keys.js";
+import { slpKeys } from "../../base/state/slp-query-keys.js";
 
-export function useUpdateNoodlerFanActivity() {
+export function useUpdateCreatorFanActivity() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -19,10 +19,10 @@ export function useUpdateNoodlerFanActivity() {
         subtree: "scheduler",
         patch: { fanActivity },
       } satisfies SlpAccountSettingsPatchInput),
-    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: slpKeys.noodlerAccounts() }),
   });
 }
-export function useRefreshNoodlerFanActivityNow() {
+export function useRefreshCreatorFanActivityNow() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () =>
@@ -32,16 +32,16 @@ export function useRefreshNoodlerFanActivityNow() {
     onSuccess: () =>
       Promise.all([
         qc.invalidateQueries({
-          queryKey: [...noodleKeys.noodlerRoot(), "posts"],
+          queryKey: [...slpKeys.noodlerRoot(), "posts"],
         }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerFanStatus() }),
+        qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() }),
+        qc.invalidateQueries({ queryKey: slpKeys.noodlerFanStatus() }),
       ]),
   });
 }
-export function useNoodlerFanActivityStatus(enabled = true) {
+export function useCreatorFanActivityStatus(enabled = true) {
   return useQuery({
-    queryKey: noodleKeys.noodlerFanStatus(),
+    queryKey: slpKeys.noodlerFanStatus(),
     queryFn: () =>
       api.get<{
         localDate: string;

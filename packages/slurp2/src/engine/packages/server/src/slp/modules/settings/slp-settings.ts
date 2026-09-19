@@ -380,7 +380,7 @@ export type SlurpBootstrap = Omit<SlpBootstrap, "settings"> & { settings: SlurpS
 // single tone prompt: creator personality, mood balance, and the adult flirty lean
 // all live here so they are visible and editable in Slurp settings, not hardcoded.
 // Keep this value aligned with the Slurp settings surface.
-const LEGACY_NOODLER_DEFAULT_GENERATION_GUIDANCE =
+const LEGACY_SLP_CREATOR_DEFAULT_GENERATION_GUIDANCE =
   "All NoodleR creators and viewers are adults (18+). This is an adult creator page: flirty, suggestive, teasing, and sensual posts are common, and explicit posts appear regularly when they suit the creator — but they are not required and need not be the majority. Tease the locked posts and answer flirty comments in kind. Keep each creator's personality intact: a shy creator flirts shyly, a blunt one bluntly, a funny one filthily. Ordinary posts — updates, humor, behind the scenes, project news — matter just as much and keep both the page and the character human. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood.";
 
 export const LEGACY_SLURP_DEFAULT_GENERATION_GUIDANCE =
@@ -401,7 +401,7 @@ export const SLURP_GUIDANCE_PRESETS = {
 
 export type SlurpGuidanceLevel = keyof typeof SLURP_GUIDANCE_PRESETS;
 
-export const NOODLER_DEFAULT_GENERATION_GUIDANCE: string = SLURP_GUIDANCE_PRESETS.steamy;
+export const SLP_CREATOR_DEFAULT_GENERATION_GUIDANCE: string = SLURP_GUIDANCE_PRESETS.steamy;
 
 /** The middle level shipped with a typo before the levels existed; migrate it forward. */
 export const LEGACY_TYPO_SLURP_DEFAULT_GENERATION_GUIDANCE =
@@ -413,16 +413,16 @@ export const LEGACY_STEAMY_SLURP_DEFAULT_GENERATION_GUIDANCE =
 export const LEGACY_EXPLICIT_SLURP_DEFAULT_GENERATION_GUIDANCE =
   "All Slurp creators and viewers are adults (18+). This is an explicit adult creator page. Sexual content is the norm here rather than the exception, and creators describe it directly and in detail when it suits them. Tease the locked posts hard and answer flirty comments in kind. Keep each creator's personality intact: a shy creator is explicit shyly, a blunt one is explicit bluntly. Ordinary posts about their day, work, and mood still appear and keep the feed believable.";
 
-export const LEGACY_NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT =
+export const LEGACY_SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT =
   "Create a polished social-media image for an adult Creator post. Match the creator's identity, personality, body, clothing, and established visual details. Follow the post's mood and subject. Describe the pose, expression, setting, lighting, camera angle, composition, and visible details clearly. Flirty, suggestive, sensual, or explicit imagery is allowed when it fits the post and creator, but do not force sexual content into ordinary updates. Keep the image coherent, intentional, and suitable for a public or locked Creator feed.";
 
-export const NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT =
+export const SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT =
   "Create a polished social-media image for an adult Creator post. Match the creator's identity, personality, body, clothing, and established visual details. Follow the post's mood and subject. Describe the pose, expression, setting, lighting, camera angle, composition, and visible details clearly. Flirty, suggestive, sensual, or explicit imagery is allowed when it fits the post and creator, but do not force sexual content into ordinary updates. When the image shows nudity or sex, always use thorough, graphic descriptions. Name the body in dirty everyday words, not clinical ones: tits, nipples, ass, pussy, clit, cock, balls, cum, wet, dripping, hard, leaking. Describe how it looks, how it sits, how it catches the light. Keep the image coherent, intentional, and suitable for a public or locked Creator feed.";
 
-export const LEGACY_NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION =
+export const LEGACY_SLP_CREATOR_DEFAULT_IMAGE_PROMPT_INTERPRETATION =
   "Edit this image prompt into a provider-ready image prompt. Preserve the original subject, action, setting, composition, and visual style. Preserve any explicit style in the original prompt, character context, image instructions, or style guidance. Do not add realistic, photorealistic, photographic, camera, lens, or natural-lighting language unless the supplied context clearly requests that style. Do not convert an anime, cartoon, game, manga, comic, illustration, painterly, fantasy, or stylized character into a realistic image. When no style is specified, keep the prompt style-neutral. Do not invent an art style. Treat image instructions as guidance, not text to copy into the result. Return only the provider-ready image prompt.";
 
-export const NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION =
+export const SLP_CREATOR_DEFAULT_IMAGE_PROMPT_INTERPRETATION =
   "Edit this image prompt into a provider-ready image prompt. Preserve the original subject, action, setting, composition, and visual style. Preserve any explicit style in the original prompt, character context, image instructions, or style guidance. Do not add realistic, photorealistic, photographic, camera, lens, or natural-lighting language unless the supplied context clearly requests that style. Do not convert an anime, cartoon, game, manga, comic, illustration, painterly, fantasy, or stylized character into a realistic image. When no style is specified, keep the prompt style-neutral. Do not invent an art style. When the prompt shows nudity or sex, keep thorough, graphic body language and dirty everyday words such as tits, nipples, ass, pussy, clit, cock, balls, cum, wet, dripping, hard, leaking. Do not replace them with clinical or euphemistic wording. Treat image instructions as guidance, not text to copy into the result. Return only the provider-ready image prompt.";
 
 /**
@@ -482,7 +482,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   storyImageWidth: 1024,
   storyImageHeight: 1280,
   refreshesPerDay: 0,
-  generationGuidance: NOODLER_DEFAULT_GENERATION_GUIDANCE,
+  generationGuidance: SLP_CREATOR_DEFAULT_GENERATION_GUIDANCE,
   audienceTone: SLURP_DEFAULT_AUDIENCE_TONE,
   worldActivity: SLURP_DEFAULT_WORLD_ACTIVITY,
   platformScale: SLURP_DEFAULT_PLATFORM_SCALE,
@@ -490,8 +490,8 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   imageContextMode: "auto",
   imageContextConnectionId: null,
   imageGenerationConnectionId: null,
-  imageGenerationPrompt: NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT,
-  imagePromptInterpretation: NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION,
+  imageGenerationPrompt: SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT,
+  imagePromptInterpretation: SLP_CREATOR_DEFAULT_IMAGE_PROMPT_INTERPRETATION,
   enableImageInterpretation: true,
   imageGenerationUseAvatarReferences: false,
   imageGenerationIncludeDescriptions: false,
@@ -594,25 +594,25 @@ export function normalizeSlurpSettings(raw: unknown): SlurpSettings {
     Object.entries(DEFAULT_SLURP_SETTINGS).map(([key, value]) => [key, rawRecord[key] ?? value]),
   ) as Record<keyof SlurpSettings, unknown>;
   candidate.generationGuidance =
-    rawRecord.generationGuidance === LEGACY_NOODLER_DEFAULT_GENERATION_GUIDANCE ||
+    rawRecord.generationGuidance === LEGACY_SLP_CREATOR_DEFAULT_GENERATION_GUIDANCE ||
     rawRecord.generationGuidance === LEGACY_TYPO_SLURP_DEFAULT_GENERATION_GUIDANCE ||
     rawRecord.generationGuidance === LEGACY_SLURP_DEFAULT_GENERATION_GUIDANCE ||
     rawRecord.generationGuidance === LEGACY_STEAMY_SLURP_DEFAULT_GENERATION_GUIDANCE
-      ? NOODLER_DEFAULT_GENERATION_GUIDANCE
+      ? SLP_CREATOR_DEFAULT_GENERATION_GUIDANCE
       : rawRecord.generationGuidance === LEGACY_EXPLICIT_SLURP_DEFAULT_GENERATION_GUIDANCE
         ? SLURP_GUIDANCE_PRESETS.explicit
-        : (rawRecord.generationGuidance ?? NOODLER_DEFAULT_GENERATION_GUIDANCE);
+        : (rawRecord.generationGuidance ?? SLP_CREATOR_DEFAULT_GENERATION_GUIDANCE);
   candidate.imageGenerationPrompt =
     rawRecord.imageGenerationPrompt === undefined ||
     rawRecord.imageGenerationPrompt === "" ||
-    rawRecord.imageGenerationPrompt === LEGACY_NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT
-      ? NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT
+    rawRecord.imageGenerationPrompt === LEGACY_SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT
+      ? SLP_CREATOR_DEFAULT_IMAGE_GENERATION_PROMPT
       : rawRecord.imageGenerationPrompt;
   candidate.imagePromptInterpretation =
     rawRecord.imagePromptInterpretation === undefined ||
     rawRecord.imagePromptInterpretation === "" ||
-    rawRecord.imagePromptInterpretation === LEGACY_NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION
-      ? NOODLER_DEFAULT_IMAGE_PROMPT_INTERPRETATION
+    rawRecord.imagePromptInterpretation === LEGACY_SLP_CREATOR_DEFAULT_IMAGE_PROMPT_INTERPRETATION
+      ? SLP_CREATOR_DEFAULT_IMAGE_PROMPT_INTERPRETATION
       : rawRecord.imagePromptInterpretation;
   candidate.nightQuiet = rawRecord.nightQuiet ?? DEFAULT_SLURP_SETTINGS.nightQuiet;
   // Repaired rather than replaced: a player who edited one type must not lose the other seven

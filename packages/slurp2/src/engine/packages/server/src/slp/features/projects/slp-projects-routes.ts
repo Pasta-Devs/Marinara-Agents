@@ -25,7 +25,7 @@ import {
 } from "../../modules/projects/slp-arc-library.js";
 import { slurpCrossoverForViewer } from "../../modules/projects/slp-arc-crossover.js";
 import { isSlurpViewerActorAccount } from "../../modules/settings/slp-settings.js";
-import { isNoodlerHiddenFromViewer } from "../../base/identity/slp-access.js";
+import { isCreatorHiddenFromViewer } from "../../base/identity/slp-access.js";
 import { generateSlurpArc, SlurpArcGenerationFailure } from "./slp-arc-generation-service.js";
 import { isConnectionAdmissionFailure } from "../../../services/generation/connection-admission.js";
 import type { FastifyInstance } from "fastify";
@@ -263,7 +263,7 @@ export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps
     const owner = creatorBelongsToViewer(creator, viewer);
     if (
       !owner &&
-      (isNoodlerHiddenFromViewer(creator, viewer.id) ||
+      (isCreatorHiddenFromViewer(creator, viewer.id) ||
         (creator.settings.privacy.identityDisclosure ?? "open") !== "open")
     )
       return { arcs: [] };
@@ -280,7 +280,7 @@ export async function slpProjectsRoutes(app: FastifyInstance, deps: SlpRouteDeps
       return Boolean(
         account &&
         (creatorBelongsToViewer(account, viewer) ||
-          (!isNoodlerHiddenFromViewer(account, viewer.id) &&
+          (!isCreatorHiddenFromViewer(account, viewer.id) &&
             (account.settings.privacy.identityDisclosure ?? "open") === "open")),
       );
     };

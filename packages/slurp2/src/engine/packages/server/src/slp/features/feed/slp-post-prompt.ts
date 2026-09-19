@@ -14,20 +14,23 @@ import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "../../
 import { buildSlurpPostTimingContext } from "../../modules/feed/slp-post-timing.js";
 import { type SlurpProject } from "../../modules/projects/slp-project.js";
 import { slurpProjectChapter, slurpProjectInstruction } from "../../modules/projects/slp-arc-progress.js";
-import { NOODLER_CONTENT_HARD_MAX_LENGTH, type NoodlerContentFormat } from "../../base/prompting/slp-content-format.js";
+import {
+  NOODLER_CONTENT_HARD_MAX_LENGTH,
+  type SlpCreatorContentFormat,
+} from "../../base/prompting/slp-content-format.js";
 import { SLURP_PLATFORM_CONTEXT } from "../../modules/prompting/slp-prompt.js";
-import { protectNoodlerGeneratedIdentity, type PublicIdentity } from "../../base/identity/slp-identity-protection.js";
-import { NOODLER_UNTRUSTED_CONTENT_INSTRUCTION, noodlerIdentityInstruction } from "./slp-public-identity.js";
+import { protectCreatorGeneratedIdentity, type PublicIdentity } from "../../base/identity/slp-identity-protection.js";
+import { NOODLER_UNTRUSTED_CONTENT_INSTRUCTION, slpCreatorIdentityInstruction } from "./slp-public-identity.js";
 
-export type FormattedNoodlerGenerationRequest = SlpCreatorGenerationRequest & {
+export type FormattedCreatorGenerationRequest = SlpCreatorGenerationRequest & {
   /** The composer asked for an image on this post, whatever the scheduler's image setting is. */
   generateImage?: boolean;
-  format?: NoodlerContentFormat;
+  format?: SlpCreatorContentFormat;
   /** The guided path can ask for a Story outright instead of waiting for the rotation. */
   postType?: "post" | "story";
 };
 
-const NOODLER_FORMAT_PROMPTS: Record<NoodlerContentFormat, string> = {
+const NOODLER_FORMAT_PROMPTS: Record<SlpCreatorContentFormat, string> = {
   caption:
     "Format: caption. Aim for 40-220 characters in one short creator-feed caption. Go longer only when the moment really calls for it.",
   announcement: "Format: announcement. Aim for 80-600 body characters with the important news first.",
@@ -42,7 +45,7 @@ const NOODLER_FORMAT_PROMPTS: Record<NoodlerContentFormat, string> = {
  * desk in the same pose eight times running. It rewrote the caption each time and reinvented an
  * identical picture, because nothing told it what the picture had been.
  */
-function formatNoodlerPostHistory(posts: SlpCreatorManagedPost[], protect: (value: string) => string): string {
+function formatCreatorPostHistory(posts: SlpCreatorManagedPost[], protect: (value: string) => string): string {
   if (posts.length === 0) return "No previous posts on this Slurp page.";
   return posts
     .slice()
@@ -63,7 +66,7 @@ export function buildNoodlerPostMessages(input: {
   disclosureMode: SlpIdentityDisclosure;
   publicIdentity: PublicIdentity | null;
   recentPosts: SlpCreatorManagedPost[];
-  request: Pick<FormattedNoodlerGenerationRequest, "noodlerPostGuide" | "format">;
+  request: Pick<FormattedCreatorGenerationRequest, "noodlerPostGuide" | "format">;
   allowImagePrompt: boolean;
   imageGenerationPrompt: string;
   generationGuidance: string;
@@ -92,7 +95,7 @@ export function buildNoodlerPostMessages(input: {
   promptBlocks?: SlurpPromptBlockOverrides;
 }): ChatMessage[] {
   const protect = (value: string) =>
-    protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
+    protectCreatorGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
   const guidance = input.generationGuidance.trim();
   const format = input.request.format ?? "caption";
   const systemBlocks = [
@@ -128,7 +131,7 @@ export function buildNoodlerPostMessages(input: {
     {
       id: "identity",
       kind: "required" as const,
-      text: noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
+      text: slpCreatorIdentityInstruction(input.disclosureMode, input.publicIdentity),
     },
     {
       id: "format",
@@ -202,7 +205,7 @@ export function buildNoodlerPostMessages(input: {
     buildSlurpPostTimingContext(input.generatedAt ?? new Date(), input.publicationTime),
     "",
     "# Recent Slurp posts",
-    formatNoodlerPostHistory(input.recentPosts, protect),
+    formatCreatorPostHistory(input.recentPosts, protect),
     ...(input.variationInstruction ? ["", input.variationInstruction] : []),
     ...(input.project
       ? [
@@ -253,24 +256,24 @@ export function buildNoodlerPostMessages(input: {
   ];
 }
 
-const NOODLER_FALLBACK_TITLE_MAX_LENGTH = 80;
+const SLP_CREATOR_FALLBACK_TITLE_MAX_LENGTH = 80;
 
 /** Title for posts whose model dropped the field: the first sentence, trimmed to a headline. */
-export function noodlerTitleFromContent(content: string): string {
+export function slpCreatorTitleFromContent(content: string): string {
   const firstSentence =
     content
       .trim()
       .split(/(?<=[.!?])\s|\n/u)[0]
       ?.trim() || content.trim();
-  if (firstSentence.length <= NOODLER_FALLBACK_TITLE_MAX_LENGTH)
+  if (firstSentence.length <= SLP_CREATOR_FALLBACK_TITLE_MAX_LENGTH)
     return firstSentence.replace(/[.!?,;:\s]+$/u, "") || firstSentence;
   // Leave room for the trailing ellipsis so the result never exceeds the stated max length.
-  const clipped = firstSentence.slice(0, NOODLER_FALLBACK_TITLE_MAX_LENGTH - 1);
+  const clipped = firstSentence.slice(0, SLP_CREATOR_FALLBACK_TITLE_MAX_LENGTH - 1);
   const lastSpace = clipped.lastIndexOf(" ");
   return `${(lastSpace > 20 ? clipped.slice(0, lastSpace) : clipped).replace(/[.!?,;:\s]+$/u, "")}…`;
 }
 
-export function parseNoodlerPost(content: string) {
+export function parseCreatorPost(content: string) {
   const parsed = parseGameJsonish(requireModelAnswer(content, "a creator post"));
   // Many LLMs (especially local models via Ollama/KoboldCPP) wrap the expected object
   // in an array ([{"title":...}]) regardless of the prompt instructing "one JSON object".

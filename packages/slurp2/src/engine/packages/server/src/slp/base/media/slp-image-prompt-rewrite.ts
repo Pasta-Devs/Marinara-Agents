@@ -31,7 +31,7 @@ function parseRecord(value: unknown): Record<string, unknown> {
 }
 
 /** Rewrite a Noodle image prompt with connection instructions and art-style guidance. */
-export async function rewriteNoodleImagePrompt(input: {
+export async function rewriteSlpImagePrompt(input: {
   db: DB;
   prompt: string;
   interpretationInstruction?: string;

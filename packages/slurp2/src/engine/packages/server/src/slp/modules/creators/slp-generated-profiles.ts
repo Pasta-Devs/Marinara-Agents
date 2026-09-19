@@ -4,7 +4,7 @@ import {
   type SlpGeneratedProfile,
 } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
 
-export type RejectedNoodleGeneratedProfile = {
+export type RejectedSlpGeneratedProfile = {
   index: number;
   issueCount: number;
 };
@@ -13,9 +13,9 @@ export type RejectedNoodleGeneratedProfile = {
  * Parse model-generated profile rows independently so one malformed account
  * cannot discard valid profiles from the same Noodle setup batch.
  */
-export function parseNoodleGeneratedProfiles(value: unknown): {
+export function parseSlpGeneratedProfiles(value: unknown): {
   profiles: SlpGeneratedProfile[];
-  rejected: RejectedNoodleGeneratedProfile[];
+  rejected: RejectedSlpGeneratedProfile[];
 } {
   const wrappedValue =
     Array.isArray(value) &&
@@ -41,7 +41,7 @@ export function parseNoodleGeneratedProfiles(value: unknown): {
   }
 
   const profiles: SlpGeneratedProfile[] = [];
-  const rejected: RejectedNoodleGeneratedProfile[] = [];
+  const rejected: RejectedSlpGeneratedProfile[] = [];
   rawProfiles.forEach((rawProfile, index) => {
     const parsed = slpGeneratedProfileSchema.safeParse(rawProfile);
     if (parsed.success) profiles.push(parsed.data);

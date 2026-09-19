@@ -1,8 +1,8 @@
 import type { SlpAccount, SlpPost } from "../../../../../shared/src/slp/slp-social.types.js";
 
-type NoodlerAccessAccount = SlpAccount & { sourceEntityId?: string | null };
+type SlpCreatorAccessAccount = SlpAccount & { sourceEntityId?: string | null };
 
-export function withoutNoodlerSelfHiddenAccountId(
+export function withoutCreatorSelfHiddenAccountId(
   hiddenFromAccountIds: readonly string[],
   sourceEntityId: string | null | undefined,
 ): string[] {
@@ -11,12 +11,12 @@ export function withoutNoodlerSelfHiddenAccountId(
     : [...hiddenFromAccountIds];
 }
 
-export function isNoodlerHiddenFromViewer(account: NoodlerAccessAccount, viewerAccountId: string): boolean {
+export function isCreatorHiddenFromViewer(account: SlpCreatorAccessAccount, viewerAccountId: string): boolean {
   if (account.sourceEntityId === viewerAccountId) return false;
   return account.settings.privacy.access.hiddenFromAccountIds.includes(viewerAccountId);
 }
 
-export function canViewNoodlerPost(input: {
+export function canViewCreatorPost(input: {
   post: Pick<SlpPost, "id" | "access">;
   subscribed: boolean;
   unlockedPostIds: ReadonlySet<string>;

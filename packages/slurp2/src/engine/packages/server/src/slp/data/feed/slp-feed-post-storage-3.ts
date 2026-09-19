@@ -1,5 +1,5 @@
 import { inArray } from "../../../db/file-query.js";
-import { noodleActivityDigests, noodleInteractions, noodlePosts, noodleRefreshRuns } from "../../../db/schema/slurp.js";
+import { slpActivityDigests, slpInteractions, slpPosts, slpRefreshRuns } from "../../../db/schema/slurp.js";
 import { parseStringArray } from "../../modules/records/slp-storage-model.js";
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
 
@@ -36,13 +36,13 @@ export function createFeedPostStorage3(context: SlurpStorageContext) {
       const slurpSourceAccountIds = (await this.listAccounts({ includeHidden: true })).map((account) => account.id);
       const publicPosts =
         slurpSourceAccountIds.length > 0
-          ? await db.select().from(noodlePosts).where(inArray(noodlePosts.authorAccountId, slurpSourceAccountIds))
+          ? await db.select().from(slpPosts).where(inArray(slpPosts.authorAccountId, slurpSourceAccountIds))
           : [];
       const publicPostIds = publicPosts.map((post) => post.id);
       const publicInteractions = await db
         .select()
-        .from(noodleInteractions)
-        .where(inArray(noodleInteractions.postId, publicPostIds));
+        .from(slpInteractions)
+        .where(inArray(slpInteractions.postId, publicPostIds));
       const slurpSourceAccountIdSet = new Set(slurpSourceAccountIds);
       const protectedPostIds = new Set(
         publicInteractions
@@ -52,7 +52,7 @@ export function createFeedPostStorage3(context: SlurpStorageContext) {
       const interactionPostById = new Map(
         publicInteractions.map((interaction) => [interaction.id, interaction.postId]),
       );
-      const digests = await db.select().from(noodleActivityDigests);
+      const digests = await db.select().from(slpActivityDigests);
       for (const digest of digests) {
         if (parseStringArray(digest.accountIds).every((accountId) => slurpSourceAccountIdSet.has(accountId))) continue;
         if (digest.sourcePostId && publicPostIds.includes(digest.sourcePostId)) {
@@ -70,15 +70,15 @@ export function createFeedPostStorage3(context: SlurpStorageContext) {
       await db.transaction(async (tx) => {
         if (deletableInteractionIds.length > 0) {
           await tx
-            .delete(noodleActivityDigests)
-            .where(inArray(noodleActivityDigests.sourceInteractionId, deletableInteractionIds));
+            .delete(slpActivityDigests)
+            .where(inArray(slpActivityDigests.sourceInteractionId, deletableInteractionIds));
         }
         if (deletablePostIds.length > 0) {
-          await tx.delete(noodleActivityDigests).where(inArray(noodleActivityDigests.sourcePostId, deletablePostIds));
-          await tx.delete(noodleInteractions).where(inArray(noodleInteractions.postId, deletablePostIds));
-          await tx.delete(noodlePosts).where(inArray(noodlePosts.id, deletablePostIds));
+          await tx.delete(slpActivityDigests).where(inArray(slpActivityDigests.sourcePostId, deletablePostIds));
+          await tx.delete(slpInteractions).where(inArray(slpInteractions.postId, deletablePostIds));
+          await tx.delete(slpPosts).where(inArray(slpPosts.id, deletablePostIds));
         }
-        await tx.delete(noodleRefreshRuns);
+        await tx.delete(slpRefreshRuns);
       });
     },
   } satisfies ThisType<Record<string, any>>;

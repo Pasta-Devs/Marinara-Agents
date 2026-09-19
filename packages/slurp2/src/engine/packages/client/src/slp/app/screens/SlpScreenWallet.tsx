@@ -15,12 +15,12 @@ import {
   useSlurpWallet,
 } from "../../features/economy/slp-economy-hooks";
 import { useEffect, useState } from "react";
-import { useNoodlerAccounts } from "../../features/creators/slp-creators-hooks";
-import { useToggleNoodlerSubscription } from "../../features/feed/slp-feed-viewer-hooks";
+import { useCreatorAccounts } from "../../features/creators/slp-creators-hooks";
+import { useToggleCreatorSubscription } from "../../features/feed/slp-feed-viewer-hooks";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import type { AvatarCrop } from "@marinara-engine/shared";
 import { SlurpCoinAmount } from "../../modules/coin/SlpCoin";
-import { NoodlerFrame } from "./SlpHomeHelpers";
+import { SlpCreatorFrame } from "./SlpHomeHelpers";
 
 export function SlurpWalletView({
   personaId,
@@ -46,13 +46,13 @@ export function SlurpWalletView({
   const claimRefill = useClaimSlurpDailyRefill();
   const setDevWalletCoins = useSetSlurpWalletCoinsForDevelopment();
   const payout = useSlurpPayout();
-  const toggleSubscription = useToggleNoodlerSubscription();
+  const toggleSubscription = useToggleCreatorSubscription();
   const [ledgerMode, setLedgerMode] = useState<"spending" | "earnings">("spending");
   const [countdownNow, setCountdownNow] = useState(() => Date.now());
   const [devCoins, setDevCoins] = useState("");
   // The wallet stores subscriptions by creator id. Rendering the raw id told the player nothing,
   // so join the managed profiles the same way every other Slurp surface names a creator.
-  const creatorsQuery = useNoodlerAccounts();
+  const creatorsQuery = useCreatorAccounts();
   const creatorById = new Map((creatorsQuery.data ?? []).map((profile) => [profile.id, profile]));
   const creatorByHandle = new Map((creatorsQuery.data ?? []).map((profile) => [profile.handle, profile]));
   const wallet = walletQuery.data;
@@ -103,7 +103,7 @@ export function SlurpWalletView({
     return { icon: Gift, tone: "bg-amber-500/14 text-amber-300" };
   };
   return (
-    <NoodlerFrame onBack={onBack} title={localizeUi("ui.slurp.navigation.wallet")} action={<span />}>
+    <SlpCreatorFrame onBack={onBack} title={localizeUi("ui.slurp.navigation.wallet")} action={<span />}>
       <div className="mx-auto flex w-full max-w-[40rem] flex-col gap-5 px-3 py-4 sm:px-5 sm:py-5">
         <div className="flex items-center gap-3 px-1">
           <Avatar
@@ -473,6 +473,6 @@ export function SlurpWalletView({
           )}
         </section>
       </div>
-    </NoodlerFrame>
+    </SlpCreatorFrame>
   );
 }

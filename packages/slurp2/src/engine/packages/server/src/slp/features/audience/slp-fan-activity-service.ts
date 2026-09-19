@@ -12,7 +12,7 @@ import { logger, logDebugOverride } from "../../../lib/logger.js";
 import { resolveBaseUrl } from "../../../services/generation/connection-base-url.js";
 import { clampGenerationMaxOutputTokens } from "../../../services/generation/output-token-limits.js";
 import { resolveStoredChatOptions } from "../../../services/generation/generation-parameters.js";
-import { noodleSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
+import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
 import { parseGameJsonish } from "../../../services/game/jsonish.js";
 import { requireModelAnswer } from "../../base/model/slp-model-answer.js";
 import {
@@ -34,18 +34,18 @@ import {
 import { SLURP_REALISTIC_TUNING } from "../../../../../shared/src/slp/slp-tuning.js";
 import { slurpAudienceArcDescription, type SlurpAudienceArc } from "../../modules/projects/slp-audience-arc.js";
 import { slurpArcLifeLine } from "../../modules/projects/slp-arc-progress.js";
-import { protectNoodlerGeneratedIdentity, resolveNoodlerPublicIdentity } from "../feed/slp-feed-contract.js";
+import { protectCreatorGeneratedIdentity, resolveNoodlerPublicIdentity } from "../feed/slp-feed-contract.js";
 import {
   NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR,
   NOODLE_FAN_ACTIVITY_MAX_CREATORS_PER_RUN,
-  type NoodleFanActivityToStore,
+  type SlpFanActivityToStore,
 } from "../../modules/audience/slp-fan-activity-day-plan.js";
 import {
-  syntheticNoodlerFanIdentityProvider,
-  type NoodlerFanIdentity,
-  type NoodlerFanIdentityProvider,
+  syntheticCreatorFanIdentityProvider,
+  type SlpCreatorFanIdentity,
+  type SlpCreatorFanIdentityProvider,
 } from "../../modules/audience/slp-fan-identity-provider.js";
-import { noodleResponseFormat } from "../../base/prompting/slp-response-format.js";
+import { slpResponseFormat } from "../../base/prompting/slp-response-format.js";
 import { normalizeSlurpFanActivityRows } from "../../modules/audience/slp-fan-activity-response.js";
 import { composeSlurpPromptBlocks } from "../../base/prompting/slp-prompt-blocks.js";
 
@@ -56,15 +56,15 @@ export const MAX_FAN_POSTS_PER_CREATOR = 4;
 /** Comments shown per post. Enough to answer somebody, short enough not to bury the post. */
 const MAX_POST_COMMENTS_IN_PROMPT = 6;
 
-export interface ResolvedNoodlerFanActivityPolicy {
+export interface ResolvedCreatorFanActivityPolicy {
   enabled: boolean;
   archetypeWeights: SlpCreatorFanArchetypeWeights;
 }
 
-export function resolveNoodlerFanActivityPolicy(
+export function resolveCreatorFanActivityPolicy(
   settings: Pick<SlurpSettings, "fanArchetypeWeights" | "fanActivityEnabled">,
   creator: SlpAccount,
-): ResolvedNoodlerFanActivityPolicy {
+): ResolvedCreatorFanActivityPolicy {
   const override = creator.settings.scheduler.fanActivity;
   const archetypeWeights = { ...settings.fanArchetypeWeights, ...override?.archetypeWeights };
   return {
@@ -73,9 +73,9 @@ export function resolveNoodlerFanActivityPolicy(
   };
 }
 
-export interface NoodlerFanCreatorCandidate {
+export interface SlpCreatorFanCreatorCandidate {
   creator: SlpAccount;
-  policy: ResolvedNoodlerFanActivityPolicy;
+  policy: ResolvedCreatorFanActivityPolicy;
   posts: Array<
     SlurpImageContextPost & {
       id: string;
@@ -93,23 +93,23 @@ export interface NoodlerFanCreatorCandidate {
       comments?: { id: string; from: string; text: string }[];
     }
   >;
-  identities: NoodlerFanIdentity[];
+  identities: SlpCreatorFanIdentity[];
   /** What is going on in the Creator's life, from their running arc. Already protected. */
   arc?: string | null;
 }
 
-function weightedIdentitySequence(identities: NoodlerFanIdentity[], weights: SlpCreatorFanArchetypeWeights) {
+function weightedIdentitySequence(identities: SlpCreatorFanIdentity[], weights: SlpCreatorFanArchetypeWeights) {
   return identities
     .map((identity) => ({ identity, weight: Math.max(0, weights[identity.archetype]) }))
     .filter(({ weight }) => weight > 0);
 }
 
-export function selectNoodlerFanActivities(input: {
+export function selectCreatorFanActivities(input: {
   activities: (SlpGeneratedFanRefresh["activities"][number] & { parentInteractionId?: string | null })[];
-  creators: readonly NoodlerFanCreatorCandidate[];
+  creators: readonly SlpCreatorFanCreatorCandidate[];
   existingInteractions: readonly Pick<SlpInteraction, "postId" | "actorAccountId" | "type" | "content">[];
   quotas: { like: number; reply: number };
-}): NoodleFanActivityToStore[] {
+}): SlpFanActivityToStore[] {
   const creatorById = new Map(input.creators.map((candidate) => [candidate.creator.id, candidate]));
   const postOwnerById = new Map(
     input.creators.flatMap((candidate) => candidate.posts.map((post) => [post.id, candidate.creator.id])),
@@ -127,7 +127,7 @@ export function selectNoodlerFanActivities(input: {
   const quotas = { ...input.quotas };
   const creatorCounts = new Map<string, number>();
   const creatorSlotSeen = new Set<string>();
-  const selected: NoodleFanActivityToStore[] = [];
+  const selected: SlpFanActivityToStore[] = [];
   for (const activity of input.activities) {
     if (activity.type !== "like" && activity.type !== "reply") continue;
     if (quotas[activity.type] <= 0) continue;
@@ -202,7 +202,7 @@ function describeFanRelationship(persona: {
 }
 
 function buildFanActivityMessages(input: {
-  creators: NoodlerFanCreatorCandidate[];
+  creators: SlpCreatorFanCreatorCandidate[];
   settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone" | "promptBlocks"> &
     Partial<Pick<SlurpSettings, "simulationTuning">>;
   imageContexts?: ReadonlyMap<string, string>;
@@ -322,7 +322,7 @@ async function generateFanActivity(input: {
     | "imageContextConnectionId"
     | "promptBlocks"
   >;
-  creators: NoodlerFanCreatorCandidate[];
+  creators: SlpCreatorFanCreatorCandidate[];
   debugMode: boolean;
 }): Promise<SlpGeneratedFanRefresh> {
   const provider = createLLMProvider(
@@ -352,7 +352,7 @@ async function generateFanActivity(input: {
       if (context) {
         imageContexts.set(
           post.id,
-          protectNoodlerGeneratedIdentity(
+          protectCreatorGeneratedIdentity(
             context,
             candidate.creator.settings.privacy.identityDisclosure ?? "secret",
             identity,
@@ -369,7 +369,7 @@ async function generateFanActivity(input: {
   );
   const response = await provider.chatComplete(messages, {
     model: input.connection.model,
-    ...noodleSamplingOptions(
+    ...slpSamplingOptions(
       resolveStoredChatOptions(input.connection.defaultParameters, input.connection.provider, input.connection.model),
       { temperature: 0.8, topP: 0.95 },
     ),
@@ -382,7 +382,7 @@ async function generateFanActivity(input: {
     }),
     stream: false,
     debugMode: input.debugMode,
-    responseFormat: noodleResponseFormat(input.connection.model, "noodler_fan_activity"),
+    responseFormat: slpResponseFormat(input.connection.model, "noodler_fan_activity"),
   });
   const content = response.content ?? "";
   logDebugOverride(
@@ -430,13 +430,13 @@ export function parseGeneratedFanActivityResponse(
   };
 }
 
-export async function prepareNoodlerFanCreatorCandidates(input: {
+export async function prepareCreatorFanCreatorCandidates(input: {
   db: DB;
   settings: Pick<SlurpSettings, "fanActivityEnabled" | "fanArchetypeWeights"> &
     Partial<Pick<SlurpSettings, "arcFanReactions">>;
   creatorIds: string[];
-  identityProvider?: NoodlerFanIdentityProvider;
-}): Promise<NoodlerFanCreatorCandidate[]> {
+  identityProvider?: SlpCreatorFanIdentityProvider;
+}): Promise<SlpCreatorFanCreatorCandidate[]> {
   const noodle = createSlurpStorage(input.db);
   const creators = (
     await Promise.all(
@@ -447,7 +447,7 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
     creators.map((creator) => creator.id),
     MAX_FAN_POSTS_PER_CREATOR,
   );
-  const provider = input.identityProvider ?? syntheticNoodlerFanIdentityProvider;
+  const provider = input.identityProvider ?? syntheticCreatorFanIdentityProvider;
   const allPostIds = creators.flatMap((creator) => (postsByCreator.get(creator.id) ?? []).map((post) => post.id));
   const commentsByPost = new Map<string, { id: string; from: string; text: string }[]>();
   for (const interaction of allPostIds.length > 0 ? await noodle.listNoodlerInteractions(allPostIds) : []) {
@@ -492,7 +492,7 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
         return [
           creator.id,
           publicIdentity
-            ? protectNoodlerGeneratedIdentity(
+            ? protectCreatorGeneratedIdentity(
                 line,
                 creator.settings.privacy.identityDisclosure ?? "open",
                 publicIdentity,
@@ -504,7 +504,7 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
     for (const [creatorId, line] of arcEntries) arcByCreator.set(creatorId, line);
   }
   return creators.flatMap((creator) => {
-    const policy = resolveNoodlerFanActivityPolicy(input.settings, creator);
+    const policy = resolveCreatorFanActivityPolicy(input.settings, creator);
     if (!policy.enabled) return [];
     const posts = (postsByCreator.get(creator.id) ?? []).slice(0, MAX_FAN_POSTS_PER_CREATOR).map((post) => ({
       id: post.id,
@@ -524,16 +524,16 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
   });
 }
 
-export async function generateNoodlerFanActivityBatch(input: {
+export async function generateCreatorFanActivityBatch(input: {
   db: DB;
   settings: Pick<
     SlurpSettings,
     "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "audienceTone" | "imageContextMode" | "imageContextConnectionId"
   >;
   connection: GenerationConnection;
-  creators: NoodlerFanCreatorCandidate[];
+  creators: SlpCreatorFanCreatorCandidate[];
   debugMode?: boolean;
-}): Promise<NoodleFanActivityToStore[]> {
+}): Promise<SlpFanActivityToStore[]> {
   if (input.creators.length === 0) return [];
   if (input.settings.fanLikesPerRefresh + input.settings.fanRepliesPerRefresh === 0) {
     return [];
@@ -541,7 +541,7 @@ export async function generateNoodlerFanActivityBatch(input: {
   const generated = await generateFanActivity({ ...input, debugMode: input.debugMode === true });
   const postIds = input.creators.flatMap((creator) => creator.posts.map((post) => post.id));
   const existing = await createSlurpStorage(input.db).listNoodlerInteractions(postIds);
-  return selectNoodlerFanActivities({
+  return selectCreatorFanActivities({
     activities: generated.activities,
     creators: input.creators,
     existingInteractions: existing,
@@ -552,7 +552,7 @@ export async function generateNoodlerFanActivityBatch(input: {
   });
 }
 
-export async function resolveNoodlerFanConnection(
+export async function resolveCreatorFanConnection(
   db: DB,
   settings: Pick<SlurpSettings, "generationConnectionId" | "modelBudget">,
 ) {

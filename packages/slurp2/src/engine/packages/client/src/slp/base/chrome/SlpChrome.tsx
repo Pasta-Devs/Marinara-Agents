@@ -14,8 +14,8 @@ import { useSlurpMediaSrc } from "../media/slp-media-src";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { SLURP_LOGO_SRC } from "./slp-logo";
 
-export const NOODLE_BLUE = "#7EA7FF";
-export const NOODLE_PINK = "#FF7EC1";
+export const SLP_BLUE = "#7EA7FF";
+export const SLP_PINK = "#FF7EC1";
 
 // The Engine viewport uses `viewport-fit=cover`, so `env(safe-area-inset-bottom)`
 // reports the Android system navigation bar as well. Gecko on Android keeps the
@@ -32,8 +32,8 @@ export const BOTTOM_SAFE_INSET =
 // The accent hex that drives `--noodle-accent` for every reused Noodle surface.
 // Provided at the shell root so descendants inherit via CSS var, and read here
 // so portaled popovers/modals (which escape the shell's CSS scope) can re-apply it.
-export const NoodleAccentContext = createContext<string>(NOODLE_BLUE);
-export const useNoodleAccent = () => useContext(NoodleAccentContext);
+export const SlpAccentContext = createContext<string>(SLP_BLUE);
+export const useSlpAccent = () => useContext(SlpAccentContext);
 export const NOODLE_ICON_SCOPE_CLASS = "[&_:where(svg)]:text-[var(--noodle-accent)]";
 // NoodleR's mark. Untranslated on purpose — it is branding, not copy — and a constant so the
 // localization audit does not read it as a hardcoded string. Meaning is carried by the adjacent
@@ -49,14 +49,14 @@ export const SLURP_ROW_ACTIVE_CLASS =
 export const SLURP_TOGGLE_ACTIVE_CLASS =
   "bg-[color-mix(in_srgb,var(--noodle-accent)_28%,var(--slurp-surface-raised))] text-[var(--foreground)] ring-1 ring-inset ring-[var(--noodle-accent)]/50";
 
-export const NOODLER_MARK = "R";
-export const NOODLER_ADD_MARK = "+R";
-export const NOODLE_LOGO_SRC = SLURP_LOGO_SRC;
+export const SLP_CREATOR_MARK = "R";
+export const SLP_CREATOR_ADD_MARK = "+R";
+export const SLP_LOGO_SRC = SLURP_LOGO_SRC;
 export const NOODLER_LOGO_SRC = SLURP_LOGO_SRC;
 export const SLURP_NAME = "Slurp";
-export const NOODLE_PERSONA_SWITCHER_PAGE_SIZE = 5;
+export const SLP_PERSONA_SWITCHER_PAGE_SIZE = 5;
 
-export function getNoodleAccentStyle(accent: string, style: CSSProperties = {}): CSSProperties {
+export function getSlpAccentStyle(accent: string, style: CSSProperties = {}): CSSProperties {
   return {
     "--noodle-accent": accent,
     "--noodle-accent-foreground": "light-dark(#8d174f, #ff9bd0)",
@@ -115,7 +115,7 @@ export function initials(name: string) {
   );
 }
 
-export function NoodleLogo({ className, src = NOODLE_LOGO_SRC }: { className?: string; src?: string }) {
+export function SlpLogo({ className, src = SLP_LOGO_SRC }: { className?: string; src?: string }) {
   return <img src={src} alt="" className={cn("object-contain", className)} />;
 }
 

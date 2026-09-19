@@ -5,19 +5,19 @@ import { createCharacterGalleryStorage } from "../../../services/storage/charact
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { createPromptOverridesStorage } from "../../../services/storage/prompt-overrides.storage.js";
-import { generateNoodlerPostImage } from "../media/slp-media-contract.js";
+import { generateCreatorPostImage } from "../media/slp-media-contract.js";
 import {
-  noodlerAvatarUrl,
-  noodlerBannerUrl,
-  unlinkNoodlerAvatar,
-  unlinkNoodlerBanner,
+  slpCreatorAvatarUrl,
+  slpCreatorBannerUrl,
+  unlinkCreatorAvatar,
+  unlinkCreatorBanner,
 } from "../../base/identity/slp-avatar.js";
-import { resolveNoodlerImageConnectionId } from "../../base/media/slp-image-connections.js";
-import { resolveNoodlerCreatorArtwork } from "./slp-public-profiles-service.js";
-import { tryNoodlerAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
+import { resolveCreatorImageConnectionId } from "../../base/media/slp-image-connections.js";
+import { resolveCreatorArtwork } from "./slp-public-profiles-service.js";
+import { tryCreatorAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
 import { isConnectionAdmissionFailure } from "../../../services/generation/connection-admission.js";
 
-export type NoodlerArtworkOutcome = "idle" | "inherited" | "avatar" | "banner" | "unavailable";
+export type SlpCreatorArtworkOutcome = "idle" | "inherited" | "avatar" | "banner" | "unavailable";
 
 /**
  * An open creator borrows its source's face and gallery, so its artwork is a copy. A hinted or
@@ -46,24 +46,24 @@ function artworkCompositionGuard(kind: "avatar" | "banner") {
     : "COMPOSITION REQUIREMENT: output one continuous ultra-wide background scene only. The profile page draws its own avatar on top of this image, so a second one ruins it. Do not include a profile picture, avatar, avatar bubble, headshot, dominant face, circular or rounded crop, badge, medallion, sticker portrait, framed portrait, inset image, picture-in-picture, card, collage, social-media UI, text, logo, border, or empty placeholder intended to contain a portrait.";
 }
 
-export async function generateNoodlerCreatorArtwork(
+export async function generateCreatorArtwork(
   db: DB,
   input: { accountId: string; kind: "avatar" | "banner"; guidance?: string },
 ): Promise<"avatar" | "banner" | "missing" | "unavailable" | "busy"> {
   const noodle = createSlurpStorage(db);
-  const locked = await tryNoodlerAccountOperation(input.accountId, async () => {
+  const locked = await tryCreatorAccountOperation(input.accountId, async () => {
     const account = await noodle.getNoodlerAccountById(input.accountId);
     if (!account) return "missing" as const;
     const linkedPublicAccount = await noodle.resolveAccountSource(account);
     const disclosureMode = account.settings.privacy.identityDisclosure ?? "open";
     const connections = createConnectionsStorage(db);
-    const mappedId = await resolveNoodlerImageConnectionId(db, account.id);
+    const mappedId = await resolveCreatorImageConnectionId(db, account.id);
     const imageConnection =
       (mappedId ? await connections.getWithKey(mappedId) : null) ?? (await connections.getDefaultForImageGeneration());
     if (!imageConnection) return "unavailable" as const;
     const settings = await noodle.getSettings();
     const guidance = input.guidance?.trim().slice(0, 2000);
-    const image = await generateNoodlerPostImage({
+    const image = await generateCreatorPostImage({
       account,
       linkedPublicAccount,
       disclosureMode,
@@ -99,11 +99,11 @@ export async function generateNoodlerCreatorArtwork(
     image.stagedMedia?.promote();
     try {
       if (input.kind === "avatar") {
-        await noodle.updateNoodlerAvatar(account.id, noodlerAvatarUrl(account.id, mediaPath));
-        unlinkNoodlerAvatar(account.id, account.avatarUrl);
+        await noodle.updateNoodlerAvatar(account.id, slpCreatorAvatarUrl(account.id, mediaPath));
+        unlinkCreatorAvatar(account.id, account.avatarUrl);
       } else {
-        await noodle.updateNoodlerBanner(account.id, noodlerBannerUrl(account.id, mediaPath));
-        unlinkNoodlerBanner(account.id, account.settings.profile.bannerUrl ?? null);
+        await noodle.updateNoodlerBanner(account.id, slpCreatorBannerUrl(account.id, mediaPath));
+        unlinkCreatorBanner(account.id, account.settings.profile.bannerUrl ?? null);
       }
     } catch (error) {
       image.stagedMedia?.compensate();
@@ -118,7 +118,7 @@ export async function generateNoodlerCreatorArtwork(
  * One artwork item per call: this runs on the scheduler poll, so a page of new creators fills in
  * over a few minutes instead of blocking creation on a queue of image generations.
  */
-export async function backfillNextNoodlerCreatorArtwork(db: DB): Promise<NoodlerArtworkOutcome> {
+export async function backfillNextCreatorArtwork(db: DB): Promise<SlpCreatorArtworkOutcome> {
   const noodle = createSlurpStorage(db);
   const settings = await noodle.getSettings();
 
@@ -127,7 +127,7 @@ export async function backfillNextNoodlerCreatorArtwork(db: DB): Promise<Noodler
   if (!target) return "idle";
   const kind: "avatar" | "banner" = target.avatarUrl ? "banner" : "avatar";
 
-  const locked = await tryNoodlerAccountOperation(target.id, async () => {
+  const locked = await tryCreatorAccountOperation(target.id, async () => {
     const account = await noodle.getNoodlerAccountById(target.id);
     if (!account) return "idle" as const;
     const linkedPublicAccount = await noodle.resolveAccountSource(account);
@@ -136,7 +136,7 @@ export async function backfillNextNoodlerCreatorArtwork(db: DB): Promise<Noodler
     // Open creators inherit rather than generate, including ones created before artwork existed.
     if (disclosureMode === "open") {
       if (!linkedPublicAccount) return "idle" as const;
-      const artwork = await resolveNoodlerCreatorArtwork({
+      const artwork = await resolveCreatorArtwork({
         characters: createCharactersStorage(db),
         characterGallery: createCharacterGalleryStorage(db),
         publicAccount: linkedPublicAccount,
@@ -150,12 +150,12 @@ export async function backfillNextNoodlerCreatorArtwork(db: DB): Promise<Noodler
     }
 
     const connections = createConnectionsStorage(db);
-    const mappedId = await resolveNoodlerImageConnectionId(db, target.id);
+    const mappedId = await resolveCreatorImageConnectionId(db, target.id);
     const imageConnection =
       (mappedId ? await connections.getWithKey(mappedId) : null) ?? (await connections.getDefaultForImageGeneration());
     if (!imageConnection) return "unavailable" as const;
 
-    const image = await generateNoodlerPostImage({
+    const image = await generateCreatorPostImage({
       account,
       linkedPublicAccount,
       disclosureMode,
@@ -191,9 +191,9 @@ export async function backfillNextNoodlerCreatorArtwork(db: DB): Promise<Noodler
     image.stagedMedia?.promote();
     try {
       if (kind === "avatar") {
-        await noodle.updateNoodlerAvatar(target.id, noodlerAvatarUrl(target.id, mediaPath));
+        await noodle.updateNoodlerAvatar(target.id, slpCreatorAvatarUrl(target.id, mediaPath));
       } else {
-        await noodle.updateNoodlerBanner(target.id, noodlerBannerUrl(target.id, mediaPath));
+        await noodle.updateNoodlerBanner(target.id, slpCreatorBannerUrl(target.id, mediaPath));
       }
     } catch (error) {
       image.stagedMedia?.compensate();
@@ -206,9 +206,9 @@ export async function backfillNextNoodlerCreatorArtwork(db: DB): Promise<Noodler
 }
 
 /** Poll-safe wrapper: artwork is cosmetic, so a failure never interrupts the reserve poll. */
-export async function tryBackfillNextNoodlerCreatorArtwork(db: DB): Promise<NoodlerArtworkOutcome> {
+export async function tryBackfillNextCreatorArtwork(db: DB): Promise<SlpCreatorArtworkOutcome> {
   try {
-    return await backfillNextNoodlerCreatorArtwork(db);
+    return await backfillNextCreatorArtwork(db);
   } catch (error) {
     // A busy connection is not a failure: nothing was sent, so the next poll may simply try again.
     if (isConnectionAdmissionFailure(error)) return "idle";

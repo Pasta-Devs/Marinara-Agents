@@ -8,7 +8,7 @@ import type {
 import type { DB } from "../../../db/connection.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { parseRecord } from "../../modules/creators/slp-public-support.js";
-import { noodlerCharacterCanonText } from "../../base/prompting/slp-prompt-safety.js";
+import { slpCreatorCharacterCanonText } from "../../base/prompting/slp-prompt-safety.js";
 import {
   slurpAudienceCharacterVoice,
   slurpCharacterIdFromFanEntityId,
@@ -41,7 +41,7 @@ export async function resolveSlurpCharacterFanVoice(
   return slurpAudienceCharacterVoice(card, voiceBudget);
 }
 
-export async function resolveNoodlerCharacterCanon(
+export async function resolveCreatorCharacterCanon(
   db: DB,
   publicAccount: Pick<SlpAccount, "kind" | "entityId"> | null,
   disclosureMode: SlpIdentityDisclosure,
@@ -50,12 +50,12 @@ export async function resolveNoodlerCharacterCanon(
   const characters = createCharactersStorage(db);
   if (publicAccount.kind === "character") {
     const source = await characters.getById(publicAccount.entityId);
-    return source ? noodlerCharacterCanonText(source.data, disclosureMode === "open") : "";
+    return source ? slpCreatorCharacterCanonText(source.data, disclosureMode === "open") : "";
   }
   if (publicAccount.kind === "persona") {
     const source = await characters.getPersona(publicAccount.entityId);
     return source
-      ? noodlerCharacterCanonText(
+      ? slpCreatorCharacterCanonText(
           {
             name: source.name,
             description: source.description,
@@ -71,7 +71,7 @@ export async function resolveNoodlerCharacterCanon(
   return "";
 }
 
-export async function resolveNoodlerSourceSnapshot(
+export async function resolveCreatorSourceSnapshot(
   db: DB,
   publicAccount: Pick<SlpAccount, "kind" | "entityId" | "displayName" | "handle">,
 ): Promise<SlpCreatorSourceSnapshot | null> {

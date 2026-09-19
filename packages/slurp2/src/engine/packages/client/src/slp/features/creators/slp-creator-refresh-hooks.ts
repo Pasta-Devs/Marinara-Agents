@@ -3,10 +3,10 @@ import type { SlpCreatorRefreshNowOutcome } from "../../../../../shared/src/slp/
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "../../../lib/api-client.js";
-import { noodleKeys } from "../../base/state/slp-query-keys.js";
+import { slpKeys } from "../../base/state/slp-query-keys.js";
 import { refreshSlurpCreatorBatch } from "./slp-refresh-batch.js";
 
-export function useRefreshNoodlerConversationSchedule() {
+export function useRefreshCreatorConversationSchedule() {
   const qc = useQueryClient();
   const { t: localizeUi } = useUiTranslation();
   // Toasts live here, not in mutate() callbacks: those are dropped if the caller unmounts first.
@@ -17,7 +17,7 @@ export function useRefreshNoodlerConversationSchedule() {
       ),
     onSuccess: () => {
       toast.success(localizeUi("ui.slurp.settings.creators.scheduleRefreshed"));
-      return qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() });
+      return qc.invalidateQueries({ queryKey: slpKeys.noodlerAccounts() });
     },
     onError: (error) =>
       toast.error(
@@ -25,7 +25,7 @@ export function useRefreshNoodlerConversationSchedule() {
       ),
   });
 }
-export function useRefreshTargetedNoodlerCreatorsNow(onRemaining?: (remaining: number) => void) {
+export function useRefreshTargetedCreatorsNow(onRemaining?: (remaining: number) => void) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: { accountIds: string[]; executionId?: string; access?: "public" | "locked" }) =>
@@ -40,12 +40,12 @@ export function useRefreshTargetedNoodlerCreatorsNow(onRemaining?: (remaining: n
       ),
     onSuccess: () =>
       Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerReserveStatus() }),
+        qc.invalidateQueries({ queryKey: slpKeys.noodlerAccounts() }),
+        qc.invalidateQueries({ queryKey: slpKeys.noodlerReserveStatus() }),
         qc.invalidateQueries({
-          queryKey: [...noodleKeys.noodlerRoot(), "posts"],
+          queryKey: [...slpKeys.noodlerRoot(), "posts"],
         }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
+        qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() }),
       ]),
   });
 }

@@ -14,12 +14,12 @@ import {
 } from "../../data/messages/slp-messages-storage-context.js";
 import { reactToSlurpPayment } from "./slp-payment-reaction.js";
 import { slurpPayoutAllowance } from "../../modules/economy/slp-earnings.js";
-import { isNoodlerHiddenFromViewer } from "../../base/identity/slp-access.js";
+import { isCreatorHiddenFromViewer } from "../../base/identity/slp-access.js";
 import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
 import { SLURP_NAMED_CAST_LIMIT } from "../../../../../shared/src/slp/slp-population.js";
-import { noodlerUnlockPriceFromMetadata } from "../../modules/economy/slp-prices.js";
+import { slpCreatorUnlockPriceFromMetadata } from "../../modules/economy/slp-prices.js";
 import type { FastifyInstance } from "fastify";
-import { noodlerPageCursorSchema, NOODLER_FEED_PAGE_SIZE } from "../../modules/requests/slp-request-schemas.js";
+import { slpCreatorPageCursorSchema, SLP_CREATOR_FEED_PAGE_SIZE } from "../../modules/requests/slp-request-schemas.js";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
 /**
@@ -36,9 +36,9 @@ type SlurpSubscriberRow = SlpCreatorSubscriber & {
   spent?: number;
 };
 
-const noodlerSubscriberPageQuerySchema = noodlerPageCursorSchema.and(
+const slpCreatorSubscriberPageQuerySchema = slpCreatorPageCursorSchema.and(
   z.object({
-    limit: z.coerce.number().int().min(1).max(NOODLER_FEED_PAGE_SIZE).default(NOODLER_FEED_PAGE_SIZE),
+    limit: z.coerce.number().int().min(1).max(SLP_CREATOR_FEED_PAGE_SIZE).default(SLP_CREATOR_FEED_PAGE_SIZE),
   }),
 );
 export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
@@ -231,7 +231,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
       !viewer ||
       !creator ||
       creatorBelongsToViewer(creator, viewer) ||
-      isNoodlerHiddenFromViewer(creator, viewer.id)
+      isCreatorHiddenFromViewer(creator, viewer.id)
     ) {
       return reply.code(404).send({ error: "Slurp stage profile not found" });
     }
@@ -261,7 +261,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
 
   app.get("/noodler/accounts/:id/subscribers", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const parsed = noodlerSubscriberPageQuerySchema.safeParse(req.query);
+    const parsed = slpCreatorSubscriberPageQuerySchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     if (!(await noodle.getNoodlerAccountById(id))) {
       return reply.code(404).send({ error: "Slurp stage profile not found" });
@@ -343,7 +343,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
       !creator ||
       post.access !== "locked" ||
       creatorBelongsToViewer(creator, viewer) ||
-      isNoodlerHiddenFromViewer(creator, viewer.id)
+      isCreatorHiddenFromViewer(creator, viewer.id)
     ) {
       return reply.code(404).send({ error: "Slurp post not found" });
     }
@@ -352,7 +352,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
     // the client can tell "top up" apart from "this post is gone".
     if (!unlock) {
       const wallet = await noodle.getWallet(viewer.id);
-      const price = noodlerUnlockPriceFromMetadata(post.metadata);
+      const price = slpCreatorUnlockPriceFromMetadata(post.metadata);
       if (wallet.coins < price) return reply.code(402).send({ error: "Not enough coins", price, coins: wallet.coins });
       return reply.code(400).send({ error: "Could not unlock this post" });
     }
@@ -360,7 +360,7 @@ export async function slpWalletRoutes(app: FastifyInstance, deps: SlpRouteDeps) 
       viewerAccountId: viewer.id,
       creatorAccountId: creator.id,
       kind: "unlock",
-      amount: noodlerUnlockPriceFromMetadata(post.metadata),
+      amount: slpCreatorUnlockPriceFromMetadata(post.metadata),
     });
     return reply.code(201).send(buildViewerShell(await buildViewerContext(viewer)));
   });

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
-import { noodleKeys } from "../../base/state/slp-query-keys.js";
+import { slpKeys } from "../../base/state/slp-query-keys.js";
 import type { SlurpSettings } from "../settings/slp-settings-contract.js";
 
 export type SlurpAutopurgeResult = {
@@ -36,15 +36,15 @@ export function useRunSlurpAutopurge() {
   return useMutation({
     mutationFn: () => api.post<SlurpAutopurgeResult>("/slurp2/autopurge/run", {}),
     onSuccess: (result) => {
-      void queryClient.invalidateQueries({ queryKey: noodleKeys.settings() });
-      void queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() });
+      void queryClient.invalidateQueries({ queryKey: slpKeys.settings() });
+      void queryClient.invalidateQueries({ queryKey: slpKeys.noodlerRoot() });
       return result;
     },
   });
 }
 export function useSlurpMaintenanceSummary(enabled: boolean) {
   return useQuery({
-    queryKey: [...noodleKeys.settings(), "maintenance-summary"] as const,
+    queryKey: [...slpKeys.settings(), "maintenance-summary"] as const,
     queryFn: () => api.get<SlurpMaintenanceSummary>("/slurp2/maintenance/summary"),
     enabled,
     staleTime: 15_000,
@@ -60,7 +60,7 @@ export function useSlurpAutopurgePreview(settings: SlurpSettings | undefined, en
       }
     : null;
   return useQuery({
-    queryKey: [...noodleKeys.settings(), "autopurge-preview", input] as const,
+    queryKey: [...slpKeys.settings(), "autopurge-preview", input] as const,
     queryFn: () => api.post<SlurpAutopurgePreview>("/slurp2/autopurge/preview", input!),
     enabled: enabled && Boolean(input),
     staleTime: 10_000,
@@ -70,7 +70,7 @@ export function useDeleteAllSlurpData() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => api.delete<{ deletedCreators: number; deletedPosts: number }>("/slurp2/data"),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.all }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: slpKeys.all }),
   });
 }
 export function useDeleteUnusedSlurpData() {
@@ -78,6 +78,6 @@ export function useDeleteUnusedSlurpData() {
   return useMutation({
     mutationFn: () =>
       api.delete<{ deletedPreparedPosts: number; deletedAttempts: number; deletedRuns: number }>("/slurp2/data/unused"),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.all }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: slpKeys.all }),
   });
 }

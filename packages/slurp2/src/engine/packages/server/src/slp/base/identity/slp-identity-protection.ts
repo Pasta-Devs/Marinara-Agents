@@ -39,7 +39,7 @@ export function protectedIdentityValues(publicIdentity: PublicIdentity): string[
     .sort((left, right) => right.length - left.length);
 }
 
-export function protectNoodlerGeneratedIdentity(
+export function protectCreatorGeneratedIdentity(
   value: string | null | undefined,
   mode: SlpIdentityDisclosure,
   publicIdentity: PublicIdentity | null,

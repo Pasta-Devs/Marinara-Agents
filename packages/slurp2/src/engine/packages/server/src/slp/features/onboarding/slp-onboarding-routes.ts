@@ -8,26 +8,26 @@ import {
   slurpDiscoveryProfileComplete,
 } from "../../modules/discovery/slp-discovery-profile.js";
 import { slurpDisclosureMode } from "../../modules/creators/slp-disclosure.js";
-import { resolveNoodlerSourceSnapshot } from "../../data/creators/slp-source-resolve.js";
+import { resolveCreatorSourceSnapshot } from "../../data/creators/slp-source-resolve.js";
 import { stageProfileContainsPublicIdentity, stageProfileContainsSourceDetails } from "../feed/slp-feed-contract.js";
-import { resolveNoodlerCreatorArtwork } from "../creators/slp-creators-contract.js";
-import { minimizeNoodlerSourceSnapshot } from "../../base/identity/slp-source.js";
+import { resolveCreatorArtwork } from "../creators/slp-creators-contract.js";
+import { minimizeCreatorSourceSnapshot } from "../../base/identity/slp-source.js";
 import { isSlurpFileUniqueConstraintError } from "../../base/host/slp-file-errors.js";
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
 import { settleAgentJobsWithConcurrencyLimit } from "../../../services/agents/agent-concurrency.js";
 import { logger } from "../../../lib/logger.js";
-import { generateNoodlerStageProfileDraft } from "../creators/slp-creators-contract.js";
+import { generateCreatorStageProfileDraft } from "../creators/slp-creators-contract.js";
 import type { FastifyInstance } from "fastify";
 import type { SlpRouteDeps } from "../viewer/slp-viewer-contract.js";
 
-const slurpBulkNoodlerAccountCreateSchema = slpBulkCreatorAccountCreateSchema.extend({
+const slurpBulkCreatorAccountCreateSchema = slpBulkCreatorAccountCreateSchema.extend({
   connectionId: z.string().min(1).nullable().optional(),
 });
 
 const slurpStageProfileSchema = slpStageProfileSchema.extend(slurpDiscoveryProfileSchema.shape);
 // Older clients could skip gender and tags; a new Creator needs both so Discover can find them.
 const SLURP_NEW_CREATOR_DISCOVERY_MESSAGE = "A new Creator needs a gender and at least 3 tags.";
-const slurpNoodlerAccountCreateSchema = z
+const slurpCreatorAccountCreateSchema = z
   .object({
     stageProfile: slurpStageProfileSchema.refine(slurpDiscoveryProfileComplete, {
       message: SLURP_NEW_CREATOR_DISCOVERY_MESSAGE,
@@ -38,7 +38,7 @@ const slurpNoodlerAccountCreateSchema = z
 export async function slpOnboardingRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   const { characterGallery, characters, connections, firstPostQueue, noodle, resolveNoodlerPublicIdentity } = deps;
   app.post("/accounts/:id/noodler", async (req, reply) => {
-    const parsed = slurpNoodlerAccountCreateSchema.safeParse(req.body ?? {});
+    const parsed = slurpCreatorAccountCreateSchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
     const publicAccount = await noodle.resolveSourceByEntityId(id);
@@ -47,7 +47,7 @@ export async function slpOnboardingRoutes(app: FastifyInstance, deps: SlpRouteDe
     }
     // The shared schema still accepts Secret; Slurp creates it as Hinted.
     parsed.data.stageProfile.disclosureMode = slurpDisclosureMode(parsed.data.stageProfile.disclosureMode);
-    const sourceSnapshot = publicAccount ? await resolveNoodlerSourceSnapshot(app.db, publicAccount) : null;
+    const sourceSnapshot = publicAccount ? await resolveCreatorSourceSnapshot(app.db, publicAccount) : null;
     if (
       publicAccount &&
       (stageProfileContainsPublicIdentity(
@@ -61,7 +61,7 @@ export async function slpOnboardingRoutes(app: FastifyInstance, deps: SlpRouteDe
       });
     }
     try {
-      const artwork = await resolveNoodlerCreatorArtwork({
+      const artwork = await resolveCreatorArtwork({
         characters,
         characterGallery,
         publicAccount,
@@ -73,7 +73,7 @@ export async function slpOnboardingRoutes(app: FastifyInstance, deps: SlpRouteDe
         parsed.data.stageProfile,
         undefined,
         sourceSnapshot
-          ? minimizeNoodlerSourceSnapshot(sourceSnapshot, parsed.data.stageProfile.disclosureMode)
+          ? minimizeCreatorSourceSnapshot(sourceSnapshot, parsed.data.stageProfile.disclosureMode)
           : undefined,
         artwork.avatarUrl,
         artwork.bannerUrl,
@@ -93,7 +93,7 @@ export async function slpOnboardingRoutes(app: FastifyInstance, deps: SlpRouteDe
   });
 
   app.post("/noodler/accounts/bulk", async (req, reply) => {
-    const parsed = slurpBulkNoodlerAccountCreateSchema.safeParse(req.body ?? {});
+    const parsed = slurpBulkCreatorAccountCreateSchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { noodleAccountIds, disclosureMode, disclosureExceptions, autoPosting, connectionId, executionId } =
       parsed.data;
@@ -157,7 +157,7 @@ export async function slpOnboardingRoutes(app: FastifyInstance, deps: SlpRouteDe
         return;
       }
       try {
-        const stageProfile = await generateNoodlerStageProfileDraft(app.db, {
+        const stageProfile = await generateCreatorStageProfileDraft(app.db, {
           request: {
             noodleAccountId,
             disclosureMode: accountDisclosure,
@@ -173,7 +173,7 @@ export async function slpOnboardingRoutes(app: FastifyInstance, deps: SlpRouteDe
           sourceRevisionToken: _draftToken,
           ...generatedProfile
         } = stageProfile as typeof stageProfile & { sourceSnapshot?: unknown; sourceRevisionToken?: unknown };
-        const validatedProfile = slurpNoodlerAccountCreateSchema.safeParse({ stageProfile: generatedProfile });
+        const validatedProfile = slurpCreatorAccountCreateSchema.safeParse({ stageProfile: generatedProfile });
         if (!validatedProfile.success) {
           skipped.push(noodleAccountId);
           noteReason(
@@ -186,7 +186,7 @@ export async function slpOnboardingRoutes(app: FastifyInstance, deps: SlpRouteDe
           );
           return;
         }
-        const sourceSnapshot = await resolveNoodlerSourceSnapshot(app.db, publicAccount);
+        const sourceSnapshot = await resolveCreatorSourceSnapshot(app.db, publicAccount);
         // Belt-and-braces: the generator already enforces leak protection, but keep the guard.
         if (
           stageProfileContainsPublicIdentity(stageProfile, await resolveNoodlerPublicIdentity(publicAccount)) ||
@@ -199,7 +199,7 @@ export async function slpOnboardingRoutes(app: FastifyInstance, deps: SlpRouteDe
           );
           return;
         }
-        const artwork = await resolveNoodlerCreatorArtwork({
+        const artwork = await resolveCreatorArtwork({
           characters,
           characterGallery,
           publicAccount,
@@ -210,7 +210,7 @@ export async function slpOnboardingRoutes(app: FastifyInstance, deps: SlpRouteDe
           publicAccount.entityId,
           validatedProfile.data.stageProfile,
           executionId,
-          sourceSnapshot ? minimizeNoodlerSourceSnapshot(sourceSnapshot, accountDisclosure) : undefined,
+          sourceSnapshot ? minimizeCreatorSourceSnapshot(sourceSnapshot, accountDisclosure) : undefined,
           artwork.avatarUrl,
           artwork.bannerUrl,
         );

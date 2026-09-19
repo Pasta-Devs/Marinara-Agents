@@ -1,16 +1,15 @@
 import type { SlpAuthorSnapshot } from "../../../../../shared/src/slp/slp-social.types.js";
 
-export const NOODLE_FAN_ACTIVITY_DAY_PLAN_VERSION = 1 as const;
-export const NOODLE_FAN_ACTIVITY_RUNS_PER_DAY = 8 as const;
-export const NOODLE_FAN_ACTIVITY_MAX_RUNS_PER_DAY = 96 as const;
-export const NOODLE_FAN_ACTIVITY_MAX_MANUAL_RUNS = 24 as const;
+export const SLP_FAN_ACTIVITY_DAY_PLAN_VERSION = 1 as const;
+export const SLP_FAN_ACTIVITY_RUNS_PER_DAY = 8 as const;
+export const SLP_FAN_ACTIVITY_MAX_RUNS_PER_DAY = 96 as const;
+export const SLP_FAN_ACTIVITY_MAX_MANUAL_RUNS = 24 as const;
 export const NOODLE_FAN_ACTIVITY_MAX_CREATORS_PER_RUN = 12 as const;
 export const NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR = 4 as const;
 
-export type NoodleFanActivityRunStatus =
-  "scheduled" | "generating" | "applying" | "completed" | "skipped" | "abandoned";
+export type SlpFanActivityRunStatus = "scheduled" | "generating" | "applying" | "completed" | "skipped" | "abandoned";
 
-export interface NoodleFanAcceptedActivity {
+export interface SlpFanAcceptedActivity {
   id: string;
   creatorId: string;
   type: string;
@@ -23,26 +22,26 @@ export interface NoodleFanAcceptedActivity {
   applied: boolean;
 }
 
-export interface NoodleFanActivityDayPlanRun {
+export interface SlpFanActivityDayPlanRun {
   id: string;
   scheduledAt: string;
   creatorIds: string[];
-  status: NoodleFanActivityRunStatus;
-  acceptedActivities: NoodleFanAcceptedActivity[];
+  status: SlpFanActivityRunStatus;
+  acceptedActivities: SlpFanAcceptedActivity[];
   claimedAt: string | null;
   finishedAt: string | null;
   manual?: boolean;
 }
 
-export interface PersistedNoodleFanActivityDayPlan {
-  version: typeof NOODLE_FAN_ACTIVITY_DAY_PLAN_VERSION;
+export interface PersistedSlpFanActivityDayPlan {
+  version: typeof SLP_FAN_ACTIVITY_DAY_PLAN_VERSION;
   localDate: string;
   timezone: string;
-  runs: NoodleFanActivityDayPlanRun[];
+  runs: SlpFanActivityDayPlanRun[];
   nextCreatorOffset: number;
 }
 
-export interface NoodleFanActivityToStore {
+export interface SlpFanActivityToStore {
   creatorId: string;
   type: string;
   targetPostId: string;
@@ -57,7 +56,7 @@ function isTimestamp(value: unknown): value is string {
   return typeof value === "string" && Number.isFinite(Date.parse(value));
 }
 
-function isStatus(value: unknown): value is NoodleFanActivityRunStatus {
+function isStatus(value: unknown): value is SlpFanActivityRunStatus {
   return (
     value === "scheduled" ||
     value === "generating" ||
@@ -94,7 +93,7 @@ function validAuthorSnapshot(value: unknown): value is SlpAuthorSnapshot {
   );
 }
 
-function validActivity(value: unknown): value is NoodleFanAcceptedActivity {
+function validActivity(value: unknown): value is SlpFanAcceptedActivity {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
   return (
@@ -112,7 +111,7 @@ function validActivity(value: unknown): value is NoodleFanAcceptedActivity {
   );
 }
 
-function validRun(value: unknown): value is NoodleFanActivityDayPlanRun {
+function validRun(value: unknown): value is SlpFanActivityDayPlanRun {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
   return (
@@ -130,22 +129,22 @@ function validRun(value: unknown): value is NoodleFanActivityDayPlanRun {
   );
 }
 
-export function parsePersistedNoodleFanActivityDayPlan(value: unknown): PersistedNoodleFanActivityDayPlan | null {
+export function parsePersistedSlpFanActivityDayPlan(value: unknown): PersistedSlpFanActivityDayPlan | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const row = value as Record<string, unknown>;
-  if (row.version !== NOODLE_FAN_ACTIVITY_DAY_PLAN_VERSION) return null;
+  if (row.version !== SLP_FAN_ACTIVITY_DAY_PLAN_VERSION) return null;
   if (typeof row.localDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/u.test(row.localDate)) return null;
   if (typeof row.timezone !== "string" || !row.timezone || !Array.isArray(row.runs)) return null;
   const validRuns = row.runs.every(validRun);
   const manualRunCount = validRuns
-    ? row.runs.filter((run) => (run as NoodleFanActivityDayPlanRun).manual === true).length
+    ? row.runs.filter((run) => (run as SlpFanActivityDayPlanRun).manual === true).length
     : 0;
   const automaticRunCount = validRuns ? row.runs.length - manualRunCount : 0;
   if (
     row.runs.length < 1 ||
     !validRuns ||
-    automaticRunCount > NOODLE_FAN_ACTIVITY_MAX_RUNS_PER_DAY ||
-    manualRunCount > NOODLE_FAN_ACTIVITY_MAX_MANUAL_RUNS
+    automaticRunCount > SLP_FAN_ACTIVITY_MAX_RUNS_PER_DAY ||
+    manualRunCount > SLP_FAN_ACTIVITY_MAX_MANUAL_RUNS
   ) {
     return null;
   }
@@ -157,7 +156,7 @@ export function parsePersistedNoodleFanActivityDayPlan(value: unknown): Persiste
     return null;
   }
   return {
-    version: NOODLE_FAN_ACTIVITY_DAY_PLAN_VERSION,
+    version: SLP_FAN_ACTIVITY_DAY_PLAN_VERSION,
     localDate: row.localDate,
     timezone: row.timezone,
     runs: row.runs,
@@ -165,7 +164,7 @@ export function parsePersistedNoodleFanActivityDayPlan(value: unknown): Persiste
   };
 }
 
-function scheduledRuns(at: Date, runsPerDay: number = NOODLE_FAN_ACTIVITY_RUNS_PER_DAY): NoodleFanActivityDayPlanRun[] {
+function scheduledRuns(at: Date, runsPerDay: number = SLP_FAN_ACTIVITY_RUNS_PER_DAY): SlpFanActivityDayPlanRun[] {
   const start = new Date(at.getFullYear(), at.getMonth(), at.getDate());
   return Array.from({ length: runsPerDay }, (_, index) => ({
     id: `${localDate(at)}-run-${index + 1}`,
@@ -179,16 +178,16 @@ function scheduledRuns(at: Date, runsPerDay: number = NOODLE_FAN_ACTIVITY_RUNS_P
   }));
 }
 
-export function reconcileNoodleFanActivityDayPlan(
-  current: PersistedNoodleFanActivityDayPlan | null,
+export function reconcileSlpFanActivityDayPlan(
+  current: PersistedSlpFanActivityDayPlan | null,
   creatorIds: string[],
   at: Date,
-  runsPerDay: number = NOODLE_FAN_ACTIVITY_RUNS_PER_DAY,
-): PersistedNoodleFanActivityDayPlan {
+  runsPerDay: number = SLP_FAN_ACTIVITY_RUNS_PER_DAY,
+): PersistedSlpFanActivityDayPlan {
   const date = localDate(at);
   const zone = timezone();
   if (current?.localDate === date && current.timezone === zone) {
-    const targetRuns = Math.max(1, Math.min(NOODLE_FAN_ACTIVITY_MAX_RUNS_PER_DAY, runsPerDay));
+    const targetRuns = Math.max(1, Math.min(SLP_FAN_ACTIVITY_MAX_RUNS_PER_DAY, runsPerDay));
     const manualRuns = current.runs.filter((run) => run.manual);
     const automaticRuns = current.runs.filter((run) => !run.manual);
     const usedRuns = automaticRuns.filter((run) => run.status !== "scheduled");
@@ -207,7 +206,7 @@ export function reconcileNoodleFanActivityDayPlan(
       run.creatorIds = Array.from({ length: count }, (_, index) => creators[(offset + index) % creators.length]!);
       offset = creators.length === 0 ? 0 : (offset + count) % creators.length;
     }
-    return reconcileOverdueNoodleFanActivityRuns(
+    return reconcileOverdueSlpFanActivityRuns(
       {
         ...current,
         runs: [...usedRuns, ...retainedScheduledRuns, ...addedRuns, ...manualRuns],
@@ -218,7 +217,7 @@ export function reconcileNoodleFanActivityDayPlan(
   }
 
   const creators = creatorList(creatorIds);
-  const runs = scheduledRuns(at, Math.max(1, Math.min(NOODLE_FAN_ACTIVITY_MAX_RUNS_PER_DAY, runsPerDay)));
+  const runs = scheduledRuns(at, Math.max(1, Math.min(SLP_FAN_ACTIVITY_MAX_RUNS_PER_DAY, runsPerDay)));
   let offset = creators.length === 0 ? 0 : (current?.nextCreatorOffset ?? 0) % creators.length;
   for (const run of runs) {
     const count = Math.min(NOODLE_FAN_ACTIVITY_MAX_CREATORS_PER_RUN, creators.length);
@@ -226,7 +225,7 @@ export function reconcileNoodleFanActivityDayPlan(
     offset = creators.length === 0 ? 0 : (offset + count) % creators.length;
   }
   return {
-    version: NOODLE_FAN_ACTIVITY_DAY_PLAN_VERSION,
+    version: SLP_FAN_ACTIVITY_DAY_PLAN_VERSION,
     localDate: date,
     timezone: zone,
     runs,
@@ -234,10 +233,10 @@ export function reconcileNoodleFanActivityDayPlan(
   };
 }
 
-function reconcileOverdueNoodleFanActivityRuns(
-  plan: PersistedNoodleFanActivityDayPlan,
+function reconcileOverdueSlpFanActivityRuns(
+  plan: PersistedSlpFanActivityDayPlan,
   at: Date,
-): PersistedNoodleFanActivityDayPlan {
+): PersistedSlpFanActivityDayPlan {
   const due = dueScheduledRuns(plan, at);
   const newest = due.at(-1)?.id;
   if (!newest) return plan;
@@ -251,25 +250,22 @@ function reconcileOverdueNoodleFanActivityRuns(
   };
 }
 
-export function dueNoodleFanActivityRun(
-  plan: PersistedNoodleFanActivityDayPlan,
-  at: Date,
-): NoodleFanActivityDayPlanRun | null {
+export function dueSlpFanActivityRun(plan: PersistedSlpFanActivityDayPlan, at: Date): SlpFanActivityDayPlanRun | null {
   return dueScheduledRuns(plan, at).at(-1) ?? null;
 }
 
-function dueScheduledRuns(plan: PersistedNoodleFanActivityDayPlan, at: Date): NoodleFanActivityDayPlanRun[] {
+function dueScheduledRuns(plan: PersistedSlpFanActivityDayPlan, at: Date): SlpFanActivityDayPlanRun[] {
   return plan.runs
     .filter((run) => run.status === "scheduled" && Date.parse(run.scheduledAt) <= at.getTime())
     .sort((left, right) => Date.parse(left.scheduledAt) - Date.parse(right.scheduledAt));
 }
 
-export function claimNoodleFanActivityRun(
-  plan: PersistedNoodleFanActivityDayPlan,
+export function claimSlpFanActivityRun(
+  plan: PersistedSlpFanActivityDayPlan,
   runId: string,
   at: Date,
-): PersistedNoodleFanActivityDayPlan {
-  const reconciled = reconcileOverdueNoodleFanActivityRuns(plan, at);
+): PersistedSlpFanActivityDayPlan {
+  const reconciled = reconcileOverdueSlpFanActivityRuns(plan, at);
   const run = reconciled.runs.find((candidate) => candidate.id === runId);
   if (!run || run.status !== "scheduled" || Date.parse(run.scheduledAt) > at.getTime()) {
     throw new Error("That Slurp fan activity run is not due or is no longer available.");
@@ -282,11 +278,11 @@ export function claimNoodleFanActivityRun(
   };
 }
 
-export function storeNoodleFanAcceptedActivities(
-  plan: PersistedNoodleFanActivityDayPlan,
+export function storeSlpFanAcceptedActivities(
+  plan: PersistedSlpFanActivityDayPlan,
   runId: string,
-  activities: NoodleFanActivityToStore[],
-): PersistedNoodleFanActivityDayPlan {
+  activities: SlpFanActivityToStore[],
+): PersistedSlpFanActivityDayPlan {
   return {
     ...plan,
     runs: plan.runs.map((run) =>
@@ -311,11 +307,11 @@ export function storeNoodleFanAcceptedActivities(
   };
 }
 
-export function markNoodleFanActivityApplied(
-  plan: PersistedNoodleFanActivityDayPlan,
+export function markSlpFanActivityApplied(
+  plan: PersistedSlpFanActivityDayPlan,
   runId: string,
   activityId: string,
-): PersistedNoodleFanActivityDayPlan {
+): PersistedSlpFanActivityDayPlan {
   return {
     ...plan,
     runs: plan.runs.map((run) =>
@@ -331,12 +327,12 @@ export function markNoodleFanActivityApplied(
   };
 }
 
-export function finishNoodleFanActivityRun(
-  plan: PersistedNoodleFanActivityDayPlan,
+export function finishSlpFanActivityRun(
+  plan: PersistedSlpFanActivityDayPlan,
   runId: string,
   status: "completed" | "skipped" | "abandoned",
   at: Date,
-): PersistedNoodleFanActivityDayPlan {
+): PersistedSlpFanActivityDayPlan {
   if (status !== "completed" && status !== "skipped" && status !== "abandoned") {
     throw new Error("Invalid Slurp fan activity finish status.");
   }
@@ -346,22 +342,20 @@ export function finishNoodleFanActivityRun(
   };
 }
 
-export function nextAvailableNoodleFanActivityRun(
-  plan: PersistedNoodleFanActivityDayPlan,
-): NoodleFanActivityDayPlanRun | null {
+export function nextAvailableSlpFanActivityRun(plan: PersistedSlpFanActivityDayPlan): SlpFanActivityDayPlanRun | null {
   return plan.runs.find((run) => run.status === "scheduled") ?? null;
 }
 
-export function claimManualNoodleFanActivityRun(
-  plan: PersistedNoodleFanActivityDayPlan,
+export function claimManualSlpFanActivityRun(
+  plan: PersistedSlpFanActivityDayPlan,
   at: Date,
 ): {
-  plan: PersistedNoodleFanActivityDayPlan;
-  run: NoodleFanActivityDayPlanRun;
+  plan: PersistedSlpFanActivityDayPlan;
+  run: SlpFanActivityDayPlanRun;
 } {
   const automaticRuns = plan.runs.filter((run) => !run.manual);
-  const manualRuns = plan.runs.filter((run) => run.manual).slice(-(NOODLE_FAN_ACTIVITY_MAX_MANUAL_RUNS - 1));
-  const run: NoodleFanActivityDayPlanRun = {
+  const manualRuns = plan.runs.filter((run) => run.manual).slice(-(SLP_FAN_ACTIVITY_MAX_MANUAL_RUNS - 1));
+  const run: SlpFanActivityDayPlanRun = {
     id: `${plan.localDate}-manual-${at.getTime()}`,
     scheduledAt: at.toISOString(),
     creatorIds: [...new Set(automaticRuns.flatMap((candidate) => candidate.creatorIds))].slice(

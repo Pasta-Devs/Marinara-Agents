@@ -44,16 +44,16 @@ const AUDIENCE_FIELDS = [
   "updatedAt",
 ] as const;
 
-export type NoodlerAudienceProfile = Pick<
+export type SlpCreatorAudienceProfile = Pick<
   SlurpManagedStageProfile,
   (typeof AUDIENCE_FIELDS)[number] | "slurpSourceAccountId" | "publicIdentity"
 >;
 
-export function isNoodlerDisclosureDowngrade(current: SlpIdentityDisclosure, next: SlpIdentityDisclosure): boolean {
+export function isCreatorDisclosureDowngrade(current: SlpIdentityDisclosure, next: SlpIdentityDisclosure): boolean {
   return DISCLOSURE_RANK[next] < DISCLOSURE_RANK[current];
 }
 
-export function projectNoodlerAudienceProfile(profile: SlurpManagedStageProfile): NoodlerAudienceProfile {
+export function projectCreatorAudienceProfile(profile: SlurpManagedStageProfile): SlpCreatorAudienceProfile {
   const open = profile.disclosureMode === "open";
   return {
     ...(Object.fromEntries(AUDIENCE_FIELDS.map((field) => [field, profile[field]])) as Pick<
@@ -65,14 +65,14 @@ export function projectNoodlerAudienceProfile(profile: SlurpManagedStageProfile)
   };
 }
 
-export type NoodlerDisclosureReviewReason = {
+export type SlpCreatorDisclosureReviewReason = {
   // Stable code so callers can match a reason without parsing its English label.
   code: "published_posts" | "published_media" | "creator_avatar" | "creator_banner" | "prepared_posts";
   count: number;
   label: string;
 };
 
-export function noodlerDisclosureReviewReasons(input: {
+export function slpCreatorDisclosureReviewReasons(input: {
   currentMode: SlpIdentityDisclosure;
   nextMode: SlpIdentityDisclosure;
   postCount: number;
@@ -80,8 +80,8 @@ export function noodlerDisclosureReviewReasons(input: {
   hasAvatar: boolean;
   hasBanner: boolean;
   preparedPostCount: number;
-}): NoodlerDisclosureReviewReason[] {
-  if (!isNoodlerDisclosureDowngrade(input.currentMode, input.nextMode)) return [];
+}): SlpCreatorDisclosureReviewReason[] {
+  if (!isCreatorDisclosureDowngrade(input.currentMode, input.nextMode)) return [];
   const plural = (count: number) => (count === 1 ? "" : "s");
   return [
     ...(input.postCount > 0

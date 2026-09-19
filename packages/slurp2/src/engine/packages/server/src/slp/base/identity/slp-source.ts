@@ -49,7 +49,7 @@ function hintedThemes(value: string): string {
   return HINTED_THEME_TOKENS.filter((token) => words.has(token)).join(" ");
 }
 
-export function minimizeNoodlerSourceSnapshot(
+export function minimizeCreatorSourceSnapshot(
   snapshot: SlpCreatorSourceSnapshot,
   mode: SlpIdentityDisclosure,
   baseline?: SlpCreatorSourceSnapshot | null,
@@ -65,14 +65,14 @@ export function minimizeNoodlerSourceSnapshot(
   ) as SlpCreatorSourceSnapshot;
 }
 
-export function isMinimizedNoodlerSourceSnapshot(snapshot: SlpCreatorSourceSnapshot): boolean {
+export function isMinimizedCreatorSourceSnapshot(snapshot: SlpCreatorSourceSnapshot): boolean {
   // Unsalted legacy tokens deliberately fail this test, so storage re-minimizes them.
   return (Object.keys(snapshot) as Array<keyof SlpCreatorSourceSnapshot>).every((field) =>
     REVISION_TOKEN.test(snapshot[field]),
   );
 }
 
-export function compareNoodlerSourceSnapshots(
+export function compareCreatorSourceSnapshots(
   baseline: SlpCreatorSourceSnapshot,
   current: SlpCreatorSourceSnapshot,
 ): SlpCreatorSourceStatus {
@@ -82,13 +82,13 @@ export function compareNoodlerSourceSnapshots(
   return changes.length > 0 ? { state: "changed", changes } : { state: "current" };
 }
 
-export function compareMinimizedNoodlerSourceSnapshot(
+export function compareMinimizedCreatorSourceSnapshot(
   baseline: SlpCreatorSourceSnapshot,
   current: SlpCreatorSourceSnapshot,
   mode: SlpIdentityDisclosure,
 ): SlpCreatorSourceStatus {
-  const minimizedCurrent = minimizeNoodlerSourceSnapshot(current, mode, baseline);
-  const comparison = compareNoodlerSourceSnapshots(baseline, minimizedCurrent);
+  const minimizedCurrent = minimizeCreatorSourceSnapshot(current, mode, baseline);
+  const comparison = compareCreatorSourceSnapshots(baseline, minimizedCurrent);
   if (mode === "open" || comparison.state !== "changed") return comparison;
   return {
     state: "changed",

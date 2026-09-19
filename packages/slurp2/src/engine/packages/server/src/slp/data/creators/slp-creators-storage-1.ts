@@ -9,10 +9,10 @@ import {
 } from "../../modules/discovery/slp-discovery-profile.js";
 import { SLURP_ARC_LIBRARY_SEED } from "../../modules/projects/slp-arc-library.js";
 import {
-  noodleAccounts,
-  noodleAccountSubscriptions,
-  noodleInteractions,
-  noodlePostUnlocks,
+  slpAccounts,
+  slpAccountSubscriptions,
+  slpInteractions,
+  slpPostUnlocks,
   slurpEvents,
   slurpMessageClaims,
   slurpMessages,
@@ -43,13 +43,13 @@ import {
   SLURP_SETTINGS_NAMESPACE,
 } from "../host/slp-storage-constants.js";
 import {
-  emptyNoodleAccountSettings,
+  emptySlpAccountSettings,
   defaultAutoPostingSettings,
-  normalizeNoodleAccountSettings,
+  normalizeSlpAccountSettings,
 } from "../../modules/records/slp-storage-model.js";
 import type {
   SlurpSourceKind,
-  SlurpNoodleAccountSettings,
+  SlurpSlpAccountSettings,
   SlurpAccount,
 } from "../../modules/records/slp-storage-model.js";
 import { isSlurpViewerActorAccount, normalizeSlurpSettings } from "../../modules/settings/slp-settings.js";
@@ -131,7 +131,7 @@ export function createCreatorsStorage1(context: SlurpStorageContext) {
       const persona = await characters.getPersona(personaId);
       if (!persona) return null;
       const raw = await settingsStore.get(slurpViewerSettingsKey(personaId));
-      return mapViewer(personaId, raw ? normalizeNoodleAccountSettings(raw) : emptyNoodleAccountSettings(), persona);
+      return mapViewer(personaId, raw ? normalizeSlpAccountSettings(raw) : emptySlpAccountSettings(), persona);
     },
     async listViewerWallets(personaIds: string[]): Promise<Record<string, { coins: number }>> {
       const wallets = await Promise.all(
@@ -148,10 +148,7 @@ export function createCreatorsStorage1(context: SlurpStorageContext) {
       );
     },
     async cleanupRetiredViewer(personaId: string): Promise<void> {
-      const authored = await db
-        .select()
-        .from(noodleInteractions)
-        .where(eq(noodleInteractions.actorAccountId, personaId));
+      const authored = await db.select().from(slpInteractions).where(eq(slpInteractions.actorAccountId, personaId));
       for (const interaction of authored) await this.deleteInteractionById(interaction.id);
       await db.transaction(async (tx) => {
         const threads = await tx.select().from(slurpThreads).where(eq(slurpThreads.viewerAccountId, personaId));
@@ -161,8 +158,8 @@ export function createCreatorsStorage1(context: SlurpStorageContext) {
           await tx.delete(slurpReplyBubbles).where(eq(slurpReplyBubbles.threadId, thread.id));
           await tx.delete(slurpThreads).where(eq(slurpThreads.id, thread.id));
         }
-        await tx.delete(noodleAccountSubscriptions).where(eq(noodleAccountSubscriptions.viewerAccountId, personaId));
-        await tx.delete(noodlePostUnlocks).where(eq(noodlePostUnlocks.viewerAccountId, personaId));
+        await tx.delete(slpAccountSubscriptions).where(eq(slpAccountSubscriptions.viewerAccountId, personaId));
+        await tx.delete(slpPostUnlocks).where(eq(slpPostUnlocks.viewerAccountId, personaId));
         await tx.delete(slurpCommissions).where(eq(slurpCommissions.viewerAccountId, personaId));
         await tx.delete(slurpEvents).where(eq(slurpEvents.recipientPersonaId, personaId));
         await createAppSettingsStorage(tx).remove(slurpViewerSettingsKey(personaId));
@@ -366,21 +363,21 @@ export function createCreatorsStorage1(context: SlurpStorageContext) {
       );
       const settings = await this.updateSettings({ discoveryTags, arcLibrary });
       await db.transaction(async (tx) => {
-        const rows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.platform, "slurp"));
+        const rows = await tx.select().from(slpAccounts).where(eq(slpAccounts.platform, "slurp"));
         for (const row of rows) {
-          const accountSettings = normalizeNoodleAccountSettings(row.settings);
+          const accountSettings = normalizeSlpAccountSettings(row.settings);
           const tags = accountSettings.profile.tags ?? [];
           if (!tags.some((tag) => tag.toLocaleLowerCase() === key)) continue;
           await tx
-            .update(noodleAccounts)
+            .update(slpAccounts)
             .set({
               settings: JSON.stringify({
                 ...accountSettings,
                 profile: { ...accountSettings.profile, tags: replaceSlurpDiscoveryTag(tags, from, to) },
-              } satisfies SlurpNoodleAccountSettings),
+              } satisfies SlurpSlpAccountSettings),
               updatedAt: now(),
             })
-            .where(eq(noodleAccounts.id, row.id));
+            .where(eq(slpAccounts.id, row.id));
         }
       });
       return settings;
@@ -412,10 +409,10 @@ export function createCreatorsStorage1(context: SlurpStorageContext) {
       let skipped = 0;
       let tagLimitReached = 0;
       await db.transaction(async (tx) => {
-        const rows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.platform, "slurp"));
+        const rows = await tx.select().from(slpAccounts).where(eq(slpAccounts.platform, "slurp"));
         for (const row of rows) {
           if (!creatorIds.has(row.id)) continue;
-          const current = normalizeNoodleAccountSettings(row.settings);
+          const current = normalizeSlpAccountSettings(row.settings);
           const candidate = [...(patch.tags ?? current.profile.tags ?? []), ...(patch.addTags ?? [])].filter(
             (tag) => !remove.has(key(tag)),
           );
@@ -425,7 +422,7 @@ export function createCreatorsStorage1(context: SlurpStorageContext) {
           const blocked = patch.autoPosting === true && row.sourceKind === "persona" && row.kind === "persona";
           if (blocked) skipped += 1;
           await tx
-            .update(noodleAccounts)
+            .update(slpAccounts)
             .set({
               settings: JSON.stringify({
                 ...current,
@@ -437,10 +434,10 @@ export function createCreatorsStorage1(context: SlurpStorageContext) {
                     imagesEnabled: patch.imagesEnabled ?? auto.imagesEnabled,
                   },
                 },
-              } satisfies SlurpNoodleAccountSettings),
+              } satisfies SlurpSlpAccountSettings),
               updatedAt: now(),
             })
-            .where(eq(noodleAccounts.id, row.id));
+            .where(eq(slpAccounts.id, row.id));
           updated += 1;
         }
       });

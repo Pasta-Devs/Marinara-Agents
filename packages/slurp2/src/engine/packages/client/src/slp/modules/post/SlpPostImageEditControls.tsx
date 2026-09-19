@@ -4,9 +4,9 @@ import type { SlpPostImageCrop } from "../../../../../shared/src/slp/slp-social.
 import { readSlpPostImageCrop } from "../../../../../shared/src/slp/slp-post-images.js";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { PostImageCropEditor, PostImageFrame } from "../../base/media/SlpPostImageCropEditor";
-import { labelClass, type NoodlePostCardModel, type NoodlePostImageUpdate } from "./SlpPostCard";
+import { labelClass, type SlpPostCardModel, type SlpPostImageUpdate } from "./SlpPostCard";
 
-type NoodlePostImageCropSource =
+type SlpPostImageCropSource =
   | {
       source: File | string;
       crop: SlpPostImageCrop | null;
@@ -14,13 +14,13 @@ type NoodlePostImageCropSource =
     }
   | { source: File; crop: SlpPostImageCrop | null; mode: "replace" };
 
-interface NoodlePostCardImageEditingCap {
-  update: NoodlePostImageUpdate | null;
-  cropSource: NoodlePostImageCropSource | null;
+interface SlpPostCardImageEditingCap {
+  update: SlpPostImageUpdate | null;
+  cropSource: SlpPostImageCropSource | null;
   loading: boolean;
   error: string | null;
   fileInputRef: RefObject<HTMLInputElement | null>;
-  beginCrop: (post: NoodlePostCardModel) => void;
+  beginCrop: (post: SlpPostCardModel) => void;
   selectReplacement: (event: ChangeEvent<HTMLInputElement>) => void;
   applyCrop: (crop: SlpPostImageCrop) => Promise<void>;
   cancelCrop: () => void;
@@ -34,8 +34,8 @@ export function PostImageEditControls({
   disabled,
   footer,
 }: {
-  post: NoodlePostCardModel;
-  editing: NoodlePostCardImageEditingCap;
+  post: SlpPostCardModel;
+  editing: SlpPostCardImageEditingCap;
   disabled: boolean;
   footer: React.ReactNode;
 }) {

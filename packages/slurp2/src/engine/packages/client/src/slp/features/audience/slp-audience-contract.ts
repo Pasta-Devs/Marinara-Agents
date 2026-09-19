@@ -1,7 +1,7 @@
 import type { SlpAccount, SlpCreatorSubscriber } from "../../../../../shared/src/slp/slp-social.types.js";
 
 /** Fan and follower totals keyed by creator account id. */
-export type NoodlerConnectionCounts = Record<string, { fans: number; followers: number }>;
+export type SlpCreatorConnectionCounts = Record<string, { fans: number; followers: number }>;
 /**
  * A subscriber row, widened for the generated audience.
  *
@@ -48,7 +48,7 @@ export type SlurpAmbientProfile = {
   bio: string;
   avatarUrl: string | null;
 };
-export type NoodleAmbientProfileRerollResult = {
+export type SlpAmbientProfileRerollResult = {
   accounts: SlpAccount[];
   outcomes: Array<{ accountId: string; status: string; reason?: string }>;
 };

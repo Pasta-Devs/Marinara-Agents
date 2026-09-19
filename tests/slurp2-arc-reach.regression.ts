@@ -100,7 +100,7 @@ assert.equal(slurpArcImageLine(arc), "The picture shows this moment of an ongoin
 assert.equal(slurpArcImageLine(null), null);
 assert.match(
   source("services/slurp/slurp-generation.service.ts"),
-  /protectNoodlerGeneratedIdentity\(\s*generated\.imagePrompt && arcImageLine/,
+  /protectCreatorGeneratedIdentity\(\s*generated\.imagePrompt && arcImageLine/,
 );
 
 // Profile proposal lifecycle: propose on chapter start, apply stores previous, revert proposal at end.

@@ -7,11 +7,11 @@ import {
 } from "../../../services/generation/image-captioning-runtime.js";
 import { createLLMProvider } from "../../../services/llm/provider-registry.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
-import { normalizeNoodleImagePrompt } from "./slp-image-prompt.js";
-import { noodlerPostMediaUrl, slurpMessageMediaUrl } from "./slp-media.js";
+import { normalizeSlpImagePrompt } from "./slp-image-prompt.js";
+import { slpCreatorPostMediaUrl, slurpMessageMediaUrl } from "./slp-media.js";
 import {
-  isUnsupportedNoodleVisionInputError,
-  prepareNoodleVisionAttachments,
+  isUnsupportedSlpVisionInputError,
+  prepareSlpVisionAttachments,
   rememberSlurpVisionRejection,
   slurpModelLacksVision,
 } from "./slp-vision.js";
@@ -52,7 +52,7 @@ export async function slurpImageCaptioning(
       try {
         return await provider.chatComplete(...args);
       } catch (error) {
-        if (isUnsupportedNoodleVisionInputError(error)) rememberSlurpVisionRejection(connection);
+        if (isUnsupportedSlpVisionInputError(error)) rememberSlurpVisionRejection(connection);
         throw error;
       }
     },
@@ -87,7 +87,7 @@ export async function prepareSlurpPostImageContexts(input: {
   const visionPosts: SlurpImageContextPost[] = [];
   for (const post of input.posts) {
     if ((!input.allowLocked && post.access === "locked") || !post.imageUrl) continue;
-    const prompt = normalizeNoodleImagePrompt(post.imagePrompt);
+    const prompt = normalizeSlpImagePrompt(post.imagePrompt);
     const saved =
       post.metadata.imageDescriptionSource === imageSource(post) && typeof post.metadata.imageDescription === "string"
         ? post.metadata.imageDescription.trim()
@@ -107,7 +107,7 @@ export async function prepareSlurpPostImageContexts(input: {
     (await slurpModelLacksVision(input.captioning.connection, resolveBaseUrl(input.captioning.connection)))
   )
     return contexts;
-  const attachments = await prepareNoodleVisionAttachments(
+  const attachments = await prepareSlpVisionAttachments(
     visionPosts.map((post) => ({
       key: post.id,
       postId: post.id,
@@ -116,7 +116,7 @@ export async function prepareSlurpPostImageContexts(input: {
       createdAt: post.createdAt,
       // Messages keep their generated pictures the same way posts do.
       ...(typeof post.metadata.noodlerMediaPath === "string" &&
-      (post.imageUrl === noodlerPostMediaUrl(post.id) || post.imageUrl === slurpMessageMediaUrl(post.id))
+      (post.imageUrl === slpCreatorPostMediaUrl(post.id) || post.imageUrl === slurpMessageMediaUrl(post.id))
         ? { mediaPath: post.metadata.noodlerMediaPath }
         : {}),
     })),

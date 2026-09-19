@@ -1,7 +1,7 @@
 import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Modal } from "../../../components/ui/Modal";
-import { getNoodleAccentStyle } from "../../base/chrome/SlpChrome";
+import { getSlpAccentStyle } from "../../base/chrome/SlpChrome";
 import { errorMessage } from "./SlpHomeHelpers";
 import type { StageProfileViewModel } from "./slp-profile-view-model";
 
@@ -44,7 +44,7 @@ export function SlpProfileModals({ model }: { model: StageProfileViewModel }) {
         width="max-w-lg"
         closeDisabled={generateProfileArtwork.isPending}
         panelClassName="noodle-icon-scope"
-        panelStyle={getNoodleAccentStyle(accent, {
+        panelStyle={getSlpAccentStyle(accent, {
           "--background": "var(--slurp-surface)",
           "--foreground": "var(--slurp-text)",
           "--muted-foreground": "var(--slurp-muted)",
@@ -118,7 +118,7 @@ export function SlpProfileModals({ model }: { model: StageProfileViewModel }) {
         onClose={() => setAccessSettingsOpen(false)}
         title={localizeUi("ui.noodle.stageprofileview.viewerAccess")}
         width="max-w-md"
-        panelStyle={getNoodleAccentStyle(accent)}
+        panelStyle={getSlpAccentStyle(accent)}
       >
         <div className="space-y-4">
           <div className="flex items-start justify-between gap-4">
@@ -165,7 +165,7 @@ export function SlpProfileModals({ model }: { model: StageProfileViewModel }) {
         onClose={() => setAutomationOpen(false)}
         title={localizeUi("ui.noodle.stageprofileview.automaticPosting")}
         width="max-w-md"
-        panelStyle={getNoodleAccentStyle(accent)}
+        panelStyle={getSlpAccentStyle(accent)}
       >
         <div className="space-y-4">
           <p className="text-xs leading-5 text-[var(--muted-foreground)]">

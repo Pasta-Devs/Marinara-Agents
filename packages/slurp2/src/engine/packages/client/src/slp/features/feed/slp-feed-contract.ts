@@ -8,23 +8,23 @@ import type { ImagePromptReviewItem } from "../../../components/ui/ImagePromptRe
 
 export type SlurpProfilePost =
   { managed: SlpCreatorManagedPost; viewerPost: SlpCreatorPostView | null } | { viewerPost: SlpCreatorPostView };
-export type NoodlePostDraft = {
+export type SlpPostDraft = {
   title: string | null;
   content: string;
   imagePrompt: string | null;
   access: "public";
   authorAccountId: string;
 };
-export type NoodlePostDraftRequest = {
+export type SlpPostDraftRequest = {
   accountId: string;
   guidance?: string;
   connectionId?: string;
 };
-export type GeneratedNoodlerNoodlePost = SlpCreatorManagedPost & {
+export type GeneratedCreatorSlpPost = SlpCreatorManagedPost & {
   imagePromptReview?: ImagePromptReviewItem;
 };
-export type NoodlerPostDraftImage = {
+export type SlpCreatorPostDraftImage = {
   source: File | string;
   crop: SlpPostImageCrop | null;
 };
-export type NoodlerContentFormat = "caption" | "announcement" | "long_form";
+export type SlpCreatorContentFormat = "caption" | "announcement" | "long_form";

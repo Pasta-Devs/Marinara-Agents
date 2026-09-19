@@ -7,10 +7,10 @@ import type {
 } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpStageProfileInput } from "../../base/state/slp-state-types";
 import {
-  useRemoveNoodlerAvatar,
-  useUpdateNoodlerStageProfile,
-  useUploadNoodlerAvatar,
-  useUseNoodlerSourceAvatar,
+  useRemoveCreatorAvatar,
+  useUpdateCreatorStageProfile,
+  useUploadCreatorAvatar,
+  useUseCreatorSourceAvatar,
 } from "./slp-creator-profile-hooks";
 import { showConfirmDialog } from "../../../lib/app-dialogs";
 import { confirmSlurpAvatarReview, StageProfileForm } from "./SlpStageProfileForm";
@@ -32,10 +32,10 @@ export function SlurpCreatorProfileEditor({
   onRedraft: () => void;
 }) {
   const { t } = useTranslation();
-  const updateProfile = useUpdateNoodlerStageProfile();
-  const uploadAvatar = useUploadNoodlerAvatar();
-  const useSourceAvatar = useUseNoodlerSourceAvatar();
-  const removeAvatar = useRemoveNoodlerAvatar();
+  const updateProfile = useUpdateCreatorStageProfile();
+  const uploadAvatar = useUploadCreatorAvatar();
+  const useSourceAvatar = useUseCreatorSourceAvatar();
+  const removeAvatar = useRemoveCreatorAvatar();
   const [draft, setDraft] = useState<SlurpStageProfileInput>({
     displayName: creator.displayName,
     handle: creator.handle,

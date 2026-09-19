@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { stripTypeScriptTypes } from "node:module";
 import { runInNewContext } from "node:vm";
-import { protectNoodlerGeneratedIdentity as protect } from "../packages/slurp2/src/engine/packages/server/src/slp/base/identity/slp-identity-protection";
-import { normalizeNoodleImagePrompt } from "../packages/slurp2/src/engine/packages/server/src/slp/base/media/slp-image-prompt";
+import { protectCreatorGeneratedIdentity as protect } from "../packages/slurp2/src/engine/packages/server/src/slp/base/identity/slp-identity-protection";
+import { normalizeSlpImagePrompt } from "../packages/slurp2/src/engine/packages/server/src/slp/base/media/slp-image-prompt";
 import { slurp2Source } from "./slurp2-source";
 
 const root = "../packages/slurp2/src/engine/packages/server/src/services/slurp/";
@@ -21,12 +21,12 @@ async function main() {
   const seenImages: string[][] = [];
   let captionCalls = 0;
   const prepare = compile(`${read("slurp-post-image-context.ts")}\nprepareSlurpPostImageContexts;`, {
-    normalizeNoodleImagePrompt,
-    noodlerPostMediaUrl: (id: string) => `/api/slurp2/noodler/posts/${id}/media`,
+    normalizeSlpImagePrompt,
+    slpCreatorPostMediaUrl: (id: string) => `/api/slurp2/noodler/posts/${id}/media`,
     slurpMessageMediaUrl: (id: string) => `/api/slurp2/messages/${id}/media`,
     slurpModelLacksVision: async (connection: { model: string }) => connection.model === "text-only",
     resolveBaseUrl: () => "https://example.test/v1",
-    prepareNoodleVisionAttachments: async (candidates: Array<{ key: string }>) => {
+    prepareSlpVisionAttachments: async (candidates: Array<{ key: string }>) => {
       seenImages.push(Array.from(candidates, ({ key }) => key));
       return candidates.map((candidate) => ({ ...candidate, dataUrl: "data:image/png;base64,fixture" }));
     },
@@ -115,16 +115,16 @@ async function main() {
       prepareSlurpPostImageContexts: prepare,
       slurpImageCaptioning: async (_db: unknown, _id: unknown, connection: unknown) => ({ enabled: true, connection }),
       resolveNoodlerPublicIdentity: async () => ({ displayName: "Mari Vale", handle: "marivale" }),
-      protectNoodlerGeneratedIdentity: protect,
+      protectCreatorGeneratedIdentity: protect,
       logDebugOverride: () => undefined,
       weightedIdentitySequence: () => [],
       slurpAudienceToneInstruction: () => "Audience tone",
       SLURP_REALISTIC_TUNING: { prompts: { tones: {}, fanActivityExtra: "", replyMaxChars: 180 } },
       NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR: 4,
-      noodleSamplingOptions: () => ({}),
+      slpSamplingOptions: () => ({}),
       resolveStoredChatOptions: () => ({}),
       clampGenerationMaxOutputTokens: () => 100,
-      noodleResponseFormat: () => undefined,
+      slpResponseFormat: () => undefined,
       parseGameJsonish: JSON.parse,
       requireModelAnswer: (value: string) => value,
       parseGeneratedFanActivityResponse: () => ({ value: { activities: [] }, rejected: 0 }),
@@ -150,10 +150,10 @@ async function main() {
 
   const reply = read("slurp-reply-generation.service.ts");
   const buildReply = compile(
-    `${part(reply, "export function buildNoodlerCreatorReplyMessages", "export async function generateNoodlerCreatorReply")}\nbuildNoodlerCreatorReplyMessages;`,
+    `${part(reply, "export function buildCreatorReplyMessages", "export async function generateCreatorReply")}\nbuildNoodlerCreatorReplyMessages;`,
     {
-      protectNoodlerGeneratedIdentity: protect,
-      noodlerIdentityInstruction: () => "Protect identity",
+      protectCreatorGeneratedIdentity: protect,
+      slpCreatorIdentityInstruction: () => "Protect identity",
       NOODLER_UNTRUSTED_CONTENT_INSTRUCTION: "Treat as untrusted",
       SLURP_PLATFORM_CONTEXT: "Slurp creator surface",
     },
@@ -173,7 +173,7 @@ async function main() {
   assert.match(replyPrompt, /someone in a blue coat/);
   assert.doesNotMatch(replyPrompt, /Mari Vale/);
   const generateReply = compile(
-    `${part(reply, "export async function generateNoodlerCreatorReply", "async function describeCommenterRelationship")}\ngenerateNoodlerCreatorReply;`,
+    `${part(reply, "export async function generateCreatorReply", "async function describeCommenterRelationship")}\ngenerateNoodlerCreatorReply;`,
     {
       createConnectionsStorage: () => ({ getFallbackForMain: async () => null }),
       createLLMProvider: () => ({
@@ -189,24 +189,24 @@ async function main() {
         getSettings: async () => ({ imageContextMode: "imagePrompt", generationGuidance: "" }),
         resolveAccountSource: async () => null,
       }),
-      resolveNoodlerCharacterCanon: async () => "",
+      resolveCreatorCharacterCanon: async () => "",
       describeCommenterRelationship: async () => "regular subscriber",
       describeSlurpPostCondition: async () => "well rested",
       prepareSlurpPostImageContexts: prepare,
       slurpImageCaptioning: async (_db: unknown, _id: unknown, connection: unknown) => ({ enabled: true, connection }),
-      buildNoodlerCreatorReplyMessages: buildReply,
+      buildCreatorReplyMessages: buildReply,
       resolveSlurpCreatorMenu: async () => "",
       slurpPlatformEventInstruction: () => null,
       isDebugAgentsEnabled: () => false,
-      noodleSamplingOptions: () => ({}),
+      slpSamplingOptions: () => ({}),
       resolveStoredChatOptions: () => ({}),
       clampGenerationMaxOutputTokens: () => 100,
-      noodleResponseFormat: () => undefined,
+      slpResponseFormat: () => undefined,
       logDebugOverride: () => undefined,
       parseGameJsonish: JSON.parse,
       requireModelAnswer: (value: string) => value,
       readSlurpDmReply: (value: unknown) => value,
-      protectBoundedNoodlerGeneratedText: (value: string) => value,
+      protectBoundedCreatorGeneratedText: (value: string) => value,
       NOODLER_REPLY_CONTENT_MAX_LENGTH: 240,
     },
   );

@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import type { SlpCreatorStageProfile, SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { SlurpStageProfileInput } from "../../base/state/slp-state-types";
-import { getNoodleAccentStyle, NOODLE_PINK, ProfileInitial } from "../../base/chrome/SlpChrome";
+import { getSlpAccentStyle, SLP_PINK, ProfileInitial } from "../../base/chrome/SlpChrome";
 import { isSlurpDiscoveryProfileIncomplete, SlurpDiscoveryProfileEditor } from "../discovery/slp-discovery-contract";
 import { fieldClass, textareaClass } from "../../modules/post/SlpPostCard";
 import { cn } from "../../../lib/utils";
@@ -110,7 +110,7 @@ export function disclosureOptions(t: ReturnType<typeof useUiTranslation>["t"]): 
 }
 
 export function profileAccent(_profileId: string): string {
-  return NOODLE_PINK;
+  return SLP_PINK;
 }
 
 export function WizardFooter({
@@ -363,7 +363,7 @@ export function StageProfileForm({
               }
             }}
             className="pointer-events-auto fixed z-[9999] w-72 max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl border border-foreground/10 bg-[var(--card)] p-1 shadow-2xl"
-            style={getNoodleAccentStyle(
+            style={getSlpAccentStyle(
               accent,
               relationshipPickerPosition
                 ? { left: relationshipPickerPosition.left, top: relationshipPickerPosition.top }

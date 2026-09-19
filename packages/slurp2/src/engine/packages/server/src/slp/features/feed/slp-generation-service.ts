@@ -10,7 +10,7 @@ import { logger, logDebugOverride } from "../../../lib/logger.js";
 import { resolveBaseUrl } from "../../../services/generation/connection-base-url.js";
 import { clampGenerationMaxOutputTokens } from "../../../services/generation/output-token-limits.js";
 import { resolveStoredChatOptions } from "../../../services/generation/generation-parameters.js";
-import { noodleSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
+import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
 import { withConnectionFallbackProvider } from "../../../services/llm/connection-fallback-provider.js";
 import { withConnectionAdmissionProvider } from "../../../services/generation/connection-admission.js";
 import {
@@ -19,23 +19,23 @@ import {
 } from "../../../services/generation/connection-admission.js";
 import type { ChatMessage } from "../../../services/llm/base-provider.js";
 import { createLLMProvider } from "../../../services/llm/provider-registry.js";
-import { resolveNoodlerImageConnectionId } from "../../base/media/slp-image-connections.js";
+import { resolveCreatorImageConnectionId } from "../../base/media/slp-image-connections.js";
 import { resolveSlurpCreatorMenu, resolveSlurpPostGuidance } from "../../data/settings/slp-post-guidance-storage.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { type SlurpAccount } from "../../modules/records/slp-storage-model.js";
 import { createPromptOverridesStorage } from "../../../services/storage/prompt-overrides.storage.js";
-import { generateNoodlerPostImage } from "../media/slp-media-contract.js";
-import { noodlerUnlockPriceMetadata } from "../../modules/economy/slp-prices.js";
+import { generateCreatorPostImage } from "../media/slp-media-contract.js";
+import { slpCreatorUnlockPriceMetadata } from "../../modules/economy/slp-prices.js";
 import {
-  persistNoodlerPostWithUploadedMedia,
-  noodlerPostMediaUrl,
-  type NoodlerPostMediaUpload,
+  persistCreatorPostWithUploadedMedia,
+  slpCreatorPostMediaUrl,
+  type SlpCreatorPostMediaUpload,
 } from "../../base/media/slp-media.js";
-import type { NoodleImagePromptReviewItem } from "../media/slp-media-contract.js";
+import type { SlpImagePromptReviewItem } from "../media/slp-media-contract.js";
 import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
-import { noodleResponseFormat } from "../../base/prompting/slp-response-format.js";
+import { slpResponseFormat } from "../../base/prompting/slp-response-format.js";
 import {
   SLURP_TEASER_INSTRUCTION,
   slurpPostProject,
@@ -48,28 +48,28 @@ import { slurpArcRotation, slurpProjectChapter } from "../../modules/projects/sl
 import { resolveSlurpCreatorScheduleContext } from "../creators/slp-creators-contract.js";
 import { createSlurpMessagesStorage } from "../../data/slp-storage.js";
 import { createChatsStorage } from "../../../services/storage/chats.storage.js";
-import { type NoodlerContentFormat } from "../../base/prompting/slp-content-format.js";
-import { noodleLorebookTokenBudget } from "../../modules/prompting/slp-prompt.js";
+import { type SlpCreatorContentFormat } from "../../base/prompting/slp-content-format.js";
+import { slpLorebookTokenBudget } from "../../modules/prompting/slp-prompt.js";
 import { processLorebooks } from "../../../services/lorebook/index.js";
 import { createCharacterGalleryStorage } from "../../../services/storage/character-gallery.storage.js";
 import { createGalleryStorage } from "../../../services/storage/gallery.storage.js";
 import { pickGalleryAttachmentForAccount } from "./slp-generated-activity-service.js";
 // The disclosure privacy core lives in a leaf module so tests can execute it instead of grepping
 // this file, which cannot be imported without a database and an LLM provider.
-import { protectNoodlerGeneratedIdentity, type PublicIdentity } from "../../base/identity/slp-identity-protection.js";
-import { resolveNoodlerCharacterCanon } from "../../data/creators/slp-source-resolve.js";
+import { protectCreatorGeneratedIdentity, type PublicIdentity } from "../../base/identity/slp-identity-protection.js";
+import { resolveCreatorCharacterCanon } from "../../data/creators/slp-source-resolve.js";
 import { slurpPlatformEventInstruction } from "../../../../../shared/src/slp/slp-platform-events.js";
-import { noodlerPublicIdentityFor, protectBoundedNoodlerGeneratedText } from "./slp-public-identity.js";
+import { slpCreatorPublicIdentityFor, protectBoundedCreatorGeneratedText } from "./slp-public-identity.js";
 import {
-  FormattedNoodlerGenerationRequest,
+  FormattedCreatorGenerationRequest,
   buildNoodlerPostMessages,
-  noodlerTitleFromContent,
-  parseNoodlerPost,
+  slpCreatorTitleFromContent,
+  parseCreatorPost,
 } from "./slp-post-prompt.js";
-export type { NoodlerContentFormat } from "../../base/prompting/slp-content-format.js";
+export type { SlpCreatorContentFormat } from "../../base/prompting/slp-content-format.js";
 
 export {
-  protectNoodlerGeneratedIdentity,
+  protectCreatorGeneratedIdentity,
   stageProfileContainsPublicIdentity,
   stageProfileContainsSourceDetails,
   normalizedDisclosureWords,
@@ -77,12 +77,12 @@ export {
   type PublicIdentity,
 } from "../../base/identity/slp-identity-protection.js";
 
-export type GeneratedNoodlerPostResult = {
+export type GeneratedCreatorPostResult = {
   post: SlpCreatorManagedPost;
-  imagePromptReview: NoodleImagePromptReviewItem | null;
+  imagePromptReview: SlpImagePromptReviewItem | null;
 };
 
-export type PreparedNoodlerPostResult = {
+export type PreparedCreatorPostResult = {
   title: string | null;
   content: string;
   imagePrompt: string | null;
@@ -95,11 +95,11 @@ export type PreparedNoodlerPostResult = {
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
-export type NoodlerPostGenerationInput = {
+export type SlpCreatorPostGenerationInput = {
   account: SlpAccount;
-  request: FormattedNoodlerGenerationRequest;
+  request: FormattedCreatorGenerationRequest;
   connection: GenerationConnection;
-  media?: NoodlerPostMediaUpload;
+  media?: SlpCreatorPostMediaUpload;
   prepareOnly?: boolean;
   /** Scheduler-owned automatic runs pass background so they yield to user generation. */
   admissionMode?: ConnectionAdmissionMode;
@@ -111,20 +111,20 @@ export type NoodlerPostGenerationInput = {
   allowStory?: boolean;
 };
 
-const NOODLER_POST_MAX_TOKENS = 2048;
+const SLP_CREATOR_POST_MAX_TOKENS = 2048;
 
-export async function generateNoodlerPost(
+export async function generateCreatorPost(
   db: DB,
-  input: NoodlerPostGenerationInput & { prepareOnly: true },
-): Promise<PreparedNoodlerPostResult>;
-export async function generateNoodlerPost(
+  input: SlpCreatorPostGenerationInput & { prepareOnly: true },
+): Promise<PreparedCreatorPostResult>;
+export async function generateCreatorPost(
   db: DB,
-  input: NoodlerPostGenerationInput & { prepareOnly?: false },
-): Promise<GeneratedNoodlerPostResult>;
-export async function generateNoodlerPost(
+  input: SlpCreatorPostGenerationInput & { prepareOnly?: false },
+): Promise<GeneratedCreatorPostResult>;
+export async function generateCreatorPost(
   db: DB,
-  input: NoodlerPostGenerationInput,
-): Promise<GeneratedNoodlerPostResult | PreparedNoodlerPostResult> {
+  input: SlpCreatorPostGenerationInput,
+): Promise<GeneratedCreatorPostResult | PreparedCreatorPostResult> {
   const noodle = createSlurpStorage(db);
   const { account } = input;
   const settings = await noodle.getSettings();
@@ -173,12 +173,12 @@ export async function generateNoodlerPost(
       )
     : undefined;
   // Derive the identity from the row already in hand; resolving it again would re-read it.
-  const publicIdentity = await noodlerPublicIdentityFor(db, linkedPublicAccount);
+  const publicIdentity = await slpCreatorPublicIdentityFor(db, linkedPublicAccount);
   // Read the card at post time rather than relying on the bio and stage voice frozen at setup, so
   // sharpening a character sharpens its Creator and existing Creators improve without a migration.
   // Concealed modes get the same seed the stage profile draft uses; disclosure limits what may be
   // said, not who this is.
-  const sourceCharacterContext = await resolveNoodlerCharacterCanon(db, linkedPublicAccount, disclosureMode);
+  const sourceCharacterContext = await resolveCreatorCharacterCanon(db, linkedPublicAccount, disclosureMode);
   // The Engine's own lorebook scan, as Noodle uses it: off until the player opts in, scoped to this
   // Creator's source, and read-only. Recent posts and the card give keyword entries something to match.
   // Lore is a nicety, so a failed scan costs the post its lore, never the post.
@@ -196,7 +196,7 @@ export async function generateNoodlerPost(
         {
           characterIds: linkedPublicAccount?.kind === "character" ? [linkedPublicAccount.entityId] : [],
           personaId: linkedPublicAccount?.kind === "persona" ? linkedPublicAccount.entityId : null,
-          tokenBudget: noodleLorebookTokenBudget(1),
+          tokenBudget: slpLorebookTokenBudget(1),
           generationTriggers: ["slurp"],
           previewOnly: true,
         },
@@ -289,7 +289,7 @@ export async function generateNoodlerPost(
   );
   const completionOptions = {
     model: input.connection.model,
-    ...noodleSamplingOptions(
+    ...slpSamplingOptions(
       resolveStoredChatOptions(input.connection.defaultParameters, input.connection.provider, input.connection.model),
       { temperature: 0.9, topP: 0.95 },
     ),
@@ -297,12 +297,12 @@ export async function generateNoodlerPost(
       provider: input.connection.provider as APIProvider,
       model: input.connection.model,
       // A long post needs the tokens to finish; a truncated response fails the JSON parse outright.
-      maxTokens: Math.max(NOODLER_POST_MAX_TOKENS, Math.ceil(settings.postMaxLength * 1.2)),
+      maxTokens: Math.max(SLP_CREATOR_POST_MAX_TOKENS, Math.ceil(settings.postMaxLength * 1.2)),
       maxTokensOverride: input.connection.maxTokensOverride,
     }),
     stream: false,
     debugMode,
-    responseFormat: noodleResponseFormat(input.connection.model, "noodler_post", {
+    responseFormat: slpResponseFormat(input.connection.model, "noodler_post", {
       allowImagePrompt: imagesEnabled,
       contentMaxLength: settings.postMaxLength,
     }),
@@ -317,7 +317,7 @@ export async function generateNoodlerPost(
   );
   let generated;
   try {
-    generated = parseNoodlerPost(content);
+    generated = parseCreatorPost(content);
   } catch {
     // Automatic posts used to get one attempt where a foreground post got two, so a scheduled post
     // failed outright on malformed output that a manual post recovered from — and the slot was lost
@@ -345,10 +345,10 @@ export async function generateNoodlerPost(
       "[debug/slurp] Model response attempt 2 received (%d characters); content is redacted.",
       content.length,
     );
-    generated = parseNoodlerPost(content);
+    generated = parseCreatorPost(content);
   }
 
-  const protectedContent = protectBoundedNoodlerGeneratedText(
+  const protectedContent = protectBoundedCreatorGeneratedText(
     generated.content,
     disclosureMode,
     publicIdentity,
@@ -359,12 +359,12 @@ export async function generateNoodlerPost(
     // Every format shows a title now. Weak models still drop the field, so fall back to the
     // opening of the post rather than failing a whole generation over a headline.
     title:
-      protectBoundedNoodlerGeneratedText(
+      protectBoundedCreatorGeneratedText(
         generated.title,
         disclosureMode,
         publicIdentity,
         SLP_CREATOR_POST_TITLE_MAX_LENGTH,
-      ) ?? noodlerTitleFromContent(protectedContent),
+      ) ?? slpCreatorTitleFromContent(protectedContent),
     content: protectedContent,
   };
 
@@ -380,7 +380,7 @@ export async function generateNoodlerPost(
   // joins the prompt before protection, so a chapter naming a real place is redacted the same way.
   const arcImageLine = slurpArcImageLine(project);
   const draftImagePrompt = imagesEnabled
-    ? protectNoodlerGeneratedIdentity(
+    ? protectCreatorGeneratedIdentity(
         generated.imagePrompt && arcImageLine ? `${generated.imagePrompt}\n${arcImageLine}` : generated.imagePrompt,
         disclosureMode,
         publicIdentity,
@@ -392,9 +392,9 @@ export async function generateNoodlerPost(
   const arcChoice = project && !project.pollPostId ? (project.choices[project.chapter] ?? null) : null;
   const arcPoll = arcChoice
     ? createSlpPoll({
-        question: protectBoundedNoodlerGeneratedText(arcChoice.question, disclosureMode, publicIdentity, 240),
+        question: protectBoundedCreatorGeneratedText(arcChoice.question, disclosureMode, publicIdentity, 240),
         options: arcChoice.options.map((option) =>
-          protectBoundedNoodlerGeneratedText(option.label, disclosureMode, publicIdentity, 120),
+          protectBoundedCreatorGeneratedText(option.label, disclosureMode, publicIdentity, 120),
         ),
       })
     : null;
@@ -414,7 +414,7 @@ export async function generateNoodlerPost(
       // Stamped at creation like a manual post, so a generated locked post honours the configured
       // unlock price and keeps it across refreshes and edits instead of falling back to 1.
       ...(input.request.access === "locked"
-        ? noodlerUnlockPriceMetadata(
+        ? slpCreatorUnlockPriceMetadata(
             (await createSlurpMessagesStorage(db).getCreatorMessaging(account.id)).unlockPrice ??
               settings.walletUnlockCost,
           )
@@ -465,7 +465,7 @@ export async function generateNoodlerPost(
 
   if (input.media) {
     const postId = newId();
-    const post = await persistNoodlerPostWithUploadedMedia(account.id, postId, input.media, (persistedMedia) =>
+    const post = await persistCreatorPostWithUploadedMedia(account.id, postId, input.media, (persistedMedia) =>
       persist({
         id: postId,
         imageUrl: persistedMedia.imageUrl,
@@ -494,11 +494,11 @@ export async function generateNoodlerPost(
 
   if (!draftImagePrompt) return { post: await persist(await galleryFallback()), imagePromptReview: null };
 
-  const noodlerImageConnectionId = await resolveNoodlerImageConnectionId(db, account.id);
+  const slpCreatorImageConnectionId = await resolveCreatorImageConnectionId(db, account.id);
   // Fall back to the default image connection when a creator's mapped override
   // was deleted (getWithKey returns null), rather than skipping image generation.
   const imageConnection =
-    (noodlerImageConnectionId ? await connections.getWithKey(noodlerImageConnectionId) : null) ??
+    (slpCreatorImageConnectionId ? await connections.getWithKey(slpCreatorImageConnectionId) : null) ??
     (await connections.getDefaultForImageGeneration());
   if (!imageConnection) {
     // A gallery image is a finished picture, so the post is not marked for the retry pass.
@@ -537,9 +537,9 @@ export async function generateNoodlerPost(
   // Manual Guide review path: persist a pending prompt and hand back a preview for the
   // reviewed-image confirmation route to claim and finalize later.
   if (input.request.reviewImagePromptsBeforeSend === true) {
-    let preview: Awaited<ReturnType<typeof generateNoodlerPostImage>>;
+    let preview: Awaited<ReturnType<typeof generateCreatorPostImage>>;
     try {
-      preview = await generateNoodlerPostImage({
+      preview = await generateCreatorPostImage({
         ...imageInput,
         previewOnly: true,
       });
@@ -572,9 +572,9 @@ export async function generateNoodlerPost(
 
   // Immediate generation: only a provider failure falls back to a text-only post. Persistence
   // failures propagate so a single run can never both persist an image post and a text fallback.
-  let image: Awaited<ReturnType<typeof generateNoodlerPostImage>>;
+  let image: Awaited<ReturnType<typeof generateCreatorPostImage>>;
   try {
-    image = await generateNoodlerPostImage({
+    image = await generateCreatorPostImage({
       ...imageInput,
       previewOnly: false,
     });
@@ -606,7 +606,7 @@ export async function generateNoodlerPost(
     const post = await persist({
       id: postId,
       imagePrompt: draftImagePrompt,
-      imageUrl: noodlerPostMediaUrl(postId),
+      imageUrl: slpCreatorPostMediaUrl(postId),
       metadata: { ...image.metadata, ...(storyVariation ? { noodlerPostType: "story" } : {}) },
     });
     return { post, imagePromptReview: null };

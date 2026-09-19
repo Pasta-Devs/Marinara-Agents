@@ -64,7 +64,7 @@ export const AMBIENT_SLP_ENTITY_IDS = [
   "random_user:moth-hour",
   "random_user:brine-index",
 ] as const;
-// Exact `Title:\n` + `\n\n` + `Body:\n` framing overhead from serializeNoodlerPostGuide.
+// Exact `Title:\n` + `\n\n` + `Body:\n` framing overhead from serializeCreatorPostGuide.
 export const SLP_CREATOR_POST_GUIDE_MAX_LENGTH =
   SLP_CREATOR_POST_TITLE_MAX_LENGTH + SLP_CREATOR_POST_CONTENT_MAX_LENGTH + 15;
 

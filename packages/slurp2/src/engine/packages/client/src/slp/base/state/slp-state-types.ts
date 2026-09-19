@@ -30,7 +30,7 @@ export type SlurpViewerScope = Omit<SlpCreatorViewerScope, "creators"> & {
     }
   >;
 };
-export type NoodleRefreshResult = {
+export type SlpRefreshResult = {
   bootstrap: SlpBootstrap;
   imagePromptReviewItems: ImagePromptReviewItem[];
 };

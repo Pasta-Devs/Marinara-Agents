@@ -16,8 +16,8 @@ import {
 } from "../../../../../shared/src/slp/slp-social.types.js";
 import {
   parseRecord,
-  emptyNoodleAccountSettings,
-  normalizeNoodleAccountSettings,
+  emptySlpAccountSettings,
+  normalizeSlpAccountSettings,
   parseRefreshAttempts,
   parseStringArray,
   parseAuthorSnapshot,
@@ -37,7 +37,7 @@ import type {
   PostUnlockRow,
 } from "../../modules/records/slp-storage-model.js";
 export function mapAccount(row: AccountRow): SlurpAccount {
-  const settings = normalizeNoodleAccountSettings(row.settings);
+  const settings = normalizeSlpAccountSettings(row.settings);
   return {
     id: row.id,
     kind: normalizeAccountKind(row.kind),
@@ -107,7 +107,7 @@ export function sourceAccountFromEntity(
     avatarUrl: typeof source.avatarPath === "string" ? source.avatarPath : null,
     avatarCrop: normalizeAvatarCrop(kind === "persona" ? source.avatarCrop : parseRecord(data.extensions).avatarCrop),
     invited: true,
-    settings: emptyNoodleAccountSettings(),
+    settings: emptySlpAccountSettings(),
     platform: "noodle",
     slurpSourceAccountId: null,
     createdAt: typeof source.createdAt === "string" ? source.createdAt : "",

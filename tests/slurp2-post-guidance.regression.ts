@@ -129,13 +129,13 @@ assert.equal(
 const images = slurp2Source(join(pkg, "server/src/services/slurp/slurp-images.service.ts"));
 assert.doesNotMatch(
   images,
-  /imagePrompt: attempts >= NOODLER_POST_IMAGE_RETRY_LIMIT \? null : undefined/u,
+  /imagePrompt: attempts >= SLP_CREATOR_POST_IMAGE_RETRY_LIMIT \? null : undefined/u,
   "spending the automatic retry budget must not delete the prompt the user redraws from",
 );
 const storage = slurp2Source(join(pkg, "server/src/services/storage/slurp.storage.ts"));
 assert.match(
   storage,
-  /noodlerPostImageRetryAttempts\(metadata\) >= NOODLER_POST_IMAGE_RETRY_LIMIT\) continue;/u,
+  /slpCreatorPostImageRetryAttempts\(metadata\) >= SLP_CREATOR_POST_IMAGE_RETRY_LIMIT\) continue;/u,
   "the automatic pass must stop on the attempt counter, which is what makes deleting the prompt unnecessary",
 );
 

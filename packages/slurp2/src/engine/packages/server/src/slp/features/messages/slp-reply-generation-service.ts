@@ -15,7 +15,7 @@ import { resolveBaseUrl } from "../../../services/generation/connection-base-url
 import { clampGenerationMaxOutputTokens } from "../../../services/generation/output-token-limits.js";
 import { resolveStoredChatOptions } from "../../../services/generation/generation-parameters.js";
 import { prepareSlurpPostImageContexts, slurpImageCaptioning } from "../../base/media/slp-post-image-context.js";
-import { noodleSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
+import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
 import { parseGameJsonish } from "../../../services/game/jsonish.js";
 import { requireModelAnswer } from "../../base/model/slp-model-answer.js";
 import { withConnectionFallbackProvider } from "../../../services/llm/connection-fallback-provider.js";
@@ -31,18 +31,18 @@ import { readSlurpDmReply } from "../../modules/messages/slp-dm-response.js";
 import type { SlurpMoodShift } from "../../modules/world/slp-mood.js";
 import {
   NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
-  noodlerIdentityInstruction,
-  protectBoundedNoodlerGeneratedText,
-  protectNoodlerGeneratedIdentity,
+  slpCreatorIdentityInstruction,
+  protectBoundedCreatorGeneratedText,
+  protectCreatorGeneratedIdentity,
   resolveNoodlerPublicIdentity,
   type PublicIdentity,
 } from "../feed/slp-feed-contract.js";
-import { noodleResponseFormat } from "../../base/prompting/slp-response-format.js";
+import { slpResponseFormat } from "../../base/prompting/slp-response-format.js";
 import { resolveSlurpCreatorScheduleContext } from "../creators/slp-creators-contract.js";
 import { createChatsStorage } from "../../../services/storage/chats.storage.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { SLURP_PLATFORM_CONTEXT } from "../../modules/prompting/slp-prompt.js";
-import { resolveNoodlerCharacterCanon } from "../../data/creators/slp-source-resolve.js";
+import { resolveCreatorCharacterCanon } from "../../data/creators/slp-source-resolve.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -53,11 +53,11 @@ type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof cre
  * population member can be the commenter without a fake account row being minted to satisfy a
  * type. Real accounts satisfy this structurally, so every existing caller is unaffected.
  */
-export type NoodlerReplyCommenter = { id: string; displayName: string; handle: string };
+export type SlpCreatorReplyCommenter = { id: string; displayName: string; handle: string };
 
-export function buildNoodlerCreatorReplyMessages(input: {
+export function buildCreatorReplyMessages(input: {
   creator: SlpAccount;
-  viewer: NoodlerReplyCommenter;
+  viewer: SlpCreatorReplyCommenter;
   post: SlpCreatorManagedPost;
   parent: SlpInteraction;
   disclosureMode: SlpIdentityDisclosure;
@@ -85,7 +85,7 @@ export function buildNoodlerCreatorReplyMessages(input: {
   promptBlocks?: SlurpPromptBlockOverrides;
 }): ChatMessage[] {
   const protect = (value: string | null | undefined) =>
-    protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
+    protectCreatorGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
   const system = composeSlurpPromptBlocks(
     "commentReply",
     [
@@ -108,7 +108,7 @@ export function buildNoodlerCreatorReplyMessages(input: {
       {
         id: "identity",
         kind: "required" as const,
-        text: noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
+        text: slpCreatorIdentityInstruction(input.disclosureMode, input.publicIdentity),
       },
       {
         id: "style",
@@ -169,10 +169,10 @@ export function buildNoodlerCreatorReplyMessages(input: {
   ];
 }
 
-export async function generateNoodlerCreatorReply(input: {
+export async function generateCreatorReply(input: {
   db: DB;
   creator: SlpAccount;
-  viewer: NoodlerReplyCommenter;
+  viewer: SlpCreatorReplyCommenter;
   post: SlpCreatorManagedPost;
   parent: SlpInteraction;
   connection: GenerationConnection;
@@ -203,7 +203,7 @@ export async function generateNoodlerCreatorReply(input: {
   const publicIdentity = await resolveNoodlerPublicIdentity(input.db, input.creator);
   const settings = await createSlurpStorage(input.db).getSettings();
   const source = await createSlurpStorage(input.db).resolveAccountSource(input.creator);
-  const characterCanon = await resolveNoodlerCharacterCanon(input.db, source, disclosureMode);
+  const characterCanon = await resolveCreatorCharacterCanon(input.db, source, disclosureMode);
   const scheduleContext = source
     ? await resolveSlurpCreatorScheduleContext(createCharactersStorage(input.db), source, undefined, new Date())
     : undefined;
@@ -220,7 +220,7 @@ export async function generateNoodlerCreatorReply(input: {
     allowLocked: input.allowLockedImageContext === true,
     debugMode: input.debugMode,
   });
-  const messages = buildNoodlerCreatorReplyMessages({
+  const messages = buildCreatorReplyMessages({
     ...input,
     disclosureMode,
     publicIdentity,
@@ -237,7 +237,7 @@ export async function generateNoodlerCreatorReply(input: {
   const debugMode = input.debugMode === true || isDebugAgentsEnabled();
   const options = {
     model: input.connection.model,
-    ...noodleSamplingOptions(
+    ...slpSamplingOptions(
       resolveStoredChatOptions(input.connection.defaultParameters, input.connection.provider, input.connection.model),
       { temperature: 0.9, topP: 0.95 },
     ),
@@ -249,7 +249,7 @@ export async function generateNoodlerCreatorReply(input: {
     }),
     stream: false,
     debugMode,
-    responseFormat: noodleResponseFormat(input.connection.model, "noodler_dm"),
+    responseFormat: slpResponseFormat(input.connection.model, "noodler_dm"),
   } as const;
   logDebugOverride(
     debugMode,
@@ -265,7 +265,7 @@ export async function generateNoodlerCreatorReply(input: {
   );
   const parsed = parseGameJsonish(requireModelAnswer(content, "a creator reply"));
   const generated = readSlurpDmReply(Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed);
-  const protectedContent = protectBoundedNoodlerGeneratedText(
+  const protectedContent = protectBoundedCreatorGeneratedText(
     generated.content,
     disclosureMode,
     publicIdentity,

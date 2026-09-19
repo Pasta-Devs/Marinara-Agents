@@ -16,7 +16,7 @@ function shuffleWith<T>(items: readonly T[], random: RandomSource): T[] {
   return next;
 }
 
-export function collectNoodlePriorityAccountIds(input: {
+export function collectSlpPriorityAccountIds(input: {
   accounts: SlpAccount[];
   posts: SlpPost[];
   interactions: SlpInteraction[];
@@ -52,7 +52,7 @@ export function collectNoodlePriorityAccountIds(input: {
   return priority;
 }
 
-export function chooseNoodleParticipantAccounts(input: {
+export function chooseSlpParticipantAccounts(input: {
   accounts: SlpAccount[];
   settings: SlurpSettings;
   selectedGroupCharacterIds: ReadonlySet<string>;

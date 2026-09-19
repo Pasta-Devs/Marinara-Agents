@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { slurp2Source } from "./slurp2-source";
 
 // Slurp2 shipped leaked "Noodle"/"NoodleR" branding in error messages, prompts, and labels.
-// Identifiers (noodleAccounts, /noodler routes, ui.noodle.* keys) stay; prose does not.
+// Identifiers (slpAccounts, /noodler routes, ui.noodle.* keys) stay; prose does not.
 const engineRoot = "packages/slurp2/src/engine/packages";
 const localeRoot = join(engineRoot, "client/src/slp/locales");
 

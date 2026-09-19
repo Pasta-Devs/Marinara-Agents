@@ -7,8 +7,8 @@ import {
   SlurpEarnings,
   SlurpEarningsEntryKind,
 } from "../../modules/economy/slp-earnings.js";
-import { noodlePosts, noodlePostUnlocks } from "../../../db/schema/slurp.js";
-import { noodleRefreshSchedulerStatus } from "../../modules/feed/slp-refresh-schedule.js";
+import { slpPosts, slpPostUnlocks } from "../../../db/schema/slurp.js";
+import { slpRefreshSchedulerStatus } from "../../modules/feed/slp-refresh-schedule.js";
 import type { SlurpBootstrap } from "../../modules/settings/slp-settings.js";
 import { mapManagedPost, mapPostUnlock } from "../host/slp-storage-mappers.js";
 import type { SlurpStorageContext } from "../host/slp-storage-context.js";
@@ -46,9 +46,9 @@ export function createEconomyTailStorage1(context: SlurpStorageContext) {
     async listPostsByProject(projectId: string, limit = 8): Promise<SlpCreatorManagedPost[]> {
       const rows = await db
         .select()
-        .from(noodlePosts)
-        .where(eq(noodlePosts.projectId, projectId))
-        .orderBy(desc(noodlePosts.createdAt))
+        .from(slpPosts)
+        .where(eq(slpPosts.projectId, projectId))
+        .orderBy(desc(slpPosts.createdAt))
         .limit(Math.max(1, Math.min(50, Math.floor(limit))));
       return rows.map(mapManagedPost);
     },
@@ -69,15 +69,12 @@ export function createEconomyTailStorage1(context: SlurpStorageContext) {
       await run;
     },
     async listPostUnlocksForViewer(viewerAccountId: string): Promise<SlpPostUnlock[]> {
-      const rows = await db
-        .select()
-        .from(noodlePostUnlocks)
-        .where(eq(noodlePostUnlocks.viewerAccountId, viewerAccountId));
+      const rows = await db.select().from(slpPostUnlocks).where(eq(slpPostUnlocks.viewerAccountId, viewerAccountId));
       return rows.map(mapPostUnlock);
     },
     async bootstrap(): Promise<SlurpBootstrap> {
       const posts = await this.listPosts({ limit: 160 });
-      const scheduler = noodleRefreshSchedulerStatus(await this.ensureRefreshSchedule(new Date()), new Date());
+      const scheduler = slpRefreshSchedulerStatus(await this.ensureRefreshSchedule(new Date()), new Date());
       return {
         settings: await this.getSettings(),
         scheduler,
