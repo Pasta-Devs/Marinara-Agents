@@ -111,6 +111,40 @@ export default tseslint.config(
     },
   },
   {
+    // Quartermaster's client modules are concatenated into one IIFE by
+    // scripts/build-quartermaster-package.mjs, so they share a scope that
+    // per-file linting cannot see. QM is defined in 00-api.js; the
+    // QM_*/QM_COLOR_* constants are defined in 05-state.js and used by
+    // sibling modules; QM_ICON_SVG is defined in 90-element.js and reused by
+    // 15-panel.js for the tracker-panel header's icon slot.
+    files: ["packages/quartermaster/src/**/*.js"],
+    languageOptions: {
+      globals: {
+        QM: "readonly",
+        QM_OWNER_ID: "readonly",
+        QM_EQUIP_SLOTS: "readonly",
+        QM_DEFAULT_ITEM_IMAGE_PROMPT_TEMPLATE: "readonly",
+        QM_DEFAULT_OUTFIT_PORTRAIT_PROMPT_TEMPLATE: "readonly",
+        QM_SLOT_GROUPS: "readonly",
+        QM_SLOT_LABELS: "readonly",
+        QM_PORTRAIT_LAYOUT: "readonly",
+        QM_APPEARANCE_FEED_OPTIONS: "readonly",
+        QM_COLOR_DANGER: "readonly",
+        QM_COLOR_DANGER_FG: "readonly",
+        QM_COLOR_SUCCESS: "readonly",
+        QM_COLOR_SUCCESS_FG: "readonly",
+        QM_COLOR_WARNING: "readonly",
+        QM_ICON_SVG: "readonly",
+        QM_OVERLAY_TOP_SLOTS: "readonly",
+        QM_OVERLAY_BOTTOM_SLOTS: "readonly",
+        QM_OVERLAY_SLOT_PAIRS: "readonly",
+        QM_OVERLAY_SLOT_LABELS: "readonly",
+        QM_OVERLAY_SLOT_LABEL_LINES: "readonly",
+        qmLocationLabel: "readonly",
+      },
+    },
+  },
+  {
     files: ["scripts/validate-pr-triage.mjs"],
     rules: {
       "no-regex-spaces": "off",
