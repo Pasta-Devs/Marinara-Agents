@@ -1,7 +1,7 @@
 # 5e (SRD 5.1)
 
 ## 0.3.0 — 2026-09-19
-- Battles now start from your character sheet. Your hit points and spell slots go into the fight, and when it ends the damage you took and the slots you spent are written back.
+- Battles now start from your character sheet. Your hit points and spell slots go into the fight, and when it ends the damage you took and the slots you spent are written back. Pact Magic slots do not transfer: their level follows the character, which the battle block cannot say yet.
 - Your prepared spells and the weapons you picked from the catalogs show up as skills. Cantrips come too, because they are cast without being prepared. A row you typed by hand carries no numbers, so it stays out.
 - Health is carried as a share of your maximum, so a character at half hit points starts the fight at half of the health bar.
 - The damage is still Marinara's own combat math. Attack rolls, saving throws and concentration are not applied, so this is not a 5e combat system.
