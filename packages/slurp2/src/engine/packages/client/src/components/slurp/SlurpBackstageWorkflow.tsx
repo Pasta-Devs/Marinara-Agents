@@ -29,7 +29,7 @@ import { cn } from "../../lib/utils";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { formatClockTime, formatDateTime } from "./SlurpDateTime";
+import { formatClockTime, formatDateTime } from "../../slp/base/ui/slp-date-time";
 import {
   useRerollAmbientProfiles,
   useSlurpAmbientProfiles,
@@ -47,7 +47,7 @@ import type { SlurpArcType } from "../../slp/features/projects/slp-projects-cont
 import { useGenerateSlurpArcType } from "../../slp/features/projects/slp-projects-hooks";
 import { useResetSlurpArcType } from "../../slp/features/settings/slp-settings-hooks";
 import { Modal } from "../ui/Modal";
-import { SLURP_SETTINGS_SECTIONS } from "./slurp-navigation.types";
+import { SLURP_SETTINGS_SECTIONS } from "../../slp/base/navigation/slp-navigation.types";
 import { type NoodlerManagedStageProfile } from "@marinara-engine/shared";
 import { Avatar, SLURP_ROW_ACTIVE_CLASS, SLURP_ROW_CLASS } from "./SlurpShell";
 

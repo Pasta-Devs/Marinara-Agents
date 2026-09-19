@@ -1,4 +1,4 @@
-import { cn } from "../../lib/utils";
+import { cn } from "../../../lib/utils";
 
 /** Quiet Slurp branding for empty media surfaces. The paths read as waves or loose spaghetti. */
 export function SlurpEmptyArtwork({ className }: { className?: string }) {

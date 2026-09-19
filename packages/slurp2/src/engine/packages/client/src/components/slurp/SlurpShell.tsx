@@ -35,7 +35,7 @@ import { useDialogFocusScope } from "../../hooks/use-dialog-focus-scope";
 import { useSlurpMediaSrc } from "../../slp/base/media/slp-media-src";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { SlurpCoinAmount } from "../../slp/modules/coin/SlpCoin";
-import { SLURP_LOGO_SRC } from "./slurp-logo";
+import { SLURP_LOGO_SRC } from "../../slp/base/chrome/slp-logo";
 
 export const NOODLE_BLUE = "#7EA7FF";
 export const NOODLE_PINK = "#FF7EC1";

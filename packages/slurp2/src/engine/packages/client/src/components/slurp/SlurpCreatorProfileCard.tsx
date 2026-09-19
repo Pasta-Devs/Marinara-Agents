@@ -3,7 +3,7 @@ import type { AvatarCrop } from "@marinara-engine/shared";
 import { cn } from "../../lib/utils";
 import { useNearViewportSlurpMediaSrc } from "../../slp/base/media/slp-media-src";
 import { ProfileInitial } from "./SlurpShell";
-import { SlurpEmptyArtwork } from "./SlurpEmptyArtwork";
+import { SlurpEmptyArtwork } from "../../slp/base/chrome/SlpEmptyArtwork";
 import { Check, Loader2 } from "lucide-react";
 import { DEFAULT_SLURP_SUBSCRIPTION_PRICE, SlurpCoinAmount } from "../../slp/modules/coin/SlpCoin";
 import type { SlurpDiscoverLayout } from "../../slp/features/discovery/slp-discovery";

@@ -624,6 +624,30 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   "packages/server/src/services/slurp/slurp-garnish-sync.service.ts": [
     "packages/server/src/slp/features/ads/slp-garnish-sync-service.ts",
   ],
+  // Slice 10 moved the remaining `components/slurp/` leaf files into the slp roots.
+  "packages/client/src/components/slurp/slurp-logo.ts": ["packages/client/src/slp/base/chrome/slp-logo.ts"],
+  "packages/client/src/components/slurp/slurp-gunterlie-avatar.ts": [
+    "packages/client/src/slp/base/chrome/slp-gunterlie-avatar.ts",
+  ],
+  "packages/client/src/components/slurp/SlurpEmptyArtwork.tsx": [
+    "packages/client/src/slp/base/chrome/SlpEmptyArtwork.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpSparkleVeil.tsx": [
+    "packages/client/src/slp/base/chrome/SlpSparkleVeil.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpDateTime.ts": ["packages/client/src/slp/base/ui/slp-date-time.ts"],
+  "packages/client/src/components/slurp/slurp-navigation.types.ts": [
+    "packages/client/src/slp/base/navigation/slp-navigation.types.ts",
+  ],
+  "packages/client/src/components/slurp/SlurpImageComposer.tsx": [
+    "packages/client/src/slp/base/media/SlpImageComposer.tsx",
+  ],
+  "packages/client/src/components/slurp/PostImageCropEditor.tsx": [
+    "packages/client/src/slp/base/media/SlpPostImageCropEditor.tsx",
+  ],
+  "packages/client/src/components/slurp/slurp-creator-status.ts": [
+    "packages/client/src/slp/modules/creator/slp-creator-status.ts",
+  ],
   "packages/server/src/services/slurp/slurp-post-guidance.storage.ts": [
     "packages/server/src/slp/data/settings/slp-post-guidance-storage.ts",
   ],

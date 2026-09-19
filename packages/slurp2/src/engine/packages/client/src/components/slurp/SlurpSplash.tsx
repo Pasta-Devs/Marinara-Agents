@@ -4,7 +4,7 @@
 import { AlertTriangle, ChevronDown, ExternalLink, Wrench } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { GUNTERLIE_AVATAR_SRC } from "./slurp-gunterlie-avatar";
+import { GUNTERLIE_AVATAR_SRC } from "../../slp/base/chrome/slp-gunterlie-avatar";
 import { getNoodleAccentStyle, NOODLE_PINK } from "./SlurpShell";
 import { getSlurp2UnseenReleases, SLURP2_VERSION } from "./slurp2-release";
 

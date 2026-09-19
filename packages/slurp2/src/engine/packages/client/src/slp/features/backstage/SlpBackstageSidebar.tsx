@@ -2,7 +2,7 @@ import { ArrowLeft } from "lucide-react";
 
 import { useTranslation } from "react-i18next";
 
-import { type SlurpNavigationState } from "../../../components/slurp/slurp-navigation.types";
+import { type SlurpNavigationState } from "../../base/navigation/slp-navigation.types";
 
 import {
   SLP_BACKSTAGE_DEFAULT_TARGET,

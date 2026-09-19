@@ -4,7 +4,7 @@ import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
 import { Field, SettingsGroup, Toggle } from "../../modules/settings/SlpSettingsControls";
 import { SlurpCreatorBulkEdit } from "../../../components/slurp/SlurpCreatorBulkEdit";
 import { toast } from "sonner";
-import { formatDateTime } from "../../../components/slurp/SlurpDateTime";
+import { formatDateTime } from "../../base/ui/slp-date-time";
 import { showConfirmDialog } from "../../../lib/app-dialogs";
 import { Avatar } from "../../../components/slurp/SlurpShell";
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { SLURP_LOGO_SRC } from "../packages/slurp2/src/engine/packages/client/src/components/slurp/slurp-logo";
+import { SLURP_LOGO_SRC } from "../packages/slurp2/src/engine/packages/client/src/slp/base/chrome/slp-logo";
 
 // The header logo used to load through the package-asset route, which only answers while the Engine
 // lists this exact package as ready. 0.0.1 even pointed it at Slurp Legacy's package. Inlined, it

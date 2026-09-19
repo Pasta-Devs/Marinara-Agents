@@ -45,7 +45,7 @@ import type { ChatImage } from "../../hooks/use-gallery";
 import { useNearViewportSlurpMediaSrc } from "../../slp/base/media/slp-media-src";
 import { Modal } from "../ui/Modal";
 import { Avatar, ProfileInitial, SlurpMediaImg } from "./SlurpShell";
-import { formatTime } from "./SlurpDateTime";
+import { formatTime } from "../../slp/base/ui/slp-date-time";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import {
   countInteractions,
@@ -71,8 +71,8 @@ import {
 import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
 import { SlurpLikedBy } from "./SlurpFanCard";
 import { NoodlePollComposer } from "../../slp/modules/poll/SlpPollComposer";
-import { PostImageFrame } from "./PostImageCropEditor";
-import { SlurpCelebrationRing, SlurpSparkleVeil } from "./SlurpSparkleVeil";
+import { PostImageFrame } from "../../slp/base/media/SlpPostImageCropEditor";
+import { SlurpCelebrationRing, SlurpSparkleVeil } from "../../slp/base/chrome/SlpSparkleVeil";
 import { SlurpCoin, SlurpCoinBurst } from "../../slp/modules/coin/SlpCoin";
 
 const SLURP_FEED_MEDIA_RATIO_CLASS = "aspect-[4/3] sm:aspect-[16/10]";

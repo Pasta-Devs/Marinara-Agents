@@ -22,7 +22,7 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 - Last updated: 2026-09-19
 - Updated by: Slice 10 implementation agent
 - Overall state: Slice 10 in progress
-- Active slice: 10 (final architecture and package proof), issue #ISSUE, branch
+- Active slice: 10 (final architecture and package proof), issue #939, branch
   `slurp2-slice10-final-architecture` from `origin/modular-simping` `14d27b4d` (the Slice 9 merge
   commit).
 - Slice 9 merge gate: **satisfied.** PR #937 is `MERGED` into `modular-simping` at `14d27b4d`.
@@ -32,7 +32,7 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 - Staging integration: `git rev-list --count origin/modular-simping..origin/staging` = **0**.
   `modular-simping` already contains every `origin/staging` commit, so no merge was needed and none
   was made. No commit was pushed directly to `modular-simping`.
-- Pull request: draft PR #PR against `modular-simping`, assigned to `Gunterlie`. Issue #ISSUE is
+- Pull request: draft PR #940 against `modular-simping`, assigned to `Gunterlie`. Issue #939 is
   assigned to `Gunterlie`. The PR stays draft; the implementation agent does not merge it.
 - Package version: `0.0.32` before this slice; this slice ships `0.0.33` (integration-only;
   `staging` stays at `0.0.22` until the final `0.1.0` release PR).

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Crop, Move, RotateCcw } from "lucide-react";
 import type { NoodlePostImageCrop } from "@marinara-engine/shared";
-import { cn } from "../../lib/utils";
+import { cn } from "../../../lib/utils";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import { useSlurpMediaSrc } from "../../slp/base/media/slp-media-src";
+import { useSlurpMediaSrc } from "./slp-media-src";
 
 type CropAspect = "original" | "square" | "portrait" | "landscape";
 

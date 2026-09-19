@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { slurpCreatorStatus } from "../packages/slurp2/src/engine/packages/client/src/components/slurp/slurp-creator-status.js";
+import { slurpCreatorStatus } from "../packages/slurp2/src/engine/packages/client/src/slp/modules/creator/slp-creator-status.js";
 import { slurp2Source } from "./slurp2-source";
 
 const read = (path: string) => slurp2Source(path);

@@ -180,7 +180,7 @@ import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
 import { SlurpArcTimelineCard, SlurpProjectsPanel } from "./SlurpProjectsPanel";
 import { SlurpFanCard } from "./SlurpFanCard";
 import { LockedSlurpPostCard, SlurpCreatorPostCard } from "./SlurpCreatorPostCard";
-import { SlurpSparkleVeil } from "./SlurpSparkleVeil";
+import { SlurpSparkleVeil } from "../../slp/base/chrome/SlpSparkleVeil";
 import {
   DEFAULT_SLURP_SUBSCRIPTION_PRICE,
   SlurpCoin,
@@ -192,7 +192,7 @@ import { useNearViewportSlurpMediaSrc, useSlurpMediaSrc } from "../../slp/base/m
 import { SlurpOnboardingWizard } from "./SlurpOnboardingPanel";
 import { SlurpAgeGate, SlurpConfetti } from "./SlurpAgeGate";
 import { SlurpSplash, slurp2SplashPending } from "./SlurpSplash";
-import { slurpCreatorStatus } from "./slurp-creator-status";
+import { slurpCreatorStatus } from "../../slp/modules/creator/slp-creator-status";
 import {
   Avatar,
   getNoodleAccentStyle,
@@ -211,14 +211,14 @@ import { BroadcastPanel, SlurpMessagesView } from "./SlurpMessages";
 import { SlpBackstageShell } from "../../slp/app/backstage/SlpBackstageShell";
 import { SlpBackstageSidebar } from "../../slp/features/backstage/SlpBackstageSidebar";
 import { confirmLeaveSlurpBackstage } from "../../slp/features/backstage/SlpBackstageControls";
-import { NoodleImageComposer } from "./SlurpImageComposer";
+import { NoodleImageComposer } from "../../slp/base/media/SlpImageComposer";
 import { NoodlePollComposer } from "../../slp/modules/poll/SlpPollComposer";
 import { SlpStoryTile } from "../../slp/modules/story/SlpStoryTile";
-import { PostImageCropEditor, PostImageFrame } from "./PostImageCropEditor";
+import { PostImageCropEditor, PostImageFrame } from "../../slp/base/media/SlpPostImageCropEditor";
 import { ConversationMediaPickerPanel, type ConversationMediaPickerTabId } from "../chat/ConversationMediaPickerPanel";
 import { HelpTooltip } from "../ui/HelpTooltip";
 import { Modal } from "../ui/Modal";
-import type { SlurpNavigationState } from "./slurp-navigation.types";
+import type { SlurpNavigationState } from "../../slp/base/navigation/slp-navigation.types";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { SlurpInlineAd, SlurpInlineAdTile } from "./SlurpInlineAd";
 import { SlurpCreatorProfileCard } from "./SlurpCreatorProfileCard";
@@ -241,7 +241,7 @@ import {
   type SlurpDiscoverSort,
 } from "../../slp/features/discovery/slp-discovery";
 import type { SlurpDiscoveryGender } from "../../slp/base/state/slp-state-types";
-import { formatTime } from "./SlurpDateTime";
+import { formatTime } from "../../slp/base/ui/slp-date-time";
 
 interface SlurpHomeProps {
   navigation: Extract<SlurpNavigationState, { mode: "creator" }>;
