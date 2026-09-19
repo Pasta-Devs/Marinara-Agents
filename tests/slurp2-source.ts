@@ -14,10 +14,11 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   "packages/client/src/components/slurp/SlurpHome.tsx": [
     "packages/client/src/slp/app/SlpRouter.tsx",
     "packages/client/src/slp/app/SlpApp.tsx",
-    "packages/client/src/slp/app/SlpHomeHost.tsx",
+    // Original order: the Home state and its actions come before the JSX that renders them.
     "packages/client/src/slp/app/slp-home-state.ts",
-    "packages/client/src/slp/app/slp-home-actions.ts",
     "packages/client/src/slp/app/slp-home-post-actions.ts",
+    "packages/client/src/slp/app/slp-home-actions.ts",
+    "packages/client/src/slp/app/SlpHomeHost.tsx",
     "packages/client/src/slp/app/screens/SlpHomeCreatorFlow.tsx",
     "packages/client/src/slp/app/screens/SlpHomeDestinations.tsx",
     "packages/client/src/slp/app/screens/SlpHomeFeedRail.tsx",

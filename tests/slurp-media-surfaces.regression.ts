@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { slurp2Source } from "./slurp2-source";
 
-const postCard = readFileSync(
+const postCard = slurp2Source(
   "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpCreatorPostCard.tsx",
-  "utf8",
 );
 const home = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
 

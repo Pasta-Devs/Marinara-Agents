@@ -216,8 +216,14 @@ export function noodlerGoalOfProfile(
 // Profile View
 // ---------------------------------------------------------------------------
 
-export function StageProfileView(props: StageProfileViewProps) {
-  const model = useStageProfileViewModel(props);
+export function StageProfileView({
+  viewerAccount,
+  viewerActorAccount,
+  slurpSettings,
+  postCardCtx,
+  ...rest
+}: StageProfileViewProps) {
+  const model = useStageProfileViewModel({ viewerAccount, viewerActorAccount, slurpSettings, postCardCtx, ...rest });
   const {
     profile,
     onProfileChange,
@@ -225,7 +231,6 @@ export function StageProfileView(props: StageProfileViewProps) {
     onSaveEdit,
     profileSavePending,
     posts,
-    postCardCtx,
     draft,
     onDraftChange,
     onClearDraft,

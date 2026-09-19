@@ -210,24 +210,14 @@ const slurpOwnedSourcePaths = [
   "packages/server/src/services/slurp",
   "packages/server/src/services/storage/slurp.storage.ts",
 ];
-// Not spread from slurpOwnedSourcePaths: the remaster's files move into its slp roots.
+// Must equal slurp2OwnedSourcePaths in the builder: the three slp roots and three permanent exceptions.
 const slurp2OwnedSourcePaths = [
-  ...slurpOwnedSourcePaths.filter(
-    (path) =>
-      ![
-        "packages/client/src/slurp-package-entry.tsx",
-        "packages/client/src/hooks/use-slurp.ts",
-        "packages/client/src/stores/slurp-package.store.ts",
-        "packages/server/src/routes/slurp.routes.ts",
-        "packages/server/src/services/storage/slurp.storage.ts",
-        "packages/server/src/services/slurp",
-      ].includes(path) && !path.startsWith("packages/server/src/services/storage/slurp-"),
-  ),
   "packages/client/src/slp",
   "packages/server/src/slp",
   "packages/shared/src/slp",
-  "packages/server/src/slp",
+  "packages/client/src/lib/api-client.ts",
   "packages/server/src/services/garnish-ads",
+  "packages/server/src/db/schema/slurp.ts",
 ];
 for (const [packageId, ownedSourcePaths] of [
   ["slurp", slurpOwnedSourcePaths],
@@ -245,7 +235,11 @@ for (const [packageId, ownedSourcePaths] of [
 // ten stale copies of package-owned files survived in sources/engine long after the split. A
 // captured copy is worse than dead weight now: the remaster's slurp2_* table names would become
 // build input for Noodle, and tests that read the snapshot would check the wrong tree.
+// api-client.ts is the one owned path that overrides a generic Engine file, so the snapshot keeps
+// the Engine's own copy of it.
+const slurp2EngineOverrides = new Set(["packages/client/src/lib/api-client.ts"]);
 for (const relativePath of ["packages/server/src/db/schema/slurp.ts", ...slurp2OwnedSourcePaths]) {
+  if (slurp2EngineOverrides.has(relativePath)) continue;
   if (existsSync(join(repoRoot, "sources/engine", relativePath))) {
     throw new Error(`Slurp source must not be captured as generic Engine material: ${relativePath}`);
   }

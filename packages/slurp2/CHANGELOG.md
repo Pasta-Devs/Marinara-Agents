@@ -1,5 +1,11 @@
 # Slurp Remastered release notes
 
+## 0.0.34 — 2026-09-19
+
+- No visible changes. Moved the last seven Slurp client components into the slp namespace and
+  split them below the size ceiling, and made the package typecheck report missing and duplicate
+  exports.
+
 ## 0.0.33 — 2026-09-19
 
 - No visible changes. Moved the remaining Slurp client components into the slp namespace, split

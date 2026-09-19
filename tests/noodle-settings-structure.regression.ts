@@ -13,7 +13,8 @@ async function main() {
   ]);
   assert.doesNotMatch(noodleHome, /enableNoodler|NoodlerPublishingSettings|SlurpAgeGate/u);
   assert.match(slurpSettings, /useSlurpSettings|useUpdateSlurpSettings/u);
-  assert.match(slurpHome, /SlurpOnboardingPanel/u);
+  // Slice 11 renamed the module to SlpOnboardingPanel; Home must still wire it.
+  assert.match(slurpHome, /\/SlpOnboardingPanel"/u);
   assert.match(slurpTypes, /mode: "creator-settings"/u);
   assert.match(slurpTypes, /section\?: SlurpBackstageSection;/u);
   assert.match(slurpTypes, /target\?: SlurpBackstageTarget;/u);
