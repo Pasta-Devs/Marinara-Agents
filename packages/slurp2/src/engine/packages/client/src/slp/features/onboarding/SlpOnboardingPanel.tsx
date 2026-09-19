@@ -53,26 +53,27 @@ import {
   type SlurpActivityPreset,
 } from "../../modules/creator/slp-activity-presets";
 import { LockedSlurpPostCard } from "../../modules/post/SlpLockedPostCard";
+import { useSlurpOnboardingWizardModel } from "./slp-onboarding-wizard-model";
 
-type Step = 1 | 2 | 3 | 4 | 5;
+export type Step = 1 | 2 | 3 | 4 | 5;
 /** The teaching screens that run ahead of the numbered steps on first run. */
-type Intro = 0 | 1 | 2 | 3 | 4 | null;
-type SetupLane = "easy" | "customize" | null;
-const LAST_INTRO = 4;
+export type Intro = 0 | 1 | 2 | 3 | 4 | null;
+export type SetupLane = "easy" | "customize" | null;
+export const LAST_INTRO = 4;
 /** "creationFailed" is local to the wizard: the shared resolver reports it as "failed", which
  * reads as a first-post problem even when no creator was ever set up. */
-type CompletionKind = NoodlerOnboardingCompletion | "creationFailed";
+export type CompletionKind = NoodlerOnboardingCompletion | "creationFailed";
 
-const clampPostsPerDay = (raw: string) =>
+export const clampPostsPerDay = (raw: string) =>
   Math.max(1, Math.min(NOODLER_POSTS_PER_DAY_MAX, Math.round(Number(raw)) || 1));
 
 const DISCLOSURES: NoodleIdentityDisclosure[] = ["open", "hinted"];
-const DEFAULT_ACTIVITY_PATCH = slurpActivityPresetPatch(SLURP_DEFAULT_ACTIVITY_PRESET);
-const DEFAULT_POSTS_PER_DAY = DEFAULT_ACTIVITY_PATCH.postsPerDay!;
+export const DEFAULT_ACTIVITY_PATCH = slurpActivityPresetPatch(SLURP_DEFAULT_ACTIVITY_PRESET);
+export const DEFAULT_POSTS_PER_DAY = DEFAULT_ACTIVITY_PATCH.postsPerDay!;
 
 // The intro uses the real locked post card for a staged walkthrough. Mari is demonstrating
 // the interaction, so the example stays independent from the identity choice above.
-const DEMO_PROFILE: NoodlerStageProfile = {
+export const DEMO_PROFILE: NoodlerStageProfile = {
   id: "onboarding-demo",
   sourceAccountId: null,
   handle: "professor_mari",
@@ -100,7 +101,7 @@ const DEMO_POST: Pick<NoodlerPostView, "id" | "access" | "createdAt" | "title" |
   replyCount: 3,
 };
 
-interface WizardProps {
+export interface WizardProps {
   open: boolean;
   selectionOnly?: boolean;
   onClose: () => void;
@@ -109,388 +110,89 @@ interface WizardProps {
   onSkipped?: () => void;
 }
 
-function disclosureLabel(value: NoodleIdentityDisclosure, t: ReturnType<typeof useUiTranslation>["t"]) {
+export function disclosureLabel(value: NoodleIdentityDisclosure, t: ReturnType<typeof useUiTranslation>["t"]) {
   return t(`ui.noodle.noodlerwizard.disclosure.${value}.title`);
 }
 
-export function SlurpOnboardingWizard({
-  open,
-  selectionOnly = false,
-  onClose,
-  onComplete,
-  onSeeFeed,
-  onSkipped,
-}: WizardProps) {
-  const { t } = useUiTranslation();
-  const eligible = useNoodlerEligibleAccounts("", "all", open);
-  const bulkCreate = useBulkCreateNoodlerStageProfiles();
-  const refreshTargeted = useRefreshTargetedNoodlerCreatorsNow();
-  const enqueueFirstPosts = useEnqueueNoodlerFirstPosts();
-  const assignImageConnections = useUpdateSlurpConnectionsForCreators();
-  const updateSlurpSettings = useUpdateSlurpSettings();
-  const connectionsQuery = useSlurpConnections(open);
-  const settingsQuery = useSlurpSettings();
-  const accounts = useMemo(() => eligible.data?.pages.flatMap((page) => page.items) ?? [], [eligible.data?.pages]);
-  const [step, setStep] = useState<Step>(1);
-  const [intro, setIntro] = useState<Intro>(selectionOnly ? null : 0);
-  const [setupLane, setSetupLane] = useState<SetupLane>(selectionOnly ? "easy" : null);
-  const [postExplored, setPostExplored] = useState(false);
-  const [activityChoice, setActivityChoice] = useState<SlurpActivityPreset | null>(SLURP_DEFAULT_ACTIVITY_PRESET);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [selectionInitialized, setSelectionInitialized] = useState(false);
-  const [disclosure, setDisclosure] = useState<NoodleIdentityDisclosure>("open");
-  const [exceptions, setExceptions] = useState<Record<string, NoodleIdentityDisclosure>>({});
-  const [autoPostingEnabled, setAutoPostingEnabled] = useState(true);
-  const [postsPerDay, setPostsPerDay] = useState(DEFAULT_POSTS_PER_DAY);
-  // Typed value kept apart from the committed one: clamping per keystroke made the first digit
-  // of a two-digit pace snap back to 1, and the field impossible to clear.
-  const [postsPerDayDraft, setPostsPerDayDraft] = useState(String(DEFAULT_POSTS_PER_DAY));
-  const [nightQuiet, setNightQuiet] = useState(true);
-  const [imagesEnabled, setImagesEnabled] = useState(false);
-  // Empty means the Slurp-wide default image connection. Chosen here because the first post is
-  // written during this run: setting it afterwards in Backstage would already be too late.
-  const [imageConnectionId, setImageConnectionId] = useState("");
-  const [generateNow, setGenerateNow] = useState(true);
-  const [createdIds, setCreatedIds] = useState<string[]>([]);
-  const [creationFailures, setCreationFailures] = useState(0);
-  const [settingsFailed, setSettingsFailed] = useState(false);
-  const [creationFailed, setCreationFailed] = useState(false);
-  const [creationError, setCreationError] = useState<string | null>(null);
-  const [creationReasons, setCreationReasons] = useState<{ accountId: string; reason: string }[]>([]);
-  const [generationConnectionId, setGenerationConnectionId] = useState("");
-  const [settingsSeeded, setSettingsSeeded] = useState(false);
-  const [outcomes, setOutcomes] = useState<NoodlerRefreshNowOutcome[]>([]);
-  const [completion, setCompletion] = useState<CompletionKind | null>(null);
-  const [executionId, setExecutionId] = useState("");
-  const [firstPostsQueued, setFirstPostsQueued] = useState(false);
-  const [providerConfirmationOpen, setProviderConfirmationOpen] = useState(false);
-  const completionHeadingRef = useRef<HTMLHeadingElement>(null);
-  const demoProfile: NoodlerStageProfile = {
-    ...DEMO_PROFILE,
-    displayName:
-      disclosure === "open"
-        ? t("ui.noodle.noodlerwizard.identityPreview.openName")
-        : t("ui.noodle.noodlerwizard.identityPreview.hintedName"),
-    handle:
-      disclosure === "open"
-        ? t("ui.noodle.noodlerwizard.identityPreview.openHandle")
-        : t("ui.noodle.noodlerwizard.identityPreview.hintedHandle"),
-    avatarUrl: "/sprites/mari/chibi-professor-mari.png",
-    disclosureMode: disclosure,
-  };
-
-  useEffect(() => {
-    if (completion) completionHeadingRef.current?.focus();
-  }, [completion]);
-
-  useEffect(() => {
-    if (!open) return;
-    setStep(1);
-    setIntro(selectionOnly ? null : 0);
-    setSetupLane(selectionOnly ? "easy" : null);
-    setPostExplored(false);
-    setActivityChoice(SLURP_DEFAULT_ACTIVITY_PRESET);
-    setSelected(new Set());
-    setSelectionInitialized(false);
-    setSettingsSeeded(false);
-    setDisclosure("open");
-    setExceptions({});
-    setGenerateNow(true);
-    setCreatedIds([]);
-    setCreationFailures(0);
-    setSettingsFailed(false);
-    setCreationFailed(false);
-    setCreationError(null);
-    setCreationReasons([]);
-    setGenerationConnectionId("");
-    setOutcomes([]);
-    setCompletion(null);
-    setExecutionId(generateClientId());
-    setFirstPostsQueued(false);
-  }, [open, selectionOnly]);
-
-  const firstPostStatus = useNoodlerFirstPostStatus(executionId, step === 5 && firstPostsQueued);
-
-  useEffect(() => {
-    if (!open || settingsSeeded || !settingsQuery.data || !connectionsQuery.data) return;
-    const settings = settingsQuery.data;
-    const defaultLanguageConnection = connectionsQuery.data.find(
-      (connection) =>
-        connection.provider !== "image_generation" &&
-        (connection.defaultForAgents === true || connection.defaultForAgents === "true"),
-    );
-    const persistedPostsPerDay = settings.postsPerDay ?? DEFAULT_POSTS_PER_DAY;
-    setPostsPerDay(persistedPostsPerDay);
-    setPostsPerDayDraft(String(persistedPostsPerDay));
-    setAutoPostingEnabled(settings.autoPostingScheduleEnabled);
-    setActivityChoice(slurpActivityPresetForSettings(settings));
-    setNightQuiet(settings.nightQuiet);
-    setImagesEnabled(settings.autoPostingImagesEnabled);
-    setGenerationConnectionId(settings.generationConnectionId ?? defaultLanguageConnection?.id ?? "");
-    setSettingsSeeded(true);
-  }, [connectionsQuery.data, open, settingsQuery.data, settingsSeeded]);
-
-  const { fetchNextPage, hasNextPage, isFetching } = eligible;
-  useEffect(() => {
-    if (!open || isFetching || !hasNextPage) return;
-    void fetchNextPage();
-  }, [fetchNextPage, hasNextPage, isFetching, open]);
-
-  useEffect(() => {
-    if (!open || selectionInitialized || eligible.isLoading || eligible.hasNextPage) return;
-    setSelected(new Set());
-    setSelectionInitialized(true);
-  }, [accounts, eligible.hasNextPage, eligible.isLoading, open, selectionInitialized]);
-
-  // One bulk request carries at most NOODLER_BULK_ACCOUNT_MAX accounts, so the selection is
-  // capped here: rejecting the whole request after the fact loses every choice the user made.
-  const selectionFull = selected.size >= NOODLER_BULK_ACCOUNT_MAX;
-  const toggleSelected = (id: string) => {
-    setSelected((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else if (next.size < NOODLER_BULK_ACCOUNT_MAX) next.add(id);
-      return next;
-    });
-  };
-  const chooseActivity = (choice: SlurpActivityPreset) => {
-    setActivityChoice(choice);
-    const patch = slurpActivityPresetPatch(choice);
-    setAutoPostingEnabled(patch.autoPostingScheduleEnabled);
-    if (patch.postsPerDay !== undefined) {
-      setPostsPerDay(patch.postsPerDay);
-      setPostsPerDayDraft(String(patch.postsPerDay));
-    }
-  };
-  // A persona Creator is skipped by design (it never auto-posts), so it is not a failure.
-  const failedIds = outcomes
-    .filter((outcome) => outcome.status !== "generated" && outcome.status !== "skipped")
-    .map((outcome) => outcome.accountId);
-  const failedCount = creationFailures + failedIds.length;
-  const generatedCount = outcomes.filter((outcome) => outcome.status === "generated").length;
-  // Nothing was created, so the run failed before first posts: say that instead of blaming
-  // generation.
-  const resolveCompletion = (input: {
-    selectedCount: number;
-    createdCount: number;
-    createFailures: number;
-    outcomes: NoodlerRefreshNowOutcome[] | null;
-  }): CompletionKind =>
-    input.createdCount === 0 && input.createFailures > 0 ? "creationFailed" : resolveNoodlerOnboardingCompletion(input);
-  const finalizeOutcomes = (
-    next: NoodlerRefreshNowOutcome[],
-    createFailures = creationFailures,
-    createdCount = createdIds.length,
-    settingsSaved = !settingsFailed,
-  ) => {
-    setOutcomes(next);
-    setCompletion(
-      settingsSaved
-        ? resolveCompletion({
-            selectedCount: selected.size,
-            createdCount,
-            createFailures,
-            outcomes: next,
-          })
-        : "settingsFailed",
-    );
-    setStep(5);
-  };
-  useEffect(() => {
-    if (!firstPostsQueued || !firstPostStatus.data?.complete) return;
-    const next = firstPostStatus.data.jobs.map((job) => ({
-      accountId: job.accountId,
-      status:
-        job.status === "generated"
-          ? ("generated" as const)
-          : job.status === "skipped"
-            ? ("skipped" as const)
-            : ("error" as const),
-    }));
-    setFirstPostsQueued(false);
-    finalizeOutcomes(next, creationFailures, createdIds.length);
-  }, [createdIds.length, creationFailures, firstPostStatus.data, firstPostsQueued]);
-  const runGeneration = async (ids: string[], createFailures = creationFailures) => {
-    const retriedIds = new Set(ids);
-    const kept = outcomes.filter((outcome) => !retriedIds.has(outcome.accountId));
-    try {
-      const result = await refreshTargeted.mutateAsync({
-        accountIds: ids,
-        executionId,
-      });
-      finalizeOutcomes([...kept, ...result.outcomes], createFailures);
-    } catch (error) {
-      // The profiles still exist; only generation fell over, so they stay retryable.
-      finalizeOutcomes([...kept, ...ids.map((accountId) => ({ accountId, status: "error" as const }))], createFailures);
-    }
-  };
-  const saveSettings = async (state: "zero" | "completed") => {
-    try {
-      await updateSlurpSettings.mutateAsync({
-        postsPerDay,
-        generationConnectionId: generationConnectionId || null,
-        autoPostingScheduleEnabled: autoPostingEnabled,
-        autoPostingImagesEnabled: imagesEnabled,
-        nightQuiet,
-        ...(selectionOnly
-          ? {}
-          : {
-              onboarding: state === "completed" ? "completed" : "not_started",
-            }),
-      });
-      return true;
-    } catch {
-      toast.error("Slurp setup settings could not be saved.");
-      return false;
-    }
-  };
-  const skip = async () => {
-    if (await saveSettings("zero")) {
-      onSkipped?.();
-      onClose();
-    }
-  };
-  const returnToSetup = () => {
-    setCreationFailed(false);
-    setCreationError(null);
-    setCreationReasons([]);
-    setCompletion(null);
-    setStep(4);
-  };
-  const returnToPreviousStep = () => setStep(setupLane === "easy" ? 1 : ((step - 1) as Step));
-  const performFinish = async () => {
-    let newIds: string[] = [];
-    let createFailureCount = 0;
-    try {
-      {
-        const result = await bulkCreate.mutateAsync({
-          noodleAccountIds: [...selected],
-          executionId,
-          disclosureMode: disclosure,
-          disclosureExceptions: exceptions,
-          autoPosting: { enabled: autoPostingEnabled, imagesEnabled },
-          connectionId: generationConnectionId || null,
-        });
-        newIds = result.created.map((profile) => profile.id);
-        setCreatedIds(newIds);
-        createFailureCount = result.skipped.length + (result.failed?.length ?? 0);
-        setCreationFailures(createFailureCount);
-        setCreationReasons(result.reasons ?? []);
-      }
-    } catch (error) {
-      // The request may still have created profiles before the response was lost. The server
-      // replays the same executionId idempotently, so keep the run retryable in place rather
-      // than making the user reselect everything.
-      setCreationFailed(true);
-      setCompletion("creationFailed");
-      if (error instanceof Error) setCreationError(error.message);
-      setStep(5);
-      return;
-    }
-    setCreationFailed(false);
-    setCreationError(null);
-    // A failed settings write keeps onboarding incomplete, but the profiles already exist:
-    // still write their first posts so the run is not stranded halfway.
-    // Nothing was created, so onboarding is not complete: writing "completed" here would
-    // close the wizard for good on a run that produced no creator at all.
-    const settingsSaved = await saveSettings(selected.size === 0 || newIds.length === 0 ? "zero" : "completed");
-    setSettingsFailed(!settingsSaved);
-    if (newIds.length === 0 || !generateNow) {
-      setCompletion(
-        settingsSaved
-          ? resolveCompletion({
-              selectedCount: selected.size,
-              createdCount: newIds.length,
-              createFailures: createFailureCount,
-              outcomes: null,
-            })
-          : "settingsFailed",
-      );
-      setStep(5);
-      if (settingsSaved && newIds.length > 0) onComplete?.();
-      return;
-    }
-    // Before the first posts, never after: these are the connections those posts must use.
-    // A failure here costs the chosen workflow, not the run, so the creators still get their posts.
-    if (imageConnectionId) {
-      try {
-        await assignImageConnections.mutateAsync({ creatorIds: newIds, connectionId: imageConnectionId });
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : t("ui.slurp.onboarding.imageConnectionFailed"));
-      }
-    }
-    try {
-      await enqueueFirstPosts.mutateAsync({ accountIds: newIds, executionId });
-      setFirstPostsQueued(true);
-      setOutcomes([]);
-      setCompletion(settingsSaved ? "partial" : "settingsFailed");
-      setStep(5);
-      if (settingsSaved) onComplete?.();
-    } catch {
-      // The profiles exist; only generation fell over, so every one of them is retryable.
-      finalizeOutcomes(
-        newIds.map((accountId) => ({ accountId, status: "error" as const })),
-        createFailureCount,
-        newIds.length,
-        settingsSaved,
-      );
-      if (settingsSaved) onComplete?.();
-    }
-  };
-  const finish = () => {
-    if (selected.size > 0) {
-      setProviderConfirmationOpen(true);
-      return;
-    }
-    void performFinish();
-  };
-  const pending =
-    bulkCreate.isPending || updateSlurpSettings.isPending || refreshTargeted.isPending || enqueueFirstPosts.isPending;
-  const summaries =
-    setupLane === "easy"
-      ? [
-          {
-            step: 1 as Step,
-            label: t("ui.noodle.noodlerwizard.characters"),
-            value: t("ui.noodle.noodlerwizard.selectedCount", {
-              count: selected.size,
-            }),
-          },
-          {
-            step: 4 as Step,
-            label: t("ui.noodle.noodlerwizard.review"),
-            value: t("ui.noodle.noodlerwizard.readyToCreate"),
-          },
-        ]
-      : [
-          {
-            step: 1 as Step,
-            label: t("ui.noodle.noodlerwizard.characters"),
-            value: t("ui.noodle.noodlerwizard.selectedCount", {
-              count: selected.size,
-            }),
-          },
-          {
-            step: 2 as Step,
-            label: t("ui.noodle.noodlerwizard.disclosure.title"),
-            value: disclosureLabel(disclosure, t),
-          },
-          {
-            step: 3 as Step,
-            label: t("ui.noodle.noodlerwizard.activity"),
-            value: autoPostingEnabled
-              ? t("ui.noodle.noodlerwizard.postsSummary", {
-                  count: postsPerDay,
-                })
-              : t("ui.noodle.noodlerwizard.manualOnly"),
-          },
-          {
-            step: 4 as Step,
-            label: t("ui.noodle.noodlerwizard.images"),
-            value: imagesEnabled ? t("ui.noodle.noodlerwizard.on") : t("ui.noodle.noodlerwizard.off"),
-          },
-        ];
-
+export function SlurpOnboardingWizard(props: WizardProps) {
+  const model = useSlurpOnboardingWizardModel(props);
+  const {
+    open,
+    selectionOnly,
+    onClose,
+    onComplete,
+    onSeeFeed,
+    t,
+    eligible,
+    bulkCreate,
+    refreshTargeted,
+    enqueueFirstPosts,
+    connectionsQuery,
+    accounts,
+    step,
+    setStep,
+    intro,
+    setIntro,
+    setupLane,
+    setSetupLane,
+    postExplored,
+    setPostExplored,
+    activityChoice,
+    selected,
+    setSelected,
+    disclosure,
+    setDisclosure,
+    exceptions,
+    setExceptions,
+    autoPostingEnabled,
+    setAutoPostingEnabled,
+    postsPerDay,
+    setPostsPerDay,
+    postsPerDayDraft,
+    setPostsPerDayDraft,
+    nightQuiet,
+    setNightQuiet,
+    imagesEnabled,
+    setImagesEnabled,
+    imageConnectionId,
+    setImageConnectionId,
+    generateNow,
+    setGenerateNow,
+    createdIds,
+    creationFailures,
+    settingsFailed,
+    setSettingsFailed,
+    creationFailed,
+    creationError,
+    creationReasons,
+    generationConnectionId,
+    setGenerationConnectionId,
+    outcomes,
+    completion,
+    setCompletion,
+    firstPostsQueued,
+    providerConfirmationOpen,
+    setProviderConfirmationOpen,
+    completionHeadingRef,
+    demoProfile,
+    hasNextPage,
+    selectionFull,
+    toggleSelected,
+    chooseActivity,
+    failedIds,
+    failedCount,
+    generatedCount,
+    resolveCompletion,
+    runGeneration,
+    saveSettings,
+    skip,
+    returnToSetup,
+    returnToPreviousStep,
+    performFinish,
+    finish,
+    pending,
+    summaries,
+  } = model;
   return (
     <>
       <Modal
