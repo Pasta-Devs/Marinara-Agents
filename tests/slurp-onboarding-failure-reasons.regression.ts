@@ -78,7 +78,7 @@ for (const [file, source] of Object.entries(parsers)) {
     );
     assert.match(
       source,
-      /repaired = parseNoodlerStageProfileDraft\(retry\.content \?\? "", allowedTags\);\s*lastAnswer = retry\.content \?\? "";\s*\}\s*if \(!repaired\) \{[\s\S]*?requireModelAnswer\(lastAnswer, "a creator profile"\)/u,
+      /repaired = parseCreatorStageProfileDraft\(retry\.content \?\? "", allowedTags\);\s*lastAnswer = retry\.content \?\? "";\s*\}\s*if \(!repaired\) \{[\s\S]*?requireModelAnswer\(lastAnswer, "a creator profile"\)/u,
     );
     continue;
   }

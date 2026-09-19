@@ -17,7 +17,7 @@ assert.match(
 );
 assert.match(
   read("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx"),
-  /useNoodlerEligibleAccounts\("", "all", open\)/u,
+  /useCreatorEligibleAccounts\("", "all", open\)/u,
   "onboarding must offer personas as well as characters",
 );
 

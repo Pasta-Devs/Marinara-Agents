@@ -43,11 +43,11 @@ assert.match(
   "the Slurp refresh scheduler must call the supported NoodleR route mode",
 );
 const viewerHook = hooks.slice(
-  hooks.indexOf("export function useNoodlerViewer"),
+  hooks.indexOf("export function useCreatorViewer"),
   hooks.indexOf("/**\n * Unseen-post count"),
 );
 assert.match(viewerHook, /refetchInterval: enabled && personaId \? 30_000 : false/u);
-assert.match(hooks, /invalidateQueries\(\{ queryKey: noodleKeys\.viewer\(personaId\) \}\)/u);
+assert.match(hooks, /invalidateQueries\(\{ queryKey: slpKeys\.viewer\(personaId\) \}\)/u);
 assert.match(storage, /autoPostGenerationMode: z\.enum\(\["pre_generate", "on_demand"\]\)/u);
 assert.match(
   storage,
@@ -173,7 +173,7 @@ assert.match(storage, /item\.id !== current\.id && \(item\.state === "scheduled"
 assert.match(storage, /hasSlurpCreatorPostingIntervalConflict\(activityTimes, publishMs, settings\.postsPerDay\)/u);
 assert.match(routes, /result === "conflict"/u);
 assert.match(hooks, /slots: SlurpScheduleSlot\[\]/u);
-assert.match(settingsUi, /useUpdateNoodlerScheduleSlot/u);
+assert.match(settingsUi, /useUpdateCreatorScheduleSlot/u);
 assert.match(settingsUi, /type="datetime-local"/u);
 assert.match(homeUi, /ui\.noodle\.stageprofileview\.automaticPostingProviderDisclosure/u);
 assert.match(onboardingUi, /ui\.noodle\.noodlerwizard\.autoPostingHelp/u);
@@ -227,7 +227,10 @@ const reschedule = storage.slice(
   storage.indexOf("async rescheduleNoodlerPost"),
   storage.indexOf("async listNoodlerPreparedPosts"),
 );
-assert.match(reschedule, /policyFingerprint: noodlerReservePolicyFingerprint\(account, settings, source\?\.updatedAt/u);
+assert.match(
+  reschedule,
+  /policyFingerprint: slpCreatorReservePolicyFingerprint\(account, settings, source\?\.updatedAt/u,
+);
 
 async function testPollOrdering() {
   const operations: string[] = [];

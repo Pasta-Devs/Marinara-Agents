@@ -47,7 +47,7 @@ assert.match(fanActivity, /schedule\(slurpPollBackoffMs\(POLL_MS, consecutiveFai
 
 // Unattended artwork must yield the image connection to the user's own work.
 const artwork = read("slurp-artwork.operation.ts");
-const backfill = artwork.slice(artwork.indexOf("export async function backfillNextNoodlerCreatorArtwork"));
+const backfill = artwork.slice(artwork.indexOf("export async function backfillNextCreatorArtwork"));
 assert.match(backfill, /admissionMode: \{ kind: "background" \}/);
 assert.match(backfill, /if \(isConnectionAdmissionFailure\(error\)\) return "idle";/);
 
@@ -61,7 +61,7 @@ assert.match(images, /imageRetryAttempts: attempts/);
 // image-less post with no record of what the picture was meant to be, so nobody could redraw it
 // by hand — which is the one thing left to do after three automatic failures. The automatic pass
 // stops on the attempt counter checked below, so the prompt never needed to be the off switch.
-assert.doesNotMatch(images, /imagePrompt: attempts >= NOODLER_POST_IMAGE_RETRY_LIMIT \? null : undefined/);
+assert.doesNotMatch(images, /imagePrompt: attempts >= SLP_CREATOR_POST_IMAGE_RETRY_LIMIT \? null : undefined/);
 assert.match(images, /if \(isConnectionAdmissionFailure\(error\)\) \{\s*await noodle\.releasePostImageClaim/);
 assert.match(images, /retryNextFailedPostImage/);
 assert.match(images, /admissionMode: \{ kind: "background" \}/);
@@ -73,7 +73,10 @@ assert.match(
   awaiting.slice(0, 1200),
   /metadata\.imagePendingReview === true \|\| metadata\.imageGenerationFailed !== true/,
 );
-assert.match(awaiting.slice(0, 1400), /noodlerPostImageRetryAttempts\(metadata\) >= NOODLER_POST_IMAGE_RETRY_LIMIT/);
+assert.match(
+  awaiting.slice(0, 1400),
+  /slpCreatorPostImageRetryAttempts\(metadata\) >= SLP_CREATOR_POST_IMAGE_RETRY_LIMIT/,
+);
 
 // The failure fallbacks persist the prompt, or there would be nothing to redraw from.
 const generation = read("slurp-generation.service.ts");

@@ -292,7 +292,7 @@
         {
           "version": "0.1.1",
           "date": "2026-09-19",
-          "notes": "- Slurp now carries its own vocabulary instead of borrowing the Engine's Noodle names.\n- Removed a leftover Noodle mention from the setup wizard intro.\n- You should not feel any difference. Your creators, posts and settings are untouched.",
+          "notes": "- Slurp now carries its own vocabulary instead of borrowing names from the Engine.\n- Cleaned up a leftover wording slip in the setup wizard intro.\n- You should not feel any difference. Your creators, posts and settings are untouched.",
           "highlight": false
         },
         {
