@@ -20,56 +20,66 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 ## Current state
 
 - Last updated: 2026-09-19
-- Updated by: Slice 8 implementation agent
-- Overall state: Slice 8 in progress
-- Active slice: 8 (client app and reusable modules), issue #931, branch
-  `slurp2-slice8-client-app-modules` from `origin/modular-simping`
-  `4776370ab2c7c828e1336bfecfe629808cab4162`.
-- Pull request: draft PR to be opened against `modular-simping` and assigned to `Gunterlie`; issue
-  #931 is assigned to `Gunterlie`. Slice 7 PR #929 is merged into `modular-simping` at
-  `4776370ab2c7c828e1336bfecfe629808cab4162`.
-- Branch commits: `4f407071` records the Slice 7 start/merge gate; `40407635` is the complete
-  implementation, regression, documentation, and generated-package commit. A final ledger-only
-  handoff commit follows it.
-- Slice 6 merge gate: PR #927 is `MERGED` into `modular-simping` at `26a80fe7`; its generated
-  `0.0.29` payload, manifest, `artifacts/slurp2-0.0.29.zip` (sha256
-  `66559923bee9ec2c683805731b6776c1e2cbe4792d756810ce6e462a5ce46d08`, 6725244 bytes), and all three
-  catalog lanes are present.
-- Staging integration: `origin/modular-simping` is 27 ahead / 0 behind `origin/staging`, so
-  `origin/staging` is an ancestor and no merge was required before this slice.
-- Package version: `0.0.30` before this slice; this slice ships `0.0.31` (integration-only;
+- Updated by: Slice 9 implementation agent
+- Overall state: Slice 9 in progress
+- Active slice: 9 (Backstage), issue #936, branch `slurp2-slice9-backstage` from
+  `origin/modular-simping` `03ae3a90` (the Slice 8 merge commit).
+- Slice 8 merge gate: PR #932 is `MERGED` into `modular-simping` at `03ae3a90`. Its generated
+  `0.0.31` payload, manifest and `artifacts/slurp2-0.0.31.zip` are present on the branch. Slice 8
+  merged with a recorded scope gap (`SlurpHome.tsx` and `SlurpMessages.tsx` remain stateful hosts);
+  that gap is Slice 8/10 work and is not reopened here.
+- Staging integration: `origin/modular-simping` was 5 commits behind `origin/staging` at slice
+  start. `origin/staging` was merged into the slice branch with an ordinary merge (no rebase, no
+  force) so the merge reaches `modular-simping` through the Slice 9 PR rather than a direct push.
+  The merge was clean; no generated Slurp2 output conflicted. The only builder change from staging
+  bumps `long-term-memory` to `1.3.4` and leaves Slurp2 at `0.0.31`.
+- Pull request: draft PR against `modular-simping`, assigned to `Gunterlie`. Issue #936 is assigned
+  to `Gunterlie`.
+- Package version: `0.0.31` before this slice; this slice ships `0.0.32` (integration-only;
   `staging` stays at `0.0.22` until the final `0.1.0` release PR).
-- Node: `/home/dev/.nvm/versions/node/v24.18.0/bin`; `node -v` = `v24.18.0`. Builds used
-  `TMPDIR=/home/dev/.cache/slp-tmp`; the resumed validation sandbox used writable `/tmp`.
+- Node: `/home/dev/.nvm/versions/node/v24.18.0/bin`; `node -v` = `v24.18.0` (verified this slice).
 - Engine source: `/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish`, branch
-  `welcome-to-the-agentshop`, commit `fdb67d47bfb909f013346afdb3d2c23d72d7b399`, tracked files clean;
-  4 ahead / 39 behind Engine `origin/staging` after a fresh fetch. Used unchanged, as in Slice 7, so build deltas stay
-  comparable across slices.
+  `welcome-to-the-agentshop`, commit `fdb67d47bfb909f013346afdb3d2c23d72d7b399`, tracked files clean
+  (`git status --porcelain --untracked-files=no` empty); 4 ahead / 80 behind Engine `origin/staging`
+  after a fresh fetch. Used unchanged, as in Slices 7 and 8, so build deltas stay comparable across
+  slices. No substitute worktree was needed.
 
-- Slice 8 implementation discovery: the first extraction moved coin and poll presentation to
-  `client/src/slp/modules/coin/SlpCoin.tsx` and `client/src/slp/modules/poll/SlpPollComposer.tsx`,
-  moved Story tile presentation to `client/src/slp/modules/story/SlpStoryTile.tsx`, and added
-  `app/SlpApp.tsx` plus `app/SlpRouter.tsx`. The full Home and Messages hosts remain legacy files
-  while their stateful behavior is preserved; no Backstage panel was moved.
-- Slice 8 focused results so far: architecture regression passes; `node scripts/typecheck-packages.mjs
-  slurp2` passes; `slurp2-client-hooks`, `slurp-media-surfaces`, `slurp-inbox-wallet`,
-  `slurp-share-card`, `slurp2-post-guidance`, `slurp-relationship-panel` (baseline route-count
-  mismatch), `slurp-chat-media`, `slurp-messaging-surface`, `slurp2-messaging-fixes`, and
-  `slurp2-prompt-errors` pass. `slurp-stories-shelf` and `slurp-feed-layout` fail with the same
-  source-shape assertions on `origin/modular-simping` and are recorded as pre-existing baseline
-  failures, not Slice 8 regressions.
-- Scope gap: `SlurpHome.tsx` remains the stateful host and `SlurpMessages.tsx` remains the stateful
-  Messages host. `SlpApp` and `SlpRouter` compose the current host, but they are not a complete
-  Home screen split. Creator presentation remains feature-owned because the current card owns media
-  hooks and subscription confirmation. The PR must remain draft until these missing Slice 8
-  deliverables are implemented.
-- Browser proof: `MARINARA_ENGINE_ROOT=/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish npm run
-  test:browser:slurp2` launched the Engine services, but all 14 desktop/mobile cases were blocked
-  by Chromium missing `libnspr4.so`. No browser or lifecycle result is claimed.
-- Implementation commit: `541e4874`; branch pushed to
-  `origin/slurp2-slice8-client-app-modules`. Draft PR #932 remains open against `modular-simping`
-  and assigned to `Gunterlie`; it is not ready for review because the Home and Messages splits are
-  incomplete.
+### Slice 9 verified starting shape
+
+- Backstage renders by **target**, not by section. `SlurpSettings.tsx` renders all six section page
+  components unconditionally and each one self-gates on `target === "..."` (Overview gates on
+  `section`). The registry therefore replaces a real duplicated dispatch rather than inventing one.
+- 17 targets in `SLURP_BACKSTAGE_TARGETS`: overview, creators, improve, world, tags, events, arcs,
+  messaging, audience, ads, wallet, automation, general, images, prompts, autopurge, advanced.
+- Current file sizes: `SlurpBackstageWorld.tsx` 2171, `SlurpSettings.tsx` 1328, `SlurpBackstageAutomation.tsx`
+  926, `SlurpBackstageChrome.tsx` 816, `SlurpBackstageCreators.tsx` 811, `SlurpBackstageMaintenance.tsx`
+  571, `SlurpBackstageOverview.tsx` 327, `SlurpBackstageKit.tsx` 318, `SlurpBackstagePrompts.tsx` 280,
+  `slurp-backstage.ts` 266. `SlurpBackstageWorkflow.tsx` (1711) is a shared kit, not a panel.
+- `useSlurpBackstageController` in `SlurpSettings.tsx` is one hook that fetches for every feature and
+  is spread into all six pages as `SlurpBackstagePageProps`.
+
+### Slice 9 approved panel ownership (maintainer decision, 2026-09-19)
+
+`overview`, `world` and `automation` render only landing summaries that link to other targets, so
+they encode the Backstage information architecture itself and stay in `features/backstage/`. The
+other fourteen targets go to the feature that owns the setting, mirroring the server feature names:
+creators/improve to `creators`, tags to `discovery`, events to `world`, arcs to `projects`,
+messaging to `messages`, audience to `audience`, ads to `ads`, wallet to `economy`, general to
+`feed`, autopurge/advanced to `maintenance`.
+
+Two targets had no domain owner and were decided explicitly:
+
+- `images` goes to a new client `features/media/`, mirroring the existing server `features/media/`.
+  Evidence: `imageWidth`/`storyImageWidth`/`imageContextMode` are read on the server by
+  `features/feed`, `features/media`, `features/messages`, `features/audience` and
+  `base/media/slp-generated-media-policy.ts`, so `feed` cannot own them.
+- `prompts` goes to the existing `features/settings/`, as cross-cutting generation configuration
+  with no domain owner. Evidence: `generationGuidance`/`promptBlocks`/`imageGenerationPrompt` are
+  read on the server by ads, audience, creators, feed, media, messages, projects and world, and the
+  shared machinery lives in `base/prompting/` and `modules/prompting/` rather than in any feature.
+  `features/settings/` already owns the settings contract, the settings hooks and the
+  post-guidance hook the prompts panel calls. It owns cross-cutting configuration UI only, never a
+  domain panel.
 
 ## Slice ledger
 
@@ -83,7 +93,7 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 |     6 | Event and modifier seam                | ready for review | #926 / #927      | 0.0.29          | 0 new regression failures; 4 mutants caught; unit rebuilt        |
  |     7 | Client state and hooks                 | merged           | #928 / #929      | 0.0.30          | Merged into `modular-simping` at `4776370a`; focused gate passes |
 |     8 | Client app and reusable modules        | in progress      | #931 / #932      | 0.0.31       | Partial: app boundary and coin/poll/story modules; Home/Messages split remains |
-|     9 | Backstage                              | not started      | —                | —               | —                                                                |
+|     9 | Backstage                              | in progress      | #936 / PR pending | 0.0.32          | Branch `slurp2-slice9-backstage` from `03ae3a90`; staging merged into the branch |
 |    10 | Final architecture and package proof   | not started      | —                | —               | —                                                                |
 
 ## Verified baseline
