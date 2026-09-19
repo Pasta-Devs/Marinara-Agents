@@ -161,6 +161,18 @@ What the block says:
   opponent a Game Master invents can be pulled onto it. Nothing in this package's own bestiary is
   ever clamped to it.
 
+**About the scale.** Health, armour class and the attack bonus are measured from every SRD creature
+of the rating. The damage band is measured only from the ones whose fighting is really in their
+actions: a spellcaster's printed attack is a dagger and its fireballs are a trait, so counting it
+would say a rating 12 monster deals nine damage a round. 37 casters and 4 creatures whose damage
+this format had to leave in a trait are out of that one measurement, and in every other.
+
+The caps and the floors are then made **monotone** along the rating order, and that is the one place
+this table is smoothed. A higher rating may never allow less than a lower one, because the scale is
+what bounds a monster a Game Master made up, and two unlucky SRD creatures at one rating should not
+cap everybody else's. The numbers are still the SRD creatures' own; only which rating may reach them
+changes.
+
 ### Creatures
 
 `catalogs/creatures.json` is 321 of the 325 SRD 5.1 monsters, each written in the numbers above:
@@ -195,6 +207,9 @@ Said plainly, because a ruleset should not claim what the Engine does not do:
   ("plus 7 (2d6) fire damage") keeps the first and says the rest in a trait: 64 of them. So does an
   attack that prints an alternative ("or 8 (1d10 + 3) if used with two hands", "or 5 (2d4) if the
   swarm has half its hit points"), which is a choice a fight has no way to make: 61 of them.
+  The second helpings are a trait in this release because a creature action holds one damage roll in
+  Capability API 1.27; the Engine is scheduled to carry them, and the converter already counts them,
+  so they come back as numbers the release after that seam lands.
 - **Spellcasting monsters** are traits. A stat block's spell list is not something a creature action
   can hold.
 - **A creature cannot heal.** An action such as the deva's Healing Touch is a trait.

@@ -2274,7 +2274,7 @@
       "thunder"
     ],
     "threat": {
-      "$comment": "The scale an opponent nobody wrote is pulled onto. MEASURED from the SRD 5.1 creatures of each challenge rating: health is the lowest to the highest average hit points, defense and toHit are the median Armor Class and the median best attack bonus, damagePerRound is the lowest to the highest best round against one target, and saveDifficulty is the median of the difficulties those creatures' actions name. A rating the SRD has no creature for takes the midpoint of its nearest measured neighbours. This package's own bestiary is never clamped to it.",
+      "$comment": "The scale an opponent NOBODY WROTE is pulled onto. MEASURED from the SRD 5.1 creatures of each challenge rating: health is the lowest to the highest average hit points, defense and toHit are the median Armor Class and the median best attack bonus, damagePerRound is the lowest to the highest best round against one target, and saveDifficulty is the median of the difficulties those creatures' actions name. Damage is measured only from the creatures whose fighting is in their actions, because a spellcaster's printed attack is a dagger and an action this format could not hold is a trait a fight never rolls. A rating the SRD has no creature for, or none that can be measured for damage, takes the midpoint of its nearest neighbours. The caps and floors are then made monotone along the rating order, which is the one place this table is smoothed: a higher rating may never allow less than a lower one, and the numbers themselves are still the SRD creatures' own. This package's own bestiary is never clamped to it.",
       "tiers": [
         {
           "id": "cr_0",
@@ -2288,11 +2288,11 @@
         {
           "id": "cr_1_8",
           "label": "CR 1/8",
-          "health": [2, 15],
+          "health": [2, 16],
           "defense": 12,
           "toHit": 4,
           "damagePerRound": [1, 7],
-          "saveDifficulty": 11
+          "saveDifficulty": 12
         },
         {
           "id": "cr_1_4",
@@ -2301,7 +2301,7 @@
           "defense": 12,
           "toHit": 4,
           "damagePerRound": [1, 11],
-          "saveDifficulty": 11
+          "saveDifficulty": 12
         },
         {
           "id": "cr_1_2",
@@ -2310,16 +2310,16 @@
           "defense": 12,
           "toHit": 4,
           "damagePerRound": [3, 13],
-          "saveDifficulty": 11
+          "saveDifficulty": 12
         },
         {
           "id": "cr_1",
           "label": "CR 1",
-          "health": [7, 52],
+          "health": [9, 52],
           "defense": 12,
           "toHit": 4,
-          "damagePerRound": [2, 20],
-          "saveDifficulty": 11
+          "damagePerRound": [5, 20],
+          "saveDifficulty": 12
         },
         {
           "id": "cr_2",
@@ -2327,7 +2327,7 @@
           "health": [22, 85],
           "defense": 13,
           "toHit": 5,
-          "damagePerRound": [3, 23],
+          "damagePerRound": [5, 23],
           "saveDifficulty": 12
         },
         {
@@ -2343,9 +2343,9 @@
           "id": "cr_4",
           "label": "CR 4",
           "health": [45, 120],
-          "defense": 12,
+          "defense": 14,
           "toHit": 5,
-          "damagePerRound": [6, 33],
+          "damagePerRound": [7, 33],
           "saveDifficulty": 13
         },
         {
@@ -2360,10 +2360,10 @@
         {
           "id": "cr_6",
           "label": "CR 6",
-          "health": [40, 133],
+          "health": [65, 136],
           "defense": 15,
           "toHit": 7,
-          "damagePerRound": [4, 45],
+          "damagePerRound": [8, 45],
           "saveDifficulty": 15
         },
         {
@@ -2372,17 +2372,17 @@
           "health": [110, 157],
           "defense": 17,
           "toHit": 7,
-          "damagePerRound": [15, 50],
-          "saveDifficulty": 14
+          "damagePerRound": [22, 50],
+          "saveDifficulty": 15
         },
         {
           "id": "cr_8",
           "label": "CR 8",
-          "health": [75, 172],
-          "defense": 15,
+          "health": [110, 172],
+          "defense": 17,
           "toHit": 7,
-          "damagePerRound": [7, 55],
-          "saveDifficulty": 14
+          "damagePerRound": [22, 55],
+          "saveDifficulty": 15
         },
         {
           "id": "cr_9",
@@ -2396,64 +2396,64 @@
         {
           "id": "cr_10",
           "label": "CR 10",
-          "health": [127, 178],
+          "health": [133, 200],
           "defense": 18,
           "toHit": 10,
-          "damagePerRound": [15, 56],
+          "damagePerRound": [39, 56],
           "saveDifficulty": 17
         },
         {
           "id": "cr_11",
           "label": "CR 11",
-          "health": [85, 248],
-          "defense": 17,
+          "health": [133, 248],
+          "defense": 18,
           "toHit": 10,
-          "damagePerRound": [22, 66],
-          "saveDifficulty": 15
+          "damagePerRound": [39, 66],
+          "saveDifficulty": 17
         },
         {
           "id": "cr_12",
           "label": "CR 12",
-          "health": [99, 153],
-          "defense": 15,
-          "toHit": 7,
-          "damagePerRound": [4, 9],
-          "saveDifficulty": 14
+          "health": [133, 248],
+          "defense": 18,
+          "toHit": 10,
+          "damagePerRound": [39, 66],
+          "saveDifficulty": 17
         },
         {
           "id": "cr_13",
           "label": "CR 13",
-          "health": [110, 230],
-          "defense": 17,
+          "health": [133, 248],
+          "defense": 18,
           "toHit": 11,
-          "damagePerRound": [8, 60],
+          "damagePerRound": [39, 66],
           "saveDifficulty": 17
         },
         {
           "id": "cr_14",
           "label": "CR 14",
-          "health": [180, 195],
+          "health": [180, 248],
           "defense": 18,
           "toHit": 11,
-          "damagePerRound": [35, 54],
+          "damagePerRound": [39, 66],
           "saveDifficulty": 18
         },
         {
           "id": "cr_15",
           "label": "CR 15",
-          "health": [97, 247],
+          "health": [180, 248],
           "defense": 19,
           "toHit": 12,
-          "damagePerRound": [14, 66],
+          "damagePerRound": [42, 66],
           "saveDifficulty": 18
         },
         {
           "id": "cr_16",
           "label": "CR 16",
-          "health": [189, 243],
+          "health": [189, 248],
           "defense": 19,
           "toHit": 12,
-          "damagePerRound": [42, 93],
+          "damagePerRound": [45, 93],
           "saveDifficulty": 19
         },
         {
@@ -2462,43 +2462,43 @@
           "health": [199, 341],
           "defense": 19,
           "toHit": 14,
-          "damagePerRound": [34, 66],
+          "damagePerRound": [58, 93],
           "saveDifficulty": 21
         },
         {
           "id": "cr_18",
           "label": "CR 18",
-          "health": [231, 302],
+          "health": [231, 341],
           "defense": 19,
           "toHit": 14,
-          "damagePerRound": [35, 52],
+          "damagePerRound": [58, 93],
           "saveDifficulty": 21
         },
         {
           "id": "cr_19",
           "label": "CR 19",
-          "health": [262, 262],
+          "health": [262, 341],
           "defense": 19,
           "toHit": 14,
-          "damagePerRound": [36, 37],
+          "damagePerRound": [58, 93],
           "saveDifficulty": 21
         },
         {
           "id": "cr_20",
           "label": "CR 20",
-          "health": [297, 333],
+          "health": [297, 341],
           "defense": 20,
           "toHit": 14,
-          "damagePerRound": [56, 79],
+          "damagePerRound": [58, 93],
           "saveDifficulty": 21
         },
         {
           "id": "cr_21",
           "label": "CR 21",
-          "health": [135, 367],
+          "health": [297, 367],
           "defense": 21,
           "toHit": 15,
-          "damagePerRound": [21, 68],
+          "damagePerRound": [63, 93],
           "saveDifficulty": 21
         },
         {
@@ -2507,7 +2507,7 @@
           "health": [385, 444],
           "defense": 22,
           "toHit": 16,
-          "damagePerRound": [77, 88],
+          "damagePerRound": [77, 93],
           "saveDifficulty": 23
         },
         {
@@ -2516,7 +2516,7 @@
           "health": [472, 487],
           "defense": 22,
           "toHit": 16,
-          "damagePerRound": [61, 88],
+          "damagePerRound": [77, 93],
           "saveDifficulty": 23
         },
         {
@@ -2525,7 +2525,7 @@
           "health": [546, 546],
           "defense": 22,
           "toHit": 17,
-          "damagePerRound": [71, 91],
+          "damagePerRound": [77, 93],
           "saveDifficulty": 24
         },
         {
@@ -2535,7 +2535,7 @@
           "defense": 25,
           "toHit": 19,
           "damagePerRound": [148, 148],
-          "saveDifficulty": 20
+          "saveDifficulty": 24
         }
       ]
     }

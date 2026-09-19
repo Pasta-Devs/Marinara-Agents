@@ -33,8 +33,8 @@
   "files": [
     {
       "path": "ruleset.json",
-      "sha256": "6c99b499888ec0f8ff37db1153bd97b14610dfaa5436b3d7a223b19fa2be8948",
-      "bytes": 73231
+      "sha256": "319b89eca0b7e71eaa2d9080a591a289dc6d1e9aaf84259c891cd1af10c475eb",
+      "bytes": 73706
     },
     {
       "path": "catalogs/spells.json",

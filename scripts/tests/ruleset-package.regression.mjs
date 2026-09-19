@@ -800,6 +800,42 @@ for (const [table, message] of [
 
 // The package as committed opts into both, and everything they name holds together.
 assert.equal(assertRulesetCombat(shippedManifest, parsedAsset), true);
+
+// The threat scale is what an opponent NOBODY WROTE is pulled onto, so a higher rating may never
+// allow less than a lower one: a Game Master's own rating 12 monster would otherwise be clamped to
+// what the two SRD creatures of that rating happen to print, which is a dagger and a spell list.
+// The build makes every cap and floor a running maximum; this is what stops that quietly coming
+// undone. The numbers themselves stay the SRD creatures' own.
+{
+  const tiers = parsedAsset.combat.threat.tiers;
+  assert.ok(tiers.length > 20, "the shipped scale must cover the SRD's challenge ratings");
+  const caps = [
+    ["health cap", (tier) => tier.health[1]],
+    ["defense", (tier) => tier.defense],
+    ["toHit", (tier) => tier.toHit],
+    ["damagePerRound cap", (tier) => tier.damagePerRound[1]],
+    ["saveDifficulty", (tier) => tier.saveDifficulty],
+  ];
+  const floors = [
+    ["health floor", (tier) => tier.health[0]],
+    ["damagePerRound floor", (tier) => tier.damagePerRound[0]],
+  ];
+  for (const [what, read] of [...caps, ...floors]) {
+    tiers.forEach((tier, index) => {
+      if (index === 0) return;
+      const previous = tiers[index - 1];
+      assert.ok(
+        read(tier) >= read(previous),
+        `${what} goes down from ${previous.id} (${read(previous)}) to ${tier.id} (${read(tier)})`,
+      );
+    });
+  }
+  // And a floor is never above the cap it sits under, or the band would be empty.
+  for (const tier of tiers) {
+    assert.ok(tier.health[0] <= tier.health[1], `${tier.id} health floor is above its cap`);
+    assert.ok(tier.damagePerRound[0] <= tier.damagePerRound[1], `${tier.id} damage floor is above its cap`);
+  }
+}
 assert.ok(
   assertRulesetCreatures(shippedManifest, parsedAsset, shippedCatalogSources) > 300,
   "the shipped bestiary must carry the SRD creatures",

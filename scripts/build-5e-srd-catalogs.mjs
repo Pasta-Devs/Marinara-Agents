@@ -1298,7 +1298,11 @@ function appliedConditions(text, at, ability) {
 }
 
 /** One creature action, as far as the format can say it, plus the trait lines for everything it
- *  could not. `null` means the action itself is nothing a fight could resolve. */
+ *  could not. `null` means the action itself is nothing a fight could resolve.
+ *
+ *  `hiddenDamage` says that some of what this printed action DEALS ended up in a trait rather than
+ *  in the block. The threat scale reads it: a creature whose hitting is partly written in prose
+ *  cannot be measured for damage, because its actions no longer say what it does in a round. */
 function creatureAction(action, attackRow, report) {
   const parent = action.fields.parent;
   const name = plainText(action.fields.name);
@@ -1307,6 +1311,7 @@ function creatureAction(action, attackRow, report) {
   const full = plainText(marked);
   const id = actionId(action.pk, parent);
   const notes = [];
+  let hiddenDamage = false;
   // A block of options is several actions sharing one recharge, which the format has no way to
   // hold. The first is the action; the rest are traits.
   const headings = [...marked.matchAll(OPTION_HEADING)];
@@ -1319,6 +1324,7 @@ function creatureAction(action, attackRow, report) {
     text = plainText(marked.slice(first.index + first[0].length, second.index));
     notes.push(trait("other options of one printed action", name, marked.slice(second.index)));
     report.optionBlocksSplit += 1;
+    if (damageClauses(plainText(marked.slice(second.index))).length > 0) hiddenDamage = true;
   }
   text = plainText(text);
 
@@ -1332,7 +1338,7 @@ function creatureAction(action, attackRow, report) {
     const printed = TO_HIT.exec(text);
     if (!printed) {
       report.attacksWithoutPrintedToHit.push(action.pk);
-      return { action: null, notes };
+      return { action: null, notes, hiddenDamage: hiddenDamage || clauses.length > 0 };
     }
     const toHit = Number(printed[1]);
     if (toHit !== attackRow.to_hit_mod) report.toHitDisagreements.push(action.pk);
@@ -1389,7 +1395,11 @@ function creatureAction(action, attackRow, report) {
     });
     if (!built.damage && !built.applies) {
       report.attacksWithNothingToResolve.push(action.pk);
-      return { action: null, notes: [...notes, trait("a printed action nothing can resolve", name, full)] };
+      return {
+        action: null,
+        notes: [...notes, trait("a printed action nothing can resolve", name, full)],
+        hiddenDamage: hiddenDamage || clauses.length > 0,
+      };
     }
     for (const clause of dropped) {
       if (clause.joiner?.toLowerCase() === "plus") report.foldedRiders += 1;
@@ -1403,7 +1413,7 @@ function creatureAction(action, attackRow, report) {
       notes.push(trait(dropped.length > 0 ? "a damage clause one roll cannot hold" : "a rider save", label, effect));
     }
     if (ability && !carried) report.riderSavesNotCarried += 1;
-    return { action: built, notes };
+    return { action: built, notes, hiddenDamage };
   }
 
   // Not an attack. A save the text states is the whole of it: the damage it deals, what a success
@@ -1411,7 +1421,13 @@ function creatureAction(action, attackRow, report) {
   const save = SAVE_DC.exec(text);
   if (!save) {
     report.actionsWithNeitherAttackNorSave += 1;
-    return { action: null, notes: [...notes, trait("a printed action nothing can resolve", name, full)] };
+    // Only a printed action that DEALS something hides damage. A summons, an aura or a stare hides
+    // nothing a round's worth of damage would have counted.
+    return {
+      action: null,
+      notes: [...notes, trait("a printed action nothing can resolve", name, full)],
+      hiddenDamage: hiddenDamage || clauses.length > 0,
+    };
   }
   const ability = ABILITY_BY_SAVE_NAME[save[2].toLowerCase()];
   const conditions = appliedConditions(text, save.index, ability);
@@ -1430,14 +1446,18 @@ function creatureAction(action, attackRow, report) {
   });
   if (!built.damage && !built.applies) {
     report.savesWithNothingToResolve.push(action.pk);
-    return { action: null, notes: [...notes, trait("a printed action nothing can resolve", name, full)] };
+    return {
+      action: null,
+      notes: [...notes, trait("a printed action nothing can resolve", name, full)],
+      hiddenDamage: hiddenDamage || clauses.length > 0,
+    };
   }
   for (const clause of dropped) {
     if (clause.joiner?.toLowerCase() === "plus") report.foldedRiders += 1;
     else report.alternativeClauses += 1;
   }
   if (dropped.length > 0) notes.push(trait("a damage clause one roll cannot hold", label, text));
-  return { action: built, notes };
+  return { action: built, notes, hiddenDamage };
 }
 
 // How many targets one area action is pointed at. A fight has no positions yet, so nothing can count
@@ -1519,6 +1539,13 @@ function multiattackSequence(text, attacks) {
 
 // ── One creature ──
 
+// A stat block whose fighting is written in prose. Its printed attack is a dagger and the rest of
+// what it does is a spell list, so its actions do not say what it deals in a round.
+const SPELLCASTING_TRAIT = /spellcasting/iu;
+
+/** The entry a creature record becomes, and whether its DAMAGE can be measured from its actions.
+ *  The second is only for the threat scale: a creature is in the bestiary, and in the health,
+ *  defense and to-hit measurements, either way. */
 function creatureEntry(record, sources, report) {
   const { pk, fields } = record;
   const actions = (sources.actions.get(pk) ?? []).filter((action) => action.fields.action_type !== "REACTION");
@@ -1530,6 +1557,7 @@ function creatureEntry(record, sources, report) {
   const notes = [];
   const built = [];
   const legendaryActions = [];
+  let hiddenDamage = false;
   let multiattack = null;
   for (const action of actions) {
     if (/^multiattack$/iu.test(action.fields.name)) {
@@ -1543,6 +1571,7 @@ function creatureEntry(record, sources, report) {
     }
     const result = creatureAction(action, sources.attacks.get(action.pk), report);
     for (const note of result.notes) if (note) notes.push(note);
+    if (result.hiddenDamage) hiddenDamage = true;
     if (result.action) built.push(compact({ ...result.action, ...usesFrom(action.fields) }));
   }
 
@@ -1567,6 +1596,7 @@ function creatureEntry(record, sources, report) {
     }
     const result = creatureAction(action, sources.attacks.get(action.pk), report);
     for (const note of result.notes) if (note) notes.push(note);
+    if (result.hiddenDamage) hiddenDamage = true;
     if (result.action) built.push({ ...result.action, signature: { cost } });
   }
   // Points are only worth declaring when something can be bought with them.
@@ -1681,7 +1711,15 @@ function creatureEntry(record, sources, report) {
     actions: built,
   });
 
+  // A creature whose fighting is not all in its actions cannot be measured for damage: a
+  // spellcaster's best printed attack is a dagger, and an action the converter could not resolve is
+  // a trait a fight never rolls. It stays in the bestiary and in every other measurement.
+  const casts = (sources.traits.get(pk) ?? []).some((source) => SPELLCASTING_TRAIT.test(source.fields.name));
+  if (casts) report.damageMeasurementSkippedCasters += 1;
+  else if (hiddenDamage) report.damageMeasurementSkippedHiddenDamage += 1;
+
   return {
+    damageMeasurable: !casts && !hiddenDamage,
     id: entryId(pk),
     label: fields.name,
     summary: trimToSentence(
@@ -1800,13 +1838,26 @@ function averageHealth(creature) {
 
 function threatTiers(entries, report) {
   const byTier = new Map(CHALLENGE_RATINGS.map((challenge) => [tierId(challenge), []]));
-  for (const entry of entries) byTier.get(entry.creature.tier).push(entry.creature);
+  for (const entry of entries) byTier.get(entry.creature.tier).push(entry);
   const measured = CHALLENGE_RATINGS.map((challenge) => {
     const id = tierId(challenge);
-    const creatures = byTier.get(id);
-    if (creatures.length === 0) return { id, challenge, label: `CR ${challengeLabel(challenge)}`, count: 0 };
+    const group = byTier.get(id);
+    const creatures = group.map((entry) => entry.creature);
+    // Health, defense and to-hit are read off EVERY creature of the rating. Damage is read only off
+    // the ones whose fighting is in their actions, because a spellcaster's printed attack is a
+    // dagger and a printed action the converter could not resolve is a trait a fight never rolls.
+    // Measuring damage from those would cap the whole rating at what a wizard does with a knife.
+    const hitters = group.filter((entry) => entry.damageMeasurable).map((entry) => entry.creature);
+    const rounds = hitters.map(bestRound);
+    const base = {
+      id,
+      challenge,
+      label: `CR ${challengeLabel(challenge)}`,
+      count: creatures.length,
+      hitters: hitters.length,
+    };
+    if (creatures.length === 0) return base;
     const healths = creatures.map(averageHealth);
-    const rounds = creatures.map(bestRound);
     const toHits = creatures.flatMap((creature) => {
       const best = creature.actions.flatMap((action) => (action.toHit === undefined ? [] : [action.toHit]));
       return best.length > 0 ? [Math.max(...best)] : [];
@@ -1816,61 +1867,93 @@ function threatTiers(entries, report) {
       return named.length > 0 ? [median(named)] : [];
     });
     return {
-      id,
-      challenge,
-      label: `CR ${challengeLabel(challenge)}`,
-      count: creatures.length,
+      ...base,
       health: [Math.max(1, Math.min(...healths)), Math.max(...healths)],
       defense: Math.round(median(creatures.map((creature) => creature.defense))),
       toHit: toHits.length > 0 ? Math.round(median(toHits)) : undefined,
-      damagePerRound: [Math.floor(Math.min(...rounds)), Math.ceil(Math.max(...rounds))],
+      damagePerRound: rounds.length > 0 ? [Math.floor(Math.min(...rounds)), Math.ceil(Math.max(...rounds))] : undefined,
       saveDifficulty: difficulties.length > 0 ? Math.round(median(difficulties)) : undefined,
     };
   });
 
-  // A rating the SRD has no creature for takes the midpoint of the nearest measured rung on each
-  // side, so the scale never has a hole an opponent could be clamped into.
+  // A rating the SRD has no creature for, and a rating whose creatures all fight in prose, take the
+  // midpoint of the nearest rung on each side that has the number in question, so the scale never
+  // has a hole an opponent could be clamped into.
   const filled = measured.map((tier, index) => {
-    const before = measured
-      .slice(0, index)
-      .reverse()
-      .find((entry) => entry.count > 0);
-    const after = measured.slice(index + 1).find((entry) => entry.count > 0);
+    const nearest = (pick, step) => {
+      for (let at = index + step; at >= 0 && at < measured.length; at += step) {
+        const value = pick(measured[at]);
+        if (value !== undefined) return value;
+      }
+      return undefined;
+    };
     const between = (pick) => {
-      const low = before ? pick(before) : undefined;
-      const high = after ? pick(after) : undefined;
+      const low = nearest(pick, -1);
+      const high = nearest(pick, 1);
       if (low === undefined) return high;
       if (high === undefined) return low;
       return Math.round((low + high) / 2);
     };
-    if (tier.count === 0) {
-      report.tiersFilledFromNeighbours.push(tier.id);
-      return {
-        id: tier.id,
-        label: tier.label,
-        health: [between((entry) => entry.health[0]), between((entry) => entry.health[1])],
-        defense: between((entry) => entry.defense),
-        toHit: between((entry) => entry.toHit),
-        damagePerRound: [between((entry) => entry.damagePerRound[0]), between((entry) => entry.damagePerRound[1])],
-        saveDifficulty: between((entry) => entry.saveDifficulty),
-        count: 0,
-      };
-    }
-    // A rating whose creatures roll nothing to hit, or name no difficulty, borrows only that one
-    // number from its neighbours and keeps everything it measured for itself.
+    const band = (pick) => {
+      const own = pick(tier);
+      if (own !== undefined) return own;
+      const low = between((entry) => pick(entry)?.[0]);
+      const high = between((entry) => pick(entry)?.[1]);
+      return [low, high];
+    };
+    if (tier.count === 0) report.tiersFilledFromNeighbours.push(tier.id);
+    if (tier.count > 0 && tier.damagePerRound === undefined) report.tiersWithNoHitters.push(tier.id);
     return {
       ...tier,
+      health: band((entry) => entry.health),
+      defense: tier.defense ?? between((entry) => entry.defense),
       toHit: tier.toHit ?? between((entry) => entry.toHit) ?? 0,
+      damagePerRound: band((entry) => entry.damagePerRound),
       saveDifficulty: tier.saveDifficulty ?? between((entry) => entry.saveDifficulty) ?? 10,
     };
   });
-  for (const tier of filled) {
+
+  // The one place this table is smoothed. It is the scale an opponent NOBODY WROTE is pulled onto,
+  // so a higher rating may never allow less than a lower one: a Game Master's own rating 12 monster
+  // would otherwise be clamped to what the two SRD creatures of that rating happen to print. Every
+  // cap and every floor becomes a running maximum along the rating order. The numbers are still the
+  // SRD creatures' own; only which rating may use them changes.
+  const running = {
+    healthLow: 0,
+    healthHigh: 0,
+    defense: 0,
+    toHit: -Infinity,
+    damageLow: 0,
+    damageHigh: 0,
+    difficulty: 0,
+  };
+  const shipped = filled.map((tier) => {
+    running.healthLow = Math.max(running.healthLow, tier.health[0]);
+    running.healthHigh = Math.max(running.healthHigh, tier.health[1]);
+    running.defense = Math.max(running.defense, tier.defense);
+    running.toHit = Math.max(running.toHit, tier.toHit);
+    running.damageLow = Math.max(running.damageLow, tier.damagePerRound[0]);
+    running.damageHigh = Math.max(running.damageHigh, tier.damagePerRound[1]);
+    running.difficulty = Math.max(running.difficulty, tier.saveDifficulty);
+    return {
+      ...tier,
+      // A floor can never pass its own cap: both are running maxima of numbers that were already
+      // ordered that way, so this only ever confirms it.
+      health: [Math.max(1, Math.min(running.healthLow, running.healthHigh)), running.healthHigh],
+      defense: running.defense,
+      toHit: running.toHit,
+      damagePerRound: [Math.min(running.damageLow, running.damageHigh), running.damageHigh],
+      saveDifficulty: running.difficulty,
+    };
+  });
+
+  for (const tier of shipped) {
     if (tier.toHit === undefined || tier.saveDifficulty === undefined) fail(`Threat tier ${tier.id} has no numbers`);
     if (tier.health[0] > tier.health[1] || tier.damagePerRound[0] > tier.damagePerRound[1]) {
       fail(`Threat tier ${tier.id} has a band whose lowest is above its highest`);
     }
   }
-  return filled;
+  return { measured: filled, tiers: shipped };
 }
 
 // ── The combat block ──
@@ -1996,7 +2079,7 @@ function combatBlock(tiers) {
     damageTypes: [...DAMAGE_TYPES],
     threat: {
       $comment:
-        "The scale an opponent nobody wrote is pulled onto. MEASURED from the SRD 5.1 creatures of each challenge rating: health is the lowest to the highest average hit points, defense and toHit are the median Armor Class and the median best attack bonus, damagePerRound is the lowest to the highest best round against one target, and saveDifficulty is the median of the difficulties those creatures' actions name. A rating the SRD has no creature for takes the midpoint of its nearest measured neighbours. This package's own bestiary is never clamped to it.",
+        "The scale an opponent NOBODY WROTE is pulled onto. MEASURED from the SRD 5.1 creatures of each challenge rating: health is the lowest to the highest average hit points, defense and toHit are the median Armor Class and the median best attack bonus, damagePerRound is the lowest to the highest best round against one target, and saveDifficulty is the median of the difficulties those creatures' actions name. Damage is measured only from the creatures whose fighting is in their actions, because a spellcaster's printed attack is a dagger and an action this format could not hold is a trait a fight never rolls. A rating the SRD has no creature for, or none that can be measured for damage, takes the midpoint of its nearest neighbours. The caps and floors are then made monotone along the rating order, which is the one place this table is smoothed: a higher rating may never allow less than a lower one, and the numbers themselves are still the SRD creatures' own. This package's own bestiary is never clamped to it.",
       tiers: tiers.map((tier) => ({
         id: tier.id,
         label: tier.label,
@@ -2159,6 +2242,9 @@ const report = {
   traitsByKind: new Map(),
   traitsDropped: 0,
   tiersFilledFromNeighbours: [],
+  tiersWithNoHitters: [],
+  damageMeasurementSkippedCasters: 0,
+  damageMeasurementSkippedHiddenDamage: 0,
 };
 
 const creatureRecords = srdOnly(await fixture("Creature.json"), "creature");
@@ -2194,11 +2280,14 @@ const creatureSources = {
   traits: creatureTraits,
   environments,
 };
-const creatures = creatureRecords
+const parsedCreatures = creatureRecords
   .map((record) => creatureEntry(record, creatureSources, report))
   .filter(Boolean)
   .sort(byId);
-const tiers = threatTiers(creatures, report);
+const { measured: measuredTiers, tiers } = threatTiers(parsedCreatures, report);
+// `damageMeasurable` is the threat scale's business and nothing the Engine reads, so it comes off
+// before the entries are written.
+const creatures = parsedCreatures.map(({ damageMeasurable, ...entry }) => entry);
 const combat = combatBlock(tiers);
 
 // Two catalogs are long enough to need a file of their own; the weapon list is
@@ -2397,11 +2486,27 @@ console.log("");
 console.log(
   `Threat scale: ${tiers.length} tiers, ${report.tiersFilledFromNeighbours.length} filled from neighbours (${list(report.tiersFilledFromNeighbours)})`,
 );
-console.log("  tier          n   health      defense  toHit  damage/round  save DC");
-for (const tier of tiers) {
-  console.log(
-    `  ${tier.id.padEnd(12)} ${String(tier.count).padStart(3)}   ` +
-      `${`${tier.health[0]}..${tier.health[1]}`.padEnd(10)}  ${String(tier.defense).padStart(7)}  ` +
-      `${String(tier.toHit).padStart(5)}  ${`${tier.damagePerRound[0]}..${tier.damagePerRound[1]}`.padStart(12)}  ${String(tier.saveDifficulty).padStart(7)}`,
-  );
-}
+console.log(
+  `  ${report.damageMeasurementSkippedCasters} creature(s) cast rather than swing and ` +
+    `${report.damageMeasurementSkippedHiddenDamage} carry damage this format left in a trait, so neither is measured for ` +
+    "damage (they are still in the bestiary, and in the health, defense and to-hit measurements)",
+);
+console.log(
+  `  ${report.tiersWithNoHitters.length} rating(s) have creatures but none that can be measured for damage ` +
+    `(${list(report.tiersWithNoHitters)}), so that band comes from their neighbours`,
+);
+console.log("  n = creatures at the rating, d = the ones its damage band was measured from");
+const tierRow = (tier) =>
+  `  ${tier.id.padEnd(12)} ${String(tier.count).padStart(3)} ${String(tier.hitters).padStart(3)}   ` +
+  `${`${tier.health[0]}..${tier.health[1]}`.padEnd(10)}  ${String(tier.defense).padStart(7)}  ` +
+  `${String(tier.toHit).padStart(5)}  ${`${tier.damagePerRound[0]}..${tier.damagePerRound[1]}`.padStart(12)}  ` +
+  `${String(tier.saveDifficulty).padStart(7)}`;
+const tierHead = "  tier          n   d   health      defense  toHit  damage/round  save DC";
+console.log("");
+console.log("  As measured");
+console.log(tierHead);
+for (const tier of measuredTiers) console.log(tierRow(tier));
+console.log("");
+console.log("  As shipped, with every cap and floor made monotone along the rating order");
+console.log(tierHead);
+for (const tier of tiers) console.log(tierRow(tier));
