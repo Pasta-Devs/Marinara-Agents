@@ -1,36 +1,13 @@
 import { Check, CheckCheck, Heart, Lock, Moon } from "lucide-react";
-import { useOpenSlurpCreatorThread, useSlurpComposeTargets } from "../../features/messages/slp-messages-hooks";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { useSlurpMediaSrc } from "../../base/media/slp-media-src";
-import {
-  CommissionRequest,
-  CommissionRow,
-  isCommissionRequest,
-  SlurpCommissionsPanel,
-} from "./commissions/SlpCommissions";
 import { showConfirmDialog } from "../../../lib/app-dialogs";
 import { cn } from "../../../lib/utils";
 import { Avatar } from "../../base/chrome/SlpChrome";
 import { formatTime } from "../../base/ui/slp-date-time";
 import { SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "../../modules/coin/SlpCoin";
-import type { SlurpMessage, SlurpThread, SlurpThreadRelationship } from "../../features/messages/slp-messages-contract";
+import type { SlurpMessage, SlurpThreadRelationship } from "../../features/messages/slp-messages-contract";
 import { useReactToSlurpMessage, useUnlockSlurpMessage } from "../../features/messages/slp-message-action-hooks";
-import {
-  useSlurpCompose,
-  useSlurpMessagePrompt,
-  useSlurpOlderMessages,
-  useSlurpThread,
-  useSlurpThreads,
-} from "../../features/messages/slp-messages-hooks";
-import { useSlurpSettings, useUpdateSlurpSettings } from "../../features/settings/slp-settings-contract";
-import {
-  SlurpPromptDebugPanel,
-  SlurpRapportBadge,
-  SlurpRelationshipPanel,
-  SlurpTierLadder,
-  useDismissablePopover,
-} from "./SlpMessageInsights";
 
 // One message in a thread, the away animation and the platform action card.
 

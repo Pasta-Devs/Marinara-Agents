@@ -1,17 +1,10 @@
 import { BriefcaseBusiness, Image as ImageIcon, Lock, MessageCircle, Palette } from "lucide-react";
-import { useOpenSlurpCreatorThread, useSlurpComposeTargets } from "../../features/messages/slp-messages-hooks";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import {
-  CommissionRequest,
-  CommissionRow,
-  isCommissionRequest,
-  SlurpCommissionsPanel,
-} from "./commissions/SlpCommissions";
 import { SlurpCoin } from "../../modules/coin/SlpCoin";
 import { useSlurpConnections } from "../../base/state/slp-host-connections";
 import { useCreateSlurpCommission } from "../../features/messages/commissions/slp-commission-hooks";
-import type { SlurpMessage, SlurpThread, SlurpThreadRelationship } from "../../features/messages/slp-messages-contract";
+import type { SlurpMessage } from "../../features/messages/slp-messages-contract";
 import {
   useDraftSlurpCreatorReply,
   useForceSlurpReply,
@@ -30,13 +23,6 @@ import {
   useSlurpThread,
 } from "../../features/messages/slp-messages-hooks";
 import { useSlurpSettings, useUpdateSlurpSettings } from "../../features/settings/slp-settings-contract";
-import {
-  SlurpPromptDebugPanel,
-  SlurpRapportBadge,
-  SlurpRelationshipPanel,
-  SlurpTierLadder,
-  useDismissablePopover,
-} from "./SlpMessageInsights";
 
 /** Tip amounts offered in a thread. Small enough to be a reflex, large enough to mean something. */
 /**
@@ -45,9 +31,6 @@ import {
  * `replyToSlurpMessage` reports six outcomes and the client displayed none of them, so an offline
  * creator, a thread already generating, and a missing connection were all the same blank screen.
  */
-import { HeaderIconButton, SlurpConnectionSwitcher, SlurpFollowUpItem } from "./SlpThreadChrome";
-import { MessageBubble, SlurpAwayAnimation, SlurpPlatformActionCard } from "./SlpMessageBubble";
-import { BroadcastPanel, CreatorMessageTools, FanImageTool } from "./SlpMessageTools";
 import { SLURP_MESSAGE_PAGE, type SlurpConversationDrawerMode } from "./SlpMessages";
 
 export interface SlurpThreadViewProps {

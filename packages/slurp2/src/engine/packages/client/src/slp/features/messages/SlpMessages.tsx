@@ -3,47 +3,12 @@ import type { SlurpComposeTarget } from "../../features/messages/slp-messages-co
 import { useOpenSlurpCreatorThread, useSlurpComposeTargets } from "../../features/messages/slp-messages-hooks";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import {
-  CommissionRequest,
-  CommissionRow,
-  isCommissionRequest,
-  SlurpCommissionsPanel,
-} from "./commissions/SlpCommissions";
 import { cn } from "../../../lib/utils";
 import { Avatar } from "../../base/chrome/SlpChrome";
 import { SlurpEmptyArtwork } from "../../base/chrome/SlpEmptyArtwork";
 import { formatTime } from "../../base/ui/slp-date-time";
-import { SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "../../modules/coin/SlpCoin";
-import type { SlurpMessage, SlurpThread, SlurpThreadRelationship } from "../../features/messages/slp-messages-contract";
-import {
-  useBroadcastSlurpMessage,
-  useCancelSlurpFollowUp,
-  useDraftSlurpCreatorReply,
-  useForceSlurpReply,
-  useGenerateSlurpViewerImage,
-  useReactToSlurpMessage,
-  useRequestSlurpReply,
-  useResetSlurpThread,
-  useResolveSlurpMessageRequest,
-  useSendSlurpCreatorImage,
-  useSendSlurpCreatorPpv,
-  useSendSlurpCreatorReply,
-  useSendSlurpMessage,
-  useSendSlurpViewerImage,
-  useSetSlurpThreadNotes,
-  useSlurpCheatDirective,
-  useTipInSlurpThread,
-  useUnlockSlurpMessage,
-} from "../../features/messages/slp-message-action-hooks";
+import type { SlurpThread } from "../../features/messages/slp-messages-contract";
 import { useSlurpThreads } from "../../features/messages/slp-messages-hooks";
-import { useSlurpSettings, useUpdateSlurpSettings } from "../../features/settings/slp-settings-contract";
-import {
-  SlurpPromptDebugPanel,
-  SlurpRapportBadge,
-  SlurpRelationshipPanel,
-  SlurpTierLadder,
-  useDismissablePopover,
-} from "./SlpMessageInsights";
 
 /** Tip amounts offered in a thread. Small enough to be a reflex, large enough to mean something. */
 /**
@@ -52,8 +17,6 @@ import {
  * `replyToSlurpMessage` reports six outcomes and the client displayed none of them, so an offline
  * creator, a thread already generating, and a missing connection were all the same blank screen.
  */
-import { HeaderIconButton, SlurpConnectionSwitcher, SlurpFollowUpItem } from "./SlpThreadChrome";
-import { MessageBubble, SlurpAwayAnimation, SlurpPlatformActionCard } from "./SlpMessageBubble";
 import { BroadcastPanel } from "./SlpMessageTools";
 import { SlurpThreadView } from "./SlpThreadView";
 

@@ -9,7 +9,6 @@ import {
 import type { ConversationMediaPickerTabId } from "../../../components/chat/ConversationMediaPickerPanel";
 import type { ChatImage } from "../../../hooks/use-gallery";
 import type {
-  ActiveComposerMention,
   NoodlePostCardCtx,
   NoodlePostCardControllerOptions,
   NoodlePostCardModel,

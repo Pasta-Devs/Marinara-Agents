@@ -10,12 +10,9 @@ import { useNoodlerViewer } from "../../features/feed/slp-feed-viewer-hooks";
 import type {
   NoodlePostAccess,
   NoodlerPostView,
-  NoodleManagedPost,
   NoodlePollInput,
-  NoodlePostImageCrop,
   NoodlerStageProfile,
   NoodlerPostDraftImage,
-  NoodleContentFormat,
   NoodlerManagedPost,
 } from "@marinara-engine/shared";
 import type { SlurpStageProfileInput } from "../../base/state/slp-state-types";

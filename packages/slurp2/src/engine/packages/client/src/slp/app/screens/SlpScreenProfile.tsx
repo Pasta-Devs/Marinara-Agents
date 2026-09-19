@@ -4,59 +4,14 @@ import { SlpProfileModals } from "./SlpProfileModals";
 import { SlpProfilePostCards } from "./SlpProfilePostCards";
 import { SlpProfileLeadingActions } from "./SlpProfileLeadingActions";
 import { ChevronDown, ChevronLeft, Sparkles } from "lucide-react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Fragment } from "react";
-import {
-  NOODLER_POST_CONTENT_MAX_LENGTH,
-  NOODLER_POST_GUIDE_MAX_LENGTH,
-  NOODLER_POST_TITLE_MAX_LENGTH,
-  noodlePollInputSchema,
-} from "@marinara-engine/shared";
-import type {
-  NoodleAccount,
-  NoodlePostAccess,
-  NoodlerPostView,
-  NoodlePollInput,
-  NoodlePostImageCrop,
-  NoodlerManagedPost,
-  NoodlerStageProfile,
-} from "@marinara-engine/shared";
-import type { SlurpManagedStageProfile, SlurpStageProfileInput } from "../../base/state/slp-state-types";
+import type { NoodlerPostView, NoodlerStageProfile } from "@marinara-engine/shared";
 import type { SlurpPromotion } from "../../features/ads/slp-ads-contract";
-import { useNoodlerFollowers, useNoodlerSubscribers } from "../../features/audience/slp-audience-hooks";
-import {
-  useGenerateNoodlerArtwork,
-  useUploadNoodlerAvatar,
-  useUploadNoodlerBanner,
-} from "../../features/creators/slp-creator-profile-hooks";
-import type {
-  NoodlerContentFormat,
-  NoodlerPostDraftImage,
-  SlurpProfilePost,
-} from "../../features/feed/slp-feed-contract";
-import {
-  useNoodlerViewer,
-  useToggleNoodlerFollow,
-  useToggleNoodlerSubscription,
-} from "../../features/feed/slp-feed-viewer-hooks";
 import { toast } from "sonner";
 import { type NoodlePostCardModel } from "../../modules/post/SlpPostCard";
 import { SlurpArcTimelineCard } from "../../features/projects/SlpArcTimelineCard";
-import { SlurpCoinAmount, SlurpCoinBurst } from "../../modules/coin/SlpCoin";
 import { useNearViewportSlurpMediaSrc } from "../../base/media/slp-media-src";
-import {
-  Avatar,
-  getNoodleAccentStyle,
-  SLURP_TOGGLE_ACTIVE_CLASS,
-  NoodleLogo,
-  ProfileInitial,
-  NOODLE_PINK,
-} from "../../base/chrome/SlpChrome";
 import { SlurpProfileSurface } from "../../features/creators/SlpProfileSurface";
-import {
-  ConversationMediaPickerPanel,
-  type ConversationMediaPickerTabId,
-} from "../../../components/chat/ConversationMediaPickerPanel";
 import { HelpTooltip } from "../../../components/ui/HelpTooltip";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { SlurpInlineAdTile } from "../../features/ads/SlpInlineAd";
@@ -270,75 +225,37 @@ export function StageProfileView(props: StageProfileViewProps) {
     onSaveEdit,
     profileSavePending,
     posts,
-    viewerCreator,
-    viewerAccount,
-    viewerActorAccount,
     postCardCtx,
-    viewerIsLoading,
-    viewerIsError,
-    onRetryViewer,
     draft,
     onDraftChange,
     onClearDraft,
     onDiscardDraft,
-    isLoading,
-    isError,
-    onRetry,
     onEdit,
     onBack,
     onManualPost,
     onGuidedPost,
     manualPending,
     guidePending,
-    onRunNow,
-    runNowPending,
-    onUnlock,
-    unlockPending,
-    onToggleFollow,
-    followPending,
-    onToggleSubscription,
-    subscriptionPending,
-    onOpenMessages,
-    accessPending,
-    onAccessChange,
     composerOpenSignal,
     localizeUi,
-    i18n,
     bannerSrc,
-    accessSettingsOpen,
     setAccessSettingsOpen,
-    automationOpen,
     setAutomationOpen,
     creatorToolsOpen,
     setCreatorToolsOpen,
-    updateAutoPosting,
-    updateFanActivity,
-    tipCreator,
-    tipOpen,
-    setTipOpen,
-    offerMessaging,
-    customTip,
-    setCustomTip,
     locationDraft,
     setLocationDraft,
     uploadProfileAvatar,
     uploadProfileBanner,
-    generateProfileArtwork,
     profileAvatarFileRef,
     profileBannerFileRef,
-    artworkKind,
     setArtworkKind,
     setOpenImagePostId,
-    artworkGuidance,
     setArtworkGuidance,
-    globalSettings,
     autoPosting,
     activeTab,
     setActiveTab,
-    setRevealedManagedPostIds,
     subscribersQuery,
-    followersQuery,
-    subscribers,
     subscriberTotal,
     followerTotal,
     profileLikeTotal,
@@ -346,19 +263,14 @@ export function StageProfileView(props: StageProfileViewProps) {
     creatorStatus,
     profileLocation,
     profileBioBody,
-    accent,
     personaBackedCreator,
-    accessViewerAccounts,
     managedCreator,
     goalForViewer,
     arcsQuery,
     editing,
     editDraft,
-    visiblePosts,
-    imagePosts,
     featuredPost,
     openImagePost,
-    emptyTabTitle,
   } = model;
   const cards = <SlpProfilePostCards model={model} />;
   return (

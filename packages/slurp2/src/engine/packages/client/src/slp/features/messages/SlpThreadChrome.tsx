@@ -1,32 +1,8 @@
 import { Brain, Check, Link, X } from "lucide-react";
-import { useOpenSlurpCreatorThread, useSlurpComposeTargets } from "../../features/messages/slp-messages-hooks";
 import { useRef } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import {
-  CommissionRequest,
-  CommissionRow,
-  isCommissionRequest,
-  SlurpCommissionsPanel,
-} from "./commissions/SlpCommissions";
 import { cn } from "../../../lib/utils";
-import { SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "../../modules/coin/SlpCoin";
-import type { SlurpMessage, SlurpThread, SlurpThreadRelationship } from "../../features/messages/slp-messages-contract";
 import { useCancelSlurpFollowUp } from "../../features/messages/slp-message-action-hooks";
-import {
-  useSlurpCompose,
-  useSlurpMessagePrompt,
-  useSlurpOlderMessages,
-  useSlurpThread,
-  useSlurpThreads,
-} from "../../features/messages/slp-messages-hooks";
-import { useSlurpSettings, useUpdateSlurpSettings } from "../../features/settings/slp-settings-contract";
-import {
-  SlurpPromptDebugPanel,
-  SlurpRapportBadge,
-  SlurpRelationshipPanel,
-  SlurpTierLadder,
-  useDismissablePopover,
-} from "./SlpMessageInsights";
 
 // The thread header controls, the connection switcher and one follow-up row.
 

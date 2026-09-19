@@ -3,13 +3,7 @@ import { Check, Clock, Eye, Image as ImageIcon, RefreshCw, SlidersHorizontal, Us
 import { NOODLER_BULK_ACCOUNT_MAX, NOODLER_POSTS_PER_DAY_MAX } from "@marinara-engine/shared";
 import { cn } from "../../../lib/utils";
 import { Avatar } from "../../base/chrome/SlpChrome";
-import type {
-  NoodleIdentityDisclosure,
-  NoodlerOnboardingCompletion,
-  NoodlerRefreshNowOutcome,
-  NoodlerPostView,
-  NoodlerStageProfile,
-} from "@marinara-engine/shared";
+import type { NoodleIdentityDisclosure } from "@marinara-engine/shared";
 import type { SlurpOnboardingWizardModel } from "./slp-onboarding-wizard-model";
 
 /** The wizard body: pick the creators, tune them, run the setup, and read what came back. */

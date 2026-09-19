@@ -1,156 +1,18 @@
 import { Loader2 } from "lucide-react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import {
-  Fragment,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type Dispatch,
-  type ReactNode,
-  type SetStateAction,
-} from "react";
 import { toast } from "sonner";
-import {
-  NOODLER_POST_CONTENT_MAX_LENGTH,
-  NOODLER_POST_GUIDE_MAX_LENGTH,
-  NOODLER_POST_TITLE_MAX_LENGTH,
-  noodlePollInputSchema,
-} from "@marinara-engine/shared";
-import type {
-  NoodleIdentityDisclosure,
-  NoodleAccount,
-  NoodleInteraction,
-  NoodlePostAccess,
-  NoodlerPostView,
-  NoodlePollInput,
-  NoodlePostImageCrop,
-  NoodlerManagedPost,
-  NoodlerStageProfile,
-  NoodlerSourceSnapshot,
-  AvatarCrop,
-  Persona,
-} from "@marinara-engine/shared";
-import type { SlurpManagedStageProfile, SlurpStageProfileInput } from "../base/state/slp-state-types";
-import {
-  useHideSlurpAd,
-  useHideSlurpAdBrand,
-  useRecordSlurpAdAction,
-  useSlurpInlineAds,
-} from "../features/ads/slp-ads-hooks";
-import {
-  useNoodlerConnectionCounts,
-  useNoodlerFollowers,
-  useNoodlerSubscribers,
-} from "../features/audience/slp-audience-hooks";
-import {
-  useCreateNoodlerStageProfile,
-  useGenerateNoodlerArtwork,
-  useGenerateNoodlerStageProfileDraft,
-  useRemoveNoodlerAvatar,
-  useUpdateNoodlerProfileLocation,
-  useUpdateNoodlerStageProfile,
-  useUploadNoodlerAvatar,
-  useUploadNoodlerBanner,
-  useUseNoodlerSourceAvatar,
-} from "../features/creators/slp-creator-profile-hooks";
-import { useNoodlerAccounts, useNoodlerEligibleAccounts } from "../features/creators/slp-creators-hooks";
-import {
-  useClaimSlurpDailyRefill,
-  useNoodlerViewerWallets,
-  useSetSlurpGoal,
-  useSetSlurpWalletCoinsForDevelopment,
-  useSlurpPayout,
-  useSlurpStudio,
-  useSlurpWallet,
-  useTipSlurpCreator,
-} from "../features/economy/slp-economy-hooks";
-import {
-  useConfirmNoodlerImagePrompts,
-  useCreateNoodlerPost,
-  useDeleteNoodlerPost,
-  useGenerateNoodlerNoodlePost,
-  useGenerateNoodlerPostImage,
-  useLoadNoodlerPostImage,
-  useNoodlerPosts,
-  useReplaceNoodlerPostImage,
-  useUpdateNoodlerPost,
-} from "../features/feed/slp-feed-post-hooks";
-import {
-  useRunNoodlerAutoPostNow,
-  useUpdateNoodlerAccess,
-  useUpdateNoodlerAutoPosting,
-} from "../features/feed/slp-feed-schedule-hooks";
-import {
-  useCreateNoodlerInteraction,
-  useDeleteNoodlerInteraction,
-  useMarkNoodlerFeedSeen,
-  useNoodlerUnseenCount,
-  useNoodlerViewer,
-  useRemoveNoodlerInteraction,
-  useToggleNoodlerFollow,
-  useToggleNoodlerSubscription,
-  useTriggerNoodlerCreatorReply,
-  useUnlockNoodlerPost,
-  useUpdateNoodlerInteraction,
-} from "../features/feed/slp-feed-viewer-hooks";
-import {
-  useRecordSlurpStoryView,
-  useSlurpCompose,
-  useSlurpStoryViews,
-  useSlurpThreads,
-} from "../features/messages/slp-messages-hooks";
-import type { SlurpEventGroup, SlurpEventItem } from "../features/notifications/slp-notifications-contract";
-import { useMarkSlurpNotificationsSeen, useSlurpNotifications } from "../features/notifications/slp-notification-hooks";
-import { useSlurpSettings, useUpdateSlurpSettings } from "../features/settings/slp-settings-hooks";
-import { useActivePersona, usePersonas } from "../../hooks/use-creator-personas";
-import { StageProfileSourcePicker, DisclosureStep } from "./screens/SlpScreenCreateProfile";
 import { ViewerHub } from "./screens/SlpScreenHub";
 import { SLURP_PLACEHOLDER_BALANCE, errorMessage, EmptyState, NoodlerFrame } from "./screens/SlpHomeHelpers";
 import { ImagePromptReviewModal } from "../../components/ui/ImagePromptReviewModal";
-import {
-  NoodleComposerShell,
-  NoodleComposerToolRow,
-  type NoodlePostCardCtx,
-  type NoodlePostCardModel,
-  type NoodlePostImageUpdate,
-  useNoodlePostCardController,
-} from "../modules/post/SlpPostCard";
-import { DEFAULT_SLURP_SUBSCRIPTION_PRICE, SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "../modules/coin/SlpCoin";
 import { ChatImageLightbox } from "../../components/chat/ChatImageLightbox";
-import { useNearViewportSlurpMediaSrc, useSlurpMediaSrc } from "../base/media/slp-media-src";
 import { SlurpOnboardingWizard } from "../features/onboarding/SlpOnboardingPanel";
 import { SlurpAgeGate, SlurpConfetti } from "../features/onboarding/SlpAgeGate";
 import { SlurpSplash } from "../features/onboarding/SlpSplash";
 import { getNoodleAccentStyle, NOODLE_PERSONA_SWITCHER_PAGE_SIZE, NOODLE_PINK } from "../base/chrome/SlpChrome";
 import { NoodleShell } from "../modules/chrome/SlpShell";
-import { BroadcastPanel, SlurpMessagesView } from "../features/messages/SlpMessages";
 import { SlpBackstageShell } from "../app/backstage/SlpBackstageShell";
 import { SlpBackstageSidebar } from "../features/backstage/SlpBackstageSidebar";
-import { PostImageCropEditor, PostImageFrame } from "../base/media/SlpPostImageCropEditor";
-import {
-  ConversationMediaPickerPanel,
-  type ConversationMediaPickerTabId,
-} from "../../components/chat/ConversationMediaPickerPanel";
 import { Modal } from "../../components/ui/Modal";
 import type { SlurpNavigationState } from "../base/navigation/slp-navigation.types";
-import { SlurpInlineAd, SlurpInlineAdTile } from "../features/ads/SlpInlineAd";
-import {
-  appendAudienceStance,
-  confirmSlurpAvatarReview,
-  AudienceStancePresets,
-  disclosureOptions,
-  profileAccent,
-  StageProfileForm,
-  WizardFooter,
-} from "../features/creators/SlpStageProfileForm";
-import {
-  filterAndSortSlurpCreators,
-  isSlurpDiscoveryProfileIncomplete,
-  SLURP_DISCOVERY_TAGS,
-  type SlurpDiscoverLayout,
-  type SlurpDiscoverSort,
-} from "../features/discovery/slp-discovery";
 import { useSlurpHomeState } from "./slp-home-actions";
 import { renderSlurpHomeCreatorFlow } from "./screens/SlpHomeCreatorFlow";
 import { renderSlurpHomeDestinations } from "./screens/SlpHomeDestinations";
@@ -191,15 +53,10 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     accountSwitcherRef,
     visiblePersonaAccounts,
     switchViewerPersona,
-    noodlerPostDrafts,
-    updateNoodlerPostDraft,
-    clearNoodlerPostDraft,
     exitToCreatorHub,
     openSettings,
     feedSearch,
     setFeedSearch,
-    discoverRank,
-    setDiscoverRank,
     discoveryInputRef,
     feedTab,
     setFeedTab,
@@ -220,47 +77,9 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     toggleFollow,
     toggleSubscription,
     unlockPost,
-    updateAccess,
-    draftNoodleAccountId,
-    setDraftNoodleAccountId,
-    sourceSearch,
-    sourceKind,
-    eligibleAccountsQuery,
-    createProfile,
-    updateProfile,
-    uploadAvatar,
-    useSourceAvatar,
-    removeAvatar,
-    generatePost,
     confirmImagePrompts,
-    runAutoPostNow,
-    setupAutoPosting,
-    createPost,
-    generateProfileDraft,
-    connections,
-    profileDraft,
-    setProfileDraft,
-    setProfileDraftDirty,
     imagePromptReview,
     setImagePromptReview,
-    creationStep,
-    setCreationStep,
-    autoPostSetupId,
-    setAutoPostSetupId,
-    creationDisclosure,
-    setCreationDisclosure,
-    draftGuidance,
-    setDraftGuidance,
-    draftConnectionId,
-    setDraftConnectionId,
-    previousDraft,
-    setPreviousDraft,
-    editingProfileId,
-    composerOpenSignal,
-    setComposerOpenSignal,
-    setAcceptSourceChangesForProfileId,
-    invalidateProfileDraftGeneration,
-    profileReturnView,
     prepareNavigationAwayFromProfileEditor,
     goToHub,
     goToNoodlerSearch,
@@ -270,30 +89,12 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
     closeNoodlerSearch,
     postCardController,
     postCardCtx,
-    selectedProfile,
-    postsQuery,
-    selectedViewerCreator,
-    eligibleNoodleAccounts,
-    selectedSource,
-    sourcePickerLoading,
-    handleSourceSearch,
-    handleSourceKind,
     enterFromGate,
     closeOnboarding,
-    beginCreate,
-    cancelCreateProfile,
     beginEdit,
-    closeProfileEditor,
-    changeDisclosure,
-    generateDraft,
     redraftFromSource,
-    saveProfile,
-    submitManualPost,
-    submitGuidedPost,
-    submitRunNow,
     confirmReviewedImagePrompts,
     toggleCreatorSubscription,
-    toggleCreatorFollow,
     mainAuthorProfile,
     openPostComposer,
     openStoryComposer,

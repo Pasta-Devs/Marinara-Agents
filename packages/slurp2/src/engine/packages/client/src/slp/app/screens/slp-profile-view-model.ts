@@ -1,40 +1,5 @@
-import {
-  BookmarkCheck,
-  BookmarkPlus,
-  ChevronDown,
-  ChevronLeft,
-  Clock3,
-  LayoutGrid,
-  List,
-  Loader2,
-  Lock,
-  MessageCircle,
-  Pencil,
-  Plus,
-  Search,
-  Send,
-  Sparkles,
-  Trash2,
-  TriangleAlert,
-  X,
-} from "lucide-react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
-import {
-  NOODLER_POST_CONTENT_MAX_LENGTH,
-  NOODLER_POST_GUIDE_MAX_LENGTH,
-  NOODLER_POST_TITLE_MAX_LENGTH,
-  noodlePollInputSchema,
-} from "@marinara-engine/shared";
-import type {
-  NoodleAccount,
-  NoodlePostAccess,
-  NoodlerPostView,
-  NoodlePollInput,
-  NoodlePostImageCrop,
-  NoodlerManagedPost,
-  NoodlerStageProfile,
-} from "@marinara-engine/shared";
+import type { NoodleAccount } from "@marinara-engine/shared";
 import type { SlurpManagedStageProfile, SlurpStageProfileInput } from "../../base/state/slp-state-types";
 import { useNoodlerFollowers, useNoodlerSubscribers } from "../../features/audience/slp-audience-hooks";
 import { useUpdateNoodlerFanActivity } from "../../features/audience/slp-fan-activity-hooks";
@@ -44,32 +9,15 @@ import {
   useUploadNoodlerBanner,
 } from "../../features/creators/slp-creator-profile-hooks";
 import { useTipSlurpCreator } from "../../features/economy/slp-economy-hooks";
-import type {
-  NoodlerContentFormat,
-  NoodlerPostDraftImage,
-  SlurpProfilePost,
-} from "../../features/feed/slp-feed-contract";
+import type { SlurpProfilePost } from "../../features/feed/slp-feed-contract";
 import { useUpdateNoodlerAutoPosting } from "../../features/feed/slp-feed-schedule-hooks";
 import { useNoodlerViewer } from "../../features/feed/slp-feed-viewer-hooks";
 import { useSlurpCompose } from "../../features/messages/slp-messages-hooks";
 import { useSlurpArcs } from "../../features/projects/slp-projects-hooks";
 import { useSlurpSettings } from "../../features/settings/slp-settings-hooks";
 import { type NoodlePostCardCtx } from "../../modules/post/SlpPostCard";
-import { SlurpCoinAmount, SlurpCoinBurst } from "../../modules/coin/SlpCoin";
 import { useSlurpMediaSrc } from "../../base/media/slp-media-src";
 import { slurpCreatorStatus } from "../../modules/creator/slp-creator-status";
-import {
-  Avatar,
-  getNoodleAccentStyle,
-  SLURP_TOGGLE_ACTIVE_CLASS,
-  NoodleLogo,
-  ProfileInitial,
-  NOODLE_PINK,
-} from "../../base/chrome/SlpChrome";
-import {
-  ConversationMediaPickerPanel,
-  type ConversationMediaPickerTabId,
-} from "../../../components/chat/ConversationMediaPickerPanel";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { profileAccent } from "../../features/creators/SlpStageProfileForm";
 import {
@@ -142,45 +90,12 @@ export function useStageProfileViewModel(props: StageProfileViewProps) {
   const {
     profile,
     profileDraft,
-    onProfileChange,
-    onCancelEdit,
-    onSaveEdit,
-    profileSavePending,
     posts,
     viewerCreator,
     viewerAccount,
-    viewerActorAccount,
     slurpSettings,
-    postCardCtx,
     viewerAccounts,
     connectionCounts,
-    viewerIsLoading,
-    viewerIsError,
-    onRetryViewer,
-    draft,
-    onDraftChange,
-    onClearDraft,
-    onDiscardDraft,
-    isLoading,
-    isError,
-    onRetry,
-    onEdit,
-    onBack,
-    onManualPost,
-    onGuidedPost,
-    manualPending,
-    guidePending,
-    onRunNow,
-    runNowPending,
-    onUnlock,
-    unlockPending,
-    onToggleFollow,
-    followPending,
-    onToggleSubscription,
-    subscriptionPending,
-    onOpenMessages,
-    accessPending,
-    onAccessChange,
     composerOpenSignal,
   } = props;
   const { t: localizeUi, i18n } = useUiTranslation();

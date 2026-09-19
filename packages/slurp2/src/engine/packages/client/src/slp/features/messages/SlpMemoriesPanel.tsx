@@ -1,33 +1,9 @@
 import { SlurpFollowUpItem } from "./SlpThreadChrome";
 import { SLURP_MEMORY_TIER_LIMIT } from "./SlpMessages";
 import { Pencil, Plus, Search, Trash2 } from "lucide-react";
-import { useOpenSlurpCreatorThread, useSlurpComposeTargets } from "../../features/messages/slp-messages-hooks";
 import { useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import {
-  CommissionRequest,
-  CommissionRow,
-  isCommissionRequest,
-  SlurpCommissionsPanel,
-} from "./commissions/SlpCommissions";
-import { SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "../../modules/coin/SlpCoin";
-import type { SlurpMessage, SlurpThread, SlurpThreadRelationship } from "../../features/messages/slp-messages-contract";
 import { useSetSlurpThreadNotes } from "../../features/messages/slp-message-action-hooks";
-import {
-  useSlurpCompose,
-  useSlurpMessagePrompt,
-  useSlurpOlderMessages,
-  useSlurpThread,
-  useSlurpThreads,
-} from "../../features/messages/slp-messages-hooks";
-import { useSlurpSettings, useUpdateSlurpSettings } from "../../features/settings/slp-settings-contract";
-import {
-  SlurpPromptDebugPanel,
-  SlurpRapportBadge,
-  SlurpRelationshipPanel,
-  SlurpTierLadder,
-  useDismissablePopover,
-} from "./SlpMessageInsights";
 
 // What a Creator remembers about the viewer, and the editor for one memory.
 

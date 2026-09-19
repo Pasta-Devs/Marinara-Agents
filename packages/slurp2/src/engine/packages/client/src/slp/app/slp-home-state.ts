@@ -3,14 +3,11 @@ import { useSlurpHomePostActions } from "./slp-home-post-actions";
 import { NOODLER_POST_TITLE_MAX_LENGTH } from "@marinara-engine/shared";
 import type {
   NoodleAccount,
-  NoodleInteraction,
-  NoodlePollInput,
   NoodlerManagedPost,
-  NoodlePostAccess,
   NoodleIdentityDisclosure,
   NoodlerSourceSnapshot,
 } from "@marinara-engine/shared";
-import type { SlurpManagedStageProfile, SlurpStageProfileInput } from "../base/state/slp-state-types";
+import type { SlurpStageProfileInput } from "../base/state/slp-state-types";
 import { useNoodlerConnectionCounts } from "../features/audience/slp-audience-hooks";
 import {
   useCreateNoodlerStageProfile,
@@ -67,7 +64,7 @@ import {
   SLURP_PLACEHOLDER_BALANCE,
 } from "./screens/SlpHomeHelpers";
 import { useNoodlePostCardController } from "../modules/post/SlpPostCard";
-import type { ImagePromptOverride, ImagePromptReviewItem } from "../../components/ui/ImagePromptReviewModal";
+import type { ImagePromptReviewItem } from "../../components/ui/ImagePromptReviewModal";
 import type { SlurpNavigationState } from "../base/navigation/slp-navigation.types";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { confirmLeaveSlurpBackstage } from "../features/backstage/SlpBackstageControls";

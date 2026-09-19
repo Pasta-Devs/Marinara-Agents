@@ -39,7 +39,7 @@ import {
   createNoodleLightboxImage,
   PostImageEditControls,
 } from "./SlpPostHelpers";
-import type { NoodlePostCardModel, NoodlePostCardCtx, NoodlePostImageUpdate } from "./SlpPostHelpers";
+import type { NoodlePostCardModel, NoodlePostCardCtx } from "./SlpPostHelpers";
 
 export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: NoodlePostCardCtx }) {
   const { t: localizeUi, i18n } = useUiTranslation();

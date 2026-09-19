@@ -4,7 +4,7 @@ import { SubscriptionSections } from "./SlpScreenSubscriptions";
 import { LayoutGrid, List, Loader2, RefreshCw, Search, UserRound } from "lucide-react";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import type { NoodlerPostView, Persona } from "@marinara-engine/shared";
+import type { Persona } from "@marinara-engine/shared";
 import type { SlurpManagedStageProfile } from "../../base/state/slp-state-types";
 import {
   useHideSlurpAd,
@@ -13,7 +13,6 @@ import {
   useSlurpInlineAds,
 } from "../../features/ads/slp-ads-hooks";
 import { useNoodlerViewer } from "../../features/feed/slp-feed-viewer-hooks";
-import { useRecordSlurpStoryView, useSlurpStoryViews } from "../../features/messages/slp-messages-hooks";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { cn } from "../../../lib/utils";
 import { NoodlePostCardCtx } from "../../modules/post/SlpPostCard";

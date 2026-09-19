@@ -1,16 +1,7 @@
 import { Lock, Megaphone } from "lucide-react";
-import { useOpenSlurpCreatorThread, useSlurpComposeTargets } from "../../features/messages/slp-messages-hooks";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import {
-  CommissionRequest,
-  CommissionRow,
-  isCommissionRequest,
-  SlurpCommissionsPanel,
-} from "./commissions/SlpCommissions";
 import { cn } from "../../../lib/utils";
-import { SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "../../modules/coin/SlpCoin";
-import type { SlurpMessage, SlurpThread, SlurpThreadRelationship } from "../../features/messages/slp-messages-contract";
 import {
   useBroadcastSlurpMessage,
   useGenerateSlurpViewerImage,
@@ -18,21 +9,6 @@ import {
   useSendSlurpCreatorPpv,
   useSendSlurpViewerImage,
 } from "../../features/messages/slp-message-action-hooks";
-import {
-  useSlurpCompose,
-  useSlurpMessagePrompt,
-  useSlurpOlderMessages,
-  useSlurpThread,
-  useSlurpThreads,
-} from "../../features/messages/slp-messages-hooks";
-import { useSlurpSettings, useUpdateSlurpSettings } from "../../features/settings/slp-settings-contract";
-import {
-  SlurpPromptDebugPanel,
-  SlurpRapportBadge,
-  SlurpRelationshipPanel,
-  SlurpTierLadder,
-  useDismissablePopover,
-} from "./SlpMessageInsights";
 
 // Creator-side tools: broadcast, the message toolbar and the fan image picker.
 

@@ -9,7 +9,6 @@ import type {
   NoodlePostImageCrop,
   NoodlerManagedPost,
   NoodlerPostView,
-  NoodlerStageProfile,
 } from "@marinara-engine/shared";
 import type { SlurpManagedStageProfile } from "../../base/state/slp-state-types";
 import type { NoodlerContentFormat, SlurpProfilePost } from "../../features/feed/slp-feed-contract";

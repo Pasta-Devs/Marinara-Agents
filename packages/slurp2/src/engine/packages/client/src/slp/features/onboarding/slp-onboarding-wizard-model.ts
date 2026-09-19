@@ -1,28 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  AlertTriangle,
-  Check,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  Coins,
-  Cpu,
-  Eye,
-  Image as ImageIcon,
-  Loader2,
-  Lock,
-  RefreshCw,
-  SlidersHorizontal,
-  Sparkles,
-  Users,
-} from "lucide-react";
-import type {
-  NoodleIdentityDisclosure,
-  NoodlerOnboardingCompletion,
-  NoodlerRefreshNowOutcome,
-  NoodlerPostView,
-  NoodlerStageProfile,
-} from "@marinara-engine/shared";
+import type { NoodleIdentityDisclosure, NoodlerRefreshNowOutcome, NoodlerStageProfile } from "@marinara-engine/shared";
 import { NOODLER_BULK_ACCOUNT_MAX, resolveNoodlerOnboardingCompletion } from "@marinara-engine/shared";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -36,7 +13,6 @@ import { useEnqueueNoodlerFirstPosts, useNoodlerFirstPostStatus } from "./slp-fi
 import { useUpdateSlurpConnectionsForCreators } from "../media/slp-media-contract";
 import { useSlurpSettings, useUpdateSlurpSettings } from "../settings/slp-settings-contract";
 import { generateClientId } from "../../../lib/utils";
-import { Avatar, getNoodleAccentStyle, NOODLE_PINK } from "../../base/chrome/SlpChrome";
 import {
   SLURP_DEFAULT_ACTIVITY_PRESET,
   slurpActivityPresetForSettings,

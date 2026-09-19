@@ -1,38 +1,8 @@
 import { useDismissablePopover } from "./SlpMessageInsights";
-import {
-  ArrowDown,
-  ArrowLeft,
-  Brain,
-  BriefcaseBusiness,
-  Check,
-  CheckCheck,
-  ChevronDown,
-  Heart,
-  Image as ImageIcon,
-  Info,
-  Link,
-  Loader2,
-  Lock,
-  MessageCircle,
-  Megaphone,
-  Moon,
-  MoreVertical,
-  Palette,
-  Pencil,
-  Plus,
-  Search,
-  Send,
-  Trash2,
-  UserRound,
-  X,
-} from "lucide-react";
-import { useOpenSlurpCreatorThread, useSlurpComposeTargets } from "../../features/messages/slp-messages-hooks";
 import { useLayoutEffect } from "react";
 import { toast } from "sonner";
 import { isCommissionRequest } from "./commissions/SlpCommissions";
 import { showConfirmDialog } from "../../../lib/app-dialogs";
-import { SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "../../modules/coin/SlpCoin";
-import type { SlurpMessage, SlurpThread, SlurpThreadRelationship } from "../../features/messages/slp-messages-contract";
 import { useSlurpThreadViewState, type SlurpThreadViewProps, type SlurpThreadViewState } from "./slp-thread-view-model";
 
 /**

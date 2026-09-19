@@ -1,65 +1,9 @@
-import { useEffect, useRef, useState } from "react";
-import type {
-  NoodleAccount,
-  NoodleInteraction,
-  NoodlePollInput,
-  NoodlerManagedPost,
-  NoodlePostAccess,
-  NoodleIdentityDisclosure,
-  NoodlerSourceSnapshot,
-} from "@marinara-engine/shared";
+import type { NoodleIdentityDisclosure } from "@marinara-engine/shared";
 import type { SlurpManagedStageProfile, SlurpStageProfileInput } from "../base/state/slp-state-types";
-import {
-  useCreateNoodlerStageProfile,
-  useGenerateNoodlerStageProfileDraft,
-  useRemoveNoodlerAvatar,
-  useUpdateNoodlerProfileLocation,
-  useUpdateNoodlerStageProfile,
-  useUploadNoodlerAvatar,
-  useUseNoodlerSourceAvatar,
-} from "../features/creators/slp-creator-profile-hooks";
-import { useNoodlerAccounts, useNoodlerEligibleAccounts } from "../features/creators/slp-creators-hooks";
-import {
-  useConfirmNoodlerImagePrompts,
-  useCreateNoodlerPost,
-  useDeleteNoodlerPost,
-  useGenerateNoodlerNoodlePost,
-  useGenerateNoodlerPostImage,
-  useLoadNoodlerPostImage,
-  useNoodlerPosts,
-  useReplaceNoodlerPostImage,
-  useUpdateNoodlerPost,
-} from "../features/feed/slp-feed-post-hooks";
-import {
-  useRunNoodlerAutoPostNow,
-  useUpdateNoodlerAccess,
-  useUpdateNoodlerAutoPosting,
-} from "../features/feed/slp-feed-schedule-hooks";
-import {
-  useCreateNoodlerInteraction,
-  useDeleteNoodlerInteraction,
-  useMarkNoodlerFeedSeen,
-  useNoodlerUnseenCount,
-  useNoodlerViewer,
-  useRemoveNoodlerInteraction,
-  useToggleNoodlerFollow,
-  useToggleNoodlerSubscription,
-  useTriggerNoodlerCreatorReply,
-  useUnlockNoodlerPost,
-  useUpdateNoodlerInteraction,
-} from "../features/feed/slp-feed-viewer-hooks";
-import { useSlurpSettings, useUpdateSlurpSettings } from "../features/settings/slp-settings-hooks";
-import { useActivePersona, usePersonas } from "../../hooks/use-creator-personas";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { type NoodlerPostSubmission, errorMessage, serializeNoodlerPostGuide } from "./screens/SlpHomeHelpers";
-import {
-  type NoodlePostCardModel,
-  type NoodlePostImageUpdate,
-  useNoodlePostCardController,
-} from "../modules/post/SlpPostCard";
-import type { ImagePromptOverride, ImagePromptReviewItem } from "../../components/ui/ImagePromptReviewModal";
+import type { ImagePromptOverride } from "../../components/ui/ImagePromptReviewModal";
 import { confirmSlurpAvatarReview } from "../features/creators/SlpStageProfileForm";
-import { NOODLE_PERSONA_SWITCHER_PAGE_SIZE, NOODLE_PINK } from "../base/chrome/SlpChrome";
 import { ApiError } from "../../lib/api-client";
 import { toast } from "sonner";
 import { useSlurpHomeBaseState, type SlurpHomeBaseState, type SlurpHomeProps } from "./slp-home-state";
