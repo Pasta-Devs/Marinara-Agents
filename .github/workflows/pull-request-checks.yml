@@ -40,8 +40,13 @@ jobs:
       - name: Test package security invariants
         run: npm run test:security
 
-      - name: Test Calls SwarmUI video generation
-        run: node tests/calls-swarmui-video.regression.mjs
+      - name: Test Calls autoplay recovery
+        run: npx tsx tests/calls-playback.regression.ts
+
+      - name: Test Calls release and SwarmUI video generation
+        run: |
+          node tests/conversation-calls-summary.regression.mjs
+          node tests/calls-swarmui-video.regression.mjs
 
       - name: Test Memory Nag recall selection
         run: npx tsx tests/memory-nag-selection.regression.ts

@@ -186,7 +186,7 @@
     {
       "id": "barbarian-rage",
       "label": "Rage",
-      "summary": "Picking this also adds the Rage class resource: starts at 2, back after a long rest. In battle, you fight with primal ferocity. On your turn, you can enter a rage as a bonus action.",
+      "summary": "Picking this also adds the Rage class resource: its maximum follows the Barbarian table, back after a long rest. The table says Unlimited at 20th level, so the maximum stays 6. Your sheet has one level, so a multiclass character follows the total. In battle, you fight with primal ferocity.",
       "filters": { "class": "Barbarian", "subclass": "Base class", "level": 1 },
       "rows": [
         {
@@ -196,7 +196,22 @@
             "text": "In battle, you fight with primal ferocity. On your turn, you can enter a rage as a bonus action. While raging, you gain the following benefits if you aren't wearing heavy armor: * You have advantage on Strength checks and Strength saving throws. * When you make a melee weapon attack using Strength, you gain a bonus to the damage roll that increases as you gain levels as a barbarian, as shown in the Rage Damage column of the Barbarian table. * You have resistance to bludgeoning, piercing, and slashing damage. If you are able to cast spells, you can't cast them or concentrate on them while raging. Your rage lasts for 1 minute. See the SRD for the full text."
           }
         },
-        { "list": "counters", "values": { "name": "Rage", "max": 2, "recharge": "long" } }
+        {
+          "list": "counters",
+          "values": { "name": "Rage", "max": 2, "recharge": "long" },
+          "scaled": {
+            "max": {
+              "from": { "field": "level" },
+              "table": [
+                [1, 2],
+                [3, 3],
+                [6, 4],
+                [12, 5],
+                [17, 6]
+              ]
+            }
+          }
+        }
       ]
     },
     {
@@ -277,7 +292,7 @@
     {
       "id": "bard-bardic-inspiration",
       "label": "Bardic Inspiration",
-      "summary": "Picking this also adds the Bardic Inspiration class resource: starts at 1, back after a long rest. Uses equal your Charisma modifier, at least one, so raise the maximum on the sheet. You can inspire others through stirring words or music.",
+      "summary": "Picking this also adds the Bardic Inspiration class resource: its maximum follows your Charisma modifier, at least one, back after a long rest. You can inspire others through stirring words or music.",
       "filters": { "class": "Bard", "subclass": "Base class", "level": 1 },
       "rows": [
         {
@@ -287,7 +302,11 @@
             "text": "You can inspire others through stirring words or music. To do so, you use a bonus action on your turn to choose one creature other than yourself within 60 feet of you who can hear you. That creature gains one Bardic Inspiration die, a d6. Once within the next 10 minutes, the creature can roll the die and add the number rolled to one ability check, attack roll, or saving throw it makes. The creature can wait until after it rolls the d20 before deciding to use the Bardic Inspiration die, but must decide before the GM says whether the roll succeeds or fails. Once the Bardic Inspiration die is rolled, it is lost. A creature can have only one Bardic Inspiration die at a time. See the SRD for the full text."
           }
         },
-        { "list": "counters", "values": { "name": "Bardic Inspiration", "max": 1, "recharge": "long" } }
+        {
+          "list": "counters",
+          "values": { "name": "Bardic Inspiration", "max": 1, "recharge": "long" },
+          "scaled": { "max": { "from": { "derived": "bardic_inspiration_uses" } } }
+        }
       ]
     },
     {
@@ -623,7 +642,7 @@
     {
       "id": "cleric-channel-divinity",
       "label": "Channel Divinity",
-      "summary": "Picking this also adds the Channel Divinity class resource: starts at 1, back after a short rest. At 2nd level, you gain the ability to channel divine energy directly from your deity, using that energy to fuel magical effects.",
+      "summary": "Picking this also adds the Channel Divinity class resource: its maximum follows the Cleric table, back after a short rest. Your sheet has one level, so a multiclass character follows the total.",
       "filters": { "class": "Cleric", "subclass": "Base class", "level": 2 },
       "rows": [
         {
@@ -633,7 +652,20 @@
             "text": "At 2nd level, you gain the ability to channel divine energy directly from your deity, using that energy to fuel magical effects. You start with two such effects: Turn Undead and an effect determined by your domain. Some domains grant you additional effects as you advance in levels, as noted in the domain description. When you use your Channel Divinity, you choose which effect to create. You must then finish a short or long rest to use your Channel Divinity again. Some Channel Divinity effects require saving throws. When you use such an effect from this class, the DC equals your cleric spell save DC. Beginning at 6th level, you can use your Channel Divinity twice between rests, and beginning at 18th level, you can use it three times between rests. See the SRD for the full text."
           }
         },
-        { "list": "counters", "values": { "name": "Channel Divinity", "max": 1, "recharge": "short" } }
+        {
+          "list": "counters",
+          "values": { "name": "Channel Divinity", "max": 1, "recharge": "short" },
+          "scaled": {
+            "max": {
+              "from": { "field": "level" },
+              "table": [
+                [2, 1],
+                [6, 2],
+                [18, 3]
+              ]
+            }
+          }
+        }
       ]
     },
     {
@@ -999,7 +1031,7 @@
     {
       "id": "druid-wild-shape",
       "label": "Wild Shape",
-      "summary": "Picking this also adds the Wild Shape class resource: starts at 2, back after a short rest. Starting at 2nd level, you can use your action to magically assume the shape of a beast that you have seen before. You can use this feature twice.",
+      "summary": "Picking this also adds the Wild Shape class resource: starts at 2, back after a short rest. At 20th level the Archdruid feature makes Wild Shape unlimited. Starting at 2nd level, you can use your action to magically assume the shape of a beast that you have seen before.",
       "filters": { "class": "Druid", "subclass": "Base class", "level": 2 },
       "rows": [
         {
@@ -1030,7 +1062,7 @@
     {
       "id": "fighter-action-surge",
       "label": "Action Surge",
-      "summary": "Picking this also adds the Action Surge class resource: starts at 1, back after a short rest. Starting at 2nd level, you can push yourself beyond your normal limits for a moment. On your turn, you can take one additional action on top of your regular action and a possible bonus action.",
+      "summary": "Picking this also adds the Action Surge class resource: its maximum follows the Fighter table, back after a short rest. Your sheet has one level, so a multiclass character follows the total. Starting at 2nd level, you can push yourself beyond your normal limits for a moment.",
       "filters": { "class": "Fighter", "subclass": "Base class", "level": 2 },
       "rows": [
         {
@@ -1040,7 +1072,19 @@
             "text": "Starting at 2nd level, you can push yourself beyond your normal limits for a moment. On your turn, you can take one additional action on top of your regular action and a possible bonus action. Once you use this feature, you must finish a short or long rest before you can use it again. Starting at 17th level, you can use it twice before a rest, but only once on the same turn."
           }
         },
-        { "list": "counters", "values": { "name": "Action Surge", "max": 1, "recharge": "short" } }
+        {
+          "list": "counters",
+          "values": { "name": "Action Surge", "max": 1, "recharge": "short" },
+          "scaled": {
+            "max": {
+              "from": { "field": "level" },
+              "table": [
+                [2, 1],
+                [17, 2]
+              ]
+            }
+          }
+        }
       ]
     },
     {
@@ -1091,7 +1135,7 @@
     {
       "id": "fighter-indomitable",
       "label": "Indomitable",
-      "summary": "Picking this also adds the Indomitable class resource: starts at 1, back after a long rest. Beginning at 9th level, you can reroll a saving throw that you fail. If you do so, you must use the new roll, and you can't use this feature again until you finish a long rest.",
+      "summary": "Picking this also adds the Indomitable class resource: its maximum follows the Fighter table, back after a long rest. Your sheet has one level, so a multiclass character follows the total. Beginning at 9th level, you can reroll a saving throw that you fail.",
       "filters": { "class": "Fighter", "subclass": "Base class", "level": 9 },
       "rows": [
         {
@@ -1101,7 +1145,20 @@
             "text": "Beginning at 9th level, you can reroll a saving throw that you fail. If you do so, you must use the new roll, and you can't use this feature again until you finish a long rest. You can use this feature twice between long rests starting at 13th level and three times between long rests starting at 17th level."
           }
         },
-        { "list": "counters", "values": { "name": "Indomitable", "max": 1, "recharge": "long" } }
+        {
+          "list": "counters",
+          "values": { "name": "Indomitable", "max": 1, "recharge": "long" },
+          "scaled": {
+            "max": {
+              "from": { "field": "level" },
+              "table": [
+                [9, 1],
+                [13, 2],
+                [17, 3]
+              ]
+            }
+          }
+        }
       ]
     },
     {
@@ -1424,7 +1481,7 @@
     {
       "id": "monk-ki",
       "label": "Ki",
-      "summary": "Picking this also adds the Ki class resource: starts at 2, back after a short rest. You have as many ki points as your monk level, so raise the maximum on the sheet. Starting at 2nd level, your training allows you to harness the mystic energy of ki.",
+      "summary": "Picking this also adds the Ki class resource: its maximum follows the Monk table, back after a short rest. Your sheet has one level, so a multiclass character follows the total. Starting at 2nd level, your training allows you to harness the mystic energy of ki.",
       "filters": { "class": "Monk", "subclass": "Base class", "level": 2 },
       "rows": [
         {
@@ -1434,7 +1491,36 @@
             "text": "Starting at 2nd level, your training allows you to harness the mystic energy of ki. Your access to this energy is represented by a number of ki points. Your monk level determines the number of points you have, as shown in the Ki Points column of the Monk table. You can spend these points to fuel various ki features. You start knowing three such features: Flurry of Blows, Patient Defense, and Step of the Wind. You learn more ki features as you gain levels in this class. When you spend a ki point, it is unavailable until you finish a short or long rest, at the end of which you draw all of your expended ki back into yourself. You must spend at least 30 minutes of the rest meditating to regain your ki points. See the SRD for the full text."
           }
         },
-        { "list": "counters", "values": { "name": "Ki", "max": 2, "recharge": "short" } }
+        {
+          "list": "counters",
+          "values": { "name": "Ki", "max": 2, "recharge": "short" },
+          "scaled": {
+            "max": {
+              "from": { "field": "level" },
+              "table": [
+                [2, 2],
+                [3, 3],
+                [4, 4],
+                [5, 5],
+                [6, 6],
+                [7, 7],
+                [8, 8],
+                [9, 9],
+                [10, 10],
+                [11, 11],
+                [12, 12],
+                [13, 13],
+                [14, 14],
+                [15, 15],
+                [16, 16],
+                [17, 17],
+                [18, 18],
+                [19, 19],
+                [20, 20]
+              ]
+            }
+          }
+        }
       ]
     },
     {
@@ -1800,7 +1886,7 @@
     {
       "id": "paladin-divine-sense",
       "label": "Divine Sense",
-      "summary": "Picking this also adds the Divine Sense class resource: starts at 1, back after a long rest. Uses equal 1 plus your Charisma modifier, so raise the maximum on the sheet.",
+      "summary": "Picking this also adds the Divine Sense class resource: its maximum follows 1 plus your Charisma modifier, back after a long rest. The presence of strong evil registers on your senses like a noxious odor, and powerful good rings like heavenly music in your ears.",
       "filters": { "class": "Paladin", "subclass": "Base class", "level": 1 },
       "rows": [
         {
@@ -1810,7 +1896,11 @@
             "text": "The presence of strong evil registers on your senses like a noxious odor, and powerful good rings like heavenly music in your ears. As an action, you can open your awareness to detect such forces. Until the end of your next turn, you know the location of any celestial, fiend, or undead within 60 feet of you that is not behind total cover. You know the type (celestial, fiend, or undead) of any being whose presence you sense, but not its identity (the vampire Count Strahd von Zarovich, for instance). Within the same radius, you also detect the presence of any place or object that has been consecrated or desecrated, as with the hallow spell. You can use this feature a number of times equal to 1 + your Charisma modifier. When you finish a long rest, you regain all expended uses."
           }
         },
-        { "list": "counters", "values": { "name": "Divine Sense", "max": 1, "recharge": "long" } }
+        {
+          "list": "counters",
+          "values": { "name": "Divine Sense", "max": 1, "recharge": "long" },
+          "scaled": { "max": { "from": { "derived": "divine_sense_uses" } } }
+        }
       ]
     },
     {
@@ -1891,7 +1981,7 @@
     {
       "id": "paladin-lay-on-hands",
       "label": "Lay on Hands",
-      "summary": "Your blessed touch can heal wounds. You have a pool of healing power that replenishes when you take a long rest. With that pool, you can restore a total number of hit points equal to your paladin level × 5.",
+      "summary": "Picking this also adds the Lay on Hands class resource: its maximum follows your level times 5, back after a long rest. Your sheet has one level, so a multiclass character follows the total. Your blessed touch can heal wounds.",
       "filters": { "class": "Paladin", "subclass": "Base class", "level": 1 },
       "rows": [
         {
@@ -1900,6 +1990,11 @@
             "name": "Lay on Hands",
             "text": "Your blessed touch can heal wounds. You have a pool of healing power that replenishes when you take a long rest. With that pool, you can restore a total number of hit points equal to your paladin level × 5. As an action, you can touch a creature and draw power from the pool to restore a number of hit points to that creature, up to the maximum amount remaining in your pool. Alternatively, you can expend 5 hit points from your pool of healing to cure the target of one disease or neutralize one poison affecting it. You can cure multiple diseases and neutralize multiple poisons with a single use of Lay on Hands, expending hit points separately for each one. This feature has no effect on undead and constructs."
           }
+        },
+        {
+          "list": "counters",
+          "values": { "name": "Lay on Hands", "max": 5, "recharge": "long" },
+          "scaled": { "max": { "from": { "derived": "lay_on_hands_pool" } } }
         }
       ]
     },
@@ -2566,7 +2661,7 @@
     {
       "id": "sorcerer-font-of-magic",
       "label": "Font of Magic",
-      "summary": "Picking this also adds the Sorcery Points class resource: starts at 2, back after a long rest. You have as many sorcery points as your sorcerer level, so raise the maximum on the sheet. At 2nd level, you tap into a deep wellspring of magic within yourself.",
+      "summary": "Picking this also adds the Sorcery Points class resource: its maximum follows the Sorcerer table, back after a long rest. Your sheet has one level, so a multiclass character follows the total. At 2nd level, you tap into a deep wellspring of magic within yourself.",
       "filters": { "class": "Sorcerer", "subclass": "Base class", "level": 2 },
       "rows": [
         {
@@ -2576,7 +2671,36 @@
             "text": "At 2nd level, you tap into a deep wellspring of magic within yourself. This wellspring is represented by sorcery points, which allow you to create a variety of magical effects. ### Sorcery Points You have 2 sorcery points, and you gain more as you reach higher levels, as shown in the Sorcery Points column of the Sorcerer table. You can never have more sorcery points than shown on the table for your level. You regain all spent sorcery points when you finish a long rest. ### Flexible Casting You can use your sorcery points to gain additional spell slots, or sacrifice spell slots to gain additional sorcery points. You learn other ways to use your sorcery points as you reach higher levels. See the SRD for the full text."
           }
         },
-        { "list": "counters", "values": { "name": "Sorcery Points", "max": 2, "recharge": "long" } }
+        {
+          "list": "counters",
+          "values": { "name": "Sorcery Points", "max": 2, "recharge": "long" },
+          "scaled": {
+            "max": {
+              "from": { "field": "level" },
+              "table": [
+                [2, 2],
+                [3, 3],
+                [4, 4],
+                [5, 5],
+                [6, 6],
+                [7, 7],
+                [8, 8],
+                [9, 9],
+                [10, 10],
+                [11, 11],
+                [12, 12],
+                [13, 13],
+                [14, 14],
+                [15, 15],
+                [16, 16],
+                [17, 17],
+                [18, 18],
+                [19, 19],
+                [20, 20]
+              ]
+            }
+          }
+        }
       ]
     },
     {
