@@ -78,8 +78,7 @@ export const SLP_BACKSTAGE_TARGET_LABELS: Record<SlpBackstageTarget, string> = {
 
 export function destinationForTarget(target: SlpBackstageTarget): SlpBackstageSection {
   return (
-    SLP_BACKSTAGE_SECTIONS.find((section) => SLP_BACKSTAGE_TARGETS_BY_SECTION[section].includes(target)) ??
-    "overview"
+    SLP_BACKSTAGE_SECTIONS.find((section) => SLP_BACKSTAGE_TARGETS_BY_SECTION[section].includes(target)) ?? "overview"
   );
 }
 

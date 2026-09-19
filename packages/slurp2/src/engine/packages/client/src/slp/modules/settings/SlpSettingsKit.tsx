@@ -327,13 +327,7 @@ const scopeLabels: Record<SlpSettingScope, string> = {
   creator: "This Creator",
 };
 
-export function SlpSettingScopeBadge({
-  scope,
-  creatorName,
-}: {
-  scope: SlpSettingScope;
-  creatorName?: string | null;
-}) {
+export function SlpSettingScopeBadge({ scope, creatorName }: { scope: SlpSettingScope; creatorName?: string | null }) {
   const { t } = useTranslation();
   return (
     <span className="inline-flex min-h-7 max-w-40 items-center truncate rounded-full bg-[color-mix(in_srgb,var(--slurp-violet)_12%,var(--slurp-surface-raised))] px-2.5 text-xs font-semibold text-[var(--slurp-violet)] ring-1 ring-inset ring-[color-mix(in_srgb,var(--slurp-violet)_24%,transparent)]">

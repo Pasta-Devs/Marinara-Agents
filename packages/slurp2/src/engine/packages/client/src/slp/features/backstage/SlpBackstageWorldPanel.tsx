@@ -4,34 +4,13 @@ import { BackstagePageHeader, SummaryRow, type SummaryTone } from "../../modules
 import { outcomeSummary } from "./SlpBackstagePreview";
 import type { SlpBackstageTarget } from "../../base/navigation/slp-backstage-target";
 
-
-
-
-
-
 import { slurpActivePlatformEvents } from "../../../../../shared/src/slp/slp-platform-events.js";
-
-
-
-
-
-
-
-
 
 import type { SlpBackstagePageProps } from "./slp-backstage-contract";
 
-
-
 /** Features landing page: one row per area, plus the libraries that live behind them. */
 export function SlpBackstageWorldPanel(page: SlpBackstagePageProps) {
-  const {
-    t,
-    target,
-    adPool,
-    settings,
-    creators,
-  } = page;
+  const { t, adPool, settings, creators } = page;
   const go = (next: SlpBackstageTarget) => page.onNavigate({ ...page.navigation, section: "world", target: next });
   const onOff = (value: boolean) => (value ? t("ui.slurp.settings.overview.on") : t("ui.slurp.settings.overview.off"));
   const worldRows: Array<{
@@ -123,46 +102,46 @@ export function SlpBackstageWorldPanel(page: SlpBackstagePageProps) {
     },
   ];
   return (
-        <div className="space-y-4">
-          <BackstagePageHeader
-            title={t("ui.slurp.settings.backstage.sections.world")}
-            detail={t("ui.slurp.settings.backstage.landing.worldDetail", {
-              defaultValue: "Shape how your Slurp feels. Open an area to change it.",
-            })}
-            scope="all-slurp"
-          />
-          {worldRows.map((row) => (
-            <SummaryRow
-              key={row.target}
-              icon={row.icon}
-              title={row.title}
-              status={row.status}
-              tone={row.tone}
-              value={outcomeSummary(t, row.target, settings, creators.length)}
-              onOpen={() => go(row.target)}
-            />
+    <div className="space-y-4">
+      <BackstagePageHeader
+        title={t("ui.slurp.settings.backstage.sections.world")}
+        detail={t("ui.slurp.settings.backstage.landing.worldDetail", {
+          defaultValue: "Shape how your Slurp feels. Open an area to change it.",
+        })}
+        scope="all-slurp"
+      />
+      {worldRows.map((row) => (
+        <SummaryRow
+          key={row.target}
+          icon={row.icon}
+          title={row.title}
+          status={row.status}
+          tone={row.tone}
+          value={outcomeSummary(t, row.target, settings, creators.length)}
+          onOpen={() => go(row.target)}
+        />
+      ))}
+      <section
+        className="rounded-xl bg-[var(--slurp-surface-raised)] p-4 ring-1 ring-inset ring-[var(--slurp-outline)]"
+        aria-labelledby="slurp-world-libraries"
+      >
+        <h2 id="slurp-world-libraries" className="text-sm font-black">
+          {t("ui.slurp.settings.backstage.landing.libraries", { defaultValue: "Libraries" })}
+        </h2>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {libraries.map((library) => (
+            <button
+              key={library.label}
+              type="button"
+              onClick={() => go(library.target)}
+              className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[var(--slurp-canvas)] px-4 text-sm font-semibold ring-1 ring-inset ring-[var(--slurp-outline)] hover:text-[var(--noodle-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+            >
+              {library.label}
+              <span className="tabular-nums text-[var(--slurp-muted)]">{library.count}</span>
+            </button>
           ))}
-          <section
-            className="rounded-xl bg-[var(--slurp-surface-raised)] p-4 ring-1 ring-inset ring-[var(--slurp-outline)]"
-            aria-labelledby="slurp-world-libraries"
-          >
-            <h2 id="slurp-world-libraries" className="text-sm font-black">
-              {t("ui.slurp.settings.backstage.landing.libraries", { defaultValue: "Libraries" })}
-            </h2>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {libraries.map((library) => (
-                <button
-                  key={library.label}
-                  type="button"
-                  onClick={() => go(library.target)}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-full bg-[var(--slurp-canvas)] px-4 text-sm font-semibold ring-1 ring-inset ring-[var(--slurp-outline)] hover:text-[var(--noodle-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
-                >
-                  {library.label}
-                  <span className="tabular-nums text-[var(--slurp-muted)]">{library.count}</span>
-                </button>
-              ))}
-            </div>
-          </section>
         </div>
+      </section>
+    </div>
   );
 }

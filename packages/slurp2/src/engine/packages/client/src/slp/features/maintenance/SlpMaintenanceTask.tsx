@@ -1,15 +1,4 @@
-
 import type { ReactNode } from "react";
-
-
-
-
-
-
-
-
-
-
 
 export const focusRing = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]";
 export const quietButton = `inline-flex min-h-11 items-center gap-2 rounded-lg px-3 text-xs font-semibold ring-1 ring-inset ring-[var(--slurp-outline)] transition-[background-color,transform] hover:bg-[var(--slurp-canvas)] active:scale-[0.96] motion-reduce:transition-none motion-reduce:active:scale-100 disabled:opacity-50 ${focusRing}`;

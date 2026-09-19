@@ -1,4 +1,14 @@
-import { Activity, AlertTriangle, CheckCircle2, ChevronRight, HardDrive, Image, Megaphone, Play, UsersRound } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  CheckCircle2,
+  ChevronRight,
+  HardDrive,
+  Image,
+  Megaphone,
+  Play,
+  UsersRound,
+} from "lucide-react";
 import { nextSlurpAutopurgeRunAt } from "../../../../../shared/src/slp/slp-autopurge-time.js";
 import { Toggle } from "../../modules/settings/SlpSettingsControls";
 import { slurpAudiencePresetFor } from "../../../../../shared/src/slp/slp-tuning.js";
@@ -21,7 +31,6 @@ export function SlpBackstageOverviewPanel(page: SlpBackstagePageProps) {
     onNavigate,
     t,
     i18n,
-    section,
     settings,
     update,
     updatePatch,

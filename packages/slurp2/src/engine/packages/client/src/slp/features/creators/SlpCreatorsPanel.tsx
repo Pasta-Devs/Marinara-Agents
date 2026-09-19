@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment } from "react";
 import { CalendarClock, CheckCircle2, ListChecks, Loader2, Search, Sparkles, Trash2, UsersRound } from "lucide-react";
 import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
 import { Field, SettingsGroup, Toggle } from "../../modules/settings/SlpSettingsControls";
@@ -16,10 +16,8 @@ import { errorMessage, CreatorMessagingGroup } from "../../../components/slurp/S
 import { BackstagePageHeader, SettingAnchor } from "../../modules/settings/SlpSettingsKit";
 import { SlurpPostGuidanceField } from "../../../components/slurp/SlurpPostGuidanceField";
 import { SlurpCreatorProfileEditor } from "../../../components/slurp/SlurpCreatorProfileEditor";
-import type { SlurpCreatorMetrics } from "./slp-creators-contract";
 import { useSlurpCreatorMetrics } from "./slp-creators-hooks";
 import { useSlurpPostGuidance } from "../settings/slp-post-guidance-contract";
-
 
 const CREATOR_FILTERS: readonly SlpCreatorFilter[] = ["all", "active", "paused", "attention"];
 const CREATOR_TABS: readonly SlpCreatorTab[] = ["profile", "publishing", "images", "messages", "danger"];
@@ -38,7 +36,6 @@ export function SlpCreatorsPanel(page: SlpBackstagePageProps) {
     t,
     i18n,
     updateSettings,
-    target,
     settings,
     setScheduleCreatorId,
     setSelectedCreatorId,
@@ -77,7 +74,6 @@ export function SlpCreatorsPanel(page: SlpBackstagePageProps) {
   const metricsQuery = useSlurpCreatorMetrics(true);
   const metricsById = new Map((metricsQuery.data?.creators ?? []).map((entry) => [entry.id, entry]));
   const postGuidanceQuery = useSlurpPostGuidance(true);
-
 
   const needle = query.trim().toLowerCase();
   const visibleCreators = creators.filter((creator) => {

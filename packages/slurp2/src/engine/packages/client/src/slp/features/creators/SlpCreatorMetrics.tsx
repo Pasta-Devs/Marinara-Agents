@@ -2,23 +2,12 @@ import { useState } from "react";
 
 import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
 
-
-
-
-
 import { Avatar } from "../../../components/slurp/SlurpShell";
-
 
 import { noteClass, selectClass } from "./slp-creator-classes";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 
-
-
-
 import type { SlurpCreatorMetrics } from "./slp-creators-contract";
-
-
-
 
 type Translate = SlpBackstagePageProps["t"];
 const METRIC_KEYS = ["posts", "followers", "subscribers", "likes", "replies", "earnings", "unread", "arcs"] as const;

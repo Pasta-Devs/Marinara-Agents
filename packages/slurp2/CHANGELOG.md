@@ -1,5 +1,9 @@
 # Slurp Remastered release notes
 
+## 0.0.32 — 2026-09-19
+
+- No visible changes. Made Backstage a thin host over an explicit settings panel registry.
+
 ## 0.0.31 — 2026-09-19
 
 - No visible changes. Split the client app composition and reusable presentation modules.

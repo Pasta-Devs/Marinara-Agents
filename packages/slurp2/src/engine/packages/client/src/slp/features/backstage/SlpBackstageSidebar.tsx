@@ -1,45 +1,18 @@
 import { ArrowLeft } from "lucide-react";
 
-
-
 import { useTranslation } from "react-i18next";
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 import { type SlurpNavigationState } from "../../../components/slurp/slurp-navigation.types";
 
-
-
-
-
-
-import { SLP_BACKSTAGE_DEFAULT_TARGET, SLP_BACKSTAGE_SECTION_LABELS, SLP_BACKSTAGE_TARGET_LABELS, SLP_BACKSTAGE_TARGETS_BY_SECTION, type SlpBackstageTarget } from "../../base/navigation/slp-backstage-target";
+import {
+  SLP_BACKSTAGE_DEFAULT_TARGET,
+  SLP_BACKSTAGE_SECTION_LABELS,
+  SLP_BACKSTAGE_TARGET_LABELS,
+  SLP_BACKSTAGE_TARGETS_BY_SECTION,
+  type SlpBackstageTarget,
+} from "../../base/navigation/slp-backstage-target";
 
 import { settingsSections, sectionTabClass } from "../../../components/slurp/SlurpBackstageWorkflow";
-
-
-
-
-
-
-
-
 
 export function SlpBackstageSidebar({
   navigation,

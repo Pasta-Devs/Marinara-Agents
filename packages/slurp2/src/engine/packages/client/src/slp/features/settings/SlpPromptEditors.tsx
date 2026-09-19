@@ -1,45 +1,8 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-import { DEFAULT_SLURP_GENERATION_GUIDANCE, DEFAULT_SLURP_IMAGE_GENERATION_PROMPT, PromptEditor } from "../../../components/slurp/SlurpBackstageWorkflow";
-
-
-
-
-
-
-
-
+import {
+  DEFAULT_SLURP_GENERATION_GUIDANCE,
+  DEFAULT_SLURP_IMAGE_GENERATION_PROMPT,
+  PromptEditor,
+} from "../../../components/slurp/SlurpBackstageWorkflow";
 
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 

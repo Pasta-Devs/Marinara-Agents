@@ -1,40 +1,27 @@
 import { AlertTriangle, CheckCircle2, Loader2, RefreshCw } from "lucide-react";
 
-
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 import { showConfirmDialog } from "../../../lib/app-dialogs";
 
-
-
-import { changedSlurpSettingKeys, isSlurpResettableSection, slurpSettingsResetPatch } from "../../../components/slurp/slurp-settings-defaults";
-
-
+import {
+  changedSlurpSettingKeys,
+  isSlurpResettableSection,
+  slurpSettingsResetPatch,
+} from "../../../components/slurp/slurp-settings-defaults";
 
 import { slurpAudiencePresetFor } from "../../../../../shared/src/slp/slp-tuning.js";
 import { SLP_BACKSTAGE_SECTION_LABELS, SLP_BACKSTAGE_TARGET_LABELS } from "../../base/navigation/slp-backstage-target";
-import { confirmLeaveSlurpBackstage, SlurpBackstageApplyBar, useSlurpBackstageDraftGuard } from "../../features/backstage/SlpBackstageControls";
+import {
+  confirmLeaveSlurpBackstage,
+  SlurpBackstageApplyBar,
+  useSlurpBackstageDraftGuard,
+} from "../../features/backstage/SlpBackstageControls";
 import { SlurpBackstageSearch, SlurpBackstageSubnav } from "../../features/backstage/SlpBackstageNavigation";
 import { errorMessage } from "../../../components/slurp/SlurpBackstageWorkflow";
 import { focusSettingAnchor } from "../../modules/settings/SlpSettingsKit";
-
 
 import { useSlpBackstageController } from "./slp-backstage-controller";
 import { slpBackstagePanelFor } from "./slp-backstage-registry";
@@ -132,8 +119,6 @@ export function SlpBackstageShell({
   const panel = slpBackstagePanelFor(target);
   const Panel = panel?.Component;
 
-  return (
-    <>
   return (
     <>
       <main className="min-h-0 flex-1 overflow-y-auto bg-[var(--slurp-canvas)] pb-[calc(5rem+env(safe-area-inset-bottom))] text-[var(--slurp-text)] sm:pb-8">
@@ -247,6 +232,7 @@ export function SlpBackstageShell({
             </div>
           </div>
         </div>
+      </main>
       <SlpCreatorRefreshModal {...page} />
       <SlpCreatorScheduleModal {...page} />
       <SlpPromptEditors {...page} />

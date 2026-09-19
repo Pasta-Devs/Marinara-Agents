@@ -1,4 +1,7 @@
-import type { SlpBackstageSection as SlurpBackstageSection, SlpBackstageTarget as SlurpBackstageTarget } from "../../slp/base/navigation/slp-backstage-target";
+import type {
+  SlpBackstageSection as SlurpBackstageSection,
+  SlpBackstageTarget as SlurpBackstageTarget,
+} from "../../slp/base/navigation/slp-backstage-target";
 
 export const SLURP_API_PREFIX = "/api/slurp2";
 

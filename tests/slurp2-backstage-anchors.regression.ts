@@ -69,7 +69,10 @@ for (const entry of entries) {
 // --- every non-internal setting renders its anchor on its registered panel ---------------------
 
 const missing = Object.entries(SLP_BACKSTAGE_SETTING_PLACEMENT)
-  .filter(([key, placement]) => !placement.internal && !read(panelFile.get(placement.target)!).includes(`settingKey="${key}"`))
+  .filter(
+    ([key, placement]) =>
+      !placement.internal && !read(panelFile.get(placement.target)!).includes(`settingKey="${key}"`),
+  )
   .map(([key, placement]) => `${key} -> ${panelFile.get(placement.target)}`);
 assert.deepEqual(missing, [], "each non-internal setting has a SettingAnchor on its registered panel");
 

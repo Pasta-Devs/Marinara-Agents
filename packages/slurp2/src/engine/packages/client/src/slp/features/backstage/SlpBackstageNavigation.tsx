@@ -4,13 +4,17 @@ import { useTranslation } from "react-i18next";
 
 import type { SlurpSettings } from "../settings/slp-settings-contract";
 
-
-
 import { cn } from "../../../lib/utils";
 import { SlpSettingScopeBadge } from "../../modules/settings/SlpSettingsKit";
 
-
-import { destinationForTarget, SLP_BACKSTAGE_SECTION_LABELS, SLP_BACKSTAGE_TARGET_LABELS, SLP_BACKSTAGE_TARGETS_BY_SECTION, type SlpBackstageSection, type SlpBackstageTarget } from "../../base/navigation/slp-backstage-target";
+import {
+  destinationForTarget,
+  SLP_BACKSTAGE_SECTION_LABELS,
+  SLP_BACKSTAGE_TARGET_LABELS,
+  SLP_BACKSTAGE_TARGETS_BY_SECTION,
+  type SlpBackstageSection,
+  type SlpBackstageTarget,
+} from "../../base/navigation/slp-backstage-target";
 import { SLP_BACKSTAGE_SETTING_PLACEMENT } from "./slp-backstage-placement";
 
 export const humanize = (value: string) =>

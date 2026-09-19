@@ -2,14 +2,7 @@ import { Check, X } from "lucide-react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
-
-
-
 import { showConfirmDialog } from "../../../lib/app-dialogs";
-
-
-
-
 
 export function SlurpBackstageApplyBar({
   count,

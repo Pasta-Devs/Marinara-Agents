@@ -4,7 +4,14 @@ import { useSlurpPostGuidance } from "./slp-post-guidance-contract";
 import { SlurpPostGuidanceField } from "../../../components/slurp/SlurpPostGuidanceField";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 import { SlurpPromptBlockBuilder } from "../../../components/slurp/SlurpPromptBlockBuilder";
-import { SLURP_GUIDANCE_PRESETS, SLURP_GUIDANCE_LEVELS, SLURP_IMAGE_INTERPRETATION_PRESETS, SLURP_IMAGE_INTERPRETATION_STYLES, DEFAULT_SLURP_GENERATION_GUIDANCE, PromptCard } from "../../../components/slurp/SlurpBackstageWorkflow";
+import {
+  SLURP_GUIDANCE_PRESETS,
+  SLURP_GUIDANCE_LEVELS,
+  SLURP_IMAGE_INTERPRETATION_PRESETS,
+  SLURP_IMAGE_INTERPRETATION_STYLES,
+  DEFAULT_SLURP_GENERATION_GUIDANCE,
+  PromptCard,
+} from "../../../components/slurp/SlurpBackstageWorkflow";
 
 /**
  * Prompts: every text Slurp sends to a model, in one place.
@@ -16,7 +23,6 @@ export function SlpPromptsPanel(page: SlpBackstagePageProps) {
   const {
     t,
     updateSettings,
-    target,
     settings,
     setGenerationGuidanceDraft,
     setGenerationGuidanceEditorOpen,
