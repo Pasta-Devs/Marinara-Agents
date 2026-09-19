@@ -290,6 +290,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.1.2",
+          "date": "2026-09-19",
+          "notes": "- Fixed Creator filters, profile expansion, and settings tabs not responding after the 0.1.1 update.",
+          "highlight": false
+        },
+        {
           "version": "0.1.1",
           "date": "2026-09-19",
           "notes": "- Slurp now carries its own vocabulary instead of borrowing names from the Engine.\n- Cleaned up a leftover wording slip in the setup wizard intro.\n- Fixed SwarmUI image generation: prompt images and LoRAs are now sent when you do not use a custom workflow.\n- Nothing else changes. Your creators, posts and settings are untouched.",
@@ -401,12 +407,6 @@
           "version": "0.0.6",
           "date": "2026-09-13",
           "notes": "- Added image context options for reactions: stored prompts, vision descriptions, or automatic selection. Public fan reactions keep locked images hidden and respect Creator identity privacy.\n- Generation now shows how many Creators remain, including skipped or failed requests.\n- Restored visible success and error notifications for Slurp actions.\n- Fixed persona Creator creation when Slurp already has the persona's viewer identity. The viewer and Creator accounts can now coexist for one persona.",
-          "highlight": false
-        },
-        {
-          "version": "0.0.5",
-          "date": "2026-09-13",
-          "notes": "- Made the welcome screen shorter, put Gunterlie beside the greeting, linked Slurp General, and tucked older release notes behind an expander.\n- Corrected older ad ratings, fallback handles, onboarding text, and invalid digest account errors.",
           "highlight": false
         }
       ]
