@@ -1444,6 +1444,12 @@ for (const [edit, message] of [
 // Every name a creature carries is one the ruleset already has.
 for (const [edit, message] of [
   [(block) => (block.tier = "deadly"), /names unknown threat tier "deadly"/u],
+  [(block) => delete block.health, /needs health: a whole number from 1, or dice, not undefined/u],
+  [(block) => (block.health = 0), /needs health: a whole number from 1, or dice, not 0/u],
+  [(block) => (block.health = { flat: 3 }), /needs health: a whole number from 1, or dice/u],
+  [(block) => delete block.defense, /needs a defense: a whole number from 0, not undefined/u],
+  [(block) => (block.defense = 12.5), /needs a defense: a whole number from 0, not 12\.5/u],
+  [(block) => delete block.initiativeModifier, /needs an initiativeModifier: a whole number, not undefined/u],
   [(block) => (block.abilities = { grit: 3 }), /names unknown ability "grit"/u],
   [(block) => (block.saves = { luck_save: 3 }), /names unknown save "luck_save"/u],
   [(block) => (block.resist = ["starfire"]), /is resist to unknown damage type "starfire"/u],

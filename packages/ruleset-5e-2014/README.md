@@ -159,7 +159,7 @@ What the block says:
   and the damage type are all read off the row.
 - Your prepared spells, your cantrips and the class features you picked are the things you do with
   an action, rolling the sheet's Spell attack bonus and asking for its Spell save DC.
-- The six standard actions, eleven of the fourteen SRD conditions, concentration (a Constitution
+- The six standard actions, twelve of the fourteen SRD conditions, concentration (a Constitution
   save at DC 10 or half the damage, whichever is higher), death saves (three and three, a natural
   20 brings you back up at one hit point, a natural 1 counts twice, a blow while down costs a
   failure and a critical costs two) and the thirteen damage types.

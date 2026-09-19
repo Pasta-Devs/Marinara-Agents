@@ -865,6 +865,23 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
       count += 1;
       if (!tiers.has(creature.tier))
         throw new Error(`${where} names unknown threat tier ${JSON.stringify(creature.tier)}`);
+      // The three numbers a fight cannot be built without. The Engine requires all of them (health a
+      // whole number from 1, or dice; defense a whole number from 0; a whole initiative modifier), and
+      // nothing on the combat path would stand in for a missing one.
+      const health = creature.health;
+      const healthIsNumber = Number.isInteger(health) && health >= 1;
+      const healthIsDice = health !== null && typeof health === "object" && typeof health.dice === "string";
+      if (!healthIsNumber && !healthIsDice) {
+        throw new Error(`${where} needs health: a whole number from 1, or dice, not ${JSON.stringify(health)}`);
+      }
+      if (!Number.isInteger(creature.defense) || creature.defense < 0) {
+        throw new Error(`${where} needs a defense: a whole number from 0, not ${JSON.stringify(creature.defense)}`);
+      }
+      if (!Number.isInteger(creature.initiativeModifier)) {
+        throw new Error(
+          `${where} needs an initiativeModifier: a whole number, not ${JSON.stringify(creature.initiativeModifier)}`,
+        );
+      }
       // Health written as dice is thrown when the fight is created, so dice nobody can throw would
       // build an opponent with no hit points at all.
       const healthDice = typeof creature.health === "object" ? creature.health?.dice : undefined;
