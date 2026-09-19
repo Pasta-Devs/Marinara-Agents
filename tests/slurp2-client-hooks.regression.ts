@@ -581,14 +581,20 @@ assert.match(
   "the API-client host override must survive",
 );
 
-// 7. No client `slp` file reaches into server `slp`; the shared rules are the only crossing point.
+// 7. The Creators panel must consume the setter names returned by its Backstage state contract.
+const creatorsPanel = readFileSync(join(slpRoot, "features/creators/SlpCreatorsPanel.tsx"), "utf8");
+assert.match(creatorsPanel, /setCreatorFilter:\s*setFilter/u);
+assert.match(creatorsPanel, /setCreatorTab:\s*setTab/u);
+assert.doesNotMatch(creatorsPanel, /setSlpCreator(?:Filter|Tab)/u);
+
+// 8. No client `slp` file reaches into server `slp`; the shared rules are the only crossing point.
 for (const [path, source] of sources) {
   for (const match of source.matchAll(/from\s*"([^"]+)"/gu)) {
     assert.ok(!/server\/src\/slp/u.test(match[1]), `${path} must not import server slp code: ${match[1]}`);
   }
 }
 
-// 8. Nothing in the new namespace is a barrel or an oversized file.
+// 9. Nothing in the new namespace is a barrel or an oversized file.
 for (const path of paths) {
   assert.ok(!/(^|\/)index\.tsx?$/u.test(path), `${path} must not be a generic barrel`);
   assert.ok((sources.get(path) ?? "").split("\n").length <= 800, `${path} must stay under 800 lines`);
