@@ -19,9 +19,7 @@ const drawer = shell.slice(shell.indexOf("NoodleView.MobileDrawer"), shell.index
 assert.match(drawer, /<details className="group mt-3">/u, "the drawer's persona list must be collapsed by default");
 assert.match(drawer, /group-open:rotate-180/u);
 
-const surface = slurp2Source(
-  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpProfileSurface.tsx",
-);
+const surface = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpProfileSurface.tsx");
 // Editing happens in place now: there is exactly one identity block, not a display one and a
 // separate stacked form.
 assert.match(surface, /const inPlaceFieldClass/u);
