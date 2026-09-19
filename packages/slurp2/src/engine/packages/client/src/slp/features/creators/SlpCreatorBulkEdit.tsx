@@ -2,13 +2,13 @@ import { Check } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import type { SlurpDiscoveryGender } from "../../slp/base/state/slp-state-types";
-import type { SlurpCreatorBulkPatch } from "../../slp/features/creators/slp-creators-contract";
-import { useBulkUpdateSlurpCreators } from "../../slp/features/creators/slp-creators-hooks";
-import { showConfirmDialog } from "../../lib/app-dialogs";
-import { SLURP_DISCOVERY_TAG_LIMIT } from "../../slp/features/discovery/slp-discovery";
-import { cn } from "../../lib/utils";
-import { Field, SettingsGroup } from "../../slp/modules/settings/SlpSettingsControls";
+import type { SlurpDiscoveryGender } from "../../base/state/slp-state-types";
+import type { SlurpCreatorBulkPatch } from "./slp-creators-contract";
+import { useBulkUpdateSlurpCreators } from "./slp-creators-hooks";
+import { showConfirmDialog } from "../../../lib/app-dialogs";
+import { SLURP_DISCOVERY_TAG_LIMIT } from "../discovery/slp-discovery-contract";
+import { cn } from "../../../lib/utils";
+import { Field, SettingsGroup } from "../../modules/settings/SlpSettingsControls";
 
 type Choice = "keep" | "on" | "off";
 

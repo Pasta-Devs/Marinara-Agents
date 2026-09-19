@@ -1,10 +1,7 @@
 import { AlertCircle, Database, HardDrive, Loader2, MessageCircle, Sparkles, UsersRound } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type {
-  SlurpAutopurgePreview,
-  SlurpMaintenanceSummary,
-} from "../../slp/features/maintenance/slp-maintenance-hooks";
-import { formatBytes } from "../../slp/modules/settings/slp-backstage-format";
+import type { SlurpAutopurgePreview, SlurpMaintenanceSummary } from "./slp-maintenance-hooks";
+import { formatBytes } from "../../modules/settings/slp-backstage-format";
 
 export function SlurpMaintenanceHealth({
   summary,

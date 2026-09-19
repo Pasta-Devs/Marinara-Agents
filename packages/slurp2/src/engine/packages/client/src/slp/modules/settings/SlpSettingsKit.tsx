@@ -10,7 +10,7 @@ export type SlpSettingKey = string;
 /** Who a setting applies to. Shown on page headers and in search results. */
 export type SlpSettingScope = "all-slurp" | "this-viewer" | "new-creators" | "creator";
 
-const focusRing = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]";
+import { focusRing } from "../../base/chrome/slp-focus";
 
 export function BackstagePageHeader({
   title,

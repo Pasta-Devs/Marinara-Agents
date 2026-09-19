@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
-import { useSlurpAudienceMember } from "../../slp/features/audience/slp-audience-hooks";
-import { cn } from "../../lib/utils";
-import { SLURP_CHARACTER_FAN_PREFIX } from "../../../../shared/src/slp/slp-audience-characters.js";
+import { NoodleAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
+import { useSlurpAudienceMember } from "./slp-audience-hooks";
+import { cn } from "../../../lib/utils";
+import { SLURP_CHARACTER_FAN_PREFIX } from "../../../../../shared/src/slp/slp-audience-characters.js";
 
 /** Population ids carry this prefix. An id with it has a fan card; an account id does not. */
 export const SLURP_AUDIENCE_ID_PREFIX = "slurp-fan:";

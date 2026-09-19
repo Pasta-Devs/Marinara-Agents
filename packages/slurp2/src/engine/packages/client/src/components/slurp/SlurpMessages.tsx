@@ -38,7 +38,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, 
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { useSlurpMediaSrc } from "../../slp/base/media/slp-media-src";
-import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
+import { NoodleAnchoredPopover } from "../../slp/base/chrome/SlpAnchoredPopover";
 import { getApiErrorMessage } from "../../lib/api-client";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { cn } from "../../lib/utils";

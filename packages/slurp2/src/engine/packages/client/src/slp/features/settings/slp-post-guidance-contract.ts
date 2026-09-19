@@ -43,3 +43,7 @@ export function useGenerateSlurpPostGuidance() {
     }) => api.post<{ guidance: string }>("/slurp2/noodler/post-guidance-draft", input),
   });
 }
+
+// The Creators Backstage panel edits per-Creator post guidance inline, so the field is part of this
+// contract rather than a Settings internal.
+export { SlurpPostGuidanceField } from "./SlpPostGuidanceField.js";

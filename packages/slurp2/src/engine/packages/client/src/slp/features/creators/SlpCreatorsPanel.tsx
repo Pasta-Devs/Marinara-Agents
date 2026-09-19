@@ -2,7 +2,7 @@ import { Fragment } from "react";
 import { CalendarClock, CheckCircle2, ListChecks, Loader2, Search, Sparkles, Trash2, UsersRound } from "lucide-react";
 import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
 import { Field, SettingsGroup, Toggle } from "../../modules/settings/SlpSettingsControls";
-import { SlurpCreatorBulkEdit } from "../../../components/slurp/SlurpCreatorBulkEdit";
+import { SlurpCreatorBulkEdit } from "./SlpCreatorBulkEdit";
 import { toast } from "sonner";
 import { formatDateTime } from "../../base/ui/slp-date-time";
 import { showConfirmDialog } from "../../../lib/app-dialogs";
@@ -15,7 +15,7 @@ import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract"
 import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import { CreatorMessagingGroup } from "../messages/slp-messages-contract";
 import { BackstagePageHeader, SettingAnchor } from "../../modules/settings/SlpSettingsKit";
-import { SlurpPostGuidanceField } from "../../../components/slurp/SlurpPostGuidanceField";
+import { SlurpPostGuidanceField } from "../settings/slp-post-guidance-contract";
 import { SlurpCreatorProfileEditor } from "../../../components/slurp/SlurpCreatorProfileEditor";
 import { useSlurpCreatorMetrics } from "./slp-creators-hooks";
 import { useSlurpPostGuidance } from "../settings/slp-post-guidance-contract";

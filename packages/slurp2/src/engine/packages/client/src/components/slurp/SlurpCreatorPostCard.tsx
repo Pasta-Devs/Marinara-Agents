@@ -68,8 +68,8 @@ import {
   type NoodlePostCardCtx,
   type NoodlePostCardModel,
 } from "./SlurpPostCard";
-import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
-import { SlurpLikedBy } from "./SlurpFanCard";
+import { NoodleAnchoredPopover } from "../../slp/base/chrome/SlpAnchoredPopover";
+import { SlurpLikedBy } from "../../slp/features/audience/SlpFanCard";
 import { NoodlePollComposer } from "../../slp/modules/poll/SlpPollComposer";
 import { PostImageFrame } from "../../slp/base/media/SlpPostImageCropEditor";
 import { SlurpCelebrationRing, SlurpSparkleVeil } from "../../slp/base/chrome/SlpSparkleVeil";

@@ -57,3 +57,5 @@ export type SlurpReserveStatus = {
     slots: SlurpScheduleSlot[];
   }>;
 };
+
+export type SlurpDiscoverLayout = "grid" | "list";

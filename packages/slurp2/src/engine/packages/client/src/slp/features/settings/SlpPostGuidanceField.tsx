@@ -1,15 +1,12 @@
 import { useEffect, useState } from "react";
 import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import {
-  useGenerateSlurpPostGuidance,
-  useUpdateSlurpPostGuidance,
-} from "../../slp/features/settings/slp-post-guidance-contract";
-import type { SlurpPostAccess, SlurpPostGuidance } from "../../slp/features/settings/slp-post-guidance-contract";
-import { errorMessage } from "../../slp/modules/settings/slp-backstage-format";
-import { PromptCard, PromptEditor } from "../../slp/modules/settings/SlpBackstageKit";
+import { useGenerateSlurpPostGuidance, useUpdateSlurpPostGuidance } from "./slp-post-guidance-contract";
+import type { SlurpPostAccess, SlurpPostGuidance } from "./slp-post-guidance-contract";
+import { errorMessage } from "../../modules/settings/slp-backstage-format";
+import { PromptCard, PromptEditor } from "../../modules/settings/SlpBackstageKit";
 
-const focusRing = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]";
+import { focusRing } from "../../base/chrome/slp-focus";
 const quietButton = `inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-xs font-semibold ring-1 ring-inset ring-[var(--slurp-outline)] hover:bg-[var(--slurp-canvas)] disabled:opacity-50 ${focusRing}`;
 
 export const SLURP_POST_GUIDANCE_MAX_LENGTH = 4000;

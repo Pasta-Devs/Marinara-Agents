@@ -2,7 +2,7 @@ import { Plus, Send, Smile, Trash2, X } from "lucide-react";
 import { type ReactNode, useRef, useState } from "react";
 import { noodlePollInputSchema, type NoodlePollInput } from "@marinara-engine/shared";
 import { ConversationMediaPickerPanel } from "../../../components/chat/ConversationMediaPickerPanel";
-import { NoodleAnchoredPopover } from "../../../components/slurp/NoodleAnchoredPopover";
+import { NoodleAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
 import { useTranslation as useUiTranslation } from "react-i18next";
 
 const EMPTY_POLL: NoodlePollInput = { question: "", options: ["", ""] };

@@ -1,6 +1,6 @@
 import { Ban, ExternalLink, Megaphone, X } from "lucide-react";
-import type { SlurpPromotion } from "../../slp/features/ads/slp-ads-contract";
-import { SlurpMediaImg } from "../../slp/base/chrome/SlpChrome";
+import type { SlurpPromotion } from "./slp-ads-contract";
+import { SlurpMediaImg } from "../../base/chrome/SlpChrome";
 
 /**
  * The same ad as a wall tile.

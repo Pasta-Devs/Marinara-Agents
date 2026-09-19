@@ -699,6 +699,36 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
     "packages/client/src/slp/features/audience/SlpAmbientProfilesPanel.tsx",
     "packages/client/src/slp/features/messages/SlpCreatorMessagingGroup.tsx",
   ],
+  "packages/client/src/components/slurp/NoodleAnchoredPopover.tsx": [
+    "packages/client/src/slp/base/chrome/SlpAnchoredPopover.tsx",
+  ],
+  "packages/client/src/components/slurp/slurp2-release.ts": [
+    "packages/client/src/slp/features/onboarding/slp-release.ts",
+  ],
+  "packages/client/src/components/slurp/SlurpAgeGate.tsx": [
+    "packages/client/src/slp/features/onboarding/SlpAgeGate.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpSplash.tsx": ["packages/client/src/slp/features/onboarding/SlpSplash.tsx"],
+  "packages/client/src/components/slurp/SlurpCreatorBulkEdit.tsx": [
+    "packages/client/src/slp/features/creators/SlpCreatorBulkEdit.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpCreatorImprover.tsx": [
+    "packages/client/src/slp/features/creators/SlpCreatorImprover.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpProfileSurface.tsx": [
+    "packages/client/src/slp/features/creators/SlpProfileSurface.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpCreatorProfileCard.tsx": [
+    "packages/client/src/slp/modules/creator/SlpCreatorProfileCard.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpFanCard.tsx": ["packages/client/src/slp/features/audience/SlpFanCard.tsx"],
+  "packages/client/src/components/slurp/SlurpInlineAd.tsx": ["packages/client/src/slp/features/ads/SlpInlineAd.tsx"],
+  "packages/client/src/components/slurp/SlurpMaintenanceHealth.tsx": [
+    "packages/client/src/slp/features/maintenance/SlpMaintenanceHealth.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpPostGuidanceField.tsx": [
+    "packages/client/src/slp/features/settings/SlpPostGuidanceField.tsx",
+  ],
   "packages/server/src/services/slurp/slurp-post-guidance.storage.ts": [
     "packages/server/src/slp/data/settings/slp-post-guidance-storage.ts",
   ],

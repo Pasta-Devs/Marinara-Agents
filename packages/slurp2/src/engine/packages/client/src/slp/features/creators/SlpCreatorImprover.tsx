@@ -7,12 +7,12 @@ import {
   useDismissSlurpImprovementProposals,
   useSetSlurpImprovementJobState,
   useSlurpImprovementJobs,
-} from "../../slp/features/maintenance/slp-improvement-hooks";
-import type { SlurpImprovementProposal } from "../../slp/features/maintenance/slp-improvement-hooks";
-import type { SlurpSettings } from "../../slp/features/settings/slp-settings-contract";
+} from "../maintenance/slp-maintenance-contract";
+import type { SlurpImprovementProposal } from "../maintenance/slp-maintenance-contract";
+import type { SlurpSettings } from "../settings/slp-settings-contract";
 import { toast } from "sonner";
-import { Avatar } from "../../slp/base/chrome/SlpChrome";
-import { SlpSettingScopeBadge } from "../../slp/modules/settings/SlpSettingsKit";
+import { Avatar } from "../../base/chrome/SlpChrome";
+import { SlpSettingScopeBadge } from "../../modules/settings/SlpSettingsKit";
 
 // Lanes with a server generator. The server rejects the rest until they exist.
 const LANES = [

@@ -176,9 +176,9 @@ import {
   type NoodlePostImageUpdate,
   useNoodlePostCardController,
 } from "./SlurpPostCard";
-import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
+import { NoodleAnchoredPopover } from "../../slp/base/chrome/SlpAnchoredPopover";
 import { SlurpArcTimelineCard, SlurpProjectsPanel } from "./SlurpProjectsPanel";
-import { SlurpFanCard } from "./SlurpFanCard";
+import { SlurpFanCard } from "../../slp/features/audience/SlpFanCard";
 import { LockedSlurpPostCard, SlurpCreatorPostCard } from "./SlurpCreatorPostCard";
 import { SlurpSparkleVeil } from "../../slp/base/chrome/SlpSparkleVeil";
 import {
@@ -190,12 +190,12 @@ import {
 import { ChatImageLightbox } from "../chat/ChatImageLightbox";
 import { useNearViewportSlurpMediaSrc, useSlurpMediaSrc } from "../../slp/base/media/slp-media-src";
 import { SlurpOnboardingWizard } from "./SlurpOnboardingPanel";
-import { SlurpAgeGate, SlurpConfetti } from "./SlurpAgeGate";
-import { SlurpSplash, slurp2SplashPending } from "./SlurpSplash";
+import { SlurpAgeGate, SlurpConfetti } from "../../slp/features/onboarding/SlpAgeGate";
+import { SlurpSplash, slurp2SplashPending } from "../../slp/features/onboarding/SlpSplash";
 import { slurpCreatorStatus } from "../../slp/modules/creator/slp-creator-status";
 import { Avatar, getNoodleAccentStyle, SLURP_TOGGLE_ACTIVE_CLASS, NewSinceLastVisitDivider, HIDE_ON_SCROLL_CLASS, NoodleLogo, ProfileInitial, useHideOnScroll, NOODLE_PERSONA_SWITCHER_PAGE_SIZE, NOODLE_PINK } from "../../slp/base/chrome/SlpChrome";
 import { NoodleShell } from "../../slp/modules/chrome/SlpShell";
-import { SlurpProfileSurface } from "./SlurpProfileSurface";
+import { SlurpProfileSurface } from "../../slp/features/creators/SlpProfileSurface";
 import { BroadcastPanel, SlurpMessagesView } from "./SlurpMessages";
 import { SlpBackstageShell } from "../../slp/app/backstage/SlpBackstageShell";
 import { SlpBackstageSidebar } from "../../slp/features/backstage/SlpBackstageSidebar";
@@ -209,8 +209,8 @@ import { HelpTooltip } from "../ui/HelpTooltip";
 import { Modal } from "../ui/Modal";
 import type { SlurpNavigationState } from "../../slp/base/navigation/slp-navigation.types";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import { SlurpInlineAd, SlurpInlineAdTile } from "./SlurpInlineAd";
-import { SlurpCreatorProfileCard } from "./SlurpCreatorProfileCard";
+import { SlurpInlineAd, SlurpInlineAdTile } from "../../slp/features/ads/SlpInlineAd";
+import { SlurpCreatorProfileCard } from "../../slp/modules/creator/SlpCreatorProfileCard";
 import { SlurpDiscoveryProfileEditor } from "../../slp/features/discovery/SlpDiscoveryProfileEditor";
 import {
   appendAudienceStance,

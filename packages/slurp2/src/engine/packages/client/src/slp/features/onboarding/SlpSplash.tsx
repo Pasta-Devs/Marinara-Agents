@@ -2,11 +2,11 @@
 // the "what is Slurp" explainer. It is the alpha warning, in Gunterlie's own words, plus the notes
 // for the versions the user has not seen yet and an approval the user has to tick.
 import { AlertTriangle, ChevronDown, ExternalLink, Wrench } from "lucide-react";
-import { Modal } from "../ui/Modal";
+import { Modal } from "../../../components/ui/Modal";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { GUNTERLIE_AVATAR_SRC } from "../../slp/base/chrome/slp-gunterlie-avatar";
-import { getNoodleAccentStyle, NOODLE_PINK } from "../../slp/base/chrome/SlpChrome";
-import { getSlurp2UnseenReleases, SLURP2_VERSION } from "./slurp2-release";
+import { GUNTERLIE_AVATAR_SRC } from "../../base/chrome/slp-gunterlie-avatar";
+import { getNoodleAccentStyle, NOODLE_PINK } from "../../base/chrome/SlpChrome";
+import { getSlurp2UnseenReleases, SLURP2_VERSION } from "./slp-release";
 
 // Per browser, not per Engine: the splash is a notice, not a setting, and a localStorage key keeps
 // it off the server and off the migration path.

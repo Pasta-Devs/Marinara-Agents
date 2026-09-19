@@ -1,14 +1,14 @@
 import { useTranslation as useUiTranslation } from "react-i18next";
 import type { AvatarCrop } from "@marinara-engine/shared";
-import { cn } from "../../lib/utils";
-import { useNearViewportSlurpMediaSrc } from "../../slp/base/media/slp-media-src";
-import { ProfileInitial } from "../../slp/base/chrome/SlpChrome";
-import { SlurpEmptyArtwork } from "../../slp/base/chrome/SlpEmptyArtwork";
+import { cn } from "../../../lib/utils";
+import { useNearViewportSlurpMediaSrc } from "../../base/media/slp-media-src";
+import { ProfileInitial } from "../../base/chrome/SlpChrome";
+import { SlurpEmptyArtwork } from "../../base/chrome/SlpEmptyArtwork";
 import { Check, Loader2 } from "lucide-react";
-import { DEFAULT_SLURP_SUBSCRIPTION_PRICE, SlurpCoinAmount } from "../../slp/modules/coin/SlpCoin";
-import type { SlurpDiscoverLayout } from "../../slp/features/discovery/slp-discovery";
-import type { SlurpDiscoveryGender } from "../../slp/base/state/slp-state-types";
-import { showConfirmDialog } from "../../lib/app-dialogs";
+import { DEFAULT_SLURP_SUBSCRIPTION_PRICE, SlurpCoinAmount } from "../coin/SlpCoin";
+import type { SlurpDiscoverLayout } from "../../base/state/slp-state-types";
+import type { SlurpDiscoveryGender } from "../../base/state/slp-state-types";
+import { showConfirmDialog } from "../../../lib/app-dialogs";
 
 export type SlurpCreatorProfileCardCreator = {
   profile: {
