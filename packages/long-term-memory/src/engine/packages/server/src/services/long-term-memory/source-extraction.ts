@@ -4,6 +4,7 @@ import {
   DEFAULT_LTM_EXTRACTION_PROMPTS_BY_MODE,
   type LtmExtractionAccounting,
   type LtmDraftMutation,
+  type LtmExtractionFingerprint,
   type LtmExtractionOutcome,
   type LtmExtractionResponse,
   type LtmExtractionDraft,
@@ -37,7 +38,7 @@ import {
 } from "./subject-identity.js";
 import { noteIdForLtmDraftMutation, projectLtmDraftOntoNotes } from "./draft-projector.js";
 import { stableJsonHash } from "./chunking.js";
-import { extractionFingerprintForLtmSourceNote, isLtmSourceExtractionFingerprintCurrent } from "./source-hash.js";
+import { extractionFingerprintForLtmSourceNote, extractionFingerprintsEqual } from "./source-hash.js";
 import { LtmServiceError } from "./service-error.js";
 export type ExtractLongTermMemoryFromSourceNoteOptions = {
   noteId: string;
@@ -58,6 +59,7 @@ export type ExtractLongTermMemoryFromSourceNoteResult = {
   operationId: string;
   chatId?: string;
   sourceNote: LtmNote;
+  sourceFingerprintBeforeBinding: LtmExtractionFingerprint;
   extractionMode: LtmMode;
   response: LtmExtractionResponse;
   diagnostics: LtmExtractionDiagnostic[];
@@ -73,12 +75,7 @@ export function getLtmSourceNoteText(note: LtmNote) {
   return (note.sections.source?.text ?? note.sections.summary?.text ?? "").trim();
 }
 
-async function bindSourceNoteToExtractionContext(options: {
-  storage: LongTermMemoryStorage;
-  sourceNote: LtmNote;
-  scope: LtmScope;
-  modes: LtmMode[];
-}) {
+function bindSourceNoteToExtractionContext(options: { sourceNote: LtmNote; scope: LtmScope; modes: LtmMode[] }) {
   const { sourceNote } = options;
   if (
     stableJsonHash(sourceNote.destinationScope ?? sourceNote.scope) === stableJsonHash(options.scope) &&
@@ -87,7 +84,8 @@ async function bindSourceNoteToExtractionContext(options: {
     return sourceNote;
   }
 
-  return options.storage.updateNote(sourceNote.id, { destinationScope: options.scope, modes: options.modes });
+  // The binding stays in memory until commit so a failed or aborted preparation leaves the source note untouched.
+  return { ...sourceNote, destinationScope: options.scope, modes: options.modes };
 }
 
 function compatibleProjectedCreate(
@@ -181,6 +179,7 @@ async function remapDraftCreatesForProjection(options: {
 export async function finalizeLongTermMemoryExtractionDraft(
   input: {
     sourceNote: LtmNote;
+    sourceFingerprintBeforeBinding: LtmExtractionFingerprint;
     response: LtmExtractionResponse;
     scope: LtmScope;
     modes: LtmMode[];
@@ -211,12 +210,12 @@ export async function finalizeLongTermMemoryExtractionDraft(
       "ltm_source_changed",
     );
   }
-  const expectedFingerprint = extractionFingerprintForLtmSourceNote(input.sourceNote, {
-    scope: input.scope,
-    modes: input.modes,
+  // Context binding is deferred until commit, so verify the stored note still carries the context it had before
+  // preparation. A concurrent bind or provenance change is rejected instead of being silently overwritten.
+  const currentFingerprint = extractionFingerprintForLtmSourceNote(currentSource, {
     extractionMode: input.extractionMode,
   });
-  if (!isLtmSourceExtractionFingerprintCurrent(currentSource, expectedFingerprint)) {
+  if (!extractionFingerprintsEqual(currentFingerprint, input.sourceFingerprintBeforeBinding)) {
     throw new LtmServiceError(
       `Long-term memory source extraction context changed before draft finalization: ${input.sourceNote.id}`,
       409,
@@ -392,8 +391,10 @@ async function extractLongTermMemoryFromSourceNoteInner(
       "ltm_mode_not_enabled",
     );
   }
-  sourceNote = await bindSourceNoteToExtractionContext({
-    storage,
+  const sourceFingerprintBeforeBinding = extractionFingerprintForLtmSourceNote(sourceNote, {
+    extractionMode: resolvedMode,
+  });
+  sourceNote = bindSourceNoteToExtractionContext({
     sourceNote,
     scope: requestedScope,
     modes: requestedModes,
@@ -633,6 +634,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
     operationId: options.operationId,
     ...(options.chatId ? { chatId: options.chatId } : {}),
     sourceNote,
+    sourceFingerprintBeforeBinding,
     extractionMode: resolvedMode,
     response: compiled.compiledResponse,
     diagnostics: compiled.diagnostics,
