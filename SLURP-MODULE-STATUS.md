@@ -66,6 +66,10 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 - Browser proof: `MARINARA_ENGINE_ROOT=/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish npm run
   test:browser:slurp2` launched the Engine services, but all 14 desktop/mobile cases were blocked
   by Chromium missing `libnspr4.so`. No browser or lifecycle result is claimed.
+- Implementation commit: `541e4874`; branch pushed to
+  `origin/slurp2-slice8-client-app-modules`. Draft PR #932 remains open against `modular-simping`
+  and assigned to `Gunterlie`; it is not ready for review because the Home and Messages splits are
+  incomplete.
 
 ## Slice ledger
 
