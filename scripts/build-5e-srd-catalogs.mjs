@@ -2372,6 +2372,27 @@ console.log(
 console.log(
   `    ${report.creaturesWithoutHitDice.length} creature(s) print hit points but no hit dice — ${list(report.creaturesWithoutHitDice)}`,
 );
+// What the spell catalog now says in numbers, for the same reason: a reviewer can see at a glance
+// how much of a fight the entries can actually resolve.
+const withMechanic = (key) => spells.filter((entry) => entry.mechanics?.[key] !== undefined).length;
+const longCastDamage = srdSpells.filter(
+  (spell) => spell.fields.damage_roll && !["action", "bonus-action", "reaction"].includes(spell.fields.casting_time),
+).length;
+console.log("");
+console.log("Spell mechanics");
+console.log(
+  `  ${withMechanic("scales")} cantrip(s) grow with the character's level, ${withMechanic("applies")} spell(s) apply a ` +
+    `condition, ${withMechanic("temporary")} grant temporary points, ${withMechanic("autoHit")} simply land`,
+);
+console.log(
+  `  ${withMechanic("budget")} spell(s) spend a named budget, ${withMechanic("targetCount")} take more than one target, ` +
+    `${withMechanic("save")} ask for a save`,
+);
+console.log(
+  `  ${longCastDamage} damage spell(s) take longer than a turn to cast, which the economy has no budget for, so they ` +
+    "spend the list's own action",
+);
+
 console.log("");
 console.log(
   `Threat scale: ${tiers.length} tiers, ${report.tiersFilledFromNeighbours.length} filled from neighbours (${list(report.tiersFilledFromNeighbours)})`,
