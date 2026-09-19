@@ -37,6 +37,8 @@ import {
   assertRulesetAssetDocument,
   assertRulesetBattle,
   assertRulesetCatalogs,
+  assertRulesetCombat,
+  assertRulesetCreatures,
   assertRulesetPackageContract,
   assertRulesetScaled,
   isRulesetPackage,
@@ -709,6 +711,9 @@ for (const entry of catalog.packages) {
     assertRulesetBattle(manifest, document);
     // A scaled column rides inside a catalog entry, inline or in an asset, and is gated the same way.
     assertRulesetScaled(manifest, document, catalogSources);
+    // So does the combat block, and the bestiary whose creatures are written in its own names.
+    assertRulesetCombat(manifest, document);
+    assertRulesetCreatures(manifest, document, catalogSources);
   } else {
     if (!manifest.entrypoints.agents) throw new Error(`Missing agent definition entrypoint for ${manifest.id}`);
     const agentDefinitions = JSON.parse(
