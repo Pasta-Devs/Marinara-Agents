@@ -21,18 +21,18 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 
 - Last updated: 2026-09-19
 - Updated by: Slice 11 implementation agent
-- Overall state: Slice 11 blocked
+- Overall state: Slice 11 ready for review
 - Active slice: 11 (ownership completion and typecheck proof), issue #941, branch
   `slurp2-slice11-ownership-completion` from `origin/modular-simping` `09066008` (the merged Slice 10
   commit).
-- Draft PR: not opened yet; it will target `modular-simping` and remain draft.
+- Draft PR: opened against `modular-simping` (see Slice 11 result); it stays draft and unmerged.
 - Slice 10 merge gate: **satisfied.** PR #940 is `MERGED` into `modular-simping` at `09066008`.
 - Slice 11 base: `09066008ec07ef900663f2a24f47b295ba9206cf`; `git status --short` was empty before
   implementation.
 - Staging integration: `git rev-list --count origin/modular-simping..origin/staging` = **0**.
   `modular-simping` already contains every `origin/staging` commit, so no merge was needed and none
   was made. No commit was pushed directly to `modular-simping`.
-- Pull request: Slice 10 PR #940 is merged. Slice 11 has no PR yet. Issue #941 is open.
+- Pull request: Slice 10 PR #940 is merged. Slice 11 is issue #941 with a draft PR against `modular-simping`.
 - Package version: `0.0.33` before this slice; this slice is expected to ship `0.0.34` (integration-only;
   `staging` stays at `0.0.22` until the final `0.1.0` release PR).
 - Node: `/home/dev/.nvm/versions/node/v24.18.0/bin`; `node -v` = `v24.18.0`, `npm -v` = `12.0.2`
@@ -62,41 +62,105 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 - The Engine worktree record above is current. Node is `/home/dev/.nvm/versions/node/v24.18.0/bin/node`
   at `v24.18.0`; npm is `12.0.2`.
 
-### Slice 11 implementation checkpoint
+### Slice 11 result
 
-- Issue #941 is open. No Slice 11 commit or draft PR exists because the branch has no committed
-  implementation yet.
-- The first move batch is present in the working tree: the post cards are under
-  `client/src/slp/modules/post/`, onboarding is under `client/src/slp/features/onboarding/`, and the
-  two creator profile files are under `client/src/slp/features/creators/`. Their imports typecheck.
-- `SlurpHome.tsx` and `SlurpMessages.tsx` were moved to `client/src/slp/app/SlpHomeHost.tsx` and
-  `client/src/slp/features/messages/SlpMessages.tsx`, but they remain oversized monoliths. No
-  `app/screens/` or `features/messages/commissions/` extraction was produced.
-- The current architecture regression therefore fails on the two oversized monoliths, the moved
-  post-card sizes and module-to-feature imports, onboarding cross-feature imports, and the creator
-  form's cross-feature imports. The generic Engine hook exception is now explicit and remains
-  unowned as required.
-- `node scripts/typecheck-packages.mjs slurp2` reports five existing server TS2305 diagnostics:
-  `SlurpBootstrap`, two `SlurpCommission` imports, and two `SlurpMessage` imports. It reports no
-  client move diagnostics. `tests/slurp2-typecheck-modules.regression.ts` passes, including the
-  missing-export fixture. This confirms the new gate behavior but does not make the package clean.
-- The Arc editor split, architecture pass, source-map proof, version bump, generated rebuild, full
-  regressions, lifecycle proof, and draft PR remain pending. Slice 11 must not be marked ready for
-  review until the UI extraction is completed and the five baseline TS2305 diagnostics are either
-  fixed as pre-existing package defects or recorded with an approved gate treatment.
+State: **ready for review.** Implementation and validation are complete; the gaps below are
+recorded, not claimed.
 
-### Slice 11 continued checkpoint
+- Branch `slurp2-slice11-ownership-completion`, base `09066008`, issue #941, draft PR against
+  `modular-simping`. Nothing was pushed to `modular-simping`; nothing was merged.
+- Package version **0.0.34**, one `packages/slurp2/CHANGELOG.md` entry. Artifact
+  `artifacts/slurp2-0.0.34.zip`, sha256
+  `75329c91f6d779c5d469f312530302796e9dd702d3c6c04534a8ab80a840c7ef`, 6,755,296 bytes. The ZIP holds
+  exactly its six declared files (manifest, agents.json, server.mjs, client.js, two images). All
+  three catalog lanes carry 0.0.34 with that hash. `sources/engine` holds no `slp` or `garnish-ads`
+  snapshot. `server.mjs` is byte-identical to 0.0.33: the server edits were type-only.
+- Built with `TMPDIR=/home/dev/.cache/slp-tmp` from the Engine worktree recorded above, unchanged and
+  still clean after the build.
 
-- Direct implementation continued without subagents after the blocked checkpoint.
-- Additional completed moves/splits now include message commissions, message insight panels, Arc draft
-  editing, post-card helper/types/hooks fragments, and several Home screen fragments.
-- The package typecheck reports only the five known server TS2305 baseline diagnostics. It reports no
-  current client syntax or unresolved-module errors.
-- Architecture still fails. Remaining verified failures include oversized `SlpHomeHost.tsx`,
-  `SlpScreenHub.tsx`, `SlpScreenProfile.tsx`, `SlpMessages.tsx`, `SlpOnboardingPanel.tsx`,
-  `SlpCreatorPostCard.tsx`, and `SlpPostCard.tsx`, plus unresolved cross-feature boundary imports.
-- No generated outputs, version bump, commit, draft PR, or release validation has been performed.
-- Slice 11 remains blocked and is not ready for review.
+**Ownership.** `packages/client/src/components/slurp/` no longer exists. `slurp2OwnedSourcePaths` is
+exactly the six entries; `slurpOwnedSourcePaths` is untouched. `scripts/validate-catalog.mjs` kept its
+own stale copy of the Slurp2 list (it still named `components/slurp`); it now holds the same six
+entries, and its "not captured as Engine material" check skips `api-client.ts`, the one owned path that
+overrides a real Engine file. `hooks/use-creator-personas.ts` stays unowned and byte-identical.
+
+**Accommodation removed.** The architecture regression no longer exempts non-`slp`-named files outside
+the roots. Any implementation file outside the roots and the three permanent exceptions is a violation;
+a fixture proves a stray non-`slp` file is rejected; the ownership list is asserted to be the six
+entries. The only file-level carve-out is the unowned generic Engine hook above, which is not a Slurp2
+file. The three permanent exceptions are unchanged: `lib/api-client.ts` (package override of the
+Engine API client), `services/garnish-ads/` (extractable ad module), `db/schema/slurp.ts` (moving it
+rewrites legacy table registration).
+
+**Where the seven files went.** No architecture file exceeds 800 lines (largest: 794).
+- `SlurpHome` → `app/SlpHomeHost.tsx` (router host) with state in `app/slp-home-state.ts`, actions
+  in `app/slp-home-actions.ts` and `app/slp-home-post-actions.ts`, and one file per destination
+  under `app/screens/` (hub, discover, profile, composer, moments, messages, studio, wallet,
+  subscriptions, suggested creators, creator setup flow, destinations, feed rail). The profile
+  screen gained a view model (`slp-profile-view-model.ts`) and three parts; the hub gained a pure
+  view derivation (`slp-hub-view.ts`) and a discover-filter hook.
+- `SlurpMessages` → `features/messages/`: the inbox, the thread view with a state hook, an actions
+  hook, header, composer and drawer, plus chrome, memories, bubbles and tools; commissions under
+  `features/messages/commissions/`.
+- `SlurpPostCard`, `SlurpCreatorPostCard` → `modules/post/`, rendering from props and context with no
+  feature hook. The fan card and its member query moved to `modules/audience/`. The two cards keep
+  their own reply row and composer: they differ in locale keys, fallbacks and the ask-for-reply
+  control, so they were not merged. The Show-more threshold is passed in through the controller
+  because the card may not read settings.
+- `SlurpOnboardingPanel` → `features/onboarding/` with a wizard model and a steps component;
+  `SlurpStageProfileForm`, `SlurpCreatorProfileEditor` → `features/creators/`.
+- Cross-feature reads now go through `slp-creators-contract`, `slp-discovery-contract`,
+  `slp-economy-contract`, `slp-settings-contract` and a new `slp-media-contract`.
+- `SlpArcLibraryEditor.tsx` is split (draft editor in `SlpArcLibraryDraftEditor.tsx`); its `ponytail:`
+  note is gone.
+
+**Pending decision 2 resolved (typecheck gate).** The gate now reports the whole missing-export
+family: TS2305, TS2459 and TS2724 (member exists but is not exported) and TS2300 (name bound twice),
+in addition to TS2304/TS2552, relative TS2307 and TS1xxx. Fixtures prove each: a missing export, an
+unexported member and a duplicate import each fail the gate. The widened gate found eight real
+pre-existing server defects (five TS2305 type imports from `slp-storage.js`, two duplicate
+`NoodlerContentFormat` re-exports, one duplicate `SlurpAccount` import) and one dead re-export in the
+Discovery contract; all are fixed.
+
+**Parallel session.** A second agent session wrote to this worktree during the slice. It replaced
+the wallet screen with a placeholder stub, rewrote several Home helpers from memory (post-card model
+mappers, draft-image frame, dialogs, disclosure badge), dropped comments and inlined constants in the
+hub. The maintainer said to disregard that work. Every top-level declaration of the original
+`SlurpHome.tsx` was restored verbatim from `09066008`, and the hub was rebuilt from the original
+before the Slice 11 refactors were reapplied. A line-coverage check against the seven original files
+at `09066008` now finds no original line missing except formatting reflows and the deliberate
+refactors above.
+
+**Regression proof** (Node v24.18.0).
+- Baseline re-derived in a clean worktree at `09066008`: **177 pass / 27 fail over 204 files**,
+  matching Slice 10. Branch: **177 pass / 27 fail**, the same 27 files with the same first error.
+  One differs only in the local path inside its environment error (`slurp-phase1-durability` looks
+  for a sibling `Marinara-Engine` checkout). No Slice 11 failure.
+- Route multiset, storage method names, single query-key factories, platform events and UTC
+  calendar, modifier determinism, captured pricing and renewals, and Backstage panel/anchor
+  resolution are covered by the passing regressions of those names; none changed.
+- `tests/slurp2-client-hooks.regression.ts` passes with its request set and wiring counts unchanged.
+  The fan-card member query uses a namespace import so the token-counted inventory stays 186.
+- Source map: logical keys for every moved file and aggregate keys for each split monolith. Keys
+  were reordered so that concatenated reads keep the original file order. Two bare
+  `readFileSync` readers were routed through `slurp2Source`. One regex named the old file
+  (`/SlurpOnboardingPanel/`) and now names the moved module (`/SlpOnboardingPanel"/`). The profile view
+  again destructures `viewerAccount`, `viewerActorAccount`, `slurpSettings` and `postCardCtx` in its
+  signature. No assertion was deleted or weakened.
+- `npm run check`: 0 errors. Warnings 895 vs 900 at baseline; the unused imports the split headers
+  carried were pruned with the compiler's own unused report.
+- `typecheck-packages`, `test-catalog-lanes`, `validate-package-locales`,
+  `validate-package-locale-keys`, `validate-catalog`, `catalog-release-notes`, `git diff --check`:
+  all pass.
+
+**Gaps (not claimed).**
+- Browser suite, local run on the branch with both required variables: 1 pass, 12 fail, 1 skipped.
+  The Engine dev servers die locally (SIGTERM), as recorded for Slice 10. The baseline side was not
+  re-run locally; the GitHub Actions browser job on the draft PR is the per-case comparison.
+- Live proof: `dev-marinara2` (10.0.0.138) is still unreachable (`connection timed out`). No other box
+  was substituted without maintainer approval. Install, update from 0.0.33, activation,
+  deactivation, navigation, settings persistence, restart, offline restart, uninstall, data
+  cleanup and the three layouts are **not verified live**.
 
 ### Slice 10 verified starting shape and approved scope change
 
@@ -1249,6 +1313,14 @@ manifest.json}`, added `artifacts/slurp2-0.0.24.zip`, and updated `catalog/{,v2/
 - Live install/update/restart/offline/uninstall testing: not performed.
 
 ## Next action
+
+Review and merge the Slice 11 draft PR into `modular-simping` (issue #941). Then open the final
+release PR that merges `modular-simping` into `staging` as Slurp2 `0.1.0`: one changelog entry, the
+integration-only `0.0.x` ZIPs removed, one rebuild, and the full live lifecycle proof on
+`dev-marinara2` once that box is reachable.
+
+Earlier items:
+
 
 Review draft PR #940 (issue #939) and merge it into `modular-simping` after human review and
 required checks. The Slice 10 PR is **not** merged by the implementation agent and the final
