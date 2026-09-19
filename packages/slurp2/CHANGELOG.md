@@ -1,5 +1,11 @@
 # Slurp Remastered release notes
 
+## 0.1.1 — 2026-09-19
+
+- Slurp now carries its own vocabulary instead of borrowing the Engine's Noodle names.
+- Removed a leftover Noodle mention from the setup wizard intro.
+- You should not feel any difference. Your creators, posts and settings are untouched.
+
 ## 0.1.0 — 2026-09-19
 
 - Completed the backend file split and modularisation.
