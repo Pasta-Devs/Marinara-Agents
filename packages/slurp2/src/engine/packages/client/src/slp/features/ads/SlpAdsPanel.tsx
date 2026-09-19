@@ -9,10 +9,10 @@ import { SettingAnchor } from "../../modules/settings/SlpSettingsKit";
 import type { SlurpContentRating } from "../../base/state/slp-state-types";
 
 import type { SlurpSettings } from "../settings/slp-settings-contract";
-import { SlurpMediaImg } from "../../../components/slurp/SlurpShell";
+import { SlurpMediaImg } from "../../base/chrome/SlpChrome";
 
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
-import { errorMessage } from "../../../components/slurp/SlurpBackstageWorkflow";
+import { errorMessage } from "../../modules/settings/slp-backstage-format";
 
 /** Ads: the inline ad settings, the ad pool and the ad editors. */
 export function SlpAdsPanel(page: SlpBackstagePageProps) {

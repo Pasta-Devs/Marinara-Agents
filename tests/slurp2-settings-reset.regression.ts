@@ -8,7 +8,7 @@ import {
   SLURP_SETTINGS_NOT_RESET,
   SLURP_SETTINGS_SECTION_KEYS,
   slurpSettingsResetPatch,
-} from "../packages/slurp2/src/engine/packages/client/src/components/slurp/slurp-settings-defaults";
+} from "../packages/slurp2/src/engine/packages/client/src/slp/features/settings/slp-settings-defaults";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
 import { slurp2Source } from "./slurp2-source";
 

@@ -11,10 +11,10 @@ import {
 } from "./slp-backup";
 
 import { showConfirmDialog, showPromptDialog } from "../../../lib/app-dialogs";
-import { SlurpMaintenanceHealth } from "../../../components/slurp/SlurpMaintenanceHealth";
+import { SlurpMaintenanceHealth } from "./SlpMaintenanceHealth";
 import { MaintenanceTask, focusRing, quietButton } from "./SlpMaintenanceTask";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
-import { errorMessage, formatBytes } from "../../../components/slurp/SlurpBackstageWorkflow";
+import { errorMessage, formatBytes } from "../../modules/settings/slp-backstage-format";
 
 /** Backup and data: export, restore and the destructive delete actions. */
 export function SlpBackupPanel(page: SlpBackstagePageProps) {

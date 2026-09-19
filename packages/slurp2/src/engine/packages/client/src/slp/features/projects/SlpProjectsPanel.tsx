@@ -7,7 +7,7 @@ import { SettingAnchor } from "../../modules/settings/SlpSettingsKit";
 import type { SlurpSettings } from "../settings/slp-settings-contract";
 
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
-import { ArcLibraryEditor } from "../../../components/slurp/SlurpBackstageWorkflow";
+import { ArcLibraryEditor } from "./SlpArcLibraryEditor";
 
 /** Story arcs: pace, sourcing, crossovers and the arc library. */
 export function SlpProjectsPanel(page: SlpBackstagePageProps) {

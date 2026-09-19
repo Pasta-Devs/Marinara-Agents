@@ -47,7 +47,7 @@ import {
   slurpAudienceCharacterFanTypeId,
   slurpAudienceCharacterTraits,
   slurpAudienceCharacterVoice,
-} from "../../modules/audience/slp-audience-characters.js";
+} from "../../../../../shared/src/slp/slp-audience-characters.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { newId } from "../../../utils/id-generator.js";
 import { claimSlurpModelBudget, slurpModelWorkerAllows } from "../../base/model/slp-model-worker.js";

@@ -305,7 +305,14 @@ packages/client/src/slp
 packages/client/src/lib/api-client.ts
 packages/server/src/slp
 packages/server/src/services/garnish-ads
+packages/server/src/db/schema/slurp.ts
 ```
+
+Corrected during Slice 10 (maintainer-approved; see `DECISIONS.md`). This list first had five
+entries and omitted `packages/server/src/db/schema/slurp.ts`, which is live and is co-owned by the
+frozen legacy Slurp package. Moving it under `server/src/slp/` would rewrite legacy table
+registration, which §9 forbids, so it becomes a third permanent ownership exception instead. The
+final list is six entries.
 
 Update the Slurp2 feature descriptor in the same change that moves the entrypoints:
 

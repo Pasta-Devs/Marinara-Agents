@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
 import { showConfirmDialog } from "../../../lib/app-dialogs";
-import { errorMessage } from "../../../components/slurp/SlurpBackstageWorkflow";
+import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import type { SlpBackstageSection } from "../../base/navigation/slp-backstage-target";
 import {
   useAdoptNoodlerSourceIdentity,

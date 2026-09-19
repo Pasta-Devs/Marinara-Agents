@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { type SlurpNavigationState } from "../../../components/slurp/slurp-navigation.types";
+import { type SlurpNavigationState } from "../navigation/slp-navigation.types";
 import {
   isSlpBackstageSection,
   isSlpBackstageTarget,

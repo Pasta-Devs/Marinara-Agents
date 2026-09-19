@@ -1,4 +1,4 @@
-import { SlurpPlatformEventsSettings } from "../../../components/slurp/SlurpPlatformEventsSettings";
+import { SlurpPlatformEventsSettings } from "./SlpPlatformEventsPanel";
 
 import { SettingAnchor } from "../../modules/settings/SlpSettingsKit";
 

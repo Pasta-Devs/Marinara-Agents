@@ -11,7 +11,7 @@ import {
   slurpCommissionChancePerDay,
   slurpMessageChancePerDay,
   slurpQuestionChancePerDay,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world.js";
 import {
   scoreSlurpRapport,
   emptySlurpRapportFacts,
@@ -19,7 +19,7 @@ import {
 import {
   slurpCreatorReplyChance,
   slurpCreatorOpenerKind,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world.js";
 import { slurpAudienceReaction } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world-copy.js";
 import { slurp2Source } from "./slurp2-source";
 

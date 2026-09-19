@@ -13,7 +13,7 @@ import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.j
 import { generateSlurpConversationSchedule } from "../messages/slp-messages-contract.js";
 import { slurpPlatformScaleMultiplier } from "../../modules/audience/slp-scale.js";
 import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-storage-funnel.js";
-import { slurpCreatorReach } from "../../modules/audience/slp-reach.js";
+import { slurpCreatorReach } from "../../../../../shared/src/slp/slp-reach.js";
 import { generateNoodlerStageProfileDraft } from "./slp-stage-profile-draft-service.js";
 import { logger } from "../../../lib/logger.js";
 import { getErrorMessage } from "../../modules/creators/slp-public-support.js";

@@ -1,17 +1,17 @@
 import { Field, SectionTitle, Toggle } from "../../modules/settings/SlpSettingsControls";
 import { BackstagePageHeader, SettingAnchor } from "../../modules/settings/SlpSettingsKit";
 import { useSlurpPostGuidance } from "./slp-post-guidance-contract";
-import { SlurpPostGuidanceField } from "../../../components/slurp/SlurpPostGuidanceField";
+import { SlurpPostGuidanceField } from "./SlpPostGuidanceField";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
-import { SlurpPromptBlockBuilder } from "../../../components/slurp/SlurpPromptBlockBuilder";
+import { SlurpPromptBlockBuilder } from "./SlpPromptBlockBuilder";
 import {
   SLURP_GUIDANCE_PRESETS,
   SLURP_GUIDANCE_LEVELS,
   SLURP_IMAGE_INTERPRETATION_PRESETS,
   SLURP_IMAGE_INTERPRETATION_STYLES,
   DEFAULT_SLURP_GENERATION_GUIDANCE,
-  PromptCard,
-} from "../../../components/slurp/SlurpBackstageWorkflow";
+} from "../../modules/settings/slp-backstage-format";
+import { PromptCard } from "../../modules/settings/SlpBackstageKit";
 
 /**
  * Prompts: every text Slurp sends to a model, in one place.

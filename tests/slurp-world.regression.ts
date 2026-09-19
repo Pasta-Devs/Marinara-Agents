@@ -11,7 +11,7 @@ import {
   SLURP_WORLD_MAX_CATCHUP_DAYS,
   SLURP_WORLD_MAX_OPEN_REQUESTS,
   type SlurpWorldCreator,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world.js";
 import {
   slurpAudienceOpener,
   slurpAudienceQuestion,

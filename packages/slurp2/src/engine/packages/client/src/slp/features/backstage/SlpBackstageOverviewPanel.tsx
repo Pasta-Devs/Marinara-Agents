@@ -14,8 +14,9 @@ import { Toggle } from "../../modules/settings/SlpSettingsControls";
 import { slurpAudiencePresetFor } from "../../../../../shared/src/slp/slp-tuning.js";
 import type { SlpBackstagePageProps } from "./slp-backstage-contract";
 import type { SlpBackstageSection, SlpBackstageTarget } from "../../base/navigation/slp-backstage-target";
-import { formatDateTime } from "../../../components/slurp/SlurpDateTime";
-import { OverviewCard, OverviewActivity, formatBytes } from "../../../components/slurp/SlurpBackstageWorkflow";
+import { formatDateTime } from "../../base/ui/slp-date-time";
+import { formatBytes } from "../../modules/settings/slp-backstage-format";
+import { OverviewCard, OverviewActivity } from "../../modules/settings/SlpBackstageKit";
 
 type AttentionItem = { id: string; label: string; section: SlpBackstageSection; target: SlpBackstageTarget };
 

@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
+import { slurp2Source } from "./slurp2-source";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const splash = readFileSync(
+const splash = slurp2Source(
   join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpSplash.tsx"),
-  "utf8",
 );
 
 assert.match(splash, /grid-cols-\[minmax\(0,1fr\)_6rem\][\s\S]*?sm:grid-cols-\[minmax\(0,1fr\)_8rem\]/u);

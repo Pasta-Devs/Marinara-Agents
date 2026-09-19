@@ -7,7 +7,7 @@ import { BackstagePageHeader, BackstageWizard } from "../../modules/settings/Slp
 import type { SlurpSettings } from "../settings/slp-settings-contract";
 
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
-import { errorMessage } from "../../../components/slurp/SlurpBackstageWorkflow";
+import { errorMessage } from "../../modules/settings/slp-backstage-format";
 
 /** Image generation: connections, sizes, context mode and what gets an image. */
 export function SlpImagesPanel(page: SlpBackstagePageProps) {

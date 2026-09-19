@@ -4,7 +4,8 @@ import { toast } from "sonner";
 
 import { Modal } from "../../../components/ui/Modal";
 
-import { errorMessage, ScheduleSlotEditor } from "../../../components/slurp/SlurpBackstageWorkflow";
+import { errorMessage } from "../../modules/settings/slp-backstage-format";
+import { ScheduleSlotEditor } from "../../modules/settings/SlpBackstageKit";
 
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 

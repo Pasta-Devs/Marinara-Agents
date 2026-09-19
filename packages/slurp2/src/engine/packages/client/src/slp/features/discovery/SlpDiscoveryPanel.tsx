@@ -1,4 +1,4 @@
-import { SlurpTagsSettings } from "../../../components/slurp/SlurpTagsSettings";
+import { SlurpTagsSettings } from "./SlpTagsPanel";
 
 import { SettingAnchor } from "../../modules/settings/SlpSettingsKit";
 

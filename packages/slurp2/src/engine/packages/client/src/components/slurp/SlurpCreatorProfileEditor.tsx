@@ -11,7 +11,7 @@ import {
 } from "../../slp/features/creators/slp-creator-profile-hooks";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { confirmSlurpAvatarReview, StageProfileForm } from "./SlurpStageProfileForm";
-import { errorMessage } from "./SlurpBackstageWorkflow";
+import { errorMessage } from "../../slp/modules/settings/slp-backstage-format";
 
 /**
  * The Creator's own profile fields, inside Backstage.

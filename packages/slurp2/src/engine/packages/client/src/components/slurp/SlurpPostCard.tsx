@@ -46,13 +46,13 @@ import {
 } from "../chat/ConversationMediaPickerPanel";
 import type { ChatImage } from "../../hooks/use-gallery";
 import { useSlurpSettings } from "../../slp/features/settings/slp-settings-hooks";
-import { Avatar, SlurpMediaImg } from "./SlurpShell";
-import { formatTime } from "./SlurpDateTime";
-import { NoodleImageComposer } from "./SlurpImageComposer";
+import { Avatar, SlurpMediaImg } from "../../slp/base/chrome/SlpChrome";
+import { formatTime } from "../../slp/base/ui/slp-date-time";
+import { NoodleImageComposer } from "../../slp/base/media/SlpImageComposer";
 import { NoodlePollComposer } from "../../slp/modules/poll/SlpPollComposer";
-import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
-import { SlurpLikedBy } from "./SlurpFanCard";
-import { PostImageCropEditor, PostImageFrame } from "./PostImageCropEditor";
+import { NoodleAnchoredPopover } from "../../slp/base/chrome/SlpAnchoredPopover";
+import { SlurpLikedBy } from "../../slp/features/audience/SlpFanCard";
+import { PostImageCropEditor, PostImageFrame } from "../../slp/base/media/SlpPostImageCropEditor";
 import { useTranslation as useUiTranslation } from "react-i18next";
 
 export const fieldClass =

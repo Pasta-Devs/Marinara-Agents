@@ -6,7 +6,7 @@ import {
   slurpPulseBudget,
   SLURP_PULSE_MAX_PER_TICK,
   SLURP_PULSE_POST_MAX_AGE_HOURS,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world-pulse.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world-pulse.js";
 import {
   SLURP_REALISTIC_TUNING,
   SLURP_TUNING_PULSE_PER_TICK_CEILING,

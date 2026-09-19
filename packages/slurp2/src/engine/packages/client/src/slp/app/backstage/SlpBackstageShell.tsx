@@ -10,7 +10,7 @@ import {
   changedSlurpSettingKeys,
   isSlurpResettableSection,
   slurpSettingsResetPatch,
-} from "../../../components/slurp/slurp-settings-defaults";
+} from "../../features/settings/slp-settings-defaults";
 
 import { slurpAudiencePresetFor } from "../../../../../shared/src/slp/slp-tuning.js";
 import { SLP_BACKSTAGE_SECTION_LABELS, SLP_BACKSTAGE_TARGET_LABELS } from "../../base/navigation/slp-backstage-target";
@@ -20,7 +20,7 @@ import {
   useSlurpBackstageDraftGuard,
 } from "../../features/backstage/SlpBackstageControls";
 import { SlurpBackstageSearch, SlurpBackstageSubnav } from "../../features/backstage/SlpBackstageNavigation";
-import { errorMessage } from "../../../components/slurp/SlurpBackstageWorkflow";
+import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import { focusSettingAnchor } from "../../modules/settings/SlpSettingsKit";
 
 import { useSlpBackstageController } from "./slp-backstage-controller";

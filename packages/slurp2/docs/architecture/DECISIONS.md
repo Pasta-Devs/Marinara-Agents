@@ -103,3 +103,33 @@ modules, rejected alternative, and migration consequence.
   the narrower test that replaced it. The plan's server allocation ledger moves these eight files to
   shared. Pending decision 5 is resolved for the hook layer; the remaining component importers in
   `components/slurp/` now import shared, so Slice 8 inherits no client-to-server edge.
+
+## 2026-09-19 — Slice 10: the schema is a permanent exception, and the shell is a module
+
+- **Problem:** the final ownership list in plan §5 had five entries and omitted
+  `packages/server/src/db/schema/slurp.ts`, which is live and appears in **both**
+  `slurpOwnedSourcePaths` (frozen legacy Slurp) and `slurp2OwnedSourcePaths`. Separately, the shell
+  and the reusable Creator card could not go where plan §3 placed them: `NoodleShell` renders a
+  wallet balance through `modules/coin/`, and the Creator card read a Discovery type, so putting
+  either in `base/` would have broken the layer direction the same document defines.
+- **Decision:** (1) the Drizzle schema stays at its path and becomes a third permanent ownership
+  exception; moving it would rewrite table registration for the frozen legacy package. (2) The
+  domain-neutral chrome (accent tokens, logo, avatar, scroll behaviour, media img) goes to
+  `base/chrome/`, while the shell, its contract and the persona switcher go to `modules/chrome/`.
+  (3) Types read by more than one layer move to `base/state/`: `SlurpDiscoverLayout`,
+  `SlurpReserveStatus` and `SlurpScheduleSlot`, the last two re-exported from the feed contract so no
+  feed consumer changes. (4) Five pure rule modules the client already imported across the
+  client/server boundary move to `shared/src/slp/`: `slp-world.ts`, `slp-world-pulse.ts`,
+  `slp-reach.ts`, `slp-audience-subscription.ts` and `slp-audience-characters.ts`.
+- **Affected modules:** `base/chrome/`, `modules/chrome/` (new), `modules/settings/`,
+  `modules/creator/`, `modules/audience/` (new), `base/state/`, `shared/src/slp/`, server
+  `modules/audience/` and `modules/world/`, and the Discovery, Maintenance, Ads, Economy, Messages,
+  Projects and Settings contracts, which gained the entries other features legitimately need.
+- **Rejected alternative:** keeping the shell in `base/chrome/` and passing the wallet balance in as
+  a prop. That changes a component API during a structural move, which plan §9 forbids. Also
+  rejected: an allowlist for the client-to-server rule imports, since the plan requires the final
+  regression to pass with no temporary exception.
+- **Migration consequence:** plan §5's final ownership list becomes six entries, not five. The
+  `focusRing` class string, copied byte-identically into four files by Slice 9, is now
+  `base/chrome/slp-focus.ts`; the three `quietButton` composites stay separate because they differ in
+  minimum height and animation, so merging them would change what renders.

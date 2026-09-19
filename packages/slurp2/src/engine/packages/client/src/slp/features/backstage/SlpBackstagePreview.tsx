@@ -3,12 +3,12 @@ import { useDeferredValue, useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { SlurpPromotion } from "../ads/slp-ads-contract";
 import type { SlurpSettings } from "../settings/slp-settings-contract";
-import { SlurpInlineAd } from "../../../components/slurp/SlurpInlineAd";
-import { ProfileInitial } from "../../../components/slurp/SlurpShell";
+import { SlurpInlineAd } from "../ads/slp-ads-contract";
+import { ProfileInitial } from "../../base/chrome/SlpChrome";
 
 import { cn } from "../../../lib/utils";
 import { humanize } from "./SlpBackstageNavigation";
-import { estimateSlurpSimulation } from "../../../components/slurp/slurp-simulation-estimate";
+import { estimateSlurpSimulation } from "../../modules/audience/slp-simulation-estimate";
 import { slurpActivePlatformEvents } from "../../../../../shared/src/slp/slp-platform-events.js";
 import { SLP_BACKSTAGE_SETTING_PLACEMENT } from "./slp-backstage-placement";
 import { SLP_BACKSTAGE_TARGET_LABELS, type SlpBackstageTarget } from "../../base/navigation/slp-backstage-target";

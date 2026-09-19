@@ -7,7 +7,7 @@ import {
   slurpCharacterFanEntityId,
   slurpCharacterIdFromFanEntityId,
   SlurpAudienceCharacterGroup,
-} from "../../modules/audience/slp-audience-characters.js";
+} from "../../../../../shared/src/slp/slp-audience-characters.js";
 import { normalizeNoodleAccountSettings } from "../../modules/records/slp-storage-model.js";
 import type { SlurpAccount } from "../../modules/records/slp-storage-model.js";
 import { mapAccount, sourceAccountFromEntity } from "../host/slp-storage-mappers.js";

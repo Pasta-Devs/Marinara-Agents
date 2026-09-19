@@ -9,7 +9,7 @@ import {
   slurpAudienceCharacterVoice,
   slurpCharacterFanEntityId,
   slurpCharacterIdFromFanEntityId,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-audience-characters.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-audience-characters.js";
 import { slurp2Source } from "./slurp2-source";
 
 const settings = {

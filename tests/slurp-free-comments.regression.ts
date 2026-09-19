@@ -5,7 +5,7 @@ import {
   slurpPulseBudget,
   SLURP_PULSE_MAX_PER_TICK,
   type SlurpPulseTarget,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world-pulse.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world-pulse.js";
 import {
   slurpAudienceReaction,
   SLURP_SHIPPED_REACTIONS,

@@ -26,7 +26,7 @@ import {
   X,
 } from "lucide-react";
 import { Fragment, useMemo, useRef, useState } from "react";
-import { slurpPostWentViral, slurpReachWeek } from "../../../../server/src/slp/modules/audience/slp-reach.js";
+import { slurpPostWentViral, slurpReachWeek } from "../../../../shared/src/slp/slp-reach.js";
 import {
   canManageNoodleReply,
   noodlePollInputSchema,
@@ -44,8 +44,8 @@ import { ConversationMediaPickerPanel } from "../chat/ConversationMediaPickerPan
 import type { ChatImage } from "../../hooks/use-gallery";
 import { useNearViewportSlurpMediaSrc } from "../../slp/base/media/slp-media-src";
 import { Modal } from "../ui/Modal";
-import { Avatar, ProfileInitial, SlurpMediaImg } from "./SlurpShell";
-import { formatTime } from "./SlurpDateTime";
+import { Avatar, ProfileInitial, SlurpMediaImg } from "../../slp/base/chrome/SlpChrome";
+import { formatTime } from "../../slp/base/ui/slp-date-time";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import {
   countInteractions,
@@ -68,11 +68,11 @@ import {
   type NoodlePostCardCtx,
   type NoodlePostCardModel,
 } from "./SlurpPostCard";
-import { NoodleAnchoredPopover } from "./NoodleAnchoredPopover";
-import { SlurpLikedBy } from "./SlurpFanCard";
+import { NoodleAnchoredPopover } from "../../slp/base/chrome/SlpAnchoredPopover";
+import { SlurpLikedBy } from "../../slp/features/audience/SlpFanCard";
 import { NoodlePollComposer } from "../../slp/modules/poll/SlpPollComposer";
-import { PostImageFrame } from "./PostImageCropEditor";
-import { SlurpCelebrationRing, SlurpSparkleVeil } from "./SlurpSparkleVeil";
+import { PostImageFrame } from "../../slp/base/media/SlpPostImageCropEditor";
+import { SlurpCelebrationRing, SlurpSparkleVeil } from "../../slp/base/chrome/SlpSparkleVeil";
 import { SlurpCoin, SlurpCoinBurst } from "../../slp/modules/coin/SlpCoin";
 
 const SLURP_FEED_MEDIA_RATIO_CLASS = "aspect-[4/3] sm:aspect-[16/10]";

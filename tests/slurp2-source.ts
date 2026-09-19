@@ -501,15 +501,15 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
     "packages/server/src/slp/modules/audience/slp-fan-identity-provider.ts",
   ],
   "packages/server/src/services/slurp/slurp-audience-characters.ts": [
-    "packages/server/src/slp/modules/audience/slp-audience-characters.ts",
+    "packages/shared/src/slp/slp-audience-characters.ts",
   ],
   "packages/server/src/services/slurp/slurp-audience-subscription.ts": [
-    "packages/server/src/slp/modules/audience/slp-audience-subscription.ts",
+    "packages/shared/src/slp/slp-audience-subscription.ts",
   ],
   "packages/server/src/services/slurp/slurp-audience-reply.operation.ts": [
     "packages/server/src/slp/features/audience/slp-audience-reply-operation.ts",
   ],
-  "packages/server/src/services/slurp/slurp-reach.ts": ["packages/server/src/slp/modules/audience/slp-reach.ts"],
+  "packages/server/src/services/slurp/slurp-reach.ts": ["packages/shared/src/slp/slp-reach.ts"],
   "packages/server/src/services/slurp/slurp-scale.ts": ["packages/server/src/slp/modules/audience/slp-scale.ts"],
   "packages/server/src/services/slurp/slurp-ambient-profiles.ts": [
     "packages/server/src/slp/data/audience/slp-ambient-profiles.ts",
@@ -517,16 +517,14 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   "packages/server/src/services/slurp/slurp-ambient-profile-generation.service.ts": [
     "packages/server/src/slp/features/audience/slp-ambient-profile-generation-service.ts",
   ],
-  "packages/server/src/services/slurp/slurp-world.ts": ["packages/server/src/slp/modules/world/slp-world.ts"],
+  "packages/server/src/services/slurp/slurp-world.ts": ["packages/shared/src/slp/slp-world.ts"],
   "packages/server/src/services/slurp/slurp-world.operation.ts": [
     "packages/server/src/slp/features/world/slp-world-operation.ts",
     "packages/server/src/slp/features/world/slp-world-actions.ts",
     "packages/server/src/slp/features/world/slp-world-tick-state.ts",
   ],
   "packages/server/src/services/slurp/slurp-world-copy.ts": ["packages/server/src/slp/modules/world/slp-world-copy.ts"],
-  "packages/server/src/services/slurp/slurp-world-pulse.ts": [
-    "packages/server/src/slp/modules/world/slp-world-pulse.ts",
-  ],
+  "packages/server/src/services/slurp/slurp-world-pulse.ts": ["packages/shared/src/slp/slp-world-pulse.ts"],
   "packages/server/src/services/slurp/slurp-world-scheduler.service.ts": [
     "packages/server/src/slp/features/world/slp-world-scheduler-service.ts",
   ],
@@ -623,6 +621,119 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   ],
   "packages/server/src/services/slurp/slurp-garnish-sync.service.ts": [
     "packages/server/src/slp/features/ads/slp-garnish-sync-service.ts",
+  ],
+  // Slice 10 moved the remaining `components/slurp/` leaf files into the slp roots.
+  "packages/client/src/components/slurp/slurp-logo.ts": ["packages/client/src/slp/base/chrome/slp-logo.ts"],
+  "packages/client/src/components/slurp/slurp-gunterlie-avatar.ts": [
+    "packages/client/src/slp/base/chrome/slp-gunterlie-avatar.ts",
+  ],
+  "packages/client/src/components/slurp/SlurpEmptyArtwork.tsx": [
+    "packages/client/src/slp/base/chrome/SlpEmptyArtwork.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpSparkleVeil.tsx": [
+    "packages/client/src/slp/base/chrome/SlpSparkleVeil.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpDateTime.ts": ["packages/client/src/slp/base/ui/slp-date-time.ts"],
+  "packages/client/src/components/slurp/slurp-navigation.types.ts": [
+    "packages/client/src/slp/base/navigation/slp-navigation.types.ts",
+  ],
+  "packages/client/src/components/slurp/SlurpImageComposer.tsx": [
+    "packages/client/src/slp/base/media/SlpImageComposer.tsx",
+  ],
+  "packages/client/src/components/slurp/PostImageCropEditor.tsx": [
+    "packages/client/src/slp/base/media/SlpPostImageCropEditor.tsx",
+  ],
+  "packages/client/src/components/slurp/slurp-creator-status.ts": [
+    "packages/client/src/slp/modules/creator/slp-creator-status.ts",
+  ],
+  "packages/client/src/components/slurp/SlurpTagsSettings.tsx": [
+    "packages/client/src/slp/features/discovery/SlpTagsPanel.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpDiscoverToolbar.tsx": [
+    "packages/client/src/slp/features/discovery/SlpDiscoverToolbar.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpDiscoveryProfileEditor.tsx": [
+    "packages/client/src/slp/features/discovery/SlpDiscoveryProfileEditor.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpFanTypesSettings.tsx": [
+    "packages/client/src/slp/features/audience/SlpFanTypesPanel.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpAudienceConfigSettings.tsx": [
+    "packages/client/src/slp/features/audience/SlpAudienceConfigPanel.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpSimulationSettings.tsx": [
+    "packages/client/src/slp/features/audience/SlpSimulationPanel.tsx",
+  ],
+  "packages/client/src/slp/modules/audience/slp-simulation-estimate.ts": [
+    "packages/client/src/slp/modules/audience/slp-simulation-estimate.ts",
+  ],
+  "packages/client/src/components/slurp/SlurpPlatformEventsSettings.tsx": [
+    "packages/client/src/slp/features/world/SlpPlatformEventsPanel.tsx",
+  ],
+  "packages/client/src/components/slurp/slurp-activity-presets.ts": [
+    "packages/client/src/slp/modules/creator/slp-activity-presets.ts",
+  ],
+  "packages/client/src/slp/features/settings/slp-settings-defaults.ts": [
+    "packages/client/src/slp/features/settings/slp-settings-defaults.ts",
+  ],
+  "packages/client/src/slp/features/settings/slp-prompt-presets.ts": [
+    "packages/client/src/slp/features/settings/slp-prompt-presets.ts",
+  ],
+  "packages/client/src/components/slurp/SlurpPromptBlockBuilder.tsx": [
+    "packages/client/src/slp/features/settings/SlpPromptBlockBuilder.tsx",
+  ],
+  // Slice 10 split the shell: domain-neutral chrome to base/, the shell and persona switcher to
+  // modules/chrome/ because the shell renders a wallet balance through modules/coin.
+  "packages/client/src/components/slurp/SlurpShell.tsx": [
+    "packages/client/src/slp/base/chrome/SlpChrome.tsx",
+    "packages/client/src/slp/modules/chrome/slp-shell.types.ts",
+    "packages/client/src/slp/modules/chrome/SlpPersonaSwitcher.tsx",
+    "packages/client/src/slp/modules/chrome/SlpShell.tsx",
+  ],
+  // Slice 10 split the shared Backstage kit: pure formatting and prop-driven controls into
+  // modules/settings/, and the three hook-driven panels into the features that own their settings.
+  "packages/client/src/components/slurp/SlurpBackstageWorkflow.tsx": [
+    "packages/client/src/slp/modules/settings/slp-backstage-format.ts",
+    "packages/client/src/slp/modules/settings/SlpBackstageKit.tsx",
+    "packages/client/src/slp/features/projects/SlpArcLibraryEditor.tsx",
+    "packages/client/src/slp/features/audience/SlpAmbientProfilesPanel.tsx",
+    "packages/client/src/slp/features/messages/SlpCreatorMessagingGroup.tsx",
+  ],
+  "packages/client/src/components/slurp/NoodleAnchoredPopover.tsx": [
+    "packages/client/src/slp/base/chrome/SlpAnchoredPopover.tsx",
+  ],
+  "packages/client/src/components/slurp/slurp2-release.ts": [
+    "packages/client/src/slp/features/onboarding/slp-release.ts",
+  ],
+  "packages/client/src/components/slurp/SlurpAgeGate.tsx": [
+    "packages/client/src/slp/features/onboarding/SlpAgeGate.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpSplash.tsx": ["packages/client/src/slp/features/onboarding/SlpSplash.tsx"],
+  "packages/client/src/components/slurp/SlurpCreatorBulkEdit.tsx": [
+    "packages/client/src/slp/features/creators/SlpCreatorBulkEdit.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpCreatorImprover.tsx": [
+    "packages/client/src/slp/features/creators/SlpCreatorImprover.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpProfileSurface.tsx": [
+    "packages/client/src/slp/features/creators/SlpProfileSurface.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpCreatorProfileCard.tsx": [
+    "packages/client/src/slp/modules/creator/SlpCreatorProfileCard.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpFanCard.tsx": ["packages/client/src/slp/features/audience/SlpFanCard.tsx"],
+  "packages/client/src/components/slurp/SlurpInlineAd.tsx": ["packages/client/src/slp/features/ads/SlpInlineAd.tsx"],
+  "packages/client/src/components/slurp/SlurpMaintenanceHealth.tsx": [
+    "packages/client/src/slp/features/maintenance/SlpMaintenanceHealth.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpPostGuidanceField.tsx": [
+    "packages/client/src/slp/features/settings/SlpPostGuidanceField.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpProjectsPanel.tsx": [
+    "packages/client/src/slp/features/projects/SlpProjectsBoard.tsx",
+    "packages/client/src/slp/features/projects/SlpArcTimelineCard.tsx",
+    "packages/client/src/slp/features/projects/SlpArcConfigSection.tsx",
+    "packages/client/src/slp/features/projects/SlpProjectEditor.tsx",
   ],
   "packages/server/src/services/slurp/slurp-post-guidance.storage.ts": [
     "packages/server/src/slp/data/settings/slp-post-guidance-storage.ts",

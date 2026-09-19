@@ -18,13 +18,13 @@ import {
   SLURP_NAMED_CAST_LIMIT,
   isSlurpPopulationMemberId,
 } from "../../../../../shared/src/slp/slp-population.js";
-import { slurpCreatorReach } from "../../modules/audience/slp-reach.js";
+import { slurpCreatorReach } from "../../../../../shared/src/slp/slp-reach.js";
 import { slurpPlatformScaleMultiplier } from "../../modules/audience/slp-scale.js";
 import {
   slurpCharacterIdFromFanEntityId,
   slurpAudienceCharacterFanTypeId,
   slurpAudienceCharacterTraits,
-} from "../../modules/audience/slp-audience-characters.js";
+} from "../../../../../shared/src/slp/slp-audience-characters.js";
 import { isNoodlerHiddenFromViewer } from "../../base/identity/slp-access.js";
 import { runNoodlerFanActivity, getNoodlerFanActivityStatus } from "./slp-fan-activity-operation.js";
 import { isConnectionAdmissionFailure } from "../../../services/generation/connection-admission.js";

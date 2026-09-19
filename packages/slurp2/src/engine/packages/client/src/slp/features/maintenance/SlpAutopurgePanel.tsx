@@ -7,10 +7,10 @@ import { BackstagePageHeader, SettingAnchor } from "../../modules/settings/SlpSe
 
 import type { SlurpSettings } from "../settings/slp-settings-contract";
 
-import { SlurpMaintenanceHealth } from "../../../components/slurp/SlurpMaintenanceHealth";
+import { SlurpMaintenanceHealth } from "./SlpMaintenanceHealth";
 import { MaintenanceTask, focusRing, quietButton } from "./SlpMaintenanceTask";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
-import { formatBytes, localDateTimeValue } from "../../../components/slurp/SlurpBackstageWorkflow";
+import { formatBytes, localDateTimeValue } from "../../modules/settings/slp-backstage-format";
 
 /** Storage and cleanup: retention, what is removed and when the next run happens. */
 export function SlpAutopurgePanel(page: SlpBackstagePageProps) {

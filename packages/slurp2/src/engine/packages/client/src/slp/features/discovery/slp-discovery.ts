@@ -32,7 +32,8 @@ export function isSlurpDiscoveryProfileIncomplete(profile: { gender?: unknown; t
 export const SLURP_DISCOVERY_TAG_MAX_LENGTH = 24;
 
 export type SlurpDiscoverSort = "recommended" | "newest" | "liked" | "subscribed";
-export type SlurpDiscoverLayout = "grid" | "list";
+// Defined in base/state so the reusable Creator card can read it without importing Discovery.
+export type { SlurpDiscoverLayout } from "../../base/state/slp-state-types.js";
 
 export function normalizeSlurpDiscoveryTag(value: string): string {
   return value.normalize("NFKC").trim().replace(/\s+/gu, " ");

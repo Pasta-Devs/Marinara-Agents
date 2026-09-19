@@ -85,3 +85,6 @@ export type SlurpStudioCreator = {
   milestonesCrossed: number[];
   posts: SlurpStudioPost[];
 };
+
+// The Messages per-creator group edits a Creator's message price, which Economy owns.
+export { useSetSlurpCreatorPrice } from "./slp-economy-hooks.js";

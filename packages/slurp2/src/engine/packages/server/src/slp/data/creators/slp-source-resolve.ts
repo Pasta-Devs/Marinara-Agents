@@ -8,7 +8,7 @@ import { noodlerCharacterCanonText } from "../../base/prompting/slp-prompt-safet
 import {
   slurpAudienceCharacterVoice,
   slurpCharacterIdFromFanEntityId,
-} from "../../modules/audience/slp-audience-characters.js";
+} from "../../../../../shared/src/slp/slp-audience-characters.js";
 
 function text(value: unknown): string {
   return typeof value === "string" ? value : "";

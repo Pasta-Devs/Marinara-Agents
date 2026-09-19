@@ -18,3 +18,6 @@ export type SlurpPromotion = {
   imageUrl?: string | null;
   actionLabel?: string;
 };
+
+// The Backstage ads preview renders a real inline ad, so the tile is part of the Ads contract.
+export { SlurpInlineAd } from "./SlpInlineAd.js";

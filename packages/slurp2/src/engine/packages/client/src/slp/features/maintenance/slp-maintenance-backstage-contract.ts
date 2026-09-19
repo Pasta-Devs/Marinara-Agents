@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { showConfirmDialog } from "../../../lib/app-dialogs";
-import { errorMessage, localDateTimeValue } from "../../../components/slurp/SlurpBackstageWorkflow";
+import { errorMessage, localDateTimeValue } from "../../modules/settings/slp-backstage-format";
 import { nextSlurpAutopurgeRunAt } from "../../../../../shared/src/slp/slp-autopurge-time.js";
 import type { SlpBackstageSection, SlpBackstageTarget } from "../../base/navigation/slp-backstage-target";
 import type { SlurpSettings } from "../settings/slp-settings-contract";
