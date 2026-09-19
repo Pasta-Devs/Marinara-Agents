@@ -38,6 +38,7 @@ import {
   assertRulesetBattle,
   assertRulesetCatalogs,
   assertRulesetPackageContract,
+  assertRulesetScaled,
   isRulesetPackage,
   rulesetCatalogAssetPaths,
 } from "./ruleset-package-checks.mjs";
@@ -703,6 +704,8 @@ for (const entry of catalog.packages) {
     // The battle block ships inside the same file and is gated the same way, so it is checked here
     // for the same reason: what this repository publishes has to be installable.
     assertRulesetBattle(manifest, document);
+    // A scaled column rides inside a catalog entry, inline or in an asset, and is gated the same way.
+    assertRulesetScaled(manifest, document, catalogSources);
   } else {
     if (!manifest.entrypoints.agents) throw new Error(`Missing agent definition entrypoint for ${manifest.id}`);
     const agentDefinitions = JSON.parse(

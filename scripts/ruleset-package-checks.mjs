@@ -36,6 +36,28 @@ export const RULESET_CATALOG_MIN_CAPABILITY_API = Object.freeze({ major: 1, mino
 // the manifest cannot show it and the gate is read from the document instead.
 export const RULESET_BATTLE_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 22 });
 
+// Capability API 1.23 added `scaled`: the columns of a picked row whose number the
+// RULESET keeps up to date rather than the player. It is a new key in a strict
+// file, inline in `ruleset.json` or inside a `catalogs/<id>.json` asset, so an
+// older Engine refuses whichever file holds it.
+export const RULESET_SCALED_MIN_CAPABILITY_API = Object.freeze({ major: 1, minor: 23 });
+
+// How many columns of one row a ruleset may keep, and how long a step table may be.
+const RULESET_SCALED_MAX_COLUMNS = 4;
+const RULESET_STEP_TABLE_MAX = 100;
+
+// A value reference names exactly one of these. The same closed set the Engine has.
+const VALUE_REF_KEYS = Object.freeze([
+  "const",
+  "field",
+  "derived",
+  "abilityScore",
+  "abilityMod",
+  "abilityModFromField",
+  "skillMod",
+  "saveMod",
+]);
+
 // The Engine refuses a catalog asset on its declared size before reading it, and
 // refuses a catalog holding more entries than this. Both are mirrored here so a
 // package that would be rejected on install never reaches the catalog.
@@ -323,6 +345,152 @@ export function assertRulesetCatalogs(manifest, document, catalogSources = new M
       throw new Error(`${id} declares ${path} but no catalog in ${RULESET_ASSET_PATH} names it`);
   }
   return summaries;
+}
+
+/** One catalog's entries, wherever it ships them from, or null when there are none to read.
+ *
+ *  A missing or unparseable asset is assertRulesetCatalogs' story to tell, and it tells it with a
+ *  better message, so this reads only what is actually there. Both checks run together everywhere
+ *  a ruleset is built or validated. */
+function catalogEntryList(catalog, catalogSources) {
+  if (Array.isArray(catalog?.entries)) return catalog.entries;
+  const raw = typeof catalog?.asset === "string" ? catalogSources.get(catalog.asset) : undefined;
+  if (typeof raw !== "string") return null;
+  try {
+    const file = JSON.parse(raw);
+    return Array.isArray(file?.entries) ? file.entries : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Why this value reference cannot be resolved against the sheet beside it, or null when it can.
+ *  A reference to a field that is not there, or to a text field where a number is needed, reads as
+ *  nothing and would quietly leave the column at whatever the row was picked with. */
+function valueRefIssue(ref, names) {
+  if (!ref || typeof ref !== "object" || Array.isArray(ref)) return "must be a value reference";
+  const unknown = Object.keys(ref).find((key) => !VALUE_REF_KEYS.includes(key));
+  if (unknown !== undefined) return `has the unknown key ${JSON.stringify(unknown)}`;
+  const present = VALUE_REF_KEYS.filter((key) => ref[key] !== undefined);
+  if (present.length !== 1) return `names exactly one of: ${VALUE_REF_KEYS.join(", ")}`;
+  const key = present[0];
+  const value = ref[key];
+  if (key === "const") {
+    return typeof value === "number" && Number.isFinite(value) ? null : "const must be a finite number";
+  }
+  if (key === "field" || key === "abilityModFromField") {
+    const field = names.fields.get(value);
+    if (!field) return `names unknown field ${JSON.stringify(value)}`;
+    // `abilityModFromField` reads an enum field whose VALUE is an ability id, which is how a caster
+    // points at their own spellcasting ability; every other reference wants a plain number.
+    const wanted = key === "field" ? "number" : "enum";
+    return field.type === wanted ? null : `field "${value}" is not ${wanted === "enum" ? "an enum" : "a number"}`;
+  }
+  const declared = {
+    derived: [names.derived, "derived value"],
+    abilityScore: [names.abilities, "ability"],
+    abilityMod: [names.abilities, "ability"],
+    skillMod: [names.skills, "skill"],
+    saveMod: [names.saves, "save"],
+  }[key];
+  return declared[0].has(value) ? null : `names unknown ${declared[1]} ${JSON.stringify(value)}`;
+}
+
+/** Why this step table is not one, or null when it is. Thresholds ascend, because the lookup walks
+ *  them in order and takes the last one at or below the input. */
+function stepTableIssue(table) {
+  if (!Array.isArray(table) || table.length === 0) return "table must be a non-empty array";
+  if (table.length > RULESET_STEP_TABLE_MAX) return `table holds ${table.length} steps, over ${RULESET_STEP_TABLE_MAX}`;
+  let previous = null;
+  for (const step of table) {
+    if (!Array.isArray(step) || step.length !== 2 || !step.every((entry) => Number.isFinite(entry))) {
+      return "each table step is a [threshold, value] pair of numbers";
+    }
+    if (previous !== null && step[0] <= previous) return "table thresholds must ascend";
+    previous = step[0];
+  }
+  return null;
+}
+
+/** Assert the `scaled` columns of every catalog entry, and report how many rows carry one.
+ *
+ *  These are the Engine's own rules restated at the narrow shape the key has, for the same reason
+ *  the battle block's are: a scaled column is a reference into the sheet beside it, so one that
+ *  names a column the list does not have, or a field the sheet does not declare, publishes fine
+ *  and then leaves a maximum the ruleset promised to keep sitting at whatever it was picked with.
+ *
+ *  `catalogSources` maps each `catalogs/<id>.json` path to its raw bytes, exactly as
+ *  assertRulesetCatalogs takes them, so this stays a pure function a test can drive. */
+export function assertRulesetScaled(manifest, document, catalogSources = new Map()) {
+  const id = manifest?.id ?? "package";
+  const catalogs = Array.isArray(document?.catalogs) ? document.catalogs : [];
+  const sheet = document?.sheet ?? {};
+  const listColumns = new Map(
+    (sheet.lists ?? []).map((list) => [list.id, new Map((list.columns ?? []).map((column) => [column.id, column]))]),
+  );
+  const ids = (items) => new Set((items ?? []).map((item) => item?.id));
+  const names = {
+    fields: new Map((sheet.fields ?? []).map((field) => [field.id, field])),
+    derived: ids(sheet.derived),
+    abilities: ids(sheet.abilities),
+    skills: ids(sheet.skills),
+    saves: ids(sheet.saves),
+  };
+
+  let scaledRows = 0;
+  for (const catalog of catalogs) {
+    for (const entry of catalogEntryList(catalog, catalogSources) ?? []) {
+      const rows = Array.isArray(entry?.rows) ? entry.rows : [];
+      // A kept row has to be the entry's only one for its list, or a marked row on a sheet could
+      // not be matched back to the spec it came from without guessing which of two it was.
+      const perList = new Map();
+      for (const row of rows) perList.set(row?.list, (perList.get(row?.list) ?? 0) + 1);
+      for (const row of rows) {
+        if (row?.scaled === undefined) continue;
+        const where = `${id} catalog "${catalog?.id}" entry "${entry?.id}"`;
+        scaledRows += 1;
+        const api = RULESET_SCALED_MIN_CAPABILITY_API;
+        if (!meetsCapabilityApi(manifest, api)) {
+          throw new Error(`${id} ships scaled catalog rows and must declare capability API ${api.major}.${api.minor}`);
+        }
+        if (!row.scaled || typeof row.scaled !== "object" || Array.isArray(row.scaled)) {
+          throw new Error(`${where} has a scaled that is not an object`);
+        }
+        if (perList.get(row.list) > 1) {
+          throw new Error(`${where} scales a row that is not its only one for the list "${row.list}"`);
+        }
+        const columnIds = Object.keys(row.scaled);
+        if (columnIds.length === 0 || columnIds.length > RULESET_SCALED_MAX_COLUMNS) {
+          throw new Error(`${where} scales ${columnIds.length} columns, not 1 to ${RULESET_SCALED_MAX_COLUMNS}`);
+        }
+        const columns = listColumns.get(row.list);
+        if (!columns) throw new Error(`${where} scales a row of unknown list "${row.list}"`);
+        for (const columnId of columnIds) {
+          if (columns.get(columnId)?.type !== "number") {
+            throw new Error(`${where} scales "${columnId}", which is not a number column of "${row.list}"`);
+          }
+          // `values` still holds what the row starts as, because an entry is picked before anything
+          // knows which sheet it lands on: without it the cell would sit empty until a first edit.
+          if (typeof row.values?.[columnId] !== "number") {
+            throw new Error(`${where} scales "${columnId}" but its values hold no starting number for it`);
+          }
+          const spec = row.scaled[columnId];
+          if (!spec || typeof spec !== "object" || Array.isArray(spec)) {
+            throw new Error(`${where} scaled "${columnId}" must be an object`);
+          }
+          const extra = Object.keys(spec).find((key) => key !== "from" && key !== "table");
+          if (extra !== undefined) {
+            throw new Error(`${where} scaled "${columnId}" has the unknown key ${JSON.stringify(extra)}`);
+          }
+          const refIssue = valueRefIssue(spec.from, names);
+          if (refIssue) throw new Error(`${where} scaled "${columnId}" from ${refIssue}`);
+          const tableIssue = spec.table === undefined ? null : stepTableIssue(spec.table);
+          if (tableIssue) throw new Error(`${where} scaled "${columnId}" ${tableIssue}`);
+        }
+      }
+    }
+  }
+  return scaledRows;
 }
 
 /** Why `equals` is not a value this list column could hold, or null when it is. A comparison that
