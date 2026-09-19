@@ -74,7 +74,7 @@ These packages are being built in this repository but are not ready for the stab
 | Package | ID | Availability | Status |
 | --- | --- | --- | --- |
 | Pixelforge | [`pixelforge`](packages/pixelforge/manifest.json) | In development | A walkable pixel-art RPG Experience for Game Mode: generated settlements, NPCs, and story-driven exploration. Under active development; not yet listed for users. |
-| 5e (SRD 5.1) | [`ruleset-5e-2014`](packages/ruleset-5e-2014/manifest.json) | Staging only | A Game Mode ruleset: 5e SRD 5.1 ability checks, skill checks, saving throws, and the full character sheet, plus pickable SRD spells, class features and weapons. Ships only data, no Agent and no code. Needs an Engine with Capability API 1.21, which today means the Engine `staging` branch. |
+| 5e (SRD 5.1) | [`ruleset-5e-2014`](packages/ruleset-5e-2014/manifest.json) | Staging only | A Game Mode ruleset: 5e SRD 5.1 ability checks, skill checks, saving throws, and the full character sheet, plus pickable SRD spells, class features and weapons. Battles start from the sheet's hit points and spell slots, though the combat math stays Marinara's. Ships only data, no Agent and no code. Needs an Engine with Capability API 1.22, which today means the Engine `staging` branch. |
 
 ### Localization sources
 

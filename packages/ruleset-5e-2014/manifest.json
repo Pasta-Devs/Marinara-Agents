@@ -2,16 +2,16 @@
   "schemaVersion": 2,
   "capabilityApi": {
     "major": 1,
-    "minor": 21
+    "minor": 22
   },
   "builtAgainst": {
     "engineVersion": "2.4.6",
-    "engineCommit": "d091ad7d3209e41fc8ef3a72033446dd34268fe2"
+    "engineCommit": "d71106851b8ffd6b963542601901387b4269fb34"
   },
   "id": "ruleset-5e-2014",
   "name": "5e (SRD 5.1)",
-  "version": "0.2.0",
-  "description": "Provides 5e SRD 5.1 rules for Game Mode ability checks, skill checks, saving throws, and the full character sheet, plus pickable SRD spells, class features and weapons so you do not type them row by row. Battles still use Marinara's default combat, not 5e combat. After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
+  "version": "0.3.0",
+  "description": "Provides 5e SRD 5.1 rules for Game Mode ability checks, skill checks, saving throws, and the full character sheet, plus pickable SRD spells, class features and weapons so you do not type them row by row. Battles now start from the sheet: your hit points and spell slots go into the fight (Pact Magic slots do not), your prepared spells, your cantrips and the weapons you picked show up as skills, and what the fight cost is written back when it ends. Health is carried as a share of the maximum, the damage is still Marinara's own combat math, and attack rolls, saving throws and concentration are not applied. After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
   "engine": {
     "min": "2.4.6",
     "maxExclusive": "4.0.0"
@@ -32,13 +32,13 @@
   "files": [
     {
       "path": "ruleset.json",
-      "sha256": "d419812c644c631ff5f832ff1df809191d61145c40fa1ef777811c2c174fca1f",
-      "bytes": 57209
+      "sha256": "d8312fefe0cc9ce54926a40aa187cf1c1c1b55a632a98ce0fff675397e162d09",
+      "bytes": 58561
     },
     {
       "path": "catalogs/spells.json",
-      "sha256": "d2423775cf50f28a7ceaca05bfa8d803c277297270a58c5cd9f78b8bb5e1be93",
-      "bytes": 306274
+      "sha256": "ca26bdb3231e565f166de2f41afd0dcbd96074a692e89e16e764f36c5bf1e38d",
+      "bytes": 307146
     },
     {
       "path": "catalogs/features.json",

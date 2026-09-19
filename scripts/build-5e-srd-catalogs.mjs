@@ -22,15 +22,16 @@
 //   output is formatted with the repository's own Prettier settings so a
 //   rebuild that changes nothing leaves the tree byte-identical.
 //
-// The one place a number is typed by hand is COUNTERS below, where the SRD
-// states a plain count that no fixture field carries. Each row cites the SRD
-// sentence it came from, and the three that a class table also carries are
-// cross-checked against it so a typo cannot survive a rebuild.
+// The two places a number is typed by hand are COUNTERS and HEALING_SPELLS
+// below, where the SRD states something no fixture field carries. Each row
+// cites the SRD sentence it came from, the three counters that a class table
+// also carries are cross-checked against it, and every healing pk is checked
+// against the source, so a typo cannot survive a rebuild.
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import prettier from "prettier";
-import { assertRulesetCatalogs } from "./ruleset-package-checks.mjs";
+import { assertRulesetBattle, assertRulesetCatalogs } from "./ruleset-package-checks.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageRoot = join(repoRoot, "packages/ruleset-5e-2014");
@@ -104,7 +105,48 @@ const RANGED_WEAPONS = new Set([
 // The ruleset version this converter writes. Raise it when the generated
 // content changes what an installed ruleset means; a rebuild refuses to lower
 // a version that is already higher.
-const RULESET_VERSION = 2;
+const RULESET_VERSION = 3;
+
+// The SRD's healing spells. The fixture has no healing field at all: a spell
+// carries a damage roll or nothing, so a heal arrives here looking exactly like
+// a utility spell and would stay one. These are the SRD 5.1 spells whose effect
+// is restoring hit points, keyed by fixture pk, with the amount the spell's own
+// text states and, where its "At Higher Levels" paragraph is a plain "+NdM per
+// slot level", the step that paragraph states. A spell whose higher-level text
+// is anything else gets no `perCostStep` rather than a guessed one.
+// assertHealingSpells fails the run when one of these leaves the source or
+// starts carrying damage, so the table cannot quietly go stale. Nothing else
+// about these entries changes: the rows, notes and filters stay as generated.
+const HEALING_SPELLS = new Map([
+  // "A creature you touch regains a number of hit points equal to 1d8 + your spellcasting ability
+  // modifier." At Higher Levels: "the healing increases by 1d8 for each slot level above 1st."
+  ["srd_cure-wounds", { amount: { dice: "1d8" }, perCostStep: { dice: "1d8" } }],
+  // "A creature of your choice that you can see within range regains hit points equal to 1d4 + your
+  // spellcasting ability modifier." At Higher Levels: "increases by 1d4 for each slot level above 1st."
+  ["srd_healing-word", { amount: { dice: "1d4" }, perCostStep: { dice: "1d4" } }],
+  // "Each target regains hit points equal to 3d8 + your spellcasting ability modifier." At Higher
+  // Levels: "the healing increases by 1d8 for each slot level above 5th."
+  ["srd_mass-cure-wounds", { amount: { dice: "3d8" }, perCostStep: { dice: "1d8" } }],
+  // "up to six creatures of your choice that you can see within range regain hit points equal to 1d4
+  // + your spellcasting ability modifier." At Higher Levels: "increases by 1d4 for each slot level
+  // above 3rd."
+  ["srd_mass-healing-word", { amount: { dice: "1d4" }, perCostStep: { dice: "1d4" } }],
+  // "Up to six creatures of your choice that you can see within range each regain hit points equal to
+  // 2d8 + your spellcasting ability modifier." At Higher Levels: "increases by 1d8 for each slot level
+  // above 2nd."
+  ["srd_prayer-of-healing", { amount: { dice: "2d8" }, perCostStep: { dice: "1d8" } }],
+  // "A surge of positive energy washes through the creature, causing it to regain 70 hit points." At
+  // Higher Levels: "the amount of healing increases by 10 for each slot level above 6th."
+  ["srd_heal", { amount: { flat: 70 }, perCostStep: { flat: 10 } }],
+  // "You restore up to 700 hit points, divided as you choose among any number of creatures." That is
+  // a shared pool, not what one target regains, so the amount is left out rather than misread as a
+  // 700-point heal. The entry is still a heal, which is the honest part.
+  ["srd_mass-heal", {}],
+  // "The target regains 4d8 + 15 hit points." The regeneration over the spell's duration and the
+  // restored limbs are not a number a catalog entry can carry, and the SRD states no higher-level
+  // effect, so neither is here.
+  ["srd_regenerate", { amount: { dice: "4d8+15" } }],
+]);
 
 // The fixture's property assignments disagree with the SRD 5.1 weapons table
 // (Equipment, "Weapons") for these rows: it never assigns Heavy, and it drops
@@ -341,20 +383,39 @@ function spellPerCostStep(fields, options) {
   return step === undefined ? undefined : { dice: `${step}d${die}` };
 }
 
-function spellMechanics(fields, options) {
+/** Every healing spell named above is still in the source, and still a plain heal. A pk that
+ *  vanished would take its healing with it silently; one that grew a damage roll would be two
+ *  readings at once, so both stop the run instead of one quietly winning. */
+function assertHealingSpells(spells) {
+  for (const pk of HEALING_SPELLS.keys()) {
+    const spell = spells.find((entry) => entry.pk === pk);
+    if (!spell) fail(`${pk} is written as a healing spell but is not in the source`);
+    if (spell.fields.damage_roll) fail(`${pk} now carries a damage roll, so it is no longer a plain healing spell`);
+  }
+}
+
+function spellMechanics(fields, options, healing) {
   const shape = fields.shape_type ? AREA_SHAPES[fields.shape_type] : undefined;
   return compact({
-    // The source marks no spell as healing, so a healing spell stays "utility"
-    // rather than being guessed at from its wording.
-    kind: fields.damage_roll ? "attack" : "utility",
+    // The source marks no spell as healing, so a heal is the hand-checked
+    // HEALING_SPELLS table above rather than a guess at the wording. Everything
+    // not in that table stays exactly what it was.
+    kind: healing ? "heal" : fields.damage_roll ? "attack" : "utility",
     range: spellRange(fields, fields.name),
     area: shape && fields.shape_size > 0 ? { shape, size: fields.shape_size } : undefined,
-    amount: fields.damage_roll ? amountFrom(fields.damage_roll, `Spell "${fields.name}"`) : undefined,
+    targets: healing ? "ally" : undefined,
+    amount: healing
+      ? healing.amount
+      : fields.damage_roll
+        ? amountFrom(fields.damage_roll, `Spell "${fields.name}"`)
+        : undefined,
     damageType: fields.damage_types[0],
     attackRoll: fields.attack_roll ? true : undefined,
     save: spellSave(fields),
     cost: fields.level >= 1 ? [{ pool: `slots_${fields.level}`, amount: 1 }] : undefined,
-    perCostStep: spellPerCostStep(fields, options),
+    // A healing step comes from the table, which read it out of the spell's own
+    // "At Higher Levels" paragraph; the source's slot options only carry damage.
+    perCostStep: healing ? healing.perCostStep : spellPerCostStep(fields, options),
     concentration: fields.concentration ? true : undefined,
     reaction: fields.casting_time === "reaction" ? true : undefined,
   });
@@ -378,6 +439,7 @@ function spellNotes(fields) {
 }
 
 function buildSpellEntries(spells, castingOptions, classNames) {
+  assertHealingSpells(spells);
   return spells
     .map(({ pk, fields }) => {
       const classes = fields.classes.map((id) => classNames.get(id) ?? fail(`Spell "${fields.name}" names ${id}`));
@@ -401,7 +463,7 @@ function buildSpellEntries(spells, castingOptions, classNames) {
             },
           },
         ],
-        mechanics: spellMechanics(fields, castingOptions.get(pk) ?? new Map()),
+        mechanics: spellMechanics(fields, castingOptions.get(pk) ?? new Map(), HEALING_SPELLS.get(pk)),
       };
     })
     .sort(byId);
@@ -580,6 +642,16 @@ async function writeRuleset(path, catalogs) {
   if (current > RULESET_VERSION) {
     fail(`ruleset.json is at version ${current}; raise RULESET_VERSION in this script before rebuilding`);
   }
+  // The hand-authored `battle` block has to sit ABOVE the catalogs key, because
+  // the splice below replaces that key and every byte after it. A block that
+  // drifted below would be deleted by a rebuild without a word.
+  const battleAt = raw.search(/^ {2}"battle":/mu);
+  const catalogsAt = raw.search(/^ {2}"catalogs":/mu);
+  if (battleAt >= 0 && catalogsAt >= 0 && battleAt > catalogsAt) {
+    fail(
+      'ruleset.json has "battle" after "catalogs"; move it above, because a rebuild replaces the catalogs key and everything after it',
+    );
+  }
   const closing = raw.lastIndexOf("\n}");
   if (closing < 0 || raw.slice(closing) !== "\n}\n") fail("ruleset.json does not end with a closing brace");
   const body = raw
@@ -719,6 +791,7 @@ const manifest = JSON.parse(await readFile(join(packageRoot, "manifest.json"), "
 const sources = new Map();
 for (const assetPath of assets.keys()) sources.set(assetPath, await readFile(join(packageRoot, assetPath), "utf8"));
 const summaries = assertRulesetCatalogs(manifest, document, sources);
+assertRulesetBattle(manifest, document);
 
 console.log(`5e SRD catalogs built from ${SOURCE_DOCUMENT} at ${sourceCommit}`);
 console.log(`  ruleset.json ${rulesetBytes} bytes`);
