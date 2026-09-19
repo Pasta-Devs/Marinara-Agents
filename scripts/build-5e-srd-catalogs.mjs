@@ -101,6 +101,32 @@ const RANGED_WEAPONS = new Set([
   "srd_net",
 ]);
 
+// The ruleset version this converter writes. Raise it when the generated
+// content changes what an installed ruleset means; a rebuild refuses to lower
+// a version that is already higher.
+const RULESET_VERSION = 2;
+
+// The fixture's property assignments disagree with the SRD 5.1 weapons table
+// (Equipment, "Weapons") for these rows: it never assigns Heavy, and it drops
+// or adds a property on a few others. Each entry is the row's FULL property
+// list as the SRD prints it, keyed by fixture pk. assertWeaponCorrections
+// fails the run when a pk disappears or the fixture catches up, so this table
+// cannot quietly go stale.
+const WEAPON_PROPERTY_CORRECTIONS = new Map([
+  ["srd_crossbow-heavy", ["Ammunition", "Heavy", "Loading", "Two-Handed"]],
+  ["srd_crossbow-light", ["Ammunition", "Loading", "Two-Handed"]],
+  ["srd_glaive", ["Heavy", "Reach", "Two-Handed"]],
+  ["srd_greataxe", ["Heavy", "Two-Handed"]],
+  ["srd_greatsword", ["Heavy", "Two-Handed"]],
+  ["srd_halberd", ["Heavy", "Reach", "Two-Handed"]],
+  ["srd_handaxe", ["Light", "Thrown"]],
+  ["srd_longbow", ["Ammunition", "Heavy", "Two-Handed"]],
+  ["srd_maul", ["Heavy", "Two-Handed"]],
+  ["srd_pike", ["Heavy", "Reach", "Two-Handed"]],
+  ["srd_trident", ["Thrown", "Versatile"]],
+  ["srd_whip", ["Finesse", "Reach"]],
+]);
+
 // The net deals no damage ("damage_dice": "0") and its whole effect is the
 // restrained condition, which a sheet attack row cannot hold. Skipped on
 // purpose rather than shipped as an attack for 0 damage.
@@ -455,8 +481,22 @@ function assertRangedWeapons(weapons, propertiesByWeapon) {
   }
 }
 
+function assertWeaponCorrections(weapons, propertiesByWeapon) {
+  for (const [pk, corrected] of WEAPON_PROPERTY_CORRECTIONS) {
+    if (!weapons.some((weapon) => weapon.pk === pk))
+      fail(`Weapon correction names ${pk}, which the source no longer has`);
+    const sourced = (propertiesByWeapon.get(pk) ?? [])
+      .map((entry) => entry.name.replace(/^Special \(.*\)$/u, "Special"))
+      .sort();
+    if (sourced.join("|") === [...corrected].sort().join("|")) {
+      fail(`The source now lists ${pk} the way the SRD does; remove its entry from WEAPON_PROPERTY_CORRECTIONS`);
+    }
+  }
+}
+
 function buildWeaponEntries(weapons, propertiesByWeapon) {
   assertRangedWeapons(weapons, propertiesByWeapon);
+  assertWeaponCorrections(weapons, propertiesByWeapon);
   return weapons
     .filter(({ pk, fields }) => !SKIPPED_WEAPONS.has(pk) && !fields.is_improvised)
     .map(({ pk, fields }) => {
@@ -465,8 +505,9 @@ function buildWeaponEntries(weapons, propertiesByWeapon) {
         .sort((left, right) => (left.name < right.name ? -1 : 1));
       // "Special (Lance)" and "Special (Net)" are one SRD property, Special,
       // named per weapon in the fixture.
-      const properties = assigned.map((entry) => entry.name.replace(/^Special \(.*\)$/u, "Special"));
-      const has = (name) => assigned.some((entry) => entry.name === name);
+      const sourced = assigned.map((entry) => entry.name.replace(/^Special \(.*\)$/u, "Special"));
+      const properties = WEAPON_PROPERTY_CORRECTIONS.get(pk) ?? sourced;
+      const has = (name) => properties.includes(name);
       const ranged = RANGED_WEAPONS.has(pk);
       const category = `${fields.is_simple ? "Simple" : "Martial"} ${ranged ? "ranged" : "melee"}`;
       const amount = amountFrom(fields.damage_dice, fields.name);
@@ -502,9 +543,9 @@ function buildWeaponEntries(weapons, propertiesByWeapon) {
         ],
         mechanics: compact({
           kind: "attack",
-          // A melee weapon reaches 5 feet, or 10 with the Reach property; a
-          // ranged weapon uses its own normal range.
-          range: ranged ? fields.range : has("Reach") ? 10 : 5,
+          // A ranged or thrown weapon uses its own normal range; any other
+          // melee weapon reaches 5 feet, or 10 with the Reach property.
+          range: fields.range > 0 ? fields.range : has("Reach") ? 10 : 5,
           amount,
           damageType: fields.damage_type,
           attackRoll: true,
@@ -534,11 +575,16 @@ async function writeRuleset(path, catalogs) {
   const raw = await readFile(path, "utf8");
   const versions = raw.match(/^ {2}"version": \d+,$/gmu) ?? [];
   if (versions.length !== 1) fail(`Expected exactly one top-level version in ruleset.json, found ${versions.length}`);
+  // A rebuild must never lower the version somebody raised by hand for another reason.
+  const current = Number(/\d+/u.exec(versions[0])[0]);
+  if (current > RULESET_VERSION) {
+    fail(`ruleset.json is at version ${current}; raise RULESET_VERSION in this script before rebuilding`);
+  }
   const closing = raw.lastIndexOf("\n}");
   if (closing < 0 || raw.slice(closing) !== "\n}\n") fail("ruleset.json does not end with a closing brace");
   const body = raw
     .slice(0, closing)
-    .replace(/^ {2}"version": \d+,$/mu, '  "version": 2,')
+    .replace(/^ {2}"version": \d+,$/mu, `  "version": ${RULESET_VERSION},`)
     // Drop a catalogs block an earlier run wrote, with the comma that joined it
     // to the key before, so rebuilding is idempotent instead of stacking blocks.
     .replace(/^ {2}"catalogs": [\s\S]*$/mu, "")

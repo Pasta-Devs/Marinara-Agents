@@ -1251,8 +1251,8 @@
         {
           "id": "crossbow-heavy",
           "label": "Crossbow, heavy",
-          "summary": "Martial ranged weapon. Properties: Loading, Two-Handed. Range 100/400 feet.",
-          "filters": { "category": "Martial ranged", "properties": ["Loading", "Two-Handed"] },
+          "summary": "Martial ranged weapon. Properties: Ammunition, Heavy, Loading, Two-Handed. Range 100/400 feet.",
+          "filters": { "category": "Martial ranged", "properties": ["Ammunition", "Heavy", "Loading", "Two-Handed"] },
           "rows": [
             {
               "list": "attacks",
@@ -1277,8 +1277,8 @@
         {
           "id": "crossbow-light",
           "label": "Crossbow, light",
-          "summary": "Simple ranged weapon. Properties: Ammunition, Loading. Range 80/320 feet.",
-          "filters": { "category": "Simple ranged", "properties": ["Ammunition", "Loading"] },
+          "summary": "Simple ranged weapon. Properties: Ammunition, Loading, Two-Handed. Range 80/320 feet.",
+          "filters": { "category": "Simple ranged", "properties": ["Ammunition", "Loading", "Two-Handed"] },
           "rows": [
             {
               "list": "attacks",
@@ -1320,7 +1320,7 @@
           ],
           "mechanics": {
             "kind": "attack",
-            "range": 5,
+            "range": 20,
             "amount": { "dice": "1d4" },
             "damageType": "piercing",
             "attackRoll": true
@@ -1381,8 +1381,8 @@
         {
           "id": "glaive",
           "label": "Glaive",
-          "summary": "Martial melee weapon. Properties: Reach, Two-Handed.",
-          "filters": { "category": "Martial melee", "properties": ["Reach", "Two-Handed"] },
+          "summary": "Martial melee weapon. Properties: Heavy, Reach, Two-Handed.",
+          "filters": { "category": "Martial melee", "properties": ["Heavy", "Reach", "Two-Handed"] },
           "rows": [
             {
               "list": "attacks",
@@ -1407,8 +1407,8 @@
         {
           "id": "greataxe",
           "label": "Greataxe",
-          "summary": "Martial melee weapon. Properties: Two-Handed.",
-          "filters": { "category": "Martial melee", "properties": ["Two-Handed"] },
+          "summary": "Martial melee weapon. Properties: Heavy, Two-Handed.",
+          "filters": { "category": "Martial melee", "properties": ["Heavy", "Two-Handed"] },
           "rows": [
             {
               "list": "attacks",
@@ -1459,8 +1459,8 @@
         {
           "id": "greatsword",
           "label": "Greatsword",
-          "summary": "Martial melee weapon. Properties: Two-Handed.",
-          "filters": { "category": "Martial melee", "properties": ["Two-Handed"] },
+          "summary": "Martial melee weapon. Properties: Heavy, Two-Handed.",
+          "filters": { "category": "Martial melee", "properties": ["Heavy", "Two-Handed"] },
           "rows": [
             {
               "list": "attacks",
@@ -1485,8 +1485,8 @@
         {
           "id": "halberd",
           "label": "Halberd",
-          "summary": "Martial melee weapon. Properties: Reach, Two-Handed.",
-          "filters": { "category": "Martial melee", "properties": ["Reach", "Two-Handed"] },
+          "summary": "Martial melee weapon. Properties: Heavy, Reach, Two-Handed.",
+          "filters": { "category": "Martial melee", "properties": ["Heavy", "Reach", "Two-Handed"] },
           "rows": [
             {
               "list": "attacks",
@@ -1511,8 +1511,8 @@
         {
           "id": "handaxe",
           "label": "Handaxe",
-          "summary": "Simple melee weapon. Properties: Light. Range 20/60 feet.",
-          "filters": { "category": "Simple melee", "properties": ["Light"] },
+          "summary": "Simple melee weapon. Properties: Light, Thrown. Range 20/60 feet.",
+          "filters": { "category": "Simple melee", "properties": ["Light", "Thrown"] },
           "rows": [
             {
               "list": "attacks",
@@ -1528,7 +1528,7 @@
           ],
           "mechanics": {
             "kind": "attack",
-            "range": 5,
+            "range": 20,
             "amount": { "dice": "1d6" },
             "damageType": "slashing",
             "attackRoll": true
@@ -1554,7 +1554,7 @@
           ],
           "mechanics": {
             "kind": "attack",
-            "range": 5,
+            "range": 30,
             "amount": { "dice": "1d6" },
             "damageType": "piercing",
             "attackRoll": true
@@ -1606,7 +1606,7 @@
           ],
           "mechanics": {
             "kind": "attack",
-            "range": 5,
+            "range": 20,
             "amount": { "dice": "1d4" },
             "damageType": "bludgeoning",
             "attackRoll": true
@@ -1615,8 +1615,8 @@
         {
           "id": "longbow",
           "label": "Longbow",
-          "summary": "Martial ranged weapon. Properties: Ammunition, Two-Handed. Range 150/600 feet.",
-          "filters": { "category": "Martial ranged", "properties": ["Ammunition", "Two-Handed"] },
+          "summary": "Martial ranged weapon. Properties: Ammunition, Heavy, Two-Handed. Range 150/600 feet.",
+          "filters": { "category": "Martial ranged", "properties": ["Ammunition", "Heavy", "Two-Handed"] },
           "rows": [
             {
               "list": "attacks",
@@ -1693,8 +1693,8 @@
         {
           "id": "maul",
           "label": "Maul",
-          "summary": "Martial melee weapon. Properties: Two-Handed.",
-          "filters": { "category": "Martial melee", "properties": ["Two-Handed"] },
+          "summary": "Martial melee weapon. Properties: Heavy, Two-Handed.",
+          "filters": { "category": "Martial melee", "properties": ["Heavy", "Two-Handed"] },
           "rows": [
             {
               "list": "attacks",
@@ -1745,8 +1745,8 @@
         {
           "id": "pike",
           "label": "Pike",
-          "summary": "Martial melee weapon. Properties: Reach, Two-Handed.",
-          "filters": { "category": "Martial melee", "properties": ["Reach", "Two-Handed"] },
+          "summary": "Martial melee weapon. Properties: Heavy, Reach, Two-Handed.",
+          "filters": { "category": "Martial melee", "properties": ["Heavy", "Reach", "Two-Handed"] },
           "rows": [
             {
               "list": "attacks",
@@ -1970,7 +1970,7 @@
           ],
           "mechanics": {
             "kind": "attack",
-            "range": 5,
+            "range": 20,
             "amount": { "dice": "1d6" },
             "damageType": "piercing",
             "attackRoll": true
@@ -1979,8 +1979,8 @@
         {
           "id": "trident",
           "label": "Trident",
-          "summary": "Martial melee weapon. Properties: Thrown, Two-Handed, Versatile. Versatile: 1d8 in two hands. Range 20/60 feet.",
-          "filters": { "category": "Martial melee", "properties": ["Thrown", "Two-Handed", "Versatile"] },
+          "summary": "Martial melee weapon. Properties: Thrown, Versatile. Versatile: 1d8 in two hands. Range 20/60 feet.",
+          "filters": { "category": "Martial melee", "properties": ["Thrown", "Versatile"] },
           "rows": [
             {
               "list": "attacks",
@@ -1996,7 +1996,7 @@
           ],
           "mechanics": {
             "kind": "attack",
-            "range": 5,
+            "range": 20,
             "amount": { "dice": "1d6" },
             "damageType": "piercing",
             "attackRoll": true
@@ -2057,8 +2057,8 @@
         {
           "id": "whip",
           "label": "Whip",
-          "summary": "Martial melee weapon. Properties: Reach.",
-          "filters": { "category": "Martial melee", "properties": ["Reach"] },
+          "summary": "Martial melee weapon. Properties: Finesse, Reach. Finesse: may use Dexterity.",
+          "filters": { "category": "Martial melee", "properties": ["Finesse", "Reach"] },
           "rows": [
             {
               "list": "attacks",

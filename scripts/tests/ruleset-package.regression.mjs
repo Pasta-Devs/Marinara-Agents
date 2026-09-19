@@ -193,6 +193,18 @@ assert.throws(
     ),
   /declares the reserved catalogs\/spells\.json asset but is not kind "ruleset"/u,
 );
+// A path inside the reserved family that does not have its shape is refused outright. It would
+// otherwise be hashed and zipped like any asset while skipping every catalog check.
+for (const malformed of ["catalogs/Spells.json", "catalogs/my-list.json", "catalogs/nested/spells.json"]) {
+  assert.throws(
+    () =>
+      assertRulesetPackageContract(
+        rulesetManifest({ contributions: { assets: { paths: [RULESET_ASSET_PATH, malformed] } } }),
+      ),
+    /is not a "catalogs\/<id>\.json" asset/u,
+    malformed,
+  );
+}
 // Capability API 1.21 is the release that introduced catalogs.
 const withCatalogAsset = (overrides = {}) =>
   rulesetManifest({

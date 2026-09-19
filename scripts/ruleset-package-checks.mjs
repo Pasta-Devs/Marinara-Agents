@@ -59,6 +59,16 @@ export function rulesetCatalogAssetPaths(manifest) {
   return Array.isArray(paths) ? paths.filter(isRulesetCatalogAssetPath) : [];
 }
 
+/** Declared paths inside the reserved `catalogs/` family that do not have its shape. They would
+ *  otherwise be hashed and zipped like any asset while slipping past every catalog check. */
+export function malformedRulesetCatalogAssetPaths(manifest) {
+  const paths = manifest?.contributions?.assets?.paths;
+  if (!Array.isArray(paths)) return [];
+  return paths.filter(
+    (path) => typeof path === "string" && path.startsWith("catalogs/") && !isRulesetCatalogAssetPath(path),
+  );
+}
+
 function meetsCapabilityApi(manifest, { major, minor }) {
   const declared = manifest?.capabilityApi;
   if (!Number.isInteger(declared?.major) || !Number.isInteger(declared?.minor)) return false;
@@ -78,6 +88,10 @@ export function assertRulesetPackageContract(manifest) {
   const listsRulesetAsset = Array.isArray(assetPaths) && assetPaths.includes(RULESET_ASSET_PATH);
   const declaresRulesetKind = isRulesetPackage(manifest);
   const catalogPaths = rulesetCatalogAssetPaths(manifest);
+  const malformedCatalogPaths = malformedRulesetCatalogAssetPaths(manifest);
+  if (malformedCatalogPaths.length > 0) {
+    throw new Error(`${id} declares ${malformedCatalogPaths[0]}, which is not a "catalogs/<id>.json" asset`);
+  }
   // A catalog only means anything to the ruleset that declares it, so the
   // binding is the same one the reserved ruleset asset has: the family and the
   // kind go together in both directions.
