@@ -20,29 +20,57 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 ## Current state
 
 - Last updated: 2026-09-19
-- Updated by: Slice 9 implementation agent
-- Overall state: Slice 9 ready for review
-- Active slice: 9 (Backstage), issue #936, branch `slurp2-slice9-backstage` from
-  `origin/modular-simping` `03ae3a90` (the Slice 8 merge commit).
-- Slice 8 merge gate: PR #932 is `MERGED` into `modular-simping` at `03ae3a90`. Its generated
-  `0.0.31` payload, manifest and `artifacts/slurp2-0.0.31.zip` are present on the branch. Slice 8
-  merged with a recorded scope gap (`SlurpHome.tsx` and `SlurpMessages.tsx` remain stateful hosts);
-  that gap is Slice 8/10 work and is not reopened here.
-- Staging integration: `origin/modular-simping` was 5 commits behind `origin/staging` at slice
-  start. `origin/staging` was merged into the slice branch with an ordinary merge (no rebase, no
-  force) so the merge reaches `modular-simping` through the Slice 9 PR rather than a direct push.
-  The merge was clean; no generated Slurp2 output conflicted. The only builder change from staging
-  bumps `long-term-memory` to `1.3.4` and leaves Slurp2 at `0.0.31`.
-- Pull request: draft PR #937 against `modular-simping`, assigned to `Gunterlie`. Issue #936 is
-  assigned to `Gunterlie`. The PR stays draft; it is not merged by the implementation agent.
-- Package version: `0.0.31` before this slice; this slice ships `0.0.32` (integration-only;
+- Updated by: Slice 10 implementation agent
+- Overall state: Slice 10 in progress
+- Active slice: 10 (final architecture and package proof), issue #ISSUE, branch
+  `slurp2-slice10-final-architecture` from `origin/modular-simping` `14d27b4d` (the Slice 9 merge
+  commit).
+- Slice 9 merge gate: **satisfied.** PR #937 is `MERGED` into `modular-simping` at `14d27b4d`.
+  Its generated `0.0.32` payload, `manifest.json` and `artifacts/slurp2-0.0.32.zip` are present on
+  the branch. The Slice 9 Backstage regressions pass on this branch (recorded under
+  *Slice 10 merge-gate evidence*).
+- Staging integration: `git rev-list --count origin/modular-simping..origin/staging` = **0**.
+  `modular-simping` already contains every `origin/staging` commit, so no merge was needed and none
+  was made. No commit was pushed directly to `modular-simping`.
+- Pull request: draft PR #PR against `modular-simping`, assigned to `Gunterlie`. Issue #ISSUE is
+  assigned to `Gunterlie`. The PR stays draft; the implementation agent does not merge it.
+- Package version: `0.0.32` before this slice; this slice ships `0.0.33` (integration-only;
   `staging` stays at `0.0.22` until the final `0.1.0` release PR).
-- Node: `/home/dev/.nvm/versions/node/v24.18.0/bin`; `node -v` = `v24.18.0` (verified this slice).
+- Node: `/home/dev/.nvm/versions/node/v24.18.0/bin`; `node -v` = `v24.18.0`, `npm -v` = `12.0.2`
+  (verified this slice).
 - Engine source: `/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish`, branch
   `welcome-to-the-agentshop`, commit `fdb67d47bfb909f013346afdb3d2c23d72d7b399`, tracked files clean
   (`git status --porcelain --untracked-files=no` empty); 4 ahead / 80 behind Engine `origin/staging`
-  after a fresh fetch. Used unchanged, as in Slices 7 and 8, so build deltas stay comparable across
-  slices. No substitute worktree was needed.
+  after a fresh fetch. Used unchanged, as in Slices 7, 8 and 9, so build deltas stay comparable
+  across slices. No substitute worktree was needed and nothing in it was reset, rebased or cleaned.
+
+### Slice 10 verified starting shape and approved scope change
+
+The plan's §7.10 bullet list and the Slice 10 acceptance criteria disagreed. Re-deriving the tree
+from `14d27b4d` rather than trusting the ledger showed why:
+
+- **44 live files, ~31,000 lines, remain in `packages/client/src/components/slurp/`**, plus
+  `packages/server/src/db/schema/slurp.ts` (649 lines). Only `slurp-auto-post.ts` is dead.
+- Eight of them exceed the 800-line architecture ceiling and therefore must be **split**, not moved:
+  `SlurpHome.tsx` (8,142), `SlurpMessages.tsx` (5,159), `SlurpPostCard.tsx` (2,512),
+  `SlurpBackstageWorkflow.tsx` (1,717), `SlurpCreatorPostCard.tsx` (1,677),
+  `SlurpOnboardingPanel.tsx` (1,608), `SlurpShell.tsx` (1,214), `SlurpProjectsPanel.tsx` (1,013).
+- `slurp2OwnedSourcePaths` has **7** entries today, not the plan's final five.
+- `packages/server/src/db/schema/slurp.ts` appears in **both** `slurpOwnedSourcePaths` (frozen
+  legacy Slurp) and `slurp2OwnedSourcePaths`, yet the plan's §5 final five-entry list omits it with
+  no replacement owner.
+
+So plan §7.10's bullets are a small slice, while the acceptance criteria additionally require
+finishing the client scope gap that Slice 8 recorded and deferred. Two maintainer decisions were
+taken on 2026-09-19 rather than being made silently:
+
+1. **Scope: full ownership completion.** Slice 10 moves and splits every remaining
+   `components/slurp/` file so `slurp2OwnedSourcePaths` reaches its final list. No Slice 11.
+2. **`db/schema/slurp.ts`: permanent sixth exception.** The Drizzle schema stays at its current
+   path and is recorded in the architecture guide as a third named permanent exception beside
+   `packages/client/src/lib/api-client.ts` and `packages/server/src/services/garnish-ads/`. Moving
+   it would rewrite table registration for the frozen legacy Slurp package, which the plan forbids.
+   `SLURP-MODULE-PLAN.md` §5 is corrected to six entries with that reason.
 
 ### Slice 9 verified starting shape
 

@@ -14,8 +14,13 @@
  * It also reports TS2307 for relative imports, so a moved or deleted package file cannot leave a
  * dangling import behind.
  *
- * ponytail: TS2304/TS2552 plus relative TS2307 only. Bare specifiers are skipped because the
- * overlay installs no dependencies; widen once the merged tree typechecks against an Engine.
+ * Syntax diagnostics (TS1xxx) are reported unconditionally. TypeScript emits no semantic errors for
+ * a file it could not parse, so without these a split panel with an unbalanced JSX fragment was
+ * reported as clean while every undefined name in it went unmentioned. A syntax error is never
+ * acceptable output, so this rule has no allowlist.
+ *
+ * ponytail: TS2304/TS2552, relative TS2307 and all TS1xxx only. Bare specifiers are skipped because
+ * the overlay installs no dependencies; widen once the merged tree typechecks against an Engine.
  */
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -31,6 +36,8 @@ const tsc = join(repoRoot, "node_modules/.bin/tsc");
 const IGNORED_NAMES = new Set(["setImmediate", "clearImmediate", "NodeJS"]);
 const CODES = /error (TS2304|TS2552): Cannot find name '([^']+)'/;
 const MISSING_MODULE = /^(.+?)\(\d+,\d+\): error TS2307: Cannot find module '(\.{1,2}\/[^']+)'/;
+// A file that does not parse yields only TS1xxx, so these must never be filtered or allowlisted.
+const SYNTAX = /error TS1\d{3}: /;
 // Engine host files the bundler resolves from the real Engine checkout; sources/engine omits them.
 const ENGINE_HOST_MODULES = new Set([
   "packages/client/src/components/chat/chat-area.types",
@@ -93,13 +100,14 @@ for (const id of packages) {
     const found = [
       ...lines.filter((line) => CODES.test(line) && !IGNORED_NAMES.has(CODES.exec(line)[2])),
       ...lines.filter(isReportedMissingModule),
+      ...lines.filter((line) => SYNTAX.test(line)),
     ];
     if (found.length > 0) {
       failed = true;
-      console.error(`${id}: ${found.length} undefined name(s) or unresolved module(s)`);
+      console.error(`${id}: ${found.length} syntax error(s), undefined name(s) or unresolved module(s)`);
       for (const line of found) console.error(`  ${line}`);
     } else {
-      console.log(`${id}: no undefined names or unresolved modules`);
+      console.log(`${id}: no syntax errors, undefined names or unresolved modules`);
     }
   } finally {
     await rm(overlay, { recursive: true, force: true });
