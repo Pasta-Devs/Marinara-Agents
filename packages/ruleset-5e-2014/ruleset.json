@@ -16,7 +16,7 @@
     "resources": true,
     "rests": true,
     "combat": false,
-    "summary": "Ability checks, skill checks, saving throws, the full character sheet, spell slots, hit dice, class resources, conditions and rests. Battles use Marinara's default combat, not 5e combat."
+    "summary": "Ability checks, skill checks, saving throws, the full character sheet, spell slots, hit dice, class resources, conditions and rests. It also describes how 5e resolves a fight, and ships the SRD monsters, but no Engine release plays a battle on that yet: battles still use Marinara's default combat."
   },
   "resolution": {
     "kind": "dice-sum",
