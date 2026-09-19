@@ -31,3 +31,32 @@ and handlers remain unchanged.
 
 The remaining NoodleR names are permanent for Engine contracts, persisted names, locale keys, the
 `"noodler"` platform value, and the four retained media routes required by stored URLs and backups.
+
+## Validation
+
+- Package version: `0.1.3`.
+- Route proof: 179 routes, method counts `DELETE 11`, `GET 59`, `PATCH 14`, `POST 90`, `PUT 5`,
+  unchanged handler counts, independent `origin/staging` route fixture, and failing method/removal
+  fixtures.
+- Client proof: independent `origin/staging` request fixture and unchanged eleven wiring counts.
+- `node scripts/typecheck-packages.mjs slurp2` passes.
+- Catalog lane, package locale, locale key, catalog, release-note, and `git diff --check` gates pass.
+- Full independent regression comparison: clean staging `173/196` pass and `23` fail; this branch
+  also has `173/196` pass and the same `23` failures. No new regression failure.
+- Browser suite: the Engine servers started, but the host Chromium pages crashed or failed to expose
+  the Slurp tab. The suite did not provide route proof. This remains an environment gap.
+
+## Live proof
+
+- Production installed `0.1.2`, created a temporary profile with an avatar, created a post with an
+  image, changed a setting, subscribed a viewer, sent a message, and made a backup.
+- Production updated to `0.1.3` and restarted successfully. New `/api/slurp2/slurp/*` routes and
+  all four retained `/api/slurp2/noodler/*` media routes returned success. Existing avatar and post
+  image bytes rendered after the update.
+- The `0.1.2` backup inspection and restore completed on `0.1.3`: 34 creators, 233 posts, and 222
+  media files restored.
+- Post-update viewer, feed, settings, subscribe, message, and new profile/post/media/share-card
+  operations passed. Legacy `/api/noodle/accounts` remained healthy.
+- Restart and offline-style restart passed. The Engine was disconnected from its Docker network
+  during restart, reconnected, and returned healthy.
+- The temporary profile and posts were deleted after proof. Production remains on `0.1.3`.
