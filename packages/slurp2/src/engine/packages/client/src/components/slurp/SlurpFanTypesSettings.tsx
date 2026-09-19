@@ -8,7 +8,13 @@ import {
   type SlurpFanType,
 } from "../../../../shared/src/slp/slp-fan-types.js";
 import { api } from "../../lib/api-client";
-import { Field, NumberSetting, SectionTitle, SettingsGroup, Toggle } from "./SlurpSettingsControls";
+import {
+  Field,
+  NumberSetting,
+  SectionTitle,
+  SettingsGroup,
+  Toggle,
+} from "../../slp/modules/settings/SlpSettingsControls";
 
 type RebalancePreview = { changed: number; counts: Record<string, { before: number; after: number }> };
 

@@ -1,25 +1,9 @@
+import type { SlurpPromotion } from "./slp-ads-contract";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
 import { noodleKeys } from "../../base/state/slp-query-keys.js";
 import type { SlurpContentRating } from "../../base/state/slp-state-types.js";
 
-export type SlurpPromotion = {
-  id: string;
-  platform?: "slurp" | "noodle";
-  kind: "creator" | "inline";
-  contentRating?: SlurpContentRating;
-  origin?: "builtin" | "user" | "generated";
-  retiredAt?: string | null;
-  brand: string;
-  product: string;
-  copy: string;
-  categories: string[];
-  contextTags: string[];
-  creatorAccountId?: string;
-  creatorHandle?: string;
-  imageUrl?: string | null;
-  actionLabel?: string;
-};
 export function useSlurpInlineAds(personaId: string | null, creatorId?: string | null, contextTags: string[] = []) {
   return useQuery({
     queryKey: noodleKeys.ads(personaId ?? "none", creatorId, contextTags),

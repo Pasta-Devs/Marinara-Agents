@@ -94,6 +94,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.3.4",
+          "date": "2026-09-18",
+          "notes": "- Kept a source note's extraction context unbound until its extraction succeeds, so a failed or cancelled preparation no longer rewrites the source note.\n- Rejected concurrent source-context changes again at the final commit, so a late writer cannot be overwritten after extraction validation.\n- Marked extractions whose only non-kept candidates were duplicates as current, so re-running them no longer churns.\n- Kept error-diagnostic extractions from being marked current, including direct Game Mode preparation with requested context bound to draft and persistence metadata.",
+          "highlight": false
+        },
+        {
           "version": "1.3.3",
           "date": "2026-09-18",
           "notes": "- Kept static character and world facts static when their wording contains incidental narrative verbs, and stopped rejecting character facts that establish lasting status or affiliation.",
@@ -278,6 +284,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.0.32",
+          "date": "2026-09-19",
+          "notes": "- No visible changes. Made Backstage a thin host over an explicit settings panel registry.",
+          "highlight": false
+        },
+        {
           "version": "0.0.31",
           "date": "2026-09-19",
           "notes": "- No visible changes. Split the client app composition and reusable presentation modules.",
@@ -389,12 +401,6 @@
           "version": "0.0.12",
           "date": "2026-09-15",
           "notes": "- AI Creator drafts are repaired instead of failing: long text is shortened, gender and tag spellings are understood, broken JSON is fixed, and the form lists what still needs a choice.\n- Persona Creators now have the same drafting tools as character Creators: AI post drafts from your own text, and an AI image toggle in the composer for drafted and manual posts.\n- Fixed bulk Creator creation skipping open-mode Creators with a wrong gender and tags reason, and draft errors now show the real cause.",
-          "highlight": false
-        },
-        {
-          "version": "0.0.11",
-          "date": "2026-09-14",
-          "notes": "- Fixed AI Creator drafts that failed or could not be saved because the model left out gender or gave fewer than three tags.",
           "highlight": false
         }
       ]

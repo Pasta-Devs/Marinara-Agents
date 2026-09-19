@@ -8,7 +8,7 @@ import { useBulkUpdateSlurpCreators } from "../../slp/features/creators/slp-crea
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { SLURP_DISCOVERY_TAG_LIMIT } from "../../slp/features/discovery/slp-discovery";
 import { cn } from "../../lib/utils";
-import { Field, SettingsGroup } from "./SlurpSettingsControls";
+import { Field, SettingsGroup } from "../../slp/modules/settings/SlpSettingsControls";
 
 type Choice = "keep" | "on" | "off";
 

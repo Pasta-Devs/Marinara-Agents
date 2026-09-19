@@ -80,7 +80,7 @@ import {
   useRecordSlurpAdAction,
   useSlurpInlineAds,
 } from "../../slp/features/ads/slp-ads-hooks";
-import type { SlurpPromotion } from "../../slp/features/ads/slp-ads-hooks";
+import type { SlurpPromotion } from "../../slp/features/ads/slp-ads-contract";
 import {
   useNoodlerConnectionCounts,
   useNoodlerFollowers,
@@ -208,8 +208,9 @@ import {
 } from "./SlurpShell";
 import { SlurpProfileSurface } from "./SlurpProfileSurface";
 import { BroadcastPanel, SlurpMessagesView } from "./SlurpMessages";
-import { SlurpSettings, SlurpSettingsSidebar } from "./SlurpSettings";
-import { confirmLeaveSlurpBackstage } from "./SlurpBackstageChrome";
+import { SlpBackstageShell } from "../../slp/app/backstage/SlpBackstageShell";
+import { SlpBackstageSidebar } from "../../slp/features/backstage/SlpBackstageSidebar";
+import { confirmLeaveSlurpBackstage } from "../../slp/features/backstage/SlpBackstageControls";
 import { NoodleImageComposer } from "./SlurpImageComposer";
 import { NoodlePollComposer } from "../../slp/modules/poll/SlpPollComposer";
 import { SlpStoryTile } from "../../slp/modules/story/SlpStoryTile";
@@ -1656,10 +1657,10 @@ export function SlurpHome({ navigation, onNavigate, onLeave }: SlurpHomeProps) {
       <NoodleShell
         {...shellProps}
         desktopSidebar={
-          <SlurpSettingsSidebar navigation={navigation} onNavigate={onNavigate} onExit={exitToCreatorHub} />
+          <SlpBackstageSidebar navigation={navigation} onNavigate={onNavigate} onExit={exitToCreatorHub} />
         }
       >
-        <SlurpSettings
+        <SlpBackstageShell
           navigation={navigation}
           onNavigate={onNavigate}
           onAddCreators={() => setOnboardingMode("add-creators")}

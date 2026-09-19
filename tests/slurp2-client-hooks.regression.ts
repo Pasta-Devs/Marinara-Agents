@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
+import { SLURP2_SOURCE_MODULES } from "./slurp2-source";
+
 // Slice 7 proof: the client state layer moved into `slp/` without changing what it exposes, which
 // endpoints it calls, or how the query cache is keyed. The frozen inventories below were taken from
 // `hooks/use-slurp.ts` at `26a80fe7`, the commit the split started from.
@@ -17,7 +19,18 @@ function walk(dir: string, base = ""): string[] {
   });
 }
 
-const paths = walk(slpRoot).filter((path) => /\.tsx?$/u.test(path));
+// Slice 9 moved Backstage into `slp/` too. This proof is about the state layer, so the files the
+// source map attributes to the Backstage components are excluded; everything else still counts.
+const backstageFiles = new Set(
+  Object.entries(SLURP2_SOURCE_MODULES)
+    .filter(([key]) => /components\/slurp\/(SlurpSettings|SlurpBackstage|slurp-backstage)/u.test(key))
+    .flatMap(([, files]) => files)
+    .filter((file) => file.startsWith("packages/client/src/slp/"))
+    .map((file) => file.replace("packages/client/src/slp/", "")),
+);
+const paths = walk(slpRoot)
+  .filter((path) => /\.tsx?$/u.test(path))
+  .filter((path) => !backstageFiles.has(path));
 const sources = new Map(paths.map((path) => [path, readFileSync(join(slpRoot, path), "utf8")]));
 const combined = [...sources.values()].join("\n");
 
@@ -523,8 +536,8 @@ for (const [name, path] of [
   ["useSlurpConnections", "base/state/slp-host-connections.ts"],
   ["useSlurpInlineAds", "features/ads/slp-ads-hooks.ts"],
   ["useSlurpSettings", "features/settings/slp-settings-hooks.ts"],
-  ["useSlurpImageConnections", "features/settings/slp-image-connection-hooks.ts"],
-  ["useSlurpPostGuidance", "features/settings/slp-post-guidance-hooks.ts"],
+  ["useSlurpImageConnections", "features/media/slp-image-connection-hooks.ts"],
+  ["useSlurpPostGuidance", "features/settings/slp-post-guidance-contract.ts"],
   ["startSlurpBackup", "features/maintenance/slp-backup.ts"],
   ["useRunSlurpAutopurge", "features/maintenance/slp-maintenance-hooks.ts"],
   ["useSlurpImprovementJobs", "features/maintenance/slp-improvement-hooks.ts"],

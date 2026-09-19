@@ -1,4 +1,7 @@
-import type { SlurpBackstageSection, SlurpBackstageTarget } from "./slurp-backstage";
+import type {
+  SlpBackstageSection as SlurpBackstageSection,
+  SlpBackstageTarget as SlurpBackstageTarget,
+} from "../../slp/base/navigation/slp-backstage-target";
 
 export const SLURP_API_PREFIX = "/api/slurp2";
 
@@ -48,8 +51,8 @@ export type SlurpNavigationState =
  * check. It used to be copied into each, and the copies drifted — the store silently dropped a
  * persisted `section: "ads"` because its copy never learned about it.
  */
-export { SLURP_BACKSTAGE_SECTIONS as SLURP_SETTINGS_SECTIONS } from "./slurp-backstage";
-export type { SlurpBackstageSection as SlurpSettingsSection } from "./slurp-backstage";
+export { SLP_BACKSTAGE_SECTIONS as SLURP_SETTINGS_SECTIONS } from "../../slp/base/navigation/slp-backstage-target";
+export type { SlpBackstageSection as SlurpSettingsSection } from "../../slp/base/navigation/slp-backstage-target";
 
 export type SlurpSourceKind = "character" | "persona";
 

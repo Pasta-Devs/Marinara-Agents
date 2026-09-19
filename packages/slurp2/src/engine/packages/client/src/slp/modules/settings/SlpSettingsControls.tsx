@@ -1,15 +1,13 @@
 /**
  * The settings controls both settings surfaces share.
  *
- * `SlurpSettings.tsx` is already about five thousand lines, so the simulation panel lives in its
- * own file; these are the four or five controls it needs to look like the rest of settings rather
- * than like a second, slightly different settings screen.
+ * The Backstage host composes panels rather than drawing controls itself, so these live here as a
+ * reusable module: every feature panel and the simulation panel draw the same control set.
  */
 import { CircleHelp } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
-import type { SlurpSettings } from "../../slp/features/settings/slp-settings-contract";
-import { SettingAnchor } from "./SlurpBackstageKit";
+import { SettingAnchor, type SlpSettingKey } from "./SlpSettingsKit";
 
 export function NumberSetting({
   value,
@@ -108,7 +106,7 @@ export function Field({
   label: string;
   detail?: string;
   /** Marks the field as the Backstage search target for this setting. */
-  settingKey?: keyof SlurpSettings;
+  settingKey?: SlpSettingKey;
   children: ReactNode;
 }) {
   const field = (
@@ -141,7 +139,7 @@ export function Toggle({
   onChange: (value: boolean) => void;
   compact?: boolean;
   /** Marks the toggle as the Backstage search target for this setting. */
-  settingKey?: keyof SlurpSettings;
+  settingKey?: SlpSettingKey;
 }) {
   const toggle = (
     <label

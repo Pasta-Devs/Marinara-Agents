@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import {
-  SLURP_BACKSTAGE_SECTIONS,
-  SLURP_BACKSTAGE_SETTING_PLACEMENT,
-  SLURP_LEGACY_SETTINGS_DESTINATION,
-} from "../packages/slurp2/src/engine/packages/client/src/components/slurp/slurp-backstage";
+  SLP_BACKSTAGE_SECTIONS,
+  SLP_LEGACY_SETTINGS_DESTINATION,
+} from "../packages/slurp2/src/engine/packages/client/src/slp/base/navigation/slp-backstage-target";
+import { SLP_BACKSTAGE_SETTING_PLACEMENT } from "../packages/slurp2/src/engine/packages/client/src/slp/features/backstage/slp-backstage-placement";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
 import { slurp2Source } from "./slurp2-source";
 
@@ -16,13 +16,13 @@ const settingKeys = [...hooks.slice(settingsStart, settingsEnd).matchAll(/^\s{2}
   (match) => match[1],
 );
 
-assert.deepEqual(SLURP_BACKSTAGE_SECTIONS, ["overview", "creators", "world", "automation", "prompts", "maintenance"]);
+assert.deepEqual(SLP_BACKSTAGE_SECTIONS, ["overview", "creators", "world", "automation", "prompts", "maintenance"]);
 assert.deepEqual(
-  Object.keys(SLURP_BACKSTAGE_SETTING_PLACEMENT).sort(),
+  Object.keys(SLP_BACKSTAGE_SETTING_PLACEMENT).sort(),
   settingKeys.sort(),
   "every Slurp setting has exactly one canonical Backstage placement",
 );
-assert.deepEqual(Object.keys(SLURP_LEGACY_SETTINGS_DESTINATION).sort(), [
+assert.deepEqual(Object.keys(SLP_LEGACY_SETTINGS_DESTINATION).sort(), [
   "ads",
   "advanced",
   "arcs",
@@ -45,7 +45,7 @@ const autopurge = read("packages/slurp2/src/engine/packages/server/src/services/
 assert.match(client, /<SlurpBackstageSearch/u);
 assert.doesNotMatch(client, /<SlurpBackstagePreview/u);
 assert.match(client, /<SlurpBackstageApplyBar/u);
-assert.match(client, /target === "improve"/u);
+assert.match(client, /\{ target: "improve", Component: SlpCreatorImprovePanel \}/u);
 assert.match(improver, /Free checkup/u);
 assert.match(improver, /useCreateSlurpImprovementJob/u);
 assert.match(improver, /Apply selected/u);

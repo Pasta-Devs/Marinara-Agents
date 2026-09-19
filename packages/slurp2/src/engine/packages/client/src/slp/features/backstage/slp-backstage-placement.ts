@@ -1,130 +1,31 @@
-import type { SlurpSettings } from "../../slp/features/settings/slp-settings-contract";
+import type { SlurpSettings } from "../settings/slp-settings-contract";
+import type { SlpBackstageSection, SlpBackstageTarget } from "../../base/navigation/slp-backstage-target";
 
-export const SLURP_BACKSTAGE_SECTIONS = [
-  "overview",
-  "creators",
-  "world",
-  "automation",
-  "prompts",
-  "maintenance",
-] as const;
-export type SlurpBackstageSection = (typeof SLURP_BACKSTAGE_SECTIONS)[number];
-
-export const SLURP_BACKSTAGE_TARGETS = [
-  "overview",
-  "creators",
-  "improve",
-  "world",
-  "tags",
-  "events",
-  "arcs",
-  "messaging",
-  "audience",
-  "ads",
-  "wallet",
-  "automation",
-  "general",
-  "images",
-  "prompts",
-  "autopurge",
-  "advanced",
-] as const;
-export type SlurpBackstageTarget = (typeof SLURP_BACKSTAGE_TARGETS)[number];
-
-export const SLURP_BACKSTAGE_TARGETS_BY_SECTION: Record<SlurpBackstageSection, readonly SlurpBackstageTarget[]> = {
-  overview: ["overview"],
-  creators: ["creators", "improve"],
-  world: ["world", "tags", "events", "arcs", "audience", "messaging", "ads", "wallet"],
-  automation: ["automation", "general", "images"],
-  prompts: ["prompts"],
-  maintenance: ["autopurge", "advanced"],
-};
-
-export const SLURP_BACKSTAGE_DEFAULT_TARGET: Record<SlurpBackstageSection, SlurpBackstageTarget> = {
-  overview: "overview",
-  creators: "creators",
-  world: "world",
-  automation: "automation",
-  prompts: "prompts",
-  maintenance: "autopurge",
-};
-
-export const SLURP_BACKSTAGE_SECTION_LABELS: Record<SlurpBackstageSection, string> = {
-  overview: "Overview",
-  creators: "Creators",
-  world: "Features",
-  automation: "Automation",
-  prompts: "Prompts",
-  maintenance: "Maintenance",
-};
-
-export const SLURP_BACKSTAGE_TARGET_LABELS: Record<SlurpBackstageTarget, string> = {
-  overview: "Overview",
-  creators: "Creator management",
-  improve: "Improve with AI",
-  world: "All areas",
-  automation: "All automations",
-  tags: "Discovery",
-  events: "Events and holidays",
-  arcs: "Arcs",
-  messaging: "Messaging rules",
-  audience: "Audience",
-  ads: "Ads",
-  wallet: "Coins and access",
-  general: "Publishing",
-  images: "Image generation",
-  prompts: "Prompts",
-  autopurge: "Storage and cleanup",
-  advanced: "Backup and data",
-};
-
-export function destinationForTarget(target: SlurpBackstageTarget): SlurpBackstageSection {
-  return (
-    SLURP_BACKSTAGE_SECTIONS.find((section) => SLURP_BACKSTAGE_TARGETS_BY_SECTION[section].includes(target)) ??
-    "overview"
-  );
-}
-
-export const SLURP_LEGACY_SETTINGS_DESTINATION = {
-  overview: { section: "overview", target: "overview" },
-  creators: { section: "creators", target: "creators" },
-  tags: { section: "world", target: "tags" },
-  arcs: { section: "world", target: "arcs" },
-  messaging: { section: "world", target: "messaging" },
-  audience: { section: "world", target: "audience" },
-  ads: { section: "world", target: "ads" },
-  wallet: { section: "world", target: "wallet" },
-  general: { section: "automation", target: "general" },
-  images: { section: "automation", target: "images" },
-  autopurge: { section: "maintenance", target: "autopurge" },
-  advanced: { section: "maintenance", target: "advanced" },
-} as const satisfies Record<string, { section: SlurpBackstageSection; target: SlurpBackstageTarget }>;
-
-export type SlurpBackstageScope = "all-slurp" | "this-viewer" | "new-creators" | "creator";
-export type SlurpBackstagePlacement = {
-  section: SlurpBackstageSection;
-  target: SlurpBackstageTarget;
-  scope: SlurpBackstageScope;
+export type SlpBackstageScope = "all-slurp" | "this-viewer" | "new-creators" | "creator";
+export type SlpBackstagePlacement = {
+  section: SlpBackstageSection;
+  target: SlpBackstageTarget;
+  scope: SlpBackstageScope;
   searchTerms: readonly string[];
   /** Runtime or setup state with no Backstage control; hidden from search and exempt from anchors. */
   internal?: true;
 };
 
 const place = (
-  section: SlurpBackstageSection,
-  target: SlurpBackstageTarget,
-  scope: SlurpBackstageScope,
+  section: SlpBackstageSection,
+  target: SlpBackstageTarget,
+  scope: SlpBackstageScope,
   ...searchTerms: string[]
-): SlurpBackstagePlacement => ({ section, target, scope, searchTerms });
-const world = (target: SlurpBackstageTarget, ...terms: string[]) => place("world", target, "all-slurp", ...terms);
-const automation = (target: SlurpBackstageTarget, ...terms: string[]) =>
+): SlpBackstagePlacement => ({ section, target, scope, searchTerms });
+const world = (target: SlpBackstageTarget, ...terms: string[]) => place("world", target, "all-slurp", ...terms);
+const automation = (target: SlpBackstageTarget, ...terms: string[]) =>
   place("automation", target, "all-slurp", ...terms);
-const internal = (placement: SlurpBackstagePlacement): SlurpBackstagePlacement => ({ ...placement, internal: true });
+const internal = (placement: SlpBackstagePlacement): SlpBackstagePlacement => ({ ...placement, internal: true });
 const prompts = (...terms: string[]) => place("prompts", "prompts", "all-slurp", ...terms);
 const maintenance = (...terms: string[]) => place("maintenance", "autopurge", "all-slurp", ...terms);
 
 /** One searchable, canonical Backstage home for every persisted setting. */
-export const SLURP_BACKSTAGE_SETTING_PLACEMENT: Record<keyof SlurpSettings, SlurpBackstagePlacement> = {
+export const SLP_BACKSTAGE_SETTING_PLACEMENT: Record<keyof SlurpSettings, SlpBackstagePlacement> = {
   inlineAdsEnabled: world("ads", "ads", "promotions", "feed"),
   inlineAdsFrequency: world("ads", "ad frequency", "promotions"),
   inlineAdsSteering: world("ads", "personalized ads", "random ads"),
@@ -252,15 +153,3 @@ export const SLURP_BACKSTAGE_SETTING_PLACEMENT: Record<keyof SlurpSettings, Slur
   modelBudget: world("audience", "AI budget", "model calls"),
   onboarding: internal(place("creators", "creators", "new-creators", "setup", "onboarding")),
 };
-
-export function isSlurpBackstageSection(value: unknown): value is SlurpBackstageSection {
-  return typeof value === "string" && SLURP_BACKSTAGE_SECTIONS.includes(value as SlurpBackstageSection);
-}
-
-export function isSlurpBackstageTarget(value: unknown): value is SlurpBackstageTarget {
-  return typeof value === "string" && SLURP_BACKSTAGE_TARGETS.includes(value as SlurpBackstageTarget);
-}
-
-export function targetBelongsToSection(section: SlurpBackstageSection, target: SlurpBackstageTarget): boolean {
-  return SLURP_BACKSTAGE_TARGETS_BY_SECTION[section].includes(target);
-}
