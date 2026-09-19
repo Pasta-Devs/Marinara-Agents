@@ -729,6 +729,12 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   "packages/client/src/components/slurp/SlurpPostGuidanceField.tsx": [
     "packages/client/src/slp/features/settings/SlpPostGuidanceField.tsx",
   ],
+  "packages/client/src/components/slurp/SlurpProjectsPanel.tsx": [
+    "packages/client/src/slp/features/projects/SlpProjectsBoard.tsx",
+    "packages/client/src/slp/features/projects/SlpArcTimelineCard.tsx",
+    "packages/client/src/slp/features/projects/SlpArcConfigSection.tsx",
+    "packages/client/src/slp/features/projects/SlpProjectEditor.tsx",
+  ],
   "packages/server/src/services/slurp/slurp-post-guidance.storage.ts": [
     "packages/server/src/slp/data/settings/slp-post-guidance-storage.ts",
   ],

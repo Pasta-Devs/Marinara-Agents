@@ -177,7 +177,8 @@ import {
   useNoodlePostCardController,
 } from "./SlurpPostCard";
 import { NoodleAnchoredPopover } from "../../slp/base/chrome/SlpAnchoredPopover";
-import { SlurpArcTimelineCard, SlurpProjectsPanel } from "./SlurpProjectsPanel";
+import { SlurpArcTimelineCard } from "../../slp/features/projects/SlpArcTimelineCard";
+import { SlurpProjectsPanel } from "../../slp/features/projects/SlpProjectsBoard";
 import { SlurpFanCard } from "../../slp/features/audience/SlpFanCard";
 import { LockedSlurpPostCard, SlurpCreatorPostCard } from "./SlurpCreatorPostCard";
 import { SlurpSparkleVeil } from "../../slp/base/chrome/SlpSparkleVeil";
