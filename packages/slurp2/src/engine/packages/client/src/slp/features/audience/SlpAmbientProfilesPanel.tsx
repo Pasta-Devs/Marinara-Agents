@@ -7,7 +7,11 @@ import { useDeleteNoodlerStageProfile } from "../creators/slp-creators-contract"
 import { Pencil, RefreshCw, Save, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useRerollAmbientProfiles, useSlurpAmbientProfiles, useUpdateAmbientProfile } from "slp-ambient-profile-hooks";
+import {
+  useRerollAmbientProfiles,
+  useSlurpAmbientProfiles,
+  useUpdateAmbientProfile,
+} from "./slp-ambient-profile-hooks";
 import { toast } from "sonner";
 
 export function AmbientProfilesPanel({

@@ -1,5 +1,11 @@
 # Slurp Remastered release notes
 
+## 0.0.33 — 2026-09-19
+
+- No visible changes. Moved the remaining Slurp client components into the slp namespace, split
+  the shell, the shared Backstage kit and the Projects destination, and made the package typecheck
+  report syntax errors.
+
 ## 0.0.32 — 2026-09-19
 
 - No visible changes. Made Backstage a thin host over an explicit settings panel registry.

@@ -2,11 +2,11 @@
 // Slice 10. Named Board to avoid colliding with the Backstage SlpProjectsPanel from Slice 9.
 
 import { useSlurpSettings } from "../settings/slp-settings-contract";
-import { ArcConfigSection } from "SlpArcConfigSection";
-import { ProjectEditor, canSave } from "SlpProjectEditor";
+import { ArcConfigSection } from "./SlpArcConfigSection";
+import { ProjectEditor, canSave } from "./SlpProjectEditor";
 import { useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import type { SlurpProject } from "slp-projects-contract";
+import type { SlurpProject } from "./slp-projects-contract";
 import {
   useCreateSlurpProject,
   useDeleteSlurpProject,
@@ -16,7 +16,7 @@ import {
   useSaveSlurpProjectToLibrary,
   useSlurpProjects,
   useUpdateSlurpProject,
-} from "slp-projects-hooks";
+} from "./slp-projects-hooks";
 
 type Draft = {
   title: string;

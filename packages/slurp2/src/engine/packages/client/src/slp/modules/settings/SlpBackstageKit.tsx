@@ -26,7 +26,7 @@ import {
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { localDateTimeValue } from "slp-backstage-format";
+import { localDateTimeValue } from "./slp-backstage-format";
 
 export function ChoiceRow<T extends string>({
   title,

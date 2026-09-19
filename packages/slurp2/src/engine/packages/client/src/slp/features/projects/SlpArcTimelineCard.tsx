@@ -3,7 +3,7 @@
 import { SlurpMediaImg } from "../../base/chrome/SlpChrome";
 import { useSlurpSettings } from "../settings/slp-settings-contract";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import type { SlurpArcEffects, SlurpArcTimeline } from "slp-projects-contract";
+import type { SlurpArcEffects, SlurpArcTimeline } from "./slp-projects-contract";
 
 export function SlurpArcTimelineCard({
   arcs,

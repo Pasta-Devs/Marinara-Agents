@@ -194,7 +194,18 @@ import { SlurpOnboardingWizard } from "./SlurpOnboardingPanel";
 import { SlurpAgeGate, SlurpConfetti } from "../../slp/features/onboarding/SlpAgeGate";
 import { SlurpSplash, slurp2SplashPending } from "../../slp/features/onboarding/SlpSplash";
 import { slurpCreatorStatus } from "../../slp/modules/creator/slp-creator-status";
-import { Avatar, getNoodleAccentStyle, SLURP_TOGGLE_ACTIVE_CLASS, NewSinceLastVisitDivider, HIDE_ON_SCROLL_CLASS, NoodleLogo, ProfileInitial, useHideOnScroll, NOODLE_PERSONA_SWITCHER_PAGE_SIZE, NOODLE_PINK } from "../../slp/base/chrome/SlpChrome";
+import {
+  Avatar,
+  getNoodleAccentStyle,
+  SLURP_TOGGLE_ACTIVE_CLASS,
+  NewSinceLastVisitDivider,
+  HIDE_ON_SCROLL_CLASS,
+  NoodleLogo,
+  ProfileInitial,
+  useHideOnScroll,
+  NOODLE_PERSONA_SWITCHER_PAGE_SIZE,
+  NOODLE_PINK,
+} from "../../slp/base/chrome/SlpChrome";
 import { NoodleShell } from "../../slp/modules/chrome/SlpShell";
 import { SlurpProfileSurface } from "../../slp/features/creators/SlpProfileSurface";
 import { BroadcastPanel, SlurpMessagesView } from "./SlurpMessages";

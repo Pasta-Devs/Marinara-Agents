@@ -7,8 +7,8 @@ import { useSetSlurpCreatorPrice } from "../economy/slp-economy-contract";
 import { Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { SlurpCreatorMessaging } from "slp-messages-contract";
-import { useSetSlurpCreatorMessaging, useSlurpCreatorMessagingSettings } from "slp-messages-hooks";
+import type { SlurpCreatorMessaging } from "./slp-messages-contract";
+import { useSetSlurpCreatorMessaging, useSlurpCreatorMessagingSettings } from "./slp-messages-hooks";
 import { toast } from "sonner";
 
 export function CreatorMessagingGroup({

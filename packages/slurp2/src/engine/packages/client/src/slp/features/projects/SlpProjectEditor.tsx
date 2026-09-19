@@ -1,8 +1,8 @@
 // Project editor form, split out of components/slurp/SlurpProjectsPanel.tsx in Slice 10.
 
-import { Draft } from "SlpProjectsBoard";
+import { Draft } from "./SlpProjectsBoard";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import type { SlurpArcType } from "slp-projects-contract";
+import type { SlurpArcType } from "./slp-projects-contract";
 
 const canSave = (draft: Draft) => Boolean(draft.title.trim()) || draft.typeId !== null;
 

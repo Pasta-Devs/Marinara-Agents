@@ -9,8 +9,8 @@ import { useResetSlurpArcType } from "../settings/slp-settings-contract";
 import { ChevronRight, CircleHelp, Plus } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { SlurpArcType } from "slp-projects-contract";
-import { useGenerateSlurpArcType } from "slp-projects-hooks";
+import type { SlurpArcType } from "./slp-projects-contract";
+import { useGenerateSlurpArcType } from "./slp-projects-hooks";
 import { toast } from "sonner";
 
 export function ArcLibraryEditor({

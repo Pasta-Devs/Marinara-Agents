@@ -1,8 +1,8 @@
 // Arc configuration section, split out of components/slurp/SlurpProjectsPanel.tsx in Slice 10.
 
 import { useTranslation as useUiTranslation } from "react-i18next";
-import type { SlurpArcType, SlurpCreatorArcConfig } from "slp-projects-contract";
-import { useSlurpArcConfig, useUpdateSlurpArcConfig } from "slp-projects-hooks";
+import type { SlurpArcType, SlurpCreatorArcConfig } from "./slp-projects-contract";
+import { useSlurpArcConfig, useUpdateSlurpArcConfig } from "./slp-projects-hooks";
 
 function ArcConfigSection({
   personaId,
