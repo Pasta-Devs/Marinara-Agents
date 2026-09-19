@@ -6,12 +6,12 @@ slots, hit dice, class resources, conditions, rests, and a full character sheet.
 the sheet's own hit points and spell slots, but the combat arithmetic is still Marinara's, not 5e
 combat.
 
-Requires **Marinara Engine 2.4.6+ with Capability API 1.22** (the ruleset seam, catalogs, and the
-battle block: hash-pinned `ruleset.json` and `catalogs/<id>.json` assets the Engine reads by
-reserved filename, exactly like `gm-verbs.json`). Today that means the Engine `staging` branch;
-older hosts reject the manifest and cannot install this package. This package ships no server
-entrypoint, no client entrypoint, and no Agent. It is pure data: nothing here runs code, and no
-restart is needed after install.
+Requires **Marinara Engine 2.4.6+ with Capability API 1.23** (the ruleset seam, catalogs, the
+battle block, and scaled catalog columns: hash-pinned `ruleset.json` and `catalogs/<id>.json`
+assets the Engine reads by reserved filename, exactly like `gm-verbs.json`). Today that means the
+Engine `staging` branch; older hosts reject the manifest and cannot install this package. This
+package ships no server entrypoint, no client entrypoint, and no Agent. It is pure data: nothing
+here runs code, and no restart is needed after install.
 
 ## What it contains
 
@@ -20,7 +20,8 @@ restart is needed after install.
 - A d20 resolution kind, ability modifiers, proficiency tiers, and a difficulty ladder.
 - A full character sheet: six abilities, six saves, eighteen skills, identity/combat/spellcasting
   fields, derived values (proficiency bonus, initiative, passive Perception, spell save DC, spell
-  attack bonus), and lists for attacks, spells, features, class resources, and proficiencies.
+  attack bonus, and the Bardic Inspiration, Divine Sense and Lay on Hands maximums), and lists for
+  attacks, spells, features, class resources, and proficiencies.
 - Live play state: hit points, hit dice, spell slots, pact slots, death saves, exhaustion,
   concentration, and the standard conditions.
 - Short and long rest recovery rules.
@@ -51,12 +52,33 @@ never rewrites a character you already made.
 its own skills from that block, as described under Battles below. The save, the attack roll, the
 concentration and what a higher slot would add are recorded but not applied.
 
-**Class resources start at their first value.** Picking a feature that the SRD gives a plain number
-of uses, such as Second Wind, Rage, Wild Shape or Ki, also adds the class resource that tracks it.
-The Engine has no class tables, so the maximum is the value at the level the feature is gained, and
-you raise it yourself as you level up. Where the SRD ties the number to an ability modifier
-(Bardic Inspiration, Divine Sense) the picker says so. A feature whose uses the SRD does not state
-as a plain count gets no resource at all rather than a guessed one.
+**Class resources keep themselves.** Picking a feature that the SRD gives a plain number of uses,
+such as Second Wind, Rage, Wild Shape or Ki, also adds the class resource that tracks it. Nine of
+them are **scaled**: the sheet works the maximum out and keeps it current as you level up, and the
+cell is shown as read only.
+
+| Class resource | Maximum follows | Where the number comes from |
+| --- | --- | --- |
+| Rage | Level | The Barbarian table's Rages column |
+| Ki | Level | The Monk table's Ki Points column |
+| Sorcery Points | Level | The Sorcerer table's Sorcery Points column |
+| Channel Divinity | Level | The Cleric table: 1 at 2nd, 2 at 6th, 3 at 18th |
+| Action Surge | Level | The Fighter table: 1 at 2nd, 2 at 17th |
+| Indomitable | Level | The Fighter table: 1 at 9th, 2 at 13th, 3 at 17th |
+| Bardic Inspiration | Charisma | Your Charisma modifier, at least one |
+| Divine Sense | Charisma | 1 plus your Charisma modifier |
+| Lay on Hands | Level | Your level times 5 |
+
+Second Wind, Wild Shape and Arcane Recovery are not scaled, because the SRD never raises them: a
+20th-level druid's unlimited Wild Shape comes from the separate Archdruid feature, not from a
+bigger number. Rage stops at six for the same reason: the Barbarian table says Unlimited at 20th
+level, which is not a number a counter can hold. A feature whose uses the SRD does not state as a
+plain count gets no resource at all rather than a guessed one.
+
+**Your sheet has one Level field**, because a ruleset sheet has no notion of a class and so cannot
+have a level per class. A multiclass character's class resources therefore follow the **total**
+level, which is right for a single-class character and generous for a multiclass one. If you want
+your own number, delete the picked row and type one: a row you typed is never kept by the ruleset.
 
 **Armor is not a catalog.** A catalog fills a list, and armor sets the sheet's Armor Class field,
 which is not a list. Set **Armor Class** by hand on the Combat section of the sheet.
@@ -107,13 +129,13 @@ block has drifted below.
 
 Available to Engine `staging` users only. The package is listed in `STAGING_ONLY_PACKAGE_IDS`, so
 it is published to the preview overlay under `catalog/preview/` that staging Engines read, and is
-hidden from stable `main` users. It stays there until the Capability API 1.22 ruleset, catalog and
-battle seam reaches a stable Engine release.
+hidden from stable `main` users. It stays there until the Capability API 1.23 ruleset, catalog,
+battle and scaled-column seam reaches a stable Engine release.
 
 ## Installing
 
 Install it from **Agents** and **Download Agents** in a Marinara Engine build that supports
-Capability API 1.22. After installing, choose it under Rules in the Game Mode setup wizard when you
+Capability API 1.23. After installing, choose it under Rules in the Game Mode setup wizard when you
 create a new game.
 
 ## License
