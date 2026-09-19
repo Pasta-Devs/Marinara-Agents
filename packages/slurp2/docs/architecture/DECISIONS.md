@@ -158,5 +158,4 @@ modules, rejected alternative, and migration consequence.
   member query moved.
 - **Migration consequence:** no `components/slurp/` path remains, so no source test may read one
   except through `slurp2Source`. New Slurp2 code must live in the `slp` roots or one of the three
-  permanent exceptions.
-
+   permanent exceptions.
