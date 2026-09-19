@@ -6,7 +6,7 @@ import { Modal } from "../../../components/ui/Modal";
 
 import { Avatar, getNoodleAccentStyle, NOODLE_PINK } from "../../base/chrome/SlpChrome";
 
-import { errorMessage } from "../../../components/slurp/SlurpBackstageWorkflow";
+import { errorMessage } from "../../modules/settings/slp-backstage-format";
 
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 

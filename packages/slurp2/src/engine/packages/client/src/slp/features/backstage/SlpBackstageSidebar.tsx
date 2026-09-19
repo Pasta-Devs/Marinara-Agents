@@ -12,7 +12,7 @@ import {
   type SlpBackstageTarget,
 } from "../../base/navigation/slp-backstage-target";
 
-import { settingsSections, sectionTabClass } from "../../../components/slurp/SlurpBackstageWorkflow";
+import { settingsSections, sectionTabClass } from "../../modules/settings/slp-backstage-format";
 
 export function SlpBackstageSidebar({
   navigation,

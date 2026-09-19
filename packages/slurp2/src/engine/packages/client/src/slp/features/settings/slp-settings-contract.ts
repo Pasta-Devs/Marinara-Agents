@@ -158,3 +158,6 @@ export type SlurpPromptDefinition = {
 // The settings read hook is the only part of this feature other features consume. Exposing it here
 // keeps Discovery (and any later reader) on the contract instead of reaching into the hook file.
 export { useSlurpSettings } from "./slp-settings-hooks.js";
+
+// The Projects arc library resets an arc type back to its shipped default.
+export { useResetSlurpArcType } from "./slp-settings-hooks.js";

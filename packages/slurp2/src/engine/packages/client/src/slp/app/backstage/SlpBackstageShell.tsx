@@ -20,7 +20,7 @@ import {
   useSlurpBackstageDraftGuard,
 } from "../../features/backstage/SlpBackstageControls";
 import { SlurpBackstageSearch, SlurpBackstageSubnav } from "../../features/backstage/SlpBackstageNavigation";
-import { errorMessage } from "../../../components/slurp/SlurpBackstageWorkflow";
+import { errorMessage } from "../../modules/settings/slp-backstage-format";
 import { focusSettingAnchor } from "../../modules/settings/SlpSettingsKit";
 
 import { useSlpBackstageController } from "./slp-backstage-controller";

@@ -10,8 +10,8 @@ import {
   SLURP_IMAGE_INTERPRETATION_PRESETS,
   SLURP_IMAGE_INTERPRETATION_STYLES,
   DEFAULT_SLURP_GENERATION_GUIDANCE,
-  PromptCard,
-} from "../../../components/slurp/SlurpBackstageWorkflow";
+} from "../../modules/settings/slp-backstage-format";
+import { PromptCard } from "../../modules/settings/SlpBackstageKit";
 
 /**
  * Prompts: every text Slurp sends to a model, in one place.

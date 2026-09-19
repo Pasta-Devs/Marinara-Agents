@@ -36,3 +36,6 @@ export type SlurpCreatorMetrics = {
   unread: number;
   arcs: number;
 };
+
+// Audience's ambient-profile panel deletes a managed stage profile, which Creators owns.
+export { useDeleteNoodlerStageProfile } from "./slp-creator-profile-hooks.js";

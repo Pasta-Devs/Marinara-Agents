@@ -12,7 +12,7 @@ import type { SlurpSettings } from "../settings/slp-settings-contract";
 import { SlurpMediaImg } from "../../base/chrome/SlpChrome";
 
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
-import { errorMessage } from "../../../components/slurp/SlurpBackstageWorkflow";
+import { errorMessage } from "../../modules/settings/slp-backstage-format";
 
 /** Ads: the inline ad settings, the ad pool and the ad editors. */
 export function SlpAdsPanel(page: SlpBackstagePageProps) {

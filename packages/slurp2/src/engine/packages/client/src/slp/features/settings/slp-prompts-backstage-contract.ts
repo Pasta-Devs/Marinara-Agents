@@ -9,7 +9,7 @@ import {
   SLURP_GUIDANCE_PRESETS,
   SLURP_IMAGE_INTERPRETATION_PRESETS,
   SLURP_IMAGE_INTERPRETATION_STYLES,
-} from "../../../components/slurp/SlurpBackstageWorkflow";
+} from "../../modules/settings/slp-backstage-format";
 import {
   exportSlurpPromptPresets,
   importSlurpPromptPresets,

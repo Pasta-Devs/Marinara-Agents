@@ -172,3 +172,7 @@ export type SlurpComposeTarget = {
   threadId: string | null;
   creatorAccountId: string | null;
 };
+
+// The Creators Backstage panel renders a Creator's message policy inline, so this group is part of
+// the Messages contract rather than an internal component.
+export { CreatorMessagingGroup } from "./SlpCreatorMessagingGroup.js";

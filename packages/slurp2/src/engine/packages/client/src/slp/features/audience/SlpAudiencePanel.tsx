@@ -15,7 +15,9 @@ import type { SlurpSettings } from "../settings/slp-settings-contract";
 
 import { SLURP_AUDIENCE_PRESETS, slurpAudiencePresetPatch } from "../../../../../shared/src/slp/slp-tuning.js";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
-import { errorMessage, ChoiceRow, AmbientProfilesPanel } from "../../../components/slurp/SlurpBackstageWorkflow";
+import { errorMessage } from "../../modules/settings/slp-backstage-format";
+import { ChoiceRow } from "../../modules/settings/SlpBackstageKit";
+import { AmbientProfilesPanel } from "./SlpAmbientProfilesPanel";
 
 /** Audience: crowd scale, tone, fan types, the reaction bank and simulation tuning. */
 export function SlpAudiencePanel(page: SlpBackstagePageProps) {

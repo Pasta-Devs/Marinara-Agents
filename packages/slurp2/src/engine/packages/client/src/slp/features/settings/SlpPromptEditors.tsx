@@ -1,8 +1,8 @@
 import {
   DEFAULT_SLURP_GENERATION_GUIDANCE,
   DEFAULT_SLURP_IMAGE_GENERATION_PROMPT,
-  PromptEditor,
-} from "../../../components/slurp/SlurpBackstageWorkflow";
+} from "../../modules/settings/slp-backstage-format";
+import { PromptEditor } from "../../modules/settings/SlpBackstageKit";
 
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 

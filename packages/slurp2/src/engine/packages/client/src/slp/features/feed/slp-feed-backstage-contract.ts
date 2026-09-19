@@ -1,10 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
-import {
-  SLURP_ACTIVITY_PRESETS,
-  slurpActivityPresetForSettings,
-} from "../../modules/creator/slp-activity-presets";
+import { SLURP_ACTIVITY_PRESETS, slurpActivityPresetForSettings } from "../../modules/creator/slp-activity-presets";
 import type { SlpBackstageSection } from "../../base/navigation/slp-backstage-target";
 import type { SlurpSettings } from "../settings/slp-settings-contract";
 import {

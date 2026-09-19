@@ -12,7 +12,8 @@ import { accentButton, focusRing, noteClass, quietButton, selectClass } from "./
 import { CreatorCollabsEditor, CreatorMetricsRow, CreatorMetricsTotals } from "./SlpCreatorMetrics";
 import type { SlpCreatorFilter, SlpCreatorTab } from "./slp-creators-backstage-contract";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
-import { errorMessage, CreatorMessagingGroup } from "../../../components/slurp/SlurpBackstageWorkflow";
+import { errorMessage } from "../../modules/settings/slp-backstage-format";
+import { CreatorMessagingGroup } from "../messages/slp-messages-contract";
 import { BackstagePageHeader, SettingAnchor } from "../../modules/settings/SlpSettingsKit";
 import { SlurpPostGuidanceField } from "../../../components/slurp/SlurpPostGuidanceField";
 import { SlurpCreatorProfileEditor } from "../../../components/slurp/SlurpCreatorProfileEditor";

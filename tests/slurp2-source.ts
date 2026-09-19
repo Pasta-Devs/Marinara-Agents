@@ -690,6 +690,15 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
     "packages/client/src/slp/modules/chrome/SlpPersonaSwitcher.tsx",
     "packages/client/src/slp/modules/chrome/SlpShell.tsx",
   ],
+  // Slice 10 split the shared Backstage kit: pure formatting and prop-driven controls into
+  // modules/settings/, and the three hook-driven panels into the features that own their settings.
+  "packages/client/src/components/slurp/SlurpBackstageWorkflow.tsx": [
+    "packages/client/src/slp/modules/settings/slp-backstage-format.ts",
+    "packages/client/src/slp/modules/settings/SlpBackstageKit.tsx",
+    "packages/client/src/slp/features/projects/SlpArcLibraryEditor.tsx",
+    "packages/client/src/slp/features/audience/SlpAmbientProfilesPanel.tsx",
+    "packages/client/src/slp/features/messages/SlpCreatorMessagingGroup.tsx",
+  ],
   "packages/server/src/services/slurp/slurp-post-guidance.storage.ts": [
     "packages/server/src/slp/data/settings/slp-post-guidance-storage.ts",
   ],

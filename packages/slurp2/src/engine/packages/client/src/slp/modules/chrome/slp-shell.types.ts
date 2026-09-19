@@ -2,7 +2,6 @@
 import type { ReactNode, RefObject } from "react";
 import type { NoodleAccount } from "@marinara-engine/shared";
 
-
 export type NoodleShellView =
   "home" | "noodler" | "search" | "profile" | "messages" | "notifications" | "studio" | "wallet" | "settings" | null;
 type NoodleShellMode = "noodle" | "noodler" | "slurp";

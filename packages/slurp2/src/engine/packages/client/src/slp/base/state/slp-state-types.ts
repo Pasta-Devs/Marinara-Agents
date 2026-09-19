@@ -35,3 +35,25 @@ export type NoodleRefreshResult = {
   imagePromptReviewItems: ImagePromptReviewItem[];
 };
 export type SlurpContentRating = "tame" | "suggestive" | "explicit";
+
+// The reserve/schedule shapes are read by the shared Backstage kit in modules/ as well as by Feed,
+// so they live here rather than behind a modules -> features import.
+export type SlurpScheduleSlot = {
+  id: string;
+  publishAt: string;
+  state: "scheduled" | "prepared";
+};
+export type SlurpReserveStatus = {
+  preparedCount: number;
+  preparedThrough: string | null;
+  textAttemptsUsed: number;
+  imageAttemptsUsed: number;
+  postsPerDay: number;
+  preparationNotBefore: string;
+  creators: Array<{
+    accountId: string;
+    nextPreparedAt: string | null;
+    preparedCount: number;
+    slots: SlurpScheduleSlot[];
+  }>;
+};

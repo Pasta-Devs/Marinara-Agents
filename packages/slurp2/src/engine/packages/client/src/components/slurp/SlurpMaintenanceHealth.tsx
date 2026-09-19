@@ -4,7 +4,7 @@ import type {
   SlurpAutopurgePreview,
   SlurpMaintenanceSummary,
 } from "../../slp/features/maintenance/slp-maintenance-hooks";
-import { formatBytes } from "./SlurpBackstageWorkflow";
+import { formatBytes } from "../../slp/modules/settings/slp-backstage-format";
 
 export function SlurpMaintenanceHealth({
   summary,
