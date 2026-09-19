@@ -30,27 +30,27 @@ import {
 } from "@marinara-engine/shared";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { useSlurpConnections } from "../../slp/base/state/slp-host-connections";
-import { useBulkCreateNoodlerStageProfiles } from "../../slp/features/creators/slp-creator-profile-hooks";
-import { useRefreshTargetedNoodlerCreatorsNow } from "../../slp/features/creators/slp-creator-refresh-hooks";
-import { useNoodlerEligibleAccounts } from "../../slp/features/creators/slp-creators-hooks";
+import { useSlurpConnections } from "../../base/state/slp-host-connections";
+import { useBulkCreateNoodlerStageProfiles } from "../creators/slp-creator-profile-hooks";
+import { useRefreshTargetedNoodlerCreatorsNow } from "../creators/slp-creator-refresh-hooks";
+import { useNoodlerEligibleAccounts } from "../creators/slp-creators-hooks";
 import {
   useEnqueueNoodlerFirstPosts,
   useNoodlerFirstPostStatus,
-} from "../../slp/features/onboarding/slp-first-post-hooks";
-import { useUpdateSlurpConnectionsForCreators } from "../../slp/features/media/slp-image-connection-hooks";
-import { useSlurpSettings, useUpdateSlurpSettings } from "../../slp/features/settings/slp-settings-hooks";
-import { cn, generateClientId } from "../../lib/utils";
-import { Modal } from "../ui/Modal";
-import { Avatar, getNoodleAccentStyle, NOODLE_PINK } from "../../slp/base/chrome/SlpChrome";
+} from "./slp-first-post-hooks";
+import { useUpdateSlurpConnectionsForCreators } from "../media/slp-image-connection-hooks";
+import { useSlurpSettings, useUpdateSlurpSettings } from "../settings/slp-settings-hooks";
+import { cn, generateClientId } from "../../../lib/utils";
+import { Modal } from "../../../components/ui/Modal";
+import { Avatar, getNoodleAccentStyle, NOODLE_PINK } from "../../base/chrome/SlpChrome";
 import {
   SLURP_ACTIVITY_PRESETS,
   SLURP_DEFAULT_ACTIVITY_PRESET,
   slurpActivityPresetForSettings,
   slurpActivityPresetPatch,
   type SlurpActivityPreset,
-} from "../../slp/modules/creator/slp-activity-presets";
-import { LockedSlurpPostCard } from "./SlurpCreatorPostCard";
+} from "../../modules/creator/slp-activity-presets";
+import { LockedSlurpPostCard } from "../../modules/post/SlpLockedPostCard";
 
 type Step = 1 | 2 | 3 | 4 | 5;
 /** The teaching screens that run ahead of the numbered steps on first run. */

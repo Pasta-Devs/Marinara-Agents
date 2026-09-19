@@ -2,16 +2,16 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { NoodleIdentityDisclosure, NoodlerManagedStageProfile } from "@marinara-engine/shared";
-import type { SlurpStageProfileInput } from "../../slp/base/state/slp-state-types";
+import type { SlurpStageProfileInput } from "../../base/state/slp-state-types";
 import {
   useRemoveNoodlerAvatar,
   useUpdateNoodlerStageProfile,
   useUploadNoodlerAvatar,
   useUseNoodlerSourceAvatar,
-} from "../../slp/features/creators/slp-creator-profile-hooks";
-import { showConfirmDialog } from "../../lib/app-dialogs";
-import { confirmSlurpAvatarReview, StageProfileForm } from "./SlurpStageProfileForm";
-import { errorMessage } from "../../slp/modules/settings/slp-backstage-format";
+} from "./slp-creator-profile-hooks";
+import { showConfirmDialog } from "../../../lib/app-dialogs";
+import { confirmSlurpAvatarReview, StageProfileForm } from "./SlpStageProfileForm";
+import { errorMessage } from "../../modules/settings/slp-backstage-format";
 
 /**
  * The Creator's own profile fields, inside Backstage.

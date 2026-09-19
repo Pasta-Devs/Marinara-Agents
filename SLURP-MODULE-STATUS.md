@@ -20,29 +20,83 @@ Allowed slice states: `not started`, `in progress`, `blocked`, `ready for review
 ## Current state
 
 - Last updated: 2026-09-19
-- Updated by: Slice 10 implementation agent
-- Overall state: Slice 10 ready for review, with a recorded ownership scope gap
-- Active slice: 10 (final architecture and package proof), issue #939, branch
-  `slurp2-slice10-final-architecture` from `origin/modular-simping` `14d27b4d` (the Slice 9 merge
+- Updated by: Slice 11 implementation agent
+- Overall state: Slice 11 blocked
+- Active slice: 11 (ownership completion and typecheck proof), issue #941, branch
+  `slurp2-slice11-ownership-completion` from `origin/modular-simping` `09066008` (the merged Slice 10
   commit).
-- Slice 9 merge gate: **satisfied.** PR #937 is `MERGED` into `modular-simping` at `14d27b4d`.
-  Its generated `0.0.32` payload, `manifest.json` and `artifacts/slurp2-0.0.32.zip` are present on
-  the branch. The Slice 9 Backstage regressions pass on this branch (recorded under
-  *Slice 10 merge-gate evidence*).
+- Draft PR: not opened yet; it will target `modular-simping` and remain draft.
+- Slice 10 merge gate: **satisfied.** PR #940 is `MERGED` into `modular-simping` at `09066008`.
+- Slice 11 base: `09066008ec07ef900663f2a24f47b295ba9206cf`; `git status --short` was empty before
+  implementation.
 - Staging integration: `git rev-list --count origin/modular-simping..origin/staging` = **0**.
   `modular-simping` already contains every `origin/staging` commit, so no merge was needed and none
   was made. No commit was pushed directly to `modular-simping`.
-- Pull request: draft PR #940 against `modular-simping`, assigned to `Gunterlie`. Issue #939 is
-  assigned to `Gunterlie`. The PR stays draft; the implementation agent does not merge it.
-- Package version: `0.0.32` before this slice; this slice ships `0.0.33` (integration-only;
+- Pull request: Slice 10 PR #940 is merged. Slice 11 has no PR yet. Issue #941 is open.
+- Package version: `0.0.33` before this slice; this slice is expected to ship `0.0.34` (integration-only;
   `staging` stays at `0.0.22` until the final `0.1.0` release PR).
 - Node: `/home/dev/.nvm/versions/node/v24.18.0/bin`; `node -v` = `v24.18.0`, `npm -v` = `12.0.2`
   (verified this slice).
 - Engine source: `/home/dev/.paseo/worktrees/1432mxa9/shy-lionfish`, branch
   `welcome-to-the-agentshop`, commit `fdb67d47bfb909f013346afdb3d2c23d72d7b399`, tracked files clean
   (`git status --porcelain --untracked-files=no` empty); 4 ahead / 80 behind Engine `origin/staging`
-  after a fresh fetch. Used unchanged, as in Slices 7, 8 and 9, so build deltas stay comparable
-  across slices. No substitute worktree was needed and nothing in it was reset, rebased or cleaned.
+  after a fresh fetch. It will be used unchanged, as in Slices 7, 8, 9 and 10, so build deltas stay
+  comparable across slices. No substitute worktree was needed and nothing in it was reset, rebased
+  or cleaned.
+
+### Slice 11 verified starting shape
+
+- The seven remaining files under `packages/client/src/components/slurp/` are exactly:
+  `SlurpHome.tsx` (8,143), `SlurpMessages.tsx` (5,159), `SlurpPostCard.tsx` (2,512),
+  `SlurpCreatorPostCard.tsx` (1,677), `SlurpOnboardingPanel.tsx` (1,608),
+  `SlurpStageProfileForm.tsx` (773), and `SlurpCreatorProfileEditor.tsx` (110): **19,982 lines**.
+- The five files above 800 lines are single React components. The two files below the ceiling import
+  the unsplit components. `SlurpCreatorPostCard.tsx` was previously attempted and reverted in Slice
+  10; its locked-card extraction was clean, but the remainder was 1,159 lines with two shared-state
+  render branches.
+- `packages/client/src/slp/features/projects/SlpArcLibraryEditor.tsx` is **800 physical lines** on
+  this checkout. Its two-line `ponytail:` note identifies the draft-editor branch as the next split.
+- `slurp2OwnedSourcePaths` currently has seven entries, including `packages/client/src/components/slurp`.
+  The target list is exactly six entries: the three `slp` roots, `packages/client/src/lib/api-client.ts`,
+  `packages/server/src/services/garnish-ads`, and `packages/server/src/db/schema/slurp.ts`.
+- The Engine worktree record above is current. Node is `/home/dev/.nvm/versions/node/v24.18.0/bin/node`
+  at `v24.18.0`; npm is `12.0.2`.
+
+### Slice 11 implementation checkpoint
+
+- Issue #941 is open. No Slice 11 commit or draft PR exists because the branch has no committed
+  implementation yet.
+- The first move batch is present in the working tree: the post cards are under
+  `client/src/slp/modules/post/`, onboarding is under `client/src/slp/features/onboarding/`, and the
+  two creator profile files are under `client/src/slp/features/creators/`. Their imports typecheck.
+- `SlurpHome.tsx` and `SlurpMessages.tsx` were moved to `client/src/slp/app/SlpHomeHost.tsx` and
+  `client/src/slp/features/messages/SlpMessages.tsx`, but they remain oversized monoliths. No
+  `app/screens/` or `features/messages/commissions/` extraction was produced.
+- The current architecture regression therefore fails on the two oversized monoliths, the moved
+  post-card sizes and module-to-feature imports, onboarding cross-feature imports, and the creator
+  form's cross-feature imports. The generic Engine hook exception is now explicit and remains
+  unowned as required.
+- `node scripts/typecheck-packages.mjs slurp2` reports five existing server TS2305 diagnostics:
+  `SlurpBootstrap`, two `SlurpCommission` imports, and two `SlurpMessage` imports. It reports no
+  client move diagnostics. `tests/slurp2-typecheck-modules.regression.ts` passes, including the
+  missing-export fixture. This confirms the new gate behavior but does not make the package clean.
+- The Arc editor split, architecture pass, source-map proof, version bump, generated rebuild, full
+  regressions, lifecycle proof, and draft PR remain pending. Slice 11 must not be marked ready for
+  review until the UI extraction is completed and the five baseline TS2305 diagnostics are either
+  fixed as pre-existing package defects or recorded with an approved gate treatment.
+
+### Slice 11 continued checkpoint
+
+- Direct implementation continued without subagents after the blocked checkpoint.
+- Additional completed moves/splits now include message commissions, message insight panels, Arc draft
+  editing, post-card helper/types/hooks fragments, and several Home screen fragments.
+- The package typecheck reports only the five known server TS2305 baseline diagnostics. It reports no
+  current client syntax or unresolved-module errors.
+- Architecture still fails. Remaining verified failures include oversized `SlpHomeHost.tsx`,
+  `SlpScreenHub.tsx`, `SlpScreenProfile.tsx`, `SlpMessages.tsx`, `SlpOnboardingPanel.tsx`,
+  `SlpCreatorPostCard.tsx`, and `SlpPostCard.tsx`, plus unresolved cross-feature boundary imports.
+- No generated outputs, version bump, commit, draft PR, or release validation has been performed.
+- Slice 11 remains blocked and is not ready for review.
 
 ### Slice 10 verified starting shape and approved scope change
 

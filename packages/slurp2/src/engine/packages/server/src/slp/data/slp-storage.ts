@@ -22,6 +22,9 @@ import { createProjectsStorage1 } from "./projects/slp-projects-storage-1.js";
 import { createProjectsStorage2 } from "./projects/slp-projects-storage-2.js";
 import { createEconomyTailStorage1 } from "./economy/slp-economy-tail-storage.js";
 import { createSlurpMessagesStorageFacet } from "./messages/slp-messages-storage-facet.js";
+export type { SlurpMessage, SlurpCommission } from "./messages/slp-messages-storage-types.js";
+export type { SlurpBootstrap } from "../modules/settings/slp-settings.js";
+
 export function createSlurpStorage(db: DB) {
   const context = createSlurpStorageContext(db);
   return Object.assign(

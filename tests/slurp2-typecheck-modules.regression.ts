@@ -3,7 +3,8 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-// The package typecheck must fail on a dangling relative import (TS2307), an undefined name, and a
+// The package typecheck must fail on a dangling relative import (TS2307), an undefined name, a
+// missing export (TS2305), and a
 // file that does not parse at all (TS1xxx), while still ignoring Node globals, Engine host modules
 // and bare dependency specifiers.
 const repoRoot = join(import.meta.dirname, "..");
@@ -45,6 +46,18 @@ try {
   assert.doesNotMatch(output, /db\/connection|bare-dependency|setImmediate/u);
 
   rmSync(join(serverRoot, "broken.ts"));
+
+  writeFileSync(join(serverRoot, "exports.ts"), "export const present = 1;\n");
+  writeFileSync(
+    join(serverRoot, "missing-export.ts"),
+    ['import { absent } from "./exports.js";', "export const value = absent;", ""].join("\n"),
+  );
+  const missingExport = check();
+  const missingExportOutput = `${missingExport.stdout}${missingExport.stderr}`;
+  assert.equal(missingExport.status, 1, `a missing export must fail the check:\n${missingExportOutput}`);
+  assert.match(missingExportOutput, /missing-export\.ts\(\d+,\d+\): error TS2305: /u);
+  rmSync(join(serverRoot, "exports.ts"));
+  rmSync(join(serverRoot, "missing-export.ts"));
 
   // A file whose only defect is a syntax error. TypeScript emits no semantic diagnostics for it, so
   // before TS1xxx was reported this fixture passed the gate while `missingName` went unmentioned.

@@ -12,9 +12,16 @@ import { fileURLToPath } from "node:url";
  */
 export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   "packages/client/src/components/slurp/SlurpHome.tsx": [
-    "packages/client/src/components/slurp/SlurpHome.tsx",
-    "packages/client/src/slp/app/SlpApp.tsx",
     "packages/client/src/slp/app/SlpRouter.tsx",
+    "packages/client/src/slp/app/SlpApp.tsx",
+    "packages/client/src/slp/app/SlpHomeHost.tsx",
+    "packages/client/src/slp/app/screens/SlpHomeHelpers.tsx",
+    "packages/client/src/slp/app/screens/SlpScreenCreateProfile.tsx",
+    "packages/client/src/slp/app/screens/SlpScreenHub.tsx",
+    "packages/client/src/slp/app/screens/SlpScreenMessages.tsx",
+    "packages/client/src/slp/app/screens/SlpScreenProfile.tsx",
+    "packages/client/src/slp/app/screens/SlpScreenStudio.tsx",
+    "packages/client/src/slp/app/screens/SlpScreenWallet.tsx",
     "packages/client/src/slp/modules/story/SlpStoryTile.tsx",
   ],
   // Slice 9 split Backstage into a thin host, an explicit panel registry and feature-owned panels.
@@ -85,7 +92,34 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
     "packages/client/src/slp/base/navigation/slp-backstage-target.ts",
     "packages/client/src/slp/features/backstage/slp-backstage-placement.ts",
   ],
-  "packages/client/src/components/slurp/SlurpMessages.tsx": ["packages/client/src/components/slurp/SlurpMessages.tsx"],
+  "packages/client/src/components/slurp/SlurpMessages.tsx": [
+    "packages/client/src/slp/features/messages/SlpMessages.tsx",
+    "packages/client/src/slp/features/messages/commissions/SlpCommissions.tsx",
+    "packages/client/src/slp/features/messages/SlpMessageInsights.tsx",
+    "packages/client/src/slp/features/messages/SlpMessageInsightParts.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpPostCard.tsx": [
+    "packages/client/src/slp/modules/post/SlpPostCard.tsx",
+    "packages/client/src/slp/modules/post/SlpPostHelpers.tsx",
+    "packages/client/src/slp/modules/post/SlpPostTypes.tsx",
+    "packages/client/src/slp/modules/post/SlpPostHooks.tsx",
+    "packages/client/src/slp/modules/post/SlpPostComposerTools.tsx",
+    "packages/client/src/slp/modules/post/SlpMarkdownRenderer.tsx",
+    "packages/client/src/slp/modules/post/SlpPollCard.tsx",
+    "packages/client/src/slp/modules/post/SlpPostImageEditControls.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpCreatorPostCard.tsx": [
+    "packages/client/src/slp/modules/post/SlpCreatorPostCard.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpOnboardingPanel.tsx": [
+    "packages/client/src/slp/features/onboarding/SlpOnboardingPanel.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpStageProfileForm.tsx": [
+    "packages/client/src/slp/features/creators/SlpStageProfileForm.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpCreatorProfileEditor.tsx": [
+    "packages/client/src/slp/features/creators/SlpCreatorProfileEditor.tsx",
+  ],
   "packages/client/src/components/slurp/SlurpCoin.tsx": ["packages/client/src/slp/modules/coin/SlpCoin.tsx"],
   "packages/client/src/components/slurp/SlurpPollComposer.tsx": [
     "packages/client/src/slp/modules/poll/SlpPollComposer.tsx",

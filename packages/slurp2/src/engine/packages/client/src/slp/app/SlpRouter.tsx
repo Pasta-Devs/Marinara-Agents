@@ -1,5 +1,5 @@
 import type { SlurpNavigationState } from "../base/navigation/slp-navigation.types";
-import { SlurpHome } from "../../components/slurp/SlurpHome";
+import { SlurpHome } from "./SlpHomeHost";
 
 export function SlpRouter({
   navigation,

@@ -164,10 +164,9 @@ const slurp2OwnedSourcePaths = [
   "packages/client/src/slp",
   "packages/server/src/slp",
   "packages/shared/src/slp",
-  "packages/client/src/components/slurp",
-  "packages/server/src/db/schema/slurp.ts",
-  "packages/server/src/services/garnish-ads",
   "packages/client/src/lib/api-client.ts",
+  "packages/server/src/services/garnish-ads",
+  "packages/server/src/db/schema/slurp.ts",
 ];
 // Release builds must bundle the current source; runtime reuse is for explicit non-release verification builds.
 const releaseBuild = process.env.MARINARA_RELEASE_BUILD !== "0";
