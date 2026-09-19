@@ -2,9 +2,9 @@ import { ChevronRight, Loader2, RefreshCw, UsersRound } from "lucide-react";
 import { BackstagePageHeader, BackstageWizard } from "../../modules/settings/SlpSettingsKit";
 
 import { Field, NumberSetting, SettingsGroup, Toggle } from "../../modules/settings/SlpSettingsControls";
-import { SlurpSimulationSettings } from "../../../components/slurp/SlurpSimulationSettings";
-import { SlurpFanTypesSettings } from "../../../components/slurp/SlurpFanTypesSettings";
-import { SlurpAudienceConfigSettings } from "../../../components/slurp/SlurpAudienceConfigSettings";
+import { SlurpSimulationSettings } from "./SlpSimulationPanel";
+import { SlurpFanTypesSettings } from "./SlpFanTypesPanel";
+import { SlurpAudienceConfigSettings } from "./SlpAudienceConfigPanel";
 
 import { toast } from "sonner";
 import { SettingAnchor } from "../../modules/settings/SlpSettingsKit";

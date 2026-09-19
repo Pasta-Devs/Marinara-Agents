@@ -11,7 +11,7 @@ import {
   slurpPostLikeCount,
   slurpPostReplyCount,
   slurpPostUnlockCount,
-} from "../../modules/audience/slp-reach.js";
+} from "../../../../../shared/src/slp/slp-reach.js";
 import { NOODLER_FAN_IDENTITY_PREFIX } from "../../modules/audience/slp-fan-identity-provider.js";
 import { NOODLER_MEDIA_URL_PREFIX, noodlerPostMediaUrlForPersona } from "../../base/media/slp-media.js";
 import type { FastifyInstance } from "fastify";

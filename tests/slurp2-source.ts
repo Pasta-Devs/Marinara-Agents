@@ -501,15 +501,15 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
     "packages/server/src/slp/modules/audience/slp-fan-identity-provider.ts",
   ],
   "packages/server/src/services/slurp/slurp-audience-characters.ts": [
-    "packages/server/src/slp/modules/audience/slp-audience-characters.ts",
+    "packages/shared/src/slp/slp-audience-characters.ts",
   ],
   "packages/server/src/services/slurp/slurp-audience-subscription.ts": [
-    "packages/server/src/slp/modules/audience/slp-audience-subscription.ts",
+    "packages/shared/src/slp/slp-audience-subscription.ts",
   ],
   "packages/server/src/services/slurp/slurp-audience-reply.operation.ts": [
     "packages/server/src/slp/features/audience/slp-audience-reply-operation.ts",
   ],
-  "packages/server/src/services/slurp/slurp-reach.ts": ["packages/server/src/slp/modules/audience/slp-reach.ts"],
+  "packages/server/src/services/slurp/slurp-reach.ts": ["packages/shared/src/slp/slp-reach.ts"],
   "packages/server/src/services/slurp/slurp-scale.ts": ["packages/server/src/slp/modules/audience/slp-scale.ts"],
   "packages/server/src/services/slurp/slurp-ambient-profiles.ts": [
     "packages/server/src/slp/data/audience/slp-ambient-profiles.ts",
@@ -517,16 +517,14 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   "packages/server/src/services/slurp/slurp-ambient-profile-generation.service.ts": [
     "packages/server/src/slp/features/audience/slp-ambient-profile-generation-service.ts",
   ],
-  "packages/server/src/services/slurp/slurp-world.ts": ["packages/server/src/slp/modules/world/slp-world.ts"],
+  "packages/server/src/services/slurp/slurp-world.ts": ["packages/shared/src/slp/slp-world.ts"],
   "packages/server/src/services/slurp/slurp-world.operation.ts": [
     "packages/server/src/slp/features/world/slp-world-operation.ts",
     "packages/server/src/slp/features/world/slp-world-actions.ts",
     "packages/server/src/slp/features/world/slp-world-tick-state.ts",
   ],
   "packages/server/src/services/slurp/slurp-world-copy.ts": ["packages/server/src/slp/modules/world/slp-world-copy.ts"],
-  "packages/server/src/services/slurp/slurp-world-pulse.ts": [
-    "packages/server/src/slp/modules/world/slp-world-pulse.ts",
-  ],
+  "packages/server/src/services/slurp/slurp-world-pulse.ts": ["packages/shared/src/slp/slp-world-pulse.ts"],
   "packages/server/src/services/slurp/slurp-world-scheduler.service.ts": [
     "packages/server/src/slp/features/world/slp-world-scheduler-service.ts",
   ],
@@ -647,6 +645,42 @@ export const SLURP2_SOURCE_MODULES: Record<string, readonly string[]> = {
   ],
   "packages/client/src/components/slurp/slurp-creator-status.ts": [
     "packages/client/src/slp/modules/creator/slp-creator-status.ts",
+  ],
+  "packages/client/src/components/slurp/SlurpTagsSettings.tsx": [
+    "packages/client/src/slp/features/discovery/SlpTagsPanel.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpDiscoverToolbar.tsx": [
+    "packages/client/src/slp/features/discovery/SlpDiscoverToolbar.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpDiscoveryProfileEditor.tsx": [
+    "packages/client/src/slp/features/discovery/SlpDiscoveryProfileEditor.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpFanTypesSettings.tsx": [
+    "packages/client/src/slp/features/audience/SlpFanTypesPanel.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpAudienceConfigSettings.tsx": [
+    "packages/client/src/slp/features/audience/SlpAudienceConfigPanel.tsx",
+  ],
+  "packages/client/src/components/slurp/SlurpSimulationSettings.tsx": [
+    "packages/client/src/slp/features/audience/SlpSimulationPanel.tsx",
+  ],
+  "packages/client/src/components/slurp/slurp-simulation-estimate.ts": [
+    "packages/client/src/slp/modules/audience/slp-simulation-estimate.ts",
+  ],
+  "packages/client/src/components/slurp/SlurpPlatformEventsSettings.tsx": [
+    "packages/client/src/slp/features/world/SlpPlatformEventsPanel.tsx",
+  ],
+  "packages/client/src/components/slurp/slurp-activity-presets.ts": [
+    "packages/client/src/slp/modules/creator/slp-activity-presets.ts",
+  ],
+  "packages/client/src/components/slurp/slurp-settings-defaults.ts": [
+    "packages/client/src/slp/features/settings/slp-settings-defaults.ts",
+  ],
+  "packages/client/src/components/slurp/slurp-prompt-presets.ts": [
+    "packages/client/src/slp/features/settings/slp-prompt-presets.ts",
+  ],
+  "packages/client/src/components/slurp/SlurpPromptBlockBuilder.tsx": [
+    "packages/client/src/slp/features/settings/SlpPromptBlockBuilder.tsx",
   ],
   "packages/server/src/services/slurp/slurp-post-guidance.storage.ts": [
     "packages/server/src/slp/data/settings/slp-post-guidance-storage.ts",

@@ -1,14 +1,14 @@
 import { Check, Coins, LayoutGrid, List, Tags, UsersRound, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import { useSlurpSettings } from "../../slp/features/settings/slp-settings-hooks";
+import { useSlurpSettings } from "../settings/slp-settings-contract";
 import {
   groupSlurpDiscoveryTags,
   type SlurpDiscoverLayout,
   type SlurpDiscoverSort,
-} from "../../slp/features/discovery/slp-discovery";
-import type { SlurpDiscoveryGender } from "../../slp/base/state/slp-state-types";
-import { cn } from "../../lib/utils";
+} from "./slp-discovery";
+import type { SlurpDiscoveryGender } from "../../base/state/slp-state-types";
+import { cn } from "../../../lib/utils";
 
 const triggerClass =
   "inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--noodle-divider)] bg-[var(--slurp-surface)] px-3 text-xs font-bold transition-colors hover:border-[var(--noodle-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]";

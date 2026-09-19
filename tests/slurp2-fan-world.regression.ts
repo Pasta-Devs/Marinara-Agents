@@ -5,12 +5,12 @@ import {
   slurpFanMemoryForPrompt,
   SLURP_FAN_MEMORY_MAX,
 } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-fan-types.js";
-import { slurpAudienceWeeklySpend } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-audience-subscription.js";
+import { slurpAudienceWeeklySpend } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-audience-subscription.js";
 import {
   planSlurpWorldTick,
   slurpAudienceTipAmount,
   type SlurpWorldActorWeights,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world.js";
 import { SLURP_REALISTIC_TUNING } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-tuning.js";
 import { slurp2Source } from "./slurp2-source";
 

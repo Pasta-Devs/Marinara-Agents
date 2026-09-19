@@ -9,9 +9,9 @@ import {
   SLURP_DEFAULT_PLATFORM_SCALE,
   SLURP_DEFAULT_WORLD_ACTIVITY,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-scale.js";
-import { slurpCreatorReach } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-reach.js";
-import { planSlurpWorldTick } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world.js";
-import { planSlurpWorldPulse } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world-pulse.js";
+import { slurpCreatorReach } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-reach.js";
+import { planSlurpWorldTick } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world.js";
+import { planSlurpWorldPulse } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world-pulse.js";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
 import { slurp2Source } from "./slurp2-source";
 

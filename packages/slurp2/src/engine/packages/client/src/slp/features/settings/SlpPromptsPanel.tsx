@@ -3,7 +3,7 @@ import { BackstagePageHeader, SettingAnchor } from "../../modules/settings/SlpSe
 import { useSlurpPostGuidance } from "./slp-post-guidance-contract";
 import { SlurpPostGuidanceField } from "../../../components/slurp/SlurpPostGuidanceField";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
-import { SlurpPromptBlockBuilder } from "../../../components/slurp/SlurpPromptBlockBuilder";
+import { SlurpPromptBlockBuilder } from "./SlpPromptBlockBuilder";
 import {
   SLURP_GUIDANCE_PRESETS,
   SLURP_GUIDANCE_LEVELS,

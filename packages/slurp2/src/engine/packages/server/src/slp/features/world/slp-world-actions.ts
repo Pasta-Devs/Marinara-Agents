@@ -18,8 +18,8 @@ import {
 } from "../../modules/world/slp-world-copy.js";
 import { slurpReactionBodiesForType, type SlurpReactionBanks } from "../../modules/world/slp-reaction-bank.js";
 import { enqueueSlurpPendingText } from "./slp-pending-text-service.js";
-import { type SlurpWorldAction } from "../../modules/world/slp-world.js";
-import { slurpPulseTieAdvance, type SlurpPulseAction } from "../../modules/world/slp-world-pulse.js";
+import { type SlurpWorldAction } from "../../../../../shared/src/slp/slp-world.js";
+import { slurpPulseTieAdvance, type SlurpPulseAction } from "../../../../../shared/src/slp/slp-world-pulse.js";
 
 /** The local day, so a per-pair roll is made once a day rather than on every page load. */
 export function localDayKey(at: Date): string {

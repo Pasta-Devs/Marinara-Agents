@@ -6,15 +6,15 @@ import {
   slurpAudiencePaidThrough,
   slurpAudienceRollKey,
   slurpAudienceSubscriptionDecision,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-audience-subscription.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-audience-subscription.js";
 import {
   planSlurpWorldPulse,
   slurpPulseTieAdvance,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world-pulse.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world-pulse.js";
 import {
   slurpQuestionPostIds,
   slurpWorldElapsedDays,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world.js";
 import {
   SLURP_REALISTIC_TUNING,
   SLURP_TUNING_PULSE_PER_TICK_CEILING,

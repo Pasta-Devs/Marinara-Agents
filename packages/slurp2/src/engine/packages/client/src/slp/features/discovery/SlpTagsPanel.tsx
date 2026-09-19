@@ -5,15 +5,15 @@ import { toast } from "sonner";
 import {
   useReplaceSlurpDiscoveryTag,
   useSlurpDiscoveryTagUsage,
-} from "../../slp/features/discovery/slp-discovery-tag-hooks";
-import { showConfirmDialog } from "../../lib/app-dialogs";
+} from "./slp-discovery-tag-hooks";
+import { showConfirmDialog } from "../../../lib/app-dialogs";
 import {
   groupSlurpDiscoveryTags,
   normalizeSlurpDiscoveryTag,
   SLURP_DISCOVERY_TAG_MAX_LENGTH,
-} from "../../slp/features/discovery/slp-discovery";
-import { cn } from "../../lib/utils";
-import { SectionTitle } from "../../slp/modules/settings/SlpSettingsControls";
+} from "./slp-discovery";
+import { cn } from "../../../lib/utils";
+import { SectionTitle } from "../../modules/settings/SlpSettingsControls";
 
 type DiscoveryTag = { tag: string; group: string };
 

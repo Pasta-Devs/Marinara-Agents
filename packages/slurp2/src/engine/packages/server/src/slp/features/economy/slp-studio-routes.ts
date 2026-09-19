@@ -8,7 +8,7 @@ import {
   slurpPostLikeCount,
   slurpPostReplyCount,
   slurpPostUnlockCount,
-} from "../../modules/audience/slp-reach.js";
+} from "../../../../../shared/src/slp/slp-reach.js";
 import { slurpFollowerMilestone, slurpMilestonesCrossed } from "../../modules/world/slp-milestones.js";
 import { slurpGoalProgress } from "../../modules/projects/slp-goal.js";
 import { slurpPayoutAllowance } from "../../modules/economy/slp-earnings.js";

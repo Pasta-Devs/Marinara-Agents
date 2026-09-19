@@ -222,7 +222,7 @@ import type { SlurpNavigationState } from "../../slp/base/navigation/slp-navigat
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { SlurpInlineAd, SlurpInlineAdTile } from "./SlurpInlineAd";
 import { SlurpCreatorProfileCard } from "./SlurpCreatorProfileCard";
-import { SlurpDiscoveryProfileEditor } from "./SlurpDiscoveryProfileEditor";
+import { SlurpDiscoveryProfileEditor } from "../../slp/features/discovery/SlpDiscoveryProfileEditor";
 import {
   appendAudienceStance,
   confirmSlurpAvatarReview,
@@ -232,7 +232,7 @@ import {
   StageProfileForm,
   WizardFooter,
 } from "./SlurpStageProfileForm";
-import { SlurpDiscoverToolbar } from "./SlurpDiscoverToolbar";
+import { SlurpDiscoverToolbar } from "../../slp/features/discovery/SlpDiscoverToolbar";
 import {
   filterAndSortSlurpCreators,
   isSlurpDiscoveryProfileIncomplete,

@@ -25,7 +25,7 @@ import {
   SLURP_REALISTIC_TUNING,
   SLURP_TUNING_ACTIONS_PER_TICK_CEILING,
   type SlurpSimulationTuning,
-} from "../../../../../shared/src/slp/slp-tuning.js";
+} from "./slp-tuning.js";
 
 export type SlurpWorldAction =
   /** Somebody asks the Creator to make something. */

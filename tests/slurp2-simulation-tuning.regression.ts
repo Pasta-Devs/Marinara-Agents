@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
 
-import { slurpCreatorReach } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-reach.js";
+import { slurpCreatorReach } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-reach.js";
 import {
   planSlurpWorldPulse,
   slurpPulseBudget,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world-pulse.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world-pulse.js";
 import {
   planSlurpWorldTick,
   slurpCommissionChancePerDay,
   slurpMessageChancePerDay,
   slurpQuestionChancePerDay,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world.js";
 import {
   SLURP_REALISTIC_TUNING,
   SLURP_TUNING_ACTIONS_PER_TICK_CEILING,

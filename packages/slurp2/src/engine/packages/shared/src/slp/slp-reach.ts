@@ -27,7 +27,7 @@
  * list. See `slurp-wallet.ts` for the numbers that must stay exact.
  */
 
-import { SLURP_REALISTIC_TUNING, type SlurpSimulationTuning } from "../../../../../shared/src/slp/slp-tuning.js";
+import { SLURP_REALISTIC_TUNING, type SlurpSimulationTuning } from "./slp-tuning.js";
 
 /*
  * Creator reach numbers live in Simulation Tuning (`reach`): `floor` is the smallest audience a

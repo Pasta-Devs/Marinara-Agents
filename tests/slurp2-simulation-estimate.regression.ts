@@ -6,8 +6,8 @@ import {
   SLURP_ESTIMATE_SAMPLE,
 } from "../packages/slurp2/src/engine/packages/client/src/components/slurp/slurp-simulation-estimate.js";
 import { slurpTuningForPreset } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-tuning.js";
-import * as pulseRules from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world-pulse.js";
-import * as worldRules from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world.js";
+import * as pulseRules from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world-pulse.js";
+import * as worldRules from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world.js";
 import { slurp2BackstageSource } from "./slurp2-backstage-source";
 import { slurp2Source } from "./slurp2-source";
 

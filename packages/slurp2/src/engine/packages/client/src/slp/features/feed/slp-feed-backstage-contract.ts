@@ -4,7 +4,7 @@ import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
 import {
   SLURP_ACTIVITY_PRESETS,
   slurpActivityPresetForSettings,
-} from "../../../components/slurp/slurp-activity-presets";
+} from "../../modules/creator/slp-activity-presets";
 import type { SlpBackstageSection } from "../../base/navigation/slp-backstage-target";
 import type { SlurpSettings } from "../settings/slp-settings-contract";
 import {

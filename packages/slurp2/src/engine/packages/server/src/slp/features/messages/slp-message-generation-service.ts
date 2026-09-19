@@ -73,7 +73,7 @@ import {
 import { prepareSlurpPostImageContexts, slurpImageCaptioning } from "../../base/media/slp-post-image-context.js";
 import { createSlurpMessagesStorage, type SlurpMessage } from "../../data/slp-storage.js";
 import type { SlurpDmPolicy } from "../../modules/messages/slp-messaging.js";
-import { isSlurpCharacterFanAccount } from "../../modules/audience/slp-audience-characters.js";
+import { isSlurpCharacterFanAccount } from "../../../../../shared/src/slp/slp-audience-characters.js";
 import { resolveNoodlerCharacterCanon, resolveSlurpCharacterFanVoice } from "../../data/creators/slp-source-resolve.js";
 import {
   claimSlurpModelBudget,

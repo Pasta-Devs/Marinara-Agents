@@ -2,22 +2,22 @@ import { Download, RefreshCw, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { slurpFanTypesSchema, type SlurpFanType } from "../../../../shared/src/slp/slp-fan-types.js";
+import { slurpFanTypesSchema, type SlurpFanType } from "../../../../../shared/src/slp/slp-fan-types.js";
 import {
   SLURP_MODEL_JOB_KINDS,
   slurpModelBudgetSchema,
   type SlurpModelBudget,
   type SlurpModelBudgetLedger,
-} from "../../../../shared/src/slp/slp-model-budget.js";
-import { slurpSimulationTuningSchema, type SlurpSimulationTuning } from "../../../../shared/src/slp/slp-tuning.js";
-import { api } from "../../lib/api-client";
+} from "../../../../../shared/src/slp/slp-model-budget.js";
+import { slurpSimulationTuningSchema, type SlurpSimulationTuning } from "../../../../../shared/src/slp/slp-tuning.js";
+import { api } from "../../../lib/api-client";
 import {
   Field,
   NumberSetting,
   SectionTitle,
   SettingsGroup,
   Toggle,
-} from "../../slp/modules/settings/SlpSettingsControls";
+} from "../../modules/settings/SlpSettingsControls";
 
 type Connection = { id: string; name?: string; model?: string; provider?: string };
 type PortableAudienceConfig = {

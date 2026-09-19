@@ -15,7 +15,7 @@ import {
   importSlurpPromptPresets,
   mergeSlurpPromptPreset,
   SLURP_PROMPT_PRESET_NAME_LIMIT,
-} from "../../../components/slurp/slurp-prompt-presets";
+} from "./slp-prompt-presets";
 import type { SlurpSettings } from "./slp-settings-contract";
 
 /**

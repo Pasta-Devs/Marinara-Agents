@@ -29,7 +29,7 @@ import {
   SLURP_REALISTIC_TUNING,
   SLURP_TUNING_PULSE_PER_TICK_CEILING,
   type SlurpSimulationTuning,
-} from "../../../../../shared/src/slp/slp-tuning.js";
+} from "./slp-tuning.js";
 
 type PulseTuning = SlurpSimulationTuning["pulse"];
 

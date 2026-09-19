@@ -7,7 +7,7 @@ import {
   slurpPostLikeCount,
   slurpPostReplyCount,
   slurpPostUnlockCount,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-reach.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-reach.js";
 import { slurp2Source } from "./slurp2-source";
 
 const born = "2026-01-01T00:00:00.000Z";

@@ -12,16 +12,16 @@
 import {
   slurpAudiencePaidThrough,
   slurpAudienceSubscriptionDecision,
-} from "../../../../server/src/slp/modules/audience/slp-audience-subscription.js";
-import { generateSlurpPopulationMember } from "../../../../shared/src/slp/slp-population.js";
-import { slurpCreatorReach } from "../../../../server/src/slp/modules/audience/slp-reach.js";
+} from "../../../../../shared/src/slp/slp-audience-subscription.js";
+import { generateSlurpPopulationMember } from "../../../../../shared/src/slp/slp-population.js";
+import { slurpCreatorReach } from "../../../../../shared/src/slp/slp-reach.js";
 import {
   slurpRhythmMultiplier,
   slurpWorldTimerDue,
   type SlurpSimulationTuning,
-} from "../../../../shared/src/slp/slp-tuning.js";
-import { planSlurpWorldPulse } from "../../../../server/src/slp/modules/world/slp-world-pulse.js";
-import { planSlurpWorldTick } from "../../../../server/src/slp/modules/world/slp-world.js";
+} from "../../../../../shared/src/slp/slp-tuning.js";
+import { planSlurpWorldPulse } from "../../../../../shared/src/slp/slp-world-pulse.js";
+import { planSlurpWorldTick } from "../../../../../shared/src/slp/slp-world.js";
 
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;

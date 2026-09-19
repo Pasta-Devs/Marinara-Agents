@@ -25,9 +25,9 @@ import { generateSlurpPopulationMember } from "../packages/slurp2/src/engine/pac
 import {
   slurpAudienceConversionChance,
   SLURP_AUDIENCE_WEEKLY_BUDGET,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-audience-subscription.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-audience-subscription.js";
 import { populationNoodlerFanIdentityProvider } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-fan-identity-provider.js";
-import { planSlurpWorldPulse } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world-pulse.js";
+import { planSlurpWorldPulse } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world-pulse.js";
 import { slurp2Source } from "./slurp2-source";
 
 const at = new Date("2026-09-05T00:00:00.000Z");

@@ -49,7 +49,7 @@ import {
   slurpActivityPresetForSettings,
   slurpActivityPresetPatch,
   type SlurpActivityPreset,
-} from "./slurp-activity-presets";
+} from "../../slp/modules/creator/slp-activity-presets";
 import { LockedSlurpPostCard } from "./SlurpCreatorPostCard";
 
 type Step = 1 | 2 | 3 | 4 | 5;

@@ -6,7 +6,7 @@ import {
   slurpAudienceSubscriptionDecision,
   SLURP_AUDIENCE_SUBSCRIPTION_DAYS,
   SLURP_AUDIENCE_WEEKLY_BUDGET,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-audience-subscription.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-audience-subscription.js";
 import { slurp2Source } from "./slurp2-source";
 
 const at = new Date("2026-09-08T12:00:00.000Z");

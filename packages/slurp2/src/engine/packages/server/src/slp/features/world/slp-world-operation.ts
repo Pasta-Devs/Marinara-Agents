@@ -26,11 +26,11 @@ import { isAmbientNoodleAccount } from "../../data/audience/slp-ambient-profiles
 import { tryNoodleOperation } from "../../base/locking/slp-operation-lock.js";
 import { readSlurpAudienceTone } from "../../../../../shared/src/slp/slp-tone.js";
 import { slurpCapTickEvents, slurpRhythmMultiplier } from "../../../../../shared/src/slp/slp-tuning.js";
-import { slurpCreatorReach } from "../../modules/audience/slp-reach.js";
+import { slurpCreatorReach } from "../../../../../shared/src/slp/slp-reach.js";
 import {
   selectSlurpAudienceCharacterIds,
   slurpAudienceCharacterFanTypeId,
-} from "../../modules/audience/slp-audience-characters.js";
+} from "../../../../../shared/src/slp/slp-audience-characters.js";
 import { isSlurpPopulationMemberId, slurpMembersActiveAt } from "../../../../../shared/src/slp/slp-population.js";
 import {
   slurpFanTypeCommissionBudget,
@@ -46,7 +46,7 @@ import {
   slurpAudiencePaidThrough,
   slurpAudienceSubscriptionDecision,
   slurpLapseReason,
-} from "../../modules/audience/slp-audience-subscription.js";
+} from "../../../../../shared/src/slp/slp-audience-subscription.js";
 import { slurpPlatformScaleMultiplier, slurpWorldActivityMultiplier } from "../../modules/audience/slp-scale.js";
 import { slurpCreatorOpener, slurpCreatorReaction, slurpLapseNote } from "../../modules/world/slp-world-copy.js";
 import { generateSlurpArc } from "../projects/slp-projects-contract.js";
@@ -59,9 +59,9 @@ import {
   SLURP_MAX_CREATOR_OPENERS_PER_TICK,
   SLURP_MAX_CREATOR_REPLIES_PER_TICK,
   type SlurpWorldCreator,
-} from "../../modules/world/slp-world.js";
+} from "../../../../../shared/src/slp/slp-world.js";
 import { SLURP_POST_LANDED_REACTIONS } from "../../modules/creators/slp-creator-state.js";
-import { planSlurpWorldPulse } from "../../modules/world/slp-world-pulse.js";
+import { planSlurpWorldPulse } from "../../../../../shared/src/slp/slp-world-pulse.js";
 import { noodlerUnlockPriceFromMetadata } from "../../modules/economy/slp-prices.js";
 import { localDayKey, applyAction, applyPulse } from "./slp-world-actions.js";
 import {

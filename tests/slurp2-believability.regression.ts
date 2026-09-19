@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { slurpLapseReason } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/audience/slp-audience-subscription.js";
+import { slurpLapseReason } from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-audience-subscription.js";
 import {
   SLURP_REALISTIC_TUNING,
   SLURP_TUNING_PULSE_PER_TICK_CEILING,
@@ -10,7 +10,7 @@ import {
 import {
   planSlurpWorldPulse,
   slurpPostViralMultiplier,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world-pulse.js";
+} from "../packages/slurp2/src/engine/packages/shared/src/slp/slp-world-pulse.js";
 import { slurpLapseNote } from "../packages/slurp2/src/engine/packages/server/src/slp/modules/world/slp-world-copy.js";
 import { slurp2Source } from "./slurp2-source";
 

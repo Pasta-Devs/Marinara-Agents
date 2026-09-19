@@ -2,7 +2,7 @@ import type { SlurpFanType } from "../../../../../shared/src/slp/slp-fan-types.j
 import type { SlurpModelBudget } from "../../../../../shared/src/slp/slp-model-budget.js";
 import type { SlurpPlatformEvent } from "../../../../../shared/src/slp/slp-platform-events.js";
 import type { SlurpSimulationTuning } from "../../../../../shared/src/slp/slp-tuning.js";
-import type { SlurpPromptPreset } from "../../../components/slurp/slurp-prompt-presets.js";
+import type { SlurpPromptPreset } from "./slp-prompt-presets.js";
 import type { SlurpContentRating, SlurpPromptBlockOverride } from "../../base/state/slp-state-types.js";
 import type { SlurpArcType } from "../projects/slp-projects-contract.js";
 
@@ -154,3 +154,7 @@ export type SlurpPromptDefinition = {
   group: "writing" | "messages" | "images" | "profiles" | "world" | "audience";
   blocks: SlurpPromptBlockDefinition[];
 };
+
+// The settings read hook is the only part of this feature other features consume. Exposing it here
+// keeps Discovery (and any later reader) on the contract instead of reaching into the hook file.
+export { useSlurpSettings } from "./slp-settings-hooks.js";

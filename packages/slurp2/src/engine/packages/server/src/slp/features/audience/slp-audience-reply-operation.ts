@@ -24,7 +24,7 @@ import { createSlurpPopulationStorage } from "../../data/audience/slp-audience-s
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
 import { tryNoodlerAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
 import { generateNoodlerCreatorReply } from "../messages/slp-messages-contract.js";
-import { slurpCreatorReplyChance } from "../../modules/world/slp-world.js";
+import { slurpCreatorReplyChance } from "../../../../../shared/src/slp/slp-world.js";
 
 /**
  * Shortest comment worth a written answer.

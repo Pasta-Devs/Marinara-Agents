@@ -9,7 +9,7 @@ import {
   SLURP_ACTIVITY_PRESETS,
   slurpActivityPresetPatch,
   slurpPostsPerDayForPreset,
-} from "../../../components/slurp/slurp-activity-presets";
+} from "../../modules/creator/slp-activity-presets";
 import type { SlpBackstagePageProps } from "../backstage/slp-backstage-contract";
 
 /** Publishing: how often posts go out, the schedule, carryover and post length. */
