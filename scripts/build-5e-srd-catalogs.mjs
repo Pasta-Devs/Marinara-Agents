@@ -40,6 +40,9 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import prettier from "prettier";
 import {
+  RULESET_CATALOG_DICE_PATTERN,
+  RULESET_CREATURE_MAX_ACTIONS,
+  RULESET_CREATURE_MAX_TRAITS,
   assertRulesetBattle,
   assertRulesetCatalogs,
   assertRulesetCombat,
@@ -615,7 +618,8 @@ const DICE_PATTERN = /^(\d{1,3})d(\d{1,4})$/u;
 // Everything the catalog's own dice field accepts, plus the plain number a few
 // SRD entries state instead (the blowgun's 1, Guardian of Faith's 20). The dice
 // shape is the Engine's: at least one die, of at least two sides, no leading zeros.
-const CATALOG_DICE_PATTERN = /^[1-9]\d{0,2}d(?:[2-9]|[1-9]\d{1,3})(?:[+-]\d{1,4})?$/u;
+// One copy of it, kept beside the package checks that restate the Engine's rules.
+const CATALOG_DICE_PATTERN = RULESET_CATALOG_DICE_PATTERN;
 const FLAT_DAMAGE_PATTERN = /^\d{1,3}$/u;
 
 /** The damage a source string states, or a loud failure when it states a shape
@@ -1100,8 +1104,8 @@ function buildWeaponEntries(weapons, propertiesByWeapon) {
 
 /** How many actions and traits one creature may carry, mirrored from the Engine's schema so the
  *  converter trims to fit rather than emitting a block the Engine would refuse. */
-const CREATURE_MAX_ACTIONS = 12;
-const CREATURE_MAX_TRAITS = 8;
+const CREATURE_MAX_ACTIONS = RULESET_CREATURE_MAX_ACTIONS;
+const CREATURE_MAX_TRAITS = RULESET_CREATURE_MAX_TRAITS;
 const TRAIT_NAME_MAX = 60;
 const TRAIT_TEXT_MAX = 400;
 const CREATURE_SUMMARY_MAX = 300;

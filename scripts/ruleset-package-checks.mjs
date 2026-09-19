@@ -60,8 +60,8 @@ const RULESET_STEP_TABLE_MAX = 100;
 
 // What the Engine's own schema allows one creature. Mirrored so a package that
 // would be refused on install never reaches the catalog.
-const RULESET_CREATURE_MAX_ACTIONS = 12;
-const RULESET_CREATURE_MAX_TRAITS = 8;
+export const RULESET_CREATURE_MAX_ACTIONS = 12;
+export const RULESET_CREATURE_MAX_TRAITS = 8;
 const RULESET_CREATURE_MAX_APPLIES = 4;
 const RULESET_CREATURE_MAX_SEQUENCE = 6;
 const RULESET_COMBAT_MAX_BUDGETS = 8;
@@ -119,7 +119,7 @@ const RULESET_SHEET_ID_MAX = 40;
 // Dice a table really has: at least one die, of at least two sides, with no leading zeros. Mirrored
 // from the Engine, which refuses "0d6", "1d1" and "01d6" outright, so a package carrying one never
 // reaches the catalog.
-const RULESET_CATALOG_DICE_PATTERN = /^[1-9]\d{0,2}d(?:[2-9]|[1-9]\d{1,3})(?:[+-]\d{1,4})?$/u;
+export const RULESET_CATALOG_DICE_PATTERN = /^[1-9]\d{0,2}d(?:[2-9]|[1-9]\d{1,3})(?:[+-]\d{1,4})?$/u;
 
 export function isRulesetPackage(manifest) {
   return Array.isArray(manifest?.kind) && manifest.kind.includes("ruleset");
