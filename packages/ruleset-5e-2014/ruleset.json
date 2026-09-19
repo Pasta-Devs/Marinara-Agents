@@ -2,7 +2,7 @@
   "$comment": "First-party 5e ruleset on SRD 5.1. Every id here is this file's own choice: the Engine never looks for 'level', 'dex' or 'slots'. A $comment key is allowed on any object and ignored.",
   "schemaVersion": 1,
   "id": "5e-2014",
-  "version": 2,
+  "version": 4,
   "name": "5e (SRD 5.1)",
   "edition": "System Reference Document 5.1, 2014 rules",
   "license": {
@@ -618,6 +618,27 @@
           "field": "spellcasting_ability",
           "equals": "none"
         }
+      },
+      {
+        "$comment": "Class resource maximums the SRD ties to an ability score rather than to a class table. A catalog entry's scaled column reads them, so the sheet keeps the counter it picked. They carry no section, so they sit beside the Class resources list, and no hide rule, because the sheet has no field that says which class you are and a hide rule can only compare one to a value.",
+        "id": "bardic_inspiration_uses",
+        "label": "Bardic Inspiration uses",
+        "op": "max",
+        "of": [{ "const": 1 }, { "abilityMod": "cha" }]
+      },
+      {
+        "id": "divine_sense_uses",
+        "label": "Divine Sense uses",
+        "op": "sum",
+        "of": [{ "const": 1 }, { "abilityMod": "cha" }]
+      },
+      {
+        "$comment": "Lay on Hands is a pool of hit points, not a count of uses, so it is the one class resource whose maximum is a multiple of the level.",
+        "id": "lay_on_hands_pool",
+        "label": "Lay on Hands pool",
+        "op": "scale",
+        "of": { "field": "level" },
+        "multiplier": 5
       }
     ],
     "lists": [
@@ -762,7 +783,7 @@
             "label": "Maximum",
             "type": "number",
             "min": 0,
-            "max": 99,
+            "max": 999,
             "default": 1
           },
           {
@@ -1105,6 +1126,30 @@
         }
       ]
     }
+  },
+  "battle": {
+    "$comment": "What a battle may read from this sheet. It is not a 5e combat adapter: there are no attack rolls, no saving throws and no concentration in a fight, and the damage arithmetic stays Marinara's. Hit points, slots and the spells and attacks a player picked from a catalog are simply lent to Marinara's own combat. Pact Magic slots are left out, because their level follows the character's own level and a fixed list of levels cannot say that. This block is hand-authored and must stay above \"catalogs\": scripts/build-5e-srd-catalogs.mjs rewrites the catalogs key and everything after it.",
+    "health": { "pool": "hp" },
+    "slots": [
+      { "pool": "slots_1", "level": 1 },
+      { "pool": "slots_2", "level": 2 },
+      { "pool": "slots_3", "level": 3 },
+      { "pool": "slots_4", "level": 4 },
+      { "pool": "slots_5", "level": 5 },
+      { "pool": "slots_6", "level": 6 },
+      { "pool": "slots_7", "level": 7 },
+      { "pool": "slots_8", "level": 8 },
+      { "pool": "slots_9", "level": 9 }
+    ],
+    "skills": [
+      {
+        "$comment": "Prepared spells, plus cantrips, which are cast without being prepared and are level 0 on this sheet.",
+        "list": "spells",
+        "onlyWhen": "prepared",
+        "alwaysWhen": { "column": "level", "equals": 0 }
+      },
+      { "list": "attacks" }
+    ]
   },
   "catalogs": [
     {

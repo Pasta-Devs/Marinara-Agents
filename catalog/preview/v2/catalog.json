@@ -7,16 +7,16 @@
         "schemaVersion": 2,
         "capabilityApi": {
           "major": 1,
-          "minor": 21
+          "minor": 23
         },
         "builtAgainst": {
           "engineVersion": "2.4.6",
-          "engineCommit": "d091ad7d3209e41fc8ef3a72033446dd34268fe2"
+          "engineCommit": "1c160153fbe69f395ba940a0cf65d5e70e26cb9e"
         },
         "id": "ruleset-5e-2014",
         "name": "5e (SRD 5.1)",
-        "version": "0.2.0",
-        "description": "Provides 5e SRD 5.1 rules for Game Mode ability checks, skill checks, saving throws, and the full character sheet, plus pickable SRD spells, class features and weapons so you do not type them row by row. Battles still use Marinara's default combat, not 5e combat. After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
+        "version": "0.4.0",
+        "description": "Provides 5e SRD 5.1 rules for Game Mode ability checks, skill checks, saving throws, and the full character sheet, plus pickable SRD spells, class features and weapons so you do not type them row by row. Class resources now keep themselves: pick Rage, Ki, Sorcery Points, Channel Divinity, Action Surge, Indomitable, Bardic Inspiration, Divine Sense or Lay on Hands and the sheet sets the maximum from your level or your Charisma and keeps it current as you level up. Battles start from the sheet: your hit points and spell slots go into the fight (Pact Magic slots do not), your prepared spells, your cantrips and the weapons you picked show up as skills, and what the fight cost is written back when it ends. Health is carried as a share of the maximum, the damage is still Marinara's own combat math, and attack rolls, saving throws and concentration are not applied. After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
         "engine": {
           "min": "2.4.6",
           "maxExclusive": "4.0.0"
@@ -37,18 +37,18 @@
         "files": [
           {
             "path": "ruleset.json",
-            "sha256": "d419812c644c631ff5f832ff1df809191d61145c40fa1ef777811c2c174fca1f",
-            "bytes": 57209
+            "sha256": "e61c7bf78d93717a50856b66e53c418cf1d800929629197e4f2f99e073c14d4d",
+            "bytes": 59629
           },
           {
             "path": "catalogs/spells.json",
-            "sha256": "d2423775cf50f28a7ceaca05bfa8d803c277297270a58c5cd9f78b8bb5e1be93",
-            "bytes": 306274
+            "sha256": "ca26bdb3231e565f166de2f41afd0dcbd96074a692e89e16e764f36c5bf1e38d",
+            "bytes": 307146
           },
           {
             "path": "catalogs/features.json",
-            "sha256": "70a8e57cf46712406fcd06fe74917dd81be7890d6e7881726a2a3f3ad024a07d",
-            "bytes": 195198
+            "sha256": "f5461d01986872dbe3071eb34a3eb2383433a752a21d2f15c288c57c6a155524",
+            "bytes": 198169
           }
         ],
         "permissions": [],
@@ -57,9 +57,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/ruleset-5e-2014.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-0.2.0.zip",
-        "sha256": "b47089cc6afc6c54b2c6cfd8f355d526ea15276ca2f96cd45972bad4352fbfe2",
-        "bytes": 560610
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-0.4.0.zip",
+        "sha256": "9661c5a99d6530eca0aa1cb31f76a8115cd600ae7a8d6c7814d901936af1f3f2",
+        "bytes": 567480
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/game/getting-started.md#choosing-rules"
     }

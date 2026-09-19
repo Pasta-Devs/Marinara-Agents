@@ -1,0 +1,67 @@
+name: Calls Package Browser
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+    paths:
+      - ".github/workflows/calls-browser.yml"
+      - "artifacts/conversation-calls-*.zip"
+      - "packages/conversation-calls/**"
+      - "scripts/install-package-browser-fixture.mjs"
+      - "scripts/run-package-browser-tests.mjs"
+      - "scripts/start-package-browser-servers.mjs"
+      - "tests/package-calls.e2e.ts"
+      - "tests/playwright.package.config.ts"
+
+concurrency:
+  group: calls-browser-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  calls-browser:
+    name: Calls package browser
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Marinara Agents
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout Marinara Engine staging
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: Pasta-Devs/Marinara-Engine
+          ref: staging
+          path: engine
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: engine/package.json
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+
+      - name: Install package runner dependencies
+        run: npm ci
+
+      - name: Install Engine dependencies
+        run: pnpm --dir engine install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run installed Calls playback browser proof
+        env:
+          MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
+        run: node scripts/run-package-browser-tests.mjs conversation-calls tests/package-calls.e2e.ts
