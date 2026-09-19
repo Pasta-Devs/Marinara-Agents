@@ -46,7 +46,7 @@ import {
   type NoodlePostCardCtx,
   type NoodlePostCardModel,
 } from "./SlpPostCard";
-import { SlurpLikedBy } from "../../features/audience/SlpFanCard";
+import { SlurpLikedBy } from "../audience/SlpFanCard";
 import { NoodlePollComposer } from "../poll/SlpPollComposer";
 import { PostImageFrame } from "../../base/media/SlpPostImageCropEditor";
 import { LockedSlurpPostCard } from "./SlpLockedPostCard";

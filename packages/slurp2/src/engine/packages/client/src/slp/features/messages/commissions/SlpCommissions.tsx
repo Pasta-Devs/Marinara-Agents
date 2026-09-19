@@ -5,7 +5,7 @@ import { cn } from "../../../../lib/utils";
 import { useSlurpMediaSrc } from "../../../base/media/slp-media-src";
 import { formatTime } from "../../../base/ui/slp-date-time";
 import { SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "../../../modules/coin/SlpCoin";
-import { useSlurpWallet } from "../../economy/slp-economy-hooks";
+import { useSlurpWallet } from "../../economy/slp-economy-contract";
 import {
   useAcceptSlurpCommission,
   useCounterSlurpCommission,

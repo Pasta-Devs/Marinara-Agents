@@ -214,7 +214,7 @@ import {
 import { NoodleAnchoredPopover } from "../base/chrome/SlpAnchoredPopover";
 import { SlurpArcTimelineCard } from "../features/projects/SlpArcTimelineCard";
 import { SlurpProjectsPanel } from "../features/projects/SlpProjectsBoard";
-import { SlurpFanCard } from "../features/audience/SlpFanCard";
+import { SlurpFanCard } from "../modules/audience/SlpFanCard";
 import { LockedSlurpPostCard } from "../modules/post/SlpLockedPostCard";
 import { SlurpCreatorPostCard } from "../modules/post/SlpCreatorPostCard";
 import { SlurpSparkleVeil } from "../base/chrome/SlpSparkleVeil";
@@ -279,6 +279,7 @@ import {
 } from "../features/discovery/slp-discovery";
 import type { SlurpDiscoveryGender } from "../base/state/slp-state-types";
 import { formatTime } from "../base/ui/slp-date-time";
+import { useSlurpHomeState } from "./SlpHomeHooks";
 
 interface SlurpHomeProps {
   navigation: Extract<SlurpNavigationState, { mode: "creator" }>;

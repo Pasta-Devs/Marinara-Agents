@@ -32,7 +32,7 @@ import { formatTime } from "../../base/ui/slp-date-time";
 import { NoodleImageComposer } from "../../base/media/SlpImageComposer";
 import { NoodlePollComposer } from "../poll/SlpPollComposer";
 import { NoodleAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
-import { SlurpLikedBy } from "../../features/audience/SlpFanCard";
+import { SlurpLikedBy } from "../audience/SlpFanCard";
 import { PostImageFrame } from "../../base/media/SlpPostImageCropEditor";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import {

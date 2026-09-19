@@ -80,7 +80,7 @@ import {
 } from "../../modules/post/SlpPostCard";
 import { NoodleAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
 import { SlurpArcTimelineCard } from "../../features/projects/SlpArcTimelineCard";
-import { SlurpFanCard } from "../../features/audience/SlpFanCard";
+import { SlurpFanCard } from "../../modules/audience/SlpFanCard";
 import { LockedSlurpPostCard } from "../../modules/post/SlpLockedPostCard";
 import { SlurpCreatorPostCard } from "../../modules/post/SlpCreatorPostCard";
 import {

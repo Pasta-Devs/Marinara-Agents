@@ -17,8 +17,10 @@ import {
 import type { NoodleIdentityDisclosure, NoodlerStageProfile } from "@marinara-engine/shared";
 import type { SlurpStageProfileInput } from "../../base/state/slp-state-types";
 import { getNoodleAccentStyle, NOODLE_PINK, ProfileInitial } from "../../base/chrome/SlpChrome";
-import { SlurpDiscoveryProfileEditor } from "../discovery/SlpDiscoveryProfileEditor";
-import { isSlurpDiscoveryProfileIncomplete } from "../discovery/slp-discovery";
+import {
+  isSlurpDiscoveryProfileIncomplete,
+  SlurpDiscoveryProfileEditor,
+} from "../discovery/slp-discovery-contract";
 import { fieldClass, textareaClass } from "../../modules/post/SlpPostCard";
 import { cn } from "../../../lib/utils";
 

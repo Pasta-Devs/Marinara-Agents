@@ -31,15 +31,17 @@ import {
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { useSlurpConnections } from "../../base/state/slp-host-connections";
-import { useBulkCreateNoodlerStageProfiles } from "../creators/slp-creator-profile-hooks";
-import { useRefreshTargetedNoodlerCreatorsNow } from "../creators/slp-creator-refresh-hooks";
-import { useNoodlerEligibleAccounts } from "../creators/slp-creators-hooks";
+import {
+  useBulkCreateNoodlerStageProfiles,
+  useNoodlerEligibleAccounts,
+  useRefreshTargetedNoodlerCreatorsNow,
+} from "../creators/slp-creators-contract";
 import {
   useEnqueueNoodlerFirstPosts,
   useNoodlerFirstPostStatus,
 } from "./slp-first-post-hooks";
-import { useUpdateSlurpConnectionsForCreators } from "../media/slp-image-connection-hooks";
-import { useSlurpSettings, useUpdateSlurpSettings } from "../settings/slp-settings-hooks";
+import { useUpdateSlurpConnectionsForCreators } from "../media/slp-media-contract";
+import { useSlurpSettings, useUpdateSlurpSettings } from "../settings/slp-settings-contract";
 import { cn, generateClientId } from "../../../lib/utils";
 import { Modal } from "../../../components/ui/Modal";
 import { Avatar, getNoodleAccentStyle, NOODLE_PINK } from "../../base/chrome/SlpChrome";

@@ -26,24 +26,9 @@ export type SlurpFollowerEntry = {
   spent: number;
   followedAt: string;
 };
-/** One audience member's card: who they are, and their history with one Creator. */
-export type SlurpAudienceMember = {
-  id: string;
-  displayName: string;
-  handle: string;
-  traits: string[];
-  spendTier: string;
-  activeHour: number;
-  joinedAt: string;
-  tie: {
-    stage: string;
-    audienceArc: string;
-    spent: number;
-    interactions: number;
-    firstSeenAt: string;
-    subscribed: boolean;
-  } | null;
-};
+// The fan card lives in the post modules, so its shape and read hook live there too.
+export type { SlurpAudienceMember } from "../../modules/audience/slp-audience-member.js";
+
 export type SlurpAudienceCharacterSummary = {
   id: string;
   name: string;

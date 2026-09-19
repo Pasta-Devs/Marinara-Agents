@@ -74,7 +74,7 @@ import {
   useSlurpThread,
   useSlurpThreads,
 } from "../../features/messages/slp-messages-hooks";
-import { useSlurpSettings, useUpdateSlurpSettings } from "../../features/settings/slp-settings-hooks";
+import { useSlurpSettings, useUpdateSlurpSettings } from "../../features/settings/slp-settings-contract";
 import {
   SlurpPromptDebugPanel,
   SlurpRapportBadge,

@@ -88,3 +88,6 @@ export type SlurpStudioCreator = {
 
 // The Messages per-creator group edits a Creator's message price, which Economy owns.
 export { useSetSlurpCreatorPrice } from "./slp-economy-hooks.js";
+
+// The Messages commissions submodule shows the viewer wallet balance.
+export { useSlurpWallet } from "./slp-economy-hooks.js";
