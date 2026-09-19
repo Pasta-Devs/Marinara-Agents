@@ -174,7 +174,7 @@
         "schemaVersion": 1,
         "id": "conversation-calls",
         "name": "Calls",
-        "version": "1.0.16",
+        "version": "1.0.17",
         "description": "Adds live audio and video calls with Conversation characters. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Calls for Conversation mode.",
         "engine": {
           "min": "2.4.1",
@@ -204,13 +204,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "21398667750241e50f18b015030e75163bff819f353475e6b969f8178213e216",
-            "bytes": 2311268
+            "sha256": "746d4dfd37a94f329be57873a3233c927d5dbd287b161638fb5dcf20c1675558",
+            "bytes": 2518529
           },
           {
             "path": "client.js",
-            "sha256": "4695156d68475de1711d1ff4b47b5ba4d1dd48811af0609566d109d028143f1d",
-            "bytes": 851175
+            "sha256": "c560c7455eeed43ef1df8046802596c1aef8bcd02ef3894b7e42d161d49cc4c8",
+            "bytes": 882405
           }
         ],
         "permissions": [
@@ -227,9 +227,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/conversation-calls.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.0.16.zip",
-        "sha256": "9489b6ed9fc7308482f77742e9d09b9421e4ab389aface1a08a86d5c4c628444",
-        "bytes": 3164567
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.0.17.zip",
+        "sha256": "bb1b12fae8ffcacb755d8c2e8519575a3a6d9dc32ac865187937d2d897372a55",
+        "bytes": 3403058
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#conversation-calls"
     },

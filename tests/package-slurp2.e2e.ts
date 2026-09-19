@@ -153,6 +153,7 @@ test.describe("standalone Slurp package", () => {
         await expect(choice).toBeEnabled();
         await choice.selectOption(mode);
         await expect(choice).toHaveValue(mode);
+        await page.getByRole("button", { name: "Apply changes", exact: true }).click();
         await expect
           .poll(
             async () =>
@@ -162,7 +163,11 @@ test.describe("standalone Slurp package", () => {
           .toBe(mode);
       }
       await page.screenshot({ path: testInfo.outputPath("slurp2-image-context-settings.png") });
-      await page.getByRole("button", { name: "Publishing", exact: true }).click();
+      if (testInfo.project.name.includes("mobile")) {
+        await page.getByRole("combobox", { name: "Destination" }).selectOption("automation:general");
+      } else {
+        await page.getByRole("button", { name: "Publishing", exact: true }).click();
+      }
       await page.getByRole("button", { name: "Generate posts", exact: true }).click();
       const dialog = page.getByRole("dialog", { name: "Generate posts", exact: true });
       await dialog.getByRole("button", { name: "Generate 3", exact: true }).click();
@@ -250,7 +255,7 @@ test.describe("standalone Slurp package", () => {
       }
       await expect(slurp.getByRole("combobox", { name: "Destination" })).toHaveValue("overview:overview");
     } else {
-      const sectionNavigation = slurp.getByRole("navigation", { name: "Overview areas" });
+      const sectionNavigation = slurp.getByRole("navigation", { name: "Creator settings sections" });
       await expect(sectionNavigation).toBeVisible();
       await expect(sectionNavigation.getByRole("button", { name: "Overview" })).toHaveAttribute("aria-current", "page");
     }
@@ -334,12 +339,14 @@ test.describe("standalone Slurp package", () => {
     const imageToggle = slurp.getByRole("switch", { name: /^Ad images/u });
     await slurp.getByText("Ad images", { exact: true }).click({ force: true });
     await expect(imageToggle).toBeChecked();
+    await slurp.getByRole("button", { name: "Apply changes", exact: true }).click();
     await expect
       .poll(async () => (await (await page.request.get("/api/slurp2/settings")).json()).inlineAdsImagesEnabled)
       .toBe(true);
     await expect(slurp.getByRole("heading", { name: "Ad controls", exact: true })).toBeVisible();
     await slurp.getByText("Ad images", { exact: true }).click({ force: true });
     await expect(imageToggle).not.toBeChecked();
+    await slurp.getByRole("button", { name: "Apply changes", exact: true }).click();
     await expect
       .poll(async () => (await (await page.request.get("/api/slurp2/settings")).json()).inlineAdsImagesEnabled)
       .toBe(false);
@@ -527,6 +534,7 @@ test.describe("standalone Slurp package", () => {
 
       await slurp.getByRole("button", { name: new RegExp(`^${stageProfile.displayName} @`) }).click();
       const creatorSettings = slurp.getByRole("region", { name: stageProfile.displayName, exact: true });
+      await creatorSettings.getByRole("tab", { name: "Images", exact: true }).click();
       const imageConnectionSelect = creatorSettings.getByRole("combobox", { name: /^Image connection/u });
       await expect(imageConnectionSelect).toBeEnabled({ timeout: 30_000 });
       await imageConnectionSelect.selectOption(imageConnectionIds[1]);
@@ -539,6 +547,7 @@ test.describe("standalone Slurp package", () => {
         })
         .toBe(imageConnectionIds[1]);
 
+      await creatorSettings.getByRole("tab", { name: "Publishing", exact: true }).click();
       const scheduleButton = creatorSettings.getByRole("button", { name: "Posting Schedule", exact: true });
       await expect(scheduleButton).toBeVisible();
       await scheduleButton.click();
@@ -547,9 +556,8 @@ test.describe("standalone Slurp package", () => {
       await page.keyboard.press("Escape");
       await expect(scheduleDialog).toBeHidden();
 
-      await page.getByRole("button", { name: "Publishing" }).click();
-      await slurp.locator("summary").filter({ hasText: "Generation & prompts" }).click();
-      await page.getByRole("button", { name: "Edit prompt" }).click();
+      await slurp.getByRole("button", { name: "Prompts", exact: true }).click();
+      await slurp.getByRole("button", { name: "Edit prompt", exact: true }).first().click();
       const promptDialog = page.getByRole("dialog", { name: "Edit generation guidance" });
       const savePrompt = promptDialog.getByRole("button", { name: "Save prompt" });
       await expect(savePrompt).toBeVisible();
@@ -586,7 +594,8 @@ test.describe("standalone Slurp package", () => {
       );
       await page.reload();
       await openSlurp(page);
-      await slurp.getByRole("button", { name: "Profile controls", exact: true }).click();
+      const profileControls = slurp.getByRole("button", { name: "Profile controls", exact: true });
+      if ((await profileControls.getAttribute("aria-expanded")) !== "true") await profileControls.click();
       await expect(page.getByRole("button", { name: /^Automation/u })).toHaveCount(0);
       await page.getByRole("button", { name: "Access", exact: true }).click();
       const accessDialog = page.getByRole("dialog", { name: "Viewer access" });
