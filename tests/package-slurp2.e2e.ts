@@ -493,9 +493,7 @@ test.describe("standalone Slurp package", () => {
         feedProbeBody.items.some((item) => item.post.id === postId && item.post.content === postContent),
         JSON.stringify(feedProbeBody),
       ).toBe(true);
-      const shellProbe = await page.request.get(
-        `/api/slurp2/slurp/viewer?personaId=${encodeURIComponent(persona.id)}`,
-      );
+      const shellProbe = await page.request.get(`/api/slurp2/slurp/viewer?personaId=${encodeURIComponent(persona.id)}`);
       expect(shellProbe.ok()).toBe(true);
       const shellProbeBody = (await shellProbe.json()) as {
         creators: Array<{ profile: { id: string } }>;

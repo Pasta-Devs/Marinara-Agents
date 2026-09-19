@@ -216,18 +216,17 @@ const EXPECTED_HANDLER_COUNTS = {
   "features/projects": 15,
   "features/settings": 5,
 } as const;
+const EXPECTED_METHOD_COUNTS = { DELETE: 11, GET: 59, PATCH: 14, POST: 90, PUT: 5 } as const;
 
 const root = join(import.meta.dirname, "../packages/slurp2/src/engine/packages/server/src/slp");
 const registration = /\bapp\.(get|post|put|patch|delete|addContentTypeParser)(?:<[^()]*?>)?\(\s*["'`]([^"'`]+)["'`]/gu;
 const found = (readdirSync(root, { recursive: true }) as string[])
   .filter((file) => file.endsWith(".ts"))
   .flatMap((file) =>
-    [...readFileSync(join(root, file), "utf8").matchAll(registration)].map(
-      (match) => ({
-        route: `${match[1].toUpperCase()} ${match[2]}`,
-        file,
-      }),
-    ),
+    [...readFileSync(join(root, file), "utf8").matchAll(registration)].map((match) => ({
+      route: `${match[1].toUpperCase()} ${match[2]}`,
+      file,
+    })),
   )
   .sort();
 const foundRoutes = found.map(({ route }) => route).sort();
@@ -252,7 +251,7 @@ assert.throws(
   "the inventory fixture must fail when a mapped route disappears",
 );
 assert.throws(
-    () =>
+  () =>
     assertRouteInventory(
       foundRoutes
         .map((route) => (route === "POST /slurp/posts/:id/media" ? "PUT /slurp/posts/:id/media" : route))
@@ -262,11 +261,23 @@ assert.throws(
   "the inventory fixture must fail when a mapped route changes method",
 );
 assert.deepEqual(foundRoutes, [...EXPECTED].sort(), "the Slurp2 route multiset changed");
-assert.deepEqual(BASELINE.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).map((route) => route.split(" ")[0]).sort(), foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).map((route) => route.split(" ")[0]).sort(), "HTTP method multiset changed");
+const methodCounts = Object.fromEntries(
+  foundRoutes
+    .filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER "))
+    .reduce((counts, route) => {
+      const method = route.split(" ", 1)[0]!;
+      counts.set(method, (counts.get(method) ?? 0) + 1);
+      return counts;
+    }, new Map<string, number>()),
+);
+assert.deepEqual(methodCounts, EXPECTED_METHOD_COUNTS, "HTTP method multiset changed from staging");
 assert.equal(foundRoutes.filter((route) => !route.startsWith("ADDCONTENTTYPEPARSER ")).length, 179);
 assert.deepEqual(handlerCounts, EXPECTED_HANDLER_COUNTS, "handler count changed in a feature");
 assert.ok(foundRoutes.includes("POST /slurp/posts/:id/media"), "the renamed POST media route must remain registered");
-assert.ok(!foundRoutes.includes("PUT /slurp/posts/:id/media"), "changing the media upload method must fail the fixture");
+assert.ok(
+  !foundRoutes.includes("PUT /slurp/posts/:id/media"),
+  "changing the media upload method must fail the fixture",
+);
 assert.deepEqual(
   foundRoutes.map(routeAfterRename).sort(),
   [...BASELINE].sort(),

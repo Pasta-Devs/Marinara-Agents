@@ -68,7 +68,7 @@ export function useCreatorSubscribers(accountId: string | null) {
         items: SlurpSubscriberEntry[];
         total: number;
         nextCursor: SlurpPageCursor | null;
-       }>(`/slurp2/slurp/accounts/${encodeURIComponent(accountId!)}/subscribers?limit=20${cursorQuery(pageParam)}`),
+      }>(`/slurp2/slurp/accounts/${encodeURIComponent(accountId!)}/subscribers?limit=20${cursorQuery(pageParam)}`),
     getNextPageParam: (page) => page.nextCursor ?? undefined,
     enabled: Boolean(accountId),
     staleTime: 10_000,

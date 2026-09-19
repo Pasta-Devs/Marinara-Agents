@@ -227,6 +227,6 @@ assert.match(slurpStorage, /writeEarnings\(creatorAccountId, current\)/u);
 const payoutRoutes = slurp2Source(
   join(import.meta.dirname, "..", "packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts"),
 );
-assert.match(payoutRoutes, /app\.post\("\/noodler\/accounts\/:id\/payout"/u);
+assert.match(payoutRoutes, /app\.post\("\/slurp\/accounts\/:id\/payout"/u);
 
 console.log("slurp earnings regression passed");

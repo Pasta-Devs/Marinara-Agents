@@ -209,7 +209,7 @@ export function useReplaceCreatorPostImage() {
       const form = new FormData();
       form.append("payload", JSON.stringify({ ...input, imageCrop: crop, accountId }));
       form.append("file", file);
-       return api.upload<SlpCreatorManagedPost>(`/slurp2/slurp/posts/${encodeURIComponent(id)}/media`, form);
+      return api.upload<SlpCreatorManagedPost>(`/slurp2/slurp/posts/${encodeURIComponent(id)}/media`, form);
     },
     onSuccess: (_post, input) =>
       Promise.all([

@@ -151,12 +151,9 @@ export function useToggleCreatorSubscription() {
         ? api.delete<SlpCreatorViewerScope>(
             `/slurp2/slurp/accounts/${encodeURIComponent(creatorAccountId)}/subscribe?personaId=${encodeURIComponent(personaId)}`,
           )
-        : api.post<SlpCreatorViewerScope>(
-            `/slurp2/slurp/accounts/${encodeURIComponent(creatorAccountId)}/subscribe`,
-            {
-              personaId,
-            },
-          ),
+        : api.post<SlpCreatorViewerScope>(`/slurp2/slurp/accounts/${encodeURIComponent(creatorAccountId)}/subscribe`, {
+            personaId,
+          }),
     // The mutation returns a shell without posts. Keep the current feed visible until refetch.
     onSuccess: async (scope, input) => {
       // Cancel any in-flight viewer poll first, or it can land after us and restore the stale scope.
