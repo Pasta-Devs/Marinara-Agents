@@ -2,7 +2,7 @@
 
 ## 0.5.0 — 2026-09-19
 - The package now describes 5e combat itself: the d20 attack roll with advantage, a natural 20 that hits and doubles the damage dice, a natural 1 that misses, the action, bonus action and reaction a turn holds, your weapons and prepared spells, the SRD conditions, concentration, death saves and the damage types.
-- Adds a bestiary: 321 SRD monsters with their armour class, hit dice, saves, resistances, immunities, attacks, breath weapons, multiattacks and legendary actions, every number taken from the printed stat block.
+- Adds a bestiary: 319 SRD monsters with their armour class, hit dice, saves, resistances, immunities, attacks, breath weapons, multiattacks and legendary actions, every number taken from the printed stat block.
 - A challenge-rating scale measured from those monsters, so an opponent a Game Master invents can be pulled onto it.
 - Cantrip damage now grows with your level, Magic Missile is three darts that simply hit, and fifteen well-known spells say which condition they apply.
 - Second Wind is spent as a bonus action, which is what the SRD says.

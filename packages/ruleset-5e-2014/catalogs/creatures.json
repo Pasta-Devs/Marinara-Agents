@@ -5958,40 +5958,6 @@
       }
     },
     {
-      "id": "elf-drow",
-      "label": "Elf, Drow",
-      "summary": "Medium humanoid, neutral evil. Armor Class 15, 13 hit points, challenge rating 1/4.",
-      "filters": { "challenge": 0.25, "type": "Humanoid", "size": "Medium" },
-      "creature": {
-        "health": { "dice": "3d8" },
-        "defense": 15,
-        "speed": 30,
-        "initiativeModifier": 2,
-        "abilities": { "str": 10, "dex": 14, "con": 10, "int": 11, "wis": 11, "cha": 12 },
-        "tier": "cr_1_4",
-        "actions": [
-          {
-            "id": "hand_crossbow",
-            "name": "Hand Crossbow",
-            "budget": "action",
-            "toHit": 4,
-            "damage": { "dice": "1d6", "flat": 2, "type": "piercing" },
-            "save": { "save": "con_save", "difficulty": 13, "onSuccess": "none" },
-            "applies": [{ "condition": "poisoned", "duration": "instant" }],
-            "range": 30
-          },
-          {
-            "id": "shortsword",
-            "name": "Shortsword",
-            "budget": "action",
-            "toHit": 4,
-            "damage": { "dice": "1d6", "flat": 2, "type": "piercing" },
-            "reach": 5
-          }
-        ]
-      }
-    },
-    {
       "id": "elk",
       "label": "Elk",
       "summary": "Large beast, unaligned. Armor Class 10, 13 hit points, challenge rating 1/4.",
@@ -8330,46 +8296,6 @@
             "toHit": 3,
             "damage": { "dice": "1d8", "flat": 1, "type": "piercing" },
             "range": 150
-          }
-        ]
-      }
-    },
-    {
-      "id": "gnome-deep-svirfneblin",
-      "label": "Gnome, Deep (Svirfneblin)",
-      "summary": "Small humanoid, neutral good. Armor Class 15, 16 hit points, challenge rating 1/2.",
-      "filters": { "challenge": 0.5, "type": "Humanoid", "size": "Small" },
-      "creature": {
-        "health": { "dice": "3d6+6" },
-        "defense": 15,
-        "speed": 20,
-        "initiativeModifier": 2,
-        "abilities": { "str": 15, "dex": 14, "con": 14, "int": 12, "wis": 10, "cha": 9 },
-        "tier": "cr_1_2",
-        "actions": [
-          {
-            "id": "poisoned_dart",
-            "name": "Poisoned Dart",
-            "budget": "action",
-            "toHit": 4,
-            "damage": { "dice": "1d4", "flat": 2, "type": "piercing" },
-            "save": { "save": "con_save", "difficulty": 12, "onSuccess": "none" },
-            "applies": [
-              {
-                "condition": "poisoned",
-                "duration": "until-save",
-                "saveEnds": { "save": "con_save", "at": "turn-end" }
-              }
-            ],
-            "range": 30
-          },
-          {
-            "id": "war_pick",
-            "name": "War Pick",
-            "budget": "action",
-            "toHit": 4,
-            "damage": { "dice": "1d8", "flat": 2, "type": "piercing" },
-            "reach": 5
           }
         ]
       }

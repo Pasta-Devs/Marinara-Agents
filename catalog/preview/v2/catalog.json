@@ -16,7 +16,7 @@
         "id": "ruleset-5e-2014",
         "name": "5e (SRD 5.1)",
         "version": "0.5.0",
-        "description": "Provides 5e SRD 5.1 rules for Game Mode ability checks, skill checks, saving throws, and the full character sheet, plus pickable SRD spells, class features and weapons so you do not type them row by row, and class resources the sheet keeps current as you level up. It now also describes 5e combat itself: the d20 attack roll with advantage, criticals and misses on the naturals, the action, bonus action and reaction a turn holds, your weapons and prepared spells as the things you do with them, the SRD conditions, concentration, death saves and the thirteen damage types, together with a bestiary of 321 SRD monsters and a challenge-rating scale measured from them. No Marinara Engine release plays a fight on that block yet: battles still start from the sheet and use Marinara's own combat math. After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
+        "description": "Provides 5e SRD 5.1 rules for Game Mode ability checks, skill checks, saving throws, and the full character sheet, plus pickable SRD spells, class features and weapons so you do not type them row by row, and class resources the sheet keeps current as you level up. It now also describes 5e combat itself: the d20 attack roll with advantage, criticals and misses on the naturals, the action, bonus action and reaction a turn holds, your weapons and prepared spells as the things you do with them, the SRD conditions, concentration, death saves and the thirteen damage types, together with a bestiary of 319 SRD monsters and a challenge-rating scale measured from them. No Marinara Engine release plays a fight on that block yet: battles still start from the sheet and use Marinara's own combat math. After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
         "engine": {
           "min": "2.4.6",
           "maxExclusive": "4.0.0"
@@ -53,8 +53,8 @@
           },
           {
             "path": "catalogs/creatures.json",
-            "sha256": "912d7f76e350b20f3d443954886ffde2d691cdc58f7703c17fb7d4cdc17ca970",
-            "bytes": 683084
+            "sha256": "6ef26046e2f4938f0f2a0cc1116502e707afb52f4ab2b76985de04c3d2cebd6c",
+            "bytes": 680539
           }
         ],
         "permissions": [],
@@ -64,8 +64,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/ruleset-5e-2014.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-0.5.0.zip",
-        "sha256": "dc380b41d5f062622d47b9d7a45b900b196819f3d2182257a53df1c8efc48c4c",
-        "bytes": 1268958
+        "sha256": "869c409cc99694295bb4b4af730db1e19b526a1aa4b8c3fec875850f22035563",
+        "bytes": 1266413
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/game/getting-started.md#choosing-rules"
     }

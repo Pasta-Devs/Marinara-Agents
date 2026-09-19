@@ -43,7 +43,7 @@ type a spell list or a page of class features row by row. This package ships fou
 | Spells | 319 | Spells | `catalogs/spells.json` |
 | Class features | 208 | Features and traits, Class resources | `catalogs/features.json` |
 | Weapons | 36 | Attacks | inline in `ruleset.json` |
-| Creatures | 321 | nothing: it is a bestiary | `catalogs/creatures.json` |
+| Creatures | 319 | nothing: it is a bestiary | `catalogs/creatures.json` |
 
 The bestiary is the odd one out. It writes no rows onto anyone's sheet, so the picker never offers
 it; it is the other side of a fight, and the Creatures section below says what is in it.
@@ -164,7 +164,7 @@ What the block says:
 **About the scale.** Health, armour class and the attack bonus are measured from every SRD creature
 of the rating. The damage band is measured only from the ones whose fighting is really in their
 actions: a spellcaster's printed attack is a dagger and its fireballs are a trait, so counting it
-would say a rating 12 monster deals nine damage a round. 37 casters and 4 creatures whose damage
+would say a rating 12 monster deals nine damage a round. 36 casters and 4 creatures whose damage
 this format had to leave in a trait are out of that one measurement, and in every other.
 
 The caps and the floors are then made **monotone** along the rating order, and that is the one place
@@ -175,7 +175,7 @@ changes.
 
 ### Creatures
 
-`catalogs/creatures.json` is 321 of the 325 SRD 5.1 monsters, each written in the numbers above:
+`catalogs/creatures.json` is 319 of the SRD 5.1 monsters, each written in the numbers above:
 hit dice a fight rolls, armour class, speed, ability scores, saving throw bonuses, resistances,
 vulnerabilities, immunities, condition immunities, the challenge rating it sits at, its attacks and
 saving-throw actions, its multiattack as one action that strikes several times, breath weapons that
@@ -184,6 +184,10 @@ recharge, and legendary actions bought from a pool of three points.
 Every number is read off the **printed stat block**, never off the machine-readable attack rows
 beside it, because those say the damage type is thunder on 514 of the SRD's attacks and leave the
 flat bonus out of 475 of them.
+
+That also means the SRD's own oddities ship as printed. The **Ancient Green Dragon** claws for
+22 (4d6 + 8) where every other ancient dragon claws for 2d6 + 8, because that is what SRD 5.1 prints
+for that one dragon. It is not a converter bug and it is not to be "corrected".
 
 Four creatures are left out, because the Engine's format needs a creature to have at least one
 action a fight can resolve and these have none: **Donkey**, **Frog**, **Sea Horse** (the source
@@ -194,12 +198,13 @@ at all it is the fastest of the other printed modes, so a shark travels at its s
 than standing still. Whenever there is more than walking to say, the whole printed line rides along
 as a trait ("0 ft., fly 90 ft. (hover)"), which is 172 of them.
 
-**Two creatures take a number from the printed page.** The machine-readable source has no hit dice,
-no speed and no challenge rating for the **Drow** or the **Deep Gnome (Svirfneblin)**, which would
-ship them as flat health, unable to move, at the bottom of the scale. The build states what the SRD
-stat blocks print (Drow 13 (3d8), 30 ft., Challenge 1/4; Svirfneblin 16 (3d6 + 6), 20 ft., Challenge
-1/2), and refuses to run if the source ever starts saying something else for those fields or if the
-hit dice stop averaging the hit points it already prints. Nothing else in the bestiary is hand-typed.
+**Each creature appears once.** The SRD prints its bestiary alphabetically and cross-references two
+of them under a second heading: "Elf, Drow" is an index entry pointing at the Drow's stat block, and
+"Gnome, Deep (Svirfneblin)" at the Deep Gnome's. The machine-readable source models both headings as
+records, so those two arrive as stubs with the real creature's name, armour class, hit points and
+actions and none of its hit dice, speed or challenge rating. They are left out, because they are not
+second creatures. The build refuses to run if either side leaves the source, if a stub grows hit dice
+of its own, or if the two stop printing the same actions.
 
 ### What is written down but not resolved
 

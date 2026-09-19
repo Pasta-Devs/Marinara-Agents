@@ -1125,50 +1125,30 @@ const ABILITY_BY_SAVE_NAME = Object.freeze({
   charisma: "cha",
 });
 
-// Where the FIXTURE is missing a number the printed SRD 5.1 stat block states. Two creatures come
-// out of the source with no hit dice, no speed and no challenge rating at all, which would ship them
-// as flat health, unable to move, at the bottom of the threat scale.
+// The SRD prints its bestiary alphabetically and cross-references some creatures under a second
+// heading: "Elf, Drow" is an index entry pointing at the Drow's stat block, not a second creature.
+// The fixture models both headings as records, so the index entry arrives as a stub with the real
+// one's name, armour class, hit points and actions, and none of its hit dice, speed or challenge
+// rating. Shipping both would put the same creature in the bestiary twice.
 //
-// `sourceSays` is what the fixture holds today for that field and `srd` is what the stat block
-// prints. assertCreatureOverrides below fails the run when a pk leaves the source, when the fixture
-// starts saying something else for an overridden field (the override is then stale, whichever way it
-// moved), or when the override's own hit dice do not average the hit points the fixture already
-// prints. Nothing here is a judgement call: every row is a sentence off the page.
-const CREATURE_OVERRIDES = new Map([
-  // Drow: "Hit Points 13 (3d8)", "Speed 30 ft.", "Challenge 1/4 (50 XP)".
-  [
-    "srd_elf-drow",
-    {
-      hit_dice: { sourceSays: null, srd: "3d8" },
-      walk: { sourceSays: 0, srd: 30 },
-      challenge_rating: { sourceSays: "0.000", srd: "0.250" },
-    },
-  ],
-  // Deep Gnome (Svirfneblin): "Hit Points 16 (3d6 + 6)", "Speed 20 ft.", "Challenge 1/2 (100 XP)".
-  [
-    "srd_gnome-deep-svirfneblin",
-    {
-      hit_dice: { sourceSays: null, srd: "3d6+6" },
-      walk: { sourceSays: 0, srd: 20 },
-      challenge_rating: { sourceSays: "0.000", srd: "0.500" },
-    },
-  ],
+// An alias is left out and said in the build report. assertCreatureAliases below fails the run when
+// either side leaves the source, when the alias grows hit dice of its own (it is then no longer a
+// stub, and somebody has to look at it), or when the two stop printing the same actions. Nothing
+// here corrects a number: the canonical record already holds every one of them.
+const CREATURE_ALIASES = new Map([
+  ["srd_elf-drow", "srd_drow"],
+  ["srd_gnome-deep-svirfneblin", "srd_deep-gnome-svirfneblin"],
 ]);
 
-// The shapes that put those two in this table in the first place. Any OTHER creature wearing one is
-// listed in the build report rather than guessed at, because a missing number is a decision for
-// somebody holding the book, not for a regular expression.
-const OVERRIDE_FINGERPRINTS = Object.freeze([
-  { name: "no hit dice", test: (fields) => !fields.hit_dice },
-  {
-    name: "cannot move at all",
-    test: (fields) => !fields.walk && !fields.burrow && !fields.climb && !fields.fly && !fields.swim,
-  },
-  {
-    name: "challenge 0 with real hit points and a real attack",
-    test: (fields, best) => Number(fields.challenge_rating) === 0 && fields.hit_points > 10 && best >= 4,
-  },
-]);
+// Things the SRD really prints that look like converter bugs, kept here so nobody "corrects" the
+// data later. The printed text is the truth, and these are the places it surprises a reader:
+//
+// - The Ancient Green Dragon claws for 22 (4d6 + 8) where every other ancient dragon claws for
+//   2d6 + 8. SRD 5.1 prints 4d6 for that one dragon, so 4d6 is what ships.
+// - A thrown weapon's melee and ranged rows carry the same numbers, so the first row stands for the
+//   printed action and the second is not a second attack.
+// - Eldritch Blast has no per-level damage options in the source, because it adds beams rather than
+//   dice, so it correctly gets no `scales` while every other damaging cantrip does.
 
 // The SRD's own counting words, which is how a Multiattack says how many times it strikes.
 const COUNT_WORDS = Object.freeze({
@@ -1593,42 +1573,57 @@ function multiattackSequence(text, attacks) {
 // what it does is a spell list, so its actions do not say what it deals in a round.
 const SPELLCASTING_TRAIT = /spellcasting/iu;
 
-/** The average of a hit dice string, floored the way the SRD's own printed hit points are. */
-function hitDiceAverage(dice) {
-  const roll = DICE_PATTERN.exec(dice.replace(/[+-]\d+$/u, "")) ?? fail(`"${dice}" is not hit dice`);
-  const flat = /([+-]\d+)$/u.exec(dice);
-  return Math.floor(Number(roll[1]) * ((Number(roll[2]) + 1) / 2)) + (flat ? Number(flat[1]) : 0);
+/** The names the actions of one creature print, sorted, so two records can be compared by what they
+ *  do rather than by the order the fixture happens to list them in. */
+function actionNames(pk, actions) {
+  return (actions.get(pk) ?? [])
+    .map((action) => plainText(action.fields.name))
+    .sort()
+    .join(", ");
 }
 
-/** Every override still names a creature the source has, still corrects the value the source
- *  actually holds, and still averages the hit points the source prints. A fixture that changed under
- *  one of these stops the build, whichever way it moved: a source that filled the gap in makes the
- *  row redundant, and one that filled it in differently makes it wrong. */
-function assertCreatureOverrides(records) {
-  for (const [pk, fields] of CREATURE_OVERRIDES) {
-    const record = records.find((entry) => entry.pk === pk);
-    if (!record) fail(`${pk} is written as a creature override but is not in the source`);
-    for (const [field, { sourceSays, srd }] of Object.entries(fields)) {
-      const held = record.fields[field] ?? null;
-      if (held !== (sourceSays ?? null)) {
-        fail(
-          `${pk} ${field} is ${JSON.stringify(held)} in the source, not the ${JSON.stringify(sourceSays)} this override corrects; drop or restate the row`,
-        );
-      }
-      if (field === "hit_dice" && hitDiceAverage(srd) !== record.fields.hit_points) {
-        fail(
-          `${pk} override ${srd} averages ${hitDiceAverage(srd)}, but the source prints ${record.fields.hit_points} hit points`,
-        );
-      }
+/** Every alias still points at a creature the source has, is still a stub rather than a stat block
+ *  of its own, and still prints the same actions as the creature it points at. Any of those failing
+ *  means the fixture changed under the map, and a real creature could be dropped without a word. */
+function assertCreatureAliases(records, actions) {
+  for (const [alias, canonical] of CREATURE_ALIASES) {
+    const stub = records.find((entry) => entry.pk === alias);
+    const real = records.find((entry) => entry.pk === canonical);
+    if (!stub) fail(`${alias} is written as an index alias but is not in the source`);
+    if (!real) fail(`${alias} points at ${canonical}, which is not in the source`);
+    if (stub.fields.hit_dice) {
+      fail(
+        `${alias} now prints its own hit dice (${stub.fields.hit_dice}), so it is no longer an index entry for ${canonical}`,
+      );
+    }
+    const stubActions = actionNames(alias, actions);
+    const realActions = actionNames(canonical, actions);
+    if (stubActions !== realActions) {
+      fail(`${alias} does "${stubActions}" and ${canonical} does "${realActions}", so they are not the same creature`);
     }
   }
 }
 
-/** A record's fields with the printed SRD numbers in place of the gaps the fixture left. */
-function overriddenFields(record) {
-  const overrides = CREATURE_OVERRIDES.get(record.pk);
-  if (!overrides) return record.fields;
-  return { ...record.fields, ...Object.fromEntries(Object.entries(overrides).map(([field, { srd }]) => [field, srd])) };
+/** Other pairs wearing the shape the aliases wear: the same actions and the same printed hit points,
+ *  with one of the two carrying no hit dice. Reported and never dropped, because which of a pair is
+ *  the index entry is a decision for somebody holding the book. */
+function aliasShapedPairs(records, actions) {
+  const named = CREATURE_ALIASES;
+  const pairs = [];
+  const stubs = records.filter((record) => !record.fields.hit_dice && !named.has(record.pk));
+  for (const stub of stubs) {
+    const doing = actionNames(stub.pk, actions);
+    if (!doing) continue;
+    for (const other of records) {
+      if (other.pk === stub.pk) continue;
+      if (other.fields.hit_points !== stub.fields.hit_points) continue;
+      if (actionNames(other.pk, actions) !== doing) continue;
+      pairs.push(
+        `${stub.pk} ("${stub.fields.name}") looks like an index entry for ${other.pk} ("${other.fields.name}")`,
+      );
+    }
+  }
+  return pairs;
 }
 
 // The speed modes a stat block prints after its walking speed, in the order the SRD prints them.
@@ -1654,9 +1649,7 @@ function speedOf(fields) {
  *  The second is only for the threat scale: a creature is in the bestiary, and in the health,
  *  defense and to-hit measurements, either way. */
 function creatureEntry(record, sources, report) {
-  const pk = record.pk;
-  // The printed SRD numbers where the fixture left a gap. Everything below reads these.
-  const fields = overriddenFields(record);
+  const { pk, fields } = record;
   const actions = (sources.actions.get(pk) ?? []).filter((action) => action.fields.action_type !== "REACTION");
   if (actions.length === 0) {
     report.skipped.push({ id: pk, reason: "the source gives it no action at all, and a block needs one" });
@@ -2369,13 +2362,13 @@ const report = {
   tiersWithNoHitters: [],
   speedFromAnotherMode: 0,
   speedTraits: 0,
-  fingerprinted: [],
+  aliasesLeftOut: [],
+  aliasShapedPairs: [],
   damageMeasurementSkippedCasters: 0,
   damageMeasurementSkippedHiddenDamage: 0,
 };
 
 const creatureRecords = srdOnly(await fixture("Creature.json"), "creature");
-assertCreatureOverrides(creatureRecords);
 const creatureActions = new Map();
 for (const action of await fixture("CreatureAction.json")) {
   if (!creatureActions.has(action.fields.parent)) creatureActions.set(action.fields.parent, []);
@@ -2408,26 +2401,22 @@ const creatureSources = {
   traits: creatureTraits,
   environments,
 };
+assertCreatureAliases(creatureRecords, creatureActions);
+report.aliasShapedPairs.push(...aliasShapedPairs(creatureRecords, creatureActions));
+
 const parsedCreatures = creatureRecords
+  .filter((record) => {
+    // An index entry is the same creature under a second heading, so it is left out rather than
+    // shipped as a duplicate of the stat block it points at.
+    const canonical = CREATURE_ALIASES.get(record.pk);
+    if (!canonical) return true;
+    const real = creatureRecords.find((entry) => entry.pk === canonical);
+    report.aliasesLeftOut.push(`${record.fields.name} is ${real.fields.name}`);
+    return false;
+  })
   .map((record) => creatureEntry(record, creatureSources, report))
   .filter(Boolean)
   .sort(byId);
-
-// Other creatures wearing one of the shapes that made the override table necessary. They are LISTED
-// and never corrected: a number the fixture does not hold is a decision for somebody holding the
-// book. The two already in the table are not listed, because they are already decided.
-for (const record of creatureRecords) {
-  if (CREATURE_OVERRIDES.has(record.pk)) continue;
-  const best = Math.max(
-    0,
-    ...(creatureActions.get(record.pk) ?? []).map((action) => {
-      const printed = TO_HIT.exec(plainText(action.fields.desc));
-      return printed ? Number(printed[1]) : 0;
-    }),
-  );
-  const worn = OVERRIDE_FINGERPRINTS.filter(({ test }) => test(record.fields, best)).map(({ name }) => name);
-  if (worn.length > 0) report.fingerprinted.push(`${record.pk} (${worn.join(", ")})`);
-}
 const { measured: measuredTiers, tiers } = threatTiers(parsedCreatures, report);
 // `damageMeasurable` is the threat scale's business and nothing the Engine reads, so it comes off
 // before the entries are written.
@@ -2558,7 +2547,8 @@ const list = (items, limit = 8) =>
 console.log("");
 console.log("Bestiary build report");
 console.log(
-  `  ${creatures.length} of ${creatureRecords.length} SRD creatures shipped, ${report.skipped.length} left out`,
+  `  ${creatures.length} of ${creatureRecords.length} SRD creature records shipped: ` +
+    `${report.skipped.length} left out and ${report.aliasesLeftOut.length} are index aliases for a stat block already here`,
 );
 for (const entry of report.skipped) console.log(`    left out: ${entry.id} — ${entry.reason}`);
 console.log(
@@ -2599,12 +2589,9 @@ console.log(
   `  speed: ${report.speedFromAnotherMode} creature(s) take theirs from a mode other than walking, ` +
     `${report.speedTraits} carry the printed speed line as a trait`,
 );
-console.log(
-  `  ${CREATURE_OVERRIDES.size} creature(s) take a printed SRD number the fixture does not hold: ` +
-    `${[...CREATURE_OVERRIDES.keys()].join(", ")}`,
-);
-console.log(`  ${report.fingerprinted.length} other creature(s) wear one of the shapes that needed an override:`);
-for (const entry of report.fingerprinted) console.log(`    ${entry}`);
+console.log(`  ${report.aliasesLeftOut.length} index aliases left out: ${report.aliasesLeftOut.join("; ")}`);
+console.log(`  ${report.aliasShapedPairs.length} other pair(s) look like an index entry and its stat block:`);
+for (const entry of report.aliasShapedPairs) console.log(`    ${entry}`);
 console.log("  text against structured rows:");
 console.log(`    to hit: ${report.toHitDisagreements.length} disagreement(s) — ${list(report.toHitDisagreements)}`);
 console.log(`    dice: ${report.diceDisagreements.length} disagreement(s) — ${list(report.diceDisagreements, 6)}`);
