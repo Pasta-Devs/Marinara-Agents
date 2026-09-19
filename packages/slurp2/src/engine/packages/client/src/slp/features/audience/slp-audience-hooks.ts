@@ -2,19 +2,19 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
 import type { SlurpPageCursor } from "../../base/state/slp-page-cursor.js";
 import { cursorQuery } from "../../base/state/slp-page-cursor.js";
-import { noodleKeys } from "../../base/state/slp-query-keys.js";
+import { slpKeys } from "../../base/state/slp-query-keys.js";
 import type {
-  NoodlerConnectionCounts,
+  SlpCreatorConnectionCounts,
   SlurpAudienceCharacterGroup,
   SlurpAudienceCharacterSummary,
   SlurpFollowerEntry,
   SlurpSubscriberEntry,
 } from "./slp-audience-contract.js";
 
-export function useNoodlerConnectionCounts(enabled = true) {
+export function useCreatorConnectionCounts(enabled = true) {
   return useQuery({
-    queryKey: noodleKeys.noodlerConnectionCounts(),
-    queryFn: () => api.get<NoodlerConnectionCounts>("/slurp2/noodler/account-connection-counts"),
+    queryKey: slpKeys.noodlerConnectionCounts(),
+    queryFn: () => api.get<SlpCreatorConnectionCounts>("/slurp2/noodler/account-connection-counts"),
     enabled,
     staleTime: 30_000,
   });
@@ -25,9 +25,9 @@ export function useNoodlerConnectionCounts(enabled = true) {
  * The list stops at the named cast; `total` is the platform reach. That is the point — these
  * people, and this many more.
  */
-export function useNoodlerFollowers(accountId: string | null) {
+export function useCreatorFollowers(accountId: string | null) {
   return useQuery({
-    queryKey: noodleKeys.noodlerFollowers(accountId ?? "none"),
+    queryKey: slpKeys.noodlerFollowers(accountId ?? "none"),
     queryFn: () =>
       api.get<{ items: SlurpFollowerEntry[]; total: number }>(
         `/slurp2/noodler/accounts/${encodeURIComponent(accountId!)}/followers`,
@@ -59,9 +59,9 @@ export function useSlurpAudienceCharacterGroups(enabled = true) {
     staleTime: 5 * 60_000,
   });
 }
-export function useNoodlerSubscribers(accountId: string | null) {
+export function useCreatorSubscribers(accountId: string | null) {
   return useInfiniteQuery({
-    queryKey: noodleKeys.noodlerSubscribers(accountId ?? "none"),
+    queryKey: slpKeys.noodlerSubscribers(accountId ?? "none"),
     initialPageParam: null as SlurpPageCursor | null,
     queryFn: ({ pageParam }) =>
       api.get<{

@@ -9,7 +9,7 @@
  * Standalone and pure so the rules can be tested without an Engine checkout.
  */
 import { normalizeSlurpDiscoveryTags, SLURP_DISCOVERY_MIN_TAGS } from "../discovery/slp-discovery-profile.js";
-import { normalizeNoodlerStageProfileDraft } from "./slp-stage-profile-normalize.js";
+import { normalizeCreatorStageProfileDraft } from "./slp-stage-profile-normalize.js";
 
 /** The same limits the shared stage-profile schema and the create form enforce. */
 export const SLURP_STAGE_PROFILE_LIMITS = { displayName: 120, handle: 40, bio: 500, stagePersonality: 1000 } as const;
@@ -69,7 +69,7 @@ export function repairSlurpStageProfileDraft(
   value: unknown,
   allowedTags?: readonly string[],
 ): { draft: SlurpRepairedStageProfileDraft; notes: string[] } | null {
-  const raw = normalizeNoodlerStageProfileDraft(value);
+  const raw = normalizeCreatorStageProfileDraft(value);
   if (!raw) return null;
   const notes: string[] = [];
   const limited = (field: keyof typeof SLURP_STAGE_PROFILE_LIMITS, label: string, input: string) => {

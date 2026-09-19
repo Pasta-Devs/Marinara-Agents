@@ -1,4 +1,4 @@
-import type { NoodleAccount, NoodleIdentityDisclosure } from "@marinara-engine/shared";
+import type { SlpAccount, SlpIdentityDisclosure } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { DB } from "../../../db/connection.js";
 import { logger, logDebugOverride } from "../../../lib/logger.js";
 import { newId } from "../../../utils/id-generator.js";
@@ -6,7 +6,7 @@ import { createSlurpStorage } from "../../data/slp-storage.js";
 import { type SlurpSettings } from "../../modules/settings/slp-settings.js";
 import { SLURP_ENERGY_COST } from "../../modules/creators/slp-creator-state.js";
 import { getErrorMessage } from "../../modules/creators/slp-public-support.js";
-import { NOODLER_MEDIA_PREFIX, noodlerPostMediaUrl } from "../../base/media/slp-media.js";
+import { NOODLER_MEDIA_PREFIX, slpCreatorPostMediaUrl } from "../../base/media/slp-media.js";
 import { resolveImageConnectionFallback } from "../../../services/generation/media-connection-fallback.js";
 import { generateImage, stageImageToDisk, type StagedGalleryImage } from "../../../services/image/image-generation.js";
 import { resolveConnectionImageDefaults } from "../../../services/image/image-generation-defaults.js";
@@ -17,18 +17,18 @@ import { resolveIllustratorCharacterReferences } from "../../../services/image/i
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { createPromptOverridesStorage } from "../../../services/storage/prompt-overrides.storage.js";
-import { resolveNoodlerImageConnectionId } from "../../base/media/slp-image-connections.js";
+import { resolveCreatorImageConnectionId } from "../../base/media/slp-image-connections.js";
 import { loadPrompt, NOODLE_IMAGE_POST } from "../../../services/prompt-overrides/index.js";
-import { generateNoodleImageWithRetry, noodlerPostImageRetryAttempts } from "../../base/media/slp-image-retry.js";
-import { rewriteNoodleImagePrompt } from "../../base/media/slp-image-prompt-rewrite.js";
+import { generateSlpImageWithRetry, slpCreatorPostImageRetryAttempts } from "../../base/media/slp-image-retry.js";
+import { rewriteSlpImagePrompt } from "../../base/media/slp-image-prompt-rewrite.js";
 import {
   isConnectionAdmissionFailure,
   type ConnectionAdmissionMode,
 } from "../../../services/generation/connection-admission.js";
-import { characterAppearanceFromRow, characterNoodleImageContextFromRow } from "./slp-public-images-service.js";
-import type { NoodleImagePromptReviewItem, ReviewedNoodleImagePrompt } from "./slp-public-images-service.js";
+import { characterAppearanceFromRow, characterSlpImageContextFromRow } from "./slp-public-images-service.js";
+import type { SlpImagePromptReviewItem, ReviewedSlpImagePrompt } from "./slp-public-images-service.js";
 import { characterNameFromRow } from "../../modules/creators/slp-public-support.js";
-import { selectNoodleImageProviderPrompt } from "../../base/media/slp-image-prompt.js";
+import { selectSlpImageProviderPrompt } from "../../base/media/slp-image-prompt.js";
 import { slurpImageExtension } from "../../base/media/slp-image-format.js";
 
 const REVIEWED_IMAGE_CLAIM_LEASE_MS = 2 * 60 * 1000;
@@ -41,17 +41,17 @@ function imageClaimLeaseUntil() {
 type ImageConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
 /**
- * NoodleR analog of generateNoodlePostImage. The deliberate difference from public
+ * NoodleR analog of generateSlpPostImage. The deliberate difference from public
  * Noodle: bytes stage into a NoodleR-owned media namespace and never touch the
  * public gallery or character gallery, so subscriber/PPV output can be served only
  * through the access-checked media endpoint. The staged file's on-disk path is persisted in
  * `metadata.noodlerMediaPath`; callers finalize via `stagedMedia` and derive the access-checked
  * URL from the persisted post id.
  */
-export async function generateNoodlerPostImage(input: {
-  account: NoodleAccount;
-  linkedPublicAccount: NoodleAccount | null;
-  disclosureMode: NoodleIdentityDisclosure;
+export async function generateCreatorPostImage(input: {
+  account: SlpAccount;
+  linkedPublicAccount: SlpAccount | null;
+  disclosureMode: SlpIdentityDisclosure;
   postContent: string;
   draftPrompt: string;
   settings: Pick<
@@ -89,7 +89,7 @@ export async function generateNoodlerPostImage(input: {
   suppressCharacterContext?: boolean;
 }): Promise<{
   metadata: Record<string, unknown>;
-  preview: Omit<NoodleImagePromptReviewItem, "id"> | null;
+  preview: Omit<SlpImagePromptReviewItem, "id"> | null;
   stagedMedia: StagedGalleryImage | null;
 }> {
   const imageSettings = await loadImageGenerationUserSettings(input.db);
@@ -153,7 +153,7 @@ export async function generateNoodlerPostImage(input: {
           avatarPath: sourceCharacter.avatarPath ?? null,
           appearance: characterAppearanceFromRow(sourceCharacter),
           name: characterNameFromRow(sourceCharacter),
-          ...characterNoodleImageContextFromRow(
+          ...characterSlpImageContextFromRow(
             sourceCharacter,
             input.settings.characterImageInstructions[sourceCharacter.id],
           ),
@@ -245,7 +245,7 @@ export async function generateNoodlerPostImage(input: {
   const reviewedOverride = input.retryStoredPrompt ? null : compiledOverride;
   // When no rewrite survives the provider gets the rendered template, not the bare draft: it is the
   // only document carrying appearance notes and the character's image habits, so dropping it made
-  // fallback pictures look like someone else. selectNoodleImageProviderPrompt caps it on a word
+  // fallback pictures look like someone else. selectSlpImageProviderPrompt caps it on a word
   // boundary, which is what the uncapped stack of appearance, personality and habits needed.
   const rawProviderPrompt = redactIdentity(reviewedOverride?.prompt || compiledPrompt.prompt);
   // The rewriter gets the visual intent only. It receives appearance, personality, and image habits
@@ -285,7 +285,7 @@ export async function generateNoodlerPostImage(input: {
     !skipInterpretation,
   );
   const rewrittenPrompt = rewriteAttempted
-    ? await rewriteNoodleImagePrompt({
+    ? await rewriteSlpImagePrompt({
         db: input.db,
         prompt: rawRewriteInput,
         interpretationInstruction: input.settings.imagePromptInterpretation,
@@ -310,7 +310,7 @@ export async function generateNoodlerPostImage(input: {
       })
     : null;
   const finalPromptBase = redactIdentity(
-    selectNoodleImageProviderPrompt({
+    selectSlpImageProviderPrompt({
       rewrittenPrompt: compiledRewrittenPrompt?.prompt || rewrittenPrompt,
       rawPrompt: rawProviderPrompt,
       rewriteAttempted,
@@ -365,7 +365,7 @@ export async function generateNoodlerPostImage(input: {
     };
   }
 
-  const image = await generateNoodleImageWithRetry(
+  const image = await generateSlpImageWithRetry(
     async (attempt) => {
       await input.beforeProviderAttempt?.(attempt);
       return generateImage(imageSource, imageBaseUrl, input.imageConnection.apiKey || "", imageServiceHint, {
@@ -421,14 +421,14 @@ export async function generateNoodlerPostImage(input: {
   };
 }
 
-export function createNoodlerNoodleImagesService(db: DB) {
+export function createCreatorSlpImagesService(db: DB) {
   const noodle = createSlurpStorage(db);
   const characters = createCharactersStorage(db);
   const connections = createConnectionsStorage(db);
   const promptOverrides = createPromptOverridesStorage(db);
 
   const generateReviewedImages = async (input: {
-    prompts: ReviewedNoodleImagePrompt[];
+    prompts: ReviewedSlpImagePrompt[];
     debugMode: boolean;
     /** Set when the prompts are stored drafts being retried rather than prompts a human approved. */
     retryStoredPrompt?: boolean;
@@ -456,7 +456,7 @@ export function createNoodlerNoodleImagesService(db: DB) {
         await noodle.releasePostImageClaim(claimed.id, claimToken);
         continue;
       }
-      const imageConnectionId = await resolveNoodlerImageConnectionId(db, account.id);
+      const imageConnectionId = await resolveCreatorImageConnectionId(db, account.id);
       // Fall back to the default image connection when a creator's mapped
       // override was deleted (getWithKey returns null), instead of silently
       // disabling image generation for that creator.
@@ -488,9 +488,9 @@ export function createNoodlerNoodleImagesService(db: DB) {
       const renewalTimer = setInterval(() => void renewClaim(), REVIEWED_IMAGE_CLAIM_RENEW_MS);
       renewalTimer.unref?.();
 
-      let image: Awaited<ReturnType<typeof generateNoodlerPostImage>>;
+      let image: Awaited<ReturnType<typeof generateCreatorPostImage>>;
       try {
-        image = await generateNoodlerPostImage({
+        image = await generateCreatorPostImage({
           account,
           linkedPublicAccount,
           disclosureMode,
@@ -518,7 +518,7 @@ export function createNoodlerNoodleImagesService(db: DB) {
         logger.warn(error, "[slurp] Failed to generate reviewed image for %s", account.displayName);
         await renewClaim();
         if (claimOwned) {
-          const attempts = noodlerPostImageRetryAttempts(claimed.metadata) + 1;
+          const attempts = slpCreatorPostImageRetryAttempts(claimed.metadata) + 1;
           await noodle.finalizePostImageClaim(claimed.id, claimToken, {
             imageUrl: null,
             // The prompt survives a provider failure *and* a spent budget. Spending the budget
@@ -568,7 +568,7 @@ export function createNoodlerNoodleImagesService(db: DB) {
       try {
         image.stagedMedia?.promote();
         const ok = await noodle.finalizePostImageClaim(claimed.id, claimToken, {
-          imageUrl: noodlerPostMediaUrl(claimed.id),
+          imageUrl: slpCreatorPostMediaUrl(claimed.id),
           metadata: image.metadata,
         });
         if (!ok) {

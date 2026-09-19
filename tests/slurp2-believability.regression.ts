@@ -171,7 +171,7 @@ const storage = slurp2Source("packages/slurp2/src/engine/packages/server/src/ser
 const dedupe = storage.slice(storage.indexOf("async createNoodlerWorldInteraction("));
 assert.match(
   dedupe.slice(0, 4_000),
-  /eq\(noodleInteractions\.postId, postId\),\s*eq\(noodleInteractions\.actorAccountId, input\.actorId\),\s*eq\(noodleInteractions\.type, input\.type\),/u,
+  /eq\(slpInteractions\.postId, postId\),\s*eq\(slpInteractions\.actorAccountId, input\.actorId\),\s*eq\(slpInteractions\.type, input\.type\),/u,
   "the interaction dedupe key includes the type, so a like cannot block a later comment",
 );
 let revisited = false;

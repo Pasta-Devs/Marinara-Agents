@@ -1,13 +1,13 @@
-import type { NoodlerRefreshNowOutcome } from "@marinara-engine/shared";
+import type { SlpCreatorRefreshNowOutcome } from "../../../../../shared/src/slp/slp-social.types.js";
 
 /** Keep the existing three-creator limit while reporting each completed request. */
 export async function refreshSlurpCreatorBatch(
   accountIds: string[],
-  refresh: (accountId: string) => Promise<{ outcomes: NoodlerRefreshNowOutcome[] }>,
+  refresh: (accountId: string) => Promise<{ outcomes: SlpCreatorRefreshNowOutcome[] }>,
   onRemaining?: (remaining: number) => void,
-): Promise<{ outcomes: NoodlerRefreshNowOutcome[] }> {
+): Promise<{ outcomes: SlpCreatorRefreshNowOutcome[] }> {
   const ids = [...new Set(accountIds)];
-  const outcomes: NoodlerRefreshNowOutcome[][] = new Array(ids.length);
+  const outcomes: SlpCreatorRefreshNowOutcome[][] = new Array(ids.length);
   let next = 0;
   let remaining = ids.length;
   // ponytail: undispatched creators need the page to stay open; durable resume

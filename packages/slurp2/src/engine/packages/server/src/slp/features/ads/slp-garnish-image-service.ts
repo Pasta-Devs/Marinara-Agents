@@ -13,9 +13,9 @@ import { createConnectionsStorage } from "../../../services/storage/connections.
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import type { GarnishAd } from "../../../services/garnish-ads/garnish-ads.types.js";
 import type { GarnishAdsStorage } from "../../../services/garnish-ads/garnish-ads.storage.js";
-import { generateNoodleImageWithRetry } from "../../base/media/slp-image-retry.js";
-import { rewriteNoodleImagePrompt } from "../../base/media/slp-image-prompt-rewrite.js";
-import { selectNoodleImageProviderPrompt } from "../../base/media/slp-image-prompt.js";
+import { generateSlpImageWithRetry } from "../../base/media/slp-image-retry.js";
+import { rewriteSlpImagePrompt } from "../../base/media/slp-image-prompt-rewrite.js";
+import { selectSlpImageProviderPrompt } from "../../base/media/slp-image-prompt.js";
 import { garnishAdImageUrl, garnishAdMediaNamespace, unlinkGarnishAdImage } from "./slp-garnish-image.js";
 
 /** Ads read as feed content, so the artwork is product photography rather than a poster. */
@@ -73,9 +73,9 @@ export async function generateGarnishAdImage(
     .filter(Boolean)
     .join("\n");
   const rewriteAttempted = Boolean(imagePromptInstructions) && settings.enableImageInterpretation !== false;
-  const prompt = selectNoodleImageProviderPrompt({
+  const prompt = selectSlpImageProviderPrompt({
     rewrittenPrompt: rewriteAttempted
-      ? await rewriteNoodleImagePrompt({
+      ? await rewriteSlpImagePrompt({
           db,
           prompt: rawPrompt,
           interpretationInstruction: settings.imagePromptInterpretation,
@@ -93,7 +93,7 @@ export async function generateGarnishAdImage(
       ),
   });
   try {
-    const image = await generateNoodleImageWithRetry(
+    const image = await generateSlpImageWithRetry(
       () =>
         generateImage(
           source,

@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "../../../lib/api-client.js";
-import { noodleKeys } from "../../base/state/slp-query-keys.js";
+import { slpKeys } from "../../base/state/slp-query-keys.js";
 import type { SlurpPromptErrorKind } from "./slp-messages-contract.js";
 
 export function getSlurpPromptErrorKind(error: unknown): SlurpPromptErrorKind {
@@ -22,10 +22,10 @@ export function getSlurpPromptErrorKind(error: unknown): SlurpPromptErrorKind {
 }
 export const messageKeys = {
   /** Every messaging query hangs off this, so one prefix invalidates the whole surface. */
-  root: () => [...noodleKeys.noodlerRoot(), "messages"],
-  threads: (personaId: string | null) => [...noodleKeys.noodlerRoot(), "messages", "threads", personaId ?? "none"],
+  root: () => [...slpKeys.noodlerRoot(), "messages"],
+  threads: (personaId: string | null) => [...slpKeys.noodlerRoot(), "messages", "threads", personaId ?? "none"],
   thread: (threadId: string, personaId: string | null) => [
-    ...noodleKeys.noodlerRoot(),
+    ...slpKeys.noodlerRoot(),
     "messages",
     "thread",
     threadId,
@@ -43,8 +43,8 @@ export const invalidateSlurpMessages = (qc: ReturnType<typeof useQueryClient>) =
   Promise.all(
     [
       messageKeys.root(),
-      [...noodleKeys.noodlerRoot(), "wallet"],
-      [...noodleKeys.noodlerRoot(), "viewer-wallets"],
-      [...noodleKeys.noodlerRoot(), "notifications"],
+      [...slpKeys.noodlerRoot(), "wallet"],
+      [...slpKeys.noodlerRoot(), "viewer-wallets"],
+      [...slpKeys.noodlerRoot(), "notifications"],
     ].map((queryKey) => qc.invalidateQueries({ queryKey })),
   );

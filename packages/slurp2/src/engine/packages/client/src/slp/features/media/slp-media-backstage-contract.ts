@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
+import type { SlpCreatorManagedStageProfile } from "../../../../../shared/src/slp/slp-social.types.js";
 import { useSlurpConnections } from "../../base/state/slp-host-connections";
 import type { SlpBackstageSection, SlpBackstageTarget } from "../../base/navigation/slp-backstage-target";
 import type { SlurpSettings } from "../settings/slp-settings-contract";
@@ -17,7 +17,7 @@ export function useSlpMediaBackstageState({
 }: {
   section: SlpBackstageSection;
   target: SlpBackstageTarget;
-  creators: NoodlerManagedStageProfile[];
+  creators: SlpCreatorManagedStageProfile[];
 }) {
   const { t } = useTranslation();
   const imageSettingsQuery = useSlurpImageConnections(

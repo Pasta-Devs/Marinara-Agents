@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
-import { noodleKeys } from "../../base/state/slp-query-keys.js";
+import { slpKeys } from "../../base/state/slp-query-keys.js";
 import type {
-  NoodlerViewerWallets,
+  SlpCreatorViewerWallets,
   SlurpGoalProgress,
   SlurpStudioCreator,
   SlurpWallet,
@@ -16,10 +16,10 @@ export function useSlurpPayout() {
       api.post<{ allowance: number }>(`/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/payout`, body),
     onSuccess: () =>
       Promise.all([
-        qc.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "studio"] }),
-        qc.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "wallet"] }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-        qc.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "viewer-wallets"] }),
+        qc.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "studio"] }),
+        qc.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "wallet"] }),
+        qc.invalidateQueries({ queryKey: slpKeys.slpCreatorViewers() }),
+        qc.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "viewer-wallets"] }),
       ]),
   });
 }
@@ -40,13 +40,13 @@ export function useSetSlurpGoal() {
         `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/goal`,
         body,
       ),
-    onSuccess: () => qc.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "studio"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "studio"] }),
   });
 }
 /** The Creator home. Reading it also re-marks the point future deltas are measured from. */
 export function useSlurpStudio(personaId: string | null, enabled = true) {
   return useQuery({
-    queryKey: [...noodleKeys.noodlerRoot(), "studio", personaId ?? "none"],
+    queryKey: [...slpKeys.noodlerRoot(), "studio", personaId ?? "none"],
     queryFn: () =>
       api.get<{ since: string | null; creators: SlurpStudioCreator[] }>(
         `/slurp2/noodler/studio?personaId=${encodeURIComponent(personaId!)}`,
@@ -60,7 +60,7 @@ export function useSlurpStudio(personaId: string | null, enabled = true) {
 }
 export function useSlurpWallet(personaId: string | null) {
   return useQuery({
-    queryKey: [...noodleKeys.noodlerRoot(), "wallet", personaId ?? "none"],
+    queryKey: [...slpKeys.noodlerRoot(), "wallet", personaId ?? "none"],
     queryFn: () => api.get<SlurpWallet>(`/slurp2/noodler/viewer/wallet?personaId=${encodeURIComponent(personaId!)}`),
     enabled: Boolean(personaId),
   });
@@ -70,7 +70,7 @@ export function useClaimSlurpDailyRefill() {
   return useMutation({
     mutationFn: (input: { personaId: string }) =>
       api.post<SlurpWallet>("/slurp2/noodler/viewer/wallet/daily-refill", input),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: slpKeys.noodlerRoot() }),
   });
 }
 export function useSetSlurpWalletCoinsForDevelopment() {
@@ -79,7 +79,7 @@ export function useSetSlurpWalletCoinsForDevelopment() {
     mutationFn: (input: { personaId: string; coins: number }) =>
       api.post<SlurpWallet>("/slurp2/noodler/viewer/wallet/dev-set", input),
     onSuccess: (_wallet, input) =>
-      queryClient.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "wallet", input.personaId] }),
+      queryClient.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "wallet", input.personaId] }),
   });
 }
 export function useTipSlurpCreator() {
@@ -87,7 +87,7 @@ export function useTipSlurpCreator() {
   return useMutation({
     mutationFn: (input: { accountId: string; personaId: string; amount: number; requestId?: string }) =>
       api.post<SlurpWallet>(`/slurp2/noodler/accounts/${encodeURIComponent(input.accountId)}/tip`, input),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: slpKeys.noodlerRoot() }),
   });
 }
 /** Set a creator's own weekly price, or clear it back to the default with `null`. */
@@ -99,13 +99,13 @@ export function useSetSlurpCreatorPrice() {
         personaId: input.personaId,
         price: input.price,
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: slpKeys.noodlerRoot() }),
   });
 }
-export function useNoodlerViewerWallets(enabled = true) {
+export function useCreatorViewerWallets(enabled = true) {
   return useQuery({
-    queryKey: [...noodleKeys.noodlerRoot(), "viewer-wallets"],
-    queryFn: () => api.get<NoodlerViewerWallets>("/slurp2/noodler/viewer-wallets"),
+    queryKey: [...slpKeys.noodlerRoot(), "viewer-wallets"],
+    queryFn: () => api.get<SlpCreatorViewerWallets>("/slurp2/noodler/viewer-wallets"),
     enabled,
     staleTime: 30_000,
   });

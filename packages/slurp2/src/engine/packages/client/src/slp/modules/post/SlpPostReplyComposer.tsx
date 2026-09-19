@@ -1,22 +1,23 @@
-import type { NoodleAccount, NoodlePostCardModel } from "@marinara-engine/shared";
+import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
+import type { SlpPostCardModel } from "./SlpPostCard";
 import { cn } from "../../../lib/utils";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import {
   textareaClass,
-  NOODLE_MEDIA_PICKER_TABS,
-  NOODLE_TEXT_MEDIA_PICKER_TABS,
-  NoodleMentionSuggestions,
-  createNoodleLightboxImage,
+  SLP_MEDIA_PICKER_TABS,
+  SLP_TEXT_MEDIA_PICKER_TABS,
+  SlpMentionSuggestions,
+  createSlpLightboxImage,
 } from "./SlpPostHelpers";
-import { NoodleToolButton } from "./SlpPostComposerTools";
-import { NoodleImageComposer } from "../../base/media/SlpImageComposer";
-import { NoodleAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
+import { SlpToolButton } from "./SlpPostComposerTools";
+import { SlpImageComposer } from "../../base/media/SlpImageComposer";
+import { SlpAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
 import { ConversationMediaPickerPanel } from "../../../components/chat/ConversationMediaPickerPanel";
 import { ImageIcon, Smile, X } from "lucide-react";
 
 export interface SlpPostReplyComposerProps {
   nested: boolean;
-  post: NoodlePostCardModel;
+  post: SlpPostCardModel;
   replyParentInteractionId: string | null;
   replyTargetActor: { handle: string } | null;
   replyText: string;
@@ -28,8 +29,8 @@ export interface SlpPostReplyComposerProps {
   setReplyText: React.Dispatch<React.SetStateAction<string>>;
   activeReplyMention: string | null;
   activeReplyMentionIndex: number;
-  replyMentionSuggestions: NoodleAccount[];
-  selectReplyMention: (account: NoodleAccount) => void;
+  replyMentionSuggestions: SlpAccount[];
+  selectReplyMention: (account: SlpAccount) => void;
   replyImageUrl: string;
   setReplyImageUrl: React.Dispatch<React.SetStateAction<string>>;
   setImageLightbox: React.Dispatch<React.SetStateAction<unknown>>;
@@ -45,10 +46,10 @@ export interface SlpPostReplyComposerProps {
   uploadGlobalImages: { isPending: boolean };
   clearReplyComposer: () => void;
   postReplyPending: boolean;
-  submitReply: (post: NoodlePostCardModel) => void;
+  submitReply: (post: SlpPostCardModel) => void;
   appendToReply: (text: string) => void;
   mediaPickerTab: string;
-  personaAccount: NoodleAccount | null;
+  personaAccount: SlpAccount | null;
   creatorReplyRequest?: { asked: boolean; setAsked: (value: boolean) => void };
   setMediaPickerTab: React.Dispatch<React.SetStateAction<string>>;
 }
@@ -125,7 +126,7 @@ export function SlpPostReplyComposer({
             : undefined
         }
       />
-      <NoodleMentionSuggestions
+      <SlpMentionSuggestions
         activeMention={activeReplyMention}
         activeIndex={activeReplyMentionIndex}
         accounts={replyMentionSuggestions}
@@ -136,7 +137,7 @@ export function SlpPostReplyComposer({
         <div className="relative mt-2 overflow-hidden rounded-xl border border-[var(--noodle-divider)]">
           <button
             type="button"
-            onClick={() => setImageLightbox(createNoodleLightboxImage(`reply-draft-${post.id}`, replyImageUrl))}
+            onClick={() => setImageLightbox(createSlpLightboxImage(`reply-draft-${post.id}`, replyImageUrl))}
             className="block w-full"
             title={localizeUi("ui.noodle.noodlepostcard.openAttachedImage")}
           >
@@ -161,23 +162,23 @@ export function SlpPostReplyComposer({
         <div className="flex items-center gap-1">
           {!disableReplyImage && (
             <div ref={replyImageToolRef} className="relative">
-              <NoodleToolButton
+              <SlpToolButton
                 title={localizeUi("ui.noodle.noodlehome.attachImage")}
                 active={activeReplyComposerTool === "image"}
                 onClick={() => setActiveReplyComposerTool((current) => (current === "image" ? null : "image"))}
               >
                 <ImageIcon size={17} />
-              </NoodleToolButton>
+              </SlpToolButton>
             </div>
           )}
           <div ref={replyMediaToolRef} className="relative">
-            <NoodleToolButton
+            <SlpToolButton
               title={localizeUi("ui.noodle.noodlehome.emojiGifsAndStickers")}
               active={activeReplyComposerTool === "media"}
               onClick={() => setActiveReplyComposerTool((current) => (current === "media" ? null : "media"))}
             >
               <Smile size={17} />
-            </NoodleToolButton>
+            </SlpToolButton>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -212,8 +213,8 @@ export function SlpPostReplyComposer({
         </div>
       </div>
       {!disableReplyImage && activeReplyComposerTool === "image" && (
-        <NoodleAnchoredPopover anchorRef={replyImageToolRef} wide>
-          <NoodleImageComposer
+        <SlpAnchoredPopover anchorRef={replyImageToolRef} wide>
+          <SlpImageComposer
             imageUrl={replyImageUrlDraft}
             onImageUrlChange={setReplyImageUrlDraft}
             onChooseFile={() => replyImageFileRef.current?.click()}
@@ -225,12 +226,12 @@ export function SlpPostReplyComposer({
               uploadGlobalImages.isPending ? localizeUi("ui.noodle.noodleprofilesurface.uploading") : undefined
             }
           />
-        </NoodleAnchoredPopover>
+        </SlpAnchoredPopover>
       )}
       {activeReplyComposerTool === "media" && (
-        <NoodleAnchoredPopover anchorRef={replyMediaToolRef} wide>
+        <SlpAnchoredPopover anchorRef={replyMediaToolRef} wide>
           <ConversationMediaPickerPanel
-            tabs={disableReplyImage ? NOODLE_TEXT_MEDIA_PICKER_TABS : NOODLE_MEDIA_PICKER_TABS}
+            tabs={disableReplyImage ? SLP_TEXT_MEDIA_PICKER_TABS : SLP_MEDIA_PICKER_TABS}
             activeTab={mediaPickerTab}
             onActiveTabChange={setMediaPickerTab}
             onClose={() => setActiveReplyComposerTool(null)}
@@ -245,7 +246,7 @@ export function SlpPostReplyComposer({
             }}
             className="w-full !border-[var(--marinara-chat-chrome-panel-border)] !bg-[var(--background)] !text-[var(--foreground)] shadow-2xl shadow-black/35"
           />
-        </NoodleAnchoredPopover>
+        </SlpAnchoredPopover>
       )}
     </div>
   );

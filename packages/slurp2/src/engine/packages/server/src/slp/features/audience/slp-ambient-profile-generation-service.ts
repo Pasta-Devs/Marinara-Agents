@@ -1,9 +1,9 @@
+import { type APIProvider } from "@marinara-engine/shared";
 import {
-  type APIProvider,
-  type NoodleAccount,
-  type NoodleAmbientProfileRerollOutcome,
-  type NoodleGeneratedProfile,
-} from "@marinara-engine/shared";
+  type SlpAmbientProfileRerollOutcome,
+  type SlpGeneratedProfile,
+} from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import { type SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import { logDebugOverride, logger } from "../../../lib/logger.js";
 import { resolveBaseUrl } from "../../../services/generation/connection-base-url.js";
 import {
@@ -11,7 +11,7 @@ import {
   resolveStoredMaxTokens,
 } from "../../../services/generation/generation-parameters.js";
 import { clampGenerationMaxOutputTokens } from "../../../services/generation/output-token-limits.js";
-import { noodleSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
+import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
 import { parseGameJsonish } from "../../../services/game/jsonish.js";
 import { requireModelAnswer } from "../../base/model/slp-model-answer.js";
 import { withConnectionFallbackProvider } from "../../../services/llm/connection-fallback-provider.js";
@@ -22,18 +22,18 @@ import { createSlurpStorage } from "../../data/slp-storage.js";
 import { type SlurpPromptBlockOverrides } from "../../modules/settings/slp-settings.js";
 import { composeSlurpPromptBlocks } from "../../base/prompting/slp-prompt-blocks.js";
 import type { DB } from "../../../db/connection.js";
-import { parseNoodleGeneratedProfiles } from "../../modules/creators/slp-generated-profiles.js";
-import { normalizeNoodleHandle } from "../../base/identity/slp-handle.js";
+import { parseSlpGeneratedProfiles } from "../../modules/creators/slp-generated-profiles.js";
+import { normalizeSlpHandle } from "../../base/identity/slp-handle.js";
 import { generatedProfileSettings } from "../../modules/creators/slp-public-support.js";
-import { noodleResponseFormat, NOODLE_JSON_OUTPUT_HEADING } from "../../base/prompting/slp-response-format.js";
+import { slpResponseFormat, NOODLE_JSON_OUTPUT_HEADING } from "../../base/prompting/slp-response-format.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
-export type AmbientProfileRerollOutcome = NoodleAmbientProfileRerollOutcome;
+export type AmbientProfileRerollOutcome = SlpAmbientProfileRerollOutcome;
 
 function normalizedPublicHandle(handle: string): string {
   return (
-    normalizeNoodleHandle(handle)
+    normalizeSlpHandle(handle)
       .replace(/[^a-z0-9_]+/gu, "_")
       .replace(/^_+|_+$/gu, "")
       .slice(0, 36) || "ambient_user"
@@ -52,7 +52,7 @@ export function nextAvailableAmbientHandle(handle: string, reserved: Set<string>
   return candidate;
 }
 
-export function ambientGeneratedProfileChanged(account: NoodleAccount, profile: NoodleGeneratedProfile): boolean {
+export function ambientGeneratedProfileChanged(account: SlpAccount, profile: SlpGeneratedProfile): boolean {
   return (
     account.displayName.trim().toLocaleLowerCase() !== profile.name.trim().toLocaleLowerCase() ||
     normalizedPublicHandle(account.handle) !== normalizedPublicHandle(profile.handle)
@@ -60,8 +60,8 @@ export function ambientGeneratedProfileChanged(account: NoodleAccount, profile: 
 }
 
 export function allocateAmbientProfileHandles(
-  accounts: NoodleAccount[],
-  profiles: ReadonlyMap<string, NoodleGeneratedProfile>,
+  accounts: SlpAccount[],
+  profiles: ReadonlyMap<string, SlpGeneratedProfile>,
   occupiedHandles: Iterable<string>,
 ): Map<string, string> {
   const reserved = new Set(Array.from(occupiedHandles, normalizedPublicHandle));
@@ -80,14 +80,14 @@ export function allocateAmbientProfileHandles(
   return allocated;
 }
 
-export async function rerollAmbientNoodleProfiles(input: {
+export async function rerollAmbientSlpProfiles(input: {
   db: DB;
   noodle: ReturnType<typeof createSlurpStorage>;
-  accounts: NoodleAccount[];
+  accounts: SlpAccount[];
   connection: GenerationConnection;
   debugMode: boolean;
   promptBlocks?: SlurpPromptBlockOverrides;
-}): Promise<{ accounts: NoodleAccount[]; outcomes: AmbientProfileRerollOutcome[] }> {
+}): Promise<{ accounts: SlpAccount[]; outcomes: AmbientProfileRerollOutcome[] }> {
   const connections = createConnectionsStorage(input.db);
   const fallbackConnection = await connections.getFallbackForMain();
   const provider = withConnectionFallbackProvider({
@@ -180,20 +180,18 @@ export async function rerollAmbientNoodleProfiles(input: {
       maxTokens: resolveStoredMaxTokens(input.connection.defaultParameters, 1024 + input.accounts.length * 512),
       maxTokensOverride: input.connection.maxTokensOverride,
     }),
-    ...noodleSamplingOptions(
+    ...slpSamplingOptions(
       resolveStoredChatOptions(input.connection.defaultParameters, input.connection.provider, input.connection.model),
       { temperature: 0.95, topP: 0.95 },
     ),
     stream: false,
     debugMode: input.debugMode,
-    responseFormat: noodleResponseFormat(input.connection.model, "profiles"),
+    responseFormat: slpResponseFormat(input.connection.model, "profiles"),
   });
   // A wholly malformed response throws; report it per account instead of failing the whole request.
-  let parsed: ReturnType<typeof parseNoodleGeneratedProfiles> = { profiles: [], rejected: [] };
+  let parsed: ReturnType<typeof parseSlpGeneratedProfiles> = { profiles: [], rejected: [] };
   try {
-    parsed = parseNoodleGeneratedProfiles(
-      parseGameJsonish(requireModelAnswer(result.content ?? "", "Ambient profiles")),
-    );
+    parsed = parseSlpGeneratedProfiles(parseGameJsonish(requireModelAnswer(result.content ?? "", "Ambient profiles")));
   } catch (error) {
     logger.warn(error, "[slurp] Ambient profile reroll returned an unusable response");
   }
@@ -206,7 +204,7 @@ export async function rerollAmbientNoodleProfiles(input: {
     generatedByEntityId,
     (await input.noodle.listAccounts({ includeHidden: true })).map((account) => account.handle),
   );
-  const accounts: NoodleAccount[] = [];
+  const accounts: SlpAccount[] = [];
   const outcomes: AmbientProfileRerollOutcome[] = [];
   for (const account of input.accounts) {
     const profile = generatedByEntityId.get(account.entityId);

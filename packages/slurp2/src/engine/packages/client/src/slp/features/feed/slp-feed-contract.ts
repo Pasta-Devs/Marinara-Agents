@@ -1,26 +1,30 @@
-import type { NoodlePostImageCrop, NoodlerManagedPost, NoodlerPostView } from "@marinara-engine/shared";
+import type {
+  SlpCreatorManagedPost,
+  SlpCreatorPostView,
+  SlpPostImageCrop,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 export type { SlurpReserveStatus, SlurpScheduleSlot } from "../../base/state/slp-state-types.js";
 import type { ImagePromptReviewItem } from "../../../components/ui/ImagePromptReviewModal.js";
 
 export type SlurpProfilePost =
-  { managed: NoodlerManagedPost; viewerPost: NoodlerPostView | null } | { viewerPost: NoodlerPostView };
-export type NoodlePostDraft = {
+  { managed: SlpCreatorManagedPost; viewerPost: SlpCreatorPostView | null } | { viewerPost: SlpCreatorPostView };
+export type SlpPostDraft = {
   title: string | null;
   content: string;
   imagePrompt: string | null;
   access: "public";
   authorAccountId: string;
 };
-export type NoodlePostDraftRequest = {
+export type SlpPostDraftRequest = {
   accountId: string;
   guidance?: string;
   connectionId?: string;
 };
-export type GeneratedNoodlerNoodlePost = NoodlerManagedPost & {
+export type GeneratedCreatorSlpPost = SlpCreatorManagedPost & {
   imagePromptReview?: ImagePromptReviewItem;
 };
-export type NoodlerPostDraftImage = {
+export type SlpCreatorPostDraftImage = {
   source: File | string;
-  crop: NoodlePostImageCrop | null;
+  crop: SlpPostImageCrop | null;
 };
-export type NoodlerContentFormat = "caption" | "announcement" | "long_form";
+export type SlpCreatorContentFormat = "caption" | "announcement" | "long_form";

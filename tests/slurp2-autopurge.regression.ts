@@ -58,10 +58,10 @@ assert.doesNotMatch(
   /content:/u,
   "message-media purges must preserve message text",
 );
-assert.match(media, /function unlinkNoodlerMedia\([\s\S]*\): boolean/u);
+assert.match(media, /function unlinkCreatorMedia\([\s\S]*\): boolean/u);
 assert.match(
   operation,
-  /if \(unlinkNoodlerMedia\(path\)\) removedMediaPaths\.add\(path\)[\s\S]*Retain a failed path's database reference/u,
+  /if \(unlinkCreatorMedia\(path\)\) removedMediaPaths\.add\(path\)[\s\S]*Retain a failed path's database reference/u,
   "failed filesystem cleanup must remain referenced for a later retry",
 );
 assert.match(operation, /removedPostMedia: new Set\(postMedia\.filter\([\s\S]*removedMessageMedia: new Set/u);

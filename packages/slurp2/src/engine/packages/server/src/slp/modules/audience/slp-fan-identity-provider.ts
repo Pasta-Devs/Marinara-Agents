@@ -1,12 +1,16 @@
-import type { NoodleAuthorSnapshot, NoodlerFanArchetype, NoodlerFanArchetypeWeights } from "@marinara-engine/shared";
+import type {
+  SlpAuthorSnapshot,
+  SlpCreatorFanArchetype,
+  SlpCreatorFanArchetypeWeights,
+} from "../../../../../shared/src/slp/slp-social.types.js";
 import { slurpFanVoiceForPrompt } from "../../../../../shared/src/slp/slp-fan-types.js";
 
 export const NOODLER_FAN_IDENTITY_PREFIX = "noodler-fan:";
 
-export interface NoodlerFanIdentity {
+export interface SlpCreatorFanIdentity {
   id: string;
-  archetype: NoodlerFanArchetype;
-  snapshot: NoodleAuthorSnapshot;
+  archetype: SlpCreatorFanArchetype;
+  snapshot: SlpAuthorSnapshot;
   /**
    * Who this person is, for the prompt.
    *
@@ -34,7 +38,7 @@ export interface NoodlerFanIdentity {
   };
 }
 
-export interface NoodlerFanIdentityProvider {
+export interface SlpCreatorFanIdentityProvider {
   /**
    * `creatorAccountId` is what makes the relationship line true.
    *
@@ -42,10 +46,10 @@ export interface NoodlerFanIdentityProvider {
    * described by their history with the *first* creator of the run while commenting on the
    * seventh, so the prompt did not lack the fact — it stated a false one.
    */
-  resolve(weights: NoodlerFanArchetypeWeights, creatorAccountId: string): NoodlerFanIdentity[];
+  resolve(weights: SlpCreatorFanArchetypeWeights, creatorAccountId: string): SlpCreatorFanIdentity[];
 }
 
-const IDENTITIES: Array<[NoodlerFanArchetype, string, string]> = [
+const IDENTITIES: Array<[SlpCreatorFanArchetype, string, string]> = [
   ["ordinary", "quiet regular", "quiet_regular"],
   ["eccentric", "moth-hour regular", "moth_hour_regular"],
   ["crossFandom", "crossover visitor", "crossover_visitor"],
@@ -54,7 +58,7 @@ const IDENTITIES: Array<[NoodlerFanArchetype, string, string]> = [
   ["freeResource", "free-feed follower", "free_feed_follower"],
 ];
 
-export const syntheticNoodlerFanIdentityProvider: NoodlerFanIdentityProvider = {
+export const syntheticCreatorFanIdentityProvider: SlpCreatorFanIdentityProvider = {
   resolve(weights) {
     return IDENTITIES.filter(([archetype]) => weights[archetype] > 0).map(([archetype, displayName, handle]) => {
       const id = `${NOODLER_FAN_IDENTITY_PREFIX}${archetype}`;
@@ -86,11 +90,11 @@ export const syntheticNoodlerFanIdentityProvider: NoodlerFanIdentityProvider = {
  * synchronous, so members are drawn from a pool the caller prepared — materialising a row is a
  * database write and belongs to the caller, not to a `resolve`.
  */
-export type NoodlerFanCastMember = {
+export type SlpCreatorFanCastMember = {
   id: string;
   handle: string;
   displayName: string;
-  archetype: NoodlerFanArchetype;
+  archetype: SlpCreatorFanArchetype;
   traits: string[];
   spendTier: string;
   /** The voice of this member's Fan Type. Optional: a caller that has no types passes nothing. */
@@ -105,19 +109,19 @@ export type NoodlerFanCastMember = {
    * row's own `entityId` and avatar. The synthesised snapshot below is right only for a population
    * member, whose id and entity id are the same and who has no avatar.
    */
-  snapshot?: NoodleAuthorSnapshot;
+  snapshot?: SlpAuthorSnapshot;
 };
 
 /** One member's history with one creator, keyed by creator then by member. */
-export type NoodlerFanTieLookup = ReadonlyMap<
+export type SlpCreatorFanTieLookup = ReadonlyMap<
   string,
   ReadonlyMap<string, { stage: string; spent: number; knownForDays: number; audienceArc: string; memory?: string }>
 >;
 
-export function populationNoodlerFanIdentityProvider(
-  members: readonly NoodlerFanCastMember[],
-  tiesByCreator: NoodlerFanTieLookup = new Map(),
-): NoodlerFanIdentityProvider {
+export function populationCreatorFanIdentityProvider(
+  members: readonly SlpCreatorFanCastMember[],
+  tiesByCreator: SlpCreatorFanTieLookup = new Map(),
+): SlpCreatorFanIdentityProvider {
   return {
     resolve(weights, creatorAccountId) {
       const ties = tiesByCreator.get(creatorAccountId);

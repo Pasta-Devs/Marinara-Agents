@@ -5,7 +5,7 @@ import { AlertTriangle, ChevronDown, ExternalLink, Wrench } from "lucide-react";
 import { Modal } from "../../../components/ui/Modal";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { GUNTERLIE_AVATAR_SRC } from "../../base/chrome/slp-gunterlie-avatar";
-import { getNoodleAccentStyle, NOODLE_PINK } from "../../base/chrome/SlpChrome";
+import { getSlpAccentStyle, SLP_PINK } from "../../base/chrome/SlpChrome";
 import { getSlurp2UnseenReleases, SLURP2_VERSION } from "./slp-release";
 
 // Per browser, not per Engine: the splash is a notice, not a setting, and a localStorage key keeps
@@ -86,7 +86,7 @@ export function SlurpSplash({ open, onDismiss }: { open: boolean; onDismiss: () 
       // This is a required acknowledgement screen. Hide the disabled close control instead of
       // passing a prop the shared Modal does not support.
       panelClassName="[&>div:first-child>button]:hidden"
-      panelStyle={getNoodleAccentStyle(NOODLE_PINK)}
+      panelStyle={getSlpAccentStyle(SLP_PINK)}
       closeDisabled
     >
       <div data-component="SlurpSplash" className="flex flex-col gap-4">

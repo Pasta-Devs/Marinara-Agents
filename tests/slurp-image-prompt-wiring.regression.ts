@@ -24,7 +24,7 @@ assert.match(
 
 // When no rewrite survives, the provider gets the rendered template — the only document carrying
 // appearance notes and image habits, without which fallback pictures show the wrong character. The
-// length cap in selectNoodleImageProviderPrompt is what keeps that stack bounded.
+// length cap in selectSlpImageProviderPrompt is what keeps that stack bounded.
 assert.match(
   images,
   /const rawProviderPrompt = redactIdentity\(reviewedOverride\?\.prompt \|\| compiledPrompt\.prompt\);/u,
@@ -33,8 +33,8 @@ assert.match(images, /rawPrompt: rawProviderPrompt,\s*rewriteAttempted,\s*onFall
 // Garnish ad images honour the interpretation setting and share the same rewrite and fallback.
 const garnish = slurp2Source(join(root, server, "services/slurp/slurp-garnish-image.service.ts"));
 assert.match(garnish, /settings\.enableImageInterpretation !== false/u);
-assert.match(garnish, /rewriteNoodleImagePrompt\(/u);
-assert.match(garnish, /selectNoodleImageProviderPrompt\(/u);
+assert.match(garnish, /rewriteSlpImagePrompt\(/u);
+assert.match(garnish, /selectSlpImageProviderPrompt\(/u);
 
 // --- a retry is built the same way the first attempt was ----------------------------------------
 // Every retry resends our own stored draft as promptOverride. The old guard read that as a

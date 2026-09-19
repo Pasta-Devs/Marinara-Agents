@@ -1,13 +1,13 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
-import type { NoodlerPostMediaUpload } from "../media/slp-media.js";
+import type { SlpCreatorPostMediaUpload } from "../media/slp-media.js";
 import { trySlurpWrite } from "../locking/slp-operation-lock.js";
 import { isAllowedImageBuffer, safeFetch } from "../../../utils/security.js";
 import { logger } from "../../../lib/logger.js";
 import { z } from "zod";
 
-const NOODLER_MEDIA_MAX_BYTES = 20 * 1024 * 1024;
+const SLP_CREATOR_MEDIA_MAX_BYTES = 20 * 1024 * 1024;
 
-class NoodlerMediaRequestError extends Error {
+class SlpCreatorMediaRequestError extends Error {
   constructor(
     message: string,
     readonly statusCode: number,
@@ -16,27 +16,27 @@ class NoodlerMediaRequestError extends Error {
   }
 }
 
-export async function readNoodlerMultipart(
+export async function readCreatorMultipart(
   req: FastifyRequest,
-): Promise<{ payload: unknown; media: NoodlerPostMediaUpload }> {
+): Promise<{ payload: unknown; media: SlpCreatorPostMediaUpload }> {
   let payload: unknown;
-  let media: NoodlerPostMediaUpload | null = null;
+  let media: SlpCreatorPostMediaUpload | null = null;
   for await (const part of req.parts({
-    limits: { fileSize: NOODLER_MEDIA_MAX_BYTES, files: 1 },
+    limits: { fileSize: SLP_CREATOR_MEDIA_MAX_BYTES, files: 1 },
   })) {
     if (part.type === "field") {
       if (part.fieldname === "payload") {
         try {
           payload = JSON.parse(String(part.value));
         } catch {
-          throw new NoodlerMediaRequestError("The image request payload is invalid.", 400);
+          throw new SlpCreatorMediaRequestError("The image request payload is invalid.", 400);
         }
       }
       continue;
     }
     if (part.fieldname !== "file" || media) {
       part.file.resume();
-      throw new NoodlerMediaRequestError("Upload one image in the file field.", 400);
+      throw new SlpCreatorMediaRequestError("Upload one image in the file field.", 400);
     }
     const write = await trySlurpWrite(async () => {
       try {
@@ -44,7 +44,7 @@ export async function readNoodlerMultipart(
       } catch (error) {
         const truncated = (part.file as typeof part.file & { truncated?: boolean }).truncated === true;
         const tooLarge = truncated || (error as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE";
-        throw new NoodlerMediaRequestError(
+        throw new SlpCreatorMediaRequestError(
           tooLarge ? "Slurp image is too large." : "Failed to read the uploaded image.",
           tooLarge ? 413 : 400,
         );
@@ -52,7 +52,7 @@ export async function readNoodlerMultipart(
     });
     if (!write.acquired) {
       part.file.resume();
-      throw new NoodlerMediaRequestError("Slurp data cleanup is in progress.", 409);
+      throw new SlpCreatorMediaRequestError("Slurp data cleanup is in progress.", 409);
     }
     const buffer = write.value;
     // The magic bytes decide the type, not the filename. An image saved straight from a post
@@ -61,7 +61,7 @@ export async function readNoodlerMultipart(
     // which has no signature of its own; every other format is detected from its own header.
     const detected = isAllowedImageBuffer(buffer, ".avif");
     if (!detected) {
-      throw new NoodlerMediaRequestError(
+      throw new SlpCreatorMediaRequestError(
         "That file is not a PNG, JPEG, WebP, GIF or AVIF image. Its contents are read to decide, so renaming it does not help.",
         400,
       );
@@ -69,13 +69,13 @@ export async function readNoodlerMultipart(
     media = { buffer, extension: detected.ext };
   }
   if (payload === undefined) {
-    throw new NoodlerMediaRequestError("The image request payload is required.", 400);
+    throw new SlpCreatorMediaRequestError("The image request payload is required.", 400);
   }
-  if (!media) throw new NoodlerMediaRequestError("Upload one image in the file field.", 400);
+  if (!media) throw new SlpCreatorMediaRequestError("Upload one image in the file field.", 400);
   return { payload, media };
 }
 
-async function importNoodlerMedia(imageUrl: string): Promise<NoodlerPostMediaUpload> {
+async function importCreatorMedia(imageUrl: string): Promise<SlpCreatorPostMediaUpload> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
   try {
@@ -87,25 +87,25 @@ async function importNoodlerMedia(imageUrl: string): Promise<NoodlerPostMediaUpl
         allowedProtocols: ["http:", "https:"],
         maxRedirects: 3,
       },
-      maxResponseBytes: NOODLER_MEDIA_MAX_BYTES,
+      maxResponseBytes: SLP_CREATOR_MEDIA_MAX_BYTES,
       allowedContentTypes: ["image/"],
       allowMissingContentType: true,
       headers: { Accept: "image/*" },
     });
     if (!response.ok) {
-      throw new NoodlerMediaRequestError(`Image URL returned HTTP ${response.status}.`, 400);
+      throw new SlpCreatorMediaRequestError(`Image URL returned HTTP ${response.status}.`, 400);
     }
     const buffer = Buffer.from(await response.arrayBuffer());
     const detected = isAllowedImageBuffer(buffer);
     if (!detected) {
-      throw new NoodlerMediaRequestError("The URL did not return a supported image.", 415);
+      throw new SlpCreatorMediaRequestError("The URL did not return a supported image.", 415);
     }
     return { buffer, extension: detected.ext };
   } catch (error) {
-    if (error instanceof NoodlerMediaRequestError) throw error;
+    if (error instanceof SlpCreatorMediaRequestError) throw error;
     logger.warn(error, "[slurp] Could not import image URL");
     const tooLarge = error instanceof Error && /exceeded \d+ bytes/iu.test(error.message);
-    throw new NoodlerMediaRequestError(
+    throw new SlpCreatorMediaRequestError(
       tooLarge
         ? "Slurp image is too large."
         : "Could not download that image URL. Check that it is public and points directly to an image.",
@@ -116,20 +116,20 @@ async function importNoodlerMedia(imageUrl: string): Promise<NoodlerPostMediaUpl
   }
 }
 
-export type DecodedNoodlerMediaRequest<T> =
-  { success: true; data: T; media: NoodlerPostMediaUpload | undefined } | { success: false; error: z.ZodError };
+export type DecodedCreatorMediaRequest<T> =
+  { success: true; data: T; media: SlpCreatorPostMediaUpload | undefined } | { success: false; error: z.ZodError };
 
-export async function decodeNoodlerMediaRequest<
+export async function decodeCreatorMediaRequest<
   WithMediaSchema extends z.ZodTypeAny,
   WithoutMediaSchema extends z.ZodTypeAny,
 >(
   req: FastifyRequest,
   schemas: { withMedia: WithMediaSchema; withoutMedia: WithoutMediaSchema },
-): Promise<DecodedNoodlerMediaRequest<z.output<WithMediaSchema> | z.output<WithoutMediaSchema>>> {
+): Promise<DecodedCreatorMediaRequest<z.output<WithMediaSchema> | z.output<WithoutMediaSchema>>> {
   let payload: unknown = req.body;
-  let media: NoodlerPostMediaUpload | undefined;
+  let media: SlpCreatorPostMediaUpload | undefined;
   if (req.headers["content-type"]?.startsWith("multipart/form-data")) {
-    const multipart = await readNoodlerMultipart(req);
+    const multipart = await readCreatorMultipart(req);
     payload = multipart.payload;
     media = multipart.media;
   }
@@ -141,18 +141,18 @@ export async function decodeNoodlerMediaRequest<
       : undefined;
   if (uploadedImageUrl) {
     if (media) {
-      throw new NoodlerMediaRequestError("Choose either an uploaded file or an image URL.", 400);
+      throw new SlpCreatorMediaRequestError("Choose either an uploaded file or an image URL.", 400);
     }
-    media = await importNoodlerMedia(uploadedImageUrl);
+    media = await importCreatorMedia(uploadedImageUrl);
   }
 
   const parsed = (media ? schemas.withMedia : schemas.withoutMedia).safeParse(payload);
   return parsed.success ? { success: true, data: parsed.data, media } : { success: false, error: parsed.error };
 }
 
-export function sendNoodlerMediaError(reply: FastifyReply, error: unknown) {
+export function sendCreatorMediaError(reply: FastifyReply, error: unknown) {
   const tooLarge = (error as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE";
-  const statusCode = tooLarge ? 413 : error instanceof NoodlerMediaRequestError ? error.statusCode : 500;
+  const statusCode = tooLarge ? 413 : error instanceof SlpCreatorMediaRequestError ? error.statusCode : 500;
   if (statusCode === 500) logger.error(error, "[slurp] Image request failed");
   return reply.code(statusCode).send({
     error:

@@ -1,5 +1,5 @@
 /**
- * Only OpenAI GPT-5.6 connections get a strict JSON schema (see noodleResponseFormat), so every
+ * Only OpenAI GPT-5.6 connections get a strict JSON schema (see slpResponseFormat), so every
  * other model answers free-form and routinely renames or wraps the fields. The wizard used to
  * fail the whole creator on `displayName`/`stagePersonality` missing, which is a rename, not a
  * refusal — so unwrap the common containers and accept the obvious aliases before validating.
@@ -36,7 +36,7 @@ function unwrapDraftCandidate(value: unknown): unknown {
  * Normalize a model's stage-profile answer into the field names the schema expects. Pure and
  * dependency-free so the regression suite can exercise it directly.
  */
-export function normalizeNoodlerStageProfileDraft(value: unknown): Record<string, unknown> | null {
+export function normalizeCreatorStageProfileDraft(value: unknown): Record<string, unknown> | null {
   const candidate = unwrapDraftCandidate(value);
   if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return null;
   const normalized = { ...(candidate as Record<string, unknown>) };

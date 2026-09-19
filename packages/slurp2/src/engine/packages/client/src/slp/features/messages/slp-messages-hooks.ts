@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
-import { noodleKeys } from "../../base/state/slp-query-keys.js";
+import { slpKeys } from "../../base/state/slp-query-keys.js";
 import { invalidateSlurpMessages, messageKeys } from "./slp-message-keys.js";
 import type {
   SlurpCommission,
@@ -110,7 +110,7 @@ export function useSlurpMessagePrompt(threadId: string | null, personaId: string
  */
 export function useSlurpCompose(creatorAccountId: string | null, personaId: string | null) {
   return useQuery({
-    queryKey: [...noodleKeys.noodlerRoot(), "messages", "compose", creatorAccountId ?? "none", personaId ?? "none"],
+    queryKey: [...slpKeys.noodlerRoot(), "messages", "compose", creatorAccountId ?? "none", personaId ?? "none"],
     queryFn: () =>
       api.get<{
         thread: SlurpThread | null;
@@ -151,7 +151,7 @@ export function useRecordSlurpStoryView() {
 }
 export function useSlurpStoryViews(storyId: string | null, personaId: string | null, enabled = true) {
   return useQuery({
-    queryKey: [...noodleKeys.noodlerRoot(), "story-views", storyId ?? "none", personaId ?? "none"],
+    queryKey: [...slpKeys.noodlerRoot(), "story-views", storyId ?? "none", personaId ?? "none"],
     queryFn: () =>
       api.get<{ count: number; viewers: Array<{ id: string; displayName: string; handle: string }> }>(
         `/slurp2/noodler/stories/${encodeURIComponent(storyId!)}/views?personaId=${encodeURIComponent(personaId!)}`,
@@ -162,7 +162,7 @@ export function useSlurpStoryViews(storyId: string | null, personaId: string | n
 /** The rapport breakdown, read only by the Creator edit panel. */
 export function useSlurpRapport(creatorAccountId: string | null, personaId: string | null) {
   return useQuery({
-    queryKey: [...noodleKeys.noodlerRoot(), "messages", "rapport", creatorAccountId ?? "none", personaId ?? "none"],
+    queryKey: [...slpKeys.noodlerRoot(), "messages", "rapport", creatorAccountId ?? "none", personaId ?? "none"],
     queryFn: () =>
       api.get<{ messaging: SlurpCreatorMessaging; rapport: SlurpRapport; facts: Record<string, unknown> }>(
         `/slurp2/messages/creators/${encodeURIComponent(creatorAccountId!)}/rapport?personaId=${encodeURIComponent(personaId!)}`,
@@ -174,7 +174,7 @@ export function useSlurpRapport(creatorAccountId: string | null, personaId: stri
 export function useSlurpCreatorMessagingSettings(creatorAccountId: string | null, personaId: string | null) {
   return useQuery({
     queryKey: [
-      ...noodleKeys.noodlerRoot(),
+      ...slpKeys.noodlerRoot(),
       "messages",
       "creator-settings",
       creatorAccountId ?? "none",
@@ -201,6 +201,6 @@ export function useSetSlurpCreatorMessaging() {
         patch,
       );
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: slpKeys.noodlerRoot() }),
   });
 }

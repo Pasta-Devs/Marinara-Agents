@@ -113,8 +113,8 @@ const commentReply = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-reply-generation.service.ts",
 );
 assert.match(commentReply, /moodShift: generated\.moodShift/u);
-assert.match(commentReply, /noodleResponseFormat\(input\.connection\.model, "noodler_dm"\)/u);
-assert.doesNotMatch(commentReply, /noodleGeneratedNoodlerReplySchema/u);
+assert.match(commentReply, /slpResponseFormat\(input\.connection\.model, "noodler_dm"\)/u);
+assert.doesNotMatch(commentReply, /slpGeneratedCreatorReplySchema/u);
 
 const creatorReply = slurp2Source(
   "packages/slurp2/src/engine/packages/server/src/services/slurp/slurp-creator-reply.operation.ts",

@@ -64,7 +64,7 @@ export function noodlerConcealedSourceText(data: unknown): string {
 }
 
 /** Character canon is private behavioral context, separate from linked identity disclosure. */
-export function noodlerCharacterCanonText(data: unknown, includeName: boolean): string {
+export function slpCreatorCharacterCanonText(data: unknown, includeName: boolean): string {
   const source = promptRecord(data);
   const extensions = promptRecord(source.extensions);
   return [
@@ -80,7 +80,7 @@ export function noodlerCharacterCanonText(data: unknown, includeName: boolean): 
 }
 
 /** The full card, used only where the source identity is public. */
-export function noodlerSourceText(data: unknown): string {
+export function slpCreatorSourceText(data: unknown): string {
   const source = promptRecord(data);
   const extensions = promptRecord(source.extensions);
   return [

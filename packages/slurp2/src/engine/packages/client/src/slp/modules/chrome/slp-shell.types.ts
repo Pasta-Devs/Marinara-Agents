@@ -1,21 +1,21 @@
 // Shell contract, split out of components/slurp/SlurpShell.tsx in Slice 10.
 import type { ReactNode, RefObject } from "react";
-import type { NoodleAccount } from "@marinara-engine/shared";
+import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 
-export type NoodleShellView =
+export type SlpShellView =
   "home" | "noodler" | "search" | "profile" | "messages" | "notifications" | "studio" | "wallet" | "settings" | null;
-type NoodleShellMode = "noodle" | "noodler" | "slurp";
-export type NoodleShellContextualRail = "populated" | "blank" | "spanning";
+type SlpShellMode = "noodle" | "noodler" | "slurp";
+export type SlpShellContextualRail = "populated" | "blank" | "spanning";
 
-export interface NoodleShellProps {
-  activeView: NoodleShellView;
+export interface SlpShellProps {
+  activeView: SlpShellView;
   /** App identity is independent from the selected vertical-nav destination. */
-  appMode?: NoodleShellMode;
+  appMode?: SlpShellMode;
   /** Overrides whether the Home/Hub destination is selected when app mode and subview are separate. */
   homeActive?: boolean;
   /** Posts published since this viewer persona last had the NoodleR or Slurp feed shown to it. */
   noodlerUnseenCount?: number;
-  personaAccount: NoodleAccount | null;
+  personaAccount: SlpAccount | null;
   /**
    * The active persona's Creator identity, when it runs one. Shown as the main identity on the
    * switcher card, with the persona kept beside it as a small circle, because a persona that has
@@ -24,16 +24,16 @@ export interface NoodleShellProps {
    * Deliberately not folded into `personaAccount`: that account's id drives the switcher list
    * filter and the isCreator check, and this one carries the Creator's id instead.
    */
-  creatorIdentity?: NoodleAccount | null;
-  sortedPersonaAccounts: NoodleAccount[];
-  visiblePersonaAccounts: NoodleAccount[];
+  creatorIdentity?: SlpAccount | null;
+  sortedPersonaAccounts: SlpAccount[];
+  visiblePersonaAccounts: SlpAccount[];
   linkedNoodleAccountIds?: ReadonlySet<string>;
   /** Fan and follower totals keyed by persona id. Personas without a Creator profile are absent. */
   personaConnectionCounts?: Record<string, { fans: number; followers: number }>;
   /** Wallet balances keyed by persona id. */
   personaWallets?: Record<string, { coins: number }>;
   onLoadMorePersonaAccounts: () => void;
-  onSwitchPersona: (account: NoodleAccount, mobile: boolean) => void;
+  onSwitchPersona: (account: SlpAccount, mobile: boolean) => void;
   accountSwitcherOpen: boolean;
   onAccountSwitcherOpenChange: (open: boolean) => void;
   accountSwitcherRef: RefObject<HTMLDivElement | null>;
@@ -78,10 +78,10 @@ export interface NoodleShellProps {
   /** Optional right-hand rail (search box, suggestions, etc). Omitted entirely on surfaces that don't need one. */
   rightRail?: ReactNode;
   /** Wide-screen Slurp geometry: show a populated rail, reserve an empty rail, or let content span both columns. */
-  contextualRail?: NoodleShellContextualRail;
+  contextualRail?: SlpShellContextualRail;
   /** Theme-dependent overlays (lightboxes and modals) that must render inside the token scope. */
   overlays?: ReactNode;
-  /** Accent hex driving `--noodle-accent` for every reused surface. NoodleR passes NOODLE_PINK; defaults to Noodle blue. */
+  /** Accent hex driving `--noodle-accent` for every reused surface. NoodleR passes SLP_PINK; defaults to Noodle blue. */
   accent?: string;
   children: ReactNode;
 }

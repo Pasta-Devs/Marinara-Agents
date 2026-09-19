@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
+import type { SlpCreatorManagedStageProfile } from "../../../../../shared/src/slp/slp-social.types.js";
 
 import { Avatar } from "../../base/chrome/SlpChrome";
 
@@ -71,8 +71,8 @@ export function CreatorCollabsEditor({
   onSave,
   t,
 }: {
-  creator: NoodlerManagedStageProfile;
-  creators: NoodlerManagedStageProfile[];
+  creator: SlpCreatorManagedStageProfile;
+  creators: SlpCreatorManagedStageProfile[];
   collabs: Collab[];
   onSave: (next: Collab[]) => unknown;
   t: Translate;

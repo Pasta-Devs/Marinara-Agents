@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation as useUiTranslation } from "react-i18next";
-import { NoodleAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
+import { SlpAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
 import { useSlurpAudienceMember } from "./slp-audience-member";
 import { cn } from "../../../lib/utils";
 import { SLURP_CHARACTER_FAN_PREFIX } from "../../../../../shared/src/slp/slp-audience-characters.js";
@@ -86,7 +86,7 @@ export function SlurpFanCard({
         {children}
       </button>
       {open && (
-        <NoodleAnchoredPopover anchorRef={anchorRef}>
+        <SlpAnchoredPopover anchorRef={anchorRef}>
           <div className="px-3 py-2.5">
             {query.isLoading || !member ? (
               <p className="text-xs text-[var(--muted-foreground)]">{localizeUi("ui.slurp.studio.loading")}</p>
@@ -103,7 +103,7 @@ export function SlurpFanCard({
               </>
             )}
           </div>
-        </NoodleAnchoredPopover>
+        </SlpAnchoredPopover>
       )}
     </>
   );

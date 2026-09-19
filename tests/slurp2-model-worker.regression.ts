@@ -24,9 +24,9 @@ assert.match(
   /Math\.min\(settings\.fanActivityRunsPerDay, settings\.modelBudget\.jobs\.thread\.maxPerDay\)/u,
   "fan activity uses the lower configured and thread model limits",
 );
-assert.match(fanActivityOperation, /noodlerFanActivityRunLimit\(settings\),/gu);
+assert.match(fanActivityOperation, /slpCreatorFanActivityRunLimit\(settings\),/gu);
 assert.equal(
-  [...fanActivityOperation.matchAll(/noodlerFanActivityRunLimit\(settings\),/gu)].length,
+  [...fanActivityOperation.matchAll(/slpCreatorFanActivityRunLimit\(settings\),/gu)].length,
   2,
   "plan reconciliation and status use the same authoritative limit",
 );

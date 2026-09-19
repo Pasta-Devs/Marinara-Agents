@@ -1,7 +1,7 @@
 import type { FastifyRequest, FastifyInstance } from "fastify";
 import {
   isAllowedImageBuffer,
-  resolveNoodlerMediaAbsolutePath,
+  resolveCreatorMediaAbsolutePath,
   slurpMessageMediaUrl,
   stageSlurpMessageMedia,
 } from "../../base/media/slp-media.js";
@@ -101,7 +101,7 @@ export async function slpMessagesMediaRoutes(app: FastifyInstance, messaging: Sl
       return reply.code(402).send({ error: "This message is locked." });
     }
     const mediaPath = message.metadata?.noodlerMediaPath;
-    const absolute = typeof mediaPath === "string" ? resolveNoodlerMediaAbsolutePath(mediaPath) : null;
+    const absolute = typeof mediaPath === "string" ? resolveCreatorMediaAbsolutePath(mediaPath) : null;
     if (!absolute || !existsSync(absolute)) return reply.code(404).send({ error: "Not Found" });
     return reply.header("Cache-Control", "private, max-age=300").sendFile(basename(absolute), dirname(absolute));
   });

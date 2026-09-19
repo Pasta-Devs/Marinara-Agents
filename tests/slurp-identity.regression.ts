@@ -38,8 +38,8 @@ assert.match(
   /actor\.sourceEntityId !== input\.viewerPersonaId/u,
   "Interaction mutations must bind the actor profile to the requested persona",
 );
-assert.match(storage, /eq\(noodleAccountSubscriptions\.viewerAccountId, input\.viewerPersonaId\)/u);
-assert.match(storage, /eq\(noodlePostUnlocks\.viewerAccountId, input\.viewerPersonaId\)/u);
+assert.match(storage, /eq\(slpAccountSubscriptions\.viewerAccountId, input\.viewerPersonaId\)/u);
+assert.match(storage, /eq\(slpPostUnlocks\.viewerAccountId, input\.viewerPersonaId\)/u);
 assert.match(storage, /viewerActorAccountId: string/u);
 assert.match(replyOperation, /viewerPersonaId: string;[\s\S]*?viewerActorAccountId: string/u);
 assert.match(home, /const viewerActorAccount =[\s\S]*?id: myCreatorProfile\.id/u);

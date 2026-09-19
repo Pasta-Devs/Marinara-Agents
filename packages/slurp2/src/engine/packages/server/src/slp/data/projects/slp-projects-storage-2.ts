@@ -1,5 +1,5 @@
 import { and, or } from "../../../db/file-query.js";
-import { createNoodlePoll } from "@marinara-engine/shared";
+import { createSlpPoll } from "../../../../../shared/src/slp/slp-polls.js";
 import {
   makeSlurpProject,
   slurpCollabPartners,
@@ -73,7 +73,7 @@ export function createProjectsStorage2(context: SlurpStorageContext) {
         : choice.options.map(() => 0);
       for (const interaction of await this.listNoodlerInteractions([project.pollPostId])) {
         if (interaction.type !== "vote") continue;
-        // Poll option ids are `option-1`… in option order (createNoodlePoll).
+        // Poll option ids are `option-1`… in option order (createSlpPoll).
         const index = Number(/^option-(\d+)$/.exec(interaction.content ?? "")?.[1]) - 1;
         if (index >= 0 && index < counts.length) counts[index]! += 1;
       }

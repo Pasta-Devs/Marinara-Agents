@@ -1,14 +1,14 @@
-import type { NoodlerCreatorReplyResult } from "@marinara-engine/shared";
+import type { SlpCreatorReplyResult } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { DB } from "../../../db/connection.js";
 import { logger } from "../../../lib/logger.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
 import { createSlurpStorage } from "../../data/slp-storage.js";
 import { createSlurpMessagesStorage } from "../../data/slp-storage.js";
-import { tryNoodlerAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
-import { generateNoodlerCreatorReply } from "./slp-reply-generation-service.js";
+import { tryCreatorAccountOperation } from "../../base/locking/slp-account-operation-lock.js";
+import { generateCreatorReply } from "./slp-reply-generation-service.js";
 
-export async function generateAndApplyNoodlerCreatorReply(
+export async function generateAndApplyCreatorReply(
   db: DB,
   input: {
     postId: string;
@@ -17,7 +17,7 @@ export async function generateAndApplyNoodlerCreatorReply(
     viewerActorAccountId: string;
     debugMode?: boolean;
   },
-): Promise<NoodlerCreatorReplyResult> {
+): Promise<SlpCreatorReplyResult> {
   const noodle = createSlurpStorage(db);
   const releaseClaim = async (claimId: string) => {
     try {
@@ -29,7 +29,7 @@ export async function generateAndApplyNoodlerCreatorReply(
   const post = await noodle.getNoodlerPostById(input.postId);
   if (!post) return { status: "ineligible" };
 
-  const locked = await tryNoodlerAccountOperation(post.authorAccountId, async () => {
+  const locked = await tryCreatorAccountOperation(post.authorAccountId, async () => {
     const settings = await noodle.getSettings();
     const connection = await resolveSlurpTextConnection(createConnectionsStorage(db), settings.generationConnectionId);
     if (!connection) return { status: "connection_not_found" } as const;
@@ -44,7 +44,7 @@ export async function generateAndApplyNoodlerCreatorReply(
     let content: string;
     let moodShift;
     try {
-      ({ content, moodShift } = await generateNoodlerCreatorReply({
+      ({ content, moodShift } = await generateCreatorReply({
         db,
         creator: claim.creator,
         viewer: claim.viewer,

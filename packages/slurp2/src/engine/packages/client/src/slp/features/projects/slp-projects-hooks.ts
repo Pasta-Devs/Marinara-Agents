@@ -1,12 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client.js";
-import { noodleKeys } from "../../base/state/slp-query-keys.js";
+import { slpKeys } from "../../base/state/slp-query-keys.js";
 import type { SlurpArcTimeline, SlurpArcType, SlurpCreatorArcConfig, SlurpProject } from "./slp-projects-contract.js";
 
 /** A Creator's running and past arcs, as any viewer may see them. Empty for a hidden Creator. */
 export function useSlurpArcs(personaId: string | null, creatorAccountId: string | null) {
   return useQuery({
-    queryKey: [...noodleKeys.noodlerRoot(), "projects", "arcs", creatorAccountId ?? "none", personaId ?? "none"],
+    queryKey: [...slpKeys.noodlerRoot(), "projects", "arcs", creatorAccountId ?? "none", personaId ?? "none"],
     queryFn: () =>
       api.get<{ arcs: SlurpArcTimeline[] }>(
         `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId!)}/arcs?personaId=${encodeURIComponent(personaId!)}`,
@@ -55,11 +55,11 @@ export function useResolveSlurpArcProfile() {
         body,
       ),
     // The profile itself changed too, so every Creator view refetches.
-    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.noodlerRoot() }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: slpKeys.noodlerRoot() }),
   });
 }
 const slurpArcConfigKey = (creatorAccountId: string | null, personaId: string | null) => [
-  ...noodleKeys.noodlerRoot(),
+  ...slpKeys.noodlerRoot(),
   "arc-config",
   creatorAccountId ?? "none",
   personaId ?? "none",
@@ -103,7 +103,7 @@ export function useUpdateSlurpArcConfig() {
  */
 export function useSlurpProjects(personaId: string | null, creatorAccountId: string | null, enabled = true) {
   return useQuery({
-    queryKey: [...noodleKeys.noodlerRoot(), "projects", creatorAccountId ?? "none", personaId ?? "none"],
+    queryKey: [...slpKeys.noodlerRoot(), "projects", creatorAccountId ?? "none", personaId ?? "none"],
     queryFn: () =>
       api.get<{ projects: SlurpProject[] }>(
         `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId!)}/projects?personaId=${encodeURIComponent(personaId!)}`,
@@ -112,7 +112,7 @@ export function useSlurpProjects(personaId: string | null, creatorAccountId: str
   });
 }
 const invalidateSlurpProjects = (qc: ReturnType<typeof useQueryClient>) =>
-  qc.invalidateQueries({ queryKey: [...noodleKeys.noodlerRoot(), "projects"] });
+  qc.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "projects"] });
 export function useCreateSlurpProject() {
   const qc = useQueryClient();
   return useMutation({
@@ -183,7 +183,7 @@ export function useSaveSlurpProjectToLibrary() {
         `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/projects/${encodeURIComponent(projectId)}/library`,
         { personaId },
       ),
-    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.settings() }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: slpKeys.settings() }),
   });
 }
 export function useUpdateSlurpProject() {

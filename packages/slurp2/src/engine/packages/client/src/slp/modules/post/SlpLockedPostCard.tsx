@@ -12,7 +12,7 @@ import {
   Share2,
 } from "lucide-react";
 import { useState } from "react";
-import type { NoodlerPostView, NoodlerStageProfile } from "@marinara-engine/shared";
+import type { SlpCreatorPostView, SlpCreatorStageProfile } from "../../../../../shared/src/slp/slp-social.types.js";
 import { cn } from "../../../lib/utils";
 import { useNearViewportSlurpMediaSrc } from "../../base/media/slp-media-src";
 import { Modal } from "../../../components/ui/Modal";
@@ -40,9 +40,9 @@ export function LockedSlurpPostCard({
   onOpenProfile,
   demo,
 }: {
-  post: Pick<NoodlerPostView, "id" | "access" | "createdAt" | "title" | "imageUrl"> &
-    Partial<Pick<NoodlerPostView, "likeCount" | "replyCount" | "hasImage" | "imagePrompt">>; // controller-locked managed posts carry no counts
-  profile: NoodlerStageProfile;
+  post: Pick<SlpCreatorPostView, "id" | "access" | "createdAt" | "title" | "imageUrl"> &
+    Partial<Pick<SlpCreatorPostView, "likeCount" | "replyCount" | "hasImage" | "imagePrompt">>; // controller-locked managed posts carry no counts
+  profile: SlpCreatorStageProfile;
   subscriptionPrice?: number | null;
   controllerOnly?: boolean;
   subscribed: boolean;
@@ -278,7 +278,7 @@ export function LockedSlurpPostCard({
                 >
                   <Eye size={16} strokeWidth={2.4} aria-hidden="true" />
                   {localizeUi("ui.noodle.lockednoodlerpostcard.unlock")}
-                  <NoodlerFictionalPrice amount={noodlerUnlockPriceOf(post)} />
+                  <SlpCreatorFictionalPrice amount={slpCreatorUnlockPriceOf(post)} />
                 </button>
                 <span className="text-[0.68rem] font-semibold text-white/72 drop-shadow-sm">
                   {localizeUi("ui.slurp.locked.includedForSubscribers", {
@@ -399,17 +399,17 @@ export function LockedSlurpPostCard({
                   {localizeUi("ui.slurp.unlocksheet.unlockOnce", { defaultValue: "Unlock once" })}
                 </span>
                 <span className="block text-xs text-[var(--muted-foreground)]">
-                  {noodlerUnlockCountOf(post) === 1
+                  {slpCreatorUnlockCountOf(post) === 1
                     ? localizeUi("ui.slurp.unlocksheet.unlockedByOne", { defaultValue: "Unlocked by 1 fan" })
-                    : noodlerUnlockCountOf(post) > 1
+                    : slpCreatorUnlockCountOf(post) > 1
                       ? localizeUi("ui.slurp.unlocksheet.unlockedBy", {
                           defaultValue: "Unlocked by {{count}} fans",
-                          count: noodlerUnlockCountOf(post),
+                          count: slpCreatorUnlockCountOf(post),
                         })
                       : localizeUi("ui.noodle.unlocksheet.unlockThisPostDetail")}
                 </span>
               </span>
-              <NoodlerFictionalPrice amount={noodlerUnlockPriceOf(post)} />
+              <SlpCreatorFictionalPrice amount={slpCreatorUnlockPriceOf(post)} />
             </button>
             <button
               type="button"
@@ -441,7 +441,7 @@ export function LockedSlurpPostCard({
                   })}
                 </span>
               </span>
-              <NoodlerFictionalPrice
+              <SlpCreatorFictionalPrice
                 amount={subscriptionPrice}
                 suffix={localizeUi("ui.slurp.unlocksheet.perWeek", { defaultValue: "/ week" })}
               />
@@ -460,18 +460,18 @@ export function LockedSlurpPostCard({
 
 /** Fictional SlurpCoin prices only; the tooltip makes clear that no real money is involved. */
 /** The server sends these alongside the shared view types, which have no price fields. */
-function noodlerUnlockPriceOf(post: unknown): number | null {
+function slpCreatorUnlockPriceOf(post: unknown): number | null {
   const price = (post as { unlockPrice?: unknown } | null)?.unlockPrice;
   return typeof price === "number" && price >= 0 ? price : null;
 }
 
 /** Social proof on the paywall. Absent or zero on a post nobody has paid for yet. */
-function noodlerUnlockCountOf(post: unknown): number {
+function slpCreatorUnlockCountOf(post: unknown): number {
   const count = (post as { unlockCount?: unknown } | null)?.unlockCount;
   return typeof count === "number" && count > 0 ? count : 0;
 }
 
-function NoodlerFictionalPrice({ amount, suffix }: { amount?: number | null; suffix?: string }) {
+function SlpCreatorFictionalPrice({ amount, suffix }: { amount?: number | null; suffix?: string }) {
   const { t: localizeUi } = useUiTranslation();
   if (typeof amount !== "number" || amount < 0) return null;
   return (

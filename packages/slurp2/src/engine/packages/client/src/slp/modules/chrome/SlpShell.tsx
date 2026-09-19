@@ -27,22 +27,22 @@ import { SlurpCoinAmount } from "../coin/SlpCoin";
 import {
   Avatar,
   BOTTOM_SAFE_INSET,
-  getNoodleAccentStyle,
-  NOODLE_BLUE,
+  getSlpAccentStyle,
+  SLP_BLUE,
   labelClass,
   NOODLE_ICON_SCOPE_CLASS,
-  NOODLE_LOGO_SRC,
-  NoodleAccentContext,
-  NoodleLogo,
+  SLP_LOGO_SRC,
+  SlpAccentContext,
+  SlpLogo,
   NOODLER_LOGO_SRC,
   SLURP_NAME,
   SLURP_ROW_ACTIVE_CLASS,
   SLURP_ROW_CLASS,
 } from "../../base/chrome/SlpChrome";
 import { PersonaIdentityCard, PersonaList } from "./SlpPersonaSwitcher";
-import type { NoodleShellProps } from "./slp-shell.types";
+import type { SlpShellProps } from "./slp-shell.types";
 
-export function NoodleShell({
+export function SlpShell({
   activeView,
   appMode,
   homeActive: homeActiveOverride,
@@ -81,36 +81,36 @@ export function NoodleShell({
   rightRail,
   contextualRail,
   overlays,
-  accent = NOODLE_BLUE,
+  accent = SLP_BLUE,
   children,
-}: NoodleShellProps) {
+}: SlpShellProps) {
   const { t: localizeUi } = useUiTranslation();
   const mobileDrawerRef = useRef<HTMLElement | null>(null);
   const mobileDrawerCloseRef = useRef<HTMLButtonElement | null>(null);
   const prefersReducedMotion = Boolean(useReducedMotion());
   const hasMorePersonaAccounts = visiblePersonaAccounts.length < sortedPersonaAccounts.length;
   const resolvedAppMode = appMode ?? (activeView === "noodler" ? "noodler" : "noodle");
-  const noodlerActive = resolvedAppMode === "noodler";
+  const slpCreatorActive = resolvedAppMode === "noodler";
   const slurpActive = resolvedAppMode === "slurp";
   const resolvedContextualRail = contextualRail ?? (rightRail ? "populated" : "spanning");
   const reserveContextualRail = slurpActive && resolvedContextualRail !== "spanning";
   const switcherIdentity = creatorIdentity ?? personaAccount;
-  const homeLabel = noodlerActive
+  const homeLabel = slpCreatorActive
     ? localizeUi("ui.noodle.noodleshell.hub")
     : slurpActive
       ? localizeUi("ui.slurp.navigation.home", { defaultValue: "Slurp" })
       : localizeUi("ui.noodle.noodleshell.home");
   const desktopHomeLabel = slurpActive ? localizeUi("ui.slurp.navigation.hub", { defaultValue: "Hub" }) : homeLabel;
   const homeActive = homeActiveOverride ?? (activeView === "home" || activeView === "noodler");
-  const onOpenHomeDestination = noodlerActive ? onOpenNoodler : onOpenHome;
-  const onOpenMobileHomeDestination = noodlerActive ? onOpenNoodler : onOpenMobileHome;
+  const onOpenHomeDestination = slpCreatorActive ? onOpenNoodler : onOpenHome;
+  const onOpenMobileHomeDestination = slpCreatorActive ? onOpenNoodler : onOpenMobileHome;
   const onMobileHomeTap = () => {
     onOpenMobileHomeDestination();
   };
   useDialogFocusScope(mobileDrawerOpen, mobileDrawerRef, mobileDrawerCloseRef);
 
   return (
-    <NoodleAccentContext.Provider value={accent}>
+    <SlpAccentContext.Provider value={accent}>
       <div
         className={cn(
           // `overflow-x-clip`, not `overflow-x-hidden`: the drawer starts at x:100%, so while it
@@ -122,7 +122,7 @@ export function NoodleShell({
           NOODLE_ICON_SCOPE_CLASS,
         )}
         data-component="NoodleView"
-        style={getNoodleAccentStyle(accent, { "--slurp-bottom-safe-inset": BOTTOM_SAFE_INSET } as CSSProperties)}
+        style={getSlpAccentStyle(accent, { "--slurp-bottom-safe-inset": BOTTOM_SAFE_INSET } as CSSProperties)}
       >
         {overlays}
         <AnimatePresence>
@@ -163,7 +163,7 @@ export function NoodleShell({
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-3">
-                    <NoodleLogo src={NOODLER_LOGO_SRC} className="h-9 w-14" />
+                    <SlpLogo src={NOODLER_LOGO_SRC} className="h-9 w-14" />
                     <span className="truncate text-lg font-black">{SLURP_NAME}</span>
                   </div>
                   <button
@@ -298,8 +298,8 @@ export function NoodleShell({
             <aside className="hidden w-[14rem] shrink-0 border-r border-[var(--noodle-divider)] bg-[radial-gradient(circle_at_12%_6%,color-mix(in_srgb,var(--noodle-accent)_13%,transparent),transparent_16rem),linear-gradient(180deg,color-mix(in_srgb,var(--slurp-surface-raised,var(--background))_96%,transparent),var(--background)_42%)] @min-[1024px]:flex @min-[1024px]:flex-col">
               <div className="flex min-h-0 flex-1 flex-col px-4 py-4">
                 <div className="mb-5 flex h-12 items-center gap-3 px-2">
-                  <NoodleLogo
-                    src={noodlerActive || slurpActive ? NOODLER_LOGO_SRC : NOODLE_LOGO_SRC}
+                  <SlpLogo
+                    src={slpCreatorActive || slurpActive ? NOODLER_LOGO_SRC : SLP_LOGO_SRC}
                     className="h-10 w-16"
                   />
                   {slurpActive && <span className="text-lg font-black">{SLURP_NAME}</span>}
@@ -326,7 +326,7 @@ export function NoodleShell({
                         className={cn(SLURP_ROW_CLASS, activeView === "search" && SLURP_ROW_ACTIVE_CLASS)}
                       >
                         <Search size={22} className="!text-[var(--noodle-accent)]" />
-                        {noodlerActive
+                        {slpCreatorActive
                           ? localizeUi("ui.noodle.noodleshell.discover")
                           : slurpActive
                             ? localizeUi("ui.slurp.navigation.search", { defaultValue: "Discover" })
@@ -610,7 +610,7 @@ export function NoodleShell({
                 type="button"
                 onClick={onOpenSearch}
                 aria-label={
-                  noodlerActive
+                  slpCreatorActive
                     ? localizeUi("ui.noodle.noodleshell.discoverCreators")
                     : slurpActive
                       ? localizeUi("ui.slurp.navigation.search", { defaultValue: "Discover" })
@@ -656,6 +656,6 @@ export function NoodleShell({
           </div>
         </nav>
       </div>
-    </NoodleAccentContext.Provider>
+    </SlpAccentContext.Provider>
   );
 }

@@ -1,4 +1,4 @@
-export type NoodlerViewerWallets = Record<string, { coins: number }>;
+export type SlpCreatorViewerWallets = Record<string, { coins: number }>;
 /** One wallet's ledger line. `amount` is signed: negative spends, positive earns. */
 export type SlurpWalletEntry = {
   kind:

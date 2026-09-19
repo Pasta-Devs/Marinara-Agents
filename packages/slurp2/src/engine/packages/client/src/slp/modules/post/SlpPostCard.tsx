@@ -11,13 +11,10 @@ import {
   Trash2,
 } from "lucide-react";
 import { Fragment, useRef, useState } from "react";
-import {
-  noodlePollInputSchema,
-  readNoodlePollFromMetadata,
-  readNoodlePostImageCrop,
-  type NoodleAccount,
-  type NoodleInteraction,
-} from "@marinara-engine/shared";
+import { readSlpPollFromMetadata } from "../../../../../shared/src/slp/slp-polls.js";
+import { readSlpPostImageCrop } from "../../../../../shared/src/slp/slp-post-images.js";
+import { slpPollInputSchema } from "../../../../../shared/src/slp/slp-social.schema.js";
+import { type SlpAccount, type SlpInteraction } from "../../../../../shared/src/slp/slp-social.types.js";
 import { toast } from "sonner";
 import { api } from "../../../lib/api-client";
 import { cn } from "../../../lib/utils";
@@ -26,22 +23,22 @@ import { SlpPostReplyRow } from "./SlpPostReplyRow";
 import { SlpPostReplyComposer } from "./SlpPostReplyComposer";
 import { Avatar } from "../../base/chrome/SlpChrome";
 import { formatTime } from "../../base/ui/slp-date-time";
-import { NoodlePollComposer } from "../poll/SlpPollComposer";
+import { SlpPollComposer } from "../poll/SlpPollComposer";
 import { SlurpLikedBy } from "../audience/SlpFanCard";
 import { PostImageFrame } from "../../base/media/SlpPostImageCropEditor";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import {
-  noodleIconButtonClass,
+  slpIconButtonClass,
   slurpReplyThreads,
   SlurpClampedText,
-  NoodlePollCard,
+  SlpPollCard,
   countInteractions,
-  createNoodleLightboxImage,
+  createSlpLightboxImage,
   PostImageEditControls,
 } from "./SlpPostHelpers";
-import type { NoodlePostCardModel, NoodlePostCardCtx } from "./SlpPostHelpers";
+import type { SlpPostCardModel, SlpPostCardCtx } from "./SlpPostHelpers";
 
-export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: NoodlePostCardCtx }) {
+export function SlpPostCard({ post, ctx }: { post: SlpPostCardModel; ctx: SlpPostCardCtx }) {
   const { t: localizeUi, i18n } = useUiTranslation();
   const [commentsExpanded, setCommentsExpanded] = useState(false);
   const [expandedThreadIds, setExpandedThreadIds] = useState<ReadonlySet<string>>(new Set());
@@ -120,11 +117,11 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
     replyManagement,
     mentions,
   } = ctx;
-  const accountById = ctx.accountById ?? new Map<string, NoodleAccount>();
-  const accountByHandle = ctx.accountByHandle ?? new Map<string, NoodleAccount>();
+  const accountById = ctx.accountById ?? new Map<string, SlpAccount>();
+  const accountByHandle = ctx.accountByHandle ?? new Map<string, SlpAccount>();
   const authorAccount = accountById.get(post.authorAccountId) ?? null;
   const author = authorAccount ?? post.authorSnapshot;
-  const imageCrop = readNoodlePostImageCrop(post.metadata);
+  const imageCrop = readSlpPostImageCrop(post.metadata);
 
   // Card-owned defaults for absent capability groups. Hosts pass only the capabilities they
   // support; the card fills the
@@ -133,7 +130,7 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
   // keep the () => {} fallbacks callable with their real signatures.
   const fallbackDivRef = useRef<HTMLDivElement | null>(null);
   const fallbackFileRef = useRef<HTMLInputElement | null>(null);
-  const openProfile: (account: NoodleAccount | null) => void = ctx.openProfile ?? (() => {});
+  const openProfile: (account: SlpAccount | null) => void = ctx.openProfile ?? (() => {});
   const canOpenAuthorProfile = Boolean(authorAccount || ctx.openAuthorProfile);
   const openPostAuthor = () => {
     if (authorAccount) openProfile(authorAccount);
@@ -141,7 +138,7 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
   };
   const handleReplyKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void =
     ctx.handleReplyKeyDown ?? (() => {});
-  const voteInPoll: (post: NoodlePostCardModel, optionId: string, selectedOptionId: string | null) => void =
+  const voteInPoll: (post: SlpPostCardModel, optionId: string, selectedOptionId: string | null) => void =
     ctx.voteInPoll ?? (() => {});
   const disableReplyImage = !media;
   const setImageLightbox: React.Dispatch<React.SetStateAction<ChatImage | null>> =
@@ -159,11 +156,11 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
   const editingReplyContent = replyManagement?.editingReplyContent ?? "";
   const setEditingReplyContent: React.Dispatch<React.SetStateAction<string>> =
     replyManagement?.setEditingReplyContent ?? (() => {});
-  const startEditingReply: (reply: NoodleInteraction) => void = replyManagement?.startEditingReply ?? (() => {});
+  const startEditingReply: (reply: SlpInteraction) => void = replyManagement?.startEditingReply ?? (() => {});
   const cancelEditingReply: () => void = replyManagement?.cancelEditingReply ?? (() => {});
-  const saveEditedReply: (post: NoodlePostCardModel, reply: NoodleInteraction) => void =
+  const saveEditedReply: (post: SlpPostCardModel, reply: SlpInteraction) => void =
     replyManagement?.saveEditedReply ?? (() => {});
-  const deleteNoodleReply: (post: NoodlePostCardModel, reply: NoodleInteraction) => void =
+  const deleteNoodleReply: (post: SlpPostCardModel, reply: SlpInteraction) => void =
     replyManagement?.deleteNoodleReply ?? (() => {});
   const updateInteraction = replyManagement?.updateInteraction ?? {
     isPending: false,
@@ -175,11 +172,11 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
   const activeReplyMention = mentions?.activeReplyMention ?? null;
   const activeReplyMentionIndex = mentions?.activeReplyMentionIndex ?? 0;
   const replyMentionSuggestions = mentions?.replyMentionSuggestions ?? [];
-  const selectReplyMention: (account: NoodleAccount) => void = mentions?.selectReplyMention ?? (() => {});
+  const selectReplyMention: (account: SlpAccount) => void = mentions?.selectReplyMention ?? (() => {});
 
   const postInteractions = post.interactions;
   const rootPostInteractions = postInteractions.filter((interaction) => !interaction.parentInteractionId);
-  const poll = readNoodlePollFromMetadata(post.metadata);
+  const poll = readSlpPollFromMetadata(post.metadata);
   const pollVotes = poll
     ? rootPostInteractions.filter(
         (interaction) =>
@@ -196,9 +193,9 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
     : false;
   const replies = postInteractions.filter((interaction) => interaction.type === "reply");
   const replyById = new Map(replies.map((reply) => [reply.id, reply]));
-  const orderedReplies: NoodleInteraction[] = [];
+  const orderedReplies: SlpInteraction[] = [];
   const visitedReplyIds = new Set<string>();
-  const appendReplyBranch = (reply: NoodleInteraction) => {
+  const appendReplyBranch = (reply: SlpInteraction) => {
     if (visitedReplyIds.has(reply.id)) return;
     visitedReplyIds.add(reply.id);
     orderedReplies.push(reply);
@@ -276,7 +273,7 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
     />
   );
   const editingExistingPoll = Boolean(poll && pollEditing);
-  const editingPollIsValid = !editingExistingPoll || noodlePollInputSchema.safeParse(pollEditing?.value).success;
+  const editingPollIsValid = !editingExistingPoll || slpPollInputSchema.safeParse(pollEditing?.value).success;
   const postEditActions = (
     <>
       <button
@@ -302,7 +299,7 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
       </button>
     </>
   );
-  const renderReplyRow = (reply: NoodleInteraction, nested: boolean) => (
+  const renderReplyRow = (reply: SlpInteraction, nested: boolean) => (
     <SlpPostReplyRow
       reply={reply}
       nested={nested}
@@ -489,7 +486,7 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
                 />
               )}
               {editingExistingPoll && pollEditing && (
-                <NoodlePollComposer
+                <SlpPollComposer
                   value={pollEditing.value}
                   onChange={pollEditing.setValue}
                   onClose={cancelEditingPost}
@@ -532,7 +529,7 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
             </>
           )}
           {poll && editingPostId !== post.id && (
-            <NoodlePollCard
+            <SlpPollCard
               poll={poll}
               votes={pollVotes}
               accountById={accountById}
@@ -548,7 +545,7 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
               <button
                 type="button"
                 onClick={() =>
-                  setImageLightbox(createNoodleLightboxImage(post.id, post.imageUrl!, post.imagePrompt ?? ""))
+                  setImageLightbox(createSlpLightboxImage(post.id, post.imageUrl!, post.imagePrompt ?? ""))
                 }
                 className="mt-3 block w-full overflow-hidden rounded-xl text-left ring-offset-[var(--background)] transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2"
                 title={localizeUi("ui.noodle.noodlepostcard.openImage")}
@@ -626,7 +623,7 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
           <div className="-ml-3 mt-2 flex items-center gap-2 tabular-nums">
             <button
               type="button"
-              className={cn(noodleIconButtonClass, "rounded-full", likedByPersona && "bg-[var(--noodle-accent)]/10")}
+              className={cn(slpIconButtonClass, "rounded-full", likedByPersona && "bg-[var(--noodle-accent)]/10")}
               disabled={!personaAccount || postLikePending}
               onClick={() => reactToPost(post, "like", likedByPersona)}
               title={
@@ -655,7 +652,7 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
             </button>
             <button
               type="button"
-              className={cn(noodleIconButtonClass, "rounded-full hover:text-[var(--noodle-accent)]")}
+              className={cn(slpIconButtonClass, "rounded-full hover:text-[var(--noodle-accent)]")}
               disabled={!personaAccount}
               onClick={() => openReplyComposer(post.id)}
               title={localizeUi("ui.noodle.noodlepostcard.reply")}
@@ -741,20 +738,20 @@ export function NoodlePostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: 
 
 // The card is the module's face: callers that need its model, its context or the pieces it is
 // assembled from import them here rather than from the fragments the split produced.
-export type { NoodlePostCardCtx, NoodlePostCardModel, NoodlePostImageUpdate } from "./SlpPostTypes";
-export { useNoodlePostCardController } from "./SlpPostHooks";
-export { NoodleComposerToolRow, NoodleToolButton, SlurpToolPopover } from "./SlpPostComposerTools";
-export { NoodleComposerShell } from "./SlpPostComposerShell";
+export type { SlpPostCardCtx, SlpPostCardModel, SlpPostImageUpdate } from "./SlpPostTypes";
+export { useSlpPostCardController } from "./SlpPostHooks";
+export { SlpComposerToolRow, SlpToolButton, SlurpToolPopover } from "./SlpPostComposerTools";
+export { SlpComposerShell } from "./SlpPostComposerShell";
 export {
   countInteractions,
-  createNoodleLightboxImage,
+  createSlpLightboxImage,
   fieldClass,
   labelClass,
-  NOODLE_MEDIA_PICKER_TABS,
-  NOODLE_TEXT_MEDIA_PICKER_TABS,
-  noodleCommentActionClass,
-  noodleIconButtonClass,
-  NoodleMentionSuggestions,
+  SLP_MEDIA_PICKER_TABS,
+  SLP_TEXT_MEDIA_PICKER_TABS,
+  slpCommentActionClass,
+  slpIconButtonClass,
+  SlpMentionSuggestions,
   SlurpClampedText,
   slurpReplyThreads,
   textareaClass,

@@ -1,8 +1,8 @@
 import { isOpenAIGpt56Model } from "@marinara-engine/shared";
 
-const NOODLE_POST_HARD_MAX_LENGTH = 4000;
-const NOODLE_REPLY_HARD_MAX_LENGTH = 2000;
-const NOODLER_TITLE_HARD_MAX_LENGTH = 200;
+const SLP_POST_HARD_MAX_LENGTH = 4000;
+const SLP_REPLY_HARD_MAX_LENGTH = 2000;
+const SLP_CREATOR_TITLE_HARD_MAX_LENGTH = 200;
 
 export const NOODLE_JSON_OUTPUT_HEADING = "# JSON Output Format";
 
@@ -34,7 +34,7 @@ const timelineSchema = {
         properties: {
           tempId: { type: "string" },
           authorHandle: { type: "string" },
-          content: { type: "string", maxLength: NOODLE_POST_HARD_MAX_LENGTH },
+          content: { type: "string", maxLength: SLP_POST_HARD_MAX_LENGTH },
           imagePrompt: nullableString,
           attachGalleryImage: { type: "boolean" },
           poll: pollSchema,
@@ -53,7 +53,7 @@ const timelineSchema = {
           targetPostId: nullableString,
           parentInteractionId: nullableString,
           type: { type: "string", enum: ["like", "reply", "vote"] },
-          content: { type: ["string", "null"], maxLength: NOODLE_REPLY_HARD_MAX_LENGTH },
+          content: { type: ["string", "null"], maxLength: SLP_REPLY_HARD_MAX_LENGTH },
           pollOptionIndex: nullableInteger,
         },
         required: [
@@ -108,19 +108,19 @@ const profilesSchema = {
   additionalProperties: false,
 } as const;
 
-function noodlerPostSchema(allowImagePrompt: boolean, contentMaxLength: number) {
+function slpCreatorPostSchema(allowImagePrompt: boolean, contentMaxLength: number) {
   return {
     type: "object",
     properties: {
       // Every NoodleR post carries a title, so the schema requires a non-empty string.
-      title: { type: "string", minLength: 1, maxLength: NOODLER_TITLE_HARD_MAX_LENGTH },
+      title: { type: "string", minLength: 1, maxLength: SLP_CREATOR_TITLE_HARD_MAX_LENGTH },
       content: {
         type: "string",
-        maxLength: Math.min(contentMaxLength, NOODLE_POST_HARD_MAX_LENGTH),
+        maxLength: Math.min(contentMaxLength, SLP_POST_HARD_MAX_LENGTH),
       },
       // With images enabled the prompt is mandatory: a nullable field made models skip images.
       ...(allowImagePrompt
-        ? { imagePrompt: { type: "string", minLength: 1, maxLength: NOODLE_REPLY_HARD_MAX_LENGTH } }
+        ? { imagePrompt: { type: "string", minLength: 1, maxLength: SLP_REPLY_HARD_MAX_LENGTH } }
         : {}),
     },
     required: allowImagePrompt ? ["title", "content", "imagePrompt"] : ["title", "content"],
@@ -128,7 +128,7 @@ function noodlerPostSchema(allowImagePrompt: boolean, contentMaxLength: number) 
   } as const;
 }
 
-const noodlerProfileSchema = {
+const slpCreatorProfileSchema = {
   type: "object",
   properties: {
     displayName: { type: "string" },
@@ -144,7 +144,7 @@ const noodlerProfileSchema = {
 
 const noodlerReplySchema = {
   type: "object",
-  properties: { content: { type: "string", maxLength: NOODLE_REPLY_HARD_MAX_LENGTH } },
+  properties: { content: { type: "string", maxLength: SLP_REPLY_HARD_MAX_LENGTH } },
   required: ["content"],
   additionalProperties: false,
 } as const;
@@ -160,10 +160,10 @@ const noodlerReplySchema = {
  * three fields. The parser still treats the two new ones as optional, because a connection that
  * does not support json_schema returns whatever it likes.
  */
-const noodlerDmSchema = {
+const slpCreatorDmSchema = {
   type: "object",
   properties: {
-    content: { type: "string", maxLength: NOODLE_REPLY_HARD_MAX_LENGTH },
+    content: { type: "string", maxLength: SLP_REPLY_HARD_MAX_LENGTH },
     moodShift: { type: "string", enum: ["up", "same", "down", "sharp_down"] },
     remember: {
       type: "array",
@@ -206,7 +206,7 @@ const noodlerDmSchema = {
   additionalProperties: false,
 } as const;
 
-const noodlerFanActivitySchema = {
+const slpCreatorFanActivitySchema = {
   type: "object",
   properties: {
     actorHandle: { type: "string" },
@@ -219,7 +219,7 @@ const noodlerFanActivitySchema = {
   additionalProperties: false,
 } as const;
 
-export function noodleResponseFormat(
+export function slpResponseFormat(
   model: string,
   kind:
     | "timeline"
@@ -238,26 +238,26 @@ export function noodleResponseFormat(
       : kind === "profiles"
         ? profilesSchema
         : kind === "noodler_profile"
-          ? noodlerProfileSchema
+          ? slpCreatorProfileSchema
           : kind === "noodler_reply"
             ? noodlerReplySchema
             : kind === "noodler_dm"
-              ? noodlerDmSchema
+              ? slpCreatorDmSchema
               : kind === "noodler_fan_activity"
                 ? {
                     type: "object",
                     properties: {
                       activities: {
                         type: "array",
-                        items: noodlerFanActivitySchema,
+                        items: slpCreatorFanActivitySchema,
                       },
                     },
                     required: ["activities"],
                     additionalProperties: false,
                   }
-                : noodlerPostSchema(
+                : slpCreatorPostSchema(
                     options.allowImagePrompt === true,
-                    options.contentMaxLength ?? NOODLE_POST_HARD_MAX_LENGTH,
+                    options.contentMaxLength ?? SLP_POST_HARD_MAX_LENGTH,
                   );
   return {
     type: "json_schema",

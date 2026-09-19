@@ -1,9 +1,9 @@
-import type { NoodlerPostView } from "@marinara-engine/shared";
+import type { SlpCreatorPostView } from "../../../../../shared/src/slp/slp-social.types.js";
 import { isSlurpStory, type SlurpViewerCreator } from "./SlpHomeHelpers";
 
 export type SlurpMoment = {
   creator: SlurpViewerCreator;
-  post: NoodlerPostView;
+  post: SlpCreatorPostView;
 };
 
 /**

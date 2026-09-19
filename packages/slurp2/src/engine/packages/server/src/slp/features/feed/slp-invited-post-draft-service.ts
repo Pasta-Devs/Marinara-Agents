@@ -1,4 +1,5 @@
-import type { APIProvider, NoodleAccount } from "@marinara-engine/shared";
+import type { APIProvider } from "@marinara-engine/shared";
+import type { SlpAccount } from "../../../../../shared/src/slp/slp-social.types.js";
 import type { DB } from "../../../db/connection.js";
 import { logger, logDebugOverride } from "../../../lib/logger.js";
 import { parseGameJsonish } from "../../../services/game/jsonish.js";
@@ -6,26 +7,26 @@ import { requireModelAnswer } from "../../base/model/slp-model-answer.js";
 import { resolveBaseUrl } from "../../../services/generation/connection-base-url.js";
 import { clampGenerationMaxOutputTokens } from "../../../services/generation/output-token-limits.js";
 import { resolveStoredChatOptions } from "../../../services/generation/generation-parameters.js";
-import { noodleSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
+import { slpSamplingOptions } from "../../base/prompting/slp-sampling-options.js";
 import { withConnectionFallbackProvider } from "../../../services/llm/connection-fallback-provider.js";
 import type { ChatMessage } from "../../../services/llm/base-provider.js";
 import { createLLMProvider } from "../../../services/llm/provider-registry.js";
 import { createCharactersStorage } from "../../../services/storage/characters.storage.js";
 import { createConnectionsStorage } from "../../../services/storage/connections.storage.js";
-import { noodleGeneratedNoodlerPostSchema } from "@marinara-engine/shared";
-import { noodleResponseFormat } from "../../base/prompting/slp-response-format.js";
-import { noodlerSourceText } from "../../base/prompting/slp-prompt-safety.js";
+import { slpGeneratedCreatorPostSchema } from "../../../../../shared/src/slp/slp-social-generation.schema.js";
+import { slpResponseFormat } from "../../base/prompting/slp-response-format.js";
+import { slpCreatorSourceText } from "../../base/prompting/slp-prompt-safety.js";
 import { NOODLER_UNTRUSTED_CONTENT_INSTRUCTION } from "./slp-public-identity.js";
 import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "../../base/prompting/slp-prompt-blocks.js";
 
-export type InvitedNoodlePostDraftRequest = {
+export type InvitedSlpPostDraftRequest = {
   guidance?: string;
   connectionId?: string;
   debugMode?: boolean;
   promptBlocks?: SlurpPromptBlockOverrides;
 };
 
-export type InvitedNoodlePostDraft = {
+export type InvitedSlpPostDraft = {
   title: string | null;
   content: string;
   imagePrompt: string | null;
@@ -35,15 +36,15 @@ export type InvitedNoodlePostDraft = {
 
 function parseDraft(content: string) {
   const parsed = parseGameJsonish(requireModelAnswer(content, "an invited post draft"));
-  return noodleGeneratedNoodlerPostSchema.parse(Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed);
+  return slpGeneratedCreatorPostSchema.parse(Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed);
 }
 
-export async function generateInvitedNoodlePostDraft(
+export async function generateInvitedSlpPostDraft(
   db: DB,
-  account: NoodleAccount,
+  account: SlpAccount,
   connection: NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>,
-  request: InvitedNoodlePostDraftRequest,
-): Promise<InvitedNoodlePostDraft> {
+  request: InvitedSlpPostDraftRequest,
+): Promise<InvitedSlpPostDraft> {
   const characters = createCharactersStorage(db);
   const character = await characters.getById(account.entityId);
   if (!character) throw new Error("Noodle character not found.");
@@ -103,7 +104,7 @@ export async function generateInvitedNoodlePostDraft(
         `Character handle: @${account.handle}`,
         // Only the profile fields the draft needs, never the whole stored record
         // (which carries greetings, example dialogue, and unrelated extensions).
-        `Character profile:\n${noodlerSourceText(character.data)}`,
+        `Character profile:\n${slpCreatorSourceText(character.data)}`,
         ...(request.guidance?.trim() ? [`Post direction: ${JSON.stringify(request.guidance.trim())}`] : []),
       ].join("\n"),
     },
@@ -116,7 +117,7 @@ export async function generateInvitedNoodlePostDraft(
   );
   const completionOptions = {
     model: connection.model,
-    ...noodleSamplingOptions(
+    ...slpSamplingOptions(
       resolveStoredChatOptions(connection.defaultParameters, connection.provider, connection.model),
       { temperature: 0.9, topP: 0.95 },
     ),
@@ -130,7 +131,7 @@ export async function generateInvitedNoodlePostDraft(
     debugMode,
     // The prompt always asks for imagePrompt (set to null); the strict schema
     // must require the field too, or GPT-5.6 gets conflicting instructions.
-    responseFormat: noodleResponseFormat(connection.model, "noodler_post", { allowImagePrompt: true }),
+    responseFormat: slpResponseFormat(connection.model, "noodler_post", { allowImagePrompt: true }),
   } as const;
   let response = await provider.chatComplete(messages, completionOptions);
   const raw = response.content ?? "";

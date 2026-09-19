@@ -1,13 +1,13 @@
 import type { DB } from "../../../db/connection.js";
 import { and, eq, inArray, lt } from "../../../db/file-query.js";
 import {
-  noodleAccounts,
-  noodleActivityDigests,
-  noodleInteractions,
-  noodlePosts,
-  noodlePostUnlocks,
-  noodlerCreatorReplyClaims,
-  noodlerPreparedPosts,
+  slpAccounts,
+  slpActivityDigests,
+  slpInteractions,
+  slpPosts,
+  slpPostUnlocks,
+  slpCreatorCreatorReplyClaims,
+  slpCreatorPreparedPosts,
   slurpCommissions,
   slurpMessages,
 } from "../../../db/schema/slurp.js";
@@ -17,9 +17,9 @@ import { type SlurpSettings } from "../../modules/settings/slp-settings.js";
 import { trySlurpDataDeletion } from "../../base/locking/slp-operation-lock.js";
 import { selectSlurpAutopurge } from "../../modules/maintenance/slp-autopurge-plan.js";
 import {
-  estimateNoodlerMediaRemovalBytes,
+  estimateCreatorMediaRemovalBytes,
   NOODLER_MEDIA_PREFIX,
-  unlinkNoodlerMedia,
+  unlinkCreatorMedia,
 } from "../../base/media/slp-media.js";
 import { moveSlurpAutopurgeDate, nextSlurpAutopurgeRunAt } from "../../../../../shared/src/slp/slp-autopurge-time.js";
 
@@ -83,15 +83,15 @@ async function planSlurpAutopurge(db: DB, settings: SlurpSettings) {
     settings.autopurgeRetentionUnit,
     -1,
   ).toISOString();
-  const creatorIds = (await db.select().from(noodleAccounts)).map((account) => account.id);
+  const creatorIds = (await db.select().from(slpAccounts)).map((account) => account.id);
   const selection = selectSlurpAutopurge({
     cutoff,
     creatorIds,
     posts: creatorIds.length
       ? await db
           .select()
-          .from(noodlePosts)
-          .where(and(inArray(noodlePosts.authorAccountId, creatorIds), lt(noodlePosts.createdAt, cutoff)))
+          .from(slpPosts)
+          .where(and(inArray(slpPosts.authorAccountId, creatorIds), lt(slpPosts.createdAt, cutoff)))
       : [],
     messages: settings.autopurgeIncludeMessageMedia
       ? await db.select().from(slurpMessages).where(lt(slurpMessages.createdAt, cutoff))
@@ -111,7 +111,7 @@ async function planSlurpAutopurge(db: DB, settings: SlurpSettings) {
       postMediaFiles: new Set(postMedia).size,
       messageMediaFiles: new Set(messageMedia).size,
       estimatedReclaimableBytes: mediaPaths.reduce(
-        (total, mediaPath) => total + estimateNoodlerMediaRemovalBytes(mediaPath),
+        (total, mediaPath) => total + estimateCreatorMediaRemovalBytes(mediaPath),
         0,
       ),
     } satisfies SlurpAutopurgePreview,
@@ -127,7 +127,7 @@ async function purgeUnlocked(db: DB, settings: SlurpSettings): Promise<Omit<Slur
   const { cutoff, oldPosts, oldMessages, postMedia, messageMedia } = plan;
   const removedMediaPaths = new Set<string>();
   for (const path of plan.mediaPaths) {
-    if (unlinkNoodlerMedia(path)) removedMediaPaths.add(path);
+    if (unlinkCreatorMedia(path)) removedMediaPaths.add(path);
   }
   const mediaRemovalSucceeded = (metadata: unknown): boolean => {
     const path = ownedMediaPath(metadata);
@@ -147,7 +147,7 @@ async function purgeUnlocked(db: DB, settings: SlurpSettings): Promise<Omit<Slur
   });
   const deletedPostIds = postsToDelete.map((post) => post.id);
   const deletedInteractionIds = deletedPostIds.length
-    ? (await db.select().from(noodleInteractions).where(inArray(noodleInteractions.postId, deletedPostIds))).map(
+    ? (await db.select().from(slpInteractions).where(inArray(slpInteractions.postId, deletedPostIds))).map(
         (interaction) => interaction.id,
       )
     : [];
@@ -155,7 +155,7 @@ async function purgeUnlocked(db: DB, settings: SlurpSettings): Promise<Omit<Slur
   await db.transaction(async (tx) => {
     for (const post of postsToStrip) {
       await tx
-        .update(noodlePosts)
+        .update(slpPosts)
         .set({
           imageUrl: null,
           imageClaimToken: null,
@@ -163,7 +163,7 @@ async function purgeUnlocked(db: DB, settings: SlurpSettings): Promise<Omit<Slur
           metadata: JSON.stringify(withoutMediaMetadata(post.metadata)),
           updatedAt: now(),
         })
-        .where(eq(noodlePosts.id, post.id));
+        .where(eq(slpPosts.id, post.id));
     }
     for (const message of messagesToStrip) {
       await tx
@@ -181,22 +181,22 @@ async function purgeUnlocked(db: DB, settings: SlurpSettings): Promise<Omit<Slur
         .where(eq(slurpCommissions.deliveryMessageId, message.id));
     }
     if (deletedPostIds.length > 0) {
-      await tx.update(noodlePosts).set({ parentPostId: null }).where(inArray(noodlePosts.parentPostId, deletedPostIds));
-      await tx.update(noodlePosts).set({ quotePostId: null }).where(inArray(noodlePosts.quotePostId, deletedPostIds));
+      await tx.update(slpPosts).set({ parentPostId: null }).where(inArray(slpPosts.parentPostId, deletedPostIds));
+      await tx.update(slpPosts).set({ quotePostId: null }).where(inArray(slpPosts.quotePostId, deletedPostIds));
       await tx
-        .update(noodlerPreparedPosts)
+        .update(slpCreatorPreparedPosts)
         .set({ publishedPostId: null, updatedAt: now() })
-        .where(inArray(noodlerPreparedPosts.publishedPostId, deletedPostIds));
-      await tx.delete(noodlePostUnlocks).where(inArray(noodlePostUnlocks.postId, deletedPostIds));
-      await tx.delete(noodlerCreatorReplyClaims).where(inArray(noodlerCreatorReplyClaims.postId, deletedPostIds));
-      await tx.delete(noodleInteractions).where(inArray(noodleInteractions.postId, deletedPostIds));
-      await tx.delete(noodleActivityDigests).where(inArray(noodleActivityDigests.sourcePostId, deletedPostIds));
+        .where(inArray(slpCreatorPreparedPosts.publishedPostId, deletedPostIds));
+      await tx.delete(slpPostUnlocks).where(inArray(slpPostUnlocks.postId, deletedPostIds));
+      await tx.delete(slpCreatorCreatorReplyClaims).where(inArray(slpCreatorCreatorReplyClaims.postId, deletedPostIds));
+      await tx.delete(slpInteractions).where(inArray(slpInteractions.postId, deletedPostIds));
+      await tx.delete(slpActivityDigests).where(inArray(slpActivityDigests.sourcePostId, deletedPostIds));
       if (deletedInteractionIds.length > 0) {
         await tx
-          .delete(noodleActivityDigests)
-          .where(inArray(noodleActivityDigests.sourceInteractionId, deletedInteractionIds));
+          .delete(slpActivityDigests)
+          .where(inArray(slpActivityDigests.sourceInteractionId, deletedInteractionIds));
       }
-      await tx.delete(noodlePosts).where(inArray(noodlePosts.id, deletedPostIds));
+      await tx.delete(slpPosts).where(inArray(slpPosts.id, deletedPostIds));
     }
     await tx._fileStore.flush();
   });

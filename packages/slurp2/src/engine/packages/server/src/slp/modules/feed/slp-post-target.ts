@@ -1,4 +1,4 @@
-export interface NoodleTimelinePostTargetRange {
+export interface SlpTimelinePostTargetRange {
   minimum: number;
   maximum: number;
 }
@@ -7,14 +7,14 @@ function normalizedCount(value: number) {
   return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
 }
 
-export function noodleTimelineRefreshMaxTokens(selectedAuthorCount: number) {
+export function slpTimelineRefreshMaxTokens(selectedAuthorCount: number) {
   return 4096 + normalizedCount(selectedAuthorCount) * 1024;
 }
 
-export function noodleTimelinePostTargetRange(
+export function slpTimelinePostTargetRange(
   selectedAuthorCount: number,
   maximumPostsPerRefresh: number,
-): NoodleTimelinePostTargetRange {
+): SlpTimelinePostTargetRange {
   const maximum = Math.min(normalizedCount(selectedAuthorCount), normalizedCount(maximumPostsPerRefresh));
   if (maximum === 0) return { minimum: 0, maximum: 0 };
   return {
@@ -23,8 +23,8 @@ export function noodleTimelinePostTargetRange(
   };
 }
 
-export function noodleTimelinePostTargetInstruction(selectedAuthorCount: number, maximumPostsPerRefresh: number) {
-  const target = noodleTimelinePostTargetRange(selectedAuthorCount, maximumPostsPerRefresh);
+export function slpTimelinePostTargetInstruction(selectedAuthorCount: number, maximumPostsPerRefresh: number) {
+  const target = slpTimelinePostTargetRange(selectedAuthorCount, maximumPostsPerRefresh);
   const amount =
     target.maximum === 0
       ? "create no new posts"

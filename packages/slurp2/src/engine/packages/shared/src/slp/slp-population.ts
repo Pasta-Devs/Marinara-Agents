@@ -16,7 +16,7 @@
  * constraint and it is what makes an audience affordable where synthetic creators were not.
  */
 
-import type { NoodlerFanArchetype } from "@marinara-engine/shared";
+import type { SlpCreatorFanArchetype } from "./slp-social.types.js";
 import {
   SLURP_BUILTIN_FAN_TYPES,
   slurpFanTypeActiveHour,
@@ -187,7 +187,7 @@ export type SlurpPopulationMember = {
    * Kept in step with the Fan Type's `engineArchetype`, so the Engine fan-identity interface is
    * unchanged and a row written before Fan Types existed can still resolve back to a type.
    */
-  archetype: NoodlerFanArchetype;
+  archetype: SlpCreatorFanArchetype;
   /** Which Fan Type this person is. Null on a row written before Fan Types existed. */
   fanTypeId: string | null;
   traits: string[];

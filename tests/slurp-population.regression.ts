@@ -108,7 +108,7 @@ const read = (path: string) => slurp2Source(join(root, path));
 
 // The six fixed identities with placeholder handles are no longer what fan activity draws from.
 const operation = read("services/slurp/slurp-fan-activity.operation.ts");
-assert.match(operation, /populationNoodlerFanIdentityProvider\(cast, tiesByCreator\)/u);
+assert.match(operation, /populationCreatorFanIdentityProvider\(cast, tiesByCreator\)/u);
 // Regulars recur so they can be recognised; new faces arrive so the cast churns. A frozen cast of
 // thirty is the old six-account problem with thirty faces.
 assert.match(operation, /FAN_RUN_RETURNING/u);
@@ -238,11 +238,11 @@ assert.match(fanService, /Kept to a sentence\./u);
 
 const provider = read("services/slurp/slurp-fan-identity-provider.ts");
 assert.match(provider, /persona\?: \{/u);
-assert.match(fanRun, /populationNoodlerFanIdentityProvider\(cast, tiesByCreator\)/u);
+assert.match(fanRun, /populationCreatorFanIdentityProvider\(cast, tiesByCreator\)/u);
 // A run covers up to twelve Creators. Resolving ties once and reusing them described every fan by
 // their history with the first Creator while they commented on the seventh.
 assert.match(fanRun, /run\.creatorIds\.map\(/u);
-assert.match(provider, /resolve\(weights: NoodlerFanArchetypeWeights, creatorAccountId: string\)/u);
+assert.match(provider, /resolve\(weights: SlpCreatorFanArchetypeWeights, creatorAccountId: string\)/u);
 
 // ── Being a particular fan has to change something ──────────────────────────
 // A Creator answered a whale who had spent four hundred coins exactly as they answered a stranger:
