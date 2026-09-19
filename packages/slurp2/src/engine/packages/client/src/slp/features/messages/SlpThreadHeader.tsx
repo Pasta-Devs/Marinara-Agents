@@ -37,7 +37,7 @@ import {
 import { NoodleAnchoredPopover } from "../../base/chrome/SlpAnchoredPopover";
 import { HeaderIconButton, SlurpConnectionSwitcher, SlurpFollowUpItem } from "./SlpThreadChrome";
 import { SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "../../modules/coin/SlpCoin";
-import type { SlurpThreadViewModel } from "./slp-thread-view-model";
+import type { SlurpThreadViewModel } from "./slp-thread-actions";
 
 /** The conversation header, its search bar, the commission ribbon and the request banner. */
 export function SlpThreadHeader({ model }: { model: SlurpThreadViewModel }) {

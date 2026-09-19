@@ -274,7 +274,7 @@ import {
 } from "../features/discovery/slp-discovery";
 import type { SlurpDiscoveryGender } from "../base/state/slp-state-types";
 import { formatTime } from "../base/ui/slp-date-time";
-import { useSlurpHomeState } from "./SlpHomeHooks";
+import { useSlurpHomeState } from "./slp-home-actions";
 
 interface SlurpHomeProps {
   navigation: Extract<SlurpNavigationState, { mode: "creator" }>;

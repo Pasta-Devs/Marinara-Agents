@@ -36,7 +36,7 @@ import { SlurpMemoriesPanel } from "./SlpMemoriesPanel";
 import { CommissionRequest, CommissionRow, isCommissionRequest, SlurpCommissionsPanel } from "./commissions/SlpCommissions";
 import { Avatar } from "../../base/chrome/SlpChrome";
 import { showConfirmDialog } from "../../../lib/app-dialogs";
-import type { SlurpThreadViewModel } from "./slp-thread-view-model";
+import type { SlurpThreadViewModel } from "./slp-thread-actions";
 
 /** The conversation drawer: details, memories, commissions and the prompt. */
 export function SlpThreadDrawer({ model }: { model: SlurpThreadViewModel }) {

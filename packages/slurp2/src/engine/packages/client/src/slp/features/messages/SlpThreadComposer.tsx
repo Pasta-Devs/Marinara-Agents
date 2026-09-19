@@ -31,7 +31,7 @@ import { BroadcastPanel, CreatorMessageTools, FanImageTool } from "./SlpMessageT
 import { cn } from "../../../lib/utils";
 import { SlurpCoin, SlurpCoinAmount, SlurpCoinBurst } from "../../modules/coin/SlpCoin";
 import { HeaderIconButton, SlurpConnectionSwitcher, SlurpFollowUpItem } from "./SlpThreadChrome";
-import type { SlurpThreadViewModel } from "./slp-thread-view-model";
+import type { SlurpThreadViewModel } from "./slp-thread-actions";
 
 /** The message composer: the draft, the tools it opens and the tip it can carry. */
 export function SlpThreadComposer({ model }: { model: SlurpThreadViewModel }) {

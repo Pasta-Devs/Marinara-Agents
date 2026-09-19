@@ -33,7 +33,8 @@ import {
   X,
 } from "lucide-react";
 import { getApiErrorMessage } from "../../../lib/api-client";
-import { useSlurpThreadViewModel, type SlurpThreadViewProps } from "./slp-thread-view-model";
+import { useSlurpThreadViewModel } from "./slp-thread-actions";
+import type { SlurpThreadViewProps } from "./slp-thread-view-model";
 import { SlpThreadHeader } from "./SlpThreadHeader";
 import { SlpThreadComposer } from "./SlpThreadComposer";
 import { SlpThreadDrawer } from "./SlpThreadDrawer";
