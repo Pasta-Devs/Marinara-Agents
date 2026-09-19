@@ -24,14 +24,16 @@
 //
 // The two places a number is typed by hand are COUNTERS and HEALING_SPELLS
 // below, where the SRD states something no fixture field carries. Each row
-// cites the SRD sentence it came from, the three counters that a class table
-// also carries are cross-checked against it, and every healing pk is checked
-// against the source, so a typo cannot survive a rebuild.
+// cites the SRD sentence it came from, every counter a class-table column also
+// carries has its whole step table BUILT from that column, a hand-typed step
+// table has its levels cross-checked against the ones the source marks the
+// feature at, and every healing pk is checked against the source, so a typo
+// cannot survive a rebuild.
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import prettier from "prettier";
-import { assertRulesetBattle, assertRulesetCatalogs } from "./ruleset-package-checks.mjs";
+import { assertRulesetBattle, assertRulesetCatalogs, assertRulesetScaled } from "./ruleset-package-checks.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageRoot = join(repoRoot, "packages/ruleset-5e-2014");
@@ -105,7 +107,7 @@ const RANGED_WEAPONS = new Set([
 // The ruleset version this converter writes. Raise it when the generated
 // content changes what an installed ruleset means; a rebuild refuses to lower
 // a version that is already higher.
-const RULESET_VERSION = 3;
+const RULESET_VERSION = 4;
 
 // The SRD's healing spells. The fixture has no healing field at all: a spell
 // carries a damage roll or nothing, so a heal arrives here looking exactly like
@@ -174,14 +176,29 @@ const WEAPON_PROPERTY_CORRECTIONS = new Map([
 // purpose rather than shipped as an attack for 0 damage.
 const SKIPPED_WEAPONS = new Set(["srd_net"]);
 
-// Limited-use class resources. The Engine has no class tables yet, so `max` is
-// the value at the level the feature is gained and a player raises it as they
-// level; the package README says so. `column` names an Open5e class-table
-// column carrying the same number, cross-checked at build time where one
-// exists. Every row quotes the SRD sentence that states the count; a feature
+// The sheet has one Level field, because a ruleset sheet has no notion of a class
+// and cannot have one per class. A resource that follows a class table therefore
+// reads the character's TOTAL level, which is right for a single-class character
+// and generous for a multiclass one. Said on every row it affects, and in the
+// package README; a player who wants their own number deletes the picked row and
+// types one, because a hand-typed row is never scaled.
+const MULTICLASS_NOTE = "Your sheet has one level, so a multiclass character follows the total.";
+
+// The word an Open5e class-table column prints where the SRD states no number.
+const COLUMN_UNLIMITED = "Unlimited";
+const COLUMN_NUMBER_PATTERN = /^\d{1,2}$/u;
+
+// Limited-use class resources. `max` is what the row holds before it lands on a
+// sheet, and `scaled` is how the sheet then keeps it: a value reference the
+// Engine resolves, plus the step table it is looked up in. A table is BUILT from
+// the Open5e class-table column named by `column` wherever the source has one,
+// and hand-typed from the cited SRD sentence only where it does not, in which
+// case its thresholds are cross-checked against the levels the source marks the
+// feature at. Every row quotes the SRD sentence that states the count; a feature
 // whose uses the SRD does not state as a plain number is not here.
 const COUNTERS = [
   // "Once you use this feature, you must finish a short or long rest before you can use it again."
+  // The SRD raises it at no level, so this one does not scale.
   {
     feature: "srd_fighter_second-wind",
     name: "Second Wind",
@@ -190,13 +207,56 @@ const COUNTERS = [
     mechanics: { kind: "heal", amount: { dice: "1d10" }, targets: "self" },
   },
   // "Once you use this feature, you must finish a short or long rest before you can use it again."
-  { feature: "srd_fighter_action-surge", name: "Action Surge", max: 1, recharge: "short" },
-  // "you can't use this feature again until you finish a long rest."
-  { feature: "srd_fighter_indomitable", name: "Indomitable", max: 1, recharge: "long" },
+  // "Starting at 17th level, you can use it twice before a rest, but only once on the same turn."
+  {
+    feature: "srd_fighter_action-surge",
+    name: "Action Surge",
+    max: 1,
+    recharge: "short",
+    scaled: {
+      from: { field: "level" },
+      table: [
+        [2, 1],
+        [17, 2],
+      ],
+      follows: "the Fighter table",
+      readsLevel: true,
+    },
+  },
+  // "you can't use this feature again until you finish a long rest." "You can use this feature
+  // twice between long rests starting at 13th level and three times between long rests starting
+  // at 17th level."
+  {
+    feature: "srd_fighter_indomitable",
+    name: "Indomitable",
+    max: 1,
+    recharge: "long",
+    scaled: {
+      from: { field: "level" },
+      table: [
+        [9, 1],
+        [13, 2],
+        [17, 3],
+      ],
+      follows: "the Fighter table",
+      readsLevel: true,
+    },
+  },
   // Barbarian table, Rages column: 2 at 1st level. "Once you have raged the number of times shown
   // for your barbarian level in the Rages column of the Barbarian table, you must finish a long
   // rest before you can rage again."
-  { feature: "srd_barbarian_rage", name: "Rage", max: 2, recharge: "long", column: "srd_barbarian_rages" },
+  {
+    feature: "srd_barbarian_rage",
+    name: "Rage",
+    max: 2,
+    recharge: "long",
+    column: "srd_barbarian_rages",
+    // The 20th-level cell of that column reads "Unlimited", which is not a number a counter can
+    // hold, so the table stops at the last one the SRD states and the row says so.
+    columnUnlimitedAt: 20,
+    scaled: { from: { field: "level" }, follows: "the Barbarian table", readsLevel: true },
+    note: "The table says Unlimited at 20th level, so the maximum stays 6.",
+  },
   // "You can use this feature a number of times equal to your Charisma modifier (a minimum of once).
   // You regain any expended uses when you finish a long rest."
   {
@@ -204,12 +264,42 @@ const COUNTERS = [
     name: "Bardic Inspiration",
     max: 1,
     recharge: "long",
-    note: "Uses equal your Charisma modifier, at least one, so raise the maximum on the sheet.",
+    // Charisma tops out at 30 on the sheet, a modifier of +10.
+    scaled: {
+      from: { derived: "bardic_inspiration_uses" },
+      follows: "your Charisma modifier, at least one",
+      highest: 10,
+    },
   },
-  // "You must then finish a short or long rest to use your Channel Divinity again."
-  { feature: "srd_cleric_channel-divinity", name: "Channel Divinity", max: 1, recharge: "short" },
+  // "You must then finish a short or long rest to use your Channel Divinity again." "Beginning at
+  // 6th level, you can use your Channel Divinity twice between rests, and beginning at 18th level,
+  // you can use it three times between rests."
+  {
+    feature: "srd_cleric_channel-divinity",
+    name: "Channel Divinity",
+    max: 1,
+    recharge: "short",
+    scaled: {
+      from: { field: "level" },
+      table: [
+        [2, 1],
+        [6, 2],
+        [18, 3],
+      ],
+      follows: "the Cleric table",
+      readsLevel: true,
+    },
+  },
   // "You can use this feature twice. You regain expended uses when you finish a short or long rest."
-  { feature: "srd_druid_wild-shape", name: "Wild Shape", max: 2, recharge: "short" },
+  // The SRD never raises that two; the 20th-level Archdruid feature lifts the limit instead, which
+  // is a different feature and not a number, so this one does not scale.
+  {
+    feature: "srd_druid_wild-shape",
+    name: "Wild Shape",
+    max: 2,
+    recharge: "short",
+    note: "At 20th level the Archdruid feature makes Wild Shape unlimited.",
+  },
   // Monk table, Ki Points column: 2 at 2nd level. "When you spend a ki point, it is unavailable
   // until you finish a short or long rest."
   {
@@ -218,7 +308,7 @@ const COUNTERS = [
     max: 2,
     recharge: "short",
     column: "srd_monk_ki-points",
-    note: "You have as many ki points as your monk level, so raise the maximum on the sheet.",
+    scaled: { from: { field: "level" }, follows: "the Monk table", readsLevel: true },
   },
   // "You can use this feature a number of times equal to 1 + your Charisma modifier. When you finish
   // a long rest, you regain all expended uses."
@@ -227,7 +317,17 @@ const COUNTERS = [
     name: "Divine Sense",
     max: 1,
     recharge: "long",
-    note: "Uses equal 1 plus your Charisma modifier, so raise the maximum on the sheet.",
+    scaled: { from: { derived: "divine_sense_uses" }, follows: "1 plus your Charisma modifier", highest: 11 },
+  },
+  // "You have a pool of healing power that replenishes when you take a long rest. With that pool,
+  // you can restore a total number of hit points equal to your paladin level x 5."
+  {
+    feature: "srd_paladin_lay-on-hands",
+    name: "Lay on Hands",
+    max: 5,
+    recharge: "long",
+    // Level 20 times 5.
+    scaled: { from: { derived: "lay_on_hands_pool" }, follows: "your level times 5", readsLevel: true, highest: 100 },
   },
   // Sorcerer table, Sorcery Points column: 2 at 2nd level. "You regain all spent sorcery points
   // when you finish a long rest."
@@ -237,9 +337,10 @@ const COUNTERS = [
     max: 2,
     recharge: "long",
     column: "srd_sorcerer_sorcery-points",
-    note: "You have as many sorcery points as your sorcerer level, so raise the maximum on the sheet.",
+    scaled: { from: { field: "level" }, follows: "the Sorcerer table", readsLevel: true },
   },
   // "Once per day when you finish a short rest, you can choose expended spell slots to recover."
+  // The SRD raises it at no level, so this one does not scale.
   {
     feature: "srd_wizard_arcane-recovery",
     name: "Arcane Recovery",
@@ -471,6 +572,86 @@ function buildSpellEntries(spells, castingOptions, classNames) {
 
 // ── Class features ──
 
+/** The Engine's step lookup, restated: the value of the highest threshold at or below the input,
+ *  and the first value for an input below the first threshold. */
+function stepTableAt(table, input) {
+  let value = table[0][1];
+  for (const [threshold, entry] of table) {
+    if (input < threshold) break;
+    value = entry;
+  }
+  return value;
+}
+
+/** A counter's step table read out of its Open5e class-table column, equal neighbours collapsed
+ *  into one step. This is the whole reason to prefer the source: the numbers are the SRD's own,
+ *  and a column that changed shape stops the build rather than shipping a stale hand-typed table. */
+function stepTableFromColumn(counter, levels) {
+  const rows = levels.get(counter.column);
+  if (!rows?.length) fail(`${counter.name} names the class-table column ${counter.column}, which the source has not`);
+  const unlimitedAt = counter.columnUnlimitedAt;
+  if (unlimitedAt !== undefined && !rows.some((row) => row.level === unlimitedAt)) {
+    fail(`${counter.column} has no level ${unlimitedAt}; drop columnUnlimitedAt from ${counter.name}`);
+  }
+  const table = [];
+  let previous;
+  for (const { level, value } of rows) {
+    if (level === unlimitedAt) {
+      // The SRD prints a word here rather than a number. Checked both ways, so a source that
+      // started stating one would stop the build instead of quietly keeping the lower maximum.
+      if (value !== COLUMN_UNLIMITED) {
+        fail(`${counter.column} says ${JSON.stringify(value)} at level ${level}, not ${COLUMN_UNLIMITED}`);
+      }
+      break;
+    }
+    if (!COLUMN_NUMBER_PATTERN.test(String(value))) {
+      fail(`${counter.column} says ${JSON.stringify(value)} at level ${level}, which is not a number`);
+    }
+    const number = Number(value);
+    if (number !== previous) table.push([level, number]);
+    previous = number;
+  }
+  if (table.length === 0) fail(`${counter.column} states no numbers`);
+  return table;
+}
+
+/** What each kept counter can reach at most, gathered while the rows are built. */
+const SCALED_CEILINGS = new Map();
+
+/** The `scaled` block a counter row carries: which column the ruleset keeps, what it reads off the
+ *  sheet, and the step table that reading is looked up in. */
+function scaledFor(counter, levels) {
+  const spec = counter.scaled;
+  if (!spec) return undefined;
+  if (spec.table && counter.column) {
+    fail(`${counter.name} has a hand-typed table and the ${counter.column} column; keep the column`);
+  }
+  let table;
+  if (spec.table) {
+    // The class table marks the feature at every level its cell changes, which is the one thing
+    // the source does say about a counter with no column of its own, so a threshold that drifted
+    // from the SRD stops the build.
+    const marked = (levels.get(counter.feature) ?? []).map((item) => item.level).join(", ");
+    const typed = spec.table.map(([level]) => level).join(", ");
+    if (typed !== marked) fail(`${counter.name} steps at ${typed}, but the source marks it at ${marked}`);
+    table = spec.table;
+  } else if (counter.column) {
+    table = stepTableFromColumn(counter, levels);
+  }
+  // `values.max` is what the row holds before anything knows which sheet it lands on, so it has to
+  // be what the table says at the sheet's own lowest level.
+  if (table && stepTableAt(table, 1) !== counter.max) {
+    fail(`${counter.name} starts at ${counter.max} but its table says ${stepTableAt(table, 1)} at level 1`);
+  }
+  // The most the kept number can ever be. A table says so itself; a derived value has to be told,
+  // because nothing here evaluates the sheet. It is checked against the column's own ceiling once
+  // the ruleset is written, so a counter can never be clamped short of what the rules give.
+  const highest = table ? Math.max(...table.map(([, value]) => value)) : spec.highest;
+  if (!Number.isInteger(highest)) fail(`${counter.name} follows a derived value and must say the highest it can reach`);
+  SCALED_CEILINGS.set(counter.name, highest);
+  return { max: compact({ from: spec.from, table }) };
+}
+
 /** The counter row a feature carries, plus the sentence that explains it.
  *  `levels` maps a feature to its class-table rows, ascending by level. */
 function counterFor(pk, levels) {
@@ -485,9 +666,21 @@ function counterFor(pk, levels) {
       fail(`${counter.name} is written as ${counter.max} but ${counter.column} says ${stated} at level ${gained}`);
     }
   }
+  const scaled = scaledFor(counter, levels);
   const rest = counter.recharge === "short" ? "short" : "long";
-  const line = `Picking this also adds the ${counter.name} class resource: starts at ${counter.max}, back after a ${rest} rest.`;
-  return { counter, summary: counter.note ? `${line} ${counter.note}` : line };
+  const summary = [
+    scaled
+      ? `Picking this also adds the ${counter.name} class resource: its maximum follows ${counter.scaled.follows}, back after a ${rest} rest.`
+      : `Picking this also adds the ${counter.name} class resource: starts at ${counter.max}, back after a ${rest} rest.`,
+    counter.note,
+    counter.scaled?.readsLevel ? MULTICLASS_NOTE : undefined,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  // The feature's own description is appended to this and the whole thing trimmed at a sentence
+  // boundary, so a counter that filled the budget by itself would be cut mid-explanation.
+  if (summary.length > SUMMARY_MAX) fail(`${counter.name} says ${summary.length} characters before its description`);
+  return { counter, scaled, summary };
 }
 
 function buildFeatureEntries(features, classes, featureLevels) {
@@ -505,10 +698,13 @@ function buildFeatureEntries(features, classes, featureLevels) {
         },
       ];
       if (counter) {
-        rows.push({
-          list: COUNTER_LIST,
-          values: { name: counter.counter.name, max: counter.counter.max, recharge: counter.counter.recharge },
-        });
+        rows.push(
+          compact({
+            list: COUNTER_LIST,
+            values: { name: counter.counter.name, max: counter.counter.max, recharge: counter.counter.recharge },
+            scaled: counter.scaled,
+          }),
+        );
       }
       return {
         id: entryId(pk),
@@ -792,6 +988,17 @@ const sources = new Map();
 for (const assetPath of assets.keys()) sources.set(assetPath, await readFile(join(packageRoot, assetPath), "utf8"));
 const summaries = assertRulesetCatalogs(manifest, document, sources);
 assertRulesetBattle(manifest, document);
+const scaledRows = assertRulesetScaled(manifest, document, sources);
+// A kept maximum is fitted to its column when the sheet is edited, so the column has to have room
+// for the most the rules can give (Lay on Hands is 100 at level 20).
+const counterMax = document.sheet.lists
+  .find((list) => list.id === COUNTER_LIST)
+  ?.columns.find((column) => column.id === "max")?.max;
+for (const [name, highest] of SCALED_CEILINGS) {
+  if (!(highest <= counterMax)) {
+    fail(`${name} can reach ${highest}, but the ${COUNTER_LIST} list's max column stops at ${counterMax}`);
+  }
+}
 
 console.log(`5e SRD catalogs built from ${SOURCE_DOCUMENT} at ${sourceCommit}`);
 console.log(`  ruleset.json ${rulesetBytes} bytes`);
@@ -801,4 +1008,7 @@ for (const summary of summaries) {
     `  ${summary.id}: ${summary.entryCount} entries${bytes === undefined ? " (inline)" : `, ${bytes} bytes`}`,
   );
 }
-console.log(`  ${weaponRecords.length - weapons.length} weapon(s) skipped, ${COUNTERS.length} counter(s) declared`);
+console.log(
+  `  ${weaponRecords.length - weapons.length} weapon(s) skipped, ${COUNTERS.length} counter(s) declared, ` +
+    `${scaledRows} of them kept by the sheet`,
+);

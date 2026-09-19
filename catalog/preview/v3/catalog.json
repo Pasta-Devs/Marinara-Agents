@@ -7,16 +7,16 @@
         "schemaVersion": 2,
         "capabilityApi": {
           "major": 1,
-          "minor": 22
+          "minor": 23
         },
         "builtAgainst": {
           "engineVersion": "2.4.6",
-          "engineCommit": "d71106851b8ffd6b963542601901387b4269fb34"
+          "engineCommit": "1c160153fbe69f395ba940a0cf65d5e70e26cb9e"
         },
         "id": "ruleset-5e-2014",
         "name": "5e (SRD 5.1)",
-        "version": "0.3.0",
-        "description": "Provides 5e SRD 5.1 rules for Game Mode ability checks, skill checks, saving throws, and the full character sheet, plus pickable SRD spells, class features and weapons so you do not type them row by row. Battles now start from the sheet: your hit points and spell slots go into the fight (Pact Magic slots do not), your prepared spells, your cantrips and the weapons you picked show up as skills, and what the fight cost is written back when it ends. Health is carried as a share of the maximum, the damage is still Marinara's own combat math, and attack rolls, saving throws and concentration are not applied. After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
+        "version": "0.4.0",
+        "description": "Provides 5e SRD 5.1 rules for Game Mode ability checks, skill checks, saving throws, and the full character sheet, plus pickable SRD spells, class features and weapons so you do not type them row by row. Class resources now keep themselves: pick Rage, Ki, Sorcery Points, Channel Divinity, Action Surge, Indomitable, Bardic Inspiration, Divine Sense or Lay on Hands and the sheet sets the maximum from your level or your Charisma and keeps it current as you level up. Battles start from the sheet: your hit points and spell slots go into the fight (Pact Magic slots do not), your prepared spells, your cantrips and the weapons you picked show up as skills, and what the fight cost is written back when it ends. Health is carried as a share of the maximum, the damage is still Marinara's own combat math, and attack rolls, saving throws and concentration are not applied. After installing, choose it under Rules in the Game Mode setup wizard when you create a new game.",
         "engine": {
           "min": "2.4.6",
           "maxExclusive": "4.0.0"
@@ -37,8 +37,8 @@
         "files": [
           {
             "path": "ruleset.json",
-            "sha256": "d8312fefe0cc9ce54926a40aa187cf1c1c1b55a632a98ce0fff675397e162d09",
-            "bytes": 58561
+            "sha256": "e61c7bf78d93717a50856b66e53c418cf1d800929629197e4f2f99e073c14d4d",
+            "bytes": 59629
           },
           {
             "path": "catalogs/spells.json",
@@ -47,8 +47,8 @@
           },
           {
             "path": "catalogs/features.json",
-            "sha256": "70a8e57cf46712406fcd06fe74917dd81be7890d6e7881726a2a3f3ad024a07d",
-            "bytes": 195198
+            "sha256": "f5461d01986872dbe3071eb34a3eb2383433a752a21d2f15c288c57c6a155524",
+            "bytes": 198169
           }
         ],
         "permissions": [],
@@ -57,9 +57,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/ruleset-5e-2014.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-0.3.0.zip",
-        "sha256": "269f2be400c20b4512f0f4b734d0ab9c52335ed4d51db250544f8285b53587cd",
-        "bytes": 563181
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/ruleset-5e-2014-0.4.0.zip",
+        "sha256": "9661c5a99d6530eca0aa1cb31f76a8115cd600ae7a8d6c7814d901936af1f3f2",
+        "bytes": 567480
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/game/getting-started.md#choosing-rules"
     }

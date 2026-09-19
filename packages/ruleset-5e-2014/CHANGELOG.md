@@ -1,5 +1,13 @@
 # 5e (SRD 5.1)
 
+## 0.4.0 — 2026-09-19
+- Class resources you pick now keep themselves. Rage, Ki, Sorcery Points, Channel Divinity, Action Surge and Indomitable follow their class tables, Bardic Inspiration and Divine Sense follow your Charisma, and the sheet sets the maximum and keeps it current as you level up.
+- Lay on Hands is a new class resource. Its pool is your level times 5.
+- A kept maximum is shown as read only on the sheet. If you want your own number, delete the picked row and type one: a row you typed is never kept by the ruleset.
+- Your sheet has one Level field, so a multiclass character's class resources follow the total level.
+- Rage stops at six. The Barbarian table says Unlimited at 20th level, which a counter cannot hold.
+- Needs an Engine with Capability API 1.23.
+
 ## 0.3.0 — 2026-09-19
 - Battles now start from your character sheet. Your hit points and spell slots go into the fight, and when it ends the damage you took and the slots you spent are written back. Pact Magic slots do not transfer: their level follows the character, which the battle block cannot say yet.
 - Your prepared spells and the weapons you picked from the catalogs show up as skills. Cantrips come too, because they are cast without being prepared. A row you typed by hand carries no numbers, so it stays out.
