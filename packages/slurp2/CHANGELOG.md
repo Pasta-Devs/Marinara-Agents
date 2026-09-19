@@ -4,7 +4,8 @@
 
 - Slurp now carries its own vocabulary instead of borrowing names from the Engine.
 - Cleaned up a leftover wording slip in the setup wizard intro.
-- You should not feel any difference. Your creators, posts and settings are untouched.
+- Fixed SwarmUI image generation: prompt images and LoRAs are now sent when you do not use a custom workflow.
+- Nothing else changes. Your creators, posts and settings are untouched.
 
 ## 0.1.0 — 2026-09-19
 
