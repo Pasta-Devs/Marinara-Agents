@@ -56,7 +56,7 @@ export async function readCreatorMultipart(
     }
     const buffer = write.value;
     // The magic bytes decide the type, not the filename. An image saved straight from a post
-    // (/noodler/posts/:id/media) has no extension at all, and browsers rename a JPEG to .jfif, so
+    // (/slurp/posts/:id/media) has no extension at all, and browsers rename a JPEG to .jfif, so
     // gating on the name rejected valid images. The ".avif" hint only enables AVIF brand sniffing,
     // which has no signature of its own; every other format is detected from its own header.
     const detected = isAllowedImageBuffer(buffer, ".avif");

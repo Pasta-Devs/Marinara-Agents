@@ -975,6 +975,7 @@
   "ui.longTermMemory.sourcesworkspace.current": "Current",
   "ui.longTermMemory.sourcesworkspace.extractionCompletedReviewReady": "Extraction completed. Related draft review is ready.",
   "ui.longTermMemory.sourcesworkspace.extractionIncomplete": "Extraction incomplete",
+  "ui.longTermMemory.sourcesworkspace.statusIncomplete": "Incomplete; retry available",
   "ui.longTermMemory.sourcesworkspace.importCancelledSelectionRetained": "Import transport was cancelled before results were received. Some sources may have completed; the original selection is retained, and retry will use its original source, source scope, destination, and mode.",
   "ui.longTermMemory.sourcesworkspace.mixed": "Mixed",
   "ui.longTermMemory.sourcesworkspace.new": "New",

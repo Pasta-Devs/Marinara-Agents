@@ -8,6 +8,7 @@ import { avatarCropSchema } from "@marinara-engine/shared";
 export const slpAccountKindSchema = z.enum(["persona", "character", "random_user"]);
 export const slpInteractionTypeSchema = z.enum(["like", "repost", "reply", "vote"]);
 export const slpPostAccessSchema = z.enum(["public", "locked"]);
+export const slpCreatorContentFormatSchema = z.enum(["caption", "announcement", "long_form"]);
 export const DEFAULT_SLP_WALLET_COINS = 999_999;
 export const slpParticipantSelectionModeSchema = z.enum(["all", "random_range", "exact"]);
 export const slpCarryoverModeSchema = z.enum(["off", "conversation", "roleplay", "game", "all"]);
@@ -517,6 +518,7 @@ const slpCreatorPostCreateShape = {
   targetAccountId: z.string().min(1),
   title: slpCreatorPostTitleSchema,
   content: z.string().trim().max(SLP_CREATOR_POST_CONTENT_MAX_LENGTH),
+  format: slpCreatorContentFormatSchema.optional(),
   uploadedImageUrl: z.string().trim().url().max(2000).optional(),
   imageCrop: slpPostImageCropSchema.optional(),
   poll: slpPollInputSchema.nullable().optional(),

@@ -786,6 +786,7 @@ const importStatusLabelKeys: Record<string, string> = {
   created: "ui.longTermMemory.sourcesworkspace.statusCreated",
   refreshed: "ui.longTermMemory.sourcesworkspace.statusRefreshed",
   failed: "ui.longTermMemory.sourcesworkspace.statusFailed",
+  incomplete: "ui.longTermMemory.sourcesworkspace.statusIncomplete",
   succeeded: "ui.longTermMemory.sourcesworkspace.statusSucceeded",
   cancelled: "ui.longTermMemory.sourcesworkspace.statusCancelled",
   not_started: "ui.longTermMemory.sourcesworkspace.statusNotStarted",
@@ -802,7 +803,10 @@ function resultTone(status: string): "neutral" | "success" | "warning" | "danger
     ? "success"
     : status === "failed" || status === "cancelled"
       ? "danger"
-      : status === "partial_success" || status === "no_suggestions_created" || status === "not_started"
+      : status === "partial_success" ||
+          status === "incomplete" ||
+          status === "no_suggestions_created" ||
+          status === "not_started"
         ? "warning"
         : "neutral";
 }
@@ -872,6 +876,8 @@ function extractionResultLabel(
 ) {
   if (item.extractionStatus === "not_started")
     return localizeUi("ui.longTermMemory.sourcesworkspace.sourceRefreshedExtractionNotRun");
+  if (item.extractionStatus === "incomplete")
+    return localizeUi("ui.longTermMemory.sourcesworkspace.extractionIncomplete");
   if (item.extractionStatus !== "succeeded")
     return localizeUi("ui.longTermMemory.sourcesworkspace.extractionDidNotFinish");
   if (item.outcome.state === "partial_success")
@@ -1892,7 +1898,11 @@ export default function SourcesWorkspace({
   const bulkSelectionActive = selectedFlatSourceIds.length > 0 || selectedLorebookCandidateIds.size > 0;
   const selectionCount = source === "lorebooks" ? selectedLorebookCandidateIds.size : selectedFlatSourceIds.length;
   const pendingDraftsProduced = Boolean(
-    importResult?.imported.some((item) => item.extractionStatus === "succeeded" && item.draft?.status === "pending"),
+    importResult?.imported.some(
+      (item) =>
+        (item.extractionStatus === "succeeded" || item.extractionStatus === "incomplete") &&
+        item.draft?.status === "pending",
+    ),
   );
   const proposalCount =
     importResult?.imported.reduce((count, item) => count + (item.draft?.mutations.length ?? 0), 0) ?? 0;
@@ -3883,7 +3893,8 @@ export default function SourcesWorkspace({
                   {item.extractionStatus === "failed" || item.extractionStatus === "cancelled" ? (
                     <StatusSurface tone={resultTone(item.extractionStatus)}>{item.error.message}</StatusSurface>
                   ) : null}
-                  {item.extractionStatus === "succeeded" && item.outcome.droppedUnits > 0 ? (
+                  {(item.extractionStatus === "succeeded" || item.extractionStatus === "incomplete") &&
+                  item.outcome.droppedUnits > 0 ? (
                     <div className="space-y-2">
                       <p
                         className="text-xs text-[var(--muted-foreground)]"

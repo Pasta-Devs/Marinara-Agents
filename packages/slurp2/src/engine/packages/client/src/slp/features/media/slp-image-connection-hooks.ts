@@ -9,7 +9,7 @@ export type SlurpImageConnections = {
 export function useSlurpImageConnections(enabled = true) {
   return useQuery({
     queryKey: slpKeys.noodlerImageConnections(),
-    queryFn: () => api.get<SlurpImageConnections>("/slurp2/noodler/image-connections"),
+    queryFn: () => api.get<SlurpImageConnections>("/slurp2/slurp/image-connections"),
     enabled,
     staleTime: 10_000,
   });
@@ -18,7 +18,7 @@ export function useUpdateSlurpImageConnections() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (patch: { defaultConnectionId?: string | null; creatorId?: string; connectionId?: string | null }) =>
-      api.patch<SlurpImageConnections>("/slurp2/noodler/image-connections", patch),
+      api.patch<SlurpImageConnections>("/slurp2/slurp/image-connections", patch),
     onSuccess: (value) => qc.setQueryData(slpKeys.noodlerImageConnections(), value),
   });
 }
@@ -34,7 +34,7 @@ export function useUpdateSlurpConnectionsForCreators() {
     mutationFn: async (input: { creatorIds: string[]; connectionId: string }) => {
       let latest: SlurpImageConnections | undefined;
       for (const creatorId of input.creatorIds) {
-        latest = await api.patch<SlurpImageConnections>("/slurp2/noodler/image-connections", {
+        latest = await api.patch<SlurpImageConnections>("/slurp2/slurp/image-connections", {
           creatorId,
           connectionId: input.connectionId,
         });

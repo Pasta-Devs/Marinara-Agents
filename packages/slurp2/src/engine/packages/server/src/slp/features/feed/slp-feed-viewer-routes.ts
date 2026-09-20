@@ -41,7 +41,7 @@ export async function slpFeedViewerRoutes(app: FastifyInstance, deps: SlpRouteDe
     projectViewerPosts,
     resolveViewerPersona,
   } = deps;
-  app.get("/noodler/viewer/unseen-count", async (req, reply) => {
+  app.get("/slurp/viewer/unseen-count", async (req, reply) => {
     const parsed = slpCreatorViewerPersonaSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
@@ -94,7 +94,7 @@ export async function slpFeedViewerRoutes(app: FastifyInstance, deps: SlpRouteDe
     return value;
   });
 
-  app.post("/noodler/viewer/mark-seen", async (req, reply) => {
+  app.post("/slurp/viewer/mark-seen", async (req, reply) => {
     const parsed = slpCreatorViewerPersonaSchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await noodle.patchViewerSettings(parsed.data.personaId, {
@@ -105,7 +105,7 @@ export async function slpFeedViewerRoutes(app: FastifyInstance, deps: SlpRouteDe
     return viewer;
   });
 
-  app.get("/noodler/viewer", async (req, reply) => {
+  app.get("/slurp/viewer", async (req, reply) => {
     const parsed = slpCreatorViewerPersonaSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
@@ -113,7 +113,7 @@ export async function slpFeedViewerRoutes(app: FastifyInstance, deps: SlpRouteDe
     return buildViewerShell(await buildViewerContext(viewer));
   });
 
-  app.get("/noodler/viewer/feed", async (req, reply) => {
+  app.get("/slurp/viewer/feed", async (req, reply) => {
     const parsed = slpCreatorViewerFeedQuerySchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
@@ -160,7 +160,7 @@ export async function slpFeedViewerRoutes(app: FastifyInstance, deps: SlpRouteDe
     };
   });
 
-  app.get("/noodler/accounts/:id/posts", async (req, reply) => {
+  app.get("/slurp/accounts/:id/posts", async (req, reply) => {
     const parsed = slpCreatorProfilePostsQuerySchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };

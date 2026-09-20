@@ -25,7 +25,7 @@ export async function slpDiscoveryRoutes(app: FastifyInstance, deps: SlpRouteDep
       kind?: string;
       includeAccountId?: string;
     };
-  }>("/noodler/eligible-accounts", async (req, reply) => {
+  }>("/slurp/eligible-accounts", async (req, reply) => {
     const [publicAccounts, noodlerAccounts] = await Promise.all([
       noodle.listEligibleSources(),
       noodle.listNoodlerAccounts(),

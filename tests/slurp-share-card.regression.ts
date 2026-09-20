@@ -14,8 +14,8 @@ assert.match(card, /if \(!sharp\) return null;/u);
 
 const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
 const shareRoute = routes.slice(
-  routes.indexOf('"/noodler/posts/:id/share-card"'),
-  routes.indexOf('app.post("/noodler/posts/:id/interactions"'),
+  routes.indexOf('"/slurp/posts/:id/share-card"'),
+  routes.indexOf('app.post("/slurp/posts/:id/interactions"'),
 );
 assert.ok(shareRoute.length > 0, "the share-card route must exist");
 // A share card of a locked post would be a way to read paid content for free.

@@ -124,6 +124,8 @@ assert.equal(
   2,
   "the locked teaser is served from its own branch and needs the same name",
 );
+assert.match(routes, /app\.post\("\/slurp\/posts\/:id\/media"/u, "new Slurp media uploads must use the renamed route");
+assert.doesNotMatch(routes, /app\.put\("\/slurp\/posts\/:id\/media"/u, "media uploads must remain POST");
 
 // --- a failed image keeps its prompt, so it can be redrawn by hand later ------------------
 const images = slurp2Source(join(pkg, "server/src/services/slurp/slurp-images.service.ts"));

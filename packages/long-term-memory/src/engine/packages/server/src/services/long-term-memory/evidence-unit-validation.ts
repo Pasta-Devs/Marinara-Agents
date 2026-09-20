@@ -788,6 +788,8 @@ function dropReasonDiagnosticCode(reason: LtmExtractionDropReason) {
       return "candidate_dropped_too_long_to_keep_safely";
     case "invalid_format":
       return "candidate_dropped_invalid_format";
+    case "candidate_overflow":
+      return "candidate_dropped_overflow";
   }
 }
 
@@ -836,5 +838,7 @@ function userFacingDropMessage(reason: LtmExtractionDropReason) {
       return "Dropped a candidate that was too long to keep safely.";
     case "invalid_format":
       return "Dropped a malformed candidate.";
+    case "candidate_overflow":
+      return "Dropped candidates exceeding the candidate limit.";
   }
 }

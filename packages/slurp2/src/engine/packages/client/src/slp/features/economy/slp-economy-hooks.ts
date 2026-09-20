@@ -13,7 +13,7 @@ export function useSlurpPayout() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ creatorAccountId, ...body }: { creatorAccountId: string; personaId: string; amount: number }) =>
-      api.post<{ allowance: number }>(`/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/payout`, body),
+      api.post<{ allowance: number }>(`/slurp2/slurp/accounts/${encodeURIComponent(creatorAccountId)}/payout`, body),
     onSuccess: () =>
       Promise.all([
         qc.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "studio"] }),
@@ -37,7 +37,7 @@ export function useSetSlurpGoal() {
       target: number;
     }) =>
       api.put<{ goal: SlurpGoalProgress | null }>(
-        `/slurp2/noodler/accounts/${encodeURIComponent(creatorAccountId)}/goal`,
+        `/slurp2/slurp/accounts/${encodeURIComponent(creatorAccountId)}/goal`,
         body,
       ),
     onSuccess: () => qc.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "studio"] }),
@@ -49,7 +49,7 @@ export function useSlurpStudio(personaId: string | null, enabled = true) {
     queryKey: [...slpKeys.noodlerRoot(), "studio", personaId ?? "none"],
     queryFn: () =>
       api.get<{ since: string | null; creators: SlurpStudioCreator[] }>(
-        `/slurp2/noodler/studio?personaId=${encodeURIComponent(personaId!)}`,
+        `/slurp2/slurp/studio?personaId=${encodeURIComponent(personaId!)}`,
       ),
     enabled: Boolean(personaId) && enabled,
     // The snapshot is rewritten on every read, so refetching would silently zero the deltas the
@@ -61,7 +61,7 @@ export function useSlurpStudio(personaId: string | null, enabled = true) {
 export function useSlurpWallet(personaId: string | null) {
   return useQuery({
     queryKey: [...slpKeys.noodlerRoot(), "wallet", personaId ?? "none"],
-    queryFn: () => api.get<SlurpWallet>(`/slurp2/noodler/viewer/wallet?personaId=${encodeURIComponent(personaId!)}`),
+    queryFn: () => api.get<SlurpWallet>(`/slurp2/slurp/viewer/wallet?personaId=${encodeURIComponent(personaId!)}`),
     enabled: Boolean(personaId),
   });
 }
@@ -69,7 +69,7 @@ export function useClaimSlurpDailyRefill() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: { personaId: string }) =>
-      api.post<SlurpWallet>("/slurp2/noodler/viewer/wallet/daily-refill", input),
+      api.post<SlurpWallet>("/slurp2/slurp/viewer/wallet/daily-refill", input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: slpKeys.noodlerRoot() }),
   });
 }
@@ -77,7 +77,7 @@ export function useSetSlurpWalletCoinsForDevelopment() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: { personaId: string; coins: number }) =>
-      api.post<SlurpWallet>("/slurp2/noodler/viewer/wallet/dev-set", input),
+      api.post<SlurpWallet>("/slurp2/slurp/viewer/wallet/dev-set", input),
     onSuccess: (_wallet, input) =>
       queryClient.invalidateQueries({ queryKey: [...slpKeys.noodlerRoot(), "wallet", input.personaId] }),
   });
@@ -86,7 +86,7 @@ export function useTipSlurpCreator() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: { accountId: string; personaId: string; amount: number; requestId?: string }) =>
-      api.post<SlurpWallet>(`/slurp2/noodler/accounts/${encodeURIComponent(input.accountId)}/tip`, input),
+      api.post<SlurpWallet>(`/slurp2/slurp/accounts/${encodeURIComponent(input.accountId)}/tip`, input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: slpKeys.noodlerRoot() }),
   });
 }
@@ -95,7 +95,7 @@ export function useSetSlurpCreatorPrice() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: { accountId: string; personaId: string; price: number | null }) =>
-      api.put<{ price: number }>(`/slurp2/noodler/accounts/${encodeURIComponent(input.accountId)}/subscription-price`, {
+      api.put<{ price: number }>(`/slurp2/slurp/accounts/${encodeURIComponent(input.accountId)}/subscription-price`, {
         personaId: input.personaId,
         price: input.price,
       }),
@@ -105,7 +105,7 @@ export function useSetSlurpCreatorPrice() {
 export function useCreatorViewerWallets(enabled = true) {
   return useQuery({
     queryKey: [...slpKeys.noodlerRoot(), "viewer-wallets"],
-    queryFn: () => api.get<SlpCreatorViewerWallets>("/slurp2/noodler/viewer-wallets"),
+    queryFn: () => api.get<SlpCreatorViewerWallets>("/slurp2/slurp/viewer-wallets"),
     enabled,
     staleTime: 30_000,
   });

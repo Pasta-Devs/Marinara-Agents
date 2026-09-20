@@ -132,7 +132,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
   // any handler runs. A persona query additionally gates that owner-scoped request as a fan
   // (subscriber/unlock/hidden all enforced), which is why audience-facing projections bind
   // the viewer's persona into every media URL they hand out. No persona is the owner path,
-  // the same trusted management surface as the other /noodler/accounts routes. The bytes
+  // the same trusted management surface as the other /slurp/accounts routes. The bytes
   // live outside any publicly readable gallery namespace, so this is the only way in.
   app.get("/noodler/posts/:id/media", async (req, reply) => {
     const { id } = req.params as { id: string };
@@ -183,7 +183,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
    * blurred teaser is not worth sharing. Falls back to the caller's own view when no persona is
    * supplied, which is the owner path the other management routes use.
    */
-  app.get("/noodler/posts/:id/share-card", async (req, reply) => {
+  app.get("/slurp/posts/:id/share-card", async (req, reply) => {
     const { id } = req.params as { id: string };
     const personaId = (req.query as { personaId?: string }).personaId;
     const readable = personaId ? await resolveReadableCreatorPost(personaId, id) : null;
@@ -215,7 +215,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
       .send(card);
   });
 
-  app.post("/noodler/posts/:id/interactions", async (req, reply) => {
+  app.post("/slurp/posts/:id/interactions", async (req, reply) => {
     const parsed = slpCreatorCreateInteractionSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     if (parsed.data.type === "repost") return reply.code(400).send({ error: "Reposts are not available in Slurp." });
@@ -248,7 +248,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     return reply.code(201).send(interaction);
   });
 
-  app.post("/noodler/stories/:id/view", async (req, reply) => {
+  app.post("/slurp/stories/:id/view", async (req, reply) => {
     const parsed = slpCreatorViewerPersonaSchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
@@ -301,7 +301,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     return { viewed: true, duplicate: false };
   });
 
-  app.get("/noodler/stories/:id/views", async (req, reply) => {
+  app.get("/slurp/stories/:id/views", async (req, reply) => {
     const parsed = slpCreatorViewerPersonaSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
@@ -328,7 +328,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     };
   });
 
-  app.post("/noodler/posts/:postId/interactions/:interactionId/creator-reply", async (req, reply) => {
+  app.post("/slurp/posts/:postId/interactions/:interactionId/creator-reply", async (req, reply) => {
     const parsed = slpCreatorReplyRequestSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { postId, interactionId } = req.params as {
@@ -378,7 +378,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     }
   });
 
-  app.delete("/noodler/posts/:id/interactions", async (req, reply) => {
+  app.delete("/slurp/posts/:id/interactions", async (req, reply) => {
     const parsed = slpCreatorRemoveInteractionSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
@@ -397,7 +397,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     return interaction;
   });
 
-  app.patch("/noodler/posts/:postId/interactions/:interactionId", async (req, reply) => {
+  app.patch("/slurp/posts/:postId/interactions/:interactionId", async (req, reply) => {
     const { postId, interactionId } = req.params as { postId: string; interactionId: string };
     const parsed = slpInteractionUpdateSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
@@ -421,7 +421,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     return updated;
   });
 
-  app.delete("/noodler/posts/:postId/interactions/:interactionId", async (req, reply) => {
+  app.delete("/slurp/posts/:postId/interactions/:interactionId", async (req, reply) => {
     const { postId, interactionId } = req.params as { postId: string; interactionId: string };
     const parsed = slpCreatorViewerPersonaSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
@@ -445,7 +445,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
   // NoodleR posts are stage-profile posts the user fully owns, so edit/delete route
   // through the NoodleR-only storage methods (getNoodlerPostById) rather than the Noodle
   // /posts endpoints, which reject any post whose author is not a Noodle account.
-  app.patch("/noodler/posts/:id", async (req, reply) => {
+  app.patch("/slurp/posts/:id", async (req, reply) => {
     const body = requestRecord(req.body);
     const accountId = typeof body?.accountId === "string" ? body.accountId : null;
     if (!accountId) return reply.code(400).send({ error: "accountId is required" });
@@ -489,7 +489,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     return locked.value.updated;
   });
 
-  app.post("/noodler/posts", async (req, reply) => {
+  app.post("/slurp/posts", async (req, reply) => {
     let decoded: DecodedCreatorMediaRequest<
       z.output<typeof slurpCreatorPostCreateWithMediaSchema> | z.output<typeof slurpCreatorPostCreateSchema>
     >;
@@ -528,7 +528,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     return reply.code(404).send({ error: "Slurp stage profile not found" });
   });
 
-  app.post("/noodler/posts/:id/media", async (req, reply) => {
+  app.post("/slurp/posts/:id/media", async (req, reply) => {
     const { id } = req.params as { id: string };
     let multipart: Awaited<ReturnType<typeof readCreatorMultipart>>;
     try {
@@ -557,7 +557,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     return reply.code(404).send({ error: "Slurp post not found" });
   });
 
-  app.post("/noodler/posts/:id/image/generate", async (req, reply) => {
+  app.post("/slurp/posts/:id/image/generate", async (req, reply) => {
     const { id } = req.params as { id: string };
     const parsed = z
       .object({
@@ -609,7 +609,7 @@ export async function slpFeedPostRoutes(app: FastifyInstance, deps: SlpRouteDeps
     return reply.code(409).send({ error: "This image is already being generated." });
   });
 
-  app.delete("/noodler/posts/:id", async (req, reply) => {
+  app.delete("/slurp/posts/:id", async (req, reply) => {
     const accountId =
       typeof (req.query as { accountId?: unknown })?.accountId === "string"
         ? (req.query as { accountId: string }).accountId

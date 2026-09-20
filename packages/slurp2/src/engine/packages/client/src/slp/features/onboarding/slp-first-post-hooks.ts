@@ -14,7 +14,7 @@ export type SlpCreatorFirstPostJob = {
 export function useEnqueueCreatorFirstPosts() {
   return useMutation({
     mutationFn: (input: { executionId: string; accountIds: string[] }) =>
-      api.post<{ jobs: SlpCreatorFirstPostJob[] }>("/slurp2/noodler/first-posts/enqueue", input),
+      api.post<{ jobs: SlpCreatorFirstPostJob[] }>("/slurp2/slurp/first-posts/enqueue", input),
   });
 }
 export function useCreatorFirstPostStatus(executionId: string | null, enabled = true) {
@@ -22,7 +22,7 @@ export function useCreatorFirstPostStatus(executionId: string | null, enabled = 
     queryKey: [...slpKeys.noodlerRoot(), "first-posts", executionId ?? "none"],
     queryFn: () =>
       api.get<{ jobs: SlpCreatorFirstPostJob[]; complete: boolean }>(
-        `/slurp2/noodler/first-posts/status?executionId=${encodeURIComponent(executionId!)}`,
+        `/slurp2/slurp/first-posts/status?executionId=${encodeURIComponent(executionId!)}`,
       ),
     enabled: enabled && Boolean(executionId),
     staleTime: 0,
