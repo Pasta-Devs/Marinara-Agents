@@ -343,6 +343,7 @@
         "section": "combat"
       },
       {
+        "$comment": "SRD 5.1, Speed: \"Your speed defines how far you can move when you move on your turn.\" A fight on a board reads this field through combat.economy.movement. It defaults to 30, which is what most SRD races walk; this sheet has no race mechanics, so a Wood Elf's 35 or a Dwarf's 25 is typed in here rather than read off anything.",
         "id": "speed",
         "label": "Speed (ft)",
         "type": "number",

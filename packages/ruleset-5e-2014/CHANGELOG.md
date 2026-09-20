@@ -6,7 +6,7 @@
 - Shooting with an enemy beside you is also rolled with disadvantage, and a target in trees or ruins is 2 harder to hit.
 - Spells land as the shapes the SRD prints: Fireball a burst, Burning Hands a cone, Lightning Bolt a line. Everybody in it is caught, friends too.
 - Walk out of an ogre's reach and it swings at you, spending its reaction. Disengage first and it does not.
-- Weapon rows you already picked have none of the new distances. Refresh each one from the ruleset, or an old bow only fires at somebody next to you.
+- Weapon rows you already picked have none of the new distances. Delete each one and pick it again, or an old bow only fires at somebody next to you.
 - Still to come: choosing whether to strike at a walker, three-quarters cover, elevation, grapple and shove.
 - Needs an Engine with Capability API 1.28.
 

@@ -209,10 +209,13 @@ Reach property adds 5), 8 are shot and reach nothing at all, and 6 both swing an
 a column means that row carries no such distance, which is how a sword and a thrown axe sit in the
 same list.
 
-**Refresh a row you already picked.** A picked row is a copy, so a weapon you added before this
-version has none of the three columns and the Engine reads that as reaching exactly one square. An
-old longbow will only fire at somebody standing next to you until you open the row and choose
-**Refresh from ruleset**, or fill the three numbers in by hand.
+**Pick your weapons again.** A picked row is a copy, so a weapon you added before this version has
+none of the three columns, and the Engine reads a row with no reach as reaching exactly one square:
+an old longbow will only fire at somebody standing next to you. The sheet editor's **Newer text**
+review will not fix it, because it only ever compares text-like columns and deliberately leaves a
+number alone, since a number is where your own edits live. Delete each weapon row and pick it from
+the catalog again, or type the three numbers into the row yourself. A character built from here on
+gets them with the row.
 
 **Spells land as the shape the SRD prints.** 82 of the 84 spells a fight can resolve carry a range
 in feet, and 30 carry an area: 13 spheres, 4 cylinders, 4 cones, 2 lines and 7 cubes or squares.
