@@ -241,6 +241,12 @@ export async function generateCreatorPost(
           slurpPostCameraSource(account.id, sequence, { companyCanHoldCamera: variation.companyCanHoldCamera }),
         )
       : undefined;
+  // In produce mode the post call writes text only. Asking one call for the caption and the
+  // picture together is what made every image an illustration of its own caption, so the brief is
+  // assembled from the situation instead and the caption never reaches it. A directed post has no
+  // variation and therefore no brief, so it keeps the old single-call behaviour.
+  const briefedImage = Boolean(imagesEnabled && cameraInstruction && variation);
+  const askModelForImagePrompt = imagesEnabled && !briefedImage;
   // The Creator's own state reached her direct messages and stopped there, so the feed was
   // written by somebody with no mood, no energy and no memory of last night. A failure here must
   // never cost a post: an unremarkable day is the same as no block at all.
@@ -283,7 +289,7 @@ export async function generateCreatorPost(
       .filter(Boolean)
       .join("\n\n"),
     project: project ? { project, posts: projectPosts } : undefined,
-    allowImagePrompt: imagesEnabled,
+    allowImagePrompt: askModelForImagePrompt,
     imageGenerationPrompt: settings.imageGenerationPrompt,
     generationGuidance: settings.generationGuidance,
     postMaxLength: settings.postMaxLength,
@@ -316,7 +322,7 @@ export async function generateCreatorPost(
     stream: false,
     debugMode,
     responseFormat: slpResponseFormat(input.connection.model, "noodler_post", {
-      allowImagePrompt: imagesEnabled,
+      allowImagePrompt: askModelForImagePrompt,
       contentMaxLength: settings.postMaxLength,
     }),
   } as const;
@@ -341,7 +347,7 @@ export async function generateCreatorPost(
       { role: "assistant", content },
       {
         role: "user",
-        content: imagesEnabled
+        content: askModelForImagePrompt
           ? "The response was not one valid Slurp-post JSON object. Return exactly one object with title, content, and imagePrompt. title and imagePrompt must both be non-empty. Do not include a poll. Return JSON only."
           : "The response was not one valid Slurp-post JSON object. Return exactly one object with title and content only. Do not include a poll or image prompt. Return JSON only.",
       },
@@ -392,9 +398,16 @@ export async function generateCreatorPost(
   // Identity protection applies to the image prompt too, not only post text. The arc's chapter line
   // joins the prompt before protection, so a chapter naming a real place is redacted the same way.
   const arcImageLine = slurpArcImageLine(project);
+  // Produce mode briefs the picture from the situation, never from the caption the model just
+  // wrote. Identity protection still applies: the brief carries the Creator's own place and
+  // company, so a Secret Creator's details must be redacted here exactly as they are in the text.
+  const imageDraft =
+    cameraInstruction && variation
+      ? slurpImageBrief({ cameraInstruction, variation, story: storyVariation })
+      : generated.imagePrompt;
   const draftImagePrompt = imagesEnabled
     ? protectCreatorGeneratedIdentity(
-        generated.imagePrompt && arcImageLine ? `${generated.imagePrompt}\n${arcImageLine}` : generated.imagePrompt,
+        imageDraft && arcImageLine ? `${imageDraft}\n${arcImageLine}` : imageDraft,
         disclosureMode,
         publicIdentity,
       )
