@@ -1,5 +1,9 @@
 # Memory-nag release notes
 
+## 1.1.3 — 2026-09-19
+
+Require concrete, source-compatible relevance before selecting a memory nag.
+
 ## 1.1.2 — 2026-09-13
 
 Automatic scans wait while a manual message-range scan is active, avoiding duplicate model charges between batches. Finished, stopped, failed, and abandoned scans release the guard without losing checkpoint progress.
