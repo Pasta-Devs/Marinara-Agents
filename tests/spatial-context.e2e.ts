@@ -4398,9 +4398,9 @@ test("Roleplay minimap keeps selected locations opaque over map artwork", async 
   }
 });
 
-test("installed World Maps package keeps the editor canvas visible at 16:9", async ({ page, request }, testInfo) => {
-  test.skip(!testInfo.project.name.includes("desktop"), "The package CSS is shared across viewports.");
-  test.setTimeout(120_000);
+test("installed World Maps package keeps the editor canvas square", async ({ page, request }, testInfo) => {
+  const mobile = testInfo.project.name.includes("mobile");
+  test.setTimeout(60_000);
   const response = await page.request.post("/api/chats", {
     data: {
       name: "World Map Canvas Geometry",
@@ -4433,6 +4433,7 @@ test("installed World Maps package keeps the editor canvas visible at 16:9", asy
   const uploadedArtwork = (await artworkUpload.json()) as { id: string };
   const definition = {
     ...generatedDefinition,
+    startingLocationId: "ai_harbor",
     locations: generatedDefinition.locations.map((location) => {
       if (location.id === "ai_harbor") {
         return {
@@ -4459,22 +4460,41 @@ test("installed World Maps package keeps the editor canvas visible at 16:9", asy
   try {
     await page.addInitScript((chatId) => {
       localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: { hasCompletedOnboarding: true, sidebarOpen: false, rightPanelOpen: false },
+          version: 72,
+        }),
+      );
     }, chat.id);
     await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
       await route.fulfill({ status: 204, body: "" });
     });
     await page.goto("/");
     await dismissOnboardingTutorial(page);
+    const storyLocation = page.getByRole("region", { name: "Story location" });
+    await storyLocation.getByRole("button", { name: "Open story map" }).click();
+    const runtimeCanvases = storyLocation.locator("[data-marinara-maps-world-canvas]:visible");
+    await expect(runtimeCanvases.first()).toBeVisible();
+    for (const runtimeCanvas of await runtimeCanvases.all()) {
+      const runtimeBox = await runtimeCanvas.boundingBox();
+      expect(runtimeBox).not.toBeNull();
+      expect(runtimeBox!.width / runtimeBox!.height).toBeCloseTo(1, 2);
+    }
+    await page.screenshot({ path: testInfo.outputPath("world-maps-square-runtime.png") });
+    await storyLocation.getByRole("button", { name: "Close story map", exact: true }).click();
     await page.locator('[data-tour="panel-agents"]').click();
-    const agentsPanel = page.locator('[data-component="RightPanelDesktop"]');
+    const agentsPanel = page.locator(
+      mobile ? '[data-component="RightPanelMobile"]' : '[data-component="RightPanelDesktop"]',
+    );
     await agentsPanel.locator('[data-agent-name="World Maps"]').getByText("World Maps", { exact: true }).click();
     const home = page.locator("[data-marinara-maps-home]");
     await expect(home).toBeVisible();
     await home.getByRole("button", { name: "Edit map", exact: true }).click();
 
+    if (mobile) await page.getByRole("button", { name: "hierarchy", exact: true }).click();
     const locationHierarchy = page.getByRole("region", { name: "Location hierarchy" });
-    await locationHierarchy.getByRole("button", { name: "Expand Shrouded Coast" }).click();
-    await locationHierarchy.getByRole("button", { name: "Enter Shrouded Coast" }).click();
     await locationHierarchy.getByRole("button", { name: "Enter Gloam Harbor" }).click();
     await page.getByRole("button", { name: "Arrange map" }).click();
 
@@ -4485,7 +4505,8 @@ test("installed World Maps package keeps the editor canvas visible at 16:9", asy
     const canvasBox = await canvas.boundingBox();
     expect(canvasBox).not.toBeNull();
     expect(canvasBox!.height).toBeGreaterThan(100);
-    expect(canvasBox!.width / canvasBox!.height).toBeCloseTo(16 / 9, 1);
+    expect(canvasBox!.width / canvasBox!.height).toBeCloseTo(1, 2);
+    await page.screenshot({ path: testInfo.outputPath("world-maps-square-editor.png") });
   } finally {
     await page.close();
     const deleteResponse = await request.delete(`/api/chats/${chat.id}?force=true`);
@@ -4796,7 +4817,8 @@ test("AI map expansion preserves a campaign map and its current location", async
     expect(canvasBox).not.toBeNull();
     expect(nodeBox).not.toBeNull();
     expect(canvasBox!.height).toBeGreaterThan(100);
-    expect(canvasBox!.width / canvasBox!.height).toBeCloseTo(16 / 9, 1);
+    expect(canvasBox!.width / canvasBox!.height).toBeCloseTo(1, 2);
+    await page.screenshot({ path: testInfo.outputPath("world-maps-square-editor.png") });
     const unselectedBorderColor = await lighthouseNode.evaluate((element) => getComputedStyle(element).borderColor);
     await lighthouseNode.focus();
     await lighthouseNode.click();
@@ -5559,7 +5581,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     const runtimeCanvas = roleplayMap.locator("[data-marinara-maps-world-canvas]");
     const runtimeCanvasBox = await runtimeCanvas.boundingBox();
     expect(runtimeCanvasBox, "Runtime map canvas must have browser geometry").not.toBeNull();
-    expect(runtimeCanvasBox!.width / runtimeCanvasBox!.height).toBeCloseTo(16 / 9, 1);
+    expect(runtimeCanvasBox!.width / runtimeCanvasBox!.height).toBeCloseTo(1, 2);
     const harborMarker = roleplayMap.getByRole("button", { name: /Inspect Gloam Harbor/ });
     expect(await harborMarker.evaluate((element) => (element as HTMLElement).style.left)).toBe("25%");
     expect(await harborMarker.evaluate((element) => (element as HTMLElement).style.top)).toBe("60%");
