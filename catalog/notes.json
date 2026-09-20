@@ -11,6 +11,16 @@
         }
       ]
     },
+    "card-evolution-auditor": {
+      "versions": [
+        {
+          "version": "1.0.3",
+          "date": "2026-09-20",
+          "notes": "- Clarified source authority and player-agency boundaries for card evolution proposals.",
+          "highlight": false
+        }
+      ]
+    },
     "character-tracker": {
       "versions": [
         {
