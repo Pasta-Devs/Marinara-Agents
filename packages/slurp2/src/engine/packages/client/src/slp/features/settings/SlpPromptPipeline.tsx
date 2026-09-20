@@ -80,6 +80,8 @@ function SlpPromptPipelineBlock({
   const enabled = !block.optional || entry.enabled !== false;
   const editable = block.kind === "editable";
   const customized = entry.text !== undefined || entry.instructionId !== undefined || entry.enabled === false;
+  const sharedInstruction = instructions.find((instruction) => instruction.id === entry.instructionId);
+  const resolvedText = sharedInstruction?.text ?? entry.text ?? block.defaultText;
   const [text, setText] = useState(entry.text ?? block.defaultText);
   const [instructionId, setInstructionId] = useState(entry.instructionId ?? "");
 
@@ -99,6 +101,7 @@ function SlpPromptPipelineBlock({
 
   return (
     <li
+      id={`slurp-prompt-block-${prompt.id}-${entry.id}`}
       className={`${hiddenOnSmallScreens ? "hidden lg:block" : "block"} relative overflow-hidden rounded-xl bg-[var(--slurp-surface-raised)] shadow-[0_14px_35px_-32px_rgba(0,0,0,0.9)] ring-1 ring-inset ${selected ? "ring-2 ring-[var(--noodle-accent)]" : "ring-[var(--slurp-outline)]"} ${enabled ? "" : "opacity-60"}`}
     >
       <div className="flex items-start gap-3 p-3 sm:p-4">
@@ -141,6 +144,19 @@ function SlpPromptPipelineBlock({
         )}
       </div>
 
+      {!selected && (
+        <div className="mx-3 mb-3 rounded-lg bg-[var(--slurp-canvas)] px-3 py-2.5 ring-1 ring-inset ring-[var(--slurp-outline)] sm:mx-4 sm:mb-4">
+          <p className="line-clamp-3 whitespace-pre-wrap break-words text-xs leading-5 text-[var(--slurp-muted)]">
+            {enabled
+              ? resolvedText ||
+                t("ui.slurp.settings.prompts.previewEmpty", {
+                  defaultValue: "This block adds nothing until runtime context is available.",
+                })
+              : t("ui.slurp.settings.prompts.blockDisabled", { defaultValue: "Disabled" })}
+          </p>
+        </div>
+      )}
+
       {selected && (
         <div className="space-y-4 border-t border-[var(--slurp-outline)] bg-[var(--slurp-canvas)]/45 p-3 sm:p-4">
           {editable ? (
@@ -179,6 +195,12 @@ function SlpPromptPipelineBlock({
                     onChange={(event) => setText(event.target.value)}
                     className="mt-1 min-h-36 w-full resize-y rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] p-3 text-base leading-6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] sm:text-sm"
                   />
+                  <span className="mt-1 block text-end text-[0.7rem] font-normal tabular-nums text-[var(--slurp-muted)]">
+                    {t("ui.slurp.settings.prompts.characterCount", {
+                      count: text.length,
+                      defaultValue: "{{count}} characters",
+                    })}
+                  </span>
                 </label>
               )}
               <div>

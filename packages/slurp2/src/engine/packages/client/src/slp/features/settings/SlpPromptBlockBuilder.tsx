@@ -1,5 +1,5 @@
 import { ArrowLeft, ChevronRight, RotateCcw, Search, SlidersHorizontal } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { SlurpPromptBlockOverride, SlurpReusablePromptInstruction } from "../../base/state/slp-state-types";
 import type { SlurpPromptDefinition, SlurpPromptMode } from "./slp-settings-contract";
@@ -10,6 +10,8 @@ import { SlpPromptPreviewInspector } from "./SlpPromptPreviewInspector";
 import { SlpReusableInstructions } from "./SlpReusableInstructions";
 import {
   completePromptLayout,
+  blockDefinition,
+  blockName,
   promptCustomizationCount,
   promptGroupName,
   promptGroupPurpose,
@@ -26,6 +28,7 @@ type PromptBlockBuilderProps = {
   instructions: SlurpReusablePromptInstruction[];
   savedInstructions: SlurpReusablePromptInstruction[];
   onChangeInstructions: (value: SlurpReusablePromptInstruction[]) => void;
+  overviewContent?: ReactNode;
 };
 
 export function SlurpPromptBlockBuilder({
@@ -36,6 +39,7 @@ export function SlurpPromptBlockBuilder({
   instructions,
   savedInstructions,
   onChangeInstructions,
+  overviewContent,
 }: PromptBlockBuilderProps) {
   const { t } = useTranslation();
   const definitions = useSlurpPromptBlocks(mode);
@@ -176,14 +180,17 @@ export function SlurpPromptBlockBuilder({
         </div>
 
         <div className="grid min-w-0 gap-4 xl:grid-cols-[13rem_minmax(0,1fr)_22rem]">
-          <RecipeNavigation
-            prompts={prompts}
-            selectedPromptId={selectedPrompt.id}
-            values={value}
-            onSelect={(promptId) => {
-              setSelectedPromptId(promptId);
-              setSelectedBlockId(null);
-              setMobileView("build");
+          <BlockOutline
+            prompt={selectedPrompt}
+            layout={layout}
+            selectedBlockId={selectedBlockId}
+            onSelect={(blockId) => {
+              setSelectedBlockId(blockId);
+              window.requestAnimationFrame(() => {
+                document
+                  .getElementById(`slurp-prompt-block-${selectedPrompt.id}-${blockId}`)
+                  ?.scrollIntoView({ block: "center", behavior: "smooth" });
+              });
             }}
           />
           <div className={`${mobileView === "preview" ? "hidden" : "block"} min-w-0 xl:block`}>
@@ -227,41 +234,43 @@ export function SlurpPromptBlockBuilder({
 
   return (
     <section aria-labelledby="slurp-prompt-recipes-title" className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--noodle-accent)]">
-            {t("ui.slurp.settings.prompts.producePipeline", { defaultValue: "Produce pipeline" })}
-          </p>
-          <h2 id="slurp-prompt-recipes-title" className="mt-1 text-lg font-black text-balance">
-            {t("ui.slurp.settings.prompts.recipesTitle", { defaultValue: "Prompt recipes" })}
-          </h2>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--slurp-muted)] text-pretty">
-            {t("ui.slurp.settings.prompts.recipesDetail", {
-              defaultValue: "Open a recipe to see exactly how Slurp builds that kind of content.",
-            })}
-          </p>
-        </div>
-        <label className="relative block sm:w-72">
-          <span className="sr-only">
-            {t("ui.slurp.settings.prompts.searchRecipes", { defaultValue: "Search prompt recipes" })}
-          </span>
-          <Search
-            size={16}
-            className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-[var(--slurp-muted)]"
-            aria-hidden="true"
-          />
-          <input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={t("ui.slurp.settings.prompts.searchRecipesPlaceholder", { defaultValue: "Search recipes…" })}
-            className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] pe-3 ps-10 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] sm:text-sm"
-          />
-        </label>
-      </div>
-
       <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="min-w-0 space-y-6">
+        <div className="min-w-0 space-y-8">
+          {overviewContent}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--noodle-accent)]">
+                {t("ui.slurp.settings.prompts.producePipeline", { defaultValue: "Produce pipeline" })}
+              </p>
+              <h2 id="slurp-prompt-recipes-title" className="mt-1 text-lg font-black text-balance">
+                {t("ui.slurp.settings.prompts.recipesTitle", { defaultValue: "Prompt recipes" })}
+              </h2>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--slurp-muted)] text-pretty">
+                {t("ui.slurp.settings.prompts.recipesDetail", {
+                  defaultValue: "Open a recipe to see exactly how Slurp builds that kind of content.",
+                })}
+              </p>
+            </div>
+            <label className="relative block sm:w-64">
+              <span className="sr-only">
+                {t("ui.slurp.settings.prompts.searchRecipes", { defaultValue: "Search prompt recipes" })}
+              </span>
+              <Search
+                size={16}
+                className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-[var(--slurp-muted)]"
+                aria-hidden="true"
+              />
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t("ui.slurp.settings.prompts.searchRecipesPlaceholder", {
+                  defaultValue: "Search recipes…",
+                })}
+                className="min-h-11 w-full rounded-lg border border-[var(--slurp-outline)] bg-[var(--slurp-canvas)] pe-3 ps-10 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] sm:text-sm"
+              />
+            </label>
+          </div>
           {SLP_PROMPT_GROUP_ORDER.map((group) => {
             const groupPrompts = visiblePrompts.filter((prompt) => prompt.group === group);
             if (groupPrompts.length === 0) return null;
@@ -271,7 +280,7 @@ export function SlurpPromptBlockBuilder({
                   {promptGroupName(group)}
                 </h3>
                 <p className="mt-1 text-xs leading-5 text-[var(--slurp-muted)]">{promptGroupPurpose(group)}</p>
-                <div className="mt-3 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+                <div className="mt-3 overflow-hidden rounded-xl bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
                   {groupPrompts.map((prompt) => (
                     <RecipeCard
                       key={prompt.id}
@@ -335,28 +344,23 @@ function RecipeCard({
     <button
       type="button"
       onClick={onOpen}
-      className="group min-h-36 rounded-xl bg-[var(--slurp-surface-raised)] p-4 text-start shadow-[0_18px_42px_-38px_rgba(0,0,0,0.9)] ring-1 ring-inset ring-[var(--slurp-outline)] transition-[background-color,transform] hover:bg-[color-mix(in_srgb,var(--noodle-accent)_6%,var(--slurp-surface-raised))] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] motion-reduce:transition-none motion-reduce:active:scale-100"
+      className="group flex min-h-20 w-full items-center gap-3 border-b border-[var(--slurp-outline)] p-3 text-start transition-colors last:border-b-0 hover:bg-[color-mix(in_srgb,var(--noodle-accent)_6%,var(--slurp-surface-raised))] focus-visible:relative focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--slurp-focus)] sm:p-4"
     >
-      <span className="flex h-full flex-col">
-        <span className="flex items-start gap-3">
-          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-[var(--slurp-canvas)] text-[var(--noodle-accent)]">
-            <SlidersHorizontal size={17} aria-hidden="true" />
+      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-[var(--slurp-canvas)] text-[var(--noodle-accent)]">
+        <SlidersHorizontal size={17} aria-hidden="true" />
+      </span>
+      <span className="min-w-0 flex-1 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-4">
+        <span>
+          <span className="block text-sm font-bold text-balance">{promptName(prompt.id)}</span>
+          <span className="mt-1 block text-xs leading-5 text-[var(--slurp-muted)] text-pretty">
+            {promptPurpose(prompt.id)}
           </span>
-          <span className="min-w-0 flex-1 text-sm font-bold text-balance">{promptName(prompt.id)}</span>
-          <ChevronRight
-            size={17}
-            className="shrink-0 text-[var(--slurp-muted)] transition-transform group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5 motion-reduce:transition-none"
-            aria-hidden="true"
-          />
         </span>
-        <span className="mt-3 block text-xs leading-5 text-[var(--slurp-muted)] text-pretty">
-          {promptPurpose(prompt.id)}
-        </span>
-        <span className="mt-auto flex flex-wrap items-center gap-2 pt-4 text-xs font-semibold">
+        <span className="mt-2 flex flex-wrap items-center gap-2 text-xs font-semibold sm:mt-0 sm:justify-end">
           <span className="tabular-nums text-[var(--slurp-muted)]">
             {t("ui.slurp.settings.prompts.blockCount", { count, defaultValue: "{{count}} blocks" })}
           </span>
-          <span className="ms-auto inline-flex items-center gap-1.5 rounded-full bg-[var(--slurp-canvas)] px-2 py-1 ring-1 ring-inset ring-[var(--slurp-outline)]">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--slurp-canvas)] px-2 py-1 ring-1 ring-inset ring-[var(--slurp-outline)]">
             <span
               className={`size-1.5 rounded-full ${customCount > 0 ? "bg-[var(--noodle-accent)]" : "bg-[var(--slurp-muted)]"}`}
               aria-hidden="true"
@@ -367,62 +371,63 @@ function RecipeCard({
           </span>
         </span>
       </span>
+      <ChevronRight
+        size={17}
+        className="shrink-0 text-[var(--slurp-muted)] transition-transform group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5 motion-reduce:transition-none"
+        aria-hidden="true"
+      />
     </button>
   );
 }
 
-function RecipeNavigation({
-  prompts,
-  selectedPromptId,
-  values,
+function BlockOutline({
+  prompt,
+  layout,
+  selectedBlockId,
   onSelect,
 }: {
-  prompts: SlurpPromptDefinition[];
-  selectedPromptId: string;
-  values: Record<string, SlurpPromptBlockOverride[]>;
+  prompt: SlurpPromptDefinition;
+  layout: SlurpPromptBlockOverride[];
+  selectedBlockId: string | null;
   onSelect: (id: string) => void;
 }) {
   const { t } = useTranslation();
   return (
     <nav
-      aria-label={t("ui.slurp.settings.prompts.recipesTitle", { defaultValue: "Prompt recipes" })}
-      className="hidden min-w-0 space-y-4 xl:block"
+      aria-label={t("ui.slurp.settings.prompts.recipeBlocks", { defaultValue: "Recipe blocks" })}
+      className="hidden min-w-0 xl:block"
     >
-      {SLP_PROMPT_GROUP_ORDER.map((group) => {
-        const groupPrompts = prompts.filter((prompt) => prompt.group === group);
-        if (groupPrompts.length === 0) return null;
-        return (
-          <div key={group}>
-            <p className="px-2 text-[0.7rem] font-bold uppercase tracking-[0.1em] text-[var(--slurp-muted)]">
-              {promptGroupName(group)}
-            </p>
-            <div className="mt-1 space-y-1">
-              {groupPrompts.map((prompt) => {
-                const selected = prompt.id === selectedPromptId;
-                const custom = promptCustomizationCount(prompt, values[prompt.id]) > 0;
-                return (
-                  <button
-                    key={prompt.id}
-                    type="button"
-                    aria-current={selected ? "page" : undefined}
-                    onClick={() => onSelect(prompt.id)}
-                    className={`flex min-h-10 w-full items-center gap-2 rounded-lg px-2 text-start text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] ${selected ? "bg-[var(--slurp-nav-active)] text-[var(--slurp-text)]" : "text-[var(--slurp-muted)] hover:bg-[var(--slurp-surface-raised)] hover:text-[var(--slurp-text)]"}`}
-                  >
-                    <span
-                      className={`size-1.5 shrink-0 rounded-full ${custom ? "bg-[var(--noodle-accent)]" : "bg-[var(--slurp-outline)]"}`}
-                      aria-hidden="true"
-                    />
-                    <span className="min-w-0 flex-1 break-words">{promptName(prompt.id)}</span>
-                    <span className="tabular-nums opacity-70">
-                      {completePromptLayout(prompt, values[prompt.id]).length}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
+      <div className="overflow-hidden rounded-xl bg-[var(--slurp-surface-raised)] ring-1 ring-inset ring-[var(--slurp-outline)]">
+        <p className="border-b border-[var(--slurp-outline)] px-3 py-3 text-xs font-black">
+          {t("ui.slurp.settings.prompts.recipeBlocks", { defaultValue: "Recipe blocks" })}
+        </p>
+        <ol className="p-1.5">
+          {layout.map((entry, index) => {
+            const block = blockDefinition(prompt, entry.id);
+            const selected = selectedBlockId === entry.id;
+            const custom = entry.text !== undefined || entry.instructionId !== undefined || entry.enabled === false;
+            return (
+              <li key={entry.id}>
+                <button
+                  type="button"
+                  aria-current={selected ? "step" : undefined}
+                  onClick={() => onSelect(entry.id)}
+                  className={`flex min-h-10 w-full items-center gap-2 rounded-lg px-2 text-start text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)] ${selected ? "bg-[var(--slurp-nav-active)] text-[var(--slurp-text)]" : "text-[var(--slurp-muted)] hover:bg-[var(--slurp-canvas)] hover:text-[var(--slurp-text)]"}`}
+                >
+                  <span className="grid size-6 shrink-0 place-items-center rounded-full bg-[var(--slurp-canvas)] text-[0.68rem] font-black tabular-nums ring-1 ring-inset ring-[var(--slurp-outline)]">
+                    {index + 1}
+                  </span>
+                  <span className="min-w-0 flex-1 break-words">{blockName(block.id)}</span>
+                  <span
+                    className={`size-1.5 shrink-0 rounded-full ${custom ? "bg-[var(--noodle-accent)]" : "bg-[var(--slurp-outline)]"}`}
+                    aria-hidden="true"
+                  />
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
     </nav>
   );
 }

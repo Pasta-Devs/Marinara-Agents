@@ -138,6 +138,9 @@ const settingsRoutes = slurp2Source("packages/slurp2/src/engine/packages/server/
 const promptStudioSource = slurp2Source(
   "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpPromptBlockBuilder.tsx",
 );
+const backstageKitSource = slurp2Source(
+  "packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpBackstageWorkflow.tsx",
+);
 assert.match(dmSource, /id: "outputContract"/u);
 assert.match(dmSource, /id: "relationshipState"/u);
 assert.match(commentSource, /id: "outputContract"/u);
@@ -152,6 +155,11 @@ assert.match(promptStudioSource, /SlpPromptPipeline/u);
 assert.match(promptStudioSource, /SlpPromptPreviewInspector/u);
 assert.match(promptStudioSource, /Compare with current/u);
 assert.match(promptStudioSource, /Apply to draft/u);
+assert.match(promptStudioSource, /overviewContent/u);
+assert.match(promptStudioSource, /const resolvedText =/u);
+assert.match(promptStudioSource, /!selected &&[\s\S]*?resolvedText/u);
+assert.match(backstageKitSource, /whitespace-pre-wrap break-words[\s\S]*?\{value\}/u);
+assert.doesNotMatch(backstageKitSource, /line-clamp-3 whitespace-pre-line/u);
 
 for (const mode of SLURP_PROMPT_MODES) {
   for (const prompt of slurpPromptDescriptions(mode)) {

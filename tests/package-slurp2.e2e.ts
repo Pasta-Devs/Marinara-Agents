@@ -290,8 +290,11 @@ test.describe("standalone Slurp package", () => {
     const slurp = page.locator('[data-component="NoodleView"]');
     await expect(slurp.getByRole("heading", { name: "Prompt Studio", exact: true })).toBeVisible();
     for (const outcome of ["Voice and writing", "Post behavior", "Image direction"]) {
-      await expect(slurp.getByRole("button", { name: new RegExp(`^${outcome}`, "u") })).toBeVisible();
+      await expect(slurp.getByRole("heading", { name: outcome, exact: true })).toBeVisible();
     }
+    await expect(slurp.getByText("Generation guidance", { exact: true })).toBeVisible();
+    await expect(slurp.getByText("Public post guidance", { exact: true })).toBeVisible();
+    await expect(slurp.getByText("Locked post guidance", { exact: true })).toBeVisible();
     await expect(slurp.getByRole("heading", { name: "Prompt recipes", exact: true })).toBeVisible();
     await expect(slurp.getByText("Try your changes", { exact: true })).toBeVisible();
     expect(previewRequests).toEqual([]);
@@ -299,6 +302,7 @@ test.describe("standalone Slurp package", () => {
     await slurp.getByRole("button", { name: /^Creator posts/u }).click();
     await expect(slurp.getByRole("heading", { name: "Creator posts", exact: true })).toBeVisible();
     await expect(slurp.locator("ol button[aria-expanded]").first()).toBeVisible();
+    await expect(slurp.locator("ol > li").first().locator("p").last()).not.toBeEmpty();
     await slurp.locator("ol button[aria-expanded]").first().click();
     await expect(slurp.getByRole("button", { name: "Apply to draft", exact: true })).toBeVisible();
     expect(previewRequests).toEqual([]);

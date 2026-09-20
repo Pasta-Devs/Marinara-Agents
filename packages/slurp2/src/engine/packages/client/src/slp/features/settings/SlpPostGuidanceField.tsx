@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useGenerateSlurpPostGuidance, useUpdateSlurpPostGuidance } from "./slp-post-guidance-contract";
@@ -48,6 +49,7 @@ export function SlurpPostGuidanceField({
   draftValue?: string;
   onStage?: (value: string) => void;
 }) {
+  const { t } = useTranslation();
   const persisted = (creatorId ? guidance?.creators[creatorId] : guidance?.defaults)?.[access] ?? "";
   const saved = draftValue ?? persisted;
   const [draft, setDraft] = useState("");
@@ -139,6 +141,7 @@ export function SlurpPostGuidanceField({
         }}
         restoreLabel={clearLabel}
         pending={disabled || update.isPending || generate.isPending}
+        saveLabel={t("ui.slurp.settings.prompts.applyDraft", { defaultValue: "Apply to draft" })}
       />
     </div>
   );

@@ -1,4 +1,4 @@
-import { Code2, Play, RefreshCw, Sparkles } from "lucide-react";
+import { Check, Code2, Copy, Play, RefreshCw, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { SlurpPromptBlockOverride, SlurpReusablePromptInstruction } from "../../base/state/slp-state-types";
@@ -32,6 +32,7 @@ export function SlpPromptPreviewInspector({
   const [access, setAccess] = useState<"public" | "locked">("public");
   const [format, setFormat] = useState<"caption" | "announcement" | "long_form">("caption");
   const [direction, setDirection] = useState("");
+  const [promptCopied, setPromptCopied] = useState(false);
   const promptPreview = useSlurpPromptBlockPreview();
   const resultPreview = useSlurpPromptResultPreview();
   const currentPreview = useSlurpPromptResultPreview();
@@ -44,6 +45,7 @@ export function SlpPromptPreviewInspector({
     promptPreview.reset();
     resultPreview.reset();
     currentPreview.reset();
+    setPromptCopied(false);
     setView(prompt.id === "post" ? "result" : "prompt");
     // Mutation handles are stable and including them resets on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -53,6 +55,7 @@ export function SlpPromptPreviewInspector({
     promptPreview.reset();
     resultPreview.reset();
     currentPreview.reset();
+    setPromptCopied(false);
     // An edited draft makes every previous result stale.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftBlocks, draftInstructions, access, format, direction]);
@@ -267,9 +270,28 @@ export function SlpPromptPreviewInspector({
       )}
 
       {view === "prompt" && compiledPrompt && (
-        <pre className="max-h-[32rem] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-[var(--slurp-canvas)] p-3 text-xs leading-5 text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)]">
-          {compiledPrompt}
-        </pre>
+        <div className="space-y-2">
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => {
+                void navigator.clipboard
+                  .writeText(compiledPrompt)
+                  .then(() => setPromptCopied(true))
+                  .catch(() => setPromptCopied(false));
+              }}
+              className="inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-xs font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--slurp-outline)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--slurp-focus)]"
+            >
+              {promptCopied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+              {promptCopied
+                ? t("ui.slurp.settings.prompts.promptCopied", { defaultValue: "Copied" })
+                : t("ui.slurp.settings.prompts.copyPrompt", { defaultValue: "Copy prompt" })}
+            </button>
+          </div>
+          <pre className="max-h-[32rem] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-[var(--slurp-canvas)] p-3 text-xs leading-5 text-[var(--slurp-muted)] ring-1 ring-inset ring-[var(--slurp-outline)]">
+            {compiledPrompt}
+          </pre>
+        </div>
       )}
     </aside>
   );

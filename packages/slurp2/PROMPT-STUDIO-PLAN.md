@@ -8,17 +8,18 @@ internal prompt implementation.
 
 ## Slice status
 
-| Slice | Scope                                                    | Status   | Commit   |
-| ----- | -------------------------------------------------------- | -------- | -------- |
-| 1     | Prompt Studio page framing and scope context             | Complete | 242ca65e |
-| 2     | Group prompt recipes and reduce technical density        | Complete | 0c35b8dc |
-| 3     | Make prompt preview explicit and preserve draft context  | Complete | c7a1e41e |
-| 4     | Remove visible Classic mode and migrate Produce defaults | Complete | 95c7a1df |
-| 5     | Add a draft-aware compiled prompt preview contract       | Complete | b464ba1e |
-| 6     | Add explicit model-generated result preview              | Complete | 4a122cd5 |
-| 7     | Replace the settings wall with outcome controls          | Complete | a0bd6310 |
-| 8     | Build the focused responsive recipe workspace            | Complete | a0bd6310 |
-| 9     | Add draft/current comparison and finish validation       | Complete | 665e6361 |
+| Slice | Scope                                                     | Status   | Commit   |
+| ----- | --------------------------------------------------------- | -------- | -------- |
+| 1     | Prompt Studio page framing and scope context              | Complete | 242ca65e |
+| 2     | Group prompt recipes and reduce technical density         | Complete | 0c35b8dc |
+| 3     | Make prompt preview explicit and preserve draft context   | Complete | c7a1e41e |
+| 4     | Remove visible Classic mode and migrate Produce defaults  | Complete | 95c7a1df |
+| 5     | Add a draft-aware compiled prompt preview contract        | Complete | b464ba1e |
+| 6     | Add explicit model-generated result preview               | Complete | 4a122cd5 |
+| 7     | Replace the settings wall with outcome controls           | Complete | a0bd6310 |
+| 8     | Build the focused responsive recipe workspace             | Complete | a0bd6310 |
+| 9     | Add draft/current comparison and finish validation        | Complete | 665e6361 |
+| 10    | Keep outcome prompts visible and simplify recipe scanning | Complete | —        |
 
 ## Slice 1 proof
 
@@ -130,3 +131,14 @@ internal prompt implementation.
 - Slurp2 typecheck, architecture, prompt-block, route, client-hook, catalog lane, locale, catalog,
   release-note, ESLint, Prettier, and diff checks pass.
 - The rebuilt `0.1.5` package installs as active and ready on the scratch `dev-marinara` Engine.
+
+## Slice 10 proof
+
+- Voice, public-post, locked-post, and image prompts remain readable in muted fields outside edit mode.
+- The page no longer requires selecting an outcome card before its prompt can be understood.
+- Outcome settings and prompt recipes share one main column with a sticky preview inspector.
+- Recipes scan as compact capability rows instead of a second dashboard-card grid.
+- Collapsed recipe blocks show their resolved prompt text; selecting one reveals its full editor or
+  locked inspection state.
+- Editable blocks show their source, runtime inputs, character count, reset action, and explicit
+  `Apply to draft` action.
