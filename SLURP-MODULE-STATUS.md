@@ -68,3 +68,15 @@ The remaining NoodleR names are permanent for Engine contracts, persisted names,
 - Restart and offline-style restart passed. The Engine was disconnected from its Docker network
   during restart, reconnected, and returned healthy.
 - The temporary profile and posts were deleted after proof. Production remains on `0.1.3`.
+
+## Follow-up Fix In This PR
+
+- User report reproduced. Manual post requests carried `format`, but the strict shared create-post
+  schema did not declare that key. The server rejected JSON and multipart manual posts with
+  `Unrecognized key(s) in object: 'format'`.
+- Fixed the shared Slurp2 schema to accept `caption`, `announcement`, and `long_form`, while still
+  rejecting unknown values. Added `slurp2-manual-post-format.regression.ts`.
+- Version remains `0.1.3`. The package was rebuilt in place. New artifact SHA-256 is
+  `533ac3160a89488d7a4a459caec0649ac83cc7f22bf244a196d9d7d2053cba2b`; size is `6784038` bytes.
+- The fix passed the focused regression and Slurp2 typecheck. Production verification of the
+  rebuilt same-version package is pending.
