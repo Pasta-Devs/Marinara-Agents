@@ -6,8 +6,9 @@ slots, hit dice, class resources, conditions, rests, a full character sheet, and
 a battle in a game on this ruleset is fought by these rules, on screen, against the SRD's own
 monsters.
 
-Requires **Marinara Engine 2.4.6+ with Capability API 1.28** (the ruleset seam, catalogs, the
-battle block, scaled catalog columns, the combat block, bestiaries and a fight with positions:
+Requires **Marinara Engine 2.4.6+ with Capability API 1.29** (the ruleset seam, catalogs, the
+battle block, scaled catalog columns, the combat block, bestiaries, a fight with positions and what
+one TURN of that fight can do:
 hash-pinned `ruleset.json` and `catalogs/<id>.json` assets the Engine reads by reserved filename,
 exactly like `gm-verbs.json`). Today that means the Engine `staging` branch; older hosts reject the manifest and
 cannot install this package. This package ships no server entrypoint, no client entrypoint, and no
@@ -159,7 +160,14 @@ What the block says:
   and the damage type are all read off the row.
 - Your prepared spells, your cantrips and the class features you picked are the things you do with
   an action, rolling the sheet's Spell attack bonus and asking for its Spell save DC.
-- The six standard actions, twelve of the fourteen SRD conditions, concentration (a Constitution
+- **A turn does what a tabletop turn does.** One Attack action buys as many strikes as your Attacks
+  per Attack action field says, the first spending the action and the rest offered free, so you may
+  change weapon, change target and walk between them. Sneak Attack adds itself to the first
+  qualifying hit of your turn, growing with the Rogue table. Action Surge costs nothing and hands
+  back an action. Cunning Action puts Dash, Disengage and Hide on the menu for a bonus action.
+  Dodge gives advantage on Dexterity saves as well as making you harder to hit. A creature's blow
+  may carry a second helping of a different type, rolled and resisted on its own.
+- The six standard actions, thirteen of the fourteen SRD conditions, concentration (a Constitution
   save at DC 10 or half the damage, whichever is higher), death saves (three and three, a natural
   20 brings you back up at one hit point, a natural 1 counts twice, a blow while down costs a
   failure and a critical costs two) and the thirteen damage types.
@@ -384,16 +392,14 @@ A fight plays, so this is the honest list of what it still does not do:
   reactions are traits.
 - **Legendary actions are carried, priced and resolved, but nothing opens the window they are spent
   in**, which arrives with reactions. A creature's three points and its options are all here.
-- **Charmed and deafened** have no effect the Engine's closed list can express, so they stay plain
-  records on the sheet. So does exhaustion, which this sheet counts on a track rather than as a
-  condition, so a creature immune to it says so in a trait.
-- **One damage roll per action.** An SRD attack that deals a second helping of a different type
-  ("plus 7 (2d6) fire damage") keeps the first and says the rest in a trait: 64 of them. So does an
-  attack that prints an alternative ("or 8 (1d10 + 3) if used with two hands", "or 5 (2d4) if the
-  swarm has half its hit points"), which is a choice a fight has no way to make: 61 of them.
-  The second helpings are a trait in this release because a creature action holds one damage roll in
-  Capability API 1.28; the Engine is scheduled to carry them, and the converter already counts them,
-  so they come back as numbers the release after that seam lands.
+- **Deafened** has no effect the Engine's closed list can express, so it stays a plain record on the
+  sheet. So does exhaustion, which this sheet counts on a track rather than as a condition, so a
+  creature immune to it says so in a trait.
+- **An attack that prints an ALTERNATIVE** ("or 8 (1d10 + 3) if used with two hands", "or 5 (2d4) if
+  the swarm has half its hit points") keeps the first and says the rest in a trait: 61 of them. It is
+  a choice a fight has no way to make. A second HELPING of a different type ("plus 7 (2d6) fire
+  damage") is no longer among them: Capability API 1.29 lets one blow carry up to three damage
+  clauses, each rolled and resisted on its own, and all 65 of them are now real damage.
 - **Spellcasting monsters** are traits. A stat block's spell list is not something a creature action
   can hold.
 - **A creature cannot heal.** An action such as the deva's Healing Touch is a trait.
@@ -405,21 +411,24 @@ A fight plays, so this is the honest list of what it still does not do:
 - **A class feature's own difficulty** is not the spell save DC, so the Features list rolls neither
   to hit nor against a difficulty. No entry this package ships needs one; an entry that did would
   stop the build rather than borrow the caster's number.
-- **Extra Attack, Action Surge, Cunning Action and Sneak Attack** are text on your sheet and nothing
-  more. The Engine's format has no way to say "attack twice with one action", to hand a turn a
-  second action, or to add damage when a condition holds.
+- **Sneak Attack's third condition.** The SRD lets the adjacent-ally alternative stand only if "you
+  don't have disadvantage on the attack roll", and the rider's `when` vocabulary is a closed
+  `advantage` / `ally-adjacent` pair with nothing that can say "and not disadvantage". So a rogue
+  attacking at disadvantage with an ally beside the target still gets the dice here, where the SRD
+  would withhold them. Advantage itself is read correctly.
 
 ## Status
 
 Available to Engine `staging` users only. The package is listed in `STAGING_ONLY_PACKAGE_IDS`, so
 it is published to the preview overlay under `catalog/preview/` that staging Engines read, and is
-hidden from stable `main` users. It stays there until the Capability API 1.28 ruleset, catalog,
-battle, scaled-column, combat, bestiary and positions seam reaches a stable Engine release.
+hidden from stable `main` users. It stays there until the Capability API 1.29 ruleset, catalog,
+battle, scaled-column, combat, bestiary, positions and turn-economy seam reaches a stable Engine
+release.
 
 ## Installing
 
 Install it from **Agents** and **Download Agents** in a Marinara Engine build that supports
-Capability API 1.28. After installing, choose it under Rules in the Game Mode setup wizard when you
+Capability API 1.29. After installing, choose it under Rules in the Game Mode setup wizard when you
 create a new game. Choose the **Tactical** combat style in the same wizard if you want the fight
 played on a board; **Classic** plays the same fight without positions.
 

@@ -124,6 +124,9 @@ const CONDITION_SET = new Set(CONDITIONS);
 // Sheet column ceilings, mirrored here so the converter trims to fit instead of
 // emitting a row the sheet would refuse. assertRulesetCatalogs is the check;
 // these are the budgets the text is built to.
+// How many damage clauses one blow may carry beside its first amount, which is the Engine's own
+// ceiling (Capability API 1.29). A stat block that prints more keeps the rest as a trait.
+const CREATURE_MAX_PLUS = 3;
 const SPELL_NOTES_MAX = 300;
 const FEATURE_TEXT_MAX = 800;
 const SUMMARY_MAX = 300;
@@ -1988,6 +1991,15 @@ function creatureAction(action, attackRow, report) {
     // A rider that deals its own damage on a failed save is a second helping of damage with its own
     // roll, which one action cannot hold, so the sentence is kept as a trait instead.
     const riderDamage = save && dropped.some((clause) => clause.at > save.index);
+    // "plus 7 (2d6) fire damage" is a second helping of the SAME blow, which Capability API 1.29
+    // lets an action carry and roll on its own, so resistance and immunity apply to it separately.
+    // Only the clauses joined by `plus` qualify: `or` offers an alternative a fight has no way to
+    // choose between, and a clause that lands behind the rider's own save is relieved by that save
+    // rather than by the blow, which one action still cannot say.
+    const extraClauses = riderDamage
+      ? []
+      : dropped.filter((clause) => clause.joiner?.toLowerCase() === "plus").slice(0, CREATURE_MAX_PLUS);
+    const carriedClauses = new Set(extraClauses);
     const reach = REACH.exec(text);
     const range = RANGE.exec(text);
     const built = compact({
@@ -1995,7 +2007,9 @@ function creatureAction(action, attackRow, report) {
       name: label,
       budget: BUDGET_ACTION,
       toHit,
-      damage: primary ? damageFrom(primary) : undefined,
+      damage: primary
+        ? compact({ ...damageFrom(primary), plus: extraClauses.length > 0 ? extraClauses.map(damageFrom) : undefined })
+        : undefined,
       // A save on an ATTACK never relieves the damage: the blow already landed. `none` is what says
       // that a success only keeps the rider condition off.
       save:
@@ -2017,16 +2031,18 @@ function creatureAction(action, attackRow, report) {
         hiddenDamage: hiddenDamage || clauses.length > 0,
       };
     }
-    for (const clause of dropped) {
+    const uncarried = dropped.filter((clause) => !carriedClauses.has(clause));
+    for (const clause of uncarried) {
       if (clause.joiner?.toLowerCase() === "plus") report.foldedRiders += 1;
       else report.alternativeClauses += 1;
     }
+    report.carriedClauses += extraClauses.length;
     // A rider save this format cannot roll without also relieving the damage, or one whose effect is
     // not a condition the sheet has, is kept as a trait so the rule is still in front of the Game
     // Master rather than quietly gone.
     const carried = conditions.length > 0 && !riderDamage;
-    if (dropped.length > 0 || riderDamage || (ability && !carried)) {
-      notes.push(trait(dropped.length > 0 ? "a damage clause one roll cannot hold" : "a rider save", label, effect));
+    if (uncarried.length > 0 || riderDamage || (ability && !carried)) {
+      notes.push(trait(uncarried.length > 0 ? "a damage clause one roll cannot hold" : "a rider save", label, effect));
     }
     if (ability && !carried) report.riderSavesNotCarried += 1;
     return { action: built, notes, hiddenDamage };
@@ -2048,6 +2064,13 @@ function creatureAction(action, attackRow, report) {
   const ability = ABILITY_BY_SAVE_NAME[save[2].toLowerCase()];
   const conditions = appliedConditions(text, save.index, ability);
   const onSuccess = HALF_ON_SUCCESS.test(text) ? "half" : "negates";
+  // The same second helping an attack may carry: "plus 7 (2d6) fire damage" on a breath weapon is
+  // one more clause of the same blow, and the action's own save-for-half covers the clauses that
+  // ask for none of their own. `or` alternatives are still a choice a fight cannot make.
+  const extraClauses = dropped
+    .filter((clause) => clause.joiner?.toLowerCase() === "plus")
+    .slice(0, CREATURE_MAX_PLUS);
+  const carriedClauses = new Set(extraClauses);
   const printedDistance = printedRange(RANGE.exec(text), label);
   const printedShape = printedArea(text);
   const area = printedShape
@@ -2059,7 +2082,9 @@ function creatureAction(action, attackRow, report) {
     id,
     name: label,
     budget: BUDGET_ACTION,
-    damage: primary ? damageFrom(primary) : undefined,
+    damage: primary
+      ? compact({ ...damageFrom(primary), plus: extraClauses.length > 0 ? extraClauses.map(damageFrom) : undefined })
+      : undefined,
     save: { save: `${ability}_save`, difficulty: Number(save[1]), onSuccess },
     applies: conditions.length > 0 ? conditions : undefined,
     // An area action reaches more than one target, and the creature format has no shape to count
@@ -2081,11 +2106,13 @@ function creatureAction(action, attackRow, report) {
       hiddenDamage: hiddenDamage || clauses.length > 0,
     };
   }
-  for (const clause of dropped) {
+  const uncarried = dropped.filter((clause) => !carriedClauses.has(clause));
+  for (const clause of uncarried) {
     if (clause.joiner?.toLowerCase() === "plus") report.foldedRiders += 1;
     else report.alternativeClauses += 1;
   }
-  if (dropped.length > 0) notes.push(trait("a damage clause one roll cannot hold", label, text));
+  report.carriedClauses += extraClauses.length;
+  if (uncarried.length > 0) notes.push(trait("a damage clause one roll cannot hold", label, text));
   return { action: built, notes, hiddenDamage };
 }
 
@@ -3206,6 +3233,7 @@ const report = {
   multiattacksFullyCarried: 0,
   multiattacksFallenBack: [],
   foldedRiders: 0,
+  carriedClauses: 0,
   alternativeClauses: 0,
   riderSavesNotCarried: 0,
   attacksThatOnlyApplyAConditionCount: 0,

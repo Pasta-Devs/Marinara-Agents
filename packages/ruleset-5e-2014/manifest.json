@@ -48,8 +48,8 @@
     },
     {
       "path": "catalogs/creatures.json",
-      "sha256": "76306a161d312f87d6af7e7a5f8de6c71dc52f11b66bfcd3d915d2d4af3bcf8f",
-      "bytes": 693644
+      "sha256": "801f89f37e469bde842f9bffcffb98a05f115e9004503fdefdb0204a56079008",
+      "bytes": 689420
     }
   ],
   "permissions": [],
