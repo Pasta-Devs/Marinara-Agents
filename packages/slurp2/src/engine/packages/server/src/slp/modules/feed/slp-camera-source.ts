@@ -87,6 +87,31 @@ export function slurpPermittedCameraSources(options: { companyCanHoldCamera: boo
 }
 
 /**
+ * The rotation order for one Creator, with the ones they reach for first appearing twice as often.
+ *
+ * Interleaved rather than grouped, because the rotation steps through this list one place at a
+ * time: listing the favourites together would hand a Creator the same camera twice in a row, which
+ * is the repetition the rotation exists to prevent. Preference never overrides permission — a
+ * Creator who likes being photographed still cannot be, alone.
+ */
+function cameraRotation(
+  permitted: readonly SlurpCameraSource[],
+  prefers: readonly SlurpCameraSource[],
+): readonly SlurpCameraSource[] {
+  const favoured = prefers.filter((source) => permitted.includes(source));
+  if (favoured.length === 0) return permitted;
+  const rest = permitted.filter((source) => !favoured.includes(source));
+  const rotation: SlurpCameraSource[] = [];
+  for (let index = 0; index < Math.max(favoured.length, rest.length); index += 1) {
+    if (favoured[index]) rotation.push(favoured[index]!);
+    if (rest[index]) rotation.push(rest[index]!);
+  }
+  // Every favoured source appears once more, spaced by the whole list so the extra turn can never
+  // land beside its first one.
+  return [...rotation, ...favoured];
+}
+
+/**
  * The camera source for one post.
  *
  * `sequence` is how many posts this Creator has already made, and rotating on it — rather than
@@ -99,9 +124,9 @@ export function slurpPermittedCameraSources(options: { companyCanHoldCamera: boo
 export function slurpPostCameraSource(
   creatorAccountId: string,
   sequence: number,
-  options: { companyCanHoldCamera: boolean },
+  options: { companyCanHoldCamera: boolean; prefers?: readonly SlurpCameraSource[] },
 ): SlurpCameraSource {
-  const permitted = slurpPermittedCameraSources(options);
+  const permitted = cameraRotation(slurpPermittedCameraSources(options), options.prefers ?? []);
   // Math.floor(NaN) is NaN and indexes nothing, which would hand the caller an undefined source.
   // Guarded at the boundary rather than trusting the caller's arithmetic, as the variation does.
   const step = Number.isFinite(sequence) ? Math.max(0, Math.floor(sequence)) : 0;

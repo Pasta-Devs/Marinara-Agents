@@ -235,9 +235,15 @@ export async function generateCreatorPost(
   // framing is a consequence of a camera that exists rather than a free-floating instruction. See
   // `slp-camera-source.ts`. Classic mode keeps the old framing axis untouched.
   const prompts = slurpPromptContext(settings);
+  // How this Creator makes things, as opposed to who they are. Stable for the life of the account,
+  // so it biases every post they ever make rather than this one.
+  const production = prompts.mode === "produce" ? slurpProductionProfile(account.id) : null;
   const cameraSource =
-    prompts.mode === "produce" && variation
-      ? slurpPostCameraSource(account.id, sequence, { companyCanHoldCamera: variation.companyCanHoldCamera })
+    production && variation
+      ? slurpPostCameraSource(account.id, sequence, {
+          companyCanHoldCamera: variation.companyCanHoldCamera,
+          prefers: production.prefers,
+        })
       : null;
   // A Story is a picture with a line under it, so a run that produces no image publishes an
   // ordinary post instead. The flag is only honoured on the path that commits an image below.
@@ -326,6 +332,7 @@ export async function generateCreatorPost(
     promptBlocks: prompts.blocks,
     promptMode: prompts.mode,
     contentTypeInstruction,
+    productionInstruction: production ? slurpProductionInstruction(production) : undefined,
     generatedAt: input.generatedAt ?? new Date(),
     publicationTime: input.publicationTime,
   });
@@ -446,7 +453,13 @@ export async function generateCreatorPost(
   // company, so a Secret Creator's details must be redacted here exactly as they are in the text.
   const imageDraft =
     cameraInstruction && variation
-      ? slurpImageBrief({ cameraInstruction, variation, story: storyVariation, shoot })
+      ? slurpImageBrief({
+          cameraInstruction,
+          variation,
+          story: storyVariation,
+          shoot,
+          effortInstruction: production ? slurpEffortInstruction(slurpPostEffort(production, sequence)) : undefined,
+        })
       : generated.imagePrompt;
   const draftImagePrompt = imagesEnabled
     ? protectCreatorGeneratedIdentity(

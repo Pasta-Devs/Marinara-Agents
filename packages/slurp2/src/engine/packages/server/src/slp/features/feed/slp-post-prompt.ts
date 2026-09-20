@@ -98,6 +98,8 @@ export function buildNoodlerPostMessages(input: {
   promptMode?: SlurpPromptMode;
   /** From `slp-content-type.ts`: what this post is for. Produce mode only. */
   contentTypeInstruction?: string;
+  /** From `slp-production-profile.ts`: how this Creator makes things. Produce mode only. */
+  productionInstruction?: string;
 }): ChatMessage[] {
   const protect = (value: string) =>
     protectCreatorGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
@@ -163,6 +165,15 @@ export function buildNoodlerPostMessages(input: {
       kind: "context" as const,
       optional: true,
       text: produce ? (input.contentTypeInstruction?.trim() ?? "") : "",
+    },
+    // Unrelated Creators all arrived at the same soft light and the same flattering angle, because
+    // the variation gave them different situations and the same production grammar. This is the
+    // block that makes one of them shoot on a phone in a messy kitchen and another run a backdrop.
+    {
+      id: "production",
+      kind: "context" as const,
+      optional: true,
+      text: produce ? (input.productionInstruction?.trim() ?? "") : "",
     },
     // Tone, mood balance, and the adult flirty lean are supplied by the editable
     // generation guidance (see input.generationGuidance above), not hardcoded here.

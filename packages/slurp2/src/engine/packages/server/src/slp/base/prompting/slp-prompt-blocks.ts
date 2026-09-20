@@ -281,6 +281,7 @@ const PRODUCE_PROMPT_DESCRIPTIONS: SlurpPromptDescription[] = CLASSIC_PROMPT_DES
           ["format", "required"],
           ["access", "context", true],
           ["contentType", "context", true],
+          ["production", "context", true],
           ["continuity", "editable"],
           ["imageDirection", "context", true],
           ["output", "required"],

@@ -36,6 +36,8 @@ export function slurpImageBrief(input: {
    * the photograph was taken then, so it cannot show where the Creator is standing now.
    */
   shoot?: { place: string; company: string } | null;
+  /** From `slp-production-profile.ts`: how much work went into this picture. */
+  effortInstruction?: string;
 }): string {
   const place = input.shoot?.place ?? input.variation.place;
   const company = input.shoot?.company ?? input.variation.company;
@@ -47,6 +49,7 @@ export function slurpImageBrief(input: {
     `Where: ${place}.`,
     ...(input.shoot ? [] : [`What they are in the middle of: ${input.variation.moment}.`]),
     `Who is around: ${company}.`,
+    input.effortInstruction ?? "",
     input.story
       ? "This is a Story, so the picture has to carry the post on its own, but it is still a phone picture and not a production."
       : "",
