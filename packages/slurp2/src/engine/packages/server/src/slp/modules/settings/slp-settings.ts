@@ -5,6 +5,7 @@ import {
   normalizeSlurpPromptBlockOverrides,
   SlurpPromptBlockOverrides,
   SlurpPromptModeOverrides,
+  SlurpReusablePromptInstruction,
 } from "../../base/prompting/slp-prompt-blocks.js";
 import { SLURP_DEFAULT_PROMPT_MODE, SLURP_PROMPT_MODES } from "../../base/prompting/slp-prompt-modes.js";
 import { SLURP_DEFAULT_ECONOMY } from "../economy/slp-wallet.js";
@@ -290,6 +291,16 @@ export const slurpSettingsSchema = z.object({
    * Switching modes never discards the other mode's tuning.
    */
   promptBlocks: z.unknown().transform(normalizeSlurpPromptBlockOverrides),
+  promptInstructions: z
+    .array(
+      z.object({
+        id: z.string().trim().min(1).max(80),
+        name: z.string().trim().min(1).max(120),
+        text: z.string().trim().max(20_000),
+        builtin: z.boolean().optional(),
+      }),
+    )
+    .max(100),
   enableEnhancedTimelineWriting: z.boolean(),
   includeCharacterSchedules: z.boolean(),
   enableLorebookContext: z.boolean(),
@@ -382,7 +393,7 @@ export type SlurpSettings = z.infer<typeof slurpSettingsSchema>;
 
 // Re-exported for the consumers that take one mode's layout. The stored shape is the mode-keyed
 // `SlurpPromptModeOverrides`; `slurpPromptContext` narrows one to the other.
-export type { SlurpPromptBlockOverrides, SlurpPromptModeOverrides };
+export type { SlurpPromptBlockOverrides, SlurpPromptModeOverrides, SlurpReusablePromptInstruction };
 
 export type SlurpSettingsUpdateInput = Partial<SlurpSettings>;
 
@@ -495,6 +506,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   storyImageHeight: 1280,
   refreshesPerDay: 0,
   generationGuidance: SLP_CREATOR_DEFAULT_GENERATION_GUIDANCE,
+  promptInstructions: [],
   audienceTone: SLURP_DEFAULT_AUDIENCE_TONE,
   worldActivity: SLURP_DEFAULT_WORLD_ACTIVITY,
   platformScale: SLURP_DEFAULT_PLATFORM_SCALE,

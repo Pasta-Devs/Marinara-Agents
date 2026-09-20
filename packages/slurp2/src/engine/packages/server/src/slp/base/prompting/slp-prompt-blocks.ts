@@ -28,7 +28,9 @@ export type SlurpPromptBlockOverride = {
   id: string;
   enabled?: boolean;
   text?: string;
+  instructionId?: string;
 };
+export type SlurpReusablePromptInstruction = { id: string; name: string; text: string; builtin?: boolean };
 
 /** One mode's layout for every prompt. */
 export type SlurpPromptBlockOverrides = Partial<Record<SlurpPromptId, SlurpPromptBlockOverride[]>>;
@@ -447,10 +449,18 @@ function normalizeModeOverrides(mode: SlurpPromptMode, value: unknown): SlurpPro
         ...(block.kind === "editable" && typeof record.text === "string"
           ? { text: record.text.trim().slice(0, 20_000) }
           : {}),
+        ...(block.kind === "editable" && typeof record.instructionId === "string"
+          ? { instructionId: record.instructionId.trim().slice(0, 80) }
+          : {}),
       });
     }
     for (const block of description.blocks) if (!seen.has(block.id)) next.push({ id: block.id });
-    if (next.some((row, index) => row.id !== description.blocks[index]?.id || row.enabled !== undefined || row.text)) {
+    if (
+      next.some(
+        (row, index) =>
+          row.id !== description.blocks[index]?.id || row.enabled !== undefined || row.text || row.instructionId,
+      )
+    ) {
       normalized[promptId] = next;
     }
   }
@@ -492,8 +502,10 @@ export function composeSlurpPromptBlocks(
   promptId: SlurpPromptId,
   blocks: readonly SlurpPromptBlock[],
   overrides: SlurpPromptBlockOverrides | undefined,
+  instructions: readonly SlurpReusablePromptInstruction[] = [],
 ): string {
   const byId = new Map(blocks.map((block) => [block.id, block]));
+  const instructionById = new Map(instructions.map((instruction) => [instruction.id, instruction.text]));
   const configured = overrides?.[promptId] ?? blocks.map((block) => ({ id: block.id }));
   const ordered = [
     ...configured.flatMap((entry) => {
@@ -507,7 +519,11 @@ export function composeSlurpPromptBlocks(
   return ordered
     .filter(({ block, entry }) => !block.optional || entry.enabled !== false)
     .map(({ block, entry }) =>
-      block.kind === "editable" && entry.text?.trim() ? entry.text.trim() : block.text.trim(),
+      block.kind === "editable" && entry.instructionId && instructionById.get(entry.instructionId)?.trim()
+        ? instructionById.get(entry.instructionId)!.trim()
+        : block.kind === "editable" && entry.text?.trim()
+          ? entry.text.trim()
+          : block.text.trim(),
     )
     .filter(Boolean)
     .join("\n");

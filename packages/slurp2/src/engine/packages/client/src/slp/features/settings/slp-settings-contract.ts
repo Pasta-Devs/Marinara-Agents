@@ -3,7 +3,11 @@ import type { SlurpModelBudget } from "../../../../../shared/src/slp/slp-model-b
 import type { SlurpPlatformEvent } from "../../../../../shared/src/slp/slp-platform-events.js";
 import type { SlurpSimulationTuning } from "../../../../../shared/src/slp/slp-tuning.js";
 import type { SlurpPromptPreset } from "./slp-prompt-presets.js";
-import type { SlurpContentRating, SlurpPromptBlockOverride } from "../../base/state/slp-state-types.js";
+import type {
+  SlurpContentRating,
+  SlurpPromptBlockOverride,
+  SlurpReusablePromptInstruction,
+} from "../../base/state/slp-state-types.js";
 import type { SlurpArcType } from "../projects/slp-projects-contract.js";
 
 export type SlurpSettings = {
@@ -95,6 +99,7 @@ export type SlurpSettings = {
   promptMode: SlurpPromptMode;
   /** Block layouts per mode. Switching modes never discards the other mode's tuning. */
   promptBlocks: Partial<Record<SlurpPromptMode, Record<string, SlurpPromptBlockOverride[]>>>;
+  promptInstructions: SlurpReusablePromptInstruction[];
   professorMariCreatorSource: boolean;
   enableEnhancedTimelineWriting: boolean;
   includeCharacterSchedules: boolean;
