@@ -1290,12 +1290,8 @@ async function main() {
     expectedSourceHash: sourceHashForLtmSourceNote(chat),
     eventSubjectIdentityKeys: new Set(["sera"]),
   });
-  assert.equal(
-    aliasEvent.diagnostics.find((diagnostic: any) => diagnostic.code === "event_subject_matches_character_alias")
-      ?.severity,
-    "error",
-    "timeline event identifiers matching character aliases must be rejected",
-  );
+  assert.equal(aliasEvent.droppedCandidates[0]?.validatorCode, "event_subject_matches_character_alias");
+  assert.equal(aliasEvent.droppedCandidates[0]?.reason, "unsupported_bucket");
   const subjectIdentityRejection = resolveLtmSubjectIdentities({
     units: [
       unit(chat, {

@@ -1328,18 +1328,33 @@ export function createLongTermMemoryRoutes(runtime: {
         }
       },
     );
-    app.post<{ Body: unknown }>("/fork-repair/preview", { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES }, async (request) =>
-      ltmNoteForkPreviewResponseSchema.parse(
-        await previewLtmNoteForkRepair(ltmNoteForkPreviewRequestSchema.parse(request.body ?? {}), { root }),
-      ),
+    app.post<{ Body: unknown }>(
+      "/fork-repair/preview",
+      { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES },
+      async (request, reply) => {
+        try {
+          return ltmNoteForkPreviewResponseSchema.parse(
+            await previewLtmNoteForkRepair(ltmNoteForkPreviewRequestSchema.parse(request.body ?? {}), { root }),
+          );
+        } catch (error) {
+          const result = routeError(error, "Could not preview long-term memory fork repair");
+          return reply.status(result.statusCode).send(result.body);
+        }
+      },
     );
     app.post<{ Body: unknown }>(
       "/fork-repair/apply",
       { bodyLimit: IDENTITY_REPAIR_BODY_LIMIT_BYTES },
-      async (request) =>
-        ltmNoteForkApplyResponseSchema.parse(
-          await applyLtmNoteForkRepair(ltmNoteForkApplyRequestSchema.parse(request.body ?? {}), { root }),
-        ),
+      async (request, reply) => {
+        try {
+          return ltmNoteForkApplyResponseSchema.parse(
+            await applyLtmNoteForkRepair(ltmNoteForkApplyRequestSchema.parse(request.body ?? {}), { root }),
+          );
+        } catch (error) {
+          const result = routeError(error, "Could not apply long-term memory fork repair");
+          return reply.status(result.statusCode).send(result.body);
+        }
+      },
     );
     app.post<{ Body: unknown }>("/search", { bodyLimit: SEARCH_BODY_LIMIT_BYTES }, async (request) =>
       retrieveLongTermMemory({ ...searchBody.parse(request.body), root }),

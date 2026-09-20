@@ -34,20 +34,18 @@ export function renderSectionContributions(
   additive: boolean,
 ): LtmSection | null {
   if (!contributions.length) return null;
-  const deduplicated = contributions.filter((contribution, index) => {
+  const groups = new Map<string, LtmSectionContribution[]>();
+  for (const contribution of contributions) {
     const key =
       contribution.owner === "source"
         ? `source:${contribution.sourceNoteId}:${contribution.sourceHash}:${normalizedText(contribution.text)}`
         : `manual:${normalizedText(contribution.text)}`;
-    return (
-      contributions.findIndex((candidate) => {
-        const candidateKey =
-          candidate.owner === "source"
-            ? `source:${candidate.sourceNoteId}:${candidate.sourceHash}:${normalizedText(candidate.text)}`
-            : `manual:${normalizedText(candidate.text)}`;
-        return candidateKey === key;
-      }) === index
-    );
+    groups.set(key, [...(groups.get(key) ?? []), contribution]);
+  }
+  const deduplicated = [...groups.values()].map((group) => {
+    const latest = [...group].sort((left, right) => left.updatedAt.localeCompare(right.updatedAt)).at(-1)!;
+    const evidence = uniqueStrings(group.flatMap((item) => item.evidence ?? [])).slice(0, 100);
+    return { ...latest, ...(evidence.length ? { evidence } : {}) };
   });
   const manual = deduplicated.filter((contribution) => contribution.owner === "manual");
   const rendered = additive

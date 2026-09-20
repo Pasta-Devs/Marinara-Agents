@@ -241,6 +241,8 @@ async function main() {
       { noteIds: ["world_rollback_one", "world_rollback_two"] },
       { root: rollback.root },
     );
+    const canonicalBefore = await rollback.storage.getNote("world_rollback_one");
+    const duplicateBefore = await rollback.storage.getNote("world_rollback_two");
     const originalRedirect = LongTermMemoryStorage.prototype.redirectReferences;
     LongTermMemoryStorage.prototype.redirectReferences = async () => {
       throw new Error("forced fork rollback");
@@ -260,7 +262,12 @@ async function main() {
     } finally {
       LongTermMemoryStorage.prototype.redirectReferences = originalRedirect;
     }
-    assert.equal((await rollback.storage.getNote("world_rollback_two"))?.status, "active");
+    const canonicalAfter = await rollback.storage.getNote("world_rollback_one");
+    const duplicateAfter = await rollback.storage.getNote("world_rollback_two");
+    assert.deepEqual(canonicalAfter?.sections, canonicalBefore?.sections);
+    assert.deepEqual(canonicalAfter?.links, canonicalBefore?.links);
+    assert.equal(canonicalAfter?.version, canonicalBefore?.version);
+    assert.equal(duplicateAfter?.status, duplicateBefore?.status);
   } finally {
     rollback.release();
     await rm(rollback.dataDir, { recursive: true, force: true });

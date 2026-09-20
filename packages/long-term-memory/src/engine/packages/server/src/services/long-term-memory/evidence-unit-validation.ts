@@ -775,6 +775,7 @@ function diagnosticToDropReason(code: string): LtmExtractionDropReason | null {
     code === "unsupported_mode_bucket" ||
     code === "transient_character_state" ||
     code === "invalid_timeline_section" ||
+    code === "event_subject_matches_character_alias" ||
     code === "relationship_state_without_history" ||
     code === "relationship_state_missing_caused_by" ||
     code === "invalid_relationship_dimension" ||

@@ -29,6 +29,7 @@ import { longTermMemoryRecallIndexPath, parseLtmRecallIndex, rebuildLongTermMemo
 import { LongTermMemoryStorage } from "./storage.js";
 import { parseStoredLtmNote } from "./stored-note.js";
 import { withLtmVaultLock } from "./vault-lock.js";
+import { equivalentLtmForkAvailability } from "./scoped-targets.js";
 
 type VaultFile = {
   folder: (typeof LTM_VAULT_FOLDERS)[number];
@@ -332,6 +333,7 @@ function noteForkIssues(notes: LtmNote[]): LtmIntegrityIssue[] {
     const leftText = noteText(left);
     for (const right of notes.slice(index + 1)) {
       if (right.status === "archived" || right.type !== left.type || left.id === right.id) continue;
+      if (!equivalentLtmForkAvailability(left, right)) continue;
       if (forkSimilarity(leftText, noteText(right)) < 0.72) continue;
       issues.push({
         severity: "warning",

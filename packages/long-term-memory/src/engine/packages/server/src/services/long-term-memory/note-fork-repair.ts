@@ -25,6 +25,10 @@ import {
 } from "../../../../shared/src/features/agents/long-term-memory/index.js";
 import { isAdditiveLtmSection } from "./draft-projector.js";
 import { renderSectionContributions, sectionContributions } from "./section-contributions.js";
+import { equivalentLtmForkAvailability } from "./scoped-targets.js";
+import { LtmServiceError } from "./service-error.js";
+import { uniqueLtmKeywords } from "../../../../shared/src/features/agents/long-term-memory/keywords.js";
+import { uniqueLinks } from "../../../../shared/src/features/agents/long-term-memory/utils.js";
 
 function text(note: LtmNote) {
   return Object.values(note.sections)
@@ -137,10 +141,12 @@ async function selectedNotes(request: LtmNoteForkPreviewRequest, root?: string) 
     });
   };
   const modeKey = (modes: LtmNote["modes"]) => JSON.stringify([...new Set(modes)].sort());
-  if (new Set(ordered.map((note) => scopeKey(note.scope))).size > 1)
-    throw new Error("Fork notes must have equivalent availability scopes.");
-  if (new Set(ordered.map((note) => modeKey(note.modes))).size > 1)
-    throw new Error("Fork notes must have compatible chat modes.");
+  if (ordered.some((note) => !equivalentLtmForkAvailability(ordered[0]!, note)))
+    throw new LtmServiceError(
+      "Fork notes must have equivalent availability scopes and compatible chat modes.",
+      400,
+      "ltm_fork_availability_mismatch",
+    );
   return ordered;
 }
 
@@ -182,17 +188,30 @@ export async function applyLtmNoteForkRepair(
   const root = options.root ?? getLongTermMemoryRoot();
   return withLtmVaultLock(root, async () => {
     const notes = await selectedNotes(parsed, root);
-    if (!notes.some((note) => note.id === parsed.canonicalNoteId))
-      throw new Error("Canonical fork note is not selected.");
-    const canonical = notes.find((note) => note.id === parsed.canonicalNoteId)!;
+    const canonical = notes[0]!;
+    if (parsed.canonicalNoteId !== canonical.id)
+      throw new LtmServiceError(
+        "Canonical fork note does not match the deterministic preview selection.",
+        409,
+        "ltm_fork_canonical_mismatch",
+      );
     const scores = notes
       .filter((note) => note.id !== canonical.id)
       .map((note) => similarity(text(canonical), text(note)));
-    if (Math.min(...scores) < 0.72) throw new Error("Fork notes are not sufficiently similar for a reviewed merge.");
+    if (Math.min(...scores) < 0.72)
+      throw new LtmServiceError(
+        "Fork notes are not sufficiently similar for a reviewed merge.",
+        409,
+        "ltm_fork_similarity_insufficient",
+      );
     if (contentHash(notes) !== parsed.contentHash)
-      throw new Error("Fork preview is stale. Refresh before applying the repair.");
+      throw new LtmServiceError(
+        "Fork preview is stale. Refresh before applying the repair.",
+        409,
+        "ltm_fork_preview_stale",
+      );
     const reasons = blockingReasons(notes);
-    if (reasons.length) throw new Error(reasons.join(" "));
+    if (reasons.length) throw new LtmServiceError(reasons.join(" "), 409, "ltm_fork_conflict");
     const backupId = randomUUID();
     const backupDirectory = join(dirname(root), "backups", "long-term-memory-forks", backupId);
     await mkdir(backupDirectory, { recursive: true });
@@ -205,11 +224,16 @@ export async function applyLtmNoteForkRepair(
         return {
           ...current,
           sections: mergedSections(notes),
-          links: [
+          tags: [...new Set(notes.flatMap((note) => note.tags))].slice(0, 100),
+          keywords: uniqueLtmKeywords(notes.flatMap((note) => note.keywords)).slice(0, 30),
+          manualKeywords: uniqueLtmKeywords(notes.flatMap((note) => note.manualKeywords ?? [])).slice(0, 30),
+          suppressedKeywords: uniqueLtmKeywords(notes.flatMap((note) => note.suppressedKeywords ?? [])).slice(0, 30),
+          conflicts: [
             ...new Map(
-              notes.flatMap((note) => note.links).map((link) => [`${link.target}:${link.relation}`, link]),
+              notes.flatMap((note) => note.conflicts ?? []).map((conflict) => [JSON.stringify(conflict), conflict]),
             ).values(),
-          ],
+          ].slice(0, 250),
+          links: uniqueLinks(notes.flatMap((note) => note.links)).slice(0, 250),
         };
       });
       for (const noteId of archivedNoteIds) {
@@ -224,19 +248,71 @@ export async function applyLtmNoteForkRepair(
     } catch (error) {
       const restoreRoot = join(dirname(root), `.${basename(root)}-fork-restore-${randomUUID()}`);
       const failedRoot = join(dirname(root), `.${basename(root)}-fork-failed-${randomUUID()}`);
-      await cp(join(backupDirectory, basename(root)), restoreRoot, {
-        recursive: true,
-        errorOnExist: true,
-        force: false,
-      });
-      await rename(root, failedRoot);
+      const recoveryErrors: Error[] = [];
+      let rootRecovered = false;
       try {
-        await rename(restoreRoot, root);
-      } catch (restoreError) {
-        await rename(failedRoot, root).catch(() => {});
-        throw restoreError;
+        await cp(join(backupDirectory, basename(root)), restoreRoot, {
+          recursive: true,
+          errorOnExist: true,
+          force: false,
+        });
+      } catch (recoveryError) {
+        recoveryErrors.push(
+          new Error(
+            `restoreRoot ${restoreRoot}: ${recoveryError instanceof Error ? recoveryError.message : String(recoveryError)}`,
+          ),
+        );
       }
-      await rm(failedRoot, { recursive: true, force: true });
+      if (!recoveryErrors.length) {
+        try {
+          await rename(root, failedRoot);
+        } catch (recoveryError) {
+          recoveryErrors.push(
+            new Error(
+              `failedRoot ${failedRoot}: ${recoveryError instanceof Error ? recoveryError.message : String(recoveryError)}`,
+            ),
+          );
+        }
+      }
+      if (!recoveryErrors.length) {
+        try {
+          await rename(restoreRoot, root);
+          rootRecovered = true;
+        } catch (recoveryError) {
+          recoveryErrors.push(
+            new Error(
+              `restoreRoot ${restoreRoot} -> ${root}: ${recoveryError instanceof Error ? recoveryError.message : String(recoveryError)}`,
+            ),
+          );
+        }
+      }
+      if (!rootRecovered) {
+        try {
+          await rename(failedRoot, root);
+          rootRecovered = true;
+        } catch (recoveryError) {
+          recoveryErrors.push(
+            new Error(
+              `failedRoot ${failedRoot} -> ${root}: ${recoveryError instanceof Error ? recoveryError.message : String(recoveryError)}`,
+            ),
+          );
+        }
+      } else {
+        try {
+          await rm(failedRoot, { recursive: true, force: true });
+        } catch (recoveryError) {
+          recoveryErrors.push(
+            new Error(
+              `remove failedRoot ${failedRoot}: ${recoveryError instanceof Error ? recoveryError.message : String(recoveryError)}`,
+            ),
+          );
+        }
+      }
+      if (recoveryErrors.length)
+        throw new AggregateError(
+          [error, ...recoveryErrors],
+          `Fork merge failed; recovery artifacts preserved at restoreRoot=${restoreRoot}, failedRoot=${failedRoot}.`,
+        );
       throw error;
     }
   });
