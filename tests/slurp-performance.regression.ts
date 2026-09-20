@@ -7,29 +7,21 @@ import {
 import { slurp2Source } from "./slurp2-source";
 
 const CONVERSATION_PROMPTS = ["dmReply", "commentReply", "invitedPost"] as const;
-const ids = (mode: "classic" | "produce", prompt: string) =>
-  slurpPromptDescriptions(mode)
+const ids = (prompt: string) =>
+  slurpPromptDescriptions()
     .find((entry) => entry.id === prompt)!
     .blocks.map((block) => block.id);
 
 // A Creator answered a paying subscriber the way a character answers a friend: complete access,
-// no schedule, no limits, no sense that any of this was a job. Produce mode says otherwise.
+// no schedule, no limits, no sense that any of this was a job. The working block says otherwise.
 for (const prompt of CONVERSATION_PROMPTS) {
-  assert.ok(ids("produce", prompt).includes("performance"), `${prompt} must carry the working block`);
-  assert.ok(!ids("classic", prompt).includes("performance"), `${prompt} must not carry it in classic`);
+  assert.ok(ids(prompt).includes("performance"), `${prompt} must carry the working block`);
 }
 
-// Forking the conversation prompts must not disturb any other prompt's blocks.
-for (const prompt of slurpPromptDescriptions("classic")) {
-  if (prompt.id === "post" || CONVERSATION_PROMPTS.includes(prompt.id as (typeof CONVERSATION_PROMPTS)[number]))
-    continue;
-  assert.deepEqual(ids("produce", prompt.id), ids("classic", prompt.id), `${prompt.id} must not have changed`);
-}
-
-// The block is optional, so a player who wants the old behaviour in one surface can switch it off
-// without leaving produce mode entirely.
+// The block is optional, so a player who wants the old behaviour in one surface can switch it off.
+// The Classic prompt preset does exactly that.
 for (const prompt of CONVERSATION_PROMPTS) {
-  const block = slurpPromptDescriptions("produce")
+  const block = slurpPromptDescriptions()
     .find((entry) => entry.id === prompt)!
     .blocks.find((entry) => entry.id === "performance")!;
   assert.equal(block.optional, true);
@@ -55,13 +47,13 @@ assert.match(SLURP_PERFORMED_INTIMACY, /You may say no, say later/u);
 assert.match(SLURP_PERFORMED_INTIMACY, /Do not invent a limit to be difficult/u);
 assert.match(SLURP_PERFORMED_INTIMACY, /Leave some things unanswered/u);
 
-// All three surfaces must gate the text on the mode, or classic would silently inherit it.
+// All three surfaces must supply the text; the layout alone decides whether it is used.
 for (const file of [
   "packages/slurp2/src/engine/packages/server/src/slp/features/messages/slp-reply-generation-service.ts",
   "packages/slurp2/src/engine/packages/server/src/slp/features/messages/slp-message-generation-service.ts",
   "packages/slurp2/src/engine/packages/server/src/slp/features/feed/slp-invited-post-draft-service.ts",
 ]) {
-  assert.match(slurp2Source(file), /text: produce \? SLURP_PERFORMED_INTIMACY : ""/u, `${file} must gate on the mode`);
+  assert.match(slurp2Source(file), /text: SLURP_PERFORMED_INTIMACY,/u, `${file} must supply the working block`);
 }
 
 console.log("slurp performance regression checks passed");

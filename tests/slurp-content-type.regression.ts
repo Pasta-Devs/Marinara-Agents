@@ -53,21 +53,10 @@ for (const type of SLURP_CONTENT_TYPES) {
   assert.match(slurpContentTypeInstruction(type), /# What this post is for/u);
 }
 
-// The block exists in produce mode only: classic has no concept of what a post is for.
-const blocks = (mode: "classic" | "produce") =>
-  slurpPromptDescriptions(mode)
-    .find((prompt) => prompt.id === "post")!
-    .blocks.map((block) => block.id);
-assert.ok(blocks("produce").includes("contentType"));
-assert.ok(!blocks("classic").includes("contentType"));
-// Forking one prompt must not disturb the others, or the shared entries would silently diverge.
-assert.deepEqual(
-  slurpPromptDescriptions("produce")
-    .filter((prompt) => prompt.id !== "post")
-    .map((prompt) => prompt.id),
-  slurpPromptDescriptions("classic")
-    .filter((prompt) => prompt.id !== "post")
-    .map((prompt) => prompt.id),
-);
+// Optional, so the Classic prompt preset can switch it off. See slurp-prompt-blocks.regression.ts.
+const contentTypeBlock = slurpPromptDescriptions()
+  .find((prompt) => prompt.id === "post")!
+  .blocks.find((block) => block.id === "contentType");
+assert.equal(contentTypeBlock?.optional, true);
 
 console.log("slurp content type regression checks passed");

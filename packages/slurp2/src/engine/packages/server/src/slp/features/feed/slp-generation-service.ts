@@ -81,7 +81,6 @@ import {
   type SlurpPromptBlockOverrides,
   type SlurpReusablePromptInstruction,
 } from "../../base/prompting/slp-prompt-blocks.js";
-import type { SlurpPromptMode } from "../../base/prompting/slp-prompt-modes.js";
 import { slurpCameraSourceInstruction, slurpPostCameraSource } from "../../modules/feed/slp-camera-source.js";
 import { slurpImageBrief } from "../../modules/feed/slp-image-brief.js";
 import { slurpContentTypeInstruction, slurpPostContentType } from "../../modules/feed/slp-content-type.js";
@@ -128,8 +127,7 @@ export type SlpCreatorPostGenerationInput = {
   publicationTime?: Date;
   /** False keeps the Story rotation out: "Create posts now" asks for feed posts, not Stories. */
   allowStory?: boolean;
-  /** Preview calls use the Produce pipeline and the supplied draft without changing saved settings. */
-  promptMode?: SlurpPromptMode;
+  /** Preview calls use the supplied draft without changing saved settings. */
   promptBlocks?: SlurpPromptBlockOverrides;
   promptInstructions?: SlurpReusablePromptInstruction[];
   /** Skip continuity writes when `prepareOnly` is used for a settings preview. */
@@ -236,19 +234,14 @@ export async function generateCreatorPost(
   // their direction is the angle, and a second one would fight it.
   // One sequence for both rotations, so the project and the variation cannot drift out of step.
   const sequence = await noodle.countNoodlerPostsByAccount(account.id);
-  const promptMode = input.promptMode ?? settings.promptMode;
   const prompts = slurpPromptContext({
-    ...settings,
-    promptMode,
-    promptBlocks: input.promptBlocks
-      ? { ...settings.promptBlocks, [promptMode]: input.promptBlocks }
-      : settings.promptBlocks,
+    promptBlocks: input.promptBlocks ?? settings.promptBlocks,
     promptInstructions: input.promptInstructions ?? settings.promptInstructions,
   });
   const directed = Boolean(input.request.noodlerPostGuide?.trim());
   const variation = directed
     ? null
-    : slurpPostVariation(account.id, sequence, settings.storyImagesEnabled ? settings.storyRate : "off", prompts.mode);
+    : slurpPostVariation(account.id, sequence, settings.storyImagesEnabled ? settings.storyRate : "off");
   // A project claims this post only if the rotation gives it one. Player direction stands both
   // rotations down for the same reason: their direction is the subject, and a second one fights it.
   const project = directed
@@ -263,19 +256,18 @@ export async function generateCreatorPost(
   // nothing about where this thread had got to.
   const projectPosts = project ? await noodle.listPostsByProject(project.id, 4) : [];
   const format = input.request.format ?? variation?.format ?? "caption";
-  // Produce mode decides who is holding the camera before anything describes the picture, so the
-  // framing is a consequence of a camera that exists rather than a free-floating instruction. See
-  // `slp-camera-source.ts`. Classic mode keeps the old framing axis untouched.
+  // Decide who is holding the camera before anything describes the picture, so the framing is a
+  // consequence of a camera that exists rather than a free-floating instruction. See
+  // `slp-camera-source.ts`.
   // How this Creator makes things, as opposed to who they are. Stable for the life of the account,
   // so it biases every post they ever make rather than this one.
-  const production = prompts.mode === "produce" ? slurpProductionProfile(account.id) : null;
-  const cameraSource =
-    production && variation
-      ? slurpPostCameraSource(account.id, sequence, {
-          companyCanHoldCamera: variation.companyCanHoldCamera,
-          prefers: production.prefers,
-        })
-      : null;
+  const production = slurpProductionProfile(account.id);
+  const cameraSource = variation
+    ? slurpPostCameraSource(account.id, sequence, {
+        companyCanHoldCamera: variation.companyCanHoldCamera,
+        prefers: production.prefers,
+      })
+    : null;
   // A Story is a picture with a line under it, so a run that produces no image publishes an
   // ordinary post instead. The flag is only honoured on the path that commits an image below.
   // A Story the player asked for outranks the rotation, which never fires on a directed post.
@@ -290,10 +282,9 @@ export async function generateCreatorPost(
     input.request.access === "public" && !directed && slurpTeaserPost(account.id, sequence, settings.teaserRate);
   // What this post is for, as opposed to what it is about. Story and teaser are passed in rather
   // than chosen again, so the three decisions cannot contradict each other.
-  const contentType =
-    prompts.mode === "produce" && !directed
-      ? slurpPostContentType(account.id, sequence, { story: storyVariation, teaser: isTeaser })
-      : null;
+  const contentType = !directed
+    ? slurpPostContentType(account.id, sequence, { story: storyVariation, teaser: isTeaser })
+    : null;
   // A callback continues something already shot. Drawing from a real earlier shoot is what lets a
   // caption say "one more from yesterday" and have the picture actually match, instead of putting
   // the Creator back in yesterday's room with no explanation.
@@ -309,7 +300,7 @@ export async function generateCreatorPost(
     ? [slurpContentTypeInstruction(contentType), shoot ? slurpShootInstruction(shoot) : ""].filter(Boolean).join("\n")
     : undefined;
 
-  // In produce mode the post call writes text only. Asking one call for the caption and the
+  // The post call writes text only. Asking one call for the caption and the
   // picture together is what made every image an illustration of its own caption, so the brief is
   // assembled from the situation instead and the caption never reaches it. A directed post has no
   // variation and therefore no brief, so it keeps the old single-call behaviour.
@@ -362,9 +353,8 @@ export async function generateCreatorPost(
     loreContext,
     promptBlocks: prompts.blocks,
     promptInstructions: prompts.instructions,
-    promptMode: prompts.mode,
     contentTypeInstruction,
-    productionInstruction: production ? slurpProductionInstruction(production) : undefined,
+    productionInstruction: slurpProductionInstruction(production),
     generatedAt: input.generatedAt ?? new Date(),
     publicationTime: input.publicationTime,
   });
@@ -494,7 +484,7 @@ export async function generateCreatorPost(
           variation,
           story: storyVariation,
           shoot,
-          effortInstruction: production ? slurpEffortInstruction(slurpPostEffort(production, sequence)) : undefined,
+          effortInstruction: slurpEffortInstruction(slurpPostEffort(production, sequence)),
         })
       : generated.imagePrompt;
   const draftImagePrompt = imagesEnabled

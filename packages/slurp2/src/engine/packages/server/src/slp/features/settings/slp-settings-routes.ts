@@ -1,9 +1,9 @@
 import {
   normalizeSlurpPromptBlockOverrides,
+  slurpClassicPromptPreset,
   slurpPromptDescriptions,
   slurpPromptEditableDefaults,
 } from "../../base/prompting/slp-prompt-blocks.js";
-import { SLURP_PROMPT_MODES, slurpPromptMode } from "../../base/prompting/slp-prompt-modes.js";
 import { DEFAULT_SLURP_SETTINGS, slurpSettingsSchema } from "../../modules/settings/slp-settings.js";
 import { getSlurpModelBudgetLedger } from "../../base/model/slp-model-worker.js";
 import { resolveSlurpTextConnection } from "../../base/identity/slp-connection.js";
@@ -18,7 +18,6 @@ import { SLURP_PROMPT_IDS } from "../../base/prompting/slp-prompt-blocks.js";
 
 const slurpPromptPreviewSchema = z.object({
   promptId: z.enum(SLURP_PROMPT_IDS),
-  mode: z.enum(SLURP_PROMPT_MODES),
   creatorAccountId: z.string().trim().min(1),
   promptBlocks: z.unknown().optional(),
   promptInstructions: z
@@ -45,16 +44,14 @@ export async function slpSettingsRoutes(app: FastifyInstance, deps: SlpRouteDeps
   const { noodle } = deps;
   app.get("/settings", async () => noodle.getSlurpSettings());
 
-  // The inventory is per mode, so the builder must say which one it is editing. An unknown or
-  // absent mode falls back to the shipped default rather than erroring: a stale client should get
-  // a usable panel, not a broken one.
-  app.get("/settings/prompt-blocks", async (req) => {
-    const mode = slurpPromptMode((req.query as { mode?: unknown } | undefined)?.mode);
-    const defaults = slurpPromptEditableDefaults(mode);
+  // `classicPreset` is a layout the builder can load into its draft. Loading it changes prompt
+  // text only; nothing is saved until the player saves.
+  app.get("/settings/prompt-blocks", async () => {
+    const defaults = slurpPromptEditableDefaults();
+    const settings = await noodle.getSettings();
     return {
-      mode,
-      modes: SLURP_PROMPT_MODES,
-      prompts: slurpPromptDescriptions(mode).map((prompt) => ({
+      classicPreset: slurpClassicPromptPreset(settings.classicPromptBlocks),
+      prompts: slurpPromptDescriptions().map((prompt) => ({
         ...prompt,
         blocks: prompt.blocks.map((block) => ({
           ...block,
@@ -88,16 +85,15 @@ export async function slpSettingsRoutes(app: FastifyInstance, deps: SlpRouteDeps
     );
     if (!connection) return reply.code(400).send({ error: "Select a Slurp generation connection first." });
     const promptBlocks =
-      normalizeSlurpPromptBlockOverrides({
-        produce: body.data.promptBlocks ?? settings.promptBlocks.produce,
-      }).produce ?? {};
+      body.data.promptBlocks === undefined
+        ? settings.promptBlocks
+        : normalizeSlurpPromptBlockOverrides(body.data.promptBlocks);
     try {
       const result = await generateCreatorPost(app.db, {
         account,
         connection,
         prepareOnly: true,
         previewOnly: true,
-        promptMode: "produce",
         promptBlocks,
         promptInstructions: body.data.promptInstructions,
         request: {

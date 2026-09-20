@@ -65,7 +65,6 @@ export async function generateCreatorPostImage(input: {
     | "imageWidth"
     | "imageHeight"
     | "characterImageInstructions"
-    | "promptMode"
     | "promptBlocks"
   >;
   characters: ReturnType<typeof createCharactersStorage>;

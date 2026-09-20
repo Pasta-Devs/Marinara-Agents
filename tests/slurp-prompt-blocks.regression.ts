@@ -3,84 +3,102 @@ import {
   composeSlurpPromptBlocks,
   normalizeSlurpPromptBlockOverrides,
   resolveSlurpPromptBlocks,
+  slurpClassicPromptPreset,
+  slurpLegacyClassicPromptBlocks,
   slurpPromptContext,
   slurpPromptDescriptions,
   SLURP_PROMPT_IDS,
 } from "../packages/slurp2/src/engine/packages/server/src/slp/base/prompting/slp-prompt-blocks.ts";
-import {
-  SLURP_DEFAULT_PROMPT_MODE,
-  SLURP_PROMPT_MODES,
-} from "../packages/slurp2/src/engine/packages/server/src/slp/base/prompting/slp-prompt-modes.ts";
 import { slurp2Source } from "./slurp2-source";
 
-// Both modes declare every prompt, so the settings panel and the override store stay symmetric and
-// a prompt can diverge later without a storage migration.
-for (const mode of SLURP_PROMPT_MODES) {
-  assert.equal(slurpPromptDescriptions(mode).length, SLURP_PROMPT_IDS.length, `${mode} must declare every prompt`);
-}
+assert.equal(slurpPromptDescriptions().length, SLURP_PROMPT_IDS.length, "the inventory must declare every prompt");
 
-// The nine fan-side and world-side prompts have nothing to do with posting intent. They must share
-// one entry rather than being copied, or the two modes drift apart the first time one is edited.
-const SHARED_PROMPT_IDS = [
-  "pendingCommission",
-  "pendingQuestion",
-  "pendingOpener",
-  "pendingDelivery",
-  "fanActivity",
-  "reactionBank",
-  "ambientProfile",
-  "conversationSchedule",
-  "garnishAds",
-] as const;
-for (const id of SHARED_PROMPT_IDS) {
-  const classic = slurpPromptDescriptions("classic").find((prompt) => prompt.id === id);
-  const produce = slurpPromptDescriptions("produce").find((prompt) => prompt.id === id);
-  assert.ok(classic && produce, `${id} must exist in both modes`);
-  assert.equal(classic, produce, `${id} must be one shared entry, not a copy`);
-}
-
-// The shape that shipped before the posting-intent overhaul: keyed by prompt id, no mode. Those
-// edits were written against classic's blocks and must land in classic untouched. Reinterpreting
-// them against produce mode would apply careful wording to blocks the player never saw.
-const migrated = normalizeSlurpPromptBlockOverrides({
-  post: [{ id: "continuity", text: "tuned over months" }],
+// `normalizeSlurpSettings` imports Engine host modules, so the test runs the same two calls it makes.
+// The source assertion below pins that wiring.
+type StoredPrompts = { promptBlocks?: unknown; classicPromptBlocks?: unknown; promptMode?: unknown };
+const normalizeSlurpSettings = (raw: StoredPrompts | undefined) => ({
+  promptBlocks: normalizeSlurpPromptBlockOverrides(raw?.promptBlocks),
+  classicPromptBlocks: normalizeSlurpPromptBlockOverrides(
+    raw?.classicPromptBlocks ?? slurpLegacyClassicPromptBlocks(raw?.promptBlocks),
+  ),
 });
-assert.equal(migrated.classic?.post?.find((block) => block.id === "continuity")?.text, "tuned over months");
-assert.equal(migrated.produce, undefined);
-
-// Each mode keeps its own layouts, so switching modes never discards the other side's tuning.
-const perMode = normalizeSlurpPromptBlockOverrides({
-  classic: { post: [{ id: "continuity", text: "classic wording" }] },
-  produce: { post: [{ id: "continuity", text: "produce wording" }] },
-});
-assert.equal(perMode.classic?.post?.find((block) => block.id === "continuity")?.text, "classic wording");
-assert.equal(perMode.produce?.post?.find((block) => block.id === "continuity")?.text, "produce wording");
-
-// The active mode and its layouts resolve together, so a caller cannot pair one mode's text with
-// another mode's block ids.
-assert.equal(slurpPromptContext({ promptMode: "classic", promptBlocks: perMode }).mode, "classic");
-assert.equal(
-  slurpPromptContext({ promptMode: "classic", promptBlocks: perMode }).blocks.post?.find(
-    (block) => block.id === "continuity",
-  )?.text,
-  "classic wording",
+assert.match(
+  slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/modules/settings/slp-settings.ts"),
+  /candidate\.classicPromptBlocks =\s*rawRecord\.classicPromptBlocks \?\? slurpLegacyClassicPromptBlocks\(rawRecord\.promptBlocks\);/u,
 );
-// An absent or unrecognised mode falls back to the shipped default rather than throwing.
-assert.equal(slurpPromptContext({ promptBlocks: perMode }).mode, SLURP_DEFAULT_PROMPT_MODE);
-assert.equal(slurpPromptContext({ promptMode: "nonsense", promptBlocks: perMode }).mode, SLURP_DEFAULT_PROMPT_MODE);
-assert.deepEqual(slurpPromptContext({ promptMode: "classic" }).blocks, {});
+assert.doesNotMatch(
+  slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/modules/settings/slp-settings.ts"),
+  /promptMode/u,
+  "the runtime mode setting is gone",
+);
+
+const block = (layout: { id: string; text?: string; enabled?: boolean }[] | undefined, id: string) =>
+  layout?.find((row) => row.id === id);
+const ids = (layout: { id: string }[] | undefined) => layout?.map((row) => row.id);
+
+// 0.1.3 stored flat layouts written against the Classic inventory. They become the live layouts
+// and the Classic preset source, and the blocks added since land where the inventory puts them.
+const fromFlat = normalizeSlurpSettings({ promptBlocks: { post: [{ id: "continuity", text: "tuned over months" }] } });
+assert.equal(block(fromFlat.promptBlocks.post, "continuity")?.text, "tuned over months");
+assert.equal(block(fromFlat.classicPromptBlocks.post, "continuity")?.text, "tuned over months");
+assert.deepEqual(
+  ids(fromFlat.promptBlocks.post),
+  slurpPromptDescriptions()
+    .find((prompt) => prompt.id === "post")!
+    .blocks.map((row) => row.id),
+  "a migrated layout must keep the live inventory order, not append new blocks at the end",
+);
+
+// Integration builds stored layouts per runtime mode. Produce layouts win; Classic edits are kept
+// for the preset and fill in only when Produce has none.
+const fromModes = normalizeSlurpSettings({
+  promptMode: "classic",
+  promptBlocks: {
+    classic: { post: [{ id: "continuity", text: "classic wording" }] },
+    produce: { dmReply: [{ id: "task", text: "produce wording" }] },
+  },
+});
+assert.equal(block(fromModes.promptBlocks.dmReply, "task")?.text, "produce wording");
+assert.equal(fromModes.promptBlocks.post, undefined, "produce layouts must not be overwritten by classic ones");
+assert.equal(block(fromModes.classicPromptBlocks.post, "continuity")?.text, "classic wording");
+const classicOnly = normalizeSlurpSettings({ promptBlocks: { classic: { post: [{ id: "task", text: "mine" }] } } });
+assert.equal(block(classicOnly.promptBlocks.post, "task")?.text, "mine", "classic-only edits must not be lost");
+
+// A second migration is idempotent, and a later save cannot turn new edits into the Classic preset.
+assert.deepEqual(normalizeSlurpSettings(JSON.parse(JSON.stringify(fromModes))), fromModes);
+// `updateSettings` normalizes `{ ...current, ...input }`, so the stored preset always rides along.
+const edited = normalizeSlurpSettings({ ...fromFlat, promptBlocks: { post: [{ id: "task", text: "new" }] } });
+assert.equal(block(edited.classicPromptBlocks.post, "continuity")?.text, "tuned over months");
+assert.equal(block(edited.classicPromptBlocks.post, "task")?.text, undefined);
+assert.deepEqual(normalizeSlurpSettings(undefined).classicPromptBlocks, {});
+
+// The preset restores Classic wording and turns off only the blocks the overhaul added. It is a
+// layout, so it cannot switch any runtime behaviour back on.
+const preset = slurpClassicPromptPreset(fromFlat.classicPromptBlocks);
+assert.equal(block(preset.post, "continuity")?.text, "tuned over months");
+for (const [promptId, id] of [
+  ["post", "contentType"],
+  ["post", "production"],
+  ["dmReply", "performance"],
+  ["commentReply", "performance"],
+  ["invitedPost", "performance"],
+] as const) {
+  assert.equal(block(preset[promptId], id)?.enabled, false, `${promptId}/${id} must be off in the preset`);
+}
+assert.equal(block(preset.post, "imageDirection")?.enabled, undefined, "shared blocks keep their state");
+assert.deepEqual(normalizeSlurpPromptBlockOverrides(preset), preset, "the preset must survive a save");
+
+assert.deepEqual(slurpPromptContext({}).blocks, {});
 
 const normalized = normalizeSlurpPromptBlockOverrides({
-  classic: {
-    post: [
-      { id: "continuity", text: "custom voice" },
-      { id: "output", text: "must not replace this" },
-      { id: "unknown", text: "discard" },
-      { id: "continuity", text: "duplicate" },
-    ],
-    unknownPrompt: [{ id: "x", text: "discard" }],
-  },
-}).classic!;
+  post: [
+    { id: "continuity", text: "custom voice" },
+    { id: "output", text: "must not replace this" },
+    { id: "unknown", text: "discard" },
+    { id: "continuity", text: "duplicate" },
+  ],
+  unknownPrompt: [{ id: "x", text: "discard" }],
+});
 
 assert.equal(normalized.post?.find((block) => block.id === "continuity")?.text, "custom voice");
 assert.equal(
@@ -161,15 +179,13 @@ assert.match(promptStudioSource, /!selected &&[\s\S]*?resolvedText/u);
 assert.match(backstageKitSource, /whitespace-pre-wrap break-words[\s\S]*?\{value\}/u);
 assert.doesNotMatch(backstageKitSource, /line-clamp-3 whitespace-pre-line/u);
 
-for (const mode of SLURP_PROMPT_MODES) {
-  for (const prompt of slurpPromptDescriptions(mode)) {
-    assert.ok(prompt.blocks.length > 0, `${mode}/${prompt.id} must define blocks`);
-    assert.equal(
-      new Set(prompt.blocks.map((block) => block.id)).size,
-      prompt.blocks.length,
-      `${mode}/${prompt.id} has duplicate block ids`,
-    );
-  }
+for (const prompt of slurpPromptDescriptions()) {
+  assert.ok(prompt.blocks.length > 0, `${prompt.id} must define blocks`);
+  assert.equal(
+    new Set(prompt.blocks.map((row) => row.id)).size,
+    prompt.blocks.length,
+    `${prompt.id} has duplicate block ids`,
+  );
 }
 
 console.log("slurp prompt block regression checks passed");

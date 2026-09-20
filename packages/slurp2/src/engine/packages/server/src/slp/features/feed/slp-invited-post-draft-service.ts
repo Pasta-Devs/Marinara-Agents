@@ -19,15 +19,12 @@ import { slpCreatorSourceText } from "../../base/prompting/slp-prompt-safety.js"
 import { NOODLER_UNTRUSTED_CONTENT_INSTRUCTION } from "./slp-public-identity.js";
 import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "../../base/prompting/slp-prompt-blocks.js";
 import { SLURP_PERFORMED_INTIMACY } from "../../modules/creators/slp-performance.js";
-import { SLURP_DEFAULT_PROMPT_MODE, type SlurpPromptMode } from "../../base/prompting/slp-prompt-modes.js";
 
 export type InvitedSlpPostDraftRequest = {
   guidance?: string;
   connectionId?: string;
   debugMode?: boolean;
   promptBlocks?: SlurpPromptBlockOverrides;
-  /** Which prompt personality to write. Defaults to the shipped mode. */
-  promptMode?: SlurpPromptMode;
 };
 
 export type InvitedSlpPostDraft = {
@@ -71,7 +68,6 @@ export async function generateInvitedSlpPostDraft(
     fallbackBaseUrl: fallback ? resolveBaseUrl(fallback) : "",
     category: "main",
   });
-  const produce = (request.promptMode ?? SLURP_DEFAULT_PROMPT_MODE) === "produce";
   const messages: ChatMessage[] = [
     {
       role: "system",
@@ -92,7 +88,7 @@ export async function generateInvitedSlpPostDraft(
             id: "performance",
             kind: "context",
             optional: true,
-            text: produce ? SLURP_PERFORMED_INTIMACY : "",
+            text: SLURP_PERFORMED_INTIMACY,
           },
           {
             id: "style",

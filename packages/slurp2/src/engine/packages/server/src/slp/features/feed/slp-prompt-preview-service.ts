@@ -14,7 +14,6 @@ import { slurpPostVariation, slurpPostVariationInstruction } from "../../modules
 import { slurpCameraSourceInstruction, slurpPostCameraSource } from "../../modules/feed/slp-camera-source.js";
 import { slurpContentTypeInstruction, slurpPostContentType } from "../../modules/feed/slp-content-type.js";
 import { slurpProductionInstruction, slurpProductionProfile } from "../../modules/creators/slp-production-profile.js";
-import type { SlurpPromptMode } from "../../base/prompting/slp-prompt-modes.js";
 import type { SlurpPromptId } from "../../base/prompting/slp-prompt-blocks.js";
 
 export type SlurpPromptBlockPreview = {
@@ -25,7 +24,6 @@ export type SlurpPromptBlockPreview = {
 
 export type SlurpPromptPreviewInput = {
   promptId: SlurpPromptId;
-  mode: SlurpPromptMode;
   creatorAccountId: string;
   promptBlocks?: unknown;
   promptInstructions?: SlurpReusablePromptInstruction[];
@@ -64,18 +62,13 @@ export async function previewSlurpPromptBlocks(
   // The next post this Creator would make, so the preview shows the rotation they are actually on
   // rather than a fixed sample that never matches what they publish.
   const sequence = await slurp.countNoodlerPostsByAccount(account.id);
-  const produce = input.mode === "produce";
-  const variation = slurpPostVariation(account.id, sequence, settings.storyRate, input.mode);
-  const production = produce ? slurpProductionProfile(account.id) : null;
-  const camera = production
-    ? slurpPostCameraSource(account.id, sequence, {
-        companyCanHoldCamera: variation.companyCanHoldCamera,
-        prefers: production.prefers,
-      })
-    : null;
-  const contentType = produce
-    ? slurpPostContentType(account.id, sequence, { story: variation.story, teaser: false })
-    : null;
+  const variation = slurpPostVariation(account.id, sequence, settings.storyRate);
+  const production = slurpProductionProfile(account.id);
+  const camera = slurpPostCameraSource(account.id, sequence, {
+    companyCanHoldCamera: variation.companyCanHoldCamera,
+    prefers: production.prefers,
+  });
+  const contentType = slurpPostContentType(account.id, sequence, { story: variation.story, teaser: false });
 
   const blocks = buildSlurpPostBlocks({
     account,
@@ -89,24 +82,19 @@ export async function previewSlurpPromptBlocks(
     imageGenerationPrompt: settings.imageGenerationPrompt,
     generationGuidance: settings.generationGuidance,
     postMaxLength: settings.postMaxLength,
-    variationInstruction: slurpPostVariationInstruction(
-      variation,
-      camera ? slurpCameraSourceInstruction(camera) : undefined,
-    ),
-    contentTypeInstruction: contentType ? slurpContentTypeInstruction(contentType) : undefined,
-    productionInstruction: production ? slurpProductionInstruction(production) : undefined,
-    promptMode: input.mode,
-    promptBlocks: settings.promptBlocks?.[input.mode] ?? {},
+    variationInstruction: slurpPostVariationInstruction(variation, slurpCameraSourceInstruction(camera)),
+    contentTypeInstruction: slurpContentTypeInstruction(contentType),
+    productionInstruction: slurpProductionInstruction(production),
+    promptBlocks: settings.promptBlocks,
     promptInstructions: settings.promptInstructions,
   });
-  const promptBlocks = normalizeSlurpPromptBlockOverrides(
-    input.promptBlocks === undefined ? settings.promptBlocks : { [input.mode]: input.promptBlocks },
-  );
+  const promptBlocks =
+    input.promptBlocks === undefined ? settings.promptBlocks : normalizeSlurpPromptBlockOverrides(input.promptBlocks);
   const promptInstructions = input.promptInstructions ?? settings.promptInstructions;
-  const resolvedBlocks = resolveSlurpPromptBlocks(input.promptId, blocks, promptBlocks[input.mode], promptInstructions);
+  const resolvedBlocks = resolveSlurpPromptBlocks(input.promptId, blocks, promptBlocks, promptInstructions);
   return {
     supported: true,
     blocks: resolvedBlocks.map((block) => ({ id: block.id, text: block.text.trim() })),
-    compiledText: composeSlurpPromptBlocks(input.promptId, blocks, promptBlocks[input.mode], promptInstructions),
+    compiledText: composeSlurpPromptBlocks(input.promptId, blocks, promptBlocks, promptInstructions),
   };
 }

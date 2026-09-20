@@ -49,7 +49,6 @@ import { SLURP_PLATFORM_CONTEXT } from "../../modules/prompting/slp-prompt.js";
 import { resolveCreatorCharacterCanon } from "../../data/creators/slp-source-resolve.js";
 import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
 import { SLURP_PERFORMED_INTIMACY } from "../../modules/creators/slp-performance.js";
-import { SLURP_DEFAULT_PROMPT_MODE, type SlurpPromptMode } from "../../base/prompting/slp-prompt-modes.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -91,12 +90,9 @@ export function buildCreatorReplyMessages(input: {
   platformEvents?: string | null;
   promptBlocks?: SlurpPromptBlockOverrides;
   promptInstructions?: SlurpReusablePromptInstruction[];
-  /** Which prompt personality to write. Defaults to the shipped mode. */
-  promptMode?: SlurpPromptMode;
 }): ChatMessage[] {
   const protect = (value: string | null | undefined) =>
     protectCreatorGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
-  const produce = (input.promptMode ?? SLURP_DEFAULT_PROMPT_MODE) === "produce";
   const system = composeSlurpPromptBlocks(
     "commentReply",
     [
@@ -125,7 +121,7 @@ export function buildCreatorReplyMessages(input: {
         id: "performance",
         kind: "context" as const,
         optional: true,
-        text: produce ? SLURP_PERFORMED_INTIMACY : "",
+        text: SLURP_PERFORMED_INTIMACY,
       },
       {
         id: "style",
@@ -253,7 +249,6 @@ export async function generateCreatorReply(input: {
     platformEvents: slurpPlatformEventInstruction(settings.platformEvents, new Date()),
     promptBlocks: prompts.blocks,
     promptInstructions: prompts.instructions,
-    promptMode: prompts.mode,
   });
   const debugMode = input.debugMode === true || isDebugAgentsEnabled();
   const options = {

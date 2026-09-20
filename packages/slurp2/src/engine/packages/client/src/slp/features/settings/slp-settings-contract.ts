@@ -95,10 +95,9 @@ export type SlurpSettings = {
   postShowMoreLength: number;
   characterImageInstructions: Record<string, boolean>;
   promptPresets: SlurpPromptPreset[];
-  /** Which prompt personality the package runs. See the server's `slp-prompt-modes.ts`. */
-  promptMode: SlurpPromptMode;
-  /** Block layouts per mode. Switching modes never discards the other mode's tuning. */
-  promptBlocks: Partial<Record<SlurpPromptMode, Record<string, SlurpPromptBlockOverride[]>>>;
+  promptBlocks: Record<string, SlurpPromptBlockOverride[]>;
+  /** Prompt edits from before Classic generation was removed. Source of the Classic prompt preset. */
+  classicPromptBlocks: Record<string, SlurpPromptBlockOverride[]>;
   promptInstructions: SlurpReusablePromptInstruction[];
   professorMariCreatorSource: boolean;
   enableEnhancedTimelineWriting: boolean;
@@ -151,8 +150,6 @@ export type SlurpSettings = {
   onboarding: "not_started" | "in_progress" | "completed";
 };
 export type SlurpSettingsUpdate = Partial<SlurpSettings>;
-export const SLURP_PROMPT_MODES = ["classic", "produce"] as const;
-export type SlurpPromptMode = (typeof SLURP_PROMPT_MODES)[number];
 export type SlurpPromptBlockDefinition = {
   id: string;
   kind: "editable" | "required" | "context";
@@ -162,7 +159,8 @@ export type SlurpPromptBlockDefinition = {
 /** The prompt-blocks response. Named rather than inline: the client-hook scanner cannot read a
  * generic argument containing a semicolon, so an inline object type hides the call from it. */
 export type SlurpPromptBlocksResponse = {
-  mode: SlurpPromptMode;
+  /** A layout the builder can load into its draft. Prompt text only. */
+  classicPreset: Record<string, SlurpPromptBlockOverride[]>;
   prompts: SlurpPromptDefinition[];
 };
 export type SlurpPromptBlockPreview = {
@@ -182,7 +180,6 @@ export type SlurpPromptResultPreviewResponse = {
 };
 export type SlurpPromptResultPreviewInput = {
   promptId: "post";
-  mode: SlurpPromptMode;
   creatorAccountId: string;
   promptBlocks?: unknown;
   promptInstructions?: SlurpReusablePromptInstruction[];

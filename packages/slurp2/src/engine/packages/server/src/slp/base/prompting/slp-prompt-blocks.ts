@@ -1,5 +1,3 @@
-import { SLURP_PROMPT_MODES, slurpPromptMode, type SlurpPromptMode } from "./slp-prompt-modes.js";
-
 export const SLURP_PROMPT_IDS = [
   "post",
   "dmReply",
@@ -32,20 +30,11 @@ export type SlurpPromptBlockOverride = {
 };
 export type SlurpReusablePromptInstruction = { id: string; name: string; text: string; builtin?: boolean };
 
-/** One mode's layout for every prompt. */
+/** The stored layout for every prompt. */
 export type SlurpPromptBlockOverrides = Partial<Record<SlurpPromptId, SlurpPromptBlockOverride[]>>;
 
-/**
- * Every mode's layouts, which is what actually gets stored.
- *
- * Kept separate per mode rather than shared, because produce mode declares block ids classic does
- * not have. One shared store would silently drop half of a player's edits on every switch.
- */
-export type SlurpPromptModeOverrides = Partial<Record<SlurpPromptMode, SlurpPromptBlockOverrides>>;
-
-/** The active mode and that mode's layouts, resolved together so the two cannot drift apart. */
+/** The stored layouts and reusable instructions, resolved together. */
 export type SlurpPromptContext = {
-  mode: SlurpPromptMode;
   blocks: SlurpPromptBlockOverrides;
   instructions: SlurpReusablePromptInstruction[];
 };
@@ -72,8 +61,11 @@ export type SlurpPromptDescription = {
 const descriptions = (blocks: Array<[string, SlurpPromptBlockKind, boolean?]>): SlurpPromptBlockDescription[] =>
   blocks.map(([id, kind, optional = false]) => ({ id, kind, optional }));
 
-/** Classic mode's prompt inventory: the shipped behaviour before the posting-intent overhaul. */
-const CLASSIC_PROMPT_DESCRIPTIONS: SlurpPromptDescription[] = [
+/**
+ * The prompt inventory before the posting-intent overhaul. The Classic prompt preset is this
+ * inventory: the live inventory below adds only optional context blocks to it.
+ */
+const BASE_PROMPT_DESCRIPTIONS: SlurpPromptDescription[] = [
   {
     id: "post",
     group: "writing",
@@ -260,15 +252,7 @@ const CLASSIC_PROMPT_DESCRIPTIONS: SlurpPromptDescription[] = [
   },
 ];
 
-/**
- * Produce mode's prompt inventory.
- *
- * Both modes declare all of `SLURP_PROMPT_IDS`, so the settings panel and the override store stay
- * symmetric and any prompt can diverge later without a storage migration. Nine of the eighteen are
- * fan-side or world-side and have nothing to do with posting intent: they share classic's entry
- * outright rather than being copied, so exactly one copy of that text exists.
- */
-/** Where produce mode inserts the "you are working" block, relative to each prompt's own blocks. */
+/** Where the live inventory inserts the "you are working" block, relative to each prompt's own blocks. */
 const PERFORMANCE_AFTER: Partial<Record<SlurpPromptId, string>> = {
   dmReply: "identity",
   commentReply: "identity",
@@ -284,13 +268,12 @@ function withPerformanceBlock(prompt: SlurpPromptDescription): SlurpPromptDescri
   return { ...prompt, blocks };
 }
 
-const PRODUCE_PROMPT_DESCRIPTIONS: SlurpPromptDescription[] = CLASSIC_PROMPT_DESCRIPTIONS.map((prompt) =>
+const PRODUCE_PROMPT_DESCRIPTIONS: SlurpPromptDescription[] = BASE_PROMPT_DESCRIPTIONS.map((prompt) =>
   prompt.id === "post"
     ? {
         ...prompt,
         // `contentType` is what this post is *for*: bait, throwaway, a planned set, a thank-you, a
-        // boundary notice. Classic mode has no such concept — every post there is "something
-        // happened, here is a picture of it" — so the block exists only in this inventory.
+        // boundary notice. The Classic preset turns it off.
         blocks: descriptions([
           ["task", "editable"],
           ["platform", "required"],
@@ -310,24 +293,16 @@ const PRODUCE_PROMPT_DESCRIPTIONS: SlurpPromptDescription[] = CLASSIC_PROMPT_DES
     : withPerformanceBlock(prompt),
 );
 
-const PROMPT_DESCRIPTIONS: Record<SlurpPromptMode, SlurpPromptDescription[]> = {
-  classic: CLASSIC_PROMPT_DESCRIPTIONS,
-  produce: PRODUCE_PROMPT_DESCRIPTIONS,
-};
-
 /** Public prompt inventory used by the settings UI and by regression checks. */
-export function slurpPromptDescriptions(mode: SlurpPromptMode): SlurpPromptDescription[] {
-  return PROMPT_DESCRIPTIONS[mode];
+export function slurpPromptDescriptions(): SlurpPromptDescription[] {
+  return PRODUCE_PROMPT_DESCRIPTIONS;
 }
 
-const DESCRIPTION_BY_ID: Record<SlurpPromptMode, Map<SlurpPromptId, SlurpPromptDescription>> = {
-  classic: new Map(CLASSIC_PROMPT_DESCRIPTIONS.map((prompt) => [prompt.id, prompt])),
-  produce: new Map(PRODUCE_PROMPT_DESCRIPTIONS.map((prompt) => [prompt.id, prompt])),
-};
+const DESCRIPTION_BY_ID = new Map(PRODUCE_PROMPT_DESCRIPTIONS.map((prompt) => [prompt.id, prompt]));
 
 type SlurpPromptEditableDefaults = Partial<Record<SlurpPromptId, Record<string, string>>>;
 
-const CLASSIC_PROMPT_EDITABLE_DEFAULTS: SlurpPromptEditableDefaults = {
+const PROMPT_EDITABLE_DEFAULTS: SlurpPromptEditableDefaults = {
   post: {
     task: "You write exactly one post for one Slurp creator page in Marinara Engine.",
     continuity:
@@ -405,34 +380,21 @@ const CLASSIC_PROMPT_EDITABLE_DEFAULTS: SlurpPromptEditableDefaults = {
   },
 };
 
-/** Produce mode's editable defaults. Shares classic's text wherever the prompt has not diverged. */
-const PRODUCE_PROMPT_EDITABLE_DEFAULTS: SlurpPromptEditableDefaults = CLASSIC_PROMPT_EDITABLE_DEFAULTS;
-
-const PROMPT_EDITABLE_DEFAULTS: Record<SlurpPromptMode, SlurpPromptEditableDefaults> = {
-  classic: CLASSIC_PROMPT_EDITABLE_DEFAULTS,
-  produce: PRODUCE_PROMPT_EDITABLE_DEFAULTS,
-};
-
-export function slurpPromptEditableDefaults(mode: SlurpPromptMode): SlurpPromptEditableDefaults {
-  return PROMPT_EDITABLE_DEFAULTS[mode];
+export function slurpPromptEditableDefaults(): SlurpPromptEditableDefaults {
+  return PROMPT_EDITABLE_DEFAULTS;
 }
 
-export function slurpPromptEditableDefault(
-  mode: SlurpPromptMode,
-  promptId: SlurpPromptId,
-  blockId: string,
-  fallback: string,
-): string {
-  return PROMPT_EDITABLE_DEFAULTS[mode][promptId]?.[blockId] ?? fallback;
+export function slurpPromptEditableDefault(promptId: SlurpPromptId, blockId: string, fallback: string): string {
+  return PROMPT_EDITABLE_DEFAULTS[promptId]?.[blockId] ?? fallback;
 }
 
-/** Remove stale ids and changes that target required or runtime-only blocks, for one mode. */
-function normalizeModeOverrides(mode: SlurpPromptMode, value: unknown): SlurpPromptBlockOverrides {
+/** Remove stale ids and changes that target required or runtime-only blocks. */
+function normalizeLayouts(value: unknown): SlurpPromptBlockOverrides {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const source = value as Record<string, unknown>;
   const normalized: SlurpPromptBlockOverrides = {};
   for (const promptId of SLURP_PROMPT_IDS) {
-    const description = DESCRIPTION_BY_ID[mode].get(promptId)!;
+    const description = DESCRIPTION_BY_ID.get(promptId)!;
     const known = new Map(description.blocks.map((block) => [block.id, block]));
     const rows = Array.isArray(source[promptId]) ? source[promptId] : [];
     const seen = new Set<string>();
@@ -455,7 +417,12 @@ function normalizeModeOverrides(mode: SlurpPromptMode, value: unknown): SlurpPro
           : {}),
       });
     }
-    for (const block of description.blocks) if (!seen.has(block.id)) next.push({ id: block.id });
+    // A layout saved before a block existed gets it where the inventory puts it, not at the end.
+    description.blocks.forEach((block, index) => {
+      if (seen.has(block.id)) return;
+      const before = description.blocks[index - 1]?.id;
+      next.splice(next.findIndex((row) => row.id === before) + 1, 0, { id: block.id });
+    });
     if (
       next.some(
         (row, index) =>
@@ -469,34 +436,72 @@ function normalizeModeOverrides(mode: SlurpPromptMode, value: unknown): SlurpPro
 }
 
 /**
- * Validate the stored layouts for every mode.
+ * The two stored shapes before this one.
  *
- * Also migrates the shape that shipped before the posting-intent overhaul, when there was only one
- * mode and the record was keyed by prompt id directly. Those edits belong to classic: they were
- * written against classic's blocks, and reinterpreting them against produce mode's would apply a
- * player's careful wording to blocks they never saw. No prompt id collides with a mode name, so the
- * two shapes are told apart by their keys alone.
+ * Up to 0.1.3 the layouts were keyed by prompt id directly. Integration builds then keyed them by
+ * a `classic` or `produce` runtime mode. Neither mode name is a prompt id, so the keys tell the
+ * shapes apart.
  */
-export function normalizeSlurpPromptBlockOverrides(value: unknown): SlurpPromptModeOverrides {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+function modeKeyedLayouts(value: unknown): { classic?: unknown; produce?: unknown } | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const source = value as Record<string, unknown>;
-  const legacy = !SLURP_PROMPT_MODES.some((mode) => mode in source) && SLURP_PROMPT_IDS.some((id) => id in source);
-  const normalized: SlurpPromptModeOverrides = {};
-  for (const mode of SLURP_PROMPT_MODES) {
-    const layouts = normalizeModeOverrides(mode, legacy ? (mode === "classic" ? source : {}) : source[mode]);
-    if (Object.keys(layouts).length > 0) normalized[mode] = layouts;
-  }
-  return normalized;
+  return "classic" in source || "produce" in source ? source : null;
 }
 
-/** The active mode and its layouts. One place resolves both, so a caller cannot mix them up. */
+/**
+ * Validate the stored layouts.
+ *
+ * A mode-keyed record keeps its produce layouts. Classic layouts fill in only when produce has
+ * none, because the Classic inventory is a subset of this one and every Classic edit still lands
+ * on the block it was written for.
+ */
+export function normalizeSlurpPromptBlockOverrides(value: unknown): SlurpPromptBlockOverrides {
+  const keyed = modeKeyedLayouts(value);
+  if (!keyed) return normalizeLayouts(value);
+  const produce = normalizeLayouts(keyed.produce);
+  return Object.keys(produce).length > 0 ? produce : normalizeLayouts(keyed.classic);
+}
+
+/**
+ * The player's Classic-era edits, recovered from a stored layout that predates the Classic preset.
+ * Flat 0.1.3 layouts were written against the Classic inventory, so all of them count.
+ */
+export function slurpLegacyClassicPromptBlocks(value: unknown): SlurpPromptBlockOverrides {
+  const keyed = modeKeyedLayouts(value);
+  return normalizeLayouts(keyed ? keyed.classic : value);
+}
+
+/** Blocks the posting-intent overhaul added. The Classic preset turns them off. */
+const PRODUCE_ONLY_BLOCKS: Partial<Record<SlurpPromptId, readonly string[]>> = {
+  post: ["contentType", "production"],
+  dmReply: ["performance"],
+  commentReply: ["performance"],
+  invitedPost: ["performance"],
+};
+
+/**
+ * The Classic prompt preset: the player's Classic-era edits with the overhaul's context blocks off.
+ *
+ * Prompt text only. Selecting it restores the old wording; it does not bring back the old
+ * rotation, camera, or image algorithm.
+ */
+export function slurpClassicPromptPreset(classic: SlurpPromptBlockOverrides): SlurpPromptBlockOverrides {
+  const preset: SlurpPromptBlockOverrides = { ...classic };
+  for (const [promptId, off] of Object.entries(PRODUCE_ONLY_BLOCKS) as Array<[SlurpPromptId, readonly string[]]>) {
+    const rows =
+      normalizeLayouts({ [promptId]: classic[promptId] ?? [] })[promptId] ??
+      DESCRIPTION_BY_ID.get(promptId)!.blocks.map((block) => ({ id: block.id }));
+    preset[promptId] = rows.map((row) => (off.includes(row.id) ? { ...row, enabled: false } : row));
+  }
+  return preset;
+}
+
+/** The stored layouts and instructions. One place resolves both. */
 export function slurpPromptContext(settings: {
-  promptMode?: unknown;
-  promptBlocks?: SlurpPromptModeOverrides;
+  promptBlocks?: SlurpPromptBlockOverrides;
   promptInstructions?: SlurpReusablePromptInstruction[];
 }): SlurpPromptContext {
-  const mode = slurpPromptMode(settings.promptMode);
-  return { mode, blocks: settings.promptBlocks?.[mode] ?? {}, instructions: settings.promptInstructions ?? [] };
+  return { blocks: settings.promptBlocks ?? {}, instructions: settings.promptInstructions ?? [] };
 }
 
 /** Compose one prompt from current runtime blocks and a validated user layout. */

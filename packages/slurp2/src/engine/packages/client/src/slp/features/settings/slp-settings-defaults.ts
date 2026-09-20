@@ -44,7 +44,6 @@ export const SLURP_SETTINGS_SECTION_KEYS: Record<SlurpResettableSection, readonl
     "enableImageInterpretation",
     "imagePromptInterpretation",
     "promptPresets",
-    "promptMode",
     "promptBlocks",
   ],
   audience: [

@@ -7,7 +7,6 @@ import type {
   SlurpPromptPreviewResponse,
   SlurpPromptResultPreviewResponse,
   SlurpPromptResultPreviewInput,
-  SlurpPromptMode,
   SlurpSettings,
   SlurpSettingsUpdate,
 } from "./slp-settings-contract.js";
@@ -26,13 +25,10 @@ export function useSlurpSettingsDefaults() {
     staleTime: Infinity,
   });
 }
-// Keyed by mode, because the two modes return different inventories. Sharing one cache entry
-// showed produce mode's blocks while classic was selected.
-export function useSlurpPromptBlocks(mode: SlurpPromptMode) {
+export function useSlurpPromptBlocks() {
   return useQuery({
-    queryKey: [...slpKeys.settings(), "prompt-blocks", mode] as const,
-    queryFn: () =>
-      api.get<SlurpPromptBlocksResponse>(`/slurp2/settings/prompt-blocks?mode=${encodeURIComponent(mode)}`),
+    queryKey: [...slpKeys.settings(), "prompt-blocks"] as const,
+    queryFn: () => api.get<SlurpPromptBlocksResponse>("/slurp2/settings/prompt-blocks"),
     staleTime: Infinity,
   });
 }
@@ -46,7 +42,6 @@ export function useSlurpPromptBlockPreview() {
   return useMutation({
     mutationFn: (input: {
       promptId: string;
-      mode: SlurpPromptMode;
       creatorAccountId: string;
       promptBlocks?: unknown;
       promptInstructions?: SlurpReusablePromptInstruction[];
