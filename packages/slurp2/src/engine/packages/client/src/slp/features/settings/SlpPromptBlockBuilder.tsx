@@ -299,18 +299,6 @@ export function SlurpPromptBlockBuilder({
           const layout = completeLayout(prompt, draft[prompt.id]);
           const changed = Boolean(value[prompt.id]?.length);
           const selected = selectedPromptId === prompt.id;
-          const blockPreview = layout
-            .map((entry) => {
-              const block = blockDefinition(prompt, entry.id);
-              if (block.optional && entry.enabled === false) return "";
-              return (
-                (entry.instructionId
-                  ? instructions.find((instruction) => instruction.id === entry.instructionId)?.text
-                  : entry.text) || block.defaultText.trim()
-              );
-            })
-            .filter(Boolean)
-            .join("\n");
           return (
             <section
               key={prompt.id}
@@ -333,15 +321,12 @@ export function SlurpPromptBlockBuilder({
                       defaultValue: "{{count}} blocks · {{state}}",
                     })}
                   </span>
-                  <span className="mt-3 block line-clamp-4 whitespace-pre-wrap text-xs leading-5 text-[var(--slurp-muted)]">
-                    {blockPreview || t("ui.slurp.settings.prompts.previewEmpty", { defaultValue: "No prompt text." })}
-                  </span>
                 </span>
                 <ChevronDown size={17} aria-hidden="true" className={selected ? "rotate-180" : ""} />
               </button>
               {selected && (
                 <div className="space-y-4 border-t border-[var(--slurp-outline)] p-3 sm:p-4 lg:col-span-2">
-                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(18rem,0.9fr)]">
+                  <div>
                     <ol className="space-y-2">
                       {layout.map((entry, index) => {
                         const block = blockDefinition(prompt, entry.id);
@@ -507,26 +492,6 @@ export function SlurpPromptBlockBuilder({
                         );
                       })}
                     </ol>
-                    <aside className="space-y-2 rounded-lg bg-[var(--slurp-canvas)] p-3 ring-1 ring-inset ring-[var(--slurp-outline)]">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs font-bold">
-                          {t("ui.slurp.settings.prompts.assembledTitle", { defaultValue: "Assembled prompt" })}
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => showPreview(prompt.id, layout[0]?.id ?? "")}
-                          className="inline-flex size-9 items-center justify-center rounded-lg border border-[var(--slurp-outline)]"
-                          aria-label={t("ui.slurp.settings.prompts.previewPromptAria", {
-                            defaultValue: "Preview assembled prompt",
-                          })}
-                        >
-                          <Eye size={14} aria-hidden="true" />
-                        </button>
-                      </div>
-                      <p className="max-h-80 overflow-auto whitespace-pre-wrap text-xs leading-5 text-[var(--slurp-muted)]">
-                        {blockPreview}
-                      </p>
-                    </aside>
                   </div>
                   <div className="flex flex-wrap justify-end gap-2">
                     <button
