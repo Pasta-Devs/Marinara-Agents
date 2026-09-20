@@ -1568,6 +1568,408 @@ assert.doesNotThrow(() =>
   assert.equal(assertRulesetCreatures(creatureManifest, document, new Map()), 0);
 }
 
+// ── Positions: a fight on a board (Capability API 1.28) ──
+//
+// `distance` is what makes a fight positionable at all, and everything else here is a number
+// measured in it. The Engine refuses a ruleset that declares one of them without a cell size to
+// measure it in, so a package that did would install and then be a fight nobody could stand on.
+// These restate the Engine's own rules and are never stricter: a CREATURE action may carry a plain
+// reach or range with no `distance` anywhere, which has been legal since 1.27.
+
+const positionsManifest = rulesetManifest({ capabilityApi: { major: 1, minor: 28 } });
+const RULESET_AREA_SHAPES_FOR_TEST = ["burst", "cone", "line"];
+/** The shipped block plus a cell size, with one further thing changed. */
+const positionsWith = (edit = () => {}) =>
+  combatWith((combat) => {
+    combat.distance = { label: "ft", perCell: 5 };
+    combat.ranged = { long: "disadvantage", adjacentFoe: "disadvantage" };
+    combat.cover = { bonus: 2 };
+    combat.opportunity = { budget: "bonus" };
+    combat.attacks[0].reach = { column: "bonus" };
+    combat.attacks[0].range = { normal: { column: "bonus" }, long: { column: "bonus" } };
+    edit(combat);
+  });
+
+// The whole of it, declared together, is the shape that passes.
+assert.equal(assertRulesetCombat(positionsManifest, positionsWith()), true);
+// And the package as committed is one of them.
+assert.ok(parsedAsset.combat.distance, "the shipped block must declare what one cell is worth");
+
+// A block with no cell size is exactly what it was before any of this existed.
+assert.equal(assertRulesetCombat(combatManifest, combatDocument(combatBlock)), true);
+assert.throws(
+  () => assertRulesetCombat(rulesetManifest({ capabilityApi: { major: 1, minor: 27 } }), positionsWith()),
+  /gives a fight positions and must declare capability API 1\.28 or newer/u,
+);
+assert.doesNotThrow(() =>
+  assertRulesetCombat(rulesetManifest({ capabilityApi: { major: 2, minor: 0 } }), positionsWith()),
+);
+
+// Each of the four keys, and a weapon distance, without a cell size to measure it in.
+for (const [key, edit] of [
+  ["ranged", (combat) => delete combat.cover && delete combat.opportunity],
+  ["cover", (combat) => delete combat.ranged && delete combat.opportunity],
+  ["opportunity", (combat) => delete combat.ranged && delete combat.cover],
+]) {
+  assert.throws(
+    () =>
+      assertRulesetCombat(
+        positionsManifest,
+        positionsWith((combat) => {
+          delete combat.distance;
+          delete combat.attacks[0].reach;
+          delete combat.attacks[0].range;
+          edit(combat);
+        }),
+      ),
+    new RegExp(`combat "${key}" is measured in cells, so the block declares "distance" too`, "u"),
+    key,
+  );
+}
+for (const key of ["reach", "range"]) {
+  assert.throws(
+    () =>
+      assertRulesetCombat(
+        positionsManifest,
+        positionsWith((combat) => {
+          delete combat.distance;
+          delete combat.ranged;
+          delete combat.cover;
+          delete combat.opportunity;
+          delete combat.attacks[0][key === "reach" ? "range" : "reach"];
+        }),
+      ),
+    new RegExp(`combat "attacks\\[0\\]\\.${key}" is measured in cells`, "u"),
+    key,
+  );
+}
+
+// Each of the four is an object or it is not there. A null, an array or a bare number is refused by
+// name: reading a key off one of those would either throw or, for `ranged`, quietly pass.
+for (const key of ["distance", "ranged", "cover", "opportunity"]) {
+  for (const value of [null, [], 5, "yes"]) {
+    const wanted = `combat ${key} must be an object, not ${JSON.stringify(value)}`;
+    assert.throws(
+      () =>
+        assertRulesetCombat(
+          positionsManifest,
+          positionsWith((combat) => (combat[key] = value)),
+        ),
+      (error) => error.message.includes(wanted),
+      `${key} = ${JSON.stringify(value)}`,
+    );
+  }
+}
+
+// The cell size itself.
+for (const [perCell, message] of [
+  [0, /combat distance perCell is a number above zero, not 0/u],
+  [-5, /combat distance perCell is a number above zero, not -5/u],
+  ["five", /combat distance perCell is a number above zero, not "five"/u],
+]) {
+  assert.throws(
+    () =>
+      assertRulesetCombat(
+        positionsManifest,
+        positionsWith((combat) => (combat.distance.perCell = perCell)),
+      ),
+    message,
+    String(perCell),
+  );
+}
+for (const label of ["", "a much longer unit"]) {
+  assert.throws(
+    () =>
+      assertRulesetCombat(
+        positionsManifest,
+        positionsWith((combat) => (combat.distance.label = label)),
+      ),
+    /combat distance label .* is 1 to 12 characters/u,
+    JSON.stringify(label),
+  );
+}
+
+// What a long shot and a shot beside a foe cost is a closed pair of words.
+for (const key of ["long", "adjacentFoe"]) {
+  assert.throws(
+    () =>
+      assertRulesetCombat(
+        positionsManifest,
+        positionsWith((combat) => (combat.ranged[key] = "harder")),
+      ),
+    new RegExp(`combat ranged ${key} is disadvantage or normal, not "harder"`, "u"),
+  );
+  // Either may be left out, and then it costs nothing.
+  assert.doesNotThrow(() =>
+    assertRulesetCombat(
+      positionsManifest,
+      positionsWith((combat) => delete combat.ranged[key]),
+    ),
+  );
+}
+
+// Cover is a whole bonus a defense can hold.
+for (const bonus of [-1, 2.5, 101, "two"]) {
+  assert.throws(
+    () =>
+      assertRulesetCombat(
+        positionsManifest,
+        positionsWith((combat) => (combat.cover.bonus = bonus)),
+      ),
+    /combat cover bonus is a whole number from 0 to 100/u,
+    String(bonus),
+  );
+}
+
+// A strike at somebody walking away is paid out of a budget the economy really declares.
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      positionsManifest,
+      positionsWith((combat) => (combat.opportunity.budget = "reaction")),
+    ),
+  /combat opportunity budget names unknown budget "reaction"/u,
+);
+
+// A weapon's distance is a number column of its own list, or the same number on every row.
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      positionsManifest,
+      positionsWith((combat) => (combat.attacks[0].reach = { column: "grip" })),
+    ),
+  /combat attacks "attacks" reach names unknown column "grip"/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      positionsManifest,
+      positionsWith((combat) => (combat.attacks[0].reach = { column: "name" })),
+    ),
+  /combat attacks "attacks" reach must name a number column, not text/u,
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      positionsManifest,
+      positionsWith((combat) => (combat.attacks[0].reach = 5)),
+    ),
+  /combat attacks "attacks" reach names a column or a constant, not 5/u,
+);
+// An object carrying neither key is not a distance either: the column check lets an absent name
+// through, so without its own guard `{}` would be read as a reach and pass.
+for (const neither of [{}, { columns: "reach" }]) {
+  assert.throws(
+    () =>
+      assertRulesetCombat(
+        positionsManifest,
+        positionsWith((combat) => (combat.attacks[0].reach = neither)),
+      ),
+    /combat attacks "attacks" reach names a column or a constant/u,
+    JSON.stringify(neither),
+  );
+}
+for (const fixed of [-1, 10001]) {
+  assert.throws(
+    () =>
+      assertRulesetCombat(
+        positionsManifest,
+        positionsWith((combat) => (combat.attacks[0].reach = { const: fixed })),
+      ),
+    /combat attacks "attacks" reach const is a distance from 0 to 10000/u,
+    String(fixed),
+  );
+}
+assert.doesNotThrow(() =>
+  assertRulesetCombat(
+    positionsManifest,
+    positionsWith((combat) => (combat.attacks[0].reach = { const: 5 })),
+  ),
+);
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      positionsManifest,
+      positionsWith((combat) => (combat.attacks[0].range = { long: { const: 60 } })),
+    ),
+  /combat attacks "attacks" range names the ordinary distance it is shot at/u,
+);
+// A range that is not a pair at all is refused by its own sentence: `null` would otherwise throw a
+// TypeError, and an array or a number would be told it is missing a normal distance, which is the
+// wrong complaint about a value that was never the right shape.
+for (const wrong of [null, 30, [30, 120], "30/120"]) {
+  assert.throws(
+    () =>
+      assertRulesetCombat(
+        positionsManifest,
+        positionsWith((combat) => (combat.attacks[0].range = wrong)),
+      ),
+    /combat attacks "attacks" range is an ordinary distance and an optional longer one/u,
+    JSON.stringify(wrong),
+  );
+}
+assert.throws(
+  () =>
+    assertRulesetCombat(
+      positionsManifest,
+      positionsWith((combat) => (combat.attacks[0].range = { normal: { const: 60 }, long: { const: 20 } })),
+    ),
+  /combat attacks "attacks" range long is at least the ordinary one/u,
+);
+// Two COLUMNS are the player's own two numbers, and the Engine reads a shorter long distance as no
+// long distance rather than refusing the row, so this check does not either.
+assert.doesNotThrow(() =>
+  assertRulesetCombat(
+    positionsManifest,
+    positionsWith((combat) => (combat.attacks[0].range = { normal: { column: "bonus" }, long: { column: "bonus" } })),
+  ),
+);
+
+// A creature's own distances. Both have been legal since 1.27 and need no `distance` beside them.
+assert.equal(
+  assertRulesetCreatures(
+    creatureManifest,
+    bestiaryDocument((block) => (block.actions[0].reach = 10)),
+  ),
+  1,
+);
+assert.equal(
+  assertRulesetCreatures(
+    creatureManifest,
+    bestiaryDocument((block) => (block.actions[0].range = 60)),
+  ),
+  1,
+);
+for (const [what, edit, message] of [
+  ["reach", (block) => (block.actions[0].reach = -5), /action "bite" has a reach of -5, not a distance from 0/u],
+  ["reach", (block) => (block.actions[0].reach = 10001), /action "bite" has a reach of 10001/u],
+  ["range", (block) => (block.actions[0].range = -1), /action "bite" has a range of -1, not a distance from 0/u],
+  [
+    "range",
+    (block) => (block.actions[0].range = "far"),
+    /action "bite" has a range of "far", not a distance or a pair/u,
+  ],
+  ["speed", (block) => (block.speed = -1), /has a speed of -1, not a distance from 0/u],
+  ["speed", (block) => (block.speed = "quick"), /has a speed of "quick", not a distance from 0/u],
+]) {
+  assert.throws(() => assertRulesetCreatures(creatureManifest, bestiaryDocument(edit)), message, what);
+}
+// The shape an action lands in. A new key in a strict file, so it is the 1.28 gate as well, and the
+// Engine's own closed set of three shapes is what it may name.
+assert.equal(
+  assertRulesetCreatures(
+    positionsManifest,
+    bestiaryDocument((block) => (block.actions[1].area = { shape: "cone", size: 15, friendlyFire: false })),
+  ),
+  1,
+);
+assert.throws(
+  () =>
+    assertRulesetCreatures(
+      creatureManifest,
+      bestiaryDocument((block) => (block.actions[1].area = { shape: "cone", size: 15 })),
+    ),
+  /lands in a shape and must declare capability API 1\.28 or newer/u,
+);
+for (const [what, area, message] of [
+  [
+    "a shape nobody draws",
+    { shape: "wedge", size: 15 },
+    /lands in the shape "wedge", which is not one the Engine draws/u,
+  ],
+  ["no shape at all", { size: 15 }, /lands in the shape undefined, which is not one the Engine draws/u],
+  ["a size of nothing", { shape: "cone", size: 0 }, /has an area of 0, not a size above 0/u],
+  ["a size below nothing", { shape: "cone", size: -5 }, /has an area of -5, not a size above 0/u],
+  ["a size past the ceiling", { shape: "cone", size: 10001 }, /has an area of 10001, not a size above 0/u],
+  ["a size that is not a number", { shape: "cone", size: "wide" }, /has an area of "wide", not a size above 0/u],
+  [
+    "a friendlyFire that is not a switch",
+    { shape: "cone", size: 15, friendlyFire: "no" },
+    /says friendlyFire is "no", not true or false/u,
+  ],
+  ["an area that is not a shape", "cone", /has an area of "cone", not a shape/u],
+]) {
+  assert.throws(
+    () =>
+      assertRulesetCreatures(
+        positionsManifest,
+        bestiaryDocument((block) => (block.actions[1].area = area)),
+      ),
+    message,
+    what,
+  );
+}
+// A sequence is a container, and a shape is one more thing the one budget would have done with
+// nothing to say when. The actions it names carry their own.
+assert.throws(
+  () =>
+    assertRulesetCreatures(
+      positionsManifest,
+      bestiaryDocument((block) => (block.actions[2].area = { shape: "cone", size: 15 })),
+    ),
+  /action "both" is a sequence, so it carries no area of its own/u,
+);
+// And the shipped bestiary never writes one.
+{
+  const bestiary = JSON.parse(shippedCatalogSources.get("catalogs/creatures.json"));
+  assert.ok(
+    bestiary.entries.every((entry) => entry.creature.actions.every((action) => !(action.sequence && action.area))),
+    "no shipped multiattack carries a shape of its own",
+  );
+}
+
+// A shape and a target count live on the same action on purpose: the count is what a fight WITHOUT
+// a board reads, and the shape is what one with a board draws.
+assert.equal(
+  assertRulesetCreatures(
+    positionsManifest,
+    bestiaryDocument((block) => {
+      block.actions[1].area = { shape: "burst", size: 20 };
+      block.actions[1].targetCount = 3;
+    }),
+  ),
+  1,
+);
+// And the package as committed ships both on the same actions.
+{
+  const bestiary = JSON.parse(shippedCatalogSources.get("catalogs/creatures.json"));
+  const shaped = bestiary.entries.flatMap((entry) => entry.creature.actions.filter((action) => action.area));
+  assert.ok(shaped.length > 50, "the shipped bestiary must carry the shapes the SRD prints");
+  assert.ok(
+    shaped.every((action) => RULESET_AREA_SHAPES_FOR_TEST.includes(action.area.shape)),
+    "every shipped creature area is one of the three shapes the Engine draws",
+  );
+  assert.ok(
+    shaped.every((action) => action.targetCount !== undefined),
+    "and keeps the count a fight with no board reads",
+  );
+}
+
+// A range written as a PAIR is the 1.28 key: an older Engine refuses the whole catalog file holding it.
+assert.throws(
+  () =>
+    assertRulesetCreatures(
+      creatureManifest,
+      bestiaryDocument((block) => (block.actions[0].range = { normal: 30, long: 120 })),
+    ),
+  /writes its range as a pair and must declare capability API 1\.28 or newer/u,
+);
+assert.equal(
+  assertRulesetCreatures(
+    positionsManifest,
+    bestiaryDocument((block) => (block.actions[0].range = { normal: 30, long: 120 })),
+  ),
+  1,
+);
+assert.throws(
+  () =>
+    assertRulesetCreatures(
+      positionsManifest,
+      bestiaryDocument((block) => (block.actions[0].range = { normal: 120, long: 30 })),
+    ),
+  /action "bite" has a long range below its ordinary one/u,
+);
+
 // The published artifact must be reproducible: the same manifest and asset bytes
 // have to produce the same zip, or every rebuild would churn the catalog's sha256
 // and the Engine would see an "update" that changed nothing.
