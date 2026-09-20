@@ -33,8 +33,8 @@
   "files": [
     {
       "path": "ruleset.json",
-      "sha256": "fd07f6399dd173af6ad6848289ffe229e71e6d9df159294cccdfbd482244e91f",
-      "bytes": 83643
+      "sha256": "e2d84b5b0ce72b7fca494c93fe4140eb61391b1053446252e7eab1e1a633c134",
+      "bytes": 83644
     },
     {
       "path": "catalogs/spells.json",
@@ -43,8 +43,8 @@
     },
     {
       "path": "catalogs/features.json",
-      "sha256": "62046fb128190f245a04d7871cda832d2ae9fe6c90c05042d8fc91cd0c237f48",
-      "bytes": 199101
+      "sha256": "e87b3f7541c39155efbc5348cc436855d5b4ba5f12159ed74194d296cd846a25",
+      "bytes": 199122
     },
     {
       "path": "catalogs/creatures.json",

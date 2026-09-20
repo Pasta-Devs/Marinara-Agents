@@ -1400,6 +1400,13 @@ function counterFor(pk, levels) {
 
 /** The mechanics a feature carries when no counter does, with any dice column it scales by built
  *  from the source. A feature both tables claim is refused: one of them would otherwise be lost. */
+/** Whether a feature's own mechanics grow with the sheet's Level, which is the total for a
+ *  multiclass character because the sheet has one Level field and no notion of class. */
+function featureScalesOnLevel(pk) {
+  const row = FEATURE_MECHANICS.find((entry) => entry.feature === pk);
+  return row?.scalesFromDiceColumn?.from?.field === "level";
+}
+
 function featureMechanicsFor(pk, levels) {
   const row = FEATURE_MECHANICS.find((entry) => entry.feature === pk);
   if (!row) return undefined;
@@ -1442,7 +1449,12 @@ function buildFeatureEntries(features, classes, featureLevels) {
         label: fields.name,
         summary: counter
           ? trimToSentence(`${counter.summary} ${fields.desc}`, SUMMARY_MAX)
-          : trimToSentence(fields.desc, SUMMARY_MAX),
+          : trimToSentence(
+              // A feature whose own mechanics grow with a class table reads the sheet's one Level
+              // field, exactly as a scaled counter does, so it carries the same warning.
+              featureScalesOnLevel(pk) ? `${MULTICLASS_NOTE} ${fields.desc}` : fields.desc,
+              SUMMARY_MAX,
+            ),
         filters: compact({
           class: base.name,
           subclass: owner.subclass_of ? owner.name : "Base class",
@@ -2791,11 +2803,17 @@ function bestRound(creature) {
 function averageOfDamage(action) {
   const damage = action?.damage;
   if (!damage) return 0;
-  const dice = damage.dice ? DICE_PATTERN.exec(damage.dice) : null;
-  return Math.max(
-    0,
-    averageOf({ count: dice ? Number(dice[1]) : 0, sides: dice ? Number(dice[2]) : 0, flat: damage.flat ?? 0 }),
-  );
+  // Every amount the blow is made of, not just the first: a second clause is rolled on its own and
+  // lands on the same target, so a scale measured without it would say a dragon bites for less than
+  // it does. The Engine counts them the same way when it forecasts and when it clamps.
+  const amounts = [damage, ...(damage.plus ?? [])];
+  const total = amounts.reduce((sum, amount) => {
+    const dice = amount.dice ? DICE_PATTERN.exec(amount.dice) : null;
+    return (
+      sum + averageOf({ count: dice ? Number(dice[1]) : 0, sides: dice ? Number(dice[2]) : 0, flat: amount.flat ?? 0 })
+    );
+  }, 0);
+  return Math.max(0, total);
 }
 
 /** Every save difficulty a creature's own actions name. */

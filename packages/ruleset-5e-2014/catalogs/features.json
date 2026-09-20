@@ -2502,7 +2502,7 @@
     {
       "id": "rogue-sneak-attack",
       "label": "Sneak Attack",
-      "summary": "Beginning at 1st level, you know how to strike subtly and exploit a foe's distraction. Once per turn, you can deal an extra 1d6 damage to one creature you hit with an attack if you have advantage on the attack roll. The attack must use a finesse or a ranged weapon.",
+      "summary": "Your sheet has one level, so a multiclass character follows the total. Beginning at 1st level, you know how to strike subtly and exploit a foe's distraction. Once per turn, you can deal an extra 1d6 damage to one creature you hit with an attack if you have advantage on the attack roll.",
       "filters": { "class": "Rogue", "subclass": "Base class", "level": 1 },
       "rows": [
         {

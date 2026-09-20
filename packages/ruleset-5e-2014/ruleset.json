@@ -2511,7 +2511,7 @@
           "health": [2, 15],
           "defense": 12,
           "toHit": 4,
-          "damagePerRound": [1, 7],
+          "damagePerRound": [1, 9],
           "saveDifficulty": 11
         },
         {
@@ -2565,7 +2565,7 @@
           "health": [45, 120],
           "defense": 14,
           "toHit": 5,
-          "damagePerRound": [7, 33],
+          "damagePerRound": [13, 33],
           "saveDifficulty": 13
         },
         {
@@ -2574,7 +2574,7 @@
           "health": [65, 136],
           "defense": 15,
           "toHit": 7,
-          "damagePerRound": [14, 37],
+          "damagePerRound": [18, 37],
           "saveDifficulty": 15
         },
         {
@@ -2583,7 +2583,7 @@
           "health": [65, 136],
           "defense": 15,
           "toHit": 7,
-          "damagePerRound": [15, 45],
+          "damagePerRound": [20, 45],
           "saveDifficulty": 15
         },
         {
@@ -2610,7 +2610,7 @@
           "health": [133, 200],
           "defense": 18,
           "toHit": 10,
-          "damagePerRound": [30, 56],
+          "damagePerRound": [32, 56],
           "saveDifficulty": 16
         },
         {
@@ -2637,7 +2637,7 @@
           "health": [133, 248],
           "defense": 18,
           "toHit": 10,
-          "damagePerRound": [39, 66],
+          "damagePerRound": [66, 66],
           "saveDifficulty": 17
         },
         {
@@ -2646,7 +2646,7 @@
           "health": [133, 248],
           "defense": 18,
           "toHit": 11,
-          "damagePerRound": [39, 66],
+          "damagePerRound": [66, 66],
           "saveDifficulty": 17
         },
         {
@@ -2655,7 +2655,7 @@
           "health": [180, 248],
           "defense": 18,
           "toHit": 11,
-          "damagePerRound": [39, 66],
+          "damagePerRound": [66, 66],
           "saveDifficulty": 18
         },
         {
@@ -2664,7 +2664,7 @@
           "health": [180, 248],
           "defense": 19,
           "toHit": 12,
-          "damagePerRound": [42, 66],
+          "damagePerRound": [66, 66],
           "saveDifficulty": 18
         },
         {
@@ -2673,7 +2673,7 @@
           "health": [189, 248],
           "defense": 19,
           "toHit": 12,
-          "damagePerRound": [47, 93],
+          "damagePerRound": [66, 93],
           "saveDifficulty": 19
         },
         {
@@ -2682,7 +2682,7 @@
           "health": [199, 341],
           "defense": 19,
           "toHit": 14,
-          "damagePerRound": [58, 93],
+          "damagePerRound": [66, 93],
           "saveDifficulty": 21
         },
         {
@@ -2691,7 +2691,7 @@
           "health": [231, 341],
           "defense": 19,
           "toHit": 14,
-          "damagePerRound": [58, 93],
+          "damagePerRound": [66, 93],
           "saveDifficulty": 21
         },
         {
@@ -2700,7 +2700,7 @@
           "health": [262, 341],
           "defense": 19,
           "toHit": 14,
-          "damagePerRound": [58, 93],
+          "damagePerRound": [66, 93],
           "saveDifficulty": 21
         },
         {
@@ -2709,7 +2709,7 @@
           "health": [297, 341],
           "defense": 20,
           "toHit": 14,
-          "damagePerRound": [58, 93],
+          "damagePerRound": [66, 93],
           "saveDifficulty": 21
         },
         {
@@ -2718,7 +2718,7 @@
           "health": [297, 367],
           "defense": 21,
           "toHit": 15,
-          "damagePerRound": [63, 93],
+          "damagePerRound": [66, 93],
           "saveDifficulty": 21
         },
         {
