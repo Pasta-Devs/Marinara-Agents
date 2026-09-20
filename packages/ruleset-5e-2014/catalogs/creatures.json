@@ -207,7 +207,7 @@
             "damage": { "dice": "12d8", "type": "acid" },
             "save": { "save": "dex_save", "difficulty": 18, "onSuccess": "half" },
             "targetCount": 2,
-            "range": 60,
+            "area": { "shape": "line", "size": 60 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           },
           {
@@ -317,7 +317,7 @@
             "damage": { "dice": "12d10", "type": "lightning" },
             "save": { "save": "dex_save", "difficulty": 19, "onSuccess": "half" },
             "targetCount": 2,
-            "range": 90,
+            "area": { "shape": "line", "size": 90 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           },
           {
@@ -430,7 +430,7 @@
             "damage": { "dice": "13d6", "type": "fire" },
             "save": { "save": "dex_save", "difficulty": 18, "onSuccess": "half" },
             "targetCount": 2,
-            "range": 60,
+            "area": { "shape": "line", "size": 60 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           },
           {
@@ -548,7 +548,7 @@
             "damage": { "dice": "12d10", "type": "lightning" },
             "save": { "save": "dex_save", "difficulty": 19, "onSuccess": "half" },
             "targetCount": 2,
-            "range": 90,
+            "area": { "shape": "line", "size": 90 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           },
           {
@@ -661,7 +661,7 @@
             "damage": { "dice": "12d8", "type": "acid" },
             "save": { "save": "dex_save", "difficulty": 18, "onSuccess": "half" },
             "targetCount": 2,
-            "range": 60,
+            "area": { "shape": "line", "size": 60 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           },
           {
@@ -784,7 +784,7 @@
             "damage": { "dice": "12d10", "type": "fire" },
             "save": { "save": "dex_save", "difficulty": 21, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 60,
+            "area": { "shape": "cone", "size": 60 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           },
           {
@@ -896,7 +896,7 @@
             "damage": { "dice": "16d6", "type": "poison" },
             "save": { "save": "con_save", "difficulty": 18, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 60,
+            "area": { "shape": "cone", "size": 60 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           },
           {
@@ -1006,7 +1006,7 @@
             "damage": { "dice": "18d6", "type": "fire" },
             "save": { "save": "dex_save", "difficulty": 21, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 60,
+            "area": { "shape": "cone", "size": 60 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           },
           {
@@ -1123,7 +1123,7 @@
             "damage": { "dice": "13d8", "type": "cold" },
             "save": { "save": "con_save", "difficulty": 20, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 60,
+            "area": { "shape": "cone", "size": 60 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           },
           {
@@ -1237,7 +1237,7 @@
             "damage": { "dice": "12d8", "type": "cold" },
             "save": { "save": "con_save", "difficulty": 19, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 60,
+            "area": { "shape": "cone", "size": 60 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           },
           {
@@ -1413,7 +1413,7 @@
             "damage": { "dice": "15d8", "type": "acid" },
             "save": { "save": "dex_save", "difficulty": 22, "onSuccess": "half" },
             "targetCount": 2,
-            "range": 90,
+            "area": { "shape": "line", "size": 90 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           },
           {
@@ -1523,7 +1523,7 @@
             "damage": { "dice": "16d10", "type": "lightning" },
             "save": { "save": "dex_save", "difficulty": 23, "onSuccess": "half" },
             "targetCount": 2,
-            "range": 120,
+            "area": { "shape": "line", "size": 120 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           },
           {
@@ -1640,7 +1640,7 @@
             "damage": { "dice": "16d6", "type": "fire" },
             "save": { "save": "dex_save", "difficulty": 21, "onSuccess": "half" },
             "targetCount": 2,
-            "range": 90,
+            "area": { "shape": "line", "size": 90 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           },
           {
@@ -1763,7 +1763,7 @@
             "damage": { "dice": "16d10", "type": "lightning" },
             "save": { "save": "dex_save", "difficulty": 23, "onSuccess": "half" },
             "targetCount": 2,
-            "range": 120,
+            "area": { "shape": "line", "size": 120 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           },
           {
@@ -1880,7 +1880,7 @@
             "damage": { "dice": "14d8", "type": "acid" },
             "save": { "save": "dex_save", "difficulty": 22, "onSuccess": "half" },
             "targetCount": 2,
-            "range": 90,
+            "area": { "shape": "line", "size": 90 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           },
           {
@@ -2003,7 +2003,7 @@
             "damage": { "dice": "13d10", "type": "fire" },
             "save": { "save": "dex_save", "difficulty": 24, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 90,
+            "area": { "shape": "cone", "size": 90 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           },
           {
@@ -2115,7 +2115,7 @@
             "damage": { "dice": "22d6", "type": "poison" },
             "save": { "save": "con_save", "difficulty": 22, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 90,
+            "area": { "shape": "cone", "size": 90 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           },
           {
@@ -2225,7 +2225,7 @@
             "damage": { "dice": "26d6", "type": "fire" },
             "save": { "save": "dex_save", "difficulty": 24, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 90,
+            "area": { "shape": "cone", "size": 90 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           },
           {
@@ -2347,7 +2347,7 @@
             "damage": { "dice": "15d8", "type": "cold" },
             "save": { "save": "con_save", "difficulty": 24, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 90,
+            "area": { "shape": "cone", "size": 90 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           },
           {
@@ -2461,7 +2461,7 @@
             "damage": { "dice": "16d8", "type": "cold" },
             "save": { "save": "con_save", "difficulty": 22, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 90,
+            "area": { "shape": "cone", "size": 90 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           },
           {
@@ -2649,7 +2649,7 @@
             "damage": { "dice": "3d6", "type": "acid" },
             "save": { "save": "dex_save", "difficulty": 13, "onSuccess": "half" },
             "targetCount": 2,
-            "range": 30
+            "area": { "shape": "line", "size": 30 }
           }
         ]
       }
@@ -3464,7 +3464,7 @@
             "damage": { "dice": "12d10", "type": "lightning" },
             "save": { "save": "dex_save", "difficulty": 16, "onSuccess": "half" },
             "targetCount": 2,
-            "range": 20,
+            "area": { "shape": "line", "size": 20 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           },
           {
@@ -3593,7 +3593,7 @@
             "damage": { "dice": "5d8", "type": "acid" },
             "save": { "save": "dex_save", "difficulty": 11, "onSuccess": "half" },
             "targetCount": 2,
-            "range": 15,
+            "area": { "shape": "line", "size": 15 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           }
         ]
@@ -3763,7 +3763,7 @@
             "damage": { "dice": "4d10", "type": "lightning" },
             "save": { "save": "dex_save", "difficulty": 12, "onSuccess": "half" },
             "targetCount": 2,
-            "range": 30,
+            "area": { "shape": "line", "size": 30 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           }
         ]
@@ -3914,7 +3914,7 @@
             "damage": { "dice": "4d6", "type": "fire" },
             "save": { "save": "dex_save", "difficulty": 11, "onSuccess": "half" },
             "targetCount": 2,
-            "range": 20,
+            "area": { "shape": "line", "size": 20 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           }
         ]
@@ -3958,7 +3958,7 @@
             "damage": { "dice": "3d10", "type": "lightning" },
             "save": { "save": "dex_save", "difficulty": 12, "onSuccess": "half" },
             "targetCount": 2,
-            "range": 40,
+            "area": { "shape": "line", "size": 40 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           }
         ]
@@ -4360,7 +4360,7 @@
             "damage": { "dice": "7d8", "type": "fire" },
             "save": { "save": "dex_save", "difficulty": 15, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 15,
+            "area": { "shape": "cone", "size": 15 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           }
         ]
@@ -4778,7 +4778,7 @@
             "damage": { "dice": "4d8", "type": "acid" },
             "save": { "save": "dex_save", "difficulty": 11, "onSuccess": "half" },
             "targetCount": 2,
-            "range": 20,
+            "area": { "shape": "line", "size": 20 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           }
         ]
@@ -5308,7 +5308,8 @@
             "save": { "save": "str_save", "difficulty": 18, "onSuccess": "negates" },
             "applies": [{ "condition": "restrained", "duration": "instant" }],
             "targetCount": 3,
-            "range": 5
+            "range": 120,
+            "area": { "shape": "burst", "size": 5 }
           }
         ]
       }
@@ -5475,7 +5476,7 @@
             "damage": { "dice": "15d6", "type": "fire" },
             "save": { "save": "con_save", "difficulty": 18, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 60
+            "area": { "shape": "cone", "size": 60 }
           }
         ]
       }
@@ -5528,7 +5529,7 @@
             "save": { "save": "con_save", "difficulty": 11, "onSuccess": "negates" },
             "applies": [{ "condition": "poisoned", "duration": "instant" }],
             "targetCount": 3,
-            "range": 10,
+            "area": { "shape": "burst", "size": 10 },
             "uses": { "per": "day", "count": 1 }
           }
         ]
@@ -5870,7 +5871,7 @@
               { "condition": "blinded", "duration": "until-save", "saveEnds": { "save": "dex_save", "at": "turn-end" } }
             ],
             "targetCount": 3,
-            "range": 15
+            "area": { "shape": "cone", "size": 15 }
           }
         ]
       }
@@ -8567,7 +8568,7 @@
             "damage": { "dice": "4d10", "type": "fire" },
             "save": { "save": "dex_save", "difficulty": 13, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 15,
+            "area": { "shape": "cone", "size": 15 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           }
         ]
@@ -8627,7 +8628,7 @@
               }
             ],
             "targetCount": 3,
-            "range": 30
+            "area": { "shape": "cone", "size": 30 }
           }
         ]
       }
@@ -8722,7 +8723,7 @@
             "damage": { "dice": "6d6", "type": "poison" },
             "save": { "save": "con_save", "difficulty": 11, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 15,
+            "area": { "shape": "cone", "size": 15 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           }
         ]
@@ -9166,7 +9167,7 @@
             "damage": { "dice": "7d6", "type": "fire" },
             "save": { "save": "dex_save", "difficulty": 15, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 15,
+            "area": { "shape": "cone", "size": 15 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           }
         ]
@@ -9316,7 +9317,7 @@
             "damage": { "dice": "6d6", "type": "fire" },
             "save": { "save": "dex_save", "difficulty": 12, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 15,
+            "area": { "shape": "cone", "size": 15 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           }
         ]
@@ -9888,7 +9889,7 @@
             "damage": { "dice": "2d4", "type": "cold" },
             "save": { "save": "dex_save", "difficulty": 10, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 15
+            "area": { "shape": "cone", "size": 15 }
           }
         ]
       }
@@ -10096,7 +10097,7 @@
             "damage": { "dice": "10d8", "type": "poison" },
             "save": { "save": "con_save", "difficulty": 19, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 15,
+            "area": { "shape": "cone", "size": 15 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 6 }
           }
         ]
@@ -10384,7 +10385,7 @@
             "damage": { "dice": "3d10", "type": "poison" },
             "save": { "save": "con_save", "difficulty": 23, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 60,
+            "area": { "shape": "burst", "size": 60, "friendlyFire": false },
             "signature": { "cost": 3 }
           }
         ]
@@ -10853,7 +10854,7 @@
             "damage": { "dice": "2d6", "type": "fire" },
             "save": { "save": "dex_save", "difficulty": 11, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 15,
+            "area": { "shape": "cone", "size": 15 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 6 }
           }
         ]
@@ -13204,7 +13205,7 @@
             "damage": { "dice": "7d6", "type": "fire" },
             "save": { "save": "dex_save", "difficulty": 13, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 15,
+            "area": { "shape": "cone", "size": 15 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           }
         ]
@@ -14134,7 +14135,7 @@
             "damage": { "dice": "4d8", "type": "cold" },
             "save": { "save": "con_save", "difficulty": 13, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 15,
+            "area": { "shape": "cone", "size": 15 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           }
         ]
@@ -14264,7 +14265,7 @@
             "damage": { "dice": "4d6", "type": "fire" },
             "save": { "save": "dex_save", "difficulty": 23, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 10,
+            "area": { "shape": "burst", "size": 10, "friendlyFire": false },
             "signature": { "cost": 2 }
           },
           {
@@ -14573,7 +14574,7 @@
             "damage": { "dice": "1d8", "type": "fire" },
             "save": { "save": "dex_save", "difficulty": 10, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 15
+            "area": { "shape": "cone", "size": 15 }
           }
         ]
       }
@@ -16376,7 +16377,7 @@
               }
             ],
             "targetCount": 3,
-            "range": 15
+            "area": { "shape": "burst", "size": 15 }
           },
           {
             "id": "stunning_screech",
@@ -17042,7 +17043,7 @@
             "damage": { "dice": "5d8", "type": "cold" },
             "save": { "save": "con_save", "difficulty": 12, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 15,
+            "area": { "shape": "cone", "size": 15 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           }
         ]
@@ -17229,7 +17230,7 @@
             "damage": { "dice": "4d8", "type": "cold" },
             "save": { "save": "dex_save", "difficulty": 12, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 15,
+            "area": { "shape": "cone", "size": 15 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           }
         ]
@@ -17537,7 +17538,7 @@
             "damage": { "dice": "11d8", "type": "acid" },
             "save": { "save": "dex_save", "difficulty": 14, "onSuccess": "half" },
             "targetCount": 2,
-            "range": 30,
+            "area": { "shape": "line", "size": 30 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           }
         ]
@@ -17594,7 +17595,7 @@
             "damage": { "dice": "10d10", "type": "lightning" },
             "save": { "save": "dex_save", "difficulty": 16, "onSuccess": "half" },
             "targetCount": 2,
-            "range": 60,
+            "area": { "shape": "line", "size": 60 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           }
         ]
@@ -17684,7 +17685,7 @@
             "damage": { "dice": "12d6", "type": "fire" },
             "save": { "save": "dex_save", "difficulty": 14, "onSuccess": "half" },
             "targetCount": 2,
-            "range": 40,
+            "area": { "shape": "line", "size": 40 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           }
         ]
@@ -17745,7 +17746,7 @@
             "damage": { "dice": "10d10", "type": "lightning" },
             "save": { "save": "dex_save", "difficulty": 15, "onSuccess": "half" },
             "targetCount": 2,
-            "range": 60,
+            "area": { "shape": "line", "size": 60 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           }
         ]
@@ -17805,7 +17806,7 @@
             "damage": { "dice": "9d8", "type": "acid" },
             "save": { "save": "dex_save", "difficulty": 14, "onSuccess": "half" },
             "targetCount": 2,
-            "range": 40,
+            "area": { "shape": "line", "size": 40 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           }
         ]
@@ -17866,7 +17867,7 @@
             "damage": { "dice": "10d10", "type": "fire" },
             "save": { "save": "dex_save", "difficulty": 17, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 30,
+            "area": { "shape": "cone", "size": 30 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           }
         ]
@@ -17925,7 +17926,7 @@
             "damage": { "dice": "12d6", "type": "poison" },
             "save": { "save": "con_save", "difficulty": 14, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 30,
+            "area": { "shape": "cone", "size": 30 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           }
         ]
@@ -17982,7 +17983,7 @@
             "damage": { "dice": "16d6", "type": "fire" },
             "save": { "save": "dex_save", "difficulty": 17, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 30,
+            "area": { "shape": "cone", "size": 30 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           }
         ]
@@ -18042,7 +18043,7 @@
             "damage": { "dice": "12d8", "type": "cold" },
             "save": { "save": "con_save", "difficulty": 17, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 30,
+            "area": { "shape": "cone", "size": 30 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           }
         ]
@@ -18103,7 +18104,7 @@
             "damage": { "dice": "10d8", "type": "cold" },
             "save": { "save": "con_save", "difficulty": 15, "onSuccess": "half" },
             "targetCount": 3,
-            "range": 30,
+            "area": { "shape": "cone", "size": 30 },
             "recharge": { "dice": { "count": 1, "sides": 6 }, "from": 5 }
           }
         ]

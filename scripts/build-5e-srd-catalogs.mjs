@@ -162,6 +162,8 @@ const CASTING_TIMES = Object.freeze({
 const AREA_SHAPES = Object.freeze({
   sphere: "burst",
   cylinder: "burst",
+  // "in a 10-foot radius", which is how a stat block writes a sphere.
+  radius: "burst",
   cube: "burst",
   square: "burst",
   cone: "cone",
@@ -1364,14 +1366,12 @@ const TO_HIT = /([+-]\d{1,3})\s+to hit/iu;
 const REACH = /reach\s+(\d{1,3})\s*(?:ft|feet)/iu;
 const RANGE = /range\s+(\d{1,4})(?:\/(\d{1,4}))?\s*(?:ft|feet)/iu;
 
-// "The dragon exhales fire in a 60-foot cone." A creature action in Capability API 1.28 carries a
-// reach and a range and no shape at all, so a printed area cannot become a cone, a line or a burst
-// on the board the way a catalog entry's `mechanics.area` can.
+// "The dragon exhales fire in a 60-foot cone." A creature action carries the shape it lands in, so
+// that sentence ships as a real cone on a board, aimed and resolved exactly as a spell's own area
+// is. `targetCount` below stays beside it, because that is what a fight WITHOUT a board reads.
 //
-// What the format CAN carry is how far the thing stretches, and that number is the stat block's
-// own, so a printed area becomes the action's range and the conservative `targetCount` below still
-// decides how many it catches. The shape itself is lost, and every one of them is counted in the
-// build report and named in the README, because this is the one place a printed shape is flattened.
+// The size is the number the stat block prints, in feet. A shape with no aiming distance of its own
+// carries no `range`, which the Engine reads as aimed from where the creature stands.
 // Loose about its punctuation on purpose: the SRD prints "60-foot cone", "10 -foot radius", "a line
 // that is 30 ft. long" and "a line of lightning that is 20 ft. long", and all four say the same
 // thing.
@@ -1388,12 +1388,50 @@ function printedArea(text) {
 // DC 16 Wisdom saving throw." A stat block writes the distance of an aura, a presence or a thrown
 // bolt this way rather than as a range, and the FIRST one in the text is always the sentence that
 // says who has to save: the rest, where there is a rest, are a radius around the point it landed on.
-// Read only when the block prints neither a range nor a shape, so nothing here overrides either.
+// Read only when the block prints no range of its own, so it never overrides one. A shape may have
+// one too ("a cylinder ... on a point the djinni can see within 120 feet of it"), and then it is
+// how far off that shape may be aimed.
 const PRINTED_WITHIN = /within\s+(\d{1,4})\s*(?:ft|feet)/iu;
 
 function printedWithin(text) {
   const match = PRINTED_WITHIN.exec(text);
   return match ? Number(match[1]) : undefined;
+}
+
+// A shape catches everybody standing in it, friend and foe, unless the stat block's own sentence
+// says otherwise. These are the two SRD 5.1 actions whose printed text keeps the shape off the
+// creature's own side, each with the fragment it was read from; `friendlyFire: false` is what the
+// format says it with. Every OTHER printed shape in the bestiary catches everybody, which is what
+// the SRD means by "Each creature in that area".
+const CREATURE_AREAS_SPARING_THEIR_OWN = new Map([
+  // "Each creature other than the kraken that ends its turn there must succeed on a DC 23
+  // Constitution saving throw..."
+  ["srd_kraken_ink-cloud", "other than the kraken"],
+  // "Each creature of its choice in a 10 -foot radius must make a DC 23 Dexterity saving throw..."
+  ["srd_solar_searing-burst", "of its choice"],
+]);
+
+// Wording that says a shape does NOT simply catch everybody standing in it. Deliberately loose: it
+// only has to notice the sentence so the table above has to account for it, and a shape whose text
+// says something new stops the run rather than quietly frying the creature's own pack.
+const AREA_SPARES_SOMEBODY = /other than|isn't a\b|aren't\b|of its choice|excluding|except/iu;
+
+/** Whether a printed shape spares the creature's own side, as `friendlyFire` says it. */
+function creatureAreaSparing(pk, text, label) {
+  const printed = CREATURE_AREAS_SPARING_THEIR_OWN.get(pk);
+  if (printed) {
+    if (!text.includes(printed)) {
+      fail(`${label} no longer prints ${JSON.stringify(printed)}, so its friendlyFire reading is stale`);
+    }
+    return { friendlyFire: false };
+  }
+  const match = AREA_SPARES_SOMEBODY.exec(text);
+  if (match) {
+    fail(
+      `${label} (${pk}) lands in a shape and its text says ${JSON.stringify(match[0])}. Decide whether it spares the creature's own side and say so in CREATURE_AREAS_SPARING_THEIR_OWN.`,
+    );
+  }
+  return {};
 }
 
 /** A printed "range 20/60 ft." as a creature action writes its distance: a plain number when the
@@ -1700,13 +1738,11 @@ function creatureAction(action, attackRow, report) {
   const conditions = appliedConditions(text, save.index, ability);
   const onSuccess = HALF_ON_SUCCESS.test(text) ? "half" : "negates";
   const printedDistance = printedRange(RANGE.exec(text), label);
-  const area = printedArea(text);
-  if (area) {
-    const flattened = report.creatureAreasNotCarried;
-    flattened.set(area.shape, (flattened.get(area.shape) ?? 0) + 1);
-    if (printedDistance !== undefined) report.creatureAreasWithPrintedRange += 1;
-  }
-  const within = printedDistance === undefined && area === undefined ? printedWithin(text) : undefined;
+  const printedShape = printedArea(text);
+  const area = printedShape
+    ? { ...areaFrom(printedShape.shape, printedShape.size, label), ...creatureAreaSparing(action.pk, text, label) }
+    : undefined;
+  const within = printedDistance === undefined ? printedWithin(text) : undefined;
   if (within !== undefined) report.creatureActionsFromWithin += 1;
   const built = compact({
     id,
@@ -1720,10 +1756,11 @@ function creatureAction(action, attackRow, report) {
     // Engine reads with a board and without one alike: `targetCount` is only ignored for an entry
     // that carries a real `area`, and a creature action never can.
     targetCount: primary || conditions.length > 0 ? areaTargets(text) : undefined,
-    // The printed aiming distance where the block states one, then how far the printed shape
-    // stretches, then the distance the sentence itself names, so a 60-foot cone and a presence felt
-    // at 120 feet are not read as things that only reach the next cell.
-    range: printedDistance ?? area?.size ?? within,
+    // The printed aiming distance where the block states one, and otherwise the distance the
+    // sentence itself names, so a presence felt at 120 feet is not read as something that only
+    // reaches the next cell. A shape that names neither is aimed from where the creature stands.
+    range: printedDistance ?? within,
+    area,
   });
   if (!built.damage && !built.applies) {
     report.savesWithNothingToResolve.push(action.pk);
@@ -2812,7 +2849,8 @@ const report = {
   creatureActionsWithLongRange: 0,
   creatureActionsWithBoth: 0,
   creatureActionsWithNoDistance: 0,
-  creatureAreasNotCarried: new Map(),
+  creatureAreasByShape: new Map(),
+  creatureAreasSparingTheirOwn: 0,
   creatureAreasWithPrintedRange: 0,
   creatureActionsFromWithin: 0,
   skipped: [],
@@ -3169,7 +3207,13 @@ for (const creature of creatures) {
     if (range) report.creatureActionsWithRange += 1;
     if (range && typeof action.range === "object") report.creatureActionsWithLongRange += 1;
     if (reach && range) report.creatureActionsWithBoth += 1;
-    if (!reach && !range) report.creatureActionsWithNoDistance += 1;
+    if (!reach && !range && !action.area) report.creatureActionsWithNoDistance += 1;
+    if (action.area) {
+      const shapes = report.creatureAreasByShape;
+      shapes.set(action.area.shape, (shapes.get(action.area.shape) ?? 0) + 1);
+      if (action.area.friendlyFire === false) report.creatureAreasSparingTheirOwn += 1;
+      if (action.range !== undefined) report.creatureAreasWithPrintedRange += 1;
+    }
   }
 }
 console.log("");
@@ -3192,17 +3236,18 @@ const creatureActionCount = creatures.reduce((total, entry) => total + entry.cre
 console.log(
   `  creature actions: ${creatureActionCount} in all, ${report.creatureActionsWithReach} reach, ` +
     `${report.creatureActionsWithRange} carry (${report.creatureActionsWithLongRange} of them with a long range), ` +
-    `${report.creatureActionsWithBoth} do both, ${report.creatureActionsWithNoDistance} state no distance`,
+    `${report.creatureActionsWithBoth} do both, ${report.creatureActionsWithNoDistance} state no distance at all`,
+);
+const creatureAreaCount = [...report.creatureAreasByShape.values()].reduce((total, count) => total + count, 0);
+console.log(
+  `  creature areas: ${creatureAreaCount} action(s) land in a shape the SRD prints ` +
+    `(${[...report.creatureAreasByShape].map(([shape, count]) => `${count} ${shape}`).join(", ")}); ` +
+    `${report.creatureAreasSparingTheirOwn} spare the creature's own side, and ` +
+    `${report.creatureAreasWithPrintedRange} name how far off the shape may be aimed`,
 );
 console.log(
-  `  ${[...report.creatureAreasNotCarried.values()].reduce((total, count) => total + count, 0)} printed creature ` +
-    `area(s) lost their shape and kept only how far they stretch (` +
-    `${[...report.creatureAreasNotCarried].map(([shape, count]) => `${count} ${shape}`).join(", ")}); ` +
-    `${report.creatureAreasWithPrintedRange} of them print an aiming range as well, which is what those carry`,
-);
-console.log(
-  `  ${report.creatureActionsFromWithin} creature action(s) print neither a range nor a shape and take their distance ` +
-    'from the sentence that says who must save ("within 120 feet of the dragon")',
+  `  ${report.creatureActionsFromWithin} creature action(s) print no range of their own and take their distance from ` +
+    'the sentence that says who must save ("within 120 feet of the dragon")',
 );
 
 console.log("");

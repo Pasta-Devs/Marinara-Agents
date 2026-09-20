@@ -209,6 +209,11 @@ Reach property adds 5), 8 are shot and reach nothing at all, and 6 both swing an
 a column means that row carries no such distance, which is how a sword and a thrown axe sit in the
 same list.
 
+A row that carries **both** is a thrown weapon, and it is read as each of them where each applies: a
+handaxe is a swing inside its 5 feet, with none of the penalties a shot takes, and a throw beyond
+that, at disadvantage past 20 feet and out of the question past 60. It is also something to strike
+somebody walking past you with, which a bow is not.
+
 **Pick your weapons again.** A picked row is a copy, so a weapon you added before this version has
 none of the three columns, and the Engine reads a row with no reach as reaching exactly one square:
 an old longbow will only fire at somebody standing next to you. The sheet editor's **Newer text**
@@ -236,10 +241,28 @@ Produce Flame's 10-foot radius (the light they shed) and Wall of Ice's 10-foot-s
 wall). The build refuses to run if a resolvable spell ever prints a shape that is in neither list.
 
 **A creature carries how far its actions reach.** Of the bestiary's 828 actions, 505 reach (a printed
-"reach 5 ft."), 185 carry (a printed "range 30/120 ft.", 56 of them with the long range as well), 18
-do both, and 156 state no distance: 150 of those are multiattack sequences, whose parts carry their
-own, and the last 6 are things done to somebody already grappled or standing in the creature's own
-square.
+"reach 5 ft."), 128 carry (a printed "range 30/120 ft.", 56 of them with the long range as well), 18
+do both, and 156 state no distance at all: 150 of those are multiattack sequences, whose parts carry
+their own, and the last 6 are things done to somebody already grappled or standing in the creature's
+own square. 72 actions print no range and take their distance from the sentence that names who has
+to save, which is how a stat block writes an aura or a presence ("each creature within 120 feet of
+the dragon").
+
+**And a creature's breath lands in a real shape.** 58 actions carry the shape the SRD prints: 31
+cones, 22 lines and 5 bursts. A dragon's "60-foot cone" is a cone of twelve squares aimed from where
+the dragon stands, the Behir's "line of lightning that is 20 ft. long" is a line, and the Vrock's
+"15-foot-radius cloud of toxic spores" is a burst. Each of them also keeps the target count below,
+because that is what a fight in the Classic style reads instead.
+
+Two of them spare the creature's own side, and only because their own sentence says so: the Kraken's
+Ink Cloud ("Each creature other than the kraken") and the Solar's Searing Burst ("Each creature of
+its choice"). Every other shape catches everybody standing in it, which is what "Each creature in
+that area" means. The build stops if any other printed shape ever grows wording like that without
+somebody deciding what it means.
+
+Only the Djinni's whirlwind prints how far off its shape may be formed ("on a point the djinni can
+see within 120 feet of it"); every other shape has no range, which the Engine reads as aimed from
+where the creature stands and no further than the shape itself draws.
 
 ### Creatures
 
@@ -287,19 +310,18 @@ of its own, or if the two stop printing the same actions.
 
 A fight plays, so this is the honest list of what it still does not do:
 
-- **A creature's area has no shape.** Capability API 1.28 gives a creature action a reach and a
-  range and nowhere at all to put a cone, a line or a burst, so the dragon's "60-foot cone" ships as
-  an action that reaches 60 feet and names its targets. 59 printed areas are flattened that way (31
-  cones, 22 lines, 5 radii and 1 cube), and each of them still says how many creatures it takes: two
-  for a line, three for a cone or a sphere, two for anything else that says "each creature". Those
-  counts are deliberately low, chosen once, and they are the one place in the bestiary where a
-  number is not the SRD's own. They are what the fight reads with a board and without one alike.
+- **A target count instead of a shape, for a fight with no positions.** Every area action also says
+  how many creatures it takes: two for a line, three for a cone or a sphere, two for anything else
+  that says "each creature". Those counts are deliberately low, chosen once, and they are the one
+  place in the bestiary where a number is not the SRD's own. With the Tactical style the shape
+  decides instead and the count is not read at all; with Classic the count is the whole of it.
 - **A line has no width.** "A line 100 feet long and 5 feet wide" is a line of single squares, which
   is what the SRD's own line is at this width and would not be at a wider one.
-- **A thrown weapon is read as a shot.** A row that carries both a reach and a range is a shot at
-  every distance, so swinging a handaxe at somebody in the next square takes the disadvantage meant
-  for shooting past a foe, and a character carrying only thrown weapons has nothing to strike a
-  passer-by with. The SRD's own two numbers are what ships; the reading is the Engine's.
+- **A shape that starts at the creature may be aimed a little off it.** A shape with no range is
+  aimed no further away than it draws, which is exactly right for a cone or a line, where the aimed
+  square only sets the direction. For the four bursts that the SRD centres on the creature itself
+  (the Dretch's and the Vrock's clouds, the Solar's burst, the Kraken's ink) it means the centre may
+  sit a few squares off, and for the Kraken's 60-foot cloud that is twelve squares.
 - **Half cover only, and only against an attack.** Ground the Engine's battlefield calls cover is
   worth +2 and never the +5 of three-quarters cover, there is no total cover, no elevation and no
   flying height, and the bonus is read when the attack roll is made and never when a saving throw

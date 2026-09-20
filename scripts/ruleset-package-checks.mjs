@@ -71,6 +71,8 @@ const RULESET_DISTANCE_MAX = 10000;
 const RULESET_DISTANCE_LABEL_MAX = 12;
 const RULESET_COVER_MAX = 100;
 const RULESET_RANGED_RULES = Object.freeze(["disadvantage", "normal"]);
+// The shapes the Engine draws on a board, for a catalog entry and a creature action alike.
+const RULESET_AREA_SHAPES = Object.freeze(["burst", "cone", "line"]);
 
 // How many columns of one row a ruleset may keep, and how long a step table may be.
 const RULESET_SCALED_MAX_COLUMNS = 4;
@@ -1070,6 +1072,31 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
             if (action.range.long < action.range.normal) {
               throw new Error(`${at} has a long range below its ordinary one`);
             }
+          }
+        }
+        // The shape it lands in, in the ruleset's own unit. A new key in a strict file, so an older
+        // Engine refuses the whole catalog file that holds it, exactly as it does a range pair.
+        if (action.area !== undefined) {
+          const area = action.area;
+          if (!area || typeof area !== "object" || Array.isArray(area)) {
+            throw new Error(`${at} has an area of ${JSON.stringify(area)}, not a shape`);
+          }
+          const api = RULESET_POSITIONS_MIN_CAPABILITY_API;
+          if (!meetsCapabilityApi(manifest, api)) {
+            throw new Error(
+              `${at} lands in a shape and must declare capability API ${api.major}.${api.minor} or newer`,
+            );
+          }
+          if (!RULESET_AREA_SHAPES.includes(area.shape)) {
+            throw new Error(
+              `${at} lands in the shape ${JSON.stringify(area.shape)}, which is not one the Engine draws`,
+            );
+          }
+          if (!Number.isFinite(area.size) || area.size <= 0 || area.size > RULESET_DISTANCE_MAX) {
+            throw new Error(`${at} has an area of ${JSON.stringify(area.size)}, not a size above 0`);
+          }
+          if (area.friendlyFire !== undefined && typeof area.friendlyFire !== "boolean") {
+            throw new Error(`${at} says friendlyFire is ${JSON.stringify(area.friendlyFire)}, not true or false`);
           }
         }
         const applies = action.applies ?? [];

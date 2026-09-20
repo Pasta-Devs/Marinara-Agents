@@ -1577,6 +1577,7 @@ assert.doesNotThrow(() =>
 // reach or range with no `distance` anywhere, which has been legal since 1.27.
 
 const positionsManifest = rulesetManifest({ capabilityApi: { major: 1, minor: 28 } });
+const RULESET_AREA_SHAPES_FOR_TEST = ["burst", "cone", "line"];
 /** The shipped block plus a cell size, with one further thing changed. */
 const positionsWith = (edit = () => {}) =>
   combatWith((combat) => {
@@ -1809,6 +1810,78 @@ for (const [what, edit, message] of [
 ]) {
   assert.throws(() => assertRulesetCreatures(creatureManifest, bestiaryDocument(edit)), message, what);
 }
+// The shape an action lands in. A new key in a strict file, so it is the 1.28 gate as well, and the
+// Engine's own closed set of three shapes is what it may name.
+assert.equal(
+  assertRulesetCreatures(
+    positionsManifest,
+    bestiaryDocument((block) => (block.actions[1].area = { shape: "cone", size: 15, friendlyFire: false })),
+  ),
+  1,
+);
+assert.throws(
+  () =>
+    assertRulesetCreatures(
+      creatureManifest,
+      bestiaryDocument((block) => (block.actions[1].area = { shape: "cone", size: 15 })),
+    ),
+  /lands in a shape and must declare capability API 1\.28 or newer/u,
+);
+for (const [what, area, message] of [
+  [
+    "a shape nobody draws",
+    { shape: "wedge", size: 15 },
+    /lands in the shape "wedge", which is not one the Engine draws/u,
+  ],
+  ["no shape at all", { size: 15 }, /lands in the shape undefined, which is not one the Engine draws/u],
+  ["a size of nothing", { shape: "cone", size: 0 }, /has an area of 0, not a size above 0/u],
+  ["a size below nothing", { shape: "cone", size: -5 }, /has an area of -5, not a size above 0/u],
+  ["a size past the ceiling", { shape: "cone", size: 10001 }, /has an area of 10001, not a size above 0/u],
+  ["a size that is not a number", { shape: "cone", size: "wide" }, /has an area of "wide", not a size above 0/u],
+  [
+    "a friendlyFire that is not a switch",
+    { shape: "cone", size: 15, friendlyFire: "no" },
+    /says friendlyFire is "no", not true or false/u,
+  ],
+  ["an area that is not a shape", "cone", /has an area of "cone", not a shape/u],
+]) {
+  assert.throws(
+    () =>
+      assertRulesetCreatures(
+        positionsManifest,
+        bestiaryDocument((block) => (block.actions[1].area = area)),
+      ),
+    message,
+    what,
+  );
+}
+// A shape and a target count live on the same action on purpose: the count is what a fight WITHOUT
+// a board reads, and the shape is what one with a board draws.
+assert.equal(
+  assertRulesetCreatures(
+    positionsManifest,
+    bestiaryDocument((block) => {
+      block.actions[1].area = { shape: "burst", size: 20 };
+      block.actions[1].targetCount = 3;
+    }),
+  ),
+  1,
+);
+// And the package as committed ships both on the same actions.
+{
+  const bestiary = JSON.parse(shippedCatalogSources.get("catalogs/creatures.json"));
+  const shaped = bestiary.entries.flatMap((entry) => entry.creature.actions.filter((action) => action.area));
+  assert.ok(shaped.length > 50, "the shipped bestiary must carry the shapes the SRD prints");
+  assert.ok(
+    shaped.every((action) => RULESET_AREA_SHAPES_FOR_TEST.includes(action.area.shape)),
+    "every shipped creature area is one of the three shapes the Engine draws",
+  );
+  assert.ok(
+    shaped.every((action) => action.targetCount !== undefined),
+    "and keeps the count a fight with no board reads",
+  );
+}
+
 // A range written as a PAIR is the 1.28 key: an older Engine refuses the whole catalog file holding it.
 assert.throws(
   () =>
