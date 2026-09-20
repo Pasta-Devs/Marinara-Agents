@@ -30,7 +30,7 @@ Across its Engine compatibility lanes, the catalog currently contains **37 first
 | Expression Engine | [`expression`](packages/expression/manifest.json) | Detects character emotions and selects matching Visual Novel sprites or expressions. |
 | Inventory Tracker | [`inventory-tracker`](packages/inventory-tracker/manifest.json) | Tracks currencies, equipped gear, and carried items as separate structured lists. |
 | Memory Nag | [`memory-nag`](packages/memory-nag/manifest.json) | Keeps a short per-chat vault of roleplay memories and recalls only unresolved details that matter to the current turn. |
-| World Maps | [`hierarchical-maps`](packages/hierarchical-maps/manifest.json) | Adds persistent nested locations, durable shared worlds, reusable artwork, customizable Direct Link lines, map authoring, and movement. |
+| World Maps | [`hierarchical-maps`](packages/hierarchical-maps/manifest.json) | Adds persistent nested locations, durable shared worlds, reusable artwork, customizable Direct Link lines, map authoring, and movement. Child-location maps use a square 100×100 grid; square background images align in both the editor and runtime. |
 | Persona Stats | [`persona-stats`](packages/persona-stats/manifest.json) | Tracks the player persona's status bars and custom stats from narrative events. |
 | Quest Tracker | [`quest`](packages/quest/manifest.json) | Manages quest objectives, completion states, and rewards. |
 | World State | [`world-state`](packages/world-state/manifest.json) | Tracks date, time, weather, location, temperature, and custom world details. |
