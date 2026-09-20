@@ -18,7 +18,7 @@ internal prompt implementation.
 | 6     | Add explicit model-generated result preview              | Complete | 4a122cd5 |
 | 7     | Replace the settings wall with outcome controls          | Complete | a0bd6310 |
 | 8     | Build the focused responsive recipe workspace            | Complete | a0bd6310 |
-| 9     | Add draft/current comparison and finish validation       | Complete | —        |
+| 9     | Add draft/current comparison and finish validation       | Complete | 665e6361 |
 
 ## Slice 1 proof
 
