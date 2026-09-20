@@ -65,13 +65,21 @@ const FRAMINGS = [
   "an object or a detail in the foreground, them behind it",
 ] as const;
 
-/** Who else is in the world right now. Presence, never a named person. */
+/**
+ * Who else is in the world right now. Presence, never a named person.
+ *
+ * `helper` marks the one case where somebody willing is close enough to be handed the phone. It is
+ * not the same question as "is anybody there": a room full of strangers who have no idea is not a
+ * photographer, and a voice on a finished call is not in the room at all. `slp-camera-source.ts`
+ * reads this to decide whether a second person may hold the camera, so that a Creator who is alone
+ * cannot be photographed from across the room.
+ */
 const COMPANY = [
-  "alone and glad of it",
-  "alone and not glad of it",
-  "somebody else is nearby but out of frame",
-  "surrounded by people who have no idea",
-  "just got off a call",
+  { text: "alone and glad of it", helper: false },
+  { text: "alone and not glad of it", helper: false },
+  { text: "somebody else is nearby but out of frame", helper: true },
+  { text: "surrounded by people who have no idea", helper: false },
+  { text: "just got off a call", helper: false },
 ] as const;
 
 /**
@@ -173,6 +181,8 @@ export type SlurpPostVariation = {
   moment: string;
   framing: string;
   company: string;
+  /** Whether somebody willing is close enough to be handed the phone. See `COMPANY`. */
+  companyCanHoldCamera: boolean;
 };
 
 /**
@@ -189,7 +199,7 @@ export function slurpPostVariation(
   sequence: number,
   storyRate: SlurpStoryRate = SLURP_DEFAULT_STORY_RATE,
 ): SlurpPostVariation {
-  const offset = hash(creatorAccountId);
+  const offset = slurpRotationHash(creatorAccountId);
   // Math.floor(NaN) is NaN and indexes nothing, which would hand every caller an undefined variation.
   // Third time this shape has bitten in this package; guard it at the boundary rather than trust
   // the caller's arithmetic.
@@ -204,18 +214,26 @@ export function slurpPostVariation(
     place: PLACES[(offset + step) % PLACES.length]!,
     moment: MOMENTS[(offset + step * 3) % MOMENTS.length]!,
     framing: FRAMINGS[(offset + step * 5) % FRAMINGS.length]!,
-    company: COMPANY[(offset + step * 2) % COMPANY.length]!,
+    company: COMPANY[(offset + step * 2) % COMPANY.length]!.text,
+    companyCanHoldCamera: COMPANY[(offset + step * 2) % COMPANY.length]!.helper,
   };
 }
 
-/** The variation as prompt text. One block, so the caller does not assemble it in three places. */
-export function slurpPostVariationInstruction(variation: SlurpPostVariation): string {
+/**
+ * The variation as prompt text. One block, so the caller does not assemble it in three places.
+ *
+ * `cameraInstruction` is produce mode's replacement for the `Framing` line. The two are mutually
+ * exclusive on purpose: `FRAMINGS` hands out positions like "from above, looking down" with nothing
+ * in the scene to justify them, which is the unexplained-cameraman problem `slp-camera-source.ts`
+ * exists to fix. Emitting both would reintroduce it underneath the fix.
+ */
+export function slurpPostVariationInstruction(variation: SlurpPostVariation, cameraInstruction?: string): string {
   return [
     "# This post's angle",
     "Keep the person exactly as the character card describes them — face, body, style, voice. Change the situation, not the person.",
     `Place: ${variation.place}.`,
     `Moment: ${variation.moment}.`,
-    `Framing for the image: ${variation.framing}.`,
+    ...(cameraInstruction ? [cameraInstruction] : [`Framing for the image: ${variation.framing}.`]),
     `Company: ${variation.company}.`,
     ...(variation.story
       ? [
@@ -227,7 +245,11 @@ export function slurpPostVariationInstruction(variation: SlurpPostVariation): st
   ].join("\n");
 }
 
-function hash(value: string): number {
+/**
+ * Shared by `slp-camera-source.ts`, which rotates on the same creator id and post count. Exported
+ * rather than copied so the two rotations cannot drift apart.
+ */
+export function slurpRotationHash(value: string): number {
   let out = 0x811c9dc5;
   for (let index = 0; index < value.length; index += 1) {
     out ^= value.charCodeAt(index);
@@ -257,7 +279,7 @@ export function slurpPostProject<T extends { id: string }>(
 ): T | null {
   if (projects.length === 0) return null;
   const step = Number.isFinite(sequence) ? Math.max(0, Math.floor(sequence)) : 0;
-  const offset = hash(creatorAccountId);
+  const offset = slurpRotationHash(creatorAccountId);
   const slots = slurpProjectSlots(rate);
   if (!slots.has((offset + step) % FORMAT_CYCLE.length)) return null;
   // Which project slot this is overall, not which post. Indexing projects by `step` looks
@@ -294,7 +316,7 @@ export function slurpTeaserPost(
   rate: SlurpTeaserRate = SLURP_DEFAULT_TEASER_RATE,
 ): boolean {
   const step = Number.isFinite(sequence) ? Math.max(0, Math.floor(sequence)) : 0;
-  return (TEASER_SLOTS[rate] ?? []).includes((hash(creatorAccountId) + step) % 10);
+  return (TEASER_SLOTS[rate] ?? []).includes((slurpRotationHash(creatorAccountId) + step) % 10);
 }
 
 export const SLURP_TEASER_INSTRUCTION =

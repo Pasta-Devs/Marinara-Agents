@@ -77,6 +77,7 @@ export {
   type PublicIdentity,
 } from "../../base/identity/slp-identity-protection.js";
 import { slurpPromptContext } from "../../base/prompting/slp-prompt-blocks.js";
+import { slurpCameraSourceInstruction, slurpPostCameraSource } from "../../modules/feed/slp-camera-source.js";
 
 export type GeneratedCreatorPostResult = {
   post: SlpCreatorManagedPost;
@@ -230,6 +231,16 @@ export async function generateCreatorPost(
   // nothing about where this thread had got to.
   const projectPosts = project ? await noodle.listPostsByProject(project.id, 4) : [];
   const format = input.request.format ?? variation?.format ?? "caption";
+  // Produce mode decides who is holding the camera before anything describes the picture, so the
+  // framing is a consequence of a camera that exists rather than a free-floating instruction. See
+  // `slp-camera-source.ts`. Classic mode keeps the old framing axis untouched.
+  const prompts = slurpPromptContext(settings);
+  const cameraInstruction =
+    prompts.mode === "produce" && variation
+      ? slurpCameraSourceInstruction(
+          slurpPostCameraSource(account.id, sequence, { companyCanHoldCamera: variation.companyCanHoldCamera }),
+        )
+      : undefined;
   // The Creator's own state reached her direct messages and stopped there, so the feed was
   // written by somebody with no mood, no energy and no memory of last night. A failure here must
   // never cost a post: an unremarkable day is the same as no block at all.
@@ -255,7 +266,7 @@ export async function generateCreatorPost(
     recentPosts,
     // A variation carries its own format, so an automatic post stops always being a caption.
     request: { ...input.request, format },
-    variationInstruction: variation ? slurpPostVariationInstruction(variation) : undefined,
+    variationInstruction: variation ? slurpPostVariationInstruction(variation, cameraInstruction) : undefined,
     conditionInstruction: conditionInstruction ?? undefined,
     eventInstruction:
       slurpPlatformEventInstruction(
@@ -278,7 +289,8 @@ export async function generateCreatorPost(
     postMaxLength: settings.postMaxLength,
     scheduleContext,
     loreContext,
-    promptBlocks: slurpPromptContext(settings).blocks,
+    promptBlocks: prompts.blocks,
+    promptMode: prompts.mode,
     generatedAt: input.generatedAt ?? new Date(),
     publicationTime: input.publicationTime,
   });

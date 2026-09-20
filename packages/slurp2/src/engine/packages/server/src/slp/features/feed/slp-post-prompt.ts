@@ -11,6 +11,7 @@ import { parseGameJsonish } from "../../../services/game/jsonish.js";
 import { requireModelAnswer } from "../../base/model/slp-model-answer.js";
 import type { ChatMessage } from "../../../services/llm/base-provider.js";
 import { composeSlurpPromptBlocks, type SlurpPromptBlockOverrides } from "../../base/prompting/slp-prompt-blocks.js";
+import { SLURP_DEFAULT_PROMPT_MODE, type SlurpPromptMode } from "../../base/prompting/slp-prompt-modes.js";
 import { buildSlurpPostTimingContext } from "../../modules/feed/slp-post-timing.js";
 import { type SlurpProject } from "../../modules/projects/slp-project.js";
 import { slurpProjectChapter, slurpProjectInstruction } from "../../modules/projects/slp-arc-progress.js";
@@ -93,11 +94,14 @@ export function buildNoodlerPostMessages(input: {
   /** Matching lorebook entries for this Creator. Absent when lorebook context is off or nothing matched. */
   loreContext?: string;
   promptBlocks?: SlurpPromptBlockOverrides;
+  /** Which prompt personality to write. Defaults to the shipped mode. */
+  promptMode?: SlurpPromptMode;
 }): ChatMessage[] {
   const protect = (value: string) =>
     protectCreatorGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
   const guidance = input.generationGuidance.trim();
   const format = input.request.format ?? "caption";
+  const produce = (input.promptMode ?? SLURP_DEFAULT_PROMPT_MODE) === "produce";
   const systemBlocks = [
     {
       id: "task",
@@ -171,7 +175,16 @@ export function buildNoodlerPostMessages(input: {
     {
       id: "output",
       kind: "required" as const,
-      text: `${input.allowImagePrompt ? "Return one JSON object with title, content, and imagePrompt. imagePrompt is required and must be a concrete visual description of one photo or image the creator would post now (subject, pose, setting, lighting, framing). Never return null or an empty imagePrompt, and never put the post text or field names in it. Do not create a poll." : "Return one JSON object with title and content only. Do not create a poll or image prompt."}\nReturn JSON only. No prose outside the JSON object.`,
+      text: `${
+        input.allowImagePrompt
+          ? produce
+            ? // The old contract asked for "subject, pose, setting, lighting, framing", which is a
+              // scene brief. A brief with no gaps in it produces a photograph with no accident in
+              // it, and the result reads as a shoot rather than as something a person posted.
+              "Return one JSON object with title, content, and imagePrompt. imagePrompt is required and describes the photograph this person actually took with the camera named above — what it caught, not what the moment was. It may be badly framed, poorly lit, partly blocked, or dull. Do not improve it, do not add a camera position nobody present could reach, and do not add exposed skin, undress, or sexual emphasis the post did not already call for. Never return null or an empty imagePrompt, and never put the post text or field names in it. Do not create a poll."
+            : "Return one JSON object with title, content, and imagePrompt. imagePrompt is required and must be a concrete visual description of one photo or image the creator would post now (subject, pose, setting, lighting, framing). Never return null or an empty imagePrompt, and never put the post text or field names in it. Do not create a poll."
+          : "Return one JSON object with title and content only. Do not create a poll or image prompt."
+      }\nReturn JSON only. No prose outside the JSON object.`,
     },
   ];
   const system = composeSlurpPromptBlocks("post", systemBlocks, input.promptBlocks);
