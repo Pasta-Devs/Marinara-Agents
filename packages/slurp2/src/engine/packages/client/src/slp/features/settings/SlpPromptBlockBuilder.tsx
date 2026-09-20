@@ -1,5 +1,17 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, Eye, GripVertical, LockKeyhole, Pencil, RotateCcw, Save, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Eye,
+  GripVertical,
+  LockKeyhole,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Save,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { SlurpPromptBlockOverride, SlurpReusablePromptInstruction } from "../../base/state/slp-state-types";
 import type { SlurpPromptBlockDefinition, SlurpPromptDefinition, SlurpPromptMode } from "./slp-settings-contract";
@@ -74,6 +86,7 @@ export function SlurpPromptBlockBuilder({
   const [textDraft, setTextDraft] = useState("");
   const [instructionDraft, setInstructionDraft] = useState(instructions);
   const [editingInstructionId, setEditingInstructionId] = useState<string | null>(null);
+  const [newInstructionName, setNewInstructionName] = useState("");
 
   // Reset when the mode changes as well as when the value does. Without the mode in the
   // dependency list a half-finished classic layout stayed in the draft after switching to produce
@@ -175,16 +188,33 @@ export function SlurpPromptBlockBuilder({
               <div key={instruction.id} className="rounded-lg border border-[var(--slurp-outline)] p-3">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-xs font-bold">{instruction.name}</p>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setEditingInstructionId(editingInstructionId === instruction.id ? null : instruction.id)
-                    }
-                    className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[var(--slurp-outline)] px-2.5 text-xs font-semibold"
-                  >
-                    <Pencil size={13} aria-hidden="true" />
-                    {t("ui.slurp.settings.prompts.edit", { defaultValue: "Edit" })}
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditingInstructionId(editingInstructionId === instruction.id ? null : instruction.id)
+                      }
+                      className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[var(--slurp-outline)] px-2.5 text-xs font-semibold"
+                    >
+                      <Pencil size={13} aria-hidden="true" />
+                      {t("ui.slurp.settings.prompts.edit", { defaultValue: "Edit" })}
+                    </button>
+                    {!instruction.builtin && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void onSaveInstructions(instructionDraft.filter((entry) => entry.id !== instruction.id))
+                        }
+                        className="inline-flex size-9 items-center justify-center rounded-lg border border-[var(--slurp-outline)] text-[var(--destructive)]"
+                        aria-label={t("ui.slurp.settings.prompts.deleteInstructionAria", {
+                          name: instruction.name,
+                          defaultValue: "Delete {{name}}",
+                        })}
+                      >
+                        <Trash2 size={13} aria-hidden="true" />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {editingInstructionId === instruction.id ? (
                   <>
@@ -224,6 +254,36 @@ export function SlurpPromptBlockBuilder({
                 )}
               </div>
             ))}
+          </div>
+          <div className="flex flex-col gap-2 border-t border-[var(--slurp-outline)] pt-3 sm:flex-row">
+            <input
+              value={newInstructionName}
+              onChange={(event) => setNewInstructionName(event.target.value)}
+              placeholder={t("ui.slurp.settings.prompts.newInstructionPlaceholder", {
+                defaultValue: "New instruction name",
+              })}
+              className="min-h-10 min-w-0 flex-1 rounded-lg border border-[var(--slurp-outline)] bg-transparent px-3 text-sm"
+            />
+            <button
+              type="button"
+              disabled={pending || !newInstructionName.trim()}
+              onClick={() => {
+                const id = `custom-${Date.now()}`;
+                void onSaveInstructions([
+                  ...instructionDraft,
+                  { id, name: newInstructionName.trim(), text: "Add your instruction here.", builtin: false },
+                ]).then((saved) => {
+                  if (saved) {
+                    setNewInstructionName("");
+                    setEditingInstructionId(id);
+                  }
+                });
+              }}
+              className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-[var(--slurp-outline)] px-3 text-xs font-semibold disabled:opacity-45"
+            >
+              <Plus size={14} aria-hidden="true" />
+              {t("ui.slurp.settings.prompts.addInstruction", { defaultValue: "Add instruction" })}
+            </button>
           </div>
         </section>
       )}
