@@ -31,13 +31,22 @@ export function slurpImageBrief(input: {
   variation: SlurpPostVariation;
   /** A Story is a picture with one line under it, so the picture has to carry the post alone. */
   story?: boolean;
+  /**
+   * An earlier shoot this picture came out of. When present it replaces today's place and company:
+   * the photograph was taken then, so it cannot show where the Creator is standing now.
+   */
+  shoot?: { place: string; company: string } | null;
 }): string {
+  const place = input.shoot?.place ?? input.variation.place;
+  const company = input.shoot?.company ?? input.variation.company;
   return [
-    "One photograph this person took and posted.",
+    input.shoot
+      ? "One photograph this person took at an earlier shoot and is posting now."
+      : "One photograph this person took and posted.",
     input.cameraInstruction,
-    `Where: ${input.variation.place}.`,
-    `What they are in the middle of: ${input.variation.moment}.`,
-    `Who is around: ${input.variation.company}.`,
+    `Where: ${place}.`,
+    ...(input.shoot ? [] : [`What they are in the middle of: ${input.variation.moment}.`]),
+    `Who is around: ${company}.`,
     input.story
       ? "This is a Story, so the picture has to carry the post on its own, but it is still a phone picture and not a production."
       : "",

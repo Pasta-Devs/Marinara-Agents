@@ -641,6 +641,27 @@ export const slurpPendingText = fileTable("slurp2_pending_text", {
 /** New name for the generalized queue; the physical table stays put so existing jobs survive. */
 export const slurpModelJobs = slurpPendingText;
 
+/**
+ * One planned shoot a Creator can post from more than once.
+ *
+ * A Creator who moves through four cinematic locations in an afternoon reads as a script. Real
+ * output comes in batches: one afternoon, one outfit, one room, several posts spread over days.
+ * A set drop opens a session here and later posts draw from it, which is what lets a caption say
+ * "one more from yesterday" and have the picture actually match.
+ */
+export const slurpShootSessions = fileTable("slurp2_shoot_sessions", {
+  id: text("id").primaryKey(),
+  creatorAccountId: text("creator_account_id").notNull(),
+  /** The variation axes the shoot was set up under, so later posts can reproduce its look. */
+  place: text("place").notNull(),
+  company: text("company").notNull(),
+  /** The camera that was set up. Later posts from this shoot cannot use a different one. */
+  cameraSource: text("camera_source").notNull(),
+  /** How many posts have drawn from this shoot, including the drop that opened it. */
+  shotsUsed: text("shots_used").notNull().default("1"),
+  createdAt: text("created_at").notNull(),
+});
+
 /** One cross-process lease for the free world tick. */
 export const slurpWorldClaims = fileTable("slurp2_world_claims", {
   id: text("id").primaryKey(),

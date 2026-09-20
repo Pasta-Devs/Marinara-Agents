@@ -235,12 +235,10 @@ export async function generateCreatorPost(
   // framing is a consequence of a camera that exists rather than a free-floating instruction. See
   // `slp-camera-source.ts`. Classic mode keeps the old framing axis untouched.
   const prompts = slurpPromptContext(settings);
-  const cameraInstruction =
+  const cameraSource =
     prompts.mode === "produce" && variation
-      ? slurpCameraSourceInstruction(
-          slurpPostCameraSource(account.id, sequence, { companyCanHoldCamera: variation.companyCanHoldCamera }),
-        )
-      : undefined;
+      ? slurpPostCameraSource(account.id, sequence, { companyCanHoldCamera: variation.companyCanHoldCamera })
+      : null;
   // A Story is a picture with a line under it, so a run that produces no image publishes an
   // ordinary post instead. The flag is only honoured on the path that commits an image below.
   // A Story the player asked for outranks the rotation, which never fires on a directed post.
@@ -255,12 +253,24 @@ export async function generateCreatorPost(
     input.request.access === "public" && !directed && slurpTeaserPost(account.id, sequence, settings.teaserRate);
   // What this post is for, as opposed to what it is about. Story and teaser are passed in rather
   // than chosen again, so the three decisions cannot contradict each other.
-  const contentTypeInstruction =
+  const contentType =
     prompts.mode === "produce" && !directed
-      ? slurpContentTypeInstruction(
-          slurpPostContentType(account.id, sequence, { story: storyVariation, teaser: isTeaser }),
-        )
-      : undefined;
+      ? slurpPostContentType(account.id, sequence, { story: storyVariation, teaser: isTeaser })
+      : null;
+  // A callback continues something already shot. Drawing from a real earlier shoot is what lets a
+  // caption say "one more from yesterday" and have the picture actually match, instead of putting
+  // the Creator back in yesterday's room with no explanation.
+  const shoot =
+    contentType === "callback" ? await findReusableSlurpShoot(db, account.id, input.generatedAt ?? new Date()) : null;
+  // A reused shoot keeps its own camera. The rotation's choice for today does not apply to a
+  // picture that was taken two days ago.
+  const camera = shoot?.cameraSource ?? cameraSource;
+  const cameraInstruction = camera ? slurpCameraSourceInstruction(camera) : undefined;
+  // The shoot rides in the content-type block rather than a block of its own: it is part of what
+  // this post is for, and a second block would be dead for every post that is not a callback.
+  const contentTypeInstruction = contentType
+    ? [slurpContentTypeInstruction(contentType), shoot ? slurpShootInstruction(shoot) : ""].filter(Boolean).join("\n")
+    : undefined;
 
   // In produce mode the post call writes text only. Asking one call for the caption and the
   // picture together is what made every image an illustration of its own caption, so the brief is
@@ -393,6 +403,28 @@ export async function generateCreatorPost(
     settings.postMaxLength,
   );
   if (!protectedContent) throw new Error("Slurp generation returned no usable post content.");
+
+  // Shoot bookkeeping, once the post definitely has text. A set drop opens a shoot that later
+  // callbacks can draw from; a callback that used one spends a shot. Recorded here rather than
+  // after persistence because a run that fails on the image still produced the shoot; a shoot left
+  // behind by a run that throws later is pruned with the rest.
+  if (contentType === "set" && camera && variation) {
+    await openSlurpShoot(db, {
+      creatorAccountId: account.id,
+      place: variation.place,
+      company: variation.company,
+      cameraSource: camera,
+      at: input.generatedAt ?? new Date(),
+    }).catch((error: unknown) => {
+      // A post must never fail over continuity bookkeeping.
+      logger.warn(error, "[slurp] Could not open a shoot session; the post stands on its own");
+      return null;
+    });
+  } else if (shoot) {
+    await useSlurpShoot(db, shoot).catch((error: unknown) => {
+      logger.warn(error, "[slurp] Could not record a shoot reuse; the shoot may be posted from again");
+    });
+  }
   const protectedGenerated = {
     // Every format shows a title now. Weak models still drop the field, so fall back to the
     // opening of the post rather than failing a whole generation over a headline.
@@ -414,7 +446,7 @@ export async function generateCreatorPost(
   // company, so a Secret Creator's details must be redacted here exactly as they are in the text.
   const imageDraft =
     cameraInstruction && variation
-      ? slurpImageBrief({ cameraInstruction, variation, story: storyVariation })
+      ? slurpImageBrief({ cameraInstruction, variation, story: storyVariation, shoot })
       : generated.imagePrompt;
   const draftImagePrompt = imagesEnabled
     ? protectCreatorGeneratedIdentity(
