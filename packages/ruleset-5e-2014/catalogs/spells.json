@@ -275,7 +275,6 @@
       ],
       "mechanics": {
         "kind": "utility",
-        "range": 0,
         "area": { "shape": "burst", "size": 10 },
         "cost": [{ "pool": "slots_8", "amount": 1 }],
         "concentration": true
@@ -836,7 +835,6 @@
       ],
       "mechanics": {
         "kind": "attack",
-        "range": 0,
         "area": { "shape": "cone", "size": 15 },
         "amount": { "dice": "3d6" },
         "damageType": "fire",
@@ -1112,7 +1110,6 @@
       ],
       "mechanics": {
         "kind": "utility",
-        "range": 0,
         "area": { "shape": "cone", "size": 15 },
         "cost": [{ "pool": "slots_1", "amount": 1 }]
       }
@@ -1247,7 +1244,6 @@
       ],
       "mechanics": {
         "kind": "attack",
-        "range": 0,
         "area": { "shape": "cone", "size": 60 },
         "amount": { "dice": "8d8" },
         "damageType": "cold",
@@ -2630,7 +2626,6 @@
       ],
       "mechanics": {
         "kind": "debuff",
-        "range": 0,
         "area": { "shape": "cone", "size": 30 },
         "save": { "save": "wis_save", "onSuccess": "negates" },
         "applies": [{ "condition": "frightened", "duration": { "rounds": 10 } }],
@@ -4459,7 +4454,6 @@
       ],
       "mechanics": {
         "kind": "attack",
-        "range": 0,
         "area": { "shape": "line", "size": 100 },
         "amount": { "dice": "8d6" },
         "damageType": "lightning",
@@ -5525,7 +5519,6 @@
       ],
       "mechanics": {
         "kind": "attack",
-        "range": 0,
         "area": { "shape": "cone", "size": 60 },
         "amount": { "dice": "10d6" },
         "damageType": "fire",
@@ -6867,7 +6860,6 @@
       ],
       "mechanics": {
         "kind": "attack",
-        "range": 0,
         "area": { "shape": "line", "size": 60 },
         "amount": { "dice": "6d8" },
         "damageType": "radiant",
@@ -7062,7 +7054,6 @@
       ],
       "mechanics": {
         "kind": "attack",
-        "range": 0,
         "area": { "shape": "burst", "size": 5 },
         "amount": { "dice": "2d8" },
         "damageType": "thunder",

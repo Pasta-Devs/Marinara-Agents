@@ -225,9 +225,12 @@ gets them with the row.
 **Spells land as the shape the SRD prints.** 82 of the 84 spells a fight can resolve carry a range
 in feet, and 30 carry an area: 13 spheres, 4 cylinders, 4 cones, 2 lines and 7 cubes or squares.
 Dream ("Special") and Meteor Swarm ("1 mile") carry no range, because neither is a number of feet.
-A range of **Touch** or **Self** is written as 0, which the Engine reads as the caster's own square
-and, when it is aimed at somebody else, as the next one. A Self cone or line is aimed by pointing at
-a neighbouring square, which is what gives it its direction.
+A range of **Touch** is written as 0, which the Engine reads as a reach of one square rather than a
+shot, so touching somebody standing beside an enemy costs nothing. A spell whose range is **Self**
+and which draws a shape carries no distance at all, because Self names none: the Engine sets a burst
+down on the caster's own square and lets a cone or a line be aimed anywhere within its own length,
+since there the aimed square only picks the direction. Seven of the spells a fight resolves work that
+way, Burning Hands and Thunderwave among them.
 
 **A cube or a square becomes the nearest burst**, because the Engine has a burst, a cone and a line
 and nothing else. A burst of radius r covers 2r + 1 squares across, so an edge of N feet ships as a
@@ -261,8 +264,10 @@ that area" means. The build stops if any other printed shape ever grows wording 
 somebody deciding what it means.
 
 Only the Djinni's whirlwind prints how far off its shape may be formed ("on a point the djinni can
-see within 120 feet of it"); every other shape has no range, which the Engine reads as aimed from
-where the creature stands and no further than the shape itself draws.
+see within 120 feet of it"); every other shape carries no range, which is what makes it start at the
+creature. A burst with no range goes off on the creature's own square and nowhere else, so the
+Kraken's 60-foot ink cloud is centred on the kraken; a cone or a line with no range is aimed anywhere
+within its own length, because there the aimed square only picks the direction.
 
 ### Creatures
 
@@ -317,11 +322,6 @@ A fight plays, so this is the honest list of what it still does not do:
   decides instead and the count is not read at all; with Classic the count is the whole of it.
 - **A line has no width.** "A line 100 feet long and 5 feet wide" is a line of single squares, which
   is what the SRD's own line is at this width and would not be at a wider one.
-- **A shape that starts at the creature may be aimed a little off it.** A shape with no range is
-  aimed no further away than it draws, which is exactly right for a cone or a line, where the aimed
-  square only sets the direction. For the four bursts that the SRD centres on the creature itself
-  (the Dretch's and the Vrock's clouds, the Solar's burst, the Kraken's ink) it means the centre may
-  sit a few squares off, and for the Kraken's 60-foot cloud that is twelve squares.
 - **Half cover only, and only against an attack.** Ground the Engine's battlefield calls cover is
   worth +2 and never the +5 of three-quarters cover, there is no total cover, no elevation and no
   flying height, and the bonus is read when the attack roll is made and never when a saving throw

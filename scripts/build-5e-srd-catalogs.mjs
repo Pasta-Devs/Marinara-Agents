@@ -848,6 +848,12 @@ function spellMechanics(pk, fields, options, healing, rider) {
   const area = fields.shape_type
     ? areaFrom(fields.shape_type, fields.shape_size, fields.name)
     : printed && areaFrom(printed.shape, printed.size, fields.name);
+  // "Range: Self" names no distance to aim at, and for a spell that draws a SHAPE that is the
+  // whole of it: the Engine sends a burst off on the caster's own cell and lets a cone or a line
+  // be aimed anywhere within its own length, which is exactly what a spell starting at the caster
+  // does. So a Self shape carries no range at all. "Range: Touch" is a different sentence: the
+  // glyph is set down on something beside you, so it keeps its 0 and may be aimed one cell off.
+  const selfShape = !!area && oneLine(fields.range_text).toLowerCase() === "self";
   const amount =
     rider?.amount ?? (fields.damage_roll ? amountFrom(fields.damage_roll, `Spell "${fields.name}"`) : undefined);
   // A spell that puts a condition on what it touches is a debuff even when it deals no damage, and
@@ -859,7 +865,7 @@ function spellMechanics(pk, fields, options, healing, rider) {
     // HEALING_SPELLS table above rather than a guess at the wording. Everything
     // not in that table stays exactly what it was.
     kind,
-    range: spellRange(fields, fields.name),
+    range: selfShape ? undefined : spellRange(fields, fields.name),
     area,
     targets: rider?.targets ?? (healing ? "ally" : undefined),
     amount: healing ? healing.amount : amount,
@@ -973,8 +979,11 @@ function buildSpellEntries(spells, castingOptions, classNames, report) {
  */
 function countSpellDistances(pk, fields, mechanics, report) {
   if (mechanics.kind === "utility" || mechanics.reaction) return;
-  if (mechanics.range === undefined) report.spellsWithoutRange.push(`${fields.name} (${oneLine(fields.range_text)})`);
-  else report.spellsWithRange += 1;
+  const self = mechanics.area && oneLine(fields.range_text).toLowerCase() === "self";
+  if (self) report.spellsFromTheCaster += 1;
+  else if (mechanics.range === undefined) {
+    report.spellsWithoutRange.push(`${fields.name} (${oneLine(fields.range_text)})`);
+  } else report.spellsWithRange += 1;
   if (mechanics.area) {
     const printed = fields.shape_type ?? SPELL_AREAS.get(pk)?.shape;
     report.spellAreasByShape.set(printed, (report.spellAreasByShape.get(printed) ?? 0) + 1);
@@ -2841,6 +2850,7 @@ const provenance =
 const report = {
   weaponsByDistance: { melee: 0, reach: 0, ranged: 0, thrown: 0 },
   spellsWithRange: 0,
+  spellsFromTheCaster: 0,
   spellsWithoutRange: [],
   spellAreasByShape: new Map(),
   spellAreasNotMapped: [],
@@ -3224,8 +3234,9 @@ console.log(
     `not reach, ${weaponKinds.thrown} reach and are thrown`,
 );
 console.log(
-  `  spells a fight resolves: ${report.spellsWithRange} carry a range in feet, ${report.spellsWithoutRange.length} do ` +
-    `not (${list(report.spellsWithoutRange, 4)})`,
+  `  spells a fight resolves: ${report.spellsWithRange} carry a range in feet, ${report.spellsFromTheCaster} draw a ` +
+    `shape from the caster and name no distance at all, ${report.spellsWithoutRange.length} could not be mapped ` +
+    `(${list(report.spellsWithoutRange, 4)})`,
 );
 console.log(`  spell areas: ${[...report.spellAreasByShape].map(([shape, count]) => `${count} ${shape}`).join(", ")}`);
 console.log(

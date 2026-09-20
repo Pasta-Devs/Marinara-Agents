@@ -1855,6 +1855,25 @@ for (const [what, area, message] of [
     what,
   );
 }
+// A sequence is a container, and a shape is one more thing the one budget would have done with
+// nothing to say when. The actions it names carry their own.
+assert.throws(
+  () =>
+    assertRulesetCreatures(
+      positionsManifest,
+      bestiaryDocument((block) => (block.actions[2].area = { shape: "cone", size: 15 })),
+    ),
+  /action "both" is a sequence, so it carries no area of its own/u,
+);
+// And the shipped bestiary never writes one.
+{
+  const bestiary = JSON.parse(shippedCatalogSources.get("catalogs/creatures.json"));
+  assert.ok(
+    bestiary.entries.every((entry) => entry.creature.actions.every((action) => !(action.sequence && action.area))),
+    "no shipped multiattack carries a shape of its own",
+  );
+}
+
 // A shape and a target count live on the same action on purpose: the count is what a fight WITHOUT
 // a board reads, and the shape is what one with a board draws.
 assert.equal(

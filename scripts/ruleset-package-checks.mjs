@@ -1125,8 +1125,9 @@ export function assertRulesetCreatures(manifest, document, catalogSources = new 
           throw new Error(`${at} ends a condition on a save with no difficulty to roll against`);
         }
         if (!action.sequence) continue;
-        // A sequence is a container: anything else on it would be a second thing the one budget did.
-        for (const key of ["toHit", "autoHit", "damage", "save", "saveDifficulty", "applies", "targetCount"]) {
+        // A sequence is a container: anything else on it would be a second thing the one budget did,
+        // the shape it might land in included. The actions it names carry their own.
+        for (const key of ["toHit", "autoHit", "damage", "save", "saveDifficulty", "applies", "targetCount", "area"]) {
           if (action[key] !== undefined) throw new Error(`${at} is a sequence, so it carries no ${key} of its own`);
         }
         if (action.sequence.length === 0 || action.sequence.length > RULESET_CREATURE_MAX_SEQUENCE) {
