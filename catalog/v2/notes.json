@@ -100,6 +100,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.3.5",
+          "date": "2026-09-20",
+          "notes": "- Recover complete memory candidates from token-limited output without marking incomplete extractions current.\n- Surface recovered output as an incomplete, retryable draft and bound rejection diagnostics for review.\n- Retain candidates within the processing limit and report overflow instead of rejecting the entire response.\n- Generate memory IDs and source hashes on the server, and default omitted evidence from the trusted source note.",
+          "highlight": false
+        },
+        {
           "version": "1.3.4",
           "date": "2026-09-18",
           "notes": "- Kept a source note's extraction context unbound until its extraction succeeds, so a failed or cancelled preparation no longer rewrites the source note.\n- Rejected concurrent source-context changes again at the final commit, so a late writer cannot be overwritten after extraction validation.\n- Marked extractions whose only non-kept candidates were duplicates as current, so re-running them no longer churns.\n- Kept error-diagnostic extractions from being marked current, including direct Game Mode preparation with requested context bound to draft and persistence metadata.",
@@ -290,6 +296,12 @@
     "slurp2": {
       "versions": [
         {
+          "version": "0.1.3",
+          "date": "2026-09-20",
+          "notes": "- Slurp HTTP routes now use Slurp naming. Existing avatars, banners, ad images, post images and backups keep working.",
+          "highlight": false
+        },
+        {
           "version": "0.1.2",
           "date": "2026-09-19",
           "notes": "- Fixed Creator filters, profile expansion, and settings tabs not responding after the 0.1.1 update.",
@@ -401,12 +413,6 @@
           "version": "0.0.7",
           "date": "2026-09-13",
           "notes": "- Rebuilt Discover around direct subscription actions, persistent grid and list views, and filters for subscription status, gender, weekly price, and Creator tags.\n- Added Recommended, Newest, Most liked, and Most subscribed sorting with stable results.\n- Added editable Creator gender and tags, including safe custom tags and AI-suggested curated tags during profile creation and redrafting.\n- Added Arcs with automatic suggestions, pacing, focus, allowed kinds, and delivery to posts, messages, fan comments, and notifications.\n- Moved message, photo, subscription, and tip prices from the profile information box to the action that uses each price.\n- Hid the Follow control for subscribed Creators because a subscription already includes following.\n- Made Open the default Creator identity mode and removed the Secret identity tier.\n- Fixed persona Creator creation when Slurp already has the persona's viewer identity.",
-          "highlight": false
-        },
-        {
-          "version": "0.0.6",
-          "date": "2026-09-13",
-          "notes": "- Added image context options for reactions: stored prompts, vision descriptions, or automatic selection. Public fan reactions keep locked images hidden and respect Creator identity privacy.\n- Generation now shows how many Creators remain, including skipped or failed requests.\n- Restored visible success and error notifications for Slurp actions.\n- Fixed persona Creator creation when Slurp already has the persona's viewer identity. The viewer and Creator accounts can now coexist for one persona.",
           "highlight": false
         }
       ]

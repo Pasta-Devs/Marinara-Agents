@@ -35,7 +35,7 @@ export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
     contentRating: z.enum(["tame", "suggestive", "explicit"]).default("tame"),
   });
 
-  app.get("/noodler/viewer/ads", async (req, reply) => {
+  app.get("/slurp/viewer/ads", async (req, reply) => {
     const parsed = z
       .object({
         personaId: z.string().trim().min(1),
@@ -71,7 +71,7 @@ export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
     return { items };
   });
 
-  app.post("/noodler/viewer/ads/:id/hide", async (req, reply) => {
+  app.post("/slurp/viewer/ads/:id/hide", async (req, reply) => {
     const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
@@ -79,7 +79,7 @@ export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
     return ads.hide(parsed.data.personaId, (req.params as { id: string }).id);
   });
 
-  app.post("/noodler/viewer/ads/reset", async (req, reply) => {
+  app.post("/slurp/viewer/ads/reset", async (req, reply) => {
     const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
@@ -87,7 +87,7 @@ export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
     return ads.reset(parsed.data.personaId);
   });
 
-  app.post("/noodler/viewer/ads/:id/action", async (req, reply) => {
+  app.post("/slurp/viewer/ads/:id/action", async (req, reply) => {
     const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
@@ -103,7 +103,7 @@ export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
     return { ok: true, coins: wallet.coins };
   });
 
-  app.post("/noodler/viewer/ads/brand/hide", async (req, reply) => {
+  app.post("/slurp/viewer/ads/brand/hide", async (req, reply) => {
     const parsed = z
       .object({ personaId: z.string().trim().min(1), brand: z.string().trim().min(1).max(80) })
       .safeParse(req.body);
@@ -113,7 +113,7 @@ export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
     return ads.hideBrand(parsed.data.personaId, parsed.data.brand);
   });
 
-  app.post("/noodler/viewer/ads/brand/unhide", async (req, reply) => {
+  app.post("/slurp/viewer/ads/brand/unhide", async (req, reply) => {
     const parsed = z
       .object({ personaId: z.string().trim().min(1), brand: z.string().trim().min(1).max(80) })
       .safeParse(req.body);
@@ -123,7 +123,7 @@ export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
     return ads.unhideBrand(parsed.data.personaId, parsed.data.brand);
   });
 
-  app.get("/noodler/viewer/ads/state", async (req, reply) => {
+  app.get("/slurp/viewer/ads/state", async (req, reply) => {
     const parsed = z.object({ personaId: z.string().trim().min(1) }).safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const viewer = await resolveViewerPersona(parsed.data.personaId);
@@ -141,9 +141,9 @@ export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
   });
 
   // ── Ad pool authoring ─────────────────────────────────────────────
-  app.get("/noodler/ads/pool", async () => ({ items: await ads.pool.listAll(SLURP_GARNISH_PLATFORM) }));
+  app.get("/slurp/ads/pool", async () => ({ items: await ads.pool.listAll(SLURP_GARNISH_PLATFORM) }));
 
-  app.post("/noodler/ads/pool", async (req, reply) => {
+  app.post("/slurp/ads/pool", async (req, reply) => {
     const parsed = garnishAdInputSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const input = parsed.data;
@@ -156,7 +156,7 @@ export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
     });
   });
 
-  app.delete("/noodler/ads/pool/:id", async (req) => {
+  app.delete("/slurp/ads/pool/:id", async (req) => {
     const { id } = req.params as { id: string };
     // Scoped to Slurp: the pool is shared with other Garnish platforms, whose ads this route owns no
     // part of.
@@ -176,7 +176,7 @@ export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
     .partial()
     .extend({ retiredAt: z.null().optional() });
 
-  app.patch("/noodler/ads/pool/:id", async (req, reply) => {
+  app.patch("/slurp/ads/pool/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
     const parsed = garnishAdPatchSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
@@ -189,7 +189,7 @@ export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
     return updated;
   });
 
-  app.post("/noodler/ads/:id/image", async (req, reply) => {
+  app.post("/slurp/ads/:id/image", async (req, reply) => {
     const { id } = req.params as { id: string };
     const ad = (await ads.pool.listAll(SLURP_GARNISH_PLATFORM)).find((row) => row.id === id);
     if (!ad) return reply.code(404).send({ error: "Not Found" });
@@ -224,7 +224,7 @@ export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
       .sendFile(basename(served), dirname(served));
   });
 
-  app.post("/noodler/ads/lorebook/sync", async (req, reply) => {
+  app.post("/slurp/ads/lorebook/sync", async (req, reply) => {
     const parsed = z.object({ force: z.boolean().optional() }).safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const outcome = await syncGarnishAdsWithLorebook(app.db, ads.pool, { force: parsed.data.force });
@@ -232,7 +232,7 @@ export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
     return { outcome };
   });
 
-  app.get("/noodler/ads/lorebooks", async () => ({
+  app.get("/slurp/ads/lorebooks", async () => ({
     // Lorebook rows are typed through Record<string, unknown>, so id and name are read rather
     // than accessed off the declared type.
     items: (await createLorebooksStorage(app.db).list())
@@ -241,7 +241,7 @@ export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
       .map((book) => ({ id: book.id, name: typeof book.name === "string" ? book.name : book.id })),
   }));
 
-  app.post("/noodler/ads/generate", async (req, reply) => {
+  app.post("/slurp/ads/generate", async (req, reply) => {
     const parsed = z
       .object({ connectionId: z.string().trim().min(1).optional(), count: z.number().int().min(1).max(10).optional() })
       .safeParse(req.body ?? {});
@@ -288,9 +288,9 @@ export async function slpAdsRoutes(app: FastifyInstance, deps: SlpRouteDeps) {
     }
   });
 
-  app.get("/noodler/ads/export", async () => exportGarnishAds(ads.pool, SLURP_GARNISH_PLATFORM));
+  app.get("/slurp/ads/export", async () => exportGarnishAds(ads.pool, SLURP_GARNISH_PLATFORM));
 
-  app.post("/noodler/ads/import", async (req, reply) => {
+  app.post("/slurp/ads/import", async (req, reply) => {
     const parsed = z
       .object({ mode: z.enum(["merge", "replace"]).default("merge"), payload: z.unknown() })
       .safeParse(req.body);

@@ -1,5 +1,12 @@
 # Long-Term Memory changelog
 
+## 1.3.5 — 2026-09-20
+
+- Recover complete memory candidates from token-limited output without marking incomplete extractions current.
+- Surface recovered output as an incomplete, retryable draft and bound rejection diagnostics for review.
+- Retain candidates within the processing limit and report overflow instead of rejecting the entire response.
+- Generate memory IDs and source hashes on the server, and default omitted evidence from the trusted source note.
+
 ## 1.3.4 — 2026-09-18
 
 - Kept a source note's extraction context unbound until its extraction succeeds, so a failed or cancelled preparation no longer rewrites the source note.

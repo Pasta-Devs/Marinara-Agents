@@ -19,7 +19,7 @@ const seam = slurp2Source("packages/slurp2/src/engine/packages/server/src/servic
 assert.match(seam, /function garnishTagsFromPersona/u);
 
 const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
-assert.match(routes, /\/noodler\/viewer\/ads/u);
+assert.match(routes, /\/slurp\/viewer\/ads/u);
 assert.match(routes, /inlineAdsEnabled/u);
 
 const card = slurp2Source("packages/slurp2/src/engine/packages/client/src/components/slurp/SlurpInlineAd.tsx");

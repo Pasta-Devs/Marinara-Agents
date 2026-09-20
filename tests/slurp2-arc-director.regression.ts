@@ -98,7 +98,7 @@ assert.doesNotMatch(
 
 // Director route is gated on the setting before anything else runs.
 const routes = slurp2Source("packages/slurp2/src/engine/packages/server/src/routes/slurp.routes.ts");
-const director = routes.slice(routes.indexOf('"/noodler/accounts/:id/projects/:projectId/director"'));
+const director = routes.slice(routes.indexOf('"/slurp/accounts/:id/projects/:projectId/director"'));
 assert.ok(director.length > 0);
 const gate = director.indexOf("arcDirectorMode");
 assert.ok(gate > 0 && gate < director.indexOf("directProject"), "director route checks arcDirectorMode first");
@@ -106,7 +106,7 @@ assert.match(director.slice(gate, gate + 120), /code\(403\)/);
 assert.match(storage, /arcDirectorMode: false,/, "Director mode is off by default");
 
 // The viewer timeline route never exposes suggestions, directions, or twists.
-const arcs = routes.slice(routes.indexOf('"/noodler/accounts/:id/arcs"'), routes.indexOf("A Creator's arc overrides"));
+const arcs = routes.slice(routes.indexOf('"/slurp/accounts/:id/arcs"'), routes.indexOf("A Creator's arc overrides"));
 assert.match(arcs, /status !== "suggested"/);
 assert.doesNotMatch(arcs, /direction,|twist,/);
 assert.match(arcs, /isCreatorHiddenFromViewer/);

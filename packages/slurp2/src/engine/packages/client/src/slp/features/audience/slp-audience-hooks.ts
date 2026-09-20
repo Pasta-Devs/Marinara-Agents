@@ -14,7 +14,7 @@ import type {
 export function useCreatorConnectionCounts(enabled = true) {
   return useQuery({
     queryKey: slpKeys.noodlerConnectionCounts(),
-    queryFn: () => api.get<SlpCreatorConnectionCounts>("/slurp2/noodler/account-connection-counts"),
+    queryFn: () => api.get<SlpCreatorConnectionCounts>("/slurp2/slurp/account-connection-counts"),
     enabled,
     staleTime: 30_000,
   });
@@ -30,7 +30,7 @@ export function useCreatorFollowers(accountId: string | null) {
     queryKey: slpKeys.noodlerFollowers(accountId ?? "none"),
     queryFn: () =>
       api.get<{ items: SlurpFollowerEntry[]; total: number }>(
-        `/slurp2/noodler/accounts/${encodeURIComponent(accountId!)}/followers`,
+        `/slurp2/slurp/accounts/${encodeURIComponent(accountId!)}/followers`,
       ),
     enabled: Boolean(accountId),
     staleTime: 10_000,
@@ -68,7 +68,7 @@ export function useCreatorSubscribers(accountId: string | null) {
         items: SlurpSubscriberEntry[];
         total: number;
         nextCursor: SlurpPageCursor | null;
-      }>(`/slurp2/noodler/accounts/${encodeURIComponent(accountId!)}/subscribers?limit=20${cursorQuery(pageParam)}`),
+      }>(`/slurp2/slurp/accounts/${encodeURIComponent(accountId!)}/subscribers?limit=20${cursorQuery(pageParam)}`),
     getNextPageParam: (page) => page.nextCursor ?? undefined,
     enabled: Boolean(accountId),
     staleTime: 10_000,

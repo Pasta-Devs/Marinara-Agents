@@ -144,7 +144,7 @@ export function useRecordSlurpStoryView() {
   return useMutation({
     mutationFn: (input: { storyId: string; personaId: string }) =>
       api.post<{ viewed: boolean; duplicate: boolean }>(
-        `/slurp2/noodler/stories/${encodeURIComponent(input.storyId)}/view`,
+        `/slurp2/slurp/stories/${encodeURIComponent(input.storyId)}/view`,
         { personaId: input.personaId },
       ),
   });
@@ -154,7 +154,7 @@ export function useSlurpStoryViews(storyId: string | null, personaId: string | n
     queryKey: [...slpKeys.noodlerRoot(), "story-views", storyId ?? "none", personaId ?? "none"],
     queryFn: () =>
       api.get<{ count: number; viewers: Array<{ id: string; displayName: string; handle: string }> }>(
-        `/slurp2/noodler/stories/${encodeURIComponent(storyId!)}/views?personaId=${encodeURIComponent(personaId!)}`,
+        `/slurp2/slurp/stories/${encodeURIComponent(storyId!)}/views?personaId=${encodeURIComponent(personaId!)}`,
       ),
     enabled: enabled && Boolean(storyId && personaId),
   });

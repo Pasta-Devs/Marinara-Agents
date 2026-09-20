@@ -11,7 +11,7 @@ export function useBulkUpdateSlurpCreators() {
   return useMutation({
     mutationFn: (input: { ids: string[]; patch: SlurpCreatorBulkPatch }) =>
       api.post<{ updated: number; skipped: number; tagLimitReached: number }>(
-        "/slurp2/noodler/accounts/bulk-update",
+        "/slurp2/slurp/accounts/bulk-update",
         input,
       ),
     onSuccess: () =>
@@ -29,7 +29,7 @@ export function useCreatorAccounts(enabled = true) {
     // The server sends `scheduleStatus` alongside the shared type, which has no such field — the
     // same arrangement `subscriptionPrice` and the tip goal already use.
     queryFn: () =>
-      api.get<Array<SlurpManagedStageProfile & { scheduleStatus?: SlurpScheduleStatus }>>("/slurp2/noodler/accounts"),
+      api.get<Array<SlurpManagedStageProfile & { scheduleStatus?: SlurpScheduleStatus }>>("/slurp2/slurp/accounts"),
     enabled,
     staleTime: 10_000,
     // Autonomous reserve work changes operator state without a client mutation.
@@ -41,7 +41,7 @@ export function useCreatorAccounts(enabled = true) {
 export function useSlurpCreatorMetrics(enabled = true) {
   return useQuery({
     queryKey: [...slpKeys.noodlerRoot(), "creator-metrics"],
-    queryFn: () => api.get<{ creators: SlurpCreatorMetrics[] }>("/slurp2/noodler/creator-metrics"),
+    queryFn: () => api.get<{ creators: SlurpCreatorMetrics[] }>("/slurp2/slurp/creator-metrics"),
     enabled,
     staleTime: 30_000,
   });
@@ -63,7 +63,7 @@ export function useCreatorEligibleAccounts(
         offset: number;
         hasMore: boolean;
       }>(
-        `/slurp2/noodler/eligible-accounts?limit=100&offset=${pageParam}&search=${encodeURIComponent(normalizedSearch)}${kind === "all" ? "" : `&kind=${kind}`}${includeAccountId ? `&includeAccountId=${encodeURIComponent(includeAccountId)}` : ""}`,
+        `/slurp2/slurp/eligible-accounts?limit=100&offset=${pageParam}&search=${encodeURIComponent(normalizedSearch)}${kind === "all" ? "" : `&kind=${kind}`}${includeAccountId ? `&includeAccountId=${encodeURIComponent(includeAccountId)}` : ""}`,
       ),
     getNextPageParam: (page) => (page.hasMore ? page.offset + page.items.length : undefined),
     enabled,

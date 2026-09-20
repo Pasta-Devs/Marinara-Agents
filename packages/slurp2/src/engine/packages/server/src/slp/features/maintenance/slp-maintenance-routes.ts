@@ -58,7 +58,7 @@ export async function slpMaintenanceRoutes(app: FastifyInstance, deps: SlpRouteD
     return outcome.result;
   });
 
-  app.delete("/noodler/accounts/:id", async (req, reply) => {
+  app.delete("/slurp/accounts/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
     const locked = await tryCreatorAccountOperation(id, async () => {
       const imageConnections = await getCreatorImageConnections(app.db);

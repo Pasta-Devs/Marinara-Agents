@@ -13,7 +13,7 @@ export function useRefreshCreatorConversationSchedule() {
   return useMutation({
     mutationFn: (accountId: string) =>
       api.post<{ state: "active"; blocks: number }>(
-        `/slurp2/noodler/accounts/${encodeURIComponent(accountId)}/conversation-schedule/refresh`,
+        `/slurp2/slurp/accounts/${encodeURIComponent(accountId)}/conversation-schedule/refresh`,
       ),
     onSuccess: () => {
       toast.success(localizeUi("ui.slurp.settings.creators.scheduleRefreshed"));
@@ -32,7 +32,7 @@ export function useRefreshTargetedCreatorsNow(onRemaining?: (remaining: number) 
       refreshSlurpCreatorBatch(
         input.accountIds,
         (accountId) =>
-          api.post<{ outcomes: SlpCreatorRefreshNowOutcome[] }>("/slurp2/noodler/auto-post/refresh-targeted", {
+          api.post<{ outcomes: SlpCreatorRefreshNowOutcome[] }>("/slurp2/slurp/auto-post/refresh-targeted", {
             ...input,
             accountIds: [accountId],
           }),

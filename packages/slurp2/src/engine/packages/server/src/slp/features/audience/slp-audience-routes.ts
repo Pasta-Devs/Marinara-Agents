@@ -211,7 +211,7 @@ export async function slpAudienceRoutes(app: FastifyInstance, deps: SlpRouteDeps
    * Named entries stop at the cast limit on purpose. `total` carries the platform reach, so the
    * list reads as "these people, and this many more" rather than pretending to be complete.
    */
-  app.get("/noodler/accounts/:id/followers", async (req, reply) => {
+  app.get("/slurp/accounts/:id/followers", async (req, reply) => {
     const { id } = req.params as { id: string };
     const creator = await noodle.getNoodlerAccountById(id);
     if (!creator) return reply.code(404).send({ error: "Slurp stage profile not found" });
@@ -259,7 +259,7 @@ export async function slpAudienceRoutes(app: FastifyInstance, deps: SlpRouteDeps
    * open — that is the constraint that keeps it free. This is the card instead: stage, direction,
    * what they have paid, and what they are like.
    */
-  app.get("/noodler/audience/:memberId", async (req, reply) => {
+  app.get("/slurp/audience/:memberId", async (req, reply) => {
     const { memberId } = req.params as { memberId: string };
     const creatorAccountId = (req.query as { creatorAccountId?: unknown }).creatorAccountId;
     const population = createSlurpPopulationStorage(app.db);
@@ -328,7 +328,7 @@ export async function slpAudienceRoutes(app: FastifyInstance, deps: SlpRouteDeps
     };
   });
 
-  app.patch("/noodler/accounts/:id/follow", async (req, reply) => {
+  app.patch("/slurp/accounts/:id/follow", async (req, reply) => {
     const body = req.body as { personaId?: unknown; followed?: unknown };
     if (typeof body?.personaId !== "string" || typeof body.followed !== "boolean") {
       return reply.code(400).send({ error: "personaId and followed are required" });
@@ -360,7 +360,7 @@ export async function slpAudienceRoutes(app: FastifyInstance, deps: SlpRouteDeps
     return buildViewerShell(await buildViewerContext(freshViewer ?? updated.account));
   });
 
-  app.post("/noodler/fan-activity/refresh-now", async (req, reply) => {
+  app.post("/slurp/fan-activity/refresh-now", async (req, reply) => {
     try {
       const result = await runCreatorFanActivity({
         db: app.db,
@@ -385,5 +385,5 @@ export async function slpAudienceRoutes(app: FastifyInstance, deps: SlpRouteDeps
     }
   });
 
-  app.get("/noodler/fan-activity/status", async () => getCreatorFanActivityStatus(app.db));
+  app.get("/slurp/fan-activity/status", async () => getCreatorFanActivityStatus(app.db));
 }

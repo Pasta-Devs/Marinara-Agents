@@ -144,6 +144,7 @@ export class LongTermMemoryDraftStore {
           diagnostics: options.diagnostics ?? [],
           extractionOutcome: options.outcome ?? {
             state: candidateCount > 0 ? "success" : "no_suggestions_created",
+            incomplete: false,
             totalCandidates: candidateCount,
             keptUnits: candidateCount,
             droppedUnits: 0,
